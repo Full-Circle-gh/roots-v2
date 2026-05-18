@@ -1,0 +1,47 @@
+<view class="page">
+  <view class="header">
+    <view class="kicker f-toni">MY ORDERS · 我的订单</view>
+    <view class="title f-bear">History.</view>
+  </view>
+
+  <scroll-view scroll-x class="chips" enhanced show-scrollbar="{{false}}">
+    <view wx:for="{{filters}}" wx:key="key"
+          class="chip {{activeFilter === item.key ? 'on' : ''}}"
+          data-key="{{item.key}}" bindtap="setFilter">
+      {{item.label}}
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{loading && !orders.length}}" class="loading">
+    <view class="skeleton" style="height:160rpx;margin:24rpx 44rpx"></view>
+    <view class="skeleton" style="height:160rpx;margin:24rpx 44rpx"></view>
+    <view class="skeleton" style="height:160rpx;margin:24rpx 44rpx"></view>
+  </view>
+
+  <view wx:elif="{{!orders.length}}" class="empty">
+    <view class="empty-title f-bear">{{emptyTitle}}</view>
+    <view class="empty-sub">{{emptySub}}</view>
+    <view class="empty-btn f-toni" bindtap="goShop">Browse the shop →</view>
+  </view>
+
+  <view wx:else class="list">
+    <view wx:for="{{orders}}" wx:key="id" class="order-card"
+          data-id="{{item.id}}" bindtap="openOrder">
+      <view class="card-top">
+        <view class="order-no">{{item.order_no}}</view>
+        <view class="status-pill status-{{item.status}}">{{item.status_label}}</view>
+      </view>
+      <view class="card-mid">
+        <view class="thumbs">
+          <view wx:for="{{item.item_thumbs}}" wx:for-item="it" wx:key="product_id" class="thumb">
+            <image wx:if="{{it.image}}" src="{{it.image}}" mode="aspectFill" class="thumb-img"/>
+          </view>
+          <view wx:if="{{item.item_count > 3}}" class="more-count f-gothic">+{{item.item_count - 3}}</view>
+        </view>
+        <view class="amount f-bear">{{item.total_display}}</view>
+      </view>
+      <view class="card-bot muted">{{item.placed_short}}</view>
+    </view>
+  </view>
+  <popup-manager page="orders"></popup-manager>
+</view>

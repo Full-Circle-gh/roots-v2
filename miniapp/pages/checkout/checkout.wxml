@@ -1,0 +1,374 @@
+<view class="page">
+  <view class="header">
+    <view class="header-row">
+      <view class="header-text">
+        <view class="kicker f-toni">{{copy.kicker}} · 02/03</view>
+        <view class="title f-bear">{{copy.title}}</view>
+      </view>
+      <cs-button variant="inline" placement="checkout"></cs-button>
+    </view>
+  </view>
+
+  <!-- Order receipt -->
+  <view class="section section-first">
+    <view class="section-label f-toni">
+      {{copy.orderSummary}} · {{itemCount}} {{lang === 'cn' ? '件' : 'ITEMS'}}
+    </view>
+    <view class="receipt">
+      <view wx:for="{{items}}" wx:key="key" class="order-line">
+        <view class="line-name">
+          <text>{{item.display_name}}</text>
+          <text class="line-meta"> ×{{item.qty}}</text>
+        </view>
+        <view class="line-total f-gothic">{{item.line_total}}</view>
+      </view>
+      <view wx:if="{{voucherCode}}" class="order-line voucher-line">
+        <view class="line-name">{{voucherCode}}</view>
+        <view class="line-total f-gothic">{{voucherFreeShip ? (lang === 'cn' ? '免运费' : 'Free ship') : '−¥' + voucherDiscount}}</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- Deliver to -->
+  <view class="section">
+    <view class="section-head">
+      <view class="section-title f-bear">{{copy.shipToTitle}}</view>
+      <view wx:if="{{address.id && !pickerOpen && !showNewForm}}" class="head-action f-toni" bindtap="openPicker">
+        {{lang === 'cn' ? '更换' : 'CHANGE'}}
+      </view>
+    </view>
+
+    <!-- Collapsed (default): just show the selected address as plain text. -->
+    <block wx:if="{{address.id && !pickerOpen && !showNewForm}}">
+      <view class="addr-text">
+        <text class="f-bear addr-name">{{address.recipient_name}}</text>
+        <text class="addr-phone"> · {{address.phone}}</text>
+      </view>
+      <view class="addr-text addr-full">
+        {{address.city}}{{address.district ? ' · ' + address.district : ''}}{{address.address ? ' · ' + address.address : ''}}{{address.detail ? ' · ' + address.detail : ''}}
+      </view>
+    </block>
+
+    <!-- Picker: list of saved addresses w/ inline radios, no card boxes. -->
+    <block wx:if="{{pickerOpen && savedAddresses.length && !showNewForm}}">
+      <view wx:for="{{savedAddresses}}" wx:key="id"
+            class="addr-row" data-id="{{item.id}}" bindtap="selectSaved">
+        <view class="dot {{address.id === item.id ? 'on' : ''}}"></view>
+        <view class="addr-body">
+          <view class="addr-text"><text class="f-bear">{{item.recipient_name}}</text> · {{item.phone}} <text wx:if="{{item.is_default}}" class="addr-default f-toni">DEFAULT</text></view>
+          <view class="addr-text addr-full">{{item.city}}{{item.district ? ' · ' + item.district : ''}}{{item.address ? ' · ' + item.address : ''}}{{item.detail ? ' · ' + item.detail : ''}}</view>
+        </view>
+      </view>
+      <view class="link-row f-toni" bindtap="showAddNew">+ {{lang === 'cn' ? '使用新地址' : 'USE A NEW ADDRESS'}}</view>
+    </block>
+
+    <!-- Inline form: shown when no saved addresses OR user wants new. -->
+    <block wx:if="{{showNewForm || (!savedAddresses.length && !address.id)}}">
+      <view class="field">
+        <input class="input" placeholder="{{copy.name}}" value="{{address.recipient_name}}" data-field="recipient_name" bindinput="onAddrField"/>
+      </view>
+      <view class="field">
+        <input class="input" placeholder="{{copy.phone}}" type="number" value="{{address.phone}}" data-field="phone" bindinput="onAddrField"/>
+      </view>
+      <view class="field field-pair">
+        <input class="input" placeholder="{{copy.cityPlaceholder}}" value="{{address.city}}" data-field="city" bindinput="onAddrField"/>
+        <input class="input" placeholder="{{copy.districtPlaceholder}}" value="{{address.district}}" data-field="district" bindinput="onAddrField"/>
+      </view>
+      <view class="field">
+        <input class="input" placeholder="{{copy.addr}}" value="{{address.address}}" data-field="address" bindinput="onAddrField"/>
+      </view>
+      <view class="field">
+        <input class="input" placeholder="{{copy.detailPlaceholder}}" value="{{address.detail}}" data-field="detail" bindinput="onAddrField"/>
+      </view>
+      <view wx:if="{{savedAddresses.length}}" class="link-row f-toni" bindtap="cancelNew">← {{lang === 'cn' ? '使用已保存地址' : 'PICK A SAVED ADDRESS'}}</view>
+    </block>
+  </view>
+
+  <!-- When -->
+  <view class="section">
+    <view class="section-title f-bear">{{lang === 'cn' ? '什么时候送' : 'When'}}</view>
+
+    <view wx:if="{{zoneError}}" class="zone-error">
+      <view class="ze-title f-bear">{{lang === 'cn' ? '抱歉，此地址暂不在配送范围内' : "Sorry, we don't deliver to this address yet"}}</view>
+      <view wx:if="{{kitchenAddress}}" class="ze-sub muted">{{lang === 'cn' ? '厨房地址：' : 'Our kitchen: '}}{{kitchenAddress}}</view>
+    </view>
+
+    <block wx:else>
+      <!-- Right away (only when zone allows + kitchen open) -->
+      <view wx:if="{{scheduling.right_away_available}}" class="slot-row"
+            data-id="right_away"
+            data-label-en="Right away"
+            data-label-cn="立即配送"
+            data-surcharge="0"
+            bindtap="pickSlot">
+        <view class="dot {{deliverySlotId === 'right_away' ? 'on' : ''}}"></view>
+        <view class="opt-body">
+          <view class="opt-label f-bear">{{lang === 'cn' ? '立即配送' : 'Right away'}}</view>
+          <view class="opt-sub muted">{{lang === 'cn' ? '尽快出餐' : 'ASAP after the kitchen confirms'}}</view>
+        </view>
+      </view>
+
+      <!-- Day-only mode: three radio options (Express / Today / Schedule) -->
+      <block wx:if="{{scheduling.mode === 'day_only'}}">
+        <view class="slot-option {{selectedSlotKind === 'express' ? 'on' : ''}}" bindtap="pickExpress">
+          <view class="opt-body">
+            <view class="opt-label f-bear">{{expressLabel}}</view>
+            <view class="opt-sub muted">{{expressSub}}</view>
+          </view>
+          <view class="opt-check"><view class="opt-check-dot"></view></view>
+        </view>
+
+        <view wx:if="{{hasTodayOption}}" class="slot-option {{selectedSlotKind === 'today' ? 'on' : ''}}" bindtap="pickToday">
+          <view class="opt-body">
+            <view class="opt-label f-bear">
+              ⚡ {{lang === 'cn' ? '今日送达' : 'Get it today'}} (+¥{{scheduling.same_day_surcharge}})
+            </view>
+            <view class="opt-sub muted">{{lang === 'cn' ? '今天送达,最快配送' : 'Delivered today, fastest possible'}}</view>
+          </view>
+          <view class="opt-check"><view class="opt-check-dot"></view></view>
+        </view>
+
+        <picker wx:if="{{scheduleMinDate && scheduleMaxDate && scheduleMinDate <= scheduleMaxDate}}"
+                mode="date"
+                value="{{schedulePickedDate || scheduleMinDate}}"
+                start="{{scheduleMinDate}}"
+                end="{{scheduleMaxDate}}"
+                bindchange="onScheduleDateChange">
+          <view class="slot-option {{selectedSlotKind === 'schedule' ? 'on' : ''}}">
+            <view class="opt-body">
+              <view class="opt-label f-bear">{{lang === 'cn' ? '稍后送达' : 'Schedule for later'}}</view>
+              <view class="opt-sub muted">{{schedulePickedLabel ? schedulePickedLabel : (lang === 'cn' ? '不在家?选择送达日期' : 'not home? pick your delivery date')}}</view>
+            </view>
+            <view class="opt-check"><view class="opt-check-dot"></view></view>
+          </view>
+        </picker>
+      </block>
+
+      <!-- Time-slot mode: today's 2-hour windows as chips + schedule-for-later picker -->
+      <block wx:if="{{scheduling.mode !== 'day_only'}}">
+        <view wx:if="{{scheduling.today_slots && scheduling.today_slots.length}}" class="slot-day">
+          <view class="slot-day-label f-toni">{{scheduling.slot_day_kind === 'tomorrow' ? (lang === 'cn' ? '明天' : 'TOMORROW') : (lang === 'cn' ? '今天' : 'TODAY')}}</view>
+          <view class="slot-chip-row">
+            <view wx:for="{{scheduling.today_slots}}" wx:key="slot_id" wx:for-item="slot"
+                  class="slot-chip {{deliverySlotId === slot.slot_id ? 'on' : ''}} {{slot.requires_surcharge ? 'has-surcharge' : ''}}"
+                  data-id="{{slot.slot_id}}"
+                  data-label-en="{{slot.label_en}}"
+                  data-label-cn="{{slot.label_cn}}"
+                  data-surcharge="{{slot.surcharge}}"
+                  bindtap="pickSlot">
+              <view class="chip-label">{{lang === 'cn' ? slot.start_minute === 0 ? slot.start_hour + ':00' : slot.start_hour + ':' + slot.start_minute : slot.start_hour}}<text wx:if="{{lang !== 'cn'}}">{{slot.start_hour < 12 ? 'am' : 'pm'}}</text>–{{lang === 'cn' ? slot.end_minute === 0 ? slot.end_hour + ':00' : slot.end_hour + ':' + slot.end_minute : slot.end_hour}}<text wx:if="{{lang !== 'cn'}}">{{slot.end_hour < 12 ? 'am' : 'pm'}}</text></view>
+              <view wx:if="{{slot.requires_surcharge}}" class="chip-surcharge f-toni">+¥{{slot.surcharge}}</view>
+            </view>
+          </view>
+        </view>
+
+        <!-- Schedule for later (calendar) — same widget the day-only mode uses. -->
+        <picker wx:if="{{scheduleMinDate && scheduleMaxDate && scheduleMinDate <= scheduleMaxDate}}"
+                mode="date"
+                value="{{schedulePickedDate || scheduleMinDate}}"
+                start="{{scheduleMinDate}}"
+                end="{{scheduleMaxDate}}"
+                bindchange="onScheduleDateChange">
+          <view class="slot-option {{selectedSlotKind === 'schedule' ? 'on' : ''}}">
+            <view class="opt-body">
+              <view class="opt-label f-bear">{{lang === 'cn' ? '稍后送达' : 'Schedule for later'}}</view>
+              <view class="opt-sub muted">{{schedulePickedLabel ? schedulePickedLabel : (lang === 'cn' ? '选择送达日期' : 'pick a delivery date')}}</view>
+            </view>
+            <view class="opt-check"><view class="opt-check-dot"></view></view>
+          </view>
+        </picker>
+      </block>
+
+      <view wx:if="{{!scheduling.right_away_available && (!scheduling.today_slots || !scheduling.today_slots.length) && scheduling.mode !== 'day_only' && !(scheduleMinDate && scheduleMaxDate)}}" class="muted slot-empty">
+        {{lang === 'cn' ? '暂无可用时段' : 'No delivery slots available right now'}}
+      </view>
+    </block>
+  </view>
+
+  <!-- Pay with -->
+  <view class="section">
+    <view class="section-title f-bear">{{copy.payWithTitle}}</view>
+
+    <view class="opt-row" data-method="wechat" bindtap="setPayment">
+      <view class="dot {{paymentMethod === 'wechat' ? 'on' : ''}}"></view>
+      <view class="pay-swatch" style="background: #1AAD19;"></view>
+      <view class="opt-body">
+        <view class="opt-label f-bear">{{copy.wechatOpt}}</view>
+        <view class="opt-sub f-yuan">微信支付</view>
+      </view>
+    </view>
+
+    <view class="opt-row" data-method="alipay" bindtap="setPayment">
+      <view class="dot {{paymentMethod === 'alipay' ? 'on' : ''}}"></view>
+      <view class="pay-swatch" style="background: #1677FF;"></view>
+      <view class="opt-body">
+        <view class="opt-label f-bear">{{copy.alipayOpt}}</view>
+        <view class="opt-sub f-yuan">支付宝</view>
+      </view>
+    </view>
+
+    <view wx:if="{{pointsBalance > 0}}" class="opt-row {{!pointsAffordable && pointsRequired > 0 ? 'opt-disabled' : ''}}"
+          data-method="points" bindtap="setPayment">
+      <view class="dot {{paymentMethod === 'points' ? 'on' : ''}}"></view>
+      <view class="pay-swatch" style="background: var(--lime);"></view>
+      <view class="opt-body">
+        <view class="opt-label f-bear">{{copy.pointsOpt}}</view>
+        <view wx:if="{{pointsRequired > 0 && !pointsAffordable}}" class="opt-sub muted">
+          {{lang === 'cn' ? '还差 ' : 'Need '}}{{pointsRequired - pointsBalance}}{{lang === 'cn' ? ' 积分 · 余额 ' : ' more · have '}}{{pointsBalance}}
+        </view>
+        <view wx:elif="{{pointsRequired > 0}}" class="opt-sub muted">
+          {{lang === 'cn' ? '使用 ' : 'Use '}}{{pointsRequired}}{{lang === 'cn' ? ' 积分 · 余额 ' : ' pts · balance '}}{{pointsBalance}}
+        </view>
+        <view wx:else class="opt-sub muted">
+          {{pointsBalance}} {{lang === 'cn' ? '可用 · 抵¥' : 'available · 抵¥'}}{{pointsValue}}
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- Add-ons -->
+  <view class="section">
+    <view class="section-title f-bear">{{copy.addOnsTitle}}</view>
+    <view class="checkbox-row">
+      <switch checked="{{needsCutlery}}" bindchange="onCutleryToggle" color="#1a1a17"/>
+      <view class="checkbox-label">{{copy.cutlery}}</view>
+    </view>
+    <view class="checkbox-row">
+      <switch checked="{{needsInvoice}}" bindchange="onInvoiceToggle" color="#1a1a17"/>
+      <view class="checkbox-label">{{copy.invoice}}</view>
+    </view>
+    <view class="field" style="margin-top: 16rpx">
+      <input class="input" placeholder="{{copy.noteLabel}}" value="{{note}}" bindinput="onNoteChange" maxlength="200"/>
+    </view>
+  </view>
+
+  <!-- Coupons -->
+  <view class="section">
+    <view class="section-title f-bear">{{copy.couponsTitle}}</view>
+
+    <view wx:if="{{voucherCode}}" class="voucher-applied">
+      <view>
+        <view class="va-code f-gothic">{{voucherCode}}</view>
+        <view class="va-desc muted">{{voucherFreeShip ? (lang === 'cn' ? '免运费' : 'Free shipping') : '−¥' + voucherDiscount}}</view>
+      </view>
+      <view class="va-remove f-toni" bindtap="removeVoucher">{{lang === 'cn' ? '移除' : 'REMOVE'}}</view>
+    </view>
+
+    <block wx:else>
+      <view wx:if="{{myVouchers.length}}" class="coupon-chips">
+        <view wx:for="{{myVouchers}}" wx:key="code"
+              class="coupon-chip mine" data-code="{{item.code}}" bindtap="selectPublicCoupon">
+          <view class="cc-badge f-toni">{{lang === 'cn' ? '专属' : 'YOURS'}}</view>
+          <view class="cc-title f-bear">{{item.title}}</view>
+          <view wx:if="{{item.sublabel}}" class="cc-sub f-toni">{{item.sublabel}}</view>
+          <view class="cc-apply f-toni">{{lang === 'cn' ? '点击使用 →' : 'TAP TO USE →'}}</view>
+        </view>
+      </view>
+
+      <view wx:if="{{publicCoupons.length}}" class="coupon-chips">
+        <view wx:for="{{publicCoupons}}" wx:key="code"
+              class="coupon-chip" data-code="{{item.code}}" bindtap="selectPublicCoupon">
+          <view class="cc-title f-bear">{{item.title}}</view>
+          <view wx:if="{{item.sublabel}}" class="cc-sub f-toni">{{item.sublabel}}</view>
+          <view class="cc-apply f-toni">{{lang === 'cn' ? '点击使用 →' : 'TAP TO USE →'}}</view>
+        </view>
+      </view>
+
+      <view class="coupon-code-toggle f-toni" bindtap="toggleCodeInput">
+        {{showCodeInput ? (lang === 'cn' ? '收起' : 'HIDE') : (lang === 'cn' ? '有优惠码?' : 'HAVE A CODE?')}}
+      </view>
+      <view wx:if="{{showCodeInput}}" class="voucher-input-row">
+        <input class="input" placeholder="{{lang === 'cn' ? '输入优惠码' : 'Enter code (e.g. NEWBIE20)'}}"
+               value="{{voucherInput}}" bindinput="onVoucherInput" auto-focus="{{false}}"/>
+        <view class="apply-link f-toni" bindtap="applyVoucher">{{lang === 'cn' ? '应用' : 'APPLY'}}</view>
+      </view>
+    </block>
+  </view>
+
+  <!-- Fee breakdown -->
+  <view class="section breakdown">
+    <view class="bd-row">
+      <view class="bd-label">{{lang === 'cn' ? '小计' : 'Subtotal'}}</view>
+      <view class="bd-val f-gothic">¥{{subtotal}}</view>
+    </view>
+    <view wx:if="{{!zoneError}}" class="bd-row">
+      <view class="bd-label">{{lang === 'cn' ? '配送费' : 'Delivery'}}</view>
+      <view class="bd-val f-gothic">{{(freeShipping && !voucherDiscount) || voucherFreeShip ? copy.free : '¥' + deliveryFee}}</view>
+    </view>
+    <view wx:if="{{packingFee && packingFee !== '0.00'}}" class="bd-row">
+      <view class="bd-label">{{lang === 'cn' ? '包装费' : 'Packing fee'}}</view>
+      <view class="bd-val f-gothic">¥{{packingFee}}</view>
+    </view>
+    <view wx:if="{{voucherDiscount}}" class="bd-row">
+      <view class="bd-label">{{lang === 'cn' ? '优惠券' : 'Coupon'}}</view>
+      <view class="bd-val f-gothic">−¥{{voucherDiscount}}</view>
+    </view>
+    <view wx:if="{{paymentMethod === 'points' && pointsAffordable}}" class="bd-row">
+      <view class="bd-label">{{lang === 'cn' ? '积分抵扣 · ' : 'Points · '}}{{pointsRequired}}{{lang === 'cn' ? ' 积分' : ' pts'}}</view>
+      <view class="bd-val f-gothic">{{lang === 'cn' ? '抵全部' : 'COVERS ALL'}}</view>
+    </view>
+    <view wx:if="{{pointsEarnedPreview > 0}}" class="bd-row bd-points">
+      <view class="bd-label">{{lang === 'cn' ? '本单获得积分' : "You'll earn"}}</view>
+      <view class="bd-val f-gothic">+{{pointsEarnedPreview}} {{lang === 'cn' ? '积分' : 'pts'}}</view>
+    </view>
+  </view>
+
+  <!-- Fallback-routing notice. Shown when /quote flagged the nearest
+       store as out of stock and a farther store can fulfill. We surface
+       it here (just above the Place Order button) so the customer sees
+       it before tapping. The tap then opens a confirmation modal. -->
+  <view wx:if="{{needsFallback}}" class="fallback-warning">
+    <view class="fallback-warning__icon">🚚</view>
+    <view class="fallback-warning__body">
+      <view class="fallback-warning__title">{{ lang === 'cn' ? '配送时间会更长' : 'Longer delivery time' }}</view>
+      <view class="fallback-warning__sub">
+        {{ lang === 'cn'
+          ? ('就近门店暂时缺货，将由 ' + fallbackStoreName + ' 发货')
+          : ('Nearest store is out of stock — will ship from ' + fallbackStoreName) }}
+      </view>
+    </view>
+    <view wx:if="{{acceptedFallback}}" class="fallback-warning__check">✓</view>
+  </view>
+
+  <!-- Sticky footer -->
+  <view class="sticky-bar">
+    <view class="total-block">
+      <view class="total-label f-toni">{{copy.pay}}</view>
+      <view class="total-amount f-bear">¥{{total}}</view>
+    </view>
+    <button class="place-btn f-toni" bindtap="placeOrder" disabled="{{placing || zoneError}}">
+      {{placing ? '...' : copy.placeOrder}}
+    </button>
+  </view>
+  <popup-manager page="checkout"></popup-manager>
+
+  <!-- Custom in-page fallback-confirmation modal. Replaces wx.showModal so
+       typography (Bear / Toni) and palette match the rest of the checkout.
+       Backdrop tap dismisses ↔ Cancel; the inner card swallows the tap. -->
+  <view wx:if="{{showFallbackModal}}" class="fb-modal-backdrop" bindtap="resolveFallbackCancel">
+    <view class="fb-modal-card" catchtap="noop">
+      <view class="fb-modal-icon">🚚</view>
+      <view class="fb-modal-kicker f-toni">{{ lang === 'cn' ? '02 · 库存提示' : '02 · STOCK NOTICE' }}</view>
+      <view class="fb-modal-title f-bear">
+        {{ lang === 'cn' ? '配送时间会更长' : 'Longer delivery' }}
+      </view>
+      <view class="fb-modal-body">
+        <text>{{ lang === 'cn'
+          ? (nearestStoreName + '暂时缺货，订单将由 ')
+          : (nearestStoreName + ' is out of stock. We can ship from ') }}</text>
+        <text class="fb-modal-body-em">{{fallbackStoreName}}</text>
+        <text>{{ lang === 'cn'
+          ? ' 发货，配送时间会比往常更久。'
+          : ' instead — delivery will take longer than usual.' }}</text>
+      </view>
+      <view class="fb-modal-actions">
+        <view class="fb-modal-btn fb-modal-btn--secondary f-toni" bindtap="resolveFallbackCancel">
+          {{ lang === 'cn' ? '取消' : 'Cancel' }}
+        </view>
+        <view class="fb-modal-btn fb-modal-btn--primary f-toni" bindtap="resolveFallbackContinue">
+          {{ lang === 'cn' ? '继续下单 →' : 'Continue →' }}
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

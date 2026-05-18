@@ -1,0 +1,28 @@
+<view class="page">
+  <view wx:if="{{loading && !layout.length}}" class="loading">
+    <view class="skeleton" style="height:600rpx"></view>
+    <view class="skeleton" style="height:80rpx;margin:40rpx 44rpx;width:50%"></view>
+    <view class="skeleton" style="height:400rpx;margin:0 44rpx"></view>
+  </view>
+
+  <view wx:elif="{{!layout.length}}" class="empty">
+    <view class="empty-title f-bear">{{emptyTitle}}</view>
+    <view class="empty-sub">{{emptySub}}</view>
+  </view>
+
+  <block-renderer
+    wx:for="{{layout}}"
+    wx:key="id"
+    block="{{item}}"
+    lang="{{lang}}"
+    products="{{products}}"
+    categories="{{categories}}"
+    flash-sales="{{flashSales}}"
+    polls="{{polls}}"
+    customer="{{customer}}"
+    bind:cta="onCta"
+    bind:category="onCategory"
+    bind:product="onProduct"
+    bind:vote="onVote"
+    bind:bundle="onBundle"/>
+</view>

@@ -1,0 +1,167 @@
+.page {
+  background: var(--oat);
+  min-height: 100vh;
+  padding-bottom: 120rpx;
+}
+
+.header { padding: 60rpx 44rpx 24rpx; }
+.kicker { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.16em; color: var(--olive); margin-bottom: 8rpx; }
+.title { font-size: calc(72rpx * var(--font-scale)); font-weight: 500; line-height: 1; color: var(--ink); }
+
+/* ── LIST MODE ── */
+.list { padding: 12rpx 44rpx 0; }
+.addr-card {
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  padding: 28rpx;
+  margin-bottom: 20rpx;
+}
+.addr-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+.addr-name { font-size: calc(30rpx * var(--font-scale)); }
+.default-badge {
+  padding: 4rpx 12rpx;
+  background: var(--lime);
+  color: var(--ink);
+  font-size: calc(18rpx * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-radius: 999rpx;
+}
+.addr-full {
+  font-size: calc(26rpx * var(--font-scale));
+  line-height: 1.4;
+  margin-bottom: 4rpx;
+}
+.addr-city { font-size: calc(22rpx * var(--font-scale)); }
+.addr-actions {
+  display: flex;
+  gap: 24rpx;
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 2rpx dashed rgba(0,0,0,0.15);
+}
+.action-link {
+  font-size: calc(24rpx * var(--font-scale));
+  color: var(--olive);
+  text-decoration: underline;
+}
+.action-link.danger { color: var(--berry); }
+
+.empty {
+  padding: 80rpx 44rpx;
+  text-align: center;
+}
+.empty-msg { font-size: calc(26rpx * var(--font-scale)); }
+.muted { color: var(--olive); }
+
+.add-btn-wrap {
+  padding: 24rpx 44rpx;
+}
+.add-btn {
+  width: 100%;
+  background: var(--ink);
+  color: var(--lime);
+  padding: 28rpx 0;
+  font-size: calc(26rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+/* ── FORM MODE ── */
+.form-title {
+  padding: 0 44rpx 24rpx;
+  font-size: calc(48rpx * var(--font-scale));
+  font-weight: 500;
+}
+.wx-pick-wrap {
+  padding: 0 44rpx 24rpx;
+}
+.wx-pick-btn {
+  width: 100%;
+  background: #07c160;
+  color: #fff;
+  padding: 22rpx 0;
+  font-size: calc(24rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  text-align: center;
+  line-height: 1.2;
+}
+.wx-pick-btn[disabled] { opacity: 0.5; }
+.field {
+  padding: 0 44rpx;
+  margin-bottom: 12rpx;
+}
+.input {
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  padding: 0 24rpx;
+  min-height: 84rpx;
+  line-height: 84rpx;
+  font-size: calc(28rpx * var(--font-scale));
+  font-family: var(--f-aleo);
+  color: var(--ink);
+  border-radius: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+/* Region picker row — same visual frame as .input, but acts as a button
+   that opens the native WeChat 3-column province/city/district wheel. */
+.region-field { margin-bottom: 12rpx; }
+.region-pick {
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  padding: 0 24rpx;
+  min-height: 84rpx;
+  line-height: 84rpx;
+  font-size: calc(28rpx * var(--font-scale));
+  font-family: var(--f-aleo);
+  color: var(--ink);
+  width: 100%;
+  box-sizing: border-box;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.region-pick.placeholder { color: rgba(26, 26, 23, 0.42); }
+.region-chevron {
+  font-size: calc(34rpx * var(--font-scale));
+  color: rgba(26, 26, 23, 0.5);
+  margin-left: 16rpx;
+  line-height: 1;
+}
+.input-placeholder {
+  color: rgba(26, 26, 23, 0.42);
+  font-size: calc(28rpx * var(--font-scale));
+  font-family: var(--f-aleo);
+  line-height: 84rpx;
+}
+.default-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 16rpx 44rpx;
+}
+.default-label { font-size: calc(26rpx * var(--font-scale)); }
+
+.form-actions {
+  display: flex;
+  gap: 16rpx;
+  padding: 24rpx 44rpx 0;
+}
+.btn {
+  flex: 1;
+  padding: 28rpx 0;
+  font-size: calc(26rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+  text-align: center;
+}
+.btn.primary { background: var(--ink); color: var(--lime); }
+.btn.secondary {
+  background: transparent;
+  color: var(--ink);
+  border: 3rpx solid var(--ink);
+}
+.btn[disabled] { opacity: 0.5; }

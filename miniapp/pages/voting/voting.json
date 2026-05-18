@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "Your say",
+  "backgroundColor": "#F2E7DF",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "popup-manager": "/components/popup-manager/popup-manager"
+  }
+}

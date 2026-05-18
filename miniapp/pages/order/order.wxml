@@ -1,0 +1,186 @@
+<view class="page">
+  <view wx:if="{{notFound}}" class="empty">
+    <view class="empty-title f-bear">Order not found</view>
+    <view class="empty-btn f-toni" bindtap="back">{{copy.back}}</view>
+  </view>
+
+  <view wx:elif="{{loading && !order}}" class="loading">
+    <view class="skeleton" style="height:120rpx;margin:60rpx 44rpx"></view>
+    <view class="skeleton" style="height:400rpx;margin:24rpx 44rpx"></view>
+  </view>
+
+  <block wx:elif="{{order}}">
+    <view class="header">
+      <view class="kicker f-toni">{{copy.title}} · {{order.order_no}}</view>
+      <view class="title-row">
+        <view class="title f-bear">{{statusLabel}}</view>
+        <view class="status-pill status-{{order.status}}">{{statusLabel}}</view>
+      </view>
+    </view>
+
+    <!-- Timeline -->
+    <view class="section">
+      <view class="section-label f-toni">{{copy.timelineLabel}}</view>
+      <view class="timeline">
+        <view wx:for="{{timeline}}" wx:key="key" class="step {{item.done ? 'done' : ''}} {{item.active ? 'active' : ''}}">
+          <view class="marker"></view>
+          <view class="step-body">
+            <view class="step-label">{{item.label_display}}</view>
+            <view wx:if="{{item.at_short}}" class="step-at muted">{{item.at_short}}</view>
+          </view>
+        </view>
+      </view>
+      <view style="margin-top: 24rpx; display: flex; justify-content: center;">
+        <cs-button variant="inline" placement="order"></cs-button>
+      </view>
+    </view>
+
+    <!-- Shipment tracking — only shown once a waybill is attached -->
+    <view wx:if="{{tracking}}" class="section tracking-section">
+      <view class="section-label f-toni">{{copy.trackingLabel}}</view>
+
+      <!-- Scenario banner — appears once kd100 has classified the latest
+           event. Pickup-point / locker show a big copyable code. No-contact
+           shows red urgency. Others (in-person / door / proxy) show success
+           styling. -->
+      <view wx:if="{{tracking.scenario}}" class="trk-banner trk-banner-{{tracking.scenario.urgency}}" bindtap="onScenarioTap">
+        <view class="trk-banner-icon">{{tracking.scenario.icon}}</view>
+        <view class="trk-banner-body">
+          <view class="trk-banner-title f-bear">{{lang === 'cn' ? tracking.scenario.label_cn : tracking.scenario.label_en}}</view>
+          <view wx:if="{{tracking.scenario.location_label}}" class="trk-banner-sub">{{tracking.scenario.location_label}}</view>
+          <view wx:if="{{tracking.scenario.signer}}" class="trk-banner-sub">{{lang === 'cn' ? '签收人:' : 'Signed by '}}{{tracking.scenario.signer}}</view>
+          <view wx:if="{{tracking.scenario.pickup_code}}" class="trk-banner-code-wrap">
+            <view class="trk-banner-code-label">{{lang === 'cn' ? '取件码 · TAP TO COPY' : 'PICKUP CODE · TAP TO COPY'}}</view>
+            <view class="trk-banner-code f-gothic">{{tracking.scenario.pickup_code}}</view>
+          </view>
+          <view wx:if="{{tracking.scenario.scenario === 'no_contact'}}" class="trk-banner-action">
+            {{lang === 'cn' ? '请尽快回拨快递员电话 →' : 'Call the courier back ASAP →'}}
+          </view>
+        </view>
+      </view>
+
+      <view class="trk-head">
+        <view class="trk-carrier">
+          <view class="trk-carrier-name f-bear">{{lang === 'cn' ? tracking.carrier_name_cn : tracking.carrier_name_en}}</view>
+          <view class="trk-number-row" bindtap="copyTracking" hover-class="trk-number-row-tap">
+            <view class="trk-number">{{tracking.number}}</view>
+            <image class="trk-copy-icon" src="/assets/icons/copy.svg" mode="aspectFit" aria-label="copy"></image>
+          </view>
+        </view>
+        <view wx:if="{{tracking.status_label_en}}" class="trk-status-pill">
+          <view class="trk-status-dot"></view>
+          <text>{{lang === 'cn' ? tracking.status_label_cn : tracking.status_label_en}}</text>
+        </view>
+      </view>
+      <!-- Collapsed by default: only the latest event renders. Tapping
+           "Show all N events" expands the full list inline. -->
+      <view wx:if="{{trackingEvents.length}}" class="trk-events">
+        <view wx:for="{{trackingEventsVisible}}" wx:key="idx" wx:for-item="ev" wx:for-index="idx" class="trk-event {{idx === 0 ? 'latest' : ''}}">
+          <view class="trk-event-dot"></view>
+          <view class="trk-event-body">
+            <view class="trk-event-line">{{ev.description}}</view>
+            <view class="trk-event-meta muted">
+              <text class="trk-event-time">{{ev.time}}</text>
+              <text wx:if="{{ev.location}}" class="trk-event-loc"> · {{ev.location}}</text>
+            </view>
+          </view>
+        </view>
+        <view wx:if="{{trackingEvents.length > 1}}" class="trk-toggle" bindtap="toggleTrackingEvents">
+          {{trackingEventsExpanded
+            ? (lang === 'cn' ? '收起 ↑' : 'Show less ↑')
+            : (lang === 'cn' ? '显示全部 ' + trackingEvents.length + ' 条 ↓' : 'Show all ' + trackingEvents.length + ' events ↓')
+          }}
+        </view>
+      </view>
+      <view wx:elif="{{tracking.synced_at}}" class="trk-empty muted">{{copy.trackingNoEvents}}</view>
+      <view wx:else class="trk-empty muted">{{copy.trackingPending}}</view>
+    </view>
+
+    <!-- Items -->
+    <view class="section">
+      <view class="section-label f-toni">{{copy.itemsLabel}}</view>
+      <view wx:for="{{items}}" wx:key="id" class="item-row">
+        <view class="item-thumb">
+          <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="thumb-img"/>
+        </view>
+        <view class="item-info">
+          <view class="item-name f-bear">{{item.display_name}}</view>
+          <view wx:if="{{item.options_str}}" class="item-options muted">{{item.options_str}}</view>
+          <view class="item-meta muted">×{{item.qty}}</view>
+          <view wx:if="{{order.status === 'delivered' && item.product_id}}" class="review-link"
+                data-product-id="{{item.product_id}}"
+                data-name="{{item.display_name}}"
+                data-image="{{item.image}}"
+                data-qty="{{item.qty}}"
+                bindtap="writeReview">
+            {{lang === 'cn' ? '写评价 →' : 'Leave a review →'}}
+          </view>
+        </view>
+        <view class="item-total f-gothic">{{item.line_total_display}}</view>
+      </view>
+    </view>
+
+    <!-- Money summary -->
+    <view class="section">
+      <view class="money-row">
+        <view>{{copy.subtotalLabel}}</view>
+        <view class="f-gothic">{{subtotal}}</view>
+      </view>
+      <view class="money-row">
+        <view>{{copy.shippingLabel}}</view>
+        <view class="f-gothic">{{shipping}}</view>
+      </view>
+      <view class="money-row total">
+        <view class="f-bear">{{copy.totalLabel}}</view>
+        <view class="f-bear">{{total}}</view>
+      </view>
+    </view>
+
+    <!-- Address -->
+    <view class="section">
+      <view class="section-label f-toni">{{copy.shipToLabel}}</view>
+      <view class="addr-name"><text class="f-bear">{{order.recipient_name}}</text> · {{order.recipient_phone}}</view>
+      <view class="addr-full muted">{{address}}</view>
+    </view>
+
+    <!-- Payment -->
+    <view class="section">
+      <view class="section-label f-toni">{{copy.payLabel}}</view>
+      <view class="pay-method">{{paymentLabel}}</view>
+    </view>
+
+    <!-- Customer note -->
+    <view wx:if="{{order.customer_note}}" class="section">
+      <view class="section-label f-toni">{{copy.noteLabel}}</view>
+      <view class="note-body">{{order.customer_note}}</view>
+    </view>
+
+    <!-- Refund status banner -->
+    <view wx:if="{{order.refund_status === 'pending'}}" class="refund-banner refund-pending">
+      <view class="rb-line">{{copy.refundPendingBanner}}</view>
+      <view wx:if="{{order.refund_reason}}" class="rb-reason muted">{{order.refund_reason}}</view>
+    </view>
+    <view wx:elif="{{order.refund_status === 'rejected'}}" class="refund-banner refund-rejected">
+      <view class="rb-line">{{copy.refundRejectedBanner}}</view>
+      <view wx:if="{{order.refund_review_note}}" class="rb-reason muted">{{order.refund_review_note}}</view>
+    </view>
+    <view wx:elif="{{order.refund_status === 'approved' || order.status === 'refunded'}}" class="refund-banner refund-approved">
+      <view class="rb-line">{{copy.refundApprovedBanner}}</view>
+    </view>
+
+    <!-- Customer-actionable buttons depending on status -->
+    <view wx:if="{{order.status === 'pending_payment'}}" class="cust-actions">
+      <button class="btn primary f-toni" bindtap="payNow" disabled="{{paying}}">
+        {{paying ? copy.paying : copy.payNowBtn}}
+      </button>
+      <button class="btn danger f-toni" bindtap="cancelOrder" disabled="{{paying}}">{{copy.cancelBtn}}</button>
+    </view>
+    <view wx:elif="{{order.status === 'delivered'}}" class="cust-actions">
+      <button class="btn primary f-toni" bindtap="reorder">{{copy.reorderBtn}} →</button>
+      <button wx:if="{{!order.refund_status}}" class="btn ghost f-toni" bindtap="requestRefund">{{copy.refundBtn}}</button>
+    </view>
+    <view wx:elif="{{order.status === 'paid' || order.status === 'preparing' || order.status === 'dispatched'}}" class="cust-actions">
+      <button wx:if="{{!order.refund_status}}" class="btn ghost f-toni" bindtap="requestRefund">{{copy.refundBtn}}</button>
+    </view>
+  </block>
+</view>

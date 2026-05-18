@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" id="meta-theme-color" content="#16161a">
+<title>Roots System v2 · Login</title>
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem('roots_theme');
+      var theme = saved === 'light' || saved === 'dark'
+        ? saved
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+      var meta = document.getElementById('meta-theme-color');
+      if (meta) meta.setAttribute('content', theme === 'light' ? '#ece6d8' : '#16161a');
+    } catch (e) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
+<style>
+@font-face { font-family: 'Toni Grotesk'; src: url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display: swap; }
+
+:root {
+  --bg-app:     #16161a;
+  --bg-pane:    #1f1f24;
+  --bg-elev-1:  #25252b;
+  --bg-input:   #1a1a1f;
+  --line:       rgba(255, 255, 255, .09);
+  --line-strong: rgba(255, 255, 255, .15);
+  --ring:       rgba(204, 217, 0, .35);
+  --text-1:     #ecebe5;
+  --text-2:     #aeaba2;
+  --text-3:     #7d7a72;
+  --accent:     #ccd900;
+  --accent-hi:  #dde858;
+  --accent-ink: #16161a;
+  --danger:     #e8556a;
+  --sh-3:       0 24px 60px rgba(0, 0, 0, .5);
+  --f-sans:     -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', system-ui, sans-serif;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg-app:     #ece6d8;
+  --bg-pane:    #fbf8ee;
+  --bg-elev-1:  #f4efdf;
+  --bg-input:   #fefcf3;
+  --line:       rgba(30, 25, 5, .16);
+  --line-strong: rgba(30, 25, 5, .26);
+  --text-1:     #1a1a17;
+  --text-2:     #43413a;
+  --text-3:     #6a675c;
+  --sh-3:       0 24px 60px rgba(40, 30, 5, .22);
+  color-scheme: light;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height: 100%; }
+body {
+  font: 13px var(--f-sans);
+  background: var(--bg-app);
+  color: var(--text-1);
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px max(20px, env(safe-area-inset-left, 0px));
+  padding-top: max(24px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  -webkit-font-smoothing: antialiased;
+}
+.box {
+  background: var(--bg-pane);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 36px 32px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: var(--sh-3);
+}
+.logo { text-align: center; margin-bottom: 28px; }
+.brand-mark {
+  width: 44px; height: 44px;
+  margin: 0 auto 14px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), #b3bf00);
+  color: var(--accent-ink);
+  font-weight: 800; font-size: 20px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 14px rgba(204,217,0,.22);
+}
+.logo h1 {
+  font-size: 22px; font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--text-1);
+  line-height: 1.2;
+}
+.logo p {
+  font-size: 11px; color: var(--text-3);
+  letter-spacing: .12em; text-transform: uppercase;
+  margin-top: 8px;
+  font-weight: 500;
+}
+.logo .version {
+  font-size: 10px; color: var(--accent);
+  margin-top: 4px; letter-spacing: .08em; font-weight: 600;
+}
+label {
+  display: block;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: 14px var(--f-sans);
+  color: var(--text-1);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+  margin-bottom: 16px;
+}
+input:focus {
+  border-color: rgba(204, 217, 0, .45);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+input:hover:not(:focus) { border-color: var(--line-strong); }
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 44px; }
+.pw-toggle {
+  position: absolute; top: 0; right: 0;
+  width: 44px; height: 40px;
+  background: none; border: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text-3);
+  font-size: 16px;
+  transition: color .15s;
+}
+.pw-toggle:hover { color: var(--text-1); }
+.pw-toggle:active { transform: scale(.92); }
+.btn {
+  width: 100%;
+  padding: 11px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 8px;
+  font: 600 14px var(--f-sans);
+  cursor: pointer;
+  letter-spacing: .02em;
+  transition: background .15s, transform .1s;
+}
+.btn:hover { background: var(--accent-hi); }
+.btn:active { transform: scale(.99); }
+.btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+.error {
+  background: rgba(232, 85, 106, .14);
+  border: 1px solid rgba(232, 85, 106, .35);
+  color: var(--danger);
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  margin-top: 12px;
+  display: none;
+}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">
+    <div class="brand-mark">R</div>
+    <h1>ROOTS</h1>
+    <p>Kitchen Management System</p>
+    <div class="version">v2.0 · Guangzhou 广州</div>
+  </div>
+  <label>用户名 Username</label>
+  <input type="text" id="username" placeholder="Enter username..." autofocus autocomplete="username">
+  <label>密码 Password</label>
+  <div class="pw-wrap">
+    <input type="password" id="password" placeholder="Enter password..." autocomplete="current-password">
+    <button type="button" class="pw-toggle" id="pwToggle" title="Show password · 显示密码" aria-label="Show password">👁</button>
+  </div>
+  <button class="btn" id="btn" onclick="login()">登录 Login</button>
+  <div class="error" id="err"></div>
+</div>
+<script>
+document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+document.getElementById('username').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('password').focus(); });
+// Password show/hide toggle. Tap the eye to flip the field's type
+// between 'password' (dots) and 'text' (visible). Helpful on phones
+// where typing a password is fiddly.
+document.getElementById('pwToggle').addEventListener('click', () => {
+  const inp = document.getElementById('password');
+  const btn = document.getElementById('pwToggle');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    btn.textContent = '🙈';
+    btn.title = 'Hide password · 隐藏密码';
+    btn.setAttribute('aria-label', 'Hide password');
+  } else {
+    inp.type = 'password';
+    btn.textContent = '👁';
+    btn.title = 'Show password · 显示密码';
+    btn.setAttribute('aria-label', 'Show password');
+  }
+  // Keep focus on the input so the user can keep typing.
+  inp.focus();
+});
+// Where to send the user after a successful login. Two layers:
+//   1. Explicit ?redirect=<path> in the URL — set by the per-app PWAs
+//      (/restock, /kitchen, /pos) when they bounce an unauthenticated
+//      user here. Always wins.
+//   2. Smart default based on the user's permissions — for users
+//      whose role is essentially a single app (warehouse / pos /
+//      kitchen), skip the dashboard and land them in their app.
+// Safety: redirect must be a same-origin relative path; '//' or
+// '://' is rejected to stop open-redirect injection.
+function _safeRedirect() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const r = params.get('redirect');
+    if (!r) return null;
+    if (!r.startsWith('/') || r.startsWith('//')) return null;
+    if (r.includes('://')) return null;
+    return r;
+  } catch { return null; }
+}
+// Remember-last-app: each PWA shell writes localStorage 'last_app' on
+// load. After login, if there's no explicit ?redirect= we honour that
+// remembered path so admins (and anyone else) land back where they
+// were working — instead of being kicked to the dashboard.
+function _lastAppRedirect(user) {
+  if (!user) return null;
+  let last = '';
+  try { last = localStorage.getItem('last_app') || ''; } catch {}
+  if (!last) return null;
+  // Validate same-origin and that the user actually has access.
+  const isAdmin = user.role === 'admin';
+  const p = user.permissions || {};
+  if (last === '/'        ) return '/';
+  if (last === '/restock' && (isAdmin || p.restock || p.warehouse_inbox)) return '/restock';
+  if (last === '/pos'     && (isAdmin || p.pos))      return '/pos';
+  if (last === '/kitchen' && (isAdmin || p.kitchen))  return '/kitchen';
+  return null;
+}
+function _smartRedirect(user) {
+  if (!user) return '/';
+  if (user.role === 'admin') return '/';
+  const p = user.permissions || {};
+  // Specific single-purpose flags first — these always route to their
+  // app even if other perms are also granted.
+  if (p.warehouse_inbox) return '/restock';
+  if (p.pos)             return '/pos';
+  // Manager-level perms = a multi-tool operator → dashboard. We
+  // intentionally exclude common warehouse / kitchen flags like
+  // dashboard / ingredients / purchases / alerts / suppliers because
+  // those are part of the warehouse role's default kit.
+  if (p.products || p.finance || p.sales) return '/';
+  // Otherwise route by single-app perm.
+  if (p.restock) return '/restock';
+  if (p.kitchen) return '/kitchen';
+  return '/';
+}
+async function login() {
+  const u = document.getElementById('username').value.trim();
+  const p = document.getElementById('password').value;
+  const btn = document.getElementById('btn');
+  const err = document.getElementById('err');
+  if (!u || !p) { err.textContent = 'Please enter username and password'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = 'Logging in...'; err.style.display = 'none';
+  try {
+    const r = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:u, password:p}) });
+    const d = await r.json();
+    if (d.success) {
+      // Order of precedence:
+      //   1. Explicit ?redirect=/path on this URL (set when a PWA shell
+      //      bounced an unauthenticated user here).
+      //   2. The PWA the user was last on, if they still have access.
+      //   3. Smart routing based on permissions (warehouse → /restock,
+      //      pos → /pos, etc).
+      window.location.href =
+        _safeRedirect() ||
+        _lastAppRedirect(d.user) ||
+        _smartRedirect(d.user);
+    }
+    else { err.textContent = d.error || 'Login failed'; err.style.display = 'block'; btn.disabled = false; btn.textContent = '登录 Login'; }
+  } catch(e) { err.textContent = 'Network error'; err.style.display = 'block'; btn.disabled = false; btn.textContent = '登录 Login'; }
+}
+</script>
+</body>
+</html>

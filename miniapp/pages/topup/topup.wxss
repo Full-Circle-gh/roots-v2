@@ -1,0 +1,232 @@
+/* Top-up screen — editorial header, dark balance strip, 2×2 tier grid,
+   sticky pay footer. Design #13 from the May 2026 mini-app handoff.
+   Design canvas is iPhone 390×844; mini-app normalises width to 750rpx,
+   so design-px → rpx is ~×1.92 (rounded to ×2 for crisp values). */
+
+.page {
+  background: var(--oat);
+  min-height: 100vh;
+  padding-bottom: 380rpx;       /* clear sticky footer */
+}
+
+/* ── Header ── */
+.header {
+  padding: 36rpx 44rpx 16rpx;
+}
+.kicker {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.25em;
+  color: var(--olive);
+  text-transform: uppercase;
+}
+.kicker-alt { margin-left: 6rpx; opacity: 0.7; }
+.title {
+  margin-top: 12rpx;
+  font-size: calc(76rpx * var(--font-scale));
+  line-height: 0.94;
+  letter-spacing: -0.01em;
+}
+.title .hl {
+  display: inline-block;
+  padding: 0 12rpx;
+  /* background set inline so accent-color tweaks live */
+}
+
+/* ── Balance strip ── */
+.balance-strip {
+  margin: 28rpx 44rpx 0;
+  background: var(--ink);
+  color: #fff;
+  padding: 24rpx 28rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 3rpx solid var(--ink);
+}
+.bs-lbl {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.18em;
+  color: rgba(255,255,255,0.55);
+}
+.bs-lbl-alt { margin-left: 4rpx; opacity: 0.85; }
+.bs-vals {
+  display: flex;
+  align-items: baseline;
+  gap: 20rpx;
+  margin-top: 8rpx;
+}
+.bs-amt { font-size: calc(48rpx * var(--font-scale)); line-height: 1; font-weight: 500; }
+.bs-pts {
+  font-size: calc(26rpx * var(--font-scale));
+  color: rgba(255,255,255,0.6);
+  letter-spacing: 0.04em;
+}
+.bs-link {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.15em;
+  text-decoration: underline;
+  opacity: 0.9;
+}
+
+/* ── Tier grid ── */
+.tiers {
+  margin: 32rpx 44rpx 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20rpx;
+}
+.tier {
+  border: 4rpx solid var(--ink);
+  padding: 24rpx 24rpx 28rpx;
+  position: relative;
+  transition: transform .12s ease, box-shadow .12s ease;
+  overflow: visible;
+}
+.tier-on {
+  box-shadow: 6rpx 6rpx 0 rgba(0,0,0,0.85);
+  transform: translate(-2rpx, -2rpx);
+}
+.tier-best {
+  position: absolute;
+  top: -20rpx;
+  right: -12rpx;
+  background: var(--berry);
+  color: #fff;
+  padding: 6rpx 16rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  transform: rotate(6deg);
+  border: 3rpx solid var(--ink);
+  box-shadow: 4rpx 4rpx 0 var(--ink);
+  z-index: 2;
+}
+.tier-label {
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+}
+.tier-amt {
+  font-size: calc(76rpx * var(--font-scale));
+  line-height: 0.9;
+  margin-top: 14rpx;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+}
+.tier-bonus {
+  display: inline-block;
+  margin-top: 18rpx;
+  padding: 6rpx 14rpx;
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.06em;
+}
+.tier-footer {
+  margin-top: 16rpx;
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+}
+.tier-check {
+  position: absolute;
+  top: 14rpx;
+  right: 14rpx;
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(30rpx * var(--font-scale));
+  line-height: 1;
+}
+
+/* ── How it works ── */
+.how {
+  margin: 44rpx 44rpx 0;
+}
+.how-lbl {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.22em;
+  color: var(--olive);
+}
+.how-lbl-alt { opacity: 0.7; margin-left: 4rpx; }
+.how-body {
+  margin-top: 14rpx;
+  font-size: calc(24rpx * var(--font-scale));
+  line-height: 1.55;
+  color: var(--forest);
+}
+
+/* ── Empty state ── */
+.empty {
+  margin: 60rpx 44rpx;
+  text-align: center;
+  padding: 80rpx 32rpx;
+  background: #FFFCF7;
+  border: 3rpx dashed rgba(0,0,0,0.18);
+}
+.empty-title { font-size: calc(36rpx * var(--font-scale)); }
+.empty-sub {
+  margin-top: 12rpx;
+  font-size: calc(24rpx * var(--font-scale));
+  opacity: 0.6;
+  line-height: 1.5;
+}
+
+.footer-spacer { height: 40rpx; }
+
+/* ── Sticky pay footer ── */
+.pay-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 28rpx 44rpx calc(40rpx + env(safe-area-inset-bottom));
+  background: var(--oat);
+  border-top: 3rpx solid var(--ink);
+  z-index: 10;
+}
+.pf-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 20rpx;
+}
+.pf-col { flex: 0 0 auto; }
+.pf-right { text-align: right; }
+.pf-lbl {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.18em;
+  color: var(--olive);
+}
+.pf-lbl-alt { opacity: 0.7; margin-left: 4rpx; }
+.pf-val-big {
+  font-size: calc(52rpx * var(--font-scale));
+  line-height: 1;
+  margin-top: 6rpx;
+  font-weight: 500;
+}
+.pf-val {
+  font-size: calc(36rpx * var(--font-scale));
+  line-height: 1;
+  margin-top: 6rpx;
+  font-weight: 500;
+}
+.pf-plus {
+  font-family: var(--f-bear);
+  font-size: calc(28rpx * var(--font-scale));
+  color: var(--olive);
+}
+.pf-value {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  color: var(--berry);
+  margin-top: 6rpx;
+}
+.pf-cta {
+  width: 100%;
+  padding: 28rpx 0;
+  text-align: center;
+  font-size: calc(34rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  border-radius: 0;
+}
+.pf-cta::after { border: none; }
+.pf-cta-disabled { opacity: 0.55; }

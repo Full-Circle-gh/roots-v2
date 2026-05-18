@@ -1,0 +1,1950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1a2314">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+<title>Markets POS · 市场收银</title>
+<link rel="manifest" href="/pos-manifest.webmanifest">
+<!-- PNG icons for "Add to Home Screen" on Android/iOS. Apple ignores the
+     manifest icon list and looks at apple-touch-icon, so both must be set. -->
+<link rel="icon" type="image/png" sizes="192x192" href="/pos-icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/pos-icon-512.png">
+<link rel="apple-touch-icon" href="/pos-icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/pos-icon-512.png">
+<meta name="application-name" content="Markets POS · 市场收银">
+<meta name="apple-mobile-web-app-title" content="市场 POS">
+<style>
+:root {
+  --dk: #1a2314;
+  --lime: #ccd900;
+  --lime-text: #6d7a2a;
+  --green: #3d7a1e;
+  --bg: #f6f4ee;
+  --card: #ffffff;
+  --border: #e6e2d6;
+  --muted: #8a8678;
+  --danger: #dc2626;
+  --success: #16a34a;
+  /* Safe-area env for iOS notches and Android nav bars */
+  --sa-top: env(safe-area-inset-top, 0px);
+  --sa-bot: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--dk);
+  font-size: 16px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+button { font-family: inherit; cursor: pointer; border: none; background: transparent; color: inherit; }
+input, textarea { font-family: inherit; -webkit-user-select: text; user-select: text; }
+input:focus { outline: 3px solid var(--lime); outline-offset: -1px; }
+
+/* ─────────────────────────────────────────────────────────────────────
+   APP SHELL — three rows: header, scrollable cart, sticky footer
+───────────────────────────────────────────────────────────────────── */
+.shell {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100dvh;
+  height: 100vh;
+  padding-top: var(--sa-top);
+}
+@supports (height: 100dvh) { .shell { height: 100dvh; } }
+
+/* HEADER — compact stats + icon row.
+   Today's total and txn count are always visible so the seller never
+   has to "navigate" to know how the day's going. */
+.head {
+  background: var(--dk);
+  color: #fff;
+  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+.head .stats {
+  display: flex; align-items: baseline; gap: 8px;
+  min-width: 0;
+  /* Allow the target chip to drop to a second line on narrow screens
+     instead of colliding with the user pill / search icon. */
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+/* Target chip on its own line under the totals when the screen is too
+   narrow to fit everything inline. */
+@media (max-width: 480px) {
+  .head .stats #targetChip {
+    flex-basis: 100%;
+    margin-left: 0 !important;
+  }
+}
+.head .stats .total {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--lime);
+  letter-spacing: -.01em;
+}
+.head .stats .sep { color: rgba(255,255,255,.3); font-size: 12px; }
+.head .stats .count { font-size: 13px; color: rgba(255,255,255,.7); font-weight: 600; }
+.head .icons {
+  display: flex; align-items: center; gap: 4px;
+}
+.head .icons button {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  font-size: 20px;
+  color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.head .icons button:active { background: rgba(255,255,255,.15); }
+.head .user-pill {
+  font-size: 11px;
+  color: rgba(255,255,255,.5);
+  margin-left: 6px;
+}
+/* Hide the user pill on narrow screens — the same identity is already
+   shown inside the ⋯ More overlay, and on mobile the pill kept
+   colliding with the search / history / more icons. */
+@media (max-width: 600px) {
+  .head .user-pill { display: none; }
+}
+/* (Market pill in the header was removed — market selection moved into
+    the ⋯ More overlay so the main page stays focused on the cart.) */
+
+/* CART — fills the middle, scrollable. Empty space (anywhere not on a
+   line item) is a giant tap target that opens the search overlay; the
+   small 🔍 icon in the header alone was too cramped given how often the
+   seller needs to search. cursor:pointer hints at desktop. */
+.cart {
+  background: var(--bg);
+  overflow-y: auto;
+  padding: 10px 12px 100px;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+  cursor: pointer;
+}
+.cart > .line { cursor: default; }
+.cart-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  pointer-events: none;
+  user-select: none;
+}
+.cart-empty .icon {
+  font-size: 96px;
+  opacity: .12;
+  line-height: 1;
+}
+.cart-empty .hint {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+  opacity: .7;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--card);
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+}
+
+.line {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 4px 10px;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(26,35,20,.04);
+  animation: lineIn .22s cubic-bezier(.2,.7,.4,1);
+  touch-action: pan-y;
+}
+@keyframes lineIn {
+  from { transform: translateY(-8px) scale(.97); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+.line.popped {
+  animation: pop .18s ease-out;
+}
+@keyframes pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.025); background: rgba(204,217,0,.18); }
+  100% { transform: scale(1); }
+}
+
+.line .name {
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.25;
+  word-break: break-word;
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+.line .name .variant {
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 13px;
+}
+.line .meta {
+  grid-column: 1;
+  grid-row: 2;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.line .meta .ltot {
+  color: var(--dk);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.line .qty-cluster {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.qty-btn {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dk);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .12s ease;
+}
+.qty-btn:active { background: var(--border); transform: scale(.96); }
+.qty-num {
+  min-width: 30px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.line.removing {
+  animation: lineOut .2s ease-in forwards;
+}
+@keyframes lineOut {
+  to { transform: translateX(40px); opacity: 0; height: 0; padding-top: 0; padding-bottom: 0; margin: 0; }
+}
+
+/* FOOTER — sticky total + huge confirm button */
+.foot {
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  padding: 12px 14px calc(12px + var(--sa-bot));
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 -8px 24px rgba(0,0,0,.04);
+}
+.foot .grand {
+  display: flex; flex-direction: column; line-height: 1;
+}
+.foot .grand .lbl { font-size: 10px; color: var(--muted); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 4px; }
+.foot .grand .val { font-size: 28px; font-weight: 900; color: var(--dk); font-variant-numeric: tabular-nums; }
+.confirm-btn {
+  background: var(--dk);
+  color: var(--lime);
+  border-radius: 14px;
+  padding: 18px 14px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  transition: transform .12s ease, opacity .12s ease;
+}
+.confirm-btn:disabled { opacity: .25; }
+.confirm-btn:active:not(:disabled) { transform: scale(.97); }
+
+/* ─────────────────────────────────────────────────────────────────────
+   OVERLAYS — search, camera, history. All slide up from the bottom on
+   phone, center on tablet+. No content shows on first load — only when
+   the user explicitly opens an overlay does any input/keyboard appear.
+───────────────────────────────────────────────────────────────────── */
+.ov-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 50;
+  display: none;
+  animation: fade .15s ease;
+}
+.ov-backdrop.visible { display: block; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+.ov {
+  position: fixed;
+  /* Phone default: full-screen so a focused input is never covered by
+     the soft keyboard. The header + input sit at the top of the panel;
+     the keyboard overlays the bottom but the search list above stays
+     scrollable in the visible area. */
+  inset: 0;
+  background: var(--card);
+  z-index: 51;
+  border-radius: 0;
+  display: none;
+  flex-direction: column;
+  padding-bottom: var(--sa-bot);
+  animation: slideUp .22s cubic-bezier(.2,.7,.4,1);
+}
+.ov.visible { display: flex; }
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: none; }
+}
+@media (min-width: 600px) {
+  .ov {
+    inset: auto;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(560px, 92vw);
+    max-height: 80vh;
+    border-radius: 18px;
+  }
+  .ov.visible { animation: fadeUp .22s cubic-bezier(.2,.7,.4,1); }
+  @keyframes fadeUp {
+    from { transform: translate(-50%, calc(-50% + 12px)); opacity: 0; }
+    to   { transform: translate(-50%, -50%); opacity: 1; }
+  }
+}
+/* Sticky search input at the top of the overlay body so it stays visible
+   even while the user scrolls the results list. */
+.ov .ov-input {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--card);
+}
+.ov-head {
+  padding: 14px 16px 8px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.ov-head .ov-title { font-weight: 800; font-size: 15px; }
+.ov-head .ov-close {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  font-size: 18px;
+  color: var(--muted);
+}
+.ov-head .ov-close:active { background: var(--bg); }
+.ov-body { padding: 14px 16px; overflow-y: auto; flex: 1; min-height: 0; }
+
+/* SEARCH overlay */
+.ov .ov-input {
+  width: 100%;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 18px;
+  font-weight: 600;
+  font-family: inherit;
+  background: #fff;
+}
+.ov .ov-input:focus { outline: none; border-color: var(--lime); }
+.search-list { margin-top: 12px; }
+.search-row {
+  padding: 12px 14px;
+  border-radius: 12px;
+  display: flex; justify-content: space-between; gap: 10px;
+  align-items: center;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+.search-row:active { background: var(--bg); }
+.search-row .info { min-width: 0; }
+.search-row .nm { font-weight: 700; font-size: 15px; }
+.search-row .mt { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.search-row .price {
+  font-weight: 800; font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--green);
+}
+.search-empty {
+  padding: 30px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* MORE-MENU styling — settings-list look. Each row is icon + label
+   (with optional sub-line) + a right-aligned value or chevron. Grouped
+   into cards with section labels above. */
+.menu-section { margin-bottom: 14px; }
+.menu-section:last-child { margin-bottom: 0; }
+.menu-section-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 0 6px 8px;
+}
+.menu-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .12s;
+}
+.menu-row:last-child { border-bottom: none; }
+.menu-row:active { background: rgba(0,0,0,.04); }
+.menu-row .icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  background: var(--card);
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+.menu-row .label {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dk);
+}
+.menu-row .label .sub {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.menu-row .value {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--lime-text);
+  margin-right: 4px;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.menu-row .value.muted { color: var(--muted); font-weight: 500; }
+.menu-row .chev {
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 700;
+}
+.menu-row.danger .icon { background: rgba(220,38,38,.08); border-color: rgba(220,38,38,.2); }
+.menu-row.danger .label { color: var(--danger); }
+.menu-row.accent .icon { background: rgba(204,217,0,.18); border-color: rgba(204,217,0,.4); }
+
+.menu-user {
+  display: flex; align-items: center; gap: 12px;
+  padding: 4px 4px 18px;
+}
+.menu-user .avatar {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--dk);
+  color: var(--lime);
+  font-weight: 800;
+  font-size: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+.menu-user .info { min-width: 0; }
+.menu-user .info .nm { font-size: 15px; font-weight: 800; color: var(--dk); }
+.menu-user .info .un { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* MARKET picker rows */
+.market-list { display: flex; flex-direction: column; gap: 6px; }
+.market-row {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  padding: 8px 10px 8px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-family: inherit;
+}
+.market-row-info {
+  flex: 1; min-width: 0;
+  padding: 8px 4px 8px 0;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.market-row-info:active { background: rgba(0,0,0,.04); }
+.market-row-name { font-weight: 800; font-size: 16px; color: var(--dk); }
+.market-row-sub  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.market-row-check {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--lime);
+  color: var(--dk);
+  font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.market-row-act {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-size: 15px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.market-row-act:active { background: var(--border); }
+.market-row-act.danger { background: rgba(220,38,38,.06); border-color: rgba(220,38,38,.18); }
+.market-row-act.danger:active { background: rgba(220,38,38,.18); }
+
+/* HISTORY rows */
+.txn-row {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.txn-row .info { min-width: 0; }
+.txn-row .info .when { font-weight: 700; font-size: 13px; }
+.txn-row .info .items { font-size: 11px; color: var(--muted); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 240px;
+}
+.txn-row .right { display: flex; align-items: center; gap: 8px; }
+.txn-row .amt { font-weight: 800; font-size: 16px; font-variant-numeric: tabular-nums; }
+.txn-row .void {
+  width: 32px; height: 32px; border-radius: 8px;
+  color: var(--danger); font-size: 16px;
+  background: rgba(220,38,38,.07);
+}
+.txn-row .void:active { background: rgba(220,38,38,.18); }
+
+/* TOAST — floats above everything, auto-dismiss */
+.toast-wrap {
+  position: fixed;
+  bottom: calc(120px + var(--sa-bot));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+  width: calc(100% - 32px);
+  max-width: 420px;
+}
+.toast {
+  background: var(--dk); color: #fff;
+  padding: 14px 16px; border-radius: 14px;
+  font-size: 14px; font-weight: 700;
+  box-shadow: 0 12px 32px rgba(0,0,0,.35);
+  pointer-events: auto;
+  text-align: center;
+  animation: toastIn .25s ease;
+}
+.toast.success { background: var(--success); }
+.toast.error { background: var(--danger); }
+@keyframes toastIn { from { transform: translateY(20px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* SCAN PULSE — visual hint at the top edge whenever a scan completes.
+   Replaces the "Scanned: X" status line — silent, ambient feedback. */
+.scan-pulse {
+  position: fixed;
+  top: var(--sa-top); left: 0; right: 0; height: 3px;
+  background: var(--lime);
+  transform: scaleX(0);
+  transform-origin: left;
+  z-index: 70;
+  pointer-events: none;
+}
+.scan-pulse.fire { animation: pulse .45s ease-out; }
+@keyframes pulse {
+  0%   { transform: scaleX(0); opacity: 1; }
+  40%  { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+
+/* Tablet: don't grow the cart line cards too wide; cap and center. */
+@media (min-width: 700px) {
+  .cart { padding: 16px max(16px, calc((100% - 720px) / 2)) 100px; }
+  .head, .foot { padding-left: max(14px, calc((100vw - 720px) / 2)); padding-right: max(14px, calc((100vw - 720px) / 2)); }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ── HEADER ─────────────────────────────────────────── -->
+  <header class="head">
+    <div class="stats">
+      <span class="total" id="todayTotal">¥0</span>
+      <span class="sep">·</span>
+      <span class="count"><span id="todayCount">0</span> 笔</span>
+      <span id="targetChip" style="display:none;margin-left:8px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.15);white-space:nowrap" title="Daily target progress · 每日目标进度"></span>
+      <span class="user-pill" id="userPill"></span>
+    </div>
+    <div class="icons">
+      <button id="searchBtn" title="Search · 搜索">🔍</button>
+      <button id="historyBtn" title="History · 历史">📜</button>
+      <button id="moreBtn" title="More · 更多">⋯</button>
+    </div>
+  </header>
+
+  <!-- ── CART ───────────────────────────────────────────── -->
+  <main class="cart" id="cart">
+    <div class="cart-empty">
+      <div class="icon">🛒</div>
+      <div class="hint">🔍 Tap anywhere to search · 点击任意处搜索</div>
+    </div>
+  </main>
+
+  <!-- ── FOOTER ─────────────────────────────────────────── -->
+  <footer class="foot">
+    <div class="grand">
+      <div class="lbl">合计 Total</div>
+      <div class="val" id="cartTotal">¥0.00</div>
+    </div>
+    <button class="confirm-btn" id="confirmBtn" disabled>✓ 确认 Confirm</button>
+  </footer>
+</div>
+
+<!-- Scan pulse indicator (top edge) -->
+<div class="scan-pulse" id="scanPulse"></div>
+
+<!-- ── OVERLAYS ─────────────────────────────────────────── -->
+<div class="ov-backdrop" id="ovBackdrop"></div>
+
+<!-- Search by name / SKU / barcode -->
+<div class="ov" id="searchOv">
+  <div class="ov-head">
+    <div class="ov-title">🔍 Search · 搜索</div>
+    <button class="ov-close" data-close>✕</button>
+  </div>
+  <div class="ov-body">
+    <input id="searchInput" class="ov-input" placeholder="Name 名称 / SKU / Barcode 条码"
+           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+           inputmode="search">
+    <div class="search-list" id="searchList"></div>
+  </div>
+</div>
+
+<!-- History (today's transactions) -->
+<div class="ov" id="historyOv">
+  <div class="ov-head">
+    <div class="ov-title">📜 今日交易 Today</div>
+    <button class="ov-close" data-close>✕</button>
+  </div>
+  <div class="ov-body" id="historyList">
+    <div class="search-empty">— 暂无交易 —</div>
+  </div>
+</div>
+
+<!-- More menu — settings-list style. Sections: account info, shift,
+     account actions. Repainted on open by renderMoreMenu(). -->
+<div class="ov" id="moreOv">
+  <div class="ov-head">
+    <div class="ov-title">Settings · 设置</div>
+    <button class="ov-close" data-close>✕</button>
+  </div>
+  <div class="ov-body" id="moreBody"></div>
+</div>
+
+<!-- Market picker — list of markets + inline "create new" form -->
+<div class="ov" id="marketOv">
+  <div class="ov-head">
+    <div class="ov-title">🏪 Select Market · 选择市场</div>
+    <button class="ov-close" data-close>✕</button>
+  </div>
+  <div class="ov-body" id="marketPickerBody"></div>
+</div>
+
+<!-- End-of-day summary modal -->
+<div class="ov" id="endDayOv">
+  <div class="ov-head">
+    <div class="ov-title">🌙 End of Day · 结束今日</div>
+    <button class="ov-close" data-close>✕</button>
+  </div>
+  <div class="ov-body" id="endDayBody"></div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+'use strict';
+// ─────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────
+let _user = null;
+let _cart = [];                    // { product_id, name, variant_label, sku, unit_price, qty }
+let _searchCache = null;
+let _scanBuf = '';
+let _scanBufTimer = null;
+// "Shift start" — ISO timestamp, persists in localStorage. The vendor
+// taps "End Day" at e.g. 6pm; we record that moment here, and from then
+// on the header / recent-transactions list filter to only transactions
+// with created_at >= _shiftStart. The DB itself is never touched —
+// analytics still see every sale. NULL means "show everything from
+// today" (default for a fresh device).
+let _shiftStart = null;
+try { _shiftStart = localStorage.getItem('posShiftStart') || null; } catch {}
+function _setShiftStart(iso) {
+  _shiftStart = iso;
+  try { iso ? localStorage.setItem('posShiftStart', iso) : localStorage.removeItem('posShiftStart'); } catch {}
+}
+// SQLite created_at strings ("YYYY-MM-DD HH:MM:SS" UTC) vs ISO 8601 —
+// normalise to the same shape before comparing lexically.
+function _afterShiftStart(serverTimeStr) {
+  if (!_shiftStart || !serverTimeStr) return true;
+  return String(serverTimeStr).replace(' ', 'T') >= _shiftStart;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Init — auth gate + global event wiring + load today's totals
+// ─────────────────────────────────────────────────────────────────────
+(async function init() {
+  const r = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({}));
+  _user = r?.user;
+  if (!_user) { window.location.href = '/login?redirect=' + encodeURIComponent(location.pathname + location.search); return; }
+  // Remember this is where the user was last working — login.html
+  // reads `last_app` to send them back here next time.
+  try { localStorage.setItem('last_app', '/pos'); } catch {}
+  const perms = _user.permissions || {};
+  if (_user.role !== 'admin' && !perms.pos) {
+    document.body.innerHTML = '<div style="padding:40px;text-align:center"><h1>403</h1><p>No POS access · 无收银权限</p><p><a href="/">← Back · 返回</a></p></div>';
+    return;
+  }
+  document.getElementById('userPill').textContent = _user.displayName || _user.username || '';
+  // Wire icon buttons. After opening search, also kick off doSearch('')
+  // so the empty-query "Top Sellers" list renders immediately.
+  document.getElementById('searchBtn').addEventListener('click', () => openOv('searchOv', () => {
+    const inp = document.getElementById('searchInput');
+    inp.value = '';
+    inp.focus();
+    inp.select();
+    doSearch('');
+  }));
+  document.getElementById('historyBtn').addEventListener('click', () => { openOv('historyOv'); refreshHistory(); });
+  // The More overlay is rendered fresh each open so the user info,
+  // current market, and shift status all reflect the latest state.
+  document.getElementById('moreBtn').addEventListener('click', () => { renderMoreMenu(); openOv('moreOv'); });
+
+  // Tap anywhere on the cart's empty space (the faded 🛒 area, or below
+  // the last line item) to open search. The small 🔍 icon in the header
+  // is hard to hit; this gives the seller a giant secondary tap target.
+  // We only fire when the click target is the cart container itself or
+  // the empty-state placeholder — taps on a real line / qty button bubble
+  // through unaffected.
+  document.getElementById('cart').addEventListener('click', (e) => {
+    if (e.target.closest('.line') || e.target.closest('button')) return;
+    // Tapping the cart routes to the market picker FIRST when no market
+    // is set — that's the prerequisite to scanning anything.
+    if (!_hasMarket()) { openMarketPicker(); return; }
+    openOv('searchOv', () => {
+      const inp = document.getElementById('searchInput');
+      inp.value = '';
+      inp.focus();
+      inp.select();
+      doSearch('');
+    });
+  });
+  document.getElementById('searchInput').addEventListener('input', onSearchInput);
+  document.getElementById('searchInput').addEventListener('keydown', (e) => {
+    // Hitting Enter on the search input commits the top match, so manual
+    // typing of a barcode + Enter still works without leaving the overlay.
+    if (e.key === 'Enter') {
+      const top = document.querySelector('.search-row');
+      if (top) top.click();
+    }
+  });
+
+  // Backdrop / X-button close any open overlay
+  document.getElementById('ovBackdrop').addEventListener('click', closeAllOv);
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeAllOv));
+
+  // Confirm sale
+  document.getElementById('confirmBtn').addEventListener('click', confirmSale);
+
+  // ── KEY POINT ──
+  // Document-level keystroke listener captures Bluetooth-keyboard /
+  // barcode-gun input WITHOUT needing a focused <input>. The on-screen
+  // soft keyboard never appears just from "scanning" — it only shows
+  // when the user explicitly opens the search overlay.
+  document.addEventListener('keydown', onGlobalKey);
+
+  await refreshToday();
+  setInterval(refreshToday, 30000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refreshToday();
+  });
+
+  // Auto-reload when a new service worker has taken control + register
+  // the SW directly here. PWA install criteria require a SW controlling
+  // the start_url; previously the SW was only registered from / and a
+  // first visit to /pos got no SW until they bounced through the main
+  // app first.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data?.type === 'sw-updated') location.reload();
+    });
+  }
+  // Web Push enrolment — silent no-op over HTTP. Once HTTPS goes live
+  // (rootskitchen.cn ICP filing) every POS device that has launched the
+  // PWA auto-subscribes and starts receiving OS-level pushes for any
+  // event the server fires through sendPushByPermission.
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    _enableWebPush().catch(() => {});
+  }
+})();
+function _urlBase64ToUint8Array(base64) {
+  const pad = '='.repeat((4 - base64.length % 4) % 4);
+  const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+async function _enableWebPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  const r = await fetch('/api/push/vapid-key');
+  const d = await r.json();
+  if (!d?.enabled || !d.publicKey) return;
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: _urlBase64ToUint8Array(d.publicKey),
+    });
+  }
+  await fetch('/api/push/subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sub.toJSON()),
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Global key capture (barcode gun → buffer → Enter → lookup)
+// ─────────────────────────────────────────────────────────────────────
+// Heuristic: a real gun fires ~10ms between keystrokes. Human typing is
+// ~80ms+. We accumulate single-char keystrokes; if Enter arrives before
+// the buffer expires (300ms idle), we treat the buffer as a scanned
+// barcode. If the user is in any text input/overlay, we step aside.
+function onGlobalKey(e) {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  // Ignore modifier keys / function keys.
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'Enter') {
+    if (_scanBuf) {
+      const v = _scanBuf;
+      _scanBuf = '';
+      lookupAndAdd(v);
+    }
+    return;
+  }
+  // Single printable character — append to buffer.
+  if (e.key.length === 1) {
+    _scanBuf += e.key;
+    if (_scanBufTimer) clearTimeout(_scanBufTimer);
+    // Drop the buffer if no more keystrokes for 300ms — protects against
+    // accidental keystrokes from a paired Bluetooth keyboard etc.
+    _scanBufTimer = setTimeout(() => { _scanBuf = ''; }, 300);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Barcode → product lookup → cart add
+// ─────────────────────────────────────────────────────────────────────
+async function lookupAndAdd(code) {
+  if (!_hasMarket()) { promptSetMarket(); return; }
+  pulseScan();
+  try {
+    const r = await fetch('/api/products/by-barcode/' + encodeURIComponent(code));
+    if (r.status === 404) { beep('error'); toast('Not found · 未识别: ' + code, 'error'); return; }
+    if (!r.ok) { beep('error'); toast('Lookup failed · 查询失败', 'error'); return; }
+    const d = await r.json();
+    // Honour the market-eligibility flag — refuse to add a product that's
+    // been deliberately hidden from market stalls, even if it has a valid
+    // barcode. Otherwise a scan would silently bypass the curated list.
+    if (d?.data && d.data.is_restock_only === 1) {
+      beep('error'); toast('Internal-only item, not for sale · 仅内部使用,不可销售: ' + (d.data.name_en || code), 'error');
+      return;
+    }
+    if (d?.data && d.data.is_market === 0) {
+      beep('error'); toast('Not available at markets · 此产品不在市场销售: ' + (d.data.name_en || code), 'error');
+      return;
+    }
+    addToCart(d.data, /*fromScan=*/true);
+    beep('ok');
+  } catch {
+    beep('error'); toast('Network error · 网络错误', 'error');
+  }
+}
+
+// Gate UX — when the seller tries to do anything before picking a market,
+// nudge them to the picker with a clear toast. We don't auto-pop the
+// picker on every keystroke (would be obnoxious for a gun burst) — just
+// when the action fails.
+function promptSetMarket() {
+  beep('error');
+  toast('Set your market first · 请先选择市场', 'error');
+  setTimeout(openMarketPicker, 350);
+}
+
+// Each scan adds 1 to qty. Repeat scans of the same product collapse
+// onto the same line (qty++) — chosen flow per the user's spec.
+function addToCart(p, fromScan) {
+  if (!_hasMarket()) { promptSetMarket(); return; }
+  const existingIdx = _cart.findIndex(l => l.product_id === p.id);
+  if (existingIdx >= 0) {
+    _cart[existingIdx].qty += 1;
+    renderCart(/*highlightIdx=*/existingIdx);
+  } else {
+    _cart.push({
+      product_id: p.id,
+      name: p.name_en || '?',
+      name_cn: p.name_cn || '',
+      variant_label: p.variant_label || '',
+      sku: p.sku || '',
+      unit_price: +p.sell_price || 0,
+      qty: 1,
+    });
+    renderCart(/*highlightIdx=*/_cart.length - 1);
+  }
+  if (fromScan) {
+    // Ambient close on scan — keeps the seller's hands free.
+    closeAllOv();
+  }
+}
+
+function changeQty(idx, delta) {
+  if (!_cart[idx]) return;
+  _cart[idx].qty += delta;
+  if (_cart[idx].qty <= 0) {
+    // Animate-out then remove
+    const el = document.querySelector('[data-line-idx="' + idx + '"]');
+    if (el) {
+      el.classList.add('removing');
+      setTimeout(() => { _cart.splice(idx, 1); renderCart(); }, 180);
+      // Update total immediately so the foot value tracks the visual change
+      _cart[idx].qty = 0;
+      updateFootTotals();
+    } else {
+      _cart.splice(idx, 1);
+      renderCart();
+    }
+  } else {
+    renderCart();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Cart rendering
+// ─────────────────────────────────────────────────────────────────────
+// Helper — selling is gated on having a market assigned. Without one,
+// sales would write with no market_id tag and skew analytics. We force
+// the vendor to pick before they can scan, search, or confirm a sale.
+function _hasMarket() { return !!(_user && _user.market); }
+
+function renderCart(highlightIdx) {
+  const cart = document.getElementById('cart');
+  if (!_cart.length) {
+    if (!_hasMarket()) {
+      // No market set → empty state becomes a "Set Market First" CTA.
+      // Tap anywhere on the cart still opens the market picker (the
+      // global cart click handler routes here when no market is set).
+      cart.innerHTML = `<div class="cart-empty">
+        <div class="icon">📍</div>
+        <div class="hint" style="background:var(--lime);color:var(--dk);border:none;font-weight:800;font-size:14px;padding:12px 20px">
+          Set your market to start selling · 请先选择市场
+        </div>
+      </div>`;
+    } else {
+      cart.innerHTML = '<div class="cart-empty"><div class="icon">🛒</div><div class="hint">🔍 Tap anywhere to search · 点击任意处搜索</div></div>';
+    }
+    updateFootTotals();
+    return;
+  }
+  cart.innerHTML = _cart.map((l, i) => `
+    <div class="line" data-line-idx="${i}">
+      <div class="name">${esc(l.name)}${l.variant_label ? ' <span class="variant">· ' + esc(l.variant_label) + '</span>' : ''}${l.name_cn ? '<div style="font-size:12px;font-weight:500;color:var(--muted);margin-top:1px">' + esc(l.name_cn) + '</div>' : ''}</div>
+      <div class="meta">¥${l.unit_price.toFixed(2)} × ${l.qty} = <span class="ltot">¥${(l.qty * l.unit_price).toFixed(2)}</span></div>
+      <div class="qty-cluster">
+        <button class="qty-btn" data-act="dec" data-i="${i}">−</button>
+        <span class="qty-num">${l.qty}</span>
+        <button class="qty-btn" data-act="inc" data-i="${i}">+</button>
+      </div>
+    </div>
+  `).join('') + `
+    <button id="addMoreBtn" class="line" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:var(--bg);border:2px dashed var(--lime);color:var(--lime);font-weight:800;font-size:15px;padding:18px;margin-top:10px;cursor:pointer;border-radius:14px">
+      <span style="font-size:22px;line-height:1">＋</span>
+      <span>Add Item · 添加商品</span>
+    </button>`;
+  // The "+ Add Item" button mirrors the empty-cart tap behavior — opens
+  // the search overlay so the seller can add more products without
+  // hunting for the small 🔍 icon in the header.
+  const addMore = document.getElementById('addMoreBtn');
+  if (addMore) addMore.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!_hasMarket()) { openMarketPicker(); return; }
+    openOv('searchOv', () => {
+      const inp = document.getElementById('searchInput');
+      inp.value = '';
+      inp.focus();
+      inp.select();
+      doSearch('');
+    });
+  });
+  // Wire buttons (delegated would also work; explicit is safer with rerenders)
+  cart.querySelectorAll('.qty-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = +btn.dataset.i;
+      changeQty(i, btn.dataset.act === 'inc' ? 1 : -1);
+    });
+  });
+  if (highlightIdx != null) {
+    const el = cart.querySelector(`[data-line-idx="${highlightIdx}"]`);
+    if (el) {
+      el.classList.add('popped');
+      setTimeout(() => el.classList.remove('popped'), 200);
+    }
+    // Scroll the Add Item button into view so the next scan/add target
+    // stays reachable. Falls back to the new line if the button isn't
+    // mounted yet.
+    const addBtn = document.getElementById('addMoreBtn');
+    if (addBtn) addBtn.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    else if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  updateFootTotals();
+}
+
+function updateFootTotals() {
+  const total = _cart.reduce((s, l) => s + l.qty * l.unit_price, 0);
+  document.getElementById('cartTotal').textContent = '¥' + total.toFixed(2);
+  document.getElementById('confirmBtn').disabled = _cart.length === 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Confirm sale
+// ─────────────────────────────────────────────────────────────────────
+async function confirmSale() {
+  if (!_cart.length) return;
+  const btn = document.getElementById('confirmBtn');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Saving… · 保存中…';
+  try {
+    const r = await fetch('/api/pos/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: _cart.map(l => ({
+          product_id: l.product_id,
+          name: l.name,
+          qty: l.qty,
+          unit_price: l.unit_price,
+        })),
+      }),
+    });
+    const d = await r.json();
+    if (!d.success) throw new Error(d.error || 'failed');
+    beep('done');
+    toast('✓ #' + d.transaction_id + ' · ¥' + (+d.total).toFixed(2), 'success');
+    _cart = [];
+    renderCart();
+    refreshToday();
+  } catch (e) {
+    beep('error');
+    toast('Save failed · 保存失败', 'error');
+  } finally {
+    btn.textContent = original;
+    btn.disabled = _cart.length === 0;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Today / history
+// ─────────────────────────────────────────────────────────────────────
+async function refreshToday() {
+  try {
+    const r = await fetch('/api/pos/today');
+    const d = await r.json();
+    if (!d.success) return;
+    // Filter by current shift — anything before "End Day" is hidden from
+    // the running tally. Server still has it; we just stop counting it
+    // for THIS shift.
+    const shiftTxns = (d.data.transactions || []).filter(t => _afterShiftStart(t.created_at));
+    const dayTotal = shiftTxns.reduce((s, t) => s + (+t.total || 0), 0);
+    document.getElementById('todayTotal').textContent = '¥' + Math.round(dayTotal).toLocaleString('en-US');
+    document.getElementById('todayCount').textContent = shiftTxns.length;
+    // Daily target chip — only visible when the user's market has a target
+    // set. Color-codes by progress: red < 50%, amber 50–80%, green ≥ 80%.
+    const chip = document.getElementById('targetChip');
+    if (chip) {
+      const target = +d.data.target || 0;
+      if (target > 0) {
+        const pct = Math.round((dayTotal / target) * 100);
+        const color =
+          pct >= 100 ? { bg:'rgba(109,179,63,.22)', fg:'#bce896', bd:'rgba(109,179,63,.5)' } :
+          pct >= 80  ? { bg:'rgba(109,179,63,.16)', fg:'#cdeebd', bd:'rgba(109,179,63,.4)' } :
+          pct >= 50  ? { bg:'rgba(224,184,80,.18)', fg:'#f5d98a', bd:'rgba(224,184,80,.45)' } :
+                       { bg:'rgba(220,38,38,.16)',  fg:'#fbb1b1', bd:'rgba(220,38,38,.45)' };
+        chip.textContent = '🎯 ¥' + Math.round(dayTotal).toLocaleString('en-US') + ' / ¥' +
+                           Math.round(target).toLocaleString('en-US') + ' · ' + pct + '%';
+        chip.style.display = '';
+        chip.style.background   = color.bg;
+        chip.style.color        = color.fg;
+        chip.style.borderColor  = color.bd;
+      } else {
+        chip.style.display = 'none';
+      }
+    }
+    // Stash both — full data for the End-Day summary, filtered for the
+    // History overlay (which should only show the current shift's sales).
+    window._todayData = { ...d.data, transactions: shiftTxns, dayTotal, dayCount: shiftTxns.length, _allTransactions: d.data.transactions };
+  } catch {}
+}
+
+function refreshHistory() {
+  const list = document.getElementById('historyList');
+  const data = window._todayData;
+  if (!data || !data.transactions.length) {
+    list.innerHTML = '<div class="search-empty">— No transactions · 暂无交易 —</div>';
+    return;
+  }
+  list.innerHTML = data.transactions.map(tx => {
+    const time = (tx.created_at || '').slice(11, 16);
+    const items = tx.lines.map(l => l.product_name).join(', ');
+    return `<div class="txn-row">
+      <div class="info">
+        <div class="when">#${tx.txn_id || '—'} · ${time}</div>
+        <div class="items">${esc(items)}</div>
+      </div>
+      <div class="right">
+        <div class="amt">¥${(+tx.total).toFixed(2)}</div>
+        ${tx.txn_id ? `<button class="void" data-void="${tx.txn_id}" title="作废 Void">↺</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('[data-void]').forEach(b => {
+    b.addEventListener('click', () => voidTxn(+b.dataset.void));
+  });
+}
+
+async function voidTxn(id) {
+  if (!confirm('Void #' + id + ' ? · 作废 #' + id + ' ?')) return;
+  const r = await fetch('/api/pos/void/' + id, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) {
+    toast('Voided #' + id + ' · 已作废', 'success');
+    await refreshToday();
+    refreshHistory();
+  } else {
+    toast('Void failed · 作废失败', 'error');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Search overlay (only place a soft keyboard appears)
+// ─────────────────────────────────────────────────────────────────────
+let _searchTimer = null;
+async function onSearchInput() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  if (_searchTimer) clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => doSearch(q), 120);
+}
+// Cache of top sellers at this market, refreshed when the search overlay
+// opens with an empty query (and not too recently). 5-min TTL keeps it
+// fresh through a long shift without hammering the endpoint.
+let _topProductsCache  = null;
+let _topProductsSource = null;  // 'market' | 'all_markets' | 'all_channels' | 'catalog'
+let _topProductsAt     = 0;
+
+async function doSearch(q) {
+  const list = document.getElementById('searchList');
+
+  // Empty query — show suggested products. Backend cascades from
+  // "this market's top sellers" → "all-market top sellers" → "all-time
+  // top sellers" → "catalog". A separate client-side fallback grabs
+  // /api/products if the dedicated endpoint somehow returns nothing,
+  // so the empty-state pane is *never* genuinely empty.
+  if (!q) {
+    list.innerHTML = '<div class="search-empty">Loading top sellers · 加载热销…</div>';
+    let cached = _topProductsCache;
+    let source = _topProductsSource;
+    if (!cached || (Date.now() - _topProductsAt) > 5 * 60_000) {
+      try {
+        const r = await fetch('/api/pos/top-products');
+        const d = await r.json();
+        cached = (d?.data) || [];
+        source = d?.source || 'market';
+        _topProductsCache = cached;
+        _topProductsSource = source;
+        _topProductsAt = Date.now();
+      } catch { cached = []; }
+    }
+    let rows = cached;
+    // Last-ditch fallback — pull /api/products and show alphabetically.
+    // Reuses the search cache so we don't double-fetch.
+    if (!rows.length) {
+      if (!_searchCache) {
+        try {
+          const r = await fetch('/api/products');
+          const d = await r.json();
+          _searchCache = (d.data || []).filter(p => p.status === 'Active' && p.is_market !== 0 && p.is_restock_only !== 1);
+        } catch { _searchCache = []; }
+      }
+      rows = (_searchCache || []).slice().sort((a, b) =>
+        (a.name_en || '').localeCompare(b.name_en || ''))
+        .slice(0, 30)
+        .map(p => ({
+          product_id: p.id, name_en: p.name_en, name_cn: p.name_cn,
+          sku: p.sku, sell_price: p.sell_price, variant_label: p.variant_label,
+          stock_qty: p.stock_qty, units: 0,
+        }));
+      source = 'catalog';
+    } else {
+      // Top sellers come from sales history — filter against the market
+      // catalog so an item that USED to sell at markets but is now off-market
+      // doesn't accidentally surface in the empty-state suggestions.
+      if (!_searchCache) {
+        try {
+          const r = await fetch('/api/products');
+          const d = await r.json();
+          _searchCache = (d.data || []).filter(p => p.status === 'Active' && p.is_market !== 0 && p.is_restock_only !== 1);
+        } catch { _searchCache = []; }
+      }
+      const marketIds = new Set((_searchCache || []).map(p => p.id));
+      rows = rows.filter(r => marketIds.has(r.product_id));
+    }
+    if (!rows.length) {
+      list.innerHTML = '<div class="search-empty">No products yet — start typing to search · 暂无产品</div>';
+      return;
+    }
+    const heading =
+      source === 'all_markets'   ? '🔥 Top Sellers · 热销 — all markets, last 60 days · 全市场近 60 天' :
+      source === 'all_channels'  ? '🔥 Top Sellers · 热销 — all-time, all channels · 全渠道历史'        :
+                                   '📦 Catalog · 产品列表 — alphabetical · 按字母排序';
+    const header = `<div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 6px 10px">${heading}</div>`;
+    list.innerHTML = header + rows.map((p, i) => `
+      <div class="search-row" data-pid="${p.product_id}">
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:${i<3?'var(--dk)':'var(--bg)'};color:${i<3?'var(--lime)':'var(--muted)'};font-weight:800;font-size:12px;flex-shrink:0;margin-right:4px">${i+1}</div>
+        <div class="info">
+          <div class="nm">${esc(p.name_en || '')}${p.variant_label ? ' <span style="color:var(--muted);font-weight:500">· ' + esc(p.variant_label) + '</span>' : ''}</div>
+          <div class="mt">${esc(p.name_cn || '') || (p.sku ? esc(p.sku) : '')}${p.name_cn || p.sku ? ' · ' : ''}<span style="color:var(--green);font-weight:700">${Math.round(+p.units || 0)} sold</span></div>
+        </div>
+        <div class="price">¥${(+p.sell_price || 0).toFixed(2)}</div>
+      </div>
+    `).join('');
+    wireSearchRows(list, /*topRows=*/rows);
+    return;
+  }
+
+  // Filtered search — lazy-load + cache the market-eligible product list.
+  // is_market is a per-product flag toggled on the product edit form.
+  // Defaults to 1 (visible) for legacy rows; admins flip off the products
+  // they don't carry at physical stalls.
+  if (!_searchCache) {
+    try {
+      const r = await fetch('/api/products');
+      const d = await r.json();
+      _searchCache = (d.data || []).filter(p => p.status === 'Active' && p.is_market !== 0 && p.is_restock_only !== 1);
+    } catch { _searchCache = []; }
+  }
+  const matches = _searchCache.filter(p =>
+    (p.name_en || '').toLowerCase().includes(q) ||
+    (p.name_cn || '').includes(q) ||
+    (p.sku || '').toLowerCase().includes(q) ||
+    (p.barcode || '').includes(q)
+  ).slice(0, 30);
+  if (!matches.length) { list.innerHTML = '<div class="search-empty">无匹配 No matches</div>'; return; }
+  list.innerHTML = matches.map(p => `
+    <div class="search-row" data-pid="${p.id}">
+      <div class="info">
+        <div class="nm">${esc(p.name_en || '')}${p.variant_label ? ' <span style="color:var(--muted);font-weight:500">· ' + esc(p.variant_label) + '</span>' : ''}</div>
+        <div class="mt">${p.sku ? esc(p.sku) + ' · ' : ''}${p.barcode ? '🏷 ' + esc(p.barcode) : ''}</div>
+      </div>
+      <div class="price">¥${(+p.sell_price || 0).toFixed(2)}</div>
+    </div>
+  `).join('');
+  wireSearchRows(list, null);
+}
+
+// Shared row wiring — taps add the product to the cart and close the
+// overlay. `topRows` is the product objects from /api/pos/top-products
+// (used when the user taps a row from the empty-query view since those
+// products may not yet be in _searchCache).
+function wireSearchRows(list, topRows) {
+  list.querySelectorAll('.search-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const pid = +row.dataset.pid;
+      let p = null;
+      if (topRows) {
+        const t = topRows.find(x => x.product_id === pid);
+        if (t) p = { id: t.product_id, name_en: t.name_en, name_cn: t.name_cn,
+                     sku: t.sku, sell_price: t.sell_price, variant_label: t.variant_label,
+                     stock_qty: t.stock_qty };
+      }
+      if (!p && _searchCache) p = _searchCache.find(x => x.id === pid);
+      if (!p) return;
+      addToCart(p, /*fromScan=*/false);
+      document.getElementById('searchInput').value = '';
+      closeAllOv();
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Overlay plumbing
+// ─────────────────────────────────────────────────────────────────────
+function openOv(id, after) {
+  closeAllOv(/*silent=*/true);
+  document.getElementById('ovBackdrop').classList.add('visible');
+  document.getElementById(id).classList.add('visible');
+  _ovKeyboardWatch(true);
+  if (after) setTimeout(after, 50);
+}
+function closeAllOv(silent) {
+  document.getElementById('ovBackdrop').classList.remove('visible');
+  document.querySelectorAll('.ov').forEach(el => {
+    el.classList.remove('visible');
+    el.style.height = '';  // reset any keyboard-driven sizing
+  });
+  _ovKeyboardWatch(false);
+  // Blur any focused element so the soft keyboard goes away.
+  if (!silent && document.activeElement && document.activeElement.blur) {
+    document.activeElement.blur();
+  }
+}
+
+// ── Android keyboard handling for overlays ──────────────────────────
+// On Android Chrome, the soft keyboard overlays the layout viewport
+// without resizing it — `window.innerHeight` stays the same. The fix is
+// to listen on `window.visualViewport` (whose `height` DOES shrink) and
+// force the active overlay's height to match the visible area, so the
+// keyboard never hides the search input or its top results.
+function _ovKeyboardSync() {
+  const vv = window.visualViewport;
+  const ov = document.querySelector('.ov.visible');
+  if (!ov || !vv) return;
+  // Only reflow on phone-sized screens; tablets get the centered modal.
+  if (window.innerWidth >= 600) { ov.style.height = ''; return; }
+  // Visible region top→bottom in viewport coords. We position the overlay
+  // by setting its height to match (its `inset:0` keeps it pinned).
+  const visibleH = Math.round(vv.height + vv.offsetTop);
+  ov.style.height = visibleH + 'px';
+}
+function _ovKeyboardWatch(on) {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  if (on) {
+    vv.addEventListener('resize', _ovKeyboardSync);
+    vv.addEventListener('scroll', _ovKeyboardSync);
+    _ovKeyboardSync();
+  } else {
+    vv.removeEventListener('resize', _ovKeyboardSync);
+    vv.removeEventListener('scroll', _ovKeyboardSync);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Sound + visual scan pulse
+// ─────────────────────────────────────────────────────────────────────
+let _audioCtx = null;
+function beep(kind) {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _audioCtx;
+    if (kind === 'error') {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = 220;
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.start(); osc.stop(ctx.currentTime + 0.4);
+    } else if (kind === 'done') {
+      // Two-note rising chime for sale confirmation.
+      [880, 1320].forEach((f, i) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = f;
+        const t = ctx.currentTime + i * 0.09;
+        g.gain.setValueAtTime(0.12, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+        o.start(t); o.stop(t + 0.16);
+      });
+    } else {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = 1100;
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+      osc.start(); osc.stop(ctx.currentTime + 0.1);
+    }
+  } catch {}
+}
+function pulseScan() {
+  const el = document.getElementById('scanPulse');
+  el.classList.remove('fire');
+  void el.offsetWidth;
+  el.classList.add('fire');
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Toast
+// ─────────────────────────────────────────────────────────────────────
+function toast(msg, type) {
+  const w = document.getElementById('toastWrap');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.textContent = msg;
+  w.appendChild(el);
+  setTimeout(() => el.remove(), type === 'error' ? 3500 : 2200);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Misc
+// ─────────────────────────────────────────────────────────────────────
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  location.href = '/login';
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// End of Day — summary + reset the visible totals to zero
+// ─────────────────────────────────────────────────────────────────────
+function openEndDay() {
+  const data = window._todayData;
+  const fmt  = n => '¥' + Math.round(n||0).toLocaleString('en-US');
+  const body = document.getElementById('endDayBody');
+  // No transactions in the current shift — bail out with a friendly note.
+  if (!data || !data.transactions || data.transactions.length === 0) {
+    body.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--muted)">
+      <div style="font-size:48px;margin-bottom:8px;opacity:.4">🌙</div>
+      <div style="font-size:14px;margin-bottom:14px">No sales in this shift · 本班次暂无销售</div>
+      <div style="font-size:11px;color:var(--muted)">Nothing to wrap up · 无需结算</div>
+    </div>`;
+    openOv('endDayOv');
+    return;
+  }
+  // Aggregate items across the shift's transactions for a top-N list.
+  const byProd = new Map();
+  let totalUnits = 0;
+  for (const t of data.transactions) {
+    for (const l of t.lines) {
+      const k = l.product_name || '?';
+      if (!byProd.has(k)) byProd.set(k, { name: k, units: 0, revenue: 0 });
+      const a = byProd.get(k);
+      a.units   += +l.qty   || 0;
+      a.revenue += +l.total || 0;
+      totalUnits += +l.qty || 0;
+    }
+  }
+  const topItems = [...byProd.values()].sort((x,y) => y.revenue - x.revenue).slice(0, 5);
+  const total = data.dayTotal || 0;
+  const txns  = data.dayCount || 0;
+  const avg   = txns > 0 ? total / txns : 0;
+  const firstAt = data.transactions[data.transactions.length - 1]?.created_at?.slice(11,16) || '—';
+  const lastAt  = data.transactions[0]?.created_at?.slice(11,16) || '—';
+  body.innerHTML = `
+    <!-- Headline KPIs -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div style="background:var(--bg);border-radius:12px;padding:14px">
+        <div style="font-size:10px;font-weight:800;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">营收 Revenue</div>
+        <div style="font-size:28px;font-weight:900;color:var(--dk);margin-top:4px;font-variant-numeric:tabular-nums">${fmt(total)}</div>
+      </div>
+      <div style="background:var(--bg);border-radius:12px;padding:14px">
+        <div style="font-size:10px;font-weight:800;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">交易 Transactions</div>
+        <div style="font-size:28px;font-weight:900;color:var(--dk);margin-top:4px;font-variant-numeric:tabular-nums">${txns}</div>
+      </div>
+      <div style="background:var(--bg);border-radius:12px;padding:12px 14px">
+        <div style="font-size:10px;font-weight:800;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">数量 Units</div>
+        <div style="font-size:18px;font-weight:800;color:var(--dk);margin-top:2px;font-variant-numeric:tabular-nums">${Math.round(totalUnits)}</div>
+      </div>
+      <div style="background:var(--bg);border-radius:12px;padding:12px 14px">
+        <div style="font-size:10px;font-weight:800;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">客单价 Avg</div>
+        <div style="font-size:18px;font-weight:800;color:var(--dk);margin-top:2px;font-variant-numeric:tabular-nums">${fmt(avg)}</div>
+      </div>
+    </div>
+
+    <!-- Shift window -->
+    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--muted)">
+      <span>📍 ${firstAt} → ${lastAt}</span>
+      <span>${data.transactions.length} sale${data.transactions.length===1?'':'s'}</span>
+    </div>
+
+    <!-- Top products -->
+    ${topItems.length ? `
+      <div style="font-size:10px;font-weight:800;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">🏆 Top Items · 热销</div>
+      <div style="background:var(--bg);border-radius:12px;overflow:hidden;margin-bottom:18px">
+        ${topItems.map((it, i) => `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;${i<topItems.length-1?'border-bottom:1px solid var(--border);':''}">
+          <div style="width:22px;height:22px;border-radius:50%;background:var(--dk);color:var(--lime);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center">${i+1}</div>
+          <div style="flex:1;min-width:0;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(it.name)}</div>
+          <div style="font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums">${Math.round(it.units)}件</div>
+          <div style="font-weight:800;font-variant-numeric:tabular-nums">${fmt(it.revenue)}</div>
+        </div>`).join('')}
+      </div>
+    ` : ''}
+
+    <!-- Confirm -->
+    <button class="confirm-btn" onclick="confirmEndDay()" style="background:var(--dk);color:var(--lime)">
+      ✓ End Day · 确认结束今日
+    </button>
+    <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5">
+      Resets the running total + clears your market · 结清班次并清除市场<br>
+      Sale records stay in the database for analytics · 销售数据保留
+    </div>
+  `;
+  openOv('endDayOv');
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Market picker — pick from existing OR create new on the spot
+// ─────────────────────────────────────────────────────────────────────
+// Render the ⋯ Settings overlay. Built fresh each open so the current
+// user / market / shift state are always accurate.
+function renderMoreMenu() {
+  const body = document.getElementById('moreBody');
+  if (!body || !_user) return;
+  const initial = (_user.displayName || _user.username || '?').trim().charAt(0).toUpperCase();
+  const marketLabel = _user.market
+    ? esc(_user.market.name_cn || _user.market.name)
+    : '<span style="color:var(--muted);font-weight:500">— none —</span>';
+  // Shift label: if a shift was started today we show "since HH:MM".
+  let shiftSub = 'Wrap up the day · 结束今日';
+  if (_shiftStart) {
+    const t = _shiftStart.slice(11, 16);
+    shiftSub = `Open since ${t} UTC · 班次已开`;
+  }
+  body.innerHTML = `
+    <!-- Top: who's signed in -->
+    <div class="menu-user">
+      <div class="avatar">${esc(initial)}</div>
+      <div class="info">
+        <div class="nm">${esc(_user.displayName || _user.username || '')}</div>
+        <div class="un">@${esc(_user.username || '')} · ${esc(_user.role || '')}</div>
+      </div>
+    </div>
+
+    <!-- Section: Account -->
+    <div class="menu-section">
+      <div class="menu-section-label">市场 Market</div>
+      <div class="menu-card">
+        <button class="menu-row" type="button" data-act="market">
+          <span class="icon">🏪</span>
+          <span class="label">${_user.market ? 'Current market · 当前市场' : 'Set market · 选择市场'}<span class="sub">${_user.market ? 'Tap to switch or add · 点击切换或新增' : 'Pick a stall to tag your sales · 选择摊位以记录销售'}</span></span>
+          <span class="value ${_user.market ? '' : 'muted'}">${marketLabel}</span>
+          <span class="chev">›</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Section: Shift -->
+    <div class="menu-section">
+      <div class="menu-section-label">班次 Shift</div>
+      <div class="menu-card">
+        <button class="menu-row accent" type="button" data-act="endday">
+          <span class="icon">🌙</span>
+          <span class="label">End Day · 结束今日<span class="sub">${esc(shiftSub)}</span></span>
+          <span class="chev">›</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Section: Account actions -->
+    <div class="menu-section">
+      <div class="menu-section-label">账户 Account</div>
+      <div class="menu-card">
+        <button class="menu-row danger" type="button" data-act="logout">
+          <span class="icon">⏻</span>
+          <span class="label">Logout · 退出<span class="sub">Sign out of this device · 退出当前设备</span></span>
+          <span class="chev">›</span>
+        </button>
+      </div>
+    </div>
+  `;
+  // Wire row actions
+  body.querySelectorAll('[data-act]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const act = btn.dataset.act;
+      if (act === 'market') {
+        closeAllOv(true);
+        setTimeout(openMarketPicker, 50);
+      } else if (act === 'endday') {
+        closeAllOv(true);
+        setTimeout(openEndDay, 50);
+      } else if (act === 'logout') {
+        logout();
+      }
+    });
+  });
+}
+
+let _marketCache = null;
+async function openMarketPicker() {
+  openOv('marketOv');
+  await renderMarketPicker();
+}
+
+async function renderMarketPicker() {
+  const body = document.getElementById('marketPickerBody');
+  body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">Loading…</div>';
+  try {
+    const r = await fetch('/api/markets');
+    const d = await r.json();
+    _marketCache = (d && d.data) ? d.data.filter(m => m.is_active) : [];
+  } catch { _marketCache = []; }
+  const currentId = _user?.market?.id || null;
+  const listHTML = _marketCache.length
+    ? _marketCache.map(m => `
+        <div class="market-row" data-id="${m.id}">
+          <div class="market-row-info" data-pick="${m.id}">
+            <div class="market-row-name">${esc(m.name_cn || m.name)}</div>
+            ${m.name_cn && m.name ? `<div class="market-row-sub">${esc(m.name)}</div>` : ''}
+            ${m.location ? `<div class="market-row-sub">📍 ${esc(m.location)}</div>` : ''}
+            ${+m.daily_target > 0 ? `<div class="market-row-sub">🎯 ¥${(+m.daily_target).toLocaleString('en-US')} / day · 每日目标</div>` : ''}
+          </div>
+          ${currentId === m.id ? '<div class="market-row-check">✓</div>' : ''}
+          <button class="market-row-act" data-edit="${m.id}" type="button" title="Edit · 编辑">✏️</button>
+          <button class="market-row-act danger" data-del="${m.id}" type="button" title="Remove · 删除">🗑</button>
+        </div>`).join('')
+    : '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">No markets yet · 暂无市场<br><span style="font-size:11px;opacity:.7;margin-top:4px;display:inline-block">Tap "+ New market" below to add one</span></div>';
+  body.innerHTML = `
+    <div class="market-list">${listHTML}</div>
+    <button class="confirm-btn" id="newMarketBtn" type="button"
+      style="margin-top:14px;background:var(--card);color:var(--dk);border:2px dashed var(--border)">
+      + 新建市场 · New market
+    </button>
+    <div id="newMarketForm" style="display:none;margin-top:12px;padding:14px;background:var(--bg);border-radius:12px">
+      <input id="nm_name"     class="ov-input" placeholder="Name (e.g. Yuexiu Stall) · 名称" autocomplete="off" autocapitalize="words" inputmode="text" style="margin-bottom:8px;font-size:16px">
+      <input id="nm_name_cn"  class="ov-input" placeholder="中文名 (optional)"               autocomplete="off"                       inputmode="text" style="margin-bottom:8px;font-size:16px">
+      <input id="nm_location" class="ov-input" placeholder="Location / 地址 (optional)"     autocomplete="off"                       inputmode="text" style="margin-bottom:8px;font-size:16px">
+      <input id="nm_target"   class="ov-input" placeholder="Daily target ¥ · 每日目标 (optional)" autocomplete="off" inputmode="numeric" pattern="[0-9]*" style="margin-bottom:8px;font-size:16px">
+      <button id="nm_geoBtn" class="confirm-btn" type="button" onclick="useMyLocation()" style="width:100%;padding:12px;margin-bottom:10px;background:rgba(204,217,0,.12);color:var(--lime-text);border:1px solid rgba(204,217,0,.4);font-size:13px">📍 Use my location · 使用当前位置</button>
+      <div id="nm_geoStatus" style="font-size:11px;color:var(--muted);margin-bottom:10px;display:none;text-align:center"></div>
+      <div style="display:flex;gap:8px">
+        <button class="confirm-btn" type="button" onclick="cancelNewMarket()" style="flex:1;background:var(--card);color:var(--muted);border:1px solid var(--border);padding:14px">Cancel · 取消</button>
+        <button class="confirm-btn" type="button" onclick="saveNewMarket()"   style="flex:2;padding:14px">💾 Save · 保存</button>
+      </div>
+    </div>
+    ${currentId ? `<button type="button" onclick="pickMarket(null)" style="display:block;margin:14px auto 0;background:none;color:var(--muted);font-size:12px;padding:8px;text-decoration:underline">Clear my market · 取消选择</button>` : ''}
+  `;
+  // Tap on the row's name/info area picks that market.
+  body.querySelectorAll('[data-pick]').forEach(area => {
+    area.addEventListener('click', () => pickMarket(+area.dataset.pick));
+  });
+  // Inline ✏️ and 🗑 — stop propagation so they don't also pick the row.
+  body.querySelectorAll('[data-edit]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const m = _marketCache.find(x => x.id === +btn.dataset.edit);
+      if (m) openMarketEdit(m);
+    });
+  });
+  body.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const m = _marketCache.find(x => x.id === +btn.dataset.del);
+      if (m) deleteMarket(m);
+    });
+  });
+  // "+ New market" button toggles inline form
+  document.getElementById('newMarketBtn').addEventListener('click', () => {
+    document.getElementById('newMarketForm').style.display = '';
+    document.getElementById('newMarketBtn').style.display = 'none';
+    setTimeout(() => document.getElementById('nm_name').focus(), 100);
+  });
+}
+
+// ── Edit a market ─────────────────────────────────────────────────────
+// Reuses the same inline form as "+ New market" — pre-fills with the
+// existing values and switches the save handler from POST to PUT.
+let _editingMarketId = null;
+function openMarketEdit(m) {
+  _editingMarketId = m.id;
+  document.getElementById('newMarketForm').style.display = '';
+  document.getElementById('newMarketBtn').style.display = 'none';
+  // Add a tiny "Editing X" indicator above the form so it's obvious
+  // this isn't a fresh add.
+  let banner = document.getElementById('nm_editBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'nm_editBanner';
+    banner.style.cssText = 'font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--lime-text);margin:-6px 0 8px;padding:0 2px';
+    document.getElementById('newMarketForm').prepend(banner);
+  }
+  banner.textContent = '✏️ Editing market · 编辑市场';
+  document.getElementById('nm_name').value     = m.name || '';
+  document.getElementById('nm_name_cn').value  = m.name_cn || '';
+  document.getElementById('nm_location').value = m.location || '';
+  document.getElementById('nm_target').value   = m.daily_target ? String(+m.daily_target) : '';
+  if (m.lat != null && m.lng != null) _newMarketGeo = { lat: m.lat, lng: m.lng };
+  setTimeout(() => document.getElementById('nm_name').focus(), 100);
+}
+
+// ── Delete (soft) ─────────────────────────────────────────────────────
+async function deleteMarket(m) {
+  const label = m.name_cn || m.name;
+  if (!confirm(`删除 "${label}" ?\n\nDelete this market?\n\nExisting sales tagged with it stay in the database; the market just stops appearing in pickers.`)) return;
+  try {
+    const r = await fetch('/api/markets/' + m.id, { method: 'DELETE' });
+    const d = await r.json();
+    if (!d?.success) { toast(d?.error || 'Delete failed · 删除失败', 'error'); return; }
+    toast('✓ Removed · 已删除', 'success');
+    // If the deleted market was the user's own assignment, server
+    // already cleared it (we do this in the PUT handler). Refresh
+    // /api/auth/me so the local _user reflects the cleared state.
+    if (_user?.market?.id === m.id) {
+      try {
+        const ar = await fetch('/api/auth/me');
+        const ad = await ar.json();
+        if (ad?.user) _user = ad.user;
+      } catch {}
+    }
+    await renderMarketPicker();
+    renderCart();   // empty state may need to flip if we just lost our market
+  } catch { toast('Network error · 网络错误', 'error'); }
+}
+
+// Captured GPS for the in-progress new-market form. Cleared by cancel /
+// close. We hold lat+lng separate from the typed Location field so the
+// vendor can fine-tune the address (e.g. add stall number) without
+// losing the underlying coordinates.
+let _newMarketGeo = null;
+
+function cancelNewMarket() {
+  document.getElementById('newMarketForm').style.display = 'none';
+  document.getElementById('newMarketBtn').style.display = '';
+  ['nm_name','nm_name_cn','nm_location','nm_target'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const status = document.getElementById('nm_geoStatus');
+  if (status) { status.style.display = 'none'; status.textContent = ''; status.style.color = ''; }
+  const banner = document.getElementById('nm_editBanner');
+  if (banner) banner.remove();
+  _newMarketGeo = null;
+  _editingMarketId = null;
+}
+
+// Use the device GPS to fill in lat/lng + a human-readable address.
+// 1) Browser geolocation (cm-to-tens-of-metres on phones); requires HTTPS
+//    or localhost. On plain HTTP the API is silently disabled by Chrome.
+// 2) Reverse-geocode via OpenStreetMap Nominatim (free, fair-use). Returns
+//    a friendly address; falls back to "lat, lng" string if OSM is blocked
+//    (e.g. behind a Chinese firewall — common case worth noting).
+async function useMyLocation() {
+  const btn    = document.getElementById('nm_geoBtn');
+  const status = document.getElementById('nm_geoStatus');
+  const locInp = document.getElementById('nm_location');
+  if (!('geolocation' in navigator)) {
+    toast('Geolocation not supported · 不支持定位', 'error');
+    return;
+  }
+  // Pre-flight: GPS only works in a secure context (HTTPS or localhost).
+  // On plain HTTP — which this server still uses — Chrome silently
+  // returns PERMISSION_DENIED, and the user thinks the feature is
+  // broken. Surface a clear message instead.
+  if (!window.isSecureContext) {
+    status.style.display = '';
+    status.style.color = 'var(--danger)';
+    status.innerHTML = '⚠ GPS needs HTTPS — type the address manually below.<br><span style="opacity:.8">浏览器要求 HTTPS · 请手动输入地址</span>';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = '📡 Getting location… · 定位中…';
+  status.style.display = '';
+  status.textContent  = 'Waiting for GPS… (allow location access) · 定位中,请允许权限';
+  try {
+    const pos = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 30000,
+      });
+    });
+    const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+    _newMarketGeo = { lat, lng };
+    status.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} · ±${Math.round(accuracy)}m · 解析地址中…`;
+    // Reverse-geocode. Nominatim asks us to identify in User-Agent (or
+    // Referer) — sending Referer happens automatically. Best-effort only.
+    let address = '';
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lng=${lng}&zoom=18&addressdetails=1&accept-language=zh-CN,zh,en`;
+      // Note: query-param key for longitude is "lon", not "lng" — fix it.
+      const r = await fetch(url.replace('&lng=', '&lon='));
+      if (r.ok) {
+        const j = await r.json();
+        address = (j && j.display_name) || '';
+      }
+    } catch {}
+    if (address) {
+      locInp.value = address;
+      status.textContent = `✓ ${lat.toFixed(5)}, ${lng.toFixed(5)} · ±${Math.round(accuracy)}m`;
+    } else {
+      // Geocoding failed (usually blocked) — keep the coords as the
+      // location text so the vendor still gets a useful, persistent value.
+      locInp.value = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      status.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} · ±${Math.round(accuracy)}m · 地址解析被阻止 · address lookup blocked`;
+    }
+  } catch (e) {
+    let msg = e.message || 'Location failed';
+    // Code 1 = PERMISSION_DENIED. On plain HTTP the browser blocks the
+    // API outright (we caught that above with isSecureContext), so a
+    // code-1 here is the user actually tapping "deny" or having
+    // location turned off in OS settings.
+    if (e.code === 1) msg = 'Permission denied · 权限被拒绝 — allow in Chrome settings, or type address';
+    else if (e.code === 2) msg = 'Position unavailable · 无法获取位置';
+    else if (e.code === 3) msg = 'Timed out · 超时 — try again outdoors · 室外重试';
+    status.style.color = 'var(--danger)';
+    status.textContent = '⚠ ' + msg;
+    _newMarketGeo = null;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📍 Use my location · 使用当前位置';
+  }
+}
+
+async function saveNewMarket() {
+  const name     = (document.getElementById('nm_name').value || '').trim();
+  const name_cn  = (document.getElementById('nm_name_cn').value || '').trim();
+  const location = (document.getElementById('nm_location').value || '').trim();
+  const targetRaw = (document.getElementById('nm_target').value || '').trim();
+  const daily_target = targetRaw ? Math.max(0, +targetRaw.replace(/[^\d.]/g,'')) || 0 : 0;
+  if (!name) { toast('名称必填 · Name required', 'error'); return; }
+  const body = {
+    name, name_cn, location,
+    daily_target,
+    lat: _newMarketGeo?.lat ?? null,
+    lng: _newMarketGeo?.lng ?? null,
+  };
+  // Edit mode → PUT existing market. Create mode → POST + auto-pick.
+  const editingId = _editingMarketId;
+  try {
+    const r = await fetch('/api/markets' + (editingId ? '/' + editingId : ''), {
+      method: editingId ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (!d?.success) { toast(d?.error || 'Save failed · 保存失败', 'error'); return; }
+    if (editingId) {
+      toast('✓ Updated · 已更新', 'success');
+      // If we just renamed the user's currently-assigned market, refresh
+      // the local user info so the More menu shows the new name.
+      if (_user?.market?.id === editingId) {
+        try {
+          const ar = await fetch('/api/auth/me');
+          const ad = await ar.json();
+          if (ad?.user) _user = ad.user;
+        } catch {}
+      }
+      cancelNewMarket();
+      await renderMarketPicker();
+      renderCart();
+    } else {
+      toast(d.reactivated ? '✓ 已恢复市场 Restored' : '✓ 已创建 Created', 'success');
+      cancelNewMarket();
+      await pickMarket(d.id);
+    }
+  } catch { toast('Network error · 网络错误', 'error'); }
+}
+
+async function pickMarket(marketId) {
+  try {
+    const r = await fetch('/api/pos/my-market', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ market_id: marketId }),
+    });
+    const d = await r.json();
+    if (!d?.success) { toast(d?.error || 'Save failed · 保存失败', 'error'); return; }
+    // Refresh user info so the header repaints with the new market.
+    const ar = await fetch('/api/auth/me');
+    const ad = await ar.json();
+    if (ad?.user) _user = ad.user;
+    closeAllOv();
+    renderCart();  // empty-state CTA flips between "Set market" and "Tap to search"
+    toast(marketId ? '✓ Market set · 已设置' : '✓ Market cleared · 已清除', 'success');
+  } catch { toast('Network error · 网络错误', 'error'); }
+}
+
+async function confirmEndDay() {
+  // Use the latest transaction's created_at as the cutoff (rather than
+  // "now") so any sale that lands milliseconds after this click still
+  // counts in the OLD shift, not the new one. Falls back to current ISO
+  // if for some reason there are no transactions.
+  const data = window._todayData;
+  let cutoff = new Date().toISOString();
+  if (data && data.transactions && data.transactions.length) {
+    const last = data.transactions[0].created_at; // newest first
+    if (last) cutoff = String(last).replace(' ', 'T') + 'Z'; // SQLite UTC
+    cutoff = new Date(new Date(cutoff).getTime() + 1).toISOString();
+  }
+  _setShiftStart(cutoff);
+  // Auto-clear the market assignment too. Vendors often rotate between
+  // stalls, so requiring them to re-pick at the start of the next shift
+  // prevents accidentally tagging a sale to yesterday's market. We do
+  // this server-side via /api/pos/my-market with NULL.
+  try {
+    await fetch('/api/pos/my-market', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ market_id: null }),
+    });
+    // Refresh local user info so _user.market drops and the empty cart
+    // immediately flips to the "Set market" CTA on next render.
+    const ar = await fetch('/api/auth/me');
+    const ad = await ar.json();
+    if (ad?.user) _user = ad.user;
+  } catch {}
+  closeAllOv();
+  refreshToday();
+  renderCart();   // empty state flips to "Set your market" CTA
+  toast('🌙 Day ended · 今日已结束', 'success');
+}
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+</script>
+</body>
+</html>

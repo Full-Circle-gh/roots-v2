@@ -1,0 +1,255 @@
+.page { background: var(--oat); min-height: 100vh; padding-bottom: 80rpx; }
+
+/* ── Hero ── */
+.hero {
+  position: relative;
+  background: var(--lime);
+  padding: 80rpx 44rpx 140rpx;
+  overflow: hidden;
+  min-height: 460rpx;
+}
+.hero-ip {
+  position: absolute;
+  right: 24rpx;
+  bottom: 20rpx;
+  width: 280rpx;
+  height: 380rpx;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+.hero-inner {
+  position: relative;
+  z-index: 1;
+}
+.hero-avatar {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 999rpx;
+  border: 3rpx solid var(--ink);
+  background: #FFFCF7;
+  display: block;
+  margin-bottom: 20rpx;
+}
+.hero-text { max-width: 60%; }
+.kicker {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.2em;
+  color: var(--forest);
+}
+.title {
+  font-size: calc(84rpx * var(--font-scale));
+  font-weight: 500;
+  line-height: 1.08;
+  margin-top: 14rpx;
+  color: var(--ink);
+  text-transform: capitalize;
+  word-break: break-word;
+}
+.hero-meta {
+  margin-top: 14rpx;
+  font-size: calc(22rpx * var(--font-scale));
+  font-family: var(--f-aleo);
+  color: var(--forest);
+}
+.hero-cta {
+  margin-top: 18rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/* ── Stats card (overlaps lime/oat seam) ── */
+.stats {
+  display: flex;
+  background: var(--ink);
+  color: #fff;
+  margin: -40rpx 44rpx 0;
+  position: relative;
+  z-index: 2;
+}
+.stat {
+  flex: 1;
+  text-align: left;
+  padding: 28rpx 24rpx;
+  border-left: 1rpx solid rgba(255, 255, 255, 0.18);
+}
+.stat:first-child { border-left: none; }
+.stat .val {
+  font-size: calc(44rpx * var(--font-scale));
+  color: var(--lime);
+  line-height: 1.1;
+}
+.stat .lbl {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 4rpx;
+}
+
+/* ── Sections ── */
+.section { padding: 48rpx 44rpx 0; }
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 24rpx;
+}
+.section-title {
+  font-size: calc(44rpx * var(--font-scale));
+  font-weight: 500;
+  color: var(--ink);
+}
+.view-all {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.15em;
+  color: var(--olive);
+  text-decoration: underline;
+}
+
+/* ── Order status buckets ── */
+.bucket-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 4rpx;
+}
+.bucket {
+  flex: 1;
+  text-align: center;
+  padding: 4rpx 0;
+}
+/* Icons are self-contained colored circles with a dark ring — no extra
+   wrapper border/background needed. The relative positioning is kept so
+   the count badge can anchor to the top-right corner. */
+.bucket-icon {
+  width: 96rpx;
+  height: 96rpx;
+  margin: 0 auto 12rpx;
+  position: relative;
+}
+.bucket-img {
+  width: 96rpx;
+  height: 96rpx;
+  display: block;
+}
+.bucket-badge {
+  position: absolute;
+  top: -6rpx;
+  right: -6rpx;
+  min-width: 30rpx;
+  height: 30rpx;
+  padding: 0 8rpx;
+  border-radius: 999rpx;
+  background: var(--berry);
+  color: #fff;
+  font-size: calc(18rpx * var(--font-scale));
+  font-weight: 700;
+  line-height: 30rpx;
+  text-align: center;
+}
+.bucket-lbl {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+
+/* ── Menu rows (borderless, hairline-separated) ── */
+.rows {
+  margin-top: 40rpx;
+}
+.row {
+  display: flex;
+  align-items: center;
+  padding: 28rpx 44rpx;
+  border-top: 1rpx solid rgba(0, 0, 0, 0.1);
+}
+.row:last-child { border-bottom: 1rpx solid rgba(0, 0, 0, 0.1); }
+.row-accent .row-title text.f-bear { color: var(--forest); }
+.row-accent .row-arrow { color: var(--forest); }
+.row-body { flex: 1; min-width: 0; }
+.row-title {
+  font-size: calc(30rpx * var(--font-scale));
+  line-height: 1.2;
+}
+.row-cn {
+  font-family: var(--f-yuan);
+  font-size: calc(22rpx * var(--font-scale));
+  color: var(--olive);
+}
+.row-meta {
+  font-family: var(--f-aleo);
+  font-size: calc(22rpx * var(--font-scale));
+  color: var(--olive);
+  margin-top: 6rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-arrow {
+  font-family: var(--f-bear);
+  font-size: calc(36rpx * var(--font-scale));
+  color: var(--olive);
+  margin-left: 16rpx;
+}
+
+/* ── Language picker ── */
+.lang-section { padding: 56rpx 44rpx 0; }
+.lang-row {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+.lang-opt {
+  flex: 1;
+  padding: 24rpx;
+  border: 3rpx solid var(--ink);
+  text-align: center;
+  font-family: var(--f-toni);
+  font-size: calc(24rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+}
+.lang-opt.on { background: var(--ink); color: var(--oat); }
+
+/* ── Legal + footer ── */
+.legal-links {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16rpx;
+  margin-top: 60rpx;
+  padding: 20rpx 44rpx;
+}
+.legal-link {
+  font-family: var(--f-toni);
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  color: var(--olive);
+  text-decoration: underline;
+}
+.legal-sep { color: var(--olive); opacity: 0.5; }
+
+.app-footer {
+  margin-top: 40rpx;
+  padding: 40rpx 44rpx 80rpx;
+  text-align: center;
+  opacity: 0.55;
+}
+.footer-mark {
+  display: block;
+  width: 180rpx;
+  height: 106rpx;
+  margin: 0 auto;
+}
+.footer-sub {
+  font-size: calc(22rpx * var(--font-scale));
+  margin-top: 12rpx;
+  color: var(--olive);
+}
+.footer-version {
+  font-size: calc(18rpx * var(--font-scale));
+  margin-top: 16rpx;
+  color: var(--olive);
+  letter-spacing: 0.04em;
+}
+
+.muted { color: var(--olive); }

@@ -1,0 +1,72 @@
+<view class="page">
+  <!-- Editorial hero band -->
+  <view class="hero">
+    <image class="hero-ip" src="/assets/brand/ip-onion.png" mode="aspectFit"></image>
+    <view class="hero-inner">
+      <view class="kicker f-toni">{{copy.kicker}}</view>
+      <view class="title f-bear">{{copy.title}}</view>
+      <view class="sub">{{copy.sub}}</view>
+    </view>
+  </view>
+
+  <!-- Avatar disc overlaps the hero/oat seam -->
+  <view class="avatar-wrap">
+    <view class="avatar-disc">
+      <button
+        class="avatar-btn"
+        open-type="chooseAvatar"
+        bindchooseavatar="onChooseAvatar">
+        <image wx:if="{{avatarPreview}}" class="avatar-img" src="{{avatarPreview}}" mode="aspectFill"></image>
+        <view wx:else class="avatar-placeholder f-toni">{{copy.pickAvatar}}</view>
+      </button>
+    </view>
+    <view class="avatar-hint f-toni">{{copy.avatarHint}}</view>
+  </view>
+
+  <view class="form">
+    <view class="field-block">
+      <view class="field-label f-toni">{{copy.nicknameLabel}}</view>
+      <input
+        class="input f-aleo"
+        type="nickname"
+        placeholder-class="input-placeholder"
+        placeholder="{{copy.nicknamePh}}"
+        value="{{nickname}}"
+        maxlength="40"
+        bindinput="onNicknameInput"
+        bindblur="onNicknameInput"
+      />
+    </view>
+
+    <view class="field-block">
+      <view class="field-label f-toni">{{copy.addrLabel}}</view>
+      <button class="wx-addr-btn f-toni" bindtap="pickWxAddress" disabled="{{wxAddrPicking}}">
+        <view class="wx-dot"></view>
+        <text>{{wxAddrPicking ? copy.addrLoading : copy.wxAddrBtn}}</text>
+      </button>
+      <view wx:if="{{addrPreview}}" class="addr-preview">
+        <view class="addr-line f-bear">{{addrPreview.name}} · {{addrPreview.phone}}</view>
+        <view class="addr-line addr-sub">{{addrPreview.address}}</view>
+      </view>
+      <view class="field-hint">{{copy.addrHint}}</view>
+    </view>
+
+    <view class="field-block" wx:if="{{showPhone}}">
+      <view class="field-label f-toni">{{copy.phoneLabel}}</view>
+      <button
+        class="phone-btn f-aleo"
+        open-type="getPhoneNumber"
+        bindgetphonenumber="onGetPhone">
+        {{phone ? phone : copy.phoneBtn}}
+      </button>
+      <view class="field-hint">{{copy.phoneHint}}</view>
+    </view>
+  </view>
+
+  <view class="actions">
+    <button class="btn secondary f-toni" bindtap="cancel" disabled="{{saving}}">{{copy.cancel}}</button>
+    <button class="btn primary f-toni" bindtap="save" disabled="{{saving}}">{{saving ? copy.saving : copy.save}}</button>
+  </view>
+
+  <view class="note">{{copy.note}}</view>
+</view>

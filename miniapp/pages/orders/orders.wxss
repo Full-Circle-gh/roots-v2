@@ -1,0 +1,111 @@
+.page { background: var(--oat); min-height: 100vh; padding-bottom: 100rpx; }
+
+.header { padding: 60rpx 44rpx 24rpx; }
+.kicker { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.16em; color: var(--olive); margin-bottom: 8rpx; }
+.title { font-size: calc(72rpx * var(--font-scale)); font-weight: 500; line-height: 1; color: var(--ink); }
+
+.chips {
+  white-space: nowrap;
+  padding: 12rpx 44rpx 24rpx;
+}
+.chip {
+  display: inline-block;
+  padding: 12rpx 24rpx;
+  background: transparent;
+  color: var(--olive);
+  border: 3rpx solid var(--ink);
+  border-radius: 999rpx;
+  font-family: var(--f-toni);
+  font-size: calc(22rpx * var(--font-scale));
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  margin-right: 12rpx;
+}
+.chip.on { background: var(--ink); color: var(--oat); }
+
+.list { padding: 0 44rpx; }
+.order-card {
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  padding: 28rpx;
+  margin-bottom: 20rpx;
+}
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+.order-no {
+  font-family: monospace;
+  font-size: calc(24rpx * var(--font-scale));
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* Status pills — muted brand colors */
+.status-pill {
+  padding: 6rpx 16rpx;
+  border-radius: 999rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 2rpx solid;
+}
+.status-pending_payment { background: rgba(255, 175, 96, 0.18); color: #c66800; border-color: rgba(255, 175, 96, 0.4); }
+.status-paid            { background: rgba(178, 207, 237, 0.2);  color: #2456a3; border-color: rgba(178, 207, 237, 0.5); }
+.status-preparing       { background: rgba(242, 202, 108, 0.2);  color: #7f5800; border-color: rgba(242, 202, 108, 0.5); }
+.status-dispatched      { background: rgba(123, 189, 59, 0.18);  color: #3a6817; border-color: rgba(123, 189, 59, 0.4); }
+.status-delivered       { background: rgba(54, 83, 41, 0.92);    color: #fff;    border-color: var(--forest); }
+.status-cancelled       { background: rgba(0, 0, 0, 0.06);       color: var(--olive); border-color: rgba(0, 0, 0, 0.18); }
+.status-refunded        { background: rgba(233, 97, 116, 0.18);  color: #9c1f33; border-color: rgba(233, 97, 116, 0.4); }
+
+.card-mid {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  margin-bottom: 16rpx;
+}
+.thumbs {
+  display: flex;
+  gap: 8rpx;
+  flex: 1;
+  align-items: center;
+}
+.thumb {
+  width: 80rpx;
+  height: 80rpx;
+  background: var(--oat);
+  border: 2rpx solid var(--ink);
+  overflow: hidden;
+}
+.thumb-img { width: 100%; height: 100%; }
+.more-count {
+  font-size: calc(26rpx * var(--font-scale));
+  color: var(--olive);
+  margin-left: 8rpx;
+}
+.amount {
+  font-size: calc(44rpx * var(--font-scale));
+  font-weight: 500;
+}
+
+.card-bot {
+  font-size: calc(20rpx * var(--font-scale));
+  color: var(--olive);
+}
+
+.empty {
+  padding: 200rpx 44rpx 0;
+  text-align: center;
+}
+.empty-title { font-size: calc(56rpx * var(--font-scale)); font-weight: 500; margin-bottom: 16rpx; }
+.empty-sub { color: var(--olive); font-size: calc(26rpx * var(--font-scale)); line-height: 1.5; margin-bottom: 40rpx; }
+.empty-btn {
+  display: inline-block;
+  background: var(--ink); color: var(--oat);
+  padding: 20rpx 36rpx;
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  border-radius: 999rpx;
+}

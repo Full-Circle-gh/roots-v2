@@ -1,0 +1,24 @@
+<view class="page">
+  <view class="hero">
+    <view class="check-mark">✓</view>
+    <view class="headline f-bear">{{copy.headline}}</view>
+    <view class="sub f-aleo">{{copy.sub}}</view>
+  </view>
+
+  <view wx:if="{{orderNo}}" class="card">
+    <view class="row">
+      <view class="lbl f-toni">{{copy.orderLabel}}</view>
+      <view class="val">{{orderNo}}</view>
+    </view>
+    <view class="row">
+      <view class="lbl f-toni">{{copy.totalLabel}}</view>
+      <view class="val f-bear total">{{total}}</view>
+    </view>
+  </view>
+
+  <view class="actions">
+    <button class="btn primary f-toni" bindtap="viewOrder">{{copy.viewBtn}}</button>
+    <button class="btn secondary f-toni" bindtap="goShop">{{copy.shopBtn}}</button>
+  </view>
+  <popup-manager page="order-success"></popup-manager>
+</view>

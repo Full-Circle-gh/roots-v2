@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "Order",
+  "backgroundColor": "#F2E7DF",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "cs-button": "/components/cs-button/cs-button"
+  }
+}

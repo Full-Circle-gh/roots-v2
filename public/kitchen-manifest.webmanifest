@@ -1,0 +1,18 @@
+{
+  "name": "Kitchen Station",
+  "short_name": "Kitchen",
+  "description": "Kitchen ordering + production for Roots",
+  "start_url": "/kitchen",
+  "scope": "/kitchen",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1a2314",
+  "theme_color": "#1a2314",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "/kitchen-icon-192.png",          "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/kitchen-icon-512.png",          "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/kitchen-icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/kitchen-icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

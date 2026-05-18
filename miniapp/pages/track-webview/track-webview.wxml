@@ -1,0 +1,11 @@
+<!-- Web-view wrapper that loads the public tracking page on
+     rootskitchenchina.com. Requires the domain to be added to the
+     AppID's 业务域名 list on mp.weixin.qq.com — that's a one-time
+     setup. Once whitelisted, customers tap "View on carrier site"
+     in the order page and land here on a full-screen tracking view
+     that stays inside WeChat (no browser hop). -->
+<web-view wx:if="{{src}}" src="{{src}}"></web-view>
+<view wx:else class="err">
+  <view class="err-title">{{lang === 'cn' ? '链接已失效' : 'Link expired'}}</view>
+  <view class="err-sub">{{lang === 'cn' ? '请返回订单页面重新打开。' : 'Please go back to the order page and try again.'}}</view>
+</view>

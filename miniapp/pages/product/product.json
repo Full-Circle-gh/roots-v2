@@ -1,0 +1,11 @@
+{
+  "navigationBarTitleText": "Product",
+  "navigationStyle": "custom",
+  "backgroundColor": "#F2E7DF",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "cs-button": "/components/cs-button/cs-button",
+    "popup-manager": "/components/popup-manager/popup-manager",
+    "product-blocks": "/components/product-blocks/product-blocks"
+  }
+}

@@ -1,0 +1,193 @@
+.page {
+  background: var(--oat);
+  min-height: 100vh;
+  padding: 0 0 280rpx;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────── */
+.header { padding: 48rpx 44rpx 0; }
+.kicker { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.25em; color: var(--olive); }
+.kicker-cn { font-family: var(--f-yuan); letter-spacing: 0; }
+.title { font-size: calc(70rpx * var(--font-scale)); font-weight: 500; line-height: 0.92; margin-top: 12rpx; color: var(--ink); }
+
+/* ── Product context card ─────────────────────────────────────────────── */
+.ctx-card {
+  margin: 32rpx 44rpx 0;
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  padding: 20rpx 24rpx;
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+}
+.ctx-thumb {
+  width: 108rpx;
+  height: 132rpx;
+  background: var(--lime);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.ctx-img { width: 100%; height: 100%; }
+.ctx-info { flex: 1; min-width: 0; }
+.ctx-name { font-size: calc(30rpx * var(--font-scale)); line-height: 1.05; color: var(--ink); }
+.ctx-sub { font-size: calc(20rpx * var(--font-scale)); color: var(--olive); margin-top: 4rpx; }
+.ctx-meta { font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.1em; color: var(--olive); margin-top: 8rpx; }
+
+/* ── Sections ─────────────────────────────────────────────────────────── */
+.section { margin: 40rpx 44rpx 0; }
+.section-head { display: flex; justify-content: space-between; align-items: baseline; }
+.section-label { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.22em; color: var(--olive); }
+.label-cn { font-family: var(--f-yuan); letter-spacing: 0; }
+.char-count { font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.1em; color: var(--olive); }
+
+/* ── Rating stars ─────────────────────────────────────────────────────── */
+.rating-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16rpx;
+}
+.stars { display: flex; gap: 12rpx; }
+.star {
+  width: 68rpx;
+  height: 68rpx;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32' fill='none' stroke='%231a1a17' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'><path d='M16 4l3.5 7.5L27 13l-5.5 5.5L23 26l-7-4-7 4 1.5-7.5L5 13l7.5-1.5L16 4z'/></svg>");
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+}
+.star.on {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32' fill='%23CCD900' stroke='%231a1a17' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'><path d='M16 4l3.5 7.5L27 13l-5.5 5.5L23 26l-7-4-7 4 1.5-7.5L5 13l7.5-1.5L16 4z'/></svg>");
+}
+.star:active { transform: scale(0.92); }
+.rating-label {
+  font-size: calc(44rpx * var(--font-scale));
+  color: var(--ink);
+  line-height: 1;
+}
+
+/* ── Tags ─────────────────────────────────────────────────────────────── */
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+.tag {
+  padding: 10rpx 20rpx;
+  border: 3rpx solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--f-aleo);
+  font-size: calc(22rpx * var(--font-scale));
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2;
+}
+.tag.on { background: var(--ink); color: var(--lime); }
+.tag-check { font-family: var(--f-bear); margin-right: 6rpx; }
+.tag-cn { font-family: var(--f-yuan); font-size: calc(18rpx * var(--font-scale)); opacity: 0.7; margin-left: 4rpx; }
+
+/* ── Comment + photos ─────────────────────────────────────────────────── */
+.comment-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  padding: 18rpx 22rpx;
+  margin-top: 16rpx;
+  font-size: calc(24rpx * var(--font-scale));
+  color: var(--ink);
+  height: 160rpx;
+  line-height: 1.4;
+  border-radius: 0;
+}
+
+.photo-row {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 20rpx;
+}
+.photo-tile {
+  width: 104rpx;
+  height: 104rpx;
+  background: var(--oat);
+  border: 3rpx solid var(--ink);
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+}
+.photo-img { width: 100%; height: 100%; }
+.photo-x {
+  position: absolute;
+  top: -8rpx;
+  right: -8rpx;
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #fff;
+  font-family: var(--f-bear);
+  font-size: calc(22rpx * var(--font-scale));
+  line-height: 32rpx;
+  text-align: center;
+}
+.photo-add {
+  width: 104rpx;
+  height: 104rpx;
+  border: 3rpx dashed var(--ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  color: var(--olive);
+  flex-shrink: 0;
+}
+.photo-plus { font-family: var(--f-aleo); font-size: calc(36rpx * var(--font-scale)); line-height: 1; }
+.photo-add-label { font-size: calc(16rpx * var(--font-scale)); letter-spacing: 0.12em; }
+
+/* ── Sticky submit bar ────────────────────────────────────────────────── */
+.submit-bar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: var(--oat);
+  border-top: 3rpx solid var(--ink);
+  padding: 20rpx 44rpx calc(40rpx + env(safe-area-inset-bottom));
+}
+.submit-meta {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+.points-sticker {
+  background: var(--lime);
+  color: var(--ink);
+  padding: 6rpx 14rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.06em;
+  transform: rotate(-4deg);
+  box-shadow: 4rpx 4rpx 0 rgba(0, 0, 0, 0.85);
+  white-space: nowrap;
+}
+.submit-note {
+  flex: 1;
+  font-family: var(--f-aleo);
+  font-size: calc(20rpx * var(--font-scale));
+  color: var(--olive);
+  line-height: 1.3;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.submit-btn {
+  margin-top: 18rpx;
+  background: var(--ink);
+  color: var(--lime);
+  padding: 26rpx 0;
+  text-align: center;
+  font-size: calc(32rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+}
+.submit-btn .arrow { margin-left: 8rpx; }
+.submit-btn.disabled { opacity: 0.45; }
+.submit-btn:active:not(.disabled) { transform: scale(0.99); }

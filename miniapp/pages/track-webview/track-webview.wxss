@@ -1,0 +1,15 @@
+.err {
+  padding: 120rpx 60rpx;
+  text-align: center;
+  color: var(--olive);
+}
+.err-title {
+  font-family: var(--f-bear);
+  font-size: 40rpx;
+  margin-bottom: 16rpx;
+  color: var(--ink);
+}
+.err-sub {
+  font-size: 24rpx;
+  line-height: 1.5;
+}

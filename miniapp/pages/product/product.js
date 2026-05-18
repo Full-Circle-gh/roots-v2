@@ -1,0 +1,388 @@
+// Product detail page. Wired by:
+//   wx.navigateTo({ url: '/pages/product/product?id=' + product.id })
+// from anywhere a product is tappable (home blocks, shop grid, etc.).
+// Reads /api/retail/products/:id which already returns full details
+// including options[].choices[] for any per-product Q&A.
+
+const api  = require('../../utils/api');
+const lang = require('../../utils/lang');
+const cart = require('../../utils/cart');
+
+function absUrl(u) {
+  if (!u) return '';
+  if (/^(https?:|data:|wxfile:)/i.test(u)) return u;
+  if (u.startsWith('/')) return api.BASE + u;
+  return u;
+}
+
+const MONTHS_SHORT = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+function formatReviewDate(iso, L) {
+  if (!iso || iso.length < 10) return '';
+  const [, m, d] = iso.slice(0, 10).split('-').map(Number);
+  if (!m || !d) return '';
+  return L === 'cn' ? `${m}月${d}日` : `${MONTHS_SHORT[m - 1]} ${d}`;
+}
+
+// Tag-chip labels + colours live in storefront_config (editable from
+// /retail-admin → Reviews). This fallback only runs on a cold launch
+// before config has loaded. Tag *ids* are what we persist in the DB.
+const DEFAULT_REVIEW_TAGS = [
+  { id: 'fresh',     en: 'Super fresh',     cn: '很新鲜', color: 'lime'     },
+  { id: 'tasty',     en: 'Tastes great',    cn: '味道好', color: 'papaya'   },
+  { id: 'fast-ship', en: 'Fast ship',       cn: '发货快', color: 'sky'      },
+  { id: 'packed',    en: 'Great packaging', cn: '包装好', color: 'corn'     },
+  { id: 'value',     en: 'Worth it',        cn: '值得',   color: 'pea'      },
+  { id: 'eco',       en: 'Eco-friendly',    cn: '环保',   color: 'cucumber' },
+  { id: 'will-buy',  en: 'Will reorder',    cn: '会回购', color: 'pink'     },
+];
+
+function reviewTagMap() {
+  const cfg = getApp()?.globalData?.config;
+  const list = (cfg?.reviews?.tags && cfg.reviews.tags.length)
+    ? cfg.reviews.tags
+    : DEFAULT_REVIEW_TAGS;
+  const out = {};
+  for (const t of list) out[t.id] = { en: t.en || '', cn: t.cn || '', color: t.color || 'lime' };
+  return out;
+}
+
+Page({
+  data: {
+    id: null,
+    product: null,
+    image: '',
+    aspectRatio: '',
+    name: '',
+    subtitle: '',
+    price: '',
+    priceN: 0,
+    isFlash: false,
+    flashWas: '',
+    flashOff: '',
+    flashEnds: '',
+    flashCountdown: null,  // { d, h, m, s } padded strings; null when not on flash or ended
+    flashEnded: false,
+    description: '',
+    descriptionParts: [], // [{ kind: 'heading'|'para', text }] (legacy renderer)
+    descriptionBlocks: [], // designer-block array — when non-empty, replaces descriptionParts
+    size: '',           // weight string e.g. "330ml" — shown big right of name
+    keywords: '',       // bilingual short descriptors (e.g. "raw, alive")
+    tagline: '',        // bold one-liner slogan
+    badges: [],
+    options: [],
+    selectedChoices: {},   // { [option_id]: choice_id }
+    qty: 1,
+    lang: 'en',
+    loading: true,
+    notFound: false,
+    addBtnLabel: 'ADD TO BASKET',
+    soldOut: false,
+    stockTag: '',          // 'Only 3 left' / 'Sold out' / ''
+    stockTagKind: '',      // 'low' | 'out' | ''
+    reviewAvg: 0,          // avg rating
+    reviewAvgDisplay: '',  // '4.7' or ''
+    reviewCount: 0,        // count
+    reviewStars: ['off', 'off', 'off', 'off', 'off'],
+    reviewsRecent: [],
+    nutritionBasis: '',    // resolved label e.g. "Per 100ml" / "每100毫升"
+    nutritionRows: [],     // [{label, value}]
+  },
+
+  async onLoad(query) {
+    const id = parseInt(query.id, 10);
+    if (!id) { this.setData({ notFound: true, loading: false }); return; }
+    const app = getApp();
+    this.setData({ id, lang: app.globalData.lang });
+    await this.refresh();
+  },
+
+  onShow() {
+    const app = getApp();
+    if (app.globalData.lang !== this.data.lang) {
+      this.setData({ lang: app.globalData.lang });
+      this.recomputeDisplay();
+    }
+    this.startFlashTick();
+  },
+
+  onHide()   { this.stopFlashTick(); },
+  onUnload() { this.stopFlashTick(); },
+
+  startFlashTick() {
+    this.stopFlashTick();
+    this._flashTick = setInterval(() => this.recomputeFlashCountdown(), 1000);
+    this.recomputeFlashCountdown();
+  },
+  stopFlashTick() {
+    if (this._flashTick) { clearInterval(this._flashTick); this._flashTick = null; }
+  },
+
+  recomputeFlashCountdown() {
+    if (!this.data.isFlash || !this.data.flashEnds) {
+      if (this.data.flashCountdown || this.data.flashEnded) {
+        this.setData({ flashCountdown: null, flashEnded: false });
+      }
+      return;
+    }
+    const ms = new Date(this.data.flashEnds).getTime() - Date.now();
+    if (!isFinite(ms) || ms <= 0) {
+      if (!this.data.flashEnded) this.setData({ flashCountdown: null, flashEnded: true });
+      return;
+    }
+    let s = Math.floor(ms / 1000);
+    const d = Math.floor(s / 86400); s -= d * 86400;
+    const h = Math.floor(s / 3600);  s -= h * 3600;
+    const m = Math.floor(s / 60);    s -= m * 60;
+    const pad = n => (n < 10 ? '0' + n : '' + n);
+    this.setData({
+      flashCountdown: { d: pad(d), h: pad(h), m: pad(m), s: pad(s), showDays: d > 0 },
+      flashEnded: false,
+    });
+  },
+
+  async refresh() {
+    this.setData({ loading: true });
+    try {
+      const p = await api.get('/api/retail/products/' + this.data.id);
+      this.setData({ product: p, loading: false });
+      this.recomputeDisplay();
+    } catch (e) {
+      console.warn('[product] load failed:', e.message);
+      this.setData({ notFound: true, loading: false });
+    }
+  },
+
+  async onPullDownRefresh() {
+    await this.refresh();
+    wx.stopPullDownRefresh();
+  },
+
+  recomputeDisplay() {
+    const p = this.data.product;
+    const L = this.data.lang;
+    if (!p) return;
+    const img = absUrl(p.image_url) || p.image_data || '';
+    // Use the server-resolved effective_price so what we charge matches
+    // what we display (flash sale auto-applies when active).
+    const regular = Number(p.price ?? p.sell_price) || 0;
+    const v = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
+    const isFlash = !!p.is_on_flash && v < regular;
+    const flashWas = isFlash ? '¥' + regular.toFixed(2) : '';
+    const flashOff = isFlash && regular > 0 ? '-' + Math.round(((regular - v) / regular) * 100) + '%' : '';
+    const flashEnds = isFlash && p.flash?.ends_at ? p.flash.ends_at : '';
+    // free_of (comma list like "gluten,nuts") → badges
+    const freeOf = (p.free_of || '').split(',').map(s => s.trim()).filter(Boolean);
+    const badgeMap = {
+      gluten: { en: 'GLUTEN FREE', cn: '无麸质' },
+      nuts:   { en: 'NUT FREE',    cn: '无坚果' },
+      soy:    { en: 'SOY FREE',    cn: '无大豆' },
+      dairy:  { en: 'DAIRY FREE',  cn: '无乳制品' },
+      egg:    { en: 'EGG FREE',    cn: '无蛋' },
+      '5spice': { en: '5-SPICE FREE', cn: '无五香' },
+    };
+    const badges = freeOf.map(k => badgeMap[k] ? lang.pick(badgeMap[k].en, badgeMap[k].cn, L) : k.toUpperCase()).filter(Boolean);
+    // Pre-resolve option labels for the WXML
+    const options = (p.options || []).map(o => ({
+      ...o,
+      question: lang.pick(o.question_en, o.question_cn, L),
+      choices: (o.choices || []).map(c => ({
+        ...c,
+        label: lang.pick(c.label_en, c.label_cn, L),
+        delta_text: Number(c.price_delta) ? (Number(c.price_delta) > 0 ? '+¥' + Number(c.price_delta).toFixed(2) : '−¥' + Math.abs(Number(c.price_delta)).toFixed(2)) : '',
+      })),
+    }));
+    // Pre-pick default choices on first load
+    const selected = { ...this.data.selectedChoices };
+    options.forEach(o => {
+      if (selected[o.id] != null) return;
+      const def = o.choices.find(c => c.is_default);
+      if (def) selected[o.id] = def.id;
+      else if (o.is_required && o.choices.length === 1) selected[o.id] = o.choices[0].id;
+    });
+    // Stock state — null means untracked (treat as in-stock).
+    let soldOut = false, stockTag = '', stockTagKind = '';
+    if (p.stock != null) {
+      if (Number(p.stock) <= 0) {
+        soldOut = true;
+        stockTag = L === 'cn' ? '已售罄' : 'SOLD OUT';
+        stockTagKind = 'out';
+      } else if (Number(p.stock) <= 5) {
+        stockTag = L === 'cn' ? '仅剩 ' + p.stock + ' 件' : 'Only ' + p.stock + ' left';
+        stockTagKind = 'low';
+      }
+    }
+
+    // Nutrition panel — server returns either null or
+    //   { basis_en, basis_cn, rows: [{label_en,label_cn,value}] }
+    let nutritionBasis = '', nutritionRows = [];
+    if (p.nutrition && typeof p.nutrition === 'object') {
+      nutritionBasis = lang.pick(p.nutrition.basis_en, p.nutrition.basis_cn, L);
+      nutritionRows = (p.nutrition.rows || [])
+        .map(r => ({ label: lang.pick(r.label_en, r.label_cn, L), value: r.value || '' }))
+        .filter(r => r.label || r.value);
+    }
+
+    // Review summary — fill 5 star slots based on rounded avg
+    const avg = Number(p.review_avg) || 0;
+    const rounded = Math.round(avg);
+    const reviewStars = [1, 2, 3, 4, 5].map(i => i <= rounded ? 'on' : 'off');
+    const reviewsRecent = (p.reviews_recent || []).map(r => ({
+      ...r,
+      stars: [1, 2, 3, 4, 5].map(i => i <= r.rating ? 'on' : 'off'),
+      created_short: formatReviewDate(r.created_at, L),
+      tags_view: (() => {
+        const tagMap = reviewTagMap();
+        return (r.tags || []).map(id => {
+          const t = tagMap[id];
+          // Unknown id (admin removed it after the review was written):
+          // show the slug so the chip is still visible, no silent loss.
+          const label = t ? (L === 'cn' ? (t.cn || t.en) : (t.en || t.cn)) : id;
+          const color = t ? t.color : 'lime';
+          return { id, label, color };
+        }).filter(t => t.label);
+      })(),
+      photo_urls: (r.photos || []).map(u => absUrl(u)),
+    }));
+
+    // Description: split into segments so lines starting with "## " become
+    // styled section headings (the office inserts them via the picker in the
+    // product edit form). Consecutive non-heading lines coalesce into one
+    // paragraph so the existing `white-space: pre-line` rendering still
+    // honours single newlines for line breaks inside a section.
+    const rawDesc = lang.pick(p.description_en, p.description_cn, L) || '';
+    const descParts = [];
+    let buf = [];
+    const flush = () => {
+      const t = buf.join('\n').trim();
+      if (t) descParts.push({ kind: 'para', text: t });
+      buf = [];
+    };
+    rawDesc.split('\n').forEach(line => {
+      const m = line.match(/^\s*##\s+(.+?)\s*$/);
+      if (m) { flush(); descParts.push({ kind: 'heading', text: m[1] }); }
+      else { buf.push(line); }
+    });
+    flush();
+
+    this.setData({
+      image: img,
+      aspectRatio: p.image_aspect ? String(p.image_aspect) : '',
+      name: lang.pick(p.name_en, p.name_cn, L),
+      subtitle: lang.pick(p.name_cn, p.name_en, L === 'en' ? 'cn' : 'en'),
+      priceN: v,
+      price: v > 0 ? '¥' + v.toFixed(2) : '—',
+      isFlash,
+      flashWas,
+      flashOff,
+      flashEnds,
+      description: rawDesc,
+      descriptionParts: descParts,
+      // Block-based body wins when present; legacy descParts only render
+      // when the office hasn't migrated this product to blocks yet.
+      descriptionBlocks: Array.isArray(p.description_blocks) ? p.description_blocks : [],
+      size: p.size || p.weight || '',
+      keywords: lang.pick(p.keywords_en, p.keywords_cn, L),
+      tagline: lang.pick(p.tagline_en, p.tagline_cn, L),
+      badges,
+      options,
+      selectedChoices: selected,
+      addBtnLabel: soldOut
+        ? (L === 'cn' ? '已售罄' : 'SOLD OUT')
+        : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET'),
+      soldOut,
+      stockTag,
+      stockTagKind,
+      reviewAvg: avg,
+      reviewAvgDisplay: avg > 0 ? avg.toFixed(1) : '',
+      reviewCount: Number(p.review_count) || 0,
+      reviewStars,
+      reviewsRecent,
+      nutritionBasis,
+      nutritionRows,
+    });
+    this.recomputeFlashCountdown();
+  },
+
+  pickChoice(e) {
+    const { optionId, choiceId } = e.currentTarget.dataset;
+    const selected = { ...this.data.selectedChoices, [optionId]: choiceId };
+    this.setData({ selectedChoices: selected });
+  },
+
+  decQty() { this.setData({ qty: Math.max(1, this.data.qty - 1) }); },
+  incQty() { this.setData({ qty: Math.min(99, this.data.qty + 1) }); },
+
+  back() { wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/home' }) }); },
+
+  previewReviewPhoto(e) {
+    const urls = e.currentTarget.dataset.urls || [];
+    const idx  = e.currentTarget.dataset.idx || 0;
+    if (!urls.length) return;
+    wx.previewImage({ urls, current: urls[idx] });
+  },
+
+  // Share via WeChat (...).
+  onShareAppMessage() {
+    const p = this.data.product;
+    if (!p) return { title: 'Roots', path: '/pages/home/home' };
+    const title = (this.data.lang === 'cn' ? p.name_cn : p.name_en) || p.name_en || 'Roots';
+    return {
+      title,
+      path: '/pages/product/product?id=' + p.id,
+      imageUrl: this.data.image || undefined,
+    };
+  },
+  // Share to "Moments" (timeline) — same target, slightly different prompt.
+  onShareTimeline() {
+    const p = this.data.product;
+    if (!p) return {};
+    return {
+      title: (this.data.lang === 'cn' ? p.name_cn : p.name_en) || p.name_en || 'Roots',
+      query: 'id=' + p.id,
+      imageUrl: this.data.image || undefined,
+    };
+  },
+
+  addToCart() {
+    const p = this.data.product;
+    if (!p) return;
+    if (this.data.soldOut) {
+      wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
+      return;
+    }
+    // Validate required options chosen
+    for (const o of this.data.options) {
+      if (o.is_required && !this.data.selectedChoices[o.id]) {
+        wx.showToast({ title: this.data.lang === 'cn' ? '请选择 ' + o.question : 'Please choose: ' + o.question, icon: 'none' });
+        return;
+      }
+    }
+    // Compute final unit price (base + option deltas)
+    let delta = 0;
+    const chosen = [];
+    this.data.options.forEach(o => {
+      const cid = this.data.selectedChoices[o.id];
+      if (!cid) return;
+      const c = o.choices.find(x => x.id === cid);
+      if (!c) return;
+      delta += Number(c.price_delta) || 0;
+      chosen.push({ option_id: o.id, choice_id: c.id, label: c.label, delta: Number(c.price_delta) || 0 });
+    });
+    cart.add({
+      id: p.id,
+      name_en: p.name_en,
+      name_cn: p.name_cn,
+      sku: p.sku,
+      size: p.size || p.weight,
+      image_url: p.image_url,
+      image_data: p.image_data,
+      price: this.data.priceN + delta,
+    }, this.data.qty, chosen);
+    wx.showToast({
+      title: this.data.lang === 'cn' ? '已加入购物车' : 'Added to cart',
+      icon: 'success',
+      duration: 1200,
+    });
+    setTimeout(() => wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/home' }) }), 500);
+  },
+});

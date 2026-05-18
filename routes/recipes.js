@@ -1,0 +1,295 @@
+const express = require('express');
+const db = require('../database');
+const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
+const router = express.Router();
+
+// GET all recipes (favorites first, then alphabetical)
+router.get('/api/recipes', requireAuth, requirePermission('recipes'), (req, res) => {
+  const { search } = req.query;
+  let query = 'SELECT * FROM recipes WHERE is_active = 1';
+  const params = [];
+  if (search) { query += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)'; const s = `%${search}%`; params.push(s,s,s); }
+  query += ' ORDER BY is_favorite DESC, name_en';
+  const recipes = db.prepare(query).all(...params);
+  res.json({ success: true, data: recipes });
+});
+
+// PUT toggle favorite
+router.put('/api/recipes/:id/favorite', requireAuth, requirePermission('recipes'), (req, res) => {
+  const cur = db.prepare('SELECT is_favorite FROM recipes WHERE id = ?').get(req.params.id);
+  if (!cur) return res.status(404).json({ error: 'Not found · 未找到' });
+  const next = cur.is_favorite ? 0 : 1;
+  db.prepare('UPDATE recipes SET is_favorite = ? WHERE id = ?').run(next, req.params.id);
+  res.json({ success: true, is_favorite: next });
+});
+
+// GET deleted recipes (the trash). MUST be defined before the
+// `/api/recipes/:id` route below — otherwise Express matches "trash"
+// as an id and returns 404. Lists soft-deleted rows so the user can
+// restore them. Includes a count of linked ingredients + the deletion
+// timestamp (proxied by updated_at since the soft-delete bumps that).
+router.get('/api/recipes/trash', requireAuth, requirePermission('recipes'), (req, res) => {
+  const rows = db.prepare(`
+    SELECT r.*,
+           (SELECT COUNT(*) FROM recipe_ingredients ri WHERE ri.recipe_id = r.id) AS ingredient_count
+      FROM recipes r
+     WHERE r.is_active = 0
+     ORDER BY r.updated_at DESC, r.id DESC
+  `).all();
+  res.json({ success: true, data: rows });
+});
+
+// GET single recipe with ingredients and steps
+router.get('/api/recipes/:id', requireAuth, requirePermission('recipes'), (req, res) => {
+  const recipe = db.prepare('SELECT * FROM recipes WHERE id = ? AND is_active = 1').get(req.params.id);
+  if (!recipe) return res.status(404).json({ error: 'Not found · 未找到' });
+  const ingredients = db.prepare('SELECT ri.*, i.cost_per_unit as master_cost, i.unit as master_unit FROM recipe_ingredients ri LEFT JOIN ingredients i ON ri.ingredient_id = i.id WHERE ri.recipe_id = ? ORDER BY ri.sort_order').all(recipe.id);
+  const steps = db.prepare('SELECT * FROM recipe_steps WHERE recipe_id = ? ORDER BY step_number').all(recipe.id);
+  const costData = db.prepare('SELECT * FROM recipe_cost_data WHERE recipe_id = ?').get(recipe.id);
+  res.json({ success: true, data: { ...recipe, ingredients, steps, costData } });
+});
+
+// POST create recipe
+router.post('/api/recipes', requireAuth, requirePermission('recipes'), (req, res) => {
+  const { name_en, name_cn, sku, category, batch_size, servings, serving_size, shelf_life, storage, notes, image_data, ingredients, steps } = req.body;
+  if (!name_en) return res.status(400).json({ error: 'name_en required · 英文名称必填' });
+  try {
+    const result = db.prepare('INSERT INTO recipes (name_en,name_cn,sku,category,batch_size,servings,serving_size,shelf_life,storage,notes,image_data) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .run(name_en, name_cn||null, sku||null, category||null, batch_size||null, servings||null, serving_size||null, shelf_life||null, storage||null, notes||null, image_data||null);
+    const recipeId = result.lastInsertRowid;
+    if (ingredients?.length) {
+      const insertIng = db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)');
+      ingredients.forEach((ing, i) => insertIng.run(recipeId, ing.ingredient_id||null, ing.name_en||'', ing.name_cn||null, ing.sku||null, ing.qty||0, ing.unit||'g', ing.notes||null, ing.substitutes||null, i));
+    }
+    if (steps?.length) {
+      const insertStep = db.prepare('INSERT INTO recipe_steps (recipe_id,step_number,name,instructions) VALUES (?,?,?,?)');
+      steps.forEach((s, i) => insertStep.run(recipeId, i+1, s.name||null, s.instructions||null));
+    }
+    logActivity(req.user.id, req.user.username, 'create', 'recipe', recipeId, { name_en }, req.ip);
+    res.json({ success: true, id: recipeId });
+  } catch(e) {
+    if (e.message.includes('UNIQUE') && /sku/i.test(e.message)) {
+      const owner = sku ? db.prepare('SELECT id, name_en, is_active FROM recipes WHERE sku = ?').get(sku) : null;
+      if (owner && !owner.is_active) {
+        return res.status(400).json({ error: `SKU "${sku}" belongs to a deleted recipe ("${owner.name_en}"). Pick a different SKU, or restore the deleted recipe first.` });
+      }
+      if (owner) {
+        return res.status(400).json({ error: `SKU "${sku}" is already used by recipe "${owner.name_en}".` });
+      }
+      return res.status(400).json({ error: 'SKU already exists' });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT update recipe
+router.put('/api/recipes/:id', requireAuth, requirePermission('recipes'), (req, res) => {
+  const { name_en, name_cn, sku, category, batch_size, servings, serving_size, shelf_life, storage, notes, image_data, ingredients, steps } = req.body;
+  try {
+    db.prepare('UPDATE recipes SET name_en=?,name_cn=?,sku=?,category=?,batch_size=?,servings=?,serving_size=?,shelf_life=?,storage=?,notes=?,image_data=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
+      .run(name_en, name_cn||null, sku||null, category||null, batch_size||null, servings||null, serving_size||null, shelf_life||null, storage||null, notes||null, image_data||null, req.params.id);
+    if (ingredients) {
+      db.prepare('DELETE FROM recipe_ingredients WHERE recipe_id = ?').run(req.params.id);
+      const insertIng = db.prepare('INSERT INTO recipe_ingredients (recipe_id,ingredient_id,name_en,name_cn,sku,qty,unit,notes,substitutes,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)');
+      ingredients.forEach((ing, i) => insertIng.run(req.params.id, ing.ingredient_id||null, ing.name_en||'', ing.name_cn||null, ing.sku||null, ing.qty||0, ing.unit||'g', ing.notes||null, ing.substitutes||null, i));
+    }
+    if (steps) {
+      db.prepare('DELETE FROM recipe_steps WHERE recipe_id = ?').run(req.params.id);
+      const insertStep = db.prepare('INSERT INTO recipe_steps (recipe_id,step_number,name,instructions) VALUES (?,?,?,?)');
+      steps.forEach((s, i) => insertStep.run(req.params.id, i+1, s.name||null, s.instructions||null));
+    }
+    logActivity(req.user.id, req.user.username, 'update', 'recipe', req.params.id, { name_en }, req.ip);
+    res.json({ success: true });
+  } catch(e) {
+    if (e.message.includes('UNIQUE') && /sku/i.test(e.message)) {
+      const owner = sku ? db.prepare('SELECT id, name_en, is_active FROM recipes WHERE sku = ? AND id != ?').get(sku, req.params.id) : null;
+      if (owner) {
+        const tag = owner.is_active ? '' : ' (deleted)';
+        return res.status(400).json({ error: `SKU "${sku}" is already used by recipe "${owner.name_en}"${tag}.` });
+      }
+      return res.status(400).json({ error: 'SKU already exists' });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT update cost data
+router.put('/api/recipes/:id/cost', requireAuth, requirePermission('recipes'), (req, res) => {
+  const { labour, packaging, packaging_type_id, overhead_pct, sell_price, target_food_cost } = req.body;
+  db.prepare(`INSERT INTO recipe_cost_data (recipe_id,labour,packaging,packaging_type_id,overhead_pct,sell_price,target_food_cost,updated_at) VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+    ON CONFLICT(recipe_id) DO UPDATE SET labour=?,packaging=?,packaging_type_id=?,overhead_pct=?,sell_price=?,target_food_cost=?,updated_at=CURRENT_TIMESTAMP`)
+    .run(req.params.id, labour||0, packaging||0, packaging_type_id||null, overhead_pct||0, sell_price||0, target_food_cost||30,
+         labour||0, packaging||0, packaging_type_id||null, overhead_pct||0, sell_price||0, target_food_cost||30);
+  res.json({ success: true });
+});
+
+// DELETE recipe (soft)
+router.delete('/api/recipes/:id', requireAuth, requireDelete, requirePermission('recipes'), (req, res) => {
+  db.prepare('UPDATE recipes SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
+  logActivity(req.user.id, req.user.username, 'delete', 'recipe', req.params.id, null, req.ip);
+  res.json({ success: true });
+});
+
+// PUT restore a deleted recipe. Flips is_active back to 1; ingredients,
+// steps, and cost data weren't touched on delete (soft delete only
+// hides the recipe), so restore is a single column update.
+router.put('/api/recipes/:id/restore', requireAuth, requirePermission('recipes'), (req, res) => {
+  const r = db.prepare('SELECT id, name_en, is_active FROM recipes WHERE id = ?').get(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Recipe not found · 食谱未找到' });
+  if (r.is_active) return res.json({ success: true, already_active: true });
+  db.prepare('UPDATE recipes SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
+  logActivity(req.user.id, req.user.username, 'restore', 'recipe', req.params.id, { name: r.name_en }, req.ip);
+  res.json({ success: true });
+});
+
+// DELETE permanent — hard-delete a soft-deleted recipe along with its
+// children (ingredients, steps, cost data). Admin only because once it's
+// gone, it's gone. Refuses to hard-delete an active recipe (use the
+// soft-delete endpoint first).
+router.delete('/api/recipes/:id/permanent', requireAuth, requireDelete, requirePermission('recipes'), (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only · 仅管理员可永久删除' });
+  const r = db.prepare('SELECT id, name_en, is_active FROM recipes WHERE id = ?').get(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Recipe not found · 食谱未找到' });
+  if (r.is_active) return res.status(400).json({ error: 'Soft-delete first · 请先软删除' });
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM recipe_ingredients WHERE recipe_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM recipe_steps WHERE recipe_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM recipe_cost_data WHERE recipe_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM recipes WHERE id = ?').run(req.params.id);
+  });
+  tx();
+  logActivity(req.user.id, req.user.username, 'permanent_delete', 'recipe', req.params.id, { name: r.name_en }, req.ip);
+  res.json({ success: true });
+});
+
+// POST duplicate — clones a recipe (sans SKU since SKUs are UNIQUE) plus all
+// ingredients, steps, and cost data. Optional `scale` body param applies
+// a multiplier to batch_size, servings, serving_size, and every ingredient
+// qty — used by the "Save as New Recipe" button on the Batch Scaler bar.
+// Returns the new recipe id so the UI can jump straight into the copy.
+router.post('/api/recipes/:id/duplicate', requireAuth, requirePermission('recipes'), (req, res) => {
+  const src = db.prepare('SELECT * FROM recipes WHERE id = ?').get(req.params.id);
+  if (!src) return res.status(404).json({ error: 'Recipe not found' });
+  const ings  = db.prepare('SELECT * FROM recipe_ingredients WHERE recipe_id = ? ORDER BY sort_order').all(src.id);
+  const steps = db.prepare('SELECT * FROM recipe_steps WHERE recipe_id = ? ORDER BY step_number').all(src.id);
+  const cost  = db.prepare('SELECT * FROM recipe_cost_data WHERE recipe_id = ?').get(src.id);
+
+  const scale = parseFloat(req.body?.scale);
+  const isScaled = scale && scale > 0 && Math.abs(scale - 1) > 0.001;
+  const round1 = v => v == null ? v : Math.round(v * 10) / 10;
+
+  // Name: " (copy)" for plain duplicates; "(<scaledBatch>g)" for scaled — the
+  // batch size makes the variant immediately recognisable in the recipe list.
+  let nameEn, nameCn;
+  if (isScaled) {
+    const scaledBatchG = src.batch_size ? Math.round(src.batch_size * scale) : null;
+    const tag = scaledBatchG ? `(${scaledBatchG}g)` : `(×${scale})`;
+    nameEn = (src.name_en || 'Recipe') + ' ' + tag;
+    nameCn = src.name_cn ? src.name_cn + '（' + tag + '）' : null;
+  } else {
+    nameEn = (src.name_en || '') + ' (copy)';
+    nameCn = src.name_cn ? src.name_cn + '（副本）' : null;
+  }
+
+  const tx = db.transaction(() => {
+    const r = db.prepare(`INSERT INTO recipes
+      (name_en, name_cn, sku, category, batch_size, servings, serving_size, shelf_life, storage, notes, image_data)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
+      nameEn, nameCn,
+      null, // SKU is UNIQUE — let user assign a new one
+      src.category,
+      isScaled && src.batch_size   ? Math.round(src.batch_size * scale)   : src.batch_size,
+      isScaled && src.servings     ? Math.round(src.servings * scale)     : src.servings,
+      // Per-serving size doesn't change when you scale the batch — same portions, just more of them.
+      // (v1 scaled it too, but that's a bug. Leaving it unchanged here.)
+      src.serving_size,
+      src.shelf_life, src.storage, src.notes, src.image_data
+    );
+    const newId = r.lastInsertRowid;
+    const insIng = db.prepare(`INSERT INTO recipe_ingredients
+      (recipe_id, ingredient_id, name_en, name_cn, sku, qty, unit, notes, substitutes, sort_order)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`);
+    ings.forEach(i => insIng.run(
+      newId, i.ingredient_id, i.name_en, i.name_cn, i.sku,
+      isScaled ? round1((parseFloat(i.qty) || 0) * scale) : i.qty,
+      i.unit, i.notes, i.substitutes, i.sort_order
+    ));
+    const insStep = db.prepare(`INSERT INTO recipe_steps (recipe_id, step_number, name, instructions) VALUES (?,?,?,?)`);
+    steps.forEach(s => insStep.run(newId, s.step_number, s.name, s.instructions));
+    if (cost) {
+      // Labour scales with batch (more time to prep more); packaging is per
+      // serving so it scales with servings count (which we already scaled).
+      // Overhead %, sell_price (per unit), target FC are intrinsic — copy as-is.
+      db.prepare(`INSERT INTO recipe_cost_data
+        (recipe_id, labour, packaging, packaging_type_id, overhead_pct, sell_price, target_food_cost)
+        VALUES (?,?,?,?,?,?,?)`).run(
+        newId,
+        isScaled && cost.labour ? round1(cost.labour * scale) : cost.labour,
+        cost.packaging, cost.packaging_type_id,
+        cost.overhead_pct, cost.sell_price, cost.target_food_cost
+      );
+    }
+    return newId;
+  });
+  const newId = tx();
+  logActivity(req.user.id, req.user.username, isScaled ? 'duplicate_scaled' : 'duplicate', 'recipe', newId, { from: src.id, name: src.name_en, scale: isScaled ? scale : null }, req.ip);
+  res.json({ success: true, id: newId, scaled: isScaled });
+});
+
+// POST bulk import — accepts an array of recipe objects, each with nested
+// ingredients[] and steps[]. Wrapped in a transaction so a partial import
+// never lands. Skips recipes whose SKU already exists.
+router.post('/api/recipes/bulk', requireAuth, requirePermission('recipes'), (req, res) => {
+  const { recipes } = req.body;
+  if (!Array.isArray(recipes) || !recipes.length) return res.status(400).json({ error: 'recipes array required' });
+
+  const insertRecipe = db.prepare(`INSERT INTO recipes
+    (name_en, name_cn, sku, category, batch_size, servings, serving_size, shelf_life, storage, notes)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`);
+  const insertIng = db.prepare(`INSERT INTO recipe_ingredients
+    (recipe_id, ingredient_id, name_en, name_cn, sku, qty, unit, notes, substitutes, sort_order)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`);
+  const insertStep = db.prepare(`INSERT INTO recipe_steps
+    (recipe_id, step_number, name, instructions) VALUES (?,?,?,?)`);
+  const findIngBySku   = db.prepare('SELECT id FROM ingredients WHERE sku = ? LIMIT 1');
+  const findIngByName  = db.prepare('SELECT id FROM ingredients WHERE name_en = ? LIMIT 1');
+  const findRecipeSku  = db.prepare('SELECT id FROM recipes WHERE sku = ? LIMIT 1');
+
+  const stats = { imported: 0, skipped: 0, errors: [] };
+
+  const importMany = db.transaction(() => {
+    recipes.forEach((rec, idx) => {
+      try {
+        if (!rec.name_en) { stats.skipped++; stats.errors.push(`Row ${idx+1}: missing name_en`); return; }
+        if (rec.sku && findRecipeSku.get(rec.sku)) { stats.skipped++; stats.errors.push(`Row ${idx+1}: SKU ${rec.sku} already exists`); return; }
+        const r = insertRecipe.run(
+          rec.name_en, rec.name_cn || null, rec.sku || null, rec.category || null,
+          parseFloat(rec.batch_size) || null, parseFloat(rec.servings) || null,
+          parseFloat(rec.serving_size) || null, rec.shelf_life || null,
+          rec.storage || null, rec.notes || null
+        );
+        const recipeId = r.lastInsertRowid;
+        (rec.ingredients || []).forEach((ing, i) => {
+          // Try to link to an existing ingredient by SKU or name (case-insensitive name match)
+          let ingId = null;
+          if (ing.sku)     ingId = findIngBySku.get(ing.sku)?.id || null;
+          if (!ingId && ing.name_en) ingId = findIngByName.get(ing.name_en)?.id || null;
+          insertIng.run(recipeId, ingId, ing.name_en || '', ing.name_cn || null,
+            ing.sku || null, parseFloat(ing.qty) || 0, ing.unit || 'g', ing.notes || null, ing.substitutes || null, i);
+        });
+        (rec.steps || []).forEach((s, i) => {
+          insertStep.run(recipeId, i+1, s.name || null, s.instructions || null);
+        });
+        stats.imported++;
+      } catch (e) {
+        stats.skipped++;
+        stats.errors.push(`Row ${idx+1}: ${e.message}`);
+      }
+    });
+  });
+  importMany();
+  logActivity(req.user.id, req.user.username, 'bulk_import', 'recipe', null, { imported: stats.imported, skipped: stats.skipped }, req.ip);
+  res.json({ success: true, ...stats });
+});
+
+module.exports = router;

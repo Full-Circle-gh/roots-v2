@@ -1,0 +1,101 @@
+<view class="page">
+
+  <!-- Header -->
+  <view class="header">
+    <view class="kicker f-toni">FAQ <text class="kicker-cn">· 常见问题</text></view>
+    <view class="title f-bear">
+      <text>{{lang === 'cn' ? '能为您' : 'How can'}} </text><text class="title-hl">{{lang === 'cn' ? '做些什么' : 'we help'}}</text><text>?</text>
+    </view>
+  </view>
+
+  <!-- Search -->
+  <view class="search">
+    <view class="search-icon">
+      <view class="search-ring"></view>
+      <view class="search-stem"></view>
+    </view>
+    <input
+      class="search-input f-aleo"
+      value="{{search}}"
+      placeholder="{{lang === 'cn' ? '搜索问题 · Search FAQ' : 'Search FAQ · 搜索问题'}}"
+      placeholder-class="search-ph"
+      bindinput="onSearchInput"
+      confirm-type="search"
+    />
+    <view wx:if="{{search}}" class="search-clear f-aleo" bindtap="clearSearch">clear</view>
+  </view>
+
+  <!-- Category chips -->
+  <scroll-view scroll-x="true" enhanced="true" show-scrollbar="false" class="chip-scroll">
+    <view class="chip-row">
+      <view
+        class="chip f-gothic {{activeCat === '' ? 'chip-on' : ''}}"
+        data-id=""
+        bindtap="pickCat"
+      >ALL</view>
+      <view
+        wx:for="{{categories}}"
+        wx:key="id"
+        class="chip f-gothic {{activeCat === item.id ? 'chip-on' : ''}}"
+        style="background: {{activeCat === item.id ? '' : item.color}};"
+        data-id="{{item.id}}"
+        bindtap="pickCat"
+      >
+        <text>{{item.en}}</text>
+        <text class="chip-cn f-yuan"> · {{item.cn}}</text>
+      </view>
+    </view>
+  </scroll-view>
+
+  <!-- Accordion list -->
+  <view class="list">
+    <block wx:if="{{filtered.length === 0}}">
+      <view class="empty">
+        <view class="empty-title f-bear">{{lang === 'cn' ? '没有匹配。' : 'No matches.'}}</view>
+        <view class="empty-sub muted">{{lang === 'cn' ? '换个关键词试试,或下方联系我们。' : 'Try a different keyword or contact us below.'}}</view>
+      </view>
+    </block>
+    <view
+      wx:for="{{filtered}}"
+      wx:key="id"
+      wx:for-index="idx"
+      class="row {{openIdx === idx ? 'row-open' : ''}} {{idx === 0 ? 'row-first' : ''}}"
+      data-idx="{{idx}}"
+      bindtap="toggleRow"
+    >
+      <view class="row-inner">
+        <view class="row-num f-gothic">{{item.num}}</view>
+        <view class="row-body">
+          <view class="row-pip f-gothic" style="background: {{item.catColor}};">{{item.catLabel}}</view>
+          <view class="row-q f-bear">{{item.q}}</view>
+          <view wx:if="{{item.q_sub}}" class="row-q-sub f-yuan muted">{{item.q_sub}}</view>
+
+          <block wx:if="{{openIdx === idx}}">
+            <view class="row-a f-aleo">{{item.a}}</view>
+            <view class="row-vote">
+              <view class="vote-label f-toni">{{lang === 'cn' ? '有帮助吗?' : 'WAS THIS HELPFUL?'}}</view>
+              <view class="vote-btn" catchtap="voteHelpful" data-id="{{item.id}}" data-vote="up">👍</view>
+              <view class="vote-btn" catchtap="voteHelpful" data-id="{{item.id}}" data-vote="down">👎</view>
+            </view>
+          </block>
+        </view>
+        <view class="row-plus {{openIdx === idx ? 'row-plus-open' : ''}}">+</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- Still need help — sticky contact bar -->
+  <view class="contact">
+    <view class="contact-inner">
+      <view class="contact-text">
+        <view class="contact-kicker f-toni">{{csStillStuck}}</view>
+        <view class="contact-hours f-bear">{{csHours}}</view>
+      </view>
+      <view class="contact-actions">
+        <view class="contact-btn contact-wechat f-gothic" bindtap="tapWechat">{{lang === 'cn' ? '微信' : 'WECHAT'}}</view>
+        <view wx:if="{{csPhone}}" class="contact-btn contact-call f-gothic" bindtap="tapCall">{{lang === 'cn' ? '电话' : 'CALL'}}</view>
+      </view>
+    </view>
+  </view>
+
+</view>

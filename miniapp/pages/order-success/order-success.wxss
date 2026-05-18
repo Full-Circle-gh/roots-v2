@@ -1,0 +1,81 @@
+.page {
+  background: var(--oat);
+  min-height: 100vh;
+  padding: 80rpx 44rpx 60rpx;
+}
+
+.hero { text-align: center; padding: 80rpx 0 60rpx; }
+.check-mark {
+  width: 160rpx;
+  height: 160rpx;
+  margin: 0 auto 40rpx;
+  background: var(--lime);
+  color: var(--ink);
+  font-size: calc(100rpx * var(--font-scale));
+  font-weight: 900;
+  line-height: 160rpx;
+  border-radius: 999rpx;
+}
+.headline {
+  font-size: calc(64rpx * var(--font-scale));
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--ink);
+}
+.sub {
+  margin-top: 20rpx;
+  font-size: calc(28rpx * var(--font-scale));
+  color: var(--olive);
+  line-height: 1.4;
+}
+
+.card {
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  padding: 32rpx;
+  margin-bottom: 60rpx;
+}
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 16rpx 0;
+}
+.row + .row { border-top: 2rpx dashed rgba(0, 0, 0, 0.15); }
+.lbl {
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+  color: var(--olive);
+}
+.val {
+  font-size: calc(30rpx * var(--font-scale));
+  color: var(--ink);
+  font-family: monospace;
+}
+.val.total {
+  font-size: calc(48rpx * var(--font-scale));
+  font-family: var(--f-bear);
+  letter-spacing: 0;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+.btn {
+  padding: 28rpx 0;
+  font-size: calc(28rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  text-align: center;
+  border-radius: 0;
+}
+.btn.primary {
+  background: var(--ink);
+  color: var(--lime);
+}
+.btn.secondary {
+  background: transparent;
+  color: var(--ink);
+  border: 3rpx solid var(--ink);
+}

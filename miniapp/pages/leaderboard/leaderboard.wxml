@@ -1,0 +1,78 @@
+<view class="page">
+  <view class="hero">
+    <view class="kicker f-toni">{{kicker}}</view>
+    <view class="title f-bear">{{title}}</view>
+    <view wx:if="{{subhead}}" class="subhead f-aleo">{{subhead}}</view>
+    <view class="meta f-toni">{{metaLabel}}</view>
+  </view>
+
+  <view wx:if="{{disabled}}" class="empty f-aleo">
+    {{copy.disabled}}
+  </view>
+
+  <block wx:elif="{{loading}}">
+    <view class="empty f-aleo">{{copy.loading}}</view>
+  </block>
+
+  <block wx:elif="{{!entries.length}}">
+    <view class="empty f-aleo">{{copy.empty}}</view>
+  </block>
+
+  <block wx:else>
+    <!-- Top 3 podium -->
+    <view wx:if="{{entries.length >= 3}}" class="podium">
+      <view class="podium-spot p-2">
+        <view class="podium-rank f-bear">2</view>
+        <view class="podium-name f-bear">{{entries[1].name}}</view>
+        <view class="podium-val f-toni">{{entries[1].valueDisplay}}</view>
+        <view class="podium-bar bar-2"></view>
+      </view>
+      <view class="podium-spot p-1">
+        <view class="podium-crown">★</view>
+        <view class="podium-rank f-bear">1</view>
+        <view class="podium-name f-bear">{{entries[0].name}}</view>
+        <view class="podium-val f-toni">{{entries[0].valueDisplay}}</view>
+        <view class="podium-bar bar-1"></view>
+      </view>
+      <view class="podium-spot p-3">
+        <view class="podium-rank f-bear">3</view>
+        <view class="podium-name f-bear">{{entries[2].name}}</view>
+        <view class="podium-val f-toni">{{entries[2].valueDisplay}}</view>
+        <view class="podium-bar bar-3"></view>
+      </view>
+    </view>
+
+    <!-- Remaining list -->
+    <view class="list">
+      <view wx:for="{{listEntries}}" wx:key="rank" class="row {{item.isMe ? 'is-me' : ''}}">
+        <view class="row-rank f-bear">#{{item.rank}}</view>
+        <view class="row-name f-bear">{{item.name}}</view>
+        <view class="row-val f-toni">{{item.valueDisplay}}</view>
+      </view>
+    </view>
+
+    <!-- Your rank footer -->
+    <view wx:if="{{me.rank}}" class="my-rank {{me.in_top_n ? 'in-top' : ''}}">
+      <view class="kicker f-toni">{{copy.youAre}}</view>
+      <view class="my-rank-main">
+        <view class="my-rank-num f-bear">#{{me.rank}}</view>
+        <view class="my-rank-val f-toni">{{myValueDisplay}}</view>
+      </view>
+    </view>
+    <view wx:else class="my-rank not-yet">
+      <view class="kicker f-toni">{{copy.notRankedTitle}}</view>
+      <view class="my-rank-sub f-aleo">{{copy.notRankedSub}}</view>
+    </view>
+
+    <!-- Rewards -->
+    <view wx:if="{{rewards.length}}" class="rewards">
+      <view class="kicker f-toni">{{copy.rewardsTitle}}</view>
+      <view wx:for="{{rewards}}" wx:key="tag" class="reward-row">
+        <view class="reward-tag f-toni">{{item.tag}}</view>
+        <view class="reward-text f-aleo">{{item.text}}</view>
+      </view>
+    </view>
+  </block>
+
+  <popup-manager page="leaderboard"></popup-manager>
+</view>

@@ -1,0 +1,10 @@
+.page { background: var(--oat); min-height: 100vh; padding-bottom: 80rpx; }
+
+.loading { padding: 0 0 60rpx; }
+
+.empty {
+  padding: 200rpx 44rpx 0;
+  text-align: center;
+}
+.empty-title { font-size: calc(56rpx * var(--font-scale)); font-weight: 500; margin-bottom: 16rpx; color: var(--ink); }
+.empty-sub { color: var(--olive); font-size: calc(26rpx * var(--font-scale)); line-height: 1.5; }

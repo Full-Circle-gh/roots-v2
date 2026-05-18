@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#F2E7DF">
+<title>Roots · Storefront Preview</title>
+<style>
+  /* ═══════════════ BRAND FONTS ═══════════════ */
+  @font-face { font-family: 'Bear Serif';    src: url('/assets/fonts/BearSerif.otf')      format('opentype'); font-display: swap; }
+  @font-face { font-family: 'Toni Grotesk';  src: url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display: swap; }
+  @font-face { font-family: 'League Gothic'; src: url('/assets/fonts/LeagueGothic.ttf')   format('truetype'); font-display: swap; }
+  @font-face { font-family: 'Aleo';          src: url('/assets/fonts/Aleo-Regular.otf')   format('opentype'); font-display: swap; }
+  @font-face { font-family: 'DF Yuan';       src: url('/assets/fonts/DFYuanW5.ttf')       format('truetype'); font-weight: 500; font-display: swap; }
+  @font-face { font-family: 'DF Yuan';       src: url('/assets/fonts/DFYuanW7.ttf')       format('truetype'); font-weight: 700; font-display: swap; }
+  @font-face { font-family: 'DF Yuan';       src: url('/assets/fonts/DFYuanW9.ttf')       format('truetype'); font-weight: 900; font-display: swap; }
+
+  :root {
+    /* Brand palette */
+    --lime: #CCD900; --forest: #365329; --olive: #6A6E2D; --oat: #F2E7DF;
+    --ink: #1a1a17; --berry: #E96174; --carrot: #FF6B0C; --papaya: #FFAF60;
+    --corn: #F2CA6C; --sky: #B2CFED; --pea: #7BBD3B; --lotus: #EEB8E4;
+    --pink: #F4B8CB; --citrus: #E7E74C;
+    /* Brand fonts (DF Yuan as CJK fallback in every chain) */
+    --bf-bear:   'Bear Serif',   'DF Yuan', 'New York', Georgia, serif;
+    --bf-toni:   'Toni Grotesk', 'DF Yuan', -apple-system, sans-serif;
+    --bf-gothic: 'League Gothic','DF Yuan', 'Bebas Neue', Impact, sans-serif;
+    --bf-aleo:   'Aleo',         'DF Yuan', Georgia, serif;
+    --bf-yuan:   'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+    background: #1c1c20;
+    color: #ecebe5;
+    min-height: 100vh;
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ═══════════════ TOPBAR ═══════════════ */
+  .topbar {
+    height: 52px;
+    background: #1f1f24;
+    border-bottom: 1px solid rgba(255, 255, 255, .06);
+    display: flex; align-items: center;
+    padding: 0 20px; gap: 14px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 600; font-size: 13px;
+  }
+  .brand-mark {
+    width: 24px; height: 24px; border-radius: 6px;
+    background: linear-gradient(135deg, var(--lime), #b3bf00);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink); font-weight: 700; font-size: 12px;
+  }
+  .brand .sub { color: #7d7a72; font-weight: 500; margin-left: 8px; }
+  .live-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px 4px 8px;
+    background: rgba(204, 217, 0, .1);
+    border: 1px solid rgba(204, 217, 0, .25);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--lime);
+  }
+  .live-pill .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--lime);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+  .grow { flex: 1; }
+  .topbar-link {
+    color: #aeaba2; text-decoration: none; font-size: 12px;
+    padding: 6px 10px; border-radius: 6px;
+    transition: background 120ms ease, color 120ms ease;
+  }
+  .topbar-link:hover { background: #25252b; color: #ecebe5; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    font: 500 13px inherit;
+    padding: 6px 12px;
+    background: #25252b;
+    border: 1px solid rgba(255, 255, 255, .09);
+    color: #ecebe5;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+  .btn:hover { background: #2e2e35; border-color: rgba(255, 255, 255, .15); }
+  .btn svg { width: 14px; height: 14px; }
+  .device-select {
+    font: inherit; font-size: 12px;
+    color: #aeaba2;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, .08);
+    padding: 5px 28px 5px 10px;
+    border-radius: 999px;
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237d7a72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    cursor: pointer;
+  }
+  .device-select:hover { color: #ecebe5; border-color: rgba(255, 255, 255, .15); }
+  .lang-toggle {
+    display: inline-flex;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 999px;
+    padding: 2px;
+  }
+  .lang-toggle button {
+    background: transparent; border: 0;
+    padding: 3px 10px;
+    font: 600 11px inherit; letter-spacing: .04em;
+    color: #aeaba2;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: color 120ms ease, background 120ms ease;
+  }
+  .lang-toggle button:hover { color: #ecebe5; }
+  .lang-toggle button.active { background: var(--lime); color: var(--ink); }
+
+  /* ═══════════════ CANVAS ═══════════════ */
+  .canvas {
+    min-height: calc(100vh - 52px);
+    background:
+      radial-gradient(ellipse at top, rgba(204, 217, 0, .025), transparent 50%),
+      radial-gradient(ellipse at bottom, rgba(54, 83, 41, .035), transparent 50%);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 24px 80px;
+  }
+  .phone {
+    width: 390px;
+    flex-shrink: 0;
+    min-height: 844px;
+    background: var(--oat);
+    color: var(--ink);
+    border-radius: 44px;
+    box-shadow:
+      0 32px 80px rgba(0, 0, 0, .45),
+      0 8px 24px rgba(0, 0, 0, .3),
+      0 0 0 8px #0a0a0c,
+      inset 0 0 0 1px rgba(255, 255, 255, .04);
+    overflow: hidden;
+    position: relative;
+    font-family: var(--bf-aleo);
+  }
+  /* iPhone notch */
+  .phone[data-platform="ios"]::before {
+    content: '';
+    position: absolute;
+    top: 12px; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 30px;
+    background: #0a0a0c;
+    border-radius: 0 0 18px 18px;
+    z-index: 10;
+  }
+  .phone-status {
+    height: 50px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 28px 0;
+    font-family: -apple-system, sans-serif; font-size: 14px; font-weight: 600;
+    color: var(--ink);
+    position: relative; z-index: 1;
+  }
+  .phone-status .right { display: flex; align-items: center; gap: 6px; }
+  .phone-status svg { width: 16px; height: 11px; }
+  .phone-content { padding-bottom: 86px; }
+  .phone-tabs {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 82px;
+    background: #FFFCF7;
+    border-top: 1px solid rgba(0, 0, 0, .05);
+    display: flex;
+    padding: 10px 0 24px;
+  }
+  .phone-tabs .tab {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    font: 500 10px var(--bf-toni); letter-spacing: .03em;
+    color: #b8b1a3;
+    position: relative;
+  }
+  .phone-tabs .tab.active { color: var(--forest); }
+  .phone-tabs .tab.active::before {
+    content: ''; position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+    width: 24px; height: 2px; background: var(--forest); border-radius: 2px;
+  }
+  .phone-tabs .tab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+
+  /* ═══════════════ BLOCKS (mirrors cms.html preview styles) ═══════════════ */
+  .b-announce {
+    padding: 10px 16px;
+    font: 600 12px var(--bf-toni); letter-spacing: .04em; text-align: center;
+  }
+  .b-announce.linked {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    cursor: pointer;
+  }
+  [data-cta-target] { cursor: pointer; }
+  [data-cta-target]:active { transform: scale(0.985); }
+  .b-announce.linked svg { width: 11px; height: 11px; opacity: .75; }
+  .b-hero {
+    background: linear-gradient(135deg, #c4c4c4, #a8a8a8);
+    position: relative; width: 100%; overflow: hidden;
+  }
+  .b-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .b-hero .cta-stack {
+    position: absolute; bottom: 28px; left: 22px; right: 22px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .b-hero .cta-btn {
+    padding: 14px 0; text-align: center;
+    font: 600 12px var(--bf-toni); letter-spacing: .16em;
+    border-radius: 999px;
+    text-transform: uppercase;
+  }
+  .b-hero .cta-btn.primary { background: var(--ink); color: var(--oat); }
+  .b-hero .cta-btn.secondary {
+    background: rgba(255, 255, 255, .92); color: var(--ink);
+    border: 1.5px solid var(--ink);
+  }
+  .b-hero .cta-btn.link {
+    background: transparent; color: var(--ink);
+    text-decoration: underline; text-underline-offset: 3px;
+    padding: 6px 0; border-radius: 0;
+  }
+  .b-hero .placeholder {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%; min-height: 200px;
+    color: rgba(0, 0, 0, .3);
+    font: 500 12px sans-serif;
+  }
+  .b-hero-split {
+    display: grid; grid-template-columns: 1fr 1fr; min-height: 240px;
+    height: auto !important; aspect-ratio: auto !important;
+  }
+  .b-hero-split .split-img { position: relative; overflow: hidden; background: #ddd; }
+  .b-hero-split .split-img img { width: 100%; height: 100%; object-fit: cover; }
+  .b-hero-split .split-panel {
+    padding: 20px 18px; display: flex; flex-direction: column; justify-content: center;
+    gap: 8px;
+  }
+  .b-hero-split .split-panel .headline { font: 500 22px var(--bf-bear); line-height: 1.1; }
+  .b-hero-split .split-panel .subtitle { font: 500 12px var(--bf-aleo); opacity: .8; line-height: 1.4; }
+  .b-hero-split .split-panel .cta-stack {
+    position: static; padding: 0; margin-top: 8px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .b-hero-split .split-panel .cta-btn {
+    padding: 10px 14px; text-align: center;
+    font: 700 10px var(--bf-toni); letter-spacing: .14em;
+    border-radius: 999px;
+  }
+  .b-hero-split .split-panel .cta-btn.primary { background: var(--ink); color: var(--oat); }
+  .b-hero-split .split-panel .cta-btn.secondary {
+    background: transparent; color: inherit; border: 1px solid currentColor;
+  }
+  .b-hero-split .split-panel .cta-btn.link {
+    background: transparent; padding: 4px 0; border-radius: 0;
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+  .b-cattabs { padding: 18px 22px; }
+  .b-cattabs .head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  .b-cattabs .ttl { font: 500 22px var(--bf-bear); line-height: 1.05; }
+  .b-cattabs .ttl .bi-cn { display: block; margin-top: 2px; font: 500 14px var(--bf-bear); color: var(--olive); }
+  .b-cattabs .kicker { font: 700 9px var(--bf-toni); letter-spacing: .14em; color: var(--olive); }
+  .b-cattabs .more { font: 700 9px var(--bf-toni); letter-spacing: .1em; color: var(--olive); text-decoration: underline; }
+  .b-cattabs .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .b-cattabs .tile {
+    height: 96px; padding: 12px; position: relative; overflow: hidden;
+    background: var(--corn); color: var(--ink);
+    border-radius: 2px;
+  }
+  .b-cattabs .tile .num { font: 700 9px var(--bf-toni); letter-spacing: .1em; opacity: .85; }
+  .b-cattabs .tile .name { font: 500 17px var(--bf-bear); line-height: 1; position: absolute; bottom: 12px; left: 12px; right: 12px; }
+  .b-cattabs .tile.c0 { background: var(--papaya); }
+  .b-cattabs .tile.c1 { background: var(--pea); color: #fff; }
+  .b-cattabs .tile.c2 { background: var(--berry); color: #fff; }
+  .b-cattabs .tile.c3 { background: var(--corn); }
+  .b-cattabs .tile.c4 { background: var(--sky); }
+  .b-cattabs .tile.c5 { background: var(--lotus); }
+  .b-cattabs .icons-grid { display: grid; gap: 14px 6px; padding: 0 22px; }
+  .b-cattabs .icons-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .b-cattabs .icons-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  .b-cattabs .icons-grid.cols-5 { grid-template-columns: repeat(5, 1fr); }
+  .b-cattabs .icon-tile { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .b-cattabs .icon-circle {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: var(--corn); color: var(--ink);
+    display: flex; align-items: center; justify-content: center;
+    font: 700 22px var(--bf-bear); letter-spacing: .02em;
+  }
+  .b-cattabs .icon-circle.c0 { background: var(--papaya); }
+  .b-cattabs .icon-circle.c1 { background: var(--pea); color: #fff; }
+  .b-cattabs .icon-circle.c2 { background: var(--berry); color: #fff; }
+  .b-cattabs .icon-circle.c3 { background: var(--corn); }
+  .b-cattabs .icon-circle.c4 { background: var(--sky); }
+  .b-cattabs .icon-circle.c5 { background: var(--lotus); }
+  .b-cattabs .icon-name {
+    font: 500 11px var(--bf-aleo); color: var(--ink);
+    text-align: center; line-height: 1.2;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .b-featured { padding: 18px 22px; }
+  .b-featured .card {
+    background: var(--ink); color: #fff;
+    padding: 18px; display: flex; gap: 16px; align-items: center;
+    border-radius: 2px;
+  }
+  .b-featured .img { width: 84px; height: 104px; background: #444; flex-shrink: 0; overflow: hidden; border-radius: 2px; }
+  .b-featured .img img { width: 100%; height: 100%; object-fit: cover; }
+  .b-featured .kicker { font: 700 10px var(--bf-toni); letter-spacing: .14em; color: var(--lime); }
+  .b-featured .name { font: 500 20px var(--bf-bear); line-height: 1.05; margin-top: 4px; }
+  .b-featured .price { font: 600 18px var(--bf-gothic); margin-top: 6px; letter-spacing: .04em; }
+  .b-grid { padding: 18px 22px; }
+  .b-grid .head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  .b-grid .head .kicker { font: 700 9px var(--bf-toni); letter-spacing: .14em; color: var(--olive); }
+  .b-grid .head .ttl { font: 500 22px var(--bf-bear); line-height: 1.05; margin-top: 4px; }
+  .b-grid .head .ttl .bi-cn { display: block; margin-top: 2px; font: 500 14px var(--bf-bear); color: var(--olive); }
+  .b-grid .head .more { font: 700 9px var(--bf-toni); letter-spacing: .1em; color: var(--olive); text-decoration: underline; }
+  .b-grid .grid { display: grid; gap: 12px; }
+  .b-grid .grid.c1 { grid-template-columns: 1fr; }
+  .b-grid .grid.c2 { grid-template-columns: 1fr 1fr; }
+  .b-grid .grid.c3 { grid-template-columns: 1fr 1fr 1fr; }
+  .b-grid .card .img { width: 100%; aspect-ratio: 4 / 5; background: #ddd; overflow: hidden; border-radius: 2px; }
+  .b-grid .card .img img { width: 100%; height: 100%; object-fit: cover; }
+  .b-grid .card .name { font: 500 14px var(--bf-bear); margin-top: 8px; line-height: 1.15; }
+  .b-grid .card .price { font: 600 13px var(--bf-gothic); margin-top: 2px; color: var(--olive); letter-spacing: .04em; }
+  /* Scroll view — horizontal rail */
+  .b-grid .scroll-rail {
+    display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .b-grid .scroll-rail::-webkit-scrollbar { display: none; }
+  .b-grid .scroll-rail .card { flex: 0 0 130px; }
+  /* List view — single col, image left, tagline + price right */
+  .b-grid .list-rows { display: flex; flex-direction: column; gap: 14px; }
+  .b-grid .list-row { display: flex; gap: 12px; align-items: flex-start; }
+  .b-grid .list-row .img {
+    flex: 0 0 88px; width: 88px; aspect-ratio: 1;
+    background: #ddd; overflow: hidden; border-radius: 4px;
+  }
+  .b-grid .list-row .img img { width: 100%; height: 100%; object-fit: cover; }
+  .b-grid .list-row .meta { flex: 1; min-width: 0; }
+  .b-grid .list-row .name { font: 500 14px var(--bf-bear); line-height: 1.15; }
+  .b-grid .list-row .tagline {
+    font: 500 11px var(--bf-aleo); color: rgba(0, 0, 0, .55);
+    margin-top: 3px; line-height: 1.35;
+  }
+  .b-grid .list-row .price { font: 600 13px var(--bf-gothic); margin-top: 6px; color: var(--olive); }
+  .b-spacer {}
+  .b-stickers {
+    padding: 22px;
+    display: flex; flex-wrap: wrap; gap: 10px;
+    justify-content: center; align-items: center;
+    min-height: 80px;
+  }
+  .b-stickers .sticker {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 999px;
+    color: var(--ink);
+    font: 700 12px var(--bf-toni);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    box-shadow: 2px 2px 0 rgba(0, 0, 0, .85);
+    white-space: nowrap;
+  }
+  .b-dots {
+    display: flex; justify-content: center; align-items: center;
+    gap: 10px;
+    padding: 16px;
+  }
+  .b-dots .dot {
+    width: 8px; height: 8px;
+    border-radius: 999px;
+    background: transparent;
+    border: 1.5px solid rgba(0, 0, 0, .35);
+    transition: all .15s ease;
+  }
+  .b-dots .dot.active {
+    width: 24px;
+    border-color: transparent;
+  }
+  .b-countdown {
+    padding: 20px 22px 22px;
+    text-align: center;
+  }
+  .b-countdown .kicker {
+    font: 700 9px var(--bf-toni); letter-spacing: .18em; opacity: .75;
+  }
+  .b-countdown .ttl {
+    font: 500 18px var(--bf-bear); margin-top: 4px; line-height: 1.15;
+  }
+  .b-countdown .clock {
+    display: flex; justify-content: center; align-items: flex-start;
+    gap: 6px; margin-top: 12px;
+  }
+  .b-countdown .clock .cell {
+    min-width: 48px; padding: 8px 4px;
+    background: rgba(255, 255, 255, .12);
+    border-radius: 6px;
+  }
+  .b-countdown .clock .cell .num {
+    font: 700 22px var(--bf-gothic); letter-spacing: .04em; line-height: 1;
+  }
+  .b-countdown .clock .cell .lbl {
+    font: 700 8px var(--bf-toni); letter-spacing: .14em; margin-top: 4px; opacity: .7;
+  }
+  .b-countdown .clock .sep {
+    font: 700 22px var(--bf-gothic); line-height: 1; padding-top: 8px; opacity: .55;
+  }
+  .b-countdown .cta {
+    display: inline-block; margin-top: 14px; padding: 9px 22px;
+    font: 700 10px var(--bf-toni); letter-spacing: .16em;
+    background: rgba(255, 255, 255, .92); color: var(--ink);
+    border-radius: 999px;
+  }
+  .b-countdown .ended {
+    margin-top: 16px; font: 500 13px var(--bf-aleo); opacity: .8;
+  }
+  .b-flash { padding: 16px 18px 18px; }
+  .b-flash .head {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 14px;
+  }
+  .b-flash .head .kicker {
+    font: 700 9px var(--bf-toni); letter-spacing: .18em; opacity: .85;
+  }
+  .b-flash .head .ttl {
+    font: 500 20px var(--bf-bear); margin-top: 2px; line-height: 1.05;
+  }
+  .b-flash .clock { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .b-flash .clock .ct-label {
+    font: 700 8px var(--bf-toni); letter-spacing: .14em; opacity: .8;
+  }
+  .b-flash .clock .ct-cells { display: inline-flex; align-items: center; }
+  .b-flash .ct-num {
+    display: inline-block;
+    background: rgba(0, 0, 0, .35);
+    padding: 4px 6px; border-radius: 4px;
+    font: 700 14px var(--bf-gothic); letter-spacing: .04em;
+    min-width: 26px; text-align: center;
+  }
+  .b-flash .ct-sep { padding: 0 3px; font: 700 14px var(--bf-gothic); opacity: .65; }
+  .b-flash .fs-cards {
+    display: flex; gap: 10px; overflow-x: auto;
+    margin-top: 14px; padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .b-flash .fs-cards::-webkit-scrollbar { display: none; }
+  .b-flash .fs-card {
+    flex: 0 0 130px;
+    background: rgba(255, 255, 255, .92);
+    color: var(--ink);
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .b-flash .fs-card .img {
+    position: relative; width: 100%; aspect-ratio: 1; background: #eee; overflow: hidden;
+  }
+  .b-flash .fs-card .img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .b-flash .fs-card .badge {
+    position: absolute; top: 6px; left: 6px;
+    background: var(--ink); color: var(--lime);
+    font: 700 9px var(--bf-toni); letter-spacing: .04em;
+    padding: 2px 6px; border-radius: 3px;
+  }
+  .b-flash .fs-card .meta { padding: 8px 10px 10px; }
+  .b-flash .fs-card .name {
+    font: 500 12px var(--bf-bear); line-height: 1.15;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; min-height: 28px;
+  }
+  .b-flash .fs-card .prices { margin-top: 6px; display: flex; align-items: baseline; gap: 5px; }
+  .b-flash .fs-card .now {
+    font: 700 14px var(--bf-gothic); letter-spacing: .03em; color: var(--berry);
+  }
+  .b-flash .fs-card .was {
+    font: 500 11px var(--bf-aleo); color: rgba(0, 0, 0, .4); text-decoration: line-through;
+  }
+  .b-flash .fs-card .meter {
+    margin-top: 6px; height: 4px; background: rgba(0, 0, 0, .08); border-radius: 999px; overflow: hidden;
+  }
+  .b-flash .fs-card .meter > span {
+    display: block; height: 100%; background: var(--berry); border-radius: inherit;
+    transition: width .3s ease;
+  }
+  .b-flash .fs-card .meter-lbl {
+    margin-top: 4px; font: 500 9px var(--bf-toni); letter-spacing: .06em; color: rgba(0, 0, 0, .55);
+  }
+  .b-flash .empty-flash {
+    padding: 18px 0; font: 500 12px var(--bf-aleo); text-align: center; opacity: .85;
+  }
+  .b-flash .fs-empty-head {
+    display: flex; flex-direction: column; align-items: center; gap: 4px; padding-bottom: 8px;
+  }
+  .b-flash .fs-empty-head .kicker {
+    font: 700 9px var(--bf-toni); letter-spacing: .18em; opacity: .85;
+  }
+  .b-flash .fs-empty-head .ttl {
+    font: 500 20px var(--bf-bear); line-height: 1.05;
+  }
+  .b-flash-hero, .b-flash-banner {
+    padding: 28px 22px 32px; text-align: center;
+  }
+  .b-flash-banner { padding-bottom: 28px; }
+  .b-flash-hero .hero-kicker, .b-flash-banner .hero-kicker {
+    font: 700 10px var(--bf-toni); letter-spacing: .18em; opacity: .85;
+  }
+  .b-flash-hero .hero-title, .b-flash-banner .hero-title {
+    font: 500 22px var(--bf-bear); margin-top: 4px; line-height: 1.1;
+  }
+  .b-flash-hero .hero-ends, .b-flash-banner .hero-ends {
+    font: 700 9px var(--bf-toni); letter-spacing: .18em; opacity: .7; margin-top: 14px;
+  }
+  .b-flash-hero .hero-clock, .b-flash-banner .hero-clock {
+    display: flex; justify-content: center; align-items: flex-start;
+    gap: 6px; margin-top: 8px;
+  }
+  .b-flash-hero .hero-cell, .b-flash-banner .hero-cell {
+    min-width: 52px; padding: 10px 4px;
+    background: rgba(0, 0, 0, .35); border-radius: 6px;
+  }
+  .b-flash-hero .hero-num, .b-flash-banner .hero-num {
+    font: 700 26px var(--bf-gothic); letter-spacing: .04em; line-height: 1;
+  }
+  .b-flash-hero .hero-lbl, .b-flash-banner .hero-lbl {
+    font: 700 8px var(--bf-toni); letter-spacing: .14em; margin-top: 4px; opacity: .75;
+  }
+  .b-flash-hero .hero-sep, .b-flash-banner .hero-sep {
+    font: 700 26px var(--bf-gothic); line-height: 1; padding-top: 10px; opacity: .55;
+  }
+  .b-flash-hero .hero-cta, .b-flash-banner .hero-cta {
+    display: inline-block; margin-top: 16px;
+    padding: 10px 24px;
+    font: 700 10px var(--bf-toni); letter-spacing: .16em;
+    background: rgba(255, 255, 255, .92); color: var(--ink);
+    border-radius: 999px;
+  }
+  .b-flash-hero .hero-cards { margin-top: 22px; }
+  .b-coupon {
+    margin: 14px 18px; padding: 18px; border-radius: 8px;
+    display: flex; align-items: center; gap: 16px;
+    position: relative; overflow: hidden;
+  }
+  .b-coupon::before, .b-coupon::after {
+    content: ''; position: absolute; top: 50%; transform: translateY(-50%);
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--oat);
+  }
+  .b-coupon::before { left: -7px; } .b-coupon::after { right: -7px; }
+  .b-coupon .cp-disc {
+    flex: 0 0 auto; min-width: 70px; text-align: center;
+    padding-right: 16px; border-right: 1px dashed currentColor;
+  }
+  .b-coupon .cp-disc .cp-big {
+    font: 700 28px var(--bf-gothic); letter-spacing: .04em; line-height: 1;
+  }
+  .b-coupon .cp-body { flex: 1; min-width: 0; }
+  .b-coupon .cp-kicker { font: 700 9px var(--bf-toni); letter-spacing: .14em; opacity: .8; }
+  .b-coupon .cp-ttl    { font: 500 16px var(--bf-bear); line-height: 1.15; margin-top: 2px; }
+  .b-coupon .cp-sub    { font: 500 11px var(--bf-aleo); margin-top: 4px; opacity: .8; }
+  .b-coupon .cp-code {
+    margin-top: 6px; display: inline-block;
+    font: 700 10px var(--bf-toni); letter-spacing: .14em;
+    padding: 3px 8px; border: 1px dashed currentColor; border-radius: 3px;
+  }
+  .b-coupon .cp-cta {
+    flex: 0 0 auto;
+    display: inline-flex; align-items: center;
+    padding: 8px 14px;
+    font: 700 10px var(--bf-toni); letter-spacing: .14em;
+    background: rgba(255, 255, 255, .92); color: var(--ink);
+    border-radius: 4px;
+  }
+  .b-points {
+    padding: 22px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .b-points .pt-star {
+    flex: 0 0 56px; height: 56px; border-radius: 50%;
+    background: rgba(255, 255, 255, .12);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .b-points .pt-star svg { width: 28px; height: 28px; }
+  .b-points .pt-body { flex: 1; min-width: 0; }
+  .b-points .pt-kicker { font: 700 9px var(--bf-toni); letter-spacing: .14em; opacity: .8; }
+  .b-points .pt-ttl    { font: 500 17px var(--bf-bear); margin-top: 2px; line-height: 1.15; }
+  .b-points .pt-sub    { font: 500 11px var(--bf-aleo); margin-top: 4px; opacity: .85; }
+  .b-points .pt-cta {
+    flex: 0 0 auto;
+    padding: 8px 14px;
+    font: 700 10px var(--bf-toni); letter-spacing: .14em;
+    background: rgba(255, 255, 255, .92); color: var(--ink);
+    border-radius: 999px;
+  }
+  .b-review { padding: 22px; }
+  .b-review .kicker {
+    font: 700 9px var(--bf-toni); letter-spacing: .18em; opacity: .75; text-align: center;
+    margin-bottom: 12px;
+  }
+  .b-review .rv-item { text-align: center; }
+  .b-review .stars {
+    display: flex; justify-content: center; gap: 2px;
+    font: 700 16px var(--bf-gothic);
+  }
+  .b-review .stars .on  { color: var(--corn); }
+  .b-review .stars .off { color: rgba(0, 0, 0, .15); }
+  .b-review .quote {
+    font: 500 15px var(--bf-bear); line-height: 1.4;
+    margin-top: 12px;
+  }
+  .b-review .byline {
+    margin-top: 14px;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .b-review .avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    overflow: hidden; background: rgba(0, 0, 0, .08);
+    display: flex; align-items: center; justify-content: center;
+    font: 700 14px var(--bf-bear); color: rgba(0, 0, 0, .5);
+    flex-shrink: 0;
+  }
+  .b-review .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .b-review .byline-text { font: 500 12px var(--bf-aleo); text-align: left; }
+  .b-review .byline-text .name { font-weight: 700; }
+  .b-review .byline-text .sub { opacity: .65; font-size: 10px; margin-top: 2px; letter-spacing: .04em; }
+  .b-review-carousel .rv-rail {
+    display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px;
+    scrollbar-width: none; scroll-snap-type: x mandatory;
+  }
+  .b-review-carousel .rv-rail::-webkit-scrollbar { display: none; }
+  .b-review-carousel .rv-rail .rv-item {
+    flex: 0 0 calc(100% - 12px); scroll-snap-align: start;
+    padding: 4px 8px;
+  }
+  .b-review-carousel .rv-dots {
+    display: flex; justify-content: center; gap: 6px; margin-top: 10px;
+  }
+  .b-review-carousel .rv-dots .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor; opacity: .25;
+  }
+  .b-review-carousel .rv-dots .dot.on { opacity: 1; }
+  .b-store { margin: 14px 18px; padding: 18px; border-radius: 6px; }
+  .b-store .kicker { font: 700 9px var(--bf-toni); letter-spacing: .14em; opacity: .8; }
+  .b-store .ttl { font: 500 18px var(--bf-bear); margin-top: 2px; line-height: 1.15; }
+  .b-store .row { margin-top: 10px; display: flex; gap: 10px; align-items: flex-start; }
+  .b-store .row svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 2px; opacity: .75; }
+  .b-store .row .val { font: 500 12px var(--bf-aleo); line-height: 1.4; }
+  .b-store .cta {
+    display: inline-block; margin-top: 14px;
+    padding: 7px 16px;
+    font: 700 10px var(--bf-toni); letter-spacing: .14em;
+    background: rgba(255, 255, 255, .92); color: var(--ink);
+    border-radius: 4px;
+  }
+  .empty-state {
+    color: rgba(0, 0, 0, .35); font: 400 12px var(--bf-aleo);
+    padding: 32px 22px; text-align: center;
+  }
+
+  /* ═══════════════ MOBILE: full-screen, no frame ═══════════════ */
+  @media (max-width: 500px) {
+    body { background: var(--oat); }
+    .topbar { display: none; }
+    .canvas { padding: 0; min-height: 100vh; min-height: 100dvh; background: var(--oat); }
+    .phone {
+      width: 100%;
+      min-height: 100vh; min-height: 100dvh;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    .phone::before { display: none; }
+    .phone-status { padding-top: max(18px, env(safe-area-inset-top, 0px)); }
+    .phone-tabs { padding-bottom: max(24px, env(safe-area-inset-bottom, 0px)); }
+  }
+
+  /* Loading skeleton */
+  .skeleton {
+    background: linear-gradient(90deg, rgba(0, 0, 0, .06) 0%, rgba(0, 0, 0, .03) 50%, rgba(0, 0, 0, .06) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">R</div>
+    <span>Roots</span>
+    <span class="sub">Storefront Preview</span>
+  </div>
+  <div class="live-pill">
+    <span class="dot"></span>
+    <span>LIVE · v<span id="version">—</span></span>
+  </div>
+  <div class="grow"></div>
+  <div class="lang-toggle" id="lang-toggle" title="Preview language">
+    <button class="active" data-lang="en">EN</button>
+    <button data-lang="cn">中</button>
+  </div>
+  <select class="device-select" id="device-select"></select>
+  <button class="btn" onclick="reload()" title="Refetch the live config and rerender">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+    Refresh
+  </button>
+  <a class="topbar-link" href="/cms">Edit in CMS →</a>
+</div>
+
+<div class="canvas">
+  <div class="phone" data-platform="ios">
+    <div class="phone-status">
+      <span>9:41</span>
+      <div class="right">
+        <svg viewBox="0 0 16 11" fill="currentColor"><path d="M1 8h2v3H1zM4.5 6h2v5h-2zM8 4h2v7H8zM11.5 2h2v9h-2z"/></svg>
+        <svg viewBox="0 0 24 11" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="20" height="10" rx="2"/><rect x="2" y="2" width="17" height="7" rx="1" fill="currentColor"/><path d="M22 3v5c.6-.2 1-.8 1-1.5v-2c0-.7-.4-1.3-1-1.5z" fill="currentColor"/></svg>
+      </div>
+    </div>
+    <div class="phone-content" id="phone-content">
+      <div class="skeleton" style="height: 320px"></div>
+      <div style="padding: 18px 22px">
+        <div class="skeleton" style="height: 14px; width: 30%; margin-bottom: 8px"></div>
+        <div class="skeleton" style="height: 22px; width: 70%"></div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 12px">
+          <div class="skeleton" style="height: 96px"></div>
+          <div class="skeleton" style="height: 96px"></div>
+          <div class="skeleton" style="height: 96px"></div>
+          <div class="skeleton" style="height: 96px"></div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-tabs">
+      <div class="tab active">
+        <svg viewBox="0 0 24 24" stroke="currentColor"><path d="M3 11.5L12 4l9 7.5V19a2 2 0 0 1-2 2h-3v-6h-8v6H5a2 2 0 0 1-2-2v-7.5z" stroke-linejoin="round"/></svg>
+        <span data-tab-label="home">Home</span>
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" stroke="currentColor"><path d="M4 8h16l-1.5 11a2 2 0 0 1-2 1.7H7.5a2 2 0 0 1-2-1.7L4 8z M9 8V6a3 3 0 0 1 6 0v2" stroke-linejoin="round"/></svg>
+        <span data-tab-label="shop">Shop</span>
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" stroke="currentColor"><path d="M3 4h2.5L8 16h11l2-9H6.5" stroke-linejoin="round"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg>
+        <span data-tab-label="cart">Cart</span>
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="8.5" r="3.5"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" stroke-linejoin="round"/></svg>
+        <span data-tab-label="me">Me</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const RESOLUTIONS = [
+  { w: 390, h: 844, platform: 'ios',     name: 'iPhone 14 / 15' },
+  { w: 375, h: 667, platform: 'ios',     name: 'iPhone SE / 8' },
+  { w: 430, h: 932, platform: 'ios',     name: 'iPhone Pro Max' },
+  { w: 360, h: 640, platform: 'android', name: 'Android small (S8)' },
+  { w: 360, h: 800, platform: 'android', name: 'Android common (S20)' },
+  { w: 412, h: 915, platform: 'android', name: 'Pixel 7' },
+];
+
+const state = { config: null, products: [], categories: [], flashSales: [], lang: 'en' };
+
+function $(s) { return document.querySelector(s); }
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+// Customers see one language at a time, picked by their WeChat preference.
+// This preview lets the team flip between EN / 中 with a toggle.
+function pickLang(en, cn) {
+  const a = (en || '').trim(), b = (cn || '').trim();
+  if (state.lang === 'cn') return b || a;
+  return a || b;
+}
+function biLabel(en, cn) { return escapeHtml(pickLang(en, cn)); }
+
+// Category names in the kitchen DB are mixed strings ("Bakery 烘焙"). Split
+// on the first CJK char and pick the side that matches state.lang.
+function categoryNameForLang(name) {
+  const s = String(name || '');
+  const m = s.match(/[一-鿿]/);
+  if (!m) return s;
+  const en = s.slice(0, m.index).trim();
+  const cn = s.slice(m.index).trim();
+  return state.lang === 'cn' ? (cn || en) : (en || cn);
+}
+function getBi(b, key) {
+  return { en: b[key + '_en'] ?? b[key] ?? '', cn: b[key + '_cn'] ?? '' };
+}
+function getCtas(b) {
+  if (Array.isArray(b.ctas)) {
+    return b.ctas.map(c => ({
+      label_en: c.label_en ?? c.label ?? '',
+      label_cn: c.label_cn ?? '',
+      target:   c.target   ?? '',
+      style:    c.style    ?? 'primary',
+    }));
+  }
+  if (b.cta_label) return [{ label_en: b.cta_label, label_cn: '', target: b.cta_target || '', style: 'primary' }];
+  return [];
+}
+function thumbUrl(p) { return p?.image_url || p?.image_data || ''; }
+function priceOf(p) {
+  const retail = Number(p?.price) || 0;  // public endpoint exposes retail as `price`
+  return retail > 0 ? retail : 0;
+}
+
+const TAB_LABELS = {
+  en: { home: 'Home', shop: 'Shop', cart: 'Cart', me: 'Me' },
+  cn: { home: '首页', shop: '商品', cart: '购物车', me: '我的' },
+};
+function applyTabLabels() {
+  document.querySelectorAll('[data-tab-label]').forEach(el => {
+    el.textContent = TAB_LABELS[state.lang][el.dataset.tabLabel] || el.textContent;
+  });
+}
+
+// ═══════════════ LANG TOGGLE ═══════════════
+(function buildLangToggle() {
+  try { state.lang = localStorage.getItem('storefront_lang') || 'en'; } catch {}
+  if (!['en', 'cn'].includes(state.lang)) state.lang = 'en';
+  document.querySelectorAll('#lang-toggle button').forEach(b => {
+    b.classList.toggle('active', b.dataset.lang === state.lang);
+    b.addEventListener('click', () => {
+      state.lang = b.dataset.lang;
+      document.querySelectorAll('#lang-toggle button').forEach(x =>
+        x.classList.toggle('active', x === b));
+      try { localStorage.setItem('storefront_lang', state.lang); } catch {}
+      applyTabLabels();
+      // Re-render with current data — no refetch needed
+      if (state.config) render(state.config.home?.layout || []);
+    });
+  });
+  applyTabLabels();
+})();
+
+// ═══════════════ RESOLUTION PICKER ═══════════════
+(function buildResolutionPicker() {
+  const sel = $('#device-select');
+  sel.innerHTML = RESOLUTIONS.map((r, i) => `<option value="${i}">${r.name} · ${r.w}×${r.h}</option>`).join('');
+  let saved = 0;
+  try { saved = parseInt(localStorage.getItem('storefront_res') || '0', 10) || 0; } catch {}
+  if (saved < 0 || saved >= RESOLUTIONS.length) saved = 0;
+  sel.value = String(saved);
+  applyResolution(saved);
+  sel.addEventListener('change', e => {
+    const idx = parseInt(e.target.value, 10) || 0;
+    applyResolution(idx);
+    try { localStorage.setItem('storefront_res', String(idx)); } catch {}
+  });
+})();
+function applyResolution(idx) {
+  const r = RESOLUTIONS[idx] || RESOLUTIONS[0];
+  const phone = $('.phone');
+  if (window.matchMedia('(max-width: 500px)').matches) return;  // mobile: full screen
+  phone.style.width = r.w + 'px';
+  phone.style.minHeight = r.h + 'px';
+  phone.dataset.platform = r.platform;
+}
+
+// ═══════════════ FETCH + RENDER ═══════════════
+// ?page=home (default) | promotions | categories | membership | about | onboarding
+function currentPage() {
+  const p = new URL(location.href).searchParams.get('page') || 'home';
+  return ['home', 'promotions', 'categories', 'membership', 'about', 'onboarding'].includes(p) ? p : 'home';
+}
+
+async function reload() {
+  try {
+    const [cfg, prods, cats, flash] = await Promise.all([
+      fetch('/api/retail/config',     { cache: 'no-store' }).then(r => r.json()),
+      fetch('/api/retail/products?limit=100').then(r => r.json()),
+      fetch('/api/retail/categories').then(r => r.json()),
+      fetch('/api/retail/flash-sales').then(r => r.json()).catch(() => ({ data: [] })),
+    ]);
+    if (!cfg?.success) throw new Error('config_failed');
+    state.config = cfg.data;
+    state.products = prods?.data || [];
+    state.categories = cats?.data || [];
+    state.flashSales = flash?.data || [];
+    $('#version').textContent = state.config.version || '—';
+    const page = currentPage();
+    render(state.config[page]?.layout || []);
+  } catch (e) {
+    $('#phone-content').innerHTML = `<div class="empty-state">Could not load storefront: ${escapeHtml(e.message)}</div>`;
+  }
+}
+reload();
+
+// ─── Click routing for the preview ─────────────────────────────────────
+// The mini app routes CTA events to real pages. The /storefront preview
+// only simulates the visual — we mirror the routes for the CMS-driven
+// pages (home, promotions, categories, membership, onboarding) by
+// flipping the ?page= query and re-rendering. Other targets (shop, cart,
+// product:X, category:X, etc.) toast a "would navigate to..." stub since
+// those pages don't exist on the web preview.
+const PAGE_TARGETS = new Set(['home', 'promotions', 'categories', 'membership', 'about', 'onboarding']);
+const TAB_TARGETS = new Set(['shop', 'cart', 'me', 'coupons', 'wallet']);
+
+function previewToast(msg) {
+  let t = document.getElementById('preview-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'preview-toast';
+    t.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);padding:10px 18px;background:rgba(20,20,24,.96);color:#ecebe5;font:500 12px -apple-system,sans-serif;border-radius:8px;border:1px solid rgba(255,255,255,.1);box-shadow:0 10px 30px rgba(0,0,0,.4);z-index:1000;opacity:0;transition:opacity .2s ease;pointer-events:none';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  requestAnimationFrame(() => { t.style.opacity = '1'; });
+  clearTimeout(previewToast._h);
+  previewToast._h = setTimeout(() => { t.style.opacity = '0'; }, 2200);
+}
+
+function routeCtaTarget(target) {
+  if (!target) return;
+  if (PAGE_TARGETS.has(target)) {
+    const url = new URL(location.href);
+    url.searchParams.set('page', target);
+    history.pushState({}, '', url.toString());
+    const page = currentPage();
+    render(state.config?.[page]?.layout || []);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    return;
+  }
+  if (TAB_TARGETS.has(target)) {
+    previewToast(`Would open the ${target} tab in the mini app`);
+    return;
+  }
+  if (target.startsWith('product:')) {
+    previewToast(`Would open product #${target.split(':')[1]} in the mini app`);
+    return;
+  }
+  if (target.startsWith('category:')) {
+    previewToast(`Would filter the Shop tab to category #${target.split(':')[1]} in the mini app`);
+    return;
+  }
+  previewToast(`Unknown target: ${target}`);
+}
+
+// Browser back/forward — re-render the page the URL now points at.
+window.addEventListener('popstate', () => {
+  const page = currentPage();
+  render(state.config?.[page]?.layout || []);
+});
+
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-cta-target]');
+  if (!el) return;
+  e.preventDefault();
+  routeCtaTarget(el.dataset.ctaTarget);
+});
+
+function render(blocks) {
+  const mount = $('#phone-content');
+  if (!blocks.length) {
+    mount.innerHTML = `<div class="empty-state">Nothing published yet. Open the <a href="/cms" style="color:var(--ink)">CMS</a> and publish a layout.</div>`;
+    return;
+  }
+  mount.innerHTML = blocks.map(renderBlock).join('');
+}
+
+function renderBlock(b) {
+  switch (b.type) {
+    case 'announcement_bar': {
+      const colorMap = { 'lime-leaf': 'var(--lime)', 'forest-kale': 'var(--forest)', 'berry-punch': 'var(--berry)', 'carrot-blaze': 'var(--carrot)', 'papaya-glow': 'var(--papaya)', 'oat-milk': 'var(--oat)', 'ink': 'var(--ink)' };
+      const bg = colorMap[b.bg_color] || b.bg_color || 'var(--lime)';
+      const fg = colorMap[b.fg_color] || b.fg_color || 'var(--ink)';
+      const text = pickLang(b.text_en, b.text_cn);
+      const linked = !!b.link_target;
+      const inner = linked
+        ? `<span>${escapeHtml(text)}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`
+        : escapeHtml(text);
+      const targetAttr = linked ? ` data-cta-target="${escapeAttr(b.link_target)}"` : '';
+      return `<div class="b-announce${linked ? ' linked' : ''}"${targetAttr} style="background: ${bg}; color: ${fg}">${inner}</div>`;
+    }
+    case 'hero_banner': {
+      const view = b.view || 'full';
+      const ctas = getCtas(b);
+      if (view === 'split') {
+        const hl = getBi(b, 'headline');
+        const sub = getBi(b, 'subtitle');
+        const panelBg = brandColorVar(b.panel_bg_color) || 'var(--oat)';
+        const panelFg = brandColorVar(b.panel_fg_color) || 'var(--ink)';
+        const imgHtml = b.image_url
+          ? `<img src="${escapeAttr(b.image_url)}" alt="">`
+          : `<div class="placeholder">No image set</div>`;
+        return `<div class="b-hero b-hero-split">
+          <div class="split-img">${imgHtml}</div>
+          <div class="split-panel" style="background:${panelBg};color:${panelFg}">
+            ${hl.en || hl.cn ? `<div class="headline">${biLabel(hl.en, hl.cn)}</div>` : ''}
+            ${sub.en || sub.cn ? `<div class="subtitle">${biLabel(sub.en, sub.cn)}</div>` : ''}
+            ${ctas.length ? `<div class="cta-stack">${ctas.map(c =>
+              `<div class="cta-btn ${escapeAttr(c.style || 'primary')}"${c.target ? ` data-cta-target="${escapeAttr(c.target)}"` : ''}>${biLabel(c.label_en, c.label_cn)}</div>`
+            ).join('')}</div>` : ''}
+          </div>
+        </div>`;
+      }
+      let style = '';
+      if (b.image_aspect && b.image_url) {
+        style = `aspect-ratio: ${b.image_aspect}; height: auto`;
+      } else {
+        style = `height: ${(b.height_px || 280)}px`;
+      }
+      let inner = '';
+      if (b.image_url) inner += `<img src="${escapeAttr(b.image_url)}" alt="">`;
+      else inner += `<div class="placeholder">No image set</div>`;
+      if (b.image_url && ctas.length) {
+        inner += `<div class="cta-stack">${ctas.map(c =>
+          `<div class="cta-btn ${escapeAttr(c.style || 'primary')}"${c.target ? ` data-cta-target="${escapeAttr(c.target)}"` : ''}>${biLabel(c.label_en, c.label_cn)}</div>`
+        ).join('')}</div>`;
+      }
+      return `<div class="b-hero b-hero-full" style="${style}">${inner}</div>`;
+    }
+    case 'category_tabs': {
+      const view = b.view || 'tiles';
+      const cats = (b.category_ids || []).map(id => state.categories.find(c => c.id === id)).filter(Boolean);
+      const ck = getBi(b, 'kicker'); const ct = getBi(b, 'title');
+      const seeAll = state.lang === 'cn' ? '查看全部' : 'SEE ALL';
+      const catWord = state.lang === 'cn' ? '分类' : 'CATEGORY';
+      const head = `<div class="head"><div><div class="kicker">${biLabel(ck.en, ck.cn)}</div><div class="ttl">${biLabel(ct.en, ct.cn)}</div></div><div class="more">${seeAll}</div></div>`;
+      if (!cats.length) return `<div class="b-cattabs b-cattabs-${view}">${head}</div>`;
+
+      if (view === 'icons') {
+        const cols = Math.max(3, Math.min(5, b.columns || 4));
+        const icons = cats.map((c, i) => {
+          const name = categoryNameForLang(c.name);
+          const letter = (name.trim()[0] || '').toUpperCase();
+          return `<div class="icon-tile">
+            <div class="icon-circle c${i % 6}">${escapeHtml(letter)}</div>
+            <div class="icon-name">${escapeHtml(name)}</div>
+          </div>`;
+        }).join('');
+        return `<div class="b-cattabs b-cattabs-icons">${head}<div class="icons-grid cols-${cols}">${icons}</div></div>`;
+      }
+
+      const tiles = cats.map((c, i) => `
+        <div class="tile c${i % 6}">
+          <div class="num">0${i + 1} · ${catWord}</div>
+          <div class="name">${escapeHtml(categoryNameForLang(c.name))}</div>
+        </div>`).join('');
+      return `<div class="b-cattabs b-cattabs-tiles">${head}<div class="grid">${tiles}</div></div>`;
+    }
+    case 'featured_item': {
+      const p = state.products.find(x => x.id === b.product_id);
+      if (!p) return `<div class="b-featured"><div class="empty-state">Featured product unavailable.</div></div>`;
+      const src = thumbUrl(p);
+      const k = getBi(b, 'kicker');
+      const price = priceOf(p);
+      return `<div class="b-featured">
+        <div class="card">
+          <div class="img">${src ? `<img src="${escapeAttr(src)}">` : ''}</div>
+          <div>
+            <div class="kicker">${biLabel(k.en, k.cn)}</div>
+            <div class="name">${biLabel(p.name_en, p.name_cn)}</div>
+            <div class="price">${price > 0 ? `¥${price.toFixed(2)}` : '—'}</div>
+          </div>
+        </div>
+      </div>`;
+    }
+    case 'product_grid': {
+      const view = b.view || 'grid';
+      let products = [];
+      if (b.source_type === 'manual') {
+        products = (b.product_ids || []).map(id => state.products.find(p => p.id === id)).filter(Boolean);
+      } else {
+        const cat = state.categories.find(c => c.id === b.category_id);
+        products = state.products.filter(p => !b.category_id || p.category === cat?.name);
+      }
+      products = products.slice(0, b.limit || 6);
+      const cols = b.columns || 2;
+      const gk = getBi(b, 'kicker'); const gt = getBi(b, 'title');
+      const seeAll = state.lang === 'cn' ? '查看全部' : 'SEE ALL';
+      const head = `<div class="head">
+        <div>
+          <div class="kicker">${biLabel(gk.en, gk.cn)}</div>
+          <div class="ttl">${biLabel(gt.en, gt.cn)}</div>
+        </div>
+        <div class="more">${seeAll}</div>
+      </div>`;
+      if (!products.length) {
+        return `<div class="b-grid b-grid-${view}">${head}<div class="empty-state" style="padding: 28px 0">No products available yet.</div></div>`;
+      }
+      const cards = products.map(p => {
+        const src = thumbUrl(p); const price = priceOf(p);
+        return `<div class="card">
+          <div class="img">${src ? `<img src="${escapeAttr(src)}">` : ''}</div>
+          <div class="name">${biLabel(p.name_en, p.name_cn)}</div>
+          <div class="price">${price > 0 ? `¥${price.toFixed(2)}` : '—'}</div>
+        </div>`;
+      }).join('');
+      if (view === 'scroll') {
+        return `<div class="b-grid b-grid-scroll">${head}<div class="scroll-rail">${cards}</div></div>`;
+      }
+      if (view === 'list') {
+        const listRows = products.map(p => {
+          const src = thumbUrl(p); const price = priceOf(p);
+          const tagline = pickLang(p.tagline_en, p.tagline_cn) || pickLang(p.description_en, p.description_cn) || '';
+          return `<div class="list-row">
+            <div class="img">${src ? `<img src="${escapeAttr(src)}">` : ''}</div>
+            <div class="meta">
+              <div class="name">${biLabel(p.name_en, p.name_cn)}</div>
+              ${tagline ? `<div class="tagline">${escapeHtml(tagline.slice(0, 80))}${tagline.length > 80 ? '…' : ''}</div>` : ''}
+              <div class="price">${price > 0 ? `¥${price.toFixed(2)}` : '—'}</div>
+            </div>
+          </div>`;
+        }).join('');
+        return `<div class="b-grid b-grid-list">${head}<div class="list-rows">${listRows}</div></div>`;
+      }
+      return `<div class="b-grid b-grid-grid">${head}<div class="grid c${cols}">${cards}</div></div>`;
+    }
+    case 'spacer': {
+      return `<div class="b-spacer" style="height: ${b.height_px || 24}px"></div>`;
+    }
+    case 'sticker_collage': {
+      const stickers = (b.stickers || []).map(s => {
+        const bg = brandColorVar(s.color) || 'var(--citrus)';
+        return `<span class="sticker" style="background:${bg};transform:rotate(${s.rotate || 0}deg)">${biLabel(s.label_en, s.label_cn)}</span>`;
+      }).join('');
+      return `<div class="b-stickers">${stickers}</div>`;
+    }
+    case 'progress_dots': {
+      const count = Math.max(1, Math.min(10, b.count || 3));
+      const active = Math.max(0, Math.min(count - 1, b.active_index ?? 0));
+      const c = brandColorVar(b.color) || 'var(--ink)';
+      let html = '';
+      for (let i = 0; i < count; i++) {
+        html += `<span class="dot${i === active ? ' active' : ''}" style="${i === active ? 'background:' + c : 'border-color:' + c}"></span>`;
+      }
+      return `<div class="b-dots">${html}</div>`;
+    }
+    case 'flash_sale_strip': {
+      const view = b.view || 'strip';
+      const bg = brandColorVar(b.bg_color) || 'var(--berry)';
+      const fg = brandColorVar(b.fg_color) || 'var(--oat)';
+      const active = (state.flashSales || []).filter(p => p.flash?.state === 'active');
+      const limit = view === 'banner' ? 0 : Math.max(1, Math.min(8, b.product_limit || 3));
+      const products = limit > 0 ? active.slice(0, limit) : [];
+      const k = getBi(b, 'kicker');
+      const t = getBi(b, 'title');
+      const haveSomething = products.length > 0 || (view === 'banner' && active.length > 0);
+      if (!haveSomething) {
+        if (b.hide_when_empty) return '';
+        const empty = pickLang(b.empty_text_en, b.empty_text_cn);
+        return `<div class="b-flash b-flash-${view}" style="background:${bg};color:${fg}">
+          <div class="fs-empty-head">
+            <div class="kicker">${biLabel(k.en, k.cn)}</div>
+            <div class="ttl">${biLabel(t.en, t.cn)}</div>
+          </div>
+          <div class="empty-flash">${escapeHtml(empty || '')}</div>
+        </div>`;
+      }
+      const clockSource = products.length ? products : active;
+      const soonestEnd = clockSource
+        .map(p => new Date(p.flash.ends_at).getTime())
+        .filter(Number.isFinite)
+        .sort((a, b) => a - b)[0];
+      const ms = soonestEnd ? Math.max(0, soonestEnd - Date.now()) : 0;
+      const split = splitCountdown(ms);
+      const cellsLabels = state.lang === 'cn' ? ['天','时','分','秒'] : ['DAYS','HRS','MIN','SEC'];
+      const heroCells = [split.d, split.h, split.m, split.s].map((v, i) => `
+        <div class="hero-cell">
+          <div class="hero-num">${String(v).padStart(2, '0')}</div>
+          <div class="hero-lbl">${cellsLabels[i]}</div>
+        </div>`).join('<div class="hero-sep">:</div>');
+      const stripCells = [split.d, split.h, split.m, split.s]
+        .map(v => `<span class="ct-num">${String(v).padStart(2, '0')}</span>`)
+        .join('<span class="ct-sep">:</span>');
+      const endsLbl = state.lang === 'cn' ? '距结束' : 'ENDS IN';
+      const ctaLabel = pickLang(b.cta_label_en, b.cta_label_cn);
+      const cards = products.map(p => {
+        const fp = Number(p.flash.price) || 0;
+        const rp = Number(p.price) || 0;
+        const off = rp > 0 ? Math.round(((rp - fp) / rp) * 100) : 0;
+        const img = p.image_url || p.image_data || '';
+        const name = pickLang(p.name_en, p.name_cn);
+        const sold = p.flash.stock_sold || 0;
+        const cap = p.flash.stock_limit;
+        const pct = (cap != null && cap > 0) ? Math.min(100, Math.round((sold / cap) * 100)) : null;
+        const meterLabel = state.lang === 'cn'
+          ? (cap != null ? `已抢 ${sold} / ${cap}` : `已抢 ${sold}`)
+          : (cap != null ? `${sold} of ${cap} sold` : `${sold} sold`);
+        return `<div class="fs-card">
+          <div class="img">${img ? `<img src="${escapeAttr(img)}" alt="">` : ''}${off > 0 ? `<span class="badge">-${off}%</span>` : ''}</div>
+          <div class="meta">
+            <div class="name">${escapeHtml(name)}</div>
+            <div class="prices">
+              <span class="now">¥${fp.toFixed(2)}</span>
+              ${rp > fp ? `<span class="was">¥${rp.toFixed(2)}</span>` : ''}
+            </div>
+            ${pct != null ? `<div class="meter"><span style="width:${pct}%"></span></div>` : ''}
+            <div class="meter-lbl">${escapeHtml(meterLabel)}</div>
+          </div>
+        </div>`;
+      }).join('');
+
+      if (view === 'hero' || view === 'banner') {
+        return `<div class="b-flash b-flash-${view}" data-block-id="${escapeAttr(b.id)}" style="background:${bg};color:${fg}">
+          <div class="hero-kicker">${biLabel(k.en, k.cn)}</div>
+          <div class="hero-title">${biLabel(t.en, t.cn)}</div>
+          <div class="hero-ends">${endsLbl}</div>
+          <div class="hero-clock" data-ends-at="${escapeAttr(new Date(soonestEnd).toISOString())}">${heroCells}</div>
+          ${ctaLabel ? `<div class="hero-cta"${b.cta_target ? ` data-cta-target="${escapeAttr(b.cta_target)}"` : ''}>${escapeHtml(ctaLabel)}</div>` : ''}
+          ${view === 'hero' && cards ? `<div class="fs-cards hero-cards">${cards}</div>` : ''}
+        </div>`;
+      }
+      // strip view (default)
+      return `<div class="b-flash b-flash-strip" data-block-id="${escapeAttr(b.id)}" style="background:${bg};color:${fg}">
+        <div class="head">
+          <div>
+            <div class="kicker">${biLabel(k.en, k.cn)}</div>
+            <div class="ttl">${biLabel(t.en, t.cn)}</div>
+          </div>
+          <div class="clock" data-ends-at="${escapeAttr(new Date(soonestEnd).toISOString())}">
+            <div class="ct-label">${endsLbl}</div>
+            <div class="ct-cells">${stripCells}</div>
+          </div>
+        </div>
+        <div class="fs-cards">${cards}</div>
+      </div>`;
+    }
+    case 'coupon_block': {
+      const bg = brandColorVar(b.bg_color) || 'var(--pink)';
+      const fg = brandColorVar(b.fg_color) || 'var(--ink)';
+      const k = getBi(b, 'kicker');
+      const t = getBi(b, 'title');
+      const sub = pickLang(b.subtitle_en, b.subtitle_cn);
+      const disc = pickLang(b.discount_label_en, b.discount_label_cn);
+      const cta = pickLang(b.cta_label_en, b.cta_label_cn);
+      return `<div class="b-coupon" style="background:${bg};color:${fg}">
+        ${disc ? `<div class="cp-disc"><div class="cp-big">${escapeHtml(disc)}</div></div>` : ''}
+        <div class="cp-body">
+          <div class="cp-kicker">${biLabel(k.en, k.cn)}</div>
+          <div class="cp-ttl">${biLabel(t.en, t.cn)}</div>
+          ${sub ? `<div class="cp-sub">${escapeHtml(sub)}</div>` : ''}
+          ${b.code ? `<div class="cp-code">CODE · ${escapeHtml(b.code)}</div>` : ''}
+        </div>
+        ${cta ? `<div class="cp-cta"${b.cta_target ? ` data-cta-target="${escapeAttr(b.cta_target)}"` : ''}>${escapeHtml(cta)}</div>` : ''}
+      </div>`;
+    }
+    case 'points_widget': {
+      const bg = brandColorVar(b.bg_color) || 'var(--forest)';
+      const fg = brandColorVar(b.fg_color) || 'var(--lime)';
+      const k = getBi(b, 'kicker');
+      const t = getBi(b, 'title');
+      const sub = pickLang(b.subtitle_en, b.subtitle_cn);
+      const cta = pickLang(b.cta_label_en, b.cta_label_cn);
+      return `<div class="b-points" style="background:${bg};color:${fg}">
+        <div class="pt-star">
+          <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="12 3 14.5 9 21 9.5 16.5 13.5 18 20 12 16.5 6 20 7.5 13.5 3 9.5 9.5 9 12 3"/></svg>
+        </div>
+        <div class="pt-body">
+          <div class="pt-kicker">${biLabel(k.en, k.cn)}</div>
+          <div class="pt-ttl">${biLabel(t.en, t.cn)}</div>
+          ${sub ? `<div class="pt-sub">${escapeHtml(sub)}</div>` : ''}
+        </div>
+        ${cta ? `<div class="pt-cta"${b.cta_target ? ` data-cta-target="${escapeAttr(b.cta_target)}"` : ''}>${escapeHtml(cta)}</div>` : ''}
+      </div>`;
+    }
+    case 'review_card': {
+      const view = b.view || 'card';
+      const bg = brandColorVar(b.bg_color) || 'var(--oat)';
+      const fg = brandColorVar(b.fg_color) || 'var(--ink)';
+      const k = getBi(b, 'kicker');
+      // Migrate legacy single-review fields into an array when needed.
+      let reviews = Array.isArray(b.reviews) && b.reviews.length ? b.reviews : null;
+      if (!reviews && (b.quote_en || b.quote_cn || b.author_name)) {
+        reviews = [{
+          rating: b.rating || 5,
+          quote_en: b.quote_en || '', quote_cn: b.quote_cn || '',
+          author_name: b.author_name || '',
+          author_subline_en: b.author_subline_en || '', author_subline_cn: b.author_subline_cn || '',
+          avatar_url: b.avatar_url || '',
+        }];
+      }
+      reviews = reviews || [];
+      const renderOne = (r) => {
+        const rating = Math.max(1, Math.min(5, parseInt(r.rating, 10) || 5));
+        const stars = [1,2,3,4,5].map(i => `<span class="${i <= rating ? 'on' : 'off'}">★</span>`).join('');
+        const q = pickLang(r.quote_en, r.quote_cn);
+        const subline = pickLang(r.author_subline_en, r.author_subline_cn);
+        const initial = (r.author_name || '').trim()[0] || '?';
+        const avatar = r.avatar_url
+          ? `<div class="avatar"><img src="${escapeAttr(r.avatar_url)}" alt=""></div>`
+          : `<div class="avatar fallback">${escapeHtml(initial.toUpperCase())}</div>`;
+        return `<div class="rv-item">
+          <div class="stars">${stars}</div>
+          <div class="quote">${escapeHtml(q || '')}</div>
+          <div class="byline">
+            ${avatar}
+            <div class="byline-text">
+              ${r.author_name ? `<div class="name">${escapeHtml(r.author_name)}</div>` : ''}
+              ${subline ? `<div class="sub">${escapeHtml(subline)}</div>` : ''}
+            </div>
+          </div>
+        </div>`;
+      };
+      if (!reviews.length) {
+        return `<div class="b-review b-review-${view}" style="background:${bg};color:${fg}">${k.en || k.cn ? `<div class="kicker">${biLabel(k.en, k.cn)}</div>` : ''}</div>`;
+      }
+      if (view === 'carousel') {
+        const items = reviews.map(renderOne).join('');
+        const dots = reviews.map((_, i) => `<span class="dot${i === 0 ? ' on' : ''}"></span>`).join('');
+        return `<div class="b-review b-review-carousel" style="background:${bg};color:${fg}">
+          ${k.en || k.cn ? `<div class="kicker">${biLabel(k.en, k.cn)}</div>` : ''}
+          <div class="rv-rail">${items}</div>
+          <div class="rv-dots">${dots}</div>
+        </div>`;
+      }
+      return `<div class="b-review b-review-card" style="background:${bg};color:${fg}">
+        ${k.en || k.cn ? `<div class="kicker">${biLabel(k.en, k.cn)}</div>` : ''}
+        ${renderOne(reviews[0])}
+      </div>`;
+    }
+    case 'store_info': {
+      const bg = brandColorVar(b.bg_color) || 'var(--oat)';
+      const fg = brandColorVar(b.fg_color) || 'var(--ink)';
+      const k = getBi(b, 'kicker');
+      const t = getBi(b, 'title');
+      const addr = pickLang(b.address_en, b.address_cn);
+      const hours = pickLang(b.hours_en, b.hours_cn);
+      const cta = pickLang(b.cta_label_en, b.cta_label_cn);
+      const pin   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+      const clock = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+      const phone = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13 1.05.37 2.07.7 3.06a2 2 0 0 1-.45 2.11L8.09 10.09a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.11-.45c.99.34 2.01.58 3.06.7A2 2 0 0 1 22 16.92z"/></svg>';
+      return `<div class="b-store" style="background:${bg};color:${fg}">
+        <div class="kicker">${biLabel(k.en, k.cn)}</div>
+        <div class="ttl">${biLabel(t.en, t.cn)}</div>
+        ${addr  ? `<div class="row">${pin}<div class="val">${escapeHtml(addr)}</div></div>`   : ''}
+        ${hours ? `<div class="row">${clock}<div class="val">${escapeHtml(hours)}</div></div>` : ''}
+        ${b.phone ? `<div class="row">${phone}<div class="val">${escapeHtml(b.phone)}</div></div>` : ''}
+        ${cta ? `<div class="cta"${b.cta_target ? ` data-cta-target="${escapeAttr(b.cta_target)}"` : ''}>${escapeHtml(cta)}</div>` : ''}
+      </div>`;
+    }
+    case 'countdown_timer': {
+      const bg = brandColorVar(b.bg_color) || 'var(--ink)';
+      const fg = brandColorVar(b.fg_color) || 'var(--lime)';
+      const k = getBi(b, 'kicker');
+      const t = getBi(b, 'title');
+      const ms = b.ends_at ? (new Date(b.ends_at).getTime() - Date.now()) : 0;
+      const cta = pickLang(b.cta_label_en, b.cta_label_cn);
+      if (ms <= 0) {
+        const ended = pickLang(b.ended_text_en, b.ended_text_cn) || (state.lang === 'cn' ? '本场已结束' : "That's a wrap");
+        return `<div class="b-countdown" data-block-id="${escapeAttr(b.id)}" data-ends-at="${escapeAttr(b.ends_at || '')}" style="background:${bg};color:${fg}">
+          <div class="kicker">${biLabel(k.en, k.cn)}</div>
+          <div class="ttl">${biLabel(t.en, t.cn)}</div>
+          <div class="ended">${escapeHtml(ended)}</div>
+        </div>`;
+      }
+      const p = splitCountdown(ms);
+      const labels = state.lang === 'cn' ? ['天','时','分','秒'] : ['DAYS','HRS','MIN','SEC'];
+      const cells = [p.d, p.h, p.m, p.s].map((v, i) => `
+        <div class="cell">
+          <div class="num">${String(v).padStart(2, '0')}</div>
+          <div class="lbl">${labels[i]}</div>
+        </div>`).join('<div class="sep">:</div>');
+      return `<div class="b-countdown" data-block-id="${escapeAttr(b.id)}" data-ends-at="${escapeAttr(b.ends_at || '')}" style="background:${bg};color:${fg}">
+        <div class="kicker">${biLabel(k.en, k.cn)}</div>
+        <div class="ttl">${biLabel(t.en, t.cn)}</div>
+        <div class="clock">${cells}</div>
+        ${cta ? `<div class="cta"${b.cta_target ? ` data-cta-target="${escapeAttr(b.cta_target)}"` : ''}>${escapeHtml(cta)}</div>` : ''}
+      </div>`;
+    }
+  }
+  return '';
+}
+
+function splitCountdown(ms) {
+  let s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400); s -= d * 86400;
+  const h = Math.floor(s / 3600);  s -= h * 3600;
+  const m = Math.floor(s / 60);    s -= m * 60;
+  return { d, h, m, s };
+}
+
+// Tick countdown / flash-strip digits in place. Full rerender when one
+// crosses zero so the ended-state markup / dropped-out products take over.
+// Also re-fetch flash_sales every 30s so newly-active sales appear without
+// manual reload — covers the case where the staff schedules a sale and
+// wants to see it light up on the preview screen they have open.
+setInterval(() => {
+  let crossedZero = false;
+  document.querySelectorAll('.b-countdown[data-ends-at]').forEach(root => {
+    const ends = root.dataset.endsAt;
+    if (!ends) return;
+    const ms = new Date(ends).getTime() - Date.now();
+    const clock = root.querySelector('.clock');
+    if (ms <= 0) { if (clock) crossedZero = true; return; }
+    if (!clock) { crossedZero = true; return; }
+    const cells = clock.querySelectorAll('.cell .num');
+    if (cells.length !== 4) return;
+    const p = splitCountdown(ms);
+    const vals = [p.d, p.h, p.m, p.s];
+    cells.forEach((el, i) => {
+      const next = String(vals[i]).padStart(2, '0');
+      if (el.textContent !== next) el.textContent = next;
+    });
+  });
+  document.querySelectorAll('.b-flash .clock[data-ends-at]').forEach(clock => {
+    const ends = clock.dataset.endsAt;
+    if (!ends) return;
+    const ms = new Date(ends).getTime() - Date.now();
+    if (ms <= 0) { crossedZero = true; return; }
+    const nums = clock.querySelectorAll('.ct-num');
+    if (nums.length !== 4) return;
+    const p = splitCountdown(ms);
+    const vals = [p.d, p.h, p.m, p.s];
+    nums.forEach((el, i) => {
+      const next = String(vals[i]).padStart(2, '0');
+      if (el.textContent !== next) el.textContent = next;
+    });
+  });
+  document.querySelectorAll('.b-flash .hero-clock[data-ends-at]').forEach(clock => {
+    const ends = clock.dataset.endsAt;
+    if (!ends) return;
+    const ms = new Date(ends).getTime() - Date.now();
+    if (ms <= 0) { crossedZero = true; return; }
+    const nums = clock.querySelectorAll('.hero-num');
+    if (nums.length !== 4) return;
+    const p = splitCountdown(ms);
+    const vals = [p.d, p.h, p.m, p.s];
+    nums.forEach((el, i) => {
+      const next = String(vals[i]).padStart(2, '0');
+      if (el.textContent !== next) el.textContent = next;
+    });
+  });
+  if (crossedZero && state.config) {
+    const page = currentPage();
+    render(state.config[page]?.layout || []);
+  }
+}, 1000);
+
+setInterval(async () => {
+  try {
+    const r = await fetch('/api/retail/flash-sales').then(r => r.json());
+    const next = r?.data || [];
+    if (JSON.stringify(next) !== JSON.stringify(state.flashSales)) {
+      state.flashSales = next;
+      if (state.config) render(state.config[currentPage()]?.layout || []);
+    }
+  } catch {}
+}, 30 * 1000);
+
+function brandColorVar(name) {
+  const map = {
+    'lime-leaf': 'var(--lime)', 'forest-kale': 'var(--forest)', 'olive-moss': 'var(--olive)',
+    'golden-corn': 'var(--corn)', 'oat-milk': 'var(--oat)',
+    'ink': 'var(--ink)', 'pink-guava': 'var(--pink)', 'berry-punch': 'var(--berry)',
+    'carrot-blaze': 'var(--carrot)', 'papaya-glow': 'var(--papaya)', 'skyberry': 'var(--sky)',
+    'lotus': 'var(--lotus)', 'citrus-zest': 'var(--citrus)', 'pea-sprout': 'var(--pea)',
+  };
+  return map[name];
+}
+</script>
+</body>
+</html>

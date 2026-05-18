@@ -1,0 +1,16 @@
+<view wx:if="{{open}}" class="pm-bg" bindtap="onClose" catchtouchmove="true">
+  <view class="pm-card" catchtap="swallow">
+    <view wx:if="{{dismissible}}" class="pm-close" catchtap="onClose">×</view>
+    <image
+      wx:if="{{imageUrl}}"
+      class="pm-img"
+      src="{{imageUrl}}"
+      mode="aspectFill"
+      catchtap="onTapCta"></image>
+    <view class="pm-text">
+      <view wx:if="{{title}}" class="pm-title f-bear">{{title}}</view>
+      <view wx:if="{{body}}"  class="pm-body">{{body}}</view>
+      <view wx:if="{{ctaLabel}}" class="pm-cta" catchtap="onTapCta">{{ctaLabel}}</view>
+    </view>
+  </view>
+</view>

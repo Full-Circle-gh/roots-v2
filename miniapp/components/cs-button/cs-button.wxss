@@ -1,0 +1,92 @@
+/* Reset wx button defaults */
+.cs-row, .cs-fab, .cs-pill {
+  background: none; border: none; padding: 0; margin: 0;
+  line-height: 1; display: block;
+}
+.cs-row::after, .cs-fab::after, .cs-pill::after { border: none; }
+
+/* ─── Row variant — Me tab menu row ─── */
+.cs-row {
+  display: flex; align-items: center;
+  padding: 28rpx 32rpx;
+  background: #fff;
+  border-bottom: 1rpx solid rgba(0, 0, 0, .06);
+  text-align: left;
+}
+.cs-row-body { flex: 1; }
+.cs-row-title {
+  font-size: calc(30rpx * var(--font-scale)); font-weight: 600; color: #1a1a17;
+  line-height: 1.4;
+}
+.cs-row-meta {
+  font-size: calc(22rpx * var(--font-scale)); color: #9b9285;
+  margin-top: 6rpx;
+}
+.cs-row-arrow {
+  font-size: calc(36rpx * var(--font-scale)); color: #c8c1b6;
+  margin-left: 24rpx;
+}
+
+/* ─── FAB variant — floating bubble ─── */
+.cs-fab {
+  position: fixed;
+  right: 28rpx;
+  bottom: 220rpx;
+  width: 96rpx; height: 96rpx;
+  border-radius: 50%;
+  background: #365329;
+  box-shadow: 0 6rpx 24rpx rgba(54, 83, 41, .35);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50;
+}
+.cs-fab-icon {
+  display: flex; gap: 8rpx;
+}
+.cs-fab-dot {
+  width: 12rpx; height: 12rpx; border-radius: 50%;
+  background: #fff;
+}
+
+/* ─── Pill variant — inline small button ─── */
+.cs-pill {
+  display: inline-flex; align-items: center; gap: 12rpx;
+  height: 64rpx; padding: 0 28rpx;
+  background: #F2E7DF;
+  border-radius: 999rpx;
+  color: #365329;
+  font-size: calc(26rpx * var(--font-scale)); font-weight: 600;
+}
+.cs-pill-icon { display: flex; gap: 6rpx; }
+.cs-pill-icon .cs-fab-dot { background: #365329; width: 10rpx; height: 10rpx; }
+.cs-pill-label { color: #365329; }
+
+/* ─── QR modal ─── */
+.cs-qr-bg {
+  position: fixed; left: 0; right: 0; top: 0; bottom: 0;
+  background: rgba(20, 20, 24, .72);
+  z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+}
+.cs-qr-card {
+  width: 560rpx;
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 40rpx 32rpx 24rpx;
+  text-align: center;
+}
+.cs-qr-title { font-size: calc(32rpx * var(--font-scale)); font-weight: 700; color: #1a1a17; }
+.cs-qr-hours { font-size: calc(24rpx * var(--font-scale)); color: #9b9285; margin-top: 8rpx; }
+.cs-qr-img {
+  width: 440rpx; height: 440rpx;
+  margin: 24rpx auto 16rpx;
+  display: block;
+  background: #f7f3ee;
+  border-radius: 12rpx;
+}
+.cs-qr-hint { font-size: calc(22rpx * var(--font-scale)); color: #9b9285; }
+.cs-qr-close {
+  margin-top: 24rpx;
+  padding: 18rpx 0;
+  font-size: calc(28rpx * var(--font-scale)); color: #365329; font-weight: 600;
+  border-top: 1rpx solid rgba(0, 0, 0, .06);
+}

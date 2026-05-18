@@ -1,0 +1,2299 @@
+const Database = require('better-sqlite3');
+const path = require('path');
+const fs = require('fs');
+
+const DATA_DIR = path.join(__dirname, 'data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+const db = new Database(path.join(DATA_DIR, 'roots.db'));
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
+
+// Run schema
+const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+db.exec(schema);
+
+// ── Idempotent migrations for existing databases ────────────────────────────
+// CREATE TABLE IF NOT EXISTS doesn't add new columns to an already-created
+// table, so we ALTER TABLE individually. Adding a duplicate column throws,
+// which we swallow — that's the "already migrated" case.
+function addColumn(table, col, type) {
+  try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`); }
+  catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
+}
+addColumn('products', 'description_en', 'TEXT');
+addColumn('products', 'description_cn', 'TEXT');
+addColumn('products', 'free_of',        'TEXT');
+addColumn('products', 'image_data',     'TEXT');
+addColumn('products', 'label_data',     'TEXT');
+addColumn('purchase_orders', 'source',  "TEXT DEFAULT 'manual'");
+addColumn('ingredients', 'supplier_platform', 'TEXT');
+addColumn('ingredients', 'supplier_link',     'TEXT');
+addColumn('ingredients', 'supplier_qr_data',  'TEXT');
+addColumn('ingredients', 'image_data',        'TEXT');
+addColumn('recipes',     'is_favorite',       'INTEGER DEFAULT 0');
+addColumn('po_line_items', 'lot_number',      'TEXT');
+addColumn('po_line_items', 'expiry_date',     'DATE');
+addColumn('recipes',       'image_data',      'TEXT');
+addColumn('recipe_ingredients', 'substitutes', 'TEXT');
+addColumn('ingredients', 'pack_contents_qty',  'REAL');
+addColumn('ingredients', 'pack_contents_unit', 'TEXT');
+addColumn('packaging_types', 'image_data',     'TEXT');
+// Switching products from hard-delete to soft-delete (waste/restock reference
+// product_id and would orphan otherwise). New rows default to active=1.
+addColumn('products', 'is_active',  'INTEGER DEFAULT 1');
+addColumn('products', 'updated_at', 'DATETIME');
+// Columns added for the Zoho/upstream products import. external_id holds
+// the upstream ID so we can re-sync without losing the link; sort_order
+// honours the upstream display priority (negatives sort first); stock_qty
+// is a snapshot updated by sales/waste/restock movements; tags is a
+// comma-separated free-form bag (dietary, storage, heat — see the import
+// script for normalization rules).
+addColumn('products', 'external_id', 'INTEGER');
+addColumn('products', 'sort_order',  'INTEGER DEFAULT 0');
+addColumn('products', 'stock_qty',   'INTEGER DEFAULT 0');
+addColumn('products', 'tags',        'TEXT');
+try { db.prepare('CREATE INDEX IF NOT EXISTS idx_products_external_id ON products(external_id)').run(); } catch {}
+// Variant grouping — products that share `variant_group_id` are siblings
+// of one another (e.g. "Foaming Hand Soap (Lemongrass / Mint / Lavender)").
+// `variant_label` is the axis-specific tag for THIS variant (e.g. "Mint",
+// "150g", "Crunchy"). NULL group_id = standalone product. The label is
+// what the UI shows in chips next to siblings.
+addColumn('products', 'variant_group_id', 'INTEGER');
+addColumn('products', 'variant_label',    'TEXT');
+try { db.prepare('CREATE INDEX IF NOT EXISTS idx_products_variant_group ON products(variant_group_id)').run(); } catch {}
+// Barcode for the tablet POS (market vendors scan products in with a
+// keyboard-wedge gun). Stored as text — keeps leading zeros (EAN-13 etc.)
+// and lets us hold non-numeric internal codes too. Indexed for instant
+// lookup on every scan; UNIQUE so a printed barcode can't be assigned to
+// two products by accident.
+addColumn('products', 'barcode', 'TEXT');
+try { db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL').run(); } catch {}
+// Backfill any existing rows so the COALESCE in the list query is unnecessary
+// for old data. Idempotent.
+try { db.prepare('UPDATE products SET is_active = 1 WHERE is_active IS NULL').run(); } catch {}
+
+// Web Push subscriptions for OS-level notifications. One row per
+// (user, device) — endpoint is the unique key from the push service.
+// keys.p256dh / keys.auth are needed to encrypt payloads. We send to
+// every active subscription when an event fires; failed sends (410
+// Gone) are pruned from this table by routes/push.js.
+db.exec(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL,
+  endpoint    TEXT NOT NULL,
+  p256dh      TEXT NOT NULL,
+  auth        TEXT NOT NULL,
+  user_agent  TEXT,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+)`);
+try { db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_push_endpoint ON push_subscriptions(endpoint)').run(); } catch {}
+try { db.prepare('CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id)').run(); } catch {}
+
+// "Available at markets" gate — when true, this product appears in the
+// Markets POS search. Default 0 (OFF) so admins explicitly opt-in only
+// the SKUs they actually carry at physical stalls; the catalog is
+// usually much bigger than what fits on a market table.
+addColumn('products', 'is_market', 'INTEGER DEFAULT 0');
+// Idempotent one-time migration: set ALL existing products to 0 once.
+// After this runs once, vendor edits to flip individual products on
+// will stick (UPDATE WHERE is_market IS NULL is gated to NULLs only,
+// and this migration only runs the first time).
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('default_is_market_off_v1');
+  if (!ran) {
+    db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    db.prepare('UPDATE products SET is_market = 0').run();
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('default_is_market_off_v1');
+  }
+} catch (e) { console.error('[migration default_is_market_off_v1]', e); }
+// Backfill any NULLs (legacy rows pre-migration) to 0.
+try { db.prepare('UPDATE products SET is_market = 0 WHERE is_market IS NULL').run(); } catch {}
+// "Restock only" — for items that are kitchen-internal (salad dressings,
+// in-house sauces, bulk consumables) and never sold to customers. When 1,
+// the product is excluded from POS / miniapp / Meituan search, but still
+// appears in the Restock app's picker and the admin products page. Lets
+// the kitchen track inventory on items the front of house never touches.
+addColumn('products', 'is_restock_only', 'INTEGER DEFAULT 0');
+try { db.prepare('UPDATE products SET is_restock_only = 0 WHERE is_restock_only IS NULL').run(); } catch {}
+// Waste entries gained a cost_source column so reconciliation can tell
+// recipe-derived costs from sell-price fallbacks.
+addColumn('waste_entries', 'cost_source', 'TEXT');
+// PO partial-receive: lines track ordered (qty) + received (qty_received).
+// Null until the PO is marked Delivered; on first deliver we backfill it
+// from qty so non-partial flows are unchanged.
+addColumn('po_line_items', 'qty_received', 'REAL');
+// Track which PO each backorder PO came from for traceability.
+addColumn('purchase_orders', 'backorder_of', 'INTEGER');
+// Per-line shipment tracking + damage report. Tracking number is what the
+// supplier (Taobao etc) gives at ship time. carrier is optional ("sf"/"yto"/…)
+// — left null we link to 17track which auto-detects. damaged_qty is part of
+// the receive flow so the buyer can flag broken/missing units distinctly.
+addColumn('po_line_items', 'tracking_number', 'TEXT');
+addColumn('po_line_items', 'tracking_carrier', 'TEXT');
+addColumn('po_line_items', 'damaged_qty',     'REAL DEFAULT 0');
+// Per-ingredient accounting bucket. When a PO line is created from this
+// ingredient (kitchen order, autocomplete pick, bulk import), the line's
+// expense_category is auto-populated from this column so finance posts
+// land in the right bucket without the buyer having to retype it.
+addColumn('ingredients', 'accounting_category', 'TEXT');
+// Per-line invoice tracking on POs. A single PO can mix lines from
+// different suppliers (kitchen requests often consolidate orders), so
+// supplier_name lives on the LINE, not the header. purchase_channel is
+// free-text (美团闪购 / 京东 / market / direct…) so the report can group
+// beyond just supplier name.
+//
+// invoice_status: 3-state enum the month-end report aggregates by.
+//   'not_received' — default; we should get one but haven't yet (未收取)
+//   'received'     — invoice in hand (已收取)
+//   'no_invoice'   — supplier doesn't issue one (不开发票) — common for
+//                    local market / cash transactions
+addColumn('po_line_items', 'supplier_name',     'TEXT');
+addColumn('po_line_items', 'purchase_channel',  'TEXT');
+addColumn('po_line_items', 'invoice_received',  'INTEGER DEFAULT 0');           // legacy column, kept for compat
+addColumn('po_line_items', 'invoice_status',    "TEXT DEFAULT 'not_received'");
+// One-shot backfill: anything that already had invoice_received=1 maps to
+// 'received'. Everything else keeps the default 'not_received'. Marker in
+// _migrations so it's idempotent.
+try {
+  db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+  const ranInvBackfill = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('po_invoice_status_v1');
+  if (!ranInvBackfill) {
+    db.prepare("UPDATE po_line_items SET invoice_status = 'received' WHERE invoice_received = 1 AND (invoice_status IS NULL OR invoice_status = 'not_received')").run();
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('po_invoice_status_v1');
+  }
+} catch (e) { console.error('[migration po_invoice_status_v1]', e); }
+// One-shot backfill #2: copy each PO's header-level supplier down to its
+// line items where the line still has no supplier_name. Old POs created
+// before the per-line supplier_name column existed all show up as "未指定
+// Unspecified" in the invoice report — this gives them their PO supplier
+// instead. New POs that legitimately have a blank header supplier stay
+// blank so accounting can fill them in by hand.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('po_line_supplier_backfill_v1');
+  if (!ran) {
+    const r = db.prepare(`
+      UPDATE po_line_items
+         SET supplier_name = (SELECT supplier FROM purchase_orders WHERE id = po_line_items.po_id)
+       WHERE (supplier_name IS NULL OR TRIM(supplier_name) = '')
+         AND (SELECT supplier FROM purchase_orders WHERE id = po_line_items.po_id) IS NOT NULL
+    `).run();
+    console.log(`[migration po_line_supplier_backfill_v1] backfilled ${r.changes} lines with header-level supplier`);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('po_line_supplier_backfill_v1');
+  }
+} catch (e) { console.error('[migration po_line_supplier_backfill_v1]', e); }
+
+// ── Invoices entity (Option C from the redesign) ────────────────────────────
+// A real-world 增值税专用发票 (VAT invoice) is one document covering one or
+// more POs from the same supplier over a billing period. Modeling it as a
+// first-class entity lets accounting:
+//   • record the invoice once (number, amount, date)
+//   • link it to N POs (many-to-many via invoice_pos)
+//   • support partial allocation (allocated_amount per link), so a single
+//     invoice can cover part of a PO and another invoice covers the rest
+//   • see which POs are still uncovered for month-end reconciliation
+//
+// no_invoice_expected lives on purchase_orders — a flag the buyer flips
+// when the supplier doesn't issue invoices at all (cash, market). Those
+// POs disappear from the "awaiting invoice" list.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS invoices (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier        TEXT    NOT NULL,
+    invoice_number  TEXT,
+    amount          REAL    NOT NULL,
+    date            DATE    NOT NULL,
+    notes           TEXT,
+    created_by      INTEGER,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_invoices_supplier ON invoices(supplier);
+  CREATE INDEX IF NOT EXISTS idx_invoices_date     ON invoices(date);
+
+  -- Legacy table from the PO-level invoice model (one buying order = one
+  -- supplier). We've moved to the line-level model since a single buying
+  -- order can mix items from many suppliers — see invoice_lines below.
+  -- Kept as-is so any pre-existing data isn't lost; not used by the new
+  -- code path.
+  CREATE TABLE IF NOT EXISTS invoice_pos (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id        INTEGER NOT NULL,
+    po_id             INTEGER NOT NULL,
+    allocated_amount  REAL    NOT NULL,
+    UNIQUE(invoice_id, po_id),
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+    FOREIGN KEY (po_id)      REFERENCES purchase_orders(id) ON DELETE CASCADE
+  );
+
+  -- Line-level invoice allocation. A buying order is a mixed shopping
+  -- list; each LINE knows its supplier (po_line_items.supplier_name).
+  -- An invoice from supplier X covers a subset of lines from supplier X
+  -- across one or more buying orders.
+  CREATE TABLE IF NOT EXISTS invoice_lines (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id        INTEGER NOT NULL,
+    line_id           INTEGER NOT NULL,
+    allocated_amount  REAL    NOT NULL,
+    UNIQUE(invoice_id, line_id),
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+    FOREIGN KEY (line_id)    REFERENCES po_line_items(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_invoice_lines_inv  ON invoice_lines(invoice_id);
+  CREATE INDEX IF NOT EXISTS idx_invoice_lines_line ON invoice_lines(line_id);
+`);
+addColumn('purchase_orders', 'no_invoice_expected', 'INTEGER DEFAULT 0');
+// Per-line "no invoice expected" flag — the supplier for THIS line doesn't
+// issue invoices (cash, market, …). Used by the line-level invoice report.
+addColumn('po_line_items', 'no_invoice_expected', 'INTEGER DEFAULT 0');
+
+// Supplier dossier columns. The first two are free-text notes the buyer
+// keeps about the vendor (catalogue + price list snapshot). The three
+// _data columns hold base64 image uploads — same pattern we use for
+// ingredient.image_data and supplier_qr_data: stored as a TEXT data URI
+// so a single .db backup carries everything.
+addColumn('suppliers', 'products_supplied',     'TEXT');  // catalogue notes / what they sell
+addColumn('suppliers', 'price_info',            'TEXT');  // pricing notes
+addColumn('suppliers', 'business_license_data', 'TEXT');  // 营业执照 image
+addColumn('suppliers', 'permits_data',          'TEXT');  // 许可证 image
+addColumn('suppliers', 'payment_qr_data',       'TEXT');  // 收款码 image
+
+// Backfill: every distinct supplier name found on ingredients OR PO line
+// items should exist in the suppliers master table. Pre-supplier-picker
+// imports (Zoho CSV's "Preferred Vendor" field) wrote free-text names
+// straight to ingredients.supplier without creating a master record, so
+// the Admin → Suppliers list was empty even though items referenced 12+
+// vendors. INSERT OR IGNORE keeps it idempotent (UNIQUE name constraint).
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('backfill_suppliers_from_items_v1');
+  if (!ran) {
+    const insert = db.prepare("INSERT OR IGNORE INTO suppliers (name) VALUES (?)");
+    let added = 0;
+    // Distinct names from ingredients.supplier
+    db.prepare(`SELECT DISTINCT TRIM(supplier) AS name FROM ingredients
+                WHERE supplier IS NOT NULL AND TRIM(supplier) != ''`).all().forEach(r => {
+      const result = insert.run(r.name);
+      if (result.changes > 0) added++;
+    });
+    // Distinct names from po_line_items.supplier_name
+    db.prepare(`SELECT DISTINCT TRIM(supplier_name) AS name FROM po_line_items
+                WHERE supplier_name IS NOT NULL AND TRIM(supplier_name) != ''`).all().forEach(r => {
+      const result = insert.run(r.name);
+      if (result.changes > 0) added++;
+    });
+    // Distinct names from purchase_orders.supplier (header-level)
+    db.prepare(`SELECT DISTINCT TRIM(supplier) AS name FROM purchase_orders
+                WHERE supplier IS NOT NULL AND TRIM(supplier) != ''`).all().forEach(r => {
+      const result = insert.run(r.name);
+      if (result.changes > 0) added++;
+    });
+    console.log(`[migration backfill_suppliers_from_items_v1] added ${added} supplier${added===1?'':'s'} to master list`);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('backfill_suppliers_from_items_v1');
+  }
+} catch (e) { console.error('[migration backfill_suppliers_from_items_v1]', e); }
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_po_line_items_supplier ON po_line_items(supplier_name)'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_po_line_items_invstat  ON po_line_items(invoice_status)'); } catch {}
+// Items / 物料 — broaden the "ingredients" table to cover everything the
+// buying department orders (food, packaging, equipment, retail, …). The
+// recipe picker filters to item_kind='food' so non-food items don't leak
+// into recipes; the PO autocomplete still searches every kind.
+addColumn('ingredients', 'item_kind', "TEXT DEFAULT 'food'");
+// Seed the editable list of kinds via the existing categories table so the
+// UI can manage them (add/rename/remove) the same way recipe + product
+// categories are managed. Idempotent: INSERT OR IGNORE on (kind,name).
+try {
+  const ranKinds = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_item_kinds_v1');
+  if (!ranKinds) {
+    db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    const ins = db.prepare("INSERT OR IGNORE INTO categories (kind, name, sort_order) VALUES ('item_kind', ?, ?)");
+    [['food',0],['packaging',1],['equipment',2],['retail',3],['other',4]].forEach(([n,o]) => ins.run(n, o));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_item_kinds_v1');
+  }
+} catch (e) { console.error('[migration seed_item_kinds_v1]', e); }
+// Payment methods used on the supplier form. Stored in the editable
+// categories table so admin can add/remove options without a code change.
+try {
+  const ranPM = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_payment_methods_v1');
+  if (!ranPM) {
+    const ins = db.prepare("INSERT OR IGNORE INTO categories (kind, name, sort_order) VALUES ('payment_method', ?, ?)");
+    [['WeChat 微信',0],['Alipay 支付宝',1],['Official Bank Account 对公账户',2]].forEach(([n,o]) => ins.run(n, o));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_payment_methods_v1');
+  }
+} catch (e) { console.error('[migration seed_payment_methods_v1]', e); }
+// Granular delete control. Default 0 — only admins can delete records out of
+// the box. Admin can flip this on per-user from the user permissions UI when
+// they want a manager / warehouse lead to be allowed to delete transactions.
+// Backend middleware (requireDelete) reads this flag.
+addColumn('permissions', 'can_delete', 'INTEGER DEFAULT 0');
+// Supplier management is now its own top-level module (not under Admin).
+// Default 0 — admin can flip on for the buyer / warehouse lead. Reads
+// (GET /api/suppliers) stay open to all authed users since dropdowns
+// across PO / Items / Finance need that list. Writes (create / edit /
+// delete) gate on this permission via requirePermission('suppliers').
+addColumn('permissions', 'suppliers', 'INTEGER DEFAULT 0');
+// Tablet POS for the markets sales channel. Default 0. Vendors who get this
+// flag are auto-redirected to /pos on login and stay there. Admins always
+// have access regardless of this flag.
+addColumn('permissions', 'pos', 'INTEGER DEFAULT 0');
+// AI agent (Sprout · 苗) — chat assistant with read-only DB access.
+// Default off; admins always pass. Read-only tools so even if it leaks
+// it can only describe data, never modify it.
+addColumn('permissions', 'ai', 'INTEGER DEFAULT 0');
+// Warehouse-side inbox view in the /restock mobile app. Lets a user
+// see incoming requests from stores and mark them as prepared. Default
+// off — admin grants explicitly. Independent from `restock` (which is
+// the store-side flow) so a vendor doesn't accidentally see the
+// fulfilment queue and vice-versa.
+addColumn('permissions', 'warehouse_inbox', 'INTEGER DEFAULT 0');
+// Kitchen-side inbox: lets a user see incoming restock requests that
+// the warehouse pushed to the kitchen (items missing on shelves OR
+// items missing for outgoing customer orders). Independent of the
+// `kitchen` perm (production logging) — admin grants explicitly.
+addColumn('permissions', 'kitchen_inbox', 'INTEGER DEFAULT 0');
+// Restock direction columns — historically every restock_orders row
+// was implicitly store→warehouse. Now warehouse can also raise
+// requests to the kitchen (out of stock for shipping orders, or low
+// shelf stock). New rows fill these explicitly; legacy rows default
+// to the original direction.
+addColumn('restock_orders', 'from_role', "TEXT DEFAULT 'store'");
+addColumn('restock_orders', 'to_role',   "TEXT DEFAULT 'warehouse'");
+// Why the warehouse needs this from kitchen (only meaningful for
+// warehouse→kitchen rows): 'order' = needed to ship a customer order,
+// 'shelf' = topping up warehouse shelves. NULL for store→warehouse.
+addColumn('restock_orders', 'purpose',   'TEXT');
+// Soft-delete / archive — set when a user explicitly archives a row
+// from the inbox to keep their list manageable. Archived rows still
+// exist (for activity log + future restore) but the default list
+// endpoint excludes them. NULL = active.
+addColumn('restock_orders', 'archived_at', 'DATETIME');
+// Idempotency guard for the auto-stock-update hook — stamped the first
+// time a restock_orders row transitions to 'delivered' and we apply
+// the order's items to the receiving store's per-market inventory.
+// Prevents double-counting if the status endpoint is hit twice for
+// the same order (network retry, accidental re-tap, etc.).
+addColumn('restock_orders', 'stock_applied_at', 'DATETIME');
+
+// Per-store inventory. One row per (market, product). Incremented
+// automatically when a restock_orders row is confirmed delivered to
+// that market. Editable by admin via /api/markets/:id/stock for
+// manual corrections (count adjustments, write-offs that aren't
+// already covered by waste_entries).
+db.exec(`CREATE TABLE IF NOT EXISTS market_stock (
+  market_id   INTEGER NOT NULL,
+  product_id  INTEGER NOT NULL,
+  qty         REAL NOT NULL DEFAULT 0,
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (market_id, product_id),
+  FOREIGN KEY (market_id)  REFERENCES markets(id)  ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+)`);
+try { db.prepare('CREATE INDEX IF NOT EXISTS idx_market_stock_market  ON market_stock(market_id)').run();  } catch {}
+try { db.prepare('CREATE INDEX IF NOT EXISTS idx_market_stock_product ON market_stock(product_id)').run(); } catch {}
+
+// Audit log for stock movements — every increment from a delivery (and
+// future manual adjustments) is recorded so admins can reconstruct how
+// a market's qty got to where it is.
+db.exec(`CREATE TABLE IF NOT EXISTS market_stock_ledger (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  market_id    INTEGER NOT NULL,
+  product_id   INTEGER NOT NULL,
+  delta        REAL NOT NULL,
+  reason       TEXT NOT NULL,           -- 'restock_delivered' | 'manual_adjust' | 'sale' | …
+  ref_table    TEXT,                    -- e.g. 'restock_orders'
+  ref_id       INTEGER,                 -- e.g. the restock_orders.id
+  user_id      INTEGER,
+  notes        TEXT,
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (market_id)  REFERENCES markets(id),
+  FOREIGN KEY (product_id) REFERENCES products(id),
+  FOREIGN KEY (user_id)    REFERENCES users(id)
+)`);
+try { db.prepare('CREATE INDEX IF NOT EXISTS idx_market_stock_ledger_market ON market_stock_ledger(market_id, created_at)').run(); } catch {}
+try { db.prepare('CREATE INDEX IF NOT EXISTS idx_market_stock_ledger_ref    ON market_stock_ledger(ref_table, ref_id)').run(); } catch {}
+// Payment method on income/expense — wechat / alipay / bank / cash / etc.
+// Free-form so the user can add new methods on the fly. Independent of
+// the existing `channel` column on income_entries (which means
+// "Sales-derived channel" — meituan/eleme/etc.).
+addColumn('income_entries',  'payment_method', 'TEXT');
+addColumn('expense_entries', 'payment_method', 'TEXT');
+// Suppliers — primary communication channel for the buyer to reach
+// this vendor. Type drives the UI (link vs QR vs plain text). Replaces
+// the loose "WeChat ID / phone" stuff with a structured field that
+// renders correctly on the supplier card.
+addColumn('suppliers', 'channel_type',    'TEXT');   // 'taobao' | 'alibaba' | 'wechat' | 'phone' | 'website' | 'other'
+addColumn('suppliers', 'channel_link',    'TEXT');   // URL or handle (taobao/alibaba/website store URL)
+addColumn('suppliers', 'channel_qr_data', 'TEXT');
+// Payment method — how we pay this supplier (WeChat / Alipay / Bank).
+// Distinct from payment_terms (Net 30 / COD / Prepay), which is *when* we pay.
+// Editable list of options lives in categories(kind='payment_method').
+addColumn('suppliers', 'payment_method', 'TEXT');
+// Multi-document support — replaces the three single-image columns
+// (business_license_data / permits_data / payment_qr_data) with a row-per-doc
+// table so a supplier can carry N files per kind, of any mime type
+// (image / PDF / spreadsheet). Legacy columns stay for safety; one-shot
+// backfill migration below moves existing values into this table.
+db.exec(`CREATE TABLE IF NOT EXISTS supplier_documents (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  supplier_id  INTEGER NOT NULL,
+  kind         TEXT NOT NULL,                   -- 'license' | 'permit' | 'payment_qr' | 'other'
+  label        TEXT,
+  filename     TEXT,
+  mime_type    TEXT,
+  size_bytes   INTEGER,
+  data         TEXT NOT NULL,                   -- base64 data URI
+  uploaded_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_supplier_docs_sup ON supplier_documents(supplier_id)'); } catch {}
+try {
+  const ranBF = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('backfill_supplier_documents_v1');
+  if (!ranBF) {
+    const cols = [
+      ['business_license_data', 'license',    'Business License 营业执照'],
+      ['permits_data',          'permit',     'Permits 许可证'],
+      ['payment_qr_data',       'payment_qr', 'Payment QR 收款码'],
+    ];
+    const ins = db.prepare(`INSERT INTO supplier_documents (supplier_id, kind, label, filename, mime_type, size_bytes, data)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)`);
+    let n = 0;
+    for (const [col, kind, label] of cols) {
+      const rows = db.prepare(`SELECT id, ${col} AS d FROM suppliers WHERE ${col} IS NOT NULL AND ${col} != ''`).all();
+      for (const r of rows) {
+        const mm = /^data:([^;]+);/.exec(r.d);
+        const mime = mm ? mm[1] : 'image/jpeg';
+        // base64 length × 3/4 ≈ raw byte size; strip the `data:...,` prefix first.
+        const b64 = (r.d.split(',')[1] || '');
+        const size = Math.floor(b64.length * 3 / 4);
+        ins.run(r.id, kind, label, null, mime, size, r.d);
+        n++;
+      }
+    }
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('backfill_supplier_documents_v1');
+    console.log(`[migration backfill_supplier_documents_v1] migrated ${n} legacy supplier docs`);
+  }
+} catch (e) { console.error('[migration backfill_supplier_documents_v1]', e); }
+// Markets table widens to a generic "locations" table — same row shape,
+// new `kind` column says what each row is. Existing rows default to
+// 'market' (POS stalls); add new ones with kind='retail' for stores
+// and kind='warehouse' / kind='kitchen' for the other physical sites.
+// Used by restock notification routing — events fan out only to users
+// whose users.market_id matches the destination location.
+addColumn('markets', 'kind', "TEXT DEFAULT 'market'");   // base64 data URI — WeChat add-friend QR code
+// Sprout's long-term business memory. Free-form key/value notes that get
+// re-injected as system context on every chat, so the agent doesn't have
+// to re-discover basic facts ("what's our margin target?", "main suppliers")
+// on every conversation. Admin-curated; user can ask Sprout to remember
+// something via natural language (later — for now they edit Admin → AI Memory).
+db.exec(`CREATE TABLE IF NOT EXISTS ai_memory (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  weight INTEGER DEFAULT 5,        -- 1-10 ranking; higher = more important to remember
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME
+)`);
+// Seed a few useful starter facts on a fresh DB. Idempotent via _migrations.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_ai_memory_v1');
+  if (!ran) {
+    const ins = db.prepare('INSERT INTO ai_memory (key, value, weight) VALUES (?,?,?)');
+    [
+      ['business_type',     'Plant-based food business in Guangzhou. Recipes built around hummus, salads, dips, dates, nut butters, plant-based yogurts.', 9],
+      ['margin_target',     'Owner targets ~30% food cost (i.e. ~70% gross margin). >40% food cost is a red flag.', 8],
+      ['top_channels',      'Mini-app (official 小程序), GZGrocery (B2B), Meituan (delivery, multi-store), Markets (physical stalls via /pos).', 7],
+      ['key_concerns',      'Sustained margin erosion, supplier price drift, waste cost above 5% of revenue, cross-channel pricing drift, slow-moving SKUs eating shelf space.', 8],
+      ['tone_preference',   'Direct and concise. Owner reads on phone between tasks. No filler, no hedging.', 7],
+    ].forEach(r => ins.run(r[0], r[1], r[2]));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_ai_memory_v1');
+  }
+} catch (e) { console.error('[migration seed_ai_memory_v1]', e); }
+// Backfill: admins / managers get AI on by default.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_ai_perm_v1');
+  if (!ran) {
+    db.prepare("UPDATE permissions SET ai = 1 WHERE user_id IN (SELECT id FROM users WHERE role IN ('admin','manager'))").run();
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_ai_perm_v1');
+  }
+} catch (e) { console.error('[migration seed_ai_perm_v1]', e); }
+
+// Sprout's editable in-app knowledge base. Hardcoded APP_HELP topics in
+// routes/ai.js are the defaults; DB rows here OVERRIDE the default for the
+// same topic key, or ADD brand-new topics admins authored. Sprout reads the
+// merged map every chat. One row per topic. updated_by tracks last editor.
+db.exec(`CREATE TABLE IF NOT EXISTS ai_app_help (
+  topic        TEXT PRIMARY KEY,
+  title        TEXT,
+  content      TEXT NOT NULL,
+  is_active    INTEGER DEFAULT 1,
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_by   TEXT
+)`);
+
+// Gap-feedback log. When Sprout's get_app_help is called with a topic that
+// doesn't resolve (not in defaults, not in ai_app_help), we increment the
+// miss row for that topic. Admin UI surfaces the top-N so the operator
+// knows which topics real users tried to look up but didn't exist yet.
+db.exec(`CREATE TABLE IF NOT EXISTS ai_app_help_misses (
+  topic        TEXT PRIMARY KEY,
+  hit_count    INTEGER DEFAULT 1,
+  first_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_user_id INTEGER,
+  resolved     INTEGER DEFAULT 0   -- admin marks 1 once they've added the topic
+)`);
+
+// Markets module — one row per physical market location (e.g. Yuexiu,
+// Tianhe). Each POS user is assigned to one market via users.market_id;
+// sales captured by that user are tagged so analytics can compare
+// per-location performance.
+db.exec(`CREATE TABLE IF NOT EXISTS markets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  name_cn TEXT,
+  location TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME
+)`);
+// GPS coords captured by the POS "📍 Use my location" feature. Optional —
+// markets can also be created with just a typed address. Used for the
+// admin-side map view and for spotting accidentally-duplicated stalls.
+addColumn('markets', 'lat', 'REAL');
+addColumn('markets', 'lng', 'REAL');
+// Daily revenue target per market — used by the POS header progress chip.
+// 0 means "no target set" (chip hidden).
+addColumn('markets', 'daily_target', 'REAL DEFAULT 0');
+addColumn('users', 'market_id', 'INTEGER');
+// Optional assignment to a retail store. NULL = unassigned (read-only on
+// per-store stock unless the user is admin). Admin always edits any store.
+addColumn('users', 'retail_store_id', 'INTEGER');
+// Existing admin/manager users get can_delete=1 once. Idempotent thanks to
+// the OR IGNORE marker row in _migrations below.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_can_delete_v1');
+  if (!ran) {
+    db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    db.prepare("UPDATE permissions SET can_delete = 1 WHERE user_id IN (SELECT id FROM users WHERE role IN ('admin','manager'))").run();
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_can_delete_v1');
+  }
+} catch (e) { console.error('[migration seed_can_delete_v1]', e); }
+// One-shot rename: the 'wechat' sales channel was always meant to mean
+// the team's official mini app, not raw WeChat. Migrate any existing
+// rows so analytics and the new mini-app import live under one channel
+// id ('miniapp'). Idempotent via _migrations marker.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('rename_channel_wechat_to_miniapp_v1');
+  if (!ran) {
+    db.prepare("UPDATE sales_entries SET channel = 'miniapp' WHERE channel = 'wechat'").run();
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('rename_channel_wechat_to_miniapp_v1');
+  }
+} catch (e) { console.error('[migration rename_channel_wechat_to_miniapp_v1]', e); }
+
+// Backfill suppliers=1 for admin/manager so they retain access after
+// the suppliers section moves out from under Admin. Buyer roles
+// (warehouse) also get it — they're the ones wiring suppliers to items.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_suppliers_perm_v1');
+  if (!ran) {
+    db.prepare("UPDATE permissions SET suppliers = 1 WHERE user_id IN (SELECT id FROM users WHERE role IN ('admin','manager','warehouse'))").run();
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_suppliers_perm_v1');
+  }
+} catch (e) { console.error('[migration seed_suppliers_perm_v1]', e); }
+// Indexes for lot/expiry lookups — fine to call repeatedly, IF NOT EXISTS.
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_po_line_items_lot    ON po_line_items(lot_number)'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_po_line_items_expiry ON po_line_items(expiry_date)'); } catch {}
+
+// One-time migration: ingredient.buy_pack_size used to mean "grams per buy_unit"
+// (so 1 kg → 1000). It now means "how many buy_units in one package" (so 1 kg
+// → 1). Both schemas yield the same cost_per_unit, so the math output is
+// identical — we're just normalising the stored value so the form reads
+// intuitively. Trigger flag stored in a tiny `_migrations` table so we run once.
+db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+const ranPackSizeMigration = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('pack_size_semantics_v2');
+if (!ranPackSizeMigration) {
+  // Map of buy_unit → grams in one of that unit. If buy_pack_size matches this
+  // exactly, it's almost certainly the old "grams-per-unit" value and should
+  // become 1 (one buy_unit per package).
+  const conversions = [
+    { units: ['kg', 'L', 'liter'], grams: 1000 },
+    { units: ['lb'],                grams: 453.6 },
+    { units: ['oz'],                grams: 28.35 },
+  ];
+  let total = 0;
+  const fix = db.prepare("UPDATE ingredients SET buy_pack_size = 1 WHERE buy_unit = ? AND buy_pack_size = ?");
+  const tx = db.transaction(() => {
+    for (const { units, grams } of conversions) {
+      for (const u of units) {
+        const r = fix.run(u, grams);
+        total += r.changes;
+      }
+    }
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('pack_size_semantics_v2');
+  });
+  tx();
+  if (total > 0) console.log(`[migration] pack_size_semantics_v2: normalised ${total} ingredients`);
+}
+
+// Seed default categories and packaging types — runs once.
+const ranLookupsSeed = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('lookups_seed_v1');
+if (!ranLookupsSeed) {
+  const seedCats = db.prepare('INSERT OR IGNORE INTO categories (kind, name, sort_order) VALUES (?,?,?)');
+  const recipeCats = ['Dips & Spreads 酱料','Salads 沙拉','Hot Dishes 热菜','Cold Dishes 冷菜','Baked Goods 烘焙','Beverages 饮料','Snacks 小食','Sauces & Condiments 调味','Desserts 甜点','Other 其他'];
+  const productCats = ['Bakery','Beverages','Desserts','Savory','Salads','Sandwiches','Meals','Snacks','Sauces & Condiments','Seasonal','Other'];
+  recipeCats.forEach((n, i) => seedCats.run('recipe', n, i));
+  productCats.forEach((n, i) => seedCats.run('product', n, i));
+  // Default packaging types — only if table is empty
+  if (db.prepare('SELECT COUNT(*) AS c FROM packaging_types').get().c === 0) {
+    const seedPack = db.prepare('INSERT INTO packaging_types (name, name_cn, cost) VALUES (?,?,?)');
+    seedPack.run('Small Box', '小盒', 2.50);
+    seedPack.run('Kraft Bag', '牛皮纸袋', 1.20);
+    seedPack.run('Plastic Tray', '塑料托盘', 0.80);
+  }
+  db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('lookups_seed_v1');
+  console.log('[migration] lookups_seed_v1 applied');
+}
+
+// Allergens used to be JSON-stringified on save (e.g. '"gluten, soy"' or
+// '["gluten","soy"]'), but every reader treats the column as a plain CSV
+// string. Normalise existing rows so display code works uniformly.
+const ranAllergenNormalize = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('allergens_normalize_v1');
+if (!ranAllergenNormalize) {
+  const rows = db.prepare("SELECT id, allergens FROM ingredients WHERE allergens IS NOT NULL AND allergens != ''").all();
+  const upd  = db.prepare("UPDATE ingredients SET allergens = ? WHERE id = ?");
+  let fixed = 0;
+  for (const r of rows) {
+    let next = r.allergens;
+    try {
+      const parsed = JSON.parse(r.allergens);
+      if (Array.isArray(parsed)) next = parsed.join(', ');
+      else if (typeof parsed === 'string') next = parsed;
+    } catch { /* not JSON — leave as-is */ }
+    if (next !== r.allergens) { upd.run(next, r.id); fixed++; }
+  }
+  db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('allergens_normalize_v1');
+  if (fixed > 0) console.log(`[migration] allergens_normalize_v1: cleaned ${fixed} rows`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// MINI APP ORDERS — high-fidelity capture of orders exported from the
+// official mini app. One row in `miniapp_orders` per order, with line
+// items in `miniapp_order_lines`. The richer schema preserves customer
+// identity, location, coupon attribution, refund status, and delivery
+// detail so we can build retention / cohort / geo / coupon-ROI charts
+// without losing data. Sales analytics also see these via a projection
+// into `sales_entries` (channel='miniapp') created during import.
+// ─────────────────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS miniapp_orders (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    -- Source identifiers (Order ID is the canonical upsert key)
+    source_order_id     INTEGER UNIQUE,         -- 'Order ID' in the export (numeric)
+    order_no            TEXT,                   -- 'Order #' (long string)
+    -- Customer
+    user_id             INTEGER,                -- 'User ID' in the export
+    customer_phone      TEXT,
+    customer_name       TEXT,
+    -- Money
+    product_total       REAL,                   -- 'Product price'
+    delivery_fee        REAL,                   -- 'Delivery fees'
+    income              REAL,                   -- 'Income' (after discounts)
+    used_points         REAL,
+    refund_amount       REAL,
+    -- Status
+    status              TEXT,                   -- 交易成功 / 订单关闭 / 待评价
+    refund_status       TEXT,                   -- Yes / No
+    payment_method      TEXT,                   -- WXAPP / OFFLINE-Cash / OFFLINE-Wechat
+    payment_no          TEXT,
+    -- Time
+    order_date          DATETIME,
+    delivery_date       TEXT,                   -- Free text: 'ETA：19:30' or actual date
+    -- Address (split + raw)
+    province            TEXT,
+    city                TEXT,
+    district            TEXT,
+    address             TEXT,                   -- Full 'Customer address'
+    compound            TEXT,                   -- Apartment / community
+    address_details     TEXT,                   -- Floor, unit, etc.
+    -- Marketing
+    coupon_name         TEXT,
+    coupon_discount     REAL,
+    referrer_phone      TEXT,
+    referrer_name       TEXT,
+    -- Delivery
+    delivery_company    TEXT,
+    tracking_no         TEXT,
+    pickup_store        TEXT,                   -- NULL = delivery, set = pickup
+    -- Misc
+    remarks             TEXT,
+    admin_note          TEXT,
+    -- Audit
+    imported_at         DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_miniapp_orders_user        ON miniapp_orders(user_id);
+  CREATE INDEX IF NOT EXISTS idx_miniapp_orders_phone       ON miniapp_orders(customer_phone);
+  CREATE INDEX IF NOT EXISTS idx_miniapp_orders_date        ON miniapp_orders(order_date);
+  CREATE INDEX IF NOT EXISTS idx_miniapp_orders_district    ON miniapp_orders(district);
+  CREATE INDEX IF NOT EXISTS idx_miniapp_orders_coupon      ON miniapp_orders(coupon_name);
+
+  CREATE TABLE IF NOT EXISTS miniapp_order_lines (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id            INTEGER NOT NULL,        -- FK to miniapp_orders.id
+    -- Resolved product (may be NULL if name didn't match anything)
+    product_id          INTEGER,
+    -- Raw product info from the export (kept verbatim for audit + name fallbacks)
+    product_name_en     TEXT,
+    product_name_cn     TEXT,
+    -- Variant + add-on parsed from "Options::" / "Combine with::" suffixes
+    variant_label       TEXT,                    -- e.g. 'Buy 2 Get 1 Free!'
+    combine_with        TEXT,                    -- e.g. 'Nothing, Thanks :）'
+    -- Quantities
+    units               REAL,                    -- 'Product units:'
+    unit_price          REAL,                    -- 'Price'
+    line_total          REAL,                    -- units * unit_price (computed at import)
+    -- Per-line refund info (mini app marks refund per line)
+    refund_status       TEXT,
+    FOREIGN KEY (order_id)   REFERENCES miniapp_orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id)        ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_miniapp_lines_order   ON miniapp_order_lines(order_id);
+  CREATE INDEX IF NOT EXISTS idx_miniapp_lines_product ON miniapp_order_lines(product_id);
+`);
+
+// ─────────────────────────────────────────────────────────────────────────
+// MEITUAN — settlement-style export from the Meituan B2B portal. Each
+// "order" generates ~3.6 fee rows in the source file (order revenue +
+// delivery fee + insurance + ad spend + …); we collapse them per order_no.
+// Multiple physical stores live under one channel='meituan' so the
+// channel-mix dashboard stays clean; the dedicated Meituan tab splits
+// by store for per-location P&L.
+// ─────────────────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS meituan_stores (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_store_id TEXT UNIQUE,           -- 门店id from the export
+    name            TEXT,                  -- 门店名称
+    nickname        TEXT,                  -- friendly label set by user (e.g. 'Yuexiu')
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS meituan_orders (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_id            INTEGER NOT NULL,
+    source_order_no     TEXT UNIQUE,        -- 订单号 — idempotent upsert key
+    ordered_at          DATETIME,           -- 下单时间
+    completed_at        DATETIME,           -- 完成时间
+    refunded_at         DATETIME,           -- 退款时间
+    status              TEXT,               -- 订单完成 / 订单已处理 / 订单取消
+    delivery_method     TEXT,               -- 美团直送 / 商家自配 / 经济送 / 到店取餐
+    customer_payment    TEXT,               -- 用户支付方式
+    -- Money — all derived from 商家应收款 sums grouped by 交易类型
+    product_total       REAL,               -- 商品总价 from 外卖订单 row(s)
+    package_fee         REAL,               -- 打包费
+    customer_paid       REAL,               -- 用户线上支付金额
+    customer_delivery_fee REAL,             -- 用户支付配送费
+    merchant_subsidy    REAL,               -- 商家对顾客的活动补贴
+    platform_subsidy    REAL,               -- 美团活动补贴
+    -- Fees deducted (all stored as positive numbers; net deducts)
+    delivery_fee_paid   REAL DEFAULT 0,     -- 配送费用 (Meituan delivery cost)
+    delivery_tip_paid   REAL DEFAULT 0,     -- 配送小费
+    ad_spend            REAL DEFAULT 0,     -- 流量助手节省转入广告
+    coupon_subsidy_paid REAL DEFAULT 0,     -- 津贴联盟 + 专属流量
+    insurance_fee       REAL DEFAULT 0,     -- 保险 (food safety insurance)
+    commission          REAL DEFAULT 0,     -- 佣金(实付)
+    partial_refund      REAL DEFAULT 0,     -- 订单部分退款
+    -- Outcome
+    gross_amount        REAL DEFAULT 0,     -- product_total + package_fee
+    net_to_merchant     REAL DEFAULT 0,     -- 商家应收款 sum across all rows
+    item_count          INTEGER DEFAULT 0,  -- 商品数量
+    -- Audit
+    imported_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (store_id) REFERENCES meituan_stores(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_meituan_orders_store ON meituan_orders(store_id);
+  CREATE INDEX IF NOT EXISTS idx_meituan_orders_date  ON meituan_orders(ordered_at);
+
+  -- Daily settlement (账单明细 sheet) — one row per store per day. Useful
+  -- for matching deposits to your bank statement.
+  CREATE TABLE IF NOT EXISTS meituan_settlements (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_id            INTEGER NOT NULL,
+    settlement_id       TEXT,                -- 结算id
+    bill_date           DATE,                -- 账单日期
+    bill_amount         REAL,                -- 账单金额
+    status              TEXT,                -- 结算状态
+    period              TEXT,                -- 归属账期 (e.g. '2026-01-01~2026-01-01')
+    settled_on          DATE,                -- 结算日期
+    UNIQUE(store_id, settlement_id, bill_date),
+    FOREIGN KEY (store_id) REFERENCES meituan_stores(id) ON DELETE CASCADE
+  );
+
+  -- Cash flow (账户余额流水) — withdrawals + deposits to the Meituan balance.
+  CREATE TABLE IF NOT EXISTS meituan_balance_flow (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_id        INTEGER NOT NULL,
+    txn_id          TEXT UNIQUE,             -- 交易号
+    occurred_at     DATETIME,                -- 日期
+    type            TEXT,                    -- 余额提现 / 账单入账 / etc.
+    amount          REAL,                    -- 金额
+    balance_after   REAL,                    -- 现有余额
+    status          TEXT,
+    FOREIGN KEY (store_id) REFERENCES meituan_stores(id) ON DELETE CASCADE
+  );
+`);
+
+// ─── Staff feedback / bug reports ──────────────────────────────────────────
+// Lets staff submit bugs, feature requests, and questions in-app (via the
+// Sprout panel's Report tab). Owner sees an inbox with status workflow:
+//   new → seen → in_progress → done   (or → wont_do)
+// Images attached as base64 data URIs in feedback_attachments — same
+// pattern we use elsewhere so a single .db backup carries everything.
+db.exec(`CREATE TABLE IF NOT EXISTS feedback (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  reporter_id     INTEGER NOT NULL,
+  reporter_name   TEXT NOT NULL,
+  title           TEXT NOT NULL,
+  description     TEXT,
+  category        TEXT DEFAULT 'bug',          -- bug | feature | question | other
+  status          TEXT DEFAULT 'new',          -- new | seen | in_progress | done | wont_do
+  owner_note      TEXT,
+  page_context    TEXT,
+  created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  seen_at         DATETIME,
+  done_at         DATETIME,
+  FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE CASCADE
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS feedback_attachments (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  feedback_id   INTEGER NOT NULL,
+  filename      TEXT,
+  mime_type     TEXT,
+  size_bytes    INTEGER,
+  data          TEXT NOT NULL,                  -- base64 data URI
+  uploaded_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (feedback_id) REFERENCES feedback(id) ON DELETE CASCADE
+)`);
+// Comment thread on a feedback item — lets the owner and the reporter
+// chat back and forth without leaving the app. Owner_note on `feedback`
+// stays separate (it's an internal note, only admins see it); comments
+// are visible to BOTH the owner and the reporter.
+db.exec(`CREATE TABLE IF NOT EXISTS feedback_comments (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  feedback_id   INTEGER NOT NULL,
+  author_id     INTEGER NOT NULL,
+  author_name   TEXT NOT NULL,
+  author_role   TEXT,                            -- 'admin' | other; used by UI to align bubble L/R
+  body          TEXT NOT NULL,
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (feedback_id) REFERENCES feedback(id) ON DELETE CASCADE,
+  FOREIGN KEY (author_id)   REFERENCES users(id)    ON DELETE CASCADE
+)`);
+// Photos attached to a single reply in the comment thread. Same shape as
+// feedback_attachments — data URI inline so a .db backup stays self-contained.
+db.exec(`CREATE TABLE IF NOT EXISTS feedback_comment_attachments (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  comment_id    INTEGER NOT NULL,
+  filename      TEXT,
+  mime_type     TEXT,
+  size_bytes    INTEGER,
+  data          TEXT NOT NULL,                  -- base64 data URI
+  uploaded_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (comment_id) REFERENCES feedback_comments(id) ON DELETE CASCADE
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_feedback_status   ON feedback(status)'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_feedback_reporter ON feedback(reporter_id)'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_feedback_atts     ON feedback_attachments(feedback_id)'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_feedback_comments ON feedback_comments(feedback_id, id)'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_feedback_comment_atts ON feedback_comment_attachments(comment_id)'); } catch {}
+
+// ─────────────────────────────────────────────────────────────────────────
+// RETAIL MINI APP (new native WeChat mini program) — tables back the new
+// B2C storefront. Names are `retail_*` to avoid colliding with the legacy
+// `miniapp_orders` (imported-from-old-platform audit trail). The two run
+// in parallel; no FK between them.
+//   customers          → openid-keyed buyer master
+//   customer addresses → multi-address book
+//   auth tokens        → opaque session tokens (header auth, not cookie)
+//   orders / items     → live order ledger
+//   payments           → wechat/alipay/points transaction records
+//   product options    → per-product Q&A (size, cutlery, …)
+//   storefront_config  → KV store driving theme/fees/home layout (§9 spec)
+// Existing products table gets retail-only columns for publish + price +
+// stock + sort + marketing copy; retail inventory is INDEPENDENT from
+// kitchen stock_qty.
+// ─────────────────────────────────────────────────────────────────────────
+addColumn('products', 'is_published',           'INTEGER DEFAULT 0');
+addColumn('products', 'retail_price',           'REAL DEFAULT 0');
+addColumn('products', 'retail_stock',           'INTEGER DEFAULT 0');
+addColumn('products', 'retail_display_order',   'INTEGER DEFAULT 0');
+addColumn('products', 'retail_tagline',         'TEXT');
+addColumn('products', 'retail_description_en',  'TEXT');
+addColumn('products', 'retail_description_cn',  'TEXT');
+// Nutrition facts panel. JSON-encoded for flexibility — different products
+// list different fields (kcal/fat/carbs/sugar/protein/sodium…) and basis
+// varies (per 100ml vs per 100g vs per serving). Shape:
+//   { basis_en, basis_cn, rows:[{label_en,label_cn,value}] }
+addColumn('products', 'nutrition',              'TEXT');
+// Mini-app product-card chrome:
+//   keywords_en / keywords_cn — short comma-separated descriptors that
+//     appear in green next to the other-language name, e.g. "raw, alive"
+//   tagline_en / tagline_cn   — the bold one-liner slogan below the
+//     subtitle, e.g. "Your gut deserves better"
+addColumn('products', 'keywords_en',            'TEXT');
+addColumn('products', 'keywords_cn',            'TEXT');
+addColumn('products', 'tagline_en',             'TEXT');
+addColumn('products', 'tagline_cn',             'TEXT');
+// Block-based product page body. JSON array of `{id, type, ...data}` blocks
+// where each block type is rendered by a bespoke visual on the mini-app
+// (hero_intro, stat_callout, allergen_card, ingredients, how_to_use,
+//  storage, photo_strip, pull_quote, divider, …). When this column is
+// non-empty the mini-app renders it INSTEAD of the legacy description_en/cn
+// textareas — products that haven't been migrated to blocks fall back to
+// the textareas so there's no flag day.
+addColumn('products', 'description_blocks',     'TEXT');
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_published ON products(is_published) WHERE is_published = 1'); } catch {}
+
+// ─── Flash sales (秒杀) ─────────────────────────────────────────────────────
+// A product is "on flash" between flash_starts_at and flash_ends_at, charged
+// at flash_price instead of retail_price/sell_price. flash_stock_limit caps
+// the number sold during the window (NULL = unlimited within window);
+// flash_sold is incremented atomically inside order-create. retail.js owns
+// the activation check + the pricing — these columns are just storage.
+addColumn('products', 'flash_price',       'REAL');
+addColumn('products', 'flash_starts_at',   'DATETIME');
+addColumn('products', 'flash_ends_at',     'DATETIME');
+addColumn('products', 'flash_stock_limit', 'INTEGER');
+addColumn('products', 'flash_sold',        'INTEGER DEFAULT 0');
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_flash_ends ON products(flash_ends_at) WHERE flash_price IS NOT NULL AND flash_ends_at IS NOT NULL'); } catch {}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_customers (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    openid          TEXT UNIQUE NOT NULL,
+    unionid         TEXT,
+    nickname        TEXT,
+    avatar_url      TEXT,
+    phone           TEXT,
+    email           TEXT,
+    gender          INTEGER,            -- 0 unknown, 1 male, 2 female (WeChat enum)
+    birthday        DATE,
+    tier_key        TEXT DEFAULT 'seed',    -- seed | sprout | root | tree
+    lifetime_spend  REAL DEFAULT 0,
+    points_balance  INTEGER DEFAULT 0,
+    coupon_count    INTEGER DEFAULT 0,
+    balance         REAL DEFAULT 0,         -- prepaid wallet balance
+    is_blocked      INTEGER DEFAULT 0,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_login_at   DATETIME
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_customers_phone ON retail_customers(phone);
+
+  CREATE TABLE IF NOT EXISTS retail_customer_addresses (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id     INTEGER NOT NULL,
+    recipient_name  TEXT NOT NULL,
+    phone           TEXT NOT NULL,
+    province        TEXT,
+    city            TEXT,
+    district        TEXT,
+    address         TEXT NOT NULL,          -- full street + building
+    detail          TEXT,                   -- floor, unit, apt
+    postal_code     TEXT,
+    is_default      INTEGER DEFAULT 0,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_addrs_customer ON retail_customer_addresses(customer_id);
+
+  CREATE TABLE IF NOT EXISTS retail_auth_tokens (
+    token           TEXT PRIMARY KEY,
+    customer_id     INTEGER NOT NULL,
+    expires_at      DATETIME NOT NULL,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_used_at    DATETIME,
+    user_agent      TEXT,
+    FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_tokens_customer ON retail_auth_tokens(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_retail_tokens_expires  ON retail_auth_tokens(expires_at);
+
+  CREATE TABLE IF NOT EXISTS retail_orders (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_no            TEXT UNIQUE NOT NULL,    -- public-facing, e.g. R2026051601234
+    customer_id         INTEGER NOT NULL,
+    -- Workflow
+    status              TEXT NOT NULL DEFAULT 'pending_payment',
+      -- pending_payment | paid | preparing | dispatched | delivered | cancelled | refunded
+    payment_method      TEXT,                    -- wechat | alipay | points
+    -- Snapshots (address + contact captured at order-time so later edits don't change history)
+    recipient_name      TEXT,
+    recipient_phone     TEXT,
+    address_full        TEXT,                    -- one-line concatenated, audit-friendly
+    address_json        TEXT,                    -- structured snapshot (province/city/district/address/detail)
+    -- Money (¥ stored as REAL, two-decimal precision)
+    subtotal            REAL DEFAULT 0,
+    shipping_fee        REAL DEFAULT 0,
+    voucher_code        TEXT,
+    voucher_amount      REAL DEFAULT 0,
+    points_used         INTEGER DEFAULT 0,
+    points_amount       REAL DEFAULT 0,          -- ¥ value of points_used
+    total               REAL DEFAULT 0,          -- amount actually charged
+    -- Customer extras
+    customer_note       TEXT,
+    needs_cutlery       INTEGER DEFAULT 0,
+    needs_invoice       INTEGER DEFAULT 0,
+    invoice_title       TEXT,                    -- company/personal title for fapiao
+    invoice_tax_id      TEXT,                    -- 税号 if company
+    -- Staff workflow
+    staff_note          TEXT,
+    cancelled_reason    TEXT,
+    -- Timestamps
+    placed_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+    paid_at             DATETIME,
+    preparing_at        DATETIME,
+    dispatched_at       DATETIME,
+    delivered_at        DATETIME,
+    cancelled_at        DATETIME,
+    updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES retail_customers(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_orders_customer ON retail_orders(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_retail_orders_status   ON retail_orders(status);
+  CREATE INDEX IF NOT EXISTS idx_retail_orders_placed   ON retail_orders(placed_at);
+
+  CREATE TABLE IF NOT EXISTS retail_order_items (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id        INTEGER NOT NULL,
+    product_id      INTEGER,
+    -- Snapshots at order-time so future product edits don't rewrite history
+    name_en         TEXT,
+    name_cn         TEXT,
+    sku             TEXT,
+    size            TEXT,                        -- weight/volume snapshot
+    image_url       TEXT,
+    qty             REAL NOT NULL,
+    unit_price      REAL NOT NULL,               -- price snapshot AFTER option deltas
+    line_total      REAL NOT NULL,
+    options_json    TEXT,                        -- chosen option labels + price deltas, for the receipt
+    FOREIGN KEY (order_id)   REFERENCES retail_orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_order_items_order   ON retail_order_items(order_id);
+  CREATE INDEX IF NOT EXISTS idx_retail_order_items_product ON retail_order_items(product_id);
+
+  CREATE TABLE IF NOT EXISTS retail_payments (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id            INTEGER NOT NULL,
+    method              TEXT NOT NULL,           -- wechat | alipay | points
+    amount              REAL NOT NULL,
+    status              TEXT DEFAULT 'pending',  -- pending | success | failed | refunded
+    -- Provider-side identifiers (held even after order moves on so we can reconcile)
+    transaction_id      TEXT,                    -- e.g. wechat transaction_id or alipay trade_no
+    out_trade_no        TEXT,                    -- our local ref sent to provider
+    qr_image_url        TEXT,                    -- alipay precreate result (saved for receipt screens)
+    raw_callback_json   TEXT,                    -- full provider callback body for audit
+    refunded_amount     REAL DEFAULT 0,
+    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at        DATETIME,
+    FOREIGN KEY (order_id) REFERENCES retail_orders(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_payments_order ON retail_payments(order_id);
+  CREATE INDEX IF NOT EXISTS idx_retail_payments_txn   ON retail_payments(transaction_id);
+
+  -- Per-product custom Q&A (e.g. "Choose size", "Add cutlery?", "Spice level?")
+  -- The mini app renders one block per option, in sort_order. type controls UI:
+  --   single  → radio (one choice)
+  --   multi   → checkbox (zero-or-more choices)
+  --   text    → free-text input (price_delta ignored, no choices needed)
+  CREATE TABLE IF NOT EXISTS retail_product_options (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id      INTEGER NOT NULL,
+    question_en     TEXT NOT NULL,
+    question_cn     TEXT,
+    type            TEXT NOT NULL DEFAULT 'single',   -- single | multi | text
+    is_required     INTEGER DEFAULT 0,
+    sort_order      INTEGER DEFAULT 0,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_opts_product ON retail_product_options(product_id);
+
+  CREATE TABLE IF NOT EXISTS retail_product_option_choices (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    option_id       INTEGER NOT NULL,
+    label_en        TEXT NOT NULL,
+    label_cn        TEXT,
+    price_delta     REAL DEFAULT 0,                   -- added to product retail_price when chosen
+    is_default      INTEGER DEFAULT 0,
+    sort_order      INTEGER DEFAULT 0,
+    FOREIGN KEY (option_id) REFERENCES retail_product_options(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_opt_choices_opt ON retail_product_option_choices(option_id);
+
+  -- KV-style storefront config. Keys are dotted paths (e.g. 'theme.accent',
+  -- 'fees.freeShippingThreshold', 'home.sections'). Values are JSON strings;
+  -- primitives are JSON-encoded too (so '"lime-leaf"' for a string,  '399'
+  -- for a number, '[{...},{...}]' for arrays). GET /api/retail/config
+  -- reads all rows and assembles the nested response.
+  CREATE TABLE IF NOT EXISTS storefront_config (
+    key             TEXT PRIMARY KEY,
+    value_json      TEXT NOT NULL,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_by      INTEGER                            -- staff user_id (NULL if seed)
+  );
+`);
+
+// New `retail` permission — gates the storefront admin surface (publish
+// products, edit storefront config, advance retail order statuses).
+// Default 0; admin always passes via requirePermission's role check.
+addColumn('permissions', 'retail', 'INTEGER DEFAULT 0');
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_retail_perm_v1');
+  if (!ran) {
+    db.prepare("UPDATE permissions SET retail = 1 WHERE user_id IN (SELECT id FROM users WHERE role IN ('admin','manager'))").run();
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_retail_perm_v1');
+  }
+} catch (e) { console.error('[migration seed_retail_perm_v1]', e); }
+
+// Retail subscribe-message tracking. WeChat's subscribeMessage API gives
+// us ONE chance to push a notification per customer consent. The customer
+// taps "Allow" at checkout → we record the row → status transition fires
+// a send → row is marked used. Re-prompt next time customer interacts.
+//
+// template_id is set in mp console after AppID is registered; the office
+// drops it into storefront_config.notifications.order_status_template_id.
+// Vouchers / promo codes. Office creates them in /retail-admin; customer
+// enters the code at checkout. Three types supported in v1:
+//   • fixed_amount  → value is the ¥ discount (subtract from subtotal)
+//   • percent       → value is 0..100, percent off subtotal
+//   • free_shipping → value ignored; just zeroes the shipping fee
+// Usage tracking: each voucher has used_count + max_uses. On apply we
+// atomically increment used_count via a transaction.
+db.exec(`CREATE TABLE IF NOT EXISTS retail_vouchers (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  code            TEXT NOT NULL UNIQUE,
+  type            TEXT NOT NULL DEFAULT 'fixed_amount',
+  value           REAL NOT NULL DEFAULT 0,
+  min_subtotal    REAL NOT NULL DEFAULT 0,
+  max_uses        INTEGER,                          -- NULL = unlimited
+  used_count      INTEGER DEFAULT 0,
+  per_customer_limit INTEGER DEFAULT 1,             -- 0 = no per-customer cap
+  expires_at      DATETIME,                          -- NULL = no expiry
+  is_active       INTEGER DEFAULT 1,
+  description     TEXT,                              -- internal note
+  created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_by      INTEGER,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_vouchers_code ON retail_vouchers(code)'); } catch {}
+
+// Customer-owned vouchers — vouchers admin has granted to a specific
+// customer. Show up in the customer's wallet / checkout as no-code, single-
+// tap vouchers. Distinct from is_public (browseable by everyone). When a
+// granted voucher is applied to an order, used_at + used_order_id are set.
+db.exec(`CREATE TABLE IF NOT EXISTS retail_customer_vouchers (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id   INTEGER NOT NULL,
+  voucher_id    INTEGER NOT NULL,
+  granted_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  granted_by    INTEGER,
+  granted_note  TEXT,
+  used_at       DATETIME,
+  used_order_id INTEGER,
+  FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE CASCADE,
+  FOREIGN KEY (voucher_id)  REFERENCES retail_vouchers(id)  ON DELETE CASCADE,
+  FOREIGN KEY (granted_by)  REFERENCES users(id),
+  UNIQUE(customer_id, voucher_id)
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_rcv_customer ON retail_customer_vouchers(customer_id, used_at)'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_rcv_voucher  ON retail_customer_vouchers(voucher_id)'); } catch {}
+
+// Customer product reviews. One row per (customer, product, order) so a
+// repeat buyer can write a fresh review every time they order. Shown on
+// the public product detail with aggregated avg + count + N most recent.
+db.exec(`CREATE TABLE IF NOT EXISTS retail_reviews (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id   INTEGER NOT NULL,
+  product_id    INTEGER NOT NULL,
+  order_id      INTEGER NOT NULL,
+  rating        INTEGER NOT NULL,        -- 1..5
+  comment       TEXT,
+  photos_json   TEXT,                    -- JSON array of media URLs (future)
+  is_visible    INTEGER DEFAULT 1,       -- admin can hide
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id)  REFERENCES products(id)         ON DELETE CASCADE,
+  FOREIGN KEY (order_id)    REFERENCES retail_orders(id)    ON DELETE CASCADE,
+  UNIQUE(customer_id, product_id, order_id)
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_reviews_product ON retail_reviews(product_id, is_visible, created_at)'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_reviews_customer ON retail_reviews(customer_id, created_at)'); } catch {}
+// Quick-tag chips picked by the customer (e.g. 'fresh', 'fast-ship').
+// JSON array of string ids; tag labels live client-side so we can change
+// the wording without a migration.
+addColumn('retail_reviews', 'tags_json', 'TEXT');
+
+// Customer-initiated refund requests. Lightweight — 3 columns on the
+// existing retail_orders row, no separate table. The customer fires
+// /api/retail/orders/:id/refund-request which sets refund_requested_at +
+// refund_status='pending'. Admin reviews in /retail-admin/orders/:id and
+// either transitions the order to 'refunded' (approves) or sets
+// refund_status='rejected' with a note.
+addColumn('retail_orders', 'refund_requested_at', 'DATETIME');
+addColumn('retail_orders', 'refund_reason',       'TEXT');
+addColumn('retail_orders', 'refund_status',       'TEXT');     // null | 'pending' | 'approved' | 'rejected'
+addColumn('retail_orders', 'refund_review_note',  'TEXT');     // staff note shown to customer
+addColumn('retail_vouchers', 'is_public',         'INTEGER DEFAULT 0');  // 1 = browseable, no code needed
+addColumn('retail_vouchers', 'title_en',          'TEXT');               // customer-facing label for public coupons
+addColumn('retail_vouchers', 'title_cn',          'TEXT');
+
+db.exec(`CREATE TABLE IF NOT EXISTS retail_subscriptions (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id   INTEGER NOT NULL,
+  template_id   TEXT NOT NULL,
+  order_id      INTEGER,
+  used          INTEGER DEFAULT 0,
+  used_at       DATETIME,
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE CASCADE,
+  FOREIGN KEY (order_id)    REFERENCES retail_orders(id)    ON DELETE CASCADE
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_sub_customer ON retail_subscriptions(customer_id, used)'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_sub_order    ON retail_subscriptions(order_id)'); } catch {}
+
+// Retail CMS media library — base64-in-row, same pattern as
+// supplier_documents / products.image_data so a .db backup is self-contained.
+// Image bytes get served publicly via GET /api/retail/media/:id (cached
+// long; the mini app needs them without auth).
+db.exec(`CREATE TABLE IF NOT EXISTS retail_media (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  filename     TEXT,
+  mime_type    TEXT NOT NULL,
+  size_bytes   INTEGER NOT NULL,
+  width        INTEGER,
+  height       INTEGER,
+  data         TEXT NOT NULL,          -- base64 data URI
+  uploaded_by  INTEGER,                -- staff user_id
+  uploaded_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (uploaded_by) REFERENCES users(id)
+)`);
+
+// Seed a default ONBOARDING layout — first-launch customers in the mini
+// app see this. The office can edit it later in /cms → Onboarding page.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_onboarding_layout_v1');
+  if (!ran) {
+    const layout = [
+      { id: 'on1', type: 'spacer', height_px: 80 },
+      { id: 'on2', type: 'sticker_collage', stickers: [
+        { label_en: 'RAW',          label_cn: '生鲜',     color: 'papaya-glow',  rotate: -6 },
+        { label_en: 'ALIVE',        label_cn: '活力',     color: 'berry-punch',  rotate: 4  },
+        { label_en: 'NO ADDITIVES', label_cn: '无添加',    color: 'carrot-blaze', rotate: -3 },
+        { label_en: '100% PLANT',   label_cn: '纯植物',    color: 'skyberry',     rotate: 5  },
+        { label_en: 'LOW SUGAR',    label_cn: '低糖',     color: 'golden-corn',  rotate: -4 },
+        { label_en: 'PROBIOTIC',    label_cn: '益生菌',    color: 'lotus',        rotate: 3  },
+      ]},
+      { id: 'on3', type: 'spacer', height_px: 40 },
+      { id: 'on4', type: 'announcement_bar', text_en: 'Food made from food.', text_cn: '食物源于食物。', bg_color: 'oat-milk', fg_color: 'ink' },
+      { id: 'on5', type: 'announcement_bar', text_en: 'From soil to soul.',   text_cn: '从土壤到灵魂。',  bg_color: 'oat-milk', fg_color: 'forest-kale' },
+      { id: 'on6', type: 'spacer', height_px: 40 },
+      { id: 'on7', type: 'progress_dots', count: 3, active_index: 0, color: 'ink' },
+    ];
+    const blob = JSON.stringify(layout);
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES ('onboarding.layout', ?)").run(blob);
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES ('cms.draft.onboarding_layout', ?)").run(blob);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_onboarding_layout_v1');
+  }
+} catch (e) { console.error('[migration seed_onboarding_layout_v1]', e); }
+
+// Seed a default home layout for the CMS so the editor opens to something
+// non-empty on a fresh DB. The draft slot mirrors the live slot so opening
+// the editor and hitting Publish without edits is a no-op.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_home_layout_v1');
+  if (!ran) {
+    const defaultLayout = [
+      { id: 'b1', type: 'hero_banner',   image_url: '', cta_label: 'SHOP', cta_target: 'shop', height_px: 520 },
+      { id: 'b2', type: 'announcement_bar', text_en: 'Free shipping over ¥399', text_cn: '满 399 元免邮', bg_color: 'lime-leaf', fg_color: 'ink' },
+      { id: 'b3', type: 'category_tabs', category_ids: [], style: 'tiles' },
+      { id: 'b4', type: 'product_grid',  source_type: 'category', category_id: null, columns: 2, limit: 6 },
+    ];
+    const blob = JSON.stringify(defaultLayout);
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES ('home.layout', ?)").run(blob);
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES ('cms.draft.home_layout', ?)").run(blob);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_home_layout_v1');
+  }
+} catch (e) { console.error('[migration seed_home_layout_v1]', e); }
+
+// Seed a default ABOUT layout — the "Who we are" story page reached from
+// the Me tab and from the Home tail. Two editorial blocks: the brand
+// story up top, the promise below. Office can edit in /cms → About page.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_about_layout_v1');
+  if (!ran) {
+    const layout = [
+      { id: 'ab1', type: 'spacer', height_px: 40 },
+      {
+        id: 'ab2', type: 'editorial', layout: 'image_top',
+        kicker_en: 'NO. 11 · WHO WE ARE', kicker_cn: '第十一 · 关于我们',
+        title_en: 'Food made from food.', title_cn: '食物源于食物。',
+        body_en: 'Roots started in a small Guangzhou kitchen with one question: what if eating well felt like a celebration, not a sacrifice?\n\nWe cold-press, ferment, and bake — slow, raw, plant-forward. Every batch is small. Every ingredient earns its place.',
+        body_cn: 'Roots 始于广州一间小厨房,源自一个问题:如果吃得健康也能像庆典一样令人愉悦,会怎样?\n\n我们冷压、发酵、烘焙——慢工出细活,生鲜,植物为本。每一批都不大,每一种原料都名副其实。',
+        image_url: '', image_aspect: null,
+      },
+      {
+        id: 'ab3', type: 'editorial', layout: 'text_only',
+        kicker_en: 'OUR PROMISE', kicker_cn: '我们的承诺',
+        title_en: 'From soil to soul.', title_cn: '从土壤到灵魂。',
+        body_en: 'Real ingredients, traceable suppliers, recyclable packaging. No shortcuts, no powders pretending to be food. If we wouldn\'t feed it to our families, we won\'t sell it to yours.',
+        body_cn: '真实的食材,可追溯的供应商,可回收的包装。不走捷径,不用假装成食物的粉末。我们不会给家人吃的东西,也不会卖给您。',
+        image_url: '', image_aspect: null,
+      },
+      { id: 'ab4', type: 'spacer', height_px: 60 },
+    ];
+    const blob = JSON.stringify(layout);
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES ('about.layout', ?)").run(blob);
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES ('cms.draft.about_layout', ?)").run(blob);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_about_layout_v1');
+    console.log('[migration] seed_about_layout_v1 applied');
+  }
+} catch (e) { console.error('[migration seed_about_layout_v1]', e); }
+
+// REPLACE about.layout with the full NO. 11 · WHO WE ARE design from
+// screens/story.jsx — hero, manifesto, stat strip, founder card,
+// IN/OUT promise grid, sign-off. v1 only seeded two generic editorial
+// blocks as placeholders; v2 is the real designed flow.
+// Only overwrites when the current layout still looks like the v1 seed
+// (4 blocks, first editorial id = 'ab2'). If the office has already
+// edited it via CMS, the new design is skipped — they'll need to add
+// the new block types manually.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_about_layout_v2');
+  if (!ran) {
+    const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'about.layout'").get();
+    let current = [];
+    try { current = row ? JSON.parse(row.value_json) : []; } catch {}
+    const looksLikeV1 = Array.isArray(current) && current.length === 4
+      && current[1] && current[1].id === 'ab2' && current[1].type === 'editorial';
+    const isEmpty = !Array.isArray(current) || current.length === 0;
+    if (looksLikeV1 || isEmpty) {
+      const layout = [
+        {
+          id: 's_hero', type: 'hero_banner',
+          image_url: '/assets/brand/welcome-roots.jpg',
+          image_aspect: 1198 / 1085, height_px: 640,
+          ctas: [],
+        },
+        {
+          id: 's_manifesto', type: 'editorial', layout: 'text_only',
+          kicker_en: 'WHO WE ARE', kicker_cn: '我们是谁',
+          title_en: '', title_cn: '',
+          body_en: 'We exist to make plant-based food so mind blowing good it transforms how people eat, how they see plants, and how we create a better, more sustainable future — without ever giving up flavor, health, or joy!',
+          body_cn: '我们存在的意义,是把植物食物做到令人惊艳的好——好到改变人们的饮食方式、对植物的认知,也改变我们共同走向更可持续未来的方式——而风味、健康与快乐,一样也不放下。',
+        },
+        {
+          id: 's_stats', type: 'stat_strip',
+          value_color: 'lime-leaf',
+          stats: [
+            { value_en: '2017', value_cn: '2017',  label_en: 'EST.',      label_cn: '成立' },
+            { value_en: '广州', value_cn: '广州',  label_en: 'MADE IN',   label_cn: '产地' },
+            { value_en: '50+',  value_cn: '50+',   label_en: 'PRODUCTS',  label_cn: '产品' },
+            { value_en: '100%', value_cn: '100%',  label_en: 'PLANT',     label_cn: '植物' },
+          ],
+        },
+        {
+          id: 's_founder', type: 'founder_card',
+          kicker_en: 'MEET THE FOUNDER', kicker_cn: '创始人',
+          image_url: '', tile_color: 'lime-leaf',
+          name_en: 'Founder Name', name_cn: '创始人姓名',
+          title_en: 'FOUNDER & CEO', title_cn: '创始人兼首席执行官',
+          quote_en: 'I started Roots because I wanted to prove that plants don\'t have to be the boring option.',
+          quote_cn: '我创立 Roots,是想证明植物从来不该是无聊的选择。',
+          cta: { label_en: 'READ THE FULL STORY', label_cn: '阅读完整故事', target: '', style: 'link' },
+        },
+        {
+          id: 's_promise', type: 'promise_in_out',
+          kicker_en: 'OUR PROMISE', kicker_cn: '我们的承诺',
+          title_in_en: 'in',  title_in_cn: '是',
+          title_out_en: 'out', title_out_cn: '否',
+          accent_color: 'lime-leaf',
+          in_items: [
+            { en: '100% plant-based',     cn: '100% 植物' },
+            { en: 'Made from scratch',    cn: '原料自制' },
+            { en: 'Real fermentation',    cn: '真发酵' },
+            { en: 'Whole ingredients',    cn: '完整食材' },
+            { en: 'Small batch',          cn: '小批量' },
+            { en: 'Seasonal',             cn: '应季' },
+            { en: 'Local-first · 广州',   cn: '本地优先' },
+            { en: 'Recyclable packaging', cn: '可回收包装' },
+          ],
+          out_items: [
+            { en: 'Preservatives',    cn: '防腐剂' },
+            { en: 'Refined sugar',    cn: '精制糖' },
+            { en: 'Artificial color', cn: '人造色素' },
+            { en: 'Artificial flavor',cn: '人造香精' },
+            { en: 'Additives',        cn: '添加剂' },
+            { en: 'GMO',              cn: '转基因' },
+            { en: 'Animal products',  cn: '动物产品' },
+            { en: 'Cutting corners',  cn: '走捷径' },
+          ],
+        },
+        {
+          id: 's_outro', type: 'editorial', layout: 'text_only',
+          kicker_en: '', kicker_cn: '',
+          title_en: 'From soil to soul.', title_cn: '从土壤到灵魂。',
+          body_en: '', body_cn: '',
+          cta: { label_en: 'SHOP NOW', label_cn: '立即购买', target: 'shop', style: 'primary' },
+        },
+        { id: 's_tail', type: 'spacer', height_px: 40 },
+      ];
+      const blob = JSON.stringify(layout);
+      db.prepare("INSERT OR REPLACE INTO storefront_config (key, value_json) VALUES ('about.layout', ?)").run(blob);
+      db.prepare("INSERT OR REPLACE INTO storefront_config (key, value_json) VALUES ('cms.draft.about_layout', ?)").run(blob);
+      console.log('[migration] seed_about_layout_v2: applied full story design');
+    } else {
+      console.log('[migration] seed_about_layout_v2: about.layout already customised — skipped');
+    }
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_about_layout_v2');
+  }
+} catch (e) { console.error('[migration seed_about_layout_v2]', e); }
+
+// Append a small "Story" tail to home.layout pointing to /about, once.
+// Read-modify-write rather than overwrite, so a curated home isn't lost.
+// Skipped if home already has any editorial block (idempotent for re-runs
+// and for layouts that already include the tail manually).
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_home_story_tail_v1');
+  if (!ran) {
+    const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'home.layout'").get();
+    let blocks = [];
+    try { blocks = row ? JSON.parse(row.value_json) : []; } catch {}
+    if (!Array.isArray(blocks)) blocks = [];
+    const hasEditorial = blocks.some(b => b && b.type === 'editorial');
+    if (!hasEditorial) {
+      blocks.push({
+        id: 'home_story_tail',
+        type: 'editorial',
+        layout: 'text_only',
+        kicker_en: 'NO. 04 · STORY', kicker_cn: '第四 · 故事',
+        title_en: 'Food made from food.', title_cn: '食物源于食物。',
+        body_en: 'Roots started in a small Guangzhou kitchen — slow, raw, plant-forward.',
+        body_cn: 'Roots 始于广州一间小厨房——慢工细作,生鲜,植物为本。',
+        image_url: '', image_aspect: null,
+        cta: { label_en: 'READ MORE', label_cn: '了解更多', target: 'about', style: 'secondary' },
+      });
+      const blob = JSON.stringify(blocks);
+      db.prepare("INSERT OR REPLACE INTO storefront_config (key, value_json) VALUES ('home.layout', ?)").run(blob);
+      // Mirror into the draft slot so the CMS doesn't show "dirty" right away.
+      const draftRow = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'cms.draft.home_layout'").get();
+      let draft = [];
+      try { draft = draftRow ? JSON.parse(draftRow.value_json) : []; } catch {}
+      if (!Array.isArray(draft)) draft = [];
+      if (!draft.some(b => b && b.type === 'editorial')) {
+        draft.push(blocks[blocks.length - 1]);
+        db.prepare("INSERT OR REPLACE INTO storefront_config (key, value_json) VALUES ('cms.draft.home_layout', ?)").run(JSON.stringify(draft));
+      }
+      console.log('[migration] seed_home_story_tail_v1: appended editorial tail to home.layout');
+    }
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_home_story_tail_v1');
+  }
+} catch (e) { console.error('[migration seed_home_story_tail_v1]', e); }
+
+// Replace the v1 home_story_tail (generic editorial) with the designed
+// home-v5 "Brand story break" — full-bleed accent + IP overlay + 2-line
+// headline + inline link. Only swaps if the existing block is the v1
+// editorial we shipped; if the office has edited it, the swap is skipped.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_home_story_break_v1');
+  if (!ran) {
+    const story = {
+      id: 'home_story_tail',
+      type: 'story_break',
+      bg_color: 'lime-leaf',
+      ip_image: '/assets/brand/ip-kombucha-gang.jpg',
+      kicker_en: 'NO. 03 · WHO WE ARE', kicker_cn: '第三 · 我们是谁',
+      title_en: 'No fakers.\nNo fillers.', title_cn: '无虚假。\n无填料。',
+      body_en: '100% plant. Made from scratch. Real ferment, real fruit, real veg.',
+      body_cn: '100% 植物。原料自制。真发酵、真水果、真蔬菜。',
+      link_label_en: 'READ THE STORY', link_label_cn: '阅读故事',
+      link_target: 'about',
+    };
+    for (const key of ['home.layout', 'cms.draft.home_layout']) {
+      const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = ?").get(key);
+      if (!row) continue;
+      let blocks = [];
+      try { blocks = JSON.parse(row.value_json); } catch {}
+      if (!Array.isArray(blocks)) continue;
+      const idx = blocks.findIndex(b => b && b.id === 'home_story_tail' && b.type === 'editorial');
+      if (idx === -1) continue;
+      blocks[idx] = story;
+      db.prepare("INSERT OR REPLACE INTO storefront_config (key, value_json) VALUES (?, ?)").run(key, JSON.stringify(blocks));
+      console.log(`[migration] seed_home_story_break_v1: swapped ${key} tail to story_break`);
+    }
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_home_story_break_v1');
+  }
+} catch (e) { console.error('[migration seed_home_story_break_v1]', e); }
+
+// Retire the story content from CMS — the About page moved to a hardcoded
+// mini app screen (pages/about/about) and is only reached from Me. Drop
+// the home story tail from home.layout (+ draft) and delete the about
+// page keys from storefront_config. One-shot, marker-guarded.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('retire_story_from_cms_v1');
+  if (!ran) {
+    // Strip home_story_tail from both the live home.layout and the draft.
+    for (const key of ['home.layout', 'cms.draft.home_layout']) {
+      const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = ?").get(key);
+      if (!row) continue;
+      let blocks = [];
+      try { blocks = JSON.parse(row.value_json); } catch {}
+      if (!Array.isArray(blocks)) continue;
+      const next = blocks.filter(b => !(b && (b.id === 'home_story_tail' || b.type === 'story_break')));
+      if (next.length !== blocks.length) {
+        db.prepare("INSERT OR REPLACE INTO storefront_config (key, value_json) VALUES (?, ?)").run(key, JSON.stringify(next));
+        console.log(`[migration] retire_story_from_cms_v1: removed story tail from ${key}`);
+      }
+    }
+    // Drop the About page from storefront_config entirely.
+    const del = db.prepare("DELETE FROM storefront_config WHERE key IN ('about.layout', 'cms.draft.about_layout')");
+    const r = del.run();
+    if (r.changes) console.log(`[migration] retire_story_from_cms_v1: deleted ${r.changes} about.* config keys`);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('retire_story_from_cms_v1');
+  }
+} catch (e) { console.error('[migration retire_story_from_cms_v1]', e); }
+
+// Hard sweep — strip any remaining blocks of the retired story-page types
+// (editorial / stat_strip / founder_card / promise_in_out / story_break)
+// from every layout in storefront_config. Defensive: the prior migrations
+// already pulled the known instances, but a draft saved in the window
+// between deploys could still contain one and would fail validation now
+// that these types are out of ALLOWED_BLOCK_TYPES.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('strip_retired_story_blocks_v1');
+  if (!ran) {
+    const RETIRED = new Set(['editorial', 'stat_strip', 'founder_card', 'promise_in_out', 'story_break']);
+    const rows = db.prepare(
+      "SELECT key, value_json FROM storefront_config WHERE key LIKE '%.layout' OR key LIKE 'cms.draft.%_layout'"
+    ).all();
+    const upd = db.prepare("UPDATE storefront_config SET value_json = ? WHERE key = ?");
+    let touched = 0;
+    for (const row of rows) {
+      let blocks = [];
+      try { blocks = JSON.parse(row.value_json); } catch { continue; }
+      if (!Array.isArray(blocks)) continue;
+      const next = blocks.filter(b => !(b && RETIRED.has(b.type)));
+      if (next.length !== blocks.length) {
+        upd.run(JSON.stringify(next), row.key);
+        touched++;
+      }
+    }
+    if (touched) console.log(`[migration] strip_retired_story_blocks_v1: cleaned ${touched} layout(s)`);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('strip_retired_story_blocks_v1');
+  }
+} catch (e) { console.error('[migration strip_retired_story_blocks_v1]', e); }
+
+// Seed default `about.content` so the admin editor opens to the designed
+// copy on a fresh DB. Office can edit + save from retail-admin → About.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_about_content_v1');
+  if (!ran) {
+    const content = {
+      kicker_en: 'WHO WE ARE',
+      kicker_cn: '我们是谁',
+      manifesto_en: 'We exist to make **plant-based food** so mind blowing good it transforms how people eat, how they see plants, and how we create a better, more sustainable future — without ever giving up flavor, health, or joy!',
+      manifesto_cn: '我们存在的意义,是把**植物食物**做到令人惊艳的好——好到改变人们的饮食方式、对植物的认知,也改变我们共同走向更可持续未来的方式——而风味、健康与快乐,一样也不放下。',
+      stats: [
+        { value_en: '2017', value_cn: '2017', label_en: 'EST.',     label_cn: '成立' },
+        { value_en: '广州', value_cn: '广州', label_en: 'MADE IN',  label_cn: '产地' },
+        { value_en: '50+',  value_cn: '50+',  label_en: 'PRODUCTS', label_cn: '产品' },
+        { value_en: '100%', value_cn: '100%', label_en: 'PLANT',    label_cn: '植物' },
+      ],
+      founder_kicker_en: 'MEET THE FOUNDER',
+      founder_kicker_cn: '创始人',
+      founder_name_en: 'Founder Name',
+      founder_name_cn: '创始人姓名',
+      founder_title_en: 'FOUNDER & CEO',
+      founder_title_cn: '创始人兼首席执行官',
+      founder_quote_en: 'I started Roots because I wanted to prove that plants don\'t have to be the boring option.',
+      founder_quote_cn: '我创立 Roots,是想证明植物从来不该是无聊的选择。',
+      founder_photo_url: '',
+      promise_kicker_en: 'OUR PROMISE',
+      promise_kicker_cn: '我们的承诺',
+      in_items: [
+        { en: '100% plant-based',     cn: '100% 植物' },
+        { en: 'Made from scratch',    cn: '原料自制' },
+        { en: 'Real fermentation',    cn: '真发酵' },
+        { en: 'Whole ingredients',    cn: '完整食材' },
+        { en: 'Small batch',          cn: '小批量' },
+        { en: 'Seasonal',             cn: '应季' },
+        { en: 'Local-first · 广州',   cn: '本地优先' },
+        { en: 'Recyclable packaging', cn: '可回收包装' },
+      ],
+      out_items: [
+        { en: 'Preservatives',     cn: '防腐剂' },
+        { en: 'Refined sugar',     cn: '精制糖' },
+        { en: 'Artificial color',  cn: '人造色素' },
+        { en: 'Artificial flavor', cn: '人造香精' },
+        { en: 'Additives',         cn: '添加剂' },
+        { en: 'GMO',               cn: '转基因' },
+        { en: 'Animal products',   cn: '动物产品' },
+        { en: 'Cutting corners',   cn: '走捷径' },
+      ],
+      outro_en: 'From soil to soul.',
+      outro_cn: '从土壤到灵魂',
+      cta_en: 'SHOP NOW',
+      cta_cn: '立即购买',
+    };
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES ('about.content', ?)").run(JSON.stringify(content));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_about_content_v1');
+    console.log('[migration] seed_about_content_v1 applied');
+  }
+} catch (e) { console.error('[migration seed_about_content_v1]', e); }
+
+// Add `fees.standardShipping` to config. Charged when subtotal is below
+// the free-shipping threshold and the customer picks Standard delivery
+// (Same-day uses its own `fees.sameDayDelivery`). Lives in its own
+// migration marker so existing DBs that were seeded via _v1 still pick it
+// up on next boot.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_standard_shipping_v1');
+  if (!ran) {
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES ('fees.standardShipping', ?)").run(JSON.stringify(12));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_standard_shipping_v1');
+  }
+} catch (e) { console.error('[migration seed_standard_shipping_v1]', e); }
+
+// One-shot seed of storefront_config so a fresh DB has sensible defaults.
+// Subsequent runs are no-ops via the _migrations marker — once admin edits
+// land via the admin UI, seeding never overwrites them.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_storefront_config_v1');
+  if (!ran) {
+    const ins = db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES (?, ?)");
+    const seed = [
+      // Theme — accent name maps to a CSS var name client-side
+      ['theme.accent',                JSON.stringify('lime-leaf')],
+      ['theme.ipIntensity',           JSON.stringify('soft')],
+      ['theme.language',              JSON.stringify('bilingual')],
+      // Fees / thresholds
+      ['fees.freeShippingThreshold',  JSON.stringify(399)],
+      ['fees.standardShipping',       JSON.stringify(12)],
+      ['fees.sameDayDelivery',        JSON.stringify(18)],
+      ['fees.minOrder',               JSON.stringify(0)],
+      // Home page composition — server picks featured products by id list
+      ['home.heroImg',                JSON.stringify('')],
+      ['home.ctaLabel',               JSON.stringify('SHOP')],
+      ['home.sections',               JSON.stringify([
+        { id: 'fresh',  kicker: "NO. 01 · FRESH",  title: "This week's juice",  type: 'hscroll',           productIds: [] },
+        { id: 'browse', kicker: "NO. 02 · BROWSE", title: "Shop the garden",    type: 'categories' },
+        { id: 'club',   kicker: "NO. 03 · ROOTS CLUB", title: "Grow with us.",  type: 'membership-promo' },
+      ])],
+      // Tab bar
+      ['tabBar.theme',                JSON.stringify('oat')],
+      ['tabBar.items',                JSON.stringify([
+        { id: 'home', en: 'Home', cn: '首页' },
+        { id: 'shop', en: 'Shop', cn: '商品' },
+        { id: 'cart', en: 'Cart', cn: '购物车' },
+        { id: 'me',   en: 'Me',   cn: '我的'   },
+      ])],
+    ];
+    for (const [k, v] of seed) ins.run(k, v);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_storefront_config_v1');
+    console.log(`[migration] seed_storefront_config_v1: seeded ${seed.length} config keys`);
+  }
+} catch (e) { console.error('[migration seed_storefront_config_v1]', e); }
+
+// ─────────────────────────────────────────────────────────────────────────
+// RETAIL DELIVERY / PACKING / POINTS / TOP-UP
+//   delivery_zones        → per-GZ-district + per-other-city fee rules
+//   topup_packages        → admin-managed top-up tiers (pay X, get X+bonus)
+//   topup_transactions    → wallet top-up payment records
+//   points_transactions   → points ledger (earn / redeem / bonus / adjust)
+// retail_orders gains packing_fee, delivery_mode, delivery_zone_id, points_earned
+// so a paid order's full fee breakdown survives forever.
+// ─────────────────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_delivery_zones (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    zone_type             TEXT NOT NULL,             -- 'gz_district' | 'city'
+    name_en               TEXT,
+    name_cn               TEXT,                      -- customer-facing label, e.g. '天河区' / '深圳市'
+    match_city            TEXT,                      -- address.city must equal (for 'city') or be Guangzhou (for 'gz_district')
+    match_district        TEXT,                      -- address.district must equal (only for gz_district rows)
+    base_fee              REAL NOT NULL DEFAULT 0,   -- normal delivery fee
+    max_fee               REAL,                      -- "MAX" cap option (NULL = not offered). GZ only.
+    free_threshold        REAL,                      -- free delivery above this subtotal. NULL = no free option.
+    packing_fee_per_item  REAL DEFAULT 0,            -- per-unit packing cost (used for 'city' rows)
+    packing_fee_cap       REAL,                      -- max packing fee (NULL = no cap)
+    is_active             INTEGER DEFAULT 1,
+    sort_order            INTEGER DEFAULT 0,
+    created_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_dz_lookup ON retail_delivery_zones(zone_type, match_city, match_district, is_active);
+
+  CREATE TABLE IF NOT EXISTS retail_topup_packages (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    amount          REAL NOT NULL,                   -- ¥ user pays (credited to wallet 1:1)
+    bonus_points    INTEGER NOT NULL DEFAULT 0,      -- extra points granted on success
+    title_en        TEXT,
+    title_cn        TEXT,
+    description_en  TEXT,
+    description_cn  TEXT,
+    is_active       INTEGER DEFAULT 1,
+    sort_order      INTEGER DEFAULT 0,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS retail_topup_transactions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id     INTEGER NOT NULL,
+    package_id      INTEGER,
+    amount          REAL NOT NULL,                   -- ¥ paid → credited to wallet
+    bonus_points    INTEGER NOT NULL DEFAULT 0,      -- bonus points awarded on success
+    payment_method  TEXT,                            -- wechat | alipay
+    status          TEXT DEFAULT 'pending',          -- pending | success | failed | refunded
+    out_trade_no    TEXT,
+    transaction_id  TEXT,
+    raw_callback_json TEXT,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    paid_at         DATETIME,
+    FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE CASCADE,
+    FOREIGN KEY (package_id)  REFERENCES retail_topup_packages(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_topup_customer ON retail_topup_transactions(customer_id, status);
+  CREATE INDEX IF NOT EXISTS idx_retail_topup_outtrade ON retail_topup_transactions(out_trade_no);
+
+  CREATE TABLE IF NOT EXISTS retail_points_transactions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id     INTEGER NOT NULL,
+    delta           INTEGER NOT NULL,                -- + earned, − redeemed
+    balance_after   INTEGER NOT NULL,
+    source          TEXT NOT NULL,                   -- order_earn | order_redeem | topup_bonus | admin_adjust | refund_reverse
+    order_id        INTEGER,
+    topup_id        INTEGER,
+    note            TEXT,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE CASCADE,
+    FOREIGN KEY (order_id)    REFERENCES retail_orders(id),
+    FOREIGN KEY (topup_id)    REFERENCES retail_topup_transactions(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_pts_customer ON retail_points_transactions(customer_id, created_at);
+`);
+
+// Order-level columns for the new fee model. Each added idempotently so
+// existing DBs migrate cleanly without dropping data.
+addColumn('retail_orders', 'packing_fee',      'REAL DEFAULT 0');
+addColumn('retail_orders', 'delivery_mode',    "TEXT");                 // 'standard' | 'max' (GZ) | 'fixed' (city) | 'sameday' (legacy)
+addColumn('retail_orders', 'delivery_zone_id', 'INTEGER');
+addColumn('retail_orders', 'points_earned',    'INTEGER DEFAULT 0');
+
+// Delivery scheduling. NULL scheduled_for = "right away" (deliver as soon as
+// the kitchen can). When set, contains the earliest time the customer wants
+// the order. delivery_slot_label snapshots the human-readable picker label
+// at order time ("Tomorrow 10:00–12:00") so historical orders stay readable
+// even if the slot definition is later edited. same_day_surcharge_fee captures
+// any per-zone surcharge paid for same-day delivery (Panyu-style).
+addColumn('retail_orders', 'scheduled_for',         'DATETIME');
+addColumn('retail_orders', 'delivery_slot_label',   'TEXT');
+addColumn('retail_orders', 'same_day_surcharge_fee', 'REAL DEFAULT 0');
+
+// Per-zone delivery scheduling config. same_day_allowed=0 forces the
+// customer to pick a future slot (min_lead_days kicks in). same_day_surcharge
+// > 0 means same-day is gated behind a per-order fee (Panyu pattern).
+// Slot hours/duration drive the time-slot enumerator on the checkout page.
+addColumn('retail_delivery_zones', 'same_day_allowed',      'INTEGER DEFAULT 1');
+addColumn('retail_delivery_zones', 'same_day_surcharge',    'REAL DEFAULT 0');
+addColumn('retail_delivery_zones', 'min_lead_days',         'INTEGER DEFAULT 0');
+addColumn('retail_delivery_zones', 'max_lead_days',         'INTEGER DEFAULT 14');
+addColumn('retail_delivery_zones', 'slot_start_hour',       'INTEGER DEFAULT 10');
+addColumn('retail_delivery_zones', 'slot_end_hour',         'INTEGER DEFAULT 20');
+addColumn('retail_delivery_zones', 'slot_duration_minutes', 'INTEGER DEFAULT 120');
+// day_only = 1 means the customer picks a DELIVERY DAY (no hour slots). Used
+// for outer-GZ districts (Panyu / Conghua / Nansha) and all non-GZ cities.
+// Combined with same_day_surcharge it gives the Panyu spec:
+//   • Today  → base_fee + same_day_surcharge (e.g. ¥15 + ¥10 = ¥25)
+//   • Tomorrow / +2 / +3 → base_fee only
+addColumn('retail_delivery_zones', 'day_only', 'INTEGER DEFAULT 0');
+
+// Non-GZ default: 3-day lead AND day-only. Bump existing rows once so admins
+// don't have to touch every city. Idempotent.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('delivery_scheduling_v1');
+  if (!ran) {
+    db.prepare(`UPDATE retail_delivery_zones SET min_lead_days = 3 WHERE zone_type = 'city' AND (min_lead_days IS NULL OR min_lead_days = 0)`).run();
+    db.prepare(`INSERT INTO _migrations (name) VALUES (?)`).run('delivery_scheduling_v1');
+  }
+} catch (e) { console.warn('[migrate] delivery_scheduling_v1:', e.message); }
+
+// City zones are always day-only; flip the flag on once.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('delivery_day_only_cities_v1');
+  if (!ran) {
+    db.prepare(`UPDATE retail_delivery_zones SET day_only = 1 WHERE zone_type = 'city'`).run();
+    db.prepare(`INSERT INTO _migrations (name) VALUES (?)`).run('delivery_day_only_cities_v1');
+  }
+} catch (e) { console.warn('[migrate] delivery_day_only_cities_v1:', e.message); }
+
+// Per-batch points expiration. Stamped on the row at earn time so each
+// batch knows its own TTL — admin can override per grant. NULL = never
+// expires (used for ledger rows that aren't earns: redeems, expiries).
+// Existing rows stay NULL so legacy balances are grandfathered.
+addColumn('retail_points_transactions', 'expires_at', 'DATETIME');
+addColumn('retail_points_transactions', 'expired_at', 'DATETIME');  // when this earn was swept by sweepExpiredPoints
+// "expiry" source is added to the comment-only domain — no schema CHECK to update.
+
+// Seed delivery/points/topup config keys. One-shot — admin edits in the
+// Delivery tab persist normally.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_delivery_points_v1');
+  if (!ran) {
+    const ins = db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES (?, ?)");
+    // 100 RMB spent → 1 point. earnRate is "RMB per point" so floor(subtotal / earnRate).
+    ins.run('points.earnRate',                JSON.stringify(100));
+    // 100 points = ¥1 when redeeming. redeemRate is "points per ¥1".
+    ins.run('points.redeemRate',              JSON.stringify(100));
+    // Points expire N months after earn. 0 = never expire. Admin can change
+    // on the Top-up tab. Existing earn rows stay NULL → grandfathered.
+    ins.run('points.expiryMonths',            JSON.stringify(12));
+    // Used when a matched zone has no free_threshold set.
+    ins.run('delivery.defaultFreeThreshold',  JSON.stringify(399));
+    // Customer-facing copy for the kitchen, surfaced in the mini app
+    // delivery-address screen + checkout error message when no zone matches.
+    ins.run('delivery.kitchenAddress',        JSON.stringify('广州市天河区 (Roots Kitchen)'));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_delivery_points_v1');
+    console.log('[migration] seed_delivery_points_v1: seeded points + delivery defaults');
+  }
+} catch (e) { console.error('[migration seed_delivery_points_v1]', e); }
+
+// Backfill points.expiryMonths on databases that ran seed_delivery_points_v1
+// before this key existed. INSERT OR IGNORE so it's a no-op once present.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_points_expiry_v1');
+  if (!ran) {
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES (?, ?)")
+      .run('points.expiryMonths', JSON.stringify(12));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_points_expiry_v1');
+    console.log('[migration] seed_points_expiry_v1: backfilled points.expiryMonths default');
+  }
+} catch (e) { console.error('[migration seed_points_expiry_v1]', e); }
+
+// ─────────────────────────────────────────────────────────────────────────
+// DUAL-LOCATION RETAIL INVENTORY (Phase 1)
+//   retail_stores             → physical stores (Tianhe, future Pudong, …)
+//   retail_store_stock        → per-store per-product stock with layers
+//                               (physical, safety buffer, channel quotas)
+//   retail_stock_reservations → soft-reserves on order, expire if unpaid
+//   retail_stock_ledger       → append-only audit log of every movement
+// retail_orders gains store_id, routing_reason, channel so each paid order
+// remembers which store fulfilled it and why.
+// ─────────────────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_stores (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    code            TEXT UNIQUE NOT NULL,     -- short slug, e.g. 'tianhe'
+    name_en         TEXT,
+    name_cn         TEXT,
+    address         TEXT,
+    city            TEXT,                     -- the store's home city, e.g. '广州'
+    district        TEXT,                     -- the store's home district, e.g. '天河区'
+    lat             REAL,
+    lng             REAL,
+    phone           TEXT,
+    meituan_account_id TEXT,                  -- Meituan merchant id for future sync
+    is_active       INTEGER DEFAULT 1,
+    sort_order      INTEGER DEFAULT 0,        -- routing priority — lower = preferred
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS retail_store_stock (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_id        INTEGER NOT NULL,
+    product_id      INTEGER NOT NULL,
+    physical_qty    INTEGER NOT NULL DEFAULT 0,   -- actual count at the store
+    safety_buffer   INTEGER NOT NULL DEFAULT 0,   -- held back from any channel
+    wechat_quota    INTEGER,                       -- NULL = no sub-cap (use global)
+    meituan_quota   INTEGER,                       -- NULL = no sub-cap
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(store_id, product_id),
+    FOREIGN KEY (store_id)   REFERENCES retail_stores(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id)      ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_store_stock_store   ON retail_store_stock(store_id);
+  CREATE INDEX IF NOT EXISTS idx_retail_store_stock_product ON retail_store_stock(product_id);
+
+  CREATE TABLE IF NOT EXISTS retail_stock_reservations (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_id        INTEGER NOT NULL,
+    product_id      INTEGER NOT NULL,
+    order_id        INTEGER,                       -- nullable for pre-order holds
+    qty             INTEGER NOT NULL,
+    channel         TEXT NOT NULL DEFAULT 'wechat',   -- wechat | meituan | pos | walkin
+    status          TEXT NOT NULL DEFAULT 'active',    -- active | committed | released | expired
+    expires_at      DATETIME NOT NULL,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    committed_at    DATETIME,
+    released_at     DATETIME,
+    note            TEXT,
+    FOREIGN KEY (store_id)   REFERENCES retail_stores(id),
+    FOREIGN KEY (product_id) REFERENCES products(id),
+    FOREIGN KEY (order_id)   REFERENCES retail_orders(id) ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_res_active ON retail_stock_reservations(store_id, product_id, status);
+  CREATE INDEX IF NOT EXISTS idx_retail_res_order  ON retail_stock_reservations(order_id);
+  CREATE INDEX IF NOT EXISTS idx_retail_res_expiry ON retail_stock_reservations(status, expires_at);
+
+  CREATE TABLE IF NOT EXISTS retail_stock_ledger (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_id        INTEGER NOT NULL,
+    product_id      INTEGER NOT NULL,
+    delta           INTEGER NOT NULL,                  -- + restock, − deduct
+    reason          TEXT NOT NULL,                     -- order_commit | restock | transfer_in | transfer_out | waste | adjust
+    ref_table       TEXT,
+    ref_id          INTEGER,
+    balance_after   INTEGER NOT NULL,                  -- physical_qty after this change
+    actor_user_id   INTEGER,
+    channel         TEXT,                              -- wechat/meituan/pos/walkin if applicable
+    note            TEXT,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (store_id)     REFERENCES retail_stores(id),
+    FOREIGN KEY (product_id)   REFERENCES products(id),
+    FOREIGN KEY (actor_user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_ledger_lookup ON retail_stock_ledger(store_id, product_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_retail_ledger_ref    ON retail_stock_ledger(ref_table, ref_id);
+`);
+
+// Order-level routing context. Each paid order remembers which store
+// fulfilled it (store_id), why that store was chosen (routing_reason),
+// and which sales channel placed it (channel). Idempotent ALTERs.
+addColumn('retail_orders', 'store_id',        'INTEGER');
+addColumn('retail_orders', 'routing_reason',  'TEXT');   // 'nearest' | 'fallback_no_stock' | 'manual' | 'only_store'
+addColumn('retail_orders', 'channel',         "TEXT DEFAULT 'wechat'");
+
+// Outbound logistics — populated when staff (or the JD API, once wired)
+// attaches a carrier + waybill to a dispatched order. tracking_events_json
+// is the cached carrier feed so the customer mini app can render the
+// timeline without re-hitting the upstream API on every load. tracking_status
+// is the normalized code (see lib/tracking.js) so EN/CN labels can be
+// rendered without parsing Chinese free-text events.
+addColumn('retail_orders', 'tracking_carrier',     'TEXT');     // 'jd' | 'sf' | 'yto' | 'sto' | 'zto' | 'yunda' | 'ems' | 'other'
+addColumn('retail_orders', 'tracking_number',      'TEXT');
+addColumn('retail_orders', 'tracking_status',      'TEXT');     // normalized code: placed | picked_up | in_transit | out_for_delivery | delivered | exception | returning | returned
+addColumn('retail_orders', 'tracking_events_json', 'TEXT');     // [{ time, status, location, description_cn }]
+addColumn('retail_orders', 'tracking_synced_at',   'DATETIME');
+addColumn('retail_orders', 'tracking_last_error',  'TEXT');
+addColumn('retail_orders', 'tracking_kd100_subscribed', 'INTEGER DEFAULT 0');
+// Delivery-scenario classification computed from the latest event's
+// Chinese context. `tracking_scenario` is the typed code (pickup_point,
+// locker, left_at_door, in_person, proxy, no_contact, out_for_delivery)
+// and `tracking_scenario_data_json` carries the extracted bits (pickup
+// code, signer name, location label). `tracking_scenario_notified` is
+// the last scenario we pushed a subscribe-message for, so the customer
+// doesn't get pinged twice for the same transition.
+addColumn('retail_orders', 'tracking_scenario',           'TEXT');
+addColumn('retail_orders', 'tracking_scenario_data_json', 'TEXT');
+addColumn('retail_orders', 'tracking_scenario_notified',  'TEXT');
+db.exec('CREATE INDEX IF NOT EXISTS idx_retail_orders_tracking_number ON retail_orders(tracking_number)');
+
+// ── Warehouse / packing flags on products ──────────────────────────
+// `ship_modes` is a comma-separated subset of {'air','land'}. Most items
+// can go both ways (default 'air,land'); items rejected by airlines
+// (liquids, lithium, frozen) should be set to 'land' only; items the
+// kitchen wants to send rapidly (perishable, premium) can be set to
+// 'air' only. `needs_ice_pack` triggers the cold-chain badge in retail-
+// admin so the packer pulls ice from the freezer.
+addColumn('products', 'ship_modes',     "TEXT DEFAULT 'air,land'");
+addColumn('products', 'needs_ice_pack', 'INTEGER DEFAULT 0');
+
+// Snapshot the packing flags on each order item so later product edits
+// don't rewrite what the warehouse was instructed to do.
+addColumn('retail_order_items', 'ship_modes',     'TEXT');
+addColumn('retail_order_items', 'needs_ice_pack', 'INTEGER DEFAULT 0');
+addColumn('retail_order_items', 'shipment_id',    'INTEGER');
+
+// ── retail_shipments ───────────────────────────────────────────────
+// Formal split-shipment table. An order can fan out into 1 or 2 (or
+// theoretically more) shipments. Common case: when destination is
+// outside Guangzhou and the items mix air-shippable + land-only, we
+// create two shipments — each with its own carrier, waybill, status,
+// and kd100 subscription. In-GZ orders and uniform-mode orders use a
+// single shipment. The legacy `retail_orders.tracking_*` columns are
+// preserved for back-compat and mirror the *primary* shipment.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_shipments (
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id                    INTEGER NOT NULL,
+    mode                        TEXT NOT NULL,          -- 'local' | 'air' | 'land'
+    label                       TEXT,                   -- human-friendly for the office UI
+    tracking_carrier            TEXT,
+    tracking_number             TEXT,
+    tracking_status             TEXT,
+    tracking_events_json        TEXT,
+    tracking_synced_at          DATETIME,
+    tracking_last_error         TEXT,
+    tracking_kd100_subscribed   INTEGER DEFAULT 0,
+    tracking_scenario           TEXT,
+    tracking_scenario_data_json TEXT,
+    tracking_scenario_notified  TEXT,
+    dispatched_at               DATETIME,
+    delivered_at                DATETIME,
+    created_at                  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES retail_orders(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_shipments_order ON retail_shipments(order_id);
+  CREATE INDEX IF NOT EXISTS idx_retail_shipments_tracking ON retail_shipments(tracking_number);
+`);
+
+// Per-store restock *target* — the level this store wants to keep on
+// hand. When physical_qty < restock_target the cross-store grid flags
+// it. Optional (NULL = no target set yet).
+addColumn('retail_store_stock', 'restock_target', 'INTEGER');
+
+// Geocoded coordinates on customer addresses. Populated in the background
+// by /lib/geocode.js when a Tencent Maps key is configured (TENCENT_MAPS_KEY
+// in .env). NULL = not geocoded yet or geocoding failed; routing falls
+// back to district-name matching in that case.
+addColumn('retail_customer_addresses', 'lat',         'REAL');
+addColumn('retail_customer_addresses', 'lng',         'REAL');
+addColumn('retail_customer_addresses', 'geocoded_at', 'DATETIME');
+
+// Delivery zones gain a `preferred_store_id` link so the office can map
+// a GZ district / city to its default fulfilling store. Routing reads
+// this first; if the linked store is out of stock the inventory service
+// falls back to the next active store by sort_order.
+addColumn('retail_delivery_zones', 'preferred_store_id', 'INTEGER');
+
+// Seed a default store (Tianhe — the kitchen address from delivery config).
+// One-shot via _migrations marker so admin edits stick once it lands.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_default_store_v1');
+  if (!ran) {
+    const existing = db.prepare("SELECT id FROM retail_stores LIMIT 1").get();
+    if (!existing) {
+      const info = db.prepare(`
+        INSERT INTO retail_stores (code, name_en, name_cn, address, city, district, sort_order, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+      `).run('tianhe', 'Roots Kitchen — Tianhe', 'Roots 厨房 · 天河店', '广州市天河区 (Roots Kitchen)', '广州', '天河区', 0);
+      console.log(`[migration] seed_default_store_v1: created default store id=${info.lastInsertRowid}`);
+
+      // Migrate existing products.stock_qty → default store stock so the
+      // mini app keeps selling without an admin re-entering everything.
+      // Only products published in retail are seeded; the rest stay
+      // kitchen-only.
+      const storeId = info.lastInsertRowid;
+      const products = db.prepare(`
+        SELECT id, COALESCE(stock_qty, 0) AS qty
+          FROM products
+         WHERE is_published = 1 AND COALESCE(is_active, 1) = 1
+      `).all();
+      const insStock = db.prepare(`
+        INSERT INTO retail_store_stock (store_id, product_id, physical_qty)
+        VALUES (?, ?, ?)
+      `);
+      const seedTx = db.transaction(() => {
+        for (const p of products) insStock.run(storeId, p.id, p.qty || 0);
+      });
+      seedTx();
+      console.log(`[migration] seed_default_store_v1: seeded stock for ${products.length} retail products`);
+    }
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_default_store_v1');
+  }
+} catch (e) { console.error('[migration seed_default_store_v1]', e); }
+
+// Backfill: any active product without a stock row in *any* store gets
+// one in the default store using its legacy stock_qty. Runs once via the
+// _migrations marker so existing per-store rows are never overwritten.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('backfill_all_products_to_default_store_v1');
+  if (!ran) {
+    const defaultStore = db.prepare("SELECT id FROM retail_stores WHERE is_active = 1 ORDER BY sort_order ASC, id ASC LIMIT 1").get();
+    if (defaultStore) {
+      const missing = db.prepare(`
+        SELECT p.id, COALESCE(p.stock_qty, 0) AS qty
+          FROM products p
+         WHERE COALESCE(p.is_active, 1) = 1
+           AND NOT EXISTS (SELECT 1 FROM retail_store_stock s WHERE s.product_id = p.id)
+      `).all();
+      const ins = db.prepare("INSERT INTO retail_store_stock (store_id, product_id, physical_qty) VALUES (?, ?, ?)");
+      const tx = db.transaction(() => { for (const p of missing) ins.run(defaultStore.id, p.id, p.qty); });
+      tx();
+      console.log(`[migration] backfill_all_products_to_default_store_v1: seeded ${missing.length} product(s) into store id=${defaultStore.id}`);
+    }
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('backfill_all_products_to_default_store_v1');
+  }
+} catch (e) { console.error('[migration backfill_all_products_to_default_store_v1]', e); }
+
+// Seed default reservation TTL config — minutes before an unpaid order's
+// stock reservations expire and stock returns to the available pool.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_reservation_ttl_v1');
+  if (!ran) {
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES ('inventory.reservationTtlMinutes', ?)").run(JSON.stringify(15));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_reservation_ttl_v1');
+  }
+} catch (e) { console.error('[migration seed_reservation_ttl_v1]', e); }
+
+// Backfill retail_customers.lifetime_spend from existing orders. The column
+// Affiliate / refer-a-friend. Each customer gets a stable referral_code
+// (lazily issued on first /api/retail/affiliate hit). referred_by_customer_id
+// records who invited them; set exactly once (immutable after first paid
+// order) so the reward can't be double-claimed. retail_referrals is the
+// relationship table — one row per (referrer, invitee) pair, state-machined
+// through pending → joined → ordered. Settings (enabled, ¥reward) live
+// in storefront_config under `affiliate.*` so the admin Affiliate tab is
+// the single source of truth for program rules.
+addColumn('retail_customers', 'referral_code',            'TEXT');
+addColumn('retail_customers', 'referred_by_customer_id',  'INTEGER');
+addColumn('retail_customers', 'referral_applied_at',      'DATETIME');
+try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_customers_refcode ON retail_customers(referral_code) WHERE referral_code IS NOT NULL'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_customers_refby ON retail_customers(referred_by_customer_id)'); } catch {}
+
+db.exec(`CREATE TABLE IF NOT EXISTS retail_referrals (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  referrer_id           INTEGER NOT NULL,
+  invitee_id            INTEGER NOT NULL,
+  code_used             TEXT,
+  status                TEXT NOT NULL DEFAULT 'joined',  -- joined | ordered | void
+  reward_amount         REAL NOT NULL DEFAULT 0,         -- ¥ credited to referrer on conversion
+  first_paid_order_id   INTEGER,
+  joined_at             DATETIME DEFAULT CURRENT_TIMESTAMP,
+  rewarded_at           DATETIME,
+  voided_at             DATETIME,
+  voided_reason         TEXT,
+  FOREIGN KEY (referrer_id)         REFERENCES retail_customers(id) ON DELETE CASCADE,
+  FOREIGN KEY (invitee_id)          REFERENCES retail_customers(id) ON DELETE CASCADE,
+  FOREIGN KEY (first_paid_order_id) REFERENCES retail_orders(id)    ON DELETE SET NULL,
+  UNIQUE(invitee_id)
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_referrals_referrer ON retail_referrals(referrer_id, status)'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_referrals_order ON retail_referrals(first_paid_order_id)'); } catch {}
+
+// was in the schema since launch but was never written; the new Customers
+// admin tab's "Top spenders" sort needs it populated. Sums subtotal (not
+// total — vouchers/points discounts shouldn't reduce lifetime spend) for
+// all non-cancelled / non-refunded / non-pending orders.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('backfill_lifetime_spend_v1');
+  if (!ran) {
+    const r = db.prepare(`
+      UPDATE retail_customers
+         SET lifetime_spend = COALESCE((
+           SELECT SUM(subtotal) FROM retail_orders
+            WHERE customer_id = retail_customers.id
+              AND status NOT IN ('cancelled', 'refunded', 'pending_payment')
+         ), 0)
+    `).run();
+    console.log(`[migration backfill_lifetime_spend_v1] populated lifetime_spend on ${r.changes} customer rows`);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('backfill_lifetime_spend_v1');
+  }
+} catch (e) { console.error('[migration backfill_lifetime_spend_v1]', e); }
+
+// Hydrate process.env from storefront_config `integrations.*` keys so
+// the admin Integrations tab is the source of truth for third-party
+// credentials. DB values win over pre-existing env vars (env stays
+// available as a one-shot bootstrap path). Runs once at boot; the
+// Integrations PUT endpoint also mirrors writes into process.env so a
+// restart isn't required during the admin session.
+try {
+  const envMap = {
+    'integrations.kd100.customer': 'KD100_CUSTOMER',
+    'integrations.kd100.key':      'KD100_KEY',
+    'integrations.kd100.callback': 'KD100_CALLBACK',
+    'integrations.kd100.secret':   'KD100_SECRET',
+    'integrations.jd.app_key':       'JD_APP_KEY',
+    'integrations.jd.app_secret':    'JD_APP_SECRET',
+    'integrations.jd.access_token':  'JD_ACCESS_TOKEN',
+    'integrations.jd.customer_code': 'JD_CUSTOMER_CODE',
+    'integrations.jd.env':           'JD_API_ENV',
+  };
+  let hydrated = 0;
+  for (const [cfgKey, envKey] of Object.entries(envMap)) {
+    const r = db.prepare("SELECT value_json FROM storefront_config WHERE key = ?").get(cfgKey);
+    if (!r) continue;
+    let v; try { v = JSON.parse(r.value_json); } catch { v = r.value_json; }
+    if (typeof v === 'string' && v) { process.env[envKey] = v; hydrated++; }
+  }
+  if (hydrated > 0) console.log(`[integrations] hydrated ${hydrated} env vars from storefront_config`);
+} catch (e) { console.error('[integrations.hydrate] failed', e); }
+
+// ─────────────────────────────────────────────────────────────────────────
+// COMMUNITY POLLS / VOTING (design page #23)
+//   retail_polls         → one row per poll (draft / open / closed)
+//   retail_poll_options  → 2–N answer options per poll, vote counts cached
+//   retail_poll_votes    → audit ledger, one vote per (poll, customer)
+// On vote, retail_polls.total_votes++ and the chosen option's votes++, and
+// the customer gets reward_points credited via retail_points_transactions
+// (source='poll_vote'). All inside one txn.
+// Admin manages everything from the retail-admin "Voting" tab.
+// ─────────────────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_polls (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    question_en     TEXT NOT NULL,
+    question_cn     TEXT,
+    explainer_en    TEXT,
+    explainer_cn    TEXT,
+    category_en     TEXT,
+    category_cn     TEXT,
+    status          TEXT NOT NULL DEFAULT 'draft',
+    closes_at       DATETIME,
+    reward_points   INTEGER NOT NULL DEFAULT 5,
+    is_featured     INTEGER NOT NULL DEFAULT 0,
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    total_votes     INTEGER NOT NULL DEFAULT 0,
+    winner_option_id INTEGER,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_polls_status ON retail_polls(status, sort_order);
+
+  CREATE TABLE IF NOT EXISTS retail_poll_options (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    poll_id         INTEGER NOT NULL,
+    label_en        TEXT NOT NULL,
+    label_cn        TEXT,
+    color_hex       TEXT,
+    image_url       TEXT,
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    votes           INTEGER NOT NULL DEFAULT 0,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (poll_id) REFERENCES retail_polls(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_poll_options_poll ON retail_poll_options(poll_id, sort_order);
+
+  CREATE TABLE IF NOT EXISTS retail_poll_votes (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    poll_id         INTEGER NOT NULL,
+    option_id       INTEGER NOT NULL,
+    customer_id     INTEGER NOT NULL,
+    awarded_points  INTEGER NOT NULL DEFAULT 0,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(poll_id, customer_id),
+    FOREIGN KEY (poll_id)     REFERENCES retail_polls(id)        ON DELETE CASCADE,
+    FOREIGN KEY (option_id)   REFERENCES retail_poll_options(id) ON DELETE CASCADE,
+    FOREIGN KEY (customer_id) REFERENCES retail_customers(id)    ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_poll_votes_customer ON retail_poll_votes(customer_id, created_at);
+`);
+
+// Activity log retention — purge entries older than ACTIVITY_LOG_RETENTION_DAYS
+// (default 90) on every startup. Cheap (indexed delete) and prevents
+// unbounded growth on a long-lived install.
+const RETENTION_DAYS = parseInt(process.env.ACTIVITY_LOG_RETENTION_DAYS || '90', 10);
+if (RETENTION_DAYS > 0) {
+  try {
+    const r = db.prepare("DELETE FROM activity_log WHERE created_at < datetime('now', '-' || ? || ' days')").run(RETENTION_DAYS);
+    if (r.changes > 0) console.log(`[retention] purged ${r.changes} activity_log entries older than ${RETENTION_DAYS} days`);
+  } catch (e) { /* best-effort */ }
+}
+
+module.exports = db;

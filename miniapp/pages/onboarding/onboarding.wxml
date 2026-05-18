@@ -1,0 +1,12 @@
+<view class="page">
+  <block-renderer
+    wx:for="{{layout}}"
+    wx:key="id"
+    block="{{item}}"
+    lang="{{lang}}"/>
+
+  <view class="footer">
+    <button class="skip f-toni" bindtap="goHome">SKIP</button>
+    <button class="next f-toni" bindtap="goHome">NEXT →</button>
+  </view>
+</view>

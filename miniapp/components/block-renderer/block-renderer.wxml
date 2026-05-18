@@ -1,0 +1,625 @@
+<!-- Switch on block.type and render the appropriate sub-template.
+     All data normalisation happens in JS; the template stays declarative. -->
+
+<view wx:if="{{type === 'announcement_bar'}}" class="announce {{announceLink ? 'announce-linked' : ''}}" style="background:{{bg}};color:{{fg}}" bindtap="onAnnounceTap">
+  <text class="announce-text">{{label}}</text>
+  <text wx:if="{{announceLink}}" class="announce-chev">›</text>
+</view>
+
+<!-- Hero: full view (current — image fills, CTAs float) -->
+<view wx:elif="{{type === 'hero_banner' && heroView !== 'split'}}" class="hero hero-full" style="{{aspectRatio ? 'aspect-ratio:' + aspectRatio + ';height:auto' : 'height:' + (placeholderH * 2) + 'rpx'}}">
+  <image wx:if="{{imageUrl}}" src="{{imageUrl}}" mode="aspectFill" class="hero-img"/>
+  <view wx:else class="hero-placeholder">No image</view>
+  <view wx:if="{{imageUrl && ctas.length}}" class="cta-stack">
+    <button wx:for="{{ctas}}" wx:key="index" class="cta-btn cta-{{item.style}}"
+            data-idx="{{index}}" bindtap="onCtaTap">
+      {{item.label}}
+    </button>
+  </view>
+</view>
+
+<!-- Hero: split view (image left, copy panel right) -->
+<view wx:elif="{{type === 'hero_banner' && heroView === 'split'}}" class="hero hero-split">
+  <view class="split-img">
+    <image wx:if="{{imageUrl}}" src="{{imageUrl}}" mode="aspectFill" class="hero-img"/>
+    <view wx:else class="hero-placeholder">No image</view>
+  </view>
+  <view class="split-panel" style="background:{{heroPanelBg}};color:{{heroPanelFg}}">
+    <view wx:if="{{heroHeadline}}" class="headline">{{heroHeadline}}</view>
+    <view wx:if="{{heroSubtitle}}" class="subtitle">{{heroSubtitle}}</view>
+    <view wx:if="{{ctas.length}}" class="cta-stack">
+      <button wx:for="{{ctas}}" wx:key="index" class="cta-btn cta-{{item.style}}"
+              data-idx="{{index}}" bindtap="onCtaTap">
+        {{item.label}}
+      </button>
+    </view>
+  </view>
+</view>
+
+<view wx:elif="{{type === 'category_tabs'}}" class="cattabs cattabs-{{catView}}">
+  <view class="head">
+    <view>
+      <view class="kicker">{{kicker}}</view>
+      <view class="ttl">{{title}}</view>
+    </view>
+    <view class="more">{{seeAll}}</view>
+  </view>
+  <!-- Tiles view (default) -->
+  <view wx:if="{{tiles.length && catView !== 'icons'}}" class="grid">
+    <view wx:for="{{tiles}}" wx:key="id" class="tile"
+          style="background:{{item.bg}};color:{{item.fg}}"
+          data-id="{{item.id}}" bindtap="onCategoryTap">
+      <view class="num">{{item.num}} · {{catWord}}</view>
+      <view class="name">{{item.name}}</view>
+    </view>
+  </view>
+  <!-- Icons view -->
+  <view wx:elif="{{tiles.length && catView === 'icons'}}" class="icons-grid icons-cols-{{catCols}}">
+    <view wx:for="{{tiles}}" wx:key="id" class="icon-tile"
+          data-id="{{item.id}}" bindtap="onCategoryTap">
+      <view class="icon-circle" style="background:{{item.bg}};color:{{item.fg}}">{{item.letter}}</view>
+      <view class="icon-name">{{item.name}}</view>
+    </view>
+  </view>
+  <view wx:else class="empty">No categories yet.</view>
+</view>
+
+<view wx:elif="{{type === 'featured_item'}}" class="featured">
+  <view wx:if="{{featuredProduct}}" class="card" data-id="{{featuredProduct.id}}" bindtap="onProductTap">
+    <view class="img"><image wx:if="{{featuredProduct.image}}" src="{{featuredProduct.image}}" mode="aspectFill" class="img-full"/></view>
+    <view class="meta">
+      <view class="kicker">{{featuredKicker}}</view>
+      <view class="name">{{featuredProduct.name}}</view>
+      <view class="price-row">
+        <text wx:if="{{featuredProduct.priceWas}}" class="price-was">{{featuredProduct.priceWas}}</text>
+        <text class="price {{featuredProduct.isFlash ? 'is-flash' : ''}}">{{price}}</text>
+      </view>
+    </view>
+  </view>
+  <view wx:else class="empty">No featured product</view>
+</view>
+
+<view wx:elif="{{type === 'product_grid'}}" class="grid-block grid-view-{{gridView}}">
+  <view class="head">
+    <view>
+      <view class="kicker">{{kicker}}</view>
+      <view class="ttl">{{title}}</view>
+    </view>
+    <view class="more">{{seeAll}}</view>
+  </view>
+  <!-- Grid view (default) -->
+  <view wx:if="{{gridView !== 'scroll' && gridView !== 'list'}}" class="grid cols-{{cols}}">
+    <view wx:for="{{gridProducts}}" wx:key="id" class="card"
+          data-id="{{item.id}}" bindtap="onProductTap">
+      <view class="img">
+        <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+        <view wx:if="{{item.isFlash}}" class="grid-flash-badge">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+      </view>
+      <view class="name">{{item.name}}</view>
+      <view class="price-row">
+        <text wx:if="{{item.priceWas}}" class="price-was">{{item.priceWas}}</text>
+        <text class="price {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+      </view>
+    </view>
+    <view wx:if="{{!gridProducts.length}}" class="empty">No products yet</view>
+  </view>
+  <!-- Scroll view — horizontal rail -->
+  <scroll-view wx:if="{{gridView === 'scroll'}}" class="scroll-rail" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+    <view wx:for="{{gridProducts}}" wx:key="id" class="rail-card"
+          data-id="{{item.id}}" bindtap="onProductTap">
+      <view class="img">
+        <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+        <view wx:if="{{item.isFlash}}" class="grid-flash-badge">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+      </view>
+      <view class="name">{{item.name}}</view>
+      <view class="price-row">
+        <text wx:if="{{item.priceWas}}" class="price-was">{{item.priceWas}}</text>
+        <text class="price {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+      </view>
+    </view>
+    <view wx:if="{{!gridProducts.length}}" class="empty">No products yet</view>
+  </scroll-view>
+  <!-- List view — single column with bigger images + tagline -->
+  <view wx:if="{{gridView === 'list'}}" class="list-rows">
+    <view wx:for="{{gridProducts}}" wx:key="id" class="list-row"
+          data-id="{{item.id}}" bindtap="onProductTap">
+      <view class="img">
+        <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+        <view wx:if="{{item.isFlash}}" class="grid-flash-badge">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+      </view>
+      <view class="meta">
+        <view class="name">{{item.name}}</view>
+        <view wx:if="{{item.tagline}}" class="tagline">{{item.tagline}}</view>
+        <view class="price-row">
+          <text wx:if="{{item.priceWas}}" class="price-was">{{item.priceWas}}</text>
+          <text class="price {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+        </view>
+      </view>
+    </view>
+    <view wx:if="{{!gridProducts.length}}" class="empty">No products yet</view>
+  </view>
+</view>
+
+<view wx:elif="{{type === 'spacer'}}" style="height:{{height * 2}}rpx"></view>
+
+<view wx:elif="{{type === 'sticker_collage'}}" class="stickers">
+  <view wx:for="{{stickers}}" wx:key="index" class="sticker"
+        style="background:{{item.bg}};transform:rotate({{item.rotate}}deg)">
+    {{item.label}}
+  </view>
+</view>
+
+<view wx:elif="{{type === 'progress_dots'}}" class="dots">
+  <view wx:for="{{dots}}" wx:key="index" class="dot {{item.active ? 'active' : ''}}"
+        style="{{item.active ? 'background:' + dotActiveColor : ''}}"></view>
+</view>
+
+<!-- Flash sale: strip view (default — compact header + side clock + cards) -->
+<view wx:elif="{{type === 'flash_sale_strip' && !flashHidden && flashStrip && flashView === 'strip'}}" class="flash-strip" style="background:{{bg}};color:{{fg}}">
+  <view class="fs-head">
+    <view class="fs-head-l">
+      <view wx:if="{{flashStrip.kicker}}" class="fs-kicker">{{flashStrip.kicker}}</view>
+      <view wx:if="{{flashStrip.title}}" class="fs-title">{{flashStrip.title}}</view>
+    </view>
+    <view wx:if="{{flashStrip.countdown}}" class="fs-clock">
+      <view class="fs-clock-lbl">{{flashStrip.endsLabel}}</view>
+      <view class="fs-clock-cells">
+        <text class="fs-ct-num">{{flashStrip.countdown.d}}</text>
+        <text class="fs-ct-sep">:</text>
+        <text class="fs-ct-num">{{flashStrip.countdown.h}}</text>
+        <text class="fs-ct-sep">:</text>
+        <text class="fs-ct-num">{{flashStrip.countdown.m}}</text>
+        <text class="fs-ct-sep">:</text>
+        <text class="fs-ct-num">{{flashStrip.countdown.s}}</text>
+      </view>
+    </view>
+  </view>
+  <scroll-view wx:if="{{flashStrip.cards.length}}" class="fs-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+    <view wx:for="{{flashStrip.cards}}" wx:key="id" class="fs-card"
+          data-id="{{item.id}}" bindtap="onFlashCardTap">
+      <view class="fs-card-img">
+        <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+        <view wx:if="{{item.badge}}" class="fs-badge">{{item.badge}}</view>
+      </view>
+      <view class="fs-card-meta">
+        <view class="fs-card-name">{{item.name}}</view>
+        <view class="fs-card-prices">
+          <text class="fs-price-now">{{item.priceNow}}</text>
+          <text wx:if="{{item.priceWas}}" class="fs-price-was">{{item.priceWas}}</text>
+        </view>
+        <view wx:if="{{item.meterPct !== null}}" class="fs-meter">
+          <view class="fs-meter-bar" style="width:{{item.meterPct}}%"></view>
+        </view>
+        <view class="fs-meter-lbl">{{item.meterLabel}}</view>
+      </view>
+    </view>
+  </scroll-view>
+  <view wx:elif="{{flashStrip.isEmpty}}" class="fs-empty">{{flashStrip.emptyText}}</view>
+</view>
+
+<!-- Flash sale: hero view (big centered countdown + products below) -->
+<!-- Flash sale: banner view (big countdown + CTA only, no products) -->
+<view wx:elif="{{type === 'flash_sale_strip' && !flashHidden && flashStrip && (flashView === 'hero' || flashView === 'banner')}}" class="flash-hero flash-{{flashView}}" style="background:{{bg}};color:{{fg}}">
+  <view wx:if="{{flashStrip.kicker}}" class="fh-kicker">{{flashStrip.kicker}}</view>
+  <view wx:if="{{flashStrip.title}}" class="fh-title">{{flashStrip.title}}</view>
+  <view wx:if="{{!flashStrip.isEmpty && flashStrip.cells.length}}" class="fh-ends">{{flashStrip.endsLabel}}</view>
+  <view wx:if="{{!flashStrip.isEmpty && flashStrip.cells.length}}" class="fh-clock">
+    <block wx:for="{{flashStrip.cells}}" wx:key="lbl">
+      <view class="fh-cell">
+        <view class="fh-num">{{item.num}}</view>
+        <view class="fh-lbl">{{item.lbl}}</view>
+      </view>
+      <view wx:if="{{index < flashStrip.cells.length - 1}}" class="fh-sep">:</view>
+    </block>
+  </view>
+  <view wx:if="{{!flashStrip.isEmpty && flashStrip.ctaLabel}}" class="fh-cta" bindtap="onFlashCtaTap">{{flashStrip.ctaLabel}}</view>
+  <scroll-view wx:if="{{flashView === 'hero' && flashStrip.cards.length}}" class="fs-cards fh-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+    <view wx:for="{{flashStrip.cards}}" wx:key="id" class="fs-card"
+          data-id="{{item.id}}" bindtap="onFlashCardTap">
+      <view class="fs-card-img">
+        <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+        <view wx:if="{{item.badge}}" class="fs-badge">{{item.badge}}</view>
+      </view>
+      <view class="fs-card-meta">
+        <view class="fs-card-name">{{item.name}}</view>
+        <view class="fs-card-prices">
+          <text class="fs-price-now">{{item.priceNow}}</text>
+          <text wx:if="{{item.priceWas}}" class="fs-price-was">{{item.priceWas}}</text>
+        </view>
+        <view wx:if="{{item.meterPct !== null}}" class="fs-meter">
+          <view class="fs-meter-bar" style="width:{{item.meterPct}}%"></view>
+        </view>
+        <view class="fs-meter-lbl">{{item.meterLabel}}</view>
+      </view>
+    </view>
+  </scroll-view>
+  <view wx:if="{{flashStrip.isEmpty}}" class="fs-empty">{{flashStrip.emptyText}}</view>
+</view>
+
+<view wx:elif="{{type === 'coupon_block' && coupon}}" class="coupon-blk" style="background:{{bg}};color:{{fg}}">
+  <view wx:if="{{coupon.discount}}" class="cp-disc">
+    <view class="cp-big">{{coupon.discount}}</view>
+  </view>
+  <view class="cp-body">
+    <view wx:if="{{coupon.kicker}}" class="cp-kicker">{{coupon.kicker}}</view>
+    <view wx:if="{{coupon.title}}" class="cp-title">{{coupon.title}}</view>
+    <view wx:if="{{coupon.subtitle}}" class="cp-sub">{{coupon.subtitle}}</view>
+    <view wx:if="{{coupon.code}}" class="cp-code" bindtap="onCouponCodeTap">
+      <text class="cp-code-label">CODE</text>
+      <text class="cp-code-val">{{coupon.code}}</text>
+      <text class="cp-code-copy">{{coupon.codeLabel}}</text>
+    </view>
+  </view>
+  <view wx:if="{{coupon.ctaLabel}}" class="cp-cta" bindtap="onCouponCtaTap">{{coupon.ctaLabel}}</view>
+</view>
+
+<view wx:elif="{{type === 'points_widget' && points}}" class="points-blk" style="background:{{bg}};color:{{fg}}">
+  <view class="pt-star">
+    <view class="pt-star-glyph">★</view>
+  </view>
+  <view class="pt-body">
+    <view wx:if="{{points.kicker}}" class="pt-kicker">{{points.kicker}}</view>
+    <view wx:if="{{points.title}}" class="pt-title">{{points.title}}</view>
+    <view wx:if="{{points.subtitle}}" class="pt-sub">{{points.subtitle}}</view>
+  </view>
+  <view wx:if="{{points.ctaLabel}}" class="pt-cta" bindtap="onPointsCtaTap">{{points.ctaLabel}}</view>
+</view>
+
+<view wx:elif="{{type === 'review_card' && reviews.length}}" class="review-blk review-{{reviewView}}" style="background:{{bg}};color:{{fg}}">
+  <view wx:if="{{reviewKicker}}" class="rv-kicker">{{reviewKicker}}</view>
+  <!-- Card view: first review only -->
+  <block wx:if="{{reviewView !== 'carousel'}}">
+    <view class="rv-item">
+      <view class="rv-stars">
+        <text wx:for="{{reviews[0].stars}}" wx:key="*this" class="rv-star {{item.on ? 'on' : 'off'}}">★</text>
+      </view>
+      <view wx:if="{{reviews[0].quote}}" class="rv-quote">{{reviews[0].quote}}</view>
+      <view class="rv-byline">
+        <view class="rv-avatar">
+          <image wx:if="{{reviews[0].avatar}}" src="{{reviews[0].avatar}}" mode="aspectFill" class="rv-avatar-img"/>
+          <text wx:else class="rv-avatar-fallback">{{reviews[0].avatarInitial}}</text>
+        </view>
+        <view class="rv-byline-text">
+          <view wx:if="{{reviews[0].authorName}}" class="rv-name">{{reviews[0].authorName}}</view>
+          <view wx:if="{{reviews[0].authorSub}}" class="rv-sub">{{reviews[0].authorSub}}</view>
+        </view>
+      </view>
+    </view>
+  </block>
+  <!-- Carousel view: swipe through all -->
+  <swiper wx:else class="rv-swiper" indicator-dots="{{true}}" indicator-color="rgba(0,0,0,0.18)" indicator-active-color="rgba(0,0,0,0.7)" autoplay="{{true}}" interval="{{5000}}" circular="{{true}}">
+    <swiper-item wx:for="{{reviews}}" wx:key="key">
+      <view class="rv-item">
+        <view class="rv-stars">
+          <text wx:for="{{item.stars}}" wx:key="*this" wx:for-item="s" class="rv-star {{s.on ? 'on' : 'off'}}">★</text>
+        </view>
+        <view wx:if="{{item.quote}}" class="rv-quote">{{item.quote}}</view>
+        <view class="rv-byline">
+          <view class="rv-avatar">
+            <image wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill" class="rv-avatar-img"/>
+            <text wx:else class="rv-avatar-fallback">{{item.avatarInitial}}</text>
+          </view>
+          <view class="rv-byline-text">
+            <view wx:if="{{item.authorName}}" class="rv-name">{{item.authorName}}</view>
+            <view wx:if="{{item.authorSub}}" class="rv-sub">{{item.authorSub}}</view>
+          </view>
+        </view>
+      </view>
+    </swiper-item>
+  </swiper>
+</view>
+
+<!-- Voting block — 4 views (teaser/peek/inline/past_result) + auto-pull/static -->
+<view wx:elif="{{type === 'voting_block' && voting && !votingHidden}}" class="voting-blk voting-{{voting.view}}" style="background:{{bg}};color:{{fg}}">
+
+  <!-- TEASER: just kicker + title + subtitle + CTA -->
+  <block wx:if="{{voting.view === 'teaser'}}">
+    <view class="voting-row" bindtap="onVotingTap">
+      <view class="vb-body">
+        <view wx:if="{{voting.kicker}}" class="vb-kicker">{{voting.kicker}}</view>
+        <view wx:if="{{voting.title}}" class="vb-title">{{voting.title}}</view>
+        <view wx:if="{{voting.subtitle}}" class="vb-sub">{{voting.subtitle}}</view>
+      </view>
+      <view wx:if="{{voting.ctaLabel}}" class="vb-cta vb-cta-pill" style="color:{{voting.accent}}">{{voting.ctaLabel}} →</view>
+    </view>
+  </block>
+
+  <!-- PEEK / PAST_RESULT / INLINE share a header. Static-copy fallback when no livePoll. -->
+  <block wx:elif="{{voting.dataSource === 'static' && !voting.livePoll}}">
+    <view bindtap="onVotingTap">
+      <view wx:if="{{voting.kicker}}" class="vb-kicker">{{voting.kicker}}</view>
+      <view wx:if="{{voting.title}}" class="vb-q">{{voting.title}}</view>
+      <view wx:if="{{voting.subtitle}}" class="vb-sub">{{voting.subtitle}}</view>
+      <view wx:if="{{voting.ctaLabel && voting.view !== 'inline'}}" class="vb-cta" style="color:{{voting.accent}}">{{voting.ctaLabel}} →</view>
+    </view>
+  </block>
+
+  <!-- AUTO-PULL with no poll + hide_when_empty=false: empty stub (only in static dev) -->
+  <block wx:elif="{{!voting.livePoll}}">
+    <view class="vb-stub">{{lang === 'cn' ? '暂无投票' : 'No live poll'}}</view>
+  </block>
+
+  <!-- PEEK: question + days-left + CTA -->
+  <block wx:elif="{{voting.view === 'peek'}}">
+    <view bindtap="onVotingTap">
+      <view class="vb-status-row">
+        <view class="vb-status-pill">●  {{lang === 'cn' ? '投票' : 'OPEN'}}{{voting.livePoll.daysLeft ? ' · ' + voting.livePoll.daysLeft + 'D ' + (lang === 'cn' ? '剩余' : 'LEFT') : ''}}</view>
+        <view wx:if="{{voting.livePoll.category}}" class="vb-cat">{{voting.livePoll.category}}</view>
+      </view>
+      <view class="vb-q">{{voting.livePoll.question}}</view>
+      <view class="vb-meta">{{voting.livePoll.totalVotes}} {{lang === 'cn' ? '票' : 'votes'}} · +{{voting.livePoll.rewardPoints}} {{lang === 'cn' ? '积分' : 'pts'}}</view>
+      <view wx:if="{{voting.ctaLabel}}" class="vb-cta" style="color:{{voting.accent}}">{{voting.ctaLabel}} +{{voting.livePoll.rewardPoints}} →</view>
+    </view>
+  </block>
+
+  <!-- PAST_RESULT: winner card -->
+  <block wx:elif="{{voting.view === 'past_result' || voting.livePoll.isClosed}}">
+    <view bindtap="onVotingTap">
+      <view class="vb-status-pill closed">{{lang === 'cn' ? '已结束' : 'CLOSED'}}</view>
+      <view class="vb-q">{{voting.livePoll.question}}</view>
+      <view wx:if="{{voting.livePoll.winner}}" class="vb-winner">
+        <view class="vb-winner-label">{{lang === 'cn' ? '获胜者' : 'WINNER'}}</view>
+        <view class="vb-winner-name" style="background:{{voting.accent}}">{{voting.livePoll.winner.label}}</view>
+        <view class="vb-winner-meta">{{voting.livePoll.winner.pct}}% · {{voting.livePoll.winner.votes}} {{lang === 'cn' ? '票' : 'votes'}}</view>
+      </view>
+      <view wx:if="{{voting.ctaLabel}}" class="vb-cta" style="color:{{voting.accent}}">{{voting.ctaLabel}} →</view>
+    </view>
+  </block>
+
+  <!-- INLINE: full poll with A/B/C/D options + cast vote button -->
+  <block wx:elif="{{voting.view === 'inline'}}">
+    <view class="vb-status-row">
+      <view class="vb-status-pill">●  {{lang === 'cn' ? '投票' : 'OPEN'}}{{voting.livePoll.daysLeft ? ' · ' + voting.livePoll.daysLeft + 'D ' + (lang === 'cn' ? '剩余' : 'LEFT') : ''}}</view>
+      <view wx:if="{{voting.livePoll.category}}" class="vb-cat">{{voting.livePoll.category}}</view>
+    </view>
+    <view class="vb-q">{{voting.livePoll.question}}</view>
+    <view class="vb-opts">
+      <view wx:for="{{voting.livePoll.options}}" wx:key="id" wx:for-item="opt"
+            class="vb-opt {{opt.id === voting.chosenOptionId ? 'on' : ''}} {{voting.livePoll.showResults ? 'opt-results' : ''}} {{opt.isMax ? 'opt-winner' : ''}}"
+            data-id="{{opt.id}}" bindtap="onVotingPick">
+        <view wx:if="{{voting.livePoll.showResults}}" class="vb-opt-fill {{opt.isMine ? 'fill-mine' : ''}}" style="width: {{opt.pctWidth}};"></view>
+        <view class="vb-opt-row">
+          <view class="vb-opt-letter {{opt.id === voting.chosenOptionId ? 'on' : ''}}">{{opt.letter}}</view>
+          <view class="vb-opt-label">{{opt.label}}</view>
+          <view wx:if="{{voting.livePoll.showResults}}" class="vb-opt-pct">
+            <view class="vb-opt-pct-num">{{opt.pctStr}}%</view>
+            <view class="vb-opt-pct-lbl">{{opt.votes}} {{lang === 'cn' ? '票' : 'VOTES'}}</view>
+          </view>
+          <view wx:else class="vb-opt-tick {{opt.id === voting.chosenOptionId ? 'on' : ''}}">
+            <text wx:if="{{opt.id === voting.chosenOptionId}}">✓</text>
+          </view>
+        </view>
+      </view>
+    </view>
+    <view wx:if="{{voting.livePoll.showResults}}" class="vb-voted" style="background:{{voting.accent}}">
+      <view class="vb-voted-dot" style="color:{{voting.accent}}">✓</view>
+      <view class="vb-voted-text">{{lang === 'cn' ? '已投票 · 谢谢' : 'Vote counted. Thanks!'}}</view>
+    </view>
+    <view wx:else class="vb-cta {{voting.chosenOptionId ? 'on' : ''}}"
+          style="{{voting.chosenOptionId ? 'background:#1a1a17;color:' + voting.accent : ''}}"
+          bindtap="onVotingCast">
+      <block wx:if="{{voting.chosenOptionId}}">{{lang === 'cn' ? '投票 +' + voting.livePoll.rewardPoints + ' 积分' : 'CAST VOTE · +' + voting.livePoll.rewardPoints + ' PTS'}} →</block>
+      <block wx:else>{{lang === 'cn' ? '请选择' : 'PICK ONE TO VOTE'}}</block>
+    </view>
+    <view class="vb-foot">{{voting.livePoll.totalVotes}} {{lang === 'cn' ? '票' : 'VOTES SO FAR'}}</view>
+  </block>
+</view>
+
+<!-- ─── Affiliate · CARD view (default) ─── -->
+<view wx:elif="{{type === 'affiliate_block' && affiliateCard && (!affiliateCard.view || affiliateCard.view === 'card')}}" class="aff-blk aff-card" style="background:{{bg}};color:{{fg}}" bindtap="onAffiliateTap">
+  <view class="aff-head">
+    <view wx:if="{{affiliateCard.kicker}}" class="aff-kicker">{{affiliateCard.kicker}}</view>
+    <view wx:if="{{affiliateCard.title}}" class="aff-title">{{affiliateCard.title}}</view>
+    <view wx:if="{{affiliateCard.subtitle}}" class="aff-sub">{{affiliateCard.subtitle}}</view>
+  </view>
+  <view wx:if="{{!affiliateCard.enabled}}" class="aff-disabled">{{affiliateCard.disabledMsg}}</view>
+  <block wx:elif="{{affiliateCard.code}}">
+    <view class="aff-code-row">
+      <view class="aff-code-pill">
+        <text class="aff-code-lbl">{{affiliateCard.codeLabel}}</text>
+        <text class="aff-code-val">{{affiliateCard.code}}</text>
+      </view>
+      <view class="aff-copy" catchtap="onAffiliateCopyTap">{{affiliateCard.copyLabel}}</view>
+    </view>
+    <view class="aff-actions">
+      <button class="aff-share" open-type="share" catchtap="noop">
+        {{affiliateCard.shareLabel}} →
+      </button>
+      <view wx:if="{{affiliateCard.statsLabel}}" class="aff-stats">{{affiliateCard.statsLabel}}</view>
+    </view>
+  </block>
+  <view wx:else class="aff-signin">{{affiliateCard.signinHint}}</view>
+</view>
+
+<!-- ─── Affiliate · STRIP view (one-line compact) ─── -->
+<view wx:elif="{{type === 'affiliate_block' && affiliateCard && affiliateCard.view === 'strip'}}" class="aff-blk aff-strip" style="background:{{bg}};color:{{fg}}" bindtap="onAffiliateTap">
+  <view class="aff-strip-left">
+    <view wx:if="{{affiliateCard.kicker}}" class="aff-strip-kicker">{{affiliateCard.kicker}}</view>
+    <view class="aff-strip-code-row">
+      <text class="aff-strip-code">{{affiliateCard.code || affiliateCard.codePlaceholder}}</text>
+      <view wx:if="{{affiliateCard.statsLabel}}" class="aff-strip-stats">· {{affiliateCard.statsLabel}}</view>
+    </view>
+  </view>
+  <view wx:if="{{!affiliateCard.enabled}}" class="aff-strip-disabled">{{affiliateCard.disabledMsg}}</view>
+  <block wx:elif="{{affiliateCard.code}}">
+    <view class="aff-strip-copy" catchtap="onAffiliateCopyTap">{{affiliateCard.copyLabel}}</view>
+    <button class="aff-strip-share" open-type="share" catchtap="noop">{{affiliateCard.shareLabel}}</button>
+  </block>
+  <view wx:else class="aff-strip-cta">{{affiliateCard.ctaLabel}} →</view>
+</view>
+
+<!-- ─── Affiliate · STAT view (big earned-¥ hero) ─── -->
+<view wx:elif="{{type === 'affiliate_block' && affiliateCard && affiliateCard.view === 'stat'}}" class="aff-blk aff-stat" style="background:{{bg}};color:{{fg}}" bindtap="onAffiliateTap">
+  <view wx:if="{{affiliateCard.kicker}}" class="aff-stat-kicker">{{affiliateCard.kicker}}</view>
+  <view class="aff-stat-num">{{affiliateCard.statHeadline}}</view>
+  <view class="aff-stat-sub">{{affiliateCard.statSubline}}</view>
+  <view wx:if="{{!affiliateCard.enabled}}" class="aff-stat-disabled">{{affiliateCard.disabledMsg}}</view>
+  <block wx:elif="{{affiliateCard.code}}">
+    <view class="aff-stat-code-pill">{{affiliateCard.code}}</view>
+    <view class="aff-stat-actions">
+      <view class="aff-stat-copy" catchtap="onAffiliateCopyTap">{{affiliateCard.copyLabel}}</view>
+      <button class="aff-stat-share" open-type="share" catchtap="noop">{{affiliateCard.shareLabel}} →</button>
+    </view>
+  </block>
+  <view wx:else class="aff-stat-cta">{{affiliateCard.statCta}}</view>
+</view>
+
+<!-- ─── Affiliate · RECEIPT view (paper / dashed-edges aesthetic) ─── -->
+<view wx:elif="{{type === 'affiliate_block' && affiliateCard && affiliateCard.view === 'receipt'}}" class="aff-blk aff-receipt" style="background:{{bg}};color:{{fg}}" bindtap="onAffiliateTap">
+  <view class="aff-receipt-stub">{{affiliateCard.receiptStub}}</view>
+  <view wx:if="{{affiliateCard.kicker}}" class="aff-receipt-kicker">{{affiliateCard.kicker}}</view>
+  <view wx:if="{{affiliateCard.title}}" class="aff-receipt-title">{{affiliateCard.title}}</view>
+  <view class="aff-receipt-sep">- - - - - - - - - - - - - - - - - -</view>
+  <view wx:if="{{!affiliateCard.enabled}}" class="aff-receipt-disabled">{{affiliateCard.disabledMsg}}</view>
+  <block wx:elif="{{affiliateCard.code}}">
+    <view class="aff-receipt-row">
+      <text class="aff-receipt-lbl">{{affiliateCard.codeLabel}}</text>
+      <text class="aff-receipt-val">{{affiliateCard.code}}</text>
+    </view>
+    <view wx:if="{{affiliateCard.statsLabel}}" class="aff-receipt-row aff-receipt-row-muted">
+      <text class="aff-receipt-lbl">STATS</text>
+      <text class="aff-receipt-val">{{affiliateCard.statsLabel}}</text>
+    </view>
+    <view class="aff-receipt-sep">- - - - - - - - - - - - - - - - - -</view>
+    <view class="aff-receipt-actions">
+      <view class="aff-receipt-copy" catchtap="onAffiliateCopyTap">{{affiliateCard.copyLabel}}</view>
+      <button class="aff-receipt-share" open-type="share" catchtap="noop">{{affiliateCard.shareLabel}} →</button>
+    </view>
+  </block>
+  <view wx:else class="aff-receipt-signin">{{affiliateCard.signinHint}}</view>
+</view>
+
+<view wx:elif="{{type === 'store_info' && store}}" class="store-blk" style="background:{{bg}};color:{{fg}}">
+  <view wx:if="{{store.kicker}}" class="st-kicker">{{store.kicker}}</view>
+  <view wx:if="{{store.title}}" class="st-title">{{store.title}}</view>
+  <view wx:if="{{store.address}}" class="st-row">
+    <text class="st-icon">📍</text>
+    <text class="st-val">{{store.address}}</text>
+  </view>
+  <view wx:if="{{store.hours}}" class="st-row">
+    <text class="st-icon">🕒</text>
+    <text class="st-val">{{store.hours}}</text>
+  </view>
+  <view wx:if="{{store.phone}}" class="st-row" bindtap="onStorePhoneTap">
+    <text class="st-icon">📞</text>
+    <text class="st-val st-phone">{{store.phone}}</text>
+  </view>
+  <view wx:if="{{store.ctaLabel && store.ctaTarget}}" class="st-cta" bindtap="onStoreCtaTap">{{store.ctaLabel}}</view>
+</view>
+
+<view wx:elif="{{type === 'greeting' && greeting}}" class="greet-blk" style="background:{{bg}};color:{{fg}}" bindtap="onGreetingCtaTap">
+  <view wx:if="{{greeting.kicker}}" class="gr-kicker">{{greeting.kicker}}</view>
+  <view class="gr-headline">{{greeting.headline}}</view>
+  <view wx:if="{{greeting.pointsLabel}}" class="gr-points" style="color:{{greeting.accent}}">★ {{greeting.pointsLabel}}</view>
+  <view wx:if="{{greeting.ctaLabel}}" class="gr-cta">{{greeting.ctaLabel}} →</view>
+</view>
+
+<view wx:elif="{{type === 'kitchen_status' && kitchenCard}}" class="kit-blk" style="background:{{bg}};color:{{fg}}" bindtap="onKitchenCtaTap">
+  <view class="kit-left">
+    <view wx:if="{{kitchenCard.kicker}}" class="kit-kicker">{{kitchenCard.kicker}}</view>
+    <view class="kit-title">{{kitchenCard.title}}</view>
+    <view class="kit-status">
+      <view class="kit-dot" style="background:{{kitchenCard.statusColor}}"></view>
+      <text class="kit-status-label">{{kitchenCard.statusLabel}}</text>
+      <text wx:if="{{kitchenCard.hoursLabel}}" class="kit-hours"> · {{kitchenCard.hoursLabel}}</text>
+    </view>
+    <view wx:if="{{kitchenCard.etaLabel}}" class="kit-eta">{{kitchenCard.etaLabel}}</view>
+    <view wx:if="{{kitchenCard.address}}" class="kit-address">{{kitchenCard.address}}</view>
+  </view>
+  <view wx:if="{{kitchenCard.ctaLabel}}" class="kit-cta">{{kitchenCard.ctaLabel}} →</view>
+</view>
+
+<view wx:elif="{{type === 'recipe_story' && recipe}}" class="recipe-blk recipe-{{recipe.imageView}}" style="background:{{bg}};color:{{fg}}">
+  <view class="rcp-img">
+    <image wx:if="{{recipe.imageUrl}}" src="{{recipe.imageUrl}}" mode="aspectFill" class="img-full"/>
+    <view wx:else class="rcp-img-placeholder">No image</view>
+  </view>
+  <view class="rcp-body">
+    <view wx:if="{{recipe.kicker}}" class="rcp-kicker">{{recipe.kicker}}</view>
+    <view wx:if="{{recipe.headline}}" class="rcp-headline">{{recipe.headline}}</view>
+    <view wx:if="{{recipe.byline || recipe.readTime}}" class="rcp-meta">
+      <text wx:if="{{recipe.byline}}">{{recipe.byline}}</text>
+      <text wx:if="{{recipe.byline && recipe.readTime}}"> · </text>
+      <text wx:if="{{recipe.readTime}}">{{recipe.readTime}}</text>
+    </view>
+    <view wx:for="{{recipe.paragraphs}}" wx:key="*this" class="rcp-para">{{item}}</view>
+    <view wx:if="{{recipe.linkedProduct}}" class="rcp-card" data-id="{{recipe.linkedProduct.id}}" bindtap="onProductTap">
+      <view class="rcp-card-img">
+        <image wx:if="{{recipe.linkedProduct.image}}" src="{{recipe.linkedProduct.image}}" mode="aspectFill" class="img-full"/>
+      </view>
+      <view class="rcp-card-meta">
+        <view class="rcp-card-name">{{recipe.linkedProduct.name}}</view>
+        <view wx:if="{{recipe.linkedProduct.tagline}}" class="rcp-card-tag">{{recipe.linkedProduct.tagline}}</view>
+        <view wx:if="{{recipe.linkedProduct.price}}" class="rcp-card-price">{{recipe.linkedProduct.price}} →</view>
+      </view>
+    </view>
+    <view wx:if="{{recipe.ctaLabel}}" class="rcp-cta" bindtap="onRecipeCtaTap">{{recipe.ctaLabel}} →</view>
+  </view>
+</view>
+
+<view wx:elif="{{type === 'bundle' && bundle && bundle.active}}" class="bun-blk" style="background:{{bg}};color:{{fg}}">
+  <view wx:if="{{bundle.kicker}}" class="bun-kicker">{{bundle.kicker}}</view>
+
+  <!-- Variant pills — tap to swap which bundle shows below. Hidden when
+       there's only one variant so legacy single-bundle blocks look the same. -->
+  <scroll-view wx:if="{{bundle.showPills}}" class="bun-pills-scroll" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+    <view class="bun-pills">
+      <block wx:for="{{bundle.variants}}" wx:key="id" wx:for-item="v" wx:for-index="i">
+        <view
+          class="bun-pill {{i === bundle.activeIndex ? 'on' : ''}}"
+          data-idx="{{i}}"
+          bindtap="onBundleVariantTap"
+          style="{{i === bundle.activeIndex ? 'background:' + accent + ';color:' + bg + ';border-color:' + accent + ';' : 'border-color:' + fg + ';'}}">
+          <text wx:if="{{v.recommended}}" class="bun-pill-star">★ </text>{{v.label}}
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{bundle.active.title}}" class="bun-title">{{bundle.active.title}}</view>
+  <view wx:if="{{bundle.active.subtitle}}" class="bun-sub">{{bundle.active.subtitle}}</view>
+
+  <view wx:if="{{bundle.active.empty}}" class="bun-empty">{{bundle.emptyText}}</view>
+
+  <scroll-view wx:else class="bun-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+    <view class="bun-card-row">
+      <block wx:for="{{bundle.active.cards}}" wx:key="id">
+        <view class="bun-card" data-id="{{item.id}}" bindtap="onProductTap">
+          <view class="bun-card-img">
+            <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+          </view>
+          <view class="bun-card-name">{{item.name}}</view>
+          <view wx:if="{{item.price}}" class="bun-card-price">{{item.price}}</view>
+        </view>
+        <view wx:if="{{index < bundle.active.cardCount - 1}}" class="bun-plus">+</view>
+      </block>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{!bundle.active.empty}}" class="bun-foot">
+    <view class="bun-price-block">
+      <view wx:if="{{bundle.active.savingsLabel}}" class="bun-was">{{bundle.active.sumLabel}}</view>
+      <view class="bun-price">{{bundle.active.priceLabel}}</view>
+      <view wx:if="{{bundle.active.savingsLabel}}" class="bun-savings">{{bundle.active.savingsLabel}}</view>
+    </view>
+    <view class="bun-cta" style="background:{{accent}}" bindtap="onBundleAddTap">{{bundle.active.addLabel}}</view>
+  </view>
+</view>
+
+<view wx:elif="{{type === 'countdown_timer'}}" class="countdown" style="background:{{bg}};color:{{fg}}">
+  <view wx:if="{{countdown.kicker}}" class="cd-kicker">{{countdown.kicker}}</view>
+  <view wx:if="{{countdown.title}}" class="cd-title">{{countdown.title}}</view>
+  <view wx:if="{{!countdown.isEnded}}" class="cd-clock">
+    <block wx:for="{{countdown.cells}}" wx:key="lbl">
+      <view class="cd-cell">
+        <view class="cd-num">{{item.num}}</view>
+        <view class="cd-lbl">{{item.lbl}}</view>
+      </view>
+      <view wx:if="{{index < countdown.cells.length - 1}}" class="cd-sep">:</view>
+    </block>
+  </view>
+  <view wx:if="{{!countdown.isEnded && countdown.ctaLabel}}" class="cd-cta" bindtap="onCountdownCtaTap">
+    {{countdown.ctaLabel}}
+  </view>
+  <view wx:if="{{countdown.isEnded}}" class="cd-ended">{{countdown.ended}}</view>
+</view>

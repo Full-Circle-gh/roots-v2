@@ -1,0 +1,23 @@
+{
+  "name": "Roots Kitchen Management",
+  "short_name": "Roots",
+  "description": "Roots kitchen management system v2",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1a2314",
+  "theme_color": "#ccd900",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='28' fill='%231a2314'/%3E%3Ctext x='50%25' y='62%25' font-size='128' text-anchor='middle' font-family='-apple-system,sans-serif'%3E🌿%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='72' fill='%231a2314'/%3E%3Ctext x='50%25' y='62%25' font-size='340' text-anchor='middle' font-family='-apple-system,sans-serif'%3E🌿%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "Checkout",
+  "backgroundColor": "#F2E7DF",
+  "usingComponents": {
+    "cs-button": "/components/cs-button/cs-button",
+    "popup-manager": "/components/popup-manager/popup-manager"
+  }
+}

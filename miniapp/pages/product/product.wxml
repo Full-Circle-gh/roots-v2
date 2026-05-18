@@ -1,0 +1,164 @@
+<view class="page">
+  <!-- Back button — floats over the hero -->
+  <view class="back-btn" bindtap="back">
+    <view class="back-glyph">←</view>
+  </view>
+
+  <view wx:if="{{notFound}}" class="empty">
+    <view class="empty-title f-bear">Product not found</view>
+    <view class="empty-sub">It might have been unpublished. Go back to the shop.</view>
+    <view class="empty-btn f-toni" bindtap="back">← Back</view>
+  </view>
+
+  <view wx:elif="{{loading && !product}}" class="loading">
+    <view class="skeleton hero-skel"></view>
+    <view class="skeleton title-skel"></view>
+    <view class="skeleton body-skel"></view>
+  </view>
+
+  <block wx:else>
+    <view class="hero" style="{{aspectRatio ? 'aspect-ratio:' + aspectRatio + ';height:auto' : 'height: 880rpx'}}">
+      <image wx:if="{{image}}" src="{{image}}" mode="aspectFill" class="hero-img"/>
+      <view wx:else class="hero-placeholder">No image</view>
+      <view wx:if="{{stockTag}}" class="stock-badge stock-{{stockTagKind}} f-toni">{{stockTag}}</view>
+    </view>
+
+    <view class="body">
+      <view wx:if="{{isFlash}}" class="flash-banner">
+        <view class="flash-banner-top">
+          <text class="flash-tag f-toni">{{lang === 'cn' ? '限时秒杀' : 'FLASH SALE'}}</text>
+          <text class="flash-was f-aleo">{{flashWas}}</text>
+          <text wx:if="{{flashOff}}" class="flash-off f-gothic">{{flashOff}}</text>
+        </view>
+        <view wx:if="{{flashCountdown}}" class="flash-countdown">
+          <text class="flash-cd-label f-toni">{{lang === 'cn' ? '剩余' : 'ENDS IN'}}</text>
+          <view class="flash-cd-cells">
+            <view wx:if="{{flashCountdown.showDays}}" class="flash-cd-cell">
+              <text class="flash-cd-num f-gothic">{{flashCountdown.d}}</text>
+              <text class="flash-cd-lbl f-toni">{{lang === 'cn' ? '天' : 'D'}}</text>
+            </view>
+            <view class="flash-cd-cell">
+              <text class="flash-cd-num f-gothic">{{flashCountdown.h}}</text>
+              <text class="flash-cd-lbl f-toni">{{lang === 'cn' ? '时' : 'H'}}</text>
+            </view>
+            <view class="flash-cd-cell">
+              <text class="flash-cd-num f-gothic">{{flashCountdown.m}}</text>
+              <text class="flash-cd-lbl f-toni">{{lang === 'cn' ? '分' : 'M'}}</text>
+            </view>
+            <view class="flash-cd-cell">
+              <text class="flash-cd-num f-gothic">{{flashCountdown.s}}</text>
+              <text class="flash-cd-lbl f-toni">{{lang === 'cn' ? '秒' : 'S'}}</text>
+            </view>
+          </view>
+        </view>
+        <view wx:elif="{{flashEnded}}" class="flash-countdown flash-countdown-ended">
+          <text class="flash-cd-label f-toni">{{lang === 'cn' ? '本场已结束' : "THAT'S A WRAP"}}</text>
+        </view>
+      </view>
+      <view class="title-row">
+        <view class="name f-bear">{{name}}</view>
+      </view>
+      <view wx:if="{{(subtitle && subtitle !== name) || keywords}}" class="subtitle f-yuan">
+        <text wx:if="{{subtitle && subtitle !== name}}">{{subtitle}}</text>
+        <text wx:if="{{(subtitle && subtitle !== name) && keywords}}"> · </text>
+        <text wx:if="{{keywords}}">{{keywords}}</text>
+      </view>
+      <view wx:if="{{tagline}}" class="tagline f-toni">{{tagline}}</view>
+
+      <!-- Block-based body (designer-styled per-section). When present,
+           the legacy description parts are skipped. -->
+      <product-blocks wx:if="{{descriptionBlocks.length}}"
+                      blocks="{{descriptionBlocks}}"
+                      lang="{{lang}}"/>
+      <block wx:elif="{{descriptionParts.length}}">
+        <block wx:for="{{descriptionParts}}" wx:key="text">
+          <view wx:if="{{item.kind === 'heading'}}" class="desc-heading f-bear">{{item.text}}</view>
+          <view wx:else class="description f-aleo">{{item.text}}</view>
+        </block>
+      </block>
+
+      <view wx:if="{{badges.length}}" class="badges">
+        <view wx:for="{{badges}}" wx:key="*this" class="badge f-toni">{{item}}</view>
+      </view>
+
+      <!-- Reviews summary + recent -->
+      <view wx:if="{{reviewCount > 0}}" class="reviews-block">
+        <view class="reviews-head">
+          <view class="reviews-stars">
+            <text wx:for="{{reviewStars}}" wx:key="*this" class="rs {{item}}">★</text>
+          </view>
+          <view class="reviews-meta">
+            <text class="reviews-avg f-bear">{{reviewAvgDisplay}}</text>
+            <text class="reviews-count muted">{{reviewCount}} {{lang === 'cn' ? '条评价' : 'reviews'}}</text>
+          </view>
+        </view>
+        <view wx:for="{{reviewsRecent}}" wx:key="id" class="review-row">
+          <view class="review-row-head">
+            <view class="review-row-byline">
+              <view class="review-stars">
+                <text wx:for="{{item.stars}}" wx:key="*this" wx:for-item="s" class="rs {{s}}">★</text>
+              </view>
+              <text class="review-name f-bear">{{item.customer_name || (lang === 'cn' ? '匿名' : 'Anonymous')}}</text>
+            </view>
+            <text class="review-date f-toni">{{item.created_short}}</text>
+          </view>
+          <view wx:if="{{item.comment}}" class="review-comment">{{item.comment}}</view>
+          <view wx:if="{{item.tags_view.length}}" class="review-tags">
+            <text wx:for="{{item.tags_view}}" wx:for-item="tg" wx:key="id"
+                  class="review-tag review-tag-{{tg.color}} f-aleo">{{tg.label}}</text>
+          </view>
+          <view wx:if="{{item.photo_urls.length}}" class="review-photos">
+            <image wx:for="{{item.photo_urls}}" wx:for-item="ph" wx:key="*this"
+                   src="{{ph}}" mode="aspectFill" class="review-photo"
+                   data-urls="{{item.photo_urls}}" data-idx="{{index}}" bindtap="previewReviewPhoto"/>
+          </view>
+        </view>
+      </view>
+
+      <!-- Nutrition facts -->
+      <view wx:if="{{nutritionRows.length}}" class="nutrition-block">
+        <view class="nutrition-head">
+          <text class="nutrition-title f-toni">{{lang === 'cn' ? '营养成分' : 'NUTRITION'}}</text>
+          <text wx:if="{{nutritionBasis}}" class="nutrition-basis muted">· {{nutritionBasis}}</text>
+        </view>
+        <view wx:for="{{nutritionRows}}" wx:key="label" class="nutrition-row">
+          <text class="nutrition-label">{{item.label}}</text>
+          <text class="nutrition-value f-gothic">{{item.value}}</text>
+        </view>
+      </view>
+
+      <!-- Per-product options (size, cutlery, etc.) -->
+      <block wx:if="{{options.length}}">
+        <view wx:for="{{options}}" wx:for-item="opt" wx:key="id" class="option-group">
+          <view class="option-label f-toni">
+            {{opt.question}}{{opt.is_required ? ' *' : ''}}
+          </view>
+          <view class="option-choices">
+            <view wx:for="{{opt.choices}}" wx:for-item="ch" wx:key="id"
+                  class="choice {{selectedChoices[opt.id] === ch.id ? 'on' : ''}}"
+                  data-option-id="{{opt.id}}" data-choice-id="{{ch.id}}"
+                  bindtap="pickChoice">
+              <text>{{ch.label}}</text>
+              <text wx:if="{{ch.delta_text}}" class="choice-delta">{{ch.delta_text}}</text>
+            </view>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <!-- Sticky bottom: qty stepper + add to cart -->
+    <view class="sticky-bar">
+      <cs-button variant="inline" placement="product"></cs-button>
+      <view class="qty">
+        <view class="qty-btn" bindtap="decQty">−</view>
+        <view class="qty-val f-gothic">{{qty}}</view>
+        <view class="qty-btn" bindtap="incQty">+</view>
+      </view>
+      <button class="add-btn f-toni {{soldOut ? 'sold-out' : ''}}" bindtap="addToCart" disabled="{{soldOut}}">
+        <text class="add-label">{{addBtnLabel}}</text>
+        <text wx:if="{{!soldOut}}" class="add-price f-gothic">{{price}}</text>
+      </button>
+    </view>
+  </block>
+  <popup-manager page="product"></popup-manager>
+</view>

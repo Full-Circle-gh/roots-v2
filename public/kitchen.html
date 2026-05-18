@@ -1,0 +1,1901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1a2314">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+<title>Kitchen · 厨房</title>
+<link rel="manifest" href="/kitchen-manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="/kitchen-icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/kitchen-icon-512.png">
+<link rel="apple-touch-icon" href="/kitchen-icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/kitchen-icon-512.png">
+<meta name="application-name" content="Kitchen">
+<meta name="apple-mobile-web-app-title" content="Kitchen">
+<style>
+:root {
+  --dk: #1a2314;
+  --lime: #ccd900;
+  --lime-text: #6d7a2a;
+  --green: #3d7a1e;
+  --bg: #f6f4ee;
+  --card: #ffffff;
+  --border: #e6e2d6;
+  --muted: #8a8678;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warn: #b85c00;
+  --sa-top: env(safe-area-inset-top, 0px);
+  --sa-bot: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; height: 100%; overscroll-behavior: none; -webkit-overflow-scrolling: touch; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--dk);
+  font-size: 16px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+button { font-family: inherit; cursor: pointer; border: none; background: transparent; color: inherit; }
+input, textarea { font-family: inherit; -webkit-user-select: text; user-select: text; }
+input:focus { outline: 3px solid var(--lime); outline-offset: -1px; }
+
+/* Shell */
+.shell {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  height: 100dvh;
+  height: 100vh;
+  padding-top: var(--sa-top);
+}
+@supports (height: 100dvh) { .shell { height: 100dvh; } }
+
+/* Header */
+.head {
+  background: linear-gradient(180deg, #1a2314 0%, #1f2a18 100%);
+  color: #fff;
+  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  box-shadow: 0 1px 0 rgba(0,0,0,.2);
+}
+.head .title {
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: .02em;
+  display: flex; align-items: center; gap: 10px;
+}
+.head .title .user-pill {
+  font-size: 11px;
+  color: rgba(255,255,255,.55);
+  font-weight: 600;
+  background: rgba(255,255,255,.06);
+  padding: 3px 9px;
+  border-radius: 99px;
+}
+.head .icons { display: flex; gap: 4px; }
+.head .icons button {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  font-size: 20px;
+  color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .15s ease;
+}
+.head .icons button:active { background: rgba(255,255,255,.18); transform: scale(.95); }
+/* Header-button badge — lime pill (brand-consistent, informational
+   not critical). Used for the 👥 team activity unread count. Sits in
+   the top-right of the icon button without pushing the layout. */
+.head-badge {
+  position: absolute;
+  top: 4px; right: 4px;
+  min-width: 18px; height: 18px;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: var(--lime);
+  color: var(--dk);
+  font-size: 10px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 1.5px var(--dk), 0 1px 4px rgba(204,217,0,.4);
+  pointer-events: none;
+  animation: tabBadgePop .4s ease-out;
+}
+
+/* Tabs — segmented strip with a smooth lime underline that slides
+   when switched. Each tab is a flex column so the bilingual labels
+   stack tidily when the screen is narrow. The Requests notification
+   indicator is a tight lime pill in the top-right corner instead of
+   a chunky red number that fights with the dark header. */
+.tabs {
+  background: var(--dk);
+  display: flex;
+  padding: 0 6px;
+  gap: 2px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.tab {
+  flex: 1;
+  padding: 11px 6px 9px;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255,255,255,.55);
+  border-bottom: 3px solid transparent;
+  text-align: center;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+  position: relative;
+  border-radius: 8px 8px 0 0;
+  letter-spacing: .01em;
+}
+.tab.active { color: var(--lime); border-bottom-color: var(--lime); }
+.tab:active { background: rgba(255,255,255,.05); }
+.tab:hover:not(.active) { color: rgba(255,255,255,.78); }
+/* Notification indicator — small lime pill nested in the tab's top-right
+   corner. Tight (16px high), tabular-nums for tidy 1- and 2-digit
+   counts. Pulses once when the count changes via JS (see beep `msg`
+   path). Sits ABSOLUTE so it doesn't push the tab label around. */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 6px; right: 6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: var(--lime);
+  color: var(--dk);
+  font-size: 10px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(204,217,0,.45);
+  animation: tabBadgePop .4s ease-out;
+}
+@keyframes tabBadgePop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Body */
+.body {
+  background: var(--bg);
+  overflow-y: auto;
+  padding: 10px 12px 100px;
+  min-height: 0;
+}
+
+/* Empty hint */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 0 8px;
+  pointer-events: none;
+}
+.empty .icon { font-size: 56px; opacity: .12; line-height: 1; }
+.empty .hint {
+  font-size: 13px; color: var(--muted); font-weight: 600;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px;
+  background: var(--card);
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+}
+.body.tappable { cursor: pointer; }
+.body.tappable > .line { cursor: default; }
+
+/* Cart line */
+.line {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 3px rgba(26,35,20,.04);
+  animation: lineIn .22s cubic-bezier(.2,.7,.4,1);
+}
+@keyframes lineIn { from { transform: translateY(-8px) scale(.97); opacity: 0 } to { transform: none; opacity: 1 } }
+.line.popped { animation: pop .18s ease-out; }
+@keyframes pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.025); background: rgba(204,217,0,.18); }
+  100% { transform: scale(1); }
+}
+.line .top {
+  display: flex; align-items: flex-start; gap: 10px;
+  position: relative;
+}
+.line .top .info { flex: 1; min-width: 0; padding-right: 32px; }
+.line .name { font-weight: 700; font-size: 15px; line-height: 1.25; word-break: break-word; }
+.line .name .cn { color: var(--muted); font-weight: 500; font-size: 13px; }
+.line .meta { font-size: 11px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.line .meta .last { color: var(--green); font-weight: 700; }
+.line .meta .last.warn { color: var(--warn); }
+.line .meta .last.cold { color: var(--danger); }
+.line .remove {
+  position: absolute;
+  top: -2px; right: -4px;
+  width: 32px; height: 32px;
+  font-size: 16px;
+  color: var(--danger);
+  border-radius: 8px;
+}
+.line .remove:active { background: rgba(220,38,38,.08); }
+.line .ctrl {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 12px;
+}
+.qty-btn {
+  width: 42px; height: 42px;
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 22px;
+  font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.qty-btn:active { background: var(--border); transform: scale(.96); }
+.qty-input {
+  width: 90px; height: 42px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  padding: 0 8px;
+}
+.qty-input:focus { border-color: var(--lime); outline: none; }
+.unit-pill {
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.note-input {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  background: var(--bg);
+  font-family: inherit;
+}
+.note-input:focus { outline: none; border-color: var(--lime); background: #fff; }
+
+/* Footer */
+.foot {
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  padding: 12px 14px calc(12px + var(--sa-bot));
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 -8px 24px rgba(0,0,0,.04);
+}
+.foot .info { display: flex; flex-direction: column; line-height: 1.2; }
+.foot .info .lbl { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.foot .info .val { font-size: 22px; font-weight: 900; color: var(--dk); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.submit-btn {
+  background: var(--dk);
+  color: var(--lime);
+  border-radius: 14px;
+  padding: 18px 14px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  transition: transform .12s, opacity .12s;
+}
+.submit-btn:disabled { opacity: .3; }
+.submit-btn:active:not(:disabled) { transform: scale(.97); }
+
+/* Requests tab — sub-tab pill row + empty/loading card. Matches the
+   feel of the Order/Production tabs while making the workflow context
+   crystal clear at the top of the screen. */
+.k-req-subtabs {
+  display: flex;
+  gap: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(26,35,20,.04);
+}
+.k-req-subtabs button {
+  flex: 1;
+  padding: 10px 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  border-radius: 9px;
+  transition: background .15s ease, color .15s ease;
+}
+.k-req-subtabs button.active {
+  background: rgba(204,217,0,.18);
+  color: var(--dk);
+}
+.k-req-subtabs button:active:not(.active) { background: rgba(0,0,0,.04); }
+.empty-card {
+  background: var(--card);
+  border: 1px dashed var(--border);
+  border-radius: 16px;
+  padding: 44px 24px 38px;
+  text-align: center;
+  color: var(--muted);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  margin-top: 8px;
+}
+.empty-card .empty-icon-wrap {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 6px;
+}
+.empty-card .empty-icon { font-size: 38px; line-height: 1; opacity: .55; }
+.empty-card .empty-lead { font-size: 15px; font-weight: 800; color: var(--dk); letter-spacing: .01em; }
+.empty-card .empty-sub  { font-size: 12.5px; line-height: 1.5; max-width: 280px; }
+
+/* Production tab specifics */
+.prod-form {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.prod-form input, .prod-form select {
+  width: 100%;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 16px;
+  font-family: inherit;
+  background: #fff;
+}
+.prod-form input:focus, .prod-form select:focus { outline: none; border-color: var(--lime); }
+.prod-form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.prod-form .full { grid-column: 1 / -1; }
+.prod-batch {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  background: var(--card);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 6px;
+  align-items: center;
+}
+.prod-batch .b-name { font-weight: 700; font-size: 14px; }
+.prod-batch .b-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.prod-batch .b-amt {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+
+/* Overlays — mirror POS pattern */
+.ov-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 100; display: none;
+  animation: fade .15s ease;
+}
+.ov-backdrop.visible { display: block; }
+@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+
+/* z-index 101 to sit firmly above the sticky footer + any other in-page
+   layer. Without this, on some Android Chrome builds the .foot's box-
+   shadow stacked above the overlay and clipped the last search results. */
+.ov {
+  position: fixed; inset: 0;
+  background: var(--card);
+  z-index: 101;
+  display: none;
+  flex-direction: column;
+  padding-bottom: var(--sa-bot);
+  animation: slideUp .22s cubic-bezier(.2,.7,.4,1);
+}
+.ov.visible { display: flex; }
+@keyframes slideUp { from { transform: translateY(100%) } to { transform: none } }
+@media (min-width: 600px) {
+  .ov {
+    inset: auto;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(560px, 92vw);
+    max-height: 80vh;
+    border-radius: 18px;
+  }
+  .ov.visible { animation: fadeUp .22s cubic-bezier(.2,.7,.4,1); }
+  @keyframes fadeUp {
+    from { transform: translate(-50%, calc(-50% + 12px)); opacity: 0 }
+    to   { transform: translate(-50%, -50%); opacity: 1 }
+  }
+}
+.ov-head {
+  padding: 14px 16px 8px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.ov-title { font-weight: 800; font-size: 15px; }
+.ov-close {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  font-size: 18px;
+  color: var(--muted);
+}
+.ov-close:active { background: var(--bg); }
+/* Extra bottom padding so the last search-result row is never partially
+   covered by the on-screen keyboard, the iOS home indicator, or the
+   page's sticky footer when the overlay is mid-animation. */
+.ov-body { padding: 14px 16px 60px; overflow-y: auto; flex: 1; min-height: 0; }
+.ov-input {
+  width: 100%;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 18px;
+  font-weight: 600;
+  font-family: inherit;
+  background: #fff;
+  position: sticky;
+  top: 0; z-index: 2;
+}
+.ov-input:focus { outline: none; border-color: var(--lime); }
+
+.search-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  margin-bottom: 4px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.search-row:active { background: var(--border); }
+.search-row.in-cart { opacity: .55; }
+.search-row .info { flex: 1; min-width: 0; }
+.search-row .nm { font-weight: 700; font-size: 15px; }
+.search-row .mt { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.search-row .last { font-size: 11px; color: var(--green); font-weight: 700; white-space: nowrap; }
+.search-empty { padding: 30px; text-align: center; color: var(--muted); font-size: 14px; }
+
+/* Toast */
+.toast-wrap {
+  position: fixed; bottom: calc(120px + var(--sa-bot));
+  left: 50%; transform: translateX(-50%);
+  z-index: 60; pointer-events: none;
+  display: flex; flex-direction: column; gap: 8px;
+  width: calc(100% - 32px); max-width: 420px;
+}
+.toast {
+  background: var(--dk); color: #fff;
+  padding: 14px 16px; border-radius: 14px;
+  font-size: 14px; font-weight: 700;
+  text-align: center;
+  box-shadow: 0 12px 32px rgba(0,0,0,.35);
+  pointer-events: auto;
+  animation: toastIn .25s ease;
+}
+.toast.success { background: var(--success); }
+.toast.error { background: var(--danger); }
+@keyframes toastIn { from { transform: translateY(20px); opacity: 0 } to { transform: none; opacity: 1 } }
+
+/* Scan pulse — silent ambient feedback when a barcode lands */
+/* ── Floating "+" Add button — always visible regardless of how many
+   items are in the cart, so users don't have to scroll past their list
+   to find an empty spot to tap. ── */
+.add-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(96px + var(--sa-bot));
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--lime), #a8b800);
+  color: var(--dk);
+  font-size: 30px;
+  font-weight: 900;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 22px rgba(204,217,0,.45), 0 2px 8px rgba(26,35,20,.18);
+  border: 2px solid rgba(255,255,255,.5);
+  cursor: pointer;
+  z-index: 60;
+  transition: transform .15s, box-shadow .2s;
+}
+.add-fab.visible { display: inline-flex; }
+.add-fab:active { transform: scale(.9); }
+.add-fab:not(.has-items) { animation: fabPulse 2.4s ease-in-out infinite; }
+@keyframes fabPulse {
+  0%, 100% { box-shadow: 0 8px 22px rgba(204,217,0,.45), 0 2px 8px rgba(26,35,20,.18), 0 0 0 0 rgba(204,217,0,.6); }
+  60%      { box-shadow: 0 8px 22px rgba(204,217,0,.45), 0 2px 8px rgba(26,35,20,.18), 0 0 0 14px rgba(204,217,0,0); }
+}
+@media (min-width: 600px) {
+  .add-fab.visible { bottom: calc(108px + var(--sa-bot)); right: 24px; }
+}
+
+.scan-pulse {
+  position: fixed; top: var(--sa-top); left: 0; right: 0; height: 3px;
+  background: var(--lime); transform: scaleX(0);
+  transform-origin: left; z-index: 70; pointer-events: none;
+}
+.scan-pulse.fire { animation: pulse .45s ease-out; }
+@keyframes pulse {
+  0%   { transform: scaleX(0); opacity: 1 }
+  40%  { transform: scaleX(1); opacity: 1 }
+  100% { transform: scaleX(1); opacity: 0 }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="head">
+    <div class="title">
+      🍳 Kitchen · 厨房<span class="user-pill" id="userPill"></span>
+    </div>
+    <div class="icons">
+      <button id="searchBtn" title="Search · 搜索">🔍</button>
+      <button id="teamBtn" title="Team activity · 团队动态" style="position:relative">👥<span id="teamBadge" class="head-badge" style="display:none">0</span></button>
+      <button id="moreBtn"   title="More · 更多">⋯</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" id="tabOrder" data-tab="order">🛒 订货 Order</button>
+    <button class="tab"        id="tabProd"  data-tab="prod">📋 生产 Production</button>
+    <button class="tab" id="tabReq" data-tab="req" style="display:none">
+      📥 请求 Requests
+      <span id="reqBadge" class="tab-badge" style="display:none">0</span>
+    </button>
+  </nav>
+
+  <main class="body" id="body">
+    <!-- rendered per tab -->
+  </main>
+
+  <footer class="foot" id="foot">
+    <!-- rendered per tab -->
+  </footer>
+</div>
+
+<!-- Floating "+ Add" — visible only on the Order tab so users can
+     always add another ingredient regardless of how full the cart is. -->
+<!-- Floating "+" FAB removed — replaced by the inline "+ Add Item" button
+     rendered below the cart. Inline button is more discoverable and avoids
+     covering the search hint when the cart is empty. -->
+
+<div class="scan-pulse" id="scanPulse"></div>
+
+<!-- Search overlay (for Order tab) -->
+<div class="ov-backdrop" id="ovBackdrop"></div>
+<div class="ov" id="searchOv">
+  <div class="ov-head">
+    <div class="ov-title">🔍 Add Ingredient · 添加食材</div>
+    <button class="ov-close" data-close>✕</button>
+  </div>
+  <div class="ov-body">
+    <input id="searchInput" class="ov-input" placeholder="Name 名称 / SKU / Barcode 条码"
+           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+           inputmode="search">
+    <div id="searchList" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- Recipe picker overlay (for Production tab) -->
+<div class="ov" id="recipeOv">
+  <div class="ov-head">
+    <div class="ov-title">📖 Pick Recipe · 选择食谱</div>
+    <button class="ov-close" data-close>✕</button>
+  </div>
+  <div class="ov-body">
+    <input id="recipeSearchInput" class="ov-input" placeholder="Name 名称 / SKU"
+           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+           inputmode="search">
+    <div id="recipeSearchList" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- More overlay -->
+<div class="ov" id="moreOv">
+  <div class="ov-head">
+    <div class="ov-title">Settings · 设置</div>
+    <button class="ov-close" data-close>✕</button>
+  </div>
+  <div class="ov-body" id="moreBody"></div>
+</div>
+
+<!-- Team activity overlay — opens from the 👥 button in the header.
+     Lists every kitchen order placed in the last 7 days by the team
+     (PO number · who · when · items). Same data as the search-overlay
+     surfacing; this view is "browse" rather than "pick", so staff can
+     check who's ordering what without committing to add anything. -->
+<div class="ov" id="teamOv">
+  <div class="ov-head">
+    <div class="ov-title">👥 Team activity · 团队动态 (7d)</div>
+    <button class="ov-close" data-close>✕</button>
+  </div>
+  <div class="ov-body" id="teamBody"></div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+'use strict';
+// ─── State ───────────────────────────────────────────────────────────
+let _user        = null;
+let _ingredients = [];          // cached active ingredients
+let _recipes     = [];          // cached active recipes
+let _lastQty     = {};          // ingredient_id → { qty, unit, last_date, source }
+let _orderCart   = [];          // { ing, qty, note }
+let _todaysProduction = [];     // production_batches for today
+let _pickedRecipe = null;       // selected recipe for the production form
+let _tab         = 'order';
+let _scanBuf     = '';
+let _scanBufTimer = null;
+// Team-order feed — last 7 days of kitchen orders from ALL staff. Used to
+// (a) render a "team activity" strip at the top of the Order tab and
+// (b) warn the user before they re-order something already in flight.
+// Refreshed on app open and after each successful submit.
+let _teamFeed = { orders: [], by_ingredient: {} };
+// Per-user "last seen" timestamp — when the user last opened the team
+// overlay. The badge counts orders by other staff with created_at > this
+// timestamp, so the dot only flags genuinely new activity instead of
+// permanently shouting about every in-flight order.
+const _teamSeenKey = () => 'kitchen_team_seen_' + (_user?.id || 'anon');
+function _teamLastSeen() {
+  try { return parseInt(localStorage.getItem(_teamSeenKey()) || '0', 10) || 0; } catch { return 0; }
+}
+function _teamMarkSeen() {
+  try { localStorage.setItem(_teamSeenKey(), String(Date.now())); } catch {}
+  paintTeamBadge();
+}
+async function refreshTeamFeed() {
+  try {
+    const r = await fetch('/api/kitchen/recent-team-orders?days=7');
+    const d = await r.json();
+    if (d?.success) _teamFeed = { orders: d.orders || [], by_ingredient: d.by_ingredient || {} };
+  } catch { /* best-effort */ }
+  paintTeamBadge();
+}
+function paintTeamBadge() {
+  const badge = document.getElementById('teamBadge');
+  if (!badge) return;
+  // Count orders by OTHER staff that arrived since the user last opened
+  // the overlay. First-time users (no stored timestamp) see a soft dot
+  // only when there's any activity — they haven't seen it yet by
+  // definition. Self-orders never count toward unread.
+  const lastSeen = _teamLastSeen();
+  const newOnes = (_teamFeed.orders || []).filter(o => {
+    if (o.is_self) return false;
+    const ts = o.created_at ? new Date(o.created_at.replace(' ', 'T') + (o.created_at.includes('Z')?'':'Z')).getTime() : 0;
+    return ts > lastSeen;
+  }).length;
+  if (newOnes > 0) {
+    badge.textContent = newOnes > 99 ? '99+' : String(newOnes);
+    badge.style.display = 'inline-flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+function openTeamOverlay() {
+  document.getElementById('ovBackdrop').classList.add('visible');
+  document.getElementById('teamOv').classList.add('visible');
+  // Mark everything currently in the feed as seen — opening the
+  // overlay IS the user acknowledging the activity.
+  _teamMarkSeen();
+  const body = document.getElementById('teamBody');
+  if (!body) return;
+  const orders = _teamFeed.orders || [];
+  if (!orders.length) {
+    body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">
+      No kitchen orders in the last 7 days.<br>过去 7 天内无厨房订货。
+    </div>`;
+    return;
+  }
+  // Card per order. Click toggles the item list (collapsed by default).
+  body.innerHTML = orders.map((o, idx) => {
+    const ago = _teamAgoBilingual(o.created_at);
+    const youTag = o.is_self
+      ? '<span style="background:rgba(204,217,0,.18);color:var(--lime-text);font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;margin-left:6px">you · 我</span>'
+      : '';
+    const statusBilingual = _teamStatusBilingual(o.status);
+    const statusBg =
+      (o.status || '').toLowerCase() === 'received' ? 'rgba(61,122,30,.12)' :
+      (o.status || '').toLowerCase() === 'cancelled' ? 'rgba(220,38,38,.12)' :
+      'rgba(204,217,0,.15)';
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:10px">
+        <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'" style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:800">${esc(o.po_number)} · ${esc(o.display_name || o.username || '?')}${youTag}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">${ago}</div>
+          </div>
+          <span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:99px;background:${statusBg}">${statusBilingual}</span>
+          <span style="color:var(--muted);font-size:12px">▾</span>
+        </div>
+        <div style="display:none;padding:0 14px 12px;border-top:1px solid var(--border);font-size:12px">
+          ${(o.items || []).map(it => `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed rgba(0,0,0,.06)">
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;color:var(--muted);background:rgba(0,0,0,.04);padding:2px 7px;border-radius:5px;font-weight:700;flex-shrink:0;line-height:1.45">${esc(it.sku || '—')}</span>
+            <span style="flex:1;min-width:0;line-height:1.35">
+              <div style="font-weight:700">${esc(it.name_en || '—')}</div>
+              ${it.name_cn ? `<div style="font-size:11px;color:var(--muted);margin-top:1px">${esc(it.name_cn)}</div>` : ''}
+            </span>
+            <span style="color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0;font-weight:600">${it.qty} ${esc(it.unit||'')}</span>
+          </div>`).join('') || '<div style="color:var(--muted);padding:6px 0">No items · 无项目</div>'}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ─── Init ────────────────────────────────────────────────────────────
+(async function init() {
+  const r = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({}));
+  _user = r?.user;
+  if (!_user) { location.href = '/login?redirect=' + encodeURIComponent(location.pathname + location.search); return; }
+  // Remember this is where the user was last working — login.html
+  // reads `last_app` to send them back here next time.
+  try { localStorage.setItem('last_app', '/kitchen'); } catch {}
+  const perms = _user.permissions || {};
+  if (_user.role !== 'admin' && !perms.kitchen) {
+    document.body.innerHTML = '<div style="padding:40px;text-align:center"><h1>403</h1><p>No kitchen access · 无厨房权限</p><p><a href="/">← Back · 返回</a></p></div>';
+    return;
+  }
+  document.getElementById('userPill').textContent = _user.displayName || _user.username || '';
+
+  // Tab buttons
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => switchTab(t.dataset.tab));
+  });
+  document.getElementById('searchBtn').addEventListener('click', openSearch);
+  document.getElementById('teamBtn').addEventListener('click', openTeamOverlay);
+  document.getElementById('moreBtn').addEventListener('click', openMore);
+  const fabEl = document.getElementById('addFab');
+  if (fabEl) fabEl.addEventListener('click', openSearch);
+  document.getElementById('ovBackdrop').addEventListener('click', closeAllOv);
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeAllOv));
+  document.getElementById('searchInput').addEventListener('input', onSearchInput);
+  document.getElementById('searchInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const top = document.querySelector('#searchList .search-row');
+      if (top) top.click();
+    }
+  });
+  document.getElementById('recipeSearchInput').addEventListener('input', onRecipeSearchInput);
+  document.getElementById('recipeSearchInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const top = document.querySelector('#recipeSearchList .search-row');
+      if (top) top.click();
+    }
+  });
+
+  // Document-level keystroke capture for the barcode gun (Order tab only).
+  // Same pattern as the POS — buffer printable chars, commit on Enter,
+  // drop on idle so accidental keystrokes don't accumulate.
+  document.addEventListener('keydown', (e) => {
+    if (_tab !== 'order') return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Enter') {
+      if (_scanBuf) { lookupAndAddByBarcode(_scanBuf); _scanBuf = ''; }
+      return;
+    }
+    if (e.key.length === 1) {
+      _scanBuf += e.key;
+      if (_scanBufTimer) clearTimeout(_scanBufTimer);
+      _scanBufTimer = setTimeout(() => { _scanBuf = ''; }, 300);
+    }
+  });
+
+  // Pre-fetch ingredients + last-qty + recipes + team feed in parallel
+  await Promise.all([
+    fetch('/api/ingredients').then(r => r.json()).then(d => { _ingredients = (d.data || []).filter(i => (i.is_active==null) || i.is_active); }).catch(() => {}),
+    fetch('/api/kitchen/last-qty').then(r => r.json()).then(d => { _lastQty = d.data || {}; }).catch(() => {}),
+    fetch('/api/kitchen/recipes').then(r => r.json()).then(d => { _recipes = d.data || []; }).catch(() => {}),
+    refreshTodaysProduction(),
+    refreshTeamFeed(),
+  ]);
+
+  switchTab('order');
+
+  // Show the Requests tab and start polling only for users who can act
+  // on warehouse→kitchen requests. The tab is hidden by default (the
+  // bulk of kitchen staff don't need it).
+  const _kPerms = _user.permissions || {};
+  if (_user.role === 'admin' || _kPerms.kitchen_inbox) {
+    const reqTab = document.getElementById('tabReq');
+    if (reqTab) reqTab.style.display = '';
+    refreshKitchenRequests();
+    _startKitchenReqPolling();
+    _connectKitchenEventStream();
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) refreshKitchenRequests({ silent: true });
+    });
+  }
+
+  // Register SW + auto-reload on update. SW is required for the PWA
+  // install banner; without it Chrome treats us as a regular page.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data?.type === 'sw-updated') location.reload();
+    });
+  }
+  // Web Push enrolment — silent on HTTP, kicks in the day HTTPS lands
+  // so kitchen staff can be paged about PO state changes (delivered,
+  // ordered) and any future kitchen-specific server pushes without the
+  // app having to be open.
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    _enableWebPush().catch(() => {});
+  } else if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+    // Prompt once a few seconds after launch so the kitchen actually
+    // ends up with a push subscription. Without this they only get the
+    // silent in-app banner and miss everything when the app is closed.
+    setTimeout(() => {
+      Notification.requestPermission().then((p) => {
+        if (p === 'granted') _enableWebPush().catch(() => {});
+      }).catch(() => {});
+    }, 4000);
+  }
+})();
+function _urlBase64ToUint8Array(base64) {
+  const pad = '='.repeat((4 - base64.length % 4) % 4);
+  const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+async function _enableWebPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  const r = await fetch('/api/push/vapid-key');
+  const d = await r.json();
+  if (!d?.enabled || !d.publicKey) return;
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: _urlBase64ToUint8Array(d.publicKey),
+    });
+  }
+  await fetch('/api/push/subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sub.toJSON()),
+  });
+}
+
+// ─── Tab switching ──────────────────────────────────────────────────
+function switchTab(tab) {
+  _tab = tab;
+  document.querySelectorAll('.tab').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
+  // FAB only relevant on the Order tab (where there's a cart to add to).
+  // On Production it would be misleading.
+  const fab = document.getElementById('addFab');
+  if (fab) fab.classList.toggle('visible', tab === 'order');
+  if (tab === 'order')      renderOrderTab();
+  else if (tab === 'prod')  renderProductionTab();
+  else if (tab === 'req')   renderRequestsTab();
+}
+
+// ─── Warehouse → Kitchen incoming requests ─────────────────────────
+// Mirrors the warehouse-side fulfilment flow: kitchen sees orders the
+// warehouse pushed (because items are missing for an outbound order or
+// just for shelf restock), per-item check-off, then "Mark Prepared".
+let _kReqOrders = [];
+let _kReqTab = 'active';   // active | history
+let _kReqPollTimer = null;
+
+async function refreshKitchenRequests({ silent } = {}) {
+  try {
+    const [aRes, hRes] = await Promise.all([
+      fetch('/api/restock?to_role=kitchen&tab=active').then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/restock?to_role=kitchen&tab=history').then(r => r.ok ? r.json() : null).catch(() => null),
+    ]);
+    if (!aRes || !hRes) return;
+    const active = (aRes.data || []).filter(o => o.status !== 'draft');
+    const history = (hRes.data || []);
+    const prevIds = new Set(_kReqOrders.map(o => o.id));
+    _kReqOrders = _kReqTab === 'active' ? active : history;
+    // Badge on the tab header — count of pending (status != prepared)
+    const pending = active.length;
+    const badge = document.getElementById('reqBadge');
+    if (badge) {
+      if (pending > 0) {
+        badge.style.display = 'inline-flex';
+        badge.textContent = pending > 99 ? '99+' : String(pending);
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+    if (_tab === 'req') renderRequestsTab();
+    if (silent) {
+      const newOnes = active.filter(o => !prevIds.has(o.id) && o.created_by !== _user?.id);
+      if (newOnes.length > 0) {
+        try { /* msg-style chime */
+          if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+          const ctx = _audioCtx;
+          const t0 = ctx.currentTime;
+          [1319, 1568, 2093].forEach((f, i) => {
+            const o = ctx.createOscillator(), g = ctx.createGain();
+            o.connect(g); g.connect(ctx.destination);
+            o.type = 'triangle'; o.frequency.value = f;
+            const t = t0 + i * 0.09;
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(0.32, t + 0.012);
+            g.gain.exponentialRampToValueAtTime(0.0008, t + 0.22);
+            o.start(t); o.stop(t + 0.24);
+          });
+        } catch {}
+      }
+    }
+  } catch {}
+}
+// Server-Sent Events — sub-second push from the server when a
+// warehouse user fires a request to the kitchen. Browser auto-
+// reconnects on disconnect; the 30s polling fallback above catches
+// anything that arrives during the brief reconnect window.
+let _kEventStream = null;
+function _connectKitchenEventStream() {
+  if (!_user) return;
+  try {
+    if (_kEventStream) { try { _kEventStream.close(); } catch {} }
+    _kEventStream = new EventSource('/api/events');
+    _kEventStream.addEventListener('restock', (e) => {
+      try {
+        const evt = JSON.parse(e.data);
+        if (!evt) return;
+        // Server already filters to kitchen_inbox holders, but double-
+        // check the direction here so an unrelated store→warehouse
+        // event (in case of admin overlap) doesn't trigger a refresh.
+        if (evt.to_role !== 'kitchen') return;
+        // Pull fresh data right away — banner / chime fires inside
+        // refreshKitchenRequests when it detects the new id.
+        refreshKitchenRequests({ silent: true });
+      } catch {}
+    });
+    _kEventStream.onerror = () => { /* EventSource auto-reconnects */ };
+  } catch {}
+}
+function _startKitchenReqPolling() {
+  if (_kReqPollTimer) clearInterval(_kReqPollTimer);
+  _kReqPollTimer = setInterval(() => {
+    if (document.hidden) return;
+    refreshKitchenRequests({ silent: true });
+  }, 30000);
+}
+
+function renderRequestsTab() {
+  const body = document.getElementById('body');
+  if (!body) return;
+  const rows = _kReqOrders;
+  const tabBar = `
+    <div class="k-req-subtabs">
+      <button class="${_kReqTab==='active' ?'active':''}" onclick="_kReqSetTab('active')">📥 Active · 进行中</button>
+      <button class="${_kReqTab==='history'?'active':''}" onclick="_kReqSetTab('history')">✅ History · 已完成</button>
+    </div>`;
+  if (rows.length === 0) {
+    body.innerHTML = tabBar + `
+      <div class="empty-card">
+        <div class="empty-icon-wrap"><span class="empty-icon">${_kReqTab==='active' ? '✨' : '📦'}</span></div>
+        <div class="empty-lead">${_kReqTab==='active' ? 'All caught up · 暂无待处理' : 'No history yet · 暂无历史'}</div>
+        <div class="empty-sub">${_kReqTab==='active' ? 'Warehouse hasn’t requested anything from the kitchen yet · 仓库暂无新的厨房请求' : 'Completed requests will appear here · 已处理的请求会显示在这里'}</div>
+      </div>`;
+    return;
+  }
+  body.innerHTML = tabBar + rows.map(o => {
+    const purpose = o.purpose === 'order' ? '📦 For order · 用于发货' : o.purpose === 'shelf' ? '🛒 For shelf · 货架补货' : '';
+    const purposeChip = purpose ? `<span style="display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:${o.purpose==='order'?'rgba(204,217,0,.15)':'rgba(37,99,235,.10)'};color:var(--text);margin-top:4px">${purpose}</span>` : '';
+    const statusPill = o.status === 'sent' ? '<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:rgba(37,99,235,.18);color:#1d4ed8">Sent · 已发</span>'
+                    : o.status === 'received' ? '<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:rgba(224,184,80,.20);color:#92660d">Received · 处理中</span>'
+                    : o.status === 'prepared' ? '<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:rgba(109,179,63,.18);color:#3d7a1e">Prepared · 已备货</span>'
+                    : `<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:rgba(0,0,0,.06);color:var(--muted)">${o.status}</span>`;
+    const total = o.item_count || 0;
+    const done  = o.checked_count || 0;
+    const pct   = total > 0 ? Math.round((done/total)*100) : 0;
+    return `<div onclick="openKitchenReq(${o.id})" style="cursor:pointer;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:10px">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:800;font-size:14px">${esc(o.rs_number || ('#'+o.id))} <span style="font-weight:600;color:var(--muted);font-size:12px">· ${total} item${total===1?'':'s'} 件</span></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">From warehouse · 来自仓库 · ${esc((o.sent_at||'').slice(0,16).replace('T',' '))}</div>
+          <div>${purposeChip}</div>
+        </div>
+        ${statusPill}
+      </div>
+      ${total>0?`<div style="margin-top:10px;height:6px;background:rgba(0,0,0,.06);border-radius:99px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,var(--lime),var(--lime-2));transition:width .3s"></div>
+      </div><div style="font-size:11px;color:var(--muted);margin-top:4px;font-weight:600">${done}/${total} packed · 已配 ${done}/${total}</div>`:''}
+    </div>`;
+  }).join('');
+}
+function _kReqSetTab(t) {
+  if (t !== 'active' && t !== 'history') return;
+  if (_kReqTab === t) return;
+  _kReqTab = t;
+  refreshKitchenRequests();
+}
+// Currently-open kitchen request. Held in memory so item toggles update
+// the UI without a refetch, and so the action button can morph in place
+// as status advances (sent → received → prepared) without closing the
+// modal between steps.
+let _kReqOpenOrder = null;
+
+async function openKitchenReq(id) {
+  const r = await fetch('/api/restock/' + id);
+  const d = await r.json();
+  if (!d?.success) return;
+  _kReqOpenOrder = d.data;
+  // Default every item to checked on first open — kitchen usually has
+  // everything; they only uncheck what's missing. Fires once per order
+  // (skipped if any item already touched, or if status is terminal).
+  const o = _kReqOpenOrder;
+  if (o.status !== 'prepared' && o.items?.length && o.items.every(it => !it.is_checked)) {
+    o.items.forEach(it => {
+      it.is_checked = 1;
+      fetch(`/api/restock/${o.id}/item/${it.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_checked: true }),
+      }).catch(() => {});
+    });
+  }
+  document.getElementById('ovBackdrop').classList.add('visible');
+  document.getElementById('moreOv').classList.add('visible');
+  _renderKitchenReqBody();
+}
+
+function _renderKitchenReqBody() {
+  const o = _kReqOpenOrder;
+  if (!o) return;
+  const items = o.items || [];
+  const total = items.length;
+  const checked = items.filter(it => it.is_checked).length;
+  const allDone = total > 0 && checked === total;
+  // Items are pickable from the moment the order opens — kitchen often
+  // wants to scan the list and tick off what's already on hand before
+  // formally tapping "In Preparation". Locked only once status hits
+  // 'prepared' (terminal).
+  const canCheck = o.status === 'sent' || o.status === 'received';
+  const purpose = o.purpose === 'order' ? '📦 For an outgoing order · 用于发货'
+                 : o.purpose === 'shelf' ? '🛒 For shelf restock · 货架补货' : '';
+  const ov = document.getElementById('moreOv');
+  const titleEl = ov.querySelector('.ov-title');
+  const body = ov.querySelector('.ov-body') || document.getElementById('moreBody');
+  if (titleEl) titleEl.textContent = `📥 ${o.rs_number || ('#'+o.id)}`;
+
+  let actionHtml;
+  if (o.status === 'sent') {
+    actionHtml = `<button class="submit-btn" style="width:100%" onclick="_kReqMarkReceived()">▶ In Preparation · 开始备货</button>`;
+  } else if (o.status === 'received') {
+    actionHtml = `<button class="submit-btn" style="width:100%;${allDone?'':'opacity:.45;cursor:not-allowed'}" ${allDone?'':'disabled'} onclick="_kReqMarkPrepared()">✓ Mark Prepared · 标记已备好${total>0?' ('+checked+'/'+total+')':''}</button>`;
+  } else {
+    actionHtml = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:8px">✓ Complete · 已完成</div>';
+  }
+
+  const checkAllBtn = (canCheck && total > 0)
+    ? `<button onclick="_kReqCheckAll(${!allDone})" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;font-family:inherit">${allDone ? '☐ Uncheck all · 取消全选' : '✓ Check all · 全选'}</button>`
+    : '';
+
+  body.innerHTML = `
+    ${purpose ? `<div style="padding:10px 12px;background:${o.purpose==='order'?'rgba(204,217,0,.10)':'rgba(37,99,235,.08)'};border-radius:10px;font-size:13px;font-weight:700;margin-bottom:12px">${purpose}</div>` : ''}
+    ${o.notes ? `<div style="padding:8px 12px;background:rgba(204,217,0,.08);border-radius:10px;font-size:12px;margin-bottom:10px"><strong>📝 Note · 备注:</strong> ${esc(o.notes)}</div>` : ''}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 6px;gap:8px">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Items · 物料 (${total})</div>
+      ${checkAllBtn}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+      ${items.map((it, idx) => `
+        <div ${canCheck ? `onclick="_kReqToggleItem(${idx})"` : ''} style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:${it.is_checked?'rgba(109,179,63,.10)':'var(--card)'};border:1.5px solid ${it.is_checked?'rgba(109,179,63,.4)':'var(--border)'};border-radius:10px;cursor:${canCheck?'pointer':'default'};transition:background .15s,border-color .15s;user-select:none">
+          <input type="checkbox" ${it.is_checked?'checked':''} ${canCheck?'':'disabled'} style="width:20px;height:20px;flex-shrink:0;accent-color:var(--lime);margin-top:2px;pointer-events:none">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:14px;line-height:1.35">${esc(it.product_cn || it.product_name || '?')}${it.product_cn && it.product_name ? ' <span style="color:var(--muted);font-weight:500;font-size:12px">· ' + esc(it.product_name) + '</span>' : ''}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">${it.sku ? esc(it.sku) + ' · ' : ''}${it.notes ? esc(it.notes) : ''}</div>
+          </div>
+          <div style="font-weight:800;font-variant-numeric:tabular-nums;font-size:14px">${+it.qty_requested}${it.unit?' '+esc(it.unit):''}</div>
+        </div>
+      `).join('')}
+    </div>
+    ${actionHtml}`;
+}
+
+function _kReqToggleItem(idx) {
+  const o = _kReqOpenOrder;
+  if (!o || (o.status !== 'sent' && o.status !== 'received')) return;
+  const it = o.items?.[idx];
+  if (!it) return;
+  it.is_checked = it.is_checked ? 0 : 1;
+  _renderKitchenReqBody();
+  fetch(`/api/restock/${o.id}/item/${it.id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_checked: !!it.is_checked }),
+  }).catch(() => {});
+}
+
+function _kReqCheckAll(checkOn) {
+  const o = _kReqOpenOrder;
+  if (!o || (o.status !== 'sent' && o.status !== 'received')) return;
+  const newVal = checkOn ? 1 : 0;
+  (o.items || []).forEach(it => {
+    if (!!it.is_checked === !!newVal) return;
+    it.is_checked = newVal;
+    fetch(`/api/restock/${o.id}/item/${it.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_checked: !!newVal }),
+    }).catch(() => {});
+  });
+  _renderKitchenReqBody();
+}
+
+async function _kReqMarkReceived() {
+  const o = _kReqOpenOrder;
+  if (!o) return;
+  const r = await fetch(`/api/restock/${o.id}/status`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'received' }),
+  });
+  const d = await r.json();
+  if (!d?.success) return alert(d?.error || 'Failed · 失败');
+  o.status = 'received';
+  _renderKitchenReqBody();
+  refreshKitchenRequests();
+}
+
+async function _kReqMarkPrepared() {
+  const o = _kReqOpenOrder;
+  if (!o) return;
+  const r = await fetch(`/api/restock/${o.id}/status`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'prepared' }),
+  });
+  const d = await r.json();
+  if (!d?.success) return alert(d?.error || 'Failed · 失败');
+  o.status = 'prepared';
+  _renderKitchenReqBody();
+  // Brief pause so the "✓ Complete" state is visible before auto-closing.
+  setTimeout(() => {
+    document.getElementById('moreOv').classList.remove('visible');
+    document.getElementById('ovBackdrop').classList.remove('visible');
+    _kReqOpenOrder = null;
+    refreshKitchenRequests();
+  }, 700);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// ORDER TAB — request stock from buying. Cart of ingredients with qty
+// and note per line; submit creates a kitchenOrder PO via the existing
+// /api/kitchen/submit endpoint.
+// ─────────────────────────────────────────────────────────────────────
+// Team activity moved into the search overlay — see doSearch() in this
+// file. The Order tab now stays clean (cart only); duplicate-order risk
+// surfaces at the moment of picking + via the inline ⚠ chip on cart lines.
+
+function renderOrderTab() {
+  const body = document.getElementById('body');
+  body.classList.add('tappable');
+  if (!_orderCart.length) {
+    body.innerHTML = `
+      <div class="empty">
+        <div class="icon">🛒</div>
+        <div class="hint">Empty · 暂无</div>
+      </div>
+      <button id="kOrderAddMore" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:var(--bg);border:2px dashed var(--lime);color:var(--lime);font-weight:800;font-size:15px;padding:18px;margin-top:12px;cursor:pointer;border-radius:14px">
+        <span style="font-size:22px;line-height:1">＋</span>
+        <span>Add Item · 添加商品</span>
+      </button>`;
+    const emptyAdd = document.getElementById('kOrderAddMore');
+    if (emptyAdd) emptyAdd.addEventListener('click', (e) => { e.stopPropagation(); openSearch(); });
+  } else {
+    body.innerHTML = _orderCart.map((entry, i) => renderOrderLine(entry, i)).join('') + `
+      <button id="kOrderAddMore" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:var(--bg);border:2px dashed var(--lime);color:var(--lime);font-weight:800;font-size:15px;padding:18px;margin-top:12px;cursor:pointer;border-radius:14px">
+        <span style="font-size:22px;line-height:1">＋</span>
+        <span>Add Item · 添加商品</span>
+      </button>`;
+    const addMoreBtn = document.getElementById('kOrderAddMore');
+    if (addMoreBtn) addMoreBtn.addEventListener('click', (e) => { e.stopPropagation(); openSearch(); });
+    // Wire qty buttons + remove + note inputs
+    body.querySelectorAll('[data-act]').forEach(el => {
+      el.addEventListener('click', () => {
+        const i = +el.dataset.i;
+        const a = el.dataset.act;
+        if      (a === 'inc') changeOrderQty(i, 1);
+        else if (a === 'dec') changeOrderQty(i, -1);
+        else if (a === 'rm')  removeOrderLine(i);
+      });
+    });
+    body.querySelectorAll('[data-qty]').forEach(inp => {
+      inp.addEventListener('input', (e) => {
+        const i = +inp.dataset.qty;
+        _orderCart[i].qty = parseFloat(inp.value) || 0;
+        updateOrderFooter();
+      });
+    });
+    body.querySelectorAll('[data-note]').forEach(inp => {
+      inp.addEventListener('input', (e) => {
+        const i = +inp.dataset.note;
+        _orderCart[i].note = inp.value;
+      });
+    });
+  }
+  // Footer: count + submit
+  const foot = document.getElementById('foot');
+  foot.innerHTML = `
+    <div class="info">
+      <span class="lbl">Cart · 购物车</span>
+      <span class="val" id="orderCartCount">${_orderCart.length}</span>
+    </div>
+    <button class="submit-btn" id="orderSubmitBtn" ${_orderCart.length === 0 ? 'disabled' : ''}>
+      ✓ Submit Order · 提交订单
+    </button>`;
+  document.getElementById('orderSubmitBtn').addEventListener('click', submitOrder);
+  // Tap anywhere on the body's empty space → search overlay
+  body.addEventListener('click', onBodyTap, { once: true });
+}
+
+// Replays after each render — body.addEventListener with once:true is reset
+function onBodyTap(e) {
+  if (_tab !== 'order') return;
+  if (e.target.closest('.line') || e.target.closest('button') || e.target.closest('input')) {
+    // re-attach for next tap
+    document.getElementById('body').addEventListener('click', onBodyTap, { once: true });
+    return;
+  }
+  openSearch();
+}
+
+function renderOrderLine(entry, i) {
+  const ing = entry.ing;
+  const unit = ing.buy_unit || ing.unit || '';
+  const last = _lastQty[ing.id];
+  let lastHTML = '';
+  if (last?.last_date) {
+    const days = Math.max(0, Math.round((Date.now() - new Date(last.last_date).getTime()) / 86400000));
+    const cls = days <= 7 ? '' : days <= 30 ? 'warn' : 'cold';
+    lastHTML = `<span class="last ${cls}">Last · 上次: ${last.qty}${esc(last.unit||unit||'')} · ${days===0?'today · 今天':days+'d ago · 天前'}</span>`;
+  } else {
+    lastHTML = `<span style="color:var(--muted);font-style:italic">No prior orders · 暂无历史</span>`;
+  }
+  // Already-in-flight warning. If this ingredient is in the team feed
+  // (last 7 days, not yet "received"), show an amber chip with who and
+  // when. Filter out the user's own past orders so the chip surfaces
+  // *team* duplicates, which is what the user actually cares about.
+  const teamHits = (_teamFeed.by_ingredient[ing.id] || [])
+    .filter(h => !h.is_self)
+    .filter(h => (h.status || '').toLowerCase() !== 'received');
+  let warnHTML = '';
+  if (teamHits.length) {
+    const h = teamHits[0]; // most-recent
+    const ago = _teamAgoBilingual(h.when);
+    const more = teamHits.length > 1 ? ` (+${teamHits.length-1})` : '';
+    warnHTML = `<div style="display:flex;align-items:center;gap:6px;background:rgba(224,123,80,.12);border:1px solid rgba(224,123,80,.35);color:#a04a25;font-size:11px;font-weight:600;padding:4px 8px;border-radius:8px;margin-top:4px">
+      <span>⚠</span><span style="flex:1">Already ordered by · 已被 <strong>${esc(h.who)}</strong> 订购 · ${ago}${more}</span>
+    </div>`;
+  }
+  return `<div class="line" data-line="${i}">
+    <div class="top">
+      <div class="info">
+        <div class="name">${esc(ing.name_en || ing.name_cn || '—')}${ing.name_cn && ing.name_en ? ` <span class="cn">· ${esc(ing.name_cn)}</span>` : ''}</div>
+        <div class="meta">
+          ${ing.sku ? esc(ing.sku) + ' · ' : ''}${lastHTML}
+        </div>
+        ${warnHTML}
+      </div>
+      <button class="remove" data-act="rm" data-i="${i}">✕</button>
+    </div>
+    <div class="ctrl">
+      <button class="qty-btn" data-act="dec" data-i="${i}">−</button>
+      <input class="qty-input" type="number" min="0" step="0.01" value="${entry.qty}" data-qty="${i}" inputmode="decimal">
+      <button class="qty-btn" data-act="inc" data-i="${i}">+</button>
+      <span class="unit-pill">${esc(unit||'unit')}</span>
+    </div>
+    <input class="note-input" type="text" placeholder="Note for buying · 备注 (optional)" value="${esc(entry.note||'')}" data-note="${i}">
+  </div>`;
+}
+
+function changeOrderQty(i, delta) {
+  if (!_orderCart[i]) return;
+  _orderCart[i].qty = Math.max(0, +(((_orderCart[i].qty || 0) + delta).toFixed(2)));
+  if (_orderCart[i].qty === 0) {
+    removeOrderLine(i);
+  } else {
+    renderOrderTab();
+  }
+}
+function removeOrderLine(i) { _orderCart.splice(i, 1); renderOrderTab(); }
+function updateOrderFooter() {
+  const n = document.getElementById('orderCartCount');
+  if (n) n.textContent = _orderCart.length;
+  // Calm the FAB once items are present.
+  const fab = document.getElementById('addFab');
+  if (fab) fab.classList.toggle('has-items', _orderCart.length > 0);
+}
+
+function addToOrderCart(ing) {
+  // If the ingredient is already in the cart, bump its qty by the
+  // last-ordered amount (defaulting to 1) — mirrors the kitchen team's
+  // "I want one more batch's worth" muscle memory.
+  const existing = _orderCart.find(c => c.ing.id === ing.id);
+  if (existing) {
+    existing.qty += (_lastQty[ing.id]?.qty) || 1;
+  } else {
+    _orderCart.push({
+      ing,
+      qty: _lastQty[ing.id]?.qty || 1,
+      note: '',
+    });
+  }
+  renderOrderTab();
+  pulseScan();
+  beep('ok');
+  // Scroll the Add Item button into view so it's always reachable, and
+  // pop-animate the new line as we pass it.
+  const idx = existing ? _orderCart.findIndex(c => c.ing.id === ing.id) : _orderCart.length - 1;
+  setTimeout(() => {
+    const el = document.querySelector(`[data-line="${idx}"]`);
+    if (el) {
+      el.classList.add('popped');
+      setTimeout(() => el.classList.remove('popped'), 200);
+    }
+    const addBtn = document.getElementById('kOrderAddMore');
+    if (addBtn) addBtn.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    else if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 30);
+}
+
+async function lookupAndAddByBarcode(code) {
+  try {
+    const r = await fetch('/api/products/by-barcode/' + encodeURIComponent(code));
+    if (r.status === 404) {
+      // The product lookup is barcode-on-product — for the kitchen we
+      // also tolerate a SKU as the gun's input (most kitchen items have
+      // SKU-style identifiers, not commercial barcodes).
+      const ing = _ingredients.find(i => (i.sku || '').toLowerCase() === code.toLowerCase());
+      if (ing) { addToOrderCart(ing); return; }
+      toast('Not found · 未识别: ' + code, 'error');
+      beep('error');
+      return;
+    }
+    if (!r.ok) { toast('Lookup failed · 查询失败', 'error'); return; }
+    const d = await r.json();
+    // /api/products/by-barcode returns a product, not an ingredient. Try
+    // to find the matching ingredient (same SKU). If not found, we can't
+    // add it to a kitchen order (kitchen orders are ingredient-level).
+    const sku = d?.data?.sku;
+    if (sku) {
+      const ing = _ingredients.find(i => (i.sku || '').toLowerCase() === sku.toLowerCase());
+      if (ing) { addToOrderCart(ing); return; }
+    }
+    toast('Product found, no matching item · 找到产品但无对应物料', 'error');
+  } catch { toast('Network error · 网络错误', 'error'); }
+}
+
+async function submitOrder() {
+  if (!_orderCart.length) return;
+  const btn = document.getElementById('orderSubmitBtn');
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Saving… · 保存中…';
+  try {
+    const items = _orderCart.map(c => ({
+      ingredient_id: c.ing.id,
+      name_en:  c.ing.name_en || '',
+      name_cn:  c.ing.name_cn || null,
+      sku:      c.ing.sku || null,
+      qty:      c.qty || 0,
+      unit:     c.ing.buy_unit || c.ing.unit || null,
+      cost_per_unit:    c.ing.buy_price || 0,
+      expense_category: c.ing.expense_category || null,
+      note:     c.note || null,
+    }));
+    const r = await fetch('/api/kitchen/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    });
+    const d = await r.json();
+    if (!d?.success) throw new Error(d.error || 'failed');
+    toast('✓ ' + d.po_number + ' submitted · 已提交', 'success');
+    beep('done');
+    _orderCart = [];
+    // refresh last-qty + team feed so the next session sees the new order
+    // and other staff get the inflight warning chip immediately.
+    fetch('/api/kitchen/last-qty').then(r => r.json()).then(d => { _lastQty = d.data || {}; });
+    refreshTeamFeed().then(() => renderOrderTab());
+    renderOrderTab();
+  } catch (e) {
+    toast('Save failed · 保存失败: ' + (e.message || ''), 'error');
+    beep('error');
+  } finally {
+    btn.disabled = _orderCart.length === 0;
+    btn.textContent = original;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// SEARCH overlay — ingredients (Order tab). Empty query shows recently-
+// ordered items so the kitchen can re-add common stock with one tap.
+// ─────────────────────────────────────────────────────────────────────
+function openSearch() {
+  document.getElementById('ovBackdrop').classList.add('visible');
+  document.getElementById('searchOv').classList.add('visible');
+  _ovKeyboardWatch(true);
+  setTimeout(() => {
+    const inp = document.getElementById('searchInput');
+    inp.value = '';
+    inp.focus();
+    onSearchInput();
+  }, 50);
+}
+
+let _searchTimer = null;
+function onSearchInput() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  if (_searchTimer) clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => doSearch(q), 100);
+}
+
+// Bilingual time-ago — same format used by the cart chip below so the
+// team-activity surfacing reads consistently in EN+CN.
+function _teamAgoBilingual(iso) {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 60)   return mins + 'm ago · ' + mins + '分钟前';
+  if (mins < 1440) { const h = Math.floor(mins/60); return h + 'h ago · ' + h + '小时前'; }
+  const d = Math.floor(mins/1440); return d + 'd ago · ' + d + '天前';
+}
+function _teamStatusBilingual(s) {
+  const k = (s || 'pending').toLowerCase();
+  return ({
+    pending:   'pending · 待处理',
+    requested: 'requested · 已请求',
+    ordered:   'ordered · 已下单',
+    received:  'received · 已到货',
+    cancelled: 'cancelled · 已取消',
+  })[k] || (k + ' · ' + (s || ''));
+}
+
+function _teamPickRow(ing, hits) {
+  // hits: [{po_number, who, when, status, qty, unit, is_self}, …]
+  const top = hits[0];
+  const ago = _teamAgoBilingual(top.when);
+  const more = hits.length > 1 ? ` <span style="opacity:.7">+${hits.length-1}</span>` : '';
+  const who  = top.is_self ? `<strong>you · 我</strong>` : `<strong>${esc(top.who)}</strong>`;
+  const skuChip = ing.sku
+    ? `<span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--muted);background:rgba(0,0,0,.05);padding:1px 6px;border-radius:5px;font-weight:700;margin-right:6px;display:inline-block;vertical-align:1px">${esc(ing.sku)}</span>`
+    : '';
+  return `<div class="search-row" data-id="${ing.id}" style="background:rgba(224,123,80,.06)">
+    <div class="info">
+      <div class="nm">${skuChip}${esc(ing.name_en || '—')}${ing.name_cn ? ` <span style="color:var(--muted);font-weight:500">· ${esc(ing.name_cn)}</span>` : ''}</div>
+      <div class="mt" style="color:#a04a25">⚠ Already by · 已被 ${who} 订购 · ${ago}${more} · ${_teamStatusBilingual(top.status)}</div>
+    </div>
+    <div class="last" style="color:#a04a25">${top.qty} ${esc(top.unit||ing.buy_unit||'')}</div>
+  </div>`;
+}
+
+function doSearch(q) {
+  const list = document.getElementById('searchList');
+  // Team activity — items already in flight (last 7 days, not yet received)
+  // ordered by SOMEONE on the team. Render at the top so the user sees
+  // duplicate risk exactly when picking. Filtered to the search query
+  // when one is typed.
+  const teamHitsBlock = (() => {
+    const map = _teamFeed.by_ingredient || {};
+    const ids = Object.keys(map).map(Number);
+    if (!ids.length) return '';
+    const teamRows = [];
+    for (const id of ids) {
+      const ing = _ingredients.find(i => i.id === id);
+      if (!ing) continue;
+      const hits = (map[id] || []).filter(h => (h.status || '').toLowerCase() !== 'received');
+      if (!hits.length) continue;
+      // Filter by query if user is typing.
+      if (q) {
+        const hay = ((ing.name_en||'') + ' ' + (ing.name_cn||'') + ' ' + (ing.sku||'')).toLowerCase();
+        if (!hay.includes(q)) continue;
+      }
+      teamRows.push({ ing, hits });
+    }
+    if (!teamRows.length) return '';
+    // Most-recently ordered first
+    teamRows.sort((a, b) => new Date(b.hits[0].when) - new Date(a.hits[0].when));
+    const head = `<div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#a04a25;padding:4px 6px 8px">👥 Team activity · 团队最近订货 · 7d</div>`;
+    return head + teamRows.slice(0, 8).map(x => _teamPickRow(x.ing, x.hits)).join('') +
+      `<div style="height:1px;background:var(--border);margin:8px 0 6px"></div>`;
+  })();
+
+  let rows;
+  let header = '';
+  if (!q) {
+    // Empty query → show "recently ordered" list, sorted by recency.
+    // Falls back to alphabetical if no last-qty data is available.
+    const withLast = _ingredients
+      .map(ing => ({ ing, last: _lastQty[ing.id] }))
+      .filter(x => x.last && x.last.last_date)
+      .sort((a, b) => (b.last.last_date || '').localeCompare(a.last.last_date || ''));
+    if (withLast.length > 0) {
+      rows = withLast.slice(0, 30).map(x => x.ing);
+      header = `<div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:4px 6px 8px">⏱ Recently Ordered · 近期订货</div>`;
+    } else {
+      rows = _ingredients.slice().sort((a, b) => (a.name_en || '').localeCompare(b.name_en || '')).slice(0, 30);
+    }
+  } else {
+    rows = _ingredients.filter(i =>
+      (i.name_en || '').toLowerCase().includes(q) ||
+      (i.name_cn || '').includes(q) ||
+      (i.sku || '').toLowerCase().includes(q)
+    ).slice(0, 50);
+  }
+  if (!rows.length && !teamHitsBlock) {
+    list.innerHTML = '<div class="search-empty">No matches · 无匹配</div>';
+    return;
+  }
+  const inCartIds = new Set(_orderCart.map(c => c.ing.id));
+  const mainBlock = rows.map(ing => {
+    const last = _lastQty[ing.id];
+    const lastTxt = last?.last_date
+      ? `Last · 上次: ${last.qty} ${esc(last.unit || ing.buy_unit || '')}`
+      : '';
+    const skuChip = ing.sku
+      ? `<span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--muted);background:rgba(0,0,0,.05);padding:1px 6px;border-radius:5px;font-weight:700;margin-right:6px;display:inline-block;vertical-align:1px">${esc(ing.sku)}</span>`
+      : '';
+    return `<div class="search-row${inCartIds.has(ing.id) ? ' in-cart' : ''}" data-id="${ing.id}">
+      <div class="info">
+        <div class="nm">${skuChip}${esc(ing.name_en || '—')}${ing.name_cn ? ` <span style="color:var(--muted);font-weight:500">· ${esc(ing.name_cn)}</span>` : ''}</div>
+        ${ing.category ? `<div class="mt">${esc(ing.category)}</div>` : ''}
+      </div>
+      ${lastTxt ? `<div class="last">${lastTxt}</div>` : ''}
+    </div>`;
+  }).join('');
+  list.innerHTML = teamHitsBlock + header + mainBlock;
+  list.querySelectorAll('.search-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const id = +row.dataset.id;
+      const ing = _ingredients.find(i => i.id === id);
+      if (!ing) return;
+      addToOrderCart(ing);
+      closeAllOv();
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// PRODUCTION TAB — log batches made today
+// ─────────────────────────────────────────────────────────────────────
+function renderProductionTab() {
+  const body = document.getElementById('body');
+  body.classList.remove('tappable');
+  const today = new Date().toISOString().slice(0, 10);
+  // Recipe picker is a tappable button instead of a <select> — opens a
+  // search overlay (name / SKU / 中文) so the kitchen team doesn't have
+  // to scroll through 50+ options. Shows the picked recipe inline once
+  // chosen, with a small ✕ to clear.
+  const recipeBtnHTML = _pickedRecipe
+    ? `<button id="prodRecipeBtn" type="button" style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;font-size:15px;font-family:inherit;background:#fff;text-align:left;display:flex;align-items:center;gap:10px;cursor:pointer">
+         <span style="font-size:18px">📖</span>
+         <span style="flex:1;min-width:0">
+           <div style="font-weight:700;color:var(--dk);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(_pickedRecipe.name_en || '')}</div>
+           ${_pickedRecipe.name_cn ? `<div style="font-size:12px;color:var(--muted);margin-top:1px">${esc(_pickedRecipe.name_cn)}</div>` : ''}
+         </span>
+         <span data-recipe-clear style="color:var(--muted);font-size:14px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:var(--bg)">✕</span>
+       </button>`
+    : `<button id="prodRecipeBtn" type="button" style="width:100%;border:1.5px dashed var(--border);border-radius:10px;padding:12px 14px;font-size:15px;font-family:inherit;background:rgba(204,217,0,.06);color:var(--lime-text);font-weight:700;text-align:left;display:flex;align-items:center;gap:10px;cursor:pointer">
+         <span style="font-size:18px">📖</span>
+         <span style="flex:1">Pick recipe · 选择食谱…</span>
+         <span style="color:var(--muted);font-size:14px">›</span>
+       </button>`;
+  body.innerHTML = `
+    <div class="prod-form">
+      ${recipeBtnHTML}
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">Batches · 批数</div>
+        <select id="prodBatchesSelect" onchange="_kBatchSelChange(this)" style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;font-size:16px;font-family:inherit;background:#fff">
+          <option value="1" selected>1 batch · 1 批</option>
+          <option value="2">2 batches · 2 批</option>
+          <option value="3">3 batches · 3 批</option>
+          <option value="4">4 batches · 4 批</option>
+          <option value="5">5 batches · 5 批</option>
+          <option value="custom">Other · 其它…</option>
+        </select>
+        <input id="prodBatches" type="number" min="0.01" step="0.5" value="1" placeholder="Enter batch count · 输入批次数" inputmode="decimal" style="display:none;width:100%;border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;font-size:16px;font-family:inherit;background:#fff;margin-top:6px">
+      </div>
+      <input id="prodNotes" type="text" placeholder="Notes · 备注 (optional)" autocomplete="off">
+    </div>
+    <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:14px 4px 8px">📅 Today · 今日 · ${today}</div>
+    <div id="prodList">
+      ${_todaysProduction.length === 0
+        ? '<div style="text-align:center;color:var(--muted);font-size:13px;padding:20px">No batches logged yet · 暂无生产记录</div>'
+        : _todaysProduction.map(b => `<div class="prod-batch">
+            <div>
+              <div class="b-name">${esc(b.recipe_name || '—')}</div>
+              <div class="b-meta">${(b.created_at||'').slice(11,16)}${b.notes ? ' · ' + esc((b.notes||'').slice(0, 50)) : ''}</div>
+            </div>
+            <div class="b-amt">${b.batches_made}× <span style="font-weight:500;color:var(--muted);font-size:11px">${b.servings_made ? '· '+b.servings_made+' svg' : ''}</span></div>
+          </div>`).join('')}
+    </div>`;
+  // Footer: log button
+  const foot = document.getElementById('foot');
+  foot.innerHTML = `
+    <div class="info">
+      <span class="lbl">Today · 今日批次</span>
+      <span class="val">${_todaysProduction.reduce((s, b) => s + (+b.batches_made || 0), 0)}</span>
+    </div>
+    <button class="submit-btn" id="prodLogBtn">
+      ✓ Log Batch · 记录批次
+    </button>`;
+  document.getElementById('prodLogBtn').addEventListener('click', logProductionBatch);
+  // Recipe picker — open the overlay; if user taps the inner ✕ on a
+  // chosen-recipe button, clear it instead of opening the picker.
+  document.getElementById('prodRecipeBtn').addEventListener('click', (e) => {
+    if (e.target.closest('[data-recipe-clear]')) {
+      _pickedRecipe = null;
+      renderProductionTab();
+      return;
+    }
+    openRecipePicker();
+  });
+}
+
+// Batches dropdown handler — picks 1–5 give an immediate value; "Other"
+// reveals the custom number input below. The hidden #prodBatches input
+// is always the source of truth (logProductionBatch reads it).
+function _kBatchSelChange(sel) {
+  const inp = document.getElementById('prodBatches');
+  if (!inp) return;
+  if (sel.value === 'custom') {
+    inp.style.display = '';
+    inp.value = '';
+    setTimeout(() => inp.focus(), 30);
+  } else {
+    inp.style.display = 'none';
+    inp.value = sel.value;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// RECIPE PICKER overlay — search recipes by name / SKU / 中文.
+// Empty query shows alphabetical list. Same UX as the POS Top Sellers.
+// ─────────────────────────────────────────────────────────────────────
+function openRecipePicker() {
+  document.getElementById('ovBackdrop').classList.add('visible');
+  document.getElementById('recipeOv').classList.add('visible');
+  _ovKeyboardWatch(true);
+  setTimeout(() => {
+    const inp = document.getElementById('recipeSearchInput');
+    inp.value = '';
+    inp.focus();
+    doRecipeSearch('');
+  }, 50);
+}
+
+let _recipeSearchTimer = null;
+function onRecipeSearchInput() {
+  const q = document.getElementById('recipeSearchInput').value.trim().toLowerCase();
+  if (_recipeSearchTimer) clearTimeout(_recipeSearchTimer);
+  _recipeSearchTimer = setTimeout(() => doRecipeSearch(q), 100);
+}
+
+function doRecipeSearch(q) {
+  const list = document.getElementById('recipeSearchList');
+  let rows;
+  if (!q) {
+    // Empty query → alphabetical list (capped) so the kitchen sees
+    // their full catalog at a glance.
+    rows = _recipes.slice().sort((a, b) =>
+      (a.name_en || '').localeCompare(b.name_en || '')).slice(0, 50);
+  } else {
+    rows = _recipes.filter(r =>
+      (r.name_en || '').toLowerCase().includes(q) ||
+      (r.name_cn || '').includes(q) ||
+      (r.sku || '').toLowerCase().includes(q)
+    ).slice(0, 50);
+  }
+  if (!rows.length) {
+    list.innerHTML = '<div class="search-empty">No matches · 无匹配</div>';
+    return;
+  }
+  list.innerHTML = rows.map(r => `
+    <div class="search-row" data-rid="${r.id}">
+      <div class="info">
+        <div class="nm">${esc(r.name_en || '—')}${r.name_cn ? ` <span style="color:var(--muted);font-weight:500">· ${esc(r.name_cn)}</span>` : ''}</div>
+        <div class="mt">${r.sku ? esc(r.sku) + ' · ' : ''}${r.servings ? r.servings + ' servings' : ''}</div>
+      </div>
+    </div>
+  `).join('');
+  list.querySelectorAll('.search-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const id = +row.dataset.rid;
+      const rec = _recipes.find(r => r.id === id);
+      if (!rec) return;
+      _pickedRecipe = rec;
+      closeAllOv();
+      renderProductionTab();
+      // Focus the batches input next so the kitchen flow is single-handed.
+      setTimeout(() => document.getElementById('prodBatches')?.focus(), 100);
+    });
+  });
+}
+
+async function refreshTodaysProduction() {
+  // /api/production accepts ?period=today|7d|30d|all (no from/to range).
+  // We filter to today client-side anyway since the page shows "Today"
+  // and the endpoint may include other dates if `today` is loose.
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const r = await fetch('/api/production?period=today');
+    const d = await r.json();
+    _todaysProduction = (d.data || []).filter(b => (b.date || '').slice(0, 10) === today);
+  } catch { _todaysProduction = []; }
+}
+
+async function logProductionBatch() {
+  const batches = document.getElementById('prodBatches').value;
+  const notes   = document.getElementById('prodNotes').value.trim();
+  if (!_pickedRecipe) { toast('请选择食谱 · Pick a recipe', 'error'); return; }
+  if (!batches || +batches <= 0) { toast('批数必填 · Batches required', 'error'); return; }
+  const btn = document.getElementById('prodLogBtn');
+  btn.disabled = true;
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const r = await fetch('/api/production', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date: today,
+        recipe_id: _pickedRecipe.id,
+        batches_made: parseFloat(batches),
+        staff_name: _user.displayName || _user.username || null,
+        notes: notes || null,
+      }),
+    });
+    const d = await r.json();
+    if (!d?.success) throw new Error(d.error || 'failed');
+    toast('✓ Logged · 已记录', 'success');
+    beep('done');
+    document.getElementById('prodBatches').value = '1';
+    document.getElementById('prodNotes').value   = '';
+    await refreshTodaysProduction();
+    renderProductionTab();
+  } catch (e) {
+    toast('Failed · 失败: ' + (e.message || ''), 'error');
+    beep('error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// More menu
+// ─────────────────────────────────────────────────────────────────────
+function openMore() {
+  const initial = (_user.displayName || _user.username || '?').trim().charAt(0).toUpperCase();
+  document.getElementById('moreBody').innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;padding:4px 4px 18px">
+      <div style="width:44px;height:44px;border-radius:50%;background:var(--dk);color:var(--lime);font-weight:800;font-size:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-transform:uppercase">${esc(initial)}</div>
+      <div>
+        <div style="font-weight:800">${esc(_user.displayName || _user.username || '')}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">@${esc(_user.username || '')} · ${esc(_user.role || '')}</div>
+      </div>
+    </div>
+    <button class="submit-btn" id="logoutBtn" style="background:var(--danger);color:#fff;width:100%">⏻ Logout · 退出</button>`;
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    location.href = '/login';
+  });
+  document.getElementById('ovBackdrop').classList.add('visible');
+  document.getElementById('moreOv').classList.add('visible');
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Overlay plumbing (mirrors POS)
+// ─────────────────────────────────────────────────────────────────────
+function closeAllOv() {
+  document.getElementById('ovBackdrop').classList.remove('visible');
+  document.querySelectorAll('.ov').forEach(el => {
+    el.classList.remove('visible');
+    el.style.height = '';
+  });
+  _ovKeyboardWatch(false);
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+}
+
+function _ovKeyboardSync() {
+  const vv = window.visualViewport;
+  const ov = document.querySelector('.ov.visible');
+  if (!ov || !vv) return;
+  if (window.innerWidth >= 600) { ov.style.height = ''; return; }
+  ov.style.height = Math.round(vv.height + vv.offsetTop) + 'px';
+}
+function _ovKeyboardWatch(on) {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  if (on) {
+    vv.addEventListener('resize', _ovKeyboardSync);
+    vv.addEventListener('scroll', _ovKeyboardSync);
+    _ovKeyboardSync();
+  } else {
+    vv.removeEventListener('resize', _ovKeyboardSync);
+    vv.removeEventListener('scroll', _ovKeyboardSync);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Beep + toast + scan-pulse
+// ─────────────────────────────────────────────────────────────────────
+let _audioCtx = null;
+function beep(kind) {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _audioCtx;
+    if (kind === 'error') {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 220;
+      g.gain.setValueAtTime(0.18, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      o.start(); o.stop(ctx.currentTime + 0.4);
+    } else if (kind === 'done') {
+      [880, 1320].forEach((f, i) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = f;
+        const t = ctx.currentTime + i * 0.09;
+        g.gain.setValueAtTime(0.12, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+        o.start(t); o.stop(t + 0.16);
+      });
+    } else {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 1100;
+      g.gain.setValueAtTime(0.12, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+      o.start(); o.stop(ctx.currentTime + 0.1);
+    }
+  } catch {}
+}
+function pulseScan() {
+  const el = document.getElementById('scanPulse');
+  el.classList.remove('fire');
+  void el.offsetWidth;
+  el.classList.add('fire');
+}
+function toast(msg, type) {
+  const w = document.getElementById('toastWrap');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.textContent = msg;
+  w.appendChild(el);
+  setTimeout(() => el.remove(), type === 'error' ? 3500 : 2200);
+}
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,525 @@
+.page {
+  background: var(--oat);
+  min-height: 100vh;
+  padding-bottom: 220rpx;
+}
+
+.header { padding: 80rpx 44rpx 24rpx; }
+.header-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16rpx; }
+.header-text { flex: 1; }
+.kicker { font-size: calc(22rpx * var(--font-scale)); letter-spacing: 0.22em; color: var(--olive); }
+.title { font-size: calc(80rpx * var(--font-scale)); font-weight: 500; line-height: 0.95; margin-top: 10rpx; color: var(--ink); }
+
+/* Sections: hairline separators between, with a heavier ink rule on the first. */
+.section {
+  padding: 28rpx 44rpx;
+  border-top: 1rpx solid rgba(0, 0, 0, 0.18);
+  background: var(--oat);
+}
+.section-first { border-top: 3rpx solid var(--ink); }
+.section-label {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.2em;
+  color: var(--olive);
+  margin-bottom: 14rpx;
+}
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14rpx;
+}
+.section-title {
+  font-size: calc(36rpx * var(--font-scale));
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.head-action {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.16em;
+  color: var(--olive);
+  text-decoration: underline;
+}
+
+/* Order receipt */
+.receipt { padding-top: 4rpx; }
+.order-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 5rpx 0;
+}
+.line-name {
+  flex: 1;
+  font-size: calc(26rpx * var(--font-scale));
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.line-meta { color: var(--olive); }
+.line-total { font-size: calc(28rpx * var(--font-scale)); }
+.voucher-line {
+  margin-top: 8rpx;
+  padding-top: 10rpx;
+  border-top: 1rpx dashed rgba(0, 0, 0, 0.3);
+  color: var(--berry);
+}
+.voucher-line .line-name { color: var(--berry); }
+
+/* Address block */
+.addr-text { font-size: calc(26rpx * var(--font-scale)); line-height: 1.5; }
+.addr-name { font-weight: 500; }
+.addr-phone { color: var(--ink); }
+.addr-full { color: var(--ink); opacity: 0.8; font-size: calc(24rpx * var(--font-scale)); margin-top: 2rpx; }
+.addr-default {
+  font-size: calc(16rpx * var(--font-scale));
+  letter-spacing: 0.16em;
+  color: var(--forest);
+  margin-left: 8rpx;
+}
+.addr-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 18rpx;
+  padding: 14rpx 0;
+}
+.addr-row + .addr-row { border-top: 1rpx dashed rgba(0, 0, 0, 0.18); }
+.addr-body { flex: 1; min-width: 0; }
+.link-row {
+  padding: 14rpx 0 4rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+  color: var(--olive);
+  text-decoration: underline;
+}
+
+/* Form fields */
+.field { margin-bottom: 12rpx; }
+.field-pair { display: flex; gap: 16rpx; }
+.field-pair .input { flex: 1; }
+.input {
+  background: #FFFCF7;
+  border: 2rpx solid var(--ink);
+  padding: 0 22rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  font-size: calc(26rpx * var(--font-scale));
+  font-family: inherit;
+  border-radius: 0;
+  box-sizing: border-box;
+}
+.textarea {
+  width: 100%;
+  background: #FFFCF7;
+  border: 2rpx solid var(--ink);
+  padding: 18rpx 22rpx;
+  font-size: calc(26rpx * var(--font-scale));
+  font-family: inherit;
+  border-radius: 0;
+  min-height: 100rpx;
+  box-sizing: border-box;
+}
+
+/* Radio dot — used for delivery/payment/address rows. The row itself stays
+   unstyled when selected; only the dot fills. Matches the design. */
+.dot {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 999rpx;
+  border: 3rpx solid var(--ink);
+  flex-shrink: 0;
+  position: relative;
+  background: transparent;
+}
+.dot.on::after {
+  content: '';
+  position: absolute;
+  inset: 6rpx;
+  background: var(--ink);
+  border-radius: 999rpx;
+}
+
+/* Delivery / payment rows — simple list, no boxed border. */
+.opt-row {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  padding: 14rpx 0;
+}
+.opt-row.opt-disabled { opacity: 0.45; }
+.opt-body { flex: 1; min-width: 0; }
+.opt-label {
+  font-size: calc(30rpx * var(--font-scale));
+  line-height: 1.2;
+}
+.opt-sub {
+  font-size: calc(22rpx * var(--font-scale));
+  margin-top: 2rpx;
+  line-height: 1.3;
+}
+.opt-price {
+  font-size: calc(30rpx * var(--font-scale));
+  letter-spacing: 0.04em;
+}
+
+/* Delivery slot picker */
+.slot-row {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  padding: 14rpx 0;
+}
+.slot-banner {
+  padding: 12rpx 16rpx;
+  background: rgba(204, 217, 0, 0.18);
+  border-left: 4rpx solid var(--ink);
+  margin: 12rpx 0;
+  font-size: calc(24rpx * var(--font-scale));
+}
+.slot-day { margin-top: 18rpx; }
+.slot-day-label {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.18em;
+  color: var(--olive);
+  margin-bottom: 10rpx;
+}
+.slot-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+.slot-chip {
+  border: 2rpx solid var(--ink);
+  padding: 12rpx 18rpx;
+  font-size: calc(24rpx * var(--font-scale));
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+  min-width: 140rpx;
+  align-items: center;
+}
+.slot-chip.on {
+  background: var(--ink);
+  color: var(--lime);
+}
+.slot-chip .chip-label { line-height: 1.2; }
+.slot-chip .chip-surcharge {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+  opacity: 0.85;
+}
+.slot-empty { padding: 14rpx 0; font-size: calc(24rpx * var(--font-scale)); }
+
+/* Day-only mode option rows — three card-like radios stacked. */
+.slot-option {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  padding: 22rpx 24rpx;
+  margin-top: 14rpx;
+  border: 2rpx solid var(--ink);
+  background: transparent;
+}
+.slot-option.on { background: rgba(54, 83, 41, 0.06); }
+.slot-option .opt-body { flex: 1; min-width: 0; }
+.slot-option .opt-label { font-size: calc(28rpx * var(--font-scale)); line-height: 1.25; }
+.slot-option .opt-sub { font-size: calc(22rpx * var(--font-scale)); margin-top: 4rpx; line-height: 1.35; }
+.opt-check {
+  width: 36rpx; height: 36rpx;
+  border: 3rpx solid var(--ink);
+  border-radius: 999rpx;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.slot-option.on .opt-check { background: var(--lime); border-color: var(--ink); }
+.opt-check-dot { width: 14rpx; height: 14rpx; border-radius: 999rpx; background: transparent; }
+.slot-option.on .opt-check-dot { background: var(--ink); }
+
+/* Payment colored swatch */
+.pay-swatch {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 4rpx;
+  flex-shrink: 0;
+}
+
+/* Add-ons */
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 12rpx 0;
+}
+.checkbox-label {
+  font-size: calc(26rpx * var(--font-scale));
+  color: var(--ink);
+}
+
+/* Voucher */
+.voucher-input-row {
+  display: flex;
+  gap: 12rpx;
+  align-items: center;
+}
+.voucher-input-row .input {
+  flex: 1;
+  height: 80rpx;
+  line-height: 80rpx;
+  padding: 0 22rpx;
+  box-sizing: border-box;
+}
+.apply-link {
+  height: 80rpx;
+  padding: 0 28rpx;
+  background: var(--ink);
+  color: var(--lime);
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.voucher-applied {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(204, 217, 0, 0.18);
+  border: 2rpx solid var(--lime);
+  padding: 16rpx 20rpx;
+}
+.va-code { font-size: calc(30rpx * var(--font-scale)); letter-spacing: 0.06em; color: var(--ink); }
+.va-desc { font-size: calc(22rpx * var(--font-scale)); margin-top: 2rpx; }
+.va-remove { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.1em; color: var(--berry); text-decoration: underline; }
+
+.coupon-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  margin-bottom: 18rpx;
+}
+.coupon-chip {
+  background: #fff;
+  border: 2rpx dashed rgba(0,0,0,0.2);
+  padding: 18rpx 20rpx;
+  position: relative;
+}
+.coupon-chip.mine { background: rgba(204, 217, 0, 0.12); border: 2rpx solid var(--forest); }
+.cc-badge {
+  position: absolute;
+  top: 12rpx;
+  right: 16rpx;
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  background: var(--forest);
+  color: var(--lime);
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+}
+.coupon-chip:active { background: rgba(204, 217, 0, 0.12); }
+.cc-title { font-size: calc(28rpx * var(--font-scale)); font-weight: 500; color: var(--ink); line-height: 1.3; }
+.cc-sub { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.06em; opacity: 0.55; margin-top: 4rpx; }
+.cc-apply {
+  position: absolute;
+  right: 20rpx;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  color: var(--forest);
+}
+.coupon-code-toggle {
+  text-align: center;
+  padding: 12rpx 0;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+  color: var(--ink);
+  opacity: 0.55;
+}
+
+/* Zone error */
+.zone-error {
+  padding: 24rpx 22rpx;
+  background: rgba(232, 85, 106, 0.08);
+  border: 1rpx solid rgba(232, 85, 106, 0.35);
+}
+.ze-title { font-size: calc(26rpx * var(--font-scale)); color: #c14b5f; line-height: 1.4; }
+.ze-sub { font-size: calc(22rpx * var(--font-scale)); margin-top: 8rpx; line-height: 1.5; }
+
+/* Fee breakdown */
+.breakdown { padding-bottom: 30rpx; }
+.bd-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 8rpx 0;
+}
+.bd-label { font-size: calc(26rpx * var(--font-scale)); color: var(--olive); }
+.bd-val { font-size: calc(28rpx * var(--font-scale)); color: var(--ink); }
+.bd-points .bd-val { color: #5a8a2f; }
+
+/* Sticky bottom footer */
+.sticky-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: var(--oat);
+  border-top: 3rpx solid var(--ink);
+  padding: 24rpx 32rpx 32rpx;
+  display: flex;
+  gap: 24rpx;
+  align-items: center;
+}
+.total-block { display: flex; flex-direction: column; gap: 2rpx; }
+.total-label { font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.18em; color: var(--olive); }
+.total-amount { font-size: calc(52rpx * var(--font-scale)); line-height: 1; }
+.place-btn {
+  flex: 1;
+  background: var(--ink);
+  color: var(--lime);
+  padding: 28rpx 0;
+  font-size: calc(28rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+  text-align: center;
+  border-radius: 0;
+}
+.place-btn[disabled] {
+  opacity: 0.5;
+  color: rgba(204, 217, 0, 0.5);
+}
+
+/* Fallback-routing warning — soft amber card shown above the Place Order
+   button when the nearest store is short of stock and a farther store
+   will fulfill. The check tick appears once the customer has accepted
+   the longer delivery via the modal. */
+.fallback-warning {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  margin: 24rpx 32rpx;
+  padding: 24rpx 28rpx;
+  border-radius: 16rpx;
+  background: #fff7e0;
+  border: 2rpx solid #f0c060;
+}
+.fallback-warning__icon {
+  font-size: 36rpx;
+  line-height: 1;
+}
+.fallback-warning__body {
+  flex: 1;
+  min-width: 0;
+}
+.fallback-warning__title {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #6b4a00;
+  line-height: 1.3;
+}
+.fallback-warning__sub {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: #7a5a1a;
+  line-height: 1.35;
+}
+.fallback-warning__check {
+  font-size: 32rpx;
+  color: #2a8d3a;
+  font-weight: 700;
+  padding: 0 4rpx;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   Fallback-confirmation modal — replaces wx.showModal so it matches
+   the brand. Layout: dimmed backdrop, oat-coloured card with rounded
+   corners, brand fonts (Bear for headline, Toni for kicker + CTAs),
+   two-button row (Cancel ghost / Continue black-on-lime).
+   ──────────────────────────────────────────────────────────────────── */
+.fb-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(26, 35, 20, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 56rpx;
+  animation: fbFade 180ms ease-out;
+}
+@keyframes fbFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.fb-modal-card {
+  width: 100%;
+  max-width: 620rpx;
+  background: #FFFCF7;             /* same oat as the checkout page */
+  border-radius: 28rpx;
+  padding: 56rpx 48rpx 40rpx;
+  box-shadow: 0 24rpx 60rpx rgba(26, 35, 20, 0.35);
+  animation: fbPop 200ms cubic-bezier(.2,.9,.3,1.1);
+}
+@keyframes fbPop {
+  from { transform: translateY(20rpx) scale(.94); opacity: 0; }
+  to   { transform: translateY(0) scale(1);     opacity: 1; }
+}
+.fb-modal-icon {
+  font-size: 80rpx;
+  line-height: 1;
+  margin-bottom: 18rpx;
+}
+.fb-modal-kicker {
+  font-size: 22rpx;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6d7a2a;                  /* muted lime-ink */
+  margin-bottom: 14rpx;
+}
+.fb-modal-title {
+  font-size: 56rpx;
+  line-height: 1.05;
+  font-weight: 400;                /* Bear is a serif display, weight comes from the glyphs */
+  color: #1a2314;                  /* ink */
+  margin-bottom: 24rpx;
+}
+.fb-modal-body {
+  font-size: 28rpx;
+  line-height: 1.5;
+  color: #2a3a22;
+  margin-bottom: 40rpx;
+}
+.fb-modal-body-em {
+  font-weight: 700;
+  color: #1a2314;
+}
+.fb-modal-actions {
+  display: flex;
+  gap: 14rpx;
+}
+.fb-modal-btn {
+  flex: 1;
+  text-align: center;
+  padding: 26rpx 0;
+  border-radius: 14rpx;
+  font-size: 26rpx;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.fb-modal-btn--secondary {
+  background: transparent;
+  color: #2a3a22;
+  border: 2rpx solid rgba(26, 35, 20, 0.2);
+}
+.fb-modal-btn--secondary:active {
+  background: rgba(26, 35, 20, 0.04);
+}
+.fb-modal-btn--primary {
+  background: #1a2314;             /* ink */
+  color: #ccd900;                  /* lime — same as Place Order */
+}
+.fb-modal-btn--primary:active {
+  background: #2a3a22;
+}

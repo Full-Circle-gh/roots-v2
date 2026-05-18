@@ -1,0 +1,12 @@
+<view class="page">
+  <view class="header">
+    <view class="title f-bear">{{title}}</view>
+    <view wx:if="{{updated}}" class="updated muted">Updated · {{updated}}</view>
+  </view>
+  <view class="body">
+    <view wx:if="{{paragraphs.length}}">
+      <view wx:for="{{paragraphs}}" wx:key="*this" class="paragraph">{{item}}</view>
+    </view>
+    <view wx:else class="empty muted">{{emptyMsg}}</view>
+  </view>
+</view>

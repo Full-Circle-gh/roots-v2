@@ -1,0 +1,22 @@
+{
+  "_doc": "Maps the raw `combine_with` strings from miniapp / mini-program orders to actual product SKUs in our catalog. Used by scripts/backfill_addons.js and (going forward) by routes that import sales. Strings not present here are treated as 'no addon' (e.g. customer chose 'Nothing thanks'). Heat flag (不加热/加热) is intentionally collapsed — it's a kitchen instruction, not a separate item.",
+  "mapping": {
+    "Pack of Crackers":                                  "4-270",
+    "Quinoa  加热吗？Make it Hot?:不加热 No":             "1-290",
+    "Quinoa  加热吗？Make it Hot?:加热 Yes":              "1-290",
+    "Brown Rice  加热吗？Make it Hot?:不加热 No":         "1-280",
+    "Brown Rice  加热吗？Make it Hot?:加热 Yes":          "1-280",
+    "Nachos Bag （300g）":                               "4-250",
+    "Crunchy granola":                                   "4-240",
+    "Anti inflammatory granola":                         "4-360",
+    "2 Slices Bread （Guangdong Only）":                 "3-250",
+    "Ground Meat":                                       "3-60"
+  },
+  "ignore": [
+    "Nothing, Thanks :）",
+    "No, Thanks :）  加热吗？Make it Hot?:不加热 No",
+    "No, Thanks :）  加热吗？Make it Hot?:加热 Yes",
+    "No thanks :）",
+    "Buy 3 get 1 Free!"
+  ]
+}

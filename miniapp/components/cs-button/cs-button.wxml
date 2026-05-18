@@ -1,0 +1,55 @@
+<block wx:if="{{visible}}">
+  <!-- Row variant: full-width menu row used on Me tab -->
+  <button
+    wx:if="{{variant === 'row'}}"
+    class="cs-row"
+    open-type="{{openType}}"
+    bindcontact="onContact"
+    bindtap="onTap">
+    <view class="cs-row-body">
+      <view class="cs-row-title">{{displayLabel}}</view>
+      <view wx:if="{{displayHours}}" class="cs-row-meta">{{displayHours}}</view>
+    </view>
+    <view class="cs-row-arrow">→</view>
+  </button>
+
+  <!-- FAB variant: floating bubble bottom-right -->
+  <button
+    wx:elif="{{variant === 'fab'}}"
+    class="cs-fab"
+    open-type="{{openType}}"
+    bindcontact="onContact"
+    bindtap="onTap">
+    <view class="cs-fab-icon">
+      <view class="cs-fab-dot"></view>
+      <view class="cs-fab-dot"></view>
+      <view class="cs-fab-dot"></view>
+    </view>
+  </button>
+
+  <!-- Inline variant: small pill (checkout header, product page, order page) -->
+  <button
+    wx:else
+    class="cs-pill"
+    open-type="{{openType}}"
+    bindcontact="onContact"
+    bindtap="onTap">
+    <view class="cs-pill-icon">
+      <view class="cs-fab-dot"></view>
+      <view class="cs-fab-dot"></view>
+      <view class="cs-fab-dot"></view>
+    </view>
+    <text class="cs-pill-label">{{displayLabel}}</text>
+  </button>
+
+  <!-- QR modal -->
+  <view wx:if="{{qrModalOpen}}" class="cs-qr-bg" bindtap="closeQr" catchtouchmove="true">
+    <view class="cs-qr-card" catchtap="previewQr">
+      <view class="cs-qr-title">{{displayLabel}}</view>
+      <view wx:if="{{displayHours}}" class="cs-qr-hours">{{displayHours}}</view>
+      <image class="cs-qr-img" src="{{qrUrl}}" mode="aspectFit"></image>
+      <view class="cs-qr-hint">Long-press to save · tap image to preview</view>
+      <view class="cs-qr-close" catchtap="closeQr">Close</view>
+    </view>
+  </view>
+</block>

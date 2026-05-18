@@ -1,0 +1,78 @@
+<view class="page">
+  <!-- Header -->
+  <view class="header">
+    <view class="kicker f-toni">{{copy.kicker}}<text wx:if="{{lang === 'cn'}}" class="kicker-cn"> · 评价</text></view>
+    <view class="title f-bear">{{copy.title}}</view>
+  </view>
+
+  <!-- Product context card -->
+  <view class="ctx-card">
+    <view class="ctx-thumb">
+      <image wx:if="{{productImage}}" src="{{productImage}}" mode="aspectFill" class="ctx-img"/>
+    </view>
+    <view class="ctx-info">
+      <view class="ctx-name f-bear">{{productName}}<text wx:if="{{qty > 1}}"> ×{{qty}}</text></view>
+      <view wx:if="{{lang === 'cn' && orderNo}}" class="ctx-sub f-yuan">订单 #{{orderNo}}</view>
+      <view wx:if="{{deliveredLabel}}" class="ctx-meta f-toni">{{deliveredLabel}}</view>
+    </view>
+  </view>
+
+  <!-- Overall rating -->
+  <view class="section">
+    <view class="section-label f-toni">{{copy.overall}}<text wx:if="{{lang === 'cn'}}" class="label-cn"> · 总体</text></view>
+    <view class="rating-row">
+      <view class="stars">
+        <view wx:for="{{[1,2,3,4,5]}}" wx:key="*this"
+              class="star {{item <= rating ? 'on' : ''}}"
+              data-r="{{item}}" bindtap="setRating"></view>
+      </view>
+      <view class="rating-label f-bear">{{rating ? copy.ratings[rating] : ''}}</view>
+    </view>
+  </view>
+
+  <!-- Quick tags -->
+  <view class="section">
+    <view class="section-label f-toni">{{copy.tagsLabel}}<text wx:if="{{lang === 'cn'}}" class="label-cn"> · 标签</text></view>
+    <view class="tag-row">
+      <view wx:for="{{tags}}" wx:key="id"
+            class="tag {{item.on ? 'on' : ''}}"
+            data-id="{{item.id}}" bindtap="toggleTag">
+        <text wx:if="{{item.on}}" class="tag-check">✓ </text>
+        <text>{{item.l}}</text>
+        <text wx:if="{{lang === 'cn'}}" class="tag-cn"> · {{item.cn}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- Tell us more -->
+  <view class="section">
+    <view class="section-head">
+      <view class="section-label f-toni">{{copy.tellLabel}}<text wx:if="{{lang === 'cn'}}" class="label-cn"> · 说说</text></view>
+      <view class="char-count f-toni">{{comment.length}} / 400</view>
+    </view>
+    <textarea class="comment-input f-aleo" placeholder="{{copy.placeholder}}" maxlength="400" value="{{comment}}" bindinput="onComment"/>
+
+    <!-- Photo upload row -->
+    <view class="photo-row">
+      <view wx:for="{{photos}}" wx:key="*this" class="photo-tile">
+        <image src="{{item}}" mode="aspectFill" class="photo-img"/>
+        <view class="photo-x" catchtap="removePhoto" data-i="{{index}}">×</view>
+      </view>
+      <view wx:if="{{photos.length < 6}}" class="photo-add" bindtap="addPhoto">
+        <view class="photo-plus">+</view>
+        <view class="photo-add-label f-toni">{{copy.photoLabel}}</view>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- Sticky submit -->
+<view class="submit-bar">
+  <view class="submit-meta">
+    <view class="points-sticker f-toni">+10 PTS</view>
+    <view class="submit-note f-aleo">{{copy.pointsNote}}</view>
+  </view>
+  <view class="submit-btn f-gothic {{(!rating || saving) ? 'disabled' : ''}}" bindtap="submit">
+    {{saving ? copy.saving : copy.submit}} <text wx:if="{{!saving}}" class="arrow">→</text>
+  </view>
+</view>

@@ -1,0 +1,26 @@
+# Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+.ossutilconfig
+
+# Dependencies
+node_modules/
+
+# Local SQLite + backups
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.db.bak.*
+data/roots-pre-*.db*
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Logs
+*.log

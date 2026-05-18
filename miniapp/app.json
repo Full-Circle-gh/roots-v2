@@ -1,0 +1,52 @@
+{
+  "pages": [
+    "pages/home/home",
+    "pages/shop/shop",
+    "pages/cart/cart",
+    "pages/me/me",
+    "pages/product/product",
+    "pages/checkout/checkout",
+    "pages/order-success/order-success",
+    "pages/order/order",
+    "pages/orders/orders",
+    "pages/addresses/addresses",
+    "pages/membership/membership",
+    "pages/leaderboard/leaderboard",
+    "pages/wallet/wallet",
+    "pages/coupons/coupons",
+    "pages/topup/topup",
+    "pages/affiliate/affiliate",
+    "pages/layout/layout",
+    "pages/review/review",
+    "pages/pending-reviews/pending-reviews",
+    "pages/legal/legal",
+    "pages/onboarding/onboarding",
+    "pages/profile/profile",
+    "pages/about/about",
+    "pages/faq/faq",
+    "pages/voting/voting",
+    "pages/track-webview/track-webview"
+  ],
+  "window": {
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#F2E7DF",
+    "navigationBarTitleText": "Roots",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F2E7DF"
+  },
+  "tabBar": {
+    "color": "#9b9285",
+    "selectedColor": "#365329",
+    "backgroundColor": "#FFFCF7",
+    "borderStyle": "white",
+    "list": [
+      { "pagePath": "pages/home/home", "text": "Home", "iconPath": "assets/icons/home.png", "selectedIconPath": "assets/icons/home-active.png" },
+      { "pagePath": "pages/shop/shop", "text": "Shop", "iconPath": "assets/icons/shop.png", "selectedIconPath": "assets/icons/shop-active.png" },
+      { "pagePath": "pages/cart/cart", "text": "Cart", "iconPath": "assets/icons/cart.png", "selectedIconPath": "assets/icons/cart-active.png" },
+      { "pagePath": "pages/me/me",     "text": "Me",   "iconPath": "assets/icons/me.png",   "selectedIconPath": "assets/icons/me-active.png"   }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

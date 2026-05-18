@@ -1,0 +1,45 @@
+<view class="page">
+  <view class="hero">
+    <view class="kicker f-toni">{{copy.kicker}}</view>
+    <view class="title f-bear">{{copy.title}}</view>
+    <view class="subhead f-aleo">{{copy.subhead}}</view>
+  </view>
+
+  <!-- Tier markers row — current one highlighted -->
+  <view class="tier-row">
+    <view wx:for="{{tiers}}" wx:key="key" class="tier-marker tier-{{item.color}} {{item.current ? 'current' : ''}} {{item.reached ? 'reached' : ''}}">
+      <view class="t-name f-bear">{{item.name}}</view>
+      <view wx:if="{{item.current}}" class="t-dot f-toni">{{copy.youAreHere}}</view>
+    </view>
+  </view>
+
+  <!-- Progress card -->
+  <view class="progress-card">
+    <view class="pc-label f-toni">{{copy.nextLabel}}: {{nextTier ? nextTier.name : currentTier.name}}</view>
+    <view class="pc-amount f-bear">{{spendDisplay}}{{nextTier ? ' / ¥' + nextTier.threshold : ''}}</view>
+    <view class="pc-bar">
+      <view class="pc-fill" style="width: {{progressPct}}%;"></view>
+    </view>
+    <view class="pc-meta f-aleo">{{progressLabel}}</view>
+  </view>
+
+  <!-- Leaderboard entry — only when admin has enabled the leaderboard -->
+  <view wx:if="{{leaderboardEnabled}}" class="lb-link" bindtap="goLeaderboard">
+    <view class="lb-link-label f-toni">{{leaderboardLinkLabel}}</view>
+    <view class="lb-link-arrow">→</view>
+  </view>
+
+  <!-- Per-tier perk table -->
+  <view class="tier-table">
+    <view wx:for="{{tiers}}" wx:key="key" class="tier-row-card {{item.current ? 'current' : ''}}">
+      <view class="trc-head">
+        <view class="trc-name f-bear">{{item.name}}</view>
+        <view class="trc-req f-toni">{{copy.reqLabel}} {{item.reqDisplay}}</view>
+      </view>
+      <view class="trc-perks">
+        <view wx:for="{{item.perks}}" wx:for-item="perk" wx:key="*this" class="trc-perk">· {{perk}}</view>
+      </view>
+    </view>
+  </view>
+  <popup-manager page="membership"></popup-manager>
+</view>

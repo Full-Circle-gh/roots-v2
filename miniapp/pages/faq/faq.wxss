@@ -1,0 +1,272 @@
+/* FAQ / Help centre — design mirrors Roots Mini App.html · No.14.
+   Layout is flow-based (not absolute) so list scrolls naturally and the
+   contact bar sticks to the bottom via fixed positioning. */
+
+.page {
+  background: var(--oat);
+  min-height: 100vh;
+  padding-bottom: 220rpx;  /* leave room for sticky contact bar */
+}
+
+/* Header */
+.header {
+  padding: 48rpx 44rpx 24rpx;
+}
+.kicker {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.25em;
+  color: var(--olive);
+}
+.kicker-cn {
+  font-family: var(--f-yuan);
+}
+.title {
+  font-size: calc(72rpx * var(--font-scale));
+  line-height: 0.95;
+  margin-top: 8rpx;
+  color: var(--ink);
+}
+.title-hl {
+  background: var(--lime);
+  padding: 0 12rpx;
+}
+
+/* Search */
+.search {
+  margin: 24rpx 44rpx 0;
+  background: #FFFCF7;
+  border: 4rpx solid var(--ink);
+  padding: 20rpx 28rpx;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+.search-icon {
+  position: relative;
+  width: 32rpx;
+  height: 32rpx;
+  flex-shrink: 0;
+}
+.search-ring {
+  width: 22rpx;
+  height: 22rpx;
+  border: 4rpx solid var(--ink);
+  border-radius: 50%;
+}
+.search-stem {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 12rpx;
+  height: 4rpx;
+  background: var(--ink);
+  transform: rotate(45deg);
+  transform-origin: right center;
+}
+.search-input {
+  flex: 1;
+  font-size: calc(26rpx * var(--font-scale));
+  color: var(--ink);
+  min-height: 40rpx;
+}
+.search-ph {
+  color: var(--olive);
+  opacity: 0.6;
+}
+.search-clear {
+  font-size: calc(22rpx * var(--font-scale));
+  color: var(--olive);
+}
+
+/* Category chips */
+.chip-scroll {
+  margin-top: 28rpx;
+  padding: 0 44rpx;
+  white-space: nowrap;
+  width: 100%;
+  box-sizing: border-box;
+}
+.chip-row {
+  display: inline-flex;
+  gap: 12rpx;
+  padding-right: 44rpx;  /* trailing breathing room when scrolled */
+}
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4rpx;
+  padding: 12rpx 24rpx;
+  border: 3rpx solid var(--ink);
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  background: transparent;
+  flex-shrink: 0;
+}
+.chip-on {
+  background: var(--ink) !important;
+  color: var(--lime);
+}
+.chip-cn {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0;
+}
+
+/* List */
+.list {
+  margin-top: 32rpx;
+}
+.row {
+  padding: 28rpx 44rpx;
+  border-top: 2rpx dashed rgba(0, 0, 0, 0.2);
+}
+.row-first {
+  border-top: 3rpx solid var(--ink);
+}
+.row-open {
+  background: #FFFCF7;
+}
+.row-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 24rpx;
+}
+.row-num {
+  width: 56rpx;
+  flex-shrink: 0;
+  padding-top: 4rpx;
+  font-size: calc(32rpx * var(--font-scale));
+  color: var(--olive);
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+.row-body {
+  flex: 1;
+  min-width: 0;
+}
+.row-pip {
+  display: inline-block;
+  padding: 4rpx 12rpx;
+  margin-bottom: 12rpx;
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+.row-q {
+  font-size: calc(30rpx * var(--font-scale));
+  line-height: 1.25;
+  color: var(--ink);
+}
+.row-q-sub {
+  margin-top: 6rpx;
+  font-size: calc(22rpx * var(--font-scale));
+}
+.row-a {
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 2rpx solid rgba(0, 0, 0, 0.1);
+  font-size: calc(25rpx * var(--font-scale));
+  line-height: 1.55;
+  color: var(--forest);
+}
+.row-vote {
+  margin-top: 22rpx;
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+}
+.vote-label {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.15em;
+  color: var(--olive);
+}
+.vote-btn {
+  width: 56rpx;
+  height: 56rpx;
+  border: 3rpx solid var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(28rpx * var(--font-scale));
+}
+.row-plus {
+  width: 44rpx;
+  height: 44rpx;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--f-bear);
+  font-size: calc(38rpx * var(--font-scale));
+  line-height: 1;
+  color: var(--ink);
+  transition: transform 0.18s ease;
+}
+.row-plus-open {
+  transform: rotate(45deg);
+}
+
+/* Empty */
+.empty {
+  padding: 80rpx 44rpx;
+  text-align: center;
+}
+.empty-title {
+  font-size: calc(40rpx * var(--font-scale));
+  color: var(--olive);
+}
+.empty-sub {
+  margin-top: 12rpx;
+  font-size: calc(24rpx * var(--font-scale));
+}
+
+/* Contact footer — sticky */
+.contact {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 28rpx 44rpx calc(52rpx + env(safe-area-inset-bottom));
+  background: var(--ink);
+  color: #fff;
+  z-index: 10;
+}
+.contact-inner {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+}
+.contact-text {
+  flex: 1;
+  min-width: 0;
+}
+.contact-kicker {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.18em;
+  color: var(--lime);
+}
+.contact-hours {
+  margin-top: 8rpx;
+  font-size: calc(30rpx * var(--font-scale));
+  line-height: 1;
+  color: #fff;
+}
+.contact-actions {
+  display: flex;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+.contact-btn {
+  padding: 18rpx 24rpx;
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+}
+.contact-wechat {
+  background: #1AAD19;
+  color: #fff;
+}
+.contact-call {
+  background: var(--lime);
+  color: var(--ink);
+}

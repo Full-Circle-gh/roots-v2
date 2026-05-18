@@ -1,0 +1,57 @@
+<view class="page">
+  <view class="header">
+    <view class="kicker f-toni">{{copy.kicker}}</view>
+    <view class="title-row">
+      <view class="title f-bear">{{copy.title}}</view>
+      <view class="count f-gothic">0{{items.length}}</view>
+    </view>
+  </view>
+
+  <block wx:if="{{items.length}}">
+    <view class="progress-card">
+      <view class="progress-text">
+        <text wx:if="{{!unlocked}}">You're <text class="f-bear strong">¥{{remaining}}</text> away from <text class="f-bear strong">free shipping.</text></text>
+        <text wx:else><text class="f-bear strong">Free shipping unlocked.</text></text>
+      </view>
+      <view class="progress-bar">
+        <view class="progress-fill" style="width: {{pct}}%;"></view>
+      </view>
+    </view>
+
+    <view class="items">
+      <view wx:for="{{items}}" wx:key="key" class="row">
+        <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="thumb"/>
+        <view wx:else class="thumb thumb-empty"></view>
+        <view class="info">
+          <view class="name f-bear">{{item.display_name}}</view>
+          <view class="meta">{{item.size}}</view>
+          <view class="qty">
+            <view class="qty-btn" data-key="{{item.key}}" bindtap="decQty">−</view>
+            <view class="qty-val f-gothic">{{item.qty}}</view>
+            <view class="qty-btn" data-key="{{item.key}}" bindtap="incQty">+</view>
+            <view class="del" data-key="{{item.key}}" bindtap="removeItem">×</view>
+          </view>
+        </view>
+        <view class="line-total-stack">
+          <view wx:if="{{item.is_flash}}" class="line-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+          <view wx:if="{{item.regular_total}}" class="line-was f-aleo">¥{{item.regular_total}}</view>
+          <view class="line-total f-gothic {{item.is_flash ? 'is-flash' : ''}}">¥{{item.line_total}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="checkout">
+      <view class="total-row">
+        <view class="f-bear total-label">Total</view>
+        <view class="f-bear total-amount">¥{{subtotal}}</view>
+      </view>
+      <button class="checkout-btn f-toni" bindtap="goCheckout">{{copy.checkout}} →</button>
+    </view>
+  </block>
+
+  <view wx:else class="empty">
+    <view class="empty-title f-bear">{{copy.empty}}</view>
+    <button class="empty-btn f-toni" bindtap="goShop">Browse the shop →</button>
+  </view>
+  <popup-manager page="cart"></popup-manager>
+</view>

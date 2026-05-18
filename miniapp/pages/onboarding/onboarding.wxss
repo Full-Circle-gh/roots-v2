@@ -1,0 +1,32 @@
+.page {
+  min-height: 100vh;
+  background: var(--oat);
+  padding-bottom: 200rpx;
+  position: relative;
+}
+
+.footer {
+  position: fixed;
+  bottom: 60rpx;
+  left: 44rpx;
+  right: 44rpx;
+  display: flex;
+  gap: 16rpx;
+}
+.skip {
+  flex: 1;
+  background: transparent;
+  border: 3rpx solid var(--ink);
+  color: var(--ink);
+  padding: 28rpx 0;
+  font-size: calc(26rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+}
+.next {
+  flex: 2;
+  background: var(--lime);
+  color: var(--ink);
+  padding: 28rpx 0;
+  font-size: calc(26rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+}

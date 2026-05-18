@@ -1,0 +1,3766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1a2314">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+<title>Restock · 补货</title>
+<link rel="manifest" href="/restock-manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="/restock-icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/restock-icon-512.png">
+<link rel="apple-touch-icon" href="/restock-icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/restock-icon-512.png">
+<meta name="application-name" content="Restock">
+<meta name="apple-mobile-web-app-title" content="Restock">
+<style>
+:root {
+  --dk: #1a2314;
+  --dk2: #243017;            /* slightly lifted dark */
+  --lime: #ccd900;
+  --lime-2: #a8b800;          /* deeper lime for gradients */
+  --lime-text: #6d7a2a;
+  --green: #3d7a1e;
+  --oat: #f6f4ee;
+  --bg: #f4f0e6;              /* slightly warmer than original oat */
+  --card: #ffffff;
+  --border: #e6e2d6;
+  --border-soft: #ede8db;
+  --muted: #8a8678;
+  --muted-2: #b8b3a3;
+  /* Danger family — softened from raw #dc2626 to a terracotta tone so
+     destructive surfaces sit calmly in the warm-oat palette. The bright
+     red read as alarming/cheap next to the rest of the UI. */
+  --danger: #b94a4a;
+  --danger-2: #9a3535;
+  --danger-soft-bg: #f9ecec;
+  --danger-soft-border: rgba(185,74,74,.32);
+  --success: #16a34a;
+  --warn: #b85c00;
+  --shadow-sm: 0 1px 2px rgba(26,35,20,.04), 0 0 0 1px rgba(26,35,20,.04);
+  --shadow-md: 0 4px 12px rgba(26,35,20,.06), 0 0 0 1px rgba(26,35,20,.04);
+  --shadow-lg: 0 12px 32px rgba(26,35,20,.10), 0 0 0 1px rgba(26,35,20,.04);
+  --sa-top: env(safe-area-inset-top, 0px);
+  --sa-bot: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; height: 100%; overscroll-behavior: none; -webkit-overflow-scrolling: touch; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg); color: var(--dk); font-size: 16px; line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none; -webkit-user-select: none;
+  font-feature-settings: "ss01", "cv11"; /* slightly nicer numerals where supported */
+}
+button { font-family: inherit; cursor: pointer; border: none; background: transparent; color: inherit; }
+input, textarea, select { font-family: inherit; -webkit-user-select: text; user-select: text; }
+input:focus, textarea:focus { outline: none; }
+
+/* ── Shell — three rows: header, scrollable cart, sticky footer ── */
+.shell {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100dvh;
+  height: 100vh;
+  padding-top: var(--sa-top);
+}
+@supports (height: 100dvh) { .shell { height: 100dvh; } }
+
+/* ── Header — confident dark band with subtle lime tinted shadow.
+   Two rows visually: (1) brand + icons, (2) live cart status. ── */
+.head {
+  background: linear-gradient(180deg, var(--dk2) 0%, var(--dk) 100%);
+  color: #fff;
+  padding: 14px 16px 12px;
+  display: flex; flex-direction: column; gap: 10px;
+  position: relative;
+  box-shadow: 0 4px 18px rgba(26,35,20,.18);
+}
+/* faint lime accent line at the bottom edge — anchors the band */
+.head::after {
+  content: '';
+  position: absolute; bottom: 0; left: 16px; right: 16px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(204,217,0,.6) 30%, rgba(204,217,0,.6) 70%, transparent);
+  border-radius: 999px;
+}
+.head .row1 {
+  display: flex; align-items: center; gap: 12px;
+}
+.head .brand {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 10px;
+}
+.head .brand-text { min-width: 0; }
+.head .brand-text .h1 {
+  font-weight: 900; font-size: 17px;
+  letter-spacing: -.005em; line-height: 1;
+  display: flex; align-items: center; gap: 6px;
+}
+.head .brand-text .h1 .cn-tag {
+  font-size: 11px; font-weight: 700;
+  color: var(--lime); opacity: .7;
+}
+.head .brand-text .sub {
+  font-size: 11px; color: rgba(255,255,255,.5);
+  margin-top: 3px; font-weight: 600;
+  letter-spacing: .02em;
+}
+.head .icons { display: flex; gap: 6px; }
+.head .icons button {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  font-size: 20px;
+  color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.06);
+  transition: background .15s, transform .1s;
+}
+.head .icons button:hover { background: rgba(255,255,255,.12); }
+.head .icons button:active { background: rgba(204,217,0,.2); transform: scale(.94); }
+/* Status row — live cart info, nudges the user toward the goal. */
+.head .status-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 4px 2px 0;
+}
+.head .status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,.07);
+  border: 1px solid rgba(255,255,255,.06);
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: rgba(255,255,255,.85);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.head .status-pill .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--lime);
+  box-shadow: 0 0 8px rgba(204,217,0,.6);
+}
+.head .status-pill.ghost { color: rgba(255,255,255,.4); }
+.head .status-pill.ghost .dot { background: rgba(255,255,255,.25); box-shadow: none; }
+.head .user-pill {
+  margin-left: auto;
+  font-size: 11px; color: rgba(255,255,255,.5);
+  font-weight: 600;
+}
+
+/* ── Body — scrollable cart container ── */
+.body {
+  background: var(--bg);
+  overflow-y: auto;
+  padding: 14px 14px 110px;
+  min-height: 0;
+}
+.body.tappable { cursor: pointer; }
+.body.tappable > .line { cursor: default; }
+
+/* ── Empty state — invites action, not just a placeholder ── */
+/* Header mode-switcher buttons — small, persistent, always-visible.
+   Two icons (Restock + Fulfill) sit in the header icons row. The
+   active mode's button is tinted with its brand color (lime / blue)
+   so you see at a glance what mode you're in. A red dot in the
+   top-right corner of the OTHER button flags unseen activity in
+   that flow — so while working in Restock you immediately see "📥
+   has 2 new" without leaving the screen.
+
+   The .mode-btn class extends the existing 44x44 .head .icons button
+   layout; the inline `position:relative` on each <button> in the
+   markup lets the dot anchor cleanly. */
+.head .icons button.mode-btn { transition: background .15s ease, box-shadow .15s ease; }
+.head .icons button.mode-btn.active.mode-restock {
+  background: var(--lime);
+  color: var(--dk);
+  box-shadow: 0 1px 6px rgba(204,217,0,.45);
+}
+.head .icons button.mode-btn.active.mode-inbox {
+  background: #3b82f6;
+  color: #fff;
+  box-shadow: 0 1px 6px rgba(37,99,235,.45);
+}
+/* Count badge on the mode icons — replaces the old bare dot. Shows
+   the actual number of unseen items so you can tell "1 pending" from
+   "5 pending" at a glance. White outline lifts it off whichever
+   background the active mode uses (lime/blue/dark). */
+.head .icons button.mode-btn .mode-dot {
+  position: absolute;
+  top: -3px; right: -3px;
+  min-width: 18px; height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #e05252, #c43d3d);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  text-align: center;
+  letter-spacing: -.01em;
+  box-shadow: 0 0 0 2px var(--dk), 0 2px 6px rgba(196,61,61,.45);
+  animation: modeDotPop .32s cubic-bezier(.2,.7,.4,1);
+  pointer-events: none;
+}
+@keyframes modeDotPop {
+  0%   { transform: scale(0); opacity: 0; }
+  60%  { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.empty {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px; pointer-events: none; padding: 18px 0 6px;
+}
+.empty .icon-wrap {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(204,217,0,.18), transparent 70%);
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.empty .icon-wrap::before {
+  content: '';
+  position: absolute; inset: 10px;
+  border-radius: 50%;
+  border: 1px dashed var(--border);
+}
+.empty .icon { font-size: 38px; opacity: .35; line-height: 1; filter: grayscale(.2); }
+.empty .lead {
+  font-size: 17px; font-weight: 800; color: var(--dk);
+  text-align: center; line-height: 1.3;
+}
+.empty .lead .cn { display: block; font-size: 13px; color: var(--muted); font-weight: 600; margin-top: 4px; }
+.empty .hint {
+  font-size: 13px; color: var(--lime-text); font-weight: 700;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 22px;
+  background: var(--card);
+  border: 1.5px dashed rgba(204,217,0,.45);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+  pointer-events: auto;
+}
+.empty .hint:hover { background: rgba(204,217,0,.04); border-color: rgba(204,217,0,.7); }
+
+/* ── Notes-for-warehouse bar — full-width, outlined, integrates with cards ── */
+.notes-bar {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow .15s, border-color .15s;
+}
+.notes-bar:focus-within { border-color: rgba(204,217,0,.45); box-shadow: var(--shadow-md); }
+.notes-bar .icon-pill {
+  width: 32px; height: 32px;
+  border-radius: 10px;
+  background: rgba(204,217,0,.12);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.notes-bar input {
+  flex: 1;
+  border: none;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  background: transparent;
+  color: var(--dk);
+  padding: 4px 0;
+}
+.notes-bar input::placeholder { color: var(--muted); }
+
+/* ── Cart line — multi-layer shadow, lime accent stripe on the left,
+   refined two-row internal layout (header row + controls row). ── */
+.line {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 14px 14px 14px 18px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  animation: lineIn .28s cubic-bezier(.2,.7,.4,1);
+  overflow: hidden;
+}
+
+/* "+ Add Item" CTA — sits below the last cart line. The cart auto-scrolls
+   to bring it into view after every add so it stays one tap away without
+   overlapping the items above. */
+.add-item-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%;
+  background: linear-gradient(180deg, rgba(204,217,0,.05), rgba(204,217,0,.12));
+  border: 2px dashed rgba(204,217,0,.55);
+  color: var(--lime-text);
+  font-weight: 800; font-size: 14px; letter-spacing: .03em;
+  padding: 16px 18px;
+  margin-top: 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .18s, border-color .18s, transform .12s, box-shadow .18s;
+}
+.add-item-btn:hover {
+  background: linear-gradient(180deg, rgba(204,217,0,.10), rgba(204,217,0,.18));
+  border-color: var(--lime);
+  box-shadow: 0 6px 20px rgba(204,217,0,.18);
+}
+.add-item-btn:active { transform: scale(.985); }
+.add-item-btn .plus {
+  font-size: 22px; line-height: 1; color: var(--lime);
+  text-shadow: 0 1px 4px rgba(204,217,0,.4);
+}
+.line::before {
+  /* Lime left-edge stripe — subtle "in cart" affordance */
+  content: '';
+  position: absolute; top: 12px; bottom: 12px; left: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--lime), var(--lime-2));
+  border-radius: 0 3px 3px 0;
+  opacity: .9;
+}
+@keyframes lineIn {
+  from { transform: translateY(-6px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+.line.popped { animation: pop .22s ease-out; }
+@keyframes pop {
+  0%   { transform: scale(1); box-shadow: var(--shadow-sm); }
+  40%  { transform: scale(1.015); box-shadow: 0 8px 22px rgba(204,217,0,.18), 0 0 0 1px rgba(204,217,0,.4); }
+  100% { transform: scale(1); box-shadow: var(--shadow-sm); }
+}
+.line .top {
+  display: flex; align-items: flex-start; gap: 10px;
+  position: relative;
+}
+.line .top .info { flex: 1; min-width: 0; padding-right: 36px; }
+.line .name {
+  font-weight: 800;
+  font-size: 15.5px;
+  line-height: 1.3;
+  word-break: break-word;
+  color: var(--dk);
+  letter-spacing: -.005em;
+}
+.line .name .cn {
+  color: var(--muted); font-weight: 500; font-size: 13px;
+  margin-left: 2px;
+}
+.line .meta {
+  font-size: 11px; color: var(--muted);
+  margin-top: 5px;
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+}
+.line .meta .chip {
+  display: inline-flex; align-items: center;
+  background: var(--bg);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--muted);
+}
+.line .meta .chip.sku { font-family: ui-monospace, monospace; color: var(--lime-text); background: rgba(204,217,0,.08); }
+.line .remove {
+  position: absolute; top: -4px; right: -4px;
+  width: 36px; height: 36px;
+  font-size: 16px;
+  color: var(--muted);
+  border-radius: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: color .12s, background .12s;
+}
+.line .remove:hover { color: var(--danger); background: var(--danger-soft-bg); }
+.line .remove:active { background: rgba(185,74,74,.16); transform: scale(.92); }
+/* Inbox row right-stack — status pill on top, tiny × archive button
+   tucked beneath it. Vertical group sits in the existing flex slot at
+   the top of the row, so it never collides with the pill or pushes
+   into the row content. */
+.line-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.inbox-archive-btn {
+  width: 20px; height: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--muted-2);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background .15s, color .15s, transform .12s;
+  opacity: .55;
+}
+.inbox-archive-btn:hover { background: var(--danger-soft-bg); color: var(--danger); opacity: 1; }
+.inbox-archive-btn:active { transform: scale(.9); }
+.line .ctrl {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 14px;
+}
+.line .ctrl-label {
+  font-size: 10px; font-weight: 800;
+  color: var(--muted); letter-spacing: .08em; text-transform: uppercase;
+  margin-right: 2px;
+}
+
+/* Qty dropdown — premium-feel select with inline arrow */
+.qty-select {
+  height: 46px;
+  padding: 0 36px 0 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--dk);
+  background: #fff;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%236d7a2a' d='M6 8L0 0h12z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: border-color .15s, box-shadow .15s;
+}
+.qty-select:hover { border-color: rgba(204,217,0,.5); }
+.qty-select:focus { border-color: var(--lime); box-shadow: 0 0 0 3px rgba(204,217,0,.18); outline: none; }
+.qty-input-manual {
+  height: 46px;
+  width: 86px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  padding: 0 8px;
+  font-family: inherit;
+  background: #fff;
+  transition: border-color .15s, box-shadow .15s;
+}
+.qty-input-manual:hover { border-color: rgba(204,217,0,.5); }
+.qty-input-manual:focus { border-color: var(--lime); box-shadow: 0 0 0 3px rgba(204,217,0,.18); outline: none; }
+/* Legacy class kept for safety — no longer rendered */
+.qty-btn { display: none; }
+.qty-input { display: none; }
+
+.note-input {
+  width: 100%;
+  margin-top: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 13.5px;
+  background: var(--bg);
+  font-family: inherit;
+  color: var(--dk);
+  transition: background .15s, border-color .15s;
+}
+.note-input::placeholder { color: var(--muted-2); }
+.note-input:focus { outline: none; border-color: rgba(204,217,0,.5); background: #fff; }
+
+/* ── Add-more affordance below the last cart line ── */
+.add-more-pill {
+  margin: 14px auto 6px;
+  display: flex; justify-content: center;
+}
+.add-more-pill > div {
+  font-size: 13px;
+  color: var(--lime-text);
+  font-weight: 800;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 22px;
+  background: var(--card);
+  border: 1.5px dashed rgba(204,217,0,.4);
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background .15s, border-color .15s, transform .12s;
+}
+.add-more-pill > div:hover { background: rgba(204,217,0,.04); border-color: rgba(204,217,0,.7); }
+.add-more-pill > div:active { transform: scale(.97); }
+
+/* ── Footer — sticky, two-button row, distinct visual weight ── */
+.foot {
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  padding: 14px 14px calc(14px + var(--sa-bot));
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center; gap: 14px;
+  box-shadow: 0 -10px 28px rgba(0,0,0,.06);
+  position: relative;
+}
+.foot::before {
+  /* Hairline gradient at the top — feels less "stuck on" */
+  content: '';
+  position: absolute; top: 0; left: 14px; right: 14px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
+.foot .info {
+  display: flex; flex-direction: column; line-height: 1.1;
+  padding: 4px 4px 4px 4px;
+}
+.foot .info .lbl {
+  font-size: 10px; font-weight: 800; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 4px;
+}
+.foot .info .val {
+  font-size: 26px; font-weight: 900; color: var(--dk);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.foot .info .val .cn-suffix { font-size: 12px; color: var(--muted); font-weight: 600; margin-left: 4px; }
+.foot .actions { display: flex; gap: 8px; }
+.submit-btn {
+  background: linear-gradient(180deg, var(--dk2) 0%, var(--dk) 100%);
+  color: var(--lime);
+  border-radius: 14px;
+  padding: 16px 18px;
+  font-size: 14px; font-weight: 800;
+  letter-spacing: .04em; text-transform: uppercase;
+  transition: transform .12s, box-shadow .15s, opacity .15s;
+  flex: 1;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(26,35,20,.18);
+}
+.submit-btn:disabled {
+  opacity: .35;
+  background: var(--card);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+.submit-btn:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(26,35,20,.24); }
+.submit-btn:not(:disabled):active { transform: scale(.97); }
+.submit-btn.draft {
+  background: var(--card);
+  color: var(--dk);
+  border: 1.5px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  flex: 0 0 auto;
+}
+.submit-btn.draft:hover:not(:disabled) { border-color: var(--muted); background: var(--bg); transform: translateY(-1px); }
+.submit-btn.danger {
+  background: linear-gradient(180deg, var(--danger) 0%, var(--danger-2) 100%);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(185,74,74,.22);
+}
+.submit-btn.danger:not(:disabled):hover { box-shadow: 0 6px 20px rgba(185,74,74,.30); transform: translateY(-1px); }
+/* Compact icon-only "soft danger" — used for draft-delete and similar
+   row-level destructive actions that shouldn't compete with primary CTAs. */
+.icon-btn-danger {
+  background: var(--danger-soft-bg);
+  border: 1.5px solid var(--danger-soft-border);
+  color: var(--danger);
+  border-radius: 12px;
+  width: 44px; height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 17px;
+  transition: background .15s, border-color .15s, transform .12s;
+}
+.icon-btn-danger:hover { background: #f6e0e0; border-color: var(--danger); }
+.icon-btn-danger:active { transform: scale(.94); }
+
+/* ── Floating Action Button — always-visible "+ Add" so users can add
+   another product no matter how many lines are already in the cart.
+   Without this, a full screen of lines hides the empty-area tap target
+   and the user is forced to scroll. ── */
+.add-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(96px + var(--sa-bot));
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--lime) 0%, var(--lime-2) 100%);
+  color: var(--dk);
+  font-size: 30px;
+  font-weight: 900;
+  box-shadow:
+    0 8px 22px rgba(204,217,0,.45),
+    0 2px 8px rgba(26,35,20,.18),
+    inset 0 1px 0 rgba(255,255,255,.4);
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform .15s cubic-bezier(.2,.7,.4,1), box-shadow .2s;
+  border: 2px solid rgba(255,255,255,.5);
+}
+.add-fab:active { transform: scale(.9); box-shadow: 0 4px 12px rgba(204,217,0,.35); }
+.add-fab:hover { transform: translateY(-2px); }
+/* Subtle pulse to attract attention when cart is empty (encourages first add).
+   Stops once items are present (.has-items class added by JS). */
+.add-fab:not(.has-items) { animation: fabPulse 2.4s ease-in-out infinite; }
+@keyframes fabPulse {
+  0%, 100% { box-shadow: 0 8px 22px rgba(204,217,0,.45), 0 2px 8px rgba(26,35,20,.18), 0 0 0 0 rgba(204,217,0,.6); }
+  60%      { box-shadow: 0 8px 22px rgba(204,217,0,.45), 0 2px 8px rgba(26,35,20,.18), 0 0 0 14px rgba(204,217,0,0); }
+}
+@media (min-width: 600px) {
+  .add-fab { bottom: calc(108px + var(--sa-bot)); right: 24px; }
+}
+
+/* Overlay */
+.ov-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 100; display: none;
+  animation: fade .15s ease;
+}
+.ov-backdrop.visible { display: block; }
+@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+.ov {
+  position: fixed; inset: 0;
+  background: var(--card);
+  z-index: 101; display: none;
+  flex-direction: column;
+  padding-bottom: var(--sa-bot);
+  animation: slideUp .22s cubic-bezier(.2,.7,.4,1);
+}
+.ov.visible { display: flex; }
+@keyframes slideUp { from { transform: translateY(100%) } to { transform: none } }
+@media (min-width: 600px) {
+  .ov {
+    inset: auto;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(560px, 92vw);
+    max-height: 80vh;
+    border-radius: 18px;
+  }
+  .ov.visible { animation: fadeUp .22s cubic-bezier(.2,.7,.4,1); }
+  @keyframes fadeUp {
+    from { transform: translate(-50%, calc(-50% + 12px)); opacity: 0 }
+    to   { transform: translate(-50%, -50%); opacity: 1 }
+  }
+}
+.ov-head {
+  padding: 14px 16px 8px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.ov-title { font-weight: 800; font-size: 15px; }
+.ov-close {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  font-size: 18px; color: var(--muted);
+}
+.ov-close:active { background: var(--bg); }
+.ov-body { padding: 14px 16px 60px; overflow-y: auto; flex: 1; min-height: 0; }
+.ov-input {
+  width: 100%;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 18px; font-weight: 600;
+  font-family: inherit;
+  background: #fff;
+  position: sticky;
+  top: 0; z-index: 2;
+}
+.ov-input:focus { outline: none; border-color: var(--lime); }
+
+.search-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  margin-bottom: 4px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.search-row:active { background: var(--border); }
+.search-row.in-cart { opacity: .55; }
+.search-row .info { flex: 1; min-width: 0; }
+.search-row .nm { font-weight: 700; font-size: 15px; }
+.search-row .mt { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.search-empty { padding: 30px; text-align: center; color: var(--muted); font-size: 14px; }
+
+/* Voice modal */
+.voice-mic {
+  width: 96px; height: 96px;
+  border-radius: 50%;
+  background: var(--lime); color: var(--dk);
+  font-size: 38px;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 18px rgba(204,217,0,.4);
+  transition: transform .12s, background .12s;
+}
+.voice-mic.listening { background: var(--danger); transform: scale(1.06); }
+.voice-lang-toggle {
+  display: flex; gap: 6px;
+  background: var(--bg); padding: 4px;
+  border-radius: 10px; margin-bottom: 14px;
+}
+.voice-lang-toggle button {
+  flex: 1; padding: 10px;
+  border: none; border-radius: 7px;
+  font-family: inherit; font-size: 13px; font-weight: 700;
+  cursor: pointer;
+}
+.voice-transcript {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  min-height: 56px;
+  font-size: 14px; line-height: 1.5;
+  margin-top: 14px;
+}
+
+/* Toast */
+.toast-wrap {
+  position: fixed; bottom: calc(120px + var(--sa-bot));
+  left: 50%; transform: translateX(-50%);
+  z-index: 200; pointer-events: none;
+  display: flex; flex-direction: column; gap: 8px;
+  width: calc(100% - 32px); max-width: 420px;
+}
+.toast {
+  background: var(--dk); color: #fff;
+  padding: 14px 16px; border-radius: 14px;
+  font-size: 14px; font-weight: 700;
+  text-align: center;
+  box-shadow: 0 12px 32px rgba(0,0,0,.35);
+  pointer-events: auto;
+  animation: toastIn .25s ease;
+}
+.toast.success { background: var(--success); }
+.toast.error { background: var(--danger); }
+@keyframes toastIn { from { transform: translateY(20px); opacity: 0 } to { transform: none; opacity: 1 } }
+
+.scan-pulse {
+  position: fixed; top: var(--sa-top); left: 0; right: 0; height: 3px;
+  background: var(--lime); transform: scaleX(0);
+  transform-origin: left; z-index: 70; pointer-events: none;
+}
+.scan-pulse.fire { animation: pulse .45s ease-out; }
+@keyframes pulse {
+  0%   { transform: scaleX(0); opacity: 1 }
+  40%  { transform: scaleX(1); opacity: 1 }
+  100% { transform: scaleX(1); opacity: 0 }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="head">
+    <div class="row1">
+      <div class="brand">
+        <div class="brand-text">
+          <div class="h1" id="brandH1">Restock <span class="cn-tag">补货</span></div>
+          <div class="sub" id="brandSub">Refill stock from warehouse · 仓库补货</div>
+        </div>
+      </div>
+      <div class="icons">
+        <!-- Persistent mode switchers — always visible regardless of which
+             mode is active. Each shows a red dot in the corner when its
+             flow has new activity, so you can see at a glance "I'm in
+             Restock but I have 2 incoming requests in Fulfill". One tap
+             switches. Waste stays in the ⋯ More menu (less frequent). -->
+        <button id="modeRestockBtn" class="mode-btn" title="Restock · 补货" style="position:relative;display:none">🔄<span class="mode-dot" id="modeRestockDot" style="display:none"></span></button>
+        <button id="modeInboxBtn"   class="mode-btn" title="Fulfill · 处理订单" style="position:relative;display:none">📥<span class="mode-dot" id="modeInboxDot" style="display:none"></span></button>
+        <button id="voiceBtn"  title="Voice · 语音">🎤</button>
+        <button id="headerDraftsBtn" title="Drafts · 草稿" style="position:relative">📋<span id="draftBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:var(--danger);color:#fff;font-size:10px;font-weight:800;line-height:1;min-width:16px;height:16px;border-radius:999px;padding:0 4px;display:none;align-items:center;justify-content:center;border:1.5px solid var(--bg)">0</span></button>
+        <button id="moreBtn"   title="Settings · 设置">⋯</button>
+      </div>
+    </div>
+    <div class="status-row" id="statusRow"></div>
+  </header>
+
+  <!-- Mode switcher lives inside the ⋯ More menu — staff use Waste mode
+       once a day, so a full tab strip across the top was overkill. The
+       header title (🔄 Restock or 🗑 Waste) reflects the active mode. -->
+
+  <main class="body" id="body">
+    <!-- rendered by JS -->
+  </main>
+
+  <footer class="foot" id="foot">
+    <!-- rendered by JS -->
+  </footer>
+</div>
+
+<!-- Floating "+ Add" button. Always-visible while logged in so users
+     can add another product no matter how full the cart is. -->
+<!-- Floating "+ Add" FAB removed — the inline lime "+ Add Item" button
+     below the cart is the canonical entry point now (matches kitchen + POS). -->
+
+<div class="scan-pulse" id="scanPulse"></div>
+
+<!-- Search overlay -->
+<div class="ov-backdrop" id="ovBackdrop"></div>
+<div class="ov" id="searchOv">
+  <div class="ov-head">
+    <div class="ov-title">🔍 Add Product · 添加产品</div>
+    <button class="ov-close" data-close>✕</button>
+  </div>
+  <div class="ov-body">
+    <input id="searchInput" class="ov-input" placeholder="Name 名称 / SKU / Barcode 条码"
+           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+           inputmode="search">
+    <div id="searchList" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- Voice overlay -->
+<div class="ov" id="voiceOv">
+  <div class="ov-head">
+    <div class="ov-title">🎤 Voice Restock · 语音补货</div>
+    <button class="ov-close" data-close>✕</button>
+  </div>
+  <div class="ov-body">
+    <div class="voice-lang-toggle" id="voiceLangToggle">
+      <button id="voiceLangEN">EN · English</button>
+      <button id="voiceLangCN">中文</button>
+    </div>
+    <div style="text-align:center;margin-bottom:8px">
+      <button id="voiceMicBtn" class="voice-mic">🎤</button>
+      <div id="voiceStatus" style="font-size:12px;color:var(--muted);margin-top:10px;min-height:18px"></div>
+    </div>
+    <div class="voice-transcript">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Heard · 听到</div>
+      <div id="voiceTranscript" style="font-family:inherit;color:var(--dk);min-height:20px"><span style="color:var(--muted);font-style:italic">—</span></div>
+    </div>
+    <div id="voicePreview" style="margin-top:12px"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="submit-btn draft" style="flex:1" onclick="closeAllOv()">Cancel · 取消</button>
+      <button class="submit-btn" style="flex:2" id="voiceApplyBtn" onclick="parseAndApplyVoice()" disabled>Parse + Apply · 识别应用</button>
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:var(--muted);line-height:1.5;text-align:center">
+      Format · 格式: name/SKU number, name/SKU number…
+    </div>
+  </div>
+</div>
+
+<!-- More menu -->
+<div class="ov" id="moreOv">
+  <div class="ov-head">
+    <div class="ov-title">Settings · 设置</div>
+    <button class="ov-close" data-close>✕</button>
+  </div>
+  <div class="ov-body" id="moreBody"></div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+'use strict';
+// ─── State ─────────────────────────────────────────────────────────
+let _user = null;
+let _products = [];
+let _cart = [];               // [{ product, qty, notes }] — restock cart
+let _orderNotes = '';
+// Waste cart shares the same picker but holds its own line shape:
+// { product, qty, reason, notes }. Each line submits as a separate
+// POST /api/waste call (the API takes one product per request).
+let _wasteCart = [];          // [{ product, qty, reason, notes }]
+const WASTE_REASONS = [
+  { id:'expired',  label:'Expired · 过期' },
+  { id:'spoiled',  label:'Spoiled · 变质' },
+  { id:'damaged',  label:'Damaged · 损坏' },
+  { id:'dropped',  label:'Dropped · 掉落' },
+  { id:'overprep', label:'Over-prep · 备得过多' },
+  { id:'other',    label:'Other · 其他' },
+];
+// App mode — 'restock' | 'waste' | 'inbox'. NOT persisted across opens
+// for restock/waste; warehouse users default to 'inbox' since that's
+// their daily flow.
+//   restock → vendor creates a request                       (perm: restock)
+//   waste   → log spoiled / damaged stock                    (perm: waste)
+//   inbox   → warehouse fulfilment view of incoming requests (perm: warehouse, role:warehouse, or admin)
+let _appMode = 'restock';
+// When editing a previously-saved draft these hold its identity. Submit
+// then uses PUT /api/restock/:id (replacing items + optionally bumping
+// status to 'sent') instead of creating a new order.
+let _draftId = null;
+let _draftRsNumber = null;
+let _scanBuf = '', _scanBufTimer = null;
+let _voiceLang = 'en-US', _voiceRec = null, _voiceTranscript = '', _voiceGeo = null;
+// Stashed `beforeinstallprompt` event so we can fire the OS install
+// dialog from our own button (More menu → Install App). The browser
+// fires this when the PWA install criteria are met but we want to
+// defer the prompt to a moment of our choosing. `null` after the user
+// either accepts or dismisses, or if the browser never fires it (e.g.
+// iOS Safari, Xiaomi Mi Browser).
+let _installPromptEvent = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  _installPromptEvent = e;
+});
+window.addEventListener('appinstalled', () => {
+  _installPromptEvent = null;
+  // Explicit, actionable success — many Android launchers (esp. MIUI)
+  // drop PWA icons into the App Drawer, not the home screen, so users
+  // hear "installed" and then can't find the icon. A loud, persistent
+  // alert tells them exactly where to look.
+  setTimeout(() => {
+    alert('✓ App installed!\n应用已安装\n\nWhere to find it:\n• Swipe up on your home screen to open the App Drawer · 主屏幕上滑打开应用抽屉\n• Look for "Restock 补货"\n• Long-press the icon to drag it to your home screen · 长按图标可拖动到主屏幕');
+  }, 200);
+});
+
+// ─── Init ──────────────────────────────────────────────────────────
+(async function init() {
+  const r = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({}));
+  _user = r?.user;
+  if (!_user) { location.href = '/login?redirect=' + encodeURIComponent(location.pathname + location.search); return; }
+  // Remember this is where the user was last working — login.html
+  // reads `last_app` to send them back here next time without a
+  // dashboard detour.
+  try { localStorage.setItem('last_app', '/restock'); } catch {}
+  const perms = _user.permissions || {};
+  // Allow anyone with EITHER perm — `restock` (store-side: creates
+  // requests) or `warehouse_inbox` (warehouse-side: fulfils them).
+  // Admin always passes. Without either perm the user gets a 403 page.
+  if (_user.role !== 'admin' && !perms.restock && !perms.warehouse_inbox) {
+    document.body.innerHTML = '<div style="padding:40px;text-align:center"><h1>403</h1><p>No restock access · 无补货权限</p><p><a href="/">← Back · 返回</a></p></div>';
+    return;
+  }
+  // user pill was inside the old simple `.title` div — the redesigned
+  // brand block puts the user identity in the More menu instead.
+  const userPillEl = document.getElementById('userPill');
+  if (userPillEl) userPillEl.textContent = _user.displayName || _user.username || '';
+
+  // Search header button removed — picking products happens via the
+  // big "+ Add Item" button in the body, which is more discoverable.
+  const _searchBtnEl = document.getElementById('searchBtn');
+  if (_searchBtnEl) _searchBtnEl.addEventListener('click', openSearch);
+  document.getElementById('voiceBtn').addEventListener('click', openVoice);
+  document.getElementById('headerDraftsBtn').addEventListener('click', openDrafts);
+  document.getElementById('moreBtn').addEventListener('click', openMore);
+  document.getElementById('modeRestockBtn')?.addEventListener('click', () => setAppMode('restock'));
+  document.getElementById('modeInboxBtn')?.addEventListener('click', () => setAppMode('inbox'));
+  const _fabEl = document.getElementById('addFab');
+  if (_fabEl) _fabEl.addEventListener('click', openSearch);
+  document.getElementById('ovBackdrop').addEventListener('click', closeAllOv);
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeAllOv));
+  document.getElementById('searchInput').addEventListener('input', onSearchInput);
+  document.getElementById('searchInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { const top = document.querySelector('#searchList .search-row'); if (top) top.click(); }
+  });
+  document.getElementById('voiceLangEN').addEventListener('click', () => setVoiceLang('en-US'));
+  document.getElementById('voiceLangCN').addEventListener('click', () => setVoiceLang('zh-CN'));
+  document.getElementById('voiceMicBtn').addEventListener('click', toggleVoice);
+
+  // Document-level keystroke capture for barcode gun input.
+  document.addEventListener('keydown', (e) => {
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Enter') {
+      if (_scanBuf) { lookupAndAddByBarcode(_scanBuf); _scanBuf = ''; }
+      return;
+    }
+    if (e.key.length === 1) {
+      _scanBuf += e.key;
+      if (_scanBufTimer) clearTimeout(_scanBufTimer);
+      _scanBufTimer = setTimeout(() => { _scanBuf = ''; }, 300);
+    }
+  });
+
+  // ── Body click → search ──
+  // Set up ONCE here, not inside render(). Earlier the handler was
+  // attached/removed each render which broke "tap to add another"
+  // after the first product. Now it stays live; we just filter clicks
+  // that landed on a line / button / input.
+  document.getElementById('body').addEventListener('click', (e) => {
+    // Tap-anywhere-to-add only fires in cart modes (Restock/Waste). The
+    // Fulfill (inbox) view strips the `tappable` class — list views
+    // shouldn't pop the product picker.
+    if (!e.currentTarget.classList.contains('tappable')) return;
+    if (e.target.closest('.line')) return;
+    if (e.target.closest('button')) return;
+    if (e.target.closest('input'))  return;
+    if (e.target.closest('select')) return;
+    openSearch();
+  });
+
+  // Pre-fetch active products
+  try {
+    const r2 = await fetch('/api/products');
+    const d2 = await r2.json();
+    _products = (d2.data || []).filter(p => p.status === 'Active');
+  } catch { _products = []; }
+
+  render();
+  refreshDraftBadge();
+  // Restore any unseen-notification counts the user accumulated in a
+  // prior session (e.g. tab closed before they acted). Paints the yellow
+  // ribbon and the icon-badge reminders immediately if there's anything
+  // left from before. We intentionally DON'T auto-clear at init — the
+  // badge persists across reloads as a reminder until the user actually
+  // engages with an order (opens it, marks delivered, taps the banner).
+  _loadNoti();
+  // Pollers run by PERMISSION for the whole session — not gated on
+  // current view. The home launcher reads the live data to paint its
+  // tile badges, so we want both polling loops alive regardless of
+  // which mode the user is currently looking at.
+  const _initPerms = _user.permissions || {};
+  if (_user.role === 'admin' || _initPerms.restock) {
+    refreshPendingDeliveries().then(() => { if (_appMode === 'restock') render(); });
+    _startStorePolling();
+  }
+  if (_user.role === 'admin' || _initPerms.warehouse_inbox) {
+    _startInboxPolling();
+  }
+  // Open the SSE channel — this is what makes notifications arrive
+  // sub-second instead of waiting for the 30s poll.
+  _connectEventStream();
+  // SW update reload
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data?.type === 'sw-updated') location.reload();
+    });
+  }
+  // Web Push enrolment — best-effort. No-op over HTTP (browsers block
+  // PushManager on insecure origins); the moment HTTPS lands every
+  // device with the PWA open auto-subscribes and starts receiving
+  // OS-level pushes for restock + PO events.
+  if (Notification && Notification.permission === 'granted') {
+    _enableWebPush().catch(() => {});
+  } else if (Notification && Notification.permission === 'default') {
+    // Soft-prompt: ask once after a small delay so the user has settled
+    // into the app first. Granting unlocks the in-page Notification API
+    // (works on HTTP/Chrome) and Web Push (HTTPS only, silent fallback).
+    setTimeout(() => {
+      Notification.requestPermission().then((p) => {
+        if (p === 'granted') _enableWebPush().catch(() => {});
+      }).catch(() => {});
+    }, 4000);
+  }
+})();
+function _urlBase64ToUint8Array(base64) {
+  const pad = '='.repeat((4 - base64.length % 4) % 4);
+  const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+async function _enableWebPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  const r = await fetch('/api/push/vapid-key');
+  const d = await r.json();
+  if (!d?.enabled || !d.publicKey) return;
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: _urlBase64ToUint8Array(d.publicKey),
+    });
+  }
+  await fetch('/api/push/subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sub.toJSON()),
+  });
+}
+
+// ─── App mode (Restock / Waste / Inbox) ───────────────────────────
+// Coerces _appMode to something the user has access to, then paints
+// the dynamic header title + hides icons that don't apply to the
+// active mode. The actual mode switcher UI lives inside the ⋯ More
+// overlay (see openMore below) — once-a-day toggle, not worth a tab.
+function _modeAllowed(m) {
+  if (!_user) return false;
+  const perms = _user.permissions || {};
+  const isAdmin = _user.role === 'admin';
+  if (m === 'restock') return isAdmin || !!perms.restock;
+  if (m === 'waste')   return isAdmin || !!perms.waste;
+  // Inbox is gated only by the explicit `warehouse_inbox` permission
+  // (admin-granted). No role-based shortcut — admin decides exactly who
+  // sees the warehouse fulfilment queue.
+  if (m === 'inbox')   return isAdmin || !!perms.warehouse_inbox;
+  return false;
+}
+function _paintModeTabs() {
+  if (!_user) return;
+  // Coerce to a mode the user actually has access to.
+  if (!_modeAllowed(_appMode)) {
+    if      (_modeAllowed('restock')) _appMode = 'restock';
+    else if (_modeAllowed('inbox'))   _appMode = 'inbox';
+    else if (_modeAllowed('waste'))   _appMode = 'waste';
+  }
+  // First-time-this-session: warehouse_inbox users land on the Inbox.
+  // The fulfilment queue is their daily flow.
+  if (!window._wmInitDone) {
+    window._wmInitDone = true;
+    const perms = _user.permissions || {};
+    if (_user.role !== 'admin' && !!perms.warehouse_inbox) {
+      _appMode = 'inbox';
+    }
+  }
+  // Brand block reflects the active mode so users know where they are
+  // without needing a tab strip. Each mode gets its own color identity:
+  //   Restock = lime  (the daily-use vendor flow)
+  //   Waste   = red   (a destructive, careful action)
+  //   Inbox   = blue  (warehouse-side fulfilment, neutral/info)
+  const h1   = document.getElementById('brandH1');
+  const sub  = document.getElementById('brandSub');
+  if (h1 && sub) {
+    if (_appMode === 'waste') {
+      h1.innerHTML  = 'Waste <span class="cn-tag" style="color:#fbb1b1">损耗</span>';
+      sub.textContent = 'Log spoiled / expired stock · 记录损耗';
+    } else if (_appMode === 'inbox') {
+      h1.innerHTML  = 'Fulfill <span class="cn-tag" style="color:#a5c2ff">处理订单</span>';
+      sub.textContent = 'Prepare requests from store · 处理来自门店的订单';
+    } else {
+      const isWarehouse = (_user.permissions||{}).warehouse_inbox && (_user.permissions||{}).restock;
+      h1.innerHTML  = 'Restock <span class="cn-tag">补货</span>';
+      sub.textContent = isWarehouse
+        ? 'Order from kitchen · 向厨房订货'
+        : 'Refill stock from warehouse · 仓库补货';
+    }
+  }
+  // Drafts and Voice only make sense for the vendor-side restock flow
+  // (creating new requests). Hide both on Home / Waste / Inbox.
+  const draftsBtn = document.getElementById('headerDraftsBtn');
+  if (draftsBtn) draftsBtn.style.display = (_appMode === 'restock') ? '' : 'none';
+  const voiceBtn = document.getElementById('voiceBtn');
+  if (voiceBtn) voiceBtn.style.display = (_appMode === 'restock') ? '' : 'none';
+  _paintStatusRow();
+}
+
+// Live cart-status pills under the brand row. Show the active cart
+// count + a soft total/¥ estimate so the user sees their progress at
+// a glance without scrolling. Hidden when the cart is empty.
+function _paintStatusRow() {
+  const row = document.getElementById('statusRow');
+  if (!row || !_user) return;
+  // Inbox shows ACTIVE queue depth (truly pending work). We deliberately
+  // ignore _inboxOrders here — that array holds whichever tab is on
+  // screen, so when the user is on the History tab it would mislabel
+  // completed orders as pending. _inboxActiveCount is maintained by
+  // the poller independently of the visible tab.
+  if (_appMode === 'inbox') {
+    const total = _inboxActiveCount || 0;
+    if (total === 0) { row.style.display = 'none'; row.innerHTML = ''; return; }
+    const inProgress = _inboxActiveInProgress || 0;
+    row.style.display = 'flex';
+    row.innerHTML = `
+      <span class="status-pill"><span class="dot" style="background:#3b82f6;box-shadow:0 0 8px rgba(37,99,235,.6)"></span>${total} pending · 待处理</span>
+      ${inProgress > 0 ? `<span class="status-pill ghost">${inProgress} in progress · 处理中</span>` : ''}`;
+    return;
+  }
+  const items = _appMode === 'waste'
+    ? (_wasteCart || []).filter(l => parseFloat(l.qty) > 0)
+    : (_cart      || []).filter(c => parseFloat(c.qty) > 0);
+  const count = items.length;
+  if (count === 0) {
+    row.style.display = 'none';
+    row.innerHTML = '';
+    return;
+  }
+  row.style.display = 'flex';
+  if (_appMode === 'waste') {
+    const total = items.reduce((s, l) =>
+      s + ((parseFloat(l.qty)||0) * (parseFloat(l.product?.sell_price)||0)), 0);
+    row.innerHTML = `
+      <span class="status-pill"><span class="dot" style="background:var(--danger);box-shadow:0 0 8px rgba(185,74,74,.5)"></span>${count} item${count===1?'':'s'} · 项</span>
+      <span class="status-pill" style="color:#fbb1b1">¥${total.toFixed(2)} retail</span>`;
+  } else {
+    const totalUnits = items.reduce((s, c) => s + (parseFloat(c.qty)||0), 0);
+    row.innerHTML = `
+      <span class="status-pill"><span class="dot"></span>${count} item${count===1?'':'s'} · 项</span>
+      <span class="status-pill ghost">${totalUnits} unit${totalUnits===1?'':'s'} 件</span>`;
+  }
+}
+function setAppMode(mode) {
+  if (mode !== 'restock' && mode !== 'waste' && mode !== 'inbox') return;
+  if (_appMode === mode) return;
+  // NB: pollers run by PERMISSION for the whole session (started once
+  // in init), so switching modes here only changes the VIEW. The mode
+  // buttons in the header keep their red dots updating regardless of
+  // which mode you're currently looking at.
+  _appMode = mode;
+  _paintModeTabs();
+  render();
+  if (typeof _autoClearOnContext === 'function') _autoClearOnContext();
+  // Entering restock → refresh "ready to receive" panel.
+  if (mode === 'restock') {
+    refreshPendingDeliveries().then(() => { if (_appMode === 'restock') render(); });
+  }
+}
+// Show/hide the two header mode-switch buttons based on the user's
+// perms, mark the active one, and overlay a red dot on the OTHER one
+// when its flow has unseen activity. Called from _paintModeTabs and
+// _addNoti / _clearNoti so the dots stay live across every event.
+function _paintHeaderModeBtns() {
+  const perms = _user?.permissions || {};
+  const isAdmin = _user?.role === 'admin';
+  const hasRestock = isAdmin || !!perms.restock;
+  const hasInbox   = isAdmin || !!perms.warehouse_inbox;
+  const rBtn = document.getElementById('modeRestockBtn');
+  const iBtn = document.getElementById('modeInboxBtn');
+  // Show each button independently based on its own perm. A user with
+  // only one of the two flows still gets its button (highlighted as
+  // active) so the layout is consistent and they can later be granted
+  // the other perm without the UI changing shape.
+  if (rBtn) {
+    rBtn.style.display = hasRestock ? 'inline-flex' : 'none';
+    rBtn.classList.toggle('active', _appMode === 'restock');
+    rBtn.classList.toggle('mode-restock', true);
+    rBtn.classList.toggle('mode-inbox', false);
+  }
+  if (iBtn) {
+    iBtn.style.display = hasInbox ? 'inline-flex' : 'none';
+    iBtn.classList.toggle('active', _appMode === 'inbox');
+    iBtn.classList.toggle('mode-inbox', true);
+    iBtn.classList.toggle('mode-restock', false);
+  }
+  _paintHeaderModeDots();
+}
+// Count-badge painter. Shows the unseen total per mode AT ALL TIMES
+// (no mode-match suppression) — the badge is a "you still have N to
+// deal with" reminder, valid whether or not the user is currently
+// looking at the relevant mode. It clears only when the user engages
+// with a specific order (openInboxOrder, _markDelivered) or taps the
+// banner body to open the mode for them.
+function _paintHeaderModeDots() {
+  const rDot = document.getElementById('modeRestockDot');
+  const iDot = document.getElementById('modeInboxDot');
+  // Restock dot: user's own request flipped to prepared (ready to receive).
+  const rUnseen = (_notiUnseen?.prepared || 0);
+  if (rDot) {
+    if (rUnseen > 0) {
+      rDot.textContent = rUnseen > 99 ? '99+' : String(rUnseen);
+      rDot.style.display = '';
+    } else {
+      rDot.style.display = 'none';
+    }
+  }
+  // Inbox dot: NEW requests + delivery confirmations. Both are events
+  // the warehouse user should see at a glance — `new_sent` lives in the
+  // Active tab (action needed), `delivered` lives in History (close-out
+  // ack the user requested visibility for).
+  const iUnseen = (_notiUnseen?.new_sent || 0) + (_notiUnseen?.delivered || 0);
+  if (iDot) {
+    if (iUnseen > 0) {
+      iDot.textContent = iUnseen > 99 ? '99+' : String(iUnseen);
+      iDot.style.display = '';
+    } else {
+      iDot.style.display = 'none';
+    }
+  }
+}
+
+// ─── Render ────────────────────────────────────────────────────────
+function render() {
+  _paintModeTabs();
+  _paintHeaderModeBtns();
+  if (_appMode === 'inbox') return _renderInbox();
+  if (_appMode === 'waste') return _renderWaste();
+  const body = document.getElementById('body');
+  // Body is ALWAYS tappable — the click listener (set up once in init)
+  // delegates to openSearch when the click isn't on a line / button /
+  // input. Earlier we cleared the handler when items existed, which
+  // killed the "tap to add" affordance after the first product.
+  body.classList.add('tappable');
+
+  if (_cart.length === 0) {
+    body.innerHTML = `
+      ${_renderPendingDeliveriesBanner()}
+      <div class="empty">
+        <div class="icon">🔄</div>
+        <div class="hint">Empty · 暂无</div>
+      </div>
+      <button id="rkEmptyAdd" class="add-item-btn">
+        <span class="plus">＋</span>
+        <span>Add Item · 添加商品</span>
+      </button>`;
+    const emptyAdd = document.getElementById('rkEmptyAdd');
+    if (emptyAdd) emptyAdd.addEventListener('click', (e) => { e.stopPropagation(); openSearch(); });
+  } else {
+    const draftBanner = _draftId ? `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(204,217,0,.12);border:1px solid rgba(204,217,0,.4);border-radius:10px;margin-bottom:10px">
+        <div style="font-size:16px">✏️</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)">Editing draft · 编辑草稿</div>
+          <div style="font-size:13px;font-weight:700">${esc(_draftRsNumber || ('#' + _draftId))}</div>
+        </div>
+        <button onclick="discardDraftEditing()" title="Stop editing · 停止编辑" style="background:none;border:1px solid var(--border);border-radius:8px;font-size:12px;padding:4px 10px;cursor:pointer;color:var(--muted)">× Cancel 取消</button>
+      </div>` : '';
+    body.innerHTML = `
+      ${_renderPendingDeliveriesBanner()}
+      ${draftBanner}
+      <div class="notes-bar">
+        <span style="font-size:18px">📝</span>
+        <input id="orderNotes" placeholder="Notes for warehouse · 给仓库的备注 (optional)"
+               value="${esc(_orderNotes)}" autocomplete="off">
+      </div>
+      ${_cart.map((entry, i) => renderLine(entry, i)).join('')}
+      <!-- Persistent "tap to add another" affordance below the last line.
+           Cart-tap-to-search still works on the empty space too; this
+           just makes the affordance visible after items are present. -->
+      <button id="addMoreHint" class="add-item-btn">
+        <span class="plus">＋</span>
+        <span>Add Item · 添加商品</span>
+      </button>
+    `;
+    document.getElementById('orderNotes').addEventListener('input', (e) => { _orderNotes = e.target.value; });
+    document.getElementById('addMoreHint').addEventListener('click', openSearch);
+    body.querySelectorAll('[data-act]').forEach(el => {
+      el.addEventListener('click', () => {
+        const i = +el.dataset.i, a = el.dataset.act;
+        if (a === 'rm') removeLine(i);
+      });
+    });
+    // Qty dropdown: pick 0-5 directly, or "other" reveals a manual input.
+    body.querySelectorAll('[data-qty-sel]').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const i = +sel.dataset.qtySel;
+        const v = sel.value;
+        const otherInp = body.querySelector(`[data-qty-other="${i}"]`);
+        if (v === 'other') {
+          if (otherInp) {
+            otherInp.style.display = 'inline-block';
+            // Default the manual input to 6 so it's > 5 (else it'd flip
+            // back to "5" on next render). User can change after.
+            if (!otherInp.value || +otherInp.value < 6) otherInp.value = '6';
+            _cart[i].qty = parseFloat(otherInp.value) || 6;
+            otherInp.focus();
+            otherInp.select();
+          }
+        } else {
+          if (otherInp) { otherInp.style.display = 'none'; otherInp.value = ''; }
+          _cart[i].qty = parseFloat(v) || 0;
+          if (_cart[i].qty === 0) {
+            // "—" selected → drop the line entirely.
+            removeLine(i);
+            return;
+          }
+        }
+        updateFooter();
+      });
+    });
+    body.querySelectorAll('[data-qty-other]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const i = +inp.dataset.qtyOther;
+        let v = parseFloat(inp.value) || 0;
+        if (v < 6) v = 6;     // anything < 6 belongs in the dropdown
+        if (v > 999) v = 999;
+        _cart[i].qty = v;
+        updateFooter();
+      });
+    });
+    body.querySelectorAll('[data-note]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const i = +inp.dataset.note;
+        _cart[i].notes = inp.value;
+      });
+    });
+  }
+  updateFooter();
+}
+
+function renderLine(entry, i) {
+  const p = entry.product;
+  const qtyNum = parseFloat(entry.qty) || 0;
+  const isOther = qtyNum > 5;
+  // Qty UX: dropdown 1-5 covers 95% of restock requests fast, plus an
+  // "Other 其他…" sentinel that reveals a manual number input for bulk
+  // asks. Same pattern used by the in-app Restock module.
+  return `<div class="line" data-line="${i}">
+    <div class="top">
+      <div class="info">
+        <div class="name">${esc(p.name_cn || p.name_en || '—')}${p.name_en && p.name_cn ? ` <span class="cn">· ${esc(p.name_en)}</span>` : ''}</div>
+        <div class="meta">${p.sku ? esc(p.sku) : ''}${p.category ? ' · ' + esc(p.category) : ''}</div>
+      </div>
+      <button class="remove" data-act="rm" data-i="${i}">✕</button>
+    </div>
+    <div class="ctrl">
+      <select class="qty-select" data-qty-sel="${i}">
+        <option value="0"     ${qtyNum===0?'selected':''}>—</option>
+        <option value="1"     ${qtyNum===1?'selected':''}>1</option>
+        <option value="2"     ${qtyNum===2?'selected':''}>2</option>
+        <option value="3"     ${qtyNum===3?'selected':''}>3</option>
+        <option value="4"     ${qtyNum===4?'selected':''}>4</option>
+        <option value="5"     ${qtyNum===5?'selected':''}>5</option>
+        <option value="other" ${isOther?'selected':''}>Other 其他…</option>
+      </select>
+      <input class="qty-input-manual" type="number" min="6" step="1" inputmode="numeric"
+             placeholder="qty" data-qty-other="${i}" value="${isOther?qtyNum:''}"
+             style="display:${isOther?'inline-block':'none'}">
+    </div>
+    <input class="note-input" type="text" placeholder="Note · 备注 (optional)"
+           value="${esc(entry.notes || '')}" data-note="${i}">
+  </div>`;
+}
+
+function updateFooter() {
+  const count = _cart.filter(c => parseFloat(c.qty) > 0).length;
+  const totalUnits = _cart.reduce((s, c) => s + (parseFloat(c.qty) || 0), 0);
+  // Toggle FAB pulse — pulses when cart is empty (encourages first add),
+  // becomes calmer once items are present.
+  const fab = document.getElementById('addFab');
+  if (fab) fab.classList.toggle('has-items', count > 0);
+  document.getElementById('foot').innerHTML = `
+    <div class="info">
+      <span class="lbl">Items · 项目</span>
+      <span class="val">${count}</span>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="submit-btn draft" id="draftBtn" ${count===0?'disabled':''} onclick="submitRequest('draft')">💾 Draft · 草稿</button>
+      <button class="submit-btn" id="sendBtn" ${count===0?'disabled':''} onclick="submitRequest('sent')">📤 Send · 提交</button>
+    </div>`;
+}
+
+// ─── Cart ops ──────────────────────────────────────────────────────
+function addToCart(product) {
+  // Route picks to the active mode's cart. Same picker, two carts.
+  if (_appMode === 'waste') return addToWasteCart(product);
+  const existing = _cart.find(c => c.product.id === product.id);
+  if (existing) {
+    existing.qty = (parseFloat(existing.qty) || 0) + 1;
+  } else {
+    _cart.push({ product, qty: 1, notes: '' });
+  }
+  render();
+  pulseScan(); beep('ok');
+  // Scroll the Add Item button into view so the next product is always
+  // one tap away — and pop-animate the new line on the way.
+  const idx = _cart.findIndex(c => c.product.id === product.id);
+  setTimeout(() => {
+    const el = document.querySelector(`[data-line="${idx}"]`);
+    if (el) {
+      el.classList.add('popped');
+      setTimeout(() => el.classList.remove('popped'), 200);
+    }
+    const addBtn = document.getElementById('addMoreHint') || document.getElementById('rkEmptyAdd');
+    if (addBtn) addBtn.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    else if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 30);
+}
+function changeQty(i, delta) {
+  if (!_cart[i]) return;
+  _cart[i].qty = Math.max(0, +(((parseFloat(_cart[i].qty) || 0) + delta).toFixed(0)));
+  if (_cart[i].qty === 0) removeLine(i);
+  else render();
+}
+function removeLine(i) { _cart.splice(i, 1); render(); }
+
+// ─── Waste mode ────────────────────────────────────────────────────
+function addToWasteCart(product) {
+  // Same product can legitimately appear twice with different reasons
+  // (e.g. 2 expired + 1 dropped). For convenience, bump qty if the same
+  // product+reason combo already exists; otherwise add a new line.
+  const existing = _wasteCart.find(c => c.product.id === product.id && c.reason === 'expired');
+  if (existing) {
+    existing.qty = (parseFloat(existing.qty) || 0) + 1;
+  } else {
+    _wasteCart.push({ product, qty: 1, reason: 'expired', notes: '' });
+  }
+  _renderWaste();
+  pulseScan(); beep('ok');
+  const idx = _wasteCart.length - 1;
+  setTimeout(() => {
+    const el = document.querySelector(`[data-line="${idx}"]`);
+    if (el) {
+      el.classList.add('popped');
+      setTimeout(() => el.classList.remove('popped'), 200);
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, 30);
+}
+function _wasteRemove(i) { _wasteCart.splice(i, 1); _renderWaste(); }
+
+function _renderWasteLine(line, i) {
+  const p = line.product;
+  const qtyNum = parseFloat(line.qty) || 0;
+  const isOther = qtyNum > 5;
+  const reasonOpts = WASTE_REASONS.map(r =>
+    `<option value="${r.id}" ${line.reason===r.id?'selected':''}>${esc(r.label)}</option>`
+  ).join('');
+  // Bilingual name (matches restock order — CN first since the kitchen
+  // team reads CN faster). Adds a small red accent to the reason select
+  // so it's visually distinct from the qty picker.
+  return `<div class="line" data-line="${i}">
+    <div class="top">
+      <div class="info">
+        <div class="name">${esc(p.name_cn || p.name_en || '—')}${p.name_en && p.name_cn ? ` <span class="cn">· ${esc(p.name_en)}</span>` : ''}</div>
+        <div class="meta">${p.sku ? esc(p.sku) : ''}${p.category ? (p.sku ? ' · ' : '') + esc(p.category) : ''}${p.sell_price ? (p.sku||p.category ? ' · ' : '') + '¥' + Number(p.sell_price).toFixed(2) : ''}</div>
+      </div>
+      <button class="remove" data-wact="rm" data-i="${i}">✕</button>
+    </div>
+    <div class="ctrl" style="flex-wrap:wrap">
+      <select class="qty-select" data-wqty-sel="${i}" style="min-width:96px">
+        <option value="0"     ${qtyNum===0?'selected':''}>—</option>
+        <option value="1"     ${qtyNum===1?'selected':''}>1</option>
+        <option value="2"     ${qtyNum===2?'selected':''}>2</option>
+        <option value="3"     ${qtyNum===3?'selected':''}>3</option>
+        <option value="4"     ${qtyNum===4?'selected':''}>4</option>
+        <option value="5"     ${qtyNum===5?'selected':''}>5</option>
+        <option value="other" ${isOther?'selected':''}>Other 其他…</option>
+      </select>
+      <input class="qty-input-manual" type="number" min="6" step="1" inputmode="numeric"
+             placeholder="qty" data-wqty-other="${i}" value="${isOther?qtyNum:''}"
+             style="display:${isOther?'inline-block':'none'}">
+      <select class="qty-select" data-wreason="${i}" style="flex:1;min-width:140px;border-color:var(--danger-soft-border);background:#fff">${reasonOpts}</select>
+    </div>
+    <input class="note-input" type="text" placeholder="Notes · 备注 (optional)"
+           value="${esc(line.notes||'')}" data-wnote="${i}">
+  </div>`;
+}
+
+// ─── Inbox mode (warehouse) ────────────────────────────────────────
+// Mobile-first warehouse fulfilment queue. Mirrors the desktop /restock
+// module's warehouse role: tabs for Active vs History, full status
+// pipeline (sent → received → prepared → delivered), per-item check-off
+// + qty_sent override, plus warehouse-side notes. Permission-gated by
+// the `warehouse_inbox` flag (admin-granted, default off).
+let _inboxOrders = [];
+let _inboxBusy = false;
+let _inboxTab = 'active'; // 'active' | 'history'
+// Separate from _inboxOrders so the header "X pending" pill always
+// reflects the active-tab count, regardless of which tab is on screen.
+let _inboxActiveCount = 0;
+let _inboxActiveInProgress = 0;
+
+// Pending-deliveries state for the store side. Holds restock orders
+// the current user created that are now status='prepared' — i.e.
+// waiting at the warehouse to be received. Refreshed on app open and
+// whenever the user enters Restock mode. Admins see all prepared
+// orders so they can confirm any of them.
+let _pendingDeliveries = [];
+// Pending-fulfill state for the warehouse side. Holds store→warehouse
+// orders the warehouse hasn't started yet (status='sent'). Same banner
+// treatment as the store-side "Ready to receive" so warehouse users
+// get a heads-up about incoming requests even when in Restock mode.
+let _pendingFulfill = [];
+// Awaiting-confirmation state for the warehouse side. Holds warehouse→
+// store orders at status='prepared' — the warehouse has packed them
+// and is waiting for the store to confirm receipt. Banner reminds the
+// warehouse what's still open on the store's end.
+let _awaitingConfirm = [];
+async function refreshPendingDeliveries(opts) {
+  if (!_user) return;
+  const silent = opts && opts.silent;
+  const prevIds = silent ? new Set(_pendingDeliveries.map(o => o.id)) : null;
+  const prevFulfillIds = silent ? new Set(_pendingFulfill.map(o => o.id)) : null;
+  try {
+    // Only store→warehouse orders need a "Mark Delivered" confirmation
+    // from the receiver. Warehouse→kitchen orders are CLOSED at status
+    // 'prepared' (kitchen done = done) — the warehouse just gets a
+    // notification, no confirmation needed. So we filter out anything
+    // that isn't headed to a warehouse here.
+    const r = await fetch('/api/restock?status=prepared&to_role=warehouse');
+    const d = await r.json();
+    const all = (d?.data || []);
+    _pendingDeliveries = (_user.role === 'admin')
+      ? all
+      : all.filter(o => o.created_by === _user.id);
+  } catch { _pendingDeliveries = []; }
+  // Warehouse-side incoming queue: sent store→warehouse orders waiting
+  // to be prepared. Only fetched for users who actually fulfill them.
+  const hasInbox = _user.role === 'admin' || !!(_user.permissions||{}).warehouse_inbox;
+  if (hasInbox) {
+    try {
+      const r = await fetch('/api/restock?status=sent&to_role=warehouse');
+      const d = await r.json();
+      _pendingFulfill = (d?.data || []);
+    } catch { _pendingFulfill = []; }
+    // Warehouse→store orders the user prepared and is waiting for the
+    // store to confirm receipt. Surfaces what's still open on the other
+    // end so the warehouse can follow up if it lingers.
+    try {
+      const r = await fetch('/api/restock?status=prepared&to_role=store');
+      const d = await r.json();
+      const all = (d?.data || []);
+      _awaitingConfirm = (_user.role === 'admin')
+        ? all
+        : all.filter(o => o.created_by === _user.id);
+    } catch { _awaitingConfirm = []; }
+  } else {
+    _pendingFulfill = [];
+    _awaitingConfirm = [];
+  }
+  // Notify the store user when a new prepared order shows up — beep +
+  // toast so they know warehouse is ready before they're staring at
+  // the screen. Skipped on the first (non-silent) load.
+  if (silent) {
+    const newOnes = _pendingDeliveries.filter(o => !prevIds.has(o.id));
+    if (newOnes.length > 0) {
+      // Persistent yellow ribbon at the top of the viewport — same UX as
+      // the kitchen-PO banner in app.html. Survives reload, only goes
+      // away when the user opens the order or dismisses with ×.
+      // Each order passes its own payload so the banner can name it
+      // ("RS-2026-0042 · 5 items" instead of just "1 ready").
+      newOnes.forEach(o => _addNoti('prepared', {
+        id: o.id, rs_number: o.rs_number,
+        store_name: o.store_name, store_cn: o.store_cn,
+        item_count: o.item_count || 0,
+      }));
+      if (_appMode === 'restock') render();
+    }
+  }
+}
+
+// Store-side polling — checks for newly-prepared orders every 8s
+// while the user is in restock mode and the tab is visible. SSE is
+// the fast path; this is the fallback for when EventSource is dropped
+// (mobile flaky network, tab put to sleep then woken, etc.). Cheap
+// (one GET filtered by status). Battery-friendly pause-on-hidden.
+let _storePollTimer = null;
+function _startStorePolling() {
+  _stopStorePolling();
+  _storePollTimer = setInterval(() => {
+    if (_appMode !== 'restock' || document.hidden) return;
+    refreshPendingDeliveries({ silent: true });
+  }, 8000);
+}
+function _stopStorePolling() {
+  if (_storePollTimer) { clearInterval(_storePollTimer); _storePollTimer = null; }
+}
+if (!window._storeVisWired) {
+  window._storeVisWired = true;
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && _appMode === 'restock') refreshPendingDeliveries({ silent: true });
+  });
+}
+async function _markDelivered(orderId, label) {
+  if (!confirm(`Mark ${label} as delivered? · 确认 ${label} 已送达?`)) return;
+  try {
+    const r = await fetch('/api/restock/' + orderId + '/status', {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ status: 'delivered' }),
+    });
+    const d = await r.json();
+    if (!d?.success) throw new Error(d?.error || 'failed');
+    toast(`✓ ${label} delivered · 已送达`, 'success');
+    beep('done');
+    // User just acted on a "ready to receive" notification — clear the
+    // prepared-kind badge so they're not nagged by their own action.
+    if (_notiUnseen?.prepared > 0) _clearNoti('prepared');
+    closeAllOv();
+    await refreshPendingDeliveries();
+    if (_appMode === 'restock') render();
+  } catch (e) {
+    toast('Failed: ' + (e.message || ''), 'error');
+  }
+}
+
+// Store-side detail view — opens when the user taps a row in the
+// "Ready to receive" banner. Reuses the More overlay with a custom
+// title + body. Shows what the warehouse shipped (with sent qty,
+// notes, any qty mismatches) and a primary "Mark Delivered" action.
+async function _openDeliveryDetail(orderId) {
+  document.getElementById('ovBackdrop').classList.add('visible');
+  document.getElementById('moreOv').classList.add('visible');
+  const titleEl = document.querySelector('#moreOv .ov-title');
+  const body = document.getElementById('moreBody');
+  if (titleEl) titleEl.textContent = '📦 Ready to receive · 等待收货';
+  if (body) body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Loading… · 加载中</div>`;
+  try {
+    const r = await fetch('/api/restock/' + orderId);
+    const d = await r.json();
+    if (!d?.success) throw new Error(d?.error || 'failed');
+    _renderDeliveryDetail(d.data);
+  } catch (e) {
+    if (body) body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--danger);font-size:13px">Failed to load · 加载失败</div>
+      <button class="submit-btn draft" style="width:100%;margin-top:10px" onclick="closeAllOv()">Close · 关闭</button>`;
+  }
+}
+function _renderDeliveryDetail(order) {
+  const body = document.getElementById('moreBody');
+  if (!body) return;
+  const items = order.items || [];
+  const rsLabel = esc(order.rs_number || ('#'+order.id));
+  const eventTs = order.prepared_at || order.sent_at || order.created_at;
+  const ago = _agoBilingual(eventTs);
+  const dt = _fmtDateTime(eventTs);
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;padding:4px 4px 12px;flex-wrap:wrap">
+      <span style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;font-weight:700;background:rgba(0,0,0,.05);color:var(--dk);padding:3px 9px;border-radius:6px">${rsLabel}</span>
+      <span style="font-size:10px;color:var(--muted);font-weight:600">Prepared · 已备货 ${ago}${dt ? ' · 🕒 ' + dt : ''}</span>
+      <span style="margin-left:auto;font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:rgba(109,179,63,.18);color:#3d7a1e">Ready · 待收货</span>
+    </div>
+
+    ${order.notes ? `<div style="background:rgba(204,217,0,.08);border:1px solid rgba(204,217,0,.3);border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--text);line-height:1.5"><strong>📝 Your notes · 您的备注:</strong> ${esc(order.notes)}</div>` : ''}
+    ${order.wh_notes ? `<div style="background:rgba(37,99,235,.06);border:1px solid rgba(37,99,235,.25);border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--text);line-height:1.5"><strong>🏭 Warehouse · 仓库:</strong> ${esc(order.wh_notes)}</div>` : ''}
+
+    <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 4px 6px">Shipped items · 实发商品 (${items.length})</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+      ${items.map(it => {
+        const sent = it.qty_sent != null ? +it.qty_sent : +it.qty_requested;
+        const requested = +it.qty_requested;
+        const diff = sent !== requested;
+        return `<div style="padding:10px 12px;background:var(--card);border:1.5px solid var(--border);border-radius:10px">
+          <div style="display:flex;align-items:flex-start;gap:10px">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:14px;line-height:1.35">${esc(it.product_cn || it.product_name || '?')}${it.product_cn && it.product_name ? ' <span style="color:var(--muted);font-weight:500;font-size:12px">· ' + esc(it.product_name) + '</span>' : ''}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">${it.sku ? esc(it.sku) + ' · ' : ''}${it.notes ? esc(it.notes) : ''}</div>
+            </div>
+            <div style="text-align:right;white-space:nowrap;flex-shrink:0">
+              <div style="font-weight:800;font-size:15px;color:${diff?'#a04a25':'var(--dk)'};font-variant-numeric:tabular-nums">${sent}${it.unit?' '+esc(it.unit):''}</div>
+              <div style="font-size:10px;color:var(--muted);font-weight:600">sent · 实发</div>
+              ${diff ? `<div style="font-size:10px;color:#a04a25;font-weight:700;margin-top:3px">≠ requested ${requested}${it.unit?' '+esc(it.unit):''}</div>` : ''}
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:stretch">
+      <button class="submit-btn draft" style="flex:1 1 0;min-width:0;font-size:13px;padding:14px 8px" onclick="closeAllOv()">Close · 关闭</button>
+      <button class="submit-btn" style="flex:2 1 0;min-width:0;font-size:14px;padding:14px 10px;line-height:1.2;white-space:normal;background:var(--lime);color:var(--dk);border:none" onclick="_markDelivered(${order.id}, '${rsLabel}')">✓ Mark Delivered<br><span style="font-weight:700;opacity:.85">已收到</span></button>
+    </div>`;
+}
+function _renderPendingDeliveriesBanner() {
+  return _renderReadyBanner() + _renderFulfillBanner() + _renderAwaitingBanner();
+}
+// Warehouse-side reminder: warehouse→store orders the user prepared but
+// the store hasn't confirmed yet. Amber treatment to read as "needs
+// follow-up" rather than "incoming work" or "ready for you".
+function _renderAwaitingBanner() {
+  if (!_awaitingConfirm.length) return '';
+  return `
+    <div onclick="event.stopPropagation()" style="background:linear-gradient(135deg, rgba(224,184,80,.15), rgba(204,217,0,.04));border:1.5px solid rgba(224,184,80,.5);border-radius:14px;padding:12px 14px;margin-bottom:14px;box-shadow:0 2px 6px rgba(224,184,80,.10)">
+      <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#92660d;margin-bottom:8px">
+        <span>⏳ Awaiting store · 等待门店确认</span>
+        <span style="margin-left:auto;font-weight:700;color:var(--muted)">${_awaitingConfirm.length} order${_awaitingConfirm.length===1?'':'s'} · 单</span>
+      </div>
+      ${_awaitingConfirm.slice(0, 5).map(o => {
+        const ago = _agoBilingual(o.prepared_at || o.sent_at || o.created_at);
+        const rsLabel = esc(o.rs_number || ('#'+o.id));
+        const dest = esc(o.store_name || o.store_cn || 'Store · 门店');
+        return `
+        <div onclick="setAppMode('inbox');_inboxTab='active';render();setTimeout(()=>openInboxOrder(${o.id}),50)" style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-top:1px dashed rgba(224,184,80,.3);cursor:pointer;border-radius:8px;transition:background .15s" onmouseover="this.style.background='rgba(224,184,80,.10)'" onmouseout="this.style.background=''">
+          <div style="flex:1;min-width:0">
+            <div style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;font-weight:800;color:var(--dk)">${rsLabel}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:1px">To ${dest} · Prepared ${ago} · ${o.item_count||0} item${(o.item_count||0)===1?'':'s'} 件 · tap to view 点击查看</div>
+          </div>
+          <div style="background:rgba(224,184,80,.20);color:#92660d;border-radius:9px;padding:8px 12px;font-size:11px;font-weight:800;white-space:nowrap;flex-shrink:0">⏳ Pending<br><span style="font-weight:700;opacity:.85;font-size:10px">待确认</span></div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+function _renderReadyBanner() {
+  if (!_pendingDeliveries.length) return '';
+  // Banner has an outer onclick=event.stopPropagation so taps inside
+  // never bubble to the body's tap-to-search handler. Each row tap
+  // (outside the inline ✓ button) opens a detail overlay showing what
+  // the warehouse shipped.
+  return `
+    <div onclick="event.stopPropagation()" style="background:linear-gradient(135deg, rgba(109,179,63,.10), rgba(204,217,0,.06));border:1.5px solid rgba(109,179,63,.4);border-radius:14px;padding:12px 14px;margin-bottom:14px;box-shadow:0 2px 6px rgba(109,179,63,.08)">
+      <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#3d7a1e;margin-bottom:8px">
+        <span>📦 Ready to receive · 等待收货</span>
+        <span style="margin-left:auto;font-weight:700;color:var(--muted)">${_pendingDeliveries.length} order${_pendingDeliveries.length===1?'':'s'} · 单</span>
+      </div>
+      ${_pendingDeliveries.slice(0, 5).map(o => {
+        const ago = _agoBilingual(o.prepared_at || o.sent_at || o.created_at);
+        const rsLabel = esc(o.rs_number || ('#'+o.id));
+        return `
+        <div onclick="_openDeliveryDetail(${o.id})" style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-top:1px dashed rgba(109,179,63,.25);cursor:pointer;border-radius:8px;transition:background .15s" onmouseover="this.style.background='rgba(109,179,63,.08)'" onmouseout="this.style.background=''">
+          <div style="flex:1;min-width:0">
+            <div style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;font-weight:800;color:var(--dk)">${rsLabel}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:1px">Prepared · 已备货 ${ago} · ${o.item_count||0} item${(o.item_count||0)===1?'':'s'} 件 · tap to view 点击查看</div>
+          </div>
+          <button onclick="event.stopPropagation();_markDelivered(${o.id}, '${rsLabel}')" style="background:var(--lime);color:var(--dk);border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 2px 6px rgba(204,217,0,.35);flex-shrink:0">✓ Delivered<br><span style="font-weight:700;opacity:.85;font-size:10px">已收到</span></button>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+// Warehouse-side mirror of the "Ready to receive" banner. Shows incoming
+// store→warehouse requests that haven't been started yet — same green
+// visual treatment so the warehouse user gets the same "you have stuff
+// waiting" cue when in Restock mode.
+function _renderFulfillBanner() {
+  if (!_pendingFulfill.length) return '';
+  return `
+    <div onclick="event.stopPropagation()" style="background:linear-gradient(135deg, rgba(37,99,235,.10), rgba(204,217,0,.06));border:1.5px solid rgba(37,99,235,.4);border-radius:14px;padding:12px 14px;margin-bottom:14px;box-shadow:0 2px 6px rgba(37,99,235,.08)">
+      <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#1d4ed8;margin-bottom:8px">
+        <span>📥 New requests · 新订单</span>
+        <span style="margin-left:auto;font-weight:700;color:var(--muted)">${_pendingFulfill.length} order${_pendingFulfill.length===1?'':'s'} · 单</span>
+      </div>
+      ${_pendingFulfill.slice(0, 5).map(o => {
+        const ago = _agoBilingual(o.sent_at || o.created_at);
+        const rsLabel = esc(o.rs_number || ('#'+o.id));
+        const from = esc(o.store_name || o.store_cn || 'Store · 门店');
+        return `
+        <div onclick="setAppMode('inbox');_inboxTab='active';render();setTimeout(()=>openInboxOrder(${o.id}),50)" style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-top:1px dashed rgba(37,99,235,.25);cursor:pointer;border-radius:8px;transition:background .15s" onmouseover="this.style.background='rgba(37,99,235,.08)'" onmouseout="this.style.background=''">
+          <div style="flex:1;min-width:0">
+            <div style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;font-weight:800;color:var(--dk)">${rsLabel}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:1px">From ${from} · ${ago} · ${o.item_count||0} item${(o.item_count||0)===1?'':'s'} 件 · tap to fulfill 点击备货</div>
+          </div>
+          <button onclick="event.stopPropagation();setAppMode('inbox');_inboxTab='active';render();setTimeout(()=>openInboxOrder(${o.id}),50)" style="background:rgba(37,99,235,.85);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 2px 6px rgba(37,99,235,.35);flex-shrink:0">▶ Fulfill<br><span style="font-weight:700;opacity:.85;font-size:10px">备货</span></button>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+// Auto-refresh — poll every 30s while the inbox is visible so new
+// requests from store users appear without a manual ↻ tap. The interval
+// is cleared whenever the user switches mode or backgrounds the tab,
+// and re-armed when they come back. Cheap (one GET, no items unless
+// new orders arrived).
+let _inboxPollTimer = null;
+// Establish the first-poll baseline before firing any notifications —
+// otherwise every order in the inbox would be flagged "new" the first
+// time the poller runs (especially for warehouse users who land in
+// restock/waste mode and have never opened the inbox UI in this tab).
+let _inboxPollerSeeded = false;
+function _startInboxPolling() {
+  _stopInboxPolling();
+  _inboxPollerSeeded = false;
+  // Kick a first poll right away to seed; the interval handles the rest.
+  if (!document.hidden) _silentRefreshInbox();
+  // 8s cadence — fast enough that warehouse staff feel "instant" even
+  // when SSE drops on mobile networks. Cheap (two GETs against an
+  // already-indexed table) and pauses on hidden tab.
+  _inboxPollTimer = setInterval(() => {
+    if (document.hidden) return;
+    _silentRefreshInbox();
+  }, 8000);
+}
+function _stopInboxPolling() {
+  if (_inboxPollTimer) { clearInterval(_inboxPollTimer); _inboxPollTimer = null; }
+}
+// Track which active "sent" orders we've already notified on, so we
+// only fire the banner the first time each one shows up. Spans tabs +
+// modes so a warehouse user in restock-mode still gets pinged.
+let _knownActiveIds = new Set();
+let _lastDeliveredIds = new Set();
+async function _silentRefreshInbox() {
+  // Refreshes the order list (and notification baselines) regardless of
+  // which mode/tab the user is currently viewing — warehouse users need
+  // notifications even when they're in restock or waste mode.
+  try {
+    const [aRes, hRes] = await Promise.all([
+      fetch('/api/restock?tab=active').then(r => r.json()),
+      fetch('/api/restock?tab=history').then(r => r.json()),
+    ]);
+    if (!aRes || !hRes) return;
+    const active  = (aRes?.data || []).filter(o => o.status !== 'draft');
+    const history = (hRes?.data || []);
+    // Track the active count separately so the header status pill
+    // ("X pending · 待处理") always reflects truly-pending work, not
+    // whichever tab the user happens to be looking at. Without this,
+    // viewing the History tab would mislabel completed orders as pending.
+    _inboxActiveCount      = active.length;
+    _inboxActiveInProgress = active.filter(o => o.status === 'received').length;
+    // Update tab counts only when those DOM nodes exist (i.e. the user
+    // is actually viewing the inbox). Skipped silently otherwise.
+    const cA = document.getElementById('inboxCountActive');
+    const cH = document.getElementById('inboxCountHistory');
+    if (cA) cA.textContent = '· ' + active.length;
+    if (cH) cH.textContent = '· ' + history.length;
+    if (_appMode === 'inbox') {
+      _inboxOrders = _inboxTab === 'active' ? active : history;
+      _paintInboxList();
+      _paintStatusRow();
+    }
+    // Notification detection — works the same whether or not the user
+    // has the inbox UI open. First poll surfaces ANY pending sent
+    // orders that arrived while the warehouse user had the app closed,
+    // so the icon badge reflects real work-on-deck the moment they
+    // open the app — not just things that arrive while they watch.
+    // Subsequent polls compare against the seeded set as usual.
+    // `_addNoti` dedupes by id so re-opens don't double-count.
+    const currentActiveIds    = new Set(active.map(o => o.id));
+    const currentDeliveredIds = new Set(history.filter(o => o.status === 'delivered').map(o => o.id));
+    const hasInboxPerm = _user?.role === 'admin' || !!(_user?.permissions||{}).warehouse_inbox;
+    if (hasInboxPerm) {
+      const myId = _user?.id;
+      const newOnes = active
+        .filter(o => o.status === 'sent' && o.created_by !== myId)
+        .filter(o => !_inboxPollerSeeded || !_knownActiveIds.has(o.id));
+      // One _addNoti call per order so the banner describes the latest
+      // event ("RS-2026-0042 from Yuexiu · 5 items") instead of just
+      // showing a bare count. _addNoti dedupes by id so SSE arrivals
+      // for the same order won't double-count.
+      newOnes.forEach(o => _addNoti('new_sent', {
+        id: o.id, rs_number: o.rs_number,
+        store_name: o.store_name, store_cn: o.store_cn,
+        item_count: o.item_count || 0,
+      }));
+      // For delivery confirmations the relevant actor isn't `created_by`
+      // (the original requester) — it's whoever flipped the status to
+      // delivered. Gated on `_inboxPollerSeeded` so the first poll
+      // doesn't flood the user with banners for every historical
+      // delivery; only deliveries that happen WHILE they watch count.
+      if (_inboxPollerSeeded) {
+        const justDelivered = history
+          .filter(o => currentDeliveredIds.has(o.id) && !_lastDeliveredIds.has(o.id) && o.created_by !== myId);
+        justDelivered.forEach(o => _addNoti('delivered', {
+          id: o.id, rs_number: o.rs_number,
+          store_name: o.store_name, store_cn: o.store_cn,
+          item_count: o.item_count || 0,
+        }));
+      }
+    }
+    _knownActiveIds    = currentActiveIds;
+    _lastDeliveredIds  = currentDeliveredIds;
+    _inboxPollerSeeded = true;
+  } catch { /* network blip — try again next tick */ }
+}
+// Pause polling when the tab is hidden (e.g. screen off / app
+// backgrounded); resume on visibilitychange. Wired once. Refresh fires
+// for any warehouse user, not only when inbox is active — same
+// rationale as the poller above.
+if (!window._inboxVisWired) {
+  window._inboxVisWired = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    const hasInbox = _user && (_user.role === 'admin' || (_user.permissions||{}).warehouse_inbox);
+    if (hasInbox) _silentRefreshInbox();
+  });
+}
+async function _renderInbox() {
+  const body = document.getElementById('body');
+  body.classList.remove('tappable');
+  body.innerHTML = `
+    <div style="display:flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:4px;margin-bottom:12px">
+      <button onclick="_inboxSetTab('active')"  style="flex:1;padding:10px 6px;border-radius:9px;border:none;font-family:inherit;font-size:13px;font-weight:${_inboxTab==='active'?'800':'600'};color:${_inboxTab==='active'?'var(--dk)':'var(--muted)'};background:${_inboxTab==='active'?'rgba(37,99,235,.10)':'transparent'};cursor:pointer">📥 Active · 进行中 <span id="inboxCountActive" style="opacity:.7;font-weight:600;margin-left:3px"></span></button>
+      <button onclick="_inboxSetTab('history')" style="flex:1;padding:10px 6px;border-radius:9px;border:none;font-family:inherit;font-size:13px;font-weight:${_inboxTab==='history'?'800':'600'};color:${_inboxTab==='history'?'var(--dk)':'var(--muted)'};background:${_inboxTab==='history'?'rgba(37,99,235,.10)':'transparent'};cursor:pointer">✅ History · 已完成 <span id="inboxCountHistory" style="opacity:.7;font-weight:600;margin-left:3px"></span></button>
+    </div>
+    <div style="display:flex;align-items:center;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:0 4px 8px">
+      <span>${_inboxTab === 'active' ? 'Pending fulfilment · 待备货' : 'Completed orders · 已完成订单'}</span>
+      <button onclick="_renderInbox()" title="Refresh · 刷新" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:8px;font-size:11px;padding:4px 10px;cursor:pointer;color:var(--muted);font-family:inherit">↻ Refresh</button>
+    </div>
+    <div id="inboxList"><div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Loading… · 加载中</div></div>`;
+  try {
+    // Two parallel fetches so tab counts stay live regardless of which
+    // tab is currently visible.
+    const [aRes, hRes] = await Promise.all([
+      fetch('/api/restock?tab=active').then(r => r.json()),
+      fetch('/api/restock?tab=history').then(r => r.json()),
+    ]);
+    const active  = (aRes?.data || []).filter(o => o.status !== 'draft');
+    const history = (hRes?.data || []);
+    document.getElementById('inboxCountActive').textContent  = '· ' + active.length;
+    document.getElementById('inboxCountHistory').textContent = '· ' + history.length;
+    _inboxOrders = _inboxTab === 'active' ? active : history;
+    // Seed the "last delivered" tracker on the first load so we don't
+    // toast historical deliveries — only ones that happen while the
+    // user is watching.
+    _lastDeliveredIds = new Set(history.filter(o => o.status === 'delivered').map(o => o.id));
+  } catch { _inboxOrders = []; }
+  _paintInboxList();
+  _paintStatusRow();
+  _startInboxPolling();
+}
+function _inboxSetTab(t) {
+  if (t !== 'active' && t !== 'history') return;
+  if (_inboxTab === t) return;
+  _inboxTab = t;
+  _renderInbox();
+  if (typeof _autoClearOnContext === 'function') _autoClearOnContext();
+}
+function _statusPill(status) {
+  // All four pipeline statuses get a distinct color so a glance at the
+  // list tells warehouse + store users where every order is.
+  const s = (status || '').toLowerCase();
+  if (s === 'sent')      return '<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:rgba(204,217,0,.18);color:var(--lime-text)">New · 新</span>';
+  if (s === 'received')  return '<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:rgba(37,99,235,.15);color:#1d4ed8">In progress · 处理中</span>';
+  if (s === 'prepared')  return '<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:rgba(109,179,63,.18);color:#3d7a1e">Prepared · 已备货</span>';
+  if (s === 'delivered') return '<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:rgba(0,0,0,.08);color:#444">Delivered · 已送达</span>';
+  return '<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:rgba(0,0,0,.08);color:#444">' + esc(status||'?') + '</span>';
+}
+function _paintInboxList() {
+  const list = document.getElementById('inboxList');
+  if (!list) return;
+  if (!_inboxOrders.length) {
+    const empty = _inboxTab === 'active'
+      ? { icon: '📭', lead: 'All caught up · 暂无待处理', sub: 'Nothing to prepare right now' }
+      : { icon: '📦', lead: 'No history yet · 暂无历史',   sub: 'Completed orders show up here' };
+    list.innerHTML = `
+      <div class="empty">
+        <div class="icon-wrap"><div class="icon">${empty.icon}</div></div>
+        <div class="lead">${empty.lead}<div class="cn">${empty.sub}</div></div>
+      </div>`;
+    return;
+  }
+  // Sort + display use sent_at, not created_at — what matters to the
+  // warehouse is "when was this sent to me", not when the draft was
+  // first started. Falls back to created_at for any legacy rows.
+  const eventTime = (o) => o.sent_at || o.created_at || '';
+  const sorted = _inboxOrders.slice().sort((a, b) => {
+    if (_inboxTab === 'active' && a.status !== b.status) {
+      return a.status === 'received' ? -1 : 1;
+    }
+    return eventTime(b).localeCompare(eventTime(a));
+  });
+  // Label the originator based on from_role (legacy rows = store).
+  // store    → store_name when set, else generic "Store · 门店"
+  // warehouse→ "Warehouse · 仓库" (warehouse user's own outgoing request)
+  // kitchen  → "Kitchen · 厨房"
+  const fromLabel = (o) => {
+    const fr = o.from_role || 'store';
+    if (fr === 'warehouse') return 'Warehouse · 仓库';
+    if (fr === 'kitchen')   return 'Kitchen · 厨房';
+    return o.store_name || o.store_cn || 'Store · 门店';
+  };
+  const toLabel = (o) => {
+    const tr = o.to_role || 'warehouse';
+    if (tr === 'kitchen') return 'Kitchen · 厨房';
+    if (tr === 'store')   return o.store_name || o.store_cn || 'Store · 门店';
+    return 'Warehouse · 仓库';
+  };
+  list.innerHTML = sorted.map(o => {
+    const ago = _agoBilingual(eventTime(o));
+    const total = o.item_count || 0;
+    const done  = o.checked_count || 0;
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const dt = _fmtDateTime(eventTime(o));
+    const rsLabel = esc(o.rs_number || ('#'+o.id));
+    return `<div class="line" data-inbox-id="${o.id}" onclick="openInboxOrder(${o.id})" style="cursor:pointer">
+      <div class="top">
+        <div class="info">
+          <div class="name">${rsLabel} <span class="cn">· ${total} item${total===1?'':'s'} 件</span></div>
+          <div class="meta">${esc(fromLabel(o))} → ${esc(toLabel(o))} · ${ago}</div>
+          ${dt ? `<div class="meta" style="font-size:10px;opacity:.7;font-variant-numeric:tabular-nums;margin-top:2px">🕒 ${dt}</div>` : ''}
+        </div>
+        <div class="line-right">
+          ${_statusPill(o.status)}
+          <button class="inbox-archive-btn" title="Archive · 归档" data-archive-id="${o.id}" data-archive-rs="${rsLabel}">×</button>
+        </div>
+      </div>
+      ${total > 0 ? `<div style="margin-top:10px;height:6px;background:rgba(0,0,0,.06);border-radius:99px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:linear-gradient(90deg, var(--lime), var(--lime-2));transition:width .3s"></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;font-weight:600">${done} / ${total} packed · 已配 ${done}/${total}</div>` : ''}
+    </div>`;
+  }).join('');
+  // Per-row archive button — soft-deletes the order from the list so
+  // the warehouse can keep their queue manageable. Click is captured
+  // before the card-level openInboxOrder handler via stopPropagation.
+  list.querySelectorAll('[data-archive-id]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = +btn.dataset.archiveId;
+      const rs = btn.dataset.archiveRs || ('#' + id);
+      _archiveInboxOrder(id, rs);
+    });
+  });
+}
+// Bulk-archive every row in a given inbox tab. Triggered from the
+// More menu so users can wipe their queue in one click without
+// destroying any data — rows are soft-deleted, recoverable from
+// `?tab=archived` if we ever build a restore UI.
+async function _archiveAllInTab(tab) {
+  const label = tab === 'history' ? 'all History · 全部历史' : 'all Active fulfillments · 全部待处理';
+  if (!confirm(`Archive ${label}? This hides them from the list but keeps the data.\n归档 ${label}?将从列表移除但保留数据。`)) return;
+  try {
+    const r = await fetch('/api/restock/archive-bulk', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tab }),
+    });
+    const d = await r.json();
+    if (!d?.success) throw new Error(d?.error || 'failed');
+    toast(`✓ ${d.count || 0} archived · 已归档 ${d.count || 0}`, 'success');
+    closeAllOv();
+    _silentRefreshInbox();
+  } catch (e) {
+    toast('Failed: ' + (e.message || ''), 'error');
+  }
+}
+async function _archiveInboxOrder(id, rsLabel) {
+  // Confirm strength depends on the tab — active orders are sensitive
+  // (might be a real pending request) so the prompt is sterner; history
+  // is just cleanup. Either way the row is soft-deleted (archived_at)
+  // and not destroyed, so a future restore surface stays possible.
+  const isHistory = _inboxTab === 'history';
+  const msg = isHistory
+    ? `Archive ${rsLabel}? · 归档 ${rsLabel}?`
+    : `Archive ${rsLabel}? It will be removed from your queue without being completed.\n归档 ${rsLabel}? 将从队列中移除但未完成。`;
+  if (!confirm(msg)) return;
+  try {
+    const r = await fetch('/api/restock/' + id + '/archive', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived: true }),
+    });
+    const d = await r.json();
+    if (!d?.success) throw new Error(d?.error || 'failed');
+    toast(`✓ ${rsLabel} archived · 已归档`, 'success');
+    // Re-fetch the current tab so the row disappears immediately.
+    _silentRefreshInbox();
+  } catch (e) {
+    toast('Failed: ' + (e.message || ''), 'error');
+  }
+}
+function _agoBilingual(iso) {
+  if (!iso) return '';
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1)   return 'just now · 刚刚';
+  if (mins < 60)  return mins + 'm ago · 分钟前';
+  if (mins < 1440) { const h = Math.floor(mins/60); return h + 'h ago · ' + h + '小时前'; }
+  const d = Math.floor(mins/1440); return d + 'd ago · ' + d + '天前';
+}
+// Render an ISO/SQLite timestamp in the user's local timezone as
+// `YYYY-MM-DD HH:MM`. SQLite stores DATETIME without TZ → treat as UTC.
+function _fmtDateTime(iso) {
+  if (!iso) return '';
+  const s = String(iso).replace(' ', 'T');
+  const withZ = /T.*[+\-Z]/.test(s) ? s : s + 'Z';
+  const d = new Date(withZ);
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate())
+       + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+
+// ── Order detail overlay (inbox)
+async function openInboxOrder(id) {
+  const overlay = document.getElementById('moreOv');
+  document.getElementById('ovBackdrop').classList.add('visible');
+  overlay.classList.add('visible');
+  const titleEl = overlay.querySelector('.ov-title');
+  const body = document.getElementById('moreBody');
+  if (titleEl) titleEl.textContent = '📦 Loading… · 加载中';
+  body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Loading… · 加载中</div>`;
+  // Opening an order is an "I'm engaging" signal — clear the queue-
+  // level reminder badges. The user can still see per-order state
+  // (status pill, progress bar) inside the list itself.
+  if (_notiUnseen?.new_sent > 0)  _clearNoti('new_sent');
+  if (_notiUnseen?.delivered > 0) _clearNoti('delivered');
+  try {
+    const r = await fetch('/api/restock/' + id);
+    const d = await r.json();
+    if (!d?.success) throw new Error(d?.error || 'failed');
+    _renderInboxDetail(d.data);
+  } catch (e) {
+    body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--danger);font-size:13px">Failed to load · 加载失败</div>
+      <button class="submit-btn draft" style="width:100%;margin-top:10px" onclick="closeAllOv()">Close · 关闭</button>`;
+  }
+}
+function _renderInboxDetail(order) {
+  const overlay = document.getElementById('moreOv');
+  const titleEl = overlay.querySelector('.ov-title');
+  const body = document.getElementById('moreBody');
+  // Title stays generic — the RS number was already shown on the card the
+  // user tapped to get here, and is rendered as a chip inside the body.
+  if (titleEl) titleEl.textContent = '📦 Order · 订单';
+  const items = order.items || [];
+  const done = items.filter(i => i.is_checked).length;
+  const allDone = items.length > 0 && done === items.length;
+  const status = (order.status || '').toLowerCase();
+  // Warehouse→kitchen orders are read-only from the warehouse side
+  // (kitchen does the prep). Flow ends at 'prepared' — no delivered step
+  // and no warehouse confirmation.
+  const isKitchenBound = order.to_role === 'kitchen';
+  const editable = !isKitchenBound && (status === 'sent' || status === 'received');
+  const actionBase = 'flex:2 1 0;min-width:0;font-size:14px;padding:14px 10px;line-height:1.2;white-space:normal';
+  let primaryAction = '';
+  if (isKitchenBound) {
+    // Read-only for warehouse — the kitchen drives this order. No button.
+  } else if (status === 'sent' || status === 'received') {
+    primaryAction = `<button class="submit-btn" style="${actionBase};background:${allDone?'var(--lime)':'var(--border)'};color:${allDone?'var(--dk)':'var(--muted)'};border:none" ${allDone?'':'disabled'} onclick="_inboxTransition(${order.id}, 'prepared')">✓ Mark Prepared<br><span style="font-weight:700;opacity:.85">已备货</span></button>`;
+  } else if (status === 'prepared') {
+    // Store→warehouse only: preparer self-confirms delivery to close the loop.
+    primaryAction = `<button class="submit-btn" style="${actionBase};background:var(--lime);color:var(--dk);border:none" onclick="_inboxTransition(${order.id}, 'delivered')">✓ Mark Delivered<br><span style="font-weight:700;opacity:.85">已送达</span></button>`;
+  }
+  // Pipeline stages differ by direction. Kitchen-bound: 3 steps ending
+  // at Prepared. Store→warehouse: 3 steps ending at Delivered.
+  const pipelineStages = isKitchenBound
+    ? [
+        { id:'sent',     label:'Sent 已发' },
+        { id:'received', label:'Preparing 备货中' },
+        { id:'prepared', label:'Prepared 已备好' },
+      ]
+    : [
+        { id:'sent',      label:'Sent 已发' },
+        { id:'prepared',  label:'Prepared 已备' },
+        { id:'delivered', label:'Delivered 已送' },
+      ];
+  const stageOrder = pipelineStages.map(s => s.id);
+  // Kitchen-bound: 'received' is its own stage. Store→warehouse: 'received'
+  // is a transient intermediate that maps to the 'sent' segment visually.
+  const effectiveStage = (!isKitchenBound && status === 'received') ? 'sent' : status;
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;padding:4px 4px 12px;flex-wrap:wrap">
+      <span style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;font-weight:700;background:rgba(0,0,0,.05);color:var(--dk);padding:3px 9px;border-radius:6px">${esc(order.rs_number || ('#'+order.id))}</span>
+      <div style="font-size:12px;color:var(--muted);font-weight:600">${esc(order.store_name || order.store_cn || 'Store · 门店')}</div>
+      <span style="font-size:10px;color:var(--muted)">·</span>
+      <span style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums">Sent · 已发 ${_agoBilingual(order.sent_at || order.created_at)}${_fmtDateTime(order.sent_at || order.created_at) ? ' · 🕒 ' + _fmtDateTime(order.sent_at || order.created_at) : ''}</span>
+      <span style="margin-left:auto">${_statusPill(order.status)}</span>
+    </div>
+
+    <!-- Pipeline progress visual: 3-segment bar. Stages depend on direction:
+         kitchen-bound = sent → received(preparing) → prepared
+         store→warehouse = sent → prepared → delivered -->
+    <div style="display:flex;gap:3px;margin-bottom:12px">
+      ${pipelineStages.map((seg, i) => {
+        const reached = stageOrder.indexOf(effectiveStage) >= i;
+        return `<div style="flex:1;text-align:center">
+          <div style="height:4px;background:${reached?'var(--lime)':'rgba(0,0,0,.08)'};border-radius:99px"></div>
+          <div style="font-size:9px;color:${reached?'var(--lime-text)':'var(--muted)'};font-weight:${reached?'800':'600'};margin-top:4px">${seg.label}</div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    ${order.notes ? `<div style="background:rgba(204,217,0,.08);border:1px solid rgba(204,217,0,.3);border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--text);line-height:1.5"><strong>📝 Store · 门店:</strong> ${esc(order.notes)}</div>` : ''}
+
+    <div id="inboxItems" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+      ${items.map((it) => {
+        const qtyDiff = it.qty_sent != null && +it.qty_sent !== +it.qty_requested;
+        return `<div data-iitem-id="${it.id}" style="padding:10px 12px;background:${it.is_checked?'rgba(109,179,63,.08)':'var(--card)'};border:1.5px solid ${it.is_checked?'rgba(109,179,63,.4)':'var(--border)'};border-radius:10px;transition:all .15s">
+          <div style="display:flex;align-items:flex-start;gap:10px">
+            <input type="checkbox" ${editable ? '' : 'disabled'} ${it.is_checked?'checked':''} onchange="_inboxToggleItem(${order.id}, ${it.id}, this.checked)" style="width:20px;height:20px;accent-color:var(--lime);flex-shrink:0;margin-top:2px;${editable?'':'opacity:.5'}">
+            <div style="flex:1;min-width:0;${it.is_checked?'opacity:.55':''}">
+              <div style="font-weight:700;font-size:14px;line-height:1.35">${esc(it.product_cn || it.product_name || '?')}${it.product_cn && it.product_name ? ' <span style="color:var(--muted);font-weight:500;font-size:12px">· ' + esc(it.product_name) + '</span>' : ''}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">${it.sku ? esc(it.sku) + ' · ' : ''}${it.notes ? esc(it.notes) : ''}</div>
+            </div>
+            <div style="font-weight:800;font-size:15px;color:var(--dk);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;flex-shrink:0">${it.qty_requested}${it.unit?' '+esc(it.unit):''}<div style="font-size:10px;color:var(--muted);font-weight:600">requested · 请求</div></div>
+          </div>
+          ${editable ? (() => {
+            // Effective sent qty: warehouse's explicit pick, or the
+            // requested qty as the default. >5 spills over to a manual
+            // input, same UX as the restock cart line. The ≠ badge is
+            // always rendered (with data-iqty-diff="<itemId>") and toggled
+            // instantly by the change handlers — no re-render needed.
+            const effective = it.qty_sent != null ? +it.qty_sent : +it.qty_requested;
+            const isOther = effective > 5;
+            return `
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(0,0,0,.06)">
+            <span style="font-size:11px;color:var(--muted);font-weight:600;flex-shrink:0">Sent qty · 实发:</span>
+            <select class="qty-select" data-iqty-req="${it.qty_requested}" style="height:38px;font-size:14px" onchange="_inboxOnQtySelChange(${order.id}, ${it.id}, this)">
+              <option value="0"     ${effective===0?'selected':''}>—</option>
+              <option value="1"     ${effective===1?'selected':''}>1</option>
+              <option value="2"     ${effective===2?'selected':''}>2</option>
+              <option value="3"     ${effective===3?'selected':''}>3</option>
+              <option value="4"     ${effective===4?'selected':''}>4</option>
+              <option value="5"     ${effective===5?'selected':''}>5</option>
+              <option value="other" ${isOther?'selected':''}>Other 其他…</option>
+            </select>
+            <input class="qty-input-manual" data-iqty-other="${it.id}" data-iqty-req="${it.qty_requested}" type="number" min="6" step="1" inputmode="numeric"
+                   value="${isOther?effective:''}" placeholder="qty"
+                   oninput="_inboxOnQtyManualInput(${order.id}, ${it.id}, this.value)"
+                   style="display:${isOther?'inline-block':'none'};height:38px;width:72px;font-size:14px">
+            <span data-iqty-diff="${it.id}" style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:99px;background:rgba(224,123,80,.15);color:#a04a25;flex-shrink:0;display:${qtyDiff?'inline-block':'none'}">≠</span>
+          </div>`;
+          })() : (it.qty_sent != null && +it.qty_sent !== +it.qty_requested ? `
+          <div style="margin-top:6px;padding-top:6px;border-top:1px dashed rgba(0,0,0,.06);font-size:11px;color:var(--muted)">Sent · 实发: <strong style="color:var(--dk)">${it.qty_sent}${it.unit?' '+esc(it.unit):''}</strong></div>` : '')}
+        </div>`;
+      }).join('')}
+    </div>
+
+    ${editable ? `
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px">Warehouse notes · 仓库备注</div>
+        <textarea id="whNotesInput" oninput="_inboxSetWhNotes(${order.id}, this.value)" placeholder="Optional notes back to the store · 可选备注" rows="2" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:13px;background:#fff;resize:vertical">${esc(order.wh_notes || '')}</textarea>
+      </div>` : (order.wh_notes ? `
+      <div style="background:rgba(37,99,235,.06);border:1px solid rgba(37,99,235,.25);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--text);line-height:1.5"><strong>🏭 Warehouse · 仓库:</strong> ${esc(order.wh_notes)}</div>` : '')}
+
+    <div style="display:flex;gap:8px;align-items:stretch">
+      <button class="submit-btn draft" style="flex:1 1 0;min-width:0;font-size:13px;padding:14px 8px" onclick="closeAllOv()">Close · 关闭</button>
+      ${primaryAction}
+    </div>`;
+}
+
+let _whNotesTimer = null;
+function _inboxSetWhNotes(orderId, val) {
+  // Debounce — 500ms after typing stops we PUT the order's wh_notes.
+  if (_whNotesTimer) clearTimeout(_whNotesTimer);
+  _whNotesTimer = setTimeout(async () => {
+    try {
+      await fetch('/api/restock/' + orderId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wh_notes: val }),
+      });
+    } catch {}
+  }, 500);
+}
+
+let _qtySentTimer = null;
+function _inboxSetQtySent(orderId, itemId, val) {
+  if (_qtySentTimer) clearTimeout(_qtySentTimer);
+  _qtySentTimer = setTimeout(async () => {
+    try {
+      await fetch('/api/restock/' + orderId + '/item/' + itemId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qty_sent: val === '' ? null : parseFloat(val) }),
+      });
+    } catch {}
+  }, 400);
+}
+
+// Sent-qty dropdown handler — picks 0–5 commit immediately; "Other"
+// reveals a small manual input next to the select for any value > 5.
+// The ≠ badge is shown/hidden inline as the value changes so the user
+// gets instant feedback (no waiting for a re-render or server round-trip).
+function _inboxOnQtySelChange(orderId, itemId, sel) {
+  const v = sel.value;
+  const requested = parseFloat(sel.dataset.iqtyReq) || 0;
+  const manualEl = sel.parentElement.querySelector(`[data-iqty-other="${itemId}"]`);
+  let effective;
+  if (v === 'other') {
+    if (manualEl) {
+      manualEl.style.display = 'inline-block';
+      if (!manualEl.value || +manualEl.value < 6) manualEl.value = '6';
+      manualEl.focus();
+      effective = parseFloat(manualEl.value) || 0;
+    } else {
+      effective = 0;
+    }
+    _inboxSetQtySent(orderId, itemId, effective);
+  } else {
+    if (manualEl) manualEl.style.display = 'none';
+    effective = parseFloat(v) || 0;
+    _inboxSetQtySent(orderId, itemId, effective);
+  }
+  _toggleQtyDiffBadge(itemId, effective, requested);
+}
+function _inboxOnQtyManualInput(orderId, itemId, val) {
+  _inboxSetQtySent(orderId, itemId, val);
+  // Look up the requested qty from the manual input's own data attribute
+  // and flip the ≠ badge instantly.
+  const inp = document.querySelector(`[data-iqty-other="${itemId}"]`);
+  if (inp) {
+    const requested = parseFloat(inp.dataset.iqtyReq) || 0;
+    _toggleQtyDiffBadge(itemId, parseFloat(val) || 0, requested);
+  }
+}
+function _toggleQtyDiffBadge(itemId, sent, requested) {
+  const badge = document.querySelector(`[data-iqty-diff="${itemId}"]`);
+  if (!badge) return;
+  badge.style.display = (+sent === +requested) ? 'none' : 'inline-block';
+}
+
+async function _inboxTransition(orderId, toStatus) {
+  if (_inboxBusy) return;
+  const labelMap = {
+    // 'received' kept for legacy compatibility — UI no longer triggers
+    // it but a server-side flow could.
+    received:  ['Start preparing this order? · 开始备货?',         '▶ Started · 已开始'],
+    prepared:  ['Mark this order as prepared? · 标记为已备货?',     '✓ Prepared · 已备货'],
+    delivered: ['Send this order on its way to the store? · 标记为在途?', '🚚 On the way · 在途中'],
+  };
+  const [confirmMsg, successMsg] = labelMap[toStatus] || ['Update status?', '✓ Updated'];
+  if (!confirm(confirmMsg)) return;
+  _inboxBusy = true;
+  try {
+    const r = await fetch('/api/restock/' + orderId + '/status', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: toStatus }),
+    });
+    const d = await r.json();
+    if (!d?.success) throw new Error(d?.error || 'failed');
+    toast(successMsg, 'success');
+    beep('done');
+    closeAllOv();
+    _renderInbox();
+    // Refresh the banner stack so the just-prepared order appears in the
+    // "Awaiting store" banner immediately (and the just-delivered one
+    // drops out of "Ready to receive"). Silent so we don't re-toast.
+    refreshPendingDeliveries({ silent: true }).then(() => {
+      if (_appMode === 'restock') render();
+    });
+  } catch (e) {
+    toast('Failed: ' + (e.message || ''), 'error');
+  } finally { _inboxBusy = false; }
+}
+async function _inboxToggleItem(orderId, itemId, checked) {
+  try {
+    await fetch('/api/restock/' + orderId + '/item/' + itemId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_checked: checked ? 1 : 0 }),
+    });
+    // Re-fetch order detail so the modal + progress bar stay in sync.
+    const r = await fetch('/api/restock/' + orderId);
+    const d = await r.json();
+    if (d?.success) _renderInboxDetail(d.data);
+  } catch (e) {
+    toast('Save failed · 保存失败', 'error');
+  }
+}
+
+function _renderWaste() {
+  const body = document.getElementById('body');
+  body.classList.add('tappable');
+  if (!_wasteCart.length) {
+    body.innerHTML = `
+      <div class="empty">
+        <div class="icon">🗑</div>
+        <div class="hint">Empty · 暂无</div>
+      </div>
+      <button id="wasteEmptyAdd" class="add-item-btn">
+        <span class="plus">＋</span>
+        <span>Add Item · 添加商品</span>
+      </button>`;
+    const emptyAdd = document.getElementById('wasteEmptyAdd');
+    if (emptyAdd) emptyAdd.addEventListener('click', (e) => { e.stopPropagation(); openSearch(); });
+    _renderWasteFooter();
+    return;
+  }
+  body.innerHTML = _wasteCart.map((l, i) => _renderWasteLine(l, i)).join('') + `
+    <button id="wasteAddMore" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:var(--bg);border:2px dashed var(--lime);color:var(--lime);font-weight:800;font-size:15px;padding:18px;margin-top:12px;cursor:pointer;border-radius:14px">
+      <span style="font-size:22px;line-height:1">＋</span>
+      <span>Add Item · 添加商品</span>
+    </button>`;
+  const addMore = document.getElementById('wasteAddMore');
+  if (addMore) addMore.addEventListener('click', (e) => { e.stopPropagation(); openSearch(); });
+  // Wire remove
+  body.querySelectorAll('[data-wact="rm"]').forEach(el => {
+    el.addEventListener('click', () => _wasteRemove(+el.dataset.i));
+  });
+  // Wire qty dropdown — same pattern as restock: 0–5 directly, "other"
+  // reveals a manual input next to it.
+  body.querySelectorAll('[data-wqty-sel]').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const i = +sel.dataset.wqtySel;
+      const v = sel.value;
+      const otherInp = body.querySelector(`[data-wqty-other="${i}"]`);
+      if (v === 'other') {
+        if (otherInp) {
+          otherInp.style.display = 'inline-block';
+          if (!otherInp.value || +otherInp.value < 6) otherInp.value = '6';
+          _wasteCart[i].qty = parseFloat(otherInp.value) || 6;
+          otherInp.focus();
+        }
+      } else {
+        if (otherInp) otherInp.style.display = 'none';
+        _wasteCart[i].qty = parseFloat(v) || 0;
+      }
+      _renderWasteFooter();
+    });
+  });
+  body.querySelectorAll('[data-wqty-other]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const i = +inp.dataset.wqtyOther;
+      _wasteCart[i].qty = parseFloat(inp.value) || 0;
+      _renderWasteFooter();
+    });
+  });
+  // Reason
+  body.querySelectorAll('[data-wreason]').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const i = +sel.dataset.wreason;
+      _wasteCart[i].reason = sel.value;
+    });
+  });
+  // Notes
+  body.querySelectorAll('[data-wnote]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const i = +inp.dataset.wnote;
+      _wasteCart[i].notes = inp.value;
+    });
+  });
+  _renderWasteFooter();
+}
+function _renderWasteFooter() {
+  const foot = document.getElementById('foot');
+  if (!foot) return;
+  const total = _wasteCart.reduce((s, l) => s + ((parseFloat(l.qty)||0) * (parseFloat(l.product?.sell_price)||0)), 0);
+  const count = _wasteCart.filter(l => parseFloat(l.qty) > 0).length;
+  foot.innerHTML = `
+    <div style="display:flex;align-items:center;gap:14px;padding:0 4px">
+      <div style="flex:1">
+        <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase">Est. retail loss · 估计零售损失</div>
+        <div style="font-size:20px;font-weight:900;color:var(--danger);font-variant-numeric:tabular-nums;line-height:1.1;margin-top:2px">¥${total.toFixed(2)}</div>
+      </div>
+      <button id="wasteSubmitBtn" class="submit-btn danger" ${count===0?'disabled':''} onclick="submitWaste()">🗑 Log Waste · 记录损耗 (${count})</button>
+    </div>`;
+}
+async function submitWaste() {
+  const valid = _wasteCart.filter(l => parseFloat(l.qty) > 0 && l.product?.id);
+  if (!valid.length) return;
+  const btn = document.getElementById('wasteSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving… · 保存中…'; }
+  const today = new Date().toISOString().slice(0,10);
+  const failed = [];
+  // POST one entry per cart line — the API takes a single product per call.
+  for (const l of valid) {
+    try {
+      const r = await fetch('/api/waste', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: today, product_id: l.product.id, qty: parseFloat(l.qty),
+          reason: l.reason || 'expired', notes: l.notes || null,
+          unit: l.product.unit || 'pcs',
+          staff_name: _user?.displayName || _user?.username || null,
+        }),
+      });
+      const d = await r.json();
+      if (!d?.success) failed.push({ name: l.product.name_en || l.product.name_cn, err: d?.error || 'failed' });
+    } catch (e) {
+      failed.push({ name: l.product.name_en || l.product.name_cn, err: e.message || 'network' });
+    }
+  }
+  if (failed.length) {
+    toast(`✕ ${failed.length} failed · 失败: ${failed[0].name}`, 'error');
+    beep('error');
+    _renderWasteFooter();
+    return;
+  }
+  toast(`✓ ${valid.length} waste entries logged · 已记录 ${valid.length} 条损耗`, 'success');
+  beep('done');
+  _wasteCart = [];
+  _renderWaste();
+}
+
+// ─── Barcode ───────────────────────────────────────────────────────
+async function lookupAndAddByBarcode(code) {
+  try {
+    const r = await fetch('/api/products/by-barcode/' + encodeURIComponent(code));
+    if (r.status === 404) {
+      // Fallback: try matching as SKU.
+      const p = _products.find(x => (x.sku || '').toLowerCase() === code.toLowerCase());
+      if (p) { addToCart(p); return; }
+      toast('Not found · 未识别: ' + code, 'error'); beep('error');
+      return;
+    }
+    if (!r.ok) { toast('Lookup failed · 查询失败', 'error'); return; }
+    const d = await r.json();
+    if (d?.data) addToCart(d.data);
+  } catch { toast('Network error · 网络错误', 'error'); }
+}
+
+// ─── Search overlay ────────────────────────────────────────────────
+function openSearch() {
+  document.getElementById('ovBackdrop').classList.add('visible');
+  document.getElementById('searchOv').classList.add('visible');
+  _ovKeyboardWatch(true);
+  setTimeout(() => {
+    const inp = document.getElementById('searchInput');
+    inp.value = ''; inp.focus();
+    onSearchInput();
+  }, 50);
+  // Refresh the catalog in the background — restock is a long-lived PWA
+  // and admins may add new products (e.g. salad dressings) from another
+  // tab. Without this, _products stays frozen at the moment the page
+  // first mounted, and freshly-added items don't show up in search.
+  _refreshProductsBg();
+}
+
+async function _refreshProductsBg() {
+  try {
+    const r = await fetch('/api/products', { cache: 'no-store' });
+    const d = await r.json();
+    if (d?.success && Array.isArray(d.data)) {
+      _products = d.data.filter(p => p.status === 'Active');
+      // If the search overlay is open and the user has already typed,
+      // re-run with the new catalog so they immediately see new rows.
+      if (document.getElementById('searchOv')?.classList.contains('visible')) {
+        onSearchInput();
+      }
+    }
+  } catch {}
+}
+let _searchTimer = null;
+function onSearchInput() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  if (_searchTimer) clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => doSearch(q), 100);
+}
+function doSearch(q) {
+  const list = document.getElementById('searchList');
+  let rows;
+  if (!q) {
+    // Empty query → show alphabetical product list (capped).
+    rows = _products.slice().sort((a, b) =>
+      (a.name_cn || a.name_en || '').localeCompare(b.name_cn || b.name_en || ''))
+      .slice(0, 50);
+  } else {
+    rows = _products.filter(p =>
+      (p.name_en || '').toLowerCase().includes(q) ||
+      (p.name_cn || '').includes(q) ||
+      (p.sku || '').toLowerCase().includes(q) ||
+      (p.barcode || '').includes(q)
+    ).slice(0, 50);
+  }
+  if (!rows.length) {
+    list.innerHTML = '<div class="search-empty">No matches · 无匹配</div>';
+    return;
+  }
+  const inCartIds = new Set(_cart.map(c => c.product.id));
+  list.innerHTML = rows.map(p => `
+    <div class="search-row${inCartIds.has(p.id) ? ' in-cart' : ''}" data-id="${p.id}">
+      <div class="info">
+        <div class="nm">${p.is_restock_only === 1 ? '<span title="Restock only · 仅用于补货" style="font-size:10px;background:#e0e7ff;color:#3730a3;border-radius:99px;padding:1px 7px;font-weight:700;margin-right:5px;vertical-align:1px">🔒</span>' : ''}${esc(p.name_cn || p.name_en || '')}${p.name_en && p.name_cn ? ` <span style="color:var(--muted);font-weight:500">· ${esc(p.name_en)}</span>` : ''}</div>
+        <div class="mt">${p.sku ? esc(p.sku) + ' · ' : ''}${p.category ? esc(p.category) : ''}</div>
+      </div>
+    </div>
+  `).join('');
+  list.querySelectorAll('.search-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const id = +row.dataset.id;
+      const p = _products.find(x => x.id === id);
+      if (!p) return;
+      addToCart(p);
+      closeAllOv();
+    });
+  });
+}
+
+// ─── Voice (reuses the Voice Restock parser logic from the main app) ────
+function openVoice() {
+  _voiceTranscript = '';
+  setVoiceLang(_voiceLang);  // refresh button states
+  document.getElementById('voicePreview').innerHTML = '';
+  document.getElementById('voiceTranscript').innerHTML = '<span style="color:var(--muted);font-style:italic">—</span>';
+  document.getElementById('voiceStatus').textContent = _voiceLang === 'en-US'
+    ? 'Tap mic, then say e.g.: "Hummus 5, baba 3"'
+    : '点击麦克风,然后说: "鹰嘴豆泥 5,茄子酱 3"';
+  document.getElementById('voiceApplyBtn').disabled = true;
+  document.getElementById('ovBackdrop').classList.add('visible');
+  document.getElementById('voiceOv').classList.add('visible');
+}
+function setVoiceLang(lang) {
+  _voiceLang = lang;
+  const en = document.getElementById('voiceLangEN');
+  const cn = document.getElementById('voiceLangCN');
+  if (lang === 'en-US') {
+    en.style.background = 'var(--dk)'; en.style.color = 'var(--lime)';
+    cn.style.background = 'transparent'; cn.style.color = 'var(--muted)';
+  } else {
+    cn.style.background = 'var(--dk)'; cn.style.color = 'var(--lime)';
+    en.style.background = 'transparent'; en.style.color = 'var(--muted)';
+  }
+}
+function toggleVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const status = document.getElementById('voiceStatus');
+  // Pre-flight 1: API present at all? Older Safari has none.
+  if (!SR) {
+    status.style.color = 'var(--danger)';
+    status.innerHTML = '⚠ Voice not supported in this browser · 浏览器不支持语音<br><span style="opacity:.7">Use Chrome on Android/desktop · 请使用 Chrome</span>';
+    return;
+  }
+  // Pre-flight 2: secure context. Browsers block SpeechRecognition on
+  // plain http:// for non-localhost origins. Without HTTPS this fails
+  // silently or with a vague "not-allowed" — show a clear message.
+  if (!window.isSecureContext) {
+    status.style.color = 'var(--danger)';
+    status.innerHTML = '⚠ Voice needs HTTPS · 浏览器要求 HTTPS<br><span style="opacity:.7">Currently on plain http:// — voice/mic disabled by Chrome</span>';
+    return;
+  }
+  if (_voiceRec) { _voiceRec.stop(); _voiceRec = null; return; }
+  let rec;
+  try { rec = new SR(); }
+  catch (e) {
+    status.style.color = 'var(--danger)';
+    status.textContent = '⚠ Could not start voice: ' + (e.message || e);
+    return;
+  }
+  rec.lang = _voiceLang;
+  rec.continuous = true; rec.interimResults = true;
+  let finalText = '';
+  rec.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalText += t + ' ';
+      else interim += t;
+    }
+    _voiceTranscript = (finalText + interim).trim();
+    document.getElementById('voiceTranscript').textContent = _voiceTranscript || '—';
+    document.getElementById('voiceApplyBtn').disabled = !_voiceTranscript;
+  };
+  rec.onerror = (e) => {
+    let msg = e.error || 'recognition error';
+    if (msg === 'not-allowed' || msg === 'service-not-allowed')
+      msg = 'Microphone permission denied · 麦克风权限被拒绝 — allow in Chrome settings';
+    else if (msg === 'no-speech')
+      msg = 'No speech detected · 未检测到语音';
+    else if (msg === 'audio-capture')
+      msg = 'No microphone found · 未找到麦克风';
+    else if (msg === 'network')
+      msg = 'Network error — speech recognition needs internet · 需要联网';
+    status.style.color = 'var(--danger)';
+    status.textContent = '⚠ ' + msg;
+    document.getElementById('voiceMicBtn').classList.remove('listening');
+    document.getElementById('voiceMicBtn').textContent = '🎤';
+    _voiceRec = null;
+  };
+  rec.onend = () => {
+    document.getElementById('voiceMicBtn').classList.remove('listening');
+    document.getElementById('voiceMicBtn').textContent = '🎤';
+    _voiceRec = null;
+  };
+  try {
+    rec.start();
+  } catch (e) {
+    status.style.color = 'var(--danger)';
+    status.textContent = '⚠ Could not start: ' + (e.message || e);
+    return;
+  }
+  _voiceRec = rec;
+  document.getElementById('voiceMicBtn').classList.add('listening');
+  document.getElementById('voiceMicBtn').textContent = '⏸';
+  status.style.color = 'var(--muted)';
+  status.textContent = _voiceLang === 'en-US' ? 'Listening… tap to stop' : '聆听中…点击停止';
+}
+function parseTranscript(t) {
+  if (!t) return [];
+  const cnNum = { '一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10 };
+  const chunks = t.split(/,|，|;|；|、|\band\b|\s和\s|\s+和\s+|  +/i).map(s => s.trim()).filter(Boolean);
+  const out = [];
+  for (const chunk of chunks) {
+    let qty = 1, body = chunk;
+    let m = chunk.match(/^(.*?)[\s]+(\d{1,3})$/);
+    if (m) { body = m[1].trim(); qty = parseInt(m[2], 10); }
+    else {
+      m = chunk.match(/^(.*?)([一二两三四五六七八九十]+)$/);
+      if (m) {
+        body = m[1].trim();
+        const seq = m[2];
+        if (seq === '十') qty = 10;
+        else if (seq.startsWith('十')) qty = 10 + (cnNum[seq.slice(1)] || 0);
+        else if (seq.endsWith('十'))   qty = (cnNum[seq.slice(0,1)] || 1) * 10;
+        else if (seq.includes('十'))   qty = (cnNum[seq.split('十')[0]] || 1) * 10 + (cnNum[seq.split('十')[1]] || 0);
+        else                           qty = cnNum[seq] || 1;
+      }
+    }
+    if (qty < 1) qty = 1; if (qty > 99) qty = 99;
+    if (body) out.push({ raw: chunk, body, qty });
+  }
+  return out;
+}
+function matchProduct(body) {
+  const t = body.trim().toLowerCase();
+  if (!t) return null;
+  const tPlain = t.replace(/[-\s_]/g, '');
+  for (const p of _products) {
+    const sku = (p.sku || '').toLowerCase();
+    if (!sku) continue;
+    if (sku === t || sku.replace(/[-\s_]/g, '') === tPlain) return p;
+  }
+  for (const p of _products) {
+    if ((p.name_en || '').toLowerCase() === t) return p;
+    if ((p.name_cn || '').toLowerCase() === t) return p;
+  }
+  let best = null, bestLen = 0;
+  for (const p of _products) {
+    const en = (p.name_en || '').toLowerCase();
+    const cn = (p.name_cn || '').toLowerCase();
+    if (en.includes(t) && en.length > bestLen)      { best = p; bestLen = en.length; }
+    else if (cn.includes(t) && cn.length > bestLen) { best = p; bestLen = cn.length; }
+  }
+  return best;
+}
+function parseAndApplyVoice() {
+  const parsed = parseTranscript(_voiceTranscript);
+  const matched = [], review = [];
+  for (const item of parsed) {
+    const p = matchProduct(item.body);
+    if (p) matched.push({ ...item, product: p });
+    else   review.push(item);
+  }
+  for (const m of matched) {
+    const existing = _cart.find(c => c.product.id === m.product.id);
+    if (existing) existing.qty = (parseFloat(existing.qty) || 0) + m.qty;
+    else _cart.push({ product: m.product, qty: m.qty, notes: '' });
+  }
+  document.getElementById('voicePreview').innerHTML = `
+    ${matched.length ? `
+      <div style="background:rgba(109,179,63,.08);border:1px solid rgba(109,179,63,.3);border-radius:10px;padding:10px 14px;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#3d7a1e;margin-bottom:6px">✓ Added · 已添加 (${matched.length})</div>
+        ${matched.map(m => `<div style="font-size:13px;line-height:1.6">
+          <strong>${esc(m.product.name_cn || m.product.name_en || '?')}</strong>
+          <span style="color:var(--muted);float:right">+${m.qty}</span>
+        </div>`).join('')}
+      </div>` : ''}
+    ${review.length ? `
+      <div style="background:var(--danger-soft-bg);border:1px solid var(--danger-soft-border);border-radius:10px;padding:10px 14px">
+        <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--danger);margin-bottom:6px">⚠ Needs review · 需要确认 (${review.length})</div>
+        ${review.map(r => `<div style="font-size:12px;line-height:1.6;color:var(--muted)">"${esc(r.raw)}" — couldn't match</div>`).join('')}
+      </div>` : ''}
+    ${matched.length ? `<button class="submit-btn" style="width:100%;margin-top:10px" onclick="closeAllOv();render()">Done · 完成</button>` : ''}
+  `;
+  toast(`✓ ${matched.length} added${review.length?` · ${review.length} need review`:''} · ${matched.length} 已添加${review.length?` · ${review.length} 需确认`:''}`, matched.length ? 'success' : 'error');
+  if (matched.length) { render(); }
+}
+
+// ─── Submit ────────────────────────────────────────────────────────
+// Modal stack for warehouse-side sending. Asks WHERE (kitchen or
+// store), then for kitchen also asks WHY (for-order vs for-shelf).
+// Store flow currently has no picker — there's only one retail store
+// (Yuexiu), so we auto-route. The server falls back to broadcasting
+// to all `restock` perm holders when store_name is null. Resolves to:
+//   { to_role:'kitchen', purpose:'order'|'shelf' }
+//   { to_role:'store',   store_name:null, store_cn:null }
+//   null  (cancelled)
+async function _askWarehouseDestination() {
+  const dest = await _modalChoose({
+    title: 'Where to send? · 发往哪里',
+    sub:   'Pick the destination · 选择目的地',
+    options: [
+      { v:'kitchen', emoji:'🏭', en:'To Kitchen', cn:'发给厨房', hint:'Ask the kitchen to prepare items · 请厨房备货', color:'rgba(204,217,0,.16)', border:'rgba(204,217,0,.45)' },
+      { v:'store',   emoji:'🏬', en:'To Store',   cn:'发往门店', hint:'Push stock from warehouse to the store · 仓库送货到门店',  color:'rgba(37,99,235,.10)',  border:'rgba(37,99,235,.4)'   },
+    ],
+  });
+  if (!dest) return null;
+  if (dest === 'kitchen') {
+    const purpose = await _modalChoose({
+      title: 'Why this request? · 请求原因',
+      sub:   "Tell the kitchen what they're prepping for · 告诉厨房备货目的",
+      options: [
+        { v:'order', emoji:'📦', en:'For an outgoing order', cn:'用于发货', hint:'Need it to ship a customer order · 需要发给客户', color:'rgba(204,217,0,.16)', border:'rgba(204,217,0,.45)' },
+        { v:'shelf', emoji:'🛒', en:'For shelf restock',     cn:'货架补货', hint:'Refill warehouse shelves · 补充仓库货架',         color:'rgba(37,99,235,.10)',  border:'rgba(37,99,235,.4)'   },
+      ],
+    });
+    if (!purpose) return null;
+    return { to_role:'kitchen', purpose };
+  }
+  // Single-store world today — no picker. When a second retail store
+  // joins, reintroduce a chooser here (server uses store_name as the
+  // routing key against markets table for per-store notifications).
+  return { to_role:'store', store_name: null, store_cn: null };
+}
+
+// Generic 2-or-more choice modal used for destination + purpose pickers.
+function _modalChoose({ title, sub, options }) {
+  return new Promise((resolve) => {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px';
+    ov.innerHTML = `
+      <div style="background:var(--card);border-radius:14px;padding:22px;max-width:340px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.4)">
+        <div style="font-size:18px;font-weight:800;margin-bottom:6px;color:var(--text)">${esc(title)}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${esc(sub)}</div>
+        ${options.map(o => `
+          <button data-v="${esc(o.v)}" style="display:block;width:100%;padding:14px;background:${o.color};border:1.5px solid ${o.border};color:var(--text);border-radius:10px;font-weight:700;cursor:pointer;margin-bottom:10px;font-family:inherit;text-align:left;font-size:14px">
+            ${o.emoji} ${esc(o.en)} · ${esc(o.cn)}
+            <div style="font-size:11px;font-weight:600;opacity:.75;margin-top:3px">${esc(o.hint)}</div>
+          </button>`).join('')}
+        <button data-cancel style="display:block;width:100%;padding:10px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;font-family:inherit;cursor:pointer;font-size:13px">Cancel · 取消</button>
+      </div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-v]');
+      if (btn) { ov.remove(); resolve(btn.dataset.v); return; }
+      if (e.target.closest('[data-cancel]') || e.target === ov) {
+        ov.remove(); resolve(null);
+      }
+    });
+  });
+}
+
+async function submitRequest(status) {
+  const validItems = _cart.filter(c => parseFloat(c.qty) > 0);
+  if (!validItems.length) return;
+  const btn = status === 'sent' ? document.getElementById('sendBtn') : document.getElementById('draftBtn');
+  if (!btn) return;
+  // Warehouse users sending a request → ask WHERE first (kitchen vs
+  // store), then either WHY (kitchen) or WHICH STORE (store). For the
+  // server, kitchen requests carry `purpose`; store deliveries carry
+  // `store_name` / `store_cn`. Cancelling the picker bails with no
+  // side-effects.
+  let dest = null;
+  if (status === 'sent') {
+    // Origin is role-based, not perm-based. A store user with the
+    // warehouse_inbox perm (so they can view the Fulfill tab) still
+    // sends their own restock requests to the warehouse — no chooser.
+    // Only `warehouse` and `admin` originate from the warehouse side.
+    const role = _user?.role || '';
+    const isWarehouseOrigin = (role === 'warehouse' || role === 'admin');
+    if (isWarehouseOrigin) {
+      dest = await _askWarehouseDestination();
+      if (!dest) return;
+    }
+  }
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Saving… · 保存中…';
+  try {
+    const items = validItems.map(c => ({
+      product_id: c.product.id,
+      product_name: c.product.name_en || '',
+      product_cn:   c.product.name_cn || null,
+      sku:          c.product.sku || null,
+      qty_requested: c.qty,
+      unit:         c.product.weight || null,
+      notes:        c.notes || null,
+    }));
+    let rsNumber;
+    if (_draftId) {
+      // Editing a draft → replace items via PUT, then bump status if 'sent'.
+      const r1 = await fetch('/api/restock/' + _draftId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, notes: _orderNotes || null }),
+      });
+      const d1 = await r1.json();
+      if (!d1?.success) throw new Error(d1.error || 'failed');
+      if (status === 'sent') {
+        const r2 = await fetch('/api/restock/' + _draftId + '/status', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'sent' }),
+        });
+        const d2 = await r2.json();
+        if (!d2?.success) throw new Error(d2.error || 'failed');
+      }
+      rsNumber = _draftRsNumber || ('#' + _draftId);
+    } else {
+      const r = await fetch('/api/restock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items, notes: _orderNotes || null, status,
+          // Warehouse-side destination — null/undefined for store users
+          // who fall through to the default store→warehouse direction.
+          to_role:    dest?.to_role    || undefined,
+          purpose:    dest?.purpose    || undefined,
+          store_name: dest?.store_name || undefined,
+          store_cn:   dest?.store_cn   || undefined,
+        }),
+      });
+      const d = await r.json();
+      if (!d?.success) throw new Error(d.error || 'failed');
+      rsNumber = d.rs_number;
+    }
+    toast(`✓ ${rsNumber} ${status === 'sent' ? 'sent · 已提交' : 'saved · 已保存'}`, 'success');
+    beep('done');
+    _cart = []; _orderNotes = '';
+    _draftId = null; _draftRsNumber = null;
+    render();
+    refreshDraftBadge();
+  } catch (e) {
+    toast('Save failed · 保存失败: ' + (e.message || ''), 'error');
+    beep('error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+// ─── More menu ─────────────────────────────────────────────────────
+function openMore() {
+  const initial = (_user.displayName || _user.username || '?').trim().charAt(0).toUpperCase();
+  const allowR = _modeAllowed('restock');
+  const allowW = _modeAllowed('waste');
+  const allowI = _modeAllowed('inbox');
+  const choices = [allowR, allowW, allowI].filter(Boolean).length;
+  // Per-mode visual identity: lime/red/blue match the in-app brand swap.
+  const modeBtn = (id, mode, icon, en, cn, accent, accentBg) => `
+    <button data-mode-btn="${mode}" type="button" class="mt-mode-btn ${_appMode===mode?'active':''}"
+            style="--mt-accent:${accent};--mt-accent-bg:${accentBg}">
+      <div class="mt-mode-icon">${icon}</div>
+      <div class="mt-mode-label">${en}<span class="mt-mode-cn">${cn}</span></div>
+      ${_appMode===mode ? '<div class="mt-mode-tick">✓</div>' : ''}
+    </button>`;
+  const modeRows = [
+    allowI ? modeBtn('moreModeInbox',   'inbox',   '📥', 'Fulfill', '处理订单', '#2563eb', 'rgba(37,99,235,.08)') : '',
+    allowR ? modeBtn('moreModeRestock', 'restock', '🔄', 'Restock', '补货',   'var(--lime)', 'rgba(204,217,0,.10)') : '',
+    allowW ? modeBtn('moreModeWaste',   'waste',   '🗑', 'Waste',   '损耗',   'var(--danger)', 'var(--danger-soft-bg)') : '',
+  ].filter(Boolean).join('');
+  const modeSection = choices > 1 ? `
+    <div class="mt-section">
+      <div class="mt-section-label">Mode · 模式</div>
+      <div class="mt-card mt-card-list">${modeRows}</div>
+    </div>` : '';
+
+  document.getElementById('moreBody').innerHTML = `
+    <style>
+      /* Settings/More overlay — scoped layout. Uses existing color
+         variables so dark/light themes Just Work. */
+      #moreBody {
+        /* Generous side padding so cards don't crash into the phone
+           edges; 28px bottom for safe-area on tall devices. */
+        padding: 14px 20px 28px;
+      }
+      .mt-profile {
+        display: flex; align-items: center; gap: 14px;
+        padding: 20px 18px;
+        background: linear-gradient(135deg, var(--dk) 0%, var(--dk2, #0f1a08) 100%);
+        color: #fff;
+        border-radius: 16px;
+        margin-bottom: 18px;
+        box-shadow: 0 6px 20px rgba(26,35,20,.15);
+        position: relative;
+        overflow: hidden;
+      }
+      .mt-profile::before {
+        content:''; position:absolute; right:-30px; top:-30px;
+        width: 120px; height: 120px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(204,217,0,.18), transparent 70%);
+        pointer-events: none;
+      }
+      .mt-avatar {
+        width: 52px; height: 52px; border-radius: 50%;
+        background: linear-gradient(135deg, var(--lime), var(--lime-2));
+        color: var(--dk);
+        display: inline-flex; align-items: center; justify-content: center;
+        font-weight: 900; font-size: 22px;
+        box-shadow: 0 3px 10px rgba(204,217,0,.45);
+        flex-shrink: 0; text-transform: uppercase;
+      }
+      .mt-profile-text { min-width: 0; z-index: 1; }
+      .mt-profile-name {
+        font-weight: 800; font-size: 17px; letter-spacing:-.005em;
+        line-height: 1.1;
+      }
+      .mt-profile-meta {
+        font-size: 12px; color: rgba(255,255,255,.55);
+        margin-top: 4px; font-weight: 600;
+      }
+      .mt-role-pill {
+        display: inline-block; margin-top: 6px;
+        background: rgba(204,217,0,.15);
+        color: var(--lime);
+        font-size: 10px; font-weight: 800;
+        letter-spacing: .06em; text-transform: uppercase;
+        padding: 3px 9px; border-radius: 99px;
+        border: 1px solid rgba(204,217,0,.3);
+      }
+      .mt-section { margin-bottom: 18px; }
+      .mt-section-label {
+        font-size: 10px; font-weight: 800; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--muted);
+        padding: 0 4px 8px;
+      }
+      .mt-card {
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: 14px; overflow: hidden;
+        box-shadow: 0 1px 0 rgba(0,0,0,.02);
+      }
+      .mt-card-list { padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+      .mt-mode-btn {
+        display: flex; align-items: center; gap: 12px;
+        padding: 12px 14px;
+        background: transparent; border: none; border-radius: 10px;
+        font-family: inherit; cursor: pointer; text-align: left;
+        transition: background .15s;
+        position: relative;
+      }
+      .mt-mode-btn:hover { background: rgba(0,0,0,.03); }
+      .mt-mode-btn.active {
+        background: var(--mt-accent-bg);
+      }
+      .mt-mode-btn.active .mt-mode-icon {
+        background: var(--mt-accent);
+        color: #fff;
+      }
+      .mt-mode-icon {
+        width: 36px; height: 36px; border-radius: 10px;
+        background: rgba(0,0,0,.05);
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 18px; flex-shrink: 0;
+        transition: background .15s, color .15s;
+      }
+      .mt-mode-label {
+        flex: 1; min-width: 0;
+        font-size: 14px; font-weight: 700; color: var(--dk);
+      }
+      .mt-mode-cn {
+        margin-left: 8px; color: var(--muted);
+        font-size: 12px; font-weight: 600;
+      }
+      .mt-mode-btn.active .mt-mode-label { color: var(--mt-accent); }
+      .mt-mode-tick {
+        color: var(--mt-accent); font-size: 16px; font-weight: 900;
+        flex-shrink: 0;
+      }
+      .mt-action-btn {
+        display: flex; align-items: center; gap: 12px;
+        width: 100%;
+        padding: 14px 16px;
+        background: transparent; border: none;
+        font-family: inherit; cursor: pointer; text-align: left;
+        font-size: 14px; font-weight: 700; color: var(--dk);
+      }
+      .mt-action-btn:hover { background: rgba(0,0,0,.03); }
+      .mt-action-btn .mt-action-icon {
+        width: 32px; height: 32px; border-radius: 8px;
+        background: var(--danger-soft-bg); color: var(--danger);
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 14px; flex-shrink: 0;
+      }
+      .mt-action-btn.danger { color: var(--danger); }
+      .mt-footer {
+        margin-top: 10px; padding: 14px 4px 4px;
+        font-size: 11px; color: var(--muted);
+        text-align: center; font-weight: 600; letter-spacing: .04em;
+      }
+      .mt-footer strong { color: var(--lime-text); }
+    </style>
+
+    <!-- Profile -->
+    <div class="mt-profile">
+      <div class="mt-avatar">${esc(initial)}</div>
+      <div class="mt-profile-text">
+        <div class="mt-profile-name">${esc(_user.displayName || _user.username || '—')}</div>
+        <div class="mt-profile-meta">@${esc(_user.username || '')}</div>
+        ${_user.role ? `<div class="mt-role-pill">${esc(_user.role)}</div>` : ''}
+      </div>
+    </div>
+
+    ${modeSection}
+
+    ${allowI ? `
+    <!-- Maintenance — bulk-archive shortcuts so the inbox doesn't pile
+         up over time. Gated on warehouse_inbox perm (the people who
+         actually look at the inbox tabs). -->
+    <div class="mt-section">
+      <div class="mt-section-label">Maintenance · 维护</div>
+      <div class="mt-card mt-card-list">
+        <button class="mt-action-btn" id="archiveAllHistoryBtn">
+          <span class="mt-action-icon" style="background:rgba(0,0,0,.05);color:var(--muted)">📦</span>
+          <span style="flex:1">Clear all History<span style="margin-left:8px;color:var(--muted);font-weight:600;font-size:12px">清空历史</span></span>
+        </button>
+        <button class="mt-action-btn" id="archiveAllActiveBtn">
+          <span class="mt-action-icon">🧹</span>
+          <span style="flex:1">Clear all Active fulfillments<span style="margin-left:8px;color:var(--muted);font-weight:600;font-size:12px">清空待处理</span></span>
+        </button>
+      </div>
+    </div>` : ''}
+
+    <!-- App — install / standalone hints. The Install entry uses the
+         captured beforeinstallprompt event (Chrome / Edge on Android).
+         When that event hasn't been seen (iOS Safari, Xiaomi browser,
+         already-installed PWA, etc.) the button shows a short hint
+         instead so the user knows their options. -->
+    <div class="mt-section">
+      <div class="mt-section-label">App · 应用</div>
+      <div class="mt-card mt-card-list">
+        <button class="mt-action-btn" id="refreshAppBtn">
+          <span class="mt-action-icon" style="background:rgba(37,99,235,.12);color:#1d4ed8">↻</span>
+          <span style="flex:1">Refresh App<span style="margin-left:8px;color:var(--muted);font-weight:600;font-size:12px">刷新应用</span></span>
+          <span style="font-size:10px;color:var(--muted);font-weight:600">pull latest catalog · 拉取最新</span>
+        </button>
+        <button class="mt-action-btn" id="installAppBtn">
+          <span class="mt-action-icon" style="background:rgba(204,217,0,.18);color:var(--lime-text)">⬇</span>
+          <span style="flex:1">Install App<span style="margin-left:8px;color:var(--muted);font-weight:600;font-size:12px">安装到主屏幕</span></span>
+          <span id="installAppHint" style="font-size:10px;color:var(--muted);font-weight:600"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Account -->
+    <div class="mt-section">
+      <div class="mt-section-label">Account · 账户</div>
+      <div class="mt-card">
+        <button class="mt-action-btn danger" id="logoutBtn">
+          <span class="mt-action-icon">⏻</span>
+          <span style="flex:1">Logout<span style="margin-left:8px;color:var(--muted);font-weight:600;font-size:12px">退出登录</span></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="mt-footer">🌿 <strong>Roots</strong> System · 系统 v2.0</div>`;
+
+  if (choices > 1) {
+    document.querySelectorAll('[data-mode-btn]').forEach(btn => {
+      btn.addEventListener('click', () => { setAppMode(btn.dataset.modeBtn); closeAllOv(); });
+    });
+  }
+  const archHistBtn = document.getElementById('archiveAllHistoryBtn');
+  if (archHistBtn) archHistBtn.addEventListener('click', () => _archiveAllInTab('history'));
+  const archActBtn  = document.getElementById('archiveAllActiveBtn');
+  if (archActBtn)  archActBtn.addEventListener('click', () => _archiveAllInTab('active'));
+  // Refresh App — full reload that bypasses HTTP cache AND wipes the
+  // service worker's shell cache, so a freshly-deployed restock.html is
+  // pulled instead of the in-memory copy the PWA is running. Needed
+  // because installed PWAs don't have a browser pull-to-refresh.
+  const refreshBtn = document.getElementById('refreshAppBtn');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', async () => {
+      refreshBtn.disabled = true;
+      refreshBtn.querySelector('span:nth-child(2)').innerHTML = 'Refreshing… · 刷新中…';
+      try {
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+        if (navigator.serviceWorker?.getRegistrations) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r => r.update()));
+        }
+      } catch (e) { /* best-effort — still reload below */ }
+      // bypass HTTP cache on the reload itself
+      window.location.reload(true);
+    });
+  }
+  // Install App wiring — three states:
+  //   1. Already installed (running standalone)        → tell the user.
+  //   2. Browser captured beforeinstallprompt          → fire it.
+  //   3. No prompt available (iOS, Mi Browser, etc.)   → manual hint.
+  const installBtn  = document.getElementById('installAppBtn');
+  const installHint = document.getElementById('installAppHint');
+  if (installBtn) {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                       || window.navigator.standalone === true;
+    if (isStandalone) {
+      installBtn.disabled = true;
+      installBtn.style.opacity = '.6';
+      if (installHint) installHint.textContent = 'Installed · 已安装';
+    } else if (_installPromptEvent) {
+      if (installHint) installHint.textContent = 'Tap · 点击安装';
+      installBtn.addEventListener('click', async () => {
+        try {
+          _installPromptEvent.prompt();
+          const choice = await _installPromptEvent.userChoice;
+          _installPromptEvent = null;
+          if (choice?.outcome === 'accepted') {
+            // Two beats here: immediate confirmation, then `appinstalled`
+            // fires (handler above) with the actionable "where to find
+            // it" alert. If `appinstalled` never fires (some Android
+            // browsers swallow it) the toast is still informative.
+            toast('Installing… · 安装中 · check App Drawer 查看应用抽屉', 'success');
+          } else {
+            toast('Install dismissed · 取消安装', 'error');
+            if (installHint) installHint.textContent = 'Use browser menu · 用浏览器菜单';
+          }
+        } catch (e) {
+          toast('Install failed: ' + (e.message || ''), 'error');
+        }
+      });
+    } else {
+      // No native prompt — guide them through the browser's manual flow.
+      // iOS Safari: Share → Add to Home Screen.
+      // Android Chrome: ⋮ menu → Install app / Add to Home screen.
+      // Mi Browser: ☰ menu → Add to home screen (different UI but same effect).
+      if (installHint) installHint.textContent = 'See instructions · 查看说明';
+      installBtn.addEventListener('click', () => {
+        const ua = (navigator.userAgent || '').toLowerCase();
+        const isIOS = /iphone|ipad|ipod/.test(ua);
+        const msg = isIOS
+          ? 'iOS: Tap the Share icon (☐↑) at the bottom, then "Add to Home Screen · 添加到主屏幕".'
+          : 'Open your browser menu (⋮ or ☰), then tap "Install app · 安装应用" or "Add to home screen · 添加到主屏幕". If you don\'t see it, the page may already be installed — check your home screen.';
+        alert(msg);
+      });
+    }
+  }
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    location.href = '/login';
+  });
+  document.getElementById('ovBackdrop').classList.add('visible');
+  document.getElementById('moreOv').classList.add('visible');
+}
+
+// Fetches the user's draft count and paints the small red badge on the
+// header 📋 button. Called on init + after every action that may change
+// the count (load draft, submit, send, delete).
+async function refreshDraftBadge() {
+  const badge = document.getElementById('draftBadge');
+  if (!badge || !_user) return;
+  try {
+    const r = await fetch('/api/restock?status=draft');
+    const d = await r.json();
+    const drafts = (d?.data || []).filter(o => o.created_by === _user.id || _user.role === 'admin');
+    if (drafts.length > 0) {
+      badge.textContent = drafts.length > 99 ? '99+' : String(drafts.length);
+      badge.style.display = 'inline-flex';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch { /* best-effort — silent on network blip */ }
+}
+
+// ─── Drafts list / load ────────────────────────────────────────────
+async function openDrafts() {
+  // Self-open the overlay so the header 📋 button works without first
+  // needing to open the More menu. When called from inside the More menu
+  // the classes are idempotent — already-open overlays stay open.
+  document.getElementById('ovBackdrop').classList.add('visible');
+  document.getElementById('moreOv').classList.add('visible');
+  _ovKeyboardWatch(true);
+  const body = document.getElementById('moreBody');
+  body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Loading drafts… · 加载中…</div>';
+  try {
+    const r = await fetch('/api/restock?status=draft');
+    const d = await r.json();
+    const drafts = (d?.data || []).filter(o => o.created_by === _user.id || _user.role === 'admin');
+    if (!drafts.length) {
+      body.innerHTML = `
+        <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">
+          No drafts yet · 暂无草稿
+          <div style="font-size:11px;margin-top:8px">Drafts saved with the 💾 button show up here so you can keep working on them later.</div>
+        </div>
+        <button class="submit-btn draft" style="width:100%;margin-top:10px" onclick="closeAllOv()">Done · 完成</button>`;
+      return;
+    }
+    body.innerHTML = `
+      <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">${drafts.length} draft${drafts.length===1?'':'s'} · 共 ${drafts.length} 份</div>
+      ${drafts.map(o => `
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <button class="submit-btn draft" data-draft-id="${o.id}" style="flex:1;text-align:left;display:flex;align-items:center;gap:10px;padding:12px 14px">
+            <div style="font-size:18px">📋</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:800;font-size:14px">${esc(o.rs_number || ('#'+o.id))}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">${esc((o.created_at||'').slice(0,16))} · ${o.item_count||0} item${o.item_count===1?'':'s'} 件</div>
+            </div>
+            <div style="font-size:13px;color:var(--muted)">→</div>
+          </button>
+          <button class="icon-btn-danger" data-draft-del="${o.id}" data-draft-rs="${esc(o.rs_number || ('#'+o.id))}" title="Delete draft · 删除草稿" style="flex:0 0 auto;width:48px;height:auto;align-self:stretch">🗑</button>
+        </div>`).join('')}
+      <button class="submit-btn draft" style="width:100%;margin-top:6px" onclick="closeAllOv()">Cancel · 取消</button>`;
+    body.querySelectorAll('button[data-draft-id]').forEach(btn => {
+      btn.addEventListener('click', () => loadDraft(parseInt(btn.dataset.draftId, 10)));
+    });
+    body.querySelectorAll('button[data-draft-del]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteDraft(parseInt(btn.dataset.draftDel, 10), btn.dataset.draftRs || '');
+      });
+    });
+  } catch (e) {
+    body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--danger);font-size:13px">Failed to load drafts · 加载失败</div>
+      <button class="submit-btn draft" style="width:100%;margin-top:10px" onclick="closeAllOv()">Close · 关闭</button>`;
+  }
+}
+
+async function loadDraft(id) {
+  if (_cart.length && !confirm('You have unsaved items in the cart. Loading a draft will replace them.\n购物车中有未保存的物品。加载草稿将会替换。')) return;
+  try {
+    const r = await fetch('/api/restock/' + id);
+    const d = await r.json();
+    if (!d?.success) throw new Error(d?.error || 'failed');
+    const order = d.data;
+    // Re-hydrate cart by matching items back to the full product catalog
+    // when possible (so unit / weight / icons all light up). Falls back
+    // to a stub product object if the item references something we can't
+    // find (deleted product, etc.).
+    _cart = (order.items || []).map(it => {
+      const full = _products.find(p => p.id === it.product_id);
+      return {
+        product: full || {
+          id: it.product_id,
+          name_en: it.product_name || '',
+          name_cn: it.product_cn || '',
+          sku: it.sku || '',
+          weight: it.unit || '',
+        },
+        qty: it.qty_requested,
+        notes: it.notes || '',
+      };
+    }).filter(c => c.product);
+    _orderNotes = order.notes || '';
+    _draftId = order.id;
+    _draftRsNumber = order.rs_number;
+    closeAllOv();
+    render();
+    toast(`✓ Loaded ${order.rs_number} · 已载入`, 'success');
+  } catch (e) {
+    toast('Load failed · 加载失败: ' + (e.message || ''), 'error');
+  }
+}
+
+async function deleteDraft(id, label) {
+  if (!confirm(`Delete draft ${label}? This cannot be undone.\n删除草稿 ${label}? 此操作无法撤销。`)) return;
+  try {
+    const r = await fetch('/api/restock/' + id, { method: 'DELETE' });
+    const d = await r.json();
+    if (!d?.success) throw new Error(d?.error || 'failed');
+    // If the deleted draft is the one currently being edited, clear it.
+    if (_draftId === id) {
+      _cart = []; _orderNotes = '';
+      _draftId = null; _draftRsNumber = null;
+      render();
+    }
+    toast(`✓ ${label} deleted · 已删除`, 'success');
+    refreshDraftBadge();
+    openDrafts();  // refresh the list
+  } catch (e) {
+    toast('Delete failed · 删除失败: ' + (e.message || ''), 'error');
+  }
+}
+
+function discardDraftEditing() {
+  if (!confirm('Stop editing this draft? Your changes will not be saved.\n停止编辑此草稿?未保存的修改将丢失。')) return;
+  _cart = []; _orderNotes = '';
+  _draftId = null; _draftRsNumber = null;
+  render();
+}
+
+// ─── Overlay plumbing ──────────────────────────────────────────────
+function closeAllOv() {
+  document.getElementById('ovBackdrop').classList.remove('visible');
+  document.querySelectorAll('.ov').forEach(el => {
+    el.classList.remove('visible');
+    el.style.height = '';
+  });
+  if (_voiceRec) { try { _voiceRec.stop(); } catch {} _voiceRec = null; }
+  _ovKeyboardWatch(false);
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+}
+function _ovKeyboardSync() {
+  const vv = window.visualViewport;
+  const ov = document.querySelector('.ov.visible');
+  if (!ov || !vv) return;
+  if (window.innerWidth >= 600) { ov.style.height = ''; return; }
+  ov.style.height = Math.round(vv.height + vv.offsetTop) + 'px';
+}
+function _ovKeyboardWatch(on) {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  if (on) {
+    vv.addEventListener('resize', _ovKeyboardSync);
+    vv.addEventListener('scroll', _ovKeyboardSync);
+    _ovKeyboardSync();
+  } else {
+    vv.removeEventListener('resize', _ovKeyboardSync);
+    vv.removeEventListener('scroll', _ovKeyboardSync);
+  }
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────
+let _audioCtx = null;
+// Browsers require a user gesture to unlock the AudioContext. Pre-arm
+// it on the first click/touch so subsequent timer-driven beeps actually
+// play. (Without this the context stays suspended forever.)
+(function armAudioOnFirstGesture() {
+  const arm = () => {
+    try {
+      if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+    } catch {}
+    document.removeEventListener('click', arm, true);
+    document.removeEventListener('touchstart', arm, true);
+    document.removeEventListener('keydown', arm, true);
+  };
+  document.addEventListener('click', arm, true);
+  document.addEventListener('touchstart', arm, true);
+  document.addEventListener('keydown', arm, true);
+})();
+function beep(kind) {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _audioCtx;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    if (kind === 'msg') {
+      // Message-style "incoming notification" — three ascending tones
+      // (E6 → G6 → C7) on a triangle wave with a sharp attack, played
+      // twice with a short gap. Loud enough to actually catch attention.
+      const NOTES = [1319, 1568, 2093], STEP = 0.09, SUSTAIN = 0.22, GAP = 0.42, PEAK = 0.32;
+      const playPass = (start) => {
+        NOTES.forEach((freq, i) => {
+          const osc = ctx.createOscillator(), gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.value = freq;
+          const t = start + i * STEP;
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(PEAK, t + 0.012);
+          gain.gain.exponentialRampToValueAtTime(0.0008, t + SUSTAIN);
+          osc.connect(gain).connect(ctx.destination);
+          osc.start(t); osc.stop(t + SUSTAIN + 0.02);
+        });
+      };
+      const t0 = ctx.currentTime;
+      playPass(t0);
+      playPass(t0 + GAP);
+      return;
+    }
+    if (kind === 'error') {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 220;
+      g.gain.setValueAtTime(0.18, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      o.start(); o.stop(ctx.currentTime + 0.4);
+    } else if (kind === 'done') {
+      [880, 1320].forEach((f, i) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = f;
+        const t = ctx.currentTime + i * 0.09;
+        g.gain.setValueAtTime(0.12, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+        o.start(t); o.stop(t + 0.16);
+      });
+    } else {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 1100;
+      g.gain.setValueAtTime(0.12, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+      o.start(); o.stop(ctx.currentTime + 0.1);
+    }
+  } catch {}
+}
+function pulseScan() {
+  const el = document.getElementById('scanPulse');
+  el.classList.remove('fire');
+  void el.offsetWidth;
+  el.classList.add('fire');
+}
+function toast(msg, type) {
+  const w = document.getElementById('toastWrap');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.textContent = msg;
+  w.appendChild(el);
+  setTimeout(() => el.remove(), type === 'error' ? 3500 : 2200);
+}
+
+// ─── Persistent notification banner ─────────────────────────────────
+// Same pattern as the yellow ribbon in app.html — sticky at the top of
+// the viewport, tracks unseen counts per kind across the two-sided
+// workflows (store ↔ warehouse), survives page reloads via localStorage,
+// only goes away when the user acts on it. Replaces the fading toasts
+// the manager kept missing.
+const NOTI_KINDS = {
+  // Store side: warehouse just marked the order ready for pickup.
+  prepared:  { icon:'📦', label_en:'ready to receive', label_cn:'待收货',
+               action: () => { setAppMode('restock'); refreshPendingDeliveries(); } },
+  // Warehouse side: store sent a brand new request.
+  new_sent:  { icon:'🔔', label_en:'new restock requests', label_cn:'新请求',
+               action: () => { setAppMode('inbox'); _inboxTab = 'active'; render(); } },
+  // Warehouse side: store confirmed delivery (handoff completed).
+  delivered: { icon:'✓',  label_en:'delivered',           label_cn:'已送达',
+               action: () => { setAppMode('inbox'); _inboxTab = 'history'; render(); } },
+};
+const _notiKey         = () => 'rs_noti_unseen_'    + (_user?.id || 'anon');
+const _notiDetailKey   = () => 'rs_noti_detail_'    + (_user?.id || 'anon');
+const _notiDismissKey  = () => 'rs_noti_dismissed_' + (_user?.id || 'anon');
+let _notiUnseen = { prepared: 0, new_sent: 0, delivered: 0 };
+// Latest payload per kind — used by the banner to describe WHAT the
+// notification is about (RS number, store, item count) rather than
+// just "1 new". Survives reload alongside the unseen counts.
+let _notiDetail = { prepared: null, new_sent: null, delivered: null };
+// Banner-dismissed state. Distinct from cleared/unseen: dismissing the
+// yellow ribbon (tap ✕) HIDES the banner but leaves the icon badge as
+// a reminder. Cleared = user actually entered the relevant mode and
+// dealt with it; that zeros both the unseen count AND dismissal flag.
+// A NEW arrival for a kind resets that kind's dismissal so the ribbon
+// reappears (otherwise the user would never see it again after one ✕).
+let _notiDismissed = { prepared: false, new_sent: false, delivered: false };
+// In-memory dedupe — both SSE and the 8s poller can detect the same
+// event. Key is `${kind}:${id}`; seeded by whichever path fires first.
+const _notiSeenKeys = new Set();
+function _loadNoti() {
+  try {
+    const raw = localStorage.getItem(_notiKey());
+    if (raw) Object.assign(_notiUnseen, JSON.parse(raw));
+    const rawDetail = localStorage.getItem(_notiDetailKey());
+    if (rawDetail) Object.assign(_notiDetail, JSON.parse(rawDetail));
+    const rawDismiss = localStorage.getItem(_notiDismissKey());
+    if (rawDismiss) Object.assign(_notiDismissed, JSON.parse(rawDismiss));
+  } catch {}
+  _renderNotiBanner();
+  _paintHeaderModeDots();
+}
+function _saveNoti() {
+  try {
+    localStorage.setItem(_notiKey(), JSON.stringify(_notiUnseen));
+    localStorage.setItem(_notiDetailKey(), JSON.stringify(_notiDetail));
+    localStorage.setItem(_notiDismissKey(), JSON.stringify(_notiDismissed));
+  } catch {}
+}
+// payload can be a full event object ({ id, rs_number, store_name,
+// store_cn, item_count, ... }) or a bare number (legacy count fallback
+// when we don't have details handy). Returns true if the event was
+// actually counted (not a dedupe drop).
+function _addNoti(kind, payload) {
+  if (!NOTI_KINDS[kind]) return false;
+  // Dedupe by id when we have one — same order won't double-count if
+  // SSE and the poller both detect it. Numbers/no-id fall through.
+  const id = (payload && typeof payload === 'object') ? payload.id : null;
+  if (id != null) {
+    const k = kind + ':' + id;
+    if (_notiSeenKeys.has(k)) return false;
+    _notiSeenKeys.add(k);
+  }
+  if (payload && typeof payload === 'object') {
+    _notiUnseen[kind] = (_notiUnseen[kind] || 0) + 1;
+    _notiDetail[kind] = {
+      id: payload.id || null,
+      rs_number: payload.rs_number || null,
+      store_name: payload.store_name || null,
+      store_cn: payload.store_cn || null,
+      item_count: payload.item_count || 0,
+      ts: payload.ts || Date.now(),
+    };
+  } else {
+    _notiUnseen[kind] = (_notiUnseen[kind] || 0) + (payload || 1);
+  }
+  // A fresh arrival re-opens the banner even if the user had dismissed
+  // the previous wave — otherwise they'd silently miss the new one.
+  _notiDismissed[kind] = false;
+  _saveNoti();
+  _renderNotiBanner();
+  // Live-update the header mode-switcher dots so the user sees the
+  // other flow's count badge the moment a new event arrives.
+  _paintHeaderModeDots();
+  beep('msg');
+  return true;
+}
+// Hide the yellow ribbon without zeroing the counts. The icon badges
+// stay lit as a reminder; the ribbon re-appears on the NEXT new event.
+function _dismissNotiBanner() {
+  Object.keys(_notiDismissed).forEach(k => { if (_notiUnseen[k] > 0) _notiDismissed[k] = true; });
+  _saveNoti();
+  _renderNotiBanner();
+  // Badges intentionally NOT cleared — that's the whole point.
+}
+// User actually entered the relevant mode (or tapped the banner body
+// to open it). Zeroes the count AND the dismissal flag for that kind.
+function _clearNoti(kind) {
+  if (kind) { _notiUnseen[kind] = 0; _notiDetail[kind] = null; _notiDismissed[kind] = false; }
+  else { Object.keys(_notiUnseen).forEach(k => { _notiUnseen[k] = 0; _notiDetail[k] = null; _notiDismissed[k] = false; }); }
+  _saveNoti();
+  _renderNotiBanner();
+  _paintHeaderModeDots();
+}
+function _renderNotiBanner() {
+  let bar = document.getElementById('notiBar');
+  // Show only kinds that have unseen items AND haven't been dismissed
+  // for this wave. The icon-badge stays lit either way — only the
+  // big yellow ribbon respects dismissal.
+  const items = Object.entries(_notiUnseen).filter(([k, n]) => n > 0 && !_notiDismissed[k]);
+  if (items.length === 0) {
+    if (bar) bar.remove();
+    document.body.classList.remove('has-noti-bar');
+    return;
+  }
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'notiBar';
+    bar.style.cssText = `
+      position:fixed; top:0; left:0; right:0; z-index:10000;
+      background:linear-gradient(135deg,#ccd900,#e7e54a);
+      color:#1a2314; font-weight:800; font-size:13px;
+      padding:11px 14px; cursor:pointer;
+      box-shadow:0 4px 14px rgba(0,0,0,.18);
+      display:flex; align-items:center; gap:8px;
+      animation:notiBarIn .35s ease-out;
+      font-family:inherit;
+      padding-top:calc(11px + env(safe-area-inset-top, 0px));
+    `;
+    if (!document.getElementById('notiBarStyle')) {
+      const st = document.createElement('style');
+      st.id = 'notiBarStyle';
+      st.textContent = `
+        @keyframes notiBarIn { from { transform:translateY(-100%); } to { transform:none; } }
+        body.has-noti-bar { padding-top:48px !important; }
+      `;
+      document.head.appendChild(st);
+    }
+    document.body.appendChild(bar);
+    document.body.classList.add('has-noti-bar');
+  }
+  // Headline: take the most recent kind (first in items[] — they're
+  // ordered by Object.entries which matches insertion order on modern
+  // JS engines) and describe its latest detail. Other kinds get folded
+  // into a secondary "+ N more · 还有 N 项" line.
+  const [primaryKind, primaryCount] = items[0];
+  const m       = NOTI_KINDS[primaryKind] || {};
+  const detail  = _notiDetail[primaryKind];
+  const rs      = detail?.rs_number ? detail.rs_number : '';
+  const store   = detail ? (detail.store_cn || detail.store_name || '') : '';
+  const itemN   = detail?.item_count || 0;
+  // Sentence per kind — gives the user the WHAT not just the count.
+  let lead;
+  if (primaryKind === 'new_sent') {
+    lead = `${m.icon} New request · 新订单`
+         + (rs    ? ` · ${esc(rs)}`           : '')
+         + (store ? ` · ${esc(store)}`        : '')
+         + (itemN ? ` · ${itemN} item${itemN===1?'':'s'} 件` : '');
+  } else if (primaryKind === 'prepared') {
+    lead = `${m.icon} Ready to receive · 待收货`
+         + (rs    ? ` · ${esc(rs)}`           : '')
+         + (itemN ? ` · ${itemN} item${itemN===1?'':'s'} 件` : '');
+  } else if (primaryKind === 'delivered') {
+    lead = `${m.icon} Delivery confirmed · 已送达`
+         + (rs    ? ` · ${esc(rs)}`           : '')
+         + (store ? ` · ${esc(store)}`        : '');
+  } else {
+    lead = `${m.icon || '🔔'} ${primaryCount} ${m.label_cn || primaryKind}`;
+  }
+  // Secondary line — extra kinds OR additional unseen of the same kind.
+  const extras = [];
+  if (primaryCount > 1) extras.push(`+${primaryCount-1} more · 还有 ${primaryCount-1}`);
+  items.slice(1).forEach(([k, n]) => {
+    const km = NOTI_KINDS[k] || {};
+    extras.push(`${km.icon || '🔔'} ${n} ${km.label_cn || k}`);
+  });
+  const tail = extras.length
+    ? `<div style="font-weight:700;font-size:11px;opacity:.7;margin-top:2px">${extras.join(' · ')}</div>`
+    : `<div style="font-weight:600;font-size:11px;opacity:.7;margin-top:2px">点击打开 · Tap to open</div>`;
+  bar.innerHTML = `
+    <span style="flex:1;line-height:1.3">${lead}${tail}</span>
+    <button id="notiClose" style="background:rgba(0,0,0,.14);border:none;color:#1a2314;border-radius:7px;width:28px;height:28px;font-weight:800;cursor:pointer;font-size:15px;line-height:1;font-family:inherit;flex-shrink:0">✕</button>
+  `;
+  bar.onclick = (e) => {
+    // ✕ button HIDES the banner but leaves the icon badge as a
+    // reminder that there's still something to deal with. Tapping
+    // the banner body OPENS the relevant mode (which is "I'm handling
+    // it") and clears both banner + badge.
+    if (e.target.id === 'notiClose') { _dismissNotiBanner(); return; }
+    const [primary] = items[0];                 // open the first kind first
+    const m = NOTI_KINDS[primary] || {};
+    _clearNoti(primary);
+    if (m.action) try { m.action(); } catch {}
+  };
+}
+// Auto-clear context: when the user enters the relevant mode/tab on
+// their own (without clicking the banner), wipe the matching unseen
+// count so the banner doesn't keep nagging about something they
+// already see on screen.
+function _autoClearOnContext() {
+  if (_appMode === 'restock' && _notiUnseen.prepared > 0)            _clearNoti('prepared');
+  if (_appMode === 'inbox'   && _inboxTab === 'active'   && _notiUnseen.new_sent > 0)  _clearNoti('new_sent');
+  if (_appMode === 'inbox'   && _inboxTab === 'history'  && _notiUnseen.delivered > 0) _clearNoti('delivered');
+}
+// ─── Server-Sent Events (instant push) ──────────────────────────────
+// Sub-second restock notifications. The 30s poller stays as fallback
+// for the brief reconnect window after a network blip.
+let _eventStream = null;
+function _connectEventStream() {
+  if (!_user) return;
+  try {
+    if (_eventStream) { try { _eventStream.close(); } catch {} }
+    _eventStream = new EventSource('/api/events');
+    _eventStream.addEventListener('restock', (e) => {
+      try {
+        const evt = JSON.parse(e.data);
+        if (!evt) return;
+        // The server's 'prepared' event has two distinct meanings
+        // depending on direction:
+        //   store→warehouse  → the warehouse just prepared the store's
+        //                      request → store user gets a "ready to
+        //                      receive" reminder on the 🔄 button.
+        //   warehouse→store  → the store just confirmed receipt of a
+        //                      push → warehouse user gets a "delivery
+        //                      confirmed" notification on the 📥 button.
+        //   warehouse→kitchen→ kitchen finished prepping → warehouse
+        //                      user gets a completion notification on
+        //                      the 📥 button (same as delivered).
+        // So when the source side of the event is the warehouse, the
+        // receiver is a warehouse-inbox user and we bucket the event
+        // into 'delivered' (the inbox-side completion kind) rather
+        // than 'prepared' (the store-side restock kind).
+        let kind = null;
+        if (evt.kind === 'sent')           kind = 'new_sent';
+        else if (evt.kind === 'prepared')  kind = (evt.from_role === 'warehouse') ? 'delivered' : 'prepared';
+        else if (evt.kind === 'delivered') kind = 'delivered';
+        if (!kind) return;
+        _addNoti(kind, evt);
+        // Seed the poller's known-id sets so the next /api/restock poll
+        // diff doesn't re-detect this same event and double-fire.
+        if (kind === 'new_sent')   _knownActiveIds.add(evt.id);
+        if (kind === 'delivered')  _lastDeliveredIds.add(evt.id);
+      } catch {}
+    });
+    _eventStream.onerror = () => { /* EventSource reconnects automatically */ };
+  } catch {}
+}
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+</script>
+</body>
+</html>

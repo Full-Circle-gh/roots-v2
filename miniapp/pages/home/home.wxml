@@ -1,0 +1,39 @@
+<view class="page">
+  <!-- Floating language toggle — top-right, always visible. Customer-facing
+       quick swap; the bigger picker on Me tab is the "settings" home. -->
+  <view class="lang-fab">
+    <view class="lang-opt {{lang === 'en' ? 'on' : ''}}" data-lang="en" bindtap="switchLang">EN</view>
+    <view class="lang-opt {{lang === 'cn' ? 'on' : ''}}" data-lang="cn" bindtap="switchLang">中</view>
+  </view>
+
+  <view wx:if="{{loading && !layout.length}}" class="loading">
+    <view class="skeleton hero-skel"></view>
+    <view class="skeleton title-skel"></view>
+    <view class="skeleton grid-skel"></view>
+  </view>
+
+  <view wx:elif="{{!layout.length}}" class="empty">
+    <view class="empty-title f-bear">Nothing here yet</view>
+    <view class="empty-sub">Publish a home layout from the Roots admin to get started.</view>
+  </view>
+
+  <block-renderer
+    wx:for="{{layout}}"
+    wx:key="id"
+    block="{{item}}"
+    lang="{{lang}}"
+    products="{{products}}"
+    categories="{{categories}}"
+    flash-sales="{{flashSales}}"
+    affiliate="{{affiliate}}"
+    polls="{{polls}}"
+    customer="{{customer}}"
+    bind:cta="onCta"
+    bind:category="onCategory"
+    bind:product="onProduct"
+    bind:vote="onVote"
+    bind:bundle="onBundle"/>
+
+  <cs-button variant="fab" placement="home"></cs-button>
+  <popup-manager page="home"></popup-manager>
+</view>

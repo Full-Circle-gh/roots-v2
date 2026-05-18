@@ -1,0 +1,6 @@
+{
+  "version": "2026-05-18-product-blocks-4",
+  "title": "🎨 Designer Sections — split-pane editor with live preview · 实时分屏编辑器",
+  "summary": "Products tab modal is now a true magazine editor: left pane = block tabs + form for the selected block; right pane = sticky live phone preview rendering all blocks with the real brand fonts and colors. Edits update the preview as you type.\n「产品」模态框升级为真正的杂志式编辑器:左侧块标签 + 当前块表单,右侧粘性手机预览(品牌字体与配色),所见即所得。",
+  "url": "/retail-admin"
+}

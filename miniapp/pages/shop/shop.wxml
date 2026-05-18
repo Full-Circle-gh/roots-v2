@@ -1,0 +1,261 @@
+<view class="page page-{{layout}}">
+
+  <!-- ════ FLY-TO-CART ANIMATION ════════════════════════════════ -->
+  <view wx:if="{{flyShow}}"
+        class="fly-wrap"
+        style="left:{{flyStartX}}px; top:{{flyStartY}}px; transform: translateX({{flyDx}}px);">
+    <view class="fly-ball"
+          style="transform: translateY({{flyDy}}px);">
+      <image wx:if="{{flyImg}}" class="fly-img" src="{{flyImg}}" mode="aspectFill"/>
+      <text  wx:else            class="fly-plus f-bear">+</text>
+    </view>
+  </view>
+
+
+  <!-- ════ HEADER ═══════════════════════════════════════════════ -->
+  <block wx:if="{{isListLayout}}">
+    <view class="hdr-list">
+      <view class="hdr-title f-bear">{{listTitle}}</view>
+    </view>
+  </block>
+  <block wx:else>
+    <view class="header">
+      <view class="kicker f-toni">SHOP · 商品</view>
+      <view class="title f-bear">The garden.</view>
+    </view>
+  </block>
+
+  <!-- ════ STICKY TOP — search / switcher / filters / category chips -->
+  <view class="sticky-top {{isListLayout ? '' : 'sticky-grid'}}">
+    <view class="search-bar {{isListLayout ? 'search-bar-list' : ''}}">
+      <view class="search-icon">🔍</view>
+      <input class="search-input" placeholder="{{searchPlaceholder}}" value="{{query}}" bindinput="onSearchInput" confirm-type="search"/>
+      <view wx:if="{{query}}" class="search-clear" bindtap="clearSearch">×</view>
+    </view>
+
+    <view wx:if="{{!layoutLocked}}" class="view-switcher {{isListLayout ? 'view-switcher-list' : ''}}">
+      <view wx:for="{{layoutOptions}}" wx:key="key"
+            class="vs-btn {{layout === item.key ? 'on' : ''}}"
+            data-key="{{item.key}}" bindtap="setLayout"
+            aria-label="{{item.label}}">
+        <text class="vs-icon">{{item.icon}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{showAnyFilter}}" class="filter-bar">
+      <view wx:if="{{showSort}}" class="filter-row">
+        <picker class="filter-picker" bindchange="onSortChange" value="{{sortIndex}}" range="{{sortLabels}}">
+          <view class="picker-pill f-toni">
+            {{sortLabel}} <text class="picker-arrow">▾</text>
+          </view>
+        </picker>
+        <view wx:if="{{showStockFilter}}"
+              class="filter-pill {{inStockOnly ? 'on' : ''}}"
+              bindtap="toggleInStock">
+          <text class="f-toni">{{inStockLabel}}</text>
+        </view>
+      </view>
+
+      <scroll-view wx:if="{{showBadgeFilter}}" scroll-x class="filter-chips" enhanced show-scrollbar="{{false}}">
+        <view wx:for="{{badgeFilters}}" wx:key="key"
+              class="badge-chip {{activeBadge === item.key ? 'on' : ''}}"
+              data-key="{{item.key}}" bindtap="setBadge">
+          {{item.label}}
+        </view>
+      </scroll-view>
+
+      <view wx:if="{{showPriceFilter}}" class="filter-row price-row">
+        <text class="price-label f-toni">{{priceFromLabel}}</text>
+        <input class="price-input" type="digit" value="{{priceMin}}"
+               placeholder="0" bindblur="onPriceMinBlur"/>
+        <text class="price-sep">–</text>
+        <input class="price-input" type="digit" value="{{priceMax}}"
+               placeholder="∞" bindblur="onPriceMaxBlur"/>
+        <view wx:if="{{priceMin || priceMax}}" class="price-clear" bindtap="clearPriceRange">×</view>
+      </view>
+
+      <scroll-view wx:if="{{showDietary}}" scroll-x class="diet-chips" enhanced show-scrollbar="{{false}}">
+        <view wx:for="{{dietaryFilters}}" wx:key="key"
+              class="diet-chip {{activeDietary === item.key ? 'on' : ''}}"
+              data-key="{{item.key}}" bindtap="setDietary">
+          {{item.label}}
+        </view>
+      </scroll-view>
+    </view>
+
+    <!-- Category chips (non-list layouts) — auto-highlights from scroll
+         and auto-scrolls horizontally to keep the active chip in view. -->
+    <scroll-view wx:if="{{!isListLayout}}" scroll-x class="chips"
+                 scroll-into-view="{{activeChipId}}"
+                 scroll-with-animation
+                 enhanced show-scrollbar="{{false}}">
+      <view id="chip-all" class="chip {{!activeCategory ? 'on' : ''}}" data-name="" bindtap="setCategory">{{seeAll}}</view>
+      <view wx:for="{{sections}}" wx:key="id"
+            id="chip-{{item.id}}"
+            class="chip {{activeCategory === item.name ? 'on' : ''}}"
+            data-name="{{item.name}}" bindtap="setCategory">{{item.label}}</view>
+    </scroll-view>
+  </view>
+
+  <!-- ════ LIST + LIST-COMPACT ══════════════════════════════════ -->
+  <block wx:if="{{isListLayout}}">
+    <view class="list-body">
+      <scroll-view scroll-y class="list-side" enhanced show-scrollbar="{{false}}"
+                   scroll-into-view="{{sidebarScrollId}}"
+                   scroll-with-animation>
+        <view id="s-top-anchor"
+              class="side-tab {{!activeCategory ? 'on' : ''}}"
+              data-name="" bindtap="setCategory">
+          <text class="f-bear">{{seeAll}}</text>
+        </view>
+        <view wx:for="{{sections}}" wx:key="id"
+              id="s-{{item.id}}"
+              class="side-tab {{activeCategory === item.name ? 'on' : ''}}"
+              data-name="{{item.name}}" bindtap="setCategory">
+          <text class="f-bear">{{item.label}}</text>
+        </view>
+      </scroll-view>
+
+      <scroll-view scroll-y class="list-main" enhanced show-scrollbar="{{false}}"
+                   bindscroll="onListScroll"
+                   scroll-into-view="{{scrollIntoListId}}"
+                   scroll-with-animation>
+        <view id="top-anchor" class="top-anchor"></view>
+
+        <view wx:if="{{loading && !sections.length}}" class="loading-list">
+          <view class="skeleton list-row-skel"></view>
+          <view class="skeleton list-row-skel"></view>
+          <view class="skeleton list-row-skel"></view>
+        </view>
+
+        <view wx:elif="{{!sections.length}}" class="empty empty-inline">
+          <view class="empty-title f-bear">{{emptyTitle}}</view>
+          <view class="empty-sub">{{emptySub}}</view>
+        </view>
+
+        <block wx:else>
+          <view wx:for="{{sections}}" wx:key="id" wx:for-item="section"
+                id="{{section.id}}" class="cat-section">
+            <view class="list-section-head">
+              <view>
+                <view class="list-section-kicker f-toni">{{section.label}}</view>
+              </view>
+              <view class="list-section-count f-gothic">{{section.countStr}}</view>
+            </view>
+
+            <view wx:for="{{section.items}}" wx:key="id" wx:for-item="item"
+                  class="row {{layout === 'list-compact' ? 'row-compact' : ''}}"
+                  data-id="{{item.id}}" bindtap="openProduct">
+              <view wx:if="{{layout !== 'list-compact'}}" class="row-img">
+                <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+              </view>
+              <view class="row-body">
+                <view class="row-name f-bear">{{item.name}}</view>
+                <view wx:if="{{item.subline}}" class="row-sub f-yuan">{{item.subline}}</view>
+                <view wx:if="{{item.badge}}" class="row-badge f-gothic">{{item.badge}}</view>
+                <view wx:if="{{item.outOfStock}}" class="row-oos f-toni">{{oosLabel}}</view>
+              </view>
+              <view class="row-right">
+                <view class="row-price-stack">
+                  <view wx:if="{{item.isFlash}}" class="row-was f-aleo">{{item.priceWas}}</view>
+                  <view class="row-price f-gothic {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</view>
+                </view>
+                <view wx:if="{{!item.outOfStock}}"
+                      class="row-plus f-bear"
+                      id="plus-{{item.id}}"
+                      data-id="{{item.id}}"
+                      catchtap="addToCart">+</view>
+              </view>
+            </view>
+          </view>
+        </block>
+      </scroll-view>
+    </view>
+  </block>
+
+  <!-- ════ GALLERY (1-col big editorial) ════════════════════════ -->
+  <block wx:elif="{{layout === 'gallery'}}">
+    <view wx:if="{{loading && !sections.length}}" class="loading-gal">
+      <view class="skeleton gal-skel"></view>
+      <view class="skeleton gal-skel"></view>
+    </view>
+
+    <view wx:elif="{{!sections.length}}" class="empty">
+      <view class="empty-title f-bear">{{emptyTitle}}</view>
+      <view class="empty-sub">{{emptySub}}</view>
+    </view>
+
+    <view wx:else>
+      <view wx:for="{{sections}}" wx:key="id" wx:for-item="section"
+            id="{{section.id}}" class="cat-section">
+        <view class="grid-section-head">
+          <view class="grid-section-kicker f-toni">{{section.label}}</view>
+          <view class="grid-section-count f-gothic">{{section.countStr}}</view>
+        </view>
+        <view class="gallery">
+          <view wx:for="{{section.items}}" wx:key="id" wx:for-item="item"
+                class="gal-card" data-id="{{item.id}}" bindtap="openProduct">
+            <view class="gal-img">
+              <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+              <view wx:if="{{item.badge}}" class="gal-badge f-gothic">{{item.badge}}</view>
+              <view wx:if="{{item.isFlash}}" class="gal-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+              <view wx:if="{{item.outOfStock}}" class="gal-oos f-toni">{{oosLabel}}</view>
+            </view>
+            <view class="gal-meta">
+              <view class="gal-name f-bear">{{item.name}}</view>
+              <view wx:if="{{item.subline}}" class="gal-sub f-yuan">{{item.subline}}</view>
+            </view>
+            <view class="gal-foot">
+              <view class="gal-price-stack">
+                <text wx:if="{{item.isFlash}}" class="gal-was f-aleo">{{item.priceWas}}</text>
+                <text class="gal-price f-gothic {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+              </view>
+              <view wx:if="{{!item.outOfStock}}" class="gal-plus f-bear"
+                    id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart">+</view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <!-- ════ GRID 2/3 col ═════════════════════════════════════════ -->
+  <block wx:else>
+    <view wx:if="{{loading && !sections.length}}" class="loading {{layout === 'grid-3col' ? 'loading-3' : ''}}">
+      <view class="skeleton" style="height: 360rpx"></view>
+      <view class="skeleton" style="height: 360rpx"></view>
+      <view wx:if="{{layout === 'grid-3col'}}" class="skeleton" style="height: 360rpx"></view>
+    </view>
+
+    <view wx:elif="{{!sections.length}}" class="empty">
+      <view class="empty-title f-bear">{{emptyTitle}}</view>
+      <view class="empty-sub">{{emptySub}}</view>
+    </view>
+
+    <view wx:else>
+      <view wx:for="{{sections}}" wx:key="id" wx:for-item="section"
+            id="{{section.id}}" class="cat-section">
+        <view class="grid-section-head">
+          <view class="grid-section-kicker f-toni">{{section.label}}</view>
+          <view class="grid-section-count f-gothic">{{section.countStr}}</view>
+        </view>
+        <view class="grid {{layout === 'grid-3col' ? 'grid-3' : 'grid-2'}}">
+          <view wx:for="{{section.items}}" wx:key="id" wx:for-item="item"
+                class="card" data-id="{{item.id}}" bindtap="openProduct">
+            <view class="img">
+              <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+              <view wx:if="{{item.badge}}" class="card-badge f-gothic">{{item.badge}}</view>
+              <view wx:if="{{item.isFlash}}" class="card-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+              <view wx:if="{{item.outOfStock}}" class="card-oos f-toni">{{oosLabel}}</view>
+            </view>
+            <view class="name f-bear">{{item.name}}</view>
+            <view class="price-stack">
+              <text wx:if="{{item.isFlash}}" class="price-was f-aleo">{{item.priceWas}}</text>
+              <text class="price f-gothic {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

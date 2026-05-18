@@ -1,0 +1,11 @@
+{
+  "navigationBarTitleText": "Roots",
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "block-renderer": "/components/block-renderer/block-renderer",
+    "cs-button": "/components/cs-button/cs-button",
+    "popup-manager": "/components/popup-manager/popup-manager"
+  },
+  "enablePullDownRefresh": true,
+  "backgroundColor": "#F2E7DF"
+}

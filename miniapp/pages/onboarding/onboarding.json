@@ -1,0 +1,7 @@
+{
+  "navigationStyle": "custom",
+  "navigationBarTextStyle": "white",
+  "usingComponents": {
+    "block-renderer": "/components/block-renderer/block-renderer"
+  }
+}

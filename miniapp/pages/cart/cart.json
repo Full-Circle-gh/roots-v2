@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "Cart",
+  "backgroundColor": "#F2E7DF",
+  "usingComponents": {
+    "popup-manager": "/components/popup-manager/popup-manager"
+  }
+}

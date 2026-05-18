@@ -1,0 +1,84 @@
+<view class="page">
+  <view class="header">
+    <view class="kicker f-toni">{{copy.title}} · 收货地址</view>
+    <view class="title f-bear">Saved spots.</view>
+  </view>
+
+  <!-- ── LIST MODE ── -->
+  <block wx:if="{{mode === 'list'}}">
+    <view wx:if="{{loading && !addresses.length}}" class="loading">
+      <view class="skeleton" style="height:200rpx;margin:24rpx 44rpx"></view>
+      <view class="skeleton" style="height:200rpx;margin:24rpx 44rpx"></view>
+    </view>
+
+    <view wx:elif="{{!addresses.length}}" class="empty">
+      <view class="empty-msg muted">{{copy.empty}}</view>
+    </view>
+
+    <view wx:else class="list">
+      <view wx:for="{{addresses}}" wx:key="id" class="addr-card">
+        <view class="addr-top">
+          <view class="addr-name"><text class="f-bear">{{item.recipient_name}}</text> · {{item.phone}}</view>
+          <view wx:if="{{item.is_default}}" class="default-badge f-toni">{{copy.defaultBadge}}</view>
+        </view>
+        <view class="addr-full">{{item.address}}{{item.detail ? ' · ' + item.detail : ''}}</view>
+        <view wx:if="{{item.city}}" class="addr-city muted">{{item.city}}</view>
+        <view class="addr-actions">
+          <view wx:if="{{!item.is_default}}" class="action-link" data-id="{{item.id}}" bindtap="setDefault">{{copy.setDefault}}</view>
+          <view class="action-link" data-id="{{item.id}}" bindtap="showEditForm">{{copy.editLabel}}</view>
+          <view class="action-link danger" data-id="{{item.id}}" bindtap="deleteAddr">{{copy.deleteLabel}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="add-btn-wrap">
+      <button class="add-btn f-toni" bindtap="showAddForm">{{copy.addBtn}}</button>
+    </view>
+  </block>
+
+  <!-- ── FORM MODE ── -->
+  <block wx:elif="{{mode === 'form'}}">
+    <view class="form-title f-bear">{{form.id ? copy.formEdit : copy.formAdd}}</view>
+
+    <view class="wx-pick-wrap">
+      <button class="wx-pick-btn f-toni" bindtap="pickFromWechat" disabled="{{wxPicking}}">
+        {{wxPicking ? '...' : copy.wxPickBtn}}
+      </button>
+    </view>
+
+    <view class="field">
+      <input class="input" placeholder-class="input-placeholder" placeholder="{{copy.placeholders.name}}" value="{{form.recipient_name}}" data-field="recipient_name" bindinput="onField"/>
+    </view>
+    <view class="field">
+      <input class="input" placeholder-class="input-placeholder" placeholder="{{copy.placeholders.phone}}" type="number" value="{{form.phone}}" data-field="phone" bindinput="onField"/>
+    </view>
+    <!-- Region picker — 3-column WeChat-native province/city/district wheel.
+         Customer can't type these fields freeform any more, which kills the
+         "广州" vs "广州市" mismatch problem at the source. -->
+    <view class="field region-field">
+      <picker mode="region" value="{{regionValue}}" bindchange="onRegionChange">
+        <view class="region-pick {{form.province ? '' : 'placeholder'}}">
+          <text wx:if="{{form.province}}">{{form.province}} · {{form.city}} · {{form.district}}</text>
+          <text wx:else>{{copy.placeholders.region}}</text>
+          <text class="region-chevron">›</text>
+        </view>
+      </picker>
+    </view>
+    <view class="field">
+      <input class="input" placeholder-class="input-placeholder" placeholder="{{copy.placeholders.addr}}" value="{{form.address}}" data-field="address" bindinput="onField"/>
+    </view>
+    <view class="field">
+      <input class="input" placeholder-class="input-placeholder" placeholder="{{copy.placeholders.detail}}" value="{{form.detail}}" data-field="detail" bindinput="onField"/>
+    </view>
+    <view class="default-row">
+      <switch checked="{{form.is_default}}" bindchange="onDefaultToggle" color="#1a1a17"/>
+      <view class="default-label">{{copy.setDefault}}</view>
+    </view>
+
+    <view class="form-actions">
+      <button class="btn secondary f-toni" bindtap="cancelForm" disabled="{{saving}}">{{copy.cancelBtn}}</button>
+      <button class="btn primary f-toni" bindtap="save" disabled="{{saving}}">{{saving ? '...' : copy.saveBtn}}</button>
+    </view>
+  </block>
+  <popup-manager page="addresses"></popup-manager>
+</view>

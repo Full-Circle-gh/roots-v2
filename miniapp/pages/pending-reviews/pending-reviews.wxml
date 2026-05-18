@@ -1,0 +1,33 @@
+<view class="page">
+  <view class="head">
+    <view class="kicker f-toni">{{lang === 'cn' ? '待评价 · TO REVIEW' : 'TO REVIEW · 待评价'}}</view>
+    <view class="title f-bear">{{copy.title}}</view>
+    <view class="subtitle f-aleo">{{copy.subtitle}}</view>
+  </view>
+
+  <view wx:if="{{!loading && items.length === 0}}" class="empty f-aleo">
+    {{copy.empty}}
+  </view>
+
+  <view class="list">
+    <view wx:for="{{items}}" wx:key="*this" class="item"
+          data-product-id="{{item.product_id}}"
+          data-order-id="{{item.order_id}}"
+          data-name="{{item.display_name}}"
+          data-image="{{item.image}}"
+          data-qty="{{item.qty}}"
+          data-order-no="{{item.order_no}}"
+          data-delivered-at="{{item.delivered_at}}"
+          bindtap="writeReview">
+      <view class="thumb">
+        <image wx:if="{{item.image}}" class="thumb-img" src="{{item.image}}" mode="aspectFill"></image>
+      </view>
+      <view class="body">
+        <view class="name f-bear">{{item.display_name}}</view>
+        <view class="meta f-toni">{{copy.orderLabel}} · {{item.order_no}}</view>
+        <view wx:if="{{item.delivered_label}}" class="delivered f-aleo">{{item.delivered_label}}</view>
+      </view>
+      <view class="cta f-toni">{{copy.cta}}</view>
+    </view>
+  </view>
+</view>

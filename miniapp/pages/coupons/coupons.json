@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "Coupons",
+  "backgroundColor": "#F2E7DF",
+  "navigationBarBackgroundColor": "#F2E7DF",
+  "navigationBarTextStyle": "black",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "popup-manager": "/components/popup-manager/popup-manager"
+  }
+}

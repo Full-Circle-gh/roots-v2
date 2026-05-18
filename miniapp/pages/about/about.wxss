@@ -1,0 +1,225 @@
+/* About / Story page — NO. 11 · WHO WE ARE.
+   Mirrors story.jsx from the design handoff. Spacing in rpx (= px × 2). */
+
+.page {
+  background: var(--oat);
+  min-height: 100vh;
+  padding-bottom: 60rpx;
+}
+
+/* Hero — welcome-roots.jpg as full-bleed contained image */
+.hero {
+  width: 100%;
+  height: 640rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--oat);
+}
+.hero-img {
+  width: 96%;
+  height: 100%;
+}
+
+/* Common section + kicker */
+.section { padding: 0 52rpx; margin-top: 80rpx; }
+.section-manifesto { margin-top: 24rpx; }
+.kicker {
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.25em;
+  color: var(--olive);
+  text-transform: uppercase;
+}
+.kicker-cn {
+  font-family: var(--f-yuan);
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.04em;
+  margin-left: 6rpx;
+}
+
+/* Manifesto */
+.manifesto {
+  font-size: calc(32rpx * var(--font-scale));
+  line-height: 1.4;
+  color: var(--forest);
+  margin-top: 16rpx;
+}
+.manifesto .bold { font-weight: 700; }
+.manifesto-cn {
+  font-size: calc(24rpx * var(--font-scale));
+  line-height: 1.55;
+  color: var(--forest);
+  margin-top: 16rpx;
+}
+.manifesto-cn .bold { font-weight: 700; }
+
+/* Stats strip */
+.stats {
+  margin: 64rpx 44rpx 0;
+  background: var(--ink);
+  color: #fff;
+  padding: 28rpx 24rpx;
+  display: flex;
+}
+.stat-cell { flex: 1; padding-right: 20rpx; }
+.stat-cell + .stat-cell {
+  border-left: 1rpx solid rgba(255, 255, 255, 0.15);
+  padding-left: 20rpx;
+}
+.stat-val {
+  font-size: calc(40rpx * var(--font-scale));
+  line-height: 1;
+  color: var(--lime);
+}
+.stat-lbl {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+  margin-top: 8rpx;
+  text-transform: uppercase;
+}
+
+/* Founder */
+.founder-row {
+  display: flex;
+  gap: 28rpx;
+  margin-top: 24rpx;
+}
+.founder-photo {
+  flex: 0 0 220rpx;
+  height: 280rpx;
+  background: var(--lime);
+  border: 3rpx solid var(--ink);
+  position: relative;
+}
+.founder-photo-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.15em;
+  color: rgba(0, 0, 0, 0.55);
+}
+.founder-meta { flex: 1; min-width: 0; }
+.founder-name {
+  font-size: calc(44rpx * var(--font-scale));
+  line-height: 0.95;
+}
+.founder-title {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.18em;
+  color: var(--olive);
+  margin-top: 8rpx;
+  text-transform: uppercase;
+}
+.founder-quote {
+  font-size: calc(24rpx * var(--font-scale));
+  line-height: 1.4;
+  color: var(--forest);
+  font-style: italic;
+  margin-top: 16rpx;
+}
+.founder-link {
+  display: inline-block;
+  margin-top: 16rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.15em;
+  color: var(--ink);
+  border-bottom: 3rpx solid var(--ink);
+  padding-bottom: 4rpx;
+}
+
+/* What's IN / OUT */
+.promise-title {
+  font-size: calc(60rpx * var(--font-scale));
+  line-height: 1;
+  margin-top: 8rpx;
+  color: var(--ink);
+}
+.promise-title .hl { background: var(--lime); padding: 0 12rpx; }
+.promise-title .strike {
+  text-decoration: line-through;
+  text-decoration-thickness: 4rpx;
+  color: var(--olive);
+}
+.promise-title .nl { display: block; height: 0; }
+.promise-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24rpx;
+  margin-top: 32rpx;
+}
+.promise-col {
+  border: 3rpx solid var(--ink);
+  padding: 24rpx 24rpx 28rpx;
+}
+.promise-col.promise-in  { background: var(--lime); }
+.promise-col.promise-out { background: var(--ink); }
+.promise-head {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: calc(28rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  margin-bottom: 16rpx;
+}
+.promise-head.light { color: #fff; }
+.promise-tick {
+  background: var(--ink);
+  color: var(--lime);
+  width: 36rpx; height: 36rpx;
+  display: flex; align-items: center; justify-content: center;
+  font-size: calc(26rpx * var(--font-scale));
+  line-height: 1;
+}
+.promise-tick.light {
+  background: #fff;
+  color: var(--ink);
+}
+.promise-item {
+  font-size: calc(24rpx * var(--font-scale));
+  line-height: 1.35;
+  color: var(--ink);
+  padding-top: 8rpx;
+}
+.promise-item.dark   { color: #fff; }
+.promise-item.strike { text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, 0.5); }
+.promise-item-cn {
+  font-size: calc(20rpx * var(--font-scale));
+  color: rgba(0, 0, 0, 0.55);
+  padding-left: 16rpx;
+  text-decoration: none;
+  margin-top: 2rpx;
+}
+.promise-item.dark .promise-item-cn { color: rgba(255, 255, 255, 0.55); }
+
+/* Outro sign-off */
+.outro {
+  text-align: center;
+  margin-top: 104rpx;
+  padding: 0 44rpx;
+}
+.outro-title {
+  font-size: calc(72rpx * var(--font-scale));
+  line-height: 1;
+  color: var(--forest);
+  letter-spacing: -0.01em;
+}
+.outro-cn {
+  font-size: calc(24rpx * var(--font-scale));
+  color: var(--olive);
+  margin-top: 16rpx;
+  letter-spacing: 0.05em;
+}
+.outro-cta {
+  margin-top: 44rpx;
+  background: var(--ink);
+  color: var(--lime);
+  padding: 32rpx 0;
+  font-size: calc(36rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+}

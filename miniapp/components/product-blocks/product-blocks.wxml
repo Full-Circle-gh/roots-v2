@@ -1,0 +1,55 @@
+<view class="pb-wrap">
+  <view wx:for="{{resolved}}" wx:key="_k" class="pb pb-{{item.type}}">
+
+    <!-- ───────── Hero Intro ─────────
+         Editorial paragraph. Optional highlight phrase either renders
+         inline (when it appears inside the body) with accent styling,
+         OR as a styled lead-in callout above the body (when it doesn't
+         appear in the body — gives the office a way to add a pull-out
+         line that's distinct from the prose). -->
+    <block wx:if="{{item.type === 'hero_intro'}}">
+      <view wx:if="{{item.looseHighlight}}" class="pb-hero-lead f-toni">{{item.looseHighlight}}</view>
+      <view class="pb-hero-body f-aleo">
+        <text wx:for="{{item.bodySegments}}" wx:for-item="seg" wx:key="*this"
+              class="{{seg.kind === 'hl' ? 'pb-hero-hl' : ''}}">{{seg.text}}</text>
+      </view>
+    </block>
+
+    <!-- ───────── Stat Callout ─────────
+         One giant number/percent on a brand-color slab. Acts as a
+         section break that doubles as a sales point. -->
+    <block wx:elif="{{item.type === 'stat_callout'}}">
+      <view class="pb-stat-slab">
+        <view class="pb-stat-num f-bear">{{item.stat}}</view>
+        <view wx:if="{{item.claim}}" class="pb-stat-claim f-toni">{{item.claim}}</view>
+        <view wx:if="{{item.sub}}" class="pb-stat-sub f-aleo">{{item.sub}}</view>
+      </view>
+    </block>
+
+    <!-- ───────── Allergen Card ─────────
+         ⚠️ bordered card with two segmented chip rows. -->
+    <block wx:elif="{{item.type === 'allergen_card'}}">
+      <view class="pb-allergen">
+        <view class="pb-allergen-head f-toni">
+          <text class="pb-allergen-emoji">⚠️</text>
+          <text>{{lang === 'cn' ? '过敏原信息' : 'ALLERGEN INFORMATION'}}</text>
+        </view>
+        <view wx:if="{{item.contains.length}}" class="pb-allergen-section">
+          <view class="pb-allergen-label f-toni">{{item.containsLabel}}</view>
+          <view class="pb-allergen-chips">
+            <view wx:for="{{item.contains}}" wx:key="*this" wx:for-item="c"
+                  class="pb-allergen-chip pb-allergen-chip-strong">{{c}}</view>
+          </view>
+        </view>
+        <view wx:if="{{item.mayContain.length}}" class="pb-allergen-section">
+          <view class="pb-allergen-label f-toni">{{item.mayContainLabel}}</view>
+          <view class="pb-allergen-chips">
+            <view wx:for="{{item.mayContain}}" wx:key="*this" wx:for-item="c"
+                  class="pb-allergen-chip pb-allergen-chip-soft">{{c}}</view>
+          </view>
+        </view>
+      </view>
+    </block>
+
+  </view>
+</view>

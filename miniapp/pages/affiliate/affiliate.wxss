@@ -1,0 +1,389 @@
+/* Refer-a-friend — design page #15. Logical px×2 → rpx. */
+
+.page {
+  background: var(--oat);
+  min-height: 100vh;
+  padding: 0 0 80rpx;
+}
+
+/* Header */
+.head { padding: 40rpx 44rpx 16rpx; }
+.head .kicker {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.25em;
+  color: var(--olive);
+}
+.head .cn {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  text-transform: none;
+}
+.head .title {
+  font-size: calc(64rpx * var(--font-scale));
+  line-height: 0.92;
+  letter-spacing: -0.01em;
+  margin-top: 12rpx;
+  color: var(--ink);
+}
+.head .title .hl {
+  background: var(--lime);
+  padding: 0 12rpx;
+}
+.head .sub {
+  font-size: calc(22rpx * var(--font-scale));
+  line-height: 1.45;
+  color: var(--forest);
+  margin-top: 20rpx;
+}
+
+/* Stats strip — dark slab w/ accent numerals */
+.stats {
+  margin: 32rpx 44rpx 0;
+  background: var(--ink);
+  color: #fff;
+  display: flex;
+  padding: 28rpx 32rpx;
+  border: 3rpx solid var(--ink);
+}
+.stat { flex: 1; }
+.stat-mid {
+  border-left: 1rpx solid rgba(255,255,255,0.2);
+  border-right: 1rpx solid rgba(255,255,255,0.2);
+  padding-left: 24rpx;
+}
+.stat-val {
+  font-size: calc(44rpx * var(--font-scale));
+  line-height: 1;
+  color: var(--lime);
+}
+.stat-lbl {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+  margin-top: 10rpx;
+  opacity: 0.7;
+}
+.stat-lbl .cn {
+  font-size: calc(16rpx * var(--font-scale));
+  letter-spacing: 0.05em;
+  text-transform: none;
+}
+
+/* Referral code card */
+.code-card {
+  margin: 28rpx 44rpx 0;
+  background: var(--lime);
+  border: 3rpx solid var(--ink);
+  padding: 28rpx 32rpx 32rpx;
+}
+.code-lbl {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.22em;
+  color: var(--forest);
+}
+.code-lbl .cn {
+  font-size: calc(16rpx * var(--font-scale));
+  letter-spacing: 0.05em;
+  text-transform: none;
+}
+.code-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16rpx;
+}
+.code {
+  font-size: calc(56rpx * var(--font-scale));
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.code-copy {
+  background: var(--ink);
+  color: var(--lime);
+  padding: 14rpx 22rpx;
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+}
+
+/* Share row */
+.share-row {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 28rpx;
+}
+.share {
+  flex: 1;
+  padding: 20rpx 0;
+  text-align: center;
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  border: 3rpx solid var(--ink);
+  background: var(--ink);
+  color: #fff;
+  border-radius: 0;
+  line-height: 1.3;
+}
+.share .cn {
+  font-size: calc(16rpx * var(--font-scale));
+  margin-left: 6rpx;
+  letter-spacing: 0.05em;
+  text-transform: none;
+}
+.share-wechat { background: #1AAD19; color: #fff; }
+.share-moments { background: var(--ink); color: #fff; }
+.share-more {
+  flex: 0 0 80rpx;
+  background: transparent;
+  color: var(--ink);
+  font-size: calc(32rpx * var(--font-scale));
+}
+
+/* How it works */
+.how { margin: 36rpx 44rpx 0; }
+.how-head {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.22em;
+  color: var(--olive);
+  margin-bottom: 16rpx;
+}
+.how-head .cn {
+  font-size: calc(16rpx * var(--font-scale));
+  letter-spacing: 0.05em;
+  text-transform: none;
+}
+.how-row { display: flex; gap: 12rpx; }
+.how-cell {
+  flex: 1;
+  border: 3rpx solid var(--ink);
+  background: #FFFCF7;
+  padding: 20rpx 20rpx 24rpx;
+}
+.how-num {
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  color: var(--olive);
+}
+.how-t {
+  font-size: calc(30rpx * var(--font-scale));
+  line-height: 1;
+  margin-top: 8rpx;
+}
+.how-cn {
+  font-size: calc(18rpx * var(--font-scale));
+  color: var(--olive);
+  margin-top: 4rpx;
+}
+.how-sub {
+  font-size: calc(20rpx * var(--font-scale));
+  line-height: 1.3;
+  color: var(--forest);
+  margin-top: 12rpx;
+}
+
+/* Apply someone else's code */
+.apply {
+  margin: 36rpx 44rpx 0;
+  background: #FFFCF7;
+  border: 3rpx dashed var(--ink);
+  padding: 20rpx 24rpx 24rpx;
+}
+.apply-head {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.22em;
+  color: var(--olive);
+}
+.apply-head .cn {
+  font-size: calc(16rpx * var(--font-scale));
+  letter-spacing: 0.05em;
+  text-transform: none;
+}
+.apply-row {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 14rpx;
+  align-items: stretch;
+}
+.apply-input {
+  flex: 1;
+  background: var(--oat);
+  border: 3rpx solid var(--ink);
+  padding: 18rpx 20rpx;
+  font-size: calc(28rpx * var(--font-scale));
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.apply-btn {
+  background: var(--ink);
+  color: #fff;
+  padding: 20rpx 28rpx;
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  display: flex;
+  align-items: center;
+}
+.apply-btn.disabled { opacity: 0.4; }
+.apply-err {
+  margin-top: 12rpx;
+  color: var(--berry);
+  font-size: calc(22rpx * var(--font-scale));
+}
+
+.applied {
+  margin: 36rpx 44rpx 0;
+  padding: 20rpx 24rpx;
+  border-left: 6rpx solid var(--lime);
+  background: #FFFCF7;
+}
+.applied-lbl {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.22em;
+  color: var(--olive);
+}
+.applied-lbl .cn {
+  font-size: calc(16rpx * var(--font-scale));
+  letter-spacing: 0.05em;
+  text-transform: none;
+}
+.applied-val {
+  font-size: calc(30rpx * var(--font-scale));
+  margin-top: 6rpx;
+}
+
+/* Invites list */
+.invites-head {
+  margin: 40rpx 44rpx 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.invites-title {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.22em;
+  color: var(--olive);
+}
+
+.invites { margin-top: 16rpx; }
+.inv-row {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 20rpx 44rpx;
+  border-top: 1rpx dashed rgba(0,0,0,0.2);
+}
+.inv-row.first { border-top: 3rpx solid var(--ink); }
+.avatar {
+  width: 60rpx; height: 60rpx; border-radius: 50%;
+  background: var(--oat);
+  border: 3rpx solid var(--ink);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.avatar image { width: 100%; height: 100%; }
+.avatar-letter {
+  font-size: calc(26rpx * var(--font-scale));
+  line-height: 1;
+}
+.inv-body { flex: 1; min-width: 0; }
+.inv-name {
+  font-size: calc(28rpx * var(--font-scale));
+  line-height: 1.1;
+}
+.inv-date {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+  color: var(--olive);
+  margin-top: 6rpx;
+}
+.inv-status {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  padding: 8rpx 14rpx;
+  border: 3rpx solid var(--ink);
+  flex-shrink: 0;
+}
+.status-joined  { background: var(--corn); color: var(--ink); }
+.status-ordered { background: var(--lime); color: var(--ink); }
+.status-void    {
+  background: transparent;
+  color: var(--olive);
+  border: 1rpx dashed rgba(0,0,0,0.3);
+}
+
+.empty {
+  margin: 40rpx 44rpx 0;
+  text-align: center;
+  color: var(--olive);
+  padding: 60rpx 0;
+}
+
+.disabled-card {
+  margin: 60rpx 44rpx;
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  padding: 36rpx 32rpx;
+}
+.disabled-card .kicker {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.25em;
+  color: var(--olive);
+}
+.disabled-card .title {
+  font-family: var(--f-bear);
+  font-size: calc(44rpx * var(--font-scale));
+  line-height: 1;
+  margin: 12rpx 0 16rpx;
+}
+.disabled-body {
+  font-size: calc(24rpx * var(--font-scale));
+  line-height: 1.5;
+  color: var(--forest);
+}
+
+/* Modal (share QR / fallback) */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  margin: 0 44rpx;
+  width: 600rpx;
+  padding: 36rpx 32rpx;
+}
+.modal-kicker {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.22em;
+  color: var(--olive);
+}
+.modal-title {
+  font-family: var(--f-bear);
+  font-size: calc(36rpx * var(--font-scale));
+  line-height: 1.1;
+  margin-top: 8rpx;
+}
+.modal-code {
+  font-family: var(--f-bear);
+  font-size: calc(56rpx * var(--font-scale));
+  line-height: 1;
+  margin: 28rpx 0 28rpx;
+  background: var(--lime);
+  padding: 20rpx 24rpx;
+  text-align: center;
+  border: 3rpx solid var(--ink);
+}
+.modal-actions {
+  display: flex; gap: 12rpx;
+}
+.modal-btn {
+  flex: 1;
+  background: var(--ink);
+  color: #fff;
+  padding: 20rpx 0;
+  text-align: center;
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+}

@@ -1,0 +1,196 @@
+.page { background: var(--oat); min-height: 100vh; padding-bottom: 80rpx; }
+
+/* Hero — same forest-on-lime energy as Membership page */
+.hero {
+  padding: 80rpx 44rpx 60rpx;
+  background: var(--forest);
+  color: var(--oat);
+}
+.kicker {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.18em;
+  color: var(--lime);
+}
+.title {
+  font-size: calc(96rpx * var(--font-scale));
+  font-weight: 500;
+  line-height: 1;
+  margin-top: 16rpx;
+}
+.subhead {
+  margin-top: 20rpx;
+  font-size: calc(28rpx * var(--font-scale));
+  opacity: 0.85;
+  line-height: 1.5;
+  max-width: 480rpx;
+}
+.meta {
+  margin-top: 28rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.16em;
+  opacity: 0.8;
+}
+
+.empty {
+  padding: 120rpx 44rpx;
+  text-align: center;
+  color: var(--olive);
+  font-size: calc(28rpx * var(--font-scale));
+  line-height: 1.5;
+}
+
+/* Podium */
+.podium {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 18rpx;
+  padding: 60rpx 44rpx 16rpx;
+}
+.podium-spot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  text-align: center;
+  min-width: 0;
+}
+.podium-crown {
+  font-size: calc(36rpx * var(--font-scale));
+  color: var(--lime);
+  text-shadow: 0 0 16rpx rgba(204,217,0,.5);
+  margin-bottom: 4rpx;
+}
+.podium-rank {
+  font-size: calc(56rpx * var(--font-scale));
+  line-height: 1;
+  color: var(--ink);
+}
+.p-1 .podium-rank { color: var(--lime); -webkit-text-stroke: 2rpx var(--ink); }
+.podium-name {
+  font-size: calc(28rpx * var(--font-scale));
+  line-height: 1.15;
+  margin: 8rpx 0 4rpx;
+  color: var(--ink);
+  word-break: break-all;
+  width: 100%;
+}
+.podium-val {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+  color: var(--olive);
+  margin-bottom: 12rpx;
+}
+.podium-bar {
+  width: 100%;
+  background: var(--ink);
+  border-top-left-radius: 8rpx;
+  border-top-right-radius: 8rpx;
+}
+.bar-1 { height: 180rpx; background: var(--lime); }
+.bar-2 { height: 130rpx; background: rgba(26,26,23,0.78); }
+.bar-3 { height: 90rpx;  background: rgba(26,26,23,0.55); }
+
+/* List (ranks 4..N) */
+.list {
+  margin: 36rpx 44rpx 0;
+  background: #FFFCF7;
+  border: 3rpx solid rgba(0,0,0,0.12);
+}
+.row {
+  display: grid;
+  grid-template-columns: 90rpx 1fr auto;
+  align-items: center;
+  gap: 16rpx;
+  padding: 22rpx 26rpx;
+  border-bottom: 2rpx dashed rgba(0,0,0,0.12);
+}
+.row:last-child { border-bottom: none; }
+.row.is-me {
+  background: rgba(204,217,0,0.18);
+  border-left: 8rpx solid var(--lime);
+  padding-left: 18rpx;
+}
+.row-rank {
+  font-size: calc(32rpx * var(--font-scale));
+  color: var(--olive);
+}
+.row-name {
+  font-size: calc(30rpx * var(--font-scale));
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-val {
+  font-size: calc(26rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* My rank footer */
+.my-rank {
+  margin: 36rpx 44rpx 0;
+  background: var(--ink);
+  color: #fff;
+  padding: 28rpx;
+}
+.my-rank.in-top { border-left: 8rpx solid var(--lime); padding-left: 20rpx; }
+.my-rank .kicker { color: var(--lime); }
+.my-rank-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 12rpx;
+}
+.my-rank-num {
+  font-size: calc(72rpx * var(--font-scale));
+  line-height: 1;
+}
+.my-rank-val {
+  font-size: calc(28rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+  opacity: 0.85;
+}
+.my-rank-sub {
+  font-size: calc(24rpx * var(--font-scale));
+  opacity: 0.75;
+  margin-top: 8rpx;
+  line-height: 1.45;
+}
+.my-rank.not-yet { background: #FFFCF7; color: var(--ink); border: 3rpx solid rgba(0,0,0,0.12); }
+.my-rank.not-yet .kicker { color: var(--olive); }
+
+/* Rewards */
+.rewards {
+  margin: 36rpx 44rpx 0;
+  background: #FFFCF7;
+  border: 3rpx solid rgba(0,0,0,0.12);
+  padding: 24rpx 28rpx;
+}
+.rewards .kicker { color: var(--olive); }
+.reward-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+  padding: 14rpx 0;
+  border-bottom: 2rpx dashed rgba(0,0,0,0.12);
+}
+.reward-row:last-child { border-bottom: none; }
+.reward-row:first-child { padding-top: 18rpx; }
+.reward-tag {
+  background: var(--lime);
+  color: var(--ink);
+  padding: 4rpx 12rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+.reward-text {
+  flex: 1;
+  font-size: calc(26rpx * var(--font-scale));
+  line-height: 1.5;
+  color: var(--ink);
+}

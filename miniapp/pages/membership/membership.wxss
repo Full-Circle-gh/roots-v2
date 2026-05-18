@@ -1,0 +1,162 @@
+.page { background: var(--oat); min-height: 100vh; padding-bottom: 80rpx; }
+
+/* Hero */
+.hero {
+  padding: 80rpx 44rpx 60rpx;
+  background: var(--forest);
+  color: var(--oat);
+}
+.kicker {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.18em;
+  color: var(--lime);
+}
+.title {
+  font-size: calc(96rpx * var(--font-scale));
+  font-weight: 500;
+  line-height: 1;
+  margin-top: 16rpx;
+}
+.subhead {
+  margin-top: 20rpx;
+  font-size: calc(28rpx * var(--font-scale));
+  opacity: 0.85;
+  line-height: 1.5;
+  max-width: 480rpx;
+}
+
+/* Tier markers row */
+.tier-row {
+  display: flex;
+  justify-content: space-around;
+  padding: 32rpx 44rpx;
+  background: var(--oat);
+}
+.tier-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  opacity: 0.35;
+  text-align: center;
+}
+.tier-marker.reached { opacity: 0.7; }
+.tier-marker.current { opacity: 1; }
+.t-name {
+  font-size: calc(30rpx * var(--font-scale));
+  color: var(--ink);
+  padding-bottom: 6rpx;
+  border-bottom: 4rpx solid transparent;
+}
+.tier-marker.current .t-name {
+  border-bottom-color: var(--ink);
+}
+.t-dot {
+  font-size: calc(16rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  margin-top: 8rpx;
+  background: var(--lime);
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
+}
+
+/* Progress card */
+.progress-card {
+  margin: 0 44rpx;
+  background: var(--ink);
+  color: #fff;
+  padding: 28rpx;
+}
+.pc-label {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.16em;
+  color: var(--lime);
+}
+.pc-amount {
+  font-size: calc(56rpx * var(--font-scale));
+  font-weight: 500;
+  margin: 8rpx 0 16rpx;
+  line-height: 1;
+}
+.pc-bar {
+  height: 12rpx;
+  background: rgba(255,255,255,0.12);
+  border-radius: 999rpx;
+  overflow: hidden;
+}
+.pc-fill {
+  height: 100%;
+  background: var(--lime);
+  border-radius: 999rpx;
+  transition: width 0.3s ease;
+}
+.pc-meta {
+  font-size: calc(22rpx * var(--font-scale));
+  opacity: 0.75;
+  margin-top: 12rpx;
+}
+
+/* Leaderboard entry row — appears between progress card and tier table
+   when the admin has enabled the leaderboard from retail-admin. */
+.lb-link {
+  margin: 28rpx 44rpx 0;
+  background: var(--lime);
+  color: var(--ink);
+  padding: 22rpx 26rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.lb-link-label {
+  font-size: calc(24rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.lb-link-arrow {
+  font-size: calc(32rpx * var(--font-scale));
+}
+
+/* Tier table */
+.tier-table { padding: 40rpx 44rpx 0; }
+.tier-row-card {
+  background: #FFFCF7;
+  border: 3rpx solid rgba(0,0,0,0.12);
+  padding: 24rpx 28rpx;
+  margin-bottom: 20rpx;
+}
+.tier-row-card.current {
+  border-color: var(--ink);
+  position: relative;
+}
+.tier-row-card.current::before {
+  content: '★';
+  position: absolute;
+  top: -14rpx;
+  right: 24rpx;
+  background: var(--lime);
+  color: var(--ink);
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(24rpx * var(--font-scale));
+  font-weight: 700;
+}
+.trc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 16rpx;
+  padding-bottom: 12rpx;
+  border-bottom: 2rpx dashed rgba(0,0,0,0.12);
+}
+.trc-name { font-size: calc(36rpx * var(--font-scale)); font-weight: 500; }
+.trc-req {
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+  color: var(--olive);
+}
+.trc-perks { display: flex; flex-direction: column; gap: 6rpx; }
+.trc-perk { font-size: calc(24rpx * var(--font-scale)); color: var(--ink); }

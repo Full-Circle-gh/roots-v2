@@ -1,0 +1,104 @@
+<view class="page">
+  <!-- Header: kicker + big serif title with accent highlight -->
+  <view class="header">
+    <view class="kicker f-toni">
+      {{copy.kicker}}
+      <text wx:if="{{lang !== 'en'}}" class="kicker-alt">· {{copy.kickerAlt}}</text>
+    </view>
+    <view class="title f-bear">
+      <view>{{copy.headlineL1}}</view>
+      <view>{{copy.headlineL2A}}<text class="hl" style="background: {{accent}};">{{copy.headlineL2B}}</text>{{copy.headlineL2C}}</view>
+    </view>
+  </view>
+
+  <!-- Dark balance strip -->
+  <view class="balance-strip">
+    <view class="bs-left">
+      <view class="bs-lbl f-toni">
+        {{copy.balanceLbl}}
+        <text wx:if="{{lang !== 'en'}}" class="bs-lbl-alt">· {{copy.balanceLblAlt}}</text>
+      </view>
+      <view class="bs-vals">
+        <view class="bs-amt f-bear" style="color: {{accent}};">¥{{balanceDisplay}}</view>
+        <view class="bs-pts f-gothic">· {{pointsDisplay}} {{copy.ptsSuffix}}</view>
+      </view>
+    </view>
+    <view class="bs-link f-toni" style="color: {{accent}};" bindtap="goHistory">{{copy.historyLink}}</view>
+  </view>
+
+  <!-- Tier grid (2 col) -->
+  <view wx:if="{{tiers.length}}" class="tiers">
+    <view
+      wx:for="{{tiers}}"
+      wx:key="id"
+      class="tier {{index === selectedIndex ? 'tier-on' : ''}}"
+      style="background: {{index === selectedIndex ? 'var(--ink)' : item.bg}};"
+      data-i="{{index}}"
+      bindtap="selectTier"
+    >
+      <view wx:if="{{item.best}}" class="tier-best f-gothic">BEST VALUE</view>
+
+      <view class="tier-label f-gothic" style="color: {{index === selectedIndex ? accent : 'var(--olive)'}};">
+        {{item.numLabel}} · {{item.label}}
+      </view>
+
+      <view class="tier-amt f-bear" style="color: {{index === selectedIndex ? '#fff' : 'var(--ink)'}};">
+        ¥{{item.amountDisplay}}
+      </view>
+
+      <view class="tier-bonus f-gothic"
+        style="background: {{index === selectedIndex ? accent : 'var(--ink)'}}; color: {{index === selectedIndex ? 'var(--ink)' : accent}};">
+        + {{item.bonus}} PTS
+      </view>
+
+      <view class="tier-footer f-toni"
+        style="color: {{index === selectedIndex ? 'rgba(255,255,255,.55)' : 'var(--olive)'}};">
+        {{item.pct}}% {{copy.bonusWord}} · ≈¥{{item.totalDisplay}} {{copy.valueWord}}
+      </view>
+
+      <view wx:if="{{index === selectedIndex}}" class="tier-check f-bear" style="background: {{accent}}; color: var(--ink);">✓</view>
+    </view>
+  </view>
+
+  <view wx:else class="empty">
+    <view class="empty-title f-bear">{{copy.emptyTitle}}</view>
+    <view class="empty-sub f-aleo">{{copy.emptySub}}</view>
+  </view>
+
+  <!-- How it works -->
+  <view class="how">
+    <view class="how-lbl f-toni">
+      {{copy.howLbl}}
+      <text wx:if="{{lang !== 'en'}}" class="how-lbl-alt">· {{copy.howLblAlt}}</text>
+    </view>
+    <view class="how-body f-aleo">{{copy.howBody}}</view>
+  </view>
+
+  <view class="footer-spacer"></view>
+
+  <!-- Sticky pay footer -->
+  <view wx:if="{{tiers.length}}" class="pay-footer">
+    <view class="pf-row">
+      <view class="pf-col">
+        <view class="pf-lbl f-toni">
+          {{copy.youPay}}
+          <text wx:if="{{lang !== 'en'}}" class="pf-lbl-alt">· {{copy.youPayAlt}}</text>
+        </view>
+        <view class="pf-val-big f-bear">¥{{selectedAmount}}</view>
+      </view>
+      <view class="pf-col pf-right">
+        <view class="pf-lbl f-toni">{{copy.youGet}}</view>
+        <view class="pf-val f-bear">¥{{selectedAmount}} <text class="pf-plus">+ {{selectedBonus}} {{copy.ptsShort}}</text></view>
+        <view class="pf-value f-toni">≈¥{{selectedTotal}} {{copy.valueWord}}</view>
+      </view>
+    </view>
+    <button
+      class="pf-cta f-gothic {{submitting ? 'pf-cta-disabled' : ''}}"
+      style="background: var(--ink); color: {{accent}};"
+      disabled="{{submitting}}"
+      bindtap="topUp"
+    >{{copy.ctaPrefix}} ¥{{selectedAmount}} {{copy.ctaSuffix}} →</button>
+  </view>
+
+  <popup-manager page="topup"></popup-manager>
+</view>

@@ -1,0 +1,20 @@
+{
+  "name": "Restock · 补货",
+  "short_name": "Restock",
+  "id": "/restock",
+  "description": "Mobile restock requests for Roots",
+  "start_url": "/restock",
+  "scope": "/restock",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "any",
+  "background_color": "#1a2314",
+  "theme_color": "#1a2314",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "/restock-icon-192.png",          "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/restock-icon-512.png",          "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/restock-icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/restock-icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

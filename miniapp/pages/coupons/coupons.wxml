@@ -1,0 +1,90 @@
+<view class="page">
+  <!-- Header -->
+  <view class="header">
+    <view class="header-text">
+      <view class="kicker f-toni">{{copy.kicker}}</view>
+      <view class="title f-bear">{{copy.title}}</view>
+    </view>
+    <view class="active-pill">
+      <view class="active-pill-val f-bear">{{counts.active}}</view>
+      <view class="active-pill-lbl f-toni">{{copy.activeWord}}</view>
+    </view>
+  </view>
+
+  <!-- Redeem code input -->
+  <view class="redeem">
+    <input
+      class="redeem-input f-aleo"
+      placeholder="{{copy.redeemPlaceholder}}"
+      value="{{codeInput}}"
+      bindinput="onCodeInput"
+      confirm-type="done"
+      bindconfirm="onRedeem"
+    />
+    <view class="redeem-btn f-gothic tap {{redeeming ? 'is-busy' : ''}}" bindtap="onRedeem">
+      {{redeeming ? copy.redeeming : copy.redeem}}
+    </view>
+  </view>
+
+  <!-- Tabs -->
+  <view class="tabs">
+    <view
+      wx:for="{{tabs}}"
+      wx:key="id"
+      class="tab tap {{activeTab === item.id ? 'on' : ''}}"
+      data-id="{{item.id}}"
+      bindtap="onTabTap"
+    >
+      <text class="tab-lbl f-gothic">{{item.label}}</text>
+      <text class="tab-count">· {{item.count}}</text>
+    </view>
+  </view>
+
+  <!-- Coupon list / empty state -->
+  <view class="list">
+    <block wx:if="{{visible.length}}">
+      <view
+        wx:for="{{visible}}"
+        wx:key="key"
+        class="ticket {{item.dimmed ? 'dimmed' : ''}}"
+        bindtap="onCouponTap"
+        data-code="{{item.code}}"
+        data-dimmed="{{item.dimmed}}"
+      >
+        <!-- Left value block -->
+        <view class="ticket-stub" style="background: {{item.accent}};">
+          <view class="stub-big f-bear">{{item.bigLabel}}</view>
+          <view class="stub-sub f-toni">{{item.subLabel}}</view>
+        </view>
+
+        <!-- Perforation notches -->
+        <view class="notch notch-top"></view>
+        <view class="notch notch-bot"></view>
+
+        <!-- Right detail -->
+        <view class="ticket-body">
+          <view wx:if="{{item.tag && !item.dimmed}}" class="ticket-tag f-gothic">{{item.tag}}</view>
+          <view class="ticket-name f-bear">{{item.name}}</view>
+          <view wx:if="{{item.cn}}" class="ticket-cn f-yuan">{{item.cn}}</view>
+
+          <view class="ticket-foot">
+            <view>
+              <view class="exp-lbl f-toni">{{copy.expires}}</view>
+              <view class="exp-val f-gothic">{{item.expiresDisplay}}</view>
+            </view>
+            <view wx:if="{{!item.dimmed}}" class="use-btn f-gothic tap" catchtap="onUseNow" data-code="{{item.code}}">
+              {{copy.useNow}} →
+            </view>
+            <view wx:else class="state-lbl f-toni">{{item.stateLabel}}</view>
+          </view>
+        </view>
+      </view>
+    </block>
+    <view wx:else class="empty">
+      <view class="empty-title f-bear">{{copy.emptyTitle}}</view>
+      <view class="empty-sub f-aleo">{{copy.emptySub}}</view>
+    </view>
+  </view>
+
+  <popup-manager page="coupons"></popup-manager>
+</view>

@@ -1,0 +1,4 @@
+{
+  "desc": "Sitemap config controls which pages WeChat search indexes. Allow all by default — no private/auth-only routes.",
+  "rules": [{ "action": "allow", "page": "*" }]
+}

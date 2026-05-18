@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "Roots",
+  "backgroundColor": "#F2E7DF",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "block-renderer": "/components/block-renderer/block-renderer"
+  }
+}
