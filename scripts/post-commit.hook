@@ -1,0 +1,9 @@
+#!/bin/sh
+# Auto-deploy git hook. Install with:
+#   cp scripts/post-commit.hook .git/hooks/post-commit && chmod +x .git/hooks/post-commit
+#
+# After install, every `git commit` ships the files changed in that commit to
+# the live site. Logic lives in scripts/deploy-changed.sh. This runs AFTER the
+# commit is saved, so a deploy failure never blocks or undoes the commit.
+root=$(git rev-parse --show-toplevel)
+exec bash "$root/scripts/deploy-changed.sh"
