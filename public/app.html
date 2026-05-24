@@ -413,10 +413,16 @@ textarea:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible 
 .nav-item.active { color:var(--dk); background:var(--lime); box-shadow:var(--shadow-sm); font-weight:600; }
 .nav-item.active:hover { background:var(--lime); }
 .nav-item.active .nav-icon { filter:none; }
-.nav-item > span:not(.nav-icon):not(.nav-badge) { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.nav-item > span:not(.nav-icon):not(.nav-badge):not(.nav-caret) { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
 .nav-icon { font-size:15px; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1; color:currentColor; }
 .nav-icon svg { width:16px; height:16px; display:block; }
 .nav-divider { border-top:1px solid rgba(242,231,223,.1); margin:12px 6px; }
+/* Collapsible nav group (Mini App) — parent header caret + indented children. */
+.nav-caret { flex:0 0 auto; display:inline-flex; align-items:center; opacity:.55; transition:transform var(--t-fast); }
+.nav-group-head.open .nav-caret { transform:rotate(90deg); }
+.nav-group-children { overflow:hidden; max-height:0; transition:max-height var(--t-fast) ease; }
+.nav-group-children.open { max-height:200px; }
+.nav-item.nav-child { padding-left:34px; }
 .sidebar-user { padding:12px 14px; border-top:1px solid rgba(242,231,223,.1); margin-top:8px;
                 display:flex; align-items:center; justify-content:space-between; }
 .sidebar-username { font-size:11px; color:rgba(242,231,223,.5); letter-spacing:.04em; }
@@ -1173,6 +1179,7 @@ canvas.sales-canvas { width:100%!important; display:block; }
   :root { --sidebar-w: 64px; }
   .nav-item span:not(.nav-icon) { display:none; }
   .nav-item { justify-content:center; padding:11px 0; gap:0; }
+  .nav-item.nav-child { padding-left:0; }
   .nav-divider { margin:8px 4px; }
   .sidebar-user { display:none; }
   .main { padding:20px 18px; }
@@ -1226,6 +1233,7 @@ canvas.sales-canvas { width:100%!important; display:block; }
   :root { --sidebar-w: 56px; }
   .nav-item span:not(.nav-icon) { display:none; }
   .nav-item { justify-content:center; padding:12px 0; }
+  .nav-item.nav-child { padding-left:0; }
   .nav-divider { margin:8px 4px; }
   .sidebar-user { display:none; }
   .main { padding:16px 12px; }
@@ -1459,7 +1467,6 @@ body { font: 13px var(--f-sans); background: var(--bg-app); color: var(--text-1)
   .topbar-brand .brand-divider { display: none !important; }
   .topbar-search span, .topbar-search kbd { display: none; }
   .topbar-search { padding: 6px 8px !important; }
-  #topbarStorefrontBtn, #topbarRetailAdminBtn { display: none !important; }
 }
 
 /* topbar-icon-btn — square 28×28 icon buttons (theme toggle, customize).
@@ -1880,8 +1887,6 @@ input[readonly]:hover, textarea[readonly]:hover { border-color: var(--line-soft)
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4z"/></svg>
     </button>
     <button id="lang-toggle" class="topbar-link" type="button" onclick="cuToggleLang()" title="Switch language · 切换语言" style="font-weight:600;letter-spacing:.02em">中文</button>
-    <a id="topbarStorefrontBtn" class="topbar-link" href="/cms" target="_blank" rel="noopener" title="Mini App editor · 小程序编辑器 (opens new tab)" style="display:none">Mini App Editor · 编辑器</a>
-    <a id="topbarRetailAdminBtn" class="topbar-link" href="/retail-admin" target="_blank" rel="noopener" title="Mini App backend · 小程序后台 (opens new tab)" style="display:none">Mini App Backend · 后台</a>
     <button class="topbar-link topbar-search" onclick="openCommandPalette()" title="Search anywhere · 全局搜索 (Cmd/Ctrl+K)">
       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <span>Search · 搜索</span>
@@ -2412,8 +2417,10 @@ const MODULES = [
   { id:'recipes',     label:'Recipes · 食谱',       iconKey:'book' },
   { id:'ingredients', label:'Items · 物料',         iconKey:'box' },
   { id:'products',    label:'Products · 产品',      iconKey:'bag' },
-  { id:'retail',      label:'Mini App Editor · 编辑器',    iconKey:'storefront' },
-  { id:'retail-admin', label:'Mini App Backend · 后台',     iconKey:'clipboard', permKey:'retail' },
+  { id:'miniapp',     label:'Mini App · 小程序',    iconKey:'storefront', permKey:'retail', children:[
+    { id:'retail',       label:'Editor · 编辑器',   iconKey:'storefront' },
+    { id:'retail-admin', label:'Backend · 后台',    iconKey:'clipboard'  },
+  ]},
   { id:'purchases',   label:'Purchases · 采购',     iconKey:'cart' },
   { id:'finance',     label:'Finance · 财务',       iconKey:'coin' },
   { id:'sales',       label:'Sales · 销售',         iconKey:'chart' },
@@ -2757,6 +2764,20 @@ let _sidebarEditMode = false;
 function _saveSidebarOrder() {
   try { localStorage.setItem(SIDEBAR_ORDER_KEY, JSON.stringify(_sidebarOrder || [])); } catch {}
 }
+// Collapsible nav groups (e.g. "Mini App") — remember which are expanded so
+// picking a child bounces out to /cms or /retail-admin and the group is still
+// open when the user comes back to this page.
+const NAV_GROUPS_OPEN_KEY = 'sidebar.groupsOpen';
+let _navGroupsOpen = new Set();
+try {
+  const raw = localStorage.getItem(NAV_GROUPS_OPEN_KEY);
+  if (raw) _navGroupsOpen = new Set(JSON.parse(raw));
+} catch {}
+function toggleNavGroup(id) {
+  if (_navGroupsOpen.has(id)) _navGroupsOpen.delete(id); else _navGroupsOpen.add(id);
+  try { localStorage.setItem(NAV_GROUPS_OPEN_KEY, JSON.stringify([..._navGroupsOpen])); } catch {}
+  renderSidebar();
+}
 function _orderedModules() {
   if (!_sidebarOrder || !_sidebarOrder.length) return MODULES;
   const byId = Object.fromEntries(MODULES.map(m => [m.id, m]));
@@ -2821,13 +2842,6 @@ function resetSidebarOrder() {
 
 function renderSidebar() {
   const perms = _user.permissions || {};
-  // Storefront + Retail Admin shortcuts mirror the sidebar's retail modules,
-  // so gate them on the same `retail` permission (admin sees both regardless).
-  const canRetail = _user.role === 'admin' || perms.retail;
-  const sfBtn = document.getElementById('topbarStorefrontBtn');
-  if (sfBtn) sfBtn.style.display = canRetail ? '' : 'none';
-  const raBtn = document.getElementById('topbarRetailAdminBtn');
-  if (raBtn) raBtn.style.display = canRetail ? '' : 'none';
   let html = '';
   const visibleMods = _orderedModules().filter(m => _user.role === 'admin' || perms[m.permKey || m.id]);
   visibleMods.forEach((m, idx) => {
@@ -2837,6 +2851,24 @@ function renderSidebar() {
     if (m.id === 'restock')   badge = '<span class="nav-badge" id="rsBadge"    style="display:none">0</span>';
     if (m.id === 'feedback')  badge = '<span class="nav-badge" id="fbBadge"    style="display:none">0</span>';
     const iconHtml = m.iconKey ? navIconSvg(m.iconKey) : (m.icon || '');
+    // Collapsible group (e.g. Mini App) — a parent header that expands inline
+    // to reveal its children. Children use the normal navigate() path. In
+    // reorder mode the group behaves as a single draggable row.
+    if (m.children && m.children.length && !_sidebarEditMode) {
+      const open = _navGroupsOpen.has(m.id);
+      html += `<div class="nav-item nav-group-head${open ? ' open' : ''}" id="nav-${m.id}" onclick="toggleNavGroup('${m.id}')" aria-expanded="${open}">
+        <span class="nav-icon">${iconHtml}</span><span>${m.label}</span>
+        <span class="nav-caret" aria-hidden="true"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+      </div>`;
+      html += `<div class="nav-group-children${open ? ' open' : ''}">`;
+      m.children.forEach(c => {
+        const cIcon = c.iconKey ? navIconSvg(c.iconKey) : (c.icon || '');
+        html += `<div class="nav-item nav-child" id="nav-${c.id}" onclick="navigate('${c.id}')">
+          <span class="nav-icon">${cIcon}</span><span>${c.label}</span></div>`;
+      });
+      html += `</div>`;
+      return;
+    }
     if (_sidebarEditMode) {
       // Edit mode: draggable rows with a grip handle. The whole row is the
       // drag target so users can grab anywhere; the ⋮⋮ icon is a visual cue.
@@ -25626,7 +25658,7 @@ function _fbRenderMyList() {
     const att = f.attachment_count > 0 ? `<span style="color:var(--muted);font-size:11px">📎 ${f.attachment_count}</span>` : '';
     const reporterTag = (_user?.role==='admin' && f.reporter_id !== _user.id)
       ? `<span style="color:var(--muted);font-size:11px">· ${esc(f.reporter_name)}</span>` : '';
-    return `<div onclick="_fbViewDetail(${f.id})" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease"
+    return `<div onclick="_fbViewDetail(${f.id})" style="background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease"
        onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 2px 8px rgba(0,0,0,.06)'"
        onmouseout="this.style.transform='';this.style.boxShadow=''">
       <div style="display:flex;align-items:flex-start;gap:8px">
@@ -26022,7 +26054,7 @@ function _fbInboxRender() {
   inbox.innerHTML = list.map(f => {
     const cat = _FB_CATEGORIES.find(c => c.id === f.category)?.label || f.category;
     const when = _fmtFbTime(f.created_at);
-    return `<div onclick="_fbViewDetail(${f.id})" style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;display:flex;align-items:flex-start;gap:14px;transition:transform .12s,box-shadow .12s"
+    return `<div onclick="_fbViewDetail(${f.id})" style="background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;display:flex;align-items:flex-start;gap:14px;transition:transform .12s,box-shadow .12s"
       onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,.06)'"
       onmouseout="this.style.transform='';this.style.boxShadow=''">
       ${f.attachment_count > 0
@@ -26139,30 +26171,34 @@ function sproutPageContext() {
     const trimmed = text.trim();
     if (!trimmed) return null;
 
+    // Peel an optional leading emoji/symbol/number prefix; it rides on BOTH
+    // languages so an icon stays put when the label switches.
+    const pm = trimmed.match(/^([^A-Za-z一-鿿]*)([\s\S]*)$/);
+    const pre = pm[1], body = pm[2];
+    if (!body) return null;
+
     // Explicit " · " divider — split on the FIRST one, then work out which side
     // carries the Chinese.
-    const di = trimmed.indexOf(' · ');
+    const di = body.indexOf(' · ');
     if (di !== -1) {
-      const A = trimmed.slice(0, di).trim();
-      const B = trimmed.slice(di + 3).trim();
+      const A = body.slice(0, di).trim();
+      const B = body.slice(di + 3).trim();
       if (!A || !B) return null;
       const aCN = hasChinese(A), bCN = hasChinese(B);
       const aEN = hasLatin(A),   bEN = hasLatin(B);
-      if (aCN && !bCN && bEN) return { en: B, cn: A };   // CN · EN
-      if (bCN && !aCN && aEN) return { en: A, cn: B };   // EN · CN
-      return null;                                       // data, not a label
+      if (aCN && !bCN && bEN) return { en: (pre + B).trim(), cn: (pre + A).trim() };  // CN · EN
+      if (bCN && !aCN && aEN) return { en: (pre + A).trim(), cn: (pre + B).trim() };  // EN · CN
+      return null;                                                                   // data, not a label
     }
 
-    // No divider — both scripts must be present to even be a candidate.
-    if (!hasChinese(trimmed) || !hasLatin(trimmed)) return null;
+    // No divider — both scripts must be present in the body to be a candidate.
+    if (!hasChinese(body) || !hasLatin(body)) return null;
 
-    // Space-separated: an optional neutral prefix (emoji/symbol/digits), then a
-    // single clean CJK<->Latin boundary, in either order. The prefix rides on
-    // both languages so icons stay put.
-    let m = trimmed.match(/^([^A-Za-z一-鿿]*)([一-鿿][^A-Za-z]*?)\s+([A-Za-z][^一-鿿]*)$/);
-    if (m) return { en: (m[1] + m[3]).trim(), cn: (m[1] + m[2]).trim() };   // CN then EN
-    m = trimmed.match(/^([^A-Za-z一-鿿]*)([A-Za-z][^一-鿿]*?)\s+([一-鿿][^A-Za-z]*)$/);
-    if (m) return { en: (m[1] + m[2]).trim(), cn: (m[1] + m[3]).trim() };   // EN then CN
+    // Space-separated: a single clean CJK<->Latin boundary, in either order.
+    let m = body.match(/^([一-鿿][^A-Za-z]*?)\s+([A-Za-z][^一-鿿]*)$/);
+    if (m) return { en: (pre + m[2]).trim(), cn: (pre + m[1]).trim() };   // CN then EN
+    m = body.match(/^([A-Za-z][^一-鿿]*?)\s+([一-鿿][^A-Za-z]*)$/);
+    if (m) return { en: (pre + m[1]).trim(), cn: (pre + m[2]).trim() };   // EN then CN
     return null;
   }
 
