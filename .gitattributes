@@ -1,0 +1,6 @@
+* text=auto
+
+# Shell scripts and git hooks must keep LF endings — bash chokes on CRLF
+# (the deploy hook + deploy scripts run under Git Bash / on the Linux server).
+*.sh text eol=lf
+*.hook text eol=lf
