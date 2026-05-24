@@ -420,7 +420,7 @@ textarea:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible 
 /* Collapsible nav group (Mini App) — parent header caret + indented children. */
 .nav-caret { flex:0 0 auto; display:inline-flex; align-items:center; opacity:.55; transition:transform var(--t-fast); }
 .nav-group-head.open .nav-caret { transform:rotate(90deg); }
-.nav-group-children { overflow:hidden; max-height:0; transition:max-height var(--t-fast) ease; }
+.nav-group-children { overflow:hidden; max-height:0; transition:max-height var(--t-fast); }
 .nav-group-children.open { max-height:200px; }
 .nav-item.nav-child { padding-left:34px; }
 .sidebar-user { padding:12px 14px; border-top:1px solid rgba(242,231,223,.1); margin-top:8px;
@@ -1892,7 +1892,7 @@ input[readonly]:hover, textarea[readonly]:hover { border-color: var(--line-soft)
       <span>Search · 搜索</span>
       <kbd>⌘K</kbd>
     </button>
-    <div class="topbar-user">欢迎 <strong id="userName" onclick="openProfile()" style="cursor:pointer;text-decoration:none" title="Profile · 个人资料 · 修改密码">...</strong></div>
+    <div class="topbar-user">Welcome · 欢迎 <strong id="userName" onclick="openProfile()" style="cursor:pointer;text-decoration:none" title="Profile · 个人资料 · 修改密码">...</strong></div>
     <button class="topbar-link" onclick="doLogout()">Logout · 退出</button>
   </div>
 </div>
@@ -2774,9 +2774,20 @@ try {
   if (raw) _navGroupsOpen = new Set(JSON.parse(raw));
 } catch {}
 function toggleNavGroup(id) {
-  if (_navGroupsOpen.has(id)) _navGroupsOpen.delete(id); else _navGroupsOpen.add(id);
+  const open = !_navGroupsOpen.has(id);
+  if (open) _navGroupsOpen.add(id); else _navGroupsOpen.delete(id);
   try { localStorage.setItem(NAV_GROUPS_OPEN_KEY, JSON.stringify([..._navGroupsOpen])); } catch {}
-  renderSidebar();
+  // Toggle classes on the existing DOM rather than re-rendering the whole
+  // sidebar. Rebuilding innerHTML mid-click recreates the clicked element and
+  // makes a real mouse click register twice — the group flashed open then
+  // snapped shut. Mutating in place also lets the max-height slide animate.
+  const head = document.getElementById('nav-' + id);
+  if (head) {
+    head.classList.toggle('open', open);
+    head.setAttribute('aria-expanded', String(open));
+    const kids = head.nextElementSibling;
+    if (kids && kids.classList.contains('nav-group-children')) kids.classList.toggle('open', open);
+  }
 }
 function _orderedModules() {
   if (!_sidebarOrder || !_sidebarOrder.length) return MODULES;
@@ -6076,8 +6087,10 @@ async function saveIng(id) {
     cost_per_unit: parseFloat(v('fi_cpu'))||0,
     supplier: v('fi_sup') === '__new__' ? null : v('fi_sup'),
     supplier_platform: platform || null,
-    // Only persist link/qr that match the chosen platform — keeps DB tidy
-    supplier_link:    (platform === 'alibaba' || platform === 'taobao' || platform === 'other') ? (v('fi_sup_link') || null) : null,
+    // Only persist link/qr that match the chosen platform — keeps DB tidy.
+    // Use the same LINK_PLATFORMS list the form uses to SHOW the field, or
+    // links for tmall/iherb/jd/pdd get silently dropped on save.
+    supplier_link:    LINK_PLATFORMS.includes(platform) ? (v('fi_sup_link') || null) : null,
     supplier_qr_data: platform === 'wechat' ? (document.getElementById('fi_sup_qr_data')?.value || null) : null,
     image_data: document.getElementById('fi_img_data')?.value || null,
     allergens: Array.from(document.querySelectorAll('.fi_alg_chk:checked')).map(c=>c.value).join(', ')||null,
@@ -6506,19 +6519,18 @@ async function renderRecipes() {
       ? '<div class="empty"><div class="empty-icon">📖</div><p style="font-weight:600">No recipes yet · 暂无食谱</p><p style="color:var(--muted);margin-top:8px">Create your first recipe to get started · 创建第一个食谱开始使用</p></div>'
       : `<div class="card" style="padding:0;overflow:hidden">
           <table class="data-table">
-            <thead><tr><th style="width:30px"></th><th>SKU 编号</th><th>English Name 英文名</th><th>中文名</th><th>Category 分类</th><th>Batch 批次</th><th>Servings 份数</th><th></th></tr></thead>
-            <tbody id="recipesBody">${_recipes.map(r=>`<tr>
+            <thead><tr><th style="width:30px"></th><th>SKU 编号</th><th>English Name 英文名</th><th>Chinese Name 中文名</th><th>Category 分类</th><th>Batch 批次</th><th>Servings 份数</th><th></th></tr></thead>
+            <tbody id="recipesBody">${_recipes.map(r=>`<tr onclick="viewRecipe(${r.id})" style="cursor:pointer">
               <td style="text-align:center;width:30px"><button onclick="event.stopPropagation();toggleRecipeFavorite(${r.id})" title="${r.is_favorite?'Unpin · 取消置顶':'Pin to top · 置顶'}" style="background:none;border:none;cursor:pointer;font-size:16px;padding:0;line-height:1">${r.is_favorite?'⭐':'☆'}</button></td>
               <td style="font-family:monospace;font-size:11px;color:var(--muted)">${r.sku||'—'}</td>
-              <td style="font-weight:600;cursor:pointer;color:var(--dk)" onclick="viewRecipe(${r.id})">${r.name_en}</td>
+              <td style="font-weight:600;color:var(--dk)">${r.name_en}</td>
               <td style="color:var(--muted)">${r.name_cn||'—'}</td>
               <td><span style="background:var(--gray);padding:2px 8px;border-radius:8px;font-size:11px;display:inline-block;line-height:1.4;max-width:100%">${r.category||'—'}</span></td>
               <td>${r.batch_size?r.batch_size+'g':'—'}</td>
               <td>${r.servings||'—'}</td>
               <td style="white-space:nowrap">
-                <button class="btn btn-secondary btn-sm" onclick="viewRecipe(${r.id})">👁 View</button>
-                <button class="btn btn-secondary btn-sm" onclick="showRecipeForm(${r.id})">✏️</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteRecipe(${r.id},'${esc(r.name_en)}')">🗑</button>
+                <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();showRecipeForm(${r.id})">✏️</button>
+                <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteRecipe(${r.id},'${esc(r.name_en)}')">🗑</button>
               </td>
             </tr>`).join('')}</tbody>
           </table>
@@ -7658,18 +7670,17 @@ function filterRecipes() {
     return mQ&&mC;
   });
   const body = document.getElementById('recipesBody');
-  if (body) body.innerHTML = filtered.map(r=>`<tr>
+  if (body) body.innerHTML = filtered.map(r=>`<tr onclick="viewRecipe(${r.id})" style="cursor:pointer">
     <td style="font-family:monospace;font-size:11px;color:var(--muted)">${r.sku||'—'}</td>
-    <td style="font-weight:600;cursor:pointer;color:var(--dk)" onclick="viewRecipe(${r.id})">${r.name_en}</td>
+    <td style="font-weight:600;color:var(--dk)">${r.name_en}</td>
     <td style="color:var(--muted)">${r.name_cn||'—'}</td>
     <td><span style="background:var(--gray);padding:2px 8px;border-radius:8px;font-size:11px;display:inline-block;line-height:1.4;max-width:100%">${r.category||'—'}</span></td>
     <td>${r.batch_size?r.batch_size+'g':'—'}</td>
     <td>${r.servings||'—'}</td>
     <td style="white-space:nowrap">
-      <button class="btn btn-secondary btn-sm" onclick="viewRecipe(${r.id})">👁 View</button>
-      <button class="btn btn-secondary btn-sm" onclick="showRecipeForm(${r.id})">✏️</button>
-      <button class="btn btn-secondary btn-sm" onclick="duplicateRecipe(${r.id},'${r.name_en.replace(/'/g,'')}')">⎘</button>
-      <button class="btn btn-danger btn-sm" onclick="deleteRecipe(${r.id},'${r.name_en.replace(/'/g,'')}')">🗑</button>
+      <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();showRecipeForm(${r.id})">✏️</button>
+      <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();duplicateRecipe(${r.id},'${r.name_en.replace(/'/g,'')}')">⎘</button>
+      <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteRecipe(${r.id},'${r.name_en.replace(/'/g,'')}')">🗑</button>
     </td>
   </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">No results · 暂无结果</td></tr>';
   const cnt = document.getElementById('recipeCount');
@@ -8954,7 +8965,7 @@ function _storeOpenForm(s) {
         <input id="sf_code" value="${esc(s?.code || '')}" placeholder="pudong" ${isEdit ? 'disabled' : ''} style="${isEdit ? 'background:var(--gray);color:var(--muted)' : ''}">
       </div>
       <div class="form-group"><label>Name (EN) 英文名</label><input id="sf_name_en" value="${esc(s?.name_en || '')}" placeholder="Roots Kitchen — Pudong"></div>
-      <div class="form-group"><label>名称 (中文)</label><input id="sf_name_cn" value="${esc(s?.name_cn || '')}" placeholder="Roots 厨房 · 浦东店"></div>
+      <div class="form-group"><label>Name (CN) 中文名</label><input id="sf_name_cn" value="${esc(s?.name_cn || '')}" placeholder="Roots 厨房 · 浦东店"></div>
       <div class="form-group"><label>City 城市</label><input id="sf_city" value="${esc(s?.city || '')}" placeholder="广州"></div>
       <div class="form-group"><label>District 区</label><input id="sf_district" value="${esc(s?.district || '')}" placeholder="越秀区"></div>
       <div class="form-group form-col-2">
@@ -9811,7 +9822,7 @@ function _renderSizesCardInner(ctx) {
             ${v.sku ? `<span style="opacity:.6;font-family:monospace;font-size:10px">${esc(v.sku)}</span>` : ''}
             <span style="opacity:.7;font-size:11px">¥${parseFloat(v.sell_price||0).toFixed(2)}</span>
           </div>`
-        : `<button onclick="switchVariant(${v.id})" style="display:inline-flex;align-items:center;gap:8px;background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:7px 12px;cursor:pointer;font-family:inherit;font-size:12px;transition:border-color .15s" onmouseover="this.style.borderColor='var(--lime)'" onmouseout="this.style.borderColor='var(--border)'" title="Open · 打开">
+        : `<button onclick="switchVariant(${v.id})" style="display:inline-flex;align-items:center;gap:8px;background:var(--card-bg);border:1.5px solid var(--border);border-radius:10px;padding:7px 12px;cursor:pointer;font-family:inherit;font-size:12px;transition:border-color .15s" onmouseover="this.style.borderColor='var(--lime)'" onmouseout="this.style.borderColor='var(--border)'" title="Open · 打开">
             <span style="font-weight:700">${esc(v.variant_label || '—')}</span>
             ${v.sku ? `<span style="color:var(--muted);font-family:monospace;font-size:10px">${esc(v.sku)}</span>` : ''}
             <span style="color:var(--muted)">¥${parseFloat(v.sell_price||0).toFixed(2)}</span>
@@ -10757,7 +10768,7 @@ function pfRenderSiblings(prod) {
   wrap.innerHTML = `
     <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Other variants in this group · 规格组其他成员</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px">
-      ${sibs.map(s => `<button type="button" onclick="closeOverlay('prodFormOverlay');setTimeout(()=>showProductForm(${s.id}),50)" style="display:inline-flex;align-items:center;gap:8px;background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:6px 12px;cursor:pointer;font-family:inherit;text-align:left;transition:border-color .15s" onmouseover="this.style.borderColor='var(--lime)'" onmouseout="this.style.borderColor='var(--border)'">
+      ${sibs.map(s => `<button type="button" onclick="closeOverlay('prodFormOverlay');setTimeout(()=>showProductForm(${s.id}),50)" style="display:inline-flex;align-items:center;gap:8px;background:var(--card-bg);border:1.5px solid var(--border);border-radius:10px;padding:6px 12px;cursor:pointer;font-family:inherit;text-align:left;transition:border-color .15s" onmouseover="this.style.borderColor='var(--lime)'" onmouseout="this.style.borderColor='var(--border)'">
         ${s.image_data ? `<img src="${esc(s.image_data)}" style="width:24px;height:24px;border-radius:4px;object-fit:cover">` : `<span style="font-size:14px">🛍</span>`}
         <div>
           <div style="font-size:12px;font-weight:700">${esc(s.variant_label || s.name_en)}</div>
@@ -13520,7 +13531,7 @@ async function _prodImportCommit() {
     if (container) {
       container.innerHTML = _prodViewMode === 'list' ? `<div class="card" style="padding:0;overflow:hidden">
         <table class="data-table">
-          <thead><tr><th style="width:44px"></th><th>SKU</th><th>Name EN · 英文名</th><th>中文名</th><th>Category 分类</th><th>Linked Recipe</th><th style="text-align:right">Sell Price</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th style="width:44px"></th><th>SKU</th><th>Name EN · 英文名</th><th>Chinese Name 中文名</th><th>Category 分类</th><th>Linked Recipe 关联食谱</th><th style="text-align:right">Sell Price</th><th>Status</th><th></th></tr></thead>
           <tbody id="prodBody">${_products.map(productRow).join('')}</tbody>
         </table>
       </div>` : renderProdGrid(_products);
@@ -13761,7 +13772,7 @@ async function renderAdmin(tab) {
           <thead><tr>
             <th style="width:130px">Kind 类型</th>
             <th>Name 名称</th>
-            <th>中文</th>
+            <th>Chinese 中文</th>
             <th>Location 地址</th>
             <th style="text-align:center">Status 状态</th>
             <th>Actions 操作</th>
@@ -16164,7 +16175,7 @@ function showMarketForm(existing) {
     </div>
     <div class="form-grid">
       <div class="form-group form-col-2"><label>Name (EN) * 英文名称</label><input id="mk_name" value="${esc(existing?.name||'')}" placeholder="e.g. Yuexiu Stall"></div>
-      <div class="form-group form-col-2"><label>名称 (中文)</label><input id="mk_name_cn" value="${esc(existing?.name_cn||'')}" placeholder="例如 越秀摊位"></div>
+      <div class="form-group form-col-2"><label>Name (CN) 中文名</label><input id="mk_name_cn" value="${esc(existing?.name_cn||'')}" placeholder="例如 越秀摊位"></div>
       <div class="form-group form-col-2">
         <label>Kind 类型 <span style="font-weight:400;color:var(--muted);font-size:11px">— drives notification routing · 决定通知路由</span></label>
         <select id="mk_kind" style="font-family:inherit">
