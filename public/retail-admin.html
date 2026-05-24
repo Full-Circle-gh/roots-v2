@@ -7962,6 +7962,10 @@ document.addEventListener('click', (e) => {
   const open = document.querySelectorAll('.side-drawer.dw-dismiss.open');
   if (!open.length) return;
   if (e.target.closest('.side-drawer')) return;
+  // A `.pu-editor-bg` modal (Edit / Adjust / Address) layers on top of the
+  // drawer but lives outside it in the DOM — clicks inside the modal, incl.
+  // its Close button, must not dismiss the drawer behind it.
+  if (e.target.closest('.pu-editor-bg')) return;
   if (e.target.closest('tr.order-row, tr.cu-row')) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.toString().length > 0) return;

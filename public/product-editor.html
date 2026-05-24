@@ -1416,6 +1416,13 @@ function paBlocksSelect(id) {
   paBlocksSyncFromDOM();
   PA_SELECTED_BLOCK_ID = id;
   paRenderAll();
+  paScrollPreviewTo(id);
+}
+function paScrollPreviewTo(id) {
+  const screen = document.getElementById('pa-preview-screen'); if (!screen) return;
+  const el = screen.querySelector(`[data-prev-blockid="${CSS.escape(id)}"]`); if (!el) return;
+  const top = el.getBoundingClientRect().top - screen.getBoundingClientRect().top + screen.scrollTop;
+  screen.scrollTo({ top: Math.max(0, top - 12), behavior: 'smooth' });
 }
 function paBlocksSyncFromDOM() {
   const mount = document.getElementById('pa-block-editor-mount'); if (!mount) return;
@@ -2013,7 +2020,10 @@ function paRenderPreview() {
   const colIsAuto  = !colChar;
   const img = p.image_data || p.image_url || '';
   const heroStyle = img ? `background-image:url('${escapeAttr(img)}'); background-color:transparent;` : '';
-  const blocksHtml = (window._paBlocks || []).map(_paPreviewBlockHtml).filter(Boolean).join('');
+  const blocksHtml = (window._paBlocks || []).map(b => {
+    const html = _paPreviewBlockHtml(b);
+    return html ? html.replace('class="pa-prev-block', `data-prev-blockid="${b.id}" class="pa-prev-block`) : '';
+  }).filter(Boolean).join('');
   screen.innerHTML = `
     <div class="pa-prev-hero" style="${heroStyle}">${img ? '' : '🛍'}</div>
     <div class="pa-prev-body">
