@@ -3484,6 +3484,10 @@
          dropped the standalone h3 in favour of <summary>; this guards
          against any leftover h3 inside a fold body). */
       #cu-detail-body .cu-fold-body h3 { margin-top: 0; }
+      /* Recent-orders rows are clickable → open that order. */
+      #cu-detail-body tr.cu-order-row { cursor: pointer; transition: background var(--t-fast) ease; }
+      #cu-detail-body tr.cu-order-row:hover,
+      #cu-detail-body tr.cu-order-row:focus-visible { background: var(--bg-elev-1); outline: none; }
     </style>
 
     <!-- LIST VIEW (always visible; detail opens as a side-drawer overlay) -->
@@ -12119,6 +12123,15 @@ async function cuOpenDetail(id) {
   cuRenderDetail();
 }
 
+// Jump from a customer's Recent-orders row straight to that order. The
+// customer and order drawers share the same z-index and screen position,
+// so we close the customer drawer first, then open the order on top of
+// the list underneath.
+function cuGotoOrder(id) {
+  closeDrawer('#cu-drawer');
+  openOrder(Number(id));
+}
+
 // Close the drawer and clear state once the slide-out finishes.
 onDrawerClose('#cu-drawer', () => {
   $('#cu-detail-body').innerHTML = '';
@@ -12173,7 +12186,7 @@ function cuRenderDetail() {
 
   const recentOrdersRows = d.recent_orders.length
     ? d.recent_orders.map(o => `
-        <tr>
+        <tr class="cu-order-row" tabindex="0" onclick="cuGotoOrder(${o.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();cuGotoOrder(${o.id});}">
           <td>${escapeHtml(o.order_no)}</td>
           <td><span class="cu-pill">${escapeHtml(o.status)}</span></td>
           <td class="numeric">¥${Number(o.total || 0).toFixed(2)}</td>
