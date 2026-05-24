@@ -18,6 +18,14 @@ SERVER=root@47.239.89.63
 APP=/root/roots-v2
 STAGE=$APP/__stage__
 
+# Only the `main` branch deploys. Feature/worktree branches commit freely as
+# safe checkpoints — merge into main to ship. A detached HEAD also skips.
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+if [ "$BRANCH" != "main" ]; then
+  echo "[deploy] on '$BRANCH', not main — skipping deploy."
+  exit 0
+fi
+
 # Honour an opt-out token in the commit message.
 MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
 case "$MSG" in
