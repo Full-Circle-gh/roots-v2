@@ -2038,12 +2038,13 @@ window.addEventListener('keydown', (e) => {
 // ── i18n / Language toggle ──────────────────────────────────────────────
 // Ported from retail-admin.html so the editor shows ONE language at a time
 // (matching the Mini App Editor + the parent backend) instead of crammed
-// bilingual labels. Shares the same localStorage key, so opening the editor
-// inherits whatever language the office set in retail-admin. Works by
-// splitting "EN · 中文" text nodes and rewriting nodeValue in place; a
-// MutationObserver auto-translates the forms we render after load.
+// bilingual labels. Shares one localStorage key with the whole admin suite,
+// so opening the editor inherits whatever language was last picked anywhere
+// (app.html / retail-admin / cms). Works by splitting "EN · 中文" text nodes
+// and rewriting nodeValue in place; a MutationObserver auto-translates the
+// forms we render after load.
 (function () {
-  const LANG_KEY = 'retail-admin-lang';
+  const LANG_KEY = 'roots-admin-lang';
   let _lang = 'en';
   try { const s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'cn') _lang = s; } catch {}
 

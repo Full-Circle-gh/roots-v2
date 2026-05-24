@@ -7775,6 +7775,10 @@ const NEXT_STATUS = {
 // in memory; default = 'packaging' (ice-pack items first, then dry).
 let _ITEMS_SORT_MODE = 'packaging';
 let _OPEN_ORDER = null;
+// When an order is opened from a customer's Recent-orders row, remember that
+// customer's id so the order drawer can offer a "back to customer" button.
+// Null when the order was opened any other way (orders list, etc).
+let _ORDER_BACK_CUSTOMER = null;
 
 function sortOrderItems(items, mode) {
   const arr = [...items];
@@ -7902,6 +7906,7 @@ function renderShipmentCard(o, s) {
 
 async function openOrder(id) {
   _OPEN_ORDER = null;
+  _ORDER_BACK_CUSTOMER = null;
   const mount = $('#order-detail-mount');
   mount.innerHTML = '<div class="order-card muted">Loading order…</div>';
   openDrawer('#order-drawer');
@@ -7999,6 +8004,7 @@ function renderOpenOrder(o) {
     }).join('');
     mount.innerHTML = `
       <div class="order-card">
+        ${_ORDER_BACK_CUSTOMER ? `<button class="btn btn-sm" style="margin-bottom: var(--s3);" onclick="cuBackToCustomer()">← Back to customer · 返回顾客</button>` : ''}
         <div class="order-head">
           <div>
             <div class="title-row">
@@ -12128,8 +12134,20 @@ async function cuOpenDetail(id) {
 // so we close the customer drawer first, then open the order on top of
 // the list underneath.
 function cuGotoOrder(id) {
+  const backId = CU_CURRENT?.customer?.id || null;
   closeDrawer('#cu-drawer');
   openOrder(Number(id));
+  // openOrder() clears _ORDER_BACK_CUSTOMER synchronously at its start; set it
+  // back afterwards so the order drawer shows a "back to customer" button.
+  _ORDER_BACK_CUSTOMER = backId;
+}
+
+// Return from an order opened via a Recent-orders row back to that customer.
+function cuBackToCustomer() {
+  const backId = _ORDER_BACK_CUSTOMER;
+  if (!backId) return;
+  closeDrawer('#order-drawer');
+  cuOpenDetail(backId);
 }
 
 // Close the drawer and clear state once the slide-out finishes.
@@ -14100,7 +14118,9 @@ cuApplyThemeIcon();
 
 // ── i18n / Language toggle ──
 (function () {
-  const LANG_KEY = 'retail-admin-lang';
+  // Shared across the whole admin suite (app.html / cms.html / product-editor.html)
+  // so the language you pick on one surface follows you into the others.
+  const LANG_KEY = 'roots-admin-lang';
   let _lang = 'en';
   const _listeners = [];
   try { const s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'cn') _lang = s; } catch {}
