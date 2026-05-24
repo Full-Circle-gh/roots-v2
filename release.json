@@ -1,6 +1,6 @@
 {
-  "version": "2026-05-18-product-blocks-4",
-  "title": "🎨 Designer Sections — split-pane editor with live preview · 实时分屏编辑器",
-  "summary": "Products tab modal is now a true magazine editor: left pane = block tabs + form for the selected block; right pane = sticky live phone preview rendering all blocks with the real brand fonts and colors. Edits update the preview as you type.\n「产品」模态框升级为真正的杂志式编辑器:左侧块标签 + 当前块表单,右侧粘性手机预览(品牌字体与配色),所见即所得。",
-  "url": "/retail-admin"
+  "version": "2026-05-20-design-check-apply",
+  "title": "Sprout fixes are now one-click — Apply buttons next to each suggestion · Sprout 的每条建议都带「应用」按钮,一键改色",
+  "summary": "Each fix Sprout proposes now has an **Apply** button next to it in the Design Check panel. Click it and the change writes straight into the draft, the canvas re-renders, and the affected block flashes so you see exactly what changed.\n\nHow it works:\n• New backend tool `propose_design_swap` — Sprout calls it once per fix with the block id + field + new brand token. The tool validates everything (block exists, field is valid for that block type, token is in the brand palette) and returns friendly labels for the button.\n• Each successful tool call surfaces as an Apply card under Sprout's prose, with from→to colour swatches so you see the swap before clicking.\n• \"Apply all · 全部应用\" CTA on top when there's more than one suggestion.\n• Applying writes via the same save path as manual edits — undo/Revert in the editor still works.\n\nSprout 现在提的每条修改建议旁都有「应用」按钮:点一下就直接改到草稿,画布实时刷新,目标模块还会闪一下让你看清改了哪。新增 `propose_design_swap` 工具,Sprout 每提一条建议就调用一次,工具会校验后返回友好标签;前端把成功的建议渲染成可点的卡片,带颜色对比预览,多条时还可「全部应用」。",
+  "url": "/cms"
 }

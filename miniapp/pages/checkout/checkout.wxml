@@ -33,56 +33,78 @@
   <view class="section">
     <view class="section-head">
       <view class="section-title f-bear">{{copy.shipToTitle}}</view>
-      <view wx:if="{{address.id && !pickerOpen && !showNewForm}}" class="head-action f-toni" bindtap="openPicker">
+      <view wx:if="{{isBound && address.id && !pickerOpen && !showNewForm}}" class="head-action f-toni" bindtap="openPicker">
         {{lang === 'cn' ? '更换' : 'CHANGE'}}
       </view>
     </view>
 
-    <!-- Collapsed (default): just show the selected address as plain text. -->
-    <block wx:if="{{address.id && !pickerOpen && !showNewForm}}">
-      <view class="addr-text">
-        <text class="f-bear addr-name">{{address.recipient_name}}</text>
-        <text class="addr-phone"> · {{address.phone}}</text>
-      </view>
-      <view class="addr-text addr-full">
-        {{address.city}}{{address.district ? ' · ' + address.district : ''}}{{address.address ? ' · ' + address.address : ''}}{{address.detail ? ' · ' + address.detail : ''}}
+    <!-- Unbound: empty state with bind CTA. We never show the manual fill
+         form to an unbound customer — checkout requires a WeChat-verified
+         identity. Tapping the CTA opens /pages/profile; onShow resumes here. -->
+    <block wx:if="{{!isBound}}">
+      <view class="bind-empty">
+        <view class="bind-empty__icon">🪪</view>
+        <view class="bind-empty__title f-bear">{{copy.bindTitle}}</view>
+        <view class="bind-empty__body">{{copy.bindBody}}</view>
+        <view class="bind-empty__cta f-toni" bindtap="bindWechat">{{copy.bindCta}}</view>
       </view>
     </block>
 
-    <!-- Picker: list of saved addresses w/ inline radios, no card boxes. -->
-    <block wx:if="{{pickerOpen && savedAddresses.length && !showNewForm}}">
-      <view wx:for="{{savedAddresses}}" wx:key="id"
-            class="addr-row" data-id="{{item.id}}" bindtap="selectSaved">
-        <view class="dot {{address.id === item.id ? 'on' : ''}}"></view>
-        <view class="addr-body">
-          <view class="addr-text"><text class="f-bear">{{item.recipient_name}}</text> · {{item.phone}} <text wx:if="{{item.is_default}}" class="addr-default f-toni">DEFAULT</text></view>
-          <view class="addr-text addr-full">{{item.city}}{{item.district ? ' · ' + item.district : ''}}{{item.address ? ' · ' + item.address : ''}}{{item.detail ? ' · ' + item.detail : ''}}</view>
+    <block wx:else>
+      <!-- Soft hint clarifying where the displayed shipping info comes from. -->
+      <view wx:if="{{address.id && !pickerOpen && !showNewForm}}" class="addr-hint f-toni">{{copy.shipFromHint}}</view>
+
+      <!-- Collapsed (default): just show the selected address as plain text. -->
+      <block wx:if="{{address.id && !pickerOpen && !showNewForm}}">
+        <view class="addr-text">
+          <text class="f-bear addr-name">{{address.recipient_name}}</text>
+          <text class="addr-phone"> · {{address.phone}}</text>
         </view>
-      </view>
-      <view class="link-row f-toni" bindtap="showAddNew">+ {{lang === 'cn' ? '使用新地址' : 'USE A NEW ADDRESS'}}</view>
-    </block>
+        <view class="addr-text addr-full">
+          {{address.city}}{{address.district ? ' · ' + address.district : ''}}{{address.address ? ' · ' + address.address : ''}}{{address.detail ? ' · ' + address.detail : ''}}
+        </view>
+      </block>
 
-    <!-- Inline form: shown when no saved addresses OR user wants new. -->
-    <block wx:if="{{showNewForm || (!savedAddresses.length && !address.id)}}">
-      <view class="field">
-        <input class="input" placeholder="{{copy.name}}" value="{{address.recipient_name}}" data-field="recipient_name" bindinput="onAddrField"/>
-      </view>
-      <view class="field">
-        <input class="input" placeholder="{{copy.phone}}" type="number" value="{{address.phone}}" data-field="phone" bindinput="onAddrField"/>
-      </view>
-      <view class="field field-pair">
-        <input class="input" placeholder="{{copy.cityPlaceholder}}" value="{{address.city}}" data-field="city" bindinput="onAddrField"/>
-        <input class="input" placeholder="{{copy.districtPlaceholder}}" value="{{address.district}}" data-field="district" bindinput="onAddrField"/>
-      </view>
-      <view class="field">
-        <input class="input" placeholder="{{copy.addr}}" value="{{address.address}}" data-field="address" bindinput="onAddrField"/>
-      </view>
-      <view class="field">
-        <input class="input" placeholder="{{copy.detailPlaceholder}}" value="{{address.detail}}" data-field="detail" bindinput="onAddrField"/>
-      </view>
-      <view wx:if="{{savedAddresses.length}}" class="link-row f-toni" bindtap="cancelNew">← {{lang === 'cn' ? '使用已保存地址' : 'PICK A SAVED ADDRESS'}}</view>
+      <!-- Picker: list of saved addresses w/ inline radios, no card boxes. -->
+      <block wx:if="{{pickerOpen && savedAddresses.length && !showNewForm}}">
+        <view wx:for="{{savedAddresses}}" wx:key="id"
+              class="addr-row" data-id="{{item.id}}" bindtap="selectSaved">
+          <view class="dot {{address.id === item.id ? 'on' : ''}}"></view>
+          <view class="addr-body">
+            <view class="addr-text"><text class="f-bear">{{item.recipient_name}}</text> · {{item.phone}} <text wx:if="{{item.is_default}}" class="addr-default f-toni">DEFAULT</text></view>
+            <view class="addr-text addr-full">{{item.city}}{{item.district ? ' · ' + item.district : ''}}{{item.address ? ' · ' + item.address : ''}}{{item.detail ? ' · ' + item.detail : ''}}</view>
+          </view>
+        </view>
+        <view class="link-row f-toni" bindtap="showAddNew">+ {{lang === 'cn' ? '使用新地址' : 'USE A NEW ADDRESS'}}</view>
+      </block>
+
+      <!-- Inline form: shown when no saved addresses OR user wants new. -->
+      <block wx:if="{{showNewForm || (!savedAddresses.length && !address.id)}}">
+        <view class="field">
+          <input class="input" placeholder="{{copy.name}}" value="{{address.recipient_name}}" data-field="recipient_name" bindinput="onAddrField"/>
+        </view>
+        <view class="field">
+          <input class="input" placeholder="{{copy.phone}}" type="number" value="{{address.phone}}" data-field="phone" bindinput="onAddrField"/>
+        </view>
+        <view class="field field-pair">
+          <input class="input" placeholder="{{copy.cityPlaceholder}}" value="{{address.city}}" data-field="city" bindinput="onAddrField"/>
+          <input class="input" placeholder="{{copy.districtPlaceholder}}" value="{{address.district}}" data-field="district" bindinput="onAddrField"/>
+        </view>
+        <view class="field">
+          <input class="input" placeholder="{{copy.addr}}" value="{{address.address}}" data-field="address" bindinput="onAddrField"/>
+        </view>
+        <view class="field">
+          <input class="input" placeholder="{{copy.detailPlaceholder}}" value="{{address.detail}}" data-field="detail" bindinput="onAddrField"/>
+        </view>
+        <view wx:if="{{savedAddresses.length}}" class="link-row f-toni" bindtap="cancelNew">← {{lang === 'cn' ? '使用已保存地址' : 'PICK A SAVED ADDRESS'}}</view>
+      </block>
     </block>
   </view>
+
+  <!-- All sections below depend on a bound customer + matched delivery zone.
+       Hide them until bind completes; the sticky footer's BIND CTA is the
+       only action on the page in the unbound state. -->
+  <block wx:if="{{isBound}}">
 
   <!-- When -->
   <view class="section">
@@ -94,23 +116,40 @@
     </view>
 
     <block wx:else>
-      <!-- Right away (only when zone allows + kitchen open) -->
-      <view wx:if="{{scheduling.right_away_available}}" class="slot-row"
+      <!-- Holiday-mode banner — orders accepted, future ship dates only -->
+      <view wx:if="{{scheduling.holiday_mode}}" class="holiday-banner">
+        <view class="hb-icon">🌴</view>
+        <view class="hb-body">
+          <view class="hb-title f-bear">{{lang === 'cn' ? '假期模式' : 'Holiday mode'}}</view>
+          <view class="hb-msg">{{lang === 'cn' ? (scheduling.holiday_message.cn || '我们短暂休假中 — 订单将在我们回来后第一时间发货。') : (scheduling.holiday_message.en || "We're closed for a short holiday — your order will ship as soon as we're back.")}}</view>
+        </view>
+      </view>
+
+      <!-- Right away — always visible in time-slot mode; greyed when kitchen closed
+           or holiday mode is on. Disabled state shows a reason below the label. -->
+      <view wx:if="{{scheduling.mode !== 'day_only'}}"
+            class="slot-row {{!scheduling.right_away_available ? 'disabled' : ''}}"
             data-id="right_away"
             data-label-en="Right away"
             data-label-cn="立即配送"
             data-surcharge="0"
-            bindtap="pickSlot">
+            bindtap="{{scheduling.right_away_available ? 'pickSlot' : ''}}">
         <view class="dot {{deliverySlotId === 'right_away' ? 'on' : ''}}"></view>
         <view class="opt-body">
           <view class="opt-label f-bear">{{lang === 'cn' ? '立即配送' : 'Right away'}}</view>
-          <view class="opt-sub muted">{{lang === 'cn' ? '尽快出餐' : 'ASAP after the kitchen confirms'}}</view>
+          <view wx:if="{{scheduling.right_away_available}}" class="opt-sub muted">{{lang === 'cn' ? '尽快出餐' : 'ASAP after the kitchen confirms'}}</view>
+          <view wx:elif="{{scheduling.holiday_mode}}" class="opt-sub muted">{{lang === 'cn' ? '假期模式中 — 请选择未来日期' : 'Holiday mode — please pick a future date'}}</view>
+          <view wx:elif="{{!scheduling.kitchen_open_now}}" class="opt-sub muted">{{lang === 'cn' ? '厨房已关闭 — 上午' : 'Closed — reopens '}}{{scheduling.kitchen_hours.start}}{{lang === 'cn' ? '点重开' : 'am tomorrow'}}</view>
+          <view wx:else class="opt-sub muted">{{lang === 'cn' ? '本配送区不支持立即配送' : 'Not available for this area'}}</view>
         </view>
       </view>
 
-      <!-- Day-only mode: three radio options (Express / Today / Schedule) -->
+      <!-- Day-only mode: three radio options (Express / Today / Schedule).
+           Express row only renders once we have an expressLabel — otherwise
+           we'd show an unlabeled box with just a radio dot (older clients
+           hit this when slots was empty; see applyDayOnlyDefaults). -->
       <block wx:if="{{scheduling.mode === 'day_only'}}">
-        <view class="slot-option {{selectedSlotKind === 'express' ? 'on' : ''}}" bindtap="pickExpress">
+        <view wx:if="{{expressLabel}}" class="slot-option {{selectedSlotKind === 'express' ? 'on' : ''}}" bindtap="pickExpress">
           <view class="opt-body">
             <view class="opt-label f-bear">{{expressLabel}}</view>
             <view class="opt-sub muted">{{expressSub}}</view>
@@ -162,14 +201,20 @@
           </view>
         </view>
 
-        <!-- Schedule for later (calendar) — same widget the day-only mode uses. -->
+        <!-- Schedule for later (calendar) — same widget the day-only mode uses.
+             "on" requires BOTH selectedSlotKind === 'schedule' AND the picked
+             slot id to still match the scheduled date. Without the second
+             check, picking Right away (or a 16-18pm chip) after scheduling
+             a date left this dot stale-filled (the bug the user spotted on
+             2026-05-20). pickSlot now also clears selectedSlotKind, so this
+             is belt-and-suspenders for any future code path that forgets. -->
         <picker wx:if="{{scheduleMinDate && scheduleMaxDate && scheduleMinDate <= scheduleMaxDate}}"
                 mode="date"
                 value="{{schedulePickedDate || scheduleMinDate}}"
                 start="{{scheduleMinDate}}"
                 end="{{scheduleMaxDate}}"
                 bindchange="onScheduleDateChange">
-          <view class="slot-option {{selectedSlotKind === 'schedule' ? 'on' : ''}}">
+          <view class="slot-option {{selectedSlotKind === 'schedule' && deliverySlotId === schedulePickedDate ? 'on' : ''}}">
             <view class="opt-body">
               <view class="opt-label f-bear">{{lang === 'cn' ? '稍后送达' : 'Schedule for later'}}</view>
               <view class="opt-sub muted">{{schedulePickedLabel ? schedulePickedLabel : (lang === 'cn' ? '选择送达日期' : 'pick a delivery date')}}</view>
@@ -189,6 +234,49 @@
   <view class="section">
     <view class="section-title f-bear">{{copy.payWithTitle}}</view>
 
+    <!-- Points as a discount toggle ABOVE the radios — not a payment method
+         peer. Stacks with whichever method is picked below (WeChat / Alipay).
+         When pointsAffordable is true AND toggle is on, the total goes to
+         ¥0 and the residual-charge step is skipped server-side; the chosen
+         radio is then just the "fallback rail" in case the math changes
+         on submit. Hidden entirely when the customer has 0 points.
+
+         Subtitle states (avoid the "save ¥0.00" worthless-looking copy
+         that confused users — only surface a money figure when it's
+         meaningful and accurate):
+           toggle OFF, potential >= ¥0.01:  "4 pts · worth ¥0.04 on this order"
+           toggle OFF, potential <  ¥0.01:  "4 pts available · keep earning"
+           toggle ON , covers all bill:     "Covers the bill ✓"
+           toggle ON , partial cover:       "Saving ¥X · WeChat for the rest"
+           toggle ON , potential = 0:       (toggle disables itself, not shown) -->
+    <view wx:if="{{pointsBalance > 0}}" class="points-toggle-row">
+      <view class="pt-body">
+        <view class="pt-label f-bear">
+          {{lang === 'cn' ? '使用积分' : 'Use my points'}}
+        </view>
+        <view class="pt-sub muted">
+          <!-- OFF · meaningful potential -->
+          <block wx:if="{{!usePoints && pointsPotentialDiscount > 0}}">
+            <text>{{pointsBalance}} {{lang === 'cn' ? '积分 · 本单可抵 ¥' : 'pts · worth ¥'}}{{pointsPotentialDiscount}}{{lang === 'cn' ? '' : ' on this order'}}</text>
+          </block>
+          <!-- OFF · too few to matter -->
+          <block wx:elif="{{!usePoints}}">
+            <text>{{pointsBalance}} {{lang === 'cn' ? '积分 · 继续累积' : 'pts available · keep earning'}}</text>
+          </block>
+          <!-- ON · covers the whole bill -->
+          <block wx:elif="{{usePoints && pointsAffordable}}">
+            <text class="pt-emph">{{lang === 'cn' ? '抵全部 ✓' : 'Covers the bill ✓'}}</text>
+          </block>
+          <!-- ON · partial cover -->
+          <block wx:else>
+            <text class="pt-emph">{{lang === 'cn' ? '已抵 ¥' : 'Saving ¥'}}{{pointsDiscount}}</text>
+            <text>{{lang === 'cn' ? ' · 余额由所选方式支付' : ' · rest goes to your pick below'}}</text>
+          </block>
+        </view>
+      </view>
+      <switch checked="{{usePoints}}" disabled="{{pointsPotentialDiscount <= 0}}" bindchange="onTogglePoints" color="#1a1a17"/>
+    </view>
+
     <view class="opt-row" data-method="wechat" bindtap="setPayment">
       <view class="dot {{paymentMethod === 'wechat' ? 'on' : ''}}"></view>
       <view class="pay-swatch" style="background: #1AAD19;"></view>
@@ -207,22 +295,11 @@
       </view>
     </view>
 
-    <view wx:if="{{pointsBalance > 0}}" class="opt-row {{!pointsAffordable && pointsRequired > 0 ? 'opt-disabled' : ''}}"
-          data-method="points" bindtap="setPayment">
-      <view class="dot {{paymentMethod === 'points' ? 'on' : ''}}"></view>
-      <view class="pay-swatch" style="background: var(--lime);"></view>
-      <view class="opt-body">
-        <view class="opt-label f-bear">{{copy.pointsOpt}}</view>
-        <view wx:if="{{pointsRequired > 0 && !pointsAffordable}}" class="opt-sub muted">
-          {{lang === 'cn' ? '还差 ' : 'Need '}}{{pointsRequired - pointsBalance}}{{lang === 'cn' ? ' 积分 · 余额 ' : ' more · have '}}{{pointsBalance}}
-        </view>
-        <view wx:elif="{{pointsRequired > 0}}" class="opt-sub muted">
-          {{lang === 'cn' ? '使用 ' : 'Use '}}{{pointsRequired}}{{lang === 'cn' ? ' 积分 · 余额 ' : ' pts · balance '}}{{pointsBalance}}
-        </view>
-        <view wx:else class="opt-sub muted">
-          {{pointsBalance}} {{lang === 'cn' ? '可用 · 抵¥' : 'available · 抵¥'}}{{pointsValue}}
-        </view>
-      </view>
+    <!-- When points fully cover the bill, the picked radio is purely a
+         fallback — surface that so the customer isn't surprised that
+         WeChat/Alipay doesn't get charged. -->
+    <view wx:if="{{usePoints && pointsAffordable}}" class="points-covers-hint muted">
+      {{lang === 'cn' ? '✓ 积分已覆盖全单,无需支付' : '✓ Points cover the bill — no charge to ' + (paymentMethod === 'alipay' ? 'Alipay' : 'WeChat')}}
     </view>
   </view>
 
@@ -303,9 +380,9 @@
       <view class="bd-label">{{lang === 'cn' ? '优惠券' : 'Coupon'}}</view>
       <view class="bd-val f-gothic">−¥{{voucherDiscount}}</view>
     </view>
-    <view wx:if="{{paymentMethod === 'points' && pointsAffordable}}" class="bd-row">
-      <view class="bd-label">{{lang === 'cn' ? '积分抵扣 · ' : 'Points · '}}{{pointsRequired}}{{lang === 'cn' ? ' 积分' : ' pts'}}</view>
-      <view class="bd-val f-gothic">{{lang === 'cn' ? '抵全部' : 'COVERS ALL'}}</view>
+    <view wx:if="{{paymentMethod === 'points' && pointsToUse > 0}}" class="bd-row">
+      <view class="bd-label">{{lang === 'cn' ? '积分抵扣 · ' : 'Points · '}}{{pointsToUse}}{{lang === 'cn' ? ' 积分' : ' pts'}}</view>
+      <view class="bd-val f-gothic">−¥{{pointsDiscount}}</view>
     </view>
     <view wx:if="{{pointsEarnedPreview > 0}}" class="bd-row bd-points">
       <view class="bd-label">{{lang === 'cn' ? '本单获得积分' : "You'll earn"}}</view>
@@ -314,38 +391,278 @@
   </view>
 
   <!-- Fallback-routing notice. Shown when /quote flagged the nearest
-       store as out of stock and a farther store can fulfill. We surface
-       it here (just above the Place Order button) so the customer sees
-       it before tapping. The tap then opens a confirmation modal. -->
+       store as out of stock. Tapping Place Order then opens either the
+       simple yes/no modal or the 5-option modal depending on `fallbackGate`. -->
   <view wx:if="{{needsFallback}}" class="fallback-warning">
     <view class="fallback-warning__icon">🚚</view>
     <view class="fallback-warning__body">
-      <view class="fallback-warning__title">{{ lang === 'cn' ? '配送时间会更长' : 'Longer delivery time' }}</view>
+      <view class="fallback-warning__title">
+        {{ lang === 'cn' ? '部分商品缺货' : 'Some items out of stock' }}
+      </view>
       <view class="fallback-warning__sub">
         {{ lang === 'cn'
-          ? ('就近门店暂时缺货，将由 ' + fallbackStoreName + ' 发货')
-          : ('Nearest store is out of stock — will ship from ' + fallbackStoreName) }}
+          ? ('就近门店 ' + nearestStoreName + ' 暂时缺货 · 下单时选择处理方式')
+          : (nearestStoreName + ' is out — choose how to handle when placing order') }}
       </view>
     </view>
     <view wx:if="{{acceptedFallback}}" class="fallback-warning__check">✓</view>
   </view>
 
+  </block><!-- /isBound -->
+
   <!-- Sticky footer -->
   <view class="sticky-bar">
-    <view class="total-block">
+    <view wx:if="{{isBound}}" class="total-block">
       <view class="total-label f-toni">{{copy.pay}}</view>
       <view class="total-amount f-bear">¥{{total}}</view>
     </view>
-    <button class="place-btn f-toni" bindtap="placeOrder" disabled="{{placing || zoneError}}">
-      {{placing ? '...' : copy.placeOrder}}
-    </button>
+    <!-- Use a <view> instead of <button> — WeChat <button> ships with a
+         pile of native styling (background-color: #f8f8f8, ::after
+         pseudo-border, hardcoded :disabled bg, min-height) that's tedious
+         to fully override and tends to bleed back through after SDK
+         updates. This button never needed form-type or open-type, so a
+         tap-target view is strictly simpler and visually stable.
+         Disabled state is a class — placeOrder() also no-ops on disabled
+         so a stray tap can't fire. -->
+    <view class="place-btn f-toni {{!isBound ? 'place-btn--bind' : ''}} {{(placing || (isBound && zoneError)) ? 'place-btn--disabled' : ''}}"
+          hover-class="place-btn--pressed"
+          hover-stay-time="80"
+          bindtap="placeOrder"
+          aria-disabled="{{!!(placing || (isBound && zoneError))}}">
+      {{placing ? '...' : (isBound ? copy.placeOrder : copy.placeOrderBind)}}
+    </view>
   </view>
+
+  <!-- 5-option fallback modal — GZ + non-excluded district + right_away.
+       The substitute-picker overlays on top when the customer picks "replace". -->
+  <view wx:if="{{showFallbackModal && fallbackGate === 'options_5'}}"
+        class="fb-modal-backdrop fb-modal-backdrop--sheet" bindtap="closeFallbackModal" catchtouchmove="noop">
+    <view class="fb-modal" catchtap="noop">
+      <view class="fb-modal__head">
+        <view class="fb-modal__title f-bear">
+          {{ lang === 'cn' ? '部分商品缺货' : 'Some items out of stock' }}
+        </view>
+        <view class="fb-modal__sub muted">
+          {{ lang === 'cn'
+            ? ('就近门店 ' + nearestStoreName + ' 暂时缺货,请选择处理方式：')
+            : (nearestStoreName + ' is out of these. Pick what to do:') }}
+        </view>
+        <view class="fb-modal__missing">
+          <view wx:for="{{missingItems}}" wx:key="product_id" class="fb-modal__missing-row">
+            <view wx:if="{{item.image_data}}" class="fb-modal__missing-img">
+              <image src="{{item.image_data}}" mode="aspectFill"/>
+            </view>
+            <view class="fb-modal__missing-name">
+              <view>{{ lang === 'cn' ? (item.name_cn || item.name_en) : (item.name_en || item.name_cn) }}</view>
+              <view class="muted">× {{item.qty}}</view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- Each option is a <view>, not a <button>. Mini-app native <button>
+           drags in centred margins, a built-in min-width, and a ::after
+           pseudo-border that together squeezed the cards into ~60% width
+           and a smaller-than-designed look. Views have zero of that and
+           the styling below is bulletproof against future SDK updates. -->
+      <view class="fb-modal__opts">
+        <view class="fb-opt fb-opt--neutral {{fallbackBusy ? 'fb-opt--disabled' : ''}}"
+              hover-class="{{fallbackBusy ? '' : 'fb-opt--pressed'}}"
+              hover-stay-time="80"
+              bindtap="{{fallbackBusy ? '' : 'fbCancelMissing'}}">
+          <view class="fb-opt__num">1</view>
+          <view class="fb-opt__body">
+            <view class="fb-opt__label f-bear">
+              {{ lang === 'cn' ? '取消缺货商品' : 'Cancel the missing item(s)' }}
+            </view>
+            <view class="fb-opt__sub">
+              {{ lang === 'cn' ? '其余商品照常从就近门店发出' : 'Ship the rest from the nearest store' }}
+            </view>
+          </view>
+        </view>
+
+        <view class="fb-opt fb-opt--neutral {{fallbackBusy ? 'fb-opt--disabled' : ''}}"
+              hover-class="{{fallbackBusy ? '' : 'fb-opt--pressed'}}"
+              hover-stay-time="80"
+              bindtap="{{fallbackBusy ? '' : 'fbReplaceMissing'}}">
+          <view class="fb-opt__num">2</view>
+          <view class="fb-opt__body">
+            <view class="fb-opt__label f-bear">
+              {{ lang === 'cn' ? '替换缺货商品' : 'Replace the missing item(s)' }}
+            </view>
+            <view class="fb-opt__sub">
+              {{ lang === 'cn' ? '挑选替代品 · 差价由您承担' : 'Pick a substitute · you pay any price difference' }}
+            </view>
+          </view>
+        </view>
+
+        <!-- "Ship from the other store" only makes sense when there IS an
+             other store that can fulfil the order. Per docs: "If both
+             stores out: same 4 minus 'ship from other store', plus wait
+             for restock". Without this guard the empty button still
+             showed as "Ship from ". -->
+        <view wx:if="{{fallbackStoreName}}"
+              class="fb-opt fb-opt--lime {{fallbackBusy ? 'fb-opt--disabled' : ''}}"
+              hover-class="{{fallbackBusy ? '' : 'fb-opt--pressed-lime'}}"
+              hover-stay-time="80"
+              bindtap="{{fallbackBusy ? '' : 'fbFullFromFallback'}}">
+          <view class="fb-opt__num">3</view>
+          <view class="fb-opt__body">
+            <view class="fb-opt__label f-bear">
+              {{ lang === 'cn' ? ('从 ' + fallbackStoreName + ' 发整单货') : ('Ship from ' + fallbackStoreName) }}
+            </view>
+            <view class="fb-opt__sub">
+              <text wx:if="{{fallbackExtraKm !== null}}">+{{fallbackExtraKm}} km</text>
+              <text wx:if="{{fallbackExtraMin}}"> · ~{{fallbackExtraMin}} {{lang === 'cn' ? '分钟更慢' : 'min slower'}}</text>
+              <text> · </text><text style="color:#3a5a30;font-weight:700">{{ lang === 'cn' ? '无额外费用' : 'no extra charge' }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="fb-opt fb-opt--neutral {{fallbackBusy ? 'fb-opt--disabled' : ''}}"
+              hover-class="{{fallbackBusy ? '' : 'fb-opt--pressed'}}"
+              hover-stay-time="80"
+              bindtap="{{fallbackBusy ? '' : 'fbWaitForRestock'}}">
+          <view class="fb-opt__num">4</view>
+          <view class="fb-opt__body">
+            <view class="fb-opt__label f-bear">
+              {{ lang === 'cn' ? '等补货后发货' : 'Wait for restock' }}
+            </view>
+            <view class="fb-opt__sub">
+              {{ lang === 'cn' ? '不赶时间?到货当天或次日发货' : 'Not in a rush? We ship same-day or next-day once restocked' }}
+            </view>
+          </view>
+        </view>
+
+        <view class="fb-opt fb-opt--ghost {{fallbackBusy ? 'fb-opt--disabled' : ''}}"
+              hover-class="{{fallbackBusy ? '' : 'fb-opt--pressed'}}"
+              hover-stay-time="80"
+              bindtap="{{fallbackBusy ? '' : 'fbCancelOrder'}}">
+          <view class="fb-opt__num">✕</view>
+          <view class="fb-opt__body">
+            <view class="fb-opt__label f-bear">
+              {{ lang === 'cn' ? '取消整单订单' : 'Cancel the whole order' }}
+            </view>
+            <view class="fb-opt__sub muted">
+              {{ lang === 'cn' ? '不下单了 · 关闭此弹窗' : 'Don’t place it · close this dialog' }}
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- Substitute picker — overlays on top of the 5-option modal.
+       Two modes:
+         • Curated (default): admin-recommended substitutes for the missing
+           item, in stock at the same store. Tap a card to pick it.
+         • Browse all: search the full catalogue and pick anything. Toggle
+           via the "Browse all products" link. Customer also lands here
+           automatically when there are no curated suggestions.
+       Both modes render the same .fb-sub row template so the UI feels
+       consistent whether the office curated a substitute or not. -->
+  <view wx:if="{{showReplacePicker}}" class="fb-modal-backdrop" bindtap="onReplacePickerBack" catchtouchmove="noop">
+    <view class="fb-modal fb-modal--tall" catchtap="noop">
+      <view class="fb-modal__head">
+        <view class="fb-modal__title f-bear">
+          {{ lang === 'cn'
+              ? ('替换：' + (missingItems[replacePickerIndex].name_cn || missingItems[replacePickerIndex].name_en))
+              : ('Replace ' + (missingItems[replacePickerIndex].name_en || missingItems[replacePickerIndex].name_cn)) }}
+        </view>
+        <view class="fb-modal__sub muted">
+          {{ lang === 'cn'
+              ? (missingItems.length > 1 ? ('第 ' + (replacePickerIndex+1) + ' / ' + missingItems.length + ' 件 · ' + (browseAll ? '挑一个商品' : '选择一个替代品')) : (browseAll ? '挑一个商品' : '选择一个替代品'))
+              : (missingItems.length > 1 ? ('Item ' + (replacePickerIndex+1) + ' of ' + missingItems.length + ' · ' + (browseAll ? 'pick any product' : 'pick a substitute')) : (browseAll ? 'Pick any product' : 'Pick a substitute')) }}
+        </view>
+      </view>
+
+      <!-- Mode toggle: curated ⇄ browse-all. -->
+      <view class="fb-mode-toggle">
+        <view wx:if="{{!browseAll}}" class="fb-mode-toggle__link f-toni" bindtap="toggleBrowseAll">
+          {{ lang === 'cn' ? '浏览全部商品 →' : 'Browse all products →' }}
+        </view>
+        <view wx:elif="{{substituteOptions.length}}" class="fb-mode-toggle__link f-toni" bindtap="toggleBrowseAll">
+          {{ lang === 'cn' ? '← 返回推荐替代品' : '← Back to recommended' }}
+        </view>
+      </view>
+
+      <!-- Search input — only relevant in browse mode. -->
+      <view wx:if="{{browseAll}}" class="fb-search">
+        <view class="fb-search__icon">🔍</view>
+        <input class="fb-search__input"
+               placeholder="{{lang === 'cn' ? '搜索商品名 / SKU' : 'Search name or SKU'}}"
+               value="{{browseQuery}}"
+               bindinput="onBrowseQueryInput"
+               confirm-type="search"/>
+        <view wx:if="{{browseQuery}}" class="fb-search__clear" bindtap="clearBrowseQuery">×</view>
+      </view>
+
+      <scroll-view scroll-y="true" class="fb-subs__scroll">
+        <!-- Curated mode -->
+        <block wx:if="{{!browseAll}}">
+          <view wx:if="{{!substituteOptions.length}}" class="fb-subs__empty muted">
+            {{ lang === 'cn' ? '暂无推荐替代品 — 试试上方"浏览全部商品"' : 'No recommended substitutes — try Browse all products above' }}
+          </view>
+          <view wx:for="{{substituteOptions}}" wx:key="product_id" class="fb-sub" data-id="{{item.product_id}}" bindtap="onPickSubstitute">
+            <view class="fb-sub__img">
+              <image wx:if="{{item.image_data}}" src="{{item.image_data}}" mode="aspectFill"/>
+            </view>
+            <view class="fb-sub__body">
+              <view class="fb-sub__name f-bear">
+                {{ lang === 'cn' ? (item.name_cn || item.name_en) : (item.name_en || item.name_cn) }}
+                <text wx:if="{{item.curated}}" class="fb-sub__curated">⭐</text>
+              </view>
+              <view class="fb-sub__sub muted">{{ lang === 'cn' ? (item.name_en || '') : (item.name_cn || '') }}{{ item.sku ? ' · ' + item.sku : '' }}</view>
+            </view>
+            <view class="fb-sub__price f-bear">¥{{item.sell_price}}</view>
+          </view>
+        </block>
+
+        <!-- Browse-all mode -->
+        <block wx:else>
+          <view wx:if="{{browseLoading && !browseResults.length}}" class="fb-subs__empty muted">
+            {{ lang === 'cn' ? '加载中...' : 'Loading…' }}
+          </view>
+          <view wx:elif="{{!browseResults.length}}" class="fb-subs__empty muted">
+            {{ browseQuery
+                ? (lang === 'cn' ? ('未找到 「' + browseQuery + '」') : ('No matches for “' + browseQuery + '”'))
+                : (lang === 'cn' ? '暂无商品' : 'No products') }}
+          </view>
+          <view wx:for="{{browseResults}}" wx:key="product_id" class="fb-sub" data-id="{{item.product_id}}" bindtap="onPickSubstitute">
+            <view class="fb-sub__img">
+              <image wx:if="{{item.image_data}}" src="{{item.image_data}}" mode="aspectFill"/>
+            </view>
+            <view class="fb-sub__body">
+              <view class="fb-sub__name f-bear">{{ lang === 'cn' ? (item.name_cn || item.name_en) : (item.name_en || item.name_cn) }}</view>
+              <view class="fb-sub__sub muted">{{ lang === 'cn' ? (item.name_en || '') : (item.name_cn || '') }}{{ item.sku ? ' · ' + item.sku : '' }}</view>
+            </view>
+            <view class="fb-sub__price f-bear">¥{{item.sell_price}}</view>
+          </view>
+        </block>
+      </scroll-view>
+
+      <view class="fb-subs__footer">
+        <view class="fb-opt fb-opt--ghost"
+              hover-class="fb-opt--pressed"
+              hover-stay-time="80"
+              bindtap="onReplacePickerBack">
+          {{ lang === 'cn' ? '← 返回' : '← Back' }}
+        </view>
+      </view>
+    </view>
+  </view>
+
   <popup-manager page="checkout"></popup-manager>
 
-  <!-- Custom in-page fallback-confirmation modal. Replaces wx.showModal so
-       typography (Bear / Toni) and palette match the rest of the checkout.
-       Backdrop tap dismisses ↔ Cancel; the inner card swallows the tap. -->
-  <view wx:if="{{showFallbackModal}}" class="fb-modal-backdrop" bindtap="resolveFallbackCancel">
+  <!-- Custom in-page fallback-confirmation modal (legacy simple yes/no).
+       Replaces wx.showModal so typography (Bear / Toni) and palette match
+       the rest of the checkout. Backdrop tap dismisses ↔ Cancel; the
+       inner card swallows the tap.
+       Gated on fallbackGate === 'simple_confirm' so it never overlays the
+       richer 5-option modal above when the server picks options_5. Without
+       this guard both modals rendered simultaneously and this one always
+       covered the options modal because it sits later in the DOM. -->
+  <view wx:if="{{showFallbackModal && fallbackGate === 'simple_confirm'}}" class="fb-modal-backdrop" bindtap="resolveFallbackCancel">
     <view class="fb-modal-card" catchtap="noop">
       <view class="fb-modal-icon">🚚</view>
       <view class="fb-modal-kicker f-toni">{{ lang === 'cn' ? '02 · 库存提示' : '02 · STOCK NOTICE' }}</view>
@@ -361,12 +678,84 @@
           ? ' 发货，配送时间会比往常更久。'
           : ' instead — delivery will take longer than usual.' }}</text>
       </view>
+
+      <!-- Spell out exactly which items the nearest store is short of, so
+           the customer knows whether they care enough about that SKU to
+           accept the longer delivery (vs. tapping Cancel and removing it). -->
+      <view wx:if="{{missingItems.length}}" class="fb-modal-missing">
+        <view class="fb-modal-missing__kicker f-toni">
+          {{ lang === 'cn' ? '缺货商品' : 'Out of stock' }}
+        </view>
+        <view wx:for="{{missingItems}}" wx:key="product_id" class="fb-modal-missing__row">
+          <view wx:if="{{item.image_data}}" class="fb-modal-missing__img">
+            <image src="{{item.image_data}}" mode="aspectFill"/>
+          </view>
+          <view class="fb-modal-missing__name">
+            {{ lang === 'cn' ? (item.name_cn || item.name_en) : (item.name_en || item.name_cn) }}
+            <text class="fb-modal-missing__qty"> × {{item.qty}}</text>
+          </view>
+        </view>
+      </view>
+      <!-- Numeric delta — server-computed distance + time. Only renders when
+           the server actually returned a value; falls back to the prose-only
+           message above if extra_km / extra_min_estimate were null. -->
+      <view wx:if="{{fallbackExtraKm !== null || fallbackExtraMin}}" class="fb-modal-delta">
+        <view wx:if="{{fallbackExtraKm !== null}}" class="fb-modal-delta__chip">
+          <text class="fb-modal-delta__icon">📍</text>
+          <text class="fb-modal-delta__val">+{{fallbackExtraKm}} km</text>
+          <text class="fb-modal-delta__lbl">{{ lang === 'cn' ? '更远' : 'farther' }}</text>
+        </view>
+        <view wx:if="{{fallbackExtraMin}}" class="fb-modal-delta__chip">
+          <text class="fb-modal-delta__icon">⏱</text>
+          <text class="fb-modal-delta__val">~{{fallbackExtraMin}} min</text>
+          <text class="fb-modal-delta__lbl">{{ lang === 'cn' ? '更慢' : 'slower' }}</text>
+        </view>
+      </view>
       <view class="fb-modal-actions">
         <view class="fb-modal-btn fb-modal-btn--secondary f-toni" bindtap="resolveFallbackCancel">
           {{ lang === 'cn' ? '取消' : 'Cancel' }}
         </view>
         <view class="fb-modal-btn fb-modal-btn--primary f-toni" bindtap="resolveFallbackContinue">
           {{ lang === 'cn' ? '继续下单 →' : 'Continue →' }}
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- Wait-for-restock slot-conflict warning. Brand-styled (reuses
+       fb-modal-card so the palette + typography match the simple_confirm
+       modal above). Opens when the customer taps "Wait for restock" in
+       the 5-option modal AND their picked slot is time-bound
+       (right_away or today HH:MM). Backdrop tap = Cancel. -->
+  <view wx:if="{{showWaitConfirmModal}}" class="fb-modal-backdrop" bindtap="resolveWaitConfirmCancel">
+    <view class="fb-modal-card" catchtap="noop">
+      <view class="fb-modal-icon">⏳</view>
+      <view class="fb-modal-kicker f-toni">
+        {{ lang === 'cn' ? '04 · 时段提示' : '04 · TIMING NOTICE' }}
+      </view>
+      <view class="fb-modal-title f-bear">
+        {{ lang === 'cn' ? '时段可能无法保证' : 'Time slot may not be honored' }}
+      </view>
+      <view class="fb-modal-body">
+        <text>{{ lang === 'cn'
+          ? '等补货后发货意味着我们会在补货当天或次日发货 — 您选择的 '
+          : 'Waiting for restock means we ship as soon as the item arrives — your picked window ' }}</text>
+        <text class="fb-modal-body-em">{{ waitConfirmSlotLabel }}</text>
+        <text>{{ lang === 'cn'
+          ? ' 时段可能无法准时送达。'
+          : ' may not be met.' }}</text>
+      </view>
+      <view class="fb-modal-body" style="margin-top: 8rpx;">
+        <text class="muted">{{ lang === 'cn'
+          ? '若选择继续，您所选时段的加急费用将被退还，订单会在到货后第一时间发出。'
+          : 'If you continue, any same-day surcharge is refunded and we ship as soon as stock arrives.' }}</text>
+      </view>
+      <view class="fb-modal-actions">
+        <view class="fb-modal-btn fb-modal-btn--secondary f-toni" bindtap="resolveWaitConfirmCancel">
+          {{ lang === 'cn' ? '取消' : 'Cancel' }}
+        </view>
+        <view class="fb-modal-btn fb-modal-btn--primary f-toni" bindtap="resolveWaitConfirmContinue">
+          {{ lang === 'cn' ? '继续 →' : 'Continue →' }}
         </view>
       </view>
     </view>

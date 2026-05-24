@@ -1,6 +1,11 @@
 .page {
   background: var(--oat);
   min-height: 100vh;
+  /* Reserve room for the custom tab bar so the last block isn't covered.
+     --tabbar-clear is a fixed 170rpx that covers Android (no safe area) and
+     iPhone home-indicator (~68rpx). The chained-var form with env() is
+     broken in WeChat — see app.wxss. */
+  padding-bottom: var(--tabbar-clear);
 }
 
 /* Floating language toggle — top-left, above the hero. Compact pill so

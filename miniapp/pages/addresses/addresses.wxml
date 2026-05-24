@@ -6,34 +6,60 @@
 
   <!-- ── LIST MODE ── -->
   <block wx:if="{{mode === 'list'}}">
-    <view wx:if="{{loading && !addresses.length}}" class="loading">
-      <view class="skeleton" style="height:200rpx;margin:24rpx 44rpx"></view>
-      <view class="skeleton" style="height:200rpx;margin:24rpx 44rpx"></view>
-    </view>
 
-    <view wx:elif="{{!addresses.length}}" class="empty">
-      <view class="empty-msg muted">{{copy.empty}}</view>
-    </view>
+    <!-- Unbound: bind-empty card in place of the list + Add button. Same
+         contract as checkout — we only store addresses against a WeChat-
+         verified identity, so the manual form is never offered until bind. -->
+    <block wx:if="{{!isBound}}">
+      <view class="bind-empty">
+        <view class="bind-empty__icon">🪪</view>
+        <view class="bind-empty__title f-bear">{{copy.bindTitle}}</view>
+        <view class="bind-empty__body">{{copy.bindBody}}</view>
+        <view class="bind-empty__cta f-toni" bindtap="bindWechat">{{copy.bindCta}}</view>
+      </view>
+    </block>
 
-    <view wx:else class="list">
-      <view wx:for="{{addresses}}" wx:key="id" class="addr-card">
-        <view class="addr-top">
-          <view class="addr-name"><text class="f-bear">{{item.recipient_name}}</text> · {{item.phone}}</view>
-          <view wx:if="{{item.is_default}}" class="default-badge f-toni">{{copy.defaultBadge}}</view>
-        </view>
-        <view class="addr-full">{{item.address}}{{item.detail ? ' · ' + item.detail : ''}}</view>
-        <view wx:if="{{item.city}}" class="addr-city muted">{{item.city}}</view>
-        <view class="addr-actions">
-          <view wx:if="{{!item.is_default}}" class="action-link" data-id="{{item.id}}" bindtap="setDefault">{{copy.setDefault}}</view>
-          <view class="action-link" data-id="{{item.id}}" bindtap="showEditForm">{{copy.editLabel}}</view>
-          <view class="action-link danger" data-id="{{item.id}}" bindtap="deleteAddr">{{copy.deleteLabel}}</view>
+    <block wx:else>
+      <view wx:if="{{loading && !addresses.length}}" class="loading">
+        <view class="skeleton" style="height:200rpx;margin:24rpx 44rpx"></view>
+        <view class="skeleton" style="height:200rpx;margin:24rpx 44rpx"></view>
+      </view>
+
+      <view wx:elif="{{!addresses.length}}" class="empty">
+        <view class="empty-msg muted">{{copy.empty}}</view>
+      </view>
+
+      <view wx:else class="list">
+        <view wx:if="{{addresses.length > 1}}" class="list-hint muted f-toni">{{copy.tapToSelectHint}}</view>
+        <view wx:for="{{addresses}}" wx:key="id"
+              class="addr-card {{item.is_default ? 'is-selected' : ''}}"
+              data-id="{{item.id}}"
+              bindtap="pickAddress">
+          <view class="addr-top">
+            <view class="addr-name"><text class="f-bear">{{item.recipient_name}}</text> · {{item.phone}}</view>
+            <view wx:if="{{item.is_default}}" class="default-badge f-toni">{{copy.selectedBadge}}</view>
+          </view>
+          <view class="addr-full">{{item.address}}{{item.detail ? ' · ' + item.detail : ''}}</view>
+          <view wx:if="{{item.city}}" class="addr-city muted">{{item.city}}</view>
+          <!-- Rider ETA pill — distance from the nearest store + estimated
+               e-bike ride time (≈18 km/h + 8 min pickup buffer). Helps the
+               customer pick the address that ships fastest. -->
+          <view wx:if="{{item.delivery_eta}}" class="addr-eta f-toni">
+            🛵 {{lang === 'cn' ? '约 ' : '~'}}{{item.delivery_eta.km}}{{lang === 'cn' ? ' 公里 · 约 ' : ' km · ~'}}{{item.delivery_eta.min}}{{lang === 'cn' ? ' 分钟' : ' min'}}
+          </view>
+          <view class="addr-actions">
+            <!-- Edit / Delete use catchtap so taps on these links don't
+                 bubble up to the card's pickAddress handler. -->
+            <view class="action-link" data-id="{{item.id}}" catchtap="showEditForm">{{copy.editLabel}}</view>
+            <view class="action-link danger" data-id="{{item.id}}" catchtap="deleteAddr">{{copy.deleteLabel}}</view>
+          </view>
         </view>
       </view>
-    </view>
 
-    <view class="add-btn-wrap">
-      <button class="add-btn f-toni" bindtap="showAddForm">{{copy.addBtn}}</button>
-    </view>
+      <view class="add-btn-wrap">
+        <button class="add-btn f-toni" bindtap="showAddForm">{{copy.addBtn}}</button>
+      </view>
+    </block>
   </block>
 
   <!-- ── FORM MODE ── -->

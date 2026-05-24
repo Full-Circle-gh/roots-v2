@@ -1,5 +1,40 @@
 /* Roots design tokens — matches /cms preview and customer-facing brand */
+
+/* Bear Serif's digits are thin/geometric and don't match its chunky letters.
+   The first @font-face below maps digits + currency to Lilita One; the second
+   covers the remaining glyphs from BearSerif.otf. Both files are also loaded
+   globally via wx.loadFontFace (utils/fonts.js) for cross-page availability. */
+@font-face {
+  font-family: 'Bear Serif';
+  src: url('https://rootskitchenchina.com/assets/fonts/LilitaOne.ttf') format('truetype');
+  unicode-range: U+0024, U+0025, U+0030-0039, U+00A5;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Bear Serif';
+  src: url('https://rootskitchenchina.com/assets/fonts/BearSerif.otf') format('opentype');
+  font-display: swap;
+}
+
 page {
+  /* Height of the custom tab bar (custom-tab-bar/index.wxss). Two flavours
+     because WeChat's CSS engine does NOT resolve env(safe-area-inset-bottom)
+     when it sits inside calc() inside a chained var() — the env() expands
+     to 0 and you lose the iPhone home-indicator inset (~68rpx). So:
+
+       --tabbar-h        : 98rpx + safe-area, intended for INLINE use at
+                           the consuming site (e.g. `bottom: var(--tabbar-h)`).
+                           Safe when the consumer is a non-calc property.
+       --tabbar-clear    : a generous fixed reservation (170rpx ≈ 98 + 68
+                           safe-area + a 4rpx kiss of buffer). Use this in
+                           any padding-bottom/calc context, because the
+                           env() form silently breaks there.
+
+     Stick to --tabbar-clear for padding-bottom; use --tabbar-h when you
+     literally want `bottom: <value>` and nothing else. */
+  --tabbar-h:     calc(98rpx + env(safe-area-inset-bottom));
+  --tabbar-clear: 170rpx;
+
   /* Brand palette */
   --lime: #CCD900;
   --forest: #365329;

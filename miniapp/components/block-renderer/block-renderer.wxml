@@ -1,15 +1,35 @@
 <!-- Switch on block.type and render the appropriate sub-template.
      All data normalisation happens in JS; the template stays declarative. -->
 
-<view wx:if="{{type === 'announcement_bar'}}" class="announce {{announceLink ? 'announce-linked' : ''}}" style="background:{{bg}};color:{{fg}}" bindtap="onAnnounceTap">
-  <text class="announce-text">{{label}}</text>
+<view wx:if="{{type === 'announcement_bar'}}" class="announce anim-{{anim}} speed-{{speed}} {{announceLink ? 'announce-linked' : ''}}" style="background:{{bg}};color:{{fg}}" bindtap="onAnnounceTap">
+  <!-- Marquee: clipped wrapper around a duplicated track for seamless loop -->
+  <view wx:if="{{anim === 'marquee_rtl' || anim === 'marquee_ltr'}}" class="anim-clip">
+    <view class="anim-track">
+      <text class="announce-text">{{label}}</text>
+      <text class="announce-text">{{label}}</text>
+    </view>
+  </view>
+  <!-- Vertical scroll: fixed-height clip with stacked duplicates -->
+  <view wx:elif="{{anim === 'scroll_up' || anim === 'scroll_down'}}" class="anim-vclip">
+    <view class="anim-vtrack">
+      <text class="announce-text">{{label}}</text>
+      <text class="announce-text">{{label}}</text>
+    </view>
+  </view>
+  <!-- Per-letter: each char on its own with --i for staggered delay -->
+  <view wx:elif="{{anim === 'typewriter' || anim === 'wave' || anim === 'fade_in_letters'}}" class="letters">
+    <text wx:for="{{chars}}" wx:key="index" class="ch" style="--i:{{index}}">{{item}}</text>
+  </view>
+  <!-- static, flicker — plain text -->
+  <text wx:else class="announce-text">{{label}}</text>
   <text wx:if="{{announceLink}}" class="announce-chev">›</text>
 </view>
 
 <!-- Hero: full view (current — image fills, CTAs float) -->
-<view wx:elif="{{type === 'hero_banner' && heroView !== 'split'}}" class="hero hero-full" style="{{aspectRatio ? 'aspect-ratio:' + aspectRatio + ';height:auto' : 'height:' + (placeholderH * 2) + 'rpx'}}">
+<view wx:elif="{{type === 'hero_banner' && heroView !== 'split'}}" class="hero hero-full scrim-{{heroScrim}} enter-{{heroEnter}}" style="{{aspectRatio ? 'aspect-ratio:' + aspectRatio + ';height:auto' : 'height:' + (placeholderH * 2) + 'rpx'}}">
   <image wx:if="{{imageUrl}}" src="{{imageUrl}}" mode="aspectFill" class="hero-img"/>
   <view wx:else class="hero-placeholder">No image</view>
+  <view wx:if="{{imageUrl && ctas.length && heroScrim !== 'none'}}" class="hero-scrim"></view>
   <view wx:if="{{imageUrl && ctas.length}}" class="cta-stack">
     <button wx:for="{{ctas}}" wx:key="index" class="cta-btn cta-{{item.style}}"
             data-idx="{{index}}" bindtap="onCtaTap">
@@ -36,7 +56,7 @@
   </view>
 </view>
 
-<view wx:elif="{{type === 'category_tabs'}}" class="cattabs cattabs-{{catView}}">
+<view wx:elif="{{type === 'category_tabs'}}" class="cattabs cattabs-{{catView}}" style="{{catBg ? 'background:' + catBg : ''}}">
   <view class="head">
     <view>
       <view class="kicker">{{kicker}}</view>
@@ -45,7 +65,7 @@
     <view class="more">{{seeAll}}</view>
   </view>
   <!-- Tiles view (default) -->
-  <view wx:if="{{tiles.length && catView !== 'icons'}}" class="grid">
+  <view wx:if="{{tiles.length && catView === 'tiles'}}" class="grid">
     <view wx:for="{{tiles}}" wx:key="id" class="tile"
           style="background:{{item.bg}};color:{{item.fg}}"
           data-id="{{item.id}}" bindtap="onCategoryTap">
@@ -61,17 +81,28 @@
       <view class="icon-name">{{item.name}}</view>
     </view>
   </view>
+  <!-- Scroll view — single horizontal row, drag left/right -->
+  <scroll-view wx:elif="{{tiles.length && catView === 'scroll'}}" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}" class="scroll-rail">
+    <view wx:for="{{tiles}}" wx:key="id" class="scroll-tile"
+          data-id="{{item.id}}" bindtap="onCategoryTap">
+      <view class="icon-circle" style="background:{{item.bg}};color:{{item.fg}}">{{item.letter}}</view>
+      <view class="icon-name">{{item.name}}</view>
+    </view>
+  </scroll-view>
   <view wx:else class="empty">No categories yet.</view>
 </view>
 
-<view wx:elif="{{type === 'featured_item'}}" class="featured">
-  <view wx:if="{{featuredProduct}}" class="card" data-id="{{featuredProduct.id}}" bindtap="onProductTap">
-    <view class="img"><image wx:if="{{featuredProduct.image}}" src="{{featuredProduct.image}}" mode="aspectFill" class="img-full"/></view>
+<view wx:elif="{{type === 'featured_item'}}" class="featured featured-view-{{featuredView}} corner-{{featuredCorner}} enter-{{featuredEnter}}" style="background:{{featuredBg}}">
+  <view wx:if="{{featuredProduct}}" class="card" data-id="{{featuredProduct.id}}" bindtap="onProductTap" style="background:{{featuredCardBg}};color:{{featuredCardFg}}">
+    <view class="img">
+      <image wx:if="{{featuredProduct.image}}" src="{{featuredProduct.image}}" mode="aspectFill" class="img-full"/>
+      <view wx:if="{{featuredShowSale}}" class="feat-badge">{{featuredSaleLabel}}</view>
+    </view>
     <view class="meta">
-      <view class="kicker">{{featuredKicker}}</view>
+      <view class="kicker" style="color:{{featuredCardFg}}">{{featuredKicker}}</view>
       <view class="name">{{featuredProduct.name}}</view>
-      <view class="price-row">
-        <text wx:if="{{featuredProduct.priceWas}}" class="price-was">{{featuredProduct.priceWas}}</text>
+      <view wx:if="{{featuredPriceMode !== 'hide_price'}}" class="price-row">
+        <text wx:if="{{featuredPriceMode === 'both' && featuredProduct.priceWas}}" class="price-was" style="color:{{featuredCardFg}};opacity:.55">{{featuredProduct.priceWas}}</text>
         <text class="price {{featuredProduct.isFlash ? 'is-flash' : ''}}">{{price}}</text>
       </view>
     </view>
@@ -79,7 +110,7 @@
   <view wx:else class="empty">No featured product</view>
 </view>
 
-<view wx:elif="{{type === 'product_grid'}}" class="grid-block grid-view-{{gridView}}">
+<view wx:elif="{{type === 'product_grid'}}" class="grid-block grid-view-{{gridView}} corner-{{gridCorner}} density-{{gridDensity}}">
   <view class="head">
     <view>
       <view class="kicker">{{kicker}}</view>
@@ -89,58 +120,66 @@
   </view>
   <!-- Grid view (default) -->
   <view wx:if="{{gridView !== 'scroll' && gridView !== 'list'}}" class="grid cols-{{cols}}">
-    <view wx:for="{{gridProducts}}" wx:key="id" class="card"
+    <view wx:for="{{gridProducts}}" wx:key="id" class="card {{item.rank ? 'has-rank rank-card-' + item.rank : ''}}"
           data-id="{{item.id}}" bindtap="onProductTap">
       <view class="img">
         <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
-        <view wx:if="{{item.isFlash}}" class="grid-flash-badge">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+        <view wx:if="{{item.rank}}" class="rank-badge {{item.rankClass}}">{{item.rankLabel}}</view>
+        <view wx:elif="{{item.isFlash}}" class="grid-flash-badge">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
       </view>
       <view class="name">{{item.name}}</view>
       <view class="price-row">
         <text wx:if="{{item.priceWas}}" class="price-was">{{item.priceWas}}</text>
-        <text class="price {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+        <text class="price {{item.priceWas ? 'is-flash' : ''}}">{{item.price}}</text>
       </view>
+      <view wx:if="{{item.soldCaption}}" class="sold-caption">{{item.soldCaption}}</view>
     </view>
     <view wx:if="{{!gridProducts.length}}" class="empty">No products yet</view>
   </view>
   <!-- Scroll view — horizontal rail -->
   <scroll-view wx:if="{{gridView === 'scroll'}}" class="scroll-rail" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
-    <view wx:for="{{gridProducts}}" wx:key="id" class="rail-card"
+    <view wx:for="{{gridProducts}}" wx:key="id" class="rail-card {{item.rank ? 'has-rank rank-card-' + item.rank : ''}}"
           data-id="{{item.id}}" bindtap="onProductTap">
       <view class="img">
         <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
-        <view wx:if="{{item.isFlash}}" class="grid-flash-badge">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+        <view wx:if="{{item.rank}}" class="rank-badge {{item.rankClass}}">{{item.rankLabel}}</view>
+        <view wx:elif="{{item.isFlash}}" class="grid-flash-badge">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
       </view>
       <view class="name">{{item.name}}</view>
       <view class="price-row">
         <text wx:if="{{item.priceWas}}" class="price-was">{{item.priceWas}}</text>
-        <text class="price {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+        <text class="price {{item.priceWas ? 'is-flash' : ''}}">{{item.price}}</text>
       </view>
+      <view wx:if="{{item.soldCaption}}" class="sold-caption">{{item.soldCaption}}</view>
     </view>
     <view wx:if="{{!gridProducts.length}}" class="empty">No products yet</view>
   </scroll-view>
   <!-- List view — single column with bigger images + tagline -->
   <view wx:if="{{gridView === 'list'}}" class="list-rows">
-    <view wx:for="{{gridProducts}}" wx:key="id" class="list-row"
+    <view wx:for="{{gridProducts}}" wx:key="id" class="list-row {{item.rank ? 'has-rank rank-card-' + item.rank : ''}}"
           data-id="{{item.id}}" bindtap="onProductTap">
       <view class="img">
         <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
-        <view wx:if="{{item.isFlash}}" class="grid-flash-badge">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+        <view wx:if="{{item.rank}}" class="rank-badge {{item.rankClass}}">{{item.rankLabel}}</view>
+        <view wx:elif="{{item.isFlash}}" class="grid-flash-badge">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
       </view>
       <view class="meta">
         <view class="name">{{item.name}}</view>
         <view wx:if="{{item.tagline}}" class="tagline">{{item.tagline}}</view>
         <view class="price-row">
           <text wx:if="{{item.priceWas}}" class="price-was">{{item.priceWas}}</text>
-          <text class="price {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+          <text class="price {{item.priceWas ? 'is-flash' : ''}}">{{item.price}}</text>
         </view>
+        <view wx:if="{{item.soldCaption}}" class="sold-caption">{{item.soldCaption}}</view>
       </view>
     </view>
     <view wx:if="{{!gridProducts.length}}" class="empty">No products yet</view>
   </view>
 </view>
 
-<view wx:elif="{{type === 'spacer'}}" style="height:{{height * 2}}rpx"></view>
+<view wx:elif="{{type === 'spacer'}}" class="spacer-blk divider-{{dividerStyle}}" style="height:{{height * 2}}rpx">
+  <view wx:if="{{dividerStyle !== 'none'}}" class="spacer-divider" style="border-color:{{dividerColor}};background:{{dividerStyle === 'line' ? dividerColor : 'transparent'}}"></view>
+</view>
 
 <view wx:elif="{{type === 'sticker_collage'}}" class="stickers">
   <view wx:for="{{stickers}}" wx:key="index" class="sticker"
@@ -307,6 +346,49 @@
       </view>
     </swiper-item>
   </swiper>
+</view>
+
+<!-- Favorites block — "your saved" rail / grid from customer favorites -->
+<view wx:elif="{{type === 'favorites_block' && favoritesCard && !favoritesHidden}}" class="fav-blk fav-{{favoritesCard.view}} corner-{{favoritesCorner}}" style="background:{{bg}};color:{{fg}}">
+  <view class="fav-head">
+    <view class="fav-head-text">
+      <view class="fav-kicker">{{favoritesCard.kicker}}</view>
+      <view class="fav-title">{{favoritesCard.title}}</view>
+    </view>
+    <view wx:if="{{!favoritesCard.isEmpty}}" class="fav-see-all" bindtap="onFavoritesTap">{{favoritesCard.seeAllLabel}} →</view>
+  </view>
+  <view wx:if="{{favoritesCard.isEmpty}}" class="fav-empty">
+    <view class="fav-empty-title">{{favoritesCard.emptyTitle}}</view>
+    <view class="fav-empty-sub">{{favoritesCard.emptySub}}</view>
+  </view>
+  <scroll-view wx:elif="{{favoritesCard.view === 'scroll'}}" class="fav-rail" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+    <view wx:for="{{favoritesCard.items}}" wx:key="id" class="fav-rail-card {{item.soldOut ? 'fav-out' : ''}}"
+          data-id="{{item.id}}" bindtap="onProductTap">
+      <view class="fav-img">
+        <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+        <view wx:if="{{item.soldOut}}" class="fav-out-tag">{{lang === 'cn' ? '已售罄' : 'SOLD OUT'}}</view>
+      </view>
+      <view class="fav-name">{{item.name}}</view>
+      <view class="fav-price-row">
+        <text wx:if="{{item.priceWas}}" class="fav-price-was">{{item.priceWas}}</text>
+        <text class="fav-price {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+      </view>
+    </view>
+  </scroll-view>
+  <view wx:else class="fav-grid">
+    <view wx:for="{{favoritesCard.items}}" wx:key="id" class="fav-card {{item.soldOut ? 'fav-out' : ''}}"
+          data-id="{{item.id}}" bindtap="onProductTap">
+      <view class="fav-img">
+        <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+        <view wx:if="{{item.soldOut}}" class="fav-out-tag">{{lang === 'cn' ? '已售罄' : 'SOLD OUT'}}</view>
+      </view>
+      <view class="fav-name">{{item.name}}</view>
+      <view class="fav-price-row">
+        <text wx:if="{{item.priceWas}}" class="fav-price-was">{{item.priceWas}}</text>
+        <text class="fav-price {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+      </view>
+    </view>
+  </view>
 </view>
 
 <!-- Voting block — 4 views (teaser/peek/inline/past_result) + auto-pull/static -->
@@ -489,29 +571,69 @@
   <view wx:else class="aff-receipt-signin">{{affiliateCard.signinHint}}</view>
 </view>
 
-<view wx:elif="{{type === 'store_info' && store}}" class="store-blk" style="background:{{bg}};color:{{fg}}">
-  <view wx:if="{{store.kicker}}" class="st-kicker">{{store.kicker}}</view>
-  <view wx:if="{{store.title}}" class="st-title">{{store.title}}</view>
-  <view wx:if="{{store.address}}" class="st-row">
-    <text class="st-icon">📍</text>
-    <text class="st-val">{{store.address}}</text>
+<view wx:elif="{{type === 'store_info' && stores && stores.length}}" class="store-blk" style="background:{{bg}};color:{{fg}}">
+  <view wx:if="{{storeKicker}}" class="st-kicker">{{storeKicker}}</view>
+  <view class="st-cards">
+    <view wx:for="{{stores}}" wx:key="key" wx:for-item="s" class="st-card">
+      <view wx:if="{{s.name}}" class="st-title">{{s.name}}</view>
+      <view wx:if="{{s.hasStatus}}" class="st-status">
+        <view class="st-dot" style="background:{{s.statusColor}}"></view>
+        <text class="st-status-lbl">{{s.statusLabel}}</text>
+        <text wx:if="{{s.hours}}" class="st-hours"> · {{s.hours}}</text>
+      </view>
+      <view wx:elif="{{s.hours}}" class="st-row">
+        <text class="st-icon">🕒</text>
+        <text class="st-val">{{s.hours}}</text>
+      </view>
+      <view wx:if="{{s.etaLabel}}" class="st-eta">{{s.etaLabel}}</view>
+      <view wx:if="{{s.address}}" class="st-row">
+        <text class="st-icon">📍</text>
+        <text class="st-val">{{s.address}}</text>
+      </view>
+      <view wx:if="{{s.phone}}" class="st-row" data-phone="{{s.phone}}" bindtap="onStorePhoneTap">
+        <text class="st-icon">📞</text>
+        <text class="st-val st-phone">{{s.phone}}</text>
+      </view>
+      <view wx:if="{{s.ctaLabel && s.ctaTarget}}" class="st-cta" data-target="{{s.ctaTarget}}" bindtap="onStoreCtaTap">{{s.ctaLabel}}</view>
+    </view>
   </view>
-  <view wx:if="{{store.hours}}" class="st-row">
-    <text class="st-icon">🕒</text>
-    <text class="st-val">{{store.hours}}</text>
-  </view>
-  <view wx:if="{{store.phone}}" class="st-row" bindtap="onStorePhoneTap">
-    <text class="st-icon">📞</text>
-    <text class="st-val st-phone">{{store.phone}}</text>
-  </view>
-  <view wx:if="{{store.ctaLabel && store.ctaTarget}}" class="st-cta" bindtap="onStoreCtaTap">{{store.ctaLabel}}</view>
 </view>
 
-<view wx:elif="{{type === 'greeting' && greeting}}" class="greet-blk" style="background:{{bg}};color:{{fg}}" bindtap="onGreetingCtaTap">
-  <view wx:if="{{greeting.kicker}}" class="gr-kicker">{{greeting.kicker}}</view>
-  <view class="gr-headline">{{greeting.headline}}</view>
-  <view wx:if="{{greeting.pointsLabel}}" class="gr-points" style="color:{{greeting.accent}}">★ {{greeting.pointsLabel}}</view>
-  <view wx:if="{{greeting.ctaLabel}}" class="gr-cta">{{greeting.ctaLabel}} →</view>
+<view wx:elif="{{type === 'greeting' && greeting}}" class="greet-blk greet-blk-{{greeting.view}}" style="background:{{bg}};color:{{fg}}" bindtap="onGreetingCtaTap">
+  <!-- Split: greeting + CTA on left, big points wallet on right -->
+  <view wx:if="{{greeting.view === 'split'}}" class="gr-split-row">
+    <view class="gr-split-left">
+      <view wx:if="{{greeting.kicker}}" class="gr-kicker">{{greeting.kicker}}</view>
+      <view class="gr-headline">{{greeting.headline}}</view>
+      <view wx:if="{{greeting.ctaLabel}}" class="gr-cta">{{greeting.ctaLabel}} →</view>
+    </view>
+    <view wx:if="{{greeting.pointsNum}}" class="gr-split-wallet" style="color:{{greeting.accent}};border-color:{{greeting.accent}}">
+      <view class="gr-wallet-num">{{greeting.pointsNum}}</view>
+      <view class="gr-wallet-lbl">{{greeting.pointsCnyLabel}}</view>
+    </view>
+  </view>
+  <!-- Inline: one-row, kicker + greeting on left, points pill on right -->
+  <view wx:elif="{{greeting.view === 'inline'}}" class="gr-inline-row">
+    <view class="gr-inline-copy">
+      <view wx:if="{{greeting.kicker}}" class="gr-kicker">{{greeting.kicker}}</view>
+      <view class="gr-headline gr-headline-sm">{{greeting.headline}}</view>
+    </view>
+    <view wx:if="{{greeting.pointsLabel}}" class="gr-pts-pill" style="color:{{greeting.accent}};border-color:{{greeting.accent}}">★ {{greeting.pointsLabel}}</view>
+  </view>
+  <!-- Banner: borderless, oversized greeting on coloured field -->
+  <view wx:elif="{{greeting.view === 'banner'}}">
+    <view wx:if="{{greeting.kicker}}" class="gr-kicker">{{greeting.kicker}}</view>
+    <view class="gr-headline gr-headline-lg">{{greeting.headline}}</view>
+    <view wx:if="{{greeting.pointsLabel}}" class="gr-points" style="color:{{greeting.accent}}">★ {{greeting.pointsLabel}}</view>
+    <view wx:if="{{greeting.ctaLabel}}" class="gr-cta">{{greeting.ctaLabel}} →</view>
+  </view>
+  <!-- Card (default): bordered editorial card -->
+  <view wx:else>
+    <view wx:if="{{greeting.kicker}}" class="gr-kicker">{{greeting.kicker}}</view>
+    <view class="gr-headline">{{greeting.headline}}</view>
+    <view wx:if="{{greeting.pointsLabel}}" class="gr-points" style="color:{{greeting.accent}}">★ {{greeting.pointsLabel}}</view>
+    <view wx:if="{{greeting.ctaLabel}}" class="gr-cta">{{greeting.ctaLabel}} →</view>
+  </view>
 </view>
 
 <view wx:elif="{{type === 'kitchen_status' && kitchenCard}}" class="kit-blk" style="background:{{bg}};color:{{fg}}" bindtap="onKitchenCtaTap">
@@ -529,7 +651,7 @@
   <view wx:if="{{kitchenCard.ctaLabel}}" class="kit-cta">{{kitchenCard.ctaLabel}} →</view>
 </view>
 
-<view wx:elif="{{type === 'recipe_story' && recipe}}" class="recipe-blk recipe-{{recipe.imageView}}" style="background:{{bg}};color:{{fg}}">
+<view wx:elif="{{type === 'recipe_story' && recipe}}" class="recipe-blk recipe-{{recipe.imageView}} corner-{{recipeCorner}}" style="background:{{bg}};color:{{fg}}">
   <view class="rcp-img">
     <image wx:if="{{recipe.imageUrl}}" src="{{recipe.imageUrl}}" mode="aspectFill" class="img-full"/>
     <view wx:else class="rcp-img-placeholder">No image</view>
@@ -557,7 +679,7 @@
   </view>
 </view>
 
-<view wx:elif="{{type === 'bundle' && bundle && bundle.active}}" class="bun-blk" style="background:{{bg}};color:{{fg}}">
+<view wx:elif="{{type === 'bundle' && bundle && bundle.active}}" class="bun-blk corner-{{bundleCorner}} enter-{{bundleEnter}}" style="background:{{bg}};color:{{fg}}">
   <view wx:if="{{bundle.kicker}}" class="bun-kicker">{{bundle.kicker}}</view>
 
   <!-- Variant pills — tap to swap which bundle shows below. Hidden when
@@ -606,7 +728,58 @@
   </view>
 </view>
 
-<view wx:elif="{{type === 'countdown_timer'}}" class="countdown" style="background:{{bg}};color:{{fg}}">
+<!-- "Add us on 企业微信" block. Tap the button → opens the mini-app's bound
+     WeCom CSR chat (needs WeCom CSR bound in MP backend → 设置 → 客服).
+     Long-press the 联系我 QR → adds employee as WeCom contact. Either half
+     is optional. Card stacks vertically; strip is compact horizontal. -->
+<view wx:elif="{{type === 'wecom_contact' && wecom && wecom.view === 'card'}}" class="wc-blk wc-card" style="background:{{bg}};color:{{fg}}">
+  <view wx:if="{{wecom.kicker}}" class="wc-kicker">{{wecom.kicker}}</view>
+  <view wx:if="{{wecom.title}}" class="wc-title">{{wecom.title}}</view>
+  <view wx:if="{{wecom.subtitle}}" class="wc-sub">{{wecom.subtitle}}</view>
+  <!-- Three button modes (priority order):
+       1. qrUrl set      → tap previews the QR full-screen; user long-presses
+                           to trigger WeChat's "识别图中二维码" → 添加朋友
+                           flow. Only sanctioned add-WeChat-friend path.
+       2. kfUrl set      → tap opens WeCom (企业微信) 微信客服 chat via
+                           wx.openCustomerServiceChat. Routes directly to
+                           the company's WeCom CSR, not the OA's CSR.
+       3. neither        → falls back to open-type="contact" (whichever
+                           客服 is bound in 小程序管理后台). -->
+  <button wx:if="{{wecom.showButton && wecom.qrUrl}}" class="wc-cta"
+          bindtap="onWecomCtaTap" style="background:{{wecom.accent}}">{{wecom.buttonLabel}}</button>
+  <button wx:elif="{{wecom.showButton && wecom.kfUrl}}" class="wc-cta"
+          bindtap="onWecomChatTap" style="background:{{wecom.accent}}">{{wecom.buttonLabel}}</button>
+  <button wx:elif="{{wecom.showButton}}" class="wc-cta" open-type="contact"
+          session-from="wecom_contact_block" bindcontact="onWecomContactError"
+          style="background:{{wecom.accent}}">{{wecom.buttonLabel}}</button>
+  <view wx:if="{{wecom.showQr && wecom.qrUrl}}" class="wc-qr-wrap">
+    <image src="{{wecom.qrUrl}}" mode="aspectFit" class="wc-qr" show-menu-by-longpress="{{true}}" bindtap="onWecomQrTap"/>
+    <view wx:if="{{wecom.agentName}}" class="wc-name">{{wecom.agentName}}</view>
+    <view class="wc-hint">{{wecom.hint}}</view>
+  </view>
+</view>
+
+<view wx:elif="{{type === 'wecom_contact' && wecom && wecom.view === 'strip'}}" class="wc-blk wc-strip" style="background:{{bg}};color:{{fg}}">
+  <view class="wc-strip-body">
+    <view wx:if="{{wecom.kicker}}" class="wc-kicker">{{wecom.kicker}}</view>
+    <view wx:if="{{wecom.title}}" class="wc-strip-title">{{wecom.title}}</view>
+    <view wx:if="{{wecom.subtitle}}" class="wc-strip-sub">{{wecom.subtitle}}</view>
+    <!-- See card-view notes for the three-mode branching rationale. -->
+    <button wx:if="{{wecom.showButton && wecom.qrUrl}}" class="wc-cta wc-cta-strip"
+            bindtap="onWecomCtaTap" style="background:{{wecom.accent}}">{{wecom.buttonLabel}}</button>
+    <button wx:elif="{{wecom.showButton && wecom.kfUrl}}" class="wc-cta wc-cta-strip"
+            bindtap="onWecomChatTap" style="background:{{wecom.accent}}">{{wecom.buttonLabel}}</button>
+    <button wx:elif="{{wecom.showButton}}" class="wc-cta wc-cta-strip" open-type="contact"
+            session-from="wecom_contact_block" bindcontact="onWecomContactError"
+            style="background:{{wecom.accent}}">{{wecom.buttonLabel}}</button>
+  </view>
+  <view wx:if="{{wecom.showQr && wecom.qrUrl}}" class="wc-strip-qr">
+    <image src="{{wecom.qrUrl}}" mode="aspectFit" class="wc-qr-sm" show-menu-by-longpress="{{true}}" bindtap="onWecomQrTap"/>
+    <view class="wc-hint wc-hint-sm">{{wecom.hint}}</view>
+  </view>
+</view>
+
+<view wx:elif="{{type === 'countdown_timer'}}" class="countdown corner-{{countdownCorner}} {{countdownUrgent ? 'urgent' : ''}}" style="background:{{bg}};color:{{fg}}">
   <view wx:if="{{countdown.kicker}}" class="cd-kicker">{{countdown.kicker}}</view>
   <view wx:if="{{countdown.title}}" class="cd-title">{{countdown.title}}</view>
   <view wx:if="{{!countdown.isEnded}}" class="cd-clock">

@@ -132,6 +132,16 @@
       </view>
       <view class="row-arrow">→</view>
     </view>
+    <view class="row" bindtap="goFavorites">
+      <view class="row-body">
+        <view class="row-title">
+          <text class="f-bear">{{copy.menuFavorites}}</text>
+          <text class="row-cn muted">  · {{copy.menuFavoritesCn}}</text>
+        </view>
+        <view class="row-meta">{{customer.favorite_count || 0}} {{copy.favoritesMeta}}</view>
+      </view>
+      <view class="row-arrow">→</view>
+    </view>
     <view class="row" bindtap="goMembership">
       <view class="row-body">
         <view class="row-title">

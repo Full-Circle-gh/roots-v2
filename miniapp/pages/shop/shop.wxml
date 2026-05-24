@@ -148,6 +148,7 @@
                   data-id="{{item.id}}" bindtap="openProduct">
               <view wx:if="{{layout !== 'list-compact'}}" class="row-img">
                 <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+                <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="img-placeholder"/>
               </view>
               <view class="row-body">
                 <view class="row-name f-bear">{{item.name}}</view>
@@ -197,6 +198,7 @@
                 class="gal-card" data-id="{{item.id}}" bindtap="openProduct">
             <view class="gal-img">
               <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+              <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="img-placeholder"/>
               <view wx:if="{{item.badge}}" class="gal-badge f-gothic">{{item.badge}}</view>
               <view wx:if="{{item.isFlash}}" class="gal-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
               <view wx:if="{{item.outOfStock}}" class="gal-oos f-toni">{{oosLabel}}</view>
@@ -244,14 +246,19 @@
                 class="card" data-id="{{item.id}}" bindtap="openProduct">
             <view class="img">
               <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+              <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="img-placeholder"/>
               <view wx:if="{{item.badge}}" class="card-badge f-gothic">{{item.badge}}</view>
               <view wx:if="{{item.isFlash}}" class="card-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
               <view wx:if="{{item.outOfStock}}" class="card-oos f-toni">{{oosLabel}}</view>
             </view>
             <view class="name f-bear">{{item.name}}</view>
-            <view class="price-stack">
-              <text wx:if="{{item.isFlash}}" class="price-was f-aleo">{{item.priceWas}}</text>
-              <text class="price f-gothic {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+            <view class="card-foot">
+              <view class="price-stack">
+                <text wx:if="{{item.isFlash}}" class="price-was f-aleo">{{item.priceWas}}</text>
+                <text class="price f-gothic {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+              </view>
+              <view wx:if="{{!item.outOfStock}}" class="card-plus f-bear"
+                    id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart">+</view>
             </view>
           </view>
         </view>

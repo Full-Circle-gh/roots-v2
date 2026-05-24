@@ -16,6 +16,7 @@ const PRODUCT_COLS = `
   p.nutrition,
   p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,
   p.description_blocks,
+  p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,
   r.name_en AS recipe_name
 `;
 
@@ -190,6 +191,9 @@ const FIELDS = [
   'keywords_en', 'keywords_cn', 'tagline_en', 'tagline_cn',
   // Block-based product page body (JSON array of `{id, type, ...data}`)
   'description_blocks',
+  // Colophon overrides — blank fields fall back to category-mapped character
+  // + default "From Soil to Soul" tagline.
+  'colophon_character', 'colophon_tagline_en', 'colophon_tagline_cn',
 ];
 
 function pickBody(body) {

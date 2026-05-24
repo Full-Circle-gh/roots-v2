@@ -1,22 +1,31 @@
-// product-blocks — renders a designer-styled product page body from a JSON
-// array of `{id, type, ...data}` blocks. Each block type has a bespoke
-// visual treatment (see product-blocks.wxss). All bilingual fields are
-// resolved here so the WXML can stay declarative.
+// product-blocks — Roots PDP v1 (Editorial direction).
+// Renders the office-authored block array on the mini-app product page.
+// Each block.type below has a bespoke visual per v1 design rules; data
+// shapes are bilingual where applicable so the office writes both EN/CN
+// and we pick the right side at render time.
 //
-// Currently supported block types:
-//   hero_intro     — big editorial paragraph + pull-out highlight phrase
-//   stat_callout   — giant stat number on a brand-color slab + claim line
-//   allergen_card  — ⚠️ bordered card with Contains / May contain chips
+// Supported types (10 + 1 deprecated alias):
+//   spec_strip        Three meta facts in equal columns
+//   hero_intro        Editorial paragraph + optional kicker + inline highlight
+//   why               3–5 numbered claims
+//   ingredients_chips Pill cloud, optional hero ingredient + % badges
+//   ingredients_line  Editorial single-line with lime-dot separators
+//   allergen_card     Contains / May contain segmented chip rows
+//   how_to_use        6 or 8 usage moments as tiles
+//   storage_box       Paired condition cards (one inverted)
+//   notes_callout     Italic asterisk fine-print band
+//   pull_quote        Editorial pullquote on oat-deep tint
+//   stat_callout / big_stat  One hero number on a brand-colour slab
 //
-// More types coming (ingredients cloud, how-to-use grid, storage status,
-// photo strip, pull quote, divider…) — keep additions purely additive so
-// the office can mix old + new blocks freely.
+// All bilingual `*_en` / `*_cn` pairs resolve via utils/lang.pick().
+// Anything the office leaves empty is dropped from the render, so the
+// page never shows half-filled blocks.
 
 const lang = require('../../utils/lang');
 
 function _pick(en, cn, L) { return lang.pick(en, cn, L); }
 
-// Split a comma / Chinese-comma separated string into trimmed chip labels.
+// Comma / Chinese-comma split → trimmed strings.
 function _splitChips(s) {
   return String(s || '')
     .split(/[,、，]/g)
@@ -24,24 +33,21 @@ function _splitChips(s) {
     .filter(Boolean);
 }
 
-// Wrap `phrase` inside `text` with markers so the WXML can split on
-// "<<HL>>" / "<</HL>>" and render the wrapped portion with accent
-// styling. Case-insensitive find. If the phrase isn't found inside the
-// body the highlight renders as a leading pull-quote instead — see
-// `highlight_loose` below.
+// Wrap the highlight phrase inside body text with a marker the WXML can
+// segment on, so the highlighted run renders with .pb-ink-pull styling
+// inline. If the phrase isn't in the body, we surface it as a "kicker"
+// above the paragraph (per v1 rule: "If no highlight phrase, kicker
+// carries the punch instead").
 function _markHighlight(body, phrase) {
-  if (!phrase || !body) return { text: body || '', loose: '' };
+  if (!phrase || !body) return { text: body || '', kicker: '' };
   const idx = body.toLowerCase().indexOf(phrase.toLowerCase());
-  if (idx < 0) return { text: body, loose: phrase };
+  if (idx < 0) return { text: body, kicker: phrase };
   return {
     text: body.slice(0, idx) + '<<HL>>' + body.slice(idx, idx + phrase.length) + '<</HL>>' + body.slice(idx + phrase.length),
-    loose: '',
+    kicker: '',
   };
 }
 
-// Tokenize a string containing `<<HL>>…<</HL>>` markers into an array of
-// `{kind:'plain'|'hl', text}` segments for the WXML to render with the
-// right styling. Keeps the template free of regex.
 function _segmentHighlighted(s) {
   const out = [];
   let i = 0;
@@ -57,46 +63,181 @@ function _segmentHighlighted(s) {
   return out;
 }
 
+// Each branch normalises one block's data to render-ready shape so the
+// template stays declarative. Returning { type: '_skip' } drops the block
+// (e.g. all fields empty, or unknown type → forward-compatibility with
+// older mini-app builds receiving a newer block schema).
 function _resolveBlock(b, L) {
   const t = b.type;
+
+  if (t === 'spec_strip') {
+    const cells = (Array.isArray(b.cells) ? b.cells : [b.cell1, b.cell2, b.cell3].filter(Boolean))
+      .map(c => ({
+        k: _pick(c.k_en, c.k_cn, L) || '',
+        v: _pick(c.v_en, c.v_cn, L) || '',
+      }))
+      .filter(c => c.k || c.v);
+    if (!cells.length) return { type: '_skip' };
+    return { type: t, cells };
+  }
+
   if (t === 'hero_intro') {
     const body      = _pick(b.body_en, b.body_cn, L) || '';
-    const highlight = _pick(b.highlight_en, b.highlight_cn, L) || '';
-    const marked    = _markHighlight(body, highlight);
+    const phrase    = _pick(b.highlight_en, b.highlight_cn, L) || '';
+    // Office can ALSO author an explicit kicker (e.g. "The story") that
+    // always renders above the paragraph regardless of highlight match.
+    const explicitKicker = _pick(b.kicker_en, b.kicker_cn, L) || '';
+    if (!body && !phrase && !explicitKicker) return { type: '_skip' };
+    const marked = _markHighlight(body, phrase);
     return {
       type: t,
+      kicker:       explicitKicker || marked.kicker,
       bodySegments: _segmentHighlighted(marked.text),
-      // Loose highlight = phrase that doesn't appear inside the body; we
-      // render it as a styled lead-in callout above the paragraph.
-      looseHighlight: marked.loose,
     };
   }
-  if (t === 'stat_callout') {
+
+  if (t === 'why') {
+    // Two accepted shapes: legacy { rows_en: [str], rows_cn: [str] } OR
+    // newer { rows: [{ claim_en, claim_cn }] }. Office editor uses the
+    // second; older saves use the first.
+    let rows = [];
+    if (Array.isArray(b.rows) && b.rows.length && typeof b.rows[0] === 'object') {
+      rows = b.rows.map(r => _pick(r.claim_en, r.claim_cn, L)).filter(Boolean);
+    } else {
+      const en = Array.isArray(b.rows_en) ? b.rows_en : String(b.rows_en || '').split('\n');
+      const cn = Array.isArray(b.rows_cn) ? b.rows_cn : String(b.rows_cn || '').split('\n');
+      const max = Math.max(en.length, cn.length);
+      for (let i = 0; i < max; i++) {
+        const t2 = _pick((en[i] || '').trim(), (cn[i] || '').trim(), L);
+        if (t2) rows.push(t2);
+      }
+    }
+    rows = rows.filter(Boolean);
+    if (!rows.length) return { type: '_skip' };
     return {
       type: t,
-      stat:  String(b.stat || '').trim(),
-      claim: _pick(b.claim_en, b.claim_cn, L) || '',
-      sub:   _pick(b.sub_en,   b.sub_cn,   L) || '',
+      head:   L === 'cn' ? '为什么选它' : 'Why people choose it',
+      count:  String(rows.length).padStart(2, '0'),
+      rows:   rows.map((claim, i) => ({
+        n:     String(i + 1).padStart(2, '0'),
+        claim,
+        first: i === 0,
+      })),
     };
   }
+
+  if (t === 'ingredients_chips' || t === 'ingredients_line') {
+    // Shared data: items = [{ name_en, name_cn, pct, lead }]
+    const items = Array.isArray(b.items) ? b.items : [];
+    const resolved = items
+      .map(it => ({
+        name: _pick(it.name_en, it.name_cn, L),
+        pct:  it.pct != null && it.pct !== '' ? Number(it.pct) : null,
+        lead: !!it.lead,
+      }))
+      .filter(it => it.name);
+    if (!resolved.length) return { type: '_skip' };
+    return {
+      type: t,
+      headLabel: L === 'cn' ? '配料表' : 'Ingredients',
+      tag: t === 'ingredients_chips'
+        ? `${resolved.length} ${L === 'cn' ? '项' : 'items'} · ${L === 'cn' ? '云标签' : 'chip cloud'}`
+        : (L === 'cn' ? '编辑式排版' : 'editorial run'),
+      items: resolved,
+    };
+  }
+
   if (t === 'allergen_card') {
+    const contains    = _splitChips(_pick(b.contains_en,    b.contains_cn,    L));
+    const mayContain  = _splitChips(_pick(b.may_contain_en, b.may_contain_cn, L));
+    if (!contains.length && !mayContain.length) return { type: '_skip' };
     return {
       type: t,
-      containsLabel:   L === 'cn' ? '含有' : 'CONTAINS',
-      mayContainLabel: L === 'cn' ? '可能含有微量' : 'MAY CONTAIN TRACES OF',
-      contains:    _splitChips(_pick(b.contains_en,     b.contains_cn,     L)),
-      mayContain:  _splitChips(_pick(b.may_contain_en,  b.may_contain_cn,  L)),
+      title:           L === 'cn' ? '过敏原' : 'Allergens',
+      compliance:      'GB-7718',
+      containsLabel:   L === 'cn' ? '含有' : 'Contains',
+      mayContainLabel: L === 'cn' ? '可能含有微量' : 'May contain traces of',
+      contains,
+      mayContain,
+      // Empty-contains state per v1 spec
+      containsEmpty:   contains.length === 0,
+      emptyText:       L === 'cn' ? '未声明' : 'None declared',
     };
   }
-  // Unknown type — render nothing (forward-compat: an editor on a newer
-  // schema can save block types the older mini-app build doesn't know yet,
-  // and they just silently no-op rather than throwing).
+
+  if (t === 'how_to_use') {
+    const tiles = (Array.isArray(b.tiles) ? b.tiles : [])
+      .map(it => ({
+        icon: it.icon || '',
+        lbl:  _pick(it.label_en, it.label_cn, L),
+        sub:  _pick(it.sub_en,   it.sub_cn,   L),
+      }))
+      .filter(it => it.lbl || it.icon);
+    if (!tiles.length) return { type: '_skip' };
+    // Per design rule "6 or 8 tiles, never 5 or 7" — favour 4-col when 8,
+    // 3-col otherwise. Office authors any count; we just pick the grid.
+    const cols = tiles.length >= 8 ? 4 : 3;
+    return {
+      type: t,
+      head:  L === 'cn' ? '用法' : 'How to use',
+      tag:   tiles.length + (L === 'cn' ? ' 种用法' : ' moments'),
+      tiles,
+      cols,
+    };
+  }
+
+  if (t === 'storage_box') {
+    // Two card slots: left + right. Each is independent so the office can
+    // mix any pair (room temp / refrigerated / freezer / shelf life).
+    const card = (c) => {
+      if (!c) return null;
+      const head = _pick(c.head_en, c.head_cn, L);
+      const num  = (c.num || '').toString();
+      const unit = _pick(c.unit_en, c.unit_cn, L);
+      if (!head && !num && !unit) return null;
+      return { icon: c.icon || '', head, num, unit, alt: !!c.alt };
+    };
+    const left  = card(b.left);
+    const right = card(b.right);
+    const note  = _pick(b.note_en, b.note_cn, L) || '';
+    if (!left && !right && !note) return { type: '_skip' };
+    return {
+      type: t,
+      head: L === 'cn' ? '储存' : 'Storage',
+      tag:  L === 'cn' ? '保鲜方法' : 'keep it right',
+      left, right, note,
+    };
+  }
+
+  if (t === 'notes_callout') {
+    const text = _pick(b.text_en, b.text_cn, L) || '';
+    if (!text) return { type: '_skip' };
+    return { type: t, text };
+  }
+
+  // Big stat — accept both the legacy `stat_callout` (v0 shape) and the
+  // new `big_stat`. Renders identically.
+  if (t === 'big_stat' || t === 'stat_callout') {
+    const stat  = (b.stat || '').toString().trim();
+    const what  = _pick(b.claim_en || b.what_en, b.claim_cn || b.what_cn, L) || '';
+    const claim = _pick(b.sub_en   || b.claim_en, b.sub_cn   || b.claim_cn, L) || '';
+    if (!stat && !what && !claim) return { type: '_skip' };
+    return { type: 'big_stat', stat, what, claim, bg: b.bg || 'lime' };
+  }
+
+  if (t === 'pull_quote') {
+    const text = _pick(b.text_en, b.text_cn, L) || '';
+    const who  = _pick(b.who_en,  b.who_cn,  L) || '';
+    if (!text && !who) return { type: '_skip' };
+    return { type: t, text, who };
+  }
+
   return { type: '_skip' };
 }
 
 Component({
   properties: {
-    blocks: { type: Array,  value: [], observer(v) { this._resolveAll(); } },
+    blocks: { type: Array,  value: [], observer() { this._resolveAll(); } },
     lang:   { type: String, value: 'en', observer() { this._resolveAll(); } },
   },
   data: {
@@ -105,8 +246,8 @@ Component({
   methods: {
     _resolveAll() {
       const L = this.data.lang || 'en';
-      const blocks = this.data.blocks || [];
-      const resolved = blocks
+      const arr = this.data.blocks || [];
+      const resolved = arr
         .map((b, i) => ({ ...(_resolveBlock(b, L) || {}), _k: b.id || ('b' + i) }))
         .filter(b => b.type !== '_skip');
       this.setData({ resolved });

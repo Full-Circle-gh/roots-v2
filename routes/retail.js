@@ -85,6 +85,26 @@ router.get('/api/retail/config', (req, res) => {
   try {
     const cfg = loadConfig();
     delete cfg.cms;  // internal namespace — never expose drafts to the mini app
+    // ── CMS draft preview ─────────────────────────────────────────────
+    // When a valid preview_token is in the query (minted from /cms via
+    // POST /api/retail-admin/cms/preview-token), overlay draft layouts on
+    // top of the live snapshot before responding. This is what lets the
+    // mini app — launched from a preview QR or DevTools custom-compile —
+    // render the unpublished draft on a real phone. Token-gated so casual
+    // visitors of /api/retail/config never see unannounced drafts.
+    const previewToken = req.query?.preview_token;
+    if (previewToken && validatePreviewToken(previewToken)) {
+      for (const page of ALLOWED_PAGES) {
+        const r = db.prepare(
+          'SELECT value_json FROM storefront_config WHERE key = ?'
+        ).get(`cms.draft.${page}_layout`);
+        if (!r) continue;
+        let draft; try { draft = JSON.parse(r.value_json); } catch { continue; }
+        if (!cfg[page] || typeof cfg[page] !== 'object') cfg[page] = {};
+        cfg[page].layout = draft;
+      }
+      cfg._preview = true;
+    }
     // Always surface review tags so the mini app's review form + product
     // cards have labels + colours even on fresh installs (before staff
     // has touched the Reviews editor).
@@ -108,13 +128,28 @@ router.get('/api/retail/config', (req, res) => {
 const RETAIL_PRODUCT_COLS = `
   p.id, p.name_en, p.name_cn, p.sku, p.category, p.weight AS size, p.barcode,
   p.sell_price AS price,
-  p.stock_qty  AS stock,
+  -- Stock surfaced to the mini-app. Prefer the SUM of per-store physical_qty
+  -- across ACTIVE stores (Tianhe + Yuexiu today) — that's the inventory the
+  -- /retail-admin per-store grid actually edits. Fall back to the legacy
+  -- products.stock_qty column ONLY when no per-store rows exist yet, so
+  -- newly-added products that haven't been stocked per-store don't silently
+  -- flip to OOS. When BOTH stores show 0 in the grid, this returns 0 →
+  -- shop.js marks the row as outOfStock and the "in stock only" filter
+  -- hides it.
+  COALESCE(
+    (SELECT SUM(rss.physical_qty)
+       FROM retail_store_stock rss
+       JOIN retail_stores      rs ON rs.id = rss.store_id
+      WHERE rss.product_id = p.id AND rs.is_active = 1),
+    p.stock_qty
+  ) AS stock,
   p.sort_order AS display_order,
   p.description_en, p.description_cn,
   p.free_of, p.tags, p.image_data, p.image_url,
   p.nutrition,
   p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,
   p.description_blocks,
+  p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,
   p.flash_price, p.flash_starts_at, p.flash_ends_at,
   p.flash_stock_limit, p.flash_sold
 `;
@@ -180,6 +215,138 @@ router.get('/api/retail/products', (req, res) => {
   // minutes, not the prior 30s used for static catalogue data.
   res.set('Cache-Control', 'public, max-age=10');
   res.json({ success: true, data: rows, meta: { total, limit, offset, server_time_ms: now } });
+});
+
+// GET /api/retail/products/:productId/substitute-options?store_id=N
+// Used by the mini-app's "Replace missing item" sub-screen. Returns
+// in-stock candidates at the given store: admin-curated substitutes
+// first, then auto-fill from same category. Requires retail-customer
+// auth (Bearer token in Authorization).
+router.get('/api/retail/products/:productId/substitute-options', requireRetailAuth, (req, res) => {
+  const productId = parseInt(req.params.productId, 10);
+  const storeId   = parseInt(req.query.store_id, 10);
+  if (!productId || !storeId) return res.status(400).json({ success: false, error: 'missing_params' });
+  const rows = inventory.substitutesForProduct({ productId, storeId, channel: 'wechat', limit: 20 });
+  res.json({ success: true, data: rows });
+});
+
+// ─── Top-selling products (homepage / "best sellers" block) ──────────────
+// MUST be declared before `/api/retail/products/:id` — Express matches in
+// order, and `:id` would otherwise capture `top` and return bad_id.
+// Feeds product_grid blocks whose source_type === 'top_selling'.
+//
+//   ?channel=combined|retail|kitchen  default: combined
+//     combined — mini-app retail orders + in-store sales_entries (default)
+//     retail   — mini-app orders only
+//     kitchen  — in-store POS sales only
+//   ?window=7d|30d|90d|all  default: 7d
+//   ?limit=N (1..24)        default: 6
+//
+// 5-min in-process cache keyed by (channel, window, limit).
+const TOP_PRODUCT_CACHE = new Map();
+const TOP_PRODUCT_TTL_MS = 5 * 60 * 1000;
+
+router.get('/api/retail/products/top', (req, res) => {
+  const channel = ['combined', 'retail', 'kitchen'].includes(req.query.channel)
+    ? req.query.channel : 'combined';
+  const windowSpec = ['7d', '30d', '90d', 'all'].includes(req.query.window)
+    ? req.query.window : '7d';
+  const limit = Math.max(1, Math.min(24, parseInt(req.query.limit || '6', 10) || 6));
+
+  const cacheKey = `${channel}|${windowSpec}|${limit}`;
+  const cached = TOP_PRODUCT_CACHE.get(cacheKey);
+  const now = Date.now();
+  if (cached && (now - cached.t) < TOP_PRODUCT_TTL_MS) {
+    res.set('Cache-Control', 'public, max-age=60');
+    return res.json({ success: true, data: cached.data, meta: { ...cached.meta, cached: true } });
+  }
+
+  let retailRows = [];
+  let kitchenRows = [];
+  if (channel === 'retail' || channel === 'combined') {
+    try {
+      const retailWindow = windowSpec === 'all' ? '' :
+        `AND o.paid_at >= datetime('now', '-${parseInt(windowSpec, 10) || 7} days')`;
+      retailRows = db.prepare(`
+        SELECT oi.product_id AS product_id,
+               SUM(oi.qty)   AS units_sold,
+               SUM(oi.line_total) AS revenue
+          FROM retail_order_items oi
+          JOIN retail_orders o ON o.id = oi.order_id
+         WHERE o.paid_at IS NOT NULL
+           AND o.status NOT IN ('cancelled', 'refunded', 'pending_payment')
+           AND oi.product_id IS NOT NULL
+           ${retailWindow}
+         GROUP BY oi.product_id
+      `).all();
+    } catch (e) {
+      console.error('[top-products retail]', e.message);
+    }
+  }
+  if (channel === 'kitchen' || channel === 'combined') {
+    try {
+      const kitchenWindow = windowSpec === 'all' ? '' :
+        `AND s.date >= date('now', '-${parseInt(windowSpec, 10) || 7} days')`;
+      kitchenRows = db.prepare(`
+        SELECT s.product_id AS product_id,
+               SUM(s.qty)   AS units_sold,
+               SUM(s.total) AS revenue
+          FROM sales_entries s
+         WHERE s.product_id IS NOT NULL
+           ${kitchenWindow}
+         GROUP BY s.product_id
+      `).all();
+    } catch (e) {
+      console.error('[top-products kitchen]', e.message);
+    }
+  }
+  // Merge per-product totals across channels.
+  const merged = new Map();
+  for (const r of retailRows) {
+    merged.set(r.product_id, { units: Number(r.units_sold) || 0, revenue: Number(r.revenue) || 0 });
+  }
+  for (const r of kitchenRows) {
+    const prev = merged.get(r.product_id) || { units: 0, revenue: 0 };
+    prev.units   += Number(r.units_sold) || 0;
+    prev.revenue += Number(r.revenue)    || 0;
+    merged.set(r.product_id, prev);
+  }
+
+  const ranked = [...merged.entries()]
+    .map(([id, v]) => ({ id, units: v.units, revenue: v.revenue }))
+    .sort((a, b) => b.units - a.units);
+
+  // Over-fetch products and filter by published/active to handle delistings.
+  const candidateIds = ranked.slice(0, limit * 3).map(r => r.id);
+  let products = [];
+  if (candidateIds.length) {
+    const placeholders = candidateIds.map(() => '?').join(',');
+    products = db.prepare(
+      `SELECT ${RETAIL_PRODUCT_COLS} FROM products p
+        WHERE p.id IN (${placeholders})
+          AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`
+    ).all(...candidateIds);
+  }
+  const productsById = new Map(products.map(p => [p.id, p]));
+  const out = [];
+  for (const r of ranked) {
+    if (out.length >= limit) break;
+    const p = productsById.get(r.id);
+    if (!p) continue;
+    const decorated = flashsales.decorateProduct(hydrateNutrition(p), now);
+    decorated.units_sold = Math.round(r.units);
+    decorated.revenue    = Math.round(r.revenue * 100) / 100;
+    out.push(decorated);
+  }
+  const meta = {
+    channel, window: windowSpec, limit,
+    total_candidates: ranked.length,
+    server_time_ms: now,
+    cached: false,
+  };
+  TOP_PRODUCT_CACHE.set(cacheKey, { t: now, data: out, meta });
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({ success: true, data: out, meta });
 });
 
 router.get('/api/retail/products/:id', (req, res) => {
@@ -462,17 +629,33 @@ async function wechatPayCreate(order, openid) {
 }
 
 function markOrderPaid(orderId) {
-  const r = db.prepare(
-    "UPDATE retail_orders SET status = 'paid', paid_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending_payment'"
-  ).run(orderId);
+  // "wait_for_restock" orders transition to 'awaiting_restock' on payment,
+  // not 'paid'. The kitchen waits, and checkAwaitingRestockForRestock()
+  // promotes them to 'paid' once every missing product is restocked. No
+  // stock is deducted on payment for these — they have no reservations.
+  const meta = db.prepare(
+    "SELECT fallback_choice, awaiting_restock_pids FROM retail_orders WHERE id = ?"
+  ).get(orderId);
+  const isWait = meta?.fallback_choice === 'wait_for_restock' && meta?.awaiting_restock_pids;
+
+  const r = isWait
+    ? db.prepare(
+        "UPDATE retail_orders SET status = 'awaiting_restock', paid_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending_payment'"
+      ).run(orderId)
+    : db.prepare(
+        "UPDATE retail_orders SET status = 'paid', paid_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending_payment'"
+      ).run(orderId);
+
   db.prepare(
     "UPDATE retail_payments SET status = 'success', completed_at = CURRENT_TIMESTAMP WHERE order_id = ? AND status = 'pending'"
   ).run(orderId);
   if (r.changes > 0) {
-    // Commit the soft-reservations: physical stock deducts at this point.
-    // Idempotent for callers that re-fire (e.g. wechat retry callbacks).
-    try { inventory.commitOrderReservations(orderId); }
-    catch (e) { console.error('[inventory.commit]', e); }
+    if (!isWait) {
+      // Commit the soft-reservations: physical stock deducts at this point.
+      // Idempotent for callers that re-fire (e.g. wechat retry callbacks).
+      try { inventory.commitOrderReservations(orderId); }
+      catch (e) { console.error('[inventory.commit]', e); }
+    }
     // Award earn-points on the actual transition. awardOrderPoints is
     // idempotent so calling it on already-paid orders is safe.
     try { awardOrderPoints(orderId); } catch (e) { console.error('[awardOrderPoints]', e); }
@@ -495,11 +678,14 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
 
   // Points-paid orders settle at order-create (points already deducted
   // inside the create tx). Nothing to charge — just flip status to paid.
-  if (order.payment_method === 'points') {
+  // Same shortcut when partial-points stacking zeroed out the cash total
+  // (customer applied enough points to cover the whole order via the
+  // wechat/alipay path — wechat/alipay won't accept a ¥0 charge).
+  if (order.payment_method === 'points' || Number(order.total) <= 0) {
     markOrderPaid(orderId);
     return res.json({
       success: true,
-      data: { status: 'paid', paid_by: 'points', order_no: order.order_no, method: 'points' },
+      data: { status: 'paid', paid_by: 'points', order_no: order.order_no, method: order.payment_method },
     });
   }
 
@@ -636,13 +822,29 @@ router.post('/api/retail/notifications/subscribe', requireRetailAuth, express.js
 // Server-side: cached WeChat access_token. Used for both subscribeMessage
 // API and any other server-to-server WeChat calls. Token lives ~2 hours;
 // we re-fetch when missing or near-expiry.
+//
+// Uses /cgi-bin/stable_token (not /cgi-bin/token). stable_token is WeChat's
+// multi-server-safe endpoint: it returns a token that does NOT invalidate
+// tokens held by other backends on the same AppID. The legacy /cgi-bin/token
+// would knock out a co-resident backend's cached token on every fetch — a
+// problem when the AppID is shared with another vendor (out1n) whose backend
+// also fetches tokens. force_refresh=false lets WeChat reuse a cached token
+// across calls, further reducing churn.
 let _wxAccessToken = '';
 let _wxAccessTokenExpires = 0;
 async function getWeChatAccessToken() {
   if (!WECHAT_APP_ID || !WECHAT_APP_SECRET) return null;
   if (_wxAccessToken && Date.now() < _wxAccessTokenExpires - 60_000) return _wxAccessToken;
-  const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${WECHAT_APP_ID}&secret=${WECHAT_APP_SECRET}`;
-  const resp = await fetch(url);
+  const resp = await fetch('https://api.weixin.qq.com/cgi-bin/stable_token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'client_credential',
+      appid:      WECHAT_APP_ID,
+      secret:     WECHAT_APP_SECRET,
+      force_refresh: false,
+    }),
+  });
   const j = await resp.json();
   if (!j.access_token) throw new Error('access_token_fetch_failed: ' + (j.errmsg || j.errcode));
   _wxAccessToken = j.access_token;
@@ -791,6 +993,45 @@ function publicCustomer(c) {
   };
 }
 
+// ─── Visit tracking (public, best-effort) ────────────────────────────────
+// The mini app pings this on app open (onShow) and on page views. No auth
+// is required — anonymous opens are valuable traffic data. If a Bearer token
+// is present we resolve the customer so logged-in sessions get attributed.
+// This route never throws to the client: analytics must never break the app,
+// so every failure is swallowed and we always answer 200.
+router.post('/api/retail/track', express.json(), (req, res) => {
+  try {
+    const b = req.body || {};
+    const clip = (s, n) => (s == null || s === '' ? null : String(s).slice(0, n));
+    let customerId = null;
+    let openid = clip(b.openid, 64);
+
+    // Optional token → attribute to a known customer.
+    const m = /^Bearer\s+([A-Za-z0-9]+)$/.exec(req.headers.authorization || '');
+    if (m) {
+      const row = db.prepare(
+        `SELECT c.id AS id, c.openid AS openid FROM retail_auth_tokens t
+           JOIN retail_customers c ON c.id = t.customer_id
+          WHERE t.token = ? AND datetime(t.expires_at) > CURRENT_TIMESTAMP`
+      ).get(m[1]);
+      if (row) { customerId = row.id; openid = openid || row.openid; }
+    }
+
+    const scene = Number.isFinite(+b.scene) ? Math.trunc(+b.scene) : null;
+    db.prepare(
+      `INSERT INTO retail_visits (customer_id, openid, session_id, page, scene, referrer, user_agent)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      customerId, openid,
+      clip(b.session_id, 64), clip(b.page, 128), scene,
+      clip(b.referrer, 128), clip(req.headers['user-agent'], 256)
+    );
+  } catch (e) {
+    // Intentionally silent — tracking must be invisible to the client.
+  }
+  res.json({ success: true });
+});
+
 // ─── Addresses ───────────────────────────────────────────────────────────
 // Each customer has their own address book. is_default is enforced
 // single-row per customer at the route level (we flip all others to 0 in
@@ -799,12 +1040,54 @@ const ADDRESS_PUBLIC_COLS = `id, recipient_name, phone, province, city, district
                               address, detail, postal_code, is_default,
                               created_at, updated_at`;
 
+// E-bike rider ETA from the nearest active store to a saved address.
+// Mirrors the speed assumption used in lib/inventory.js's fallback calc
+// (~18 km/h average through GZ traffic with pickup overhead, so ≈3.3 min/km).
+// We also add a flat 8 min pickup + handoff buffer so close-in deliveries
+// never read as "<5 min" which would set unrealistic customer expectations.
+const _RIDER_KM_PER_HR  = 18;
+const _RIDER_MIN_PER_KM = 60 / _RIDER_KM_PER_HR;
+const _RIDER_PICKUP_MIN = 8;
+function computeRiderEta(address, lat, lng) {
+  // Pull all active stores once per request; per-address we just pick the
+  // nearest by Haversine. Same fallback (district centroid) as routing.
+  const stores = db.prepare(
+    `SELECT id, code, name_en, name_cn, lat, lng FROM retail_stores
+      WHERE COALESCE(is_active, 1) = 1`
+  ).all();
+  if (!stores.length) return null;
+  const addr = { ...address, lat, lng };
+  let best = null;
+  for (const s of stores) {
+    const km = inventory.storeDistanceKm(s, addr);
+    if (km == null) continue;
+    if (!best || km < best.km) best = { km, store: s };
+  }
+  if (!best) return null;
+  const minutes = Math.max(_RIDER_PICKUP_MIN, Math.round(best.km * _RIDER_MIN_PER_KM + _RIDER_PICKUP_MIN));
+  return {
+    km:           Number(best.km.toFixed(1)),
+    min:          Math.round(minutes / 5) * 5, // round to nearest 5 min
+    store_code:   best.store.code,
+    store_name_en: best.store.name_en,
+    store_name_cn: best.store.name_cn,
+  };
+}
+
 router.get('/api/retail/addresses', requireRetailAuth, (req, res) => {
   const rows = db.prepare(
-    `SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses
+    `SELECT ${ADDRESS_PUBLIC_COLS}, lat, lng FROM retail_customer_addresses
       WHERE customer_id = ? ORDER BY is_default DESC, updated_at DESC`
   ).all(req.customer.id);
-  res.json({ success: true, data: rows });
+  // Stamp each row with the rider ETA from the nearest store. Pure read —
+  // no writes — so it's safe to do inline.
+  const data = rows.map(r => {
+    const eta = computeRiderEta(r, r.lat, r.lng);
+    // Hide lat/lng from the client response — internal-only.
+    const { lat, lng, ...pub } = r;
+    return { ...pub, delivery_eta: eta };
+  });
+  res.json({ success: true, data });
 });
 
 // ─── Chinese address normalization (server-side safety net) ───────────
@@ -1009,16 +1292,76 @@ function parseShipModes(csv) {
   return out.length ? out : ['air', 'land'];
 }
 
+// Bucket assignment for one item under the split-package suggestion spec:
+//   Ice (cold chain) → air (regardless of ship_modes)
+//   Air-only         → air
+//   Land-only        → land
+//   Any (both)       → land (cheaper; admin can override via Apply suggestion)
+function bucketForItem(it) {
+  if (it.needs_ice_pack) return 'air';
+  const modes = parseShipModes(it.ship_modes);
+  const hasAir  = modes.includes('air');
+  const hasLand = modes.includes('land');
+  if (hasAir && !hasLand) return 'air';
+  if (hasLand && !hasAir) return 'land';
+  return 'land'; // Any → land
+}
+
+// Parse a freeform product weight string ("200g", "1.2kg", "1 pc", "200ml")
+// into grams. Returns null when the value isn't a weight we can compute on
+// (counts like "1 pc" or volumes like "200ml" → null so the suggestion can
+// skip cleanly rather than fabricate savings numbers).
+function parseWeightToGrams(s) {
+  if (s == null) return null;
+  const str = String(s).trim().toLowerCase();
+  if (!str) return null;
+  // \b after a non-ASCII char doesn't behave (JS regex \w is ASCII-only),
+  // so anchor the end of the unit explicitly rather than relying on \b.
+  const m = str.match(/^([0-9]+(?:\.[0-9]+)?)\s*(kg|gram[s]?|g|千克|公斤|克)(?:$|[^a-z一-鿿])/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const unit = m[2];
+  if (unit === 'kg' || unit === '千克' || unit === '公斤') return Math.round(n * 1000);
+  return Math.round(n);
+}
+
+// Read shipping rate config with defaults. Admin can override in
+// storefront_config under 'shipping.rates'. byCity overrides keyed by
+// lowercased city string fall back to the default { base, per_kg }.
+function getShippingRates() {
+  const cfg = cfgValue('shipping.rates', null) || {};
+  const def = {
+    air:  { base: 20, per_kg: 8 },
+    land: { base: 12, per_kg: 5 },
+  };
+  const merged = {
+    air:  { ...def.air,  ...(cfg.air  || {}) },
+    land: { ...def.land, ...(cfg.land || {}) },
+    byCity: cfg.byCity || {},
+  };
+  return merged;
+}
+
+// Cost of shipping a single bucket (grams + mode) under the active rates,
+// honouring optional per-city overrides.
+function bucketCost(grams, mode, rates, city) {
+  if (!grams || grams <= 0) return 0;
+  const cityKey = String(city || '').trim().toLowerCase();
+  const override = rates.byCity?.[cityKey]?.[mode];
+  const r = override || rates[mode];
+  return Math.round((r.base + r.per_kg * (grams / 1000)) * 100) / 100;
+}
+
 // Given a list of order items + destination city, return a plan of
 // shipments to create and which items go into each.
 //
 //   inGZ                 → one 'local' shipment, all items
-//   outGZ + all air-OK   → one 'air' shipment
-//   outGZ + all land-OK  → one 'land' shipment (when no item supports air)
-//   outGZ + mixed        → split into two: 'air' (items that can go air)
-//                          + 'land' (items that can't)
+//   outGZ + single bkt   → one shipment of that mode
+//   outGZ + mixed        → split into two: 'air' (Ice + air-only) +
+//                          'land' (land-only + Any-mode items)
 //
-// `items` shape: [{ id, ship_modes }, ...]  where ship_modes is csv.
+// `items` shape: [{ id, ship_modes, needs_ice_pack }, ...]
 // Returns: [{ mode, label, item_ids: [...] }, ...]
 function planShipments(items, destCity) {
   if (!items.length) return [];
@@ -1028,9 +1371,8 @@ function planShipments(items, destCity) {
   const air  = [];
   const land = [];
   for (const it of items) {
-    const modes = parseShipModes(it.ship_modes);
-    if (modes.includes('air')) air.push(it.id);
-    else land.push(it.id);
+    if (bucketForItem(it) === 'air') air.push(it.id);
+    else                             land.push(it.id);
   }
   if (air.length && land.length) {
     return [
@@ -1038,7 +1380,6 @@ function planShipments(items, destCity) {
       { mode: 'land', label: 'Land shipment · 陆运', item_ids: land },
     ];
   }
-  // Single-mode case.
   if (air.length) return [{ mode: 'air',  label: 'Air shipment · 空运',  item_ids: air  }];
   return            [{ mode: 'land', label: 'Land shipment · 陆运', item_ids: land }];
 }
@@ -1066,7 +1407,9 @@ function ensureShipments(orderId) {
   try { destCity = JSON.parse(o.address_json || '{}').city || ''; } catch {}
 
   const items = db.prepare(
-    `SELECT id, COALESCE(ship_modes, 'air,land') AS ship_modes
+    `SELECT id,
+            COALESCE(ship_modes, 'air,land') AS ship_modes,
+            COALESCE(needs_ice_pack, 0)      AS needs_ice_pack
        FROM retail_order_items WHERE order_id = ?`
   ).all(orderId);
   const plan = planShipments(items, destCity);
@@ -1113,6 +1456,147 @@ function ensureShipments(orderId) {
   return db.prepare(
     `SELECT * FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
   ).all(orderId);
+}
+
+// Build a split-package suggestion for one out-of-GZ order. Compares the
+// current shipment bucketing against the optimal split (Ice + air-only
+// items by air, everything else by land) and reports projected freight
+// savings under the active shipping.rates config.
+//
+// Returns { eligible, reason, current: {plan, cost}, suggested: {plan, cost},
+//           savings, threshold, currency }.
+// `reason` codes: 'ok' | 'in_guangzhou' | 'asap_paid' | 'holiday_mode_off'
+//                 | 'only_one_bucket' | 'savings_below_threshold'
+//                 | 'land_bucket_too_small' | 'no_parseable_weight'
+//                 | 'already_optimal' | 'no_items'
+const SAVINGS_THRESHOLD = 10;       // ¥10 — see project_roots_v2_split_package
+const LAND_FLOOR_VALUE  = 50;       // ¥50 — land bucket below this folds back
+const LAND_FLOOR_GRAMS  = 2000;     // 2 kg
+function buildShipmentSuggestion(orderId) {
+  const order = db.prepare(
+    `SELECT id, address_json, delivery_slot_label, status
+       FROM retail_orders WHERE id = ?`
+  ).get(orderId);
+  if (!order) return null;
+
+  let destCity = '';
+  try { destCity = JSON.parse(order.address_json || '{}').city || ''; } catch {}
+  if (isGuangzhou(destCity)) {
+    return { eligible: false, reason: 'in_guangzhou' };
+  }
+
+  // ASAP paid → never suggest splitting; the customer paid for speed.
+  const slot = String(order.delivery_slot_label || '').toLowerCase();
+  if (/asap|right away|马上|立即/.test(slot)) {
+    return { eligible: false, reason: 'asap_paid' };
+  }
+
+  const items = db.prepare(
+    `SELECT id, qty, unit_price, size,
+            COALESCE(ship_modes, 'air,land') AS ship_modes,
+            COALESCE(needs_ice_pack, 0)      AS needs_ice_pack,
+            shipment_id
+       FROM retail_order_items WHERE order_id = ?`
+  ).all(orderId);
+  if (!items.length) return { eligible: false, reason: 'no_items' };
+
+  // Strict weight requirement — if any item lacks a parseable weight, we
+  // refuse to fabricate savings numbers.
+  const weighed = items.map(it => {
+    const grams = parseWeightToGrams(it.size);
+    return { ...it, grams_each: grams, grams_line: grams != null ? grams * it.qty : null };
+  });
+  if (weighed.some(it => it.grams_each == null)) {
+    return { eligible: false, reason: 'no_parseable_weight' };
+  }
+
+  const rates = getShippingRates();
+
+  // Current bucketing — read from each item's actual shipment row.
+  const shipments = db.prepare(
+    `SELECT id, mode FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
+  ).all(orderId);
+  const modeById = new Map(shipments.map(s => [s.id, s.mode]));
+  const currentBuckets = { air: { ids: [], grams: 0, value: 0 }, land: { ids: [], grams: 0, value: 0 } };
+  for (const it of weighed) {
+    const m = it.shipment_id ? modeById.get(it.shipment_id) : null;
+    if (m !== 'air' && m !== 'land') continue; // local or unassigned — out of scope
+    currentBuckets[m].ids.push(it.id);
+    currentBuckets[m].grams += it.grams_line;
+    currentBuckets[m].value += Number(it.unit_price) * it.qty;
+  }
+
+  // Suggested bucketing — fresh assignment by spec.
+  const suggestedBuckets = { air: { ids: [], grams: 0, value: 0 }, land: { ids: [], grams: 0, value: 0 } };
+  for (const it of weighed) {
+    const b = bucketForItem(it);
+    suggestedBuckets[b].ids.push(it.id);
+    suggestedBuckets[b].grams += it.grams_line;
+    suggestedBuckets[b].value += Number(it.unit_price) * it.qty;
+  }
+
+  // Land-floor: if the land bucket is too small to be worth its own
+  // waybill, fold it into air and suggest a single air shipment.
+  const land = suggestedBuckets.land;
+  if (land.ids.length && land.value < LAND_FLOOR_VALUE && land.grams < LAND_FLOOR_GRAMS) {
+    suggestedBuckets.air.ids.push(...land.ids);
+    suggestedBuckets.air.grams += land.grams;
+    suggestedBuckets.air.value += land.value;
+    land.ids = []; land.grams = 0; land.value = 0;
+  }
+
+  const planToCost = (bk) => {
+    let c = 0;
+    if (bk.air.ids.length)  c += bucketCost(bk.air.grams,  'air',  rates, destCity);
+    if (bk.land.ids.length) c += bucketCost(bk.land.grams, 'land', rates, destCity);
+    return c;
+  };
+  const currentCost   = planToCost(currentBuckets);
+  const suggestedCost = planToCost(suggestedBuckets);
+  const savings       = Math.round((currentCost - suggestedCost) * 100) / 100;
+
+  const planFromBuckets = (bk) => {
+    const out = [];
+    if (bk.air.ids.length)  out.push({ mode: 'air',  label: 'Air shipment · 空运',  item_ids: bk.air.ids,  grams: bk.air.grams,  value: bk.air.value,  cost: bucketCost(bk.air.grams,  'air',  rates, destCity) });
+    if (bk.land.ids.length) out.push({ mode: 'land', label: 'Land shipment · 陆运', item_ids: bk.land.ids, grams: bk.land.grams, value: bk.land.value, cost: bucketCost(bk.land.grams, 'land', rates, destCity) });
+    return out;
+  };
+  const currentPlan   = planFromBuckets(currentBuckets);
+  const suggestedPlan = planFromBuckets(suggestedBuckets);
+
+  const sameAssignment = (a, b) => {
+    if (a.length !== b.length) return false;
+    const asort = a.map(s => `${s.mode}:${[...s.item_ids].sort((x,y)=>x-y).join(',')}`).sort();
+    const bsort = b.map(s => `${s.mode}:${[...s.item_ids].sort((x,y)=>x-y).join(',')}`).sort();
+    return asort.every((v, i) => v === bsort[i]);
+  };
+
+  const result = {
+    eligible: false,
+    reason: 'ok',
+    current:   { plan: currentPlan,   cost: currentCost   },
+    suggested: { plan: suggestedPlan, cost: suggestedCost },
+    savings,
+    threshold: SAVINGS_THRESHOLD,
+    currency: '¥',
+  };
+
+  if (suggestedPlan.length === 1) {
+    // Only one bucket would have items under the suggestion — nothing to
+    // split, suppress.
+    result.reason = 'only_one_bucket';
+    return result;
+  }
+  if (sameAssignment(currentPlan, suggestedPlan)) {
+    result.reason = 'already_optimal';
+    return result;
+  }
+  if (savings < SAVINGS_THRESHOLD) {
+    result.reason = 'savings_below_threshold';
+    return result;
+  }
+  result.eligible = true;
+  return result;
 }
 
 // Build a customer-friendly tracking view for one shipment row (mirrors
@@ -1270,57 +1754,192 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   }
 
   // ── Inventory: route to a store and check soft-reservable stock ───────
-  // The actual reservation happens inside the order-create transaction
-  // below (so a reservation that succeeds but then fails the order INSERT
-  // can be rolled back atomically). Here we only route + pre-check.
-  // `accept_fallback: true` in the body means the customer has already
-  // confirmed they're OK with a farther store (longer delivery) if the
-  // nearest one is short.
-  const acceptFallback = !!body.accept_fallback;
-  const routing = inventory.routeOrder({
-    address,
-    items: resolved.map(r => ({ product_id: r.product.id, qty: r.qty })),
-    channel: 'wechat',
-    acceptFallback,
-  });
-  if (routing.error === 'no_active_store') {
-    return res.status(503).json({ success: false, error: 'no_active_store' });
+  // Customer's fallback_choice (from the 5-option modal):
+  //   'cancel_missing'      — drop short items, ship the rest from nearest
+  //   'replace_missing'     — body.replacements maps original→substitute
+  //   'full_from_fallback'  — same as legacy accept_fallback=true
+  //   'wait_for_restock'    — create order with status='awaiting_restock'
+  //                           at nearest store; system promotes to 'paid'
+  //                           when all missing items are restocked.
+  // Empty / null = no shortage expected. Server re-runs the analysis and
+  // refuses if the choice doesn't match the situation (anti-tampering).
+  const fallbackChoice = body.fallback_choice || (body.accept_fallback ? 'full_from_fallback' : null);
+  const VALID_CHOICES = new Set(['cancel_missing','replace_missing','full_from_fallback','wait_for_restock']);
+  if (fallbackChoice && !VALID_CHOICES.has(fallbackChoice)) {
+    return res.status(400).json({ success: false, error: 'invalid_fallback_choice' });
   }
-  if (routing.error === 'needs_fallback_confirmation') {
-    // Nearest store can't fulfill but a farther one can. Surface both so
-    // the mini-app can show a "wait longer for shipping?" dialog. When
-    // the customer accepts, the mini-app re-submits with accept_fallback.
-    return res.status(409).json({
-      success: false,
-      error:   'needs_fallback_confirmation',
-      nearest: {
-        store_id:      routing.nearest.store.id,
-        store_code:    routing.nearest.store.code,
-        store_name_en: routing.nearest.store.name_en,
-        store_name_cn: routing.nearest.store.name_cn,
-        shortages:     routing.nearest.shortages,
-      },
-      fallback: {
-        store_id:      routing.fallback.store.id,
-        store_code:    routing.fallback.store.code,
-        store_name_en: routing.fallback.store.name_en,
-        store_name_cn: routing.fallback.store.name_cn,
-        district:      routing.fallback.store.district,
-      },
+
+  // Mutated cart per choice. resolved → mutatedItems.
+  let mutatedItems  = resolved.slice();
+  let awaitingRestockPids = null;
+
+  if (fallbackChoice === 'cancel_missing' || fallbackChoice === 'replace_missing' || fallbackChoice === 'wait_for_restock') {
+    // All three need shortage analysis at the nearest store.
+    const a = inventory.analyzeShortage({
+      address,
+      items: resolved.map(r => ({ product_id: r.product.id, qty: r.qty })),
+      deliverySlotId, channel: 'wechat',
     });
+    if (a.error === 'no_active_store') {
+      return res.status(503).json({ success: false, error: 'no_active_store' });
+    }
+    if (a.gate === 'none') {
+      // No shortage at the nearest store — the customer picked an option
+      // they don't need. Refuse with a clear error so the mini-app can
+      // re-quote + just place the order normally.
+      return res.status(409).json({ success: false, error: 'no_shortage', hint: 'nearest_store_can_fulfill' });
+    }
+    if (fallbackChoice === 'cancel_missing') {
+      const missingIds = new Set(a.missing_items.map(m => m.product_id));
+      mutatedItems = resolved.filter(r => !missingIds.has(r.product.id));
+      if (!mutatedItems.length) {
+        return res.status(409).json({ success: false, error: 'no_items_remaining' });
+      }
+    } else if (fallbackChoice === 'replace_missing') {
+      const replacements = Array.isArray(body.replacements) ? body.replacements : [];
+      const repMap = new Map();
+      for (const r of replacements) {
+        const origId = parseInt(r.original_product_id, 10);
+        const subId  = parseInt(r.substitute_product_id, 10);
+        const qty    = Number(r.qty);
+        if (!origId || !subId || !(qty > 0)) {
+          return res.status(400).json({ success: false, error: 'invalid_replacement' });
+        }
+        repMap.set(origId, { subId, qty });
+      }
+      // Every missing item must have a replacement.
+      for (const m of a.missing_items) {
+        if (!repMap.has(m.product_id)) {
+          return res.status(400).json({ success: false, error: 'missing_replacement_for', product_id: m.product_id });
+        }
+      }
+      mutatedItems = [];
+      for (const r of resolved) {
+        if (!repMap.has(r.product.id)) { mutatedItems.push(r); continue; }
+        const { subId, qty: subQty } = repMap.get(r.product.id);
+        const sub = db.prepare(
+          `SELECT id, name_en, name_cn, sku, weight AS size, sell_price AS price, image_data,
+                  ship_modes, needs_ice_pack
+             FROM products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
+        ).get(subId);
+        if (!sub) return res.status(400).json({ success: false, error: 'substitute_not_available', product_id: subId });
+        const av = inventory.getAvailable(a.nearest.store.id, subId, 'wechat');
+        if (!av.exists || av.available < subQty) {
+          return res.status(409).json({ success: false, error: 'substitute_out_of_stock', product_id: subId, available: av.available });
+        }
+        mutatedItems.push({
+          product: sub,
+          qty: subQty,
+          unitPrice: Number(sub.price),
+          lineTotal: Number(sub.price) * subQty,
+          options: [],
+          replacedForProductId: r.product.id,
+          isFlash: false,
+        });
+      }
+      // Merge duplicate line items — if the chosen substitute happens to
+      // also be in the cart already (same product + same options), bump
+      // the qty on the existing line instead of writing "Nutella Bars ×1
+      // + Nutella Bars ×1" as two rows in the admin Orders view. We
+      // bucket on (product_id, sorted_choice_ids) so genuinely different
+      // option-variants of the same product stay as separate lines.
+      const optsKey = (opts) => JSON.stringify((opts || []).map(o => o.choice_id).filter(Boolean).sort());
+      const merged = [];
+      for (const r of mutatedItems) {
+        const key = optsKey(r.options);
+        const existing = merged.find(m => m.product.id === r.product.id && optsKey(m.options) === key);
+        if (existing) {
+          existing.qty += r.qty;
+          existing.lineTotal = Number(existing.unitPrice) * existing.qty;
+          // Preserve the substitute marker so admin still sees the line was
+          // (partially) a replacement for the original missing product.
+          if (r.replacedForProductId && !existing.replacedForProductId) {
+            existing.replacedForProductId = r.replacedForProductId;
+          }
+        } else {
+          merged.push({ ...r });
+        }
+      }
+      mutatedItems = merged;
+    } else if (fallbackChoice === 'wait_for_restock') {
+      // Order is placed at the nearest store, status='awaiting_restock'.
+      // No stock reservation happens for the WHOLE order until every
+      // missing item is restocked. The customer pays normally; stock at
+      // the store is checked + deducted by checkAwaitingRestockForRestock.
+      awaitingRestockPids = a.missing_items.map(m => m.product_id);
+    }
   }
-  if (routing.error === 'no_stock') {
-    const short = routing.shortages?.[0];
-    return res.status(409).json({
-      success: false,
-      error: 'insufficient_stock',
-      product_id: short?.product_id,
-      available: short?.available ?? 0,
-      store_id: routing.store?.id ?? null,
+
+  // Now route the (possibly-mutated) cart.
+  const acceptFallback = fallbackChoice === 'full_from_fallback';
+  const isWaitFlow     = fallbackChoice === 'wait_for_restock';
+  // Stock check only applies to GZ + same-day. For everything else
+  // (out-of-GZ, or scheduled-for-later inside GZ) we relax routing so a
+  // momentary shortage at the nearest store doesn't refuse the order or
+  // bounce the customer into a needs-fallback modal — the kitchen will
+  // restock before the scheduled fulfilment date.
+  const stockGate = inventory.requiresStockGate({ address, deliverySlotId });
+
+  let fulfillingStore, routingReason;
+  if (isWaitFlow) {
+    // Wait flow always uses the nearest store regardless of stock; we
+    // know stock is short there and that's the whole point.
+    const a = inventory.analyzeShortage({
+      address,
+      items: resolved.map(r => ({ product_id: r.product.id, qty: r.qty })),
+      deliverySlotId, channel: 'wechat',
     });
+    if (!a.nearest?.store && !a.resolved?.store) return res.status(503).json({ success: false, error: 'no_active_store' });
+    fulfillingStore = a.nearest?.store || a.resolved?.store;
+    routingReason   = 'wait_for_restock';
+  } else {
+    const routing = inventory.routeOrder({
+      address,
+      items: mutatedItems.map(r => ({ product_id: r.product.id, qty: r.qty })),
+      channel: 'wechat',
+      acceptFallback,
+      ignoreStock: !stockGate,
+    });
+    if (routing.error === 'no_active_store') {
+      return res.status(503).json({ success: false, error: 'no_active_store' });
+    }
+    if (routing.error === 'needs_fallback_confirmation') {
+      // Mini-app didn't pass a fallback_choice; return the rich payload so
+      // it can show the right modal (5-option or simple-confirm depending
+      // on gate from /quote).
+      return res.status(409).json({
+        success: false,
+        error:   'needs_fallback_confirmation',
+        nearest: {
+          store_id:      routing.nearest.store.id,
+          store_code:    routing.nearest.store.code,
+          store_name_en: routing.nearest.store.name_en,
+          store_name_cn: routing.nearest.store.name_cn,
+          shortages:     routing.nearest.shortages,
+        },
+        fallback: {
+          store_id:      routing.fallback.store.id,
+          store_code:    routing.fallback.store.code,
+          store_name_en: routing.fallback.store.name_en,
+          store_name_cn: routing.fallback.store.name_cn,
+          district:      routing.fallback.store.district,
+        },
+      });
+    }
+    if (routing.error === 'no_stock') {
+      const short = routing.shortages?.[0];
+      return res.status(409).json({
+        success: false, error: 'insufficient_stock',
+        product_id: short?.product_id, available: short?.available ?? 0,
+        store_id: routing.store?.id ?? null,
+      });
+    }
+    fulfillingStore = routing.store;
+    routingReason   = fallbackChoice === 'cancel_missing'  ? 'cancel_missing'
+                    : fallbackChoice === 'replace_missing' ? 'replace_missing'
+                    : routing.reason;
   }
-  const fulfillingStore = routing.store;
-  const routingReason   = routing.reason;
+  resolved.length = 0; for (const r of mutatedItems) resolved.push(r); // keep `resolved` as the source of truth downstream
 
   const subtotal = resolved.reduce((s, r) => s + r.lineTotal, 0);
   const totalQty = resolved.reduce((s, r) => s + r.qty, 0);
@@ -1352,11 +1971,23 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   if (slotResolved.error) {
     return res.status(400).json({ success: false, error: slotResolved.error });
   }
-  const scheduledFor       = slotResolved.scheduled_for;          // ISO string or null
-  const sameDaySurcharge   = Number(slotResolved.surcharge) || 0; // 0 unless same-day + zone-charged
-  const slotLabel          = body.delivery_slot_label
+  let scheduledFor         = slotResolved.scheduled_for;          // ISO string or null
+  let sameDaySurcharge     = Number(slotResolved.surcharge) || 0; // 0 unless same-day + zone-charged
+  let slotLabel            = body.delivery_slot_label
                               || slotResolved.slot?.label_en
                               || (deliverySlotId === 'right_away' ? 'Right away' : null);
+  // Wait-for-restock overrides any time-bound slot with a flexible label
+  // and clears scheduled_for + the same-day surcharge. The kitchen
+  // shouldn't see "Today 18:00–20:00" on an awaiting_restock order — that
+  // window can't be honored if restock lands after 18:00. Customer has
+  // already confirmed the trade-off via a modal in the mini-app
+  // (fbWaitForRestock) before this POST fires. Same-day surcharge is
+  // refunded by clearing it here since we can't promise same-day.
+  if (isWaitFlow) {
+    scheduledFor      = null;
+    sameDaySurcharge  = 0;
+    slotLabel         = 'Ships when restocked';
+  }
   // Same-day surcharge is added to the shipping line so totals reconcile
   // without a new fee column on retail_orders.
   shippingFee += sameDaySurcharge;
@@ -1393,11 +2024,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   const grossTotal = Math.max(0, subtotal + shippingFee + packingFee - voucherDiscount);
 
   // ── Points redemption ────────────────────────────────────────────────
-  // Currently supports the single mode design page 05 calls out: payment
-  // method 'points' = points cover the entire order. Customer must have
-  // enough balance; otherwise we refuse with insufficient_points so the
-  // mini-app can show the gap. Partial points + wechat/alipay stacking is
-  // an open follow-up (see CLAUDE.md).
+  // Two modes:
+  //   1. payment_method === 'points' — points cover the ENTIRE order. Full
+  //      balance check; refuses with insufficient_points if short.
+  //   2. payment_method ∈ {wechat, alipay} with body.points_to_use > 0 —
+  //      partial stack: deduct N points (cash-valued at configured rate)
+  //      from the bill, customer pays the residual with wechat/alipay.
   let pointsUsed = 0, pointsAmount = 0;
   if (paymentMethod === 'points') {
     sweepExpiredPoints(req.customer.id);
@@ -1410,6 +2042,24 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
         success: false,
         error: 'insufficient_points',
         required: pointsUsed,
+        available: have,
+      });
+    }
+  } else if (Number(body.points_to_use) > 0) {
+    sweepExpiredPoints(req.customer.id);
+    const cust = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
+    const have = cust?.points_balance || 0;
+    const requested = Math.floor(Number(body.points_to_use));
+    // Cap at the customer's balance AND at the points needed to fully
+    // cover grossTotal — extra points beyond that would just be burned.
+    const maxByOrder = pointsRequiredFor(grossTotal);
+    pointsUsed = Math.min(requested, have, maxByOrder);
+    pointsAmount = pointsCashValue(pointsUsed);
+    if (requested > have) {
+      return res.status(409).json({
+        success: false,
+        error: 'insufficient_points',
+        requested,
         available: have,
       });
     }
@@ -1431,8 +2081,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
          voucher_code, voucher_amount,
          points_used, points_amount, total,
          customer_note, needs_cutlery, needs_invoice, invoice_title, invoice_tax_id,
-         store_id, routing_reason, channel
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         store_id, routing_reason, channel,
+         fallback_choice, awaiting_restock_pids
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       orderNo, req.customer.id, 'pending_payment', paymentMethod,
       address.recipient_name, address.phone,
@@ -1446,7 +2097,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       voucher ? voucher.code : null, voucherDiscount,
       pointsUsed, pointsAmount, total,
       customerNote, needsCutlery, needsInvoice, invoiceTitle, invoiceTaxId,
-      fulfillingStore.id, routingReason, 'wechat'
+      fulfillingStore.id, routingReason, 'wechat',
+      fallbackChoice, awaitingRestockPids ? JSON.stringify(awaitingRestockPids) : null
     );
     const orderId = info.lastInsertRowid;
 
@@ -1467,8 +2119,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       `INSERT INTO retail_order_items
          (order_id, product_id, name_en, name_cn, sku, size, image_url,
           qty, unit_price, line_total, options_json,
-          ship_modes, needs_ice_pack)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+          ship_modes, needs_ice_pack, replaced_for_product_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     );
     for (const r of resolved) {
       insertItem.run(
@@ -1477,7 +2129,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
         r.qty, r.unitPrice, r.lineTotal,
         r.options.length ? JSON.stringify(r.options) : null,
         r.product.ship_modes || 'air,land',
-        r.product.needs_ice_pack ? 1 : 0
+        r.product.needs_ice_pack ? 1 : 0,
+        r.replacedForProductId || null
       );
     }
     // Auto-plan shipments based on dest city + per-item ship_modes. For
@@ -1512,12 +2165,21 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     // Soft-reserve stock at the routed store. Throws insufficient_stock
     // if a concurrent order beat us between routing and reservation —
     // the whole transaction rolls back and the customer retries.
-    inventory.reserveForOrder({
-      storeId: fulfillingStore.id,
-      orderId,
-      items: resolved.map(r => ({ product_id: r.product.id, qty: r.qty })),
-      channel: 'wechat',
-    });
+    // Skipped in two cases:
+    //   1. 'wait_for_restock' flow — those deliberately park without
+    //      reservations until missing items come back in stock.
+    //   2. stockGate is off (non-GZ, or scheduled-for-later GZ) — the
+    //      kitchen restocks before the fulfilment date, so a same-day
+    //      reservation now would just block other same-day orders for
+    //      no reason.
+    if (!isWaitFlow && stockGate) {
+      inventory.reserveForOrder({
+        storeId: fulfillingStore.id,
+        orderId,
+        items: resolved.map(r => ({ product_id: r.product.id, qty: r.qty })),
+        channel: 'wechat',
+      });
+    }
 
     db.prepare(
       `INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no)
@@ -1583,6 +2245,9 @@ function loadOrderForCustomer(orderId, customerId) {
             customer_note, needs_cutlery, needs_invoice, invoice_title, invoice_tax_id,
             staff_note, cancelled_reason,
             refund_requested_at, refund_reason, refund_status, refund_review_note,
+            refund_amount_requested, refund_amount_approved, refund_amount_paid,
+            refund_lines_json, refund_payout_method, refund_payout_ref,
+            refund_reviewed_at, refund_approved_at, refund_paid_at,
             store_id, routing_reason, channel,
             tracking_carrier, tracking_number, tracking_status,
             tracking_events_json, tracking_synced_at,
@@ -1593,6 +2258,10 @@ function loadOrderForCustomer(orderId, customerId) {
   if (!o) return null;
   if (o.address_json) { try { o.address = JSON.parse(o.address_json); } catch {} }
   delete o.address_json;
+  if (o.refund_lines_json) {
+    try { o.refund_lines = JSON.parse(o.refund_lines_json); } catch { o.refund_lines = null; }
+  }
+  delete o.refund_lines_json;
   o.tracking = buildTrackingView(o);
   // Items snapshot historical name + price at order time, but image_url
   // was never captured (always null on insert). Fall through to the live
@@ -1759,7 +2428,18 @@ router.get('/api/retail/orders/stats', requireRetailAuth, (req, res) => {
       to_ship:   (counts.paid || 0) + (counts.preparing || 0),
       shipped:   counts.dispatched || 0,
       to_review: toReviewRow.n || 0,
-      after_sales: counts.refunded || 0,
+      // After-sales = anything with an active refund process OR fully refunded.
+      // Open buckets nudge the customer to check progress; terminal buckets
+      // surface their history.
+      after_sales: (() => {
+        const r = db.prepare(
+          `SELECT COUNT(*) AS n FROM retail_orders
+            WHERE customer_id = ?
+              AND (status = 'refunded'
+                   OR refund_status IN ('pending','reviewing','approved','paid','rejected'))`
+        ).get(req.customer.id);
+        return r.n || 0;
+      })(),
       total:     totalRow.n || 0,
     },
   });
@@ -1912,6 +2592,281 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
       type: v.type,
       discount: result.discount,
       free_shipping: result.free_shipping,
+    },
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// DASHBOARD ANALYTICS — channel overview for the mini app backend. Reads
+// the LIVE retail_* tables (retail_orders / retail_order_items /
+// retail_customers / retail_visits), unlike the legacy /api/miniapp/analytics
+// endpoint in routes/sales.js which still reads imported miniapp_orders data.
+//
+// All time bucketing is shifted to GZ local (+8h) because placed_at /
+// created_at are stored as UTC (SQLite CURRENT_TIMESTAMP). Without the shift,
+// "today" and the hourly curve would be 8 hours off for the operator.
+//
+// "Revenue" counts orders that were paid and not refunded/cancelled, i.e.
+// status IN (paid, preparing, dispatched, delivered, awaiting_restock).
+// Refunded + cancelled are reported separately in the funnel.
+// ─────────────────────────────────────────────────────────────────────────
+router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
+  const TZ    = '+8 hours';
+  const PAID  = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+  const PAIDO = "o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+
+  // ── Resolve window (defaults to trailing 30 days, GZ local) ──
+  const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
+  const toDefault   = nowGz.toISOString().slice(0, 10);
+  const fromDefault = new Date(nowGz.getTime() - 29 * 86400000).toISOString().slice(0, 10);
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : fromDefault;
+  const to   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to   || '') ? req.query.to   : toDefault;
+  const spanDays = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
+  const hourly = from === to;  // single-day view → hour-of-day curve
+
+  // Preceding window of equal length, for delta arrows.
+  const prevTo   = new Date(new Date(from).getTime() - 86400000).toISOString().slice(0, 10);
+  const prevFrom = new Date(new Date(from).getTime() - spanDays * 86400000).toISOString().slice(0, 10);
+
+  // ── Headline KPIs (current + previous window) ──
+  const kpiSql = `
+    SELECT COUNT(*) AS orders,
+           COALESCE(SUM(total), 0) AS revenue,
+           COALESCE(AVG(total), 0) AS aov,
+           COUNT(DISTINCT customer_id) AS buyers
+      FROM retail_orders
+     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?`;
+  const kpi     = db.prepare(kpiSql).get(from, to);
+  const kpiPrev = db.prepare(kpiSql).get(prevFrom, prevTo);
+
+  const visitsSql = `
+    SELECT COUNT(*) AS visits,
+           COUNT(DISTINCT session_id) AS sessions,
+           COUNT(DISTINCT COALESCE(CAST(customer_id AS TEXT), openid, session_id)) AS visitors
+      FROM retail_visits
+     WHERE date(created_at, '${TZ}') BETWEEN ? AND ?`;
+  const vis     = db.prepare(visitsSql).get(from, to);
+  const visPrev = db.prepare(visitsSql).get(prevFrom, prevTo);
+
+  const newCustSql = `SELECT COUNT(*) AS n FROM retail_customers WHERE date(created_at, '${TZ}') BETWEEN ? AND ?`;
+  const newCust     = db.prepare(newCustSql).get(from, to).n;
+  const newCustPrev = db.prepare(newCustSql).get(prevFrom, prevTo).n;
+
+  // ── Status funnel (gross — every status in the window) ──
+  const funnel = db.prepare(`
+    SELECT status, COUNT(*) AS n, COALESCE(SUM(total), 0) AS revenue
+      FROM retail_orders
+     WHERE date(placed_at, '${TZ}') BETWEEN ? AND ?
+     GROUP BY status`).all(from, to);
+  const byStatus = {};
+  for (const r of funnel) byStatus[r.status] = { n: r.n, revenue: r.revenue };
+  const grossOrders = funnel.reduce((s, r) => s + r.n, 0);
+  const refundedOrders = byStatus.refunded?.n || 0;
+  const cancelledOrders = byStatus.cancelled?.n || 0;
+
+  // ── Trend (zero-filled). Hourly for a single day, else daily. ──
+  let trend;
+  if (hourly) {
+    const o = db.prepare(`
+      SELECT CAST(strftime('%H', placed_at, '${TZ}') AS INTEGER) AS b,
+             COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
+        FROM retail_orders
+       WHERE ${PAID} AND date(placed_at, '${TZ}') = ?
+       GROUP BY b`).all(from);
+    const v = db.prepare(`
+      SELECT CAST(strftime('%H', created_at, '${TZ}') AS INTEGER) AS b,
+             COUNT(*) AS visits, COUNT(DISTINCT session_id) AS sessions
+        FROM retail_visits
+       WHERE date(created_at, '${TZ}') = ?
+       GROUP BY b`).all(from);
+    const om = Object.fromEntries(o.map(r => [r.b, r]));
+    const vm = Object.fromEntries(v.map(r => [r.b, r]));
+    trend = Array.from({ length: 24 }, (_, h) => ({
+      bucket: String(h).padStart(2, '0') + ':00',
+      orders:   om[h]?.orders   || 0,
+      revenue:  om[h]?.revenue  || 0,
+      visits:   vm[h]?.visits   || 0,
+      sessions: vm[h]?.sessions || 0,
+    }));
+  } else {
+    const o = db.prepare(`
+      SELECT date(placed_at, '${TZ}') AS b,
+             COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
+        FROM retail_orders
+       WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+       GROUP BY b`).all(from, to);
+    const v = db.prepare(`
+      SELECT date(created_at, '${TZ}') AS b,
+             COUNT(*) AS visits, COUNT(DISTINCT session_id) AS sessions
+        FROM retail_visits
+       WHERE date(created_at, '${TZ}') BETWEEN ? AND ?
+       GROUP BY b`).all(from, to);
+    const om = Object.fromEntries(o.map(r => [r.b, r]));
+    const vm = Object.fromEntries(v.map(r => [r.b, r]));
+    trend = [];
+    for (let i = 0; i < spanDays; i++) {
+      const d = new Date(new Date(from).getTime() + i * 86400000).toISOString().slice(0, 10);
+      trend.push({
+        bucket: d,
+        orders:   om[d]?.orders   || 0,
+        revenue:  om[d]?.revenue  || 0,
+        visits:   vm[d]?.visits   || 0,
+        sessions: vm[d]?.sessions || 0,
+      });
+    }
+  }
+
+  // ── Payment-method split ──
+  const payments = db.prepare(`
+    SELECT COALESCE(payment_method, 'unknown') AS method,
+           COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
+      FROM retail_orders
+     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+     GROUP BY method ORDER BY revenue DESC`).all(from, to);
+
+  // ── Delivery-mode split ──
+  const delivery = db.prepare(`
+    SELECT COALESCE(delivery_mode, 'unknown') AS mode,
+           COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
+      FROM retail_orders
+     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+     GROUP BY mode ORDER BY orders DESC`).all(from, to);
+
+  // ── Fulfilling store + routing reason ──
+  const stores = db.prepare(`
+    SELECT o.store_id, s.name_en, s.name_cn,
+           COUNT(*) AS orders, COALESCE(SUM(o.total), 0) AS revenue
+      FROM retail_orders o
+      LEFT JOIN retail_stores s ON s.id = o.store_id
+     WHERE ${PAIDO} AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?
+     GROUP BY o.store_id ORDER BY orders DESC`).all(from, to);
+  const routing = db.prepare(`
+    SELECT COALESCE(routing_reason, 'unknown') AS reason, COUNT(*) AS orders
+      FROM retail_orders
+     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+     GROUP BY reason ORDER BY orders DESC`).all(from, to);
+
+  // ── Top products (by revenue) ──
+  const topProducts = db.prepare(`
+    SELECT i.product_id, i.name_en, i.name_cn, i.image_url, i.sku,
+           COALESCE(SUM(i.qty), 0) AS units,
+           COALESCE(SUM(i.line_total), 0) AS revenue,
+           COUNT(DISTINCT i.order_id) AS orders
+      FROM retail_order_items i
+      JOIN retail_orders o ON o.id = i.order_id
+     WHERE ${PAIDO} AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?
+     GROUP BY i.product_id ORDER BY revenue DESC LIMIT 15`).all(from, to);
+
+  // ── Top customers (by spend in window) ──
+  const topCustomers = db.prepare(`
+    SELECT o.customer_id, c.nickname, c.phone, c.tier_key,
+           COUNT(*) AS orders, COALESCE(SUM(o.total), 0) AS revenue,
+           MAX(o.placed_at) AS last_order
+      FROM retail_orders o
+      JOIN retail_customers c ON c.id = o.customer_id
+     WHERE ${PAIDO} AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?
+     GROUP BY o.customer_id ORDER BY revenue DESC LIMIT 15`).all(from, to);
+
+  // ── New vs returning buyers (first-ever paid order in window = new) ──
+  const nvr = db.prepare(`
+    SELECT COUNT(DISTINCT o.customer_id) AS buyers,
+           COUNT(DISTINCT CASE WHEN fo.first_day BETWEEN ? AND ? THEN o.customer_id END) AS new_buyers
+      FROM retail_orders o
+      JOIN (SELECT customer_id, MIN(date(placed_at, '${TZ}')) AS first_day
+              FROM retail_orders WHERE ${PAID} GROUP BY customer_id) fo
+        ON fo.customer_id = o.customer_id
+     WHERE ${PAIDO} AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?`).get(from, to, from, to);
+
+  // ── Loyalty-tier distribution (active customer base snapshot) ──
+  const tiers = db.prepare(`
+    SELECT COALESCE(tier_key, 'seed') AS tier, COUNT(*) AS n
+      FROM retail_customers WHERE is_blocked = 0
+     GROUP BY tier ORDER BY n DESC`).all();
+
+  // ── Geography (address_json snapshot) ──
+  const geoCities = db.prepare(`
+    SELECT json_extract(address_json, '$.city') AS city,
+           COUNT(*) AS orders, COUNT(DISTINCT customer_id) AS customers,
+           COALESCE(SUM(total), 0) AS revenue
+      FROM retail_orders
+     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+       AND address_json IS NOT NULL AND json_extract(address_json, '$.city') IS NOT NULL
+     GROUP BY city ORDER BY revenue DESC LIMIT 15`).all(from, to);
+  const geoDistricts = db.prepare(`
+    SELECT json_extract(address_json, '$.city') AS city,
+           json_extract(address_json, '$.district') AS district,
+           COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
+      FROM retail_orders
+     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+       AND address_json IS NOT NULL AND json_extract(address_json, '$.district') IS NOT NULL
+     GROUP BY city, district ORDER BY revenue DESC LIMIT 20`).all(from, to);
+
+  // ── Marketing impact ──
+  const vouchers = db.prepare(`
+    SELECT voucher_code AS code, COUNT(*) AS uses,
+           COALESCE(SUM(voucher_amount), 0) AS discount,
+           COALESCE(SUM(total), 0) AS revenue
+      FROM retail_orders
+     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+       AND voucher_code IS NOT NULL AND voucher_code != ''
+     GROUP BY voucher_code ORDER BY uses DESC LIMIT 15`).all(from, to);
+  const points = db.prepare(`
+    SELECT COUNT(*) AS orders, COALESCE(SUM(points_used), 0) AS points_used,
+           COALESCE(SUM(points_amount), 0) AS points_value
+      FROM retail_orders
+     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ? AND points_used > 0`).get(from, to);
+
+  // ── Traffic: WeChat launch-scene breakdown ──
+  const scenes = db.prepare(`
+    SELECT scene, COUNT(*) AS visits, COUNT(DISTINCT session_id) AS sessions
+      FROM retail_visits
+     WHERE date(created_at, '${TZ}') BETWEEN ? AND ? AND scene IS NOT NULL
+     GROUP BY scene ORDER BY visits DESC LIMIT 12`).all(from, to);
+
+  const conversion = vis.sessions > 0 ? (kpi.orders / vis.sessions) * 100 : null;
+  const pct = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
+
+  res.json({
+    success: true,
+    data: {
+      window: { from, to, span_days: spanDays, granularity: hourly ? 'hour' : 'day' },
+      prev_window: { from: prevFrom, to: prevTo },
+      kpis: {
+        revenue:       kpi.revenue,
+        orders:        kpi.orders,
+        aov:           kpi.aov,
+        buyers:        kpi.buyers,
+        new_customers: newCust,
+        visits:        vis.visits,
+        sessions:      vis.sessions,
+        visitors:      vis.visitors,
+        conversion_rate: conversion,
+        gross_orders:  grossOrders,
+        refunded_orders: refundedOrders,
+        cancelled_orders: cancelledOrders,
+        refund_rate: kpi.orders + refundedOrders > 0
+          ? Math.round((refundedOrders / (kpi.orders + refundedOrders)) * 1000) / 10 : 0,
+      },
+      deltas: {
+        revenue:       pct(kpi.revenue, kpiPrev.revenue),
+        orders:        pct(kpi.orders, kpiPrev.orders),
+        aov:           pct(kpi.aov, kpiPrev.aov),
+        new_customers: pct(newCust, newCustPrev),
+        visits:        pct(vis.visits, visPrev.visits),
+        sessions:      pct(vis.sessions, visPrev.sessions),
+      },
+      trend,
+      funnel: byStatus,
+      new_vs_returning: {
+        buyers: nvr.buyers || 0,
+        new_buyers: nvr.new_buyers || 0,
+        returning_buyers: (nvr.buyers || 0) - (nvr.new_buyers || 0),
+      },
+      payments, delivery, stores, routing,
+      topProducts, topCustomers, tiers,
+      geoCities, geoDistricts,
+      marketing: { vouchers, points },
+      traffic: { scenes },
     },
   });
 });
@@ -3071,28 +4026,122 @@ router.patch('/api/retail-admin/reviews/:id', requireRetailAdmin, express.json()
 
 // Customer-side REFUND REQUEST — for paid+ orders the customer can't
 // just cancel (money already moved). They file a refund request which
-// the office reviews; staff then transitions the order to 'refunded'
-// (which is the approval) or sets refund_status='rejected' via the
-// admin endpoint.
+// the office processes through a multi-step workflow:
+//   requested → reviewing → approved → paid   (terminal happy path)
+//             ↘ rejected           (terminal, staff)
+//             ↘ withdrawn          (terminal, customer pulled it)
+//
+// Customer can request a full refund (default) or a partial:
+//   body: { reason?, amount?, lines? }
+//     amount: number — partial ¥ amount (clamped to order total)
+//     lines:  [{ item_id, qty }] — itemized partial (server computes amount)
+// Staff transitions live under /api/retail-admin/orders/:id/refund/...
+function logRefundEvent({ orderId, event, amount = null, note = null, userId = null, customerId = null, meta = null }) {
+  try {
+    db.prepare(
+      `INSERT INTO retail_refund_events (order_id, event, amount, note, user_id, customer_id, meta_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(orderId, event, amount, note, userId, customerId, meta ? JSON.stringify(meta) : null);
+  } catch (e) { console.error('[logRefundEvent]', e); }
+}
+
+// Resolve a per-line refund spec into a normalized [{item_id, product_id, qty, amount}]
+// list + total amount. Validates against the order's actual items + qty caps.
+function normalizeRefundLines(orderId, lines) {
+  if (!Array.isArray(lines) || !lines.length) return { lines: null, amount: 0 };
+  const items = db.prepare(
+    'SELECT id, product_id, qty, unit_price, line_total FROM retail_order_items WHERE order_id = ?'
+  ).all(orderId);
+  const byId = new Map(items.map(it => [it.id, it]));
+  const out = [];
+  let total = 0;
+  for (const l of lines) {
+    const itemId = parseInt(l.item_id, 10);
+    const it = byId.get(itemId);
+    if (!it) continue;
+    const qty = Math.max(0, Math.min(Number(l.qty) || 0, it.qty));
+    if (!(qty > 0)) continue;
+    // line_total ÷ qty gives unit price (after option deltas)
+    const unit = it.qty > 0 ? (it.line_total / it.qty) : it.unit_price;
+    const amount = +(unit * qty).toFixed(2);
+    out.push({ item_id: itemId, product_id: it.product_id, qty, amount });
+    total += amount;
+  }
+  return { lines: out.length ? out : null, amount: +total.toFixed(2) };
+}
+
 router.post('/api/retail/orders/:id/refund-request', requireRetailAuth, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const order = db.prepare(
-    'SELECT id, status, refund_status FROM retail_orders WHERE id = ? AND customer_id = ?'
+    'SELECT id, status, refund_status, total FROM retail_orders WHERE id = ? AND customer_id = ?'
   ).get(id, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
   if (!['paid', 'preparing', 'dispatched', 'delivered'].includes(order.status)) {
     return res.status(409).json({ success: false, error: 'not_refundable', status: order.status });
   }
-  if (order.refund_status === 'pending') {
+  // Block if there's an active or already-resolved-happy refund.
+  // Allow re-request after 'rejected' or 'withdrawn' (customer can retry).
+  if (['pending', 'reviewing'].includes(order.refund_status)) {
     return res.status(409).json({ success: false, error: 'already_requested' });
   }
-  if (order.refund_status === 'approved') {
+  if (['approved', 'paid'].includes(order.refund_status)) {
     return res.status(409).json({ success: false, error: 'already_refunded' });
   }
   const reason = (req.body?.reason || '').slice(0, 500);
+  // Normalize amount + lines. Per-line wins if both are provided.
+  let amount = null;
+  let linesJson = null;
+  const { lines: normLines, amount: linesAmount } = normalizeRefundLines(id, req.body?.lines);
+  if (normLines) {
+    amount = linesAmount;
+    linesJson = JSON.stringify(normLines);
+  } else if (req.body?.amount != null) {
+    const a = Math.max(0, Math.min(Number(req.body.amount) || 0, Number(order.total) || 0));
+    amount = a > 0 ? +a.toFixed(2) : null;
+  }
   db.prepare(
-    "UPDATE retail_orders SET refund_requested_at = CURRENT_TIMESTAMP, refund_reason = ?, refund_status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-  ).run(reason || null, id);
+    `UPDATE retail_orders
+        SET refund_requested_at = CURRENT_TIMESTAMP,
+            refund_reason = ?,
+            refund_status = 'pending',
+            refund_amount_requested = ?,
+            refund_amount_approved = NULL,
+            refund_amount_paid = NULL,
+            refund_lines_json = ?,
+            refund_review_note = NULL,
+            refund_reviewed_at = NULL,
+            refund_approved_at = NULL,
+            refund_paid_at = NULL,
+            refund_reviewer_id = NULL,
+            refund_payer_id = NULL,
+            refund_payout_method = NULL,
+            refund_payout_ref = NULL,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`
+  ).run(reason || null, amount, linesJson, id);
+  logRefundEvent({
+    orderId: id, event: 'pending', amount, note: reason || null,
+    customerId: req.customer.id,
+    meta: normLines ? { lines: normLines } : null,
+  });
+  res.json({ success: true });
+});
+
+// Customer withdraws an open refund request (only while requested/reviewing).
+// Terminal — to re-open they file a fresh request.
+router.post('/api/retail/orders/:id/refund-withdraw', requireRetailAuth, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const order = db.prepare(
+    'SELECT id, refund_status FROM retail_orders WHERE id = ? AND customer_id = ?'
+  ).get(id, req.customer.id);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!['pending', 'reviewing'].includes(order.refund_status)) {
+    return res.status(409).json({ success: false, error: 'not_open', refund_status: order.refund_status });
+  }
+  db.prepare(
+    "UPDATE retail_orders SET refund_status = 'withdrawn', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+  ).run(id);
+  logRefundEvent({ orderId: id, event: 'withdrawn', customerId: req.customer.id });
   res.json({ success: true });
 });
 
@@ -3137,9 +4186,12 @@ router.get('/api/retail/customer', requireRetailAuth, (req, res) => {
       WHERE customer_id = ?
       ORDER BY is_default DESC, updated_at DESC`
   ).all(req.customer.id);
+  const favoriteCount = db.prepare(
+    'SELECT COUNT(*) AS n FROM retail_customer_favorites WHERE customer_id = ?'
+  ).get(req.customer.id).n;
   res.json({
     success: true,
-    data: { ...publicCustomer(fresh), addresses },
+    data: { ...publicCustomer(fresh), addresses, favorite_count: favoriteCount },
   });
 });
 
@@ -3253,7 +4305,8 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   const params = [];
   const body = req.body || {};
   if ('is_published' in body) { sets.push('is_published = ?'); params.push(body.is_published ? 1 : 0); }
-  for (const k of ['keywords_en', 'keywords_cn', 'tagline_en', 'tagline_cn']) {
+  for (const k of ['keywords_en', 'keywords_cn', 'tagline_en', 'tagline_cn',
+                   'colophon_character', 'colophon_tagline_en', 'colophon_tagline_cn']) {
     if (k in body) { sets.push(`${k} = ?`); params.push(body[k] || null); }
   }
   if ('description_blocks' in body) {
@@ -3265,6 +4318,30 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     } else if (Array.isArray(v)) { arr = v; }
     sets.push('description_blocks = ?');
     params.push(arr && arr.length ? JSON.stringify(arr) : null);
+  }
+  // Nutrition panel — stored as its own JSON column, edited from the product
+  // editor as a (pseudo) block. Shape: { basis_en, basis_cn, rows:[{label_en,
+  // label_cn, value}] }. Sanitised here so we never persist junk. null/empty
+  // clears the column (hides the panel on the mini-app).
+  if ('nutrition' in body) {
+    const v = body.nutrition;
+    let obj = null;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const rows = Array.isArray(v.rows) ? v.rows
+        .map(r => ({
+          label_en: (r && r.label_en ? String(r.label_en) : '').trim(),
+          label_cn: (r && r.label_cn ? String(r.label_cn) : '').trim(),
+          value:    (r && r.value    ? String(r.value)    : '').trim(),
+        }))
+        .filter(r => r.label_en || r.label_cn || r.value) : [];
+      const basis_en = (v.basis_en ? String(v.basis_en) : '').trim();
+      const basis_cn = (v.basis_cn ? String(v.basis_cn) : '').trim();
+      if (basis_en || basis_cn || rows.length) {
+        obj = { basis_en: basis_en || null, basis_cn: basis_cn || null, rows };
+      }
+    }
+    sets.push('nutrition = ?');
+    params.push(obj ? JSON.stringify(obj) : null);
   }
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
 
@@ -3280,13 +4357,22 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   const row = db.prepare(
     `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price,
             description_en, description_cn, image_data, image_url, is_published, sort_order,
-            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks
+            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
+            colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM products WHERE id = ?`
   ).get(id);
   if (row && typeof row.description_blocks === 'string' && row.description_blocks) {
     try { row.description_blocks = JSON.parse(row.description_blocks); } catch { row.description_blocks = null; }
   } else {
     row.description_blocks = null;
+  }
+  if (row && typeof row.nutrition === 'string' && row.nutrition.trim()) {
+    try {
+      const n = JSON.parse(row.nutrition);
+      row.nutrition = (n && (n.basis_en || n.basis_cn || (n.rows || []).length)) ? n : null;
+    } catch { row.nutrition = null; }
+  } else {
+    row.nutrition = null;
   }
   res.json({ success: true, data: row });
 });
@@ -3492,7 +4578,8 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     is_published, sort_order,
                     description_en, description_cn,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
-                    description_blocks
+                    description_blocks, nutrition,
+                    colophon_character, colophon_tagline_en, colophon_tagline_cn
                FROM products WHERE COALESCE(is_active, 1) = 1`;
   const params = [];
   if (q) {
@@ -3510,12 +4597,41 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
     } else {
       r.description_blocks = null;
     }
+    // Same for the nutrition panel JSON so the editor can pre-fill it.
+    if (typeof r.nutrition === 'string' && r.nutrition.trim()) {
+      try {
+        const n = JSON.parse(r.nutrition);
+        r.nutrition = (n && (n.basis_en || n.basis_cn || (n.rows || []).length)) ? n : null;
+      } catch { r.nutrition = null; }
+    } else {
+      r.nutrition = null;
+    }
     return r;
   });
   res.json({ success: true, data: rows });
 });
 
 // Retail orders queue — list + detail + status transitions.
+// Lightweight unseen-order counter for the Orders tab notification dot.
+// Counts orders placed strictly after `since` (ISO 8601 from the client's
+// localStorage "last viewed Orders tab" timestamp). Excludes cancelled and
+// pending_payment so the dot only fires for actionable new orders.
+// Returns the most-recent placed_at too so the client can advance its
+// pointer atomically after marking-as-seen.
+router.get('/api/retail-admin/orders/unseen-count', requireRetailAdmin, (req, res) => {
+  const since = String(req.query.since || '').trim();
+  // SQLite datetime() tolerates ISO strings; default to "epoch" when missing
+  // so a fresh client sees a count of every non-cancelled order.
+  const sinceSql = since || '1970-01-01T00:00:00.000Z';
+  const row = db.prepare(
+    `SELECT COUNT(*) AS n, MAX(placed_at) AS latest
+       FROM retail_orders
+      WHERE status NOT IN ('cancelled','pending_payment')
+        AND datetime(placed_at) > datetime(?)`
+  ).get(sinceSql);
+  res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
+});
+
 router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   const { status, q, from, to, store_id } = req.query;
   const limit  = Math.min(parseInt(req.query.limit  || '100', 10) || 100, 200);
@@ -3526,6 +4642,9 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.placed_at, o.paid_at, o.dispatched_at, o.delivered_at,
                     o.scheduled_for, o.delivery_slot_label,
                     o.delivery_mode, o.same_day_surcharge_fee,
+                    o.updated_at,
+                    o.refund_status, o.refund_amount_requested,
+                    o.refund_requested_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.channel,
                     o.tracking_carrier, o.tracking_number, o.tracking_status,
@@ -3536,7 +4655,14 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
           LEFT JOIN retail_stores    s ON s.id = o.store_id
               WHERE 1=1`;
   const params = [];
-  if (status)   { sql += ' AND o.status = ?';   params.push(status); }
+  // `refunds_open` is a pseudo-status that pulls every order currently in
+  // the refund pipeline regardless of primary status — so open requests
+  // are reachable from the main orders table, not only the chip view.
+  if (status === 'refunds_open') {
+    sql += " AND o.refund_status IN ('pending','reviewing','approved')";
+  } else if (status) {
+    sql += ' AND o.status = ?'; params.push(status);
+  }
   if (store_id) { sql += ' AND o.store_id = ?'; params.push(parseInt(store_id, 10)); }
   if (q) {
     sql += ' AND (o.order_no LIKE ? OR o.recipient_name LIKE ? OR o.recipient_phone LIKE ? OR c.nickname LIKE ?)';
@@ -3622,7 +4748,63 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
   // Keep legacy `o.tracking` populated from the primary shipment so older
   // UI code (the mobile track page) keeps working without changes.
   o.tracking = o.shipments[0]?.tracking || buildTrackingView(o);
+  // Split-package suggestion — drives the banner above Items in the drawer.
+  try { o.shipment_suggestion = buildShipmentSuggestion(id); } catch (e) { o.shipment_suggestion = null; }
   res.json({ success: true, data: o });
+});
+
+// Apply the split-package suggestion: re-bucket items between the order's
+// air/land shipments to match buildShipmentSuggestion's suggested plan,
+// creating a missing shipment if the order currently has only one bucket.
+// 422 if the order is no longer eligible (admin clicked an outdated banner).
+router.post('/api/retail-admin/orders/:id/shipment-suggestion/apply',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const sug = buildShipmentSuggestion(id);
+  if (!sug || !sug.eligible) {
+    return res.status(422).json({ success: false, error: 'not_eligible', reason: sug?.reason || 'unknown' });
+  }
+  const shipments = db.prepare(
+    `SELECT id, mode FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
+  ).all(id);
+  const byMode = new Map(shipments.map(s => [s.mode, s.id]));
+
+  const ensureShipmentRow = (mode) => {
+    if (byMode.has(mode)) return byMode.get(mode);
+    const label = mode === 'air' ? 'Air shipment · 空运' : 'Land shipment · 陆运';
+    const r = db.prepare(
+      `INSERT INTO retail_shipments (order_id, mode, label, created_at, updated_at)
+       VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    ).run(id, mode, label);
+    byMode.set(mode, r.lastInsertRowid);
+    return r.lastInsertRowid;
+  };
+
+  const reassign = db.prepare(
+    `UPDATE retail_order_items SET shipment_id = ? WHERE id = ? AND order_id = ?`
+  );
+  const tx = db.transaction(() => {
+    for (const bk of sug.suggested.plan) {
+      const sid = ensureShipmentRow(bk.mode);
+      for (const itemId of bk.item_ids) reassign.run(sid, itemId, id);
+    }
+    // Delete now-empty shipments (only when the new plan collapses to one
+    // bucket — rare here, but covers the land-floor fold-back path).
+    const emptyIds = db.prepare(
+      `SELECT s.id FROM retail_shipments s
+        WHERE s.order_id = ?
+          AND NOT EXISTS (SELECT 1 FROM retail_order_items i WHERE i.shipment_id = s.id)`
+    ).all(id);
+    for (const row of emptyIds) {
+      // Don't drop a shipment that already has a waybill — admin may have
+      // edited it manually after the suggestion was built.
+      const s = shipments.find(x => x.id === row.id);
+      if (s && (s.tracking_number || s.tracking_carrier)) continue;
+      db.prepare(`DELETE FROM retail_shipments WHERE id = ?`).run(row.id);
+    }
+  });
+  tx();
+  res.json({ success: true });
 });
 
 // ─── Integrations admin (kd100 + JD LOP credentials) ──────────────────
@@ -4289,10 +5471,32 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     }
   }
   if (status === 'refunded') {
+    // Fast-forward all the way through approve + paid in one shot — legacy
+    // path. New flows should use POST /refund/approve + /refund/payout for
+    // explicit, auditable steps.
+    const fullTotal = +(db.prepare('SELECT total FROM retail_orders WHERE id = ?').get(id)?.total || 0);
+    db.prepare(
+      `UPDATE retail_orders
+          SET refund_amount_approved = COALESCE(refund_amount_approved, ?),
+              refund_amount_paid     = COALESCE(refund_amount_paid,     ?),
+              refund_approved_at     = COALESCE(refund_approved_at, CURRENT_TIMESTAMP),
+              refund_paid_at         = COALESCE(refund_paid_at,     CURRENT_TIMESTAMP),
+              refund_reviewer_id     = COALESCE(refund_reviewer_id, ?),
+              refund_payer_id        = COALESCE(refund_payer_id,    ?)
+        WHERE id = ?`
+    ).run(fullTotal, fullTotal, req.user.id, req.user.id, id);
+    logRefundEvent({ orderId: id, event: 'approved', amount: fullTotal, note: reason || null, userId: req.user.id });
+    logRefundEvent({ orderId: id, event: 'paid',     amount: fullTotal, note: 'legacy status-transition shortcut', userId: req.user.id });
     try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints]', e); }
     try { reverseOrderRedeem(id); } catch (e) { console.error('[reverseOrderRedeem]', e); }
     try { inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, note: reason || null }); }
     catch (e) { console.error('[inventory.reverse (refund)]', e); }
+    // Mirror onto retail_payments for the audit trail.
+    try {
+      db.prepare(
+        `UPDATE retail_payments SET refunded_amount = amount, status = 'refunded' WHERE order_id = ? AND status = 'success'`
+      ).run(id);
+    } catch (e) { console.error('[retail_payments refund-mirror]', e); }
   }
 
   // Fire a subscribe-message notification (no-op in DEV, real send in PROD).
@@ -4302,20 +5506,276 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   res.json({ success: true, data: db.prepare('SELECT * FROM retail_orders WHERE id = ?').get(id) });
 });
 
-// Staff: reject a customer's refund request. Leaves the order's status
-// alone (e.g. still 'delivered') but flips refund_status='rejected' so
-// the customer sees the outcome + the staff note.
-router.post('/api/retail-admin/orders/:id/refund-reject', requireRetailAdmin, express.json(), (req, res) => {
+// ─── Refund processing workflow ───────────────────────────────────────
+// Workflow: requested → reviewing → approved → paid (or rejected / withdrawn)
+//
+// review:  acknowledge the request; gather info. Optional, but useful when
+//          the customer needs to be contacted before deciding.
+// approve: lock in an amount + (optional) line items. Reverses inventory
+//          for line-itemized partials. Reverses points only on full refund.
+//          Order.status flips to 'refunded' only on full refund.
+// payout:  record that money actually moved back. Captures method + reference.
+//          Mirrors retail_payments.refunded_amount.
+// reject:  terminal. Customer sees the rejection note.
+//
+// Legacy POST /api/retail-admin/orders/:id/refund-reject kept as an alias
+// for /refund/reject so existing UI code keeps working during rollout.
+
+// List endpoint — populates the admin refund queue. status filter accepts
+// 'open' (= requested+reviewing+approved, the actionable ones) or any
+// single state. Defaults to 'open'.
+router.get('/api/retail-admin/refunds', requireRetailAdmin, (req, res) => {
+  const filter = (req.query.status || 'open').toString();
+  const stateSets = {
+    open:      ['pending', 'reviewing', 'approved'],
+    actionable:['pending', 'reviewing'],
+    pending:   ['pending'],
+    requested: ['pending'],   // alias for the externally-shipped name
+    reviewing: ['reviewing'],
+    approved:  ['approved'],
+    paid:      ['paid'],
+    rejected:  ['rejected'],
+    withdrawn: ['withdrawn'],
+    all:       ['pending', 'reviewing', 'approved', 'paid', 'rejected', 'withdrawn'],
+  };
+  const states = stateSets[filter] || stateSets.open;
+  const placeholders = states.map(() => '?').join(',');
+  const rows = db.prepare(
+    `SELECT o.id, o.order_no, o.status, o.total, o.placed_at, o.delivered_at,
+            o.refund_requested_at, o.refund_reviewed_at, o.refund_approved_at, o.refund_paid_at,
+            o.refund_status, o.refund_reason, o.refund_review_note,
+            o.refund_amount_requested, o.refund_amount_approved, o.refund_amount_paid,
+            o.refund_lines_json, o.refund_payout_method, o.refund_payout_ref,
+            o.customer_id,
+            c.nickname AS customer_nickname, c.avatar_url AS customer_avatar, c.phone AS customer_phone
+       FROM retail_orders o
+       LEFT JOIN retail_customers c ON c.id = o.customer_id
+      WHERE o.refund_status IN (${placeholders})
+      ORDER BY
+        CASE o.refund_status
+          WHEN 'pending' THEN 1
+          WHEN 'reviewing' THEN 2
+          WHEN 'approved'  THEN 3
+          ELSE 4
+        END,
+        o.refund_requested_at DESC`
+  ).all(...states).map(r => {
+    if (r.refund_lines_json) {
+      try { r.refund_lines = JSON.parse(r.refund_lines_json); } catch { r.refund_lines = null; }
+    }
+    delete r.refund_lines_json;
+    return r;
+  });
+  res.json({ success: true, data: rows });
+});
+
+// Step 1: REVIEW — acknowledge the request, mark we're looking at it.
+router.post('/api/retail-admin/orders/:id/refund/review', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const note = (req.body?.note || '').slice(0, 500);
   const o = db.prepare('SELECT id, refund_status FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
-  if (o.refund_status !== 'pending') return res.status(409).json({ success: false, error: 'no_pending_request' });
+  if (!['pending', 'reviewing'].includes(o.refund_status)) {
+    return res.status(409).json({ success: false, error: 'not_reviewable', refund_status: o.refund_status });
+  }
   db.prepare(
-    "UPDATE retail_orders SET refund_status = 'rejected', refund_review_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-  ).run(note || null, id);
-  logActivity(req.user.id, req.user.username, 'refund_reject', 'retail_order', id, { note }, req.ip);
+    `UPDATE retail_orders
+        SET refund_status = 'reviewing',
+            refund_reviewed_at = COALESCE(refund_reviewed_at, CURRENT_TIMESTAMP),
+            refund_reviewer_id = COALESCE(refund_reviewer_id, ?),
+            refund_review_note = COALESCE(NULLIF(?, ''), refund_review_note),
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`
+  ).run(req.user.id, note, id);
+  logRefundEvent({ orderId: id, event: 'reviewing', note: note || null, userId: req.user.id });
+  logActivity(req.user.id, req.user.username, 'refund_review', 'retail_order', id, { note }, req.ip);
   res.json({ success: true });
+});
+
+// Step 2: APPROVE — lock in amount + lines. Reverses inventory for
+// itemized partials and full refunds. Reverses points only on full refund.
+// Order.status flips to 'refunded' only on full refund.
+// body: { amount?, lines?, note?, reverse_points? }
+//   amount: overrides customer's requested amount (staff may approve less)
+//   lines:  [{item_id, qty}] overrides for itemized partial
+//   reverse_points: explicit override; default = full-refund? then true
+router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = db.prepare(
+    'SELECT id, status, total, refund_status, refund_amount_requested, refund_lines_json FROM retail_orders WHERE id = ?'
+  ).get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!['pending', 'reviewing'].includes(o.refund_status)) {
+    return res.status(409).json({ success: false, error: 'not_approvable', refund_status: o.refund_status });
+  }
+  const note = (req.body?.note || '').slice(0, 500);
+
+  // Resolve final lines + amount. Staff-supplied wins, then customer's lines, then customer's amount, then full total.
+  let lines = null;
+  let amount = null;
+  const norm = normalizeRefundLines(id, req.body?.lines);
+  if (norm.lines) {
+    lines = norm.lines;
+    amount = norm.amount;
+  } else if (req.body?.amount != null) {
+    const a = Math.max(0, Math.min(Number(req.body.amount) || 0, Number(o.total) || 0));
+    amount = a > 0 ? +a.toFixed(2) : null;
+  } else if (o.refund_lines_json) {
+    try {
+      const customerLines = JSON.parse(o.refund_lines_json);
+      // Customer's per-line spec is already normalized (server computed
+      // amounts at request time). Re-normalize to be defensive.
+      const renorm = normalizeRefundLines(id, customerLines.map(l => ({ item_id: l.item_id, qty: l.qty })));
+      lines = renorm.lines;
+      amount = renorm.amount;
+    } catch {}
+  } else if (o.refund_amount_requested != null) {
+    amount = +Number(o.refund_amount_requested).toFixed(2);
+  } else {
+    amount = +Number(o.total).toFixed(2);
+  }
+  if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount' });
+
+  const isFull = amount + 0.005 >= Number(o.total); // tolerance for ¥0.01 rounding
+  const reversePoints = req.body?.reverse_points != null ? !!req.body.reverse_points : isFull;
+
+  db.prepare(
+    `UPDATE retail_orders
+        SET refund_status = 'approved',
+            refund_amount_approved = ?,
+            refund_lines_json = ?,
+            refund_review_note = COALESCE(NULLIF(?, ''), refund_review_note),
+            refund_approved_at = CURRENT_TIMESTAMP,
+            refund_reviewer_id = COALESCE(refund_reviewer_id, ?),
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`
+  ).run(amount, lines ? JSON.stringify(lines) : null, note, req.user.id, id);
+
+  // Side effects
+  try {
+    if (isFull) {
+      inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, note: 'refund approved (full)' });
+    } else if (lines) {
+      inventory.reverseCommittedLines(id, lines, { actorUserId: req.user.id, note: 'refund approved (partial lines)' });
+    }
+  } catch (e) { console.error('[inventory.reverse (approve)]', e); }
+  if (reversePoints) {
+    try { reverseOrderPoints(id); }  catch (e) { console.error('[reverseOrderPoints]', e); }
+    try { reverseOrderRedeem(id); }  catch (e) { console.error('[reverseOrderRedeem]', e); }
+  }
+  // Full refund flips the order's main status too.
+  if (isFull && o.status !== 'refunded' && o.status !== 'cancelled') {
+    db.prepare("UPDATE retail_orders SET status = 'refunded' WHERE id = ?").run(id);
+  }
+
+  logRefundEvent({
+    orderId: id, event: 'approved', amount, note: note || null, userId: req.user.id,
+    meta: { is_full: isFull, lines, reverse_points: reversePoints },
+  });
+  logActivity(req.user.id, req.user.username, 'refund_approve', 'retail_order', id, { amount, is_full: isFull, lines }, req.ip);
+  notifyOrderStatusChange(id, isFull ? 'refunded' : null);
+  res.json({ success: true, is_full: isFull, amount, lines });
+});
+
+// Step 3: PAYOUT — money has actually moved back. Records method + ref.
+// body: { method, reference?, amount?, note? }
+router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = db.prepare(
+    'SELECT id, total, refund_status, refund_amount_approved FROM retail_orders WHERE id = ?'
+  ).get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  if (o.refund_status !== 'approved') {
+    return res.status(409).json({ success: false, error: 'not_payable', refund_status: o.refund_status });
+  }
+  const method = (req.body?.method || '').toString().trim().toLowerCase();
+  const allowedMethods = new Set(['wechat', 'alipay', 'bank', 'wallet', 'store_credit', 'cash', 'other']);
+  if (!allowedMethods.has(method)) {
+    return res.status(400).json({ success: false, error: 'invalid_method', allowed: [...allowedMethods] });
+  }
+  const reference = (req.body?.reference || '').slice(0, 200);
+  const note = (req.body?.note || '').slice(0, 500);
+  const amount = req.body?.amount != null
+    ? Math.max(0, Math.min(Number(req.body.amount) || 0, Number(o.refund_amount_approved) || 0))
+    : Number(o.refund_amount_approved) || 0;
+  if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount' });
+
+  db.prepare(
+    `UPDATE retail_orders
+        SET refund_status = 'paid',
+            refund_amount_paid = ?,
+            refund_payout_method = ?,
+            refund_payout_ref = ?,
+            refund_paid_at = CURRENT_TIMESTAMP,
+            refund_payer_id = ?,
+            refund_review_note = COALESCE(NULLIF(?, ''), refund_review_note),
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`
+  ).run(amount, method, reference || null, req.user.id, note, id);
+
+  // Mirror onto retail_payments so reconciliation reports see it.
+  try {
+    db.prepare(
+      `UPDATE retail_payments
+          SET refunded_amount = MIN(amount, COALESCE(refunded_amount, 0) + ?),
+              status = CASE WHEN amount <= COALESCE(refunded_amount, 0) + ? THEN 'refunded' ELSE status END
+        WHERE order_id = ? AND status IN ('success', 'refunded')`
+    ).run(amount, amount, id);
+  } catch (e) { console.error('[retail_payments refund-mirror]', e); }
+
+  logRefundEvent({
+    orderId: id, event: 'paid', amount, note: note || null, userId: req.user.id,
+    meta: { method, reference: reference || null },
+  });
+  logActivity(req.user.id, req.user.username, 'refund_payout', 'retail_order', id, { amount, method, reference }, req.ip);
+  notifyOrderStatusChange(id, null);
+  res.json({ success: true, amount, method, reference });
+});
+
+// REJECT — terminal. Customer sees the note. Works at requested OR reviewing.
+function rejectRefundHandler(req, res) {
+  const id = parseInt(req.params.id, 10);
+  const note = (req.body?.note || '').slice(0, 500);
+  const o = db.prepare('SELECT id, refund_status FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!['pending', 'reviewing'].includes(o.refund_status)) {
+    return res.status(409).json({ success: false, error: 'no_pending_request', refund_status: o.refund_status });
+  }
+  db.prepare(
+    `UPDATE retail_orders
+        SET refund_status = 'rejected',
+            refund_review_note = ?,
+            refund_reviewer_id = COALESCE(refund_reviewer_id, ?),
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`
+  ).run(note || null, req.user.id, id);
+  logRefundEvent({ orderId: id, event: 'rejected', note: note || null, userId: req.user.id });
+  logActivity(req.user.id, req.user.username, 'refund_reject', 'retail_order', id, { note }, req.ip);
+  notifyOrderStatusChange(id, null);
+  res.json({ success: true });
+}
+router.post('/api/retail-admin/orders/:id/refund/reject', requireRetailAdmin, express.json(), rejectRefundHandler);
+// Back-compat alias for existing admin UI button:
+router.post('/api/retail-admin/orders/:id/refund-reject', requireRetailAdmin, express.json(), rejectRefundHandler);
+
+// Event log — show the audit trail for one order's refund history.
+router.get('/api/retail-admin/orders/:id/refund/events', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const events = db.prepare(
+    `SELECT e.id, e.event, e.amount, e.note, e.user_id, e.customer_id, e.meta_json, e.created_at,
+            u.username AS user_username,
+            c.nickname AS customer_nickname
+       FROM retail_refund_events e
+       LEFT JOIN users u ON u.id = e.user_id
+       LEFT JOIN retail_customers c ON c.id = e.customer_id
+      WHERE e.order_id = ?
+      ORDER BY e.created_at ASC, e.id ASC`
+  ).all(id).map(ev => {
+    if (ev.meta_json) { try { ev.meta = JSON.parse(ev.meta_json); } catch { ev.meta = null; } }
+    delete ev.meta_json;
+    return ev;
+  });
+  res.json({ success: true, data: events });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -4344,6 +5804,11 @@ const ALLOWED_BLOCK_TYPES = new Set([
   'kitchen_status',   // open / closed dot · hours · ETA
   'recipe_story',     // editorial image + serif headline + paragraphs + product
   'bundle',           // 3–5 products with one-tap add-all-to-cart
+  // Add-us-on-WeCom card: <button open-type="contact"> + 联系我 QR fallback
+  'wecom_contact',
+  // ── Deprecated types kept on the whitelist so existing drafts/layouts
+  // still validate. The CMS palette hides them; clients ignore them.
+  'wechat_oa',        // replaced 2026-05-19 by wecom_contact
 ]);
 
 // CMS-editable pages. Each has its own `<page>.layout` (live) and
@@ -4386,6 +5851,126 @@ const writeLayout = db.prepare(
      updated_at = CURRENT_TIMESTAMP,
      updated_by = excluded.updated_by`
 );
+
+// ── CMS preview tokens ──────────────────────────────────────────────────
+// Short-lived bearer (string) tokens that gate the mini app's "preview
+// the unpublished draft" mode. Minted only by /cms (staff-auth required),
+// in-memory store, TTL 30 min. After expiry the mini app falls back to
+// the published layouts on its next config.load(), so a leaked token
+// can leak the current draft for at most half an hour.
+const PREVIEW_TOKEN_TTL_MS = 30 * 60 * 1000;
+const _previewTokens = new Map();    // token (string) → expires_at_ms
+
+function mintPreviewToken() {
+  // 8 hex chars = 32 bits. Fine for office-only use and fits inside the
+  // wxacode scene-string 32-char budget alongside `dp=1&t=...&p=...`.
+  const token = crypto.randomBytes(4).toString('hex');
+  _previewTokens.set(token, Date.now() + PREVIEW_TOKEN_TTL_MS);
+  // Opportunistic cleanup so the map doesn't grow unbounded.
+  if (_previewTokens.size > 64) {
+    const now = Date.now();
+    for (const [k, exp] of _previewTokens) {
+      if (exp < now) _previewTokens.delete(k);
+    }
+  }
+  return token;
+}
+
+function validatePreviewToken(token) {
+  if (!token || typeof token !== 'string') return false;
+  const exp = _previewTokens.get(token);
+  if (!exp) return false;
+  if (exp < Date.now()) { _previewTokens.delete(token); return false; }
+  return true;
+}
+
+router.post('/api/retail-admin/cms/preview-token', requireRetailAdmin, (req, res) => {
+  const token = mintPreviewToken();
+  res.json({
+    success: true,
+    data: {
+      token,
+      expires_at: new Date(Date.now() + PREVIEW_TOKEN_TTL_MS).toISOString(),
+      ttl_seconds: PREVIEW_TOKEN_TTL_MS / 1000,
+    },
+  });
+});
+
+// Admin: generate a mini-app QR (wxacode/getUnlimited) that boots the
+// real mini program at pages/index/index with `dp=1&t=TOKEN&p=PAGE` in
+// the scene. Mini-app reads the scene on launch and passes `preview_token`
+// through to /api/retail/config so the draft layouts are returned.
+// Falls back to 501 in DEV mode (no merchant cert / app secret); the /cms
+// modal then just shows the DevTools custom-compile path instead.
+router.get('/api/retail-admin/cms/preview-qr', requireRetailAdmin, async (req, res) => {
+  if (WECHAT_DEV_MODE) {
+    return res.status(501).json({ success: false, error: 'wechat_creds_not_configured' });
+  }
+  const page = (req.query.page || 'home').toString().slice(0, 32);
+  const previewToken = mintPreviewToken();
+  try {
+    const token = await getWeChatAccessToken();
+    if (!token) return res.status(503).json({ success: false, error: 'no_access_token' });
+    const url = `https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=${token}`;
+    const scene = `dp=1&t=${previewToken}&p=${page}`;       // ≤ 32 chars
+    const body = {
+      scene,
+      // Home page in miniapp/app.json — was incorrectly 'pages/index/index'
+      // (causing "page not found" when scanning). Mini-app on launch reads
+      // the scene string and may route from here to the requested page.
+      page:     'pages/home/home',
+      check_path: false,
+      env_version: 'trial',                 // 'release' once published
+      width: 280,
+    };
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const ct = resp.headers.get('content-type') || '';
+    if (ct.includes('application/json')) {
+      const j = await resp.json();
+      return res.status(502).json({ success: false, error: 'wxacode_failed', detail: j });
+    }
+    const buf = Buffer.from(await resp.arrayBuffer());
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Preview-Token', previewToken);   // for clients that want the token directly
+    res.send(buf);
+  } catch (e) {
+    console.error('[cms/preview-qr]', e);
+    res.status(500).json({ success: false, error: 'qr_failed', message: e.message });
+  }
+});
+
+// Admin-only "config-with-drafts" endpoint. Mirrors /api/retail/config
+// shape exactly, but swaps every `<page>.layout` for its `cms.draft.<page>_layout`
+// when one exists. Powers the /storefront?draft=1 live mirror inside /cms:
+// the same renderer can preview what the customer will see once we publish,
+// without us forking the renderer or pre-committing the draft.
+router.get('/api/retail-admin/storefront/preview-config', requireRetailAdmin, (req, res) => {
+  const live = loadConfig();
+  // Walk the allowed-pages list and overlay any existing draft.
+  for (const page of ALLOWED_PAGES) {
+    const draftRow = db.prepare(
+      'SELECT value_json FROM storefront_config WHERE key = ?'
+    ).get(`cms.draft.${page}_layout`);
+    if (!draftRow) continue;
+    let draft;
+    try { draft = JSON.parse(draftRow.value_json); } catch { continue; }
+    // The shape /api/retail/config emits for layout is `<page>.layout` nested
+    // under the page bucket — e.g. `home.layout`, `promotions.layout`. Mirror
+    // that structure when overlaying.
+    if (!live[page] || typeof live[page] !== 'object') live[page] = {};
+    live[page].layout = draft;
+  }
+  // Bump the version so the front-end cache-busts when the draft changes.
+  // (loadConfig() returns version = max updated_at across the table; that
+  // already moves whenever a draft is saved, so no extra work needed.)
+  live._preview = true;
+  res.json({ success: true, data: live });
+});
 
 // Single bootstrap call — gives the editor both versions + the dirty flag
 // for the requested page. ?page=home|promotions|about (default home).
@@ -4493,6 +6078,252 @@ router.delete('/api/retail-admin/cms/media/:id', requireRetailAdmin, (req, res) 
   res.json({ success: true });
 });
 
+// ── Full media library API — used by /retail-admin → Media tab ──────────
+// Same `retail_media` table as the CMS picker, but exposes filtering,
+// tags, alt text, usage scan, and bulk ops.
+
+function parseTags(v) {
+  if (!v) return [];
+  try { const a = JSON.parse(v); return Array.isArray(a) ? a.map(s => String(s).trim().toLowerCase()).filter(Boolean) : []; }
+  catch { return []; }
+}
+function normalizeTagList(arr) {
+  if (!Array.isArray(arr)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const t of arr) {
+    const k = String(t || '').trim().toLowerCase().replace(/\s+/g, '-').slice(0, 40);
+    if (k && !seen.has(k)) { seen.add(k); out.push(k); }
+  }
+  return out.slice(0, 20);
+}
+
+router.get('/api/retail-admin/media/list', requireRetailAdmin, (req, res) => {
+  const q   = (req.query.q || '').toString().trim().toLowerCase();
+  const tag = (req.query.tag || '').toString().trim().toLowerCase();
+  const mime= (req.query.mime || '').toString().trim().toLowerCase();   // "image", "image/png", ""
+  const folder = (req.query.folder || '').toString().trim();            // "" = all, "unsorted" = NULL, "<id>" = that folder
+  const limit  = Math.min(Math.max(parseInt(req.query.limit, 10) || 60, 1), 200);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+  const where = []; const params = [];
+  if (q)    { where.push("(LOWER(COALESCE(filename,'')) LIKE ? OR LOWER(COALESCE(alt_text,'')) LIKE ?)"); params.push('%'+q+'%','%'+q+'%'); }
+  if (tag)  { where.push("EXISTS (SELECT 1 FROM json_each(COALESCE(tags,'[]')) je WHERE je.value = ?)"); params.push(tag); }
+  if (mime) { where.push("LOWER(mime_type) LIKE ?"); params.push(mime.includes('/') ? mime : mime+'/%'); }
+  if (folder === 'unsorted') { where.push('folder_id IS NULL'); }
+  else if (folder && /^\d+$/.test(folder)) { where.push('folder_id = ?'); params.push(parseInt(folder, 10)); }
+
+  const sqlWhere = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM retail_media ${sqlWhere}`).get(...params).n;
+  const rows = db.prepare(
+    `SELECT id, filename, mime_type, size_bytes, width, height, alt_text, tags, folder_id, uploaded_at, uploaded_by
+       FROM retail_media ${sqlWhere}
+       ORDER BY uploaded_at DESC, id DESC
+       LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset).map(r => ({ ...r, tags: parseTags(r.tags) }));
+  res.json({ success: true, data: { rows, total, limit, offset } });
+});
+
+// ── Folders ─────────────────────────────────────────────────────────
+router.get('/api/retail-admin/media/folders', requireRetailAdmin, (req, res) => {
+  const folders = db.prepare(
+    `SELECT f.id, f.name, f.parent_id, f.sort_order,
+            (SELECT COUNT(*) FROM retail_media m WHERE m.folder_id = f.id) AS count
+       FROM retail_media_folders f
+       ORDER BY f.sort_order ASC, LOWER(f.name) ASC, f.id ASC`
+  ).all();
+  const unsorted = db.prepare('SELECT COUNT(*) AS n FROM retail_media WHERE folder_id IS NULL').get().n;
+  const total    = db.prepare('SELECT COUNT(*) AS n FROM retail_media').get().n;
+  res.json({ success: true, data: { folders, unsorted_count: unsorted, total_count: total } });
+});
+
+router.post('/api/retail-admin/media/folders', requireRetailAdmin, express.json(), (req, res) => {
+  const name = (req.body?.name || '').toString().trim().slice(0, 80);
+  if (!name) return res.status(400).json({ success: false, error: 'name_required' });
+  const parent_id = req.body?.parent_id ? parseInt(req.body.parent_id, 10) : null;
+  if (parent_id != null) {
+    const ok = db.prepare('SELECT 1 FROM retail_media_folders WHERE id = ?').get(parent_id);
+    if (!ok) return res.status(400).json({ success: false, error: 'parent_not_found' });
+  }
+  const info = db.prepare(
+    `INSERT INTO retail_media_folders (name, parent_id) VALUES (?, ?)`
+  ).run(name, parent_id);
+  res.json({ success: true, data: { id: info.lastInsertRowid } });
+});
+
+router.patch('/api/retail-admin/media/folders/:id', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const sets = [], params = [];
+  if ('name' in (req.body || {})) {
+    const n = (req.body.name || '').toString().trim().slice(0, 80);
+    if (!n) return res.status(400).json({ success: false, error: 'name_required' });
+    sets.push('name = ?'); params.push(n);
+  }
+  if ('parent_id' in (req.body || {})) {
+    const p = req.body.parent_id == null ? null : parseInt(req.body.parent_id, 10);
+    if (p === id) return res.status(400).json({ success: false, error: 'self_parent' });
+    sets.push('parent_id = ?'); params.push(p);
+  }
+  if ('sort_order' in (req.body || {})) {
+    sets.push('sort_order = ?'); params.push(Number(req.body.sort_order) || 0);
+  }
+  if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
+  sets.push('updated_at = CURRENT_TIMESTAMP');
+  params.push(id);
+  const r = db.prepare(`UPDATE retail_media_folders SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({ success: true });
+});
+
+// Deleting a folder unsorts its media (folder_id → NULL) — never deletes
+// images. Nested children become top-level (parent_id → NULL via ON DELETE
+// SET NULL).
+router.delete('/api/retail-admin/media/folders/:id', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE retail_media SET folder_id = NULL WHERE folder_id = ?').run(id);
+    db.prepare('DELETE FROM retail_media_folders WHERE id = ?').run(id);
+  });
+  tx();
+  res.json({ success: true });
+});
+
+router.post('/api/retail-admin/media/bulk-move', requireRetailAdmin, express.json(), (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(x => parseInt(x, 10)).filter(Boolean) : [];
+  if (!ids.length) return res.status(400).json({ success: false, error: 'no_ids' });
+  const folder_id = req.body?.folder_id == null ? null : parseInt(req.body.folder_id, 10);
+  if (folder_id != null) {
+    const ok = db.prepare('SELECT 1 FROM retail_media_folders WHERE id = ?').get(folder_id);
+    if (!ok) return res.status(400).json({ success: false, error: 'folder_not_found' });
+  }
+  const stmt = db.prepare('UPDATE retail_media SET folder_id = ? WHERE id = ?');
+  let moved = 0;
+  const tx = db.transaction(() => { for (const id of ids) moved += stmt.run(folder_id, id).changes; });
+  tx();
+  res.json({ success: true, data: { moved } });
+});
+
+router.get('/api/retail-admin/media/tags', requireRetailAdmin, (req, res) => {
+  const rows = db.prepare(
+    `SELECT je.value AS tag, COUNT(*) AS n
+       FROM retail_media m, json_each(COALESCE(m.tags,'[]')) je
+       GROUP BY je.value
+       ORDER BY n DESC, tag ASC`
+  ).all();
+  res.json({ success: true, data: rows });
+});
+
+// Scans storefront_config (CMS layouts, FAQ, snippets, etc.) for any
+// reference to `/api/retail/media/<id>`. Cheap — only text scanning, no
+// per-row JSON parse — and gives the admin a "safe to delete?" hint.
+router.get('/api/retail-admin/media/usage', requireRetailAdmin, (req, res) => {
+  const counts = {};
+  const re = /\/api\/retail\/media\/(\d+)/g;
+  const sources = [];
+  try { sources.push(...db.prepare(`SELECT value_json AS txt FROM storefront_config`).all()); } catch {}
+  try { sources.push(...db.prepare(`SELECT image_url AS txt FROM products WHERE image_url LIKE '%/api/retail/media/%'`).all()); } catch {}
+  try { sources.push(...db.prepare(`SELECT label_url AS txt FROM products WHERE label_url LIKE '%/api/retail/media/%'`).all()); } catch {}
+  try { sources.push(...db.prepare(`SELECT description_blocks AS txt FROM products WHERE description_blocks LIKE '%/api/retail/media/%'`).all()); } catch {}
+  for (const { txt } of sources) {
+    if (!txt) continue;
+    let m;
+    while ((m = re.exec(txt)) !== null) {
+      const id = parseInt(m[1], 10);
+      counts[id] = (counts[id] || 0) + 1;
+    }
+  }
+  res.json({ success: true, data: counts });
+});
+
+router.patch('/api/retail-admin/media/:id', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const b = req.body || {};
+  const sets = [], params = [];
+  if ('filename'  in b) { sets.push('filename = ?');  params.push(b.filename == null ? null : String(b.filename).slice(0, 200)); }
+  if ('alt_text'  in b) { sets.push('alt_text = ?');  params.push(b.alt_text == null ? null : String(b.alt_text).slice(0, 500)); }
+  if ('tags'      in b) { sets.push('tags = ?');      params.push(JSON.stringify(normalizeTagList(b.tags))); }
+  if ('folder_id' in b) { sets.push('folder_id = ?'); params.push(b.folder_id == null ? null : parseInt(b.folder_id, 10)); }
+  if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
+  params.push(id);
+  const r = db.prepare(`UPDATE retail_media SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({ success: true });
+});
+
+router.post('/api/retail-admin/media/bulk-delete', requireRetailAdmin, express.json(), (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(x => parseInt(x, 10)).filter(Boolean) : [];
+  if (!ids.length) return res.status(400).json({ success: false, error: 'no_ids' });
+  const stmt = db.prepare('DELETE FROM retail_media WHERE id = ?');
+  let deleted = 0;
+  const tx = db.transaction(() => { for (const id of ids) deleted += stmt.run(id).changes; });
+  tx();
+  res.json({ success: true, data: { deleted } });
+});
+
+router.post('/api/retail-admin/media/bulk-tag', requireRetailAdmin, express.json(), (req, res) => {
+  const ids    = Array.isArray(req.body?.ids) ? req.body.ids.map(x => parseInt(x, 10)).filter(Boolean) : [];
+  const add    = normalizeTagList(req.body?.add || []);
+  const remove = normalizeTagList(req.body?.remove || []);
+  if (!ids.length) return res.status(400).json({ success: false, error: 'no_ids' });
+  if (!add.length && !remove.length) return res.status(400).json({ success: false, error: 'no_changes' });
+  const get = db.prepare('SELECT tags FROM retail_media WHERE id = ?');
+  const upd = db.prepare('UPDATE retail_media SET tags = ? WHERE id = ?');
+  const tx = db.transaction(() => {
+    for (const id of ids) {
+      const row = get.get(id); if (!row) continue;
+      const cur = new Set(parseTags(row.tags));
+      for (const t of add) cur.add(t);
+      for (const t of remove) cur.delete(t);
+      upd.run(JSON.stringify(normalizeTagList([...cur])), id);
+    }
+  });
+  tx();
+  res.json({ success: true });
+});
+
+// Upload entry point for the /retail-admin Media tab. Identical to the
+// CMS picker upload, but accepts optional alt_text + tags up front and
+// returns the full row metadata for the grid.
+router.post('/api/retail-admin/media/upload', requireRetailAdmin, (req, res) => {
+  upload.single('file')(req, res, err => {
+    if (err) {
+      const code = err.message === 'not_an_image' ? 'not_an_image'
+                 : err.code === 'LIMIT_FILE_SIZE' ? 'too_large'
+                 : 'upload_failed';
+      return res.status(400).json({ success: false, error: code });
+    }
+    if (!req.file) return res.status(400).json({ success: false, error: 'no_file' });
+    const altText = (req.body?.alt_text || '').toString().slice(0, 500) || null;
+    let tags = [];
+    try { tags = normalizeTagList(JSON.parse(req.body?.tags || '[]')); } catch {}
+    const dataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    const info = db.prepare(
+      `INSERT INTO retail_media (filename, mime_type, size_bytes, data, alt_text, tags, uploaded_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      req.file.originalname || null,
+      req.file.mimetype,
+      req.file.size,
+      dataUri,
+      altText,
+      JSON.stringify(tags),
+      req.user.id,
+    );
+    res.json({
+      success: true,
+      data: {
+        id: info.lastInsertRowid,
+        url: `/api/retail/media/${info.lastInsertRowid}`,
+        filename: req.file.originalname,
+        mime_type: req.file.mimetype,
+        size_bytes: req.file.size,
+        alt_text: altText,
+        tags,
+      },
+    });
+  });
+});
+
 router.post('/api/retail-admin/cms/revert-draft', requireRetailAdmin, express.json(), (req, res) => {
   const page = pageKey(req);
   if (!page) return res.status(400).json({ success: false, error: 'invalid_page' });
@@ -4587,9 +6418,12 @@ function matchDeliveryZone(address) {
 //     start from tomorrow.
 //   • Outside GZ (zone_type = 'city', min_lead_days = 3 by default):
 //     earliest selectable day is today + min_lead_days.
-//   • If `now` is past slot_end_hour OR before slot_start_hour, "right away"
-//     is suppressed — only future slots remain (the natural "ordered at
-//     9pm → tomorrow's slots only" UX).
+//   • "Right away" is suppressed whenever the kitchen is not running this
+//     minute — before slot_start_hour AND after slot_end_hour.
+//   • Today's time-slot chips show every future slot up to slot_end_hour,
+//     including pre-opening hours: ordering at 7am with kitchen opening at
+//     10am still offers Today 10–12 / 12–14 / etc. Only after slot_end_hour
+//     do today's chips empty out and the system rolls forward to Tomorrow.
 //
 // Returns: {
 //   right_away_available, same_day_surcharge, min_lead_days,
@@ -4612,6 +6446,15 @@ function computeDeliverySlots(zone, now) {
     for (const k of Object.keys(cfg)) {
       if (zone[k] != null) cfg[k] = Number(zone[k]);
     }
+  }
+  // Holiday mode: orders still flow but all same-day options are suppressed
+  // and the mini app shows a banner with the admin-configured message. The
+  // schedule-for-later calendar remains pickable so customers can book a
+  // future day.
+  const holidayMode = !!cfgValue('delivery.holidayMode', false);
+  const holidayMessage = cfgValue('delivery.holidayMessage', { en: '', cn: '' });
+  if (holidayMode) {
+    cfg.same_day_allowed = 0;
   }
   // Clamp pathological admin input so we never spin forever.
   if (!(cfg.slot_duration_minutes > 0))         cfg.slot_duration_minutes = 120;
@@ -4712,20 +6555,30 @@ function computeDeliverySlots(zone, now) {
   }
 
   // ── Today's options ─────────────────────────────────────────────────
-  if (cfg.same_day_allowed === 1 && kitchenOpenNow) {
+  // Gate on same_day_allowed only — NOT kitchenOpenNow. Pre-opening hours
+  // (e.g. ordering at 7am with kitchen opening at 10am) must still offer
+  // today's future slots; emitTimeSlots(filterElapsed=true) naturally
+  // returns [] post-close, so the fallback to tomorrow still kicks in.
+  if (cfg.same_day_allowed === 1) {
     if (isDayOnly) {
-      const requiresSurcharge = cfg.same_day_surcharge > 0;
-      todayDayChip = {
-        slot_id: todayIso,
-        date_iso: todayIso,
-        is_same_day: true,
-        is_day_only: true,
-        requires_surcharge: requiresSurcharge,
-        surcharge: requiresSurcharge ? cfg.same_day_surcharge : 0,
-        label_en: 'Today',
-        label_cn: '今天',
-      };
-      slotDayKind = 'today';
+      // Day-only zones don't have per-slot times, so we need an explicit
+      // "is today still fulfillable" check — kitchen must not be past
+      // close. Ordering after kitchen close → no Today chip.
+      const todayStillFulfillable = tzNow.getHours() < endHour;
+      if (todayStillFulfillable) {
+        const requiresSurcharge = cfg.same_day_surcharge > 0;
+        todayDayChip = {
+          slot_id: todayIso,
+          date_iso: todayIso,
+          is_same_day: true,
+          is_day_only: true,
+          requires_surcharge: requiresSurcharge,
+          surcharge: requiresSurcharge ? cfg.same_day_surcharge : 0,
+          label_en: 'Today',
+          label_cn: '今天',
+        };
+        slotDayKind = 'today';
+      }
     } else {
       const emitted = emitTimeSlots(startOfDay, todayIso, 'Today', '今天', /*filterElapsed=*/true);
       if (emitted.length) {
@@ -4775,6 +6628,8 @@ function computeDeliverySlots(zone, now) {
     kitchen_open_now:     kitchenOpenNow,
     kitchen_hours:        { start: startHour, end: endHour },
     slot_duration_minutes: slotMins,
+    holiday_mode:         holidayMode,
+    holiday_message:      holidayMode ? holidayMessage : null,
     today_slots:          todaySlots,
     today_day_chip:       todayDayChip,
     // 'today' when the chips above are today's, 'tomorrow' when we rolled
@@ -4784,8 +6639,29 @@ function computeDeliverySlots(zone, now) {
     // Legacy flat slot list — only TODAY's options now. Anything reading
     // `slots` and trusting it spans multiple days will need to migrate
     // to today_slots + schedule (the mini app does this in the same release).
+    //
+    // Day-only zones MUST seed at least one Express slot whenever a schedule
+    // window exists — otherwise the mini-app's day-only handler bails on
+    // an empty `slots` array and renders the Express radio with no label
+    // (visible as an empty box). This synth slot is the "ship as soon as
+    // possible" option, anchored to schedule.min_date. resolveDeliverySlot
+    // accepts any date inside the schedule window so the synth slot_id is
+    // valid on /orders POST.
     slots: isDayOnly
-      ? (todayDayChip ? [todayDayChip] : [])
+      ? (todayDayChip
+          ? [todayDayChip]
+          : (schedule
+              ? [{
+                  slot_id:    schedule.min_date,
+                  date_iso:   schedule.min_date,
+                  is_same_day: false,
+                  is_day_only: true,
+                  requires_surcharge: false,
+                  surcharge:  0,
+                  label_en:   `Earliest ${schedule.min_date}`,
+                  label_cn:   `最早 ${schedule.min_date}`,
+                }]
+              : []))
       : todaySlots,
   };
 }
@@ -5148,71 +7024,105 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
 
   const grossTotal = Math.max(0, priced.subtotal + fees.deliveryFee + fees.packingFee);
 
-  // Points preview — if the caller declares payment_method='points' we
-  // compute how many points the order would need and whether the customer
-  // can cover it. The mini-app uses this to disable the radio with a hint
-  // when the customer is short.
+  // Points preview — two modes the client uses:
+  //   • payment_method='points' (full redeem): pointsRequired / pointsAffordable
+  //     gate the radio; total → 0 when affordable.
+  //   • Partial stack: client passes points_to_use along with a cash
+  //     payment_method ('wechat'/'alipay'). Server clamps and returns
+  //     pointsToUseApplied + pointsDiscount; total = grossTotal − discount.
+  // The always-on fields (balance / rate / max usable) let the mini-app
+  // render the "Use my points" toggle even before a payment method is set.
+  sweepExpiredPoints(req.customer.id);
+  const _c = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
+  const pointsBalance = _c?.points_balance || 0;
+  const redeemRate = pointsRedeemRate();
   const paymentMethodPreview = body.payment_method || null;
-  let pointsRequired = 0, pointsAffordable = false, pointsBalance = 0;
-  if (paymentMethodPreview === 'points') {
-    sweepExpiredPoints(req.customer.id);
-    pointsRequired = pointsRequiredFor(grossTotal);
-    const c = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
-    pointsBalance    = c?.points_balance || 0;
-    pointsAffordable = pointsBalance >= pointsRequired;
-  }
-  const total = (paymentMethodPreview === 'points' && pointsAffordable) ? 0 : grossTotal;
+  const pointsRequired   = pointsRequiredFor(grossTotal);
+  const pointsAffordable = pointsBalance >= pointsRequired;
+  const pointsMaxUsable  = Math.min(pointsBalance, pointsRequired);
 
-  // Routing preview — picks the same store the real /orders POST would
-  // pick, so the mini-app can show "ships from Tianhe" (or warn that the
-  // nearest is short and a farther store would mean longer delivery)
-  // BEFORE the customer hits Place Order.
+  let pointsToUseApplied = 0;
+  let pointsDiscount     = 0;
+  let total;
+  if (paymentMethodPreview === 'points') {
+    total = pointsAffordable ? 0 : grossTotal;
+  } else {
+    const reqPts = Math.max(0, Math.floor(Number(body.points_to_use) || 0));
+    pointsToUseApplied = Math.min(reqPts, pointsMaxUsable);
+    pointsDiscount     = pointsCashValue(pointsToUseApplied);
+    total = Math.max(0, grossTotal - pointsDiscount);
+  }
+
+  // Routing preview — runs the rich shortage analysis used by the new
+  // 5-option modal (GZ + non-excluded district + right-away slot). For
+  // every other case the legacy yes/no fallback is what the mini-app
+  // gets. `gate` tells the mini-app which modal to render.
   let routingPreview = null;
   try {
-    const routing = inventory.routeOrder({
-      address,
-      items: (items || []).map(i => ({ product_id: parseInt(i.product_id, 10), qty: Number(i.qty) })),
+    const cleanItems = (items || []).map(i => ({ product_id: parseInt(i.product_id, 10), qty: Number(i.qty) }));
+    const analysis = inventory.analyzeShortage({
+      address, items: cleanItems,
+      deliverySlotId: body.delivery_slot_id || null,
       channel: 'wechat',
     });
-    if (routing.error === 'needs_fallback_confirmation') {
-      routingPreview = {
-        ok: false,
-        needs_fallback_confirmation: true,
-        nearest: {
-          store_id:      routing.nearest.store.id,
-          store_code:    routing.nearest.store.code,
-          store_name_en: routing.nearest.store.name_en,
-          store_name_cn: routing.nearest.store.name_cn,
-          district:      routing.nearest.store.district,
-          shortages:     routing.nearest.shortages,
-        },
-        fallback: {
-          store_id:      routing.fallback.store.id,
-          store_code:    routing.fallback.store.code,
-          store_name_en: routing.fallback.store.name_en,
-          store_name_cn: routing.fallback.store.name_cn,
-          district:      routing.fallback.store.district,
-        },
-      };
-    } else if (routing.error) {
-      routingPreview = {
-        ok: false,
-        error: routing.error,
-        store_id: routing.store?.id || null,
-        store_code: routing.store?.code || null,
-        shortages: routing.shortages || [],
-      };
+    if (analysis.error === 'no_active_store') {
+      routingPreview = { ok: false, error: 'no_active_store' };
+    } else if (analysis.gate === 'none') {
+      // Nearest can fulfill — happy path. Surface the chosen store.
+      const r = analysis.resolved;
+      if (r && !r.error) {
+        routingPreview = {
+          ok: true,
+          gate: 'none',
+          store_id:        r.store.id,
+          store_code:      r.store.code,
+          store_name_en:   r.store.name_en,
+          store_name_cn:   r.store.name_cn,
+          store_district:  r.store.district,
+          routing_reason:  r.reason,
+          distance_km:     analysis.nearest?.distance_km ?? null,
+          items:           r.items,
+        };
+      } else if (r?.error === 'no_stock') {
+        routingPreview = { ok: false, error: 'no_stock', shortages: r.shortages || [] };
+      }
     } else {
+      // gate = 'options_5' or 'simple_confirm'. Mini-app picks the right
+      // modal. The payload is identical either way; the gate is the hint.
       routingPreview = {
-        ok: true,
-        store_id:        routing.store.id,
-        store_code:      routing.store.code,
-        store_name_en:   routing.store.name_en,
-        store_name_cn:   routing.store.name_cn,
-        store_district:  routing.store.district,
-        routing_reason:  routing.reason,
-        items:           routing.items,
+        ok: false,
+        gate: analysis.gate,
+        nearest: {
+          store_id:      analysis.nearest.store.id,
+          store_code:    analysis.nearest.store.code,
+          store_name_en: analysis.nearest.store.name_en,
+          store_name_cn: analysis.nearest.store.name_cn,
+          district:      analysis.nearest.store.district,
+          distance_km:   analysis.nearest.distance_km,
+        },
+        fallback: analysis.fallback ? {
+          store_id:           analysis.fallback.store.id,
+          store_code:         analysis.fallback.store.code,
+          store_name_en:      analysis.fallback.store.name_en,
+          store_name_cn:      analysis.fallback.store.name_cn,
+          district:           analysis.fallback.store.district,
+          distance_km:        analysis.fallback.distance_km,
+          extra_km:           analysis.fallback.extra_km,
+          extra_min_estimate: analysis.fallback.extra_min_estimate,
+        } : null,
+        missing_items: analysis.missing_items,
       };
+      // Diagnostic — remove once the chip render is confirmed working.
+      console.log('[quote/routing]', JSON.stringify({
+        customer: req.customer?.id,
+        gate: analysis.gate,
+        nearest_code: analysis.nearest?.store?.code,
+        nearest_km: analysis.nearest?.distance_km,
+        fallback_code: analysis.fallback?.store?.code,
+        fallback_km: analysis.fallback?.distance_km,
+        extra_km: analysis.fallback?.extra_km,
+        extra_min: analysis.fallback?.extra_min_estimate,
+      }));
     }
   } catch (e) {
     console.error('[checkout/quote routing]', e);
@@ -5232,6 +7142,10 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
       points_required: pointsRequired,
       points_balance:  pointsBalance,
       points_affordable: pointsAffordable,
+      points_redeem_rate: redeemRate,
+      points_max_usable:  pointsMaxUsable,
+      points_to_use_applied: pointsToUseApplied,
+      points_discount: pointsDiscount,
       points_earned_preview: pointsEarnedFor(priced.subtotal),
       delivery_mode: deliveryMode,
       zone: {
@@ -5919,6 +7833,63 @@ router.post('/api/retail/polls/:id/vote', requireRetailAuth, express.json(), (re
       points_balance: updatedCust.points_balance,
     },
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// FAVORITES — saved / wishlisted products. Backs the Favorites page
+// (NO. 21) and the home "favorites" block. All endpoints require a
+// retail-auth token; UNIQUE(customer, product) keeps add/remove
+// idempotent. ─────────────────────────────────────────────────────────
+router.get('/api/retail/favorites', requireRetailAuth, (req, res) => {
+  const now = Date.now();
+  const rows = db.prepare(
+    `SELECT ${RETAIL_PRODUCT_COLS}, f.created_at AS favorited_at
+       FROM retail_customer_favorites f
+       JOIN products p ON p.id = f.product_id
+      WHERE f.customer_id = ?
+        AND p.is_published = 1
+        AND COALESCE(p.is_active, 1) = 1
+      ORDER BY f.created_at DESC`
+  ).all(req.customer.id)
+    .map(hydrateNutrition)
+    .map(r => flashsales.decorateProduct(r, now));
+  res.json({ success: true, data: rows, meta: { count: rows.length, server_time_ms: now } });
+});
+
+// Lightweight version — just the product ids. Used by the Product page
+// to render the heart pip in its filled/empty state without paying for
+// the full product columns. Cached briefly per-customer.
+router.get('/api/retail/favorites/ids', requireRetailAuth, (req, res) => {
+  const ids = db.prepare(
+    `SELECT product_id FROM retail_customer_favorites WHERE customer_id = ?`
+  ).all(req.customer.id).map(r => r.product_id);
+  res.json({ success: true, data: ids });
+});
+
+router.post('/api/retail/favorites/:productId', requireRetailAuth, (req, res) => {
+  const productId = parseInt(req.params.productId, 10);
+  if (!productId) return res.status(400).json({ success: false, error: 'bad_request' });
+  const prod = db.prepare('SELECT id FROM products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1').get(productId);
+  if (!prod) return res.status(404).json({ success: false, error: 'product_not_found' });
+  try {
+    db.prepare(
+      `INSERT OR IGNORE INTO retail_customer_favorites (customer_id, product_id)
+       VALUES (?, ?)`
+    ).run(req.customer.id, productId);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: 'db_insert_failed' });
+  }
+  const count = db.prepare('SELECT COUNT(*) AS n FROM retail_customer_favorites WHERE customer_id = ?').get(req.customer.id).n;
+  res.json({ success: true, data: { favorited: true, count } });
+});
+
+router.delete('/api/retail/favorites/:productId', requireRetailAuth, (req, res) => {
+  const productId = parseInt(req.params.productId, 10);
+  if (!productId) return res.status(400).json({ success: false, error: 'bad_request' });
+  db.prepare('DELETE FROM retail_customer_favorites WHERE customer_id = ? AND product_id = ?')
+    .run(req.customer.id, productId);
+  const count = db.prepare('SELECT COUNT(*) AS n FROM retail_customer_favorites WHERE customer_id = ?').get(req.customer.id).n;
+  res.json({ success: true, data: { favorited: false, count } });
 });
 
 // ─── Voting · Admin ─────────────────────────────────────────────────────

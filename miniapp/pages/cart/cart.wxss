@@ -1,4 +1,29 @@
-.page { background: var(--oat); min-height: 100vh; padding-bottom: 200rpx; }
+/* Bottom of the Cart page has TWO fixed bars stacked:
+     ┌─────────────────────────┐  ← page content scrolls behind this
+     │  Total + CHECK OUT bar  │  height: var(--checkout-h)
+     ├─────────────────────────┤
+     │  Custom tab bar         │  height: var(--tabbar-clear) (app.wxss)
+     └─────────────────────────┘  ← bottom of screen + safe area
+   The last product would tuck under either bar unless the scrollable .page
+   reserves the combined height as padding-bottom.
+
+   --checkout-h is set generously (300rpx) so the bar can grow a row or two
+   without re-clipping the last item. Measured against the rendered .checkout
+   bar at --font-scale 1.15: padding 24+32 + total-row ~85 + 20 margin + btn
+   ~115 + 3 border ≈ 279rpx. 300rpx gives ~20rpx of headroom.
+
+   Why not env(safe-area-inset-bottom) here? WeChat does NOT resolve env()
+   when it lives inside a chained var(): `calc(var(--checkout-h) +
+   var(--tabbar-h))` returns just 98rpx for --tabbar-h on iPhone instead of
+   ~166rpx, leaving the last item ~70rpx short of the bar's top. We use the
+   sibling --tabbar-clear (fixed 170rpx) which covers both Android no-safe
+   and iPhone home-indicator cases. */
+.page {
+  background: var(--oat);
+  min-height: 100vh;
+  --checkout-h: 300rpx;
+  padding-bottom: calc(var(--checkout-h) + var(--tabbar-clear));
+}
 
 .header { padding: 80rpx 44rpx 24rpx; }
 .kicker { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.18em; color: var(--olive); }
@@ -78,7 +103,12 @@
 
 .checkout {
   position: fixed;
-  bottom: 0; left: 0; right: 0;
+  /* Sit just above the custom tab bar — both share `position: fixed`, so
+     stacking them with the tab bar's full height keeps the CTA tappable.
+     Inline calc with env() — see app.wxss note on why we don't go through
+     var(--tabbar-h) here. */
+  bottom: calc(98rpx + env(safe-area-inset-bottom));
+  left: 0; right: 0;
   background: var(--oat);
   border-top: 3rpx solid var(--ink);
   padding: 24rpx 44rpx 32rpx;

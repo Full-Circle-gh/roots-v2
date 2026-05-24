@@ -1,7 +1,25 @@
 {
   "libVersion": "3.5.5",
   "projectname": "Roots",
-  "condition": {},
+  "condition": {
+    "miniprogram": {
+      "list": [
+        {
+          "name": "pages/home/home",
+          "pathName": "pages/home/home",
+          "query": "",
+          "scene": null,
+          "launchMode": "default",
+          "partialCompile": {
+            "enabled": false,
+            "pages": [
+              "pages/index/index?preview_draft=1&page=home&preview_token=0f402148"
+            ]
+          }
+        }
+      ]
+    }
+  },
   "setting": {
     "urlCheck": false,
     "coverView": true,

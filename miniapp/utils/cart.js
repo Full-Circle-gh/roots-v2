@@ -90,8 +90,20 @@ function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
 function updateBadge() {
   const n = count();
-  if (n > 0) wx.setTabBarBadge({ index: 2, text: String(n) }).catch(() => {});
-  else wx.removeTabBarBadge({ index: 2 }).catch(() => {});
+  // wx.setTabBarBadge / wx.removeTabBarBadge are callback-style in the
+  // older base libraries and only return a Promise from ~2.x onward. The
+  // previous `.catch(...)` form threw `TypeError: Cannot read .catch of
+  // undefined` on older runtimes — which bubbled out of cart.clear() and
+  // killed the post-order redirect (badge would then never clear). Use
+  // the safe callback form and wrap the whole thing so a throw never
+  // escapes the cart utility.
+  try {
+    if (n > 0) {
+      wx.setTabBarBadge({ index: 2, text: String(n), fail: () => {} });
+    } else {
+      wx.removeTabBarBadge({ index: 2, fail: () => {} });
+    }
+  } catch (e) { /* swallow — badge is cosmetic, never break cart writes */ }
 }
 
 module.exports = { get, count, subtotal, add, setQty, remove, clear, subscribe, updateBadge };

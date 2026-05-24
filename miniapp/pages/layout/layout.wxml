@@ -18,6 +18,7 @@
     products="{{products}}"
     categories="{{categories}}"
     flash-sales="{{flashSales}}"
+    top-products="{{topProducts}}"
     polls="{{polls}}"
     customer="{{customer}}"
     bind:cta="onCta"

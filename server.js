@@ -162,6 +162,7 @@ app.use(require('./routes/retail-inventory'));
 // Login page
 app.get('/login', (req, res) => {
   if (req.session?.userId) return res.redirect('/');
+  res.set('Cache-Control', 'no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
@@ -182,16 +183,31 @@ app.get('/', requireAuth, (req, res) => {
   if (!isAdmin && hasPos && !hasAnySpa) {
     return res.redirect('/pos');
   }
+  res.set('Cache-Control', 'no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'app.html'));
 });
 
 // Storefront / retail admin shell. Page self-auths via /api/auth/me.
 app.get('/retail-admin', (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'retail-admin.html'));
 });
 
+// Full-page product block editor — opened in a new tab from the
+// retail-admin Products grid (window.open('/product-editor?id=…')). Same
+// self-auth pattern as /retail-admin: the shell loads, then the page's own
+// fetch('/api/retail-admin/products') enforces auth and redirects to / on
+// 401/403. Served no-store so staff always get the latest editor build.
+app.get('/product-editor', (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'product-editor.html'));
+});
+
 // Storefront visual CMS editor. Same self-auth pattern; gated by `retail` perm.
+// Served no-store so staff always see the latest editor build the moment we
+// deploy — no more "I refreshed but the picker still looks old" confusion.
 app.get('/cms', (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'cms.html'));
 });
 
@@ -200,6 +216,7 @@ app.get('/cms', (req, res) => {
 // share the current published layout via a link, and by stakeholders to
 // see the mini app's home page without installing WeChat.
 app.get('/storefront', (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'storefront.html'));
 });
 
@@ -209,6 +226,7 @@ app.get('/storefront', (req, res) => {
 // authenticates via /api/auth/me on load and bounces unauthenticated
 // users to /login, so security is unchanged.
 app.get('/pos', (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'pos.html'));
 });
 
@@ -216,6 +234,7 @@ app.get('/pos', (req, res) => {
 // manifest start_url validates, page itself self-authenticates against
 // the `kitchen` permission via /api/auth/me on load.
 app.get('/kitchen', (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'kitchen.html'));
 });
 app.get('/kitchen-manifest.webmanifest', (req, res) => {
@@ -233,6 +252,7 @@ app.get('/kitchen-manifest.webmanifest', (req, res) => {
 // permission via /api/auth/me. Mobile-first restock-creation flow with
 // barcode-gun support, voice input, and search-everywhere-style UX.
 app.get('/restock', (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'restock.html'));
 });
 app.get('/restock-manifest.webmanifest', (req, res) => {

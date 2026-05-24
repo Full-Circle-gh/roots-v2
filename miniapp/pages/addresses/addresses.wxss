@@ -10,11 +10,32 @@
 
 /* ── LIST MODE ── */
 .list { padding: 12rpx 44rpx 0; }
+/* "Tap an address to use it" hint above the list — only shown when there
+   are 2+ addresses, since with one address there's nothing to pick. */
+.list-hint {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 4rpx 4rpx 16rpx;
+}
 .addr-card {
   background: #FFFCF7;
   border: 3rpx solid var(--ink);
   padding: 28rpx;
   margin-bottom: 20rpx;
+  /* Make it feel tappable. The whole card now picks the address (sets it
+     as default + bounces back to checkout when applicable). */
+  transition: transform 80ms ease-out, background 120ms ease-out;
+}
+.addr-card:active {
+  transform: scale(0.985);
+  background: #FAF6EE;
+}
+/* Selected card gets a lime fill so the active pick is obvious at a glance
+   without having to read the badge. */
+.addr-card.is-selected {
+  background: rgba(225, 240, 110, 0.35);
+  border-color: var(--olive);
 }
 .addr-top {
   display: flex;
@@ -38,6 +59,17 @@
   margin-bottom: 4rpx;
 }
 .addr-city { font-size: calc(22rpx * var(--font-scale)); }
+.addr-eta {
+  display: inline-block;
+  margin-top: 12rpx;
+  padding: 4rpx 14rpx;
+  background: rgba(204, 217, 0, 0.18);
+  color: #3a4400;
+  border-radius: 99rpx;
+  font-size: calc(22rpx * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: .02em;
+}
 .addr-actions {
   display: flex;
   gap: 24rpx;
@@ -70,6 +102,40 @@
   font-size: calc(26rpx * var(--font-scale));
   letter-spacing: 0.12em;
   text-align: center;
+}
+
+/* Bind-WeChat empty state — mirrors the checkout-page card. Replaces the
+   address list + Add button for customers who haven't bound their WeChat
+   profile yet. Same look as checkout for visual consistency. */
+.bind-empty {
+  margin: 12rpx 44rpx 0;
+  background: rgba(204, 217, 0, 0.14);
+  border: 2rpx solid var(--ink);
+  padding: 32rpx 28rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12rpx;
+}
+.bind-empty__icon { font-size: 56rpx; line-height: 1; }
+.bind-empty__title {
+  font-size: calc(34rpx * var(--font-scale));
+  line-height: 1.2;
+  color: var(--ink);
+}
+.bind-empty__body {
+  font-size: calc(24rpx * var(--font-scale));
+  line-height: 1.5;
+  color: var(--ink);
+  opacity: 0.78;
+}
+.bind-empty__cta {
+  margin-top: 8rpx;
+  padding: 18rpx 28rpx;
+  background: var(--ink);
+  color: var(--lime);
+  font-size: calc(24rpx * var(--font-scale));
+  letter-spacing: 0.14em;
 }
 
 /* ── FORM MODE ── */

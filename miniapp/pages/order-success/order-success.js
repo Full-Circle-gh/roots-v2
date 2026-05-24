@@ -3,6 +3,7 @@
 
 const api  = require('../../utils/api');
 const lang = require('../../utils/lang');
+const cart = require('../../utils/cart');
 
 Page({
   data: {
@@ -20,6 +21,11 @@ Page({
       shopBtn: 'Keep shopping',
     },
   },
+
+  // Defensive cart-badge clear — re-fires on show in case the
+  // wx.removeTabBarBadge call from checkout (a non-tab page) got
+  // dropped by some base-library versions.
+  onShow() { cart.updateBadge(); },
 
   async onLoad(query) {
     const app = getApp();

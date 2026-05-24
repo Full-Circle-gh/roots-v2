@@ -29,12 +29,20 @@ Page({
     loading: true,
     saving: false,
     wxPicking: false,
+    // Mirror of app.globalData.customer.nickname presence. When false we
+    // show the bind-empty card in place of the list + add button — same
+    // contract as checkout: addresses tie to WeChat-verified identity.
+    isBound: true,
     copy: {
       title: 'Addresses',
       addBtn: '+ Add new address',
       editLabel: 'Edit',
       deleteLabel: 'Delete',
       defaultBadge: 'DEFAULT',
+      // Card-tap UX: the selected card carries this badge instead of "DEFAULT"
+      // since "default" is jargon the customer doesn't need to think about.
+      selectedBadge: 'SELECTED',
+      tapToSelectHint: 'Tap an address to use it',
       setDefault: 'Set as default',
       saveBtn: 'Save',
       cancelBtn: 'Cancel',
@@ -51,14 +59,46 @@ Page({
       },
       confirmDelete: 'Delete this address?',
       regionRequired: 'Please pick province, city, district',
+      // Bind-WeChat empty state — shown for unbound customers landing
+      // here from the Me tab. Tapping the CTA opens /pages/profile.
+      bindTitle: 'Bind WeChat to save addresses',
+      bindBody: 'We pull your name, phone and address straight from WeChat — accurate every time, no manual typing.',
+      bindCta: 'Bind WeChat →',
     },
   },
 
-  onLoad() {
+  async onLoad() {
     const app = getApp();
-    this.setData({ lang: app.globalData.lang });
+    // Wait for onLaunch's silentLogin to settle. Without this a deep-link
+    // straight to /pages/addresses races auth and shows the bind-empty
+    // state to a customer who's actually bound. Resolves immediately when
+    // already authed (token restored from storage).
+    if (app.authReady) { try { await app.authReady; } catch {} }
+    const cust = app.globalData.customer || {};
+    this.setData({ lang: app.globalData.lang, isBound: !!cust.nickname });
     this.applyLangCopy();
-    this.refresh();
+    if (this.data.isBound) this.refresh();
+    else this.setData({ loading: false });
+  },
+
+  // Re-check bind state on every show so returning from /pages/profile via
+  // navigateBack flips the page from empty-state to the real address book.
+  // Also re-runs refresh() on every show so edits made on this page,
+  // pulled from WeChat, or any other source land immediately — the
+  // previous `bind-status unchanged → bail` shortcut left the list stale
+  // when nothing about the bind flow had changed.
+  onShow() {
+    const app = getApp();
+    const cust = app.globalData.customer || {};
+    const isBound = !!cust.nickname;
+    if (isBound !== this.data.isBound) this.setData({ isBound });
+    if (isBound) this.refresh();
+  },
+
+  // Routes into the WeChat-profile bind flow. wx.navigateBack returns here
+  // and onShow refreshes the page once nickname is set.
+  bindWechat() {
+    wx.navigateTo({ url: '/pages/profile/profile' });
   },
 
   applyLangCopy() {
@@ -70,6 +110,8 @@ Page({
         editLabel: '编辑',
         deleteLabel: '删除',
         defaultBadge: '默认',
+        selectedBadge: '已选',
+        tapToSelectHint: '点击地址即可使用',
         setDefault: '设为默认',
         saveBtn: '保存',
         cancelBtn: '取消',
@@ -86,6 +128,9 @@ Page({
         },
         confirmDelete: '删除此地址?',
         regionRequired: '请选择省 / 市 / 区',
+        bindTitle: '绑定微信,保存地址',
+        bindBody: '我们从微信直接读取您的姓名、电话和地址 — 准确无误,无需手动输入。',
+        bindCta: '绑定微信 →',
       },
     });
   },
@@ -291,6 +336,48 @@ Page({
       await this.refresh();
     } catch (e) {
       wx.showToast({ title: e.message, icon: 'none' });
+    }
+  },
+
+  // Tap the whole address card → mark it as default (which is what checkout
+  // reads to pre-select an address) and bounce back to the previous page if
+  // there's one underneath us (typical entry: checkout → CHANGE → here).
+  // From the Me-tab entry there's no page to go back to, so we just refresh
+  // in place and toast — the badge moves to the tapped card so the customer
+  // sees the change took effect.
+  async pickAddress(e) {
+    const id = e.currentTarget.dataset.id;
+    const current = this.data.addresses.find(a => a.is_default);
+    // Skip the round-trip if they tapped the already-selected card.
+    const alreadySelected = current && current.id === id;
+    try {
+      if (!alreadySelected) {
+        await api.put('/api/retail/addresses/' + id, { is_default: true });
+      }
+      // Optimistic local update — flip is_default on the tapped row before
+      // refresh() returns so the badge moves instantly.
+      const next = this.data.addresses.map(a => ({ ...a, is_default: a.id === id }));
+      this.setData({ addresses: next });
+
+      const pages = getCurrentPages();
+      if (pages.length > 1) {
+        // Came from another page (almost always checkout). Drop a flag the
+        // previous page can read in onShow() so it re-pulls /addresses and
+        // re-runs /quote with the new pick.
+        const prev = pages[pages.length - 2];
+        if (prev && prev.setData) {
+          try { prev.setData({ _addressJustPicked: id }); } catch {}
+        }
+        wx.navigateBack();
+      } else {
+        wx.showToast({
+          title: this.data.lang === 'cn' ? '已选择' : 'Selected',
+          icon: 'success',
+          duration: 1200,
+        });
+      }
+    } catch (err) {
+      wx.showToast({ title: err.message || 'Failed', icon: 'none' });
     }
   },
 });

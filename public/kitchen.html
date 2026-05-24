@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#1a2314">
+<meta name="theme-color" id="meta-theme-color" content="#16161a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="format-detection" content="telephone=no">
@@ -15,21 +15,86 @@
 <link rel="apple-touch-icon" sizes="512x512" href="/kitchen-icon-512.png">
 <meta name="application-name" content="Kitchen">
 <meta name="apple-mobile-web-app-title" content="Kitchen">
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem('roots_theme');
+      var theme = saved === 'light' || saved === 'dark'
+        ? saved
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+      var meta = document.getElementById('meta-theme-color');
+      if (meta) meta.setAttribute('content', theme === 'light' ? '#ece6d8' : '#16161a');
+    } catch (e) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
 <style>
+@font-face { font-family: 'Toni Grotesk'; src: url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display: swap; }
+
+/* Retail-admin token system + legacy aliases. See app.html for full docs. */
 :root {
-  --dk: #1a2314;
-  --lime: #ccd900;
-  --lime-text: #6d7a2a;
-  --green: #3d7a1e;
-  --bg: #f6f4ee;
-  --card: #ffffff;
-  --border: #e6e2d6;
-  --muted: #8a8678;
-  --danger: #dc2626;
-  --success: #16a34a;
-  --warn: #b85c00;
+  --bg-app:     #16161a;
+  --bg-pane:    #1f1f24;
+  --bg-elev-1:  #25252b;
+  --bg-elev-2:  #2e2e35;
+  --bg-input:   #1a1a1f;
+  --bg-overlay: rgba(10, 10, 12, .72);
+  --line-soft:  rgba(255, 255, 255, .055);
+  --line:       rgba(255, 255, 255, .09);
+  --line-strong: rgba(255, 255, 255, .15);
+  --ring:       rgba(204, 217, 0, .35);
+  --text-1: #ecebe5;
+  --text-2: #aeaba2;
+  --text-3: #7d7a72;
+  --text-4: #56544f;
+  --accent:      #ccd900;
+  --accent-hi:   #dde858;
+  --accent-ink:  #16161a;
+  --danger-soft: rgba(232, 85, 106, .14);
+  --warn:        #e9a35a;
+  --success-color: #80c462;
+  --sh-1: 0 1px 2px rgba(0, 0, 0, .25);
+  --sh-2: 0 4px 16px rgba(0, 0, 0, .25);
+  --sh-3: 0 24px 60px rgba(0, 0, 0, .5);
+  --f-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', "PingFang SC", system-ui, sans-serif;
+  /* Legacy aliases */
+  --dk:        var(--bg-elev-2);
+  --lime:      var(--accent);
+  --lime-text: var(--accent);
+  --green:     var(--success-color);
+  --bg:        var(--bg-app);
+  --card:      var(--bg-pane);
+  --border:    var(--line);
+  --muted:     var(--text-3);
+  --danger:    #e8556a;
+  --success:   var(--success-color);
   --sa-top: env(safe-area-inset-top, 0px);
   --sa-bot: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg-app:     #ece6d8;
+  --bg-pane:    #fbf8ee;
+  --bg-elev-1:  #f4efdf;
+  --bg-elev-2:  #e9e3d0;
+  --bg-input:   #fefcf3;
+  --bg-overlay: rgba(20, 20, 22, .42);
+  --line-soft:  rgba(30, 25, 5, .075);
+  --line:       rgba(30, 25, 5, .16);
+  --line-strong: rgba(30, 25, 5, .26);
+  --ring:       rgba(140, 152, 0, .38);
+  --text-1: #1a1a17;
+  --text-2: #43413a;
+  --text-3: #6a675c;
+  --text-4: #9a978c;
+  --accent-hi:  #b8c200;
+  --lime-text:  #6e7a00;
+  --sh-1: 0 1px 3px rgba(40, 30, 5, .09);
+  --sh-2: 0 6px 18px rgba(40, 30, 5, .10);
+  --sh-3: 0 24px 60px rgba(40, 30, 5, .22);
+  color-scheme: light;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; height: 100%; overscroll-behavior: none; -webkit-overflow-scrolling: touch; }
@@ -549,6 +614,82 @@ input:focus { outline: 3px solid var(--lime); outline-offset: -1px; }
   40%  { transform: scaleX(1); opacity: 1 }
   100% { transform: scaleX(1); opacity: 0 }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CHROME OVERRIDES — ported from /retail-admin so kitchen reads as the
+   same product. Touches surface colors, type, and the header/tab bar
+   that hardcoded forest-green. Layout untouched.
+   ═══════════════════════════════════════════════════════════════════════ */
+body { font-family: var(--f-sans); background: var(--bg-app); color: var(--text-1); }
+
+/* Header strip: from forest-green gradient to retail-admin pane. */
+.head {
+  background: var(--bg-pane) !important;
+  color: var(--text-1) !important;
+  border-bottom: 1px solid var(--line-soft);
+  box-shadow: none !important;
+}
+.head .title { color: var(--text-1); }
+.head .title .user-pill {
+  background: var(--bg-elev-1) !important;
+  color: var(--text-3) !important;
+}
+.head .icons button {
+  color: var(--text-2);
+  background: transparent;
+}
+.head .icons button:active { background: var(--bg-elev-2) !important; }
+.head-badge {
+  background: var(--accent) !important;
+  color: var(--accent-ink) !important;
+}
+
+/* Tab bar */
+.tabs {
+  background: var(--bg-pane) !important;
+  border-bottom: 1px solid var(--line-soft) !important;
+}
+.tab { color: var(--text-3) !important; }
+.tab.active { color: var(--text-1) !important; border-bottom-color: var(--accent) !important; }
+.tab:hover:not(.active) { color: var(--text-2) !important; }
+.tab:active { background: var(--bg-elev-1) !important; }
+.tab-badge {
+  background: var(--accent) !important;
+  color: var(--accent-ink) !important;
+  box-shadow: none !important;
+}
+
+/* Body + cards */
+.body { background: var(--bg-app) !important; }
+.empty .hint {
+  background: var(--bg-pane) !important;
+  border-color: var(--line) !important;
+  color: var(--text-3) !important;
+}
+.line {
+  background: var(--bg-pane) !important;
+  border: 1px solid var(--line-soft) !important;
+  box-shadow: none !important;
+}
+
+/* Catch any remaining hardcoded white surfaces (note inputs, modals,
+   inline-styled product pickers) and route them onto the new pane. */
+[style*="background:#fff"],
+[style*="background: #fff"],
+[style*="background:#ffffff"],
+[style*="background: #ffffff"] { background: var(--bg-pane) !important; }
+.note-input { background: var(--bg-input) !important; border-color: var(--line) !important; color: var(--text-1); }
+.note-input:focus { background: var(--bg-input) !important; border-color: rgba(204,217,0,.45) !important; box-shadow: 0 0 0 3px var(--ring); }
+
+/* Inputs/selects inline-styled in templates. */
+[style*="border:1.5px solid var(--border)"] {
+  background: var(--bg-input) !important;
+  color: var(--text-1) !important;
+  border: 1px solid var(--line) !important;
+}
+
+input:focus { outline-color: rgba(204,217,0,.5) !important; }
+
 </style>
 </head>
 <body>
@@ -841,7 +982,14 @@ function openTeamOverlay() {
   // Register SW + auto-reload on update. SW is required for the PWA
   // install banner; without it Chrome treats us as a regular page.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(reg => {
+      // Re-check sw.js whenever the device wakes / returns to the app. Installed
+      // PWAs otherwise only check on navigation (throttled ~24h), so a deploy
+      // could go unseen on a kiosk for a long time.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+    }).catch(() => {});
     navigator.serviceWorker.addEventListener('message', (e) => {
       if (e.data?.type === 'sw-updated') location.reload();
     });

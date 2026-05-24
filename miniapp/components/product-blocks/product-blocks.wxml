@@ -1,53 +1,171 @@
 <view class="pb-wrap">
   <view wx:for="{{resolved}}" wx:key="_k" class="pb pb-{{item.type}}">
 
-    <!-- ───────── Hero Intro ─────────
-         Editorial paragraph. Optional highlight phrase either renders
-         inline (when it appears inside the body) with accent styling,
-         OR as a styled lead-in callout above the body (when it doesn't
-         appear in the body — gives the office a way to add a pull-out
-         line that's distinct from the prose). -->
-    <block wx:if="{{item.type === 'hero_intro'}}">
-      <view wx:if="{{item.looseHighlight}}" class="pb-hero-lead f-toni">{{item.looseHighlight}}</view>
-      <view class="pb-hero-body f-aleo">
-        <text wx:for="{{item.bodySegments}}" wx:for-item="seg" wx:key="*this"
-              class="{{seg.kind === 'hl' ? 'pb-hero-hl' : ''}}">{{seg.text}}</text>
+    <!-- 01 · SPEC STRIP -->
+    <block wx:if="{{item.type === 'spec_strip'}}">
+      <view class="pb-spec">
+        <view wx:for="{{item.cells}}" wx:key="k" wx:for-item="c" class="pb-spec-cell">
+          <view wx:if="{{c.k}}" class="pb-spec-k">{{c.k}}</view>
+          <view wx:if="{{c.v}}" class="pb-spec-v">{{c.v}}</view>
+        </view>
       </view>
     </block>
 
-    <!-- ───────── Stat Callout ─────────
-         One giant number/percent on a brand-color slab. Acts as a
-         section break that doubles as a sales point. -->
-    <block wx:elif="{{item.type === 'stat_callout'}}">
-      <view class="pb-stat-slab">
-        <view class="pb-stat-num f-bear">{{item.stat}}</view>
-        <view wx:if="{{item.claim}}" class="pb-stat-claim f-toni">{{item.claim}}</view>
-        <view wx:if="{{item.sub}}" class="pb-stat-sub f-aleo">{{item.sub}}</view>
+    <!-- 02 · HERO INTRO -->
+    <block wx:elif="{{item.type === 'hero_intro'}}">
+      <view class="pb-hero">
+        <view wx:if="{{item.kicker}}" class="pb-hero-kicker">{{item.kicker}}</view>
+        <view class="pb-hero-body">
+          <text wx:for="{{item.bodySegments}}" wx:for-item="seg" wx:key="*this"
+                class="{{seg.kind === 'hl' ? 'pb-ink-pull' : ''}}">{{seg.text}}</text>
+        </view>
       </view>
     </block>
 
-    <!-- ───────── Allergen Card ─────────
-         ⚠️ bordered card with two segmented chip rows. -->
+    <!-- 03 · WHY PEOPLE CHOOSE IT -->
+    <block wx:elif="{{item.type === 'why'}}">
+      <view class="pb-why">
+        <view class="pb-why-head">
+          <text class="pb-why-head-l">{{item.head}}</text>
+          <text class="pb-why-head-r">{{item.count}}</text>
+        </view>
+        <view wx:for="{{item.rows}}" wx:for-item="r" wx:key="n"
+              class="pb-why-row {{r.first ? 'first' : ''}}">
+          <text class="pb-why-n">{{r.n}}</text>
+          <text class="pb-why-claim">{{r.claim}}</text>
+        </view>
+      </view>
+    </block>
+
+    <!-- 04a · INGREDIENTS · CHIP CLOUD -->
+    <block wx:elif="{{item.type === 'ingredients_chips'}}">
+      <view class="pb-ing">
+        <view class="pb-section-head">
+          <text class="pb-section-h3">{{item.headLabel}}</text>
+          <text class="pb-section-tag">{{item.tag}}</text>
+        </view>
+        <view class="pb-ing-chips">
+          <view wx:for="{{item.items}}" wx:for-item="it" wx:key="name"
+                class="pb-chip {{it.lead ? 'pb-chip-lead' : ''}}">
+            <text>{{it.name}}</text>
+            <text wx:if="{{it.pct}}" class="pb-chip-pct">{{it.pct}}%</text>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <!-- 04b · INGREDIENTS · EDITORIAL LINE -->
+    <block wx:elif="{{item.type === 'ingredients_line'}}">
+      <view class="pb-ing">
+        <view class="pb-section-head">
+          <text class="pb-section-h3">{{item.headLabel}}</text>
+          <text class="pb-section-tag">{{item.tag}}</text>
+        </view>
+        <view class="pb-ing-line">
+          <block wx:for="{{item.items}}" wx:for-item="it" wx:key="name">
+            <text wx:if="{{index > 0}}" class="pb-ing-line-sep"></text>
+            <text>{{it.name}}</text>
+            <text wx:if="{{it.pct}}" class="pb-ing-line-pct"> {{it.pct}}%</text>
+          </block>
+        </view>
+      </view>
+    </block>
+
+    <!-- 05 · ALLERGEN CARD -->
     <block wx:elif="{{item.type === 'allergen_card'}}">
       <view class="pb-allergen">
-        <view class="pb-allergen-head f-toni">
-          <text class="pb-allergen-emoji">⚠️</text>
-          <text>{{lang === 'cn' ? '过敏原信息' : 'ALLERGEN INFORMATION'}}</text>
-        </view>
-        <view wx:if="{{item.contains.length}}" class="pb-allergen-section">
-          <view class="pb-allergen-label f-toni">{{item.containsLabel}}</view>
-          <view class="pb-allergen-chips">
-            <view wx:for="{{item.contains}}" wx:key="*this" wx:for-item="c"
-                  class="pb-allergen-chip pb-allergen-chip-strong">{{c}}</view>
+        <view class="pb-allergen-card">
+          <view class="pb-allergen-top">
+            <view class="pb-allergen-ttl">
+              <text class="pb-allergen-warn">!</text>
+              <text>{{item.title}}</text>
+            </view>
+            <text class="pb-allergen-meta">{{item.compliance}}</text>
+          </view>
+          <view class="pb-allergen-row">
+            <text class="pb-allergen-lbl">{{item.containsLabel}}</text>
+            <view class="pb-allergen-chips">
+              <text wx:if="{{item.containsEmpty}}" class="pb-allergen-empty">{{item.emptyText}}</text>
+              <block wx:else>
+                <text wx:for="{{item.contains}}" wx:for-item="chip" wx:key="*this"
+                      class="pb-al-chip pb-al-chip-strong">{{chip}}</text>
+              </block>
+            </view>
+          </view>
+          <view wx:if="{{item.mayContain.length}}" class="pb-allergen-row">
+            <text class="pb-allergen-lbl">{{item.mayContainLabel}}</text>
+            <view class="pb-allergen-chips">
+              <text wx:for="{{item.mayContain}}" wx:key="*this"
+                    class="pb-al-chip pb-al-chip-soft">{{item}}</text>
+            </view>
           </view>
         </view>
-        <view wx:if="{{item.mayContain.length}}" class="pb-allergen-section">
-          <view class="pb-allergen-label f-toni">{{item.mayContainLabel}}</view>
-          <view class="pb-allergen-chips">
-            <view wx:for="{{item.mayContain}}" wx:key="*this" wx:for-item="c"
-                  class="pb-allergen-chip pb-allergen-chip-soft">{{c}}</view>
+      </view>
+    </block>
+
+    <!-- 06 · HOW TO USE GRID -->
+    <block wx:elif="{{item.type === 'how_to_use'}}">
+      <view class="pb-how">
+        <view class="pb-section-head">
+          <text class="pb-section-h3">{{item.head}}</text>
+          <text class="pb-section-tag">{{item.tag}}</text>
+        </view>
+        <view class="pb-how-grid {{item.cols === 4 ? 'cols-4' : ''}}">
+          <view wx:for="{{item.tiles}}" wx:for-item="t" wx:key="lbl" class="pb-how-tile">
+            <text wx:if="{{t.icon}}" class="pb-how-ic">{{t.icon}}</text>
+            <text wx:if="{{t.lbl}}" class="pb-how-lbl">{{t.lbl}}</text>
+            <text wx:if="{{t.sub}}" class="pb-how-sub">{{t.sub}}</text>
           </view>
         </view>
+      </view>
+    </block>
+
+    <!-- 07 · STORAGE BOX -->
+    <block wx:elif="{{item.type === 'storage_box'}}">
+      <view class="pb-storage">
+        <view class="pb-section-head">
+          <text class="pb-section-h3">{{item.head}}</text>
+          <text class="pb-section-tag">{{item.tag}}</text>
+        </view>
+        <view class="pb-storage-pair">
+          <view wx:if="{{item.left}}" class="pb-storage-card {{item.left.alt ? 'alt' : ''}}">
+            <text wx:if="{{item.left.icon}}" class="pb-storage-ic">{{item.left.icon}}</text>
+            <text wx:if="{{item.left.head}}" class="pb-storage-head">{{item.left.head}}</text>
+            <text wx:if="{{item.left.num}}" class="pb-storage-num">{{item.left.num}}</text>
+            <text wx:if="{{item.left.unit}}" class="pb-storage-unit">{{item.left.unit}}</text>
+          </view>
+          <view wx:if="{{item.right}}" class="pb-storage-card {{item.right.alt ? 'alt' : ''}}">
+            <text wx:if="{{item.right.icon}}" class="pb-storage-ic">{{item.right.icon}}</text>
+            <text wx:if="{{item.right.head}}" class="pb-storage-head">{{item.right.head}}</text>
+            <text wx:if="{{item.right.num}}" class="pb-storage-num">{{item.right.num}}</text>
+            <text wx:if="{{item.right.unit}}" class="pb-storage-unit">{{item.right.unit}}</text>
+          </view>
+        </view>
+        <view wx:if="{{item.note}}" class="pb-storage-note">{{item.note}}</view>
+      </view>
+    </block>
+
+    <!-- 09 · NOTES CALLOUT -->
+    <block wx:elif="{{item.type === 'notes_callout'}}">
+      <view class="pb-notes">
+        <view class="pb-notes-p">{{item.text}}</view>
+      </view>
+    </block>
+
+    <!-- +1 · BIG STAT CALLOUT -->
+    <block wx:elif="{{item.type === 'big_stat'}}">
+      <view class="pb-bigstat" style="background: var(--{{item.bg}});">
+        <view class="pb-bigstat-num">{{item.stat}}</view>
+        <view wx:if="{{item.what}}" class="pb-bigstat-what">{{item.what}}</view>
+        <view wx:if="{{item.claim}}" class="pb-bigstat-claim">{{item.claim}}</view>
+      </view>
+    </block>
+
+    <!-- +2 · PULL QUOTE / ORIGIN NOTE -->
+    <block wx:elif="{{item.type === 'pull_quote'}}">
+      <view class="pb-pullquote">
+        <view class="pb-pullquote-p">"{{item.text}}"</view>
+        <view wx:if="{{item.who}}" class="pb-pullquote-who">{{item.who}}</view>
       </view>
     </block>
 

@@ -1,4 +1,4 @@
-.page { background: var(--oat); min-height: 100vh; padding-bottom: 80rpx; }
+.page { background: var(--oat); min-height: 100vh; padding-bottom: var(--tabbar-clear); }
 
 /* ─── Fly-to-cart ball ───────────────────────────────────────────── */
 /* Outer .fly-wrap handles the horizontal translation (linear). Inner
@@ -229,11 +229,21 @@
 .card .img {
   width: 100%;
   aspect-ratio: 4 / 5;
-  background: #ddd;
+  background: #F2E7DF;  /* oat — matches page bg so placeholder reads as "empty by design" not "broken image" */
   overflow: hidden;
   position: relative;
 }
 .card .img-full { width: 100%; height: 100%; }
+/* Placeholder for products with no uploaded image — minimalist jar
+   line-art at 40% of the box size, centered. Style matches the tab-bar
+   icons. Used across all 3 shop layouts and the PDP hero. */
+.img-placeholder {
+  position: absolute;
+  width: 40%; height: 40%;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.65;
+}
 .card-badge {
   position: absolute; top: 12rpx; left: 12rpx;
   background: var(--ink); color: var(--lime);
@@ -280,7 +290,7 @@
 .gal-img {
   width: 100%;
   aspect-ratio: 4 / 5;
-  background: #ddd;
+  background: #F2E7DF;
   overflow: hidden; position: relative;
 }
 .gal-img .img-full { width: 100%; height: 100%; }
@@ -346,7 +356,14 @@
 }
 .side-tab.on { background: var(--lime); }
 
-.list-main { flex: 1; min-width: 0; background: #FFFCF7; }
+/* padding-bottom: the list-main scroll-view fills 100% of its flex slot
+   (which extends to the bottom of the viewport). The custom tab bar
+   overlays the bottom — so the last product would be covered without
+   inner content padding. Using --tabbar-clear (fixed 170rpx) instead of
+   the env()-chained --tabbar-h so the inset is honoured on iPhone
+   (see app.wxss). */
+.list-main { flex: 1; min-width: 0; background: #FFFCF7; padding-bottom: var(--tabbar-clear); box-sizing: border-box; }
+.list-side { padding-bottom: var(--tabbar-clear); box-sizing: border-box; }
 
 .list-section-head {
   padding: 28rpx 32rpx 12rpx;
@@ -361,7 +378,7 @@
   border-bottom: 2rpx solid rgba(0,0,0,.08);
 }
 .row-compact { padding: 32rpx; gap: 0; }
-.row-img { width: 200rpx; height: 240rpx; background: var(--oat); overflow: hidden; flex-shrink: 0; }
+.row-img { width: 200rpx; height: 240rpx; background: var(--oat); overflow: hidden; flex-shrink: 0; position: relative; }
 .row-img .img-full { width: 100%; height: 100%; }
 .row-body { flex: 1; min-width: 0; }
 .row-name { font-size: calc(30rpx * var(--font-scale)); line-height: 1.35; color: var(--ink); }
@@ -395,6 +412,28 @@
   font-size: calc(36rpx * var(--font-scale));
   display: flex; align-items: center; justify-content: center;
   margin-top: 12rpx; margin-left: auto; line-height: 1;
+}
+
+/* Grid-card quick-add — mirrors .row-plus / .gal-plus so all five view
+   modes (list, list-compact, gallery, grid-2col, grid-3col) get the same
+   one-tap add-to-cart affordance. .card-foot is a flex row so the price
+   stack sits on the left and the + chip on the right; both shrink in
+   3-col mode so the chip never overwhelms the small card. */
+.card-foot {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 12rpx; margin-top: 4rpx;
+}
+.card-foot .price-stack { margin-top: 0; }
+.card-plus {
+  width: 52rpx; height: 52rpx;
+  background: var(--ink); color: var(--lime);
+  font-size: calc(36rpx * var(--font-scale));
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1; flex-shrink: 0;
+}
+.grid-3 .card-plus {
+  width: 44rpx; height: 44rpx;
+  font-size: calc(30rpx * var(--font-scale));
 }
 
 .loading-list { padding: 16rpx 32rpx; }

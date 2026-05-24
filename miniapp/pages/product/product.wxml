@@ -4,6 +4,11 @@
     <view class="back-glyph">←</view>
   </view>
 
+  <!-- Heart pip — top-right, toggles favorite. Filled berry when saved. -->
+  <view wx:if="{{!notFound}}" class="fav-pip {{isFavorited ? 'is-on' : ''}}" bindtap="onFavoriteToggle">
+    <view class="fav-glyph">♥</view>
+  </view>
+
   <view wx:if="{{notFound}}" class="empty">
     <view class="empty-title f-bear">Product not found</view>
     <view class="empty-sub">It might have been unpublished. Go back to the shop.</view>
@@ -19,7 +24,7 @@
   <block wx:else>
     <view class="hero" style="{{aspectRatio ? 'aspect-ratio:' + aspectRatio + ';height:auto' : 'height: 880rpx'}}">
       <image wx:if="{{image}}" src="{{image}}" mode="aspectFill" class="hero-img"/>
-      <view wx:else class="hero-placeholder">No image</view>
+      <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="hero-placeholder-img"/>
       <view wx:if="{{stockTag}}" class="stock-badge stock-{{stockTagKind}} f-toni">{{stockTag}}</view>
     </view>
 
@@ -55,15 +60,24 @@
           <text class="flash-cd-label f-toni">{{lang === 'cn' ? '本场已结束' : "THAT'S A WRAP"}}</text>
         </view>
       </view>
-      <view class="title-row">
-        <view class="name f-bear">{{name}}</view>
+      <!-- Product header — v1 editorial: serif display name, Yuan W7 olive
+           CN subtitle, Aleo italic tagline with optional [[ink-mark]]
+           inline highlight. Bottom hairline ink rule divides from the
+           Spec Strip / first block below. -->
+      <view class="product-head">
+        <view class="title-row">
+          <view class="name f-bear">{{name}}</view>
+        </view>
+        <view wx:if="{{(subtitle && subtitle !== name) || keywords}}" class="subtitle f-yuan">
+          <text wx:if="{{subtitle && subtitle !== name}}">{{subtitle}}</text>
+          <text wx:if="{{(subtitle && subtitle !== name) && keywords}}"> · </text>
+          <text wx:if="{{keywords}}">{{keywords}}</text>
+        </view>
+        <view wx:if="{{taglineSegments.length}}" class="tagline f-aleo">
+          <text wx:for="{{taglineSegments}}" wx:for-item="seg" wx:key="*this"
+                class="{{seg.kind === 'mark' ? 'ink-mark' : ''}}">{{seg.text}}</text>
+        </view>
       </view>
-      <view wx:if="{{(subtitle && subtitle !== name) || keywords}}" class="subtitle f-yuan">
-        <text wx:if="{{subtitle && subtitle !== name}}">{{subtitle}}</text>
-        <text wx:if="{{(subtitle && subtitle !== name) && keywords}}"> · </text>
-        <text wx:if="{{keywords}}">{{keywords}}</text>
-      </view>
-      <view wx:if="{{tagline}}" class="tagline f-toni">{{tagline}}</view>
 
       <!-- Block-based body (designer-styled per-section). When present,
            the legacy description parts are skipped. -->
@@ -115,15 +129,19 @@
         </view>
       </view>
 
-      <!-- Nutrition facts -->
-      <view wx:if="{{nutritionRows.length}}" class="nutrition-block">
-        <view class="nutrition-head">
-          <text class="nutrition-title f-toni">{{lang === 'cn' ? '营养成分' : 'NUTRITION'}}</text>
-          <text wx:if="{{nutritionBasis}}" class="nutrition-basis muted">· {{nutritionBasis}}</text>
-        </view>
-        <view wx:for="{{nutritionRows}}" wx:key="label" class="nutrition-row">
-          <text class="nutrition-label">{{item.label}}</text>
-          <text class="nutrition-value f-gothic">{{item.value}}</text>
+      <!-- Nutrition facts — v1 nut-card: bordered card, basis line top-right
+           italic Aleo, parent rows bold w/ forest value, child rows indented
+           with em-dash prefix and muted styling. -->
+      <view wx:if="{{nutritionRows.length}}" class="nutrition">
+        <view class="nut-card">
+          <view class="nut-card-top">
+            <text class="nut-card-ttl f-bear">{{lang === 'cn' ? '营养成分' : 'Nutrition'}}</text>
+            <text wx:if="{{nutritionBasis}}" class="nut-card-basis f-aleo">{{nutritionBasis}}</text>
+          </view>
+          <view wx:for="{{nutritionRows}}" wx:key="label" class="nrow {{item.kind === 'parent' ? 'bold' : ''}} {{item.kind === 'child' ? 'child' : ''}}">
+            <text class="nrow-l">{{item.label}}</text>
+            <text class="nrow-r f-gothic">{{item.value}}</text>
+          </view>
         </view>
       </view>
 
@@ -144,6 +162,22 @@
           </view>
         </view>
       </block>
+
+      <!-- Colophon — page sign-off. One IP character (mapped by category)
+           centred on oat fill, "From Soil to Soul" tagline below, then a
+           small "Roots · ESTD 2017" meta line bracketed by hairlines.
+           Renders ONCE per page per v1 spec. -->
+      <view class="colophon">
+        <view wx:if="{{colophonImg}}" class="colophon-character">
+          <image src="{{colophonImg}}" mode="aspectFit" class="colophon-character-img"/>
+        </view>
+        <view class="colophon-tagline f-bear">{{colophonTagline}}</view>
+        <view class="colophon-meta f-toni">
+          <view class="colophon-rule"></view>
+          <text>Roots · ESTD 2017</text>
+          <view class="colophon-rule"></view>
+        </view>
+      </view>
     </view>
 
     <!-- Sticky bottom: qty stepper + add to cart -->

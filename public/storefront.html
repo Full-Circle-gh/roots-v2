@@ -7,6 +7,10 @@
 <title>Roots · Storefront Preview</title>
 <style>
   /* ═══════════════ BRAND FONTS ═══════════════ */
+  /* Bear Serif's digits are thin/geometric and don't match its chunky letters.
+     Lilita One is mapped over the digit/currency range so digits render with
+     matching weight. The bear-serif file covers everything else. */
+  @font-face { font-family: 'Bear Serif';    src: url('/assets/fonts/LilitaOne.ttf')      format('truetype'); unicode-range: U+0024, U+0025, U+0030-0039, U+00A5; font-display: swap; }
   @font-face { font-family: 'Bear Serif';    src: url('/assets/fonts/BearSerif.otf')      format('opentype'); font-display: swap; }
   @font-face { font-family: 'Toni Grotesk';  src: url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display: swap; }
   @font-face { font-family: 'League Gothic'; src: url('/assets/fonts/LeagueGothic.ttf')   format('truetype'); font-display: swap; }
@@ -200,14 +204,73 @@
   .b-announce {
     padding: 10px 16px;
     font: 600 12px var(--bf-toni); letter-spacing: .04em; text-align: center;
+    overflow: hidden;
   }
-  .b-announce.linked {
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    cursor: pointer;
-  }
+  .b-announce.linked { display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
   [data-cta-target] { cursor: pointer; }
   [data-cta-target]:active { transform: scale(0.985); }
-  .b-announce.linked svg { width: 11px; height: 11px; opacity: .75; }
+  .b-announce .announce-chev { opacity: .75; margin-left: 4px; font-weight: 700; }
+
+  /* ── Announcement animations (mirror of cms.html) ──────────────── */
+  .b-announce.anim-marquee_rtl,
+  .b-announce.anim-marquee_ltr { display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .b-announce .anim-clip { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+  .b-announce .anim-track { display: inline-flex; flex-wrap: nowrap; white-space: nowrap; will-change: transform; }
+  .b-announce .anim-track > span:first-child { padding-right: 48px; }
+  .b-announce.anim-marquee_rtl .anim-track { animation: b-marquee-rtl var(--anim-dur, 14s) linear infinite; }
+  .b-announce.anim-marquee_ltr .anim-track { animation: b-marquee-ltr var(--anim-dur, 14s) linear infinite; }
+  @keyframes b-marquee-rtl { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @keyframes b-marquee-ltr { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+
+  .b-announce.anim-scroll_up,
+  .b-announce.anim-scroll_down { padding: 0 16px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .b-announce .anim-vclip { height: 32px; overflow: hidden; }
+  .b-announce .anim-vtrack { display: flex; flex-direction: column; align-items: center; line-height: 32px; }
+  .b-announce.anim-scroll_up .anim-vtrack   { animation: b-scroll-up var(--anim-dur, 14s) linear infinite; }
+  .b-announce.anim-scroll_down .anim-vtrack { animation: b-scroll-down var(--anim-dur, 14s) linear infinite; }
+  @keyframes b-scroll-up   { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+  @keyframes b-scroll-down { from { transform: translateY(-50%); } to { transform: translateY(0); } }
+
+  .b-announce .letters { display: inline-block; }
+  .b-announce .letters .ch { display: inline-block; }
+  .b-announce.anim-typewriter .letters .ch {
+    opacity: 0;
+    animation: b-type-in var(--anim-dur, 6s) infinite;
+    animation-delay: calc(var(--i) * var(--step, .08s));
+  }
+  @keyframes b-type-in { 0%, 100% { opacity: 0; } 8%, 92% { opacity: 1; } }
+  .b-announce.anim-fade_in_letters .letters .ch {
+    opacity: 0;
+    animation: b-fade-in var(--anim-dur, 5s) infinite;
+    animation-delay: calc(var(--i) * var(--step, .06s));
+  }
+  @keyframes b-fade-in { 0%, 100% { opacity: 0; } 25%, 80% { opacity: 1; } }
+  .b-announce.anim-wave .letters .ch {
+    animation: b-wave var(--anim-dur, 2.2s) ease-in-out infinite;
+    animation-delay: calc(var(--i) * var(--step, .07s));
+  }
+  @keyframes b-wave { 0%, 60%, 100% { transform: translateY(0); } 25% { transform: translateY(-4px); } }
+  .b-announce.anim-flicker { animation: b-flicker var(--anim-dur, 2.4s) infinite; }
+  @keyframes b-flicker {
+    0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; text-shadow: 0 0 4px currentColor; }
+    20%, 24%, 55% { opacity: .35; text-shadow: none; }
+  }
+
+  .b-announce.speed-slow   { --anim-dur: 22s; --step: .12s; }
+  .b-announce.speed-normal { --anim-dur: 14s; --step: .08s; }
+  .b-announce.speed-fast   { --anim-dur: 8s;  --step: .05s; }
+  .b-announce.anim-typewriter.speed-slow   { --anim-dur: 9s; }
+  .b-announce.anim-typewriter.speed-normal { --anim-dur: 6s; }
+  .b-announce.anim-typewriter.speed-fast   { --anim-dur: 3.5s; }
+  .b-announce.anim-fade_in_letters.speed-slow   { --anim-dur: 7s; }
+  .b-announce.anim-fade_in_letters.speed-normal { --anim-dur: 5s; }
+  .b-announce.anim-fade_in_letters.speed-fast   { --anim-dur: 3s; }
+  .b-announce.anim-wave.speed-slow   { --anim-dur: 3.4s; }
+  .b-announce.anim-wave.speed-normal { --anim-dur: 2.2s; }
+  .b-announce.anim-wave.speed-fast   { --anim-dur: 1.3s; }
+  .b-announce.anim-flicker.speed-slow   { --anim-dur: 3.6s; }
+  .b-announce.anim-flicker.speed-normal { --anim-dur: 2.4s; }
+  .b-announce.anim-flicker.speed-fast   { --anim-dur: 1.4s; }
   .b-hero {
     background: linear-gradient(135deg, #c4c4c4, #a8a8a8);
     position: relative; width: 100%; overflow: hidden;
@@ -288,6 +351,19 @@
   .b-cattabs .tile.c3 { background: var(--corn); }
   .b-cattabs .tile.c4 { background: var(--sky); }
   .b-cattabs .tile.c5 { background: var(--lotus); }
+  /* Scroll variant — single horizontal row of circles. Padding mirrors
+     the icons grid so the section gutters line up. */
+  .b-cattabs .cattabs-scroll-rail {
+    display: flex; gap: 18px; padding: 4px 22px 6px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .b-cattabs .cattabs-scroll-rail::-webkit-scrollbar { display: none; }
+  .b-cattabs .cattabs-scroll-tile {
+    flex: 0 0 auto;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    min-width: 64px;
+  }
   .b-cattabs .icons-grid { display: grid; gap: 14px 6px; padding: 0 22px; }
   .b-cattabs .icons-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
   .b-cattabs .icons-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
@@ -357,6 +433,45 @@
     margin-top: 3px; line-height: 1.35;
   }
   .b-grid .list-row .price { font: 600 13px var(--bf-gothic); margin-top: 6px; color: var(--olive); }
+  /* Rank badge — top_selling mode, top-left of product image */
+  .b-grid .card .img, .b-grid .list-row .img { position: relative; }
+  .b-grid .card .rank-badge,
+  .b-grid .list-row .rank-badge {
+    position: absolute; top: 6px; left: 6px;
+    font: 700 9px var(--bf-toni); letter-spacing: .14em;
+    padding: 3px 7px; border-radius: 3px;
+    text-transform: uppercase; z-index: 2;
+  }
+  .b-grid .card .rank-badge.rank-1, .b-grid .list-row .rank-badge.rank-1 {
+    background: linear-gradient(135deg, #FFE066 0%, #FFC72C 45%, #B8860B 100%);
+    color: var(--ink);
+    box-shadow: 2px 2px 0 rgba(0, 0, 0, .85);
+    border: 0.5px solid rgba(184, 134, 11, .6);
+  }
+  .b-grid .card .rank-badge.rank-2, .b-grid .list-row .rank-badge.rank-2 {
+    background: linear-gradient(135deg, #F4F4F4 0%, #C8C8C8 50%, #8C8C8C 100%);
+    color: var(--ink);
+    box-shadow: 1px 1px 0 rgba(0, 0, 0, .5);
+    border: 0.5px solid rgba(120, 120, 120, .55);
+  }
+  .b-grid .card .rank-badge.rank-3, .b-grid .list-row .rank-badge.rank-3 {
+    background: linear-gradient(135deg, #E1A878 0%, #C57F4E 50%, #8A4B22 100%);
+    color: #fff;
+    box-shadow: 1px 1px 0 rgba(0, 0, 0, .5);
+    border: 0.5px solid rgba(138, 75, 34, .6);
+  }
+  .b-grid .card .rank-badge.rank-n, .b-grid .list-row .rank-badge.rank-n {
+    background: var(--ink); color: var(--oat);
+  }
+  .b-grid .list-row .rank-badge { font-size: 8px; padding: 2px 6px; }
+  /* Social proof — "420 SOLD" under price on top-selling cards. */
+  .b-grid .card .sold-caption, .b-grid .list-row .sold-caption {
+    margin-top: 4px;
+    font: 700 9px var(--bf-toni); letter-spacing: .12em;
+    color: var(--olive);
+    text-transform: uppercase;
+  }
+  .b-grid .rank-card-1 .img { box-shadow: inset 0 -2px 0 #FFC72C; }
   .b-spacer {}
   .b-stickers {
     padding: 22px;
@@ -665,6 +780,23 @@
     background: rgba(255, 255, 255, .92); color: var(--ink);
     border-radius: 4px;
   }
+  .b-store-multi .kicker { margin-bottom: 8px; }
+  .b-store-multi .st-cards { display: flex; flex-direction: column; gap: 14px; }
+  .b-store-multi .st-card + .st-card {
+    padding-top: 14px;
+    border-top: 1px solid rgba(0, 0, 0, .08);
+  }
+  .b-store-multi .st-status {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 8px; font: 500 12px var(--bf-aleo);
+  }
+  .b-store-multi .st-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, .25);
+  }
+  .b-store-multi .st-status-lbl { font-weight: 600; }
+  .b-store-multi .st-hours { opacity: .7; }
+  .b-store-multi .st-eta { margin-top: 4px; font: 500 11px var(--bf-aleo); opacity: .8; }
   .empty-state {
     color: rgba(0, 0, 0, .35); font: 400 12px var(--bf-aleo);
     padding: 32px 22px; text-align: center;
@@ -685,6 +817,27 @@
     .phone-status { padding-top: max(18px, env(safe-area-inset-top, 0px)); }
     .phone-tabs { padding-bottom: max(24px, env(safe-area-inset-bottom, 0px)); }
   }
+
+  /* ═══════════════ PREVIEW MODE — used by /retail-admin and /cms's
+     Live Preview drawer. Strips the storefront's own simulated phone
+     chrome (topbar, notch, fake status bar) so the page renders as
+     pure customer content inside the drawer's own phone frame.
+     Activated by `?preview=1` on the URL (see script below). ═════════ */
+  body.preview-mode { background: var(--oat); }
+  body.preview-mode .topbar { display: none; }
+  body.preview-mode .canvas {
+    padding: 0;
+    min-height: 100vh; min-height: 100dvh;
+    background: var(--oat);
+  }
+  body.preview-mode .phone {
+    width: 100%;
+    min-height: 100vh; min-height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  body.preview-mode .phone::before { display: none; }
+  body.preview-mode .phone-status { display: none; }   /* no fake 9:41 / signal / battery */
 
   /* Loading skeleton */
   .skeleton {
@@ -774,6 +927,21 @@ const RESOLUTIONS = [
 ];
 
 const state = { config: null, products: [], categories: [], flashSales: [], lang: 'en' };
+// Initial lang from query — lets the /cms iframe sync its EN/中 toggle by
+// re-loading /storefront?lang=cn. The visible lang-toggle still wins on tap.
+try {
+  const qLang = new URL(location.href).searchParams.get('lang');
+  if (qLang === 'cn' || qLang === 'en') state.lang = qLang;
+} catch {}
+// `?preview=1` — the Live Preview drawer in /retail-admin and /cms loads
+// this page inside an iframe wrapped in its own phone frame. Without this
+// hook the storefront's own simulated chrome (topbar, notch, fake status
+// bar) would double up. The body class is consumed by .preview-mode CSS.
+try {
+  const p = new URL(location.href).searchParams.get('preview');
+  if (p === '1') document.documentElement.classList.add('preview-mode'),
+                 document.addEventListener('DOMContentLoaded', () => document.body.classList.add('preview-mode'));
+} catch {}
 
 function $(s) { return document.querySelector(s); }
 function escapeHtml(s) {
@@ -789,6 +957,27 @@ function pickLang(en, cn) {
   return a || b;
 }
 function biLabel(en, cn) { return escapeHtml(pickLang(en, cn)); }
+
+// Mirror of cms.html — pick the right inner markup for the announcement
+// animation. Marquee / scroll need a clipped duplicated track; per-letter
+// animations need staggered spans; static / flicker stay plain.
+function renderAnnounceInner(text, anim, linked) {
+  const safe = escapeHtml(text);
+  const chev = linked ? '<span class="announce-chev">›</span>' : '';
+  if (anim === 'marquee_rtl' || anim === 'marquee_ltr') {
+    return `<div class="anim-clip"><div class="anim-track"><span>${safe}</span><span aria-hidden="true">${safe}</span></div></div>${chev}`;
+  }
+  if (anim === 'scroll_up' || anim === 'scroll_down') {
+    return `<div class="anim-vclip"><div class="anim-vtrack"><span>${safe}</span><span aria-hidden="true">${safe}</span></div></div>${chev}`;
+  }
+  if (anim === 'typewriter' || anim === 'fade_in_letters' || anim === 'wave') {
+    const chars = Array.from(text).map((ch, i) =>
+      `<span class="ch" style="--i:${i}">${ch === ' ' ? '&nbsp;' : escapeHtml(ch)}</span>`
+    ).join('');
+    return `<span class="letters">${chars}</span>${chev}`;
+  }
+  return `<span>${safe}</span>${chev}`;
+}
 
 // Category names in the kitchen DB are mixed strings ("Bakery 烘焙"). Split
 // on the first CJK char and pick the side that matches state.lang.
@@ -881,20 +1070,37 @@ function currentPage() {
   return ['home', 'promotions', 'categories', 'membership', 'about', 'onboarding'].includes(p) ? p : 'home';
 }
 
+// ?draft=1 swaps the public /api/retail/config call for the admin-only
+// preview-config endpoint, which overlays draft layouts on top of the live
+// snapshot. Used by /cms's "Live mirror" iframe so the office can see what
+// the customer will see once they publish.
+const DRAFT_MODE = new URL(location.href).searchParams.get('draft') === '1';
+const CFG_URL = DRAFT_MODE
+  ? '/api/retail-admin/storefront/preview-config'
+  : '/api/retail/config';
+
 async function reload() {
   try {
     const [cfg, prods, cats, flash] = await Promise.all([
-      fetch('/api/retail/config',     { cache: 'no-store' }).then(r => r.json()),
+      fetch(CFG_URL, { credentials: 'same-origin', cache: 'no-store' }).then(r => r.json()),
       fetch('/api/retail/products?limit=100').then(r => r.json()),
       fetch('/api/retail/categories').then(r => r.json()),
       fetch('/api/retail/flash-sales').then(r => r.json()).catch(() => ({ data: [] })),
     ]);
-    if (!cfg?.success) throw new Error('config_failed');
+    if (!cfg?.success) {
+      // Draft fetch needs admin auth — if the staff session lapsed, fall
+      // back to the live config so the preview is still useful.
+      if (DRAFT_MODE) {
+        const live = await fetch('/api/retail/config', { cache: 'no-store' }).then(r => r.json());
+        if (live?.success) { cfg.success = true; cfg.data = live.data; }
+      }
+      if (!cfg?.success) throw new Error('config_failed');
+    }
     state.config = cfg.data;
     state.products = prods?.data || [];
     state.categories = cats?.data || [];
     state.flashSales = flash?.data || [];
-    $('#version').textContent = state.config.version || '—';
+    $('#version').textContent = (state.config.version || '—') + (DRAFT_MODE ? ' · DRAFT' : '');
     const page = currentPage();
     render(state.config[page]?.layout || []);
   } catch (e) {
@@ -902,6 +1108,20 @@ async function reload() {
   }
 }
 reload();
+
+// Parent (/cms iframe) can postMessage 'cms:reload' to ask us to re-fetch
+// after a draft save. We also accept 'cms:setPage' to switch pages without
+// a full iframe reload.
+window.addEventListener('message', (e) => {
+  if (!e.data || typeof e.data !== 'object') return;
+  if (e.data.type === 'cms:reload') reload();
+  if (e.data.type === 'cms:setPage' && typeof e.data.page === 'string') {
+    const u = new URL(location.href);
+    u.searchParams.set('page', e.data.page);
+    history.replaceState({}, '', u);
+    reload();
+  }
+});
 
 // ─── Click routing for the preview ─────────────────────────────────────
 // The mini app routes CTA events to real pages. The /storefront preview
@@ -966,6 +1186,27 @@ document.addEventListener('click', (e) => {
   routeCtaTarget(el.dataset.ctaTarget);
 });
 
+// Top-selling fetch + cache — same pattern as CMS: lazy fetch with a
+// 60s TTL, re-render the current page when fresh data arrives.
+state.topProductsCache = state.topProductsCache || new Map();
+state._topInFlight = state._topInFlight || new Set();
+function loadTopProducts(channel, window, limit) {
+  const key = `${channel}|${window}|${limit}`;
+  const cached = state.topProductsCache.get(key);
+  if (cached && (Date.now() - cached.t) < 60 * 1000) return cached.products;
+  if (state._topInFlight.has(key)) return cached?.products || [];
+  state._topInFlight.add(key);
+  fetch(`/api/retail/products/top?channel=${encodeURIComponent(channel)}&window=${encodeURIComponent(window)}&limit=${limit}`)
+    .then(r => r.json())
+    .then(j => {
+      state.topProductsCache.set(key, { t: Date.now(), products: j?.data || [] });
+      state._topInFlight.delete(key);
+      if (state.config) render(state.config[currentPage()]?.layout || []);
+    })
+    .catch(() => { state._topInFlight.delete(key); });
+  return cached?.products || [];
+}
+
 function render(blocks) {
   const mount = $('#phone-content');
   if (!blocks.length) {
@@ -983,11 +1224,11 @@ function renderBlock(b) {
       const fg = colorMap[b.fg_color] || b.fg_color || 'var(--ink)';
       const text = pickLang(b.text_en, b.text_cn);
       const linked = !!b.link_target;
-      const inner = linked
-        ? `<span>${escapeHtml(text)}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`
-        : escapeHtml(text);
+      const anim = b.animation || 'static';
+      const speed = b.speed || 'normal';
+      const inner = renderAnnounceInner(text, anim, linked);
       const targetAttr = linked ? ` data-cta-target="${escapeAttr(b.link_target)}"` : '';
-      return `<div class="b-announce${linked ? ' linked' : ''}"${targetAttr} style="background: ${bg}; color: ${fg}">${inner}</div>`;
+      return `<div class="b-announce anim-${anim} speed-${speed}${linked ? ' linked' : ''}"${targetAttr} style="background: ${bg}; color: ${fg}">${inner}</div>`;
     }
     case 'hero_banner': {
       const view = b.view || 'full';
@@ -1049,6 +1290,20 @@ function renderBlock(b) {
         return `<div class="b-cattabs b-cattabs-icons">${head}<div class="icons-grid cols-${cols}">${icons}</div></div>`;
       }
 
+      // Scroll view — single horizontal row of circles, drag/swipe left-right.
+      // Mirrors the CMS canvas renderer at public/cms.html (category_tabs case).
+      if (view === 'scroll') {
+        const scrolls = cats.map((c, i) => {
+          const name = categoryNameForLang(c.name);
+          const letter = (name.trim()[0] || '').toUpperCase();
+          return `<div class="cattabs-scroll-tile">
+            <div class="icon-circle c${i % 6}">${escapeHtml(letter)}</div>
+            <div class="icon-name">${escapeHtml(name)}</div>
+          </div>`;
+        }).join('');
+        return `<div class="b-cattabs b-cattabs-scroll">${head}<div class="cattabs-scroll-rail">${scrolls}</div></div>`;
+      }
+
       const tiles = cats.map((c, i) => `
         <div class="tile c${i % 6}">
           <div class="num">0${i + 1} · ${catWord}</div>
@@ -1078,6 +1333,8 @@ function renderBlock(b) {
       let products = [];
       if (b.source_type === 'manual') {
         products = (b.product_ids || []).map(id => state.products.find(p => p.id === id)).filter(Boolean);
+      } else if (b.source_type === 'top_selling') {
+        products = loadTopProducts(b.top_channel || 'combined', b.top_window || '7d', b.limit || 6);
       } else {
         const cat = state.categories.find(c => c.id === b.category_id);
         products = state.products.filter(p => !b.category_id || p.category === cat?.name);
@@ -1096,27 +1353,46 @@ function renderBlock(b) {
       if (!products.length) {
         return `<div class="b-grid b-grid-${view}">${head}<div class="empty-state" style="padding: 28px 0">No products available yet.</div></div>`;
       }
-      const cards = products.map(p => {
+      const isTopSelling = b.source_type === 'top_selling';
+      function rankBadge(idx) {
+        if (!isTopSelling) return '';
+        const rank = idx + 1;
+        const cls = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : 'rank-n';
+        const label = rank === 1 ? '🏆 NO. 01' : `NO. ${rank < 10 ? '0' + rank : rank}`;
+        return `<div class="rank-badge ${cls}">${label}</div>`;
+      }
+      function soldCaption(p) {
+        if (!isTopSelling) return '';
+        const units = Number(p.units_sold) || 0;
+        if (units <= 0) return '';
+        const txt = state.lang === 'cn' ? `已售 ${units}` : `${units} SOLD`;
+        return `<div class="sold-caption">${escapeHtml(txt)}</div>`;
+      }
+      const cards = products.map((p, idx) => {
         const src = thumbUrl(p); const price = priceOf(p);
-        return `<div class="card">
-          <div class="img">${src ? `<img src="${escapeAttr(src)}">` : ''}</div>
+        const rankCardCls = isTopSelling ? ` has-rank rank-card-${idx + 1}` : '';
+        return `<div class="card${rankCardCls}">
+          <div class="img">${src ? `<img src="${escapeAttr(src)}">` : ''}${rankBadge(idx)}</div>
           <div class="name">${biLabel(p.name_en, p.name_cn)}</div>
           <div class="price">${price > 0 ? `¥${price.toFixed(2)}` : '—'}</div>
+          ${soldCaption(p)}
         </div>`;
       }).join('');
       if (view === 'scroll') {
         return `<div class="b-grid b-grid-scroll">${head}<div class="scroll-rail">${cards}</div></div>`;
       }
       if (view === 'list') {
-        const listRows = products.map(p => {
+        const listRows = products.map((p, idx) => {
           const src = thumbUrl(p); const price = priceOf(p);
           const tagline = pickLang(p.tagline_en, p.tagline_cn) || pickLang(p.description_en, p.description_cn) || '';
-          return `<div class="list-row">
-            <div class="img">${src ? `<img src="${escapeAttr(src)}">` : ''}</div>
+          const rankCardCls = isTopSelling ? ` has-rank rank-card-${idx + 1}` : '';
+          return `<div class="list-row${rankCardCls}">
+            <div class="img">${src ? `<img src="${escapeAttr(src)}">` : ''}${rankBadge(idx)}</div>
             <div class="meta">
               <div class="name">${biLabel(p.name_en, p.name_cn)}</div>
               ${tagline ? `<div class="tagline">${escapeHtml(tagline.slice(0, 80))}${tagline.length > 80 ? '…' : ''}</div>` : ''}
               <div class="price">${price > 0 ? `¥${price.toFixed(2)}` : '—'}</div>
+              ${soldCaption(p)}
             </div>
           </div>`;
         }).join('');
@@ -1331,20 +1607,59 @@ function renderBlock(b) {
       const bg = brandColorVar(b.bg_color) || 'var(--oat)';
       const fg = brandColorVar(b.fg_color) || 'var(--ink)';
       const k = getBi(b, 'kicker');
-      const t = getBi(b, 'title');
-      const addr = pickLang(b.address_en, b.address_cn);
-      const hours = pickLang(b.hours_en, b.hours_cn);
-      const cta = pickLang(b.cta_label_en, b.cta_label_cn);
       const pin   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
       const clock = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-      const phone = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13 1.05.37 2.07.7 3.06a2 2 0 0 1-.45 2.11L8.09 10.09a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.11-.45c.99.34 2.01.58 3.06.7A2 2 0 0 1 22 16.92z"/></svg>';
-      return `<div class="b-store" style="background:${bg};color:${fg}">
-        <div class="kicker">${biLabel(k.en, k.cn)}</div>
-        <div class="ttl">${biLabel(t.en, t.cn)}</div>
-        ${addr  ? `<div class="row">${pin}<div class="val">${escapeHtml(addr)}</div></div>`   : ''}
-        ${hours ? `<div class="row">${clock}<div class="val">${escapeHtml(hours)}</div></div>` : ''}
-        ${b.phone ? `<div class="row">${phone}<div class="val">${escapeHtml(b.phone)}</div></div>` : ''}
-        ${cta ? `<div class="cta"${b.cta_target ? ` data-cta-target="${escapeAttr(b.cta_target)}"` : ''}>${escapeHtml(cta)}</div>` : ''}
+      const phoneIc = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13 1.05.37 2.07.7 3.06a2 2 0 0 1-.45 2.11L8.09 10.09a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.11-.45c.99.34 2.01.58 3.06.7A2 2 0 0 1 22 16.92z"/></svg>';
+      // Normalize to a stores list — new schema uses b.stores[]; legacy single-store
+      // blocks had top-level title/address/hours/phone fields.
+      let stores = Array.isArray(b.stores) && b.stores.length ? b.stores : null;
+      if (!stores && (b.title_en || b.title_cn || b.address_en || b.address_cn || b.phone)) {
+        stores = [{
+          name_en: b.title_en, name_cn: b.title_cn,
+          address_en: b.address_en, address_cn: b.address_cn,
+          hours_en: b.hours_en, hours_cn: b.hours_cn,
+          phone: b.phone,
+          open_hour: b.open_hour, close_hour: b.close_hour,
+          eta_minutes: b.eta_minutes,
+          cta_label_en: b.cta_label_en, cta_label_cn: b.cta_label_cn,
+          cta_target: b.cta_target,
+        }];
+      }
+      stores = stores || [];
+      const hr = new Date().getHours() + (new Date().getMinutes() / 60);
+      const cards = stores.map(s => {
+        const name  = pickLang(s.name_en,    s.name_cn)    || '';
+        const addr  = pickLang(s.address_en, s.address_cn);
+        const hours = pickLang(s.hours_en,   s.hours_cn);
+        const cta   = pickLang(s.cta_label_en, s.cta_label_cn);
+        const openH  = Number(s.open_hour);
+        const closeH = Number(s.close_hour);
+        const hasHours = Number.isFinite(openH) && Number.isFinite(closeH);
+        const isOpen = hasHours
+          ? (closeH > openH ? (hr >= openH && hr < closeH) : (hr >= openH || hr < closeH))
+          : null;
+        const statusLbl = isOpen === null ? ''
+          : isOpen ? (state.lang === 'cn' ? '营业中' : 'Open now')
+                   : (state.lang === 'cn' ? '已打烊' : 'Closed');
+        const eta = Number(s.eta_minutes) || 0;
+        const etaLbl = (eta > 0 && isOpen === true)
+          ? (state.lang === 'cn' ? `约 ${eta} 分钟送达` : `~${eta} min delivery`)
+          : '';
+        const dot = isOpen === null ? ''
+          : `<span class="st-dot" style="background:${isOpen ? 'var(--pea, #7BBD3B)' : 'var(--berry, #E96174)'}"></span>`;
+        return `<div class="st-card">
+          ${name ? `<div class="ttl">${escapeHtml(name)}</div>` : ''}
+          ${isOpen !== null ? `<div class="st-status">${dot}<span class="st-status-lbl">${escapeHtml(statusLbl)}</span>${hours ? `<span class="st-hours"> · ${escapeHtml(hours)}</span>` : ''}</div>`
+                            : (hours ? `<div class="row">${clock}<div class="val">${escapeHtml(hours)}</div></div>` : '')}
+          ${etaLbl ? `<div class="st-eta">${escapeHtml(etaLbl)}</div>` : ''}
+          ${addr  ? `<div class="row">${pin}<div class="val">${escapeHtml(addr)}</div></div>`     : ''}
+          ${s.phone ? `<div class="row">${phoneIc}<div class="val">${escapeHtml(s.phone)}</div></div>` : ''}
+          ${cta ? `<div class="cta"${s.cta_target ? ` data-cta-target="${escapeAttr(s.cta_target)}"` : ''}>${escapeHtml(cta)}</div>` : ''}
+        </div>`;
+      }).join('');
+      return `<div class="b-store b-store-multi" style="background:${bg};color:${fg}">
+        ${k.en || k.cn ? `<div class="kicker">${biLabel(k.en, k.cn)}</div>` : ''}
+        <div class="st-cards">${cards}</div>
       </div>`;
     }
     case 'countdown_timer': {

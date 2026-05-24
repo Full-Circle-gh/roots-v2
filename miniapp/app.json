@@ -25,6 +25,7 @@
     "pages/about/about",
     "pages/faq/faq",
     "pages/voting/voting",
+    "pages/favorites/favorites",
     "pages/track-webview/track-webview"
   ],
   "window": {
@@ -35,9 +36,10 @@
     "backgroundColor": "#F2E7DF"
   },
   "tabBar": {
-    "color": "#9b9285",
+    "custom": true,
+    "color": "#7a6f64",
     "selectedColor": "#365329",
-    "backgroundColor": "#FFFCF7",
+    "backgroundColor": "#F2E7DF",
     "borderStyle": "white",
     "list": [
       { "pagePath": "pages/home/home", "text": "Home", "iconPath": "assets/icons/home.png", "selectedIconPath": "assets/icons/home-active.png" },

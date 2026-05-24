@@ -145,6 +145,8 @@ Page({
       this.refresh();
     }
     this._syncConfig();
+    const tb = this.getTabBar && this.getTabBar();
+    if (tb && tb.setSelected) tb.setSelected('pages/shop/shop');
   },
 
   // Page-level scroll: only used when the layout is grid/gallery (the

@@ -2346,7 +2346,9 @@
     font-size: 13px; font-weight: 500;
     border-radius: var(--r-lg);
     box-shadow: var(--sh-3);
-    z-index: 100;
+    /* Above drawers (200) and modals (300) so confirmations stay visible
+       even when a drawer or dialog is open. */
+    z-index: 400;
     opacity: 0; pointer-events: none;
     transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out);
   }
@@ -3518,9 +3520,8 @@
             <th class="numeric">Points · 积分</th>
             <th class="numeric">Wallet ¥ · 钱包</th>
             <th>Last login · 上次登录</th>
-            <th></th>
           </tr></thead>
-          <tbody><tr><td colspan="9" class="muted">Loading…</td></tr></tbody>
+          <tbody><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
         </table>
       </div>
       <div class="row" style="margin-top: var(--s3); justify-content: space-between;">
@@ -4027,7 +4028,12 @@
       .pu-editor-bg {
         position: fixed; left: 0; right: 0; top: 0; bottom: 0;
         background: var(--bg-overlay);
-        z-index: 90;
+        /* Sits above .side-drawer (200) so a modal launched from inside a
+           drawer (customer adjust/edit/address, order refund approve, etc.)
+           centers cleanly over the whole viewport and its backdrop dims the
+           drawer too — instead of opening behind the drawer and getting
+           clipped by it. */
+        z-index: 300;
         display: none; align-items: center; justify-content: center;
         padding: 24px;
       }
@@ -4520,9 +4526,8 @@
 
   <!-- Apply-to-others overlay — opens on top of the zone drawer. Pushes the
        current drawer-form values to a selection of other zones in one go.
-       z-index sits above .side-drawer (200) so the backdrop covers the
-       drawer too and the dialog centers cleanly over the whole viewport. -->
-  <div id="dz-apply-bg" class="pu-editor-bg" style="z-index: 300;">
+       (Base .pu-editor-bg already sits above the drawer; no override needed.) -->
+  <div id="dz-apply-bg" class="pu-editor-bg">
     <div class="pu-editor" style="width: 580px; max-width: 92vw;">
       <div class="pu-editor-head">
         <div>
@@ -6591,7 +6596,7 @@
 
 </main>
 
-<aside id="order-drawer" class="side-drawer" aria-hidden="true">
+<aside id="order-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
   <button type="button" class="drawer-close" onclick="closeDrawer('#order-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
   </button>
@@ -6599,7 +6604,7 @@
 </aside>
 
 <!-- Customer detail drawer — same slide-in pattern as Orders. -->
-<aside id="cu-drawer" class="side-drawer" aria-hidden="true">
+<aside id="cu-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
   <button type="button" class="drawer-close" onclick="closeDrawer('#cu-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
   </button>
@@ -7938,19 +7943,20 @@ document.addEventListener('keydown', (e) => {
   if (!open.length) return;
   closeDrawer(open[open.length - 1]);
 });
-// Click-outside-to-close for the Orders drawer — clicking the empty page
-// area beside the open drawer dismisses it (mouse parity with ESC).
-// Clicks inside the drawer, on an order row (switches records), or that
-// end a text selection (drag-to-copy) are left alone. Scoped to the order
-// drawer; editor drawers stay no-dismiss to avoid losing unsaved edits.
+// Click-outside-to-close for the read drawers (Orders, Customers) —
+// clicking the empty page area beside an open drawer dismisses it (mouse
+// parity with ESC). Clicks inside any drawer, on a record row (which
+// switches records), or that end a text selection (drag-to-copy) are left
+// alone. Only the read drawers opt in via `dw-dismiss`; editor drawers
+// stay no-dismiss so an accidental outside-click can't drop unsaved edits.
 document.addEventListener('click', (e) => {
-  const d = document.getElementById('order-drawer');
-  if (!d || !d.classList.contains('open')) return;
-  if (e.target.closest('#order-drawer')) return;
-  if (e.target.closest('tr.order-row')) return;
+  const open = document.querySelectorAll('.side-drawer.dw-dismiss.open');
+  if (!open.length) return;
+  if (e.target.closest('.side-drawer')) return;
+  if (e.target.closest('tr.order-row, tr.cu-row')) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.toString().length > 0) return;
-  closeDrawer(d);
+  closeDrawer(open[open.length - 1]);
 });
 // Order-drawer cleanup hook — clear the mount after slide-out.
 onDrawerClose('#order-drawer', () => {
@@ -12045,23 +12051,23 @@ async function cuLoad() {
     pageSize: CU_PAGE_SIZE
   });
   const tbody = $('#cu-table tbody');
-  tbody.innerHTML = '<tr><td colspan="9" class="muted">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8" class="muted">Loading…</td></tr>';
   let j;
   try {
     const res = await fetch('/api/retail-admin/customers?' + params);
     j = await res.json();
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="9" class="muted">Network error.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">Network error.</td></tr>';
     return;
   }
   if (!j.success) {
-    tbody.innerHTML = '<tr><td colspan="9" class="muted">Failed to load.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">Failed to load.</td></tr>';
     return;
   }
   CU_TOTAL = j.total || 0;
   const rows = j.data || [];
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="9" class="muted">No customers found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">No customers found.</td></tr>';
   } else {
     tbody.innerHTML = rows.map(r => `
       <tr class="cu-row" style="cursor: pointer;" onclick="cuOpenDetail(${r.id})">
@@ -12078,7 +12084,6 @@ async function cuLoad() {
         <td class="numeric">${r.points_balance || 0}</td>
         <td class="numeric">¥${Number(r.balance || 0).toFixed(2)}</td>
         <td class="muted">${cuFmtTime(r.last_login_at) || '—'}</td>
-        <td onclick="event.stopPropagation()"><button class="btn btn-sm" onclick="cuOpenDetail(${r.id})">Open · 打开 →</button></td>
       </tr>
     `).join('');
   }

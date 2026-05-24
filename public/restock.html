@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#1a2314">
+<meta name="theme-color" id="meta-theme-color" content="#16161a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="format-detection" content="telephone=no">
@@ -15,35 +15,96 @@
 <link rel="apple-touch-icon" sizes="512x512" href="/restock-icon-512.png">
 <meta name="application-name" content="Restock">
 <meta name="apple-mobile-web-app-title" content="Restock">
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem('roots_theme');
+      var theme = saved === 'light' || saved === 'dark'
+        ? saved
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+      var meta = document.getElementById('meta-theme-color');
+      if (meta) meta.setAttribute('content', theme === 'light' ? '#ece6d8' : '#16161a');
+    } catch (e) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
 <style>
+@font-face { font-family: 'Toni Grotesk'; src: url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display: swap; }
+
+/* Retail-admin token system + legacy aliases. See app.html for full docs. */
 :root {
-  --dk: #1a2314;
-  --dk2: #243017;            /* slightly lifted dark */
-  --lime: #ccd900;
-  --lime-2: #a8b800;          /* deeper lime for gradients */
-  --lime-text: #6d7a2a;
-  --green: #3d7a1e;
-  --oat: #f6f4ee;
-  --bg: #f4f0e6;              /* slightly warmer than original oat */
-  --card: #ffffff;
-  --border: #e6e2d6;
-  --border-soft: #ede8db;
-  --muted: #8a8678;
-  --muted-2: #b8b3a3;
-  /* Danger family — softened from raw #dc2626 to a terracotta tone so
-     destructive surfaces sit calmly in the warm-oat palette. The bright
-     red read as alarming/cheap next to the rest of the UI. */
-  --danger: #b94a4a;
-  --danger-2: #9a3535;
-  --danger-soft-bg: #f9ecec;
-  --danger-soft-border: rgba(185,74,74,.32);
-  --success: #16a34a;
-  --warn: #b85c00;
-  --shadow-sm: 0 1px 2px rgba(26,35,20,.04), 0 0 0 1px rgba(26,35,20,.04);
-  --shadow-md: 0 4px 12px rgba(26,35,20,.06), 0 0 0 1px rgba(26,35,20,.04);
-  --shadow-lg: 0 12px 32px rgba(26,35,20,.10), 0 0 0 1px rgba(26,35,20,.04);
+  --bg-app:     #16161a;
+  --bg-pane:    #1f1f24;
+  --bg-elev-1:  #25252b;
+  --bg-elev-2:  #2e2e35;
+  --bg-input:   #1a1a1f;
+  --bg-overlay: rgba(10, 10, 12, .72);
+  --line-soft-tok: rgba(255, 255, 255, .055);
+  --line-tok:      rgba(255, 255, 255, .09);
+  --line-strong:   rgba(255, 255, 255, .15);
+  --ring:          rgba(204, 217, 0, .35);
+  --text-1: #ecebe5;
+  --text-2: #aeaba2;
+  --text-3: #7d7a72;
+  --text-4: #56544f;
+  --accent:      #ccd900;
+  --accent-hi:   #dde858;
+  --accent-ink:  #16161a;
+  --success-color: #80c462;
+  --sh-1: 0 1px 2px rgba(0, 0, 0, .25);
+  --sh-2: 0 4px 16px rgba(0, 0, 0, .25);
+  --sh-3: 0 24px 60px rgba(0, 0, 0, .5);
+  --f-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', "PingFang SC", system-ui, sans-serif;
+  /* Legacy aliases — restock had a richer token set, mapped carefully */
+  --dk:          var(--bg-elev-2);
+  --dk2:         var(--bg-elev-1);
+  --lime:        var(--accent);
+  --lime-2:      #b3bf00;
+  --lime-text:   var(--accent);
+  --green:       var(--success-color);
+  --oat:         var(--bg-pane);
+  --bg:          var(--bg-app);
+  --card:        var(--bg-pane);
+  --border:      var(--line-tok);
+  --border-soft: var(--line-soft-tok);
+  --muted:       var(--text-3);
+  --muted-2:     var(--text-4);
+  --danger:      #e8556a;
+  --danger-2:    #c4435a;
+  --danger-soft-bg: rgba(232, 85, 106, .14);
+  --danger-soft-border: rgba(232, 85, 106, .35);
+  --success:     var(--success-color);
+  --warn:        #e9a35a;
+  --shadow-sm: var(--sh-1);
+  --shadow-md: var(--sh-2);
+  --shadow-lg: var(--sh-3);
   --sa-top: env(safe-area-inset-top, 0px);
   --sa-bot: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg-app:     #ece6d8;
+  --bg-pane:    #fbf8ee;
+  --bg-elev-1:  #f4efdf;
+  --bg-elev-2:  #e9e3d0;
+  --bg-input:   #fefcf3;
+  --bg-overlay: rgba(20, 20, 22, .42);
+  --line-soft-tok: rgba(30, 25, 5, .075);
+  --line-tok:      rgba(30, 25, 5, .16);
+  --line-strong:   rgba(30, 25, 5, .26);
+  --ring:          rgba(140, 152, 0, .38);
+  --text-1: #1a1a17;
+  --text-2: #43413a;
+  --text-3: #6a675c;
+  --text-4: #9a978c;
+  --accent-hi:  #b8c200;
+  --lime-text:  #6e7a00;
+  --sh-1: 0 1px 3px rgba(40, 30, 5, .09);
+  --sh-2: 0 6px 18px rgba(40, 30, 5, .10);
+  --sh-3: 0 24px 60px rgba(40, 30, 5, .22);
+  color-scheme: light;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; height: 100%; overscroll-behavior: none; -webkit-overflow-scrolling: touch; }
@@ -764,6 +825,39 @@ input:focus, textarea:focus { outline: none; }
   40%  { transform: scaleX(1); opacity: 1 }
   100% { transform: scaleX(1); opacity: 0 }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CHROME OVERRIDES — ported from /retail-admin. Layout untouched.
+   ═══════════════════════════════════════════════════════════════════════ */
+body { font-family: var(--f-sans); background: var(--bg-app); color: var(--text-1); }
+
+.head {
+  background: var(--bg-pane) !important;
+  color: var(--text-1) !important;
+  border-bottom: 1px solid var(--line-soft-tok);
+  box-shadow: none !important;
+}
+.head::after {
+  background: linear-gradient(90deg, transparent, rgba(204,217,0,.5) 30%, rgba(204,217,0,.5) 70%, transparent) !important;
+}
+
+/* Catch white surfaces in inline-styled chrome bits. */
+[style*="background:#fff"],
+[style*="background: #fff"],
+[style*="background:#ffffff"] { background: var(--bg-pane) !important; }
+[style*="border:1.5px solid var(--border)"] {
+  background: var(--bg-input) !important;
+  color: var(--text-1) !important;
+  border: 1px solid var(--line-tok) !important;
+}
+
+/* Generic surfaces that take --card. They'll auto-theme via alias, but
+   the box-shadows tuned for light backgrounds look heavy on dark; flatten. */
+[style*="box-shadow: var(--shadow-sm)"],
+[style*="box-shadow:var(--shadow-sm)"] { box-shadow: none !important; }
+
+input:focus, textarea:focus { box-shadow: 0 0 0 3px var(--ring); }
+
 </style>
 </head>
 <body>
@@ -1033,7 +1127,14 @@ window.addEventListener('appinstalled', () => {
   _connectEventStream();
   // SW update reload
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(reg => {
+      // Re-check sw.js whenever the device wakes / returns to the app. Installed
+      // PWAs otherwise only check on navigation (throttled ~24h), so a deploy
+      // could go unseen on a kiosk for a long time.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+    }).catch(() => {});
     navigator.serviceWorker.addEventListener('message', (e) => {
       if (e.data?.type === 'sw-updated') location.reload();
     });

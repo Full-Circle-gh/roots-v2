@@ -955,6 +955,15 @@ addColumn('products', 'tagline_cn',             'TEXT');
 // textareas — products that haven't been migrated to blocks fall back to
 // the textareas so there's no flag day.
 addColumn('products', 'description_blocks',     'TEXT');
+// Page colophon overrides — v1 design renders a single IP character + a
+// brand tagline as the page sign-off. By default we auto-pick the
+// character by product category and use "From Soil to Soul" as the line,
+// but the office can override either per product:
+//   colophon_character  — IP key like 'soilsoul' / 'skater' / 'kombucha-gang' / 'flex' / 'radishes' / 'mushroom' / 'peas' / 'onion' / 'broccoli' / 'hula'. Blank → auto-pick.
+//   colophon_tagline_*  — bilingual override of "From Soil to Soul". Blank → default.
+addColumn('products', 'colophon_character',     'TEXT');
+addColumn('products', 'colophon_tagline_en',    'TEXT');
+addColumn('products', 'colophon_tagline_cn',    'TEXT');
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_published ON products(is_published) WHERE is_published = 1'); } catch {}
 
 // ─── Flash sales (秒杀) ─────────────────────────────────────────────────────
@@ -1238,16 +1247,54 @@ try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_reviews_customer ON retail_
 // the wording without a migration.
 addColumn('retail_reviews', 'tags_json', 'TEXT');
 
-// Customer-initiated refund requests. Lightweight — 3 columns on the
-// existing retail_orders row, no separate table. The customer fires
-// /api/retail/orders/:id/refund-request which sets refund_requested_at +
-// refund_status='pending'. Admin reviews in /retail-admin/orders/:id and
-// either transitions the order to 'refunded' (approves) or sets
-// refund_status='rejected' with a note.
-addColumn('retail_orders', 'refund_requested_at', 'DATETIME');
-addColumn('retail_orders', 'refund_reason',       'TEXT');
-addColumn('retail_orders', 'refund_status',       'TEXT');     // null | 'pending' | 'approved' | 'rejected'
-addColumn('retail_orders', 'refund_review_note',  'TEXT');     // staff note shown to customer
+// Customer-initiated refund requests with multi-step processing workflow.
+// States on retail_orders.refund_status:
+//   null | pending | reviewing | approved | paid | rejected | withdrawn
+//
+// 'pending' is the customer-just-filed state. Name kept as 'pending' rather
+// than 'requested' for back-compat with mini-app clients that predate the
+// multi-step workflow (they only knew 'pending' / 'approved' / 'rejected').
+//
+// Customer files via /api/retail/orders/:id/refund-request which captures
+// reason, amount (partial), and optional per-line items (refund_lines_json).
+// Staff process via /api/retail-admin/orders/:id/refund/{review,approve,reject,payout}.
+// Audit log lives in retail_refund_events — one row per state change.
+addColumn('retail_orders', 'refund_requested_at',     'DATETIME');
+addColumn('retail_orders', 'refund_reason',           'TEXT');
+addColumn('retail_orders', 'refund_status',           'TEXT');
+addColumn('retail_orders', 'refund_review_note',      'TEXT');
+addColumn('retail_orders', 'refund_amount_requested', 'REAL');     // null = full order
+addColumn('retail_orders', 'refund_amount_approved',  'REAL');
+addColumn('retail_orders', 'refund_amount_paid',      'REAL');
+addColumn('retail_orders', 'refund_lines_json',       'TEXT');     // [{item_id, qty, amount}]
+addColumn('retail_orders', 'refund_payout_method',    'TEXT');     // wechat|alipay|bank|wallet|store_credit|other
+addColumn('retail_orders', 'refund_payout_ref',       'TEXT');     // provider txn id or freeform
+addColumn('retail_orders', 'refund_reviewed_at',      'DATETIME');
+addColumn('retail_orders', 'refund_approved_at',      'DATETIME');
+addColumn('retail_orders', 'refund_paid_at',          'DATETIME');
+addColumn('retail_orders', 'refund_reviewer_id',      'INTEGER');
+addColumn('retail_orders', 'refund_payer_id',         'INTEGER');
+
+// Any rows mislabeled 'requested' from the prior migration version snap
+// back to 'pending'. Safe no-op if no such rows exist.
+try {
+  db.prepare("UPDATE retail_orders SET refund_status = 'pending' WHERE refund_status = 'requested'").run();
+} catch {}
+
+db.exec(`CREATE TABLE IF NOT EXISTS retail_refund_events (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id    INTEGER NOT NULL,
+  event       TEXT NOT NULL,   -- requested | reviewing | approved | rejected | paid | withdrawn | note
+  amount      REAL,            -- relevant amount for this step (null = n/a)
+  note        TEXT,
+  user_id     INTEGER,         -- staff user (null if customer-initiated)
+  customer_id INTEGER,         -- customer (null if staff-initiated)
+  meta_json   TEXT,            -- freeform: payout method/ref, line breakdown, etc.
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (order_id) REFERENCES retail_orders(id) ON DELETE CASCADE
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_refund_events_order ON retail_refund_events(order_id)'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_refund_events_created ON retail_refund_events(created_at)'); } catch {}
 addColumn('retail_vouchers', 'is_public',         'INTEGER DEFAULT 0');  // 1 = browseable, no code needed
 addColumn('retail_vouchers', 'title_en',          'TEXT');               // customer-facing label for public coupons
 addColumn('retail_vouchers', 'title_cn',          'TEXT');
@@ -1282,6 +1329,20 @@ db.exec(`CREATE TABLE IF NOT EXISTS retail_media (
   uploaded_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (uploaded_by) REFERENCES users(id)
 )`);
+addColumn('retail_media', 'alt_text',  'TEXT');
+addColumn('retail_media', 'tags',      "TEXT DEFAULT '[]'");
+addColumn('retail_media', 'folder_id', 'INTEGER');
+
+db.exec(`CREATE TABLE IF NOT EXISTS retail_media_folders (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  parent_id   INTEGER,                  -- nested folders (NULL = top-level)
+  sort_order  INTEGER DEFAULT 0,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (parent_id) REFERENCES retail_media_folders(id) ON DELETE SET NULL
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_media_folder_id ON retail_media(folder_id)'); } catch {}
 
 // Seed a default ONBOARDING layout — first-launch customers in the mini
 // app see this. The office can edit it later in /cms → Onboarding page.
@@ -2058,6 +2119,78 @@ db.exec(`
 // it. Optional (NULL = no target set yet).
 addColumn('retail_store_stock', 'restock_target', 'INTEGER');
 
+// Per-product substitutes — admin-curated list of "if we're out of X,
+// these are acceptable swaps". Used by the mini-app's 5-option fallback
+// flow when the customer picks "Replace missing item". Order-aware: the
+// mini-app shows these first, then auto-fills with same-category in-stock
+// products at the routing store if the curated list is empty.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_product_substitutes (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id            INTEGER NOT NULL,
+    substitute_product_id INTEGER NOT NULL,
+    sort_order            INTEGER DEFAULT 0,
+    created_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(product_id, substitute_product_id),
+    FOREIGN KEY (product_id)            REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (substitute_product_id) REFERENCES products(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_subs_product ON retail_product_substitutes(product_id, sort_order);
+`);
+
+// ── retail_visits ──────────────────────────────────────────────────
+// Lightweight traffic log for the mini app. One row per app-open
+// (onShow) and optionally per page view, written best-effort by the
+// public POST /api/retail/track endpoint. customer_id is NULL for
+// anonymous opens (pre-login / silent-auth not yet resolved); openid is
+// captured when the app already knows it. session_id groups events from
+// a single app launch so we can count unique sessions, not just hits.
+// scene is WeChat's launch scene code (how they entered: scan, share,
+// ad, etc.). This table powers the dashboard's traffic + conversion
+// metrics; orders/customers cover the rest.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_visits (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id  INTEGER,                 -- NULL = anonymous / pre-login
+    openid       TEXT,                    -- known when available, even sans customer row
+    session_id   TEXT,                    -- per-launch id from the mini app
+    page         TEXT,                    -- route, e.g. 'pages/home/home'
+    scene        INTEGER,                 -- WeChat launch scene code
+    referrer     TEXT,                    -- prior in-app page, if any
+    user_agent   TEXT,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_visits_created  ON retail_visits(created_at);
+  CREATE INDEX IF NOT EXISTS idx_retail_visits_customer ON retail_visits(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_retail_visits_session  ON retail_visits(session_id);
+`);
+
+// Order-level columns for the 4-option / 5-option fallback flow:
+//   fallback_choice          → which option the customer picked
+//   awaiting_restock_pids    → JSON array of product_ids the order is
+//                              waiting on (only set when fallback_choice
+//                              = 'wait_for_restock')
+addColumn('retail_orders', 'fallback_choice',         'TEXT');
+addColumn('retail_orders', 'awaiting_restock_pids',   'TEXT');
+// Item-level: when this row is a substitute, point back to the original
+// product the customer was trying to buy. Lets us show "replaces X" on
+// receipts and analytics.
+addColumn('retail_order_items', 'replaced_for_product_id', 'INTEGER');
+
+// Seed default GZ-express excluded districts (editable from Admin →
+// Integrations later). Customers in these districts get the simple
+// fallback-yes/no modal even on right-away slots — the 5-option flow
+// only kicks in for districts your same-day delivery actually serves.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_gz_excluded_districts_v1');
+  if (!ran) {
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES (?, ?)")
+      .run('routing.gz_express_excluded_districts', JSON.stringify(['番禺区', '花都区']));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_gz_excluded_districts_v1');
+  }
+} catch (e) { console.error('[migration seed_gz_excluded_districts_v1]', e); }
+
 // Geocoded coordinates on customer addresses. Populated in the background
 // by /lib/geocode.js when a Tencent Maps key is configured (TENCENT_MAPS_KEY
 // in .env). NULL = not geocoded yet or geocoding failed; routing falls
@@ -2141,6 +2274,75 @@ try {
     db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_reservation_ttl_v1');
   }
 } catch (e) { console.error('[migration seed_reservation_ttl_v1]', e); }
+
+// Shipping-spec alignment (2026-05-20):
+//   • Expand gz_express_excluded_districts to the full 5-district set so
+//     same-day delivery only the simple yes/no fallback modal kicks in for
+//     all GZ "exception" districts (番禺/花都/南沙/从化/增城).
+//   • Ensure 花都区 has a zone row (was missing in production) with the
+//     spec defaults: ¥25 / free ¥199 / +¥30 same-day surcharge / day-only
+//     chip for same-day.
+//   • Backfill same_day_surcharge on the existing exception zones if and
+//     only if currently 0 (preserves any admin override).
+//   • Holiday-mode storefront_config keys (default OFF + message) so the
+//     retail-admin Delivery tab can pause shipping with a custom banner
+//     without code changes.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('shipping_spec_alignment_v1');
+  if (!ran) {
+    // 1. Expand the excluded-districts list
+    db.prepare("INSERT OR REPLACE INTO storefront_config (key, value_json) VALUES (?, ?)")
+      .run('routing.gz_express_excluded_districts',
+           JSON.stringify(['番禺区', '花都区', '南沙区', '从化区', '增城区']));
+
+    // 2. Add 花都区 zone if missing
+    const huadu = db.prepare(
+      `SELECT id FROM retail_delivery_zones WHERE zone_type = 'gz_district' AND match_district = ?`
+    ).get('花都区');
+    if (!huadu) {
+      db.prepare(
+        `INSERT INTO retail_delivery_zones
+           (zone_type, name_en, name_cn, match_district, base_fee, max_fee, free_threshold,
+            packing_fee_per_item, packing_fee_cap, is_active, sort_order,
+            same_day_allowed, same_day_surcharge, min_lead_days, max_lead_days,
+            slot_start_hour, slot_end_hour, slot_duration_minutes, day_only)
+         VALUES ('gz_district', ?, ?, ?, 25, NULL, 199, 0, NULL, 1, 0,
+                 1, 30, 0, 14, 10, 20, 120, 1)`
+      ).run('Huadu', '花都区', '花都区');
+      console.log('[migration shipping_spec_alignment_v1] inserted 花都区 zone');
+    }
+
+    // 3. Backfill same_day_surcharge on exception zones (only if currently 0)
+    //    so existing admin edits stick.
+    const surcharges = [
+      { district: '番禺区', amount: 20 },
+      { district: '南沙区', amount: 40 },
+      { district: '从化区', amount: 40 },
+      { district: '增城区', amount: 40 },
+    ];
+    for (const s of surcharges) {
+      db.prepare(
+        `UPDATE retail_delivery_zones
+            SET same_day_surcharge = ?, day_only = 1, same_day_allowed = 1
+          WHERE zone_type = 'gz_district'
+            AND match_district = ?
+            AND (same_day_surcharge IS NULL OR same_day_surcharge = 0)`
+      ).run(s.amount, s.district);
+    }
+
+    // 4. Holiday-mode keys (default OFF + customizable message)
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES (?, ?)")
+      .run('delivery.holidayMode', JSON.stringify(false));
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES (?, ?)")
+      .run('delivery.holidayMessage', JSON.stringify({
+        en: "We're closed for a short holiday — your order will ship as soon as we're back. Thank you for your patience!",
+        cn: '我们短暂休假中 — 订单将在我们回来后第一时间发货。感谢您的耐心等待！',
+      }));
+
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('shipping_spec_alignment_v1');
+    console.log('[migration] shipping_spec_alignment_v1: expanded excluded districts, added 花都区, backfilled surcharges, seeded holiday-mode keys');
+  }
+} catch (e) { console.error('[migration shipping_spec_alignment_v1]', e); }
 
 // Backfill retail_customers.lifetime_spend from existing orders. The column
 // Affiliate / refer-a-friend. Each customer gets a stable referral_code
@@ -2283,6 +2485,26 @@ db.exec(`
     FOREIGN KEY (customer_id) REFERENCES retail_customers(id)    ON DELETE CASCADE
   );
   CREATE INDEX IF NOT EXISTS idx_retail_poll_votes_customer ON retail_poll_votes(customer_id, created_at);
+`);
+
+// ─────────────────────────────────────────────────────────────────────────
+// FAVORITES — saved / wishlisted products per customer.
+// Drives the Mini App Favorites page (NO. 21) and the home-page
+// "favorites" CMS block. One row per (customer_id, product_id); duplicates
+// are no-ops on the API layer.
+// ─────────────────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_customer_favorites (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id     INTEGER NOT NULL,
+    product_id      INTEGER NOT NULL,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(customer_id, product_id),
+    FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id)  REFERENCES products(id)         ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_favorites_customer ON retail_customer_favorites(customer_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_retail_favorites_product  ON retail_customer_favorites(product_id);
 `);
 
 // Activity log retention — purge entries older than ACTIVITY_LOG_RETENTION_DAYS

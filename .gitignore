@@ -21,6 +21,11 @@ data/roots-pre-*.db*
 *.swp
 .idea/
 .vscode/
+.claude/
+CLAUDE.md
+AGENTS.md
+.cursor/
+.aider*
 
 # Logs
 *.log

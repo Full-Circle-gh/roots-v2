@@ -1,0 +1,115 @@
+<view class="page">
+  <!-- Header — kicker + bold serif title, count tile on the right -->
+  <view class="header">
+    <view class="header-text">
+      <view class="kicker f-toni">{{copy.kicker}}</view>
+      <view class="title f-bear">{{copy.title}}</view>
+    </view>
+    <view class="count-pill">
+      <view class="count-pill-val f-gothic">{{totalCount}}</view>
+      <view class="count-pill-lbl f-toni">{{copy.itemsWord}}</view>
+    </view>
+  </view>
+
+  <!-- Category chips + view-toggle -->
+  <view class="chip-row">
+    <scroll-view class="chips" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+      <view wx:for="{{cats}}" wx:key="id"
+            class="chip {{activeCat === item.id ? 'on' : ''}} f-gothic"
+            data-id="{{item.id}}" bindtap="onCatTap">{{item.label}}</view>
+    </scroll-view>
+    <view class="view-toggle">
+      <view class="vt-btn {{view === 'grid' ? 'on' : ''}}" data-view="grid" bindtap="onViewTap">
+        <view class="vt-grid">
+          <view class="vt-grid-cell"></view>
+          <view class="vt-grid-cell"></view>
+          <view class="vt-grid-cell"></view>
+          <view class="vt-grid-cell"></view>
+        </view>
+      </view>
+      <view class="vt-btn {{view === 'list' ? 'on' : ''}}" data-view="list" bindtap="onViewTap">
+        <view class="vt-list">
+          <view class="vt-list-row"></view>
+          <view class="vt-list-row"></view>
+          <view class="vt-list-row"></view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- Section meta line -->
+  <view wx:if="{{visible.length}}" class="section-meta f-toni">
+    <text>{{visible.length}} {{visible.length === 1 ? copy.itemWord : copy.itemsWord}}</text>
+    <text class="section-meta-right">{{copy.sortRecent}}</text>
+  </view>
+
+  <!-- Empty state -->
+  <view wx:if="{{!visible.length}}" class="empty">
+    <view class="empty-title f-bear">{{copy.emptyTitle}}</view>
+    <view class="empty-sub f-aleo">{{copy.emptySub}}</view>
+  </view>
+
+  <!-- GRID view -->
+  <view wx:elif="{{view === 'grid'}}" class="grid">
+    <view wx:for="{{visible}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="onProductTap">
+      <view class="card-img {{item.soldOut ? 'is-out' : ''}}">
+        <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+        <view class="heart-pip" data-id="{{item.id}}" catchtap="onUnfavorite">
+          <view class="heart-glyph">♥</view>
+        </view>
+        <view wx:if="{{item.priceDrop}}" class="tag-drop f-gothic">−¥{{item.priceDrop}}</view>
+        <view wx:if="{{item.soldOut}}" class="tag-out f-gothic">{{copy.soldOut}}</view>
+      </view>
+      <view class="card-name f-bear">{{item.name}}</view>
+      <view wx:if="{{item.subLine}}" class="card-sub f-yuan">{{item.subLine}}</view>
+      <view class="card-foot">
+        <text class="card-price f-gothic">{{item.priceDisplay}}</text>
+        <view wx:if="{{!item.soldOut}}" class="quick-add" data-id="{{item.id}}" catchtap="onQuickAdd">
+          <text class="quick-add-glyph f-bear">+</text>
+        </view>
+        <view wx:else class="quick-add quick-add-disabled">
+          <text class="quick-add-glyph f-bear">⌛</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- LIST view -->
+  <view wx:else class="list">
+    <view wx:for="{{visible}}" wx:key="id" class="row" data-id="{{item.id}}" bindtap="onProductTap">
+      <view class="row-img {{item.soldOut ? 'is-out' : ''}}">
+        <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+      </view>
+      <view class="row-meta">
+        <view class="row-name f-bear">{{item.name}}</view>
+        <view wx:if="{{item.subLine}}" class="row-sub f-yuan">{{item.subLine}}</view>
+        <view class="row-tags">
+          <text class="row-saved f-toni">{{item.savedDisplay}}</text>
+          <text wx:if="{{item.priceDrop}}" class="row-drop f-gothic">−¥{{item.priceDrop}}</text>
+          <text wx:if="{{item.soldOut}}" class="row-out f-gothic">{{copy.soldOut}}</text>
+        </view>
+      </view>
+      <view class="row-right">
+        <text class="row-price f-gothic">{{item.priceDisplay}}</text>
+        <view wx:if="{{!item.soldOut}}" class="quick-add" data-id="{{item.id}}" catchtap="onQuickAdd">
+          <text class="quick-add-glyph f-bear">+</text>
+        </view>
+        <view wx:else class="quick-add quick-add-disabled">
+          <text class="quick-add-glyph f-bear">⌛</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- Sticky add-all bar — only when ≥1 in-stock item is currently visible -->
+  <view wx:if="{{inStockCount > 0}}" class="sticky-bar">
+    <view class="sticky-text">
+      <view class="sticky-kicker f-toni">{{copy.inStockKicker}} · {{inStockCount}}</view>
+      <view class="sticky-total f-bear">{{inStockTotal}}</view>
+    </view>
+    <view class="sticky-cta f-gothic" bindtap="onAddAll">{{copy.addAll}} →</view>
+  </view>
+
+  <cs-button variant="fab" placement="favorites"></cs-button>
+  <popup-manager page="favorites"></popup-manager>
+</view>

@@ -7,6 +7,7 @@ const api    = require('../../utils/api');
 const cart   = require('../../utils/cart');
 const config = require('../../utils/config');
 const lang   = require('../../utils/lang');
+const theme  = require('../../utils/theme');
 
 Page({
   data: {
@@ -14,11 +15,20 @@ Page({
     products: [],
     categories: [],
     flashSales: [],
+    // Top-selling lists keyed by `${channel}|${window}|${limit}`. Only the
+    // tuples referenced by product_grid blocks with source_type='top_selling'
+    // get fetched — usually 0–2 per page.
+    topProducts: {},
     affiliate: null,
     polls: [],
     customer: null,   // { nickname, points_balance, ... } — feeds greeting block
+    favorites: [],    // customer's saved products — feeds favorites_block
     lang: 'en',
     loading: true,
+    // User-configured page background, set in /cms → Theme picker. Empty
+    // string means "use the page-wxss default" (oat). Updated on every
+    // onShow + refresh so a publish-then-pull-down sees the new colour.
+    themeBg: '',
   },
 
   switchLang(e) {
@@ -56,7 +66,11 @@ Page({
     const patch = {};
     if (app.globalData.lang !== this.data.lang) patch.lang = app.globalData.lang;
     if (app.globalData.customer !== this.data.customer) patch.customer = app.globalData.customer || null;
+    const bg = theme.getPageBg(app);
+    if (bg !== this.data.themeBg) patch.themeBg = bg;
     if (Object.keys(patch).length) this.setData(patch);
+    const tb = this.getTabBar && this.getTabBar();
+    if (tb && tb.setSelected) tb.setSelected('pages/home/home');
   },
 
   async onPullDownRefresh() {
@@ -71,7 +85,7 @@ Page({
     const app = getApp();
     const hasToken = !!(app?.globalData?.token);
     try {
-      const [cfg, prods, cats, flash, aff, polls] = await Promise.all([
+      const [cfg, prods, cats, flash, aff, polls, favs] = await Promise.all([
         config.load(force),
         api.get('/api/retail/products?limit=100').catch(() => []),
         api.get('/api/retail/categories').catch(() => []),
@@ -80,20 +94,55 @@ Page({
         // Polls feed voting_block in auto-pull mode. Requires auth, so
         // skip on first launch — block will show stub / hide as configured.
         hasToken ? api.get('/api/retail/polls').catch(() => []) : Promise.resolve([]),
+        // Favorites feed favorites_block. Authed-only — anonymous users
+        // hit the block's empty state (or it auto-hides).
+        hasToken ? api.get('/api/retail/favorites').catch(() => []) : Promise.resolve([]),
       ]);
+      const layout = cfg?.home?.layout || [];
       this.setData({
-        layout: cfg?.home?.layout || [],
+        layout,
         products: Array.isArray(prods) ? prods : (prods?.data || []),
         categories: Array.isArray(cats) ? cats : (cats?.data || []),
         flashSales: Array.isArray(flash) ? flash : (flash?.data || []),
         affiliate: aff || null,
         polls: Array.isArray(polls) ? polls : (polls?.data || []),
+        favorites: Array.isArray(favs) ? favs : (favs?.data || []),
+        themeBg: theme.getPageBg(app),
         loading: false,
       });
+      // Fire-and-forget top-seller fetches for any blocks that need them.
+      // Setting topProducts after data lands triggers the block-renderer
+      // observer and the products appear in place.
+      this._fetchTopProductsFor(layout);
     } catch (e) {
       console.warn('[home] refresh failed:', e.message);
       this.setData({ loading: false });
     }
+  },
+
+  // Walk the layout looking for product_grid blocks that source from
+  // top sellers, build the unique set of (channel|window|limit) tuples,
+  // fetch each once, and merge results into data.topProducts.
+  async _fetchTopProductsFor(layout) {
+    const keys = new Set();
+    (layout || []).forEach(b => {
+      if (b.type !== 'product_grid' || b.source_type !== 'top_selling') return;
+      const key = `${b.top_channel || 'combined'}|${b.top_window || '7d'}|${b.limit || 6}`;
+      keys.add(key);
+    });
+    if (!keys.size) return;
+    const next = { ...(this.data.topProducts || {}) };
+    await Promise.all([...keys].map(async key => {
+      if (next[key]) return;  // already loaded this render cycle
+      const [channel, window, limit] = key.split('|');
+      try {
+        const res = await api.get(`/api/retail/products/top?channel=${encodeURIComponent(channel)}&window=${encodeURIComponent(window)}&limit=${encodeURIComponent(limit)}`);
+        next[key] = Array.isArray(res) ? res : (res?.data || []);
+      } catch {
+        next[key] = [];
+      }
+    }));
+    this.setData({ topProducts: next });
   },
 
   // Inline vote cast from a voting_block. Posts the vote and refreshes
@@ -186,6 +235,7 @@ Page({
     if (t === 'faq')        return wx.navigateTo({ url: '/pages/faq/faq' });
     if (t === 'affiliate')  return wx.navigateTo({ url: '/pages/affiliate/affiliate' });
     if (t === 'topup')      return wx.navigateTo({ url: '/pages/topup/topup' });
+    if (t === 'favorites')  return wx.navigateTo({ url: '/pages/favorites/favorites' });
     // Generic CMS-driven pages — same renderer as home, just different layout
     if (t === 'promotions' || t === 'categories') {
       return wx.navigateTo({ url: '/pages/layout/layout?page=' + t });

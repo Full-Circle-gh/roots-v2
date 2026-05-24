@@ -413,6 +413,26 @@ You can read EVERY table in the database. If a question is about Roots's data �
 
 **Composite**: daily_brief (full audit), get_app_help (in-app guidance).
 
+**Mini-app design** (for the WeChat mini-app editor at /cms): design_check — review a page's brand colours, block layout, text contrast, tab-bar palette. Returns findings + the brand-palette token list + plain-English block & field names. Use this when the user asks "review my design", "does this look professional", "suggest palette fixes", or wants help with Design Check warnings shown in /cms.
+
+**Audience for these replies is a NON-DESIGNER store owner.** They read the reply inside a small drawer in /cms. They do NOT know what \`bg_color\`, \`fg_color\`, or \`panel_fg_color\` mean. They don't read block IDs like \`bj2rj2nk\`. They don't care about WCAG ratios in isolation — they want to know what to click and why. Follow these rules **strictly**:
+
+1. **Order fixes top-to-bottom by where the block sits on the page.** The tool returns \`block_summary\` with a \`position\` field (1 = topmost). Walk findings in ascending position. If you skip blocks, the owner gets lost scrolling.
+2. **Use the \`block_label_en\` / \`block_label_cn\` from the tool output** — "Hero banner", "Featured product" — never the raw type like \`hero_banner\` or the block ID.
+3. **Use the field's friendly name** from \`friendly_names.fields\`: say "background colour" or "card background", not \`bg_color\` / \`card_bg_color\`. Backticks only around the brand TOKEN itself (e.g. \`forest-kale\`), so the owner can copy-paste it.
+4. **Phrase tokens with their friendly name first**, token in backticks second: "switch the background to **Forest** (\`forest-kale\`)" — never just "switch to \`forest-kale\`".
+5. **Plain-language reasons.** Replace designer-speak. Bad: "creates visual rhythm", "undifferentiated cream block", "brand-forward first impression". Good: "the two blocks look almost the same right now, this gives them a clear line between them" / "the page opens with a stronger first colour so it catches the eye".
+6. **Recommend brand TOKENS only** (from \`palette_catalog\` or \`brand_palette\`). Never invent hex codes. Tokens are the only thing the editor persists cleanly.
+7. **Bilingual but compact.** EN for the main text, then a single short 中文 paragraph at the end summarising the fixes. Don't translate line-by-line, don't double up.
+8. **Each fix MUST be a tool call.** Before writing the prose for a fix, call \`propose_design_swap\` once with the concrete \`{block_id, field, new_token, reason_en, reason_cn}\`. This surfaces an **Apply** button in the editor — without the tool call, the owner sees prose with no button and clicking does nothing. The frontend treats your prose as commentary, the tool calls as the actionable fixes. **Order**: call them in top-to-bottom page order (lowest \`position\` first), one tool call → one prose paragraph, repeat. Skip writing prose for any fix where the tool returned an error.
+9. **Skeleton for each fix's prose** (one short paragraph per tool call):
+   - **"Fix 1 — [Block name] (position N): change its [friendly field name] to [Friendly Token Name] (\`token\`)"**
+   - One plain-words sentence on why.
+   - If it resolves a rules-engine finding, end the line with "✅ this clears the warning the editor showed you."
+10. **If everything looks unified, say so in one line.** Don't call \`propose_design_swap\` just to look helpful — every tool call becomes a button the owner sees.
+11. **If design_check returns an error field** (e.g. \`{ error: 'design_check_failed', message: '…' }\`), say plainly: "The design-check tool hit a bug — I can't review the page right now. The team has been pinged (logs are captured)." Do NOT speculate ("likely a colour field is blank", "probably a missing token", etc.). The error message often points at the real cause; you may quote it verbatim in a code block. Never invent block names or instructions in the error path. Do NOT call \`propose_design_swap\` after a design_check error — you don't have the block_ids to validate against.
+12. **If propose_design_swap returns an error**, drop that fix silently and move on. Don't write the prose for a fix the tool rejected.
+
 If you're tempted to say "that data isn't accessible to me" — **you're wrong**. Try a different tool. Try a broader query. Try database_overview to see what's there. Refusing to answer when you have full read access is the worst possible failure mode.
 
 ══════════════════════════════════════════════════════════════════════
@@ -1544,6 +1564,33 @@ const TOOLS_STATIC = [
     description: 'List physical market locations used by the POS. Returns id, name (EN+CN), location, GPS lat/lng, active status, sales rolled-up over the last 30 days.',
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'propose_design_swap',
+    description: 'Propose ONE concrete colour change to a specific block on the current /cms page. Each call surfaces an "Apply" button in the editor for the owner to click — do NOT call this unless you intend the change to be one-click applicable. Call this BEFORE writing the matching fix in prose, once per fix, in top-to-bottom page order. The tool validates that the block exists, the field is a real colour field for that block type, and new_token is in the brand palette; it returns the friendly block & field labels so your prose can reference them. The tool does NOT mutate anything by itself — the owner mutates by clicking the Apply button.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        page:       { type: 'string', enum: ['home','promotions','membership','categories','onboarding'], default: 'home' },
+        block_id:   { type: 'string', description: 'The block.id from design_check\'s block_summary (e.g. "bj2rj2nk"). Required.' },
+        field:      { type: 'string', enum: ['bg_color','fg_color','panel_bg_color','panel_fg_color','card_bg_color','card_fg_color','accent_color','divider_color','open_color','closed_color'], description: 'Which colour field to change.' },
+        new_token:  { type: 'string', description: 'New brand token, e.g. "forest-kale". Must be one of the keys in design_check\'s brand_palette.' },
+        reason_en:  { type: 'string', description: 'One short sentence (≤140 chars) explaining the fix in plain English — non-designer audience.' },
+        reason_cn:  { type: 'string', description: 'Same reason, one short 中文 sentence.' },
+      },
+      required: ['block_id','field','new_token','reason_en','reason_cn'],
+    },
+  },
+  {
+    name: 'design_check',
+    description: 'Run a deterministic design review of the mini-app editor for a given page. Returns the brand_palette (token → hex map), page_bg, tab-bar colours, block_summary (every block with its colour fields resolved to both token and hex), and findings (low contrast, muddy adjacent backgrounds, too many accents, off-brand tab-bar colour) each with severity. Use when the user asks for palette suggestions, "does this look professional", "review my design", or how to fix Design Check items shown in /cms. When recommending fixes, pick brand-palette TOKENS (e.g. "forest-kale", "oat-milk") rather than inventing hex codes — the editor stores tokens and only those persist correctly. The bilingual mini-app admin reads results in EN · 中文, so present suggestions in both.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        page: { type: 'string', enum: ['home','promotions','membership','categories','onboarding'], default: 'home', description: 'Which CMS page to review.' },
+        use:  { type: 'string', enum: ['draft','live'], default: 'draft', description: 'draft = what the author is editing in /cms (default); live = what customers see right now.' },
+      },
+    },
+  },
 ];
 
 // Build the per-request tool list with the get_app_help enum populated from
@@ -2211,7 +2258,432 @@ const TOOL_HANDLERS = {
       },
     };
   },
+
+  // Validates a swap proposal against the current draft + brand palette
+  // and returns friendly labels for the UI. Does NOT mutate — the editor
+  // applies the change when the owner clicks the surfaced "Apply" button.
+  propose_design_swap: ({ page = 'home', block_id, field, new_token, reason_en, reason_cn } = {}) => {
+    try {
+      const ALLOWED_PAGES = new Set(['home','promotions','membership','categories','onboarding']);
+      if (!ALLOWED_PAGES.has(page)) page = 'home';
+      if (!block_id) return { error: 'missing_block_id' };
+      if (!field) return { error: 'missing_field' };
+      if (!new_token) return { error: 'missing_new_token' };
+
+      const layoutKey = `cms.draft.${page}_layout`;
+      let blocks = [];
+      const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(layoutKey);
+      if (row) { try { const v = JSON.parse(row.value_json); if (Array.isArray(v)) blocks = v; } catch {} }
+
+      const block = blocks.find(b => b && b.id === block_id);
+      if (!block) return { error: 'block_not_found', detail: `No block with id "${block_id}" on page "${page}".` };
+
+      const fields = DC_FIELDS[block.type] || {};
+      const knownFields = new Set(Object.values(fields));
+      if (!knownFields.has(field)) {
+        return { error: 'invalid_field_for_block', detail: `Block type "${block.type}" doesn't have a "${field}" colour field. Valid fields: ${[...knownFields].join(', ') || '(none)'}.` };
+      }
+      if (!DC_HEX[new_token]) {
+        return { error: 'invalid_token', detail: `"${new_token}" is not in the brand palette. Pick one of: ${Object.keys(DC_HEX).join(', ')}.` };
+      }
+
+      const currentToken = block[field] ?? null;
+      const blockLabel  = DC_BLOCK_LABELS[block.type] || { en: block.type, cn: block.type };
+      const fieldLabel  = DC_FIELD_LABELS[field]      || { en: field, cn: field };
+      const tokenLabel  = DC_TOKEN_LABELS[new_token]  || { en: new_token, cn: new_token };
+      const currentLabel = currentToken && DC_TOKEN_LABELS[currentToken]
+        ? DC_TOKEN_LABELS[currentToken]
+        : (currentToken ? { en: currentToken, cn: currentToken } : { en: '(none — inherits page background)', cn: '(无 — 跟随页面背景)' });
+
+      // Position in draft (1-indexed, only counting blocks with a known type)
+      let position = 0;
+      for (let i = 0; i < blocks.length; i++) {
+        if (blocks[i] && blocks[i].type) {
+          position += 1;
+          if (blocks[i].id === block_id) break;
+        }
+      }
+
+      return {
+        ok: true,
+        page,
+        block_id,
+        block_type: block.type,
+        block_label_en: blockLabel.en,
+        block_label_cn: blockLabel.cn,
+        position,
+        field,
+        field_label_en: fieldLabel.en,
+        field_label_cn: fieldLabel.cn,
+        from_token: currentToken,
+        from_token_label_en: currentLabel.en,
+        from_token_label_cn: currentLabel.cn,
+        from_hex: currentToken && DC_HEX[currentToken] ? DC_HEX[currentToken] : null,
+        to_token: new_token,
+        to_token_label_en: tokenLabel.en,
+        to_token_label_cn: tokenLabel.cn,
+        to_hex: DC_HEX[new_token],
+        reason_en: reason_en || '',
+        reason_cn: reason_cn || '',
+      };
+    } catch (err) {
+      console.error('[propose_design_swap] failed:', err && err.stack || err);
+      return { error: 'propose_swap_failed', message: (err && err.message) || String(err) };
+    }
+  },
+
+  design_check: ({ page = 'home', use = 'draft' } = {}) => {
+    try {
+    const ALLOWED = new Set(['home','promotions','membership','categories','onboarding']);
+    if (!ALLOWED.has(page)) page = 'home';
+    const layoutKey = use === 'live' ? `${page}.layout` : `cms.draft.${page}_layout`;
+    let blocks = [];
+    try {
+      const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(layoutKey);
+      if (row) { const v = JSON.parse(row.value_json); if (Array.isArray(v)) blocks = v; }
+    } catch {}
+
+    // Read theme + tab-bar config off storefront_config. These are dotted
+    // keys, each row carries its own JSON value (not nested under a parent).
+    function readKey(k) {
+      try {
+        const r = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(k);
+        if (!r) return null;
+        return JSON.parse(r.value_json);
+      } catch { return null; }
+    }
+    const pageBgToken = readKey('theme.page_bg');
+    const tabBarCfg = {
+      theme:         readKey('tabBar.theme') || 'oat',
+      iconStyle:     readKey('tabBar.iconStyle') || 'outline',
+      color:         readKey('tabBar.color') || '',
+      selectedColor: readKey('tabBar.selectedColor') || '',
+    };
+
+    const result = runDesignCheck(blocks, pageBgToken, tabBarCfg);
+    // Build a "palette catalog" Sprout can read off when phrasing
+    // suggestions. Each entry has both the technical token (what the
+    // editor stores) AND the friendly English/Chinese name + hue
+    // description. Sprout MUST quote the token in code-style backticks
+    // so the owner sees exactly what to pick in the editor, but can
+    // refer to it in prose with the friendly name.
+    const paletteCatalog = Object.entries(DC_HEX).map(([tok, hex]) => {
+      const lbl = DC_TOKEN_LABELS[tok] || { en: tok, cn: tok, sub_en: '', sub_cn: '' };
+      return {
+        token: tok,
+        hex,
+        name_en: lbl.en,
+        name_cn: lbl.cn,
+        description_en: lbl.sub_en,
+        description_cn: lbl.sub_cn,
+        is_neutral: DC_NEUTRALS.has(tok),
+      };
+    });
+    return {
+      page, use,
+      brand_palette: DC_HEX,           // kept for back-compat
+      palette_catalog: paletteCatalog, // preferred — has friendly names
+      neutral_tokens: [...DC_NEUTRALS],
+      // Plain-English / 中文 names for every block type + colour field.
+      // Sprout uses these when speaking to the owner — they read
+      // "Hero banner's background" not "hero_banner.panel_bg_color".
+      friendly_names: {
+        blocks: DC_BLOCK_LABELS,
+        fields: DC_FIELD_LABELS,
+      },
+      ...result,
+    };
+    } catch (err) {
+      // Surface real diagnostics so Sprout (and the logs) see the actual
+      // failure instead of hallucinating. The model's system prompt tells
+      // it not to guess at causes when this field is present.
+      console.error('[design_check] tool failed:', err && err.stack || err);
+      return {
+        error: 'design_check_failed',
+        message: (err && err.message) || String(err),
+        page, use,
+      };
+    }
+  },
 };
+
+// ─────────────────────────────────────────────────────────────────────
+// DESIGN CHECK — server-side port of the rules engine that ships in
+// public/cms.html. Sprout calls this when the admin asks for design
+// review / palette suggestions. Keep the rules in sync with the JS
+// version in cms.html (`dcRunChecks`, `DC_HEX`, `DC_FIELDS`) — both must
+// agree on what counts as a "finding" or the count badge in /cms will
+// disagree with what Sprout reports.
+// ─────────────────────────────────────────────────────────────────────
+const DC_HEX = {
+  'lime-leaf': '#CCD900', 'forest-kale': '#365329', 'olive-moss': '#6A6E2D',
+  'roasted-almond': '#C37F4E', 'golden-corn': '#F2CA6C', 'oat-milk': '#F2E7DF',
+  'ink': '#1a1a17', 'pink-guava': '#F4B8CB', 'berry-punch': '#E96174',
+  'carrot-blaze': '#FF6B0C', 'papaya-glow': '#FFAF60', 'skyberry': '#B2CFED',
+  'lotus': '#EEB8E4', 'citrus-zest': '#E7E74C', 'pea-sprout': '#7BBD3B',
+};
+const DC_NEUTRALS = new Set(['oat-milk', 'ink']);
+const DC_FIELDS = {
+  announcement_bar: { bg: 'bg_color', fg: 'fg_color' },
+  hero_banner:      { bg: 'panel_bg_color', fg: 'panel_fg_color' },
+  featured_item:    { bg: 'card_bg_color', fg: 'card_fg_color' },
+  product_grid:     { bg: 'bg_color' },
+  category_tabs:    { accent: 'divider_color' },
+  countdown_timer:  { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
+  flash_sale_strip: { bg: 'bg_color', fg: 'fg_color' },
+  coupon_block:     { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
+  points_widget:    { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
+  review_card:      { bg: 'bg_color', fg: 'fg_color' },
+  store_info:       { bg: 'bg_color', fg: 'fg_color' },
+  voting_block:     { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
+  affiliate_block:  { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
+  greeting:         { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
+  recipe_story:     { bg: 'bg_color', fg: 'fg_color' },
+  bundle:           { bg: 'bg_color', fg: 'fg_color' },
+  wecom_contact:    { bg: 'bg_color', fg: 'fg_color' },
+  favorites_block:  { bg: 'bg_color', fg: 'fg_color' },
+};
+// Plain-English (+ 中文) labels Sprout uses when writing back to the
+// owner. They don't read field IDs like `panel_bg_color`; they read
+// "background colour". Keep these in sync with BLOCK_META in cms.html.
+const DC_BLOCK_LABELS = {
+  announcement_bar: { en: 'Announcement bar',  cn: '顶部横幅' },
+  hero_banner:      { en: 'Hero banner',       cn: '主图横幅' },
+  category_tabs:    { en: 'Category tiles',    cn: '分类大图' },
+  featured_item:    { en: 'Featured product',  cn: '主推商品' },
+  product_grid:     { en: 'Product grid',      cn: '商品网格' },
+  spacer:           { en: 'Spacer',            cn: '间隔' },
+  sticker_collage:  { en: 'Sticker collage',   cn: '贴纸拼贴' },
+  progress_dots:    { en: 'Progress dots',     cn: '进度小点' },
+  countdown_timer:  { en: 'Countdown timer',   cn: '倒计时' },
+  flash_sale_strip: { en: 'Flash sale',        cn: '秒杀栏' },
+  coupon_block:     { en: 'Coupon',            cn: '优惠券' },
+  points_widget:    { en: 'Points widget',     cn: '积分卡片' },
+  review_card:      { en: 'Customer review',   cn: '顾客评论' },
+  store_info:       { en: 'Store info',        cn: '门店信息' },
+  voting_block:     { en: 'Voting block',      cn: '投票卡片' },
+  affiliate_block:  { en: 'Refer a friend',    cn: '邀请有礼' },
+  greeting:         { en: 'Greeting',          cn: '问候语' },
+  recipe_story:     { en: 'Recipe story',      cn: '食谱故事' },
+  bundle:           { en: 'Bundle',            cn: '组合购' },
+  wecom_contact:    { en: 'Add us on WeCom',   cn: '企业微信卡片' },
+  favorites_block:  { en: 'Favorites',         cn: '收藏夹' },
+};
+const DC_FIELD_LABELS = {
+  bg_color:        { en: 'background colour',         cn: '背景色' },
+  panel_bg_color:  { en: 'panel background',          cn: '面板背景色' },
+  card_bg_color:   { en: 'card background',           cn: '卡片背景色' },
+  fg_color:        { en: 'text colour',               cn: '文字颜色' },
+  panel_fg_color:  { en: 'panel text colour',         cn: '面板文字颜色' },
+  card_fg_color:   { en: 'card text colour',          cn: '卡片文字颜色' },
+  accent_color:    { en: 'highlight colour',          cn: '强调色' },
+  divider_color:   { en: 'divider colour',            cn: '分隔线颜色' },
+  open_color:      { en: '"open" indicator colour',   cn: '营业中颜色' },
+  closed_color:    { en: '"closed" indicator colour', cn: '休息中颜色' },
+};
+// Friendly names for the 14 brand palette tokens. Sprout uses these
+// when speaking to non-designers — "Forest (deep green)" rather than
+// "forest-kale (#365329)".
+const DC_TOKEN_LABELS = {
+  'lime-leaf':      { en: 'Lime',         cn: '青柠',  sub_en: 'bright yellow-green', sub_cn: '亮黄绿' },
+  'forest-kale':    { en: 'Forest',       cn: '森林',  sub_en: 'deep green',          sub_cn: '深绿' },
+  'olive-moss':     { en: 'Olive',        cn: '橄榄',  sub_en: 'muted olive',         sub_cn: '哑光橄榄' },
+  'roasted-almond': { en: 'Almond',       cn: '杏仁',  sub_en: 'warm caramel',        sub_cn: '焦糖' },
+  'golden-corn':    { en: 'Corn',         cn: '玉米',  sub_en: 'soft gold',           sub_cn: '柔金' },
+  'oat-milk':       { en: 'Oat',          cn: '燕麦',  sub_en: 'warm cream (neutral)',sub_cn: '奶白(中性色)' },
+  'ink':            { en: 'Ink',          cn: '墨黑',  sub_en: 'near-black (neutral)',sub_cn: '近黑(中性色)' },
+  'pink-guava':     { en: 'Pink',         cn: '粉番石榴', sub_en: 'soft pink',        sub_cn: '柔粉' },
+  'berry-punch':    { en: 'Berry',        cn: '莓红',  sub_en: 'bold red-pink',       sub_cn: '红莓' },
+  'carrot-blaze':   { en: 'Carrot',       cn: '胡萝卜',sub_en: 'vivid orange',        sub_cn: '亮橙' },
+  'papaya-glow':    { en: 'Papaya',       cn: '木瓜',  sub_en: 'warm peach',          sub_cn: '暖桃' },
+  'skyberry':       { en: 'Sky',          cn: '天蓝',  sub_en: 'soft blue',           sub_cn: '柔蓝' },
+  'lotus':          { en: 'Lotus',        cn: '莲花',  sub_en: 'soft lavender',       sub_cn: '紫丁香' },
+  'citrus-zest':    { en: 'Citrus',       cn: '柑橘',  sub_en: 'bright yellow',       sub_cn: '亮黄' },
+  'pea-sprout':     { en: 'Pea',          cn: '豌豆',  sub_en: 'fresh green',         sub_cn: '嫩绿' },
+};
+function dcResolveHex(val) {
+  if (!val || val === 'transparent' || typeof val !== 'string') return null;
+  if (DC_HEX[val]) return DC_HEX[val].toLowerCase();
+  if (/^#[0-9a-f]{3}$/i.test(val)) return ('#' + val.slice(1).split('').map(c => c + c).join('')).toLowerCase();
+  if (/^#[0-9a-f]{6}$/i.test(val)) return val.toLowerCase();
+  return null;
+}
+function dcHexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+}
+function dcLuminance(hex) {
+  const [r,g,b] = dcHexToRgb(hex).map(c => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126*r + 0.7152*g + 0.0722*b;
+}
+function dcContrast(a, b) {
+  const l1 = dcLuminance(a), l2 = dcLuminance(b);
+  const [hi, lo] = l1 > l2 ? [l1, l2] : [l2, l1];
+  return (hi + 0.05) / (lo + 0.05);
+}
+// Reverse lookup: nearest brand token for a raw hex, by RGB distance.
+// Used to give Sprout a "this off-brand hex is closest to <token>" hint
+// so its swap suggestions stay inside the palette.
+function dcNearestToken(hex) {
+  const target = dcHexToRgb(hex);
+  let best = null, bestD = Infinity;
+  for (const [tok, h] of Object.entries(DC_HEX)) {
+    const [r,g,b] = dcHexToRgb(h);
+    const d = (r-target[0])**2 + (g-target[1])**2 + (b-target[2])**2;
+    if (d < bestD) { bestD = d; best = tok; }
+  }
+  return best;
+}
+
+// Run server-side rules over a parsed layout array + theme/tabBar config.
+// Returns { findings, block_summary, accent_tokens, page_bg_hex }.
+function runDesignCheck(blocks, pageBgToken, tabBarCfg) {
+  const findings = [];
+  const pageBgHex = dcResolveHex(pageBgToken) || '#f2e7df';
+  const blockSummary = [];
+  let position = 0;
+  for (const b of (Array.isArray(blocks) ? blocks : [])) {
+    if (!b || !b.type) continue;
+    position += 1;
+    const fields = DC_FIELDS[b.type] || {};
+    const bgTok = fields.bg ? (b[fields.bg] ?? null) : null;
+    const fgTok = fields.fg ? (b[fields.fg] ?? null) : null;
+    const accentTok = fields.accent ? (b[fields.accent] ?? null) : null;
+    const bgHex = dcResolveHex(bgTok) || pageBgHex;
+    const fgHex = dcResolveHex(fgTok);
+    const label = DC_BLOCK_LABELS[b.type] || { en: b.type, cn: b.type };
+    function fieldEntry(slot, fieldKey, tok, hex, extra = {}) {
+      if (!fieldKey) return null;
+      const flbl = DC_FIELD_LABELS[fieldKey] || { en: fieldKey, cn: fieldKey };
+      const tlbl = tok && DC_TOKEN_LABELS[tok] ? DC_TOKEN_LABELS[tok] : null;
+      return {
+        field: fieldKey,
+        field_label_en: flbl.en,
+        field_label_cn: flbl.cn,
+        token: tok,
+        token_label_en: tlbl ? tlbl.en : tok,
+        token_label_cn: tlbl ? tlbl.cn : tok,
+        hex,
+        ...extra,
+      };
+    }
+    // `bs.bg` is ALWAYS an object — never null — so rules below can
+    // safely read .hex without guarding. Blocks with no real bg field
+    // (spacer, sticker_collage, progress_dots, category_tabs) get a
+    // synthetic entry whose hex is the page background, marked
+    // inherited_from_page so the adjacency rule can skip them.
+    const bgInherited = !dcResolveHex(bgTok);
+    const bgEntry = fields.bg
+      ? fieldEntry('bg', fields.bg, bgTok, bgHex, { inherited_from_page: bgInherited })
+      : { field: null, token: null, hex: pageBgHex, inherited_from_page: true };
+    blockSummary.push({
+      id: b.id,
+      type: b.type,
+      position,                     // 1 = topmost block, increments downward
+      label_en: label.en,
+      label_cn: label.cn,
+      bg: bgEntry,
+      fg: fgTok ? fieldEntry('fg', fields.fg, fgTok, fgHex) : null,
+      accent: accentTok ? fieldEntry('accent', fields.accent, accentTok, dcResolveHex(accentTok)) : null,
+    });
+  }
+
+  // R1 — text contrast per block
+  for (let i = 0; i < blockSummary.length; i++) {
+    const bs = blockSummary[i];
+    if (!bs || !bs.fg || !bs.fg.hex || !bs.bg || !bs.bg.hex) continue;
+    const ratio = dcContrast(bs.fg.hex, bs.bg.hex);
+    if (ratio < 3.0) {
+      findings.push({ sev: 'critical', rule: 'low_contrast', block_id: bs.id, block_type: bs.type, block_label_en: bs.label_en, block_label_cn: bs.label_cn, position: bs.position, ratio: +ratio.toFixed(2), bg: bs.bg, fg: bs.fg, en: `${bs.label_en} text contrast ${ratio.toFixed(1)}:1 (needs 4.5:1).`, cn: `${bs.label_cn} 文字对比度 ${ratio.toFixed(1)}:1(应≥4.5:1)。` });
+    } else if (ratio < 4.0) {
+      findings.push({ sev: 'warn', rule: 'borderline_contrast', block_id: bs.id, block_type: bs.type, block_label_en: bs.label_en, block_label_cn: bs.label_cn, position: bs.position, ratio: +ratio.toFixed(2), bg: bs.bg, fg: bs.fg, en: `${bs.label_en} contrast ${ratio.toFixed(1)}:1 may strain readers.`, cn: `${bs.label_cn} 对比度 ${ratio.toFixed(1)}:1,小字可能难读。` });
+    }
+  }
+
+  // R2 — adjacent muddy backgrounds. Skip when EITHER block inherits
+  // the page bg (spacer / category_tabs / progress_dots / sticker_collage
+  // etc.) — those don't create a visible seam, they just show through
+  // to the page colour.
+  for (let i = 0; i < blockSummary.length - 1; i++) {
+    const a = blockSummary[i], c = blockSummary[i+1];
+    if (!a || !c || !a.bg || !c.bg || !a.bg.hex || !c.bg.hex) continue;
+    if (a.bg.inherited_from_page || c.bg.inherited_from_page) continue;
+    if (a.bg.hex === c.bg.hex) continue;
+    const r = dcContrast(a.bg.hex, c.bg.hex);
+    if (r > 1.02 && r < 1.6) {
+      findings.push({ sev: 'warn', rule: 'stacked_muddy', block_ids: [a.id, c.id], block_types: [a.type, c.type], block_labels_en: [a.label_en, c.label_en], block_labels_cn: [a.label_cn, c.label_cn], positions: [a.position, c.position], ratio: +r.toFixed(2), bg_pair: [a.bg, c.bg], en: `${a.label_en} → ${c.label_en} sit on near-identical backgrounds (${r.toFixed(2)}:1).`, cn: `${a.label_cn} → ${c.label_cn} 背景过于接近(${r.toFixed(2)}:1)。` });
+    }
+  }
+
+  // R3 — too many accent tokens
+  const accentTokens = new Set();
+  for (const bs of blockSummary) {
+    if (!bs) continue;
+    const bgSlot = bs.bg && bs.bg.token;
+    const accSlot = bs.accent && bs.accent.token;
+    for (const slot of [bgSlot, accSlot]) {
+      if (!slot || slot === 'transparent') continue;
+      if (DC_NEUTRALS.has(slot)) continue;
+      if (DC_HEX[slot]) accentTokens.add(slot);
+    }
+  }
+  if (accentTokens.size > 3) {
+    findings.push({ sev: 'warn', rule: 'too_many_accents', tokens: [...accentTokens], en: `${accentTokens.size} accent colours competing on this page.`, cn: `当前有 ${accentTokens.size} 种主色互相抢眼。` });
+  }
+
+  // R4 — tab-bar palette
+  const TABBAR_THEMES = {
+    oat:    { bg: '#F2E7DF', active: '#365329' },
+    paper:  { bg: '#FBF6E8', active: '#365329' },
+    forest: { bg: '#2a3a22', active: '#ccd900' },
+    lime:   { bg: '#ccd900', active: '#16161a' },
+  };
+  const themePreset = TABBAR_THEMES[tabBarCfg.theme || 'oat'] || TABBAR_THEMES.oat;
+  const tbBg = (themePreset.bg || '').toLowerCase();
+  const tbSel = (tabBarCfg.selectedColor || themePreset.active || '').toLowerCase();
+  if (tbBg && tbSel) {
+    const r = dcContrast(tbSel, tbBg);
+    if (r < 3.0) {
+      findings.push({ sev: 'critical', rule: 'tabbar_low_contrast', ratio: +r.toFixed(2), tab_bar: { bg_hex: tbBg, selected_hex: tbSel, theme: tabBarCfg.theme || 'oat' }, en: `Tab bar active state contrast ${r.toFixed(1)}:1 — hard to see which tab is current.`, cn: `导航栏 — 选中色与背景对比度仅 ${r.toFixed(1)}:1。` });
+    }
+  }
+  if (tabBarCfg.selectedColor) {
+    const sh = tabBarCfg.selectedColor.toLowerCase();
+    const brandHexes = new Set(Object.values(DC_HEX).map(h => h.toLowerCase()));
+    if (!brandHexes.has(sh)) {
+      findings.push({ sev: 'info', rule: 'tabbar_offbrand', tab_bar: { selected_hex: sh, nearest_brand_token: dcNearestToken(sh) }, en: `Tab bar active colour ${sh} is off-brand. Nearest brand token: ${dcNearestToken(sh)}.`, cn: `导航栏选中色 ${sh} 不在品牌色板内。最接近的品牌色: ${dcNearestToken(sh)}。` });
+    }
+  }
+
+  // Sort findings in reading order (top of page → bottom → page-level).
+  // Sprout writes fixes in this order so the owner can follow along on
+  // the canvas. Findings without a position (accent count, tab bar) go
+  // last; severity is broken as a secondary key.
+  const sevRank = { critical: 0, warn: 1, info: 2 };
+  findings.sort((a, b) => {
+    const pa = a.position ?? (Array.isArray(a.positions) ? a.positions[0] : null) ?? 9999;
+    const pb = b.position ?? (Array.isArray(b.positions) ? b.positions[0] : null) ?? 9999;
+    if (pa !== pb) return pa - pb;
+    return sevRank[a.sev] - sevRank[b.sev];
+  });
+
+  return {
+    page_bg: { token: pageBgToken, hex: pageBgHex, label_en: pageBgToken && DC_TOKEN_LABELS[pageBgToken] ? DC_TOKEN_LABELS[pageBgToken].en : 'default Oat' },
+    tab_bar: { theme: tabBarCfg.theme || 'oat', selected_color: tabBarCfg.selectedColor || null, bar_color: tabBarCfg.color || null },
+    block_summary: blockSummary,
+    accent_tokens_in_use: [...accentTokens],
+    findings,
+    summary: {
+      blocks: blockSummary.length,
+      critical: findings.filter(f => f.sev === 'critical').length,
+      warn: findings.filter(f => f.sev === 'warn').length,
+      info: findings.filter(f => f.sev === 'info').length,
+    },
+  };
+}
 
 // POST /api/ai/chat — agentic loop. Body: { messages, context? }
 //   messages: array of {role: 'user'|'assistant', content: string}

@@ -361,4 +361,51 @@ router.post('/api/retail-admin/inventory/geocode-backfill', requireAuth, (req, r
   res.json({ success: true, data: { stores_geocoded: storesDone, stores_total: stores.length, addresses_geocoded: addrsDone, addresses_total: addrs.length } });
 });
 
+// Admin: list / set / clear substitutes for a product.
+router.get('/api/retail-admin/products/:productId/substitutes', requireRetailAdmin, (req, res) => {
+  const productId = parseInt(req.params.productId, 10);
+  const rows = db.prepare(`
+    SELECT s.substitute_product_id AS product_id, s.sort_order,
+           p.name_en, p.name_cn, p.sku, p.sell_price, p.image_data, p.category
+      FROM retail_product_substitutes s
+      JOIN products p ON p.id = s.substitute_product_id
+     WHERE s.product_id = ?
+     ORDER BY s.sort_order ASC, p.name_en COLLATE NOCASE
+  `).all(productId);
+  res.json({ success: true, data: rows });
+});
+
+// PUT replaces the whole substitute list for a product.
+// Body: { substitute_product_ids: [1, 2, 3] } — in order of preference.
+router.put('/api/retail-admin/products/:productId/substitutes', requireRetailAdmin, express.json(), (req, res) => {
+  const productId = parseInt(req.params.productId, 10);
+  const ids = Array.isArray(req.body?.substitute_product_ids) ? req.body.substitute_product_ids.map(n => parseInt(n, 10)).filter(Boolean) : [];
+  // Drop self-references defensively.
+  const cleanIds = ids.filter(id => id !== productId);
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM retail_product_substitutes WHERE product_id = ?').run(productId);
+    const ins = db.prepare('INSERT OR IGNORE INTO retail_product_substitutes (product_id, substitute_product_id, sort_order) VALUES (?, ?, ?)');
+    cleanIds.forEach((sid, i) => ins.run(productId, sid, i));
+  });
+  tx();
+  logActivity(req.user.id, req.user.username, 'update', 'retail_product_substitutes', productId, { ids: cleanIds }, req.ip);
+  res.json({ success: true, data: { count: cleanIds.length } });
+});
+
+// ─── GZ-express excluded districts config (admin) ──────────────────────
+router.get('/api/retail-admin/config/gz-excluded-districts', requireRetailAdmin, (req, res) => {
+  const arr = Array.from(inventory.gzExpressExcludedDistricts());
+  res.json({ success: true, data: arr });
+});
+
+router.put('/api/retail-admin/config/gz-excluded-districts', requireRetailAdmin, express.json(), (req, res) => {
+  const list = Array.isArray(req.body?.districts) ? req.body.districts.map(s => String(s).trim()).filter(Boolean) : [];
+  db.prepare(
+    "INSERT INTO storefront_config (key, value_json) VALUES ('routing.gz_express_excluded_districts', ?) " +
+    "ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json"
+  ).run(JSON.stringify(list));
+  logActivity(req.user.id, req.user.username, 'update', 'gz_excluded_districts', null, { districts: list }, req.ip);
+  res.json({ success: true, data: list });
+});
+
 module.exports = router;

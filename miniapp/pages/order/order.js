@@ -75,10 +75,33 @@ Page({
       refundTitle: 'Request a refund',
       refundReasonPlaceholder: 'Tell us what happened (optional)',
       refundSubmit: 'Submit request',
-      refundPendingBanner: '🕒 Refund requested — we\'ll review within 24h.',
-      refundRejectedBanner: '✗ Refund request rejected',
-      refundApprovedBanner: '✓ Refund approved',
+      refundModeFull: 'Full refund',
+      refundModeAmount: 'Partial — amount',
+      refundModeLines: 'Partial — by item',
+      refundAmountLabel: 'Refund amount (¥)',
+      refundLinesLabel: 'Choose item(s)',
+      refundLinesTotal: 'Items total',
+      refundCancelBtn: 'Cancel',
+      refundWithdraw: 'Withdraw request',
+      refundWithdrawConfirm: 'Withdraw this refund request?',
+      refundOf: 'of',
+      refundStateRequested:  '🕒 Refund requested — we\'ll review within 24h.',
+      refundStateReviewing:  '🔍 We\'re looking into your request.',
+      refundStateApproved:   '✓ Refund approved — awaiting payout.',
+      refundStatePaid:       '✓ Refund paid back to you.',
+      refundStateRejected:   '✗ Refund request rejected',
+      refundStateWithdrawn:  '↺ You withdrew this refund request.',
     },
+    // Refund sheet state
+    refundSheetOpen: false,
+    refundBusy: false,
+    refundMode: 'full',       // 'full' | 'amount' | 'lines'
+    refundAmount: '',
+    refundReason: '',
+    refundLines: [],          // [{ item_id, name, qty, max_qty, unit, picked, refund_qty, amount }]
+    refundLinesTotalDisp: '¥0.00',
+    refundStateLabel: '',     // banner copy for current refund_status
+    refundShowAmounts: false, // show amount summary block in banner
   },
 
   async onLoad(query) {
@@ -122,9 +145,22 @@ Page({
         refundTitle: '申请退款',
         refundReasonPlaceholder: '说明一下情况 (可选)',
         refundSubmit: '提交申请',
-        refundPendingBanner: '🕒 退款已申请 — 我们将在 24 小时内审核。',
-        refundRejectedBanner: '✗ 退款申请未通过',
-        refundApprovedBanner: '✓ 退款已通过',
+        refundModeFull: '全额退款',
+        refundModeAmount: '部分退款 — 金额',
+        refundModeLines: '部分退款 — 按商品',
+        refundAmountLabel: '退款金额 (¥)',
+        refundLinesLabel: '选择商品',
+        refundLinesTotal: '商品合计',
+        refundCancelBtn: '取消',
+        refundWithdraw: '撤回申请',
+        refundWithdrawConfirm: '确定撤回退款申请?',
+        refundOf: '/',
+        refundStateRequested:  '🕒 退款已申请 — 我们将在 24 小时内审核。',
+        refundStateReviewing:  '🔍 我们正在处理您的申请。',
+        refundStateApproved:   '✓ 退款已批准 — 等待退款到账。',
+        refundStatePaid:       '✓ 退款已退回您的账户。',
+        refundStateRejected:   '✗ 退款申请未通过',
+        refundStateWithdrawn:  '↺ 您已撤回退款申请。',
       },
     });
   },
@@ -185,6 +221,43 @@ Page({
       const expanded = this.data.trackingEventsExpanded;
       const trackingEventsVisible = expanded ? trackingEvents : trackingEvents.slice(0, 1);
 
+      // Refund view — render the current refund state into a single block
+      // the WXML can read without piles of conditionals.
+      const C = this.data.copy;
+      const stateMap = {
+        pending:   { label: C.refundStateRequested, theme: 'pending'  },
+        reviewing: { label: C.refundStateReviewing, theme: 'pending'  },
+        approved:  { label: C.refundStateApproved,  theme: 'approved' },
+        paid:      { label: C.refundStatePaid,      theme: 'approved' },
+        rejected:  { label: C.refundStateRejected,  theme: 'rejected' },
+        withdrawn: { label: C.refundStateWithdrawn, theme: 'rejected' },
+      };
+      let refundView = null;
+      if (data.refund_status || data.status === 'refunded') {
+        const eff = data.refund_status || 'paid';
+        const s = stateMap[eff] || { label: eff, theme: 'pending' };
+        const total = Number(data.total) || 0;
+        const reqAmt = data.refund_amount_requested != null ? Number(data.refund_amount_requested) : null;
+        const apvAmt = data.refund_amount_approved  != null ? Number(data.refund_amount_approved)  : null;
+        const paidAmt = data.refund_amount_paid     != null ? Number(data.refund_amount_paid)      : null;
+        const isPartial = (reqAmt != null && reqAmt + 0.005 < total) || (apvAmt != null && apvAmt + 0.005 < total);
+        refundView = {
+          state: eff,
+          label: s.label,
+          theme: s.theme,
+          reason: data.refund_reason || '',
+          review_note: data.refund_review_note || '',
+          can_withdraw: ['pending', 'reviewing'].includes(eff),
+          show_amounts: !!(reqAmt || apvAmt || paidAmt),
+          requested_disp: reqAmt  != null ? '¥' + reqAmt.toFixed(2)  : '',
+          approved_disp:  apvAmt  != null ? '¥' + apvAmt.toFixed(2)  : '',
+          paid_disp:      paidAmt != null ? '¥' + paidAmt.toFixed(2) : '',
+          total_disp: '¥' + total.toFixed(2),
+          is_partial: isPartial,
+          payout_method: data.refund_payout_method || '',
+        };
+      }
+
       this.setData({
         order: data,
         items,
@@ -192,6 +265,7 @@ Page({
         tracking,
         trackingEvents,
         trackingEventsVisible,
+        refundView,
         subtotal: '¥' + Number(data.subtotal || 0).toFixed(2),
         shipping: Number(data.shipping_fee || 0) > 0
           ? '¥' + Number(data.shipping_fee || 0).toFixed(2)
@@ -344,24 +418,136 @@ Page({
     setTimeout(() => wx.switchTab({ url: '/pages/cart/cart' }), 600);
   },
 
-  async requestRefund() {
-    const reason = await new Promise(resolve =>
+  // ─── Refund flow ──────────────────────────────────────────────────
+  // Open the partial-refund sheet. Pre-fills full amount + line list from
+  // current order items.
+  openRefundSheet() {
+    const o = this.data.order || {};
+    const total = Number(o.total) || 0;
+    const lines = (this.data.items || []).map(it => {
+      const qty = Number(it.qty) || 0;
+      const unit = qty > 0 ? (Number(it.line_total) / qty) : Number(it.unit_price || 0);
+      return {
+        item_id: it.id,
+        name: it.display_name || it.name_en || it.name_cn || ('item #' + it.id),
+        qty,
+        max_qty: qty,
+        unit,
+        unit_disp: '¥' + unit.toFixed(2),
+        picked: false,
+        refund_qty: qty,
+        amount: 0,
+        amount_disp: '¥0.00',
+      };
+    });
+    this.setData({
+      refundSheetOpen: true,
+      refundMode: 'full',
+      refundAmount: total.toFixed(2),
+      refundReason: '',
+      refundLines: lines,
+      refundLinesTotalDisp: '¥0.00',
+    });
+  },
+  closeRefundSheet() {
+    if (this.data.refundBusy) return;
+    this.setData({ refundSheetOpen: false });
+  },
+  onRefundSheetMaskTap() { this.closeRefundSheet(); },
+  // Stop tap-through so taps inside the sheet body don't bubble up to the mask.
+  noop() {},
+  onRefundModeTap(e) {
+    const mode = e.currentTarget.dataset.mode;
+    if (!mode || mode === this.data.refundMode) return;
+    const o = this.data.order || {};
+    const total = Number(o.total) || 0;
+    if (mode === 'full') this.setData({ refundMode: 'full', refundAmount: total.toFixed(2) });
+    else this.setData({ refundMode: mode });
+  },
+  onRefundAmountInput(e) {
+    this.setData({ refundAmount: e.detail.value });
+  },
+  onRefundReasonInput(e) {
+    this.setData({ refundReason: e.detail.value });
+  },
+  onRefundLineToggle(e) {
+    const idx = e.currentTarget.dataset.idx;
+    const lines = this.data.refundLines.slice();
+    const ln = { ...lines[idx], picked: !lines[idx].picked };
+    ln.amount = ln.picked ? +(ln.unit * ln.refund_qty).toFixed(2) : 0;
+    ln.amount_disp = '¥' + ln.amount.toFixed(2);
+    lines[idx] = ln;
+    this.setData({ refundLines: lines });
+    this.recalcLinesTotal();
+  },
+  onRefundLineQty(e) {
+    const idx = e.currentTarget.dataset.idx;
+    const raw = Number(e.detail.value) || 0;
+    const lines = this.data.refundLines.slice();
+    const q = Math.max(0, Math.min(raw, lines[idx].max_qty));
+    const ln = { ...lines[idx], refund_qty: q };
+    if (ln.picked) {
+      ln.amount = +(ln.unit * q).toFixed(2);
+      ln.amount_disp = '¥' + ln.amount.toFixed(2);
+    }
+    lines[idx] = ln;
+    this.setData({ refundLines: lines });
+    this.recalcLinesTotal();
+  },
+  recalcLinesTotal() {
+    let sum = 0;
+    for (const ln of this.data.refundLines) sum += ln.picked ? Number(ln.amount) || 0 : 0;
+    this.setData({ refundLinesTotalDisp: '¥' + sum.toFixed(2) });
+  },
+
+  async submitRefund() {
+    if (this.data.refundBusy) return;
+    const mode = this.data.refundMode;
+    const body = { reason: this.data.refundReason || '' };
+    if (mode === 'lines') {
+      const sel = this.data.refundLines
+        .filter(l => l.picked && l.refund_qty > 0)
+        .map(l => ({ item_id: l.item_id, qty: l.refund_qty }));
+      if (!sel.length) {
+        wx.showToast({ title: this.data.lang === 'cn' ? '至少选一项' : 'Pick an item', icon: 'none' });
+        return;
+      }
+      body.lines = sel;
+    } else if (mode === 'amount') {
+      const a = Number(this.data.refundAmount) || 0;
+      if (!(a > 0)) {
+        wx.showToast({ title: this.data.lang === 'cn' ? '输入金额' : 'Enter amount', icon: 'none' });
+        return;
+      }
+      body.amount = a;
+    }
+    // mode === 'full' → no amount/lines, server defaults to full total.
+    this.setData({ refundBusy: true });
+    try {
+      await api.post('/api/retail/orders/' + this.data.id + '/refund-request', body);
+      wx.showToast({ title: this.data.lang === 'cn' ? '已提交' : 'Submitted', icon: 'success' });
+      this.setData({ refundSheetOpen: false });
+      await this.refresh();
+    } catch (e) {
+      wx.showToast({ title: e.message, icon: 'none' });
+    } finally {
+      this.setData({ refundBusy: false });
+    }
+  },
+
+  async withdrawRefund() {
+    const ok = await new Promise(resolve =>
       wx.showModal({
-        title: this.data.copy.refundTitle,
-        editable: true,
-        placeholderText: this.data.copy.refundReasonPlaceholder,
-        confirmText: this.data.copy.refundSubmit,
-        cancelText: this.data.lang === 'cn' ? '返回' : 'Cancel',
-        success: r => resolve(r.confirm ? (r.content || '') : null),
+        title: this.data.copy.refundWithdrawConfirm,
+        confirmText: this.data.copy.refundWithdraw,
+        cancelText: this.data.lang === 'cn' ? '返回' : 'Back',
+        success: r => resolve(r.confirm),
       })
     );
-    if (reason === null) return;
+    if (!ok) return;
     try {
-      await api.post('/api/retail/orders/' + this.data.id + '/refund-request', { reason });
-      wx.showToast({
-        title: this.data.lang === 'cn' ? '已提交' : 'Submitted',
-        icon: 'success',
-      });
+      await api.post('/api/retail/orders/' + this.data.id + '/refund-withdraw', {});
+      wx.showToast({ title: this.data.lang === 'cn' ? '已撤回' : 'Withdrawn', icon: 'success' });
       await this.refresh();
     } catch (e) {
       wx.showToast({ title: e.message, icon: 'none' });

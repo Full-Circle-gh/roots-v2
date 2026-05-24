@@ -1,135 +1,560 @@
-/* product-blocks — bespoke per-type styling for the block-based product
-   page body. The container has no padding of its own; the parent page
-   (product.wxss .body) already provides horizontal padding so the slab
-   blocks (stat_callout) can bleed full-width when we want them to. */
+/* ═══════════════════════════════════════════════════════════════════════
+   product-blocks — Roots PDP v1 (Editorial direction)
+   Ports the design system in /design_handoff_roots_pdp/v1-editorial/.
+   All sizes designed at 375px canvas — multiply by 2 for rpx
+   (e.g. 14px CSS → 28rpx WXSS).
+   ═══════════════════════════════════════════════════════════════════════ */
 
+/* Brand tokens — duplicated here so the component is self-contained.
+   Same hex values that /retail-admin uses for its live preview. */
 .pb-wrap {
+  --oat:      #F2E7DF;
+  --oat-deep: #E8D9CB;
+  --ink:      #1a1a17;
+  --ink-60:   rgba(26, 26, 23, 0.6);
+  --ink-30:   rgba(26, 26, 23, 0.3);
+  --ink-12:   rgba(26, 26, 23, 0.12);
+  --lime:     #CCD900;
+  --forest:   #365329;
+  --olive:    #6A6E2D;
+  --almond:   #C37F4E;
+  --corn:     #F2CA6C;
+  --berry:    #E96174;
+  --carrot:   #FF6B0C;
+  --papaya:   #FFAF60;
+  --pink:     #F4B8CB;
+  --sky:      #B2CFED;
+  --lotus:    #EEB8E4;
+  --pea:      #7BBD3B;
+  --cucumber: #A8D185;
+  --avocado:  #73BF83;
+
   display: block;
   width: 100%;
+  background: var(--oat);
+  color: var(--ink);
 }
+
+/* Each block sits flush against page width and divides with a 2rpx ink
+   rule (v1 signature). Negative side margin pulls past the parent body
+   padding (the host page uses 44rpx side padding). */
 .pb {
   display: block;
-  margin-top: 48rpx;
+  margin: 0 -44rpx;
+  padding: 0;
+  border-bottom: 2rpx solid var(--ink);
 }
-.pb:first-child { margin-top: 16rpx; }
+.pb:last-child { border-bottom: 0; }
 
-/* ───────── Hero Intro ─────────
-   Big editorial paragraph in serif. Optional lead-in callout sits above,
-   styled like a brand-font kicker. Inline highlight spans inside the
-   body get an accent color + slight weight bump, drawing the eye to the
-   key phrase without breaking the flow. */
-.pb-hero-lead {
-  display: block;
-  font-size: calc(22rpx * var(--font-scale));
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: var(--olive);
-  margin-bottom: 16rpx;
+/* ───────── 01 · SPEC STRIP ─────────
+   Three meta facts. Equal columns divided by hairline rules. Label is
+   small caps Toni; value is Bear Serif. The page's quietest band. */
+.pb-spec {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
 }
-.pb-hero-body {
-  font-size: calc(30rpx * var(--font-scale));
-  line-height: 1.55;
+.pb-spec-cell {
+  padding: 28rpx 28rpx 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  border-right: 2rpx solid var(--ink-12);
+}
+.pb-spec-cell:last-child { border-right: 0; }
+.pb-spec-k {
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 19rpx;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-60);
+}
+.pb-spec-v {
+  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-size: 30rpx;
+  line-height: 1.1;
   color: var(--ink);
-  /* Preserve manually typed line breaks in the body — same rule as the
-     legacy .description, so the editor experience is consistent. */
-  white-space: pre-line;
-}
-.pb-hero-hl {
-  color: var(--forest);
-  font-weight: 700;
-  background: linear-gradient(transparent 60%, rgba(204, 217, 0, 0.55) 60%);
-  padding: 0 4rpx;
 }
 
-/* ───────── Stat Callout ─────────
-   A full-bleed slab. The page body has 44rpx side padding, so we use a
-   negative margin to push the slab to the screen edges. The number is
-   huge (96rpx → ~46px); the claim is small caps; the sub-line is
-   editorial serif. */
-.pb-stat-slab {
-  margin-left: -44rpx;
-  margin-right: -44rpx;
-  padding: 52rpx 44rpx;
-  background: var(--lime);
-  color: var(--ink);
-  text-align: center;
+/* ───────── 02 · HERO INTRO ─────────
+   Aleo body 30rpx / 1.55. Optional kicker — Bear Serif caps with a
+   short lime rule prefix. Optional inline highlight phrase wraps in
+   pb-ink-pull → serif uppercase poster treatment inline. */
+.pb-hero {
+  padding: 64rpx 44rpx 60rpx;
 }
-.pb-stat-num {
-  font-size: calc(120rpx * var(--font-scale));
-  line-height: 1;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-.pb-stat-claim {
-  margin-top: 14rpx;
-  font-size: calc(28rpx * var(--font-scale));
-  font-weight: 700;
-  letter-spacing: 0.16em;
-}
-.pb-stat-sub {
-  margin-top: 14rpx;
-  font-size: calc(26rpx * var(--font-scale));
-  line-height: 1.45;
-  font-style: italic;
-}
-
-/* ───────── Allergen Card ─────────
-   Bordered card, two segmented sections. CONTAINS gets a strong red-
-   border chip; MAY CONTAIN gets a soft tan chip. The ⚠️ + header is the
-   first thing the eye lands on. */
-.pb-allergen {
-  border: 3rpx solid var(--ink);
-  background: #FFFCF7;
-  padding: 28rpx 28rpx 30rpx;
-  box-shadow: 6rpx 6rpx 0 var(--ink);
-}
-.pb-allergen-head {
+.pb-hero-kicker {
   display: flex;
   align-items: center;
-  gap: 12rpx;
-  font-size: calc(26rpx * var(--font-scale));
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  gap: 20rpx;
+  margin-bottom: 28rpx;
+  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-size: 22rpx;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--forest);
+}
+.pb-hero-kicker::before {
+  content: "";
+  display: inline-block;
+  width: 36rpx;
+  height: 2rpx;
+  background: var(--forest);
+}
+.pb-hero-body {
+  font-family: 'Aleo', 'DF Yuan', serif;
+  font-size: 30rpx;
+  line-height: 1.55;
   color: var(--ink);
-  margin-bottom: 22rpx;
-  padding-bottom: 18rpx;
-  border-bottom: 2rpx dashed rgba(26, 26, 23, 0.25);
+  white-space: pre-line;
 }
-.pb-allergen-emoji {
-  font-size: calc(34rpx * var(--font-scale));
-  letter-spacing: 0;
+/* Inline ink-pull: serif slab on lime, highlighting one phrase mid-body */
+.pb-ink-pull {
+  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-style: normal;
+  font-size: 34rpx;
+  line-height: 1;
+  letter-spacing: -0.005em;
+  background: var(--lime);
+  padding: 0.06em 0.18em;
+  color: var(--ink);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
-.pb-allergen-section {
-  margin-top: 18rpx;
+
+/* ───────── 03 · WHY PEOPLE CHOOSE IT ─────────
+   3–5 numbered single-line claims. League Gothic numeral left rail,
+   Toni claim right. Hairline divider; first row gets a solid 2rpx top. */
+.pb-why {
+  padding: 12rpx 44rpx 44rpx;
 }
-.pb-allergen-section:first-of-type { margin-top: 0; }
-.pb-allergen-label {
-  font-size: calc(20rpx * var(--font-scale));
-  font-weight: 700;
-  letter-spacing: 0.16em;
+.pb-why-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 40rpx 0 28rpx;
+}
+.pb-why-head-l {
+  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-size: 22rpx;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
   color: var(--olive);
-  margin-bottom: 10rpx;
+}
+.pb-why-head-r {
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 22rpx;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-60);
+}
+.pb-why-row {
+  display: grid;
+  grid-template-columns: 72rpx 1fr;
+  gap: 28rpx;
+  align-items: baseline;
+  padding: 28rpx 0;
+  border-top: 2rpx solid var(--ink-12);
+}
+.pb-why-row.first { border-top: 2rpx solid var(--ink); }
+.pb-why-n {
+  font-family: 'League Gothic', 'DF Yuan', sans-serif;
+  font-size: 68rpx;
+  line-height: 0.85;
+  color: var(--ink);
+}
+.pb-why-claim {
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 29rpx;
+  line-height: 1.35;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+/* ───────── Section heading shared by blocks 4/6/7/8 ─────────
+   Bear Serif h3 + small caps Toni tag right. */
+.pb-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 36rpx;
+}
+.pb-section-h3 {
+  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-weight: 400;
+  font-size: 52rpx;
+  line-height: 0.95;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+.pb-section-tag {
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 20rpx;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-60);
+  padding-bottom: 8rpx;
+}
+
+/* ───────── 04a · INGREDIENTS · CHIP CLOUD ─────────
+   Outlined pills. Optional hero chip (inverted ink fill, serif).
+   Optional berry % badge on chips ≥10%. */
+.pb-ing {
+  padding: 60rpx 44rpx 60rpx;
+}
+.pb-ing-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  align-items: flex-start;
+}
+.pb-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12rpx;
+  padding: 18rpx 26rpx 16rpx;
+  border: 2rpx solid var(--ink);
+  border-radius: 999rpx;
+  background: transparent;
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 26rpx;
+  line-height: 1;
+  color: var(--ink);
+}
+.pb-chip-lead {
+  background: var(--ink);
+  color: var(--oat);
+  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-size: 36rpx;
+  padding: 22rpx 32rpx 20rpx;
+}
+.pb-chip-pct {
+  font-family: 'League Gothic', 'DF Yuan', sans-serif;
+  font-size: 28rpx;
+  letter-spacing: 0.02em;
+  color: var(--berry);
+}
+.pb-chip-lead .pb-chip-pct { color: var(--lime); }
+
+/* ───────── 04b · INGREDIENTS · EDITORIAL LINE ─────────
+   Single typographic run. Bear Serif 44rpx / 1.25. Separators are lime
+   dots, % callouts are inline League Gothic in berry. */
+.pb-ing-line {
+  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-weight: 400;
+  font-size: 44rpx;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+.pb-ing-line-pct {
+  font-family: 'League Gothic', 'DF Yuan', sans-serif;
+  color: var(--berry);
+  font-size: 0.85em;
+  margin-left: 0.05em;
+}
+.pb-ing-line-sep {
+  display: inline-block;
+  width: 16rpx;
+  height: 16rpx;
+  background: var(--lime);
+  border-radius: 50%;
+  margin: 0 0.35em 0.12em;
+  vertical-align: middle;
+}
+
+/* ───────── 05 · ALLERGEN CARD ─────────
+   Outlined card on warm tan tint. Berry square warn-mark + serif title.
+   Two segmented chip rows: Contains (berry strong) / May contain (corn soft). */
+.pb-allergen {
+  padding: 60rpx 44rpx 60rpx;
+}
+.pb-allergen-card {
+  border: 2rpx solid var(--ink);
+  background: #FAF1E8;
+  padding: 36rpx 32rpx 32rpx;
+}
+.pb-allergen-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 24rpx;
+  margin-bottom: 24rpx;
+  border-bottom: 2rpx solid var(--ink);
+}
+.pb-allergen-ttl {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-size: 36rpx;
+  line-height: 1;
+  color: var(--ink);
+}
+.pb-allergen-warn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44rpx;
+  height: 44rpx;
+  background: var(--berry);
+  color: var(--oat);
+  border-radius: 8rpx;
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+.pb-allergen-meta {
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 19rpx;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-60);
+}
+.pb-allergen-row {
+  display: flex;
+  align-items: baseline;
+  gap: 20rpx;
+  padding: 16rpx 0;
+}
+.pb-allergen-row + .pb-allergen-row {
+  border-top: 2rpx dashed var(--ink-30);
+}
+.pb-allergen-lbl {
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 20rpx;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-60);
+  flex: 0 0 176rpx;
+  line-height: 1.4;
 }
 .pb-allergen-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8rpx;
+  gap: 12rpx;
+  flex: 1;
 }
-.pb-allergen-chip {
+.pb-al-chip {
   display: inline-block;
-  padding: 8rpx 16rpx;
-  font-size: calc(22rpx * var(--font-scale));
-  font-weight: 600;
-  border-radius: 4rpx;
-  line-height: 1.3;
+  padding: 10rpx 20rpx 8rpx;
+  border-radius: 999rpx;
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 23rpx;
+  line-height: 1;
 }
-.pb-allergen-chip-strong {
+.pb-al-chip-strong {
   background: var(--berry);
   color: #fff;
-  border: 2rpx solid var(--berry);
+  font-weight: 700;
 }
-.pb-allergen-chip-soft {
-  background: var(--oat);
+.pb-al-chip-soft {
+  background: var(--corn);
   color: var(--ink);
-  border: 2rpx solid rgba(26, 26, 23, 0.18);
+}
+.pb-allergen-empty {
+  font-family: 'Aleo', 'DF Yuan', serif;
+  font-style: italic;
+  font-size: 26rpx;
+  color: var(--ink-60);
+}
+
+/* ───────── 06 · HOW TO USE GRID ─────────
+   3-col (6 tiles) or 4-col (8 tiles) grid. 2rpx ink-12 gutter — feels
+   like a riso plate. Each tile: emoji icon + caps label, optional sub. */
+.pb-how {
+  padding: 60rpx 44rpx 60rpx;
+}
+.pb-how-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rpx;
+  background: var(--ink-12);
+  border: 2rpx solid var(--ink-12);
+}
+.pb-how-grid.cols-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+.pb-how-tile {
+  background: var(--oat);
+  padding: 36rpx 12rpx 32rpx;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  align-items: center;
+  min-height: 152rpx;
+  justify-content: center;
+}
+.pb-how-ic {
+  font-size: 48rpx;
+  line-height: 1;
+}
+.pb-how-lbl {
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 22rpx;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.pb-how-sub {
+  font-family: 'Aleo', 'DF Yuan', serif;
+  font-style: italic;
+  font-size: 22rpx;
+  color: var(--ink-60);
+  margin-top: -8rpx;
+}
+
+/* ───────── 07 · STORAGE BOX ─────────
+   Two paired graphic cards side-by-side. One inverted (ink fill).
+   League Gothic huge duration; emoji icon top-right; optional after-
+   opening note italic Aleo right-aligned. */
+.pb-storage {
+  padding: 60rpx 44rpx 60rpx;
+}
+.pb-storage-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20rpx;
+}
+.pb-storage-card {
+  border: 2rpx solid var(--ink);
+  padding: 32rpx 28rpx 28rpx;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  min-height: 256rpx;
+}
+.pb-storage-card.alt {
+  background: var(--ink);
+  color: var(--oat);
+}
+.pb-storage-ic {
+  position: absolute;
+  top: 24rpx;
+  right: 24rpx;
+  font-size: 36rpx;
+  line-height: 1;
+}
+.pb-storage-head {
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 20rpx;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+.pb-storage-num {
+  font-family: 'League Gothic', 'DF Yuan', sans-serif;
+  font-size: 96rpx;
+  line-height: 0.85;
+  margin-top: auto;
+}
+.pb-storage-unit {
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 22rpx;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.pb-storage-note {
+  margin-top: 24rpx;
+  font-family: 'Aleo', 'DF Yuan', serif;
+  font-style: italic;
+  font-size: 24rpx;
+  color: var(--ink-60);
+  text-align: right;
+}
+
+/* ───────── 09 · NOTES CALLOUT ─────────
+   Full-width band, no border. Aleo italic dimmed. Olive asterisk
+   prefix (never a bullet). Max ~3 lines. */
+.pb-notes {
+  padding: 48rpx 44rpx 56rpx;
+}
+.pb-notes-p {
+  font-family: 'Aleo', 'DF Yuan', serif;
+  font-style: italic;
+  font-size: 25rpx;
+  line-height: 1.55;
+  color: var(--ink-60);
+  position: relative;
+  padding-left: 28rpx;
+}
+.pb-notes-p::before {
+  content: "✱";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--olive);
+  font-style: normal;
+}
+
+/* ───────── +1 · BIG STAT CALLOUT ─────────
+   Full-bleed brand-colour slab. Stat huge in Bear Serif. Caps
+   what-label below. Optional italic Aleo sub-line. Decorative dots
+   at left/right edges anchor the slab. */
+.pb-bigstat {
+  background: var(--lime);
+  color: var(--ink);
+  text-align: center;
+  padding: 76rpx 44rpx 80rpx;
+  position: relative;
+  overflow: hidden;
+}
+.pb-bigstat-num {
+  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-weight: 400;
+  font-size: 220rpx;
+  line-height: 0.85;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.pb-bigstat-what {
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 22rpx;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  margin-top: 20rpx;
+  color: var(--ink);
+}
+.pb-bigstat-claim {
+  font-family: 'Aleo', 'DF Yuan', serif;
+  font-style: italic;
+  font-size: 28rpx;
+  margin-top: 12rpx;
+  color: var(--ink);
+}
+.pb-bigstat::before,
+.pb-bigstat::after {
+  content: "·";
+  position: absolute;
+  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-size: 120rpx;
+  line-height: 1;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink);
+}
+.pb-bigstat::before { left: 28rpx; }
+.pb-bigstat::after  { right: 28rpx; }
+
+/* ───────── +2 · PULL QUOTE / ORIGIN NOTE ─────────
+   Background oat-deep · no border. Aleo italic with curly quotes.
+   Attribution Toni caps. */
+.pb-pullquote {
+  padding: 48rpx 44rpx 52rpx;
+  background: var(--oat-deep);
+}
+.pb-pullquote-p {
+  font-family: 'Aleo', 'DF Yuan', serif;
+  font-style: italic;
+  font-size: 30rpx;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.pb-pullquote-who {
+  margin-top: 20rpx;
+  font-family: 'Toni Grotesk', sans-serif;
+  font-size: 20rpx;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-60);
 }

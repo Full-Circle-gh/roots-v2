@@ -18,6 +18,7 @@ Page({
     products: [],
     categories: [],
     flashSales: [],
+    topProducts: {},
     polls: [],
     customer: null,
     lang: 'en',
@@ -61,18 +62,44 @@ Page({
         api.get('/api/retail/flash-sales').catch(() => []),
         hasToken ? api.get('/api/retail/polls').catch(() => []) : Promise.resolve([]),
       ]);
+      const layout = cfg?.[this.data.page]?.layout || [];
       this.setData({
-        layout: cfg?.[this.data.page]?.layout || [],
+        layout,
         products: Array.isArray(prods) ? prods : prods?.data || [],
         categories: Array.isArray(cats) ? cats : cats?.data || [],
         flashSales: Array.isArray(flash) ? flash : flash?.data || [],
         polls: Array.isArray(polls) ? polls : (polls?.data || []),
         loading: false,
       });
+      this._fetchTopProductsFor(layout);
     } catch (e) {
       console.warn('[layout:' + this.data.page + '] refresh failed:', e.message);
       this.setData({ loading: false });
     }
+  },
+
+  // Same logic as home.js — fetch any top_selling tuples referenced by the
+  // current layout and merge into topProducts so the block-renderer can
+  // find them by key.
+  async _fetchTopProductsFor(layout) {
+    const keys = new Set();
+    (layout || []).forEach(b => {
+      if (b.type !== 'product_grid' || b.source_type !== 'top_selling') return;
+      keys.add(`${b.top_channel || 'combined'}|${b.top_window || '7d'}|${b.limit || 6}`);
+    });
+    if (!keys.size) return;
+    const next = { ...(this.data.topProducts || {}) };
+    await Promise.all([...keys].map(async key => {
+      if (next[key]) return;
+      const [channel, window, limit] = key.split('|');
+      try {
+        const res = await api.get(`/api/retail/products/top?channel=${encodeURIComponent(channel)}&window=${encodeURIComponent(window)}&limit=${encodeURIComponent(limit)}`);
+        next[key] = Array.isArray(res) ? res : (res?.data || []);
+      } catch {
+        next[key] = [];
+      }
+    }));
+    this.setData({ topProducts: next });
   },
 
   async onVote(e) {

@@ -30,11 +30,17 @@ Page({
     myVouchers: [],          // granted to this customer
     showCodeInput: false,    // collapses the type-a-code row until tapped
     deliveryMethod: 'standard',  // 'standard' | 'max' — 'sameday' kept as legacy fallback
-    paymentMethod: 'wechat',     // 'wechat' | 'alipay' | 'points'
+    paymentMethod: 'wechat',     // 'wechat' | 'alipay'  (points is no longer a method; see usePoints toggle below)
     pointsBalance: 0,            // customer's available points (drives Points option visibility)
     pointsValue: '0.00',         // ¥ value of the balance (display only)
     pointsRequired: 0,           // points needed to pay this order entirely
     pointsAffordable: false,     // balance covers requirement — gates the Points radio
+    pointsRedeemRate: 100,       // points per ¥1 (from server config)
+    pointsMaxUsable: 0,          // capped at min(balance, pointsRequiredFor(grossTotal))
+    pointsToUse: 0,              // points the customer chose to apply (partial stack)
+    pointsDiscount: '0.00',      // ¥ off the bill from pointsToUse (only meaningful when usePoints=true)
+    pointsPotentialDiscount: '0.00', // ¥ off the bill IF usePoints were on — used in the toggle subtitle BEFORE the customer flips it
+    usePoints: false,            // toggle: apply max usable on this order
     // Delivery scheduling — populated by the /quote response.
     scheduling: null,            // full scheduling object from server (slots, surcharge, hours)
     deliverySlotId: '',          // 'right_away' | 'YYYY-MM-DD' | 'YYYY-MM-DDTHH:MM' — required before placeOrder
@@ -50,12 +56,37 @@ Page({
     // farther one can fulfill, the server marks the quote with
     // `needs_fallback_confirmation`. We pre-warn the customer with a banner
     // and ask for explicit consent in a modal before submitting the order.
-    routing: null,               // full routing block from /quote — { ok, store_name_*, needs_fallback_confirmation?, nearest?, fallback? }
-    needsFallback: false,        // shortcut: routing.needs_fallback_confirmation === true
+    routing: null,               // full routing block from /quote — { gate, nearest, fallback, missing_items, ... }
+    fallbackGate: 'none',        // 'none' | 'simple_confirm' | 'options_5' — drives which modal opens
+    needsFallback: false,        // gate !== 'none'
     fallbackStoreName: '',       // display name of the farther store (localized)
     nearestStoreName: '',        // display name of the (out-of-stock) nearest store (localized)
+    fallbackExtraKm: null,       // km the fallback adds vs nearest (for option 3 messaging)
+    fallbackExtraMin: null,      // estimated extra minutes
+    missingItems: [],            // [{ product_id, name_en, name_cn, qty, available, image_data }]
     acceptedFallback: false,     // user clicked "Yes, ship from farther store" — sent as accept_fallback:true on /orders
-    showFallbackModal: false,    // toggles the custom in-page modal (replaces wx.showModal so we can brand it)
+    showFallbackModal: false,    // toggles the in-page 5-option modal
+    fallbackBusy: false,         // disables buttons while a sub-fetch is in flight
+    // Slot-conflict warning when the customer picks Wait-for-restock on a
+    // HARD time slot (right_away / today HH:MM). Modal is brand-styled
+    // (matches fb-modal-card) instead of wx.showModal which renders as the
+    // native Android-grey alert — wrong palette, wrong typography. State
+    // is mirrored by the askWaitForRestockConfirm() Promise.
+    showWaitConfirmModal: false,
+    waitConfirmSlotLabel: '',    // the slot the customer is about to lose
+    // Substitute picker sub-screen
+    showReplacePicker: false,    // overlay on top of the modal
+    replacePickerIndex: 0,       // index into missingItems we're picking for
+    substituteOptions: [],       // curated substitutes for current missing item
+    chosenReplacements: [],      // [{ original_product_id, substitute_product_id, qty, name_en }]
+    // Free-browse mode: when the curated list isn't what the customer
+    // wants (or when there are no curated suggestions at all), they can
+    // tap "Browse all products" and pick literally anything from the
+    // catalogue via a search box. Backed by /api/retail/products?q=…
+    browseAll: false,            // true = browse mode; false = curated mode
+    browseQuery: '',             // current search text
+    browseResults: [],           // products returned by the last /products fetch
+    browseLoading: false,        // in-flight indicator for the search
     scheduleMinDate: '',         // <picker mode="date"> start bound (YYYY-MM-DD)
     scheduleMaxDate: '',         // <picker mode="date"> end bound (YYYY-MM-DD)
     schedulePickedDate: '',      // last date the customer picked from the calendar
@@ -77,6 +108,11 @@ Page({
     needsCutlery: false,
     needsInvoice: false,
     placing: false,
+    // True when the customer has bound their WeChat profile (nickname is the
+    // gate field — set when /pages/profile/profile saves). Unbound customers
+    // see an empty-state CTA instead of the manual address form, and the
+    // place-order button routes them into the bind flow.
+    isBound: true,
     lang: 'en',
     copy: {
       kicker: 'CHECKOUT · 结账',
@@ -90,6 +126,7 @@ Page({
       addOnsTitle: 'Add-ons',
       couponsTitle: 'Coupons',
       placeOrder: 'PLACE ORDER →',
+      placeOrderBind: 'BIND WECHAT TO CONTINUE →',
       pay: 'PAY',
       name: 'Name',
       phone: 'Phone',
@@ -107,12 +144,29 @@ Page({
       alipayOpt: 'Alipay',
       pointsOpt: 'Points',
       free: 'FREE',
+      // Bind-WeChat empty state, shown in place of the address form when
+      // customer.nickname is unset. Tapping the CTA opens /pages/profile.
+      bindTitle: 'Bind WeChat to ship to your door',
+      bindBody: "We pull your name, phone and address straight from WeChat — accurate every time, no manual typing.",
+      bindCta: 'Bind WeChat →',
+      shipFromHint: 'From your WeChat profile · edit anytime in your address book',
     },
   },
 
   async onLoad() {
     const app = getApp();
-    this.setData({ lang: app.globalData.lang });
+    // Hard reset transient flags on every land. If a previous in-page action
+    // left `placing` true (cancelled WeChat Pay sheet that didn't fire its
+    // callback, hot-reload that preserved data, page brought back from cache),
+    // the Place Order button renders as a disabled-looking gray slab with
+    // "…" text — looks broken. Forcing them false here means a fresh land
+    // is always interactive, no matter how the previous session ended.
+    this.setData({
+      lang: app.globalData.lang,
+      placing: false,
+      fallbackBusy: false,
+      quoting: false,
+    });
     this.applyLangCopy();
 
     const state = cart.get();
@@ -122,19 +176,24 @@ Page({
       return;
     }
 
-    // Profile-binding gate. The order flow needs a real customer name —
-    // if the customer hasn't bound their WeChat nickname yet, route them
-    // to the profile page first. Cart.js gates this too, but checkout is
-    // reachable via deep-links so we re-check here.
-    const cust = app.globalData.customer || {};
-    if (!cust.nickname) {
-      wx.showToast({
-        title: this.data.lang === 'cn' ? '请先绑定资料' : 'Please bind your profile first',
-        icon: 'none',
-      });
-      setTimeout(() => wx.redirectTo({ url: '/pages/profile/profile' }), 800);
-      return;
+    // Profile-binding gate. The order flow needs a WeChat-verified name +
+    // phone + address — without it, every order would carry hand-typed data
+    // with no link back to the customer's WeChat identity. Cart.js prompts
+    // before navigating here, but checkout is reachable via deep-links so we
+    // re-check on land and render an in-page empty state instead of
+    // redirecting (the redirect ate the back stack and felt like a wall).
+    // The CTA, and the place-order button, both route to /pages/profile.
+    //
+    // Wait for onLaunch's silentLogin to settle before reading customer.
+    // Without this the deep-link arrives mid-auth, customer is null, and
+    // the page renders the bind-empty state even for a bound customer —
+    // visible as "I have to click Me first before checkout sees me".
+    if (app.authReady) {
+      try { await app.authReady; } catch {}
     }
+    const cust = app.globalData.customer || {};
+    const isBound = !!cust.nickname;
+    this.setData({ isBound });
 
     // Stash the kitchen address for the "we don't deliver here" message.
     try {
@@ -142,8 +201,122 @@ Page({
       this.setData({ kitchenAddress: cfg?.delivery?.kitchenAddress || '' });
     } catch {}
 
-    // Load saved addresses — pick the default (or first) as the initial
-    // selection. If the user has 0 saved, fall through to the inline form.
+    // Unbound customer — skip the address/quote/coupon loads. They'll run
+    // in onShow once the customer comes back from the bind page.
+    if (!isBound) return;
+
+    await this.loadAddressesAndQuote();
+    this.loadPublicCoupons();
+    this.loadPointsBalance();
+
+    // If the user tapped "Use Now" on a coupon from /pages/coupons, the
+    // code was stashed in storage on the way over. Apply it now.
+    try {
+      const pending = wx.getStorageSync('pending_voucher_code');
+      if (pending) {
+        wx.removeStorageSync('pending_voucher_code');
+        this.setData({ voucherInput: String(pending).toUpperCase() });
+        this.applyVoucher();
+      }
+    } catch {}
+  },
+
+  // Re-check bind state on every show so returning from /pages/profile
+  // (after a successful bind via wx.navigateBack) flips the page from
+  // empty-state to the real checkout without a manual refresh.
+  async onShow() {
+    const app = getApp();
+    const cust = app.globalData.customer || {};
+    const isBound = !!cust.nickname;
+    const boundChanged = isBound !== this.data.isBound;
+    const patch = {};
+    if (boundChanged) patch.isBound = isBound;
+    // Defensive: any time the page comes back to the foreground, clear the
+    // "placing" / "fallbackBusy" flags. They're meant to debounce concurrent
+    // taps inside one session — but if a wx.requestPayment or sub-modal
+    // navigation didn't fire its completion callback (e.g. user swiped away
+    // the WeChat Pay sheet), the flag stays true and the Place Order button
+    // renders as `…` over a disabled black rectangle — looks "missing" to
+    // the customer. Resetting on onShow is safe: any real in-flight order
+    // POST that's actually still pending will set the flag back to true
+    // before its next render.
+    if (this.data.placing)      patch.placing = false;
+    if (this.data.fallbackBusy) patch.fallbackBusy = false;
+    if (Object.keys(patch).length) this.setData(patch);
+    if (!isBound) return;
+    // Always re-fetch saved addresses on onShow — coming back from the
+    // /addresses page after editing a recipient name / address text must
+    // surface the new value here (and on the picker dropdown). Previously
+    // we bailed early when bind status hadn't changed, which is what made
+    // the renamed recipient look like it never saved.
+    //
+    // To avoid stomping a half-typed inline new-address form, only the
+    // initial first show (onLoad already loaded once) also re-runs the
+    // coupons + points fetches — the rest only refresh the addresses list
+    // and keep the current picked address selected when still present.
+    if (boundChanged) {
+      await this.loadAddressesAndQuote();
+      this.loadPublicCoupons();
+      this.loadPointsBalance();
+    } else {
+      this.reloadSavedAddresses();
+    }
+  },
+
+  // Lightweight re-fetch used by onShow when the user navigates back from
+  // /pages/addresses. Refreshes `savedAddresses` and, if the currently
+  // picked address still exists, mirrors its updated fields into the
+  // `address` form so the displayed recipient_name / phone / etc. reflect
+  // what was just edited. Doesn't re-run /quote because the address ID
+  // didn't change.
+  async reloadSavedAddresses() {
+    try {
+      const addrs = await api.get('/api/retail/addresses');
+      const list  = Array.isArray(addrs) ? addrs : addrs?.data || [];
+      const patch = { savedAddresses: list };
+      // /pages/addresses sets `_addressJustPicked` on us before navigating
+      // back when the customer taps a card to switch addresses. That ID wins
+      // over the previously-picked one so the new pick takes effect without
+      // forcing the customer to also tap CHANGE on this page.
+      const justPicked = this.data._addressJustPicked;
+      const targetId = justPicked || this.data.address?.id;
+      let next = targetId ? list.find(a => a.id === targetId) : null;
+      if (!next && list.length) next = list.find(a => a.is_default) || list[0];
+
+      if (next) {
+        const switched = next.id !== this.data.address?.id;
+        patch.address = {
+          id: next.id,
+          recipient_name: next.recipient_name || '',
+          phone: next.phone || '',
+          address: next.address || '',
+          detail: next.detail || '',
+          city: next.city || '',
+          district: next.district || '',
+        };
+        // Clear the cross-page flag so onShow doesn't keep re-applying it.
+        if (justPicked) patch._addressJustPicked = null;
+        this.setData(patch);
+        // If the actual selected address changed, re-run /quote so the
+        // zone-match, delivery fee, and packing fee all reflect the new
+        // city/district instead of the previous one.
+        if (switched) this.refreshQuote();
+        return;
+      }
+      this.setData(patch);
+    } catch {}
+  },
+
+  // Routes the customer into the WeChat-profile bind flow. After they save
+  // there, wx.navigateBack returns to this page and onShow refreshes state.
+  bindWechat() {
+    wx.navigateTo({ url: '/pages/profile/profile' });
+  },
+
+  // Loads saved addresses, picks the default (or first), and runs the first
+  // /quote. Extracted from onLoad so onShow can re-run it after the customer
+  // binds via the profile page.
+  async loadAddressesAndQuote() {
     try {
       const addrs = await api.get('/api/retail/addresses');
       const list = Array.isArray(addrs) ? addrs : addrs?.data || [];
@@ -166,21 +339,7 @@ Page({
         });
       }
     } catch {}
-
     this.refreshQuote();
-    this.loadPublicCoupons();
-    this.loadPointsBalance();
-
-    // If the user tapped "Use Now" on a coupon from /pages/coupons, the
-    // code was stashed in storage on the way over. Apply it now.
-    try {
-      const pending = wx.getStorageSync('pending_voucher_code');
-      if (pending) {
-        wx.removeStorageSync('pending_voucher_code');
-        this.setData({ voucherInput: String(pending).toUpperCase() });
-        this.applyVoucher();
-      }
-    } catch {}
   },
 
   async loadPublicCoupons() {
@@ -259,6 +418,7 @@ Page({
         addOnsTitle: '附加',
         couponsTitle: '优惠券',
         placeOrder: '提交订单 →',
+        placeOrderBind: '绑定微信 继续 →',
         pay: '应付',
         name: '收件人',
         phone: '电话',
@@ -276,6 +436,10 @@ Page({
         alipayOpt: '支付宝',
         pointsOpt: '积分抵扣',
         free: '免费',
+        bindTitle: '绑定微信,配送到家',
+        bindBody: '我们从微信直接读取您的姓名、电话和地址 — 准确无误,无需手动输入。',
+        bindCta: '绑定微信 →',
+        shipFromHint: '来自您的微信资料 · 可在地址簿中随时修改',
       },
     });
   },
@@ -313,16 +477,35 @@ Page({
       choices: (it.options || []).map(o => o.choice_id).filter(Boolean),
     }));
 
+    // When the "Use points" toggle is on, send the full balance and let
+    // the server clamp to min(balance, pts-needed). The quote response
+    // tells us what was actually applied + the cash discount.
+    // payment_method always sends the picked radio — server treats the
+    // residual (or 0) as a charge against that rail.
+    const usingPoints = !!this.data.usePoints;
     const body = {
       items: orderItems,
       delivery_mode: this.data.deliveryMethod,
       payment_method: this.data.paymentMethod,
+      points_to_use:  usingPoints ? (this.data.pointsBalance || 0) : 0,
+      // CRITICAL: include the picked slot so /quote's analyzeShortage uses
+      // the same `requiresStockGate` decision /orders POST will use. Without
+      // this, /quote sees slot=null → skips stock gate → reports gate=none,
+      // but /orders sees slot=right_away → triggers stock gate → returns
+      // needs_fallback_confirmation. The disagreement made the 5-option
+      // modal silently invisible (client thought no fallback was needed,
+      // so the pre-check on placeOrder didn't open it) and the submit
+      // retry loop hung until the watchdog tripped.
+      delivery_slot_id: this.data.deliverySlotId || null,
     };
     if (hasSaved) body.address_id = a.id;
     else          body.address    = { city: a.city, district: a.district };
 
     this.setData({ quoting: true });
-    api.post('/api/retail/checkout/quote', body)
+    // Returning the chain so callers (e.g. the stock-race recovery in
+    // submitOrder) can `await this.refreshQuote()` before inspecting
+    // this.data.needsFallback / fallbackGate.
+    return api.post('/api/retail/checkout/quote', body)
       .then(resp => {
         const data = resp?.data || resp || {};
         // The endpoint returns { success: false, error: 'no_zone_match', data } when
@@ -334,8 +517,12 @@ Page({
         if (this.data.voucherFreeShip) effectiveDelivery = 0;
         const voucherDiscount = Number(this.data.voucherDiscount) || 0;
         const grossTotal = Math.max(0, subtotal + effectiveDelivery + packingFee - voucherDiscount);
-        const payingWithPoints = this.data.paymentMethod === 'points' && data.points_affordable;
-        const total = payingWithPoints ? 0 : grossTotal;
+        const payingWithPoints = !!this.data.usePoints && data.points_affordable;
+        // Partial-points stack: server clamped points_to_use → applied amount + discount.
+        const pointsMaxUsable    = Number(data.points_max_usable) || 0;
+        const pointsToUseApplied = Number(data.points_to_use_applied) || 0;
+        const pointsDiscount     = Number(data.points_discount) || 0;
+        const total = payingWithPoints ? 0 : Math.max(0, grossTotal - pointsDiscount);
         // Group slots by date for the UI. Server returns a flat list; we
         // bucket by date_iso so the wxml can render a "day → slots" tree.
         const sch = data.scheduling || null;
@@ -345,27 +532,38 @@ Page({
         // clear it so the customer is forced to pick again.
         const validSlotIds = new Set(['right_away', ...((sch?.slots || []).map(s => s.slot_id))]);
         const stillValid = this.data.deliverySlotId && validSlotIds.has(this.data.deliverySlotId);
-        const nextSlotId    = stillValid ? this.data.deliverySlotId    : '';
-        const nextSlotLabel = stillValid ? this.data.deliverySlotLabel : '';
-        const nextSlotSurcharge = stillValid ? this.data.deliverySurcharge : 0;
+        let nextSlotId    = stillValid ? this.data.deliverySlotId    : '';
+        let nextSlotLabel = stillValid ? this.data.deliverySlotLabel : '';
+        let nextSlotSurcharge = stillValid ? this.data.deliverySurcharge : 0;
+        // Default to "Right away" when the kitchen is open and the
+        // customer hasn't picked something else. Customer can switch to
+        // a later time-slot or scheduled day if they prefer.
+        if (!stillValid && sch?.right_away_available) {
+          nextSlotId = 'right_away';
+          nextSlotLabel = this.data.lang === 'cn' ? '立即配送' : 'Right away';
+          nextSlotSurcharge = 0;
+        }
         const totalWithSurcharge = Math.max(0, (Number(total) || 0) + nextSlotSurcharge);
-        // Routing info — drives the "ships from farther store, longer wait?"
-        // banner + modal. Reset acceptedFallback when the situation changes
-        // (e.g. address swap that moves us back to nearest-in-stock).
+        // Routing info — drives both the simple yes/no fallback modal
+        // (legacy) and the new 5-option modal (GZ + non-excluded district
+        // + right_away slot). Server tells us which via `routing.gate`.
         const routing = data.routing || null;
-        const needsFallback = !!(routing && routing.needs_fallback_confirmation);
-        const fallbackStoreName = needsFallback
-          ? (this.data.lang === 'cn'
-              ? (routing.fallback?.store_name_cn || routing.fallback?.store_name_en || '')
-              : (routing.fallback?.store_name_en || routing.fallback?.store_name_cn || ''))
+        const fallbackGate = routing?.gate || 'none';
+        const needsFallback = fallbackGate !== 'none' && !routing?.ok;
+        const isCN = this.data.lang === 'cn';
+        const fallbackStoreName = needsFallback && routing?.fallback
+          ? (isCN ? (routing.fallback.store_name_cn || routing.fallback.store_name_en || '')
+                  : (routing.fallback.store_name_en || routing.fallback.store_name_cn || ''))
           : '';
-        const nearestStoreName = needsFallback
-          ? (this.data.lang === 'cn'
-              ? (routing.nearest?.store_name_cn || routing.nearest?.store_name_en || '')
-              : (routing.nearest?.store_name_en || routing.nearest?.store_name_cn || ''))
+        const nearestStoreName = needsFallback && routing?.nearest
+          ? (isCN ? (routing.nearest.store_name_cn || routing.nearest.store_name_en || '')
+                  : (routing.nearest.store_name_en || routing.nearest.store_name_cn || ''))
           : '';
         const keepAccepted = this.data.acceptedFallback && needsFallback
           && this.data.routing?.fallback?.store_id === routing?.fallback?.store_id;
+        const fallbackExtraKm  = routing?.fallback?.extra_km ?? null;
+        const fallbackExtraMin = routing?.fallback?.extra_min_estimate ?? null;
+        const missingItems     = Array.isArray(routing?.missing_items) ? routing.missing_items : [];
         this.setData({
           zone: data.zone || null,
           zoneError: '',
@@ -375,6 +573,16 @@ Page({
           pointsEarnedPreview: Number(data.points_earned_preview) || 0,
           pointsRequired:    Number(data.points_required) || 0,
           pointsAffordable:  !!data.points_affordable,
+          pointsRedeemRate:  Number(data.points_redeem_rate) || 100,
+          pointsBalance:     Number(data.points_balance) || this.data.pointsBalance || 0,
+          pointsMaxUsable,
+          pointsToUse:       pointsToUseApplied,
+          pointsDiscount:    pointsDiscount.toFixed(2),
+          // What the points WOULD be worth if the toggle were on, even
+          // when it isn't right now. Used as the "potential savings" copy
+          // in the Use-points toggle subtitle so the customer sees their
+          // points have value before flipping the switch.
+          pointsPotentialDiscount: (pointsMaxUsable / (Number(data.points_redeem_rate) || 100)).toFixed(2),
           scheduling: sch,
           slotsByDay,
           deliverySlotId: nextSlotId,
@@ -383,9 +591,13 @@ Page({
           total: totalWithSurcharge.toFixed(2),
           quoting: false,
           routing,
+          fallbackGate,
           needsFallback,
           fallbackStoreName,
           nearestStoreName,
+          fallbackExtraKm,
+          fallbackExtraMin,
+          missingItems,
           acceptedFallback: keepAccepted,
         });
         // Day-only mode: configure the three-option picker (Express / Today /
@@ -460,28 +672,45 @@ Page({
   // default selection (the earliest non-surcharge slot, i.e. tomorrow).
   applyDayOnlyDefaults(forceDefault) {
     const sch = this.data.scheduling;
-    if (!sch || sch.mode !== 'day_only' || !Array.isArray(sch.slots) || !sch.slots.length) {
-      this.setData({ hasTodayOption: false, scheduleMinDate: '', scheduleMaxDate: '' });
+    // Bail only when we have NOTHING to render — no slots AND no schedule
+    // window. An older server (pre-2026-05-20) could return an empty `slots`
+    // array for day-only city zones with no Today chip; in that case we
+    // synthesise the Express slot from schedule.min_date locally so the
+    // radio still has a label and a working tap target.
+    if (!sch || sch.mode !== 'day_only') {
+      this.setData({ hasTodayOption: false, scheduleMinDate: '', scheduleMaxDate: '', expressLabel: '', expressSub: '' });
       return;
     }
-    const slots = sch.slots;
+    let slots = Array.isArray(sch.slots) ? sch.slots : [];
+    if (!slots.length && sch.schedule?.min_date) {
+      slots = [{
+        slot_id:    sch.schedule.min_date,
+        date_iso:   sch.schedule.min_date,
+        is_same_day: false,
+        is_day_only: true,
+        requires_surcharge: false,
+        surcharge:  0,
+        label_en:   `Earliest ${sch.schedule.min_date}`,
+        label_cn:   `最早 ${sch.schedule.min_date}`,
+      }];
+    }
+    if (!slots.length) {
+      this.setData({ hasTodayOption: false, scheduleMinDate: '', scheduleMaxDate: '', expressLabel: '', expressSub: '' });
+      return;
+    }
     const surcharge = Number(sch.same_day_surcharge) || 0;
     const todaySlot   = slots.find(s => s.is_same_day);
     const expressSlot = slots.find(s => !s.requires_surcharge) || slots[0];
     const hasTodayOption = !!todaySlot && surcharge > 0;
     const L = this.data.lang;
 
-    // Express label: lean on the lead window — if the customer can get it
-    // tomorrow that's "1–2 days"; otherwise mention the minimum lead.
-    const minLead = Number(sch.min_lead_days) || 0;
-    let expressLabel, expressSub;
-    if (minLead <= 1) {
-      expressLabel = L === 'cn' ? '加急配送(1-2 天)' : 'Express delivery (1–2 days)';
-      expressSub   = L === 'cn' ? '根据商品和库存而定'  : 'based on product type and stock availability';
-    } else {
-      expressLabel = L === 'cn' ? `标准配送(${minLead} 天起)` : `Standard delivery (${minLead}+ days)`;
-      expressSub   = L === 'cn' ? '系统将为您安排最早的可用日期' : 'we ship on the earliest available day';
-    }
+    // Express label: customer-facing copy is always "1–2 days" for day-only
+    // zones — SF Express transit time to non-GZ cities is 1–2 business days
+    // regardless of the admin-side min_lead_days buffer (which we use for
+    // scheduling, not for what we promise the buyer). One label, both
+    // shapes, no conditional copy.
+    const expressLabel = L === 'cn' ? '加急配送(1-2 天)' : 'Express delivery (1–2 days)';
+    const expressSub   = L === 'cn' ? '系统将为您安排最早的可用日期' : 'we ship on the earliest available day';
 
     // "Schedule for later" calendar bounds come from the server's
     // scheduling.schedule object — both modes use the same window now.
@@ -579,9 +808,11 @@ Page({
     const deliveryFee = Number(this.data.deliveryFee) || 0;
     const packingFee  = Number(this.data.packingFee)  || 0;
     const voucherDiscount = Number(this.data.voucherDiscount) || 0;
-    const payingWithPoints = this.data.paymentMethod === 'points' && this.data.pointsAffordable;
+    const pointsDiscount  = Number(this.data.pointsDiscount)  || 0;
+    const payingWithPoints = !!this.data.usePoints && this.data.pointsAffordable;
     const gross = Math.max(0, subtotal + deliveryFee + packingFee - voucherDiscount + surcharge);
-    const total = payingWithPoints ? 0 : gross;
+    const total = payingWithPoints ? 0 : Math.max(0, gross - pointsDiscount);
+    const slotChanged = slot.slot_id !== this.data.deliverySlotId;
     this.setData({
       selectedSlotKind: kind,
       deliverySlotId: slot.slot_id,
@@ -589,11 +820,23 @@ Page({
       deliverySurcharge: surcharge,
       total: total.toFixed(2),
     });
+    // Re-quote when the slot identity changes — slot affects server-side
+    // stock-gating + fallback detection (right_away triggers stock check,
+    // scheduled-for-later bypasses it). Without this re-quote, the client
+    // can think `needsFallback=false` while /orders POST returns
+    // `needs_fallback_confirmation` for the same cart, leading to the
+    // submit-retry loop we just patched.
+    if (slotChanged) this.refreshQuote();
   },
 
-  // Customer picked a slot chip. Updates the slot id + label + surcharge
-  // and re-runs the local total math (no server round-trip needed since
-  // the slot itself doesn't change zone/fee — only the surcharge stacks).
+  // Customer picked a slot chip. Updates the slot id + label + surcharge,
+  // recomputes total locally, AND re-runs /quote — because the slot's
+  // same-day-ness changes server-side stock-gating + fallback detection.
+  // The original "no server round-trip needed, fees don't change" comment
+  // missed this: right_away/today triggers stock check + may need fallback;
+  // a future-dated slot bypasses it. Without the re-quote the client
+  // thinks `needsFallback=false` while /orders POST returns
+  // `needs_fallback_confirmation`, hanging the submit flow.
   pickSlot(e) {
     const id        = e.currentTarget.dataset.id;
     const labelEn   = e.currentTarget.dataset.labelEn || '';
@@ -605,15 +848,28 @@ Page({
     const deliveryFee = Number(this.data.deliveryFee) || 0;
     const packingFee  = Number(this.data.packingFee)  || 0;
     const voucherDiscount = Number(this.data.voucherDiscount) || 0;
-    const payingWithPoints = this.data.paymentMethod === 'points' && this.data.pointsAffordable;
+    const pointsDiscount  = Number(this.data.pointsDiscount)  || 0;
+    const payingWithPoints = !!this.data.usePoints && this.data.pointsAffordable;
     const gross = Math.max(0, subtotal + deliveryFee + packingFee - voucherDiscount + surcharge);
-    const total = payingWithPoints ? 0 : gross;
+    const total = payingWithPoints ? 0 : Math.max(0, gross - pointsDiscount);
+    const slotChanged = id !== this.data.deliverySlotId;
+    // Mutually-exclusive radio state: the Schedule-for-later option keys
+    // its filled "on" state off `selectedSlotKind === 'schedule'` (set by
+    // applyDayOnlySlot). pickSlot used to only touch deliverySlotId, so
+    // after the customer scheduled a date and then tapped Right away (or
+    // a 16-18pm chip), the Schedule dot stayed filled — two radios showed
+    // as selected at the same time. Resetting selectedSlotKind here makes
+    // the time-slot picker the single source of truth: any slot picked
+    // through `pickSlot` is by definition NOT a scheduled-for-later pick,
+    // so Schedule's dot turns off.
     this.setData({
       deliverySlotId: id,
       deliverySlotLabel: label,
       deliverySurcharge: surcharge,
+      selectedSlotKind: '',
       total: total.toFixed(2),
     });
+    if (slotChanged) this.refreshQuote();
   },
 
   // Used when we can't quote (no address yet, or transient error). Keeps the
@@ -732,27 +988,24 @@ Page({
     this.setData({ deliveryMethod: e.currentTarget.dataset.method });
     this.refreshQuote();
   },
+  // Pay-method radio. Points is NO LONGER one of these — it lives as a
+  // toggle above the radios. Migrating any pre-existing 'points' value
+  // (from a session predating the split) is handled in onLoad.
   setPayment(e) {
     const m = e.currentTarget.dataset.method;
-    if (m === 'points') {
-      // Points covers the whole order; refuse if balance is short. The
-      // /quote endpoint stamps pointsRequired/Affordable based on current
-      // total — re-quote first so the latest gross total drives the check.
-      const need = this.data.pointsRequired || 0;
-      const have = this.data.pointsBalance  || 0;
-      if (!this.data.pointsAffordable && need > 0 && have < need) {
-        const short = need - have;
-        wx.showToast({
-          title: this.data.lang === 'cn'
-            ? `还差 ${short} 积分`
-            : `Need ${short} more points`,
-          icon: 'none',
-        });
-        return;
-      }
-    }
+    if (m === this.data.paymentMethod) return;
     this.setData({ paymentMethod: m });
-    // Re-quote so the displayed total reflects whether points zero it out.
+    this.refreshQuote();
+  },
+
+  // Toggle: "Use my points". Flips usePoints, which becomes the trigger
+  // for the partial-stack server path (points_to_use = balance). When
+  // pointsAffordable is true on the resulting quote, the total drops to
+  // 0 and the picked radio is skipped at /payment/create.
+  onTogglePoints(e) {
+    const on = !!e.detail.value;
+    if (on === this.data.usePoints) return;
+    this.setData({ usePoints: on });
     this.refreshQuote();
   },
 
@@ -796,7 +1049,40 @@ Page({
   noop() {},
 
   async placeOrder() {
-    if (this.data.placing) return;
+    // Stale-flag self-heal: a real submitOrder() takes at most a few seconds
+    // round-trip. If `placing` has been true for >5s, it's almost certainly
+    // stuck from a prior session (cancelled pay sheet that didn't fire its
+    // callback, network drop, hot-reload). Treat a tap in that state as a
+    // recovery action — reset the flag and proceed with a fresh attempt
+    // instead of bailing and looking dead.
+    if (this.data.placing) {
+      const stuckMs = Date.now() - (this._placingStartedAt || 0);
+      if (stuckMs > 5000) {
+        console.warn('[checkout] tap on stale placing flag — recovering');
+        this.setData({ placing: false });
+        // Fall through and proceed.
+      } else {
+        return;
+      }
+    }
+    // Replaces the native <button disabled> guard now that the place-order
+    // tap target is a <view>. Tapping while in a disabled state silently
+    // no-ops (with a toast when the customer would benefit from knowing
+    // why).
+    if (this.data.isBound && this.data.zoneError) {
+      wx.showToast({
+        title: this.data.lang === 'cn' ? '此地址暂不在配送范围内' : "We don't deliver to this address",
+        icon: 'none',
+      });
+      return;
+    }
+    // Bind-on-action: if the customer hit Place Order without binding their
+    // WeChat profile (deep-linked past cart's gate), route them to bind
+    // first. onShow will resume the checkout flow on their return.
+    if (!this.data.isBound) {
+      this.bindWechat();
+      return;
+    }
     const a = this.data.address;
     if (!a.recipient_name || !a.phone || !a.address) {
       wx.showToast({ title: this.data.lang === 'cn' ? '请填写完整地址' : 'Please fill in the address', icon: 'none' });
@@ -806,15 +1092,48 @@ Page({
       wx.showToast({ title: this.data.lang === 'cn' ? '请选择配送时间' : 'Please pick a delivery time', icon: 'none' });
       return;
     }
-    // Up-front confirmation if the latest quote said nearest is short. The
-    // /orders endpoint will also refuse on its own as a safety net, so this
-    // is purely for UX — get the question out of the way before payment.
-    if (this.data.needsFallback && !this.data.acceptedFallback) {
-      const ok = await this.askFallbackConfirmation();
-      if (!ok) return;
-      this.setData({ acceptedFallback: true });
+    // Out-of-stock flow at the nearest store. The server told us via the
+    // latest /quote whether to use the rich 5-option modal or the simple
+    // yes/no. The 5-option flow now owns _all_ the order-creation logic;
+    // we route to it then return — it calls submitOrder() once the
+    // customer picks an option.
+    if (this.data.needsFallback && !this.data.acceptedFallback && !this.data.fallback_choice_applied) {
+      if (this.data.fallbackGate === 'options_5') {
+        this.setData({ showFallbackModal: true });
+        return;
+      }
+      if (this.data.fallbackGate === 'simple_confirm') {
+        const ok = await this.askFallbackConfirmation();
+        if (!ok) return;
+        this.setData({ acceptedFallback: true });
+      }
     }
-    this.setData({ placing: true });
+    return this.submitOrder({ accept_fallback: !!this.data.acceptedFallback });
+  },
+
+  // The actual order POST + payment flow. Extracted from placeOrder so the
+  // 5-option modal handlers can call it directly with the right
+  // fallback_choice / replacements payload.
+  async submitOrder(extra) {
+    const a = this.data.address;
+    this.setData({ placing: true, showFallbackModal: false, showReplacePicker: false });
+    this._placingStartedAt = Date.now();
+    // Watchdog: every imaginable success/fail path below SHOULD reset
+    // `placing` to false, but real-world bugs include (a) cancelled
+    // wx.requestPayment that doesn't fire complete on certain WeChat
+    // builds, (b) network hangs longer than the request timeout, (c)
+    // hot-reload that preserves data across recompiles. If `placing`
+    // stays true past 20s the button locks into its disabled "…" state
+    // forever and the only escape is killing the mini-program. Force a
+    // reset so the customer can always tap again.
+    if (this._placingWatchdog) clearTimeout(this._placingWatchdog);
+    this._placingWatchdog = setTimeout(() => {
+      if (this.data.placing) {
+        console.warn('[checkout] placing-flag watchdog tripped — force reset');
+        this.setData({ placing: false });
+      }
+      this._placingWatchdog = null;
+    }, 20000);
 
     try {
       // 1. Save address if it's new (id is null)
@@ -840,6 +1159,12 @@ Page({
         qty: it.qty,
         choices: (it.options || []).map(o => o.choice_id).filter(Boolean),
       }));
+      // Same translation as the quote: "Use points" toggle → send the
+      // full balance as points_to_use; server clamps and writes the ledger.
+      // payment_method is always the picked radio — when the discount
+      // equals grossTotal, server sets order.total=0 and /payment/create
+      // short-circuits to paid (the radio is just the fallback rail).
+      const usingPoints = !!this.data.usePoints;
       const orderPayload = {
         items: orderItems,
         address_id: addressId,
@@ -851,31 +1176,81 @@ Page({
         customer_note: this.data.note || null,
         needs_cutlery: this.data.needsCutlery,
         needs_invoice: this.data.needsInvoice,
-        accept_fallback: !!this.data.acceptedFallback,
+        points_to_use:  usingPoints ? (this.data.pointsBalance || 0) : 0,
+        ...(extra || {}),
       };
       let order;
       try {
+        console.log('[checkout] POST /api/retail/orders →', {
+          slot_id: orderPayload.delivery_slot_id,
+          item_count: orderPayload.items.length,
+          address_id: orderPayload.address_id,
+        });
+        const t0 = Date.now();
         order = await api.post('/api/retail/orders', orderPayload);
+        console.log('[checkout] POST /api/retail/orders ← OK in', Date.now() - t0, 'ms', { id: order?.id || order?.data?.id });
       } catch (e) {
-        // Server-side safety net: stock changed between quote and submit,
-        // and the nearest store is now short. Show the same modal using
-        // the fresh `nearest` + `fallback` info from the error body, and
-        // retry once on confirmation.
-        if (e?.message === 'needs_fallback_confirmation' && e.body) {
-          const ok = await this.askFallbackConfirmation(e.body);
-          if (!ok) { this.setData({ placing: false }); return; }
-          this.setData({ acceptedFallback: true });
-          orderPayload.accept_fallback = true;
-          order = await api.post('/api/retail/orders', orderPayload);
-        } else {
-          throw e;
+        console.warn('[checkout] POST /api/retail/orders ← FAIL', { message: e?.message, status: e?.status, body: e?.body });
+        // Stock-at-submit safety net. Server returned needs_fallback_confirmation
+        // because we either didn't have a fallback_choice yet OR stock changed
+        // between quote and submit. The 5-option modal owns this flow — its
+        // wx:if requires `fallbackGate === 'options_5'` AND `missingItems[]`
+        // populated, so calling askFallbackConfirmation() directly here used
+        // to hang forever (it sets showFallbackModal=true but neither the
+        // gate nor missingItems, so no modal renders). Cleanly hand off by
+        // re-running /quote — that path correctly sets gate + missing_items
+        // for the live cart state, and the modal opens via its normal
+        // condition. We then bail with placing:false so the modal's own
+        // submit handler picks up from here on the customer's choice.
+        if (e?.message === 'needs_fallback_confirmation') {
+          this.setData({ placing: false, acceptedFallback: false });
+          try { await this.refreshQuote(); } catch {}
+          if (this.data.needsFallback && this.data.fallbackGate === 'options_5') {
+            this.setData({ showFallbackModal: true });
+          } else if (this.data.needsFallback && this.data.fallbackGate === 'simple_confirm') {
+            const ok = await this.askFallbackConfirmation();
+            if (!ok) return;
+            this.setData({ acceptedFallback: true });
+            return this.submitOrder({ accept_fallback: true });
+          } else if (!extra || !extra._stockRetried) {
+            // Quote and /orders disagree. /quote says no fallback needed,
+            // /orders says it does. Retry once with the same payload (in
+            // case the server-side race already resolved). The
+            // `_stockRetried` flag below guarantees we never spin forever
+            // — without it the disagreement would loop as fast as the
+            // network can churn (button visibly flickers).
+            return this.submitOrder({ ...(extra || {}), _stockRetried: true });
+          } else {
+            // Already retried once and still inconsistent — server has a
+            // bug or stock dropped to 0 while we were typing. Stop the
+            // loop, tell the customer plainly, and surface the items the
+            // server thinks are missing so they can decide what to do.
+            console.error('[checkout] /quote ↔ /orders inconsistency on fallback gate; aborting retry loop', e?.body);
+            const isCN = this.data.lang === 'cn';
+            const nearestName = isCN
+              ? (e?.body?.nearest?.store_name_cn || e?.body?.nearest?.store_name_en || '')
+              : (e?.body?.nearest?.store_name_en || e?.body?.nearest?.store_name_cn || '');
+            wx.showModal({
+              title: isCN ? '库存暂时不足' : 'Temporarily out of stock',
+              content: isCN
+                ? `${nearestName || '最近门店'}缺货,请稍后再试或修改购物车。`
+                : `${nearestName || 'The nearest store'} is short of stock — please try again later or update your cart.`,
+              showCancel: false,
+              confirmText: isCN ? '我知道了' : 'OK',
+            });
+          }
+          return;
         }
+        throw e;
       }
       const orderId = order?.id || order?.data?.id;
       if (!orderId) throw new Error(this.data.lang === 'cn' ? '订单创建失败' : 'Could not create order');
 
       // 3. Initiate payment
+      console.log('[checkout] POST /api/retail/payment/create →', { order_id: orderId });
+      const tPay = Date.now();
       const pay = await api.post('/api/retail/payment/create', { order_id: orderId });
+      console.log('[checkout] POST /api/retail/payment/create ← OK in', Date.now() - tPay, 'ms');
       const payData = pay?.data || pay;
 
       if (payData?.dev || payData?.status === 'paid') {
@@ -902,6 +1277,12 @@ Page({
           },
           fail: () => {
             wx.showToast({ title: this.data.lang === 'cn' ? '支付未完成' : 'Payment incomplete', icon: 'none' });
+          },
+          // ALWAYS reset placing — some WeChat builds don't fire `fail`
+          // when the customer dismisses the pay sheet by tapping outside,
+          // leaving the button stuck in the "..." disabled state forever.
+          // `complete` runs on success AND on dismiss, so we're covered.
+          complete: () => {
             this.setData({ placing: false });
           },
         });
@@ -913,9 +1294,58 @@ Page({
       this.setData({ placing: false });
     } catch (e) {
       console.error('[checkout] place order failed:', e);
+      // Race-on-pay: stock changed between quote and Pay tap. Re-fetch the
+      // quote and react automatically — the old behaviour just toasted and
+      // left the customer to figure out what to do next (the warning banner
+      // is below the fold on most screens). Now:
+      //   • If the refreshed quote reveals a fallback gate → open the
+      //     5-option (or simple-confirm) modal immediately so they pick.
+      //   • If the race already resolved (no shortage on re-quote) →
+      //     auto-retry the order once. Capped at one retry to avoid loops.
+      //   • Otherwise → toast with a clear "remove this item or try later"
+      //     hint so the customer doesn't think the page is dead.
+      if (e?.message === 'insufficient_stock' || e?.message === 'no_shortage') {
+        wx.showToast({
+          title: this.data.lang === 'cn' ? '库存已变化,正在刷新…' : 'Stock changed — refreshing…',
+          icon: 'none',
+          duration: 1500,
+        });
+        this.setData({ placing: false, acceptedFallback: false });
+        try { await this.refreshQuote(); } catch {}
+        // 1. Quote now shows a fallback gate → open the modal automatically.
+        const gate = this.data.fallbackGate;
+        if (this.data.needsFallback && gate === 'options_5') {
+          this.setData({ showFallbackModal: true });
+          return;
+        }
+        if (this.data.needsFallback && gate === 'simple_confirm') {
+          const ok = await this.askFallbackConfirmation();
+          if (!ok) return;
+          this.setData({ acceptedFallback: true });
+          return this.submitOrder({ accept_fallback: true, _stockRetried: true });
+        }
+        // 2. No gate AND we haven't auto-retried yet → race already
+        // resolved server-side, just resubmit the same payload.
+        if (!extra || !extra._stockRetried) {
+          return this.submitOrder({ ...(extra || {}), _stockRetried: true });
+        }
+        // 3. Still failing after a retry — give the customer a clear next step.
+        const offendingId = e?.body?.product_id;
+        const offending = offendingId
+          ? (this.data.items || []).find(it => it.product_id === offendingId)
+          : null;
+        const name = offending ? (this.data.lang === 'cn' ? offending.name_cn : offending.name_en) : '';
+        wx.showToast({
+          title: name
+            ? (this.data.lang === 'cn' ? `「${name}」库存不足` : `${name} is out of stock`)
+            : (this.data.lang === 'cn' ? '部分商品库存不足,请稍后重试或修改购物车' : 'Some items are out of stock — try again later or update your cart'),
+          icon: 'none',
+          duration: 2800,
+        });
+        return;
+      }
       const friendly = {
         insufficient_points: this.data.lang === 'cn' ? '积分不足' : 'Not enough points',
-        insufficient_stock:  this.data.lang === 'cn' ? '库存不足' : 'Out of stock',
         no_zone_match:       this.data.lang === 'cn' ? '该地址无法配送' : 'Address not in delivery range',
       };
       wx.showToast({
@@ -927,5 +1357,236 @@ Page({
       if (e.message === 'insufficient_points') this.refreshQuote();
       this.setData({ placing: false });
     }
+  },
+
+  // ───── 5-option fallback modal ────────────────────────────────────────
+  // Dismiss without picking anything (taps backdrop or × button).
+  closeFallbackModal() {
+    this.setData({ showFallbackModal: false, showReplacePicker: false });
+  },
+
+  // Option 1 — cancel missing items, ship the rest from nearest.
+  async fbCancelMissing() {
+    if (this.data.fallbackBusy) return;
+    this.setData({ fallbackBusy: true });
+    try { await this.submitOrder({ fallback_choice: 'cancel_missing' }); }
+    finally { this.setData({ fallbackBusy: false }); }
+  },
+
+  // Option 2 — replace missing items with substitutes. Opens the picker
+  // sub-screen one item at a time. When all picked, submit the order.
+  async fbReplaceMissing() {
+    if (this.data.fallbackBusy) return;
+    this.setData({ chosenReplacements: [], replacePickerIndex: 0 });
+    await this._loadSubstitutesForCurrentMissing();
+  },
+
+  // Option 3 — full order from the farther store. Same as legacy accept_fallback.
+  async fbFullFromFallback() {
+    if (this.data.fallbackBusy) return;
+    this.setData({ fallbackBusy: true, acceptedFallback: true });
+    try { await this.submitOrder({ fallback_choice: 'full_from_fallback' }); }
+    finally { this.setData({ fallbackBusy: false }); }
+  },
+
+  // Option 4 — wait for the nearest store to restock. Order pays now,
+  // sits in 'awaiting_restock' until stock arrives at that store.
+  //
+  // Slot-conflict warning: "Wait for restock" means we ship whenever
+  // stock arrives — could be hours, could be days. That conflicts with
+  // a HARD time-slot pick (right_away / today HH:MM–HH:MM) because the
+  // restock might not happen inside the chosen window. Only the hard
+  // picks need a confirmation; flexible picks (day-only Express
+  // "earliest available", Schedule-for-later date-only) already imply
+  // "whenever, we trust you" and don't conflict.
+  async fbWaitForRestock() {
+    if (this.data.fallbackBusy) return;
+    const slotId = this.data.deliverySlotId || '';
+    const isHardSlot = slotId === 'right_away' || /T\d{2}:\d{2}/.test(slotId);
+    if (isHardSlot) {
+      const ok = await this.askWaitForRestockConfirm();
+      if (!ok) return;
+    }
+    this.setData({ fallbackBusy: true });
+    try { await this.submitOrder({ fallback_choice: 'wait_for_restock' }); }
+    finally { this.setData({ fallbackBusy: false }); }
+  },
+
+  // Brand-styled "your hard time slot may not be honored" warning. Opens
+  // an in-page modal (fb-modal-card) instead of wx.showModal so the
+  // palette + typography match the rest of the checkout flow. Returns a
+  // Promise<bool>: true = customer accepted, false = cancelled.
+  askWaitForRestockConfirm() {
+    this._waitConfirmResolve = null;
+    // Remember whether the 5-option sheet was open and hide it while the
+    // confirm modal is up — otherwise the sheet's z-index 9000 paints
+    // over this 1000-level dialog and the customer sees nothing. We
+    // restore it on cancel so they can pick a different option.
+    this._fallbackWasOpen = !!this.data.showFallbackModal;
+    this.setData({
+      showFallbackModal: false,
+      showWaitConfirmModal: true,
+      waitConfirmSlotLabel: this.data.deliverySlotLabel || '',
+    });
+    return new Promise(resolve => { this._waitConfirmResolve = resolve; });
+  },
+  resolveWaitConfirmContinue() {
+    this.setData({ showWaitConfirmModal: false });
+    this._fallbackWasOpen = false;
+    if (this._waitConfirmResolve) { this._waitConfirmResolve(true); this._waitConfirmResolve = null; }
+  },
+  resolveWaitConfirmCancel() {
+    // Cancel = customer changed their mind; bounce them back to the
+    // 5-option sheet so they can pick another path instead of being
+    // dumped silently back onto the checkout page.
+    this.setData({
+      showWaitConfirmModal: false,
+      showFallbackModal: this._fallbackWasOpen,
+    });
+    this._fallbackWasOpen = false;
+    if (this._waitConfirmResolve) { this._waitConfirmResolve(false); this._waitConfirmResolve = null; }
+  },
+
+  // Option 5 — cancel the whole order. Just close the modal; nothing posts.
+  fbCancelOrder() { this.closeFallbackModal(); },
+
+  // ───── Substitute picker sub-screen ───────────────────────────────────
+  async _loadSubstitutesForCurrentMissing() {
+    const i = this.data.replacePickerIndex;
+    const item = this.data.missingItems[i];
+    if (!item) {
+      // No more items to pick — submit the order with all replacements.
+      const replacements = this.data.chosenReplacements.map(r => ({
+        original_product_id: r.original_product_id,
+        substitute_product_id: r.substitute_product_id,
+        qty: r.qty,
+      }));
+      this.setData({ fallbackBusy: true });
+      try { await this.submitOrder({ fallback_choice: 'replace_missing', replacements }); }
+      finally { this.setData({ fallbackBusy: false }); }
+      return;
+    }
+    const storeId = this.data.routing?.nearest?.store_id;
+    if (!storeId) {
+      wx.showToast({ title: this.data.lang === 'cn' ? '未找到门店' : 'No store', icon: 'none' });
+      return;
+    }
+    try {
+      const options = await api.get(`/api/retail/products/${item.product_id}/substitute-options?store_id=${storeId}`);
+      const rawCurated = Array.isArray(options) ? options : (options.data || []);
+      // Pre-format sell_price to a 2-decimal string so float artefacts
+      // (e.g. 27.200000000000003) don't surface in the UI.
+      const curated = rawCurated.map(s => ({
+        ...s,
+        sell_price: (Number(s.sell_price ?? s.price ?? 0)).toFixed(2),
+      }));
+      this.setData({
+        substituteOptions: curated,
+        // Reset browse state when opening the picker for a fresh item.
+        // If there are NO curated suggestions, jump straight into browse
+        // mode so the customer isn't stuck on an empty-state screen.
+        browseAll: curated.length === 0,
+        browseQuery: '',
+        browseResults: [],
+        showFallbackModal: false,
+        showReplacePicker: true,
+      });
+      if (curated.length === 0) this._loadBrowseResults();
+    } catch (e) {
+      wx.showToast({ title: this.data.lang === 'cn' ? '加载失败' : 'Load failed', icon: 'none' });
+      this.setData({ showReplacePicker: false });
+    }
+  },
+
+  // Toggle between curated-substitutes view and free-browse view inside
+  // the replace-picker overlay. Customers who don't see what they want in
+  // the recommended list can hit "Browse all products" to pick anything.
+  toggleBrowseAll() {
+    const nextBrowse = !this.data.browseAll;
+    this.setData({ browseAll: nextBrowse });
+    if (nextBrowse && !this.data.browseResults.length) {
+      this._loadBrowseResults();
+    }
+  },
+
+  onBrowseQueryInput(e) {
+    const q = e.detail.value || '';
+    this.setData({ browseQuery: q });
+    // Debounce: only fire after the customer pauses typing for 250ms.
+    if (this._browseDebounce) clearTimeout(this._browseDebounce);
+    this._browseDebounce = setTimeout(() => this._loadBrowseResults(), 250);
+  },
+
+  clearBrowseQuery() {
+    this.setData({ browseQuery: '' });
+    this._loadBrowseResults();
+  },
+
+  async _loadBrowseResults() {
+    const q = (this.data.browseQuery || '').trim();
+    // Exclude the missing product itself — it's "out of stock", picking
+    // it back as a substitute would just re-trigger the same failure.
+    const excludeId = this.data.missingItems[this.data.replacePickerIndex]?.product_id;
+    this.setData({ browseLoading: true });
+    try {
+      const path = '/api/retail/products?limit=40' + (q ? '&q=' + encodeURIComponent(q) : '');
+      const r = await api.get(path);
+      const list = Array.isArray(r) ? r : (r.data || []);
+      const filtered = list.filter(p => p.id !== excludeId);
+      // Normalize shape to match curated substitute rows so the WXML
+      // template can render either list with the same markup. Pre-format
+      // sell_price to a 2-decimal string so floats like 27.200000000000003
+      // (server-side calc artefact) don't leak into the UI.
+      const normalized = filtered.map(p => ({
+        product_id: p.id,
+        name_en:    p.name_en,
+        name_cn:    p.name_cn,
+        sku:        p.sku,
+        sell_price: (Number(p.price ?? p.sell_price ?? 0)).toFixed(2),
+        image_data: p.image_data || p.image_url || '',
+        curated:    false,
+      }));
+      this.setData({ browseResults: normalized, browseLoading: false });
+    } catch (e) {
+      console.warn('[checkout] browse-all fetch failed:', e.message);
+      this.setData({ browseLoading: false });
+    }
+  },
+
+  // User tapped a substitute in the picker. The picked product can live in
+  // EITHER `substituteOptions` (curated) OR `browseResults` (free-browse) —
+  // search both. Previously this only checked substituteOptions, so taps in
+  // browse mode found nothing in the list and bailed silently.
+  onPickSubstitute(e) {
+    const subId = +e.currentTarget.dataset.id;
+    const i = this.data.replacePickerIndex;
+    const orig = this.data.missingItems[i];
+    const sub = (this.data.substituteOptions || []).find(s => s.product_id === subId)
+             || (this.data.browseResults    || []).find(s => s.product_id === subId);
+    if (!sub || !orig) return;
+    const chosen = [...this.data.chosenReplacements, {
+      original_product_id: orig.product_id,
+      substitute_product_id: sub.product_id,
+      qty: orig.qty,
+      name_en: sub.name_en,
+      name_cn: sub.name_cn,
+    }];
+    this.setData({ chosenReplacements: chosen, replacePickerIndex: i + 1 });
+    // Move on to the next missing item (or submit if we're done).
+    this._loadSubstitutesForCurrentMissing();
+  },
+
+  // Back-button on the picker: go back one step or close.
+  onReplacePickerBack() {
+    const i = this.data.replacePickerIndex;
+    if (i <= 0) {
+      // Back to the modal.
+      this.setData({ showReplacePicker: false, showFallbackModal: true });
+      return;
+    }
+    // Drop last chosen, reload picker for previous index.
+    const chosen = this.data.chosenReplacements.slice(0, -1);
+    this.setData({ chosenReplacements: chosen, replacePickerIndex: i - 1 });
+    this._loadSubstitutesForCurrentMissing();
   },
 });

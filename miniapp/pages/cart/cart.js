@@ -29,6 +29,13 @@ Page({
     const app = getApp();
     this.setData({ lang: app.globalData.lang });
     this.recompute();
+    // Defensive: re-fire the tab-badge update on every cart-tab show.
+    // Some base-library versions silently ignore wx.removeTabBarBadge
+    // when it's invoked from a non-tab page (e.g. during checkout's
+    // cart.clear() right before redirect), leaving a stale "1" badge.
+    cart.updateBadge();
+    const tb = this.getTabBar && this.getTabBar();
+    if (tb && tb.setSelected) tb.setSelected('pages/cart/cart');
   },
 
   recompute() {
@@ -87,9 +94,13 @@ Page({
   removeItem(e) {
     cart.remove(e.currentTarget.dataset.key);
   },
-  goCheckout() {
+  async goCheckout() {
     if (!this.data.items.length) return;
     const app = getApp();
+    // Wait for auth before checking nickname — racing onLaunch's silent
+    // login would otherwise pop the "bind your profile" modal to a
+    // customer who's already bound.
+    if (app.authReady) { try { await app.authReady; } catch {} }
     const c = app.globalData.customer || {};
     if (!c.nickname) {
       const L = this.data.lang;

@@ -20,7 +20,16 @@ const COLOR_MAP = {
   'carrot-blaze': '#FF6B0C', 'papaya-glow': '#FFAF60', 'skyberry': '#B2CFED',
   'lotus': '#EEB8E4', 'citrus-zest': '#E7E74C', 'pea-sprout': '#7BBD3B',
 };
-function color(name) { return COLOR_MAP[name] || name || '#CCD900'; }
+// Resolve a brand-colour token (e.g. 'lime-leaf') to a hex. Pass-through
+// for raw colour strings (#hex / rgb()). Empty / null returns empty so the
+// caller can decide between "no bg" and a sensible default — earlier the
+// `|| '#CCD900'` tail silently painted unset bg_color slots LIME, which
+// leaked through every block that used `color(b.bg_color || '')` (most
+// visibly the category_tabs strip on the home page).
+function color(name) {
+  if (!name) return '';
+  return COLOR_MAP[name] || name;
+}
 
 Component({
   properties: {
@@ -29,10 +38,15 @@ Component({
     categories: { type: Array,   value: [] },
     products:   { type: Array,   value: [] },
     flashSales: { type: Array,   value: [] },
+    // Top-selling products keyed by `${channel}|${window}|${limit}`. The
+    // host page fetches whatever keys are referenced by product_grid
+    // blocks with source_type='top_selling' and passes them in here.
+    topProducts: { type: Object, value: {} },
     affiliate:  { type: Object,  value: null },   // { code, stats, enabled }
     polls:      { type: Array,   value: [] },     // live polls for voting_block
     customer:   { type: Object,  value: null },   // { nickname, points_balance, ... } for greeting + kitchen blocks
     kitchen:    { type: Object,  value: null },   // { address, hours_en, hours_cn, open_hour, close_hour, eta_minutes }
+    favorites:  { type: Array,   value: [] },     // customer's saved products for favorites_block
   },
 
   data: {
@@ -41,6 +55,9 @@ Component({
     label: '',
     bg: '',
     fg: '',
+    anim: 'static',
+    speed: 'normal',
+    chars: [],
     // hero
     imageUrl: '',
     aspectRatio: '',
@@ -78,10 +95,15 @@ Component({
     store: null,
     // affiliate
     affiliateCard: null,
+    // wecom (企业微信) contact block
+    wecom: null,
+    // favorites — customer's saved products for the home block
+    favoritesCard: null,
+    favoritesHidden: false,
   },
 
   observers: {
-    'block, lang, categories, products, flashSales, affiliate, polls, customer, kitchen': function () {
+    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites': function () {
       this.recompute();
     },
   },
@@ -116,6 +138,16 @@ Component({
           out.bg = color(b.bg_color || 'lime-leaf');
           out.fg = color(b.fg_color || 'ink');
           out.announceLink = b.link_target || '';
+          out.anim = b.animation || 'static';
+          out.speed = b.speed || 'normal';
+          // Per-letter animations need each char as its own text node so
+          // we can stagger animation-delay via --i. `Array.from` handles
+          // surrogate pairs (single-char emoji / CJK = 1 element).
+          if (out.anim === 'typewriter' || out.anim === 'wave' || out.anim === 'fade_in_letters') {
+            out.chars = Array.from(out.label || '');
+          } else {
+            out.chars = [];
+          }
           break;
         }
         case 'hero_banner': {
@@ -134,6 +166,10 @@ Component({
           out.heroSubtitle = lang.pick(b.subtitle_en, b.subtitle_cn, L);
           out.heroPanelBg = color(b.panel_bg_color || 'oat-milk');
           out.heroPanelFg = color(b.panel_fg_color || 'ink');
+          // 2026-05-20 enhancements: scrim strength on the 'full' view
+          // + entrance animation.
+          out.heroScrim  = b.scrim || 'medium';
+          out.heroEnter  = b.entrance_anim || 'none';
           break;
         }
         case 'category_tabs': {
@@ -143,6 +179,7 @@ Component({
           out.catWord = L === 'cn' ? '分类' : 'CATEGORY';
           out.catView = b.view || 'tiles';
           out.catCols = Math.max(3, Math.min(5, b.columns || 4));
+          out.catBg   = color(b.bg_color || '');
           const cats = (b.category_ids || [])
             .map(id => this.properties.categories.find(c => c.id === id))
             .filter(Boolean);
@@ -178,6 +215,23 @@ Component({
             out.price = eff > 0 ? '¥' + eff.toFixed(2) : '—';
           }
           out.featuredKicker = lang.pick(b.kicker_en ?? b.kicker, b.kicker_cn, L);
+          // Layout + colours from CMS. `view` ∈ card | banner | split.
+          // `bg_color` is the outer block surface (null → transparent so the
+          // page bg shows through); `card_bg_color` / `card_fg_color` paint
+          // the inner card. Legacy blocks without these fields keep the old
+          // hardcoded look (ink card + oat-milk text).
+          out.featuredView    = b.view || 'card';
+          out.featuredBg      = b.bg_color ? color(b.bg_color) : 'transparent';
+          out.featuredCardBg  = color(b.card_bg_color || 'ink');
+          out.featuredCardFg  = color(b.card_fg_color || 'oat-milk');
+          // 2026-05-20 enhancements: corner radius preset + sale badge +
+          // price emphasis mode + entrance animation. Mirrors the CMS form.
+          out.featuredCorner    = b.corner_radius || 'subtle';
+          out.featuredEnter     = b.entrance_anim || 'none';
+          out.featuredPriceMode = b.price_mode || 'both';
+          const saleMode = b.sale_badge || 'auto';
+          out.featuredShowSale  = saleMode === 'auto' && !!(p && p.is_on_flash);
+          out.featuredSaleLabel = L === 'cn' ? '秒杀' : 'SALE';
           break;
         }
         case 'product_grid': {
@@ -186,18 +240,52 @@ Component({
           out.seeAll = L === 'cn' ? '查看全部' : 'SEE ALL';
           out.cols   = b.columns || 2;
           out.gridView = b.view || 'grid';
+          // 2026-05-20 enhancements: card corner radius + grid density +
+          // rank badge gating (only relevant for top_selling source).
+          out.gridCorner  = b.corner_radius || 'subtle';
+          out.gridDensity = b.density       || 'normal';
+          out.gridRankMode = b.rank_badge || 'top_3';
           let list = [];
           if (b.source_type === 'manual') {
             list = (b.product_ids || []).map(id => this.properties.products.find(p => p.id === id)).filter(Boolean);
+          } else if (b.source_type === 'top_selling') {
+            // Host page pre-fetches top sellers per (channel|window|limit)
+            // key; we just look up the result here. Empty array until data
+            // arrives — host triggers a re-render once cache is warm.
+            const key = `${b.top_channel || 'combined'}|${b.top_window || '7d'}|${b.limit || 6}`;
+            const top = this.properties.topProducts || {};
+            list = Array.isArray(top[key]) ? top[key] : [];
           } else {
             const cat = this.properties.categories.find(c => c.id === b.category_id);
             list = this.properties.products.filter(p => !b.category_id || p.category === cat?.name);
           }
-          out.gridProducts = list.slice(0, b.limit || 6).map(p => {
+          const isTopSelling = b.source_type === 'top_selling';
+          // Rank badge gating — `gridRankMode` picks which positions show
+          // their "NO. xx" / 🏆 ribbon. 'top_3' is the default ribbon-only-
+          // for-medalists behaviour; 'always' shows ranks 4+ too; 'never'
+          // suppresses the whole ribbon. Non-top_selling source ignores this.
+          const rankMode = out.gridRankMode;
+          out.gridProducts = list.slice(0, b.limit || 6).map((p, idx) => {
             const regular = Number(p.sell_price ?? p.price) || 0;
             const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
             const isFlash = !!p.is_on_flash && eff < regular;
             const tagline = lang.pick(p.tagline_en, p.tagline_cn, L) || lang.pick(p.description_en, p.description_cn, L) || '';
+            // Rank position (1..N). The renderer downstream decides whether
+            // to show it based on rankMode + idx.
+            let rank = isTopSelling ? (idx + 1) : 0;
+            if (rankMode === 'never') rank = 0;
+            else if (rankMode === 'top_3' && rank > 3) rank = 0;
+            const rankClass = !rank ? '' :
+              rank === 1 ? 'rank-1' :
+              rank === 2 ? 'rank-2' :
+              rank === 3 ? 'rank-3' : 'rank-n';
+            const rankLabel = !rank ? '' :
+              rank === 1 ? `🏆 NO. 01` :
+              `NO. ${rank < 10 ? '0' + rank : rank}`;
+            const units = Number(p.units_sold) || 0;
+            const soldCaption = isTopSelling && units > 0
+              ? (L === 'cn' ? `已售 ${units}` : `${units} SOLD`)
+              : '';
             return {
               id: p.id,
               image: absUrl(p.image_url) || p.image_data || '',
@@ -205,13 +293,23 @@ Component({
               tagline: tagline.length > 80 ? tagline.slice(0, 80) + '…' : tagline,
               price: eff > 0 ? '¥' + eff.toFixed(2) : '—',
               priceWas: isFlash ? '¥' + regular.toFixed(2) : '',
-              isFlash,
+              isFlash: isFlash && !rank,
+              rank,
+              rankLabel,
+              rankClass,
+              unitsSold: units,
+              soldCaption,
             };
           });
           break;
         }
         case 'spacer': {
           out.height = b.height_px || 24;
+          // 2026-05-20 — optional decorative divider centred in the spacer.
+          // 'none' is the legacy blank gap; line/dashes/dots draw a coloured
+          // rule. dividerColor is resolved via the brand-color picker.
+          out.dividerStyle = b.divider_style || 'none';
+          out.dividerColor = color(b.divider_color || 'olive-moss');
           break;
         }
         case 'sticker_collage': {
@@ -375,15 +473,101 @@ Component({
         case 'store_info': {
           out.bg = color(b.bg_color || 'oat-milk');
           out.fg = color(b.fg_color || 'ink');
-          out.store = {
-            kicker:  lang.pick(b.kicker_en,  b.kicker_cn,  L),
-            title:   lang.pick(b.title_en,   b.title_cn,   L),
-            address: lang.pick(b.address_en, b.address_cn, L),
-            hours:   lang.pick(b.hours_en,   b.hours_cn,   L),
-            phone:   b.phone || '',
-            ctaLabel: lang.pick(b.cta_label_en, b.cta_label_cn, L),
-            ctaTarget: b.cta_target || '',
+          const openCol   = color(b.open_color   || 'pea-sprout');
+          const closedCol = color(b.closed_color || 'berry-punch');
+          // Normalize stores: new format has b.stores[]; legacy had top-level
+          // title/address/hours/phone fields — fold those into a singleton so
+          // the WXML loop is uniform.
+          let raw = Array.isArray(b.stores) && b.stores.length ? b.stores : null;
+          if (!raw && (b.title_en || b.title_cn || b.address_en || b.address_cn || b.phone)) {
+            raw = [{
+              name_en: b.title_en, name_cn: b.title_cn,
+              address_en: b.address_en, address_cn: b.address_cn,
+              hours_en: b.hours_en, hours_cn: b.hours_cn,
+              phone: b.phone,
+              open_hour: b.open_hour, close_hour: b.close_hour,
+              eta_minutes: b.eta_minutes,
+              cta_label_en: b.cta_label_en, cta_label_cn: b.cta_label_cn,
+              cta_target: b.cta_target,
+            }];
+          }
+          const hr = new Date().getHours() + (new Date().getMinutes() / 60);
+          out.storeKicker = lang.pick(b.kicker_en, b.kicker_cn, L);
+          out.stores = (raw || []).map((s, i) => {
+            const openH  = Number(s.open_hour);
+            const closeH = Number(s.close_hour);
+            const hasHours = Number.isFinite(openH) && Number.isFinite(closeH);
+            const isOpen = hasHours
+              ? (closeH > openH ? (hr >= openH && hr < closeH) : (hr >= openH || hr < closeH))
+              : null;
+            const eta = Number(s.eta_minutes) || 0;
+            return {
+              key: 's' + i,
+              name:    lang.pick(s.name_en,    s.name_cn,    L),
+              address: lang.pick(s.address_en, s.address_cn, L),
+              hours:   lang.pick(s.hours_en,   s.hours_cn,   L),
+              phone:   s.phone || '',
+              hasStatus: hasHours,
+              isOpen: !!isOpen,
+              statusLabel: isOpen === null ? '' :
+                isOpen ? (L === 'cn' ? '营业中' : 'Open now')
+                       : (L === 'cn' ? '已打烊' : 'Closed'),
+              statusColor: isOpen ? openCol : closedCol,
+              etaLabel: (eta > 0 && isOpen === true)
+                ? (L === 'cn' ? `约 ${eta} 分钟送达` : `~${eta} min delivery`)
+                : '',
+              ctaLabel:  lang.pick(s.cta_label_en, s.cta_label_cn, L),
+              ctaTarget: s.cta_target || '',
+            };
+          });
+          break;
+        }
+        case 'favorites_block': {
+          // "Your saved" rail on the home page. Pulls from the customer's
+          // actual favorites (passed in via the favorites property). When
+          // the rail would be empty (no auth, or zero saved items), we
+          // hide the block — set hide_when_empty=false on the block to
+          // show an empty-state nudge instead.
+          out.bg = color(b.bg_color || 'oat-milk');
+          out.fg = color(b.fg_color || 'ink');
+          const view = b.view || 'scroll';            // 'scroll' | 'grid'
+          const limit = Math.max(1, Math.min(12, b.limit || 6));
+          const favs = Array.isArray(this.properties.favorites) ? this.properties.favorites : [];
+          const hideEmpty = b.hide_when_empty !== false;
+          if (!favs.length && hideEmpty) {
+            out.favoritesHidden = true;
+            out.favoritesCard = null;
+            break;
+          }
+          out.favoritesHidden = false;
+          out.favoritesCard = {
+            kicker: lang.pick(b.kicker_en, b.kicker_cn, L)
+                    || (L === 'cn' ? '你的收藏' : 'YOUR SAVED'),
+            title: lang.pick(b.title_en, b.title_cn, L)
+                    || (L === 'cn' ? '继续看看' : 'Pick up where you left off.'),
+            seeAllLabel: L === 'cn' ? '查看全部' : 'SEE ALL',
+            emptyTitle: L === 'cn' ? '暂无收藏' : 'Nothing saved yet.',
+            emptySub: L === 'cn' ? '点心形图标即可收藏。' : 'Tap the heart on a product to save it.',
+            view,
+            items: favs.slice(0, limit).map(p => {
+              const regular = Number(p.price ?? p.sell_price) || 0;
+              const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
+              const isFlash = !!p.is_on_flash && eff < regular;
+              const soldOut = p.stock != null && Number(p.stock) <= 0;
+              return {
+                id: p.id,
+                image: absUrl(p.image_url) || p.image_data || '',
+                name: lang.pick(p.name_en, p.name_cn, L),
+                price: eff > 0 ? '¥' + Math.round(eff) : '—',
+                priceWas: isFlash ? '¥' + Math.round(regular) : '',
+                isFlash,
+                soldOut,
+              };
+            }),
+            isEmpty: favs.length === 0,
           };
+          // 2026-05-20 — corner radius preset on the favourite cards.
+          out.favoritesCorner = b.corner_radius || 'subtle';
           break;
         }
         case 'voting_block': {
@@ -579,7 +763,11 @@ Component({
           // Custom override wins if the admin set one for this tone.
           const overrideEn = b['greet_' + tone + '_en'] || b.greet_en;
           const overrideCn = b['greet_' + tone + '_cn'] || b.greet_cn;
-          const greeting = lang.pick(overrideEn, overrideCn, L) || greetMap[L === 'cn' ? 'cn' : 'en'][tone];
+          const greetingText = lang.pick(overrideEn, overrideCn, L) || greetMap[L === 'cn' ? 'cn' : 'en'][tone];
+          // Optional time-of-day emoji prefix (opt-in via show_tod_emoji='on').
+          const todMap = { morning: '🌅', afternoon: '☀️', evening: '🌙', night: '🌟' };
+          const todPrefix = (b.show_tod_emoji === 'on') ? (todMap[tone] + ' ') : '';
+          const greeting = todPrefix + greetingText;
           // Headline: "Good morning, Asher." — leave name off when missing.
           const headline = firstName
             ? `${greeting}, ${firstName}.`
@@ -588,10 +776,15 @@ Component({
           const showPts = b.show_points !== false && pts > 0;
           const ptsValue = (pts / 100).toFixed(2);
           out.greeting = {
+            view: b.view || 'card',
             kicker:   lang.pick(b.kicker_en, b.kicker_cn, L),
             headline,
             pointsLabel: showPts
               ? (L === 'cn' ? `${pts} 积分 · 抵 ¥${ptsValue}` : `${pts} pts · 抵¥${ptsValue}`)
+              : '',
+            pointsNum:   showPts ? String(pts) : '',
+            pointsCnyLabel: showPts
+              ? (L === 'cn' ? `积分 · 抵 ¥${ptsValue}` : `pts · ¥${ptsValue}`)
               : '',
             ctaLabel: lang.pick(b.cta_label_en, b.cta_label_cn, L),
             ctaTarget: b.cta_target || '',
@@ -663,6 +856,8 @@ Component({
             ctaLabel:  lang.pick(b.cta_label_en, b.cta_label_cn, L),
             ctaTarget: b.cta_target || (linkedCard ? 'product:' + linkedCard.id : ''),
           };
+          // 2026-05-20 — corner radius preset on the recipe card.
+          out.recipeCorner = b.corner_radius || 'subtle';
           break;
         }
         case 'bundle': {
@@ -675,6 +870,9 @@ Component({
           out.bg = color(b.bg_color || 'corn');
           out.fg = color(b.fg_color || 'ink');
           out.accent = color(b.accent_color || 'ink');
+          // 2026-05-20 — corner radius preset + entrance animation.
+          out.bundleCorner = b.corner_radius || 'subtle';
+          out.bundleEnter  = b.entrance_anim || 'none';
 
           // Back-compat: blocks saved before the variants[] refactor
           // have flat fields — wrap them in a single-variant array.
@@ -744,6 +942,49 @@ Component({
           };
           break;
         }
+        case 'wecom_contact': {
+          // "Add us on 企业微信" block — two follow-paths, both optional:
+          //  · <button open-type="contact"> → opens mini-app's bound CSR
+          //    chat. Bind a WeCom CSR in 小程序管理后台 → 设置 → 客服 →
+          //    添加客服 → 选择企业微信客服 first, otherwise this falls
+          //    back to whatever WeChat OA CSR is configured.
+          //  · 联系我 QR → long-press → 识别二维码 → enters the
+          //    add-WeCom-contact flow → becomes a 客户 in the company's
+          //    WeCom CRM. Generated in 企微后台 → 客户联系 → 联系我.
+          out.bg = color(b.bg_color || 'oat-milk');
+          out.fg = color(b.fg_color || 'ink');
+          const view = b.view === 'strip' ? 'strip' : 'card';
+          out.wecom = {
+            view,
+            kicker:   lang.pick(b.kicker_en, b.kicker_cn, L),
+            title:    lang.pick(b.title_en, b.title_cn, L),
+            subtitle: lang.pick(b.subtitle_en, b.subtitle_cn, L),
+            hint:     lang.pick(b.hint_en, b.hint_cn, L)
+              || (L === 'cn' ? '长按二维码 · 识别添加' : 'Long-press QR · tap "Add"'),
+            // Default label tracks behaviour: when a QR is configured the
+            // button opens the add-friend flow, so "Add us" reads truer
+            // than the legacy "Chat with us" CSR-chat label.
+            buttonLabel: lang.pick(b.button_label_en, b.button_label_cn, L)
+              || (b.qr_image_url
+                    ? (L === 'cn' ? '添加我们' : 'Add us')
+                    : (L === 'cn' ? '联系客服' : 'Chat with us')),
+            qrUrl: absUrl(b.qr_image_url),
+            // WeCom 微信客服 chat link — when set, the button calls
+            // wx.openCustomerServiceChat() and lands the customer in the
+            // company's WeCom CSR session (bypassing whatever 公众号客服
+            // would have been used by the legacy open-type="contact"
+            // fallback). Generate the URL in 企业微信管理后台 → 微信客服
+            // → 创建客服账号. Optional corpId comes from 企业微信 →
+            // 我的企业 → 企业信息.
+            kfUrl:  b.wecom_kf_url  || '',
+            corpId: b.wecom_corp_id || '',
+            agentName: b.agent_name || '',
+            showButton: b.show_chat_button !== false,
+            showQr:     b.show_qr !== false,
+            accent: color(b.accent_color || 'forest-kale'),
+          };
+          break;
+        }
         case 'countdown_timer': {
           out.bg = color(b.bg_color || 'ink');
           out.fg = color(b.fg_color || 'lime-leaf');
@@ -775,6 +1016,17 @@ Component({
               ended: '',
             };
           }
+          // 2026-05-20 — corner radius preset + urgency animation flag.
+          // 'urgent' fires when remaining time crosses the configured
+          // threshold (off / pulse=<10min / pulse_hour=<1h).
+          out.countdownCorner = b.corner_radius || 'subtle';
+          const urgAnim = b.urgency_anim || 'pulse';
+          let urgent = false;
+          if (ms > 0 && urgAnim !== 'off') {
+            const threshold = urgAnim === 'pulse_hour' ? 60 * 60 * 1000 : 10 * 60 * 1000;
+            urgent = ms < threshold;
+          }
+          out.countdownUrgent = urgent;
           break;
         }
       }
@@ -817,8 +1069,11 @@ Component({
       const target = this.data.points?.ctaTarget || 'me';
       this.triggerEvent('cta', { target });
     },
-    onStoreCtaTap() {
-      const target = this.data.store?.ctaTarget;
+    onStoreCtaTap(e) {
+      // Multi-store: read target from the tapped card's dataset.
+      // Legacy single-store: fall back to this.data.store.
+      const target = (e && e.currentTarget && e.currentTarget.dataset.target)
+        || this.data.store?.ctaTarget;
       if (target) this.triggerEvent('cta', { target });
     },
     onVotingTap() {
@@ -861,8 +1116,10 @@ Component({
         wx.showToast({ title: this.properties.lang === 'cn' ? '已复制' : 'Code copied', icon: 'success' });
       }});
     },
-    onStorePhoneTap() {
-      const phone = (this.data.store?.phone || '').replace(/[^0-9+\-]/g, '');
+    onStorePhoneTap(e) {
+      const raw = (e && e.currentTarget && e.currentTarget.dataset.phone)
+        || this.data.store?.phone || '';
+      const phone = String(raw).replace(/[^0-9+\-]/g, '');
       if (phone) wx.makePhoneCall({ phoneNumber: phone }).catch(() => {});
     },
     onCategoryTap(e) {
@@ -870,6 +1127,10 @@ Component({
     },
     onProductTap(e) {
       this.triggerEvent('product', { id: e.currentTarget.dataset.id });
+    },
+    onFavoritesTap() {
+      // "See all" link on the favorites block — route to /pages/favorites.
+      this.triggerEvent('cta', { target: 'favorites' });
     },
     onGreetingCtaTap() {
       const target = this.data.greeting?.ctaTarget;
@@ -904,6 +1165,54 @@ Component({
         'bundle.activeIndex': idx,
         'bundle.active':      b.variants[idx],
       });
+    },
+    onWecomQrTap() {
+      const url = this.data.wecom?.qrUrl;
+      if (!url) return;
+      // Open in preview so a long-press exposes WeChat's native
+      // "识别图中二维码" sheet — that's the actual add-contact path.
+      wx.previewImage({ urls: [url], current: url });
+    },
+    // Tapping the "Add Us" button opens the QR full-screen. Same flow as
+    // the inline QR's bindtap — both surfaces lead to the same long-press →
+    // 识别二维码 → 添加朋友 sheet. WeChat does not allow a mini-program
+    // button to add a WeChat friend directly (anti-spam); previewing the
+    // QR is the only sanctioned route. This handler is wired in when the
+    // block has a configured qrUrl; without one, the button falls back to
+    // open-type="contact" for the legacy CSR-chat flow.
+    onWecomCtaTap() {
+      this.onWecomQrTap();
+    },
+    // WeCom 微信客服 chat. Used when the block has a kfUrl configured but
+    // no QR. Opens directly into the company's WeCom CSR thread — distinct
+    // from the legacy <button open-type="contact"> path which routes to
+    // whatever 客服 is bound in 小程序管理后台 (often the OA's CSR rather
+    // than the company's WeCom).
+    onWecomChatTap() {
+      const w = this.data.wecom || {};
+      const url = w.kfUrl;
+      if (!url) return;
+      const opts = {
+        extInfo: { url },
+        showMessageCard: false,
+        fail: (err) => {
+          console.warn('openCustomerServiceChat failed', err);
+          wx.showToast({
+            title: this.properties.lang === 'cn' ? '客服暂不可用' : 'Chat unavailable',
+            icon: 'none',
+          });
+        },
+      };
+      // corpId is required by wx.openCustomerServiceChat for 企业微信
+      // external contacts but may be omitted for unified 微信客服 links.
+      // Only pass it when set so the API can pick the right routing.
+      if (w.corpId) opts.corpId = w.corpId;
+      wx.openCustomerServiceChat(opts);
+    },
+    onWecomContactError(e) {
+      // <button open-type="contact"> emits this when no CSR is bound.
+      // Surface a clear hint instead of failing silently.
+      console.warn('wecom_contact: open-type="contact" failed', e.detail);
     },
   },
 });

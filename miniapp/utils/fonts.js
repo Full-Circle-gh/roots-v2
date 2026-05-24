@@ -7,6 +7,10 @@ const { BASE } = require('./api');
 
 const FONTS = [
   { family: 'Bear Serif',    url: BASE + '/assets/fonts/BearSerif.otf'      },
+  // Bear Serif's digits are thin/geometric — Lilita One is the chunky
+  // numeral pair. Loaded under its own family so the unicode-range @font-face
+  // in app.wxss can pick it up for digits + currency symbols.
+  { family: 'Lilita One',    url: BASE + '/assets/fonts/LilitaOne.ttf'      },
   { family: 'Toni Grotesk',  url: BASE + '/assets/fonts/ToniGroteskPro.otf' },
   { family: 'League Gothic', url: BASE + '/assets/fonts/LeagueGothic.ttf'   },
   { family: 'Aleo',          url: BASE + '/assets/fonts/Aleo-Regular.otf'   },

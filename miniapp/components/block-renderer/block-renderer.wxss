@@ -8,6 +8,7 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-align: center;
+  overflow: hidden;
 }
 .announce-linked {
   display: flex; align-items: center; justify-content: center; gap: 12rpx;
@@ -17,6 +18,75 @@
   opacity: 0.75;
   line-height: 1;
 }
+
+/* ── Announcement animations ──────────────────────────────────────────── */
+/* Marquee — horizontal scroll. Track is 2× the text (padded first copy +
+   bare second copy) so translateX(-50%) loops seamlessly. */
+.announce.anim-marquee_rtl,
+.announce.anim-marquee_ltr { display: flex; align-items: center; justify-content: center; gap: 12rpx; }
+.announce .anim-clip { flex: 1; min-width: 0; overflow: hidden; }
+.announce .anim-track { display: inline-flex; flex-wrap: nowrap; white-space: nowrap; will-change: transform; }
+.announce .anim-track > .announce-text:first-child { padding-right: 96rpx; }
+.announce.anim-marquee_rtl .anim-track { animation: a-marquee-rtl var(--anim-dur, 14s) linear infinite; }
+.announce.anim-marquee_ltr .anim-track { animation: a-marquee-ltr var(--anim-dur, 14s) linear infinite; }
+@keyframes a-marquee-rtl { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes a-marquee-ltr { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+
+/* Vertical scroll — fixed-height clip with 2 stacked copies. */
+.announce.anim-scroll_up,
+.announce.anim-scroll_down { padding: 0 32rpx; display: flex; align-items: center; justify-content: center; gap: 12rpx; }
+.announce .anim-vclip { height: 64rpx; overflow: hidden; }
+.announce .anim-vtrack { display: flex; flex-direction: column; align-items: center; line-height: 64rpx; }
+.announce.anim-scroll_up .anim-vtrack   { animation: a-scroll-up var(--anim-dur, 14s) linear infinite; }
+.announce.anim-scroll_down .anim-vtrack { animation: a-scroll-down var(--anim-dur, 14s) linear infinite; }
+@keyframes a-scroll-up   { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+@keyframes a-scroll-down { from { transform: translateY(-50%); } to { transform: translateY(0); } }
+
+/* Per-letter — stagger via inline --i */
+.announce .letters { display: inline-block; }
+.announce .letters .ch { display: inline-block; }
+.announce.anim-typewriter .letters .ch {
+  opacity: 0;
+  animation: a-type-in var(--anim-dur, 6s) infinite;
+  animation-delay: calc(var(--i) * var(--step, 0.08s));
+}
+@keyframes a-type-in { 0%, 100% { opacity: 0; } 8%, 92% { opacity: 1; } }
+.announce.anim-fade_in_letters .letters .ch {
+  opacity: 0;
+  animation: a-fade-in var(--anim-dur, 5s) infinite;
+  animation-delay: calc(var(--i) * var(--step, 0.06s));
+}
+@keyframes a-fade-in { 0%, 100% { opacity: 0; } 25%, 80% { opacity: 1; } }
+.announce.anim-wave .letters .ch {
+  animation: a-wave var(--anim-dur, 2.2s) ease-in-out infinite;
+  animation-delay: calc(var(--i) * var(--step, 0.07s));
+}
+@keyframes a-wave { 0%, 60%, 100% { transform: translateY(0); } 25% { transform: translateY(-8rpx); } }
+
+/* Flicker — whole-text neon flicker, no per-letter split */
+.announce.anim-flicker { animation: a-flicker var(--anim-dur, 2.4s) infinite; }
+@keyframes a-flicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; text-shadow: 0 0 8rpx currentColor; }
+  20%, 24%, 55% { opacity: 0.35; text-shadow: none; }
+}
+
+/* Speed presets — override --anim-dur (overall) and --step (per-letter delay).
+   Per-letter animations want shorter total durations so the cycle doesn't drag. */
+.announce.speed-slow   { --anim-dur: 22s; --step: 0.12s; }
+.announce.speed-normal { --anim-dur: 14s; --step: 0.08s; }
+.announce.speed-fast   { --anim-dur: 8s;  --step: 0.05s; }
+.announce.anim-typewriter.speed-slow   { --anim-dur: 9s; }
+.announce.anim-typewriter.speed-normal { --anim-dur: 6s; }
+.announce.anim-typewriter.speed-fast   { --anim-dur: 3.5s; }
+.announce.anim-fade_in_letters.speed-slow   { --anim-dur: 7s; }
+.announce.anim-fade_in_letters.speed-normal { --anim-dur: 5s; }
+.announce.anim-fade_in_letters.speed-fast   { --anim-dur: 3s; }
+.announce.anim-wave.speed-slow   { --anim-dur: 3.4s; }
+.announce.anim-wave.speed-normal { --anim-dur: 2.2s; }
+.announce.anim-wave.speed-fast   { --anim-dur: 1.3s; }
+.announce.anim-flicker.speed-slow   { --anim-dur: 3.6s; }
+.announce.anim-flicker.speed-normal { --anim-dur: 2.4s; }
+.announce.anim-flicker.speed-fast   { --anim-dur: 1.4s; }
 
 /* ── Hero banner ──────────────────────────────────────────────────────── */
 .hero {
@@ -216,34 +286,40 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Scroll view — single horizontal row, drag left/right */
+.cattabs .scroll-rail { white-space: nowrap; }
+.cattabs .scroll-tile {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 12rpx;
+  width: 140rpx;
+  margin-right: 24rpx;
+  vertical-align: top;
+}
+.cattabs .scroll-tile:last-child { margin-right: 0; }
+.cattabs .scroll-tile .icon-name { width: 140rpx; }
 
 /* ── Featured item ────────────────────────────────────────────────────── */
+/* Three layouts (driven by CMS `view`):
+   • card    — square image on top, kicker / name / price stacked below
+   • split   — image left, copy right (legacy default)
+   • banner  — wide image with copy floated bottom-left on top of it
+   Card surface (`background:{...}` inline) + text colour come from
+   `card_bg_color` / `card_fg_color`; the outer block bg comes from
+   `bg_color` (transparent by default). */
 .featured { padding: 36rpx 44rpx; }
 .featured .card {
-  background: var(--ink);
-  color: #fff;
   padding: 36rpx;
-  display: flex;
-  gap: 32rpx;
-  align-items: center;
   border-radius: 4rpx;
-}
-.featured .img {
-  width: 168rpx;
-  height: 208rpx;
-  background: #444;
-  flex-shrink: 0;
   overflow: hidden;
-  border-radius: 4rpx;
 }
+.featured .img { background: rgba(0,0,0,.15); overflow: hidden; border-radius: 4rpx; }
 .featured .img-full { width: 100%; height: 100%; }
-.featured .meta { flex: 1; min-width: 0; }
+.featured .meta { min-width: 0; }
 .featured .kicker {
   font-family: var(--f-toni);
   font-size: calc(20rpx * var(--font-scale));
   font-weight: 700;
   letter-spacing: 0.14em;
-  color: var(--lime);
+  /* Card-fg via inline style; fall back to lime if unspecified */
 }
 .featured .name {
   font-family: var(--f-bear);
@@ -268,7 +344,6 @@
 .featured .price-was {
   font-family: var(--f-aleo);
   font-size: calc(24rpx * var(--font-scale));
-  color: rgba(255, 255, 255, 0.5);
   text-decoration: line-through;
 }
 .featured .empty {
@@ -276,6 +351,50 @@
   text-align: center;
   padding: 40rpx 0;
   font-size: calc(24rpx * var(--font-scale));
+}
+
+/* CARD view — image on top, copy below. */
+.featured-view-card .card {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+.featured-view-card .img { width: 100%; height: 420rpx; }
+.featured-view-card .meta { width: 100%; }
+
+/* SPLIT view (legacy default) — image left, copy right. */
+.featured-view-split .card {
+  display: flex;
+  gap: 32rpx;
+  align-items: center;
+}
+.featured-view-split .img {
+  width: 168rpx;
+  height: 208rpx;
+  flex-shrink: 0;
+}
+.featured-view-split .meta { flex: 1; }
+
+/* BANNER view — wide image with copy floated bottom-left as an overlay. */
+.featured-view-banner .card {
+  position: relative;
+  padding: 0;
+  min-height: 360rpx;
+}
+.featured-view-banner .img {
+  width: 100%;
+  height: 360rpx;
+  border-radius: 4rpx;
+}
+.featured-view-banner .meta {
+  position: absolute;
+  left: 32rpx;
+  right: 32rpx;
+  bottom: 28rpx;
+  padding: 18rpx 22rpx;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 4rpx;
+  backdrop-filter: blur(8rpx);
 }
 
 /* ── Product grid ─────────────────────────────────────────────────────── */
@@ -360,6 +479,80 @@
   letter-spacing: 0.12em;
   padding: 4rpx 12rpx;
   border-radius: 4rpx;
+}
+
+/* Rank badges — "NO. 01" style chip in the top-left of the product image.
+   Tier 1 is the eye-catching lime so #1 reads as the headline of the
+   block; 2/3 use warm brand colours; 4+ fall back to ink so the medal
+   positions stay dominant. Applies to grid + scroll + list views. */
+.grid-block .card .rank-badge,
+.grid-block .rail-card .rank-badge,
+.grid-block .list-row .rank-badge {
+  position: absolute;
+  top: 10rpx;
+  left: 10rpx;
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+  padding: 6rpx 14rpx;
+  border-radius: 4rpx;
+  text-transform: uppercase;
+  z-index: 2;
+}
+/* Gold / silver / bronze gradients lean into the medal metaphor — the
+   eye reads "top 3" before reading the number. The hard offset shadow
+   on #1 lifts it off the photo like a sticker. */
+.rank-1 {
+  background: linear-gradient(135deg, #FFE066 0%, #FFC72C 45%, #B8860B 100%);
+  color: #1a1a17;
+  box-shadow: 3rpx 3rpx 0 rgba(0, 0, 0, 0.85);
+  border: 1rpx solid rgba(184, 134, 11, 0.6);
+}
+.rank-2 {
+  background: linear-gradient(135deg, #F4F4F4 0%, #C8C8C8 50%, #8C8C8C 100%);
+  color: #1a1a17;
+  box-shadow: 2rpx 2rpx 0 rgba(0, 0, 0, 0.5);
+  border: 1rpx solid rgba(120, 120, 120, 0.55);
+}
+.rank-3 {
+  background: linear-gradient(135deg, #E1A878 0%, #C57F4E 50%, #8A4B22 100%);
+  color: #fff;
+  box-shadow: 2rpx 2rpx 0 rgba(0, 0, 0, 0.5);
+  border: 1rpx solid rgba(138, 75, 34, 0.6);
+}
+.rank-n {
+  background: #1a1a17;
+  color: #F2E7DF;
+}
+/* List view's rank badge sits over a smaller square image — shrink it a
+   touch so it doesn't crowd the thumbnail. */
+.grid-block .list-row .rank-badge {
+  font-size: calc(16rpx * var(--font-scale));
+  padding: 4rpx 10rpx;
+  letter-spacing: 0.1em;
+}
+
+/* Social proof — "420 SOLD" sits below the price on top-selling cards.
+   Quiet styling so the rank badge + price stay primary; the number is
+   the value here, not the typography. */
+.grid-block .card .sold-caption,
+.grid-block .rail-card .sold-caption,
+.grid-block .list-row .sold-caption {
+  margin-top: 6rpx;
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  color: var(--olive);
+  text-transform: uppercase;
+}
+
+/* Make the #1 product card itself feel a bit more premium with a hair-
+   thin gold rule along the bottom of the image. Subtle — the badge is
+   doing the heavy lifting visually. */
+.grid-block .rank-card-1 .img {
+  box-shadow: inset 0 -3rpx 0 #FFC72C;
 }
 .grid-block .empty {
   color: rgba(0, 0, 0, 0.3);
@@ -1090,6 +1283,32 @@
   color: #1a1a17;
   border-radius: 8rpx;
 }
+.st-cards { display: flex; flex-direction: column; }
+.st-card + .st-card {
+  margin-top: 24rpx;
+  padding-top: 24rpx;
+  border-top: 1rpx solid rgba(0, 0, 0, 0.08);
+}
+.st-status {
+  margin-top: 14rpx;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  font-family: var(--f-aleo);
+  font-size: calc(22rpx * var(--font-scale));
+}
+.st-dot {
+  width: 14rpx; height: 14rpx; border-radius: 50%;
+  box-shadow: 0 0 0 6rpx rgba(255, 255, 255, 0.25);
+}
+.st-status-lbl { font-weight: 600; }
+.st-hours { opacity: 0.7; }
+.st-eta {
+  margin-top: 6rpx;
+  font-family: var(--f-aleo);
+  font-size: calc(20rpx * var(--font-scale));
+  opacity: 0.8;
+}
 
 /* ── Voting block — 4 views (teaser/peek/inline/past_result) ───────────── */
 .voting-blk {
@@ -1694,6 +1913,63 @@
   text-transform: uppercase;
 }
 
+/* Greeting — view variants */
+.gr-headline-sm { font-size: calc(38rpx * var(--font-scale)); line-height: 1.1; margin-top: 6rpx; }
+.gr-headline-lg { font-size: calc(88rpx * var(--font-scale)); line-height: 0.94; }
+
+.greet-blk-banner { border: 0; padding: 44rpx 36rpx 38rpx; }
+.greet-blk-banner .gr-kicker { opacity: 0.6; }
+
+.greet-blk-inline { padding: 22rpx 28rpx; }
+.gr-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+}
+.gr-inline-copy { flex: 1; min-width: 0; }
+.gr-pts-pill {
+  flex-shrink: 0;
+  padding: 10rpx 18rpx;
+  border: 2rpx solid currentColor;
+  border-radius: 999rpx;
+  font-family: var(--f-gothic);
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.04em;
+}
+
+.greet-blk-split { padding: 28rpx 32rpx; }
+.gr-split-row {
+  display: flex;
+  align-items: stretch;
+  gap: 20rpx;
+}
+.gr-split-left { flex: 1; min-width: 0; }
+.gr-split-wallet {
+  flex-shrink: 0;
+  min-width: 160rpx;
+  padding: 18rpx 22rpx;
+  border: 3rpx solid currentColor;
+  border-radius: 14rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.gr-wallet-num {
+  font-family: var(--f-bear);
+  font-size: calc(56rpx * var(--font-scale));
+  line-height: 1;
+}
+.gr-wallet-lbl {
+  margin-top: 8rpx;
+  font-family: var(--f-gothic);
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.06em;
+  opacity: 0.85;
+  text-align: center;
+}
+
+
 /* ─── Kitchen status block ────────────────────────────────────────────── */
 .kit-blk {
   margin: 24rpx 44rpx;
@@ -1938,7 +2214,7 @@
 }
 .bun-card-row {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;          /* top-align so images line up evenly */
   gap: 14rpx;
   padding: 0 10rpx;
 }
@@ -1948,7 +2224,7 @@
   white-space: normal;
 }
 .bun-card-img {
-  width: 180rpx; height: 180rpx;
+  width: 180rpx; aspect-ratio: 1 / 1;
   background: rgba(0,0,0,0.08);
   border: 2rpx solid var(--ink);
   overflow: hidden;
@@ -1959,6 +2235,7 @@
   font-family: var(--f-bear);
   font-size: calc(22rpx * var(--font-scale));
   line-height: 1.2;
+  min-height: 2.4em;                /* reserve 2 lines so short names keep row aligned */
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -2016,3 +2293,326 @@
   text-transform: uppercase;
 }
 
+/* ─── WeCom (企业微信) contact block ──────────────────────────────────── */
+.wc-blk {
+  margin: 24rpx 44rpx;
+  border: 3rpx solid var(--ink);
+}
+.wc-card {
+  padding: 36rpx 32rpx 32rpx;
+  text-align: center;
+}
+.wc-kicker {
+  font-family: var(--f-toni);
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--olive);
+}
+.wc-title {
+  margin-top: 8rpx;
+  font-family: var(--f-bear);
+  font-size: calc(44rpx * var(--font-scale));
+  line-height: 1.05;
+}
+.wc-sub {
+  margin-top: 10rpx;
+  font-family: var(--f-aleo);
+  font-size: calc(24rpx * var(--font-scale));
+  line-height: 1.4;
+  opacity: 0.78;
+}
+.wc-cta {
+  display: block;
+  margin: 24rpx auto 0;
+  padding: 24rpx 32rpx;
+  color: var(--oat);
+  font-family: var(--f-toni);
+  font-size: calc(26rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: none;
+  border-radius: 999rpx;
+  min-width: 320rpx;
+  line-height: 1;
+}
+.wc-cta::after { border: none; }
+.wc-cta-strip {
+  display: inline-block;
+  margin: 14rpx 0 0;
+  padding: 16rpx 24rpx;
+  font-size: calc(22rpx * var(--font-scale));
+  min-width: 0;
+}
+.wc-qr-wrap {
+  margin: 28rpx auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.wc-qr {
+  width: 320rpx;
+  height: 320rpx;
+  background: #fff;
+  padding: 18rpx;
+  border-radius: 12rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.08);
+}
+.wc-qr-sm {
+  width: 180rpx;
+  height: 180rpx;
+  background: #fff;
+  padding: 10rpx;
+  border-radius: 8rpx;
+}
+.wc-name {
+  margin-top: 14rpx;
+  font-family: var(--f-gothic);
+  font-size: calc(24rpx * var(--font-scale));
+  letter-spacing: 0.04em;
+}
+.wc-hint {
+  margin-top: 8rpx;
+  font-family: var(--f-aleo);
+  font-size: calc(22rpx * var(--font-scale));
+  opacity: 0.65;
+}
+.wc-hint-sm {
+  margin-top: 6rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  text-align: center;
+  max-width: 200rpx;
+  line-height: 1.3;
+}
+.wc-strip {
+  padding: 24rpx 28rpx;
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+}
+.wc-strip-body {
+  flex: 1;
+  min-width: 0;
+}
+.wc-strip-title {
+  margin-top: 6rpx;
+  font-family: var(--f-bear);
+  font-size: calc(34rpx * var(--font-scale));
+  line-height: 1.1;
+}
+.wc-strip-sub {
+  margin-top: 6rpx;
+  font-family: var(--f-aleo);
+  font-size: calc(22rpx * var(--font-scale));
+  opacity: 0.78;
+  line-height: 1.35;
+}
+.wc-strip-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+
+/* ─── Favorites block — "your saved" rail / grid ─────────────────────── */
+.fav-blk {
+  padding: 44rpx 44rpx;
+}
+.fav-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 24rpx;
+}
+.fav-head-text { flex: 1; min-width: 0; }
+.fav-kicker {
+  font-family: var(--f-toni);
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.25em;
+  opacity: 0.7;
+}
+.fav-title {
+  font-family: var(--f-bear);
+  font-size: calc(52rpx * var(--font-scale));
+  line-height: 0.95;
+  margin-top: 8rpx;
+}
+.fav-see-all {
+  font-family: var(--f-toni);
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.15em;
+  opacity: 0.7;
+  flex-shrink: 0;
+  margin-left: 16rpx;
+}
+.fav-empty {
+  padding: 60rpx 0 20rpx;
+  text-align: center;
+}
+.fav-empty-title {
+  font-family: var(--f-bear);
+  font-size: calc(36rpx * var(--font-scale));
+  opacity: 0.7;
+}
+.fav-empty-sub {
+  font-family: var(--f-aleo);
+  font-size: calc(24rpx * var(--font-scale));
+  opacity: 0.55;
+  margin-top: 8rpx;
+}
+
+.fav-rail {
+  white-space: nowrap;
+  margin: 0 -8rpx;
+  padding: 0 8rpx;
+}
+.fav-rail-card {
+  display: inline-block;
+  width: 280rpx;
+  margin-right: 20rpx;
+  vertical-align: top;
+  white-space: normal;
+}
+.fav-rail-card:last-child { margin-right: 0; }
+
+.fav-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24rpx;
+}
+.fav-card { min-width: 0; }
+
+.fav-img {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  background: var(--oat);
+  border: 2rpx solid var(--ink);
+  overflow: hidden;
+}
+.fav-img .img-full { width: 100%; height: 100%; }
+.fav-out .fav-img .img-full { filter: grayscale(0.6); opacity: 0.55; }
+.fav-out-tag {
+  position: absolute;
+  bottom: 10rpx;
+  left: 10rpx;
+  background: var(--ink);
+  color: #fff;
+  padding: 4rpx 10rpx;
+  font-family: var(--f-gothic);
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+}
+.fav-name {
+  font-family: var(--f-bear);
+  font-size: calc(28rpx * var(--font-scale));
+  line-height: 1.15;
+  margin-top: 12rpx;
+}
+.fav-price-row {
+  margin-top: 6rpx;
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+}
+.fav-price {
+  font-family: var(--f-gothic);
+  font-size: calc(30rpx * var(--font-scale));
+}
+.fav-price.is-flash { color: var(--berry, #E96174); }
+.fav-price-was {
+  font-family: var(--f-gothic);
+  font-size: calc(22rpx * var(--font-scale));
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+/* ── 2026-05-20 cross-cutting enhancements ────────────────────────────────
+   Shared classes used across multiple blocks: corner-radius presets,
+   entrance animations, hero-banner scrim, spacer divider, countdown
+   urgency pulse, featured sale badge. */
+
+/* Corner radius presets — `corner-{sharp|subtle|bold}` on a block's outer
+   class. Each block's existing border-radius wins via more specific
+   selectors; these are global overrides for the wrapper card surfaces. */
+.featured.corner-sharp .card,
+.grid-block.corner-sharp .card,
+.fav-blk.corner-sharp .fav-card,
+.bun-blk.corner-sharp,
+.recipe-blk.corner-sharp .recipe-img,
+.recipe-blk.corner-sharp,
+.countdown.corner-sharp { border-radius: 0 !important; }
+.featured.corner-bold .card,
+.grid-block.corner-bold .card,
+.fav-blk.corner-bold .fav-card,
+.bun-blk.corner-bold,
+.recipe-blk.corner-bold .recipe-img,
+.recipe-blk.corner-bold,
+.countdown.corner-bold { border-radius: 28rpx !important; }
+/* corner-subtle = legacy default, no override. */
+
+/* Entrance animations — keep them subtle. The class is applied on the
+   block root from JS via the `entrance_anim` CMS field. */
+@keyframes blk-fade-in    { from { opacity: 0; } to { opacity: 1; } }
+@keyframes blk-slide-up   { from { opacity: 0; transform: translateY(20rpx); } to { opacity: 1; transform: translateY(0); } }
+.hero.enter-fade,
+.featured.enter-fade,
+.bun-blk.enter-fade        { animation: blk-fade-in   .4s ease-out both; }
+.hero.enter-slide_up,
+.featured.enter-slide_up,
+.bun-blk.enter-slide_up    { animation: blk-slide-up .45s ease-out both; }
+/* `enter-none` is the legacy instant render. */
+
+/* Hero scrim — dims the bottom half of the image so floating CTAs read
+   on busy photography. Strength controlled by .scrim-{light|medium|dark}.
+   `scrim-none` simply omits the .hero-scrim element from the markup. */
+.hero .hero-scrim {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 50%;
+  pointer-events: none;
+  z-index: 1;
+}
+.hero.scrim-light  .hero-scrim { background: linear-gradient(to top, rgba(0,0,0,.30), transparent); }
+.hero.scrim-medium .hero-scrim { background: linear-gradient(to top, rgba(0,0,0,.50), transparent); }
+.hero.scrim-dark   .hero-scrim { background: linear-gradient(to top, rgba(0,0,0,.72), transparent); }
+.hero .cta-stack { z-index: 2; }
+
+/* Featured-item SALE ribbon — top-right corner of the card image. */
+.featured .img { position: relative; }
+.featured .feat-badge {
+  position: absolute; top: 14rpx; right: 14rpx;
+  padding: 6rpx 16rpx;
+  background: var(--berry, #E96174);
+  color: #fff;
+  font-family: var(--f-toni);
+  font-size: calc(18rpx * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: .12em;
+  border-radius: 999rpx;
+  z-index: 2;
+}
+
+/* Spacer divider — line / dashes / dots. Reuses `--divider-color` set
+   inline by the renderer from the brand-color picker. */
+.spacer-blk { display: flex; align-items: center; justify-content: center; }
+.spacer-blk .spacer-divider { width: 50%; }
+.spacer-blk.divider-line   .spacer-divider { height: 2rpx; }
+.spacer-blk.divider-dashes .spacer-divider { height: 0; border-top-width: 3rpx; border-top-style: dashed; }
+.spacer-blk.divider-dots   .spacer-divider { height: 0; border-top-width: 4rpx; border-top-style: dotted; }
+
+/* Countdown urgency — pulse the clock cells when remaining time crosses
+   the configured threshold. Mirrors the CMS preview. */
+@keyframes cd-pulse {
+  0%, 100% { transform: scale(1);    opacity: 1;   }
+  50%      { transform: scale(1.06); opacity: .85; }
+}
+.countdown.urgent .cd-cell { animation: cd-pulse .9s ease-in-out infinite; }
+.countdown.urgent .cd-cell:nth-child(2) { animation-delay: .12s; }
+.countdown.urgent .cd-cell:nth-child(4) { animation-delay: .24s; }
+.countdown.urgent .cd-cell:nth-child(6) { animation-delay: .36s; }
+
+/* Product-grid density — gap between cards. The existing `.grid` selector
+   picks up these density-prefixed overrides. */
+.grid-block.density-compact  .grid { gap: 6rpx; }
+.grid-block.density-normal   .grid { gap: 12rpx; }
+.grid-block.density-spacious .grid { gap: 28rpx; }

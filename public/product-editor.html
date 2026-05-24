@@ -1,0 +1,2151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" id="meta-theme-color" content="#16161a">
+<title>Product Editor · Roots</title>
+<script>
+  // Apply theme before first paint (mirror of retail-admin.html).
+  (function () {
+    try {
+      var saved = localStorage.getItem('retail-admin-theme');
+      var theme = saved === 'light' || saved === 'dark'
+        ? saved
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', theme);
+    } catch (e) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
+<style>
+  /* Brand fonts — same files the CMS + retail-admin load. */
+  @font-face { font-family: 'Bear Serif';   src: url('/assets/fonts/LilitaOne.ttf')      format('truetype'); unicode-range: U+0024, U+0025, U+0030-0039, U+00A5; font-display: swap; }
+  @font-face { font-family: 'Bear Serif';   src: url('/assets/fonts/BearSerif.otf')      format('opentype'); font-display: swap; }
+  @font-face { font-family: 'Toni Grotesk'; src: url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display: swap; }
+  @font-face { font-family: 'League Gothic';src: url('/assets/fonts/LeagueGothic.ttf')   format('truetype'); font-display: swap; }
+  @font-face { font-family: 'Aleo';         src: url('/assets/fonts/Aleo-Regular.otf')   format('opentype'); font-display: swap; }
+  @font-face { font-family: 'DF Yuan';      src: url('/assets/fonts/DFYuanW5.ttf')       format('truetype'); font-weight: 500; font-display: swap; }
+  @font-face { font-family: 'DF Yuan';      src: url('/assets/fonts/DFYuanW7.ttf')       format('truetype'); font-weight: 700; font-display: swap; }
+
+  /* ── DESIGN TOKENS (mirror of /cms + retail-admin) ── */
+  :root {
+    --bg-app:     #16161a;
+    --bg-pane:    #1f1f24;
+    --bg-elev-1:  #25252b;
+    --bg-elev-2:  #2e2e35;
+    --bg-input:   #1a1a1f;
+    --bg-overlay: rgba(10, 10, 12, .72);
+    --line-soft:  rgba(255, 255, 255, .055);
+    --line:       rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .15);
+    --ring:       rgba(204, 217, 0, .35);
+    --text-1:     #ecebe5;
+    --text-2:     #aeaba2;
+    --text-3:     #7d7a72;
+    --text-4:     #56544f;
+    --accent:     #ccd900;
+    --accent-hi:  #dde858;
+    --accent-ink: #16161a;
+    --danger:     #e8556a;
+    --danger-soft: rgba(232, 85, 106, .14);
+    --warn:       #e9a35a;
+    --success:    #80c462;
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s7: 32px;
+    --r-sm: 4px; --r-md: 6px; --r-lg: 10px; --r-xl: 14px;
+    --sh-1: 0 1px 2px rgba(0, 0, 0, .25);
+    --sh-2: 0 4px 16px rgba(0, 0, 0, .25);
+    --sh-3: 0 24px 60px rgba(0, 0, 0, .5);
+    --f-sans:  -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', system-ui, sans-serif;
+    --f-mono:  ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+    --ease-out: cubic-bezier(.16, 1, .3, 1);
+    --t-fast: 120ms;
+    --t-med:  220ms;
+  }
+  :root[data-theme="light"] {
+    --bg-app:     #e3ddcc;
+    --bg-pane:    #f0ebdd;
+    --bg-elev-1:  #eae3d2;
+    --bg-elev-2:  #ddd6c2;
+    --bg-input:   #f5f1e3;
+    --bg-overlay: rgba(20, 20, 22, .46);
+    --line-soft:   rgba(30, 25, 5, .085);
+    --line:        rgba(30, 25, 5, .18);
+    --line-strong: rgba(30, 25, 5, .28);
+    --ring:        rgba(140, 152, 0, .38);
+    --text-1: #1a1a17;
+    --text-2: #43413a;
+    --text-3: #6a675c;
+    --text-4: #9a978c;
+    --accent:     #b1bd00;
+    --accent-hi:  #9ea800;
+    --accent-ink: #16161a;
+    --danger-soft: rgba(232, 85, 106, .11);
+    --sh-1: 0 1px 3px rgba(40, 30, 5, .10);
+    --sh-2: 0 6px 18px rgba(40, 30, 5, .12);
+    --sh-3: 0 24px 60px rgba(40, 30, 5, .24);
+  }
+  :root[data-theme="light"] body { color-scheme: light; }
+  :root[data-theme="light"] select { color-scheme: light; }
+  :root[data-theme="light"] select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23767369' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font: 13px var(--f-sans);
+    background: var(--bg-app);
+    color: var(--text-1);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; font-weight: 500;
+    padding: 7px 12px;
+    border: 1px solid var(--line);
+    background: var(--bg-elev-1);
+    color: var(--text-1);
+    border-radius: var(--r-md);
+    cursor: pointer;
+    transition: background var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease, transform var(--t-fast) ease;
+    user-select: none;
+  }
+  .btn:hover { background: var(--bg-elev-2); border-color: var(--line-strong); }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+  .btn-primary {
+    background: var(--accent); color: var(--accent-ink);
+    border-color: var(--accent); font-weight: 600;
+  }
+  .btn-primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+  .btn-ghost {
+    background: transparent; border-color: transparent; color: var(--text-2);
+  }
+  .btn-ghost:hover { background: var(--bg-elev-1); color: var(--text-1); border-color: transparent; }
+  .btn.danger { color: var(--danger); border-color: rgba(232, 85, 106, .35); }
+  .btn.danger:hover { background: var(--danger-soft); }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+  /* ── INPUTS ── */
+  input[type=text], input[type=number], input[type=url], select, textarea {
+    font: 13px var(--f-sans);
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--line);
+    color: var(--text-1);
+    border-radius: var(--r-md);
+    outline: none;
+    min-width: 0;
+    transition: border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: rgba(204, 217, 0, .45);
+    box-shadow: 0 0 0 3px var(--ring);
+  }
+  input:hover:not(:focus), select:hover:not(:focus), textarea:hover:not(:focus) {
+    border-color: var(--line-strong);
+  }
+  textarea { min-height: 64px; resize: vertical; font-family: inherit; width: 100%; }
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237d7a72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 32px;
+    cursor: pointer;
+    color-scheme: dark;
+  }
+  option { background: var(--bg-input); color: var(--text-1); }
+  label.stacked {
+    display: block;
+    font-size: 11px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 6px;
+  }
+  .field { margin-bottom: var(--s4); }
+  .helper { font-size: 11px; color: var(--text-4); margin-top: 6px; line-height: 1.5; }
+  code { font-family: var(--f-mono); font-size: .92em; background: var(--bg-elev-1); padding: 1px 5px; border-radius: 4px; }
+
+  /* ── PAGE SHELL: topbar + full-viewport 3-pane ── */
+  #pe-topbar {
+    height: 56px; flex-shrink: 0;
+    display: flex; align-items: center; gap: var(--s4);
+    padding: 0 var(--s5);
+    background: var(--bg-pane);
+    border-bottom: 1px solid var(--line);
+  }
+  .pe-back {
+    width: 34px; height: 34px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    line-height: 1; flex-shrink: 0;
+  }
+  .pe-back svg { width: 18px; height: 18px; }
+  /* Brand lockup — mirrors the Mini App Editor's .brand / .brand-mark */
+  .pe-brand { display: flex; align-items: center; gap: var(--s3); flex-shrink: 0; }
+  .pe-brand-mark {
+    width: 26px; height: 26px; border-radius: var(--r-md);
+    background: linear-gradient(135deg, var(--accent), #b3bf00);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent-ink); font-weight: 700; font-size: 13px;
+    box-shadow: var(--sh-1);
+  }
+  :root[data-theme="light"] .pe-brand-mark { background: linear-gradient(135deg, var(--accent), #98a300); }
+  .pe-brand-name { font-weight: 600; font-size: 13px; letter-spacing: -.005em; color: var(--text-2); }
+  .pe-brand-divider { width: 1px; height: 16px; background: var(--line); }
+  .pe-topbar-title { display: flex; align-items: center; gap: var(--s3); min-width: 0; flex: 1; }
+  #pe-name {
+    font-size: 15px; font-weight: 600; color: var(--text-1);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pe-badge {
+    flex-shrink: 0;
+    font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--bg-elev-1); color: var(--text-3);
+  }
+  .pe-badge.pub { background: rgba(204, 217, 0, .14); color: var(--accent-hi); border-color: rgba(204, 217, 0, .35); }
+  .pe-badge.draft { background: rgba(233, 163, 90, .14); color: var(--warn); border-color: rgba(233, 163, 90, .35); }
+  .pe-topbar-actions { display: flex; align-items: center; gap: var(--s2); flex-shrink: 0; }
+  #pe-save-status { font-size: 11px; color: var(--text-3); margin-right: 4px; }
+  /* EN / 中 language toggle — mirrors the Mini App Editor's .lang-toggle */
+  .lang-toggle {
+    display: inline-flex;
+    background: var(--bg-elev-1);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px;
+  }
+  .lang-toggle button {
+    background: transparent; border: 0;
+    padding: 4px 12px; border-radius: 999px;
+    font: 600 11px var(--f-sans); letter-spacing: .04em;
+    color: var(--text-3); cursor: pointer;
+    transition: color var(--t-fast) ease, background var(--t-fast) ease;
+  }
+  .lang-toggle button:hover { color: var(--text-1); }
+  .lang-toggle button.active { background: var(--accent); color: var(--accent-ink); }
+
+  #pe-body {
+    height: calc(100vh - 56px);
+    display: grid;
+    grid-template-columns: 288px 1fr 380px;
+    overflow: hidden;
+  }
+  @media (max-width: 1100px) {
+    #pe-body { grid-template-columns: 260px 1fr; }
+    .pa-edit-inspector { display: none !important; }
+  }
+
+  /* Loading / error overlay */
+  #pe-loading {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg-app);
+    color: var(--text-3); font-size: 14px;
+    z-index: 50;
+  }
+  #pe-loading.hide { display: none; }
+
+  /* Toast */
+  #pe-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--bg-elev-2); color: var(--text-1);
+    border: 1px solid var(--line-strong);
+    padding: 10px 18px; border-radius: var(--r-lg);
+    font-size: 13px; font-weight: 500;
+    box-shadow: var(--sh-2);
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--t-med) ease, transform var(--t-med) ease;
+    z-index: 60;
+  }
+  #pe-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #pe-toast.err { border-color: var(--danger); color: var(--danger); }
+
+  /* ── Left panel: block list (vertical palette) ── */
+  .pa-edit-palette {
+    background: var(--bg-pane);
+    border-right: 1px solid var(--line-soft);
+    display: flex; flex-direction: column;
+    min-height: 0; overflow: hidden;
+  }
+  .pa-edit-palette-head {
+    padding: var(--s3);
+    border-bottom: 1px solid var(--line-soft);
+    display: flex; flex-direction: column; gap: var(--s2);
+    flex-shrink: 0;
+  }
+  .pa-edit-palette-title {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--text-3);
+  }
+  .pa-edit-palette-scroll {
+    flex: 1; overflow-y: auto;
+    padding: var(--s2) var(--s3) var(--s4);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+
+  /* ── Center: phone canvas (the big focal point like CMS) ── */
+  .pa-edit-canvas {
+    background: var(--bg-app);
+    background-image:
+      radial-gradient(ellipse at top, rgba(204, 217, 0, .04), transparent 55%),
+      radial-gradient(ellipse at bottom, rgba(54, 83, 41, .05), transparent 55%);
+    overflow-y: auto;
+    overflow-x: auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: var(--s6) var(--s5);
+    min-width: 0;
+  }
+
+  /* ── Right: inspector panel (chrome + form) ── */
+  .pa-edit-inspector {
+    background: var(--bg-pane);
+    border-left: 1px solid var(--line-soft);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+  }
+  .pa-edit-inspector-scroll { flex: 1; overflow-y: auto; }
+
+  /* Block ⇄ Page segmented toggle at top of the inspector */
+  .pe-insp-tabs {
+    flex-shrink: 0;
+    padding: var(--s3) var(--s4);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  /* Mirrors the Mini App Editor's .lang-toggle pill exactly */
+  .pe-insp-seg {
+    display: flex; gap: 2px; padding: 2px;
+    background: var(--bg-pane);
+    border: 1px solid var(--line-soft);
+    border-radius: 999px;
+  }
+  .pe-insp-seg button {
+    flex: 1; border: 0; background: transparent;
+    color: var(--text-3);
+    padding: 6px 12px; border-radius: 999px;
+    font: 600 11px var(--f-sans); letter-spacing: .04em;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .pe-insp-seg button svg { width: 13px; height: 13px; }
+  .pe-insp-seg button:hover { color: var(--text-1); }
+  .pe-insp-seg button.active { background: var(--accent); color: var(--accent-ink); }
+  /* ── Left rail: PAGE settings group (card chrome + colophon accordions) ── */
+  .pe-left-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+  .pe-left-group { padding: var(--s3) var(--s3) var(--s2); }
+  .pe-left-grouptitle {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--text-3); padding: 2px 2px var(--s2);
+  }
+  .pa-left-acc {
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-md);
+    background: var(--bg-elev-1);
+    margin-bottom: 6px; overflow: hidden;
+  }
+  .pa-left-acc > summary {
+    list-style: none; cursor: pointer; user-select: none;
+    display: flex; align-items: center; gap: 7px;
+    padding: 9px 11px; font-size: 12px; font-weight: 500; color: var(--text-1);
+  }
+  .pa-left-acc > summary::-webkit-details-marker { display: none; }
+  .pa-left-acc > summary::before {
+    content: '▶'; font-size: 8px; color: var(--text-4);
+    transition: transform var(--t-fast);
+  }
+  .pa-left-acc[open] > summary::before { transform: rotate(90deg); }
+  .pa-left-acc[open] > summary { border-bottom: 1px solid var(--line-soft); }
+  .pa-left-acc-body { padding: var(--s3) var(--s3) var(--s2); }
+  .pa-left-acc-body .field { margin-bottom: 10px; }
+  .pa-left-acc-body .field input { padding: 6px 9px; font-size: 12px; }
+  .pa-left-acc-body label.stacked { font-size: 10px; margin-bottom: 4px; }
+  /* dot = this accordion has content (driven by JS / peUpdatePageDot) */
+  .pe-acc-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); margin-left: auto; display: none;
+  }
+  /* small lime SVG icon used in accordion summaries / labels */
+  .pe-ic { display: inline-flex; align-items: center; color: var(--accent); flex-shrink: 0; }
+  .pe-ic svg { width: 14px; height: 14px; }
+  .pa-left-acc > summary .pe-ic { margin-right: 1px; }
+  /* colophon IP tiles fit the narrow rail at 4 across */
+  .pe-left-group .pa-colophon-grid { grid-template-columns: repeat(4, 1fr); }
+  /* sticky SECTIONS header so + Add stays reachable while the list scrolls */
+  .pe-left-head-sticky {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--bg-pane);
+    padding: var(--s3);
+    border-top: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
+    display: flex; flex-direction: column; gap: var(--s2);
+  }
+  .pe-blocks-list {
+    padding: var(--s2) var(--s3) var(--s4);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .pa-inspector-chrome {
+    padding: var(--s4) var(--s5);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .pa-colophon-details { margin-top: var(--s3); }
+  .pa-colophon-details summary {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--text-3); cursor: pointer;
+    padding: 6px 0 4px; user-select: none;
+    list-style: none; display: flex; align-items: center; gap: 6px;
+  }
+  .pa-colophon-details summary::-webkit-details-marker { display: none; }
+  .pa-colophon-details summary::before {
+    content: '▶'; font-size: 8px; color: var(--text-4);
+    transition: transform var(--t-fast);
+  }
+  .pa-colophon-details[open] summary::before { transform: rotate(90deg); }
+  .pa-colophon-details .pa-chrome { margin-top: var(--s2); }
+  .pa-inspector-presets {
+    padding: var(--s3) var(--s5) var(--s4);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .pa-inspector-presets .pa-presets { margin: 0; padding: var(--s3) var(--s4); }
+  .pa-inspector-presets .pa-presets-row { grid-template-columns: 1fr; }
+
+  /* Card chrome (keywords + tagline) */
+  .pa-chrome {
+    background: var(--bg-elev-1);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg);
+    padding: var(--s3) var(--s4);
+    margin-bottom: var(--s4);
+  }
+  .pa-chrome-title {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--text-3); margin-bottom: var(--s2);
+  }
+  .pa-chrome-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2) var(--s3); }
+  @media (max-width: 540px) { .pa-chrome-grid { grid-template-columns: 1fr; } }
+  .pa-chrome-grid .field { margin: 0; }
+  .pa-chrome-grid .field input { padding: 6px 9px; font-size: 12px; }
+  .pa-chrome-grid label.stacked { font-size: 10px; margin-bottom: 4px; }
+
+  /* Colophon IP character picker */
+  .pa-colophon-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--s2); }
+  @media (max-width: 540px) { .pa-colophon-grid { grid-template-columns: repeat(4, 1fr); } }
+  .pa-colophon-tile {
+    aspect-ratio: 1;
+    background: var(--bg-pane);
+    border: 2px solid var(--line);
+    border-radius: var(--r-md);
+    cursor: pointer; overflow: hidden; position: relative;
+    transition: border-color var(--t-fast), transform var(--t-fast);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .pa-colophon-tile:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+  .pa-colophon-tile.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .pa-colophon-tile img {
+    width: 100%; height: 100%; object-fit: contain;
+    mix-blend-mode: multiply; background: #fff;
+  }
+  :root[data-theme="light"] .pa-colophon-tile img { background: #fff; mix-blend-mode: normal; }
+  .pa-colophon-tile-label {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: rgba(0,0,0,0.55); color: #fff;
+    font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 2px 4px; text-align: center; line-height: 1.2;
+  }
+
+  /* Page presets */
+  .pa-presets {
+    margin-bottom: var(--s4);
+    padding: var(--s3) var(--s4);
+    background: var(--bg-elev-1);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg);
+  }
+  .pa-presets-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s3);
+  }
+  .pa-presets-title {
+    font-size: 11px; font-weight: 600;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--text-3);
+  }
+  .pa-presets-hint { margin: 0; }
+  .pa-presets-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+  .pa-preset-card {
+    background: var(--bg-pane);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: var(--s3) var(--s4);
+    cursor: pointer;
+    transition: border-color var(--t-fast), background var(--t-fast);
+    display: flex; flex-direction: column; gap: 6px;
+    text-align: left; min-width: 0;
+  }
+  .pa-preset-card:hover { border-color: var(--accent); background: var(--bg-elev-2); }
+  .pa-preset-card-label { font-size: 13px; font-weight: 600; color: var(--text-1); line-height: 1.3; }
+  .pa-preset-card-desc { font-size: 11px; color: var(--text-3); line-height: 1.5; }
+
+  /* Block rows — match the Mini App Editor's .palette-item exactly */
+  .pa-block-row {
+    display: flex; align-items: center; gap: var(--s3);
+    padding: 10px 12px;
+    background: var(--bg-elev-1);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-md);
+    cursor: pointer;
+    transition: border-color var(--t-fast), background var(--t-fast), transform var(--t-fast);
+    user-select: none;
+  }
+  .pa-block-row:hover { background: var(--bg-elev-2); border-color: var(--line-strong); transform: translateY(-1px); }
+  .pa-block-row.active { background: var(--bg-elev-2); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .pa-block-row .pbr-icon {
+    width: 32px; height: 32px;
+    background: rgba(204, 217, 0, .08);
+    border-radius: var(--r-md);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent); flex-shrink: 0;
+  }
+  .pa-block-row .pbr-icon svg { width: 18px; height: 18px; }
+  .pa-block-row.active .pbr-icon { background: rgba(204, 217, 0, .16); }
+  .pa-block-row .pbr-info { flex: 1; min-width: 0; }
+  .pa-block-row .pbr-name {
+    font-size: 13px; font-weight: 500; color: var(--text-1);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pa-block-row .pbr-sub {
+    font-size: 11px; color: var(--text-3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
+  }
+  .pa-block-row .pbr-num {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--bg-elev-2); color: var(--text-3);
+    font-size: 9px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .pa-block-row.active .pbr-num { background: var(--accent); color: var(--accent-ink); }
+  /* Drag-to-reorder: a grip cue that fades in on hover, plus a lime drop
+     line above/below the target row. Mirrors the mini-app editor. */
+  .pa-block-row { cursor: grab; }
+  .pa-block-row:active { cursor: grabbing; }
+  .pa-block-row .pbr-grip {
+    color: var(--text-4); font: 700 13px var(--f-sans);
+    letter-spacing: -1px; line-height: 1; opacity: 0; flex-shrink: 0;
+    transition: opacity var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .pa-block-row:hover .pbr-grip { opacity: .6; }
+  .pa-block-row.pa-row-dragging { opacity: .4; }
+  .pa-block-row.pa-drop-before, .pa-block-row.pa-drop-after { position: relative; }
+  .pa-block-row.pa-drop-before::before,
+  .pa-block-row.pa-drop-after::after {
+    content: ''; position: absolute; left: 0; right: 0;
+    height: 2px; background: var(--accent); border-radius: 1px;
+  }
+  .pa-block-row.pa-drop-before::before { top: -3px; }
+  .pa-block-row.pa-drop-after::after  { bottom: -3px; }
+
+  /* Inspector-style block editor head */
+  .pa-inspector-head {
+    padding: var(--s4) var(--s5) var(--s3);
+    border-bottom: 1px solid var(--line-soft);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--s3); flex-shrink: 0;
+  }
+  .pa-inspector-head-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .pa-inspector-icon {
+    width: 24px; height: 24px;
+    background: rgba(204, 217, 0, .1);
+    border-radius: var(--r-sm);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent); flex-shrink: 0;
+  }
+  .pa-inspector-icon svg { width: 14px; height: 14px; }
+  .pa-inspector-title {
+    font-size: 13px; font-weight: 600; color: var(--text-1);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pa-inspector-sub { font-size: 11px; color: var(--text-3); white-space: nowrap; }
+  .pa-inspector-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .pa-inspector-actions .btn { padding: 6px; }
+  .pa-inspector-actions .btn svg { width: 15px; height: 15px; }
+  .pa-inspector-actions .btn.danger { color: var(--danger); border-color: rgba(232, 85, 106, .35); }
+  .pa-inspector-actions .btn.danger:hover { background: var(--danger-soft); }
+  .pa-inspector-body { padding: var(--s4) var(--s5) var(--s7); }
+  .pa-edit-section-title {
+    font-size: 10px; font-weight: 600; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--text-3);
+  }
+  .pa-edit-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+  @media (max-width: 620px) { .pa-edit-grid-2 { grid-template-columns: 1fr; } }
+  .pa-edit-grid-2 .field { margin-bottom: 0; }
+  .pa-blocks-empty {
+    text-align: center; padding: var(--s7) var(--s4);
+    color: var(--text-3); font-size: 13px; line-height: 1.6;
+  }
+
+  /* ─── Live phone preview ── */
+  .pa-prev-frame {
+    width: 340px;
+    background: #2a2a30;
+    border-radius: 38px;
+    padding: 10px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0,0,0,.3);
+    flex-shrink: 0;
+  }
+  .pa-prev-screen {
+    background: #F2E7DF;
+    width: 100%;
+    height: calc(100vh - 56px - 48px - 20px);
+    min-height: 560px;
+    border-radius: 30px;
+    overflow-y: auto; overflow-x: hidden;
+    position: relative;
+    color: #1a1a17;
+    font-family: 'Aleo', 'PingFang SC', Georgia, serif;
+  }
+  .pa-prev-screen::-webkit-scrollbar { width: 4px; }
+  .pa-prev-screen::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
+  .pa-prev-hero {
+    width: 100%; aspect-ratio: 1;
+    background: #c4c4c4; background-size: cover; background-position: center;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(0, 0, 0, 0.35); font-size: 24px;
+  }
+  .pa-prev-body { padding: 22px 22px 60px; }
+  .pa-prev-name {
+    font-family: 'Bear Serif', 'DF Yuan', serif; font-weight: 500;
+    font-size: 30px; line-height: 1.05; color: #1a1a17;
+  }
+  .pa-prev-subtitle {
+    margin-top: 6px; font-family: 'DF Yuan', 'PingFang SC', sans-serif;
+    font-size: 12px; color: #6A6E2D;
+  }
+  .pa-prev-tagline {
+    margin-top: 10px; font-family: 'Toni Grotesk', sans-serif;
+    font-size: 13px; font-weight: 700; line-height: 1.25; color: #1a1a17;
+  }
+  .pa-prev-block { margin-top: 22px; }
+  .pa-prev-block:first-of-type { margin-top: 8px; }
+  .pa-prev-hero-lead {
+    font-family: 'Toni Grotesk', sans-serif; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase; color: #6A6E2D; margin-bottom: 8px;
+  }
+  .pa-prev-hero-body {
+    font-family: 'Aleo', serif; font-size: 14px; line-height: 1.55;
+    color: #1a1a17; white-space: pre-line;
+  }
+  .pa-prev-hero-hl {
+    color: #365329; font-weight: 700;
+    background: linear-gradient(transparent 60%, rgba(204, 217, 0, 0.55) 60%); padding: 0 2px;
+  }
+  .pa-prev-stat {
+    margin-left: -22px; margin-right: -22px; padding: 26px 22px;
+    background: #CCD900; color: #1a1a17; text-align: center;
+  }
+  .pa-prev-stat-num { font-family: 'Bear Serif', serif; font-size: 56px; line-height: 1; font-weight: 500; letter-spacing: -0.01em; }
+  .pa-prev-stat-claim { margin-top: 8px; font-family: 'Toni Grotesk', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+  .pa-prev-stat-sub { margin-top: 8px; font-family: 'Aleo', serif; font-style: italic; font-size: 12px; line-height: 1.45; }
+  .pa-prev-empty {
+    margin-top: 32px; padding: 20px; text-align: center;
+    font-family: 'Aleo', serif; font-size: 12px; color: rgba(0, 0, 0, 0.45);
+    border: 1.5px dashed rgba(0, 0, 0, 0.18); border-radius: 8px; line-height: 1.5;
+  }
+  /* v1 preview blocks */
+  .pa-prev-block { padding: 0; border-bottom: 1px solid #1a1a17; }
+  .pa-prev-block:last-child { border-bottom: 0; }
+  .pa-prev-section-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 14px; }
+  .pa-prev-section-h3 { font-family: 'Bear Serif', serif; font-size: 24px; line-height: 0.95; letter-spacing: -0.005em; color: #1a1a17; }
+  .pa-prev-section-tag { font-family: 'Toni Grotesk', sans-serif; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
+  .pa-prev-spec { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .pa-prev-spec-cell { padding: 14px 14px 16px; border-right: 1px solid rgba(26, 26, 23, 0.12); display: flex; flex-direction: column; gap: 6px; }
+  .pa-prev-spec-cell:last-child { border-right: 0; }
+  .pa-prev-spec-k { font-family: 'Toni Grotesk', sans-serif; font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
+  .pa-prev-spec-v { font-family: 'Bear Serif', serif; font-size: 14px; line-height: 1.1; }
+  .pa-prev-block.pa-prev-hero { padding: 30px 22px 28px; aspect-ratio: auto; background: transparent; display: block; color: #1a1a17; font-size: inherit; }
+  .pa-prev-why { padding: 4px 22px 18px; }
+  .pa-prev-why-head { display: flex; justify-content: space-between; align-items: baseline; padding: 18px 0 12px; }
+  .pa-prev-why-l { font-family: 'Bear Serif', serif; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: #6A6E2D; }
+  .pa-prev-why-r { font-family: 'Toni Grotesk', sans-serif; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
+  .pa-prev-why-row { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: baseline; padding: 12px 0; border-top: 1px solid rgba(26, 26, 23, 0.12); }
+  .pa-prev-why-row.first { border-top: 1px solid #1a1a17; }
+  .pa-prev-why-n { font-family: 'League Gothic', sans-serif; font-size: 28px; line-height: 0.85; color: #1a1a17; }
+  .pa-prev-why-claim { font-family: 'Toni Grotesk', sans-serif; font-size: 13px; line-height: 1.35; }
+  .pa-prev-ing { padding: 22px 22px 22px; }
+  .pa-prev-ing-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pa-prev-chip { display: inline-flex; align-items: baseline; gap: 5px; padding: 7px 11px 6px; border: 1px solid #1a1a17; border-radius: 999px; background: transparent; font-family: 'Toni Grotesk', sans-serif; font-size: 11px; line-height: 1; color: #1a1a17; }
+  .pa-prev-chip.lead { background: #1a1a17; color: #F2E7DF; font-family: 'Bear Serif', serif; font-size: 14px; padding: 9px 13px 8px; }
+  .pa-prev-chip-pct { font-family: 'League Gothic', sans-serif; font-size: 12px; color: #E96174; }
+  .pa-prev-chip.lead .pa-prev-chip-pct { color: #CCD900; }
+  .pa-prev-ing-line { font-family: 'Bear Serif', serif; font-size: 18px; line-height: 1.25; letter-spacing: -0.005em; color: #1a1a17; }
+  .pa-prev-ing-line-pct { font-family: 'League Gothic', sans-serif; color: #E96174; font-size: 0.85em; }
+  .pa-prev-ing-line-sep { display: inline-block; width: 6px; height: 6px; background: #CCD900; border-radius: 50%; margin: 0 0.35em 0.12em; vertical-align: middle; }
+  .pa-prev-allergen { margin: 22px 22px; padding: 14px 14px 12px; border: 1px solid #1a1a17; background: #FAF1E8; border-radius: 0; box-shadow: none; }
+  .pa-prev-allergen-top { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid #1a1a17; }
+  .pa-prev-allergen-ttl { display: inline-flex; align-items: center; gap: 6px; font-family: 'Bear Serif', serif; font-size: 15px; }
+  .pa-prev-allergen-warn { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; background: #E96174; color: #F2E7DF; border-radius: 3px; font-family: 'Toni Grotesk', sans-serif; font-size: 11px; font-weight: 700; }
+  .pa-prev-allergen-meta { font-family: 'Toni Grotesk', sans-serif; font-size: 8.5px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
+  .pa-prev-allergen-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; }
+  .pa-prev-allergen-row + .pa-prev-allergen-row { border-top: 1px dashed rgba(26, 26, 23, 0.3); }
+  .pa-prev-allergen-lbl { font-family: 'Toni Grotesk', sans-serif; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); flex: 0 0 76px; line-height: 1.4; }
+  .pa-prev-allergen-chips { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
+  .pa-prev-allergen-chip { display: inline-block; padding: 4px 9px 3px; border-radius: 999px; font-family: 'Toni Grotesk', sans-serif; font-size: 10px; line-height: 1; }
+  .pa-prev-allergen-chip.strong { background: #E96174; color: #fff; font-weight: 700; }
+  .pa-prev-allergen-chip.soft { background: #F2CA6C; color: #1a1a17; }
+  .pa-prev-allergen-empty { font-family: 'Aleo', serif; font-style: italic; font-size: 11px; color: rgba(26, 26, 23, 0.6); }
+  .pa-prev-how { padding: 22px 22px 22px; }
+  .pa-prev-how-grid { display: grid; gap: 1px; background: rgba(26, 26, 23, 0.12); border: 1px solid rgba(26, 26, 23, 0.12); }
+  .pa-prev-how-tile { background: #F2E7DF; padding: 14px 6px 12px; text-align: center; display: flex; flex-direction: column; gap: 5px; align-items: center; min-height: 64px; justify-content: center; }
+  .pa-prev-how-ic { font-size: 20px; line-height: 1; }
+  .pa-prev-how-lbl { font-family: 'Toni Grotesk', sans-serif; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #1a1a17; }
+  .pa-prev-how-sub { font-family: 'Aleo', serif; font-style: italic; font-size: 10px; color: rgba(26, 26, 23, 0.6); }
+  .pa-prev-storage { padding: 22px 22px 22px; }
+  .pa-prev-storage-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pa-prev-storage-card { border: 1px solid #1a1a17; padding: 12px 11px 11px; position: relative; display: flex; flex-direction: column; gap: 5px; min-height: 100px; }
+  .pa-prev-storage-card.alt { background: #1a1a17; color: #F2E7DF; }
+  .pa-prev-storage-ic { position: absolute; top: 8px; right: 8px; font-size: 14px; line-height: 1; }
+  .pa-prev-storage-head { font-family: 'Toni Grotesk', sans-serif; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; }
+  .pa-prev-storage-num { font-family: 'League Gothic', sans-serif; font-size: 38px; line-height: 0.85; margin-top: auto; }
+  .pa-prev-storage-unit { font-family: 'Toni Grotesk', sans-serif; font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; }
+  .pa-prev-storage-note { margin-top: 10px; font-family: 'Aleo', serif; font-style: italic; font-size: 10px; color: rgba(26, 26, 23, 0.6); text-align: right; }
+  .pa-prev-notes { padding: 16px 22px 18px; }
+  .pa-prev-notes-p { font-family: 'Aleo', serif; font-style: italic; font-size: 11px; line-height: 1.55; color: rgba(26, 26, 23, 0.6); position: relative; padding-left: 14px; }
+  .pa-prev-notes-p::before { content: "✱"; position: absolute; left: 0; top: 0; color: #6A6E2D; font-style: normal; }
+  .pa-prev-pullquote { padding: 18px 22px 20px; background: #E8D9CB; }
+  .pa-prev-pullquote-p { font-family: 'Aleo', serif; font-style: italic; font-size: 13px; line-height: 1.5; }
+  .pa-prev-pullquote-who { margin-top: 8px; font-family: 'Toni Grotesk', sans-serif; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
+  .pa-prev-colophon { padding: 22px 22px 18px; background: #F2E7DF; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; position: relative; border-top: 1px solid #1a1a17; }
+  .pa-prev-colophon-img { width: 72px; height: 72px; object-fit: contain; mix-blend-mode: multiply; }
+  .pa-prev-colophon-tagline { font-family: 'Bear Serif', serif; font-size: 16px; line-height: 1; letter-spacing: -0.005em; color: #1a1a17; }
+  .pa-prev-colophon-meta { display: flex; align-items: center; gap: 8px; font-family: 'Toni Grotesk', sans-serif; font-size: 8px; letter-spacing: 0.32em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
+  .pa-prev-colophon-rule { width: 14px; height: 1px; background: rgba(26, 26, 23, 0.3); }
+  .pa-prev-colophon-auto { position: absolute; top: 6px; right: 8px; font-family: 'Toni Grotesk', sans-serif; font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(26, 26, 23, 0.4); background: rgba(26, 26, 23, 0.06); padding: 2px 6px; border-radius: 3px; }
+  /* Nutrition card preview — mirrors miniapp product.wxss .nut-card */
+  .pa-prev-nutrition { padding: 22px 22px 20px; }
+  .pa-prev-nut-card { border: 1px solid #1a1a17; padding: 14px 14px 9px; }
+  .pa-prev-nut-top { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 9px; margin-bottom: 4px; border-bottom: 2px solid #1a1a17; }
+  .pa-prev-nut-ttl { font-family: 'Bear Serif', serif; font-size: 20px; line-height: 1; color: #1a1a17; }
+  .pa-prev-nut-basis { font-family: 'Aleo', serif; font-style: italic; font-size: 11px; color: rgba(26, 26, 23, 0.6); text-align: right; line-height: 1.3; }
+  .pa-prev-nrow { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 0; border-bottom: 1px solid rgba(26, 26, 23, 0.12); }
+  .pa-prev-nrow:last-child { border-bottom: 0; }
+  .pa-prev-nrow-l { font-family: 'Toni Grotesk', sans-serif; font-size: 13px; letter-spacing: 0.01em; color: #1a1a17; }
+  .pa-prev-nrow-r { font-family: 'League Gothic', sans-serif; font-size: 20px; line-height: 1; font-variant-numeric: tabular-nums; color: #1a1a17; }
+  .pa-prev-nrow.parent .pa-prev-nrow-l { font-weight: 700; }
+  .pa-prev-nrow.parent .pa-prev-nrow-r { color: #365329; }
+  .pa-prev-nrow.child { padding: 5px 0 5px 22px; border-bottom: 1px dashed rgba(26, 26, 23, 0.12); }
+  .pa-prev-nrow.child .pa-prev-nrow-l { font-family: 'Aleo', serif; font-style: italic; font-size: 12px; color: rgba(26, 26, 23, 0.6); position: relative; }
+  .pa-prev-nrow.child .pa-prev-nrow-l::before { content: "— "; }
+  .pa-prev-nrow.child .pa-prev-nrow-r { font-size: 16px; color: rgba(26, 26, 23, 0.6); }
+</style>
+</head>
+<body>
+  <header id="pe-topbar">
+    <button class="btn btn-ghost pe-back" onclick="peClose()" title="Back to products · 返回" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="pe-brand">
+      <span class="pe-brand-mark">R</span>
+      <span class="pe-brand-name">Product Editor · 产品编辑器</span>
+      <span class="pe-brand-divider"></span>
+    </div>
+    <div class="pe-topbar-title">
+      <span id="pe-name">Loading… · 加载中…</span>
+      <span id="pe-badge" class="pe-badge" style="display:none"></span>
+    </div>
+    <div class="pe-topbar-actions">
+      <div class="lang-toggle" id="lang-toggle">
+        <button data-lang="en" onclick="cuSetLang('en')">EN</button>
+        <button data-lang="cn" onclick="cuSetLang('cn')">中</button>
+      </div>
+      <span id="pe-save-status"></span>
+      <button class="btn" onclick="peClose()">Close · 关闭</button>
+      <button id="pe-save-btn" class="btn btn-primary" onclick="paSaveEdit()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save · 保存
+      </button>
+    </div>
+  </header>
+
+  <div id="pe-body">
+    <!-- LEFT: page settings (card chrome + colophon) + section list -->
+    <div class="pa-edit-palette">
+      <div class="pe-left-scroll">
+        <!-- PAGE settings — occasional, collapsed by default (dot = has content) -->
+        <div class="pe-left-group">
+          <div class="pe-left-grouptitle">Page · 页面</div>
+          <details class="pa-left-acc" id="pe-acc-chrome">
+            <summary><span class="pe-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="10" x2="17" y2="10"/><line x1="7" y1="14" x2="13" y2="14"/></svg></span> Card chrome · 卡片元素 <span id="pe-chrome-dot" class="pe-acc-dot"></span></summary>
+            <div class="pa-left-acc-body">
+              <div class="field"><label class="stacked">Keywords EN · 关键词(英文)</label><input id="pa-edit-keywords-en" type="text" placeholder="e.g. raw, alive"></div>
+              <div class="field"><label class="stacked">Keywords CN · 关键词(中文)</label><input id="pa-edit-keywords-cn" type="text" placeholder="例如:鲜活"></div>
+              <div class="field"><label class="stacked">Tagline EN · 标语(英文)</label><input id="pa-edit-tagline-en" type="text" placeholder="e.g. Your gut deserves better"></div>
+              <div class="field" style="margin-bottom:2px"><label class="stacked">Tagline CN · 标语(中文)</label><input id="pa-edit-tagline-cn" type="text" placeholder="例如:肠道值得更好的关怀"></div>
+            </div>
+          </details>
+          <details class="pa-left-acc" id="pe-acc-colophon">
+            <summary><span class="pe-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg></span> Colophon · 片尾签名 <span id="pe-colophon-dot" class="pe-acc-dot"></span></summary>
+            <div class="pa-left-acc-body">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 6px;gap:8px;flex-wrap:wrap">
+                <span class="helper" style="font-size:11px">IP character · 角色 <span style="opacity:.7">(auto if blank)</span></span>
+                <button type="button" class="btn" style="padding:3px 8px;font-size:11px" onclick="paClearColophonChar()">Auto · 自动</button>
+              </div>
+              <div id="pa-colophon-grid" class="pa-colophon-grid"></div>
+              <div class="field" style="margin-top:10px"><label class="stacked">Tagline EN · 标语(英文)</label><input id="pa-edit-colophon-tagline-en" type="text" placeholder="From Soil to Soul"></div>
+              <div class="field" style="margin-bottom:2px"><label class="stacked">Tagline CN · 标语(中文)</label><input id="pa-edit-colophon-tagline-cn" type="text" placeholder="从土壤到灵魂"></div>
+              <input type="hidden" id="pa-edit-colophon-character" value="">
+            </div>
+          </details>
+        </div>
+        <!-- SECTIONS — the main task, sticky header keeps + Add reachable -->
+        <div class="pe-left-head-sticky">
+          <span class="pa-edit-palette-title">Sections · 板块</span>
+          <select id="pa-blocks-picker" onchange="paBlocksAdd(this.value);this.value=''" style="font-size:11px;padding:5px 8px;font-weight:500;width:100%">
+            <option value="">+ Add section… · + 添加板块…</option>
+          </select>
+        </div>
+        <div id="pa-blocks-list" class="pe-blocks-list"></div>
+      </div>
+    </div>
+
+    <!-- CENTER: phone canvas -->
+    <div class="pa-edit-canvas">
+      <div class="pa-prev-frame">
+        <div class="pa-prev-screen" id="pa-preview-screen"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: inspector panel -->
+    <div class="pa-edit-inspector">
+      <div class="pe-insp-tabs">
+        <div class="pe-insp-seg">
+          <button id="pe-tab-block" class="active" onclick="peInspTab('block')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> Block · 板块</button>
+          <button id="pe-tab-page" onclick="peInspTab('page')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="9" height="7" rx="1"/><rect x="16" y="14" width="5" height="7" rx="1"/></svg> Presets · 版型</button>
+        </div>
+      </div>
+      <div class="pa-edit-inspector-scroll">
+        <!-- PAGE mode: presets only (card chrome + colophon live in the left rail) -->
+        <div id="pe-page-pane" style="display:none">
+        <div class="pa-inspector-presets">
+          <div class="pa-presets">
+            <div class="pa-presets-head">
+              <span class="pa-presets-title">Start from a preset · 套用版型</span>
+              <span class="pa-presets-hint helper">Pre-fills a coherent block stack. · 套用一套连贯板块。</span>
+            </div>
+            <div class="pa-presets-row" id="pa-presets-row"></div>
+          </div>
+        </div>
+        </div><!-- /pe-page-pane -->
+
+        <!-- BLOCK mode: the selected block's form (default) -->
+        <div id="pe-block-pane">
+          <div id="pa-block-editor-mount"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="pe-loading">Loading product… · 加载产品中…</div>
+  <div id="pe-toast"></div>
+
+  <script>
+// ── Utilities ───────────────────────────────────────────────────────────
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s) { return escapeHtml(s); }
+
+let _peToastT = null;
+function toast(msg, kind) {
+  const el = document.getElementById('pe-toast');
+  el.textContent = msg;
+  el.className = (kind === 'err' ? 'err ' : '') + 'show';
+  clearTimeout(_peToastT);
+  _peToastT = setTimeout(() => { el.className = el.className.replace('show', '').trim(); }, 2600);
+}
+
+// Close the editor tab. Opened via window.open() from retail-admin, so
+// window.close() works; fall back to navigating back if the browser blocks it.
+function peClose() {
+  window.close();
+  // If still here a tick later, the tab wasn't script-opened — go back.
+  setTimeout(() => {
+    if (document.referrer) location.href = document.referrer;
+    else location.href = '/retail-admin';
+  }, 120);
+}
+
+// ── Block-type registry — full Roots PDP v1 system. Keep in lock-step with
+// miniapp/components/product-blocks/* and retail-admin.html. ──
+const PA_BLOCK_TYPES = [
+  {
+    type: 'spec_strip', glyph: '📋',
+    label_en: '📋 Spec Strip — three meta facts',
+    label_cn: '📋 规格条 — 三项基础信息',
+    name_en: 'Spec Strip', name_cn: '规格条',
+    make: () => ({ cells: [
+      { k_en: 'Type',   k_cn: '类型', v_en: '', v_cn: '' },
+      { k_en: 'Net Wt', k_cn: '净重', v_en: '', v_cn: '' },
+      { k_en: 'Origin', k_cn: '产地', v_en: '', v_cn: '' },
+    ] }),
+  },
+  {
+    type: 'hero_intro', glyph: '📖',
+    label_en: '📖 Hero Intro — editorial paragraph + pull-out phrase',
+    label_cn: '📖 开篇引言 — 大段编辑文字 + 点睛短句',
+    name_en: 'Hero Intro', name_cn: '开篇引言',
+    make: () => ({ kicker_en: '', kicker_cn: '', body_en: '', body_cn: '', highlight_en: '', highlight_cn: '' }),
+  },
+  {
+    type: 'why', glyph: '✓',
+    label_en: '✓ Why People Choose It — 3-5 numbered claims',
+    label_cn: '✓ 为什么选它 — 3-5 条编号短句',
+    name_en: 'Why People Choose It', name_cn: '为什么选它',
+    make: () => ({ rows: [ { claim_en: '', claim_cn: '' }, { claim_en: '', claim_cn: '' }, { claim_en: '', claim_cn: '' } ] }),
+  },
+  {
+    type: 'ingredients_chips', glyph: '🌿',
+    label_en: '🌿 Ingredients · Chip Cloud — pills with optional % + hero',
+    label_cn: '🌿 配料 · 云标签 — 圆角标签,可选百分比/主料',
+    name_en: 'Ingredients · Chips', name_cn: '配料 · 云标签',
+    make: () => ({ items: [ { name_en: '', name_cn: '', pct: '', lead: false } ] }),
+  },
+  {
+    type: 'ingredients_line', glyph: '🌱',
+    label_en: '🌱 Ingredients · Editorial Line — typographic run',
+    label_cn: '🌱 配料 · 编辑式排版 — 大字一行体',
+    name_en: 'Ingredients · Line', name_cn: '配料 · 编辑式',
+    make: () => ({ items: [ { name_en: '', name_cn: '', pct: '', lead: false } ] }),
+  },
+  {
+    type: 'allergen_card', glyph: '⚠️',
+    label_en: '⚠️ Allergen Card — Contains / May contain',
+    label_cn: '⚠️ 过敏原卡 — 含有 / 可能含有微量',
+    name_en: 'Allergen Card', name_cn: '过敏原卡',
+    make: () => ({ contains_en: '', contains_cn: '', may_contain_en: '', may_contain_cn: '' }),
+  },
+  {
+    type: 'how_to_use', glyph: '🍽',
+    label_en: '🍽 How To Use Grid — 6 or 8 usage moments',
+    label_cn: '🍽 用法宫格 — 6 或 8 种用法',
+    name_en: 'How To Use', name_cn: '用法宫格',
+    make: () => ({ tiles: Array.from({ length: 6 }, () => (
+      { icon: '', label_en: '', label_cn: '', sub_en: '', sub_cn: '' }
+    )) }),
+  },
+  {
+    type: 'storage_box', glyph: '❄',
+    label_en: '❄ Storage Box — two paired condition cards + note',
+    label_cn: '❄ 储存条件 — 双卡片 + 备注',
+    name_en: 'Storage Box', name_cn: '储存条件',
+    make: () => ({
+      left:  { icon: '❄', head_en: 'Refrigerated', head_cn: '冷藏', num: '0–4°', unit_en: 'Celsius', unit_cn: '摄氏度', alt: false },
+      right: { icon: '📅', head_en: 'Shelf life',  head_cn: '保质期', num: 'pkg',  unit_en: 'see lid',  unit_cn: '见包装',  alt: true  },
+      note_en: '', note_cn: '',
+    }),
+  },
+  {
+    type: 'notes_callout', glyph: '✱',
+    label_en: '✱ Notes Callout — italic fine-print band',
+    label_cn: '✱ 备注说明 — 斜体小字提示',
+    name_en: 'Notes Callout', name_cn: '备注说明',
+    make: () => ({ text_en: '', text_cn: '' }),
+  },
+  {
+    type: 'big_stat', glyph: '✨',
+    label_en: '✨ Big Stat — one huge number on a brand slab',
+    label_cn: '✨ 大数字 — 醒目数字 + 短宣言',
+    name_en: 'Big Stat', name_cn: '大数字',
+    make: () => ({ stat: '', what_en: '', what_cn: '', claim_en: '', claim_cn: '', bg: 'lime' }),
+  },
+  {
+    type: 'pull_quote', glyph: '❝',
+    label_en: '❝ Pull Quote — editorial sourcing note',
+    label_cn: '❝ 引文 — 编辑式产地/来源短语',
+    name_en: 'Pull Quote', name_cn: '引文',
+    make: () => ({ text_en: '', text_cn: '', who_en: '', who_cn: '' }),
+  },
+  {
+    // Nutrition facts panel. Unlike the others, this block does NOT live in
+    // description_blocks — on save it is extracted into the dedicated
+    // products.nutrition column (see paCollectNutrition / paBlocksCollect),
+    // and on load it is synthesised back from that column (see peMount). The
+    // mini-app keeps rendering it from p.nutrition at its fixed position, so
+    // there's no mini-app change. Only ONE nutrition block is allowed.
+    type: 'nutrition_facts', glyph: '🥗',
+    label_en: '🥗 Nutrition Facts — basis + value rows',
+    label_cn: '🥗 营养成分 — 基准 + 数值行',
+    name_en: 'Nutrition Facts', name_cn: '营养成分',
+    make: () => ({ basis_en: 'Per 100g', basis_cn: '每100克', rows: [
+      { label_en: 'Energy',       label_cn: '能量',      value: '' },
+      { label_en: 'Protein',      label_cn: '蛋白质',    value: '' },
+      { label_en: 'Total fat',    label_cn: '总脂肪',    value: '' },
+      { label_en: 'Carbohydrate', label_cn: '碳水化合物', value: '' },
+      { label_en: 'Sodium',       label_cn: '钠',        value: '' },
+    ] }),
+  },
+];
+
+const PA_IP_CHARACTERS = [
+  { key: 'soilsoul',       label: 'Soil & Soul' },
+  { key: 'skater',         label: 'Skater'      },
+  { key: 'kombucha-gang',  label: 'Kombucha'    },
+  { key: 'flex',           label: 'Flex'        },
+  { key: 'radishes',       label: 'Radishes'    },
+  { key: 'mushroom',       label: 'Mushroom'    },
+  { key: 'peas',           label: 'Peas'        },
+  { key: 'onion',          label: 'Onion'       },
+  { key: 'broccoli',       label: 'Broccoli'    },
+  { key: 'hula',           label: 'Hula'        },
+];
+
+const PA_PAGE_PRESETS = [
+  {
+    id: 'editorial_light',
+    label_en: 'Editorial Light — Green Chili Dip layout',
+    label_cn: '清淡编辑风 — 青辣椒酱版式',
+    desc_en: 'Spec · story · why × 3 · chip-cloud ingredients · 6-tile how-to · storage · allergen · notes',
+    desc_cn: '规格 · 故事 · 3 条理由 · 配料云标签 · 6 用法 · 储存 · 过敏原 · 备注',
+    blocks: [
+      { type: 'spec_strip', cells: [
+        { k_en: 'Type',   k_cn: '类型', v_en: '', v_cn: '' },
+        { k_en: 'Net Wt', k_cn: '净重', v_en: '', v_cn: '' },
+        { k_en: 'Origin', k_cn: '产地', v_en: '', v_cn: '' },
+      ] },
+      { type: 'hero_intro', kicker_en: '', kicker_cn: '', body_en: '', body_cn: '', highlight_en: '', highlight_cn: '' },
+      { type: 'why', rows: [
+        { claim_en: '', claim_cn: '' },
+        { claim_en: '', claim_cn: '' },
+        { claim_en: '', claim_cn: '' },
+      ] },
+      { type: 'ingredients_chips', items: [
+        { name_en: '', name_cn: '', pct: '', lead: true  },
+        { name_en: '', name_cn: '', pct: '', lead: false },
+        { name_en: '', name_cn: '', pct: '', lead: false },
+        { name_en: '', name_cn: '', pct: '', lead: false },
+        { name_en: '', name_cn: '', pct: '', lead: false },
+        { name_en: '', name_cn: '', pct: '', lead: false },
+        { name_en: '', name_cn: '', pct: '', lead: false },
+      ] },
+      { type: 'how_to_use', tiles: Array.from({ length: 6 }, () => (
+        { icon: '', label_en: '', label_cn: '', sub_en: '', sub_cn: '' }
+      )) },
+      { type: 'storage_box',
+        left:  { icon: '❄',  head_en: 'Refrigerated', head_cn: '冷藏',   num: '', unit_en: '', unit_cn: '', alt: false },
+        right: { icon: '📅', head_en: 'Shelf life',   head_cn: '保质期', num: '', unit_en: '', unit_cn: '', alt: true  },
+        note_en: '', note_cn: '' },
+      { type: 'allergen_card', contains_en: '', contains_cn: '', may_contain_en: '', may_contain_cn: '' },
+      { type: 'notes_callout', text_en: '', text_cn: '' },
+    ],
+  },
+  {
+    id: 'editorial_bold',
+    label_en: 'Editorial Bold — Hazel Chocolate Spread layout',
+    label_cn: '醒目编辑风 — 榛子巧克力酱版式',
+    desc_en: 'Spec · story · big stat · why × 5 · editorial-line ingredients · pull quote · 8-tile how-to · storage · allergen · notes',
+    desc_cn: '规格 · 故事 · 大数字 · 5 条理由 · 配料编辑式 · 引文 · 8 用法 · 储存 · 过敏原 · 备注',
+    blocks: [
+      { type: 'spec_strip', cells: [
+        { k_en: 'Type',   k_cn: '类型', v_en: '', v_cn: '' },
+        { k_en: 'Net Wt', k_cn: '净重', v_en: '', v_cn: '' },
+        { k_en: 'Origin', k_cn: '产地', v_en: '', v_cn: '' },
+      ] },
+      { type: 'hero_intro', kicker_en: '', kicker_cn: '', body_en: '', body_cn: '', highlight_en: '', highlight_cn: '' },
+      { type: 'big_stat', stat: '', what_en: '', what_cn: '', claim_en: '', claim_cn: '', bg: 'lime' },
+      { type: 'why', rows: [
+        { claim_en: '', claim_cn: '' },
+        { claim_en: '', claim_cn: '' },
+        { claim_en: '', claim_cn: '' },
+        { claim_en: '', claim_cn: '' },
+        { claim_en: '', claim_cn: '' },
+      ] },
+      { type: 'ingredients_line', items: [
+        { name_en: '', name_cn: '', pct: '', lead: false },
+        { name_en: '', name_cn: '', pct: '', lead: false },
+        { name_en: '', name_cn: '', pct: '', lead: false },
+        { name_en: '', name_cn: '', pct: '', lead: false },
+        { name_en: '', name_cn: '', pct: '', lead: false },
+        { name_en: '', name_cn: '', pct: '', lead: false },
+        { name_en: '', name_cn: '', pct: '', lead: false },
+      ] },
+      { type: 'pull_quote', text_en: '', text_cn: '', who_en: '', who_cn: '' },
+      { type: 'how_to_use', tiles: Array.from({ length: 8 }, () => (
+        { icon: '', label_en: '', label_cn: '', sub_en: '', sub_cn: '' }
+      )) },
+      { type: 'storage_box',
+        left:  { icon: '🌡', head_en: 'Room temp',    head_cn: '常温', num: '', unit_en: '', unit_cn: '', alt: false },
+        right: { icon: '❄',  head_en: 'Refrigerated', head_cn: '冷藏', num: '', unit_en: '', unit_cn: '', alt: true  },
+        note_en: '', note_cn: '' },
+      { type: 'allergen_card', contains_en: '', contains_cn: '', may_contain_en: '', may_contain_cn: '' },
+      { type: 'notes_callout', text_en: '', text_cn: '' },
+    ],
+  },
+];
+
+// ── State ──
+let PA_CURRENT = null;          // the product being edited
+let PA_SELECTED_BLOCK_ID = null;
+window._paBlocks = [];
+
+// ── Boot — read ?id= from URL, fetch the product, paint the editor ──
+async function peBoot() {
+  const id = Number(new URLSearchParams(location.search).get('id'));
+  if (!id) { peFatal('No product id in URL · 网址缺少产品 id'); return; }
+  try {
+    const res = await fetch('/api/retail-admin/products', { credentials: 'same-origin' });
+    if (res.status === 401 || res.status === 403) { location.href = '/'; return; }
+    const j = await res.json();
+    if (!j.success) throw new Error(j.error || 'load_failed');
+    const p = (j.data || []).find(x => x.id === id);
+    if (!p) { peFatal('Product #' + id + ' not found · 未找到产品'); return; }
+    peMount(p);
+  } catch (e) {
+    peFatal('Failed to load · 加载失败: ' + escapeHtml(e.message));
+  }
+}
+function peFatal(msg) {
+  const el = document.getElementById('pe-loading');
+  el.classList.remove('hide');
+  el.innerHTML = '<div style="text-align:center;line-height:1.7">' + msg +
+    '<br><button class="btn" style="margin-top:14px" onclick="peClose()">Back · 返回</button></div>';
+}
+
+function peMount(p) {
+  PA_CURRENT = p;
+  document.title = (p.name_en || 'Product') + ' · Editor · Roots';
+  document.getElementById('pe-name').textContent = (p.name_en || '—') + (p.name_cn ? ' · ' + p.name_cn : '');
+  const badge = document.getElementById('pe-badge');
+  badge.style.display = '';
+  if (p.is_published === 1) { badge.textContent = '✓ Published · 已上架'; badge.className = 'pe-badge pub'; }
+  else { badge.textContent = 'Draft · 草稿'; badge.className = 'pe-badge draft'; }
+
+  document.getElementById('pa-edit-keywords-en').value = p.keywords_en || '';
+  document.getElementById('pa-edit-keywords-cn').value = p.keywords_cn || '';
+  document.getElementById('pa-edit-tagline-en').value  = p.tagline_en  || '';
+  document.getElementById('pa-edit-tagline-cn').value  = p.tagline_cn  || '';
+  document.getElementById('pa-edit-colophon-character').value  = p.colophon_character  || '';
+  document.getElementById('pa-edit-colophon-tagline-en').value = p.colophon_tagline_en || '';
+  document.getElementById('pa-edit-colophon-tagline-cn').value = p.colophon_tagline_cn || '';
+  paRenderColophonGrid();
+
+  window._paBlocks = Array.isArray(p.description_blocks)
+    ? p.description_blocks.map(b => ({ ...b, id: b.id || paBlocksGenId() }))
+    : [];
+  // Nutrition lives in its own products.nutrition column, not in
+  // description_blocks. Synthesise it back into the block list so it edits
+  // like any other section; paBlocksCollect/paCollectNutrition split it back
+  // out to the column on save.
+  if (p.nutrition && typeof p.nutrition === 'object' &&
+      (p.nutrition.basis_en || p.nutrition.basis_cn || (p.nutrition.rows || []).length)) {
+    window._paBlocks.push({
+      id: paBlocksGenId(),
+      type: 'nutrition_facts',
+      basis_en: p.nutrition.basis_en || '',
+      basis_cn: p.nutrition.basis_cn || '',
+      rows: Array.isArray(p.nutrition.rows)
+        ? p.nutrition.rows.map(r => ({ label_en: r.label_en || '', label_cn: r.label_cn || '', value: r.value || '' }))
+        : [],
+    });
+  }
+  PA_SELECTED_BLOCK_ID = window._paBlocks[0]?.id || null;
+  paBlocksPopulatePicker();
+  paRenderPresets();
+  paRenderAll();
+
+  // Wire chrome inputs → live preview + page-dot refresh
+  [
+    'pa-edit-keywords-en', 'pa-edit-keywords-cn',
+    'pa-edit-tagline-en',  'pa-edit-tagline-cn',
+    'pa-edit-colophon-tagline-en', 'pa-edit-colophon-tagline-cn',
+  ].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => { paRenderPreview(); peUpdatePageDot(); });
+  });
+  peUpdatePageDot();
+
+  // Default tab: if the page already has blocks, open Block (the common
+  // case — you came here to edit a section). If it's a blank page, open
+  // Page so the presets are right there to start from.
+  peInspTab(window._paBlocks.length ? 'block' : 'page');
+
+  document.getElementById('pe-loading').classList.add('hide');
+}
+
+// Switch the inspector between the selected-block form and page-level
+// settings (card chrome, colophon, presets). Block is the default.
+function peInspTab(mode) {
+  const isPage = mode === 'page';
+  document.getElementById('pe-page-pane').style.display  = isPage ? '' : 'none';
+  document.getElementById('pe-block-pane').style.display = isPage ? 'none' : '';
+  document.getElementById('pe-tab-page').classList.toggle('active', isPage);
+  document.getElementById('pe-tab-block').classList.toggle('active', !isPage);
+  peUpdatePageDot();
+}
+
+// Show a small dot on each left-rail accordion (Card chrome / Colophon)
+// when it carries content, so the office can see what's configured without
+// expanding it. Both accordions are collapsed by default.
+function peUpdatePageDot() {
+  const has = ids => ids.some(id => (document.getElementById(id)?.value || '').trim());
+  const chrome = has(['pa-edit-keywords-en','pa-edit-keywords-cn','pa-edit-tagline-en','pa-edit-tagline-cn']);
+  const colo   = has(['pa-edit-colophon-character','pa-edit-colophon-tagline-en','pa-edit-colophon-tagline-cn']);
+  const cd = document.getElementById('pe-chrome-dot');   if (cd) cd.style.display = chrome ? 'inline-block' : 'none';
+  const od = document.getElementById('pe-colophon-dot'); if (od) od.style.display = colo   ? 'inline-block' : 'none';
+}
+
+// ── Colophon ──
+function paRenderColophonGrid() {
+  const grid = document.getElementById('pa-colophon-grid'); if (!grid) return;
+  const current = (document.getElementById('pa-edit-colophon-character').value || '').trim();
+  grid.innerHTML = PA_IP_CHARACTERS.map(c => `
+    <div class="pa-colophon-tile ${current === c.key ? 'active' : ''}" onclick="paPickColophonChar('${c.key}')" title="${escapeAttr(c.label)}">
+      <img src="/assets/brand/ip-${c.key}.jpg" alt="${escapeAttr(c.label)}" loading="lazy">
+      <span class="pa-colophon-tile-label">${escapeHtml(c.label)}</span>
+    </div>
+  `).join('');
+}
+function paPickColophonChar(key) {
+  const input = document.getElementById('pa-edit-colophon-character');
+  input.value = input.value === key ? '' : key;
+  paRenderColophonGrid();
+  paRenderPreview();
+  peUpdatePageDot();
+}
+function paClearColophonChar() {
+  document.getElementById('pa-edit-colophon-character').value = '';
+  paRenderColophonGrid();
+  paRenderPreview();
+  peUpdatePageDot();
+}
+
+// ── Presets ──
+function paRenderPresets() {
+  const row = document.getElementById('pa-presets-row'); if (!row) return;
+  if (row.children.length) return;
+  row.innerHTML = PA_PAGE_PRESETS.map(p => `
+    <button type="button" class="pa-preset-card" onclick="paApplyPreset('${p.id}')">
+      <span class="pa-preset-card-label">${escapeHtml(p.label_en)}<br>${escapeHtml(p.label_cn)}</span>
+      <span class="pa-preset-card-desc">${escapeHtml(p.desc_en)}<br>${escapeHtml(p.desc_cn)}</span>
+    </button>
+  `).join('');
+}
+function paApplyPreset(id) {
+  const preset = PA_PAGE_PRESETS.find(p => p.id === id); if (!preset) return;
+  const existing = (window._paBlocks || []).length;
+  if (existing > 0) {
+    const ok = confirm(
+      'Apply this preset? · 套用此版型?\n\n' +
+      'It will REPLACE the ' + existing + ' block(s) currently on this product. ' +
+      '\n将替换当前产品上的 ' + existing + ' 个板块,无法撤销。'
+    );
+    if (!ok) return;
+  }
+  window._paBlocks = preset.blocks.map(b => ({ ...JSON.parse(JSON.stringify(b)), id: paBlocksGenId() }));
+  PA_SELECTED_BLOCK_ID = window._paBlocks[0]?.id || null;
+  paRenderAll();
+}
+
+// ── Repaint orchestration ──
+function paRenderAll() {
+  paRenderTabs();
+  paRenderSelectedEditor();
+  paRenderPreview();
+}
+function paLivePreview() {
+  paBlocksSyncFromDOM();
+  paRenderPreview();
+  paRefreshTabLabels();
+}
+
+// ── Save (PATCH) — stays on the page; updates badge + toast ──
+async function paSaveEdit() {
+  if (!PA_CURRENT) return;
+  const btn = document.getElementById('pe-save-btn');
+  const status = document.getElementById('pe-save-status');
+  btn.disabled = true; status.textContent = 'Saving… · 保存中…';
+  const body = {
+    keywords_en:           document.getElementById('pa-edit-keywords-en').value.trim() || null,
+    keywords_cn:           document.getElementById('pa-edit-keywords-cn').value.trim() || null,
+    tagline_en:            document.getElementById('pa-edit-tagline-en').value.trim()  || null,
+    tagline_cn:            document.getElementById('pa-edit-tagline-cn').value.trim()  || null,
+    colophon_character:    document.getElementById('pa-edit-colophon-character').value.trim() || null,
+    colophon_tagline_en:   document.getElementById('pa-edit-colophon-tagline-en').value.trim() || null,
+    colophon_tagline_cn:   document.getElementById('pa-edit-colophon-tagline-cn').value.trim() || null,
+    description_blocks:    paBlocksCollect(),
+    nutrition:             paCollectNutrition(),
+  };
+  try {
+    const r = await fetch('/api/retail-admin/products/' + PA_CURRENT.id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body),
+    });
+    if (r.status === 401 || r.status === 403) { location.href = '/'; return; }
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'save_failed');
+    PA_CURRENT = { ...PA_CURRENT, ...j.data };
+    status.textContent = 'Saved ✓ · 已保存 ' + new Date().toLocaleTimeString();
+    toast('Saved ✓ · 已保存');
+  } catch (e) {
+    status.textContent = '';
+    toast('Save failed · 保存失败: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Block editor core ──
+function paBlocksGenId() { return 'b' + Math.random().toString(36).slice(2, 9); }
+
+function paBlocksPopulatePicker() {
+  const pick = document.getElementById('pa-blocks-picker');
+  if (pick && pick.options.length <= 1) {
+    // Strip the leading emoji glyph from the registry labels so the native
+    // dropdown reads as clean text (it can't render SVG); the section list
+    // carries the proper SVG icon instead.
+    const strip = s => String(s || '').replace(/^\s*\P{L}+\s*/u, '').trim();
+    PA_BLOCK_TYPES.forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.type;
+      o.textContent = strip(t.label_en) + ' · ' + strip(t.label_cn);
+      pick.appendChild(o);
+    });
+  }
+}
+function paBlocksAdd(type) {
+  if (!type) return;
+  const def = PA_BLOCK_TYPES.find(t => t.type === type); if (!def) return;
+  paBlocksSyncFromDOM();
+  if (!window._paBlocks) window._paBlocks = [];
+  // Only one nutrition block per product (it maps to a single column) —
+  // if one exists, just select it instead of adding a duplicate.
+  if (type === 'nutrition_facts') {
+    const existing = window._paBlocks.find(b => b.type === 'nutrition_facts');
+    if (existing) {
+      PA_SELECTED_BLOCK_ID = existing.id;
+      paRenderAll();
+      toast(cuT('Only one Nutrition block per product.', '每个产品只能有一个营养成分板块。'));
+      return;
+    }
+  }
+  const nb = { id: paBlocksGenId(), type, ...def.make() };
+  window._paBlocks.push(nb);
+  PA_SELECTED_BLOCK_ID = nb.id;
+  paRenderAll();
+  setTimeout(() => {
+    const row = document.querySelector(`.pa-block-row[data-blockid="${nb.id}"]`);
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 30);
+}
+function paBlocksRemove(id) {
+  if (!confirm('Delete this section? · 删除此板块?')) return;
+  paBlocksSyncFromDOM();
+  const arr = window._paBlocks || [];
+  const i = arr.findIndex(b => b.id === id);
+  if (i < 0) return;
+  arr.splice(i, 1);
+  if (PA_SELECTED_BLOCK_ID === id) PA_SELECTED_BLOCK_ID = arr[Math.min(i, arr.length - 1)]?.id || null;
+  paRenderAll();
+}
+// Drag-to-reorder the section list (mirrors the mini-app editor). Document-
+// level delegation so it survives the list re-rendering on every paRenderAll.
+let _paDragId = null;
+function paInitBlockDnd() {
+  if (window._paDndWired) return;
+  window._paDndWired = true;
+  const clearDropMarks = () =>
+    document.querySelectorAll('.pa-block-row.pa-drop-before, .pa-block-row.pa-drop-after')
+      .forEach(r => r.classList.remove('pa-drop-before', 'pa-drop-after'));
+
+  document.addEventListener('dragstart', e => {
+    const row = e.target.closest?.('.pa-block-row'); if (!row) return;
+    _paDragId = row.dataset.blockid;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', _paDragId);
+    row.classList.add('pa-row-dragging');
+  });
+  document.addEventListener('dragend', () => {
+    _paDragId = null;
+    clearDropMarks();
+    document.querySelectorAll('.pa-block-row.pa-row-dragging').forEach(r => r.classList.remove('pa-row-dragging'));
+  });
+  document.addEventListener('dragover', e => {
+    if (!_paDragId) return;
+    const row = e.target.closest?.('.pa-block-row'); if (!row) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    clearDropMarks();
+    if (row.dataset.blockid === _paDragId) return;
+    const r = row.getBoundingClientRect();
+    row.classList.add(e.clientY < r.top + r.height / 2 ? 'pa-drop-before' : 'pa-drop-after');
+  });
+  document.addEventListener('drop', e => {
+    if (!_paDragId) return;
+    const row = e.target.closest?.('.pa-block-row'); if (!row) return;
+    e.preventDefault();
+    const after = row.classList.contains('pa-drop-after');
+    clearDropMarks();
+    paBlocksReorder(_paDragId, row.dataset.blockid, after);
+  });
+}
+function paBlocksReorder(dragId, targetId, after) {
+  if (!dragId || dragId === targetId) return;
+  paBlocksSyncFromDOM();
+  const arr = window._paBlocks || [];
+  const from = arr.findIndex(b => b.id === dragId);
+  if (from < 0) return;
+  const [moved] = arr.splice(from, 1);
+  let to = arr.findIndex(b => b.id === targetId);
+  if (to < 0) { arr.splice(from, 0, moved); return; }
+  if (after) to += 1;
+  arr.splice(to, 0, moved);
+  paRenderAll();
+}
+function paBlocksSelect(id) {
+  paBlocksSyncFromDOM();
+  PA_SELECTED_BLOCK_ID = id;
+  paRenderAll();
+}
+function paBlocksSyncFromDOM() {
+  const mount = document.getElementById('pa-block-editor-mount'); if (!mount) return;
+  const card = mount.querySelector('[data-blockid]'); if (!card) return;
+  const id = card.getAttribute('data-blockid');
+  const b = (window._paBlocks || []).find(x => x.id === id); if (!b) return;
+  card.querySelectorAll('[data-bkey]').forEach(el => {
+    const k    = el.getAttribute('data-bkey');
+    const val  = el.type === 'checkbox' ? !!el.checked : el.value;
+    const cIdx = el.getAttribute('data-cellidx');
+    const rIdx = el.getAttribute('data-rowidx');
+    const sub  = el.getAttribute('data-sub');
+    if (cIdx != null) {
+      if (!Array.isArray(b.cells)) b.cells = [];
+      b.cells[+cIdx] = { ...(b.cells[+cIdx] || {}), [k]: val };
+    } else if (rIdx != null) {
+      const arrKey = (b.type === 'why' || b.type === 'nutrition_facts') ? 'rows'
+                   : (b.type === 'ingredients_chips' || b.type === 'ingredients_line') ? 'items'
+                   : b.type === 'how_to_use' ? 'tiles'
+                   : null;
+      if (arrKey) {
+        if (!Array.isArray(b[arrKey])) b[arrKey] = [];
+        b[arrKey][+rIdx] = { ...(b[arrKey][+rIdx] || {}), [k]: val };
+      }
+    } else if (sub) {
+      b[sub] = { ...(b[sub] || {}), [k]: val };
+    } else {
+      b[k] = val;
+    }
+  });
+}
+function paArrAdd(blockId, key, factory) {
+  paBlocksSyncFromDOM();
+  const b = (window._paBlocks || []).find(x => x.id === blockId); if (!b) return;
+  if (!Array.isArray(b[key])) b[key] = [];
+  b[key].push(typeof factory === 'function' ? factory() : { ...factory });
+  paRenderAll();
+}
+function paArrRemove(blockId, key, idx) {
+  paBlocksSyncFromDOM();
+  const b = (window._paBlocks || []).find(x => x.id === blockId); if (!b) return;
+  if (!Array.isArray(b[key])) return;
+  if (b[key].length <= 1) return;
+  b[key].splice(idx, 1);
+  paRenderAll();
+}
+function paBlocksCollect() {
+  paBlocksSyncFromDOM();
+  const out = (window._paBlocks || []).filter(b => {
+    // Nutrition is persisted to its own column (paCollectNutrition), never
+    // into description_blocks — so the live mini-app never sees an unknown
+    // block type it can't render.
+    if (b.type === 'nutrition_facts') return false;
+    if (b.type === 'hero_intro')     return !!(b.body_en || b.body_cn || b.highlight_en || b.highlight_cn || b.kicker_en || b.kicker_cn);
+    if (b.type === 'stat_callout' || b.type === 'big_stat')
+                                     return !!(b.stat || b.what_en || b.what_cn || b.claim_en || b.claim_cn);
+    if (b.type === 'allergen_card')  return !!(b.contains_en || b.contains_cn || b.may_contain_en || b.may_contain_cn);
+    if (b.type === 'spec_strip')     return (b.cells || []).some(c => c.v_en || c.v_cn || c.k_en || c.k_cn);
+    if (b.type === 'why')            return (b.rows  || []).some(r => r.claim_en || r.claim_cn);
+    if (b.type === 'ingredients_chips' || b.type === 'ingredients_line')
+                                     return (b.items || []).some(it => it.name_en || it.name_cn);
+    if (b.type === 'how_to_use')     return (b.tiles || []).some(t => t.label_en || t.label_cn || t.icon);
+    if (b.type === 'storage_box')    {
+      const hasCard = c => c && (c.head_en || c.head_cn || c.num || c.unit_en || c.unit_cn);
+      return hasCard(b.left) || hasCard(b.right) || b.note_en || b.note_cn;
+    }
+    if (b.type === 'notes_callout')  return !!(b.text_en || b.text_cn);
+    if (b.type === 'pull_quote')     return !!(b.text_en || b.text_cn || b.who_en || b.who_cn);
+    return true;
+  });
+  return out.length ? out : null;
+}
+// Pull the nutrition block out of the editor list into the shape stored in
+// the products.nutrition column: { basis_en, basis_cn, rows:[{label_en,
+// label_cn, value}] }. Returns null when there's no nutrition block or it's
+// empty (which clears the column on save).
+function paCollectNutrition() {
+  paBlocksSyncFromDOM();
+  const b = (window._paBlocks || []).find(x => x.type === 'nutrition_facts');
+  if (!b) return null;
+  const rows = (b.rows || [])
+    .map(r => ({ label_en: (r.label_en || '').trim(), label_cn: (r.label_cn || '').trim(), value: (r.value || '').trim() }))
+    .filter(r => r.label_en || r.label_cn || r.value);
+  const basis_en = (b.basis_en || '').trim();
+  const basis_cn = (b.basis_cn || '').trim();
+  if (!basis_en && !basis_cn && !rows.length) return null;
+  return { basis_en: basis_en || null, basis_cn: basis_cn || null, rows };
+}
+// ── Tabs / palette rows ──
+const PA_TYPE_GLYPH = Object.fromEntries(PA_BLOCK_TYPES.map(t => [t.type, t.glyph]));
+const PA_TYPE_NAME  = Object.fromEntries(PA_BLOCK_TYPES.map(t => [t.type, { en: t.name_en, cn: t.name_cn }]));
+PA_TYPE_GLYPH.stat_callout = PA_TYPE_GLYPH.stat_callout || '✨';
+PA_TYPE_NAME.stat_callout  = PA_TYPE_NAME.stat_callout  || { en: 'Big Stat', cn: '大数字' };
+
+// ── SVG icon registry — Lucide-style stroke icons matching the Mini App
+// Editor (cms.html): 24×24 viewBox, fill:none, stroke:currentColor 1.75,
+// rounded caps/joins. currentColor inherits the lime chip color. ──
+const _SVG = (inner, opts) => `<svg viewBox="0 0 24 24" fill="${(opts&&opts.fill)||'none'}" stroke="${(opts&&opts.fill)?'none':'currentColor'}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+const PE_ICONS = {
+  spec_strip:        _SVG('<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/><line x1="15" y1="4" x2="15" y2="20"/>'),
+  hero_intro:        _SVG('<line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="11" x2="20" y2="11"/><line x1="4" y1="16" x2="14" y2="16"/>'),
+  why:               _SVG('<path d="M4 6.3l1.1 1.1L7.4 5"/><path d="M4 12.3l1.1 1.1L7.4 11"/><path d="M4 18.3l1.1 1.1L7.4 17"/><line x1="10" y1="6.5" x2="20" y2="6.5"/><line x1="10" y1="12.5" x2="20" y2="12.5"/><line x1="10" y1="18.5" x2="20" y2="18.5"/>'),
+  ingredients_chips: _SVG('<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>'),
+  ingredients_line:  _SVG('<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6"/>'),
+  allergen_card:     _SVG('<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'),
+  how_to_use:        _SVG('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'),
+  storage_box:       _SVG('<path d="M14 14.76V5a2 2 0 0 0-4 0v9.76a4 4 0 1 0 4 0z"/>'),
+  notes_callout:     _SVG('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+  big_stat:          _SVG('<path d="M12 3l1.9 4.8L18.5 9l-4.6 1.2L12 15l-1.9-4.8L5.5 9l4.6-1.2z"/><path d="M19 14l.7 1.9L21.5 17l-1.8.7L19 19.5l-.7-1.8L16.5 17l1.8-.6z"/>'),
+  pull_quote:        _SVG('<path d="M9 7H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v1a2 2 0 0 1-2 2H4v2h1a4 4 0 0 0 4-4V7zm10 0h-4a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v1a2 2 0 0 1-2 2h-1v2h1a4 4 0 0 0 4-4V7z"/>', { fill: 'currentColor' }),
+  nutrition_facts:   _SVG('<rect x="5" y="3" width="14" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/>'),
+};
+PE_ICONS.stat_callout = PE_ICONS.big_stat;
+// Fallback = a generic "box" so an unknown type still renders an SVG, never an emoji.
+const PE_ICON_FALLBACK = _SVG('<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>');
+function peTypeIcon(type) { return PE_ICONS[type] || PE_ICON_FALLBACK; }
+// Small chrome icons used in the inspector head action buttons.
+const PE_UI = {
+  x: _SVG('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
+};
+
+function _paBlockSubLabel(b) {
+  const trim = s => (s || '').toString().trim();
+  const head = s => trim(s).slice(0, 40) + (trim(s).length > 40 ? '…' : '');
+  if (b.type === 'hero_intro') return head(b.body_en || b.body_cn || b.highlight_en || b.highlight_cn || b.kicker_en || b.kicker_cn);
+  if (b.type === 'stat_callout' || b.type === 'big_stat') return [trim(b.stat), trim(b.what_en || b.what_cn || b.claim_en || b.claim_cn)].filter(Boolean).join(' · ');
+  if (b.type === 'allergen_card') return head(b.contains_en || b.contains_cn);
+  if (b.type === 'spec_strip') { const cells = Array.isArray(b.cells) ? b.cells : []; return cells.map(c => trim(c.v_en || c.v_cn)).filter(Boolean).slice(0, 3).join(' · ').slice(0, 40); }
+  if (b.type === 'why') { const r = (b.rows || [])[0] || {}; return head(r.claim_en || r.claim_cn); }
+  if (b.type === 'ingredients_chips' || b.type === 'ingredients_line') { const items = b.items || []; return items.map(it => trim(it.name_en || it.name_cn)).filter(Boolean).slice(0, 4).join(', ').slice(0, 40); }
+  if (b.type === 'how_to_use') { const tiles = b.tiles || []; return tiles.map(t => trim(t.label_en || t.label_cn)).filter(Boolean).slice(0, 4).join(' · ').slice(0, 40); }
+  if (b.type === 'storage_box') return [b.left?.head_en || b.left?.head_cn, b.right?.head_en || b.right?.head_cn].filter(Boolean).join(' · ');
+  if (b.type === 'notes_callout') return head(b.text_en || b.text_cn);
+  if (b.type === 'pull_quote') return head(b.text_en || b.text_cn);
+  if (b.type === 'nutrition_facts') {
+    const basis = trim(b.basis_en || b.basis_cn);
+    const rows = (b.rows || []).map(r => trim(r.label_en || r.label_cn)).filter(Boolean);
+    return [basis, rows.slice(0, 3).join(' · ')].filter(Boolean).join(' — ').slice(0, 40);
+  }
+  return '';
+}
+function paRenderTabs() {
+  const list = document.getElementById('pa-blocks-list'); if (!list) return;
+  const blocks = window._paBlocks || [];
+  if (!blocks.length) {
+    list.innerHTML = '<div class="helper" style="padding:14px 6px;text-align:center;font-size:11px;line-height:1.5">No sections yet — add one from the dropdown above. · 暂无板块,请从上方下拉添加。</div>';
+    return;
+  }
+  list.innerHTML = blocks.map((b, i) => {
+    const icon   = peTypeIcon(b.type);
+    const tName  = (PA_TYPE_NAME[b.type] || { en: b.type, cn: '' });
+    const sub    = _paBlockSubLabel(b);
+    const active = b.id === PA_SELECTED_BLOCK_ID ? ' active' : '';
+    return `<div class="pa-block-row${active}" draggable="true" data-blockid="${b.id}" data-idx="${i}" onclick="paBlocksSelect('${b.id}')" title="${escapeAttr(tName.en + (tName.cn ? ' · ' + tName.cn : ''))}">
+      <div class="pbr-icon">${icon}</div>
+      <div class="pbr-info">
+        <div class="pbr-name">${escapeHtml(tName.en)}</div>
+        ${sub ? `<div class="pbr-sub">${escapeHtml(sub)}</div>` : ''}
+      </div>
+      <div class="pbr-grip" title="Drag to reorder · 拖动排序">⋮⋮</div>
+      <div class="pbr-num">${i + 1}</div>
+    </div>`;
+  }).join('');
+  paInitBlockDnd();
+}
+function paRefreshTabLabels() {
+  const blocks = window._paBlocks || [];
+  blocks.forEach(b => {
+    const row = document.querySelector(`.pa-block-row[data-blockid="${b.id}"]`);
+    if (!row) return;
+    const subEl = row.querySelector('.pbr-sub');
+    const sub = _paBlockSubLabel(b);
+    if (sub) {
+      if (subEl) subEl.textContent = sub;
+      else {
+        const div = document.createElement('div');
+        div.className = 'pbr-sub'; div.textContent = sub;
+        const info = row.querySelector('.pbr-info');
+        if (info) info.appendChild(div);
+      }
+    } else if (subEl) subEl.remove();
+  });
+}
+
+// ── Selected-block editor form ──
+function _paBlockEditorBody(b) {
+  const v = (k) => escapeAttr(b[k] || '');
+  const t = (k) => escapeHtml(b[k] || '');
+
+  if (b.type === 'spec_strip') {
+    const cells = Array.isArray(b.cells) && b.cells.length ? b.cells
+      : [{ k_en:'Type',k_cn:'类型',v_en:'',v_cn:'' },{ k_en:'Net Wt',k_cn:'净重',v_en:'',v_cn:'' },{ k_en:'Origin',k_cn:'产地',v_en:'',v_cn:'' }];
+    return `
+      <div class="helper" style="margin:-4px 0 14px">Meta facts shown as a quiet strip under the product header. Labels are caps; values are serif. Designed for 3 cells but you can add/remove as needed. · 产品头部下方的安静一行,小标签 + 衬线值。默认 3 格,可按需增删。</div>
+      ${cells.map((c, i) => `
+        <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span class="pa-edit-section-title">Cell · 第 ${i + 1} 格</span>
+            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','cells',${i})" ${cells.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
+          </div>
+          <div class="pa-edit-grid-2">
+            <div class="field"><label class="stacked">Label EN · 标签(英文)</label><input data-cellidx="${i}" data-bkey="k_en" type="text" value="${escapeAttr(c.k_en || '')}" placeholder="Type"></div>
+            <div class="field"><label class="stacked">Label CN · 标签(中文)</label><input data-cellidx="${i}" data-bkey="k_cn" type="text" value="${escapeAttr(c.k_cn || '')}" placeholder="类型"></div>
+            <div class="field"><label class="stacked">Value EN · 值(英文)</label><input data-cellidx="${i}" data-bkey="v_en" type="text" value="${escapeAttr(c.v_en || '')}" placeholder="Refrigerated dip"></div>
+            <div class="field"><label class="stacked">Value CN · 值(中文)</label><input data-cellidx="${i}" data-bkey="v_cn" type="text" value="${escapeAttr(c.v_cn || '')}" placeholder="冷藏蘸酱"></div>
+          </div>
+        </div>`).join('')}
+      <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','cells',{k_en:'',k_cn:'',v_en:'',v_cn:''})">+ Add cell · 添加一格</button>`;
+  }
+  if (b.type === 'hero_intro') {
+    return `
+      <div class="pa-edit-grid-2">
+        <div class="field"><label class="stacked">Kicker EN · 引题(英文)</label>
+          <input data-bkey="kicker_en" type="text" value="${v('kicker_en')}" placeholder="The story">
+          <div class="helper">Optional caps prefix above the paragraph. · 段落上方的小标题(大写,可选)。</div>
+        </div>
+        <div class="field"><label class="stacked">Kicker CN · 引题(中文)</label><input data-bkey="kicker_cn" type="text" value="${v('kicker_cn')}" placeholder="故事"></div>
+        <div class="field" style="grid-column:span 2"><label class="stacked">Body EN · 正文</label><textarea data-bkey="body_en" rows="5">${t('body_en')}</textarea></div>
+        <div class="field" style="grid-column:span 2"><label class="stacked">Body CN · 正文(中文)</label><textarea data-bkey="body_cn" rows="5">${t('body_cn')}</textarea></div>
+        <div class="field"><label class="stacked">Highlight EN · 重点(英文)</label>
+          <input data-bkey="highlight_en" type="text" value="${v('highlight_en')}" placeholder="just enough heat to wake things up">
+          <div class="helper">If this phrase appears in the body, it renders inline on a lime slab. · 若该短语出现在正文中,会以青柠色块呈现。</div>
+        </div>
+        <div class="field"><label class="stacked">Highlight CN · 重点(中文)</label><input data-bkey="highlight_cn" type="text" value="${v('highlight_cn')}" placeholder="刚好够把舌头叫醒"></div>
+      </div>`;
+  }
+  if (b.type === 'why') {
+    const rows = Array.isArray(b.rows) ? b.rows : [];
+    return `
+      <div class="helper" style="margin:-4px 0 14px">3–5 single-sentence benefits. Numbered ledger on the mini-app. · 3-5 条单句卖点,小程序中编号呈现。</div>
+      ${rows.map((r, i) => `
+        <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
+            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','rows',${i})" ${rows.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
+          </div>
+          <div class="pa-edit-grid-2">
+            <div class="field"><label class="stacked">Claim EN · 说明(英文)</label><input data-rowidx="${i}" data-bkey="claim_en" type="text" value="${escapeAttr(r.claim_en || '')}" placeholder="Fresh herb flavor with controlled heat."></div>
+            <div class="field"><label class="stacked">Claim CN · 说明(中文)</label><input data-rowidx="${i}" data-bkey="claim_cn" type="text" value="${escapeAttr(r.claim_cn || '')}" placeholder="鲜草本风味,可控辣度。"></div>
+          </div>
+        </div>`).join('')}
+      <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','rows',{claim_en:'',claim_cn:''})" ${rows.length >= 5 ? 'disabled' : ''}>+ Add claim · 添加</button>`;
+  }
+  if (b.type === 'ingredients_chips' || b.type === 'ingredients_line') {
+    const items = Array.isArray(b.items) ? b.items : [];
+    const isChips = b.type === 'ingredients_chips';
+    return `
+      <div class="helper" style="margin:-4px 0 14px">${isChips
+        ? 'Pill cloud. Mark one item as the hero chip and add a % for any item ≥ 10%. · 圆角标签,可标记一个主料,加百分比。'
+        : 'Editorial single-line run with lime-dot separators. Best for clean lists ≤ 10 items. · 编辑式一行体,适合简洁列表。'}</div>
+      ${items.map((it, i) => `
+        <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
+            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','items',${i})" ${items.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
+          </div>
+          <div class="pa-edit-grid-2">
+            <div class="field"><label class="stacked">Name EN · 名称(英文)</label><input data-rowidx="${i}" data-bkey="name_en" type="text" value="${escapeAttr(it.name_en || '')}" placeholder="Fresh cilantro"></div>
+            <div class="field"><label class="stacked">Name CN · 名称(中文)</label><input data-rowidx="${i}" data-bkey="name_cn" type="text" value="${escapeAttr(it.name_cn || '')}" placeholder="鲜香菜"></div>
+            <div class="field"><label class="stacked">% (optional) · 百分比(可选)</label><input data-rowidx="${i}" data-bkey="pct" type="number" min="0" max="100" value="${escapeAttr(it.pct == null ? '' : it.pct)}" placeholder="38"></div>
+            <div class="field"><label class="stacked">Hero · 主料</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-1);cursor:pointer">
+                <input data-rowidx="${i}" data-bkey="lead" type="checkbox" ${it.lead ? 'checked' : ''}>
+                <span>Inverted hero chip · 反色主料标签</span>
+              </label>
+            </div>
+          </div>
+        </div>`).join('')}
+      <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','items',{name_en:'',name_cn:'',pct:'',lead:false})">+ Add ingredient · 添加配料</button>`;
+  }
+  if (b.type === 'allergen_card') {
+    return `
+      <div class="pa-edit-grid-2">
+        <div class="field"><label class="stacked">Contains EN · 包含(英文)</label>
+          <input data-bkey="contains_en" type="text" value="${v('contains_en')}" placeholder="Tree nuts, Hazelnuts">
+          <div class="helper">Comma-separated, shown as berry strong chips. Leave blank for "None declared". · 逗号分隔,显示为深莓色标签。</div>
+        </div>
+        <div class="field"><label class="stacked">Contains CN · 含有(中文)</label><input data-bkey="contains_cn" type="text" value="${v('contains_cn')}" placeholder="树坚果,榛子"></div>
+        <div class="field"><label class="stacked">May Contain EN · 可能含有(英文)</label>
+          <input data-bkey="may_contain_en" type="text" value="${v('may_contain_en')}" placeholder="Other tree nuts, soy">
+          <div class="helper">Comma-separated, shown as corn soft chips. · 逗号分隔,显示为玉米色软标签。</div>
+        </div>
+        <div class="field"><label class="stacked">May Contain CN · 可能含有(中文)</label><input data-bkey="may_contain_cn" type="text" value="${v('may_contain_cn')}" placeholder="其他树坚果、大豆"></div>
+      </div>`;
+  }
+  if (b.type === 'how_to_use') {
+    const tiles = Array.isArray(b.tiles) ? b.tiles : [];
+    return `
+      <div class="helper" style="margin:-4px 0 14px">6 tiles (3-col grid) or 8 tiles (4-col grid) — never 5 or 7. Each tile: emoji + caps label + optional italic sub-line. · 6 块 (3 列) 或 8 块 (4 列)。</div>
+      ${tiles.map((tl, i) => `
+        <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
+            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','tiles',${i})" ${tiles.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
+          </div>
+          <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px">
+            <div class="field"><label class="stacked">Icon · 图标</label><input data-rowidx="${i}" data-bkey="icon" type="text" value="${escapeAttr(tl.icon || '')}" placeholder="🥖" style="text-align:center;font-size:18px"></div>
+            <div class="field"><label class="stacked">Label EN · 标签(英文)</label><input data-rowidx="${i}" data-bkey="label_en" type="text" value="${escapeAttr(tl.label_en || '')}" placeholder="Toast"></div>
+            <div class="field"><label class="stacked">Label CN · 标签(中文)</label><input data-rowidx="${i}" data-bkey="label_cn" type="text" value="${escapeAttr(tl.label_cn || '')}" placeholder="吐司"></div>
+            <div></div>
+            <div class="field"><label class="stacked">Sub EN (optional) · 副标(英文,可选)</label><input data-rowidx="${i}" data-bkey="sub_en" type="text" value="${escapeAttr(tl.sub_en || '')}" placeholder="over eggs"></div>
+            <div class="field"><label class="stacked">Sub CN · 副标(中文,可选)</label><input data-rowidx="${i}" data-bkey="sub_cn" type="text" value="${escapeAttr(tl.sub_cn || '')}" placeholder="盖在鸡蛋上"></div>
+          </div>
+        </div>`).join('')}
+      <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','tiles',{icon:'',label_en:'',label_cn:'',sub_en:'',sub_cn:''})" ${tiles.length >= 8 ? 'disabled' : ''}>+ Add tile · 添加用法</button>`;
+  }
+  if (b.type === 'storage_box') {
+    const L = b.left  || {};
+    const R = b.right || {};
+    const card = (which, c) => `
+      <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
+        <div class="pa-edit-section-title" style="margin-bottom:8px">${which === 'left' ? 'Left card · 左卡' : 'Right card · 右卡'}</div>
+        <div style="display:grid;grid-template-columns:60px 1fr 1fr;gap:10px">
+          <div class="field"><label class="stacked">Icon · 图标</label><input data-sub="${which}" data-bkey="icon" type="text" value="${escapeAttr(c.icon || '')}" placeholder="❄" style="text-align:center;font-size:18px"></div>
+          <div class="field"><label class="stacked">Head EN · 标题(英文)</label><input data-sub="${which}" data-bkey="head_en" type="text" value="${escapeAttr(c.head_en || '')}" placeholder="Refrigerated"></div>
+          <div class="field"><label class="stacked">Head CN · 标题(中文)</label><input data-sub="${which}" data-bkey="head_cn" type="text" value="${escapeAttr(c.head_cn || '')}" placeholder="冷藏"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:8px">
+          <div class="field"><label class="stacked">Number · 数值</label><input data-sub="${which}" data-bkey="num" type="text" value="${escapeAttr(c.num || '')}" placeholder="0–4°"></div>
+          <div class="field"><label class="stacked">Unit EN · 单位(英文)</label><input data-sub="${which}" data-bkey="unit_en" type="text" value="${escapeAttr(c.unit_en || '')}" placeholder="Celsius"></div>
+          <div class="field"><label class="stacked">Unit CN · 单位(中文)</label><input data-sub="${which}" data-bkey="unit_cn" type="text" value="${escapeAttr(c.unit_cn || '')}" placeholder="摄氏度"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-1);margin-top:10px;cursor:pointer">
+          <input data-sub="${which}" data-bkey="alt" type="checkbox" ${c.alt ? 'checked' : ''}>
+          <span>Inverted (ink fill, oat text) · 反色卡片</span>
+        </label>
+      </div>`;
+    return `
+      <div class="helper" style="margin:-4px 0 14px">Two paired condition cards. Keep one inverted so they read as a set. · 双卡片成对,其中一张反色形成对比。</div>
+      ${card('left',  L)}
+      ${card('right', R)}
+      <div class="pa-edit-grid-2" style="margin-top:8px">
+        <div class="field"><label class="stacked">After-opening note EN · 开封后备注(英文)</label><input data-bkey="note_en" type="text" value="${v('note_en')}" placeholder="After opening · refrigerate"></div>
+        <div class="field"><label class="stacked">Note CN · 开封后备注(中文)</label><input data-bkey="note_cn" type="text" value="${v('note_cn')}" placeholder="开封后冷藏"></div>
+      </div>`;
+  }
+  if (b.type === 'notes_callout') {
+    return `
+      <div class="helper" style="margin:-4px 0 14px">Fine-print band — "shake before use", warnings, sourcing notes. Max ~3 lines. · 小字注释。</div>
+      <div class="pa-edit-grid-2">
+        <div class="field" style="grid-column:span 2"><label class="stacked">Text EN · 文字(英文)</label><textarea data-bkey="text_en" rows="3">${t('text_en')}</textarea></div>
+        <div class="field" style="grid-column:span 2"><label class="stacked">Text CN · 文字(中文)</label><textarea data-bkey="text_cn" rows="3">${t('text_cn')}</textarea></div>
+      </div>`;
+  }
+  if (b.type === 'big_stat' || b.type === 'stat_callout') {
+    const bgOpts = ['lime','carrot','pink','corn','sky','lotus','papaya','cucumber'];
+    return `
+      <div class="pa-edit-grid-2">
+        <div class="field" style="grid-column:span 2"><label class="stacked">Stat · 数字</label>
+          <input data-bkey="stat" type="text" value="${v('stat')}" placeholder="81%" style="font-size:22px;font-weight:700;text-align:center">
+          <div class="helper">e.g. <code>81%</code>, <code>500g</code>, <code>0g</code></div>
+        </div>
+        <div class="field"><label class="stacked">What EN · 内容(英文)</label>
+          <input data-bkey="what_en" type="text" value="${v('what_en')}" placeholder="HAZELNUTS">
+          <div class="helper">Caps label under the stat. · 数字下方的大写小标题。</div>
+        </div>
+        <div class="field"><label class="stacked">What CN · 内容(中文)</label><input data-bkey="what_cn" type="text" value="${v('what_cn')}" placeholder="榛子"></div>
+        <div class="field" style="grid-column:span 2"><label class="stacked">Claim EN (optional) · 说明(英文,可选)</label>
+          <input data-bkey="claim_en" type="text" value="${v('claim_en')}" placeholder="Nuts first, not sugar.">
+          <div class="helper">Italic one-liner under the what-label. · 内容标签下方的斜体一行说明。</div>
+        </div>
+        <div class="field" style="grid-column:span 2"><label class="stacked">Claim CN · 说明(中文,可选)</label><input data-bkey="claim_cn" type="text" value="${v('claim_cn')}" placeholder="坚果当先,不靠糖分。"></div>
+        <div class="field" style="grid-column:span 2"><label class="stacked">Slab colour · 色块颜色</label>
+          <select data-bkey="bg">${bgOpts.map(c => `<option value="${c}" ${b.bg === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
+        </div>
+      </div>`;
+  }
+  if (b.type === 'pull_quote') {
+    return `
+      <div class="helper" style="margin:-4px 0 14px">Editorial sourcing/producer quote on warm tan background. First-person voice from the kitchen. · 编辑式引文,温色背景,第一人称。</div>
+      <div class="pa-edit-grid-2">
+        <div class="field" style="grid-column:span 2"><label class="stacked">Quote EN · 引文(英文)</label><textarea data-bkey="text_en" rows="3" placeholder='"Our hazelnuts are slow-roasted in small batches…"'>${t('text_en')}</textarea></div>
+        <div class="field" style="grid-column:span 2"><label class="stacked">Quote CN · 引文(中文)</label><textarea data-bkey="text_cn" rows="3" placeholder='"我们的榛子在小批量中慢烘…"'>${t('text_cn')}</textarea></div>
+        <div class="field"><label class="stacked">Attribution EN · 引用来源(英文)</label><input data-bkey="who_en" type="text" value="${v('who_en')}" placeholder="Our kitchen · Guangzhou"></div>
+        <div class="field"><label class="stacked">Attribution CN · 引用来源(中文)</label><input data-bkey="who_cn" type="text" value="${v('who_cn')}" placeholder="我们的厨房 · 广州"></div>
+      </div>`;
+  }
+  if (b.type === 'nutrition_facts') {
+    const rows = Array.isArray(b.rows) ? b.rows : [];
+    return `
+      <div class="helper" style="margin:-4px 0 14px">Renders as the bordered Nutrition card on the product page (fixed position, after the sections). Rows like Energy / Total fat / Carbohydrate render bold; their sub-rows (Saturated, Sugars…) auto-indent. · 在产品页以带框营养卡呈现(固定位置)。能量/脂肪/碳水等为主行加粗,其子项(饱和脂肪、糖等)自动缩进。</div>
+      <div class="pa-edit-grid-2" style="margin-bottom:14px">
+        <div class="field"><label class="stacked">Basis EN · 基准(英文)</label><input data-bkey="basis_en" type="text" value="${v('basis_en')}" placeholder="Per 100g"></div>
+        <div class="field"><label class="stacked">Basis CN · 基准(中文)</label><input data-bkey="basis_cn" type="text" value="${v('basis_cn')}" placeholder="每100克"></div>
+      </div>
+      ${rows.map((r, i) => `
+        <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
+            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','rows',${i})" ${rows.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 0.8fr;gap:10px">
+            <div class="field"><label class="stacked">Label EN · 标签(英文)</label><input data-rowidx="${i}" data-bkey="label_en" type="text" value="${escapeAttr(r.label_en || '')}" placeholder="Energy"></div>
+            <div class="field"><label class="stacked">Label CN · 标签(中文)</label><input data-rowidx="${i}" data-bkey="label_cn" type="text" value="${escapeAttr(r.label_cn || '')}" placeholder="能量"></div>
+            <div class="field"><label class="stacked">Value · 数值</label><input data-rowidx="${i}" data-bkey="value" type="text" value="${escapeAttr(r.value || '')}" placeholder="2100 kJ"></div>
+          </div>
+        </div>`).join('')}
+      <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','rows',{label_en:'',label_cn:'',value:''})">+ Add row · 添加一行</button>`;
+  }
+  return `<div class="helper" style="padding:8px 0">Unknown block type · 未知板块类型: <code>${escapeHtml(b.type || '')}</code></div>`;
+}
+function paRenderSelectedEditor() {
+  const mount = document.getElementById('pa-block-editor-mount'); if (!mount) return;
+  const blocks = window._paBlocks || [];
+  if (!blocks.length) {
+    mount.innerHTML = '<div class="pa-blocks-empty">No sections yet — use + Add section on the left to compose the page. · 暂无板块,请用左侧"添加板块"开始排版。</div>';
+    return;
+  }
+  let b = blocks.find(x => x.id === PA_SELECTED_BLOCK_ID);
+  if (!b) { b = blocks[0]; PA_SELECTED_BLOCK_ID = b.id; }
+  const tName = PA_TYPE_NAME[b.type] || { en: b.type, cn: '' };
+  const icon  = peTypeIcon(b.type);
+  const body  = _paBlockEditorBody(b);
+  mount.innerHTML = `
+    <div class="pa-inspector-head" data-blockid="${b.id}">
+      <div class="pa-inspector-head-left">
+        <div class="pa-inspector-icon">${icon}</div>
+        <span class="pa-inspector-title">${escapeHtml(tName.en)}</span>
+        ${tName.cn ? `<span class="pa-inspector-sub">· ${escapeHtml(tName.cn)}</span>` : ''}
+      </div>
+      <div class="pa-inspector-actions">
+        <button type="button" class="btn btn-icon danger" title="Delete block · 删除板块" onclick="paBlocksRemove('${b.id}')">${PE_UI.x}</button>
+      </div>
+    </div>
+    <div class="pa-inspector-body">${body}</div>`;
+  mount.querySelectorAll('[data-bkey]').forEach(el => {
+    const ev = el.type === 'checkbox' ? 'change' : 'input';
+    el.addEventListener(ev, paLivePreview);
+  });
+}
+
+// ── Live phone-frame preview ──
+function _paInlineHl(body, phrase) {
+  if (!phrase || !body) return { html: escapeHtml(body || ''), loose: '' };
+  const idx = body.toLowerCase().indexOf(phrase.toLowerCase());
+  if (idx < 0) return { html: escapeHtml(body), loose: phrase };
+  return {
+    html: escapeHtml(body.slice(0, idx)) + '<span class="pa-prev-hero-hl">' + escapeHtml(body.slice(idx, idx + phrase.length)) + '</span>' + escapeHtml(body.slice(idx + phrase.length)),
+    loose: '',
+  };
+}
+function _paSplitChips(s) { return String(s || '').split(/[,、，]/g).map(x => x.trim()).filter(Boolean); }
+function _paPreviewBlockHtml(b) {
+  const esc = escapeHtml;
+  const pickT = (en, cn) => ((en || '').trim() || (cn || '').trim());
+  if (b.type === 'spec_strip') {
+    const cells = (b.cells || []).map(c => ({ k: pickT(c.k_en, c.k_cn), v: pickT(c.v_en, c.v_cn) })).filter(c => c.k || c.v);
+    if (!cells.length) return '';
+    return `<div class="pa-prev-block pa-prev-spec">${cells.map(c => `<div class="pa-prev-spec-cell">${c.k ? `<div class="pa-prev-spec-k">${esc(c.k)}</div>` : ''}${c.v ? `<div class="pa-prev-spec-v">${esc(c.v)}</div>` : ''}</div>`).join('')}</div>`;
+  }
+  if (b.type === 'hero_intro') {
+    const body = pickT(b.body_en, b.body_cn), phrase = pickT(b.highlight_en, b.highlight_cn), kicker = pickT(b.kicker_en, b.kicker_cn);
+    if (!body && !phrase && !kicker) return '';
+    const m = _paInlineHl(body, phrase);
+    const lead = kicker || m.loose;
+    return `<div class="pa-prev-block pa-prev-hero">${lead ? `<div class="pa-prev-hero-lead">${esc(lead)}</div>` : ''}${body ? `<div class="pa-prev-hero-body">${m.html}</div>` : ''}</div>`;
+  }
+  if (b.type === 'why') {
+    const rows = (b.rows || []).map(r => pickT(r.claim_en, r.claim_cn)).filter(Boolean);
+    if (!rows.length) return '';
+    return `<div class="pa-prev-block pa-prev-why">
+      <div class="pa-prev-why-head"><span class="pa-prev-why-l">Why people choose it</span><span class="pa-prev-why-r">${String(rows.length).padStart(2, '0')}</span></div>
+      ${rows.map((c, i) => `<div class="pa-prev-why-row ${i === 0 ? 'first' : ''}"><span class="pa-prev-why-n">${String(i + 1).padStart(2, '0')}</span><span class="pa-prev-why-claim">${esc(c)}</span></div>`).join('')}
+    </div>`;
+  }
+  if (b.type === 'ingredients_chips') {
+    const items = (b.items || []).map(it => ({ name: pickT(it.name_en, it.name_cn), pct: it.pct != null && it.pct !== '' ? Number(it.pct) : null, lead: !!it.lead })).filter(it => it.name);
+    if (!items.length) return '';
+    return `<div class="pa-prev-block pa-prev-ing">
+      <div class="pa-prev-section-head"><span class="pa-prev-section-h3">Ingredients</span><span class="pa-prev-section-tag">${items.length} items · chips</span></div>
+      <div class="pa-prev-ing-chips">${items.map(it => `<span class="pa-prev-chip ${it.lead ? 'lead' : ''}">${esc(it.name)}${it.pct != null && !isNaN(it.pct) && it.pct >= 10 ? `<span class="pa-prev-chip-pct">${it.pct}%</span>` : ''}</span>`).join('')}</div>
+    </div>`;
+  }
+  if (b.type === 'ingredients_line') {
+    const items = (b.items || []).map(it => ({ name: pickT(it.name_en, it.name_cn), pct: it.pct != null && it.pct !== '' ? Number(it.pct) : null })).filter(it => it.name);
+    if (!items.length) return '';
+    const run = items.map((it, i) => {
+      const sep = i > 0 ? '<span class="pa-prev-ing-line-sep"></span>' : '';
+      const pct = it.pct != null && !isNaN(it.pct) ? `<span class="pa-prev-ing-line-pct"> ${it.pct}%</span>` : '';
+      return `${sep}${esc(it.name)}${pct}`;
+    }).join(' ');
+    return `<div class="pa-prev-block pa-prev-ing"><div class="pa-prev-section-head"><span class="pa-prev-section-h3">Ingredients</span><span class="pa-prev-section-tag">editorial run</span></div><div class="pa-prev-ing-line">${run}</div></div>`;
+  }
+  if (b.type === 'allergen_card') {
+    const contains = _paSplitChips(b.contains_en || b.contains_cn);
+    const mayContain = _paSplitChips(b.may_contain_en || b.may_contain_cn);
+    const chips = (arr, cls) => arr.map(c => `<span class="pa-prev-allergen-chip ${cls}">${esc(c)}</span>`).join('');
+    return `<div class="pa-prev-block pa-prev-allergen">
+      <div class="pa-prev-allergen-top"><span class="pa-prev-allergen-ttl"><span class="pa-prev-allergen-warn">!</span> Allergens</span><span class="pa-prev-allergen-meta">GB-7718</span></div>
+      <div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">Contains</span><span class="pa-prev-allergen-chips">${contains.length ? chips(contains, 'strong') : '<span class="pa-prev-allergen-empty">None declared</span>'}</span></div>
+      ${mayContain.length ? `<div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">May contain<br>traces of</span><span class="pa-prev-allergen-chips">${chips(mayContain, 'soft')}</span></div>` : ''}
+    </div>`;
+  }
+  if (b.type === 'how_to_use') {
+    const tiles = (b.tiles || []).map(t => ({ icon: t.icon || '', lbl: pickT(t.label_en, t.label_cn), sub: pickT(t.sub_en, t.sub_cn) })).filter(t => t.lbl || t.icon);
+    if (!tiles.length) return '';
+    const cols = tiles.length >= 8 ? 4 : 3;
+    return `<div class="pa-prev-block pa-prev-how">
+      <div class="pa-prev-section-head"><span class="pa-prev-section-h3">How to use</span><span class="pa-prev-section-tag">${tiles.length} moments</span></div>
+      <div class="pa-prev-how-grid" style="grid-template-columns:repeat(${cols},1fr)">${tiles.map(t => `<div class="pa-prev-how-tile">${t.icon ? `<span class="pa-prev-how-ic">${esc(t.icon)}</span>` : ''}${t.lbl ? `<span class="pa-prev-how-lbl">${esc(t.lbl)}</span>` : ''}${t.sub ? `<span class="pa-prev-how-sub">${esc(t.sub)}</span>` : ''}</div>`).join('')}</div>
+    </div>`;
+  }
+  if (b.type === 'storage_box') {
+    const cardHtml = (c) => {
+      if (!c) return '';
+      const head = pickT(c.head_en, c.head_cn), unit = pickT(c.unit_en, c.unit_cn), num = (c.num || '').toString();
+      if (!head && !num && !unit) return '';
+      return `<div class="pa-prev-storage-card ${c.alt ? 'alt' : ''}">${c.icon ? `<span class="pa-prev-storage-ic">${esc(c.icon)}</span>` : ''}${head ? `<div class="pa-prev-storage-head">${esc(head)}</div>` : ''}${num ? `<div class="pa-prev-storage-num">${esc(num)}</div>` : ''}${unit ? `<div class="pa-prev-storage-unit">${esc(unit)}</div>` : ''}</div>`;
+    };
+    const L = cardHtml(b.left), R = cardHtml(b.right), note = pickT(b.note_en, b.note_cn);
+    if (!L && !R && !note) return '';
+    return `<div class="pa-prev-block pa-prev-storage"><div class="pa-prev-section-head"><span class="pa-prev-section-h3">Storage</span><span class="pa-prev-section-tag">keep it right</span></div><div class="pa-prev-storage-pair">${L}${R}</div>${note ? `<div class="pa-prev-storage-note">${esc(note)}</div>` : ''}</div>`;
+  }
+  if (b.type === 'notes_callout') {
+    const text = pickT(b.text_en, b.text_cn);
+    if (!text) return '';
+    return `<div class="pa-prev-block pa-prev-notes"><div class="pa-prev-notes-p">${esc(text)}</div></div>`;
+  }
+  if (b.type === 'big_stat' || b.type === 'stat_callout') {
+    const stat = (b.stat || '').toString().trim();
+    const what = pickT(b.what_en || b.claim_en, b.what_cn || b.claim_cn);
+    const claim = pickT(b.sub_en || b.claim_en, b.sub_cn || b.claim_cn);
+    if (!stat && !what && !claim) return '';
+    const BG = { lime: '#CCD900', carrot: '#FF6B0C', pink: '#F4B8CB', corn: '#F2CA6C', sky: '#B2CFED', lotus: '#EEB8E4', papaya: '#FFAF60', cucumber: '#A8D185' };
+    const bg = BG[b.bg] || BG.lime;
+    return `<div class="pa-prev-block pa-prev-stat" style="background:${bg}">${stat ? `<div class="pa-prev-stat-num">${esc(stat)}</div>` : ''}${what ? `<div class="pa-prev-stat-claim">${esc(what)}</div>` : ''}${claim ? `<div class="pa-prev-stat-sub">${esc(claim)}</div>` : ''}</div>`;
+  }
+  if (b.type === 'pull_quote') {
+    const text = pickT(b.text_en, b.text_cn), who = pickT(b.who_en, b.who_cn);
+    if (!text && !who) return '';
+    return `<div class="pa-prev-block pa-prev-pullquote">${text ? `<div class="pa-prev-pullquote-p">"${esc(text)}"</div>` : ''}${who ? `<div class="pa-prev-pullquote-who">${esc(who)}</div>` : ''}</div>`;
+  }
+  if (b.type === 'nutrition_facts') {
+    const basis = pickT(b.basis_en, b.basis_cn);
+    // Mirror the mini-app's parent/child classification so bold/indent match.
+    const PARENT = ['energy','total fat','fat','carbohydrate','carbohydrates','能量','脂肪','总脂肪','碳水化合物'];
+    const CHILD  = ['saturated','saturated fat','unsaturated','unsaturated fat','sugars','饱和脂肪','不饱和脂肪','糖'];
+    const classify = (en, cn) => {
+      const k = (String(en || cn || '')).trim().toLowerCase();
+      if (PARENT.includes(k)) return 'parent';
+      if (CHILD.includes(k)) return 'child';
+      return 'normal';
+    };
+    const rows = (b.rows || [])
+      .map(r => ({ label: pickT(r.label_en, r.label_cn), value: (r.value || '').trim(), kind: classify(r.label_en, r.label_cn) }))
+      .filter(r => r.label || r.value);
+    if (!rows.length && !basis) return '';
+    return `<div class="pa-prev-block pa-prev-nutrition">
+      <div class="pa-prev-nut-card">
+        <div class="pa-prev-nut-top">
+          <span class="pa-prev-nut-ttl">Nutrition</span>
+          ${basis ? `<span class="pa-prev-nut-basis">${esc(basis)}</span>` : ''}
+        </div>
+        ${rows.map(r => `<div class="pa-prev-nrow ${r.kind}">
+          <span class="pa-prev-nrow-l">${esc(r.label)}</span>
+          <span class="pa-prev-nrow-r">${esc(r.value)}</span>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+  return '';
+}
+const PA_COLOPHON_AUTO_MAP = [
+  [/(sauce|dip|condiment|paste|chutney)/, 'soilsoul'],
+  [/(spread|butter|jam)/,                  'skater'],
+  [/(drink|kombucha|juice|beverage|tea)/,  'kombucha-gang'],
+  [/(protein|powder|supplement|flour)/,    'flex'],
+  [/(root|tuber|carrot|radish|beet)/,      'radishes'],
+  [/(fungi|mushroom)/,                     'mushroom'],
+  [/(legume|bean|pea|lentil|chickpea)/,    'peas'],
+  [/(onion|allium|garlic|leek)/,           'onion'],
+  [/(broccoli|cabbage|leafy|green)/,       'broccoli'],
+];
+function _paResolveColophonChar(override, category) {
+  if (override) return override;
+  const cat = (category || '').toLowerCase();
+  const hit = PA_COLOPHON_AUTO_MAP.find(([rx]) => rx.test(cat));
+  return hit ? hit[1] : 'soilsoul';
+}
+function paRenderPreview() {
+  const screen = document.getElementById('pa-preview-screen'); if (!screen || !PA_CURRENT) return;
+  const p = PA_CURRENT;
+  const kwEN = document.getElementById('pa-edit-keywords-en').value || '';
+  const kwCN = document.getElementById('pa-edit-keywords-cn').value || '';
+  const tgEN = document.getElementById('pa-edit-tagline-en').value  || '';
+  const tgCN = document.getElementById('pa-edit-tagline-cn').value  || '';
+  const keywords = kwEN || kwCN;
+  const tagline  = tgEN || tgCN;
+  const otherLang = p.name_cn || '';
+  const colChar  = (document.getElementById('pa-edit-colophon-character').value || '').trim();
+  const colTagEN = (document.getElementById('pa-edit-colophon-tagline-en').value || '').trim();
+  const colTagCN = (document.getElementById('pa-edit-colophon-tagline-cn').value || '').trim();
+  const colResChar = _paResolveColophonChar(colChar, p.category);
+  const colResTag  = colTagEN || colTagCN || 'From Soil to Soul';
+  const colIsAuto  = !colChar;
+  const img = p.image_data || p.image_url || '';
+  const heroStyle = img ? `background-image:url('${escapeAttr(img)}'); background-color:transparent;` : '';
+  const blocksHtml = (window._paBlocks || []).map(_paPreviewBlockHtml).filter(Boolean).join('');
+  screen.innerHTML = `
+    <div class="pa-prev-hero" style="${heroStyle}">${img ? '' : '🛍'}</div>
+    <div class="pa-prev-body">
+      <div class="pa-prev-name">${escapeHtml(p.name_en || '—')}</div>
+      ${(otherLang || keywords) ? `<div class="pa-prev-subtitle">${otherLang ? escapeHtml(otherLang) : ''}${otherLang && keywords ? ' · ' : ''}${keywords ? escapeHtml(keywords) : ''}</div>` : ''}
+      ${tagline ? `<div class="pa-prev-tagline">${escapeHtml(tagline)}</div>` : ''}
+      ${blocksHtml || (!keywords && !tagline ? '<div class="pa-prev-empty">No designer sections yet. Add one to compose the page.</div>' : '')}
+      <div class="pa-prev-colophon">
+        <img class="pa-prev-colophon-img" src="/assets/brand/ip-${colResChar}.jpg" alt="">
+        <div class="pa-prev-colophon-tagline">${escapeHtml(colResTag)}</div>
+        <div class="pa-prev-colophon-meta"><span class="pa-prev-colophon-rule"></span><span>Roots · ESTD 2017</span><span class="pa-prev-colophon-rule"></span></div>
+        ${colIsAuto ? '<div class="pa-prev-colophon-auto">auto · 自动</div>' : ''}
+      </div>
+    </div>`;
+}
+
+// Ctrl/Cmd+S → save
+window.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); paSaveEdit(); }
+});
+
+// ── i18n / Language toggle ──────────────────────────────────────────────
+// Ported from retail-admin.html so the editor shows ONE language at a time
+// (matching the Mini App Editor + the parent backend) instead of crammed
+// bilingual labels. Shares the same localStorage key, so opening the editor
+// inherits whatever language the office set in retail-admin. Works by
+// splitting "EN · 中文" text nodes and rewriting nodeValue in place; a
+// MutationObserver auto-translates the forms we render after load.
+(function () {
+  const LANG_KEY = 'retail-admin-lang';
+  let _lang = 'en';
+  try { const s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'cn') _lang = s; } catch {}
+
+  const EN_ONLY_MAP = {
+    'Loading…': '加载中…',
+    'Saving…': '保存中…',
+  };
+  function hasChinese(s) { return /[一-鿿]/.test(s); }
+  const _reg = [];
+
+  function inSkippedContext(el) {
+    for (let n = el; n; n = n.parentElement) {
+      if (!n.tagName) break;
+      const T = n.tagName.toUpperCase();
+      if (T === 'SCRIPT' || T === 'STYLE' || T === 'TEXTAREA' || T === 'INPUT' ||
+          T === 'NOSCRIPT' || T === 'SVG' || T === 'CANVAS') return true;
+      if (n.namespaceURI === 'http://www.w3.org/2000/svg') return true;
+      if (n.dataset && n.dataset.noI18n != null) return true;
+    }
+    return false;
+  }
+  function processNode(textNode) {
+    if (textNode.__i18nDone) return;
+    const parent = textNode.parentElement;
+    if (!parent || inSkippedContext(parent)) return;
+    const text = textNode.nodeValue || '';
+    let en, cn, lead = '', trail = '';
+    const idx = text.indexOf(' · ');
+    if (idx !== -1) {
+      const left = text.slice(0, idx);
+      const right = text.slice(idx + 3);
+      en = left.trim(); cn = right.trim();
+      if (!en || !cn) return;
+      if (!hasChinese(cn) || hasChinese(en)) return;
+      lead  = left.slice(0, left.length - left.trimStart().length);
+      trail = right.slice(right.trimEnd().length);
+    } else {
+      const trimmed = text.trim();
+      if (!EN_ONLY_MAP[trimmed]) return;
+      en = trimmed; cn = EN_ONLY_MAP[trimmed];
+      lead  = text.slice(0, text.length - text.trimStart().length);
+      trail = text.slice(text.trimEnd().length);
+    }
+    const enFull = lead + en + trail;
+    const cnFull = lead + cn + trail;
+    textNode.__i18nDone = true;
+    textNode.nodeValue = _lang === 'cn' ? cnFull : enFull;
+    _reg.push({ node: textNode, en: enFull, cn: cnFull });
+  }
+  function processSubtree(root) {
+    if (!root) return;
+    if (root.nodeType === 3) { processNode(root); return; }
+    if (root.nodeType !== 1 || inSkippedContext(root)) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = []; let n;
+    while ((n = walker.nextNode())) {
+      if (n.__i18nDone) continue;
+      const t = n.nodeValue;
+      if (t && (t.indexOf(' · ') !== -1 || EN_ONLY_MAP[t.trim()])) nodes.push(n);
+    }
+    nodes.forEach(processNode);
+  }
+  function applyLang(lang) {
+    _lang = lang;
+    document.documentElement.dataset.uiLang = lang;
+    for (let i = _reg.length - 1; i >= 0; i--) {
+      const e = _reg[i];
+      if (!e.node.isConnected) { _reg.splice(i, 1); continue; }
+      e.node.nodeValue = lang === 'cn' ? e.cn : e.en;
+    }
+    processSubtree(document.body);
+    try { localStorage.setItem(LANG_KEY, lang); } catch {}
+    updateBtn();
+  }
+  function updateBtn() {
+    document.querySelectorAll('#lang-toggle button[data-lang]').forEach(b =>
+      b.classList.toggle('active', b.dataset.lang === _lang));
+  }
+  let _moTimer, _pending = [];
+  const _mo = new MutationObserver(function (mutations) {
+    for (const m of mutations) for (const node of m.addedNodes) {
+      if (node.nodeType === 1 || node.nodeType === 3) _pending.push(node);
+    }
+    if (!_pending.length) return;
+    clearTimeout(_moTimer);
+    _moTimer = setTimeout(function () {
+      const batch = _pending; _pending = [];
+      batch.forEach(function (nd) { try { processSubtree(nd); } catch (e) {} });
+    }, 50);
+  });
+  window.cuToggleLang = function () { applyLang(_lang === 'cn' ? 'en' : 'cn'); };
+  window.cuSetLang    = function (l) { applyLang(l === 'cn' ? 'cn' : 'en'); };
+  window.cuT          = function (en, cn) { return _lang === 'cn' ? cn : en; };
+  window.cuLang       = function () { return _lang; };
+  document.documentElement.dataset.uiLang = _lang;
+  try { processSubtree(document.body); } catch (e) {}
+  updateBtn();
+  _mo.observe(document.body, { childList: true, subtree: true });
+})();
+
+// Go.
+peBoot();
+  </script>
+</body>
+</html>

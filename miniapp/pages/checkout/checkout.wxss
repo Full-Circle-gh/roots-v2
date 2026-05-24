@@ -95,6 +95,52 @@
   text-decoration: underline;
 }
 
+/* Soft hint under "Deliver to" — clarifies that the shown name/phone/addr
+   came from the customer's WeChat profile and is editable in their book. */
+.addr-hint {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+  color: var(--olive);
+  margin-bottom: 10rpx;
+  text-transform: uppercase;
+}
+
+/* Bind-WeChat empty state — replaces the address form for unbound customers.
+   Soft lime-tinted card with a single dark CTA. */
+.bind-empty {
+  background: rgba(204, 217, 0, 0.14);
+  border: 2rpx solid var(--ink);
+  padding: 32rpx 28rpx;
+  margin-top: 6rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12rpx;
+}
+.bind-empty__icon { font-size: 56rpx; line-height: 1; }
+.bind-empty__title {
+  font-size: calc(34rpx * var(--font-scale));
+  line-height: 1.2;
+  color: var(--ink);
+}
+.bind-empty__body {
+  font-size: calc(24rpx * var(--font-scale));
+  line-height: 1.5;
+  color: var(--ink);
+  opacity: 0.78;
+}
+.bind-empty__cta {
+  margin-top: 8rpx;
+  padding: 18rpx 28rpx;
+  background: var(--ink);
+  color: var(--lime);
+  font-size: calc(24rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+}
+
+/* Sticky-bar BIND variant — full-width button (no total amount on its left). */
+.place-btn--bind { letter-spacing: 0.12em; }
+
 /* Form fields */
 .field { margin-bottom: 12rpx; }
 .field-pair { display: flex; gap: 16rpx; }
@@ -171,6 +217,40 @@
   gap: 18rpx;
   padding: 14rpx 0;
 }
+.slot-row.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.slot-row.disabled .dot {
+  opacity: 0.6;
+}
+.holiday-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14rpx;
+  padding: 16rpx 18rpx;
+  background: rgba(255, 200, 87, 0.22);
+  border-left: 4rpx solid #c98a2a;
+  border-radius: 6rpx;
+  margin: 8rpx 0 16rpx;
+}
+.holiday-banner .hb-icon {
+  font-size: 32rpx;
+  line-height: 1;
+  flex-shrink: 0;
+  padding-top: 2rpx;
+}
+.holiday-banner .hb-body { flex: 1; min-width: 0; }
+.holiday-banner .hb-title {
+  font-size: calc(26rpx * var(--font-scale));
+  color: var(--ink);
+  margin-bottom: 4rpx;
+}
+.holiday-banner .hb-msg {
+  font-size: calc(22rpx * var(--font-scale));
+  line-height: 1.45;
+  color: var(--text-2, #555);
+}
 .slot-banner {
   padding: 12rpx 16rpx;
   background: rgba(204, 217, 0, 0.18);
@@ -244,6 +324,47 @@
   height: 44rpx;
   border-radius: 4rpx;
   flex-shrink: 0;
+}
+
+/* "Use my points" toggle row — sits above the payment radios and stacks
+   a discount onto whichever method the customer picks. Visually grouped
+   with the section by a lime tint so it reads as a modifier, not a peer
+   payment option. */
+.points-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  padding: 16rpx 18rpx;
+  margin-bottom: 14rpx;
+  background: rgba(204, 217, 0, 0.10);
+  border: 2rpx solid rgba(26, 26, 23, 0.10);
+  border-radius: 8rpx;
+}
+.points-toggle-row .pt-body { flex: 1; min-width: 0; }
+.points-toggle-row .pt-label {
+  font-size: calc(28rpx * var(--font-scale));
+  line-height: 1.2;
+  color: var(--ink);
+}
+.points-toggle-row .pt-sub {
+  font-size: calc(22rpx * var(--font-scale));
+  margin-top: 4rpx;
+  line-height: 1.3;
+}
+.points-toggle-row .pt-emph {
+  color: var(--forest);
+  font-weight: 600;
+}
+
+/* Footnote shown under the radios when points cover the whole bill — tells
+   the customer the picked radio isn't actually charged. */
+.points-covers-hint {
+  margin-top: 10rpx;
+  padding: 10rpx 14rpx;
+  font-size: calc(22rpx * var(--font-scale));
+  background: rgba(54, 83, 41, 0.08);
+  border-left: 4rpx solid var(--forest);
+  color: var(--forest);
 }
 
 /* Add-ons */
@@ -364,9 +485,19 @@
 .sticky-bar {
   position: fixed;
   bottom: 0; left: 0; right: 0;
+  /* z-index higher than cs-fab (50) and any inline popup-trigger; lower
+     than popup-manager's full-screen sheet (300) so modals still cover it.
+     Without an explicit z-index the bar lives at the default stacking
+     context and any sibling with z-index can paint over the button. */
+  z-index: 100;
   background: var(--oat);
   border-top: 3rpx solid var(--ink);
-  padding: 24rpx 32rpx 32rpx;
+  /* env(safe-area-inset-bottom) is the iPhone home-indicator height. Without
+     it, the button sits under the gesture strip and on iOS 16+ the OS
+     visually clips it to the point it looks "missing" on a cream background.
+     Pad the bottom by max(32rpx, safe-area) so we keep the brand spacing on
+     Androids without indicators. */
+  padding: 24rpx 32rpx max(32rpx, env(safe-area-inset-bottom));
   display: flex;
   gap: 24rpx;
   align-items: center;
@@ -374,8 +505,25 @@
 .total-block { display: flex; flex-direction: column; gap: 2rpx; }
 .total-label { font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.18em; color: var(--olive); }
 .total-amount { font-size: calc(52rpx * var(--font-scale)); line-height: 1; }
+/* PLACE ORDER tap target — implemented as a <view>, not a <button>.
+ *
+ * History: it used to be a <button>, and WeChat's native <button> ships
+ * with a stack of defaults (background-color: #f8f8f8, an ::after
+ * pseudo-border, hardcoded :disabled styling, min-height/line-height
+ * presets) that bled through our .place-btn rules and made the button
+ * render as "invisible" on the cream sticky-bar. Switching to a <view>
+ * sidesteps all of it — no native styling, no surprises after SDK
+ * updates. Disabled state is now a class on the view + a guard in
+ * placeOrder() so a tap can't fire while it's intentionally inert.
+ */
 .place-btn {
   flex: 1;
+  /* Explicit display so a future wxss tweak (or app-level reset) can't
+     collapse the view to inline. min-height guarantees visible size even
+     if the localized text were ever empty. */
+  display: block;
+  min-height: 84rpx;
+  box-sizing: border-box;
   background: var(--ink);
   color: var(--lime);
   padding: 28rpx 0;
@@ -383,10 +531,16 @@
   letter-spacing: 0.14em;
   text-align: center;
   border-radius: 0;
+  line-height: 1.4;
 }
-.place-btn[disabled] {
+.place-btn--disabled {
   opacity: 0.5;
-  color: rgba(204, 217, 0, 0.5);
+  color: rgba(204, 217, 0, 0.6);
+}
+/* Tap feedback — view doesn't have native :active styling like button does,
+   so add a subtle press dim so the customer knows their tap landed. */
+.place-btn--pressed {
+  opacity: 0.7;
 }
 
 /* Fallback-routing warning — soft amber card shown above the Place Order
@@ -494,6 +648,74 @@
   font-weight: 700;
   color: #1a2314;
 }
+/* Out-of-stock items list inside the simple-confirm modal — gives the
+   customer the same "which item is short" clarity the 5-option modal
+   already provides. */
+.fb-modal-missing {
+  margin: -20rpx 0 28rpx;
+  padding: 20rpx 24rpx;
+  background: rgba(243, 235, 220, .55);
+  border-radius: 12rpx;
+  border: 2rpx solid rgba(58, 90, 48, .12);
+}
+.fb-modal-missing__kicker {
+  font-size: 22rpx;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6a6e2d;
+  margin-bottom: 12rpx;
+}
+.fb-modal-missing__row {
+  display: flex; align-items: center; gap: 14rpx;
+  font-size: 26rpx; color: #2a3a22;
+  padding: 8rpx 0;
+}
+.fb-modal-missing__row + .fb-modal-missing__row { border-top: 1rpx solid rgba(0,0,0,.06); }
+.fb-modal-missing__img {
+  width: 56rpx; height: 56rpx; border-radius: 8rpx; overflow: hidden;
+  background: rgba(0,0,0,.04); flex-shrink: 0;
+}
+.fb-modal-missing__img image { width: 100%; height: 100%; }
+.fb-modal-missing__name { flex: 1; min-width: 0; }
+.fb-modal-missing__qty { color: rgba(42, 58, 34, .55); font-size: 24rpx; margin-left: 4rpx; }
+/* Numeric delta chips — surface the extra distance + time so the customer
+   knows what "longer" actually means before they continue. Sits between
+   the prose body and the action row. */
+.fb-modal-delta {
+  display: flex;
+  gap: 14rpx;
+  margin: -16rpx 0 32rpx;          /* tighter against the body text above */
+  flex-wrap: wrap;
+}
+.fb-modal-delta__chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8rpx;
+  padding: 14rpx 18rpx;
+  background: rgba(26, 35, 20, 0.06);
+  border-radius: 12rpx;
+  flex: 1;
+  min-width: 0;
+}
+.fb-modal-delta__icon {
+  font-size: 24rpx;
+  line-height: 1;
+}
+.fb-modal-delta__val {
+  font-family: 'Toni Grotesk', -apple-system, sans-serif;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1a2314;
+  letter-spacing: -0.01em;
+}
+.fb-modal-delta__lbl {
+  font-size: 22rpx;
+  color: #6d7a2a;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
 .fb-modal-actions {
   display: flex;
   gap: 14rpx;
@@ -523,3 +745,184 @@
 .fb-modal-btn--primary:active {
   background: #2a3a22;
 }
+
+/* ──── 5-option in-stock fallback modal ─────────────────────────────────
+   Branded bottom-sheet style, sits over the whole checkout. Backdrop is
+   tap-to-close (except inside the .fb-modal card itself). The substitute
+   picker reuses .fb-modal at a taller height.
+   Modifier-scoped — must NOT redefine the bare .fb-modal-backdrop
+   because the simpler 2-button "Longer delivery" modal shares the same
+   base class but wants centered (not bottom-sheet) positioning. */
+.fb-modal-backdrop--sheet {
+  background: rgba(20, 20, 18, 0.62);
+  z-index: 9000;
+  align-items: flex-end;
+  padding: 0;
+}
+.fb-modal {
+  width: 100%;
+  max-width: 720rpx;
+  background: var(--bg, #fffdf6);
+  border-top-left-radius: 36rpx;
+  border-top-right-radius: 36rpx;
+  padding: 36rpx 32rpx calc(36rpx + env(safe-area-inset-bottom));
+  box-shadow: 0 -12rpx 32rpx rgba(0, 0, 0, 0.18);
+  max-height: 86vh;
+  overflow-y: auto;
+}
+.fb-modal--tall { display: flex; flex-direction: column; max-height: 86vh; }
+.fb-modal__head { margin-bottom: 22rpx; }
+.fb-modal__title {
+  font-size: 38rpx;
+  line-height: 1.2;
+  color: var(--ink, #1a2a0c);
+  margin-bottom: 8rpx;
+}
+.fb-modal__sub { font-size: 24rpx; line-height: 1.45; }
+.fb-modal__missing {
+  margin-top: 16rpx;
+  padding: 14rpx 16rpx;
+  background: rgba(232, 122, 58, 0.08);
+  border-left: 6rpx solid #e87a3a;
+  border-radius: 12rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+.fb-modal__missing-row { display: flex; align-items: center; gap: 14rpx; font-size: 24rpx; }
+.fb-modal__missing-img {
+  width: 56rpx; height: 56rpx;
+  border-radius: 10rpx;
+  overflow: hidden; flex-shrink: 0;
+  background: #fff;
+}
+.fb-modal__missing-img image { width: 100%; height: 100%; }
+.fb-modal__missing-name { flex: 1; min-width: 0; }
+.fb-modal__missing-name .muted { font-size: 22rpx; margin-top: 2rpx; }
+
+.fb-modal__opts { display: flex; flex-direction: column; gap: 18rpx; }
+/* Each card is a <view>, not a <button> — no native button quirks to
+   fight. Sizing was bumped 2026-05-20 after the office reported the
+   cards "looked too small": padding ~22→32, label 28→34, sub 22→26,
+   number 44→60, card gap 12→18, and a soft outer ring so they pop
+   off the cream modal bg. */
+.fb-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 22rpx;
+  padding: 32rpx 28rpx;
+  border-radius: 22rpx;
+  border: 3rpx solid transparent;
+  background: #fff;
+  width: 100%;
+  box-sizing: border-box;
+  /* Soft elevation so a row of mostly-white cards reads as distinct from
+     the cream/oat modal background. Subtle — not Material Design-y. */
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+.fb-opt--disabled { opacity: 0.55; }
+/* Hover-class variants for tap feedback (replaces button :active). */
+.fb-opt--pressed { background: #f7f4e8; transform: scale(0.99); }
+.fb-opt--pressed-lime { background: rgba(204, 217, 0, 0.20); transform: scale(0.99); }
+.fb-opt__num {
+  flex-shrink: 0;
+  width: 60rpx; height: 60rpx;
+  border-radius: 50%;
+  background: var(--gray, #f0eee4);
+  color: var(--ink, #1a2a0c);
+  font-weight: 800;
+  font-size: 30rpx;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 2rpx;
+}
+.fb-opt__body { flex: 1; min-width: 0; }
+.fb-opt__label {
+  font-size: 34rpx;
+  color: var(--ink, #1a2a0c);
+  margin-bottom: 8rpx;
+  line-height: 1.25;
+}
+.fb-opt__sub {
+  font-size: 26rpx;
+  color: var(--text-2, #6a6a5a);
+  line-height: 1.5;
+}
+.fb-opt--neutral { border-color: var(--border, #e0ddc6); }
+.fb-opt--lime {
+  border-color: var(--lime, #ccd900);
+  border-width: 4rpx;
+  background: rgba(204, 217, 0, 0.10);
+  box-shadow: 0 4rpx 14rpx rgba(204, 217, 0, 0.18);
+}
+.fb-opt--lime .fb-opt__num {
+  background: var(--lime, #ccd900);
+  color: var(--ink, #1a2a0c);
+}
+.fb-opt--ghost {
+  background: transparent;
+  border-color: var(--border, #e0ddc6);
+  border-style: dashed;
+  box-shadow: none;
+}
+.fb-opt--ghost .fb-opt__num {
+  background: transparent;
+  color: var(--text-2, #6a6a5a);
+  font-size: 32rpx;
+}
+
+/* Substitute picker sub-screen */
+/* Curated ⇄ Browse-all mode toggle — sits below the title, above the list.
+   Right-aligned underlined link, low-key by design so it doesn't compete
+   with the recommended substitutes the office curated. */
+.fb-mode-toggle {
+  display: flex; justify-content: flex-end;
+  padding: 0 2rpx 12rpx;
+}
+.fb-mode-toggle__link {
+  font-size: 22rpx;
+  letter-spacing: 0.12em;
+  color: var(--olive, #6A6E2D);
+  text-decoration: underline;
+  padding: 4rpx 0;
+}
+/* Search input for browse-all mode — matches the cream + ink-bordered
+   look from the rest of the mini-app (cart, shop). */
+.fb-search {
+  display: flex; align-items: center; gap: 10rpx;
+  padding: 12rpx 18rpx;
+  background: #FFFCF7;
+  border: 2rpx solid var(--ink, #1a2a0c);
+  border-radius: 12rpx;
+  margin-bottom: 12rpx;
+}
+.fb-search__icon { font-size: 24rpx; opacity: 0.55; flex-shrink: 0; }
+.fb-search__input { flex: 1; font-size: 26rpx; background: transparent; border: 0; font-family: inherit; }
+.fb-search__clear {
+  width: 40rpx; height: 40rpx;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30rpx; color: var(--olive, #6A6E2D); flex-shrink: 0;
+}
+.fb-subs__scroll { flex: 1; margin: 12rpx 0; }
+.fb-subs__empty { padding: 60rpx 24rpx; text-align: center; font-size: 26rpx; }
+.fb-sub {
+  display: flex; align-items: center; gap: 16rpx;
+  padding: 18rpx 16rpx;
+  border: 2rpx solid var(--border, #e0ddc6);
+  border-radius: 14rpx;
+  margin-bottom: 10rpx;
+  background: #fff;
+}
+.fb-sub:active { background: #f7f4e8; }
+.fb-sub__img {
+  width: 90rpx; height: 90rpx; flex-shrink: 0;
+  background: var(--gray, #f0eee4);
+  border-radius: 12rpx; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.fb-sub__img image { width: 100%; height: 100%; }
+.fb-sub__body { flex: 1; min-width: 0; }
+.fb-sub__name { font-size: 26rpx; color: var(--ink, #1a2a0c); }
+.fb-sub__sub { font-size: 22rpx; margin-top: 4rpx; }
+.fb-sub__curated { font-size: 22rpx; margin-left: 4rpx; }
+.fb-sub__price { font-size: 28rpx; color: var(--ink, #1a2a0c); white-space: nowrap; }
+.fb-subs__footer { margin-top: 12rpx; }

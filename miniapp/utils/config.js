@@ -12,8 +12,20 @@ const TTL_MS = 60 * 1000;
 
 async function load(force = false) {
   if (!force && _cache && Date.now() - _at < TTL_MS) return _cache;
+  // CMS draft-preview pass-through. When app.globalData.preview.token is
+  // populated (set by app.js onLaunch from a preview QR scene or a
+  // DevTools custom-compile path), tack `?preview_token=...` onto the
+  // config fetch so the backend overlays unpublished draft layouts on
+  // top of the live snapshot. Customers with no preview token are
+  // completely unaffected.
+  let path = '/api/retail/config';
   try {
-    const data = await api.get('/api/retail/config');
+    const app = getApp();
+    const tok = app?.globalData?.preview?.token;
+    if (tok) path += '?preview_token=' + encodeURIComponent(tok);
+  } catch {}
+  try {
+    const data = await api.get(path);
     _cache = data;
     _at = Date.now();
     return data;

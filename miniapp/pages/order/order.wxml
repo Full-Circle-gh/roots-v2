@@ -155,17 +155,35 @@
       <view class="note-body">{{order.customer_note}}</view>
     </view>
 
-    <!-- Refund status banner -->
-    <view wx:if="{{order.refund_status === 'pending'}}" class="refund-banner refund-pending">
-      <view class="rb-line">{{copy.refundPendingBanner}}</view>
-      <view wx:if="{{order.refund_reason}}" class="rb-reason muted">{{order.refund_reason}}</view>
-    </view>
-    <view wx:elif="{{order.refund_status === 'rejected'}}" class="refund-banner refund-rejected">
-      <view class="rb-line">{{copy.refundRejectedBanner}}</view>
-      <view wx:if="{{order.refund_review_note}}" class="rb-reason muted">{{order.refund_review_note}}</view>
-    </view>
-    <view wx:elif="{{order.refund_status === 'approved' || order.status === 'refunded'}}" class="refund-banner refund-approved">
-      <view class="rb-line">{{copy.refundApprovedBanner}}</view>
+    <!-- Refund status banner — single block driven by computed refundView -->
+    <view wx:if="{{refundView}}" class="refund-banner refund-{{refundView.theme}}">
+      <view class="rb-line">{{refundView.label}}</view>
+      <view wx:if="{{refundView.reason}}" class="rb-reason muted">{{refundView.reason}}</view>
+      <view wx:if="{{refundView.review_note}}" class="rb-reason muted">{{refundView.review_note}}</view>
+      <view wx:if="{{refundView.show_amounts}}" class="rb-amounts">
+        <view wx:if="{{refundView.requested_disp}}" class="rb-amt">
+          <text class="rb-amt-k">{{lang === 'cn' ? '申请' : 'Requested'}}</text>
+          <text class="rb-amt-v">{{refundView.requested_disp}}</text>
+        </view>
+        <view wx:if="{{refundView.approved_disp}}" class="rb-amt">
+          <text class="rb-amt-k">{{lang === 'cn' ? '已批准' : 'Approved'}}</text>
+          <text class="rb-amt-v">{{refundView.approved_disp}}</text>
+        </view>
+        <view wx:if="{{refundView.paid_disp}}" class="rb-amt">
+          <text class="rb-amt-k">{{lang === 'cn' ? '已退' : 'Paid back'}}</text>
+          <text class="rb-amt-v">{{refundView.paid_disp}}</text>
+        </view>
+        <view wx:if="{{refundView.is_partial}}" class="rb-amt">
+          <text class="rb-amt-k">{{lang === 'cn' ? '订单总额' : 'Order total'}}</text>
+          <text class="rb-amt-v rb-amt-muted">{{refundView.total_disp}}</text>
+        </view>
+      </view>
+      <view wx:if="{{refundView.payout_method}}" class="rb-reason muted">
+        {{lang === 'cn' ? '退款方式' : 'Via'}}: {{refundView.payout_method}}
+      </view>
+      <button wx:if="{{refundView.can_withdraw}}" class="btn ghost f-toni rb-action" bindtap="withdrawRefund">
+        {{copy.refundWithdraw}}
+      </button>
     </view>
 
     <!-- Customer-actionable buttons depending on status -->
@@ -177,10 +195,66 @@
     </view>
     <view wx:elif="{{order.status === 'delivered'}}" class="cust-actions">
       <button class="btn primary f-toni" bindtap="reorder">{{copy.reorderBtn}} →</button>
-      <button wx:if="{{!order.refund_status}}" class="btn ghost f-toni" bindtap="requestRefund">{{copy.refundBtn}}</button>
+      <button wx:if="{{!order.refund_status || order.refund_status === 'rejected' || order.refund_status === 'withdrawn'}}" class="btn ghost f-toni" bindtap="openRefundSheet">{{copy.refundBtn}}</button>
     </view>
     <view wx:elif="{{order.status === 'paid' || order.status === 'preparing' || order.status === 'dispatched'}}" class="cust-actions">
-      <button wx:if="{{!order.refund_status}}" class="btn ghost f-toni" bindtap="requestRefund">{{copy.refundBtn}}</button>
+      <button wx:if="{{!order.refund_status || order.refund_status === 'rejected' || order.refund_status === 'withdrawn'}}" class="btn ghost f-toni" bindtap="openRefundSheet">{{copy.refundBtn}}</button>
     </view>
   </block>
+</view>
+
+<!-- ── Refund request bottom sheet ──────────────────────────────────── -->
+<view wx:if="{{refundSheetOpen}}" class="rs-mask" bindtap="onRefundSheetMaskTap">
+  <view class="rs-sheet" catchtap="noop">
+    <view class="rs-handle"></view>
+    <view class="rs-title f-toni">{{copy.refundTitle}}</view>
+
+    <view class="rs-modes">
+      <view class="rs-mode {{refundMode === 'full'   ? 'on' : ''}}" data-mode="full"   bindtap="onRefundModeTap">{{copy.refundModeFull}}</view>
+      <view class="rs-mode {{refundMode === 'amount' ? 'on' : ''}}" data-mode="amount" bindtap="onRefundModeTap">{{copy.refundModeAmount}}</view>
+      <view class="rs-mode {{refundMode === 'lines'  ? 'on' : ''}}" data-mode="lines"  bindtap="onRefundModeTap">{{copy.refundModeLines}}</view>
+    </view>
+
+    <view wx:if="{{refundMode === 'full' || refundMode === 'amount'}}" class="rs-field">
+      <text class="rs-label">{{copy.refundAmountLabel}}</text>
+      <input class="rs-input" type="digit" value="{{refundAmount}}" bindinput="onRefundAmountInput" disabled="{{refundMode === 'full'}}"/>
+      <view class="rs-hint muted">{{lang === 'cn' ? '订单总额' : 'Order total'}}: ¥{{order.total}}</view>
+    </view>
+
+    <view wx:if="{{refundMode === 'lines'}}" class="rs-field">
+      <text class="rs-label">{{copy.refundLinesLabel}}</text>
+      <view class="rs-lines">
+        <view wx:for="{{refundLines}}" wx:key="item_id" class="rs-line">
+          <view class="rs-line-row">
+            <view class="rs-chk {{item.picked ? 'on' : ''}}" data-idx="{{index}}" bindtap="onRefundLineToggle">
+              <text wx:if="{{item.picked}}">✓</text>
+            </view>
+            <text class="rs-line-name">{{item.name}}</text>
+            <text class="rs-line-unit muted">{{item.unit_disp}}</text>
+          </view>
+          <view wx:if="{{item.picked}}" class="rs-line-row rs-line-qtyrow">
+            <text class="rs-line-qty-label muted">{{lang === 'cn' ? '数量' : 'Qty'}}</text>
+            <input class="rs-qty" type="digit" value="{{item.refund_qty}}" data-idx="{{index}}" bindinput="onRefundLineQty"/>
+            <text class="muted">/ {{item.max_qty}}</text>
+            <text class="rs-line-amt">{{item.amount_disp}}</text>
+          </view>
+        </view>
+      </view>
+      <view class="rs-lines-total">
+        <text class="muted">{{copy.refundLinesTotal}}</text>
+        <text class="rs-lines-total-v">{{refundLinesTotalDisp}}</text>
+      </view>
+    </view>
+
+    <view class="rs-field">
+      <textarea class="rs-textarea" placeholder="{{copy.refundReasonPlaceholder}}" value="{{refundReason}}" bindinput="onRefundReasonInput" maxlength="500"/>
+    </view>
+
+    <view class="rs-actions">
+      <button class="btn ghost f-toni" bindtap="closeRefundSheet" disabled="{{refundBusy}}">{{copy.refundCancelBtn}}</button>
+      <button class="btn primary f-toni" bindtap="submitRefund" disabled="{{refundBusy}}">
+        {{refundBusy ? (lang === 'cn' ? '提交中…' : 'Submitting…') : copy.refundSubmit}}
+      </button>
+    </view>
+  </view>
 </view>

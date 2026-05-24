@@ -35,6 +35,9 @@ const COPY_EN = {
   menuCoupons: 'Coupons',
   menuCouponsCn: '优惠券',
   couponsMeta: 'active',
+  menuFavorites: 'Favorites',
+  menuFavoritesCn: '收藏夹',
+  favoritesMeta: 'saved',
   menuMembership: 'Membership',
   menuMembershipCn: '会员',
   menuAffiliate: 'Refer a friend',
@@ -78,6 +81,9 @@ const COPY_CN = {
   menuCoupons: '优惠券',
   menuCouponsCn: 'COUPONS',
   couponsMeta: '张可用',
+  menuFavorites: '收藏夹',
+  menuFavoritesCn: 'FAVORITES',
+  favoritesMeta: '件已收藏',
   menuMembership: '会员',
   menuMembershipCn: 'MEMBERSHIP',
   menuAffiliate: '推广计划',
@@ -115,6 +121,8 @@ Page({
     this.setData({ lang: app.globalData.lang });
     this.applyLangCopy();
     this.refresh();
+    const tb = this.getTabBar && this.getTabBar();
+    if (tb && tb.setSelected) tb.setSelected('pages/me/me');
   },
 
   onPullDownRefresh() {
@@ -206,6 +214,7 @@ Page({
   goWallet()     { wx.navigateTo({ url: '/pages/wallet/wallet' }); },
   goTopup()      { wx.navigateTo({ url: '/pages/topup/topup' }); },
   goCoupons()    { wx.navigateTo({ url: '/pages/coupons/coupons' }); },
+  goFavorites()  { wx.navigateTo({ url: '/pages/favorites/favorites' }); },
   goProfile()    { wx.navigateTo({ url: '/pages/profile/profile' }); },
   goAbout()      { wx.navigateTo({ url: '/pages/about/about' }); },
   goFaq()        { wx.navigateTo({ url: '/pages/faq/faq' }); },

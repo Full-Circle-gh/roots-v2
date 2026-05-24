@@ -68,6 +68,9 @@ Page({
     size: '',           // weight string e.g. "330ml" — shown big right of name
     keywords: '',       // bilingual short descriptors (e.g. "raw, alive")
     tagline: '',        // bold one-liner slogan
+    taglineSegments: [], // [{kind:'plain'|'mark', text}] — pre-parsed for [[ink-mark]]
+    colophonImg: '',     // resolved IP-character image path
+    colophonTagline: '', // resolved tagline text ("From Soil to Soul" or override)
     badges: [],
     options: [],
     selectedChoices: {},   // { [option_id]: choice_id }
@@ -86,6 +89,8 @@ Page({
     reviewsRecent: [],
     nutritionBasis: '',    // resolved label e.g. "Per 100ml" / "每100毫升"
     nutritionRows: [],     // [{label, value}]
+    isFavorited: false,    // heart pip state — driven by /api/retail/favorites/ids
+    favoritePending: false, // de-dupe rapid taps on the pip
   },
 
   async onLoad(query) {
@@ -94,6 +99,7 @@ Page({
     const app = getApp();
     this.setData({ id, lang: app.globalData.lang });
     await this.refresh();
+    this.refreshFavoriteState();
   },
 
   onShow() {
@@ -103,6 +109,40 @@ Page({
       this.recomputeDisplay();
     }
     this.startFlashTick();
+    // User may have removed this product from favorites on another tab;
+    // re-check on every show so the heart pip stays accurate.
+    this.refreshFavoriteState();
+  },
+
+  async refreshFavoriteState() {
+    const app = getApp();
+    if (!app.globalData.token || !this.data.id) return;
+    try {
+      const ids = await api.get('/api/retail/favorites/ids');
+      const list = Array.isArray(ids) ? ids : (ids?.data || []);
+      this.setData({ isFavorited: list.includes(this.data.id) });
+    } catch {}
+  },
+
+  async onFavoriteToggle() {
+    if (this.data.favoritePending || !this.data.id) return;
+    const app = getApp();
+    if (!app.globalData.token) {
+      try { await app.silentLogin(); } catch {}
+      if (!app.globalData.token) return;
+    }
+    const next = !this.data.isFavorited;
+    this.setData({ isFavorited: next, favoritePending: true });
+    try {
+      if (next) await api.post('/api/retail/favorites/' + this.data.id);
+      else      await api.del('/api/retail/favorites/' + this.data.id);
+    } catch (e) {
+      // Roll back the optimistic toggle on failure.
+      this.setData({ isFavorited: !next });
+      console.warn('[product] favorite toggle failed:', e.message);
+    } finally {
+      this.setData({ favoritePending: false });
+    }
   },
 
   onHide()   { this.stopFlashTick(); },
@@ -214,11 +254,33 @@ Page({
 
     // Nutrition panel — server returns either null or
     //   { basis_en, basis_cn, rows: [{label_en,label_cn,value}] }
+    // v1 design wants parent/child classification so Energy / Total fat /
+    // Carbohydrate render bold (with forest value colour) and their child
+    // rows (Saturated / Unsaturated / Sugars) render indented with em-dash.
+    // Classification is by label match — case-insensitive, EN/CN aware.
     let nutritionBasis = '', nutritionRows = [];
     if (p.nutrition && typeof p.nutrition === 'object') {
       nutritionBasis = lang.pick(p.nutrition.basis_en, p.nutrition.basis_cn, L);
+      const PARENT = ['energy', 'total fat', 'fat', 'carbohydrate', 'carbohydrates', '能量', '脂肪', '总脂肪', '碳水化合物'];
+      const CHILD  = ['saturated', 'saturated fat', 'unsaturated', 'unsaturated fat', 'sugars', '饱和脂肪', '不饱和脂肪', '糖'];
+      const classify = (label) => {
+        const k = String(label || '').trim().toLowerCase();
+        if (PARENT.includes(k)) return 'parent';
+        if (CHILD.includes(k))  return 'child';
+        return 'normal';
+      };
       nutritionRows = (p.nutrition.rows || [])
-        .map(r => ({ label: lang.pick(r.label_en, r.label_cn, L), value: r.value || '' }))
+        .map(r => {
+          const labelEn = (r.label_en || '').trim();
+          const labelCn = (r.label_cn || '').trim();
+          // Classify off whichever label the office filled — usually EN.
+          const kind = classify(labelEn || labelCn);
+          return {
+            label: lang.pick(r.label_en, r.label_cn, L),
+            value: r.value || '',
+            kind,
+          };
+        })
         .filter(r => r.label || r.value);
     }
 
@@ -243,6 +305,52 @@ Page({
       })(),
       photo_urls: (r.photos || []).map(u => absUrl(u)),
     }));
+
+    // Tagline — parse [[mark]] syntax so the office can pull-out one word
+    // with a lime ink-mark slab (v1 design rule). Without markers, the whole
+    // string renders as a single plain segment.
+    const rawTag = lang.pick(p.tagline_en, p.tagline_cn, L) || '';
+    const taglineSegments = [];
+    if (rawTag) {
+      let i = 0;
+      while (i < rawTag.length) {
+        const a = rawTag.indexOf('[[', i);
+        if (a < 0) { taglineSegments.push({ kind: 'plain', text: rawTag.slice(i) }); break; }
+        if (a > i) taglineSegments.push({ kind: 'plain', text: rawTag.slice(i, a) });
+        const b = rawTag.indexOf(']]', a);
+        if (b < 0) { taglineSegments.push({ kind: 'plain', text: rawTag.slice(a) }); break; }
+        taglineSegments.push({ kind: 'mark', text: rawTag.slice(a + 2, b) });
+        i = b + 2;
+      }
+    }
+
+    // Colophon — IP character + tagline. Office can override either field
+    // in /retail-admin → Products; blank fields fall back to:
+    //   character → mapped from product category (soilsoul default)
+    //   tagline   → "From Soil to Soul" / "从土壤到灵魂"
+    const COLOPHON_MAP = [
+      [/(sauce|dip|condiment|paste|chutney)/, 'soilsoul'],
+      [/(spread|butter|jam)/,                  'skater'],
+      [/(drink|kombucha|juice|beverage|tea)/,  'kombucha-gang'],
+      [/(protein|powder|supplement|flour)/,    'flex'],
+      [/(root|tuber|carrot|radish|beet)/,      'radishes'],
+      [/(fungi|mushroom)/,                     'mushroom'],
+      [/(legume|bean|pea|lentil|chickpea)/,    'peas'],
+      [/(onion|allium|garlic|leek)/,           'onion'],
+      [/(broccoli|cabbage|leafy|green)/,       'broccoli'],
+    ];
+    const overrideChar = (p.colophon_character || '').trim();
+    let ipKey = overrideChar;
+    if (!ipKey) {
+      const cat = (p.category || '').toLowerCase();
+      ipKey = (COLOPHON_MAP.find(([rx]) => rx.test(cat)) || [, 'soilsoul'])[1];
+    }
+    const colophonImg = '/assets/brand/ip-' + ipKey + '.jpg';
+    // Tagline override — pick the language-matching field first; if the
+    // chosen language is empty, fall back to the OTHER language so the
+    // office can fill only one and have it show in both views.
+    const colophonTagline = lang.pick(p.colophon_tagline_en, p.colophon_tagline_cn, L)
+      || (L === 'cn' ? '从土壤到灵魂' : 'From Soil to Soul');
 
     // Description: split into segments so lines starting with "## " become
     // styled section headings (the office inserts them via the picker in the
@@ -282,7 +390,10 @@ Page({
       descriptionBlocks: Array.isArray(p.description_blocks) ? p.description_blocks : [],
       size: p.size || p.weight || '',
       keywords: lang.pick(p.keywords_en, p.keywords_cn, L),
-      tagline: lang.pick(p.tagline_en, p.tagline_cn, L),
+      tagline: rawTag,
+      taglineSegments,
+      colophonImg,
+      colophonTagline,
       badges,
       options,
       selectedChoices: selected,
