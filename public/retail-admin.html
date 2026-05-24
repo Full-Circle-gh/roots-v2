@@ -12246,9 +12246,9 @@ function cuRenderDetail() {
         <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
           <span class="cu-pill tier-${escapeHtml(c.tier_key || 'seed')}">${escapeHtml(c.tier_key || 'seed')}</span>
           ${c.is_blocked ? '<span class="cu-pill blocked">Blocked · 已封禁</span>' : ''}
-          <span class="cu-pill">Joined · 加入 ${cuFmtDate(c.created_at) || '—'}</span>
-          <span class="cu-pill">Last login · 最近登录 ${cuFmtTime(c.last_login_at) || 'never · 从未'}</span>
-          <span class="cu-pill">${sessions} active · 活跃 · ${sessions === 1 ? 'session · 会话' : 'sessions · 会话'}</span>
+          <span class="cu-pill">Joined · 加入 <span>${cuFmtDate(c.created_at) || '—'}</span></span>
+          <span class="cu-pill">Last login · 最近登录 <span>${cuFmtTime(c.last_login_at) || 'never · 从未'}</span></span>
+          <span class="cu-pill">${sessions} <span>active sessions · 活跃会话</span></span>
         </div>
         <div class="muted cu-openid" style="margin-top: 8px; word-break: break-all;">openid: ${escapeHtml(c.openid || '')}</div>
       </div>
