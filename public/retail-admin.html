@@ -7769,8 +7769,8 @@ function dashRenderTrend() {
       xl += `<text class="ax" x="${px.toFixed(1)}" y="${H - 6}" text-anchor="middle">${escapeHtml(lbl)}</text>`;
     }
     if (cs === 'dots' || n <= 32) dots += `<circle class="dot" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${cs === 'dots' ? 3.6 : 2.5}"/>`;
-    const colW = innerW / n;
-    hover += `<rect class="hovercol" x="${(px - colW / 2).toFixed(1)}" y="${padT}" width="${colW.toFixed(1)}" height="${innerH}"></rect>`;
+    const colW = innerW / Math.max(1, n - 1);  // tile contiguously, point-to-point
+    hover += `<rect class="hovercol" data-i="${i}" onmousemove="dashTrendTip(event)" x="${(px - colW / 2).toFixed(1)}" y="${padT}" width="${colW.toFixed(1)}" height="${innerH}"></rect>`;
   });
 
   // Bars mode — one rounded column per bucket from the baseline up.
@@ -7783,7 +7783,7 @@ function dashRenderTrend() {
   const svgLine = cs === 'curve' ? line : '';
   const svgDots = cs !== 'bars' ? dots : '';
 
-  $('#db-trend').innerHTML = `<svg class="db-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" onmousemove="dashTrendTip(event)" onmouseleave="dashTrendHide()">${grid}${svgArea}${svgLine}${bars}${svgDots}${hover}${xl}</svg>`;  /* tooltip is a body-level singleton (dashTrendTip) */
+  $('#db-trend').innerHTML = `<svg class="db-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" onmouseleave="dashTrendHide()">${grid}${svgArea}${svgLine}${bars}${svgDots}${hover}${xl}</svg>`;  /* per-column hover binding is on each .hovercol; tooltip is a body-level singleton */
 }
 
 // Cursor-following tooltip for the trend chart. Computes the nearest data
@@ -7794,19 +7794,12 @@ function dashRenderTrend() {
 function dashTrendTip(e) {
   const t = (DASH_DATA && DASH_DATA.trend) || [];
   if (!t.length) return;
-  const svg = e.currentTarget;
-  const r = svg.getBoundingClientRect();
-  const W = 820, padL = 8, padR = 8;
-  const sc = r.width / W;
-  const innerW = (W - padL - padR) * sc;
-  // Clamp into the plot range rather than hiding near the edges. The last
-  // bucket sits exactly at innerW and its hover zone (plus the right padding)
-  // extends past it, so an early `xIn > innerW` hide created a dead zone on
-  // the right where no tooltip showed. idx is clamped below regardless.
-  const xIn = Math.max(0, Math.min((e.clientX - r.left) - padL * sc, innerW));
-  const n = t.length;
-  let idx = n === 1 ? 0 : Math.round((xIn / innerW) * (n - 1));
-  idx = Math.max(0, Math.min(n - 1, idx));
+  // The hovered column carries its own index (data-i). Reading it directly —
+  // rather than computing it from e.clientX vs getBoundingClientRect — makes
+  // the tooltip immune to the html `zoom` the text-size control applies
+  // (which otherwise skews those two coordinate spaces against each other).
+  const col = e.currentTarget;
+  const idx = Math.max(0, Math.min(t.length - 1, parseInt(col.dataset.i, 10) || 0));
   const p = t[idx];
   if (!p) return dashTrendHide();
   // Singleton tooltip lives on <body> so no overflow:hidden ancestor (the
@@ -7822,17 +7815,19 @@ function dashTrendTip(e) {
     `<div class="r"><span>${cuT('Orders','订单')}</span><b>${dashNum(p.orders)}</b></div>` +
     `<div class="r"><span>${cuT('Visits','访问')}</span><b>${dashNum(p.visits)}</b></div>`;
   tip.style.display = 'block';
-  // Viewport coords (position:fixed). Flip left of the cursor near the right
-  // edge, then hard-clamp inside the viewport on every side.
-  const tw = tip.offsetWidth, th = tip.offsetHeight;
-  let x = e.clientX + 14;
-  if (x + tw + 8 > window.innerWidth) x = e.clientX - tw - 14;
-  x = Math.max(6, Math.min(x, window.innerWidth - tw - 6));
-  let y = Math.max(6, Math.min(e.clientY - 12, window.innerHeight - th - 6));
+  // Anchor off the column's own rect (same coord space as the position:fixed
+  // tooltip, so it stays correct under zoom). Sit to the right of the column;
+  // flip left near the viewport's right edge; clamp on all sides.
+  const cr = col.getBoundingClientRect();
+  const tw = tip.offsetWidth;
+  let x = cr.right + 12;
+  if (x + tw + 6 > window.innerWidth) x = cr.left - tw - 12;
+  let y = cr.top + 8;
   tip.style.left = x + 'px';
   tip.style.top = y + 'px';
   fcClampToViewport(tip);
-  svg.querySelectorAll('.hovercol').forEach((c, i) => c.classList.toggle('on', i === idx));
+  const svg = col.ownerSVGElement;
+  if (svg) svg.querySelectorAll('.hovercol').forEach(c => c.classList.toggle('on', c === col));
 }
 // Final safety net: re-measure the actually-rendered box and nudge it fully
 // on-screen. Covers any offsetWidth mis-measure / sub-pixel rounding so a
