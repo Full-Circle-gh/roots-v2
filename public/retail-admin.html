@@ -3810,6 +3810,22 @@
       .cu-bar.peak  { opacity: 1; }
       .cu-bar.empty { background: var(--line); opacity: 1; }
       .cu-bar-label { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; color: var(--text-4); }
+      /* Whole column is the hover target (so 0-order months — a 3px sliver —
+         are still hoverable) + a cursor-following tooltip mirroring the
+         dashboard trend chart. */
+      .cu-bar-col { cursor: default; }
+      .cu-bar-col:hover .cu-bar { opacity: 1; }
+      .cu-bar-tip {
+        position: absolute; display: none; pointer-events: none; z-index: 8;
+        background: #12161A; color: #E8E5DC; border-radius: 10px; padding: 9px 12px;
+        font-size: 12px; line-height: 1.5; white-space: nowrap; min-width: 150px;
+        border: 1px solid rgba(232,229,220,.12);
+        box-shadow: 0 10px 30px rgba(0,0,0,.28); font-variant-numeric: tabular-nums;
+      }
+      .cu-bar-tip .b { font-weight: 700; margin-bottom: 5px; color: var(--accent); }
+      .cu-bar-tip .r { display: flex; justify-content: space-between; gap: 18px; }
+      .cu-bar-tip .r span { color: rgba(255,255,255,.6); }
+      .cu-bar-tip .r b { font-weight: 700; }
 
       .cu-detail-pairs { display: grid; grid-template-columns: 55fr 45fr; gap: var(--s6); align-items: start; }
       @media (max-width: 720px) { .cu-detail-pairs { grid-template-columns: 1fr; } }
@@ -7481,6 +7497,34 @@ function dashTrendHide() {
   const tip = document.getElementById('db-trend-tip');
   if (tip) tip.style.display = 'none';
   document.querySelectorAll('#db-trend .hovercol.on').forEach(c => c.classList.remove('on'));
+}
+
+// Cursor-following tooltip for the customer drawer's "Orders by month" bars.
+// Bound to the whole column (.cu-bar-col) — not the bar — so zero-order
+// months (a 3px sliver) still surface their details on hover.
+function cuBarTip(e) {
+  const col = e.currentTarget;
+  const host = col.closest('.cu-bar-host');
+  const tip = document.getElementById('cu-bar-tip');
+  if (!host || !tip) return;
+  const m = col.dataset.m || '', n = col.dataset.n || '0', rev = col.dataset.rev || '0.00';
+  tip.innerHTML =
+    `<div class="b">${escapeHtml(m)}</div>` +
+    `<div class="r"><span>${cuT('Orders', '订单')}</span><b>${escapeHtml(n)}</b></div>` +
+    `<div class="r"><span>${cuT('Revenue', '营收')}</span><b>¥${escapeHtml(rev)}</b></div>`;
+  tip.style.display = 'block';
+  const hr = host.getBoundingClientRect();
+  let x = (e.clientX - hr.left) + 14;
+  let y = (e.clientY - hr.top) - 12;
+  if (x + tip.offsetWidth + 8 > hr.width) x = (e.clientX - hr.left) - tip.offsetWidth - 14;
+  if (x < 0) x = 4;
+  if (y < 0) y = 4;
+  tip.style.left = x + 'px';
+  tip.style.top = y + 'px';
+}
+function cuBarTipHide() {
+  const tip = document.getElementById('cu-bar-tip');
+  if (tip) tip.style.display = 'none';
 }
 
 function dashBarList(rows) {
@@ -13101,8 +13145,8 @@ function cuRenderDetail() {
   const maxN = Math.max(1, ...months.map(m => m.n));
   const barMax = CDV.chartTall ? 162 : 110;   // View tweak: taller bars when stretched
   const monthBars = months.map(m => `
-    <div class="cu-bar-col">
-      <div class="cu-bar ${m.n === 0 ? 'empty' : (m.n === maxN ? 'peak' : '')}" style="height: ${m.n === 0 ? 3 : Math.max(8, (m.n / maxN) * barMax)}px;" title="${m.key}: ${m.n} orders, ¥${Number(m.revenue || 0).toFixed(2)}"></div>
+    <div class="cu-bar-col" data-m="${m.key}" data-n="${m.n}" data-rev="${Number(m.revenue || 0).toFixed(2)}" onmousemove="cuBarTip(event)" onmouseleave="cuBarTipHide()">
+      <div class="cu-bar ${m.n === 0 ? 'empty' : (m.n === maxN ? 'peak' : '')}" style="height: ${m.n === 0 ? 3 : Math.max(8, (m.n / maxN) * barMax)}px;"></div>
       <div class="cu-bar-label">${m.key.slice(5)}</div>
     </div>
   `).join('');
@@ -13238,7 +13282,10 @@ function cuRenderDetail() {
          stay open because the operator scans them at-a-glance. -->
     <div style="margin-bottom: var(--s7);">
       <div class="cu-sec-title" style="margin-bottom: var(--s3);">Orders by month (last 12) · 月度订单数(近 12 个月)</div>
-      <div class="cu-bar-row${CDV.chartTall ? ' cu-bars-tall' : ''}">${monthBars}</div>
+      <div class="cu-bar-host" style="position: relative;">
+        <div class="cu-bar-row${CDV.chartTall ? ' cu-bars-tall' : ''}">${monthBars}</div>
+        <div id="cu-bar-tip" class="cu-bar-tip"></div>
+      </div>
     </div>
 
     <div class="cu-detail-pairs">
