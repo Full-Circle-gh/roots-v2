@@ -27,6 +27,11 @@
      it doesn't delay first paint; importers fall back to "Save as CSV" hint
      if the lib hasn't arrived yet (very rare on second visit due to caching). -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js" defer></script>
+<!-- Full Circle chrome type — IBM Plex Sans / Mono (+ SC for 中文), mirroring
+     /retail-admin. Falls back to system fonts if the CDN is unreachable. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   /* Brand fonts — shared with retail-admin & mini-app previews. */
   /* Bear Serif's digits are thin/geometric and don't match its chunky letters.
@@ -62,7 +67,7 @@
   --line-soft:   rgba(255, 255, 255, .055);
   --line:        rgba(255, 255, 255, .09);
   --line-strong: rgba(255, 255, 255, .15);
-  --ring:        rgba(204, 217, 0, .35);
+  --ring:        rgba(107, 142, 111, .40);   /* Tea focus */
 
   /* Text scale */
   --text-1: #ecebe5;
@@ -70,14 +75,17 @@
   --text-3: #7d7a72;
   --text-4: #56544f;
 
-  /* Accent + semantic */
-  --accent:      #ccd900;
-  --accent-hi:   #dde858;
-  --accent-ink:  #16161a;
+  /* Accent + semantic — Full Circle: Tea Green = active/positive,
+     Aged Brass = primary action/attention. (Was acid yellow-green.) */
+  --accent:      #6B8E6F;   /* Tea Green */
+  --accent-hi:   #7BA07F;
+  --accent-ink:  #12161A;
+  --brass:       #B08D4A;   /* Aged Brass */
+  --brass-hi:    #C29B54;
   --danger:      #e8556a;
   --danger-soft: rgba(232, 85, 106, .14);
-  --warn:        #e9a35a;
-  --success:     #80c462;
+  --warn:        #B08D4A;   /* attention = Brass */
+  --success:     #6B8E6F;   /* positive = Tea */
 
   /* Spacing / radius / shadow scale */
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s7: 32px;
@@ -86,8 +94,8 @@
   --sh-3: 0 24px 60px rgba(0, 0, 0, .5);
 
   /* Type + motion */
-  --f-sans:  -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', system-ui, sans-serif;
-  --f-mono:  ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  --f-sans:  'IBM Plex Sans', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --f-mono:  'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
   --ease-out: cubic-bezier(.16, 1, .3, 1);
   --t-med:   220ms;
 
@@ -133,7 +141,7 @@
   --line-soft:   rgba(30, 25, 5, .085);
   --line:        rgba(30, 25, 5, .18);
   --line-strong: rgba(30, 25, 5, .28);
-  --ring:        rgba(140, 152, 0, .38);
+  --ring:        rgba(107, 142, 111, .40);   /* Tea focus */
 
   --text-1: #1a1a17;
   --text-2: #43413a;
@@ -145,10 +153,14 @@
      after the surface dim pass. Drop the lime to a confident olive-lime
      in light mode only; dark mode keeps the punchy #ccd900 because the
      dark bg balances it. accent-hi nudged proportionally. */
-  --accent:      #b1bd00;          /* was inherited #ccd900 — softer on cream */
-  --accent-hi:   #9ea800;          /* was #b8c200 */
-  --accent-ink:  #16161a;
-  --lime:        #b1bd00;          /* keep the legacy alias in step with --accent */
+  --accent:      #5E7E62;          /* Tea Green, darkened for cream legibility */
+  --accent-hi:   #6B8E6F;
+  --accent-ink:  #12161A;
+  --brass:       #9D7C3F;          /* Aged Brass, darkened for cream */
+  --brass-hi:    #8a6a2e;
+  --lime:        #5E7E62;          /* keep the legacy alias in step with --accent */
+  --warn:        #9D7C3F;
+  --success:     #5E7E62;
   --danger-soft: rgba(232, 85, 106, .11);
 
   --sh-1: 0 1px 3px rgba(40, 30, 5, .10);
@@ -156,7 +168,7 @@
   --sh-3: 0 24px 60px rgba(40, 30, 5, .24);
 
   /* Legacy alias overrides for light mode */
-  --lime-text:   #6e7a00;          /* darker lime for text on cream (WCAG AA) */
+  --lime-text:   #4e6b52;          /* darker Tea for text on cream (WCAG AA) */
   --card-shadow: rgba(40,30,5,.12);
   color-scheme: light;
 }
@@ -240,11 +252,11 @@ body { font-family: -apple-system, 'DM Sans', sans-serif; background:var(--bg); 
   --shadow-md: 0 4px 14px rgba(26,35,20,.08);
   --shadow-lg: 0 12px 32px rgba(26,35,20,.12);
   --shadow-xl: 0 20px 56px rgba(26,35,20,.16);
-  --shadow-focus: 0 0 0 4px rgba(204,217,0,.30);
+  --shadow-focus: 0 0 0 4px rgba(107,142,111,.30);
   --shadow-focus-danger: 0 0 0 4px rgba(220,38,38,.22);
   --r-sm: 6px;  --r-md: 8px;  --r-lg: 12px;  --r-xl: 16px;  --r-pill: 999px;
   --t-fast: .12s ease;  --t-base: .18s cubic-bezier(.2,.7,.3,1);  --t-slow: .28s cubic-bezier(.2,.7,.3,1);
-  --accent-glow: 0 0 0 1px rgba(204,217,0,.4), 0 8px 24px rgba(204,217,0,.18);
+  --accent-glow: 0 0 0 1px rgba(107,142,111,.4), 0 8px 24px rgba(107,142,111,.18);
 }
 :root[data-theme="dark"] {
   --shadow-xs: 0 1px 2px rgba(0,0,0,.35);
@@ -252,9 +264,9 @@ body { font-family: -apple-system, 'DM Sans', sans-serif; background:var(--bg); 
   --shadow-md: 0 6px 18px rgba(0,0,0,.5);
   --shadow-lg: 0 16px 40px rgba(0,0,0,.55);
   --shadow-xl: 0 24px 64px rgba(0,0,0,.6);
-  --shadow-focus: 0 0 0 4px rgba(204,217,0,.34);
+  --shadow-focus: 0 0 0 4px rgba(107,142,111,.34);
   --shadow-focus-danger: 0 0 0 4px rgba(220,38,38,.34);
-  --accent-glow: 0 0 0 1px rgba(204,217,0,.55), 0 10px 28px rgba(204,217,0,.2);
+  --accent-glow: 0 0 0 1px rgba(107,142,111,.55), 0 10px 28px rgba(107,142,111,.2);
 }
 
 /* Subtle global motion preferences honoured. */
@@ -760,13 +772,13 @@ body.user-no-delete .btn-icon[onclick*="Delete"] { display:none !important; }
 }
 .wir-kicker svg { color: var(--text-3); flex-shrink: 0; }
 .wir-value {
-  font-size: 22px; font-weight: 700; line-height: 1; color: var(--text-1);
+  font-size: 26px; font-weight: 300; line-height: 1; color: var(--text-1);
   font-variant-numeric: tabular-nums; letter-spacing: -.01em;
 }
 .wir-value--muted  { color: var(--text-3); }
-.wir-value--danger { color: var(--danger, #e05252); }
-.wir-value--warn   { color: var(--warn,   #c89030); }
-.wir-value--good   { color: var(--success,#3d7a1e); }
+.wir-value--danger { color: var(--brass); }   /* attention = Brass (was red) */
+.wir-value--warn   { color: var(--brass); }
+.wir-value--good   { color: var(--accent); }   /* positive = Tea (was green) */
 .wir-value-text    { font-size: 13px; font-weight: 600; color: var(--text-1); line-height: 1.25; }
 .wir-sub           { font-size: 11px; color: var(--text-3); margin-top: 4px; }
 
@@ -1418,17 +1430,12 @@ body { font: 13px var(--f-sans); background: var(--bg-app); color: var(--text-1)
   text-transform: none !important;
 }
 .topbar-brand .brand-mark {
-  width: 26px; height: 26px; border-radius: var(--r-md);
-  background: linear-gradient(135deg, var(--accent), #b3bf00);
+  width: 26px; height: 26px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  color: var(--accent-ink); font-weight: 700; font-size: 13px;
-  box-shadow: var(--sh-1);
+  color: var(--accent);
 }
-:root[data-theme="light"] .topbar-brand .brand-mark {
-  background: linear-gradient(135deg, var(--accent), #98a300);
-  box-shadow: 0 1px 2px rgba(0,0,0,.15);
-}
-.topbar-brand .brand-name { font-weight: 600; }
+.topbar-brand .brand-mark svg { display: block; }
+.topbar-brand .brand-name { font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .topbar-brand .brand-divider { width: 1px; height: 16px; background: var(--line); margin: 0 4px; display: inline-block; }
 .topbar-brand .brand-sub { color: var(--text-3); font-weight: 500; }
 
@@ -1875,8 +1882,8 @@ input[readonly]:hover, textarea[readonly]:hover { border-color: var(--line-soft)
 
 <div class="topbar">
   <div class="topbar-brand">
-    <span class="brand-mark">R</span>
-    <span class="brand-name">Roots</span>
+    <span class="brand-mark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.4a8.6 8.6 0 1 0 6.2 2.7" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg></span>
+    <span class="brand-name">Full Circle</span>
   </div>
   <div class="topbar-right">
     <button id="themeBtn" class="topbar-icon-btn" onclick="toggleTheme()" title="Toggle theme · 切换主题" aria-label="Toggle theme">
@@ -3966,7 +3973,7 @@ async function renderDashboard() {
   document.getElementById('main').innerHTML = `
     <div class="page-header">
       <div>
-        <div class="page-title">${navIconSvg('home')}<span>DASHBOARD · 主页</span></div>
+        <div class="page-title"><span>DASHBOARD · 主页</span></div>
         <div style="font-size:13px;color:var(--muted);margin-top:4px">Welcome back · 欢迎回来, ${esc(_user.display_name || _user.username)}</div>
       </div>
     </div>
@@ -4059,11 +4066,11 @@ async function renderDashboard() {
               const onclick = clickable ? `onclick="navigate('products');setTimeout(()=>viewProduct(${p.product_id}),200)"` : '';
               const cursor  = clickable ? 'cursor:pointer' : '';
               return `
-              <div ${onclick} style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0ece6;${cursor}" ${clickable ? 'onmouseover="this.style.background=\'#faf8f3\'" onmouseout="this.style.background=\'\'"' : ''}>
-                <div style="width:22px;height:22px;border-radius:50%;background:var(--dk);color:var(--lime);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">${i+1}</div>
-                <div style="flex:1;font-size:13px;font-weight:600">${esc(p.name)}</div>
-                <div style="font-size:11px;color:var(--muted)">${fmt(p.units)} 件</div>
-                <div style="font-family:'Bebas Neue',sans-serif;font-weight:700;color:#3d7a1e;font-size:14px">¥${fmt(p.revenue)}</div>
+              <div ${onclick} style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-soft);${cursor}" ${clickable ? 'onmouseover="this.style.background=\'var(--bg-elev-1)\'" onmouseout="this.style.background=\'\'"' : ''}>
+                <div style="width:22px;height:22px;border-radius:50%;background:var(--bg-elev-2);color:var(--accent);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums">${i+1}</div>
+                <div style="flex:1;font-size:13px;font-weight:500">${esc(p.name)}</div>
+                <div style="font-size:11px;color:var(--muted);font-family:var(--f-mono)">${fmt(p.units)} 件</div>
+                <div style="font-weight:500;color:var(--accent);font-size:14px;font-variant-numeric:tabular-nums">¥${fmt(p.revenue)}</div>
               </div>`;
             }).join('') + '</div>'
           : '<p style="color:var(--muted);font-size:13px;padding:14px 0;text-align:center">暂无销售数据 No sales yet this month</p>'}
@@ -4074,9 +4081,9 @@ async function renderDashboard() {
           ? '<div>' + alerts.map(a => {
               const up = a.new_price > a.old_price;
               const pct = a.change_pct == null ? '' :
-                `<span style="font-size:11px;font-weight:700;color:${up?'#e05252':'#3d7a1e'}">${up?'▲':'▼'} ${Math.abs(a.change_pct).toFixed(1)}%</span>`;
-              return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0ece6">
-                <div style="font-size:18px">${up?'📈':'📉'}</div>
+                `<span style="font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;color:${up?'var(--brass)':'var(--accent)'}">${up?'▲':'▼'} ${Math.abs(a.change_pct).toFixed(1)}%</span>`;
+              return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-soft)">
+                <div style="color:${up?'var(--brass)':'var(--accent)'};display:flex"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">${up?NAV_ICONS.trendingUp:NAV_ICONS.trendingDown}</svg></div>
                 <div style="flex:1;min-width:0">
                   <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.ingredient_name||'')}</div>
                   <div style="font-size:11px;color:var(--muted)">¥${Number(a.old_price||0).toFixed(4)} → ¥${Number(a.new_price||0).toFixed(4)}</div>
@@ -4084,7 +4091,7 @@ async function renderDashboard() {
                 ${pct}
               </div>`;
             }).join('') + `<div style="text-align:center;padding-top:10px"><a href="#" onclick="event.preventDefault();navigate('alerts')" style="color:var(--mg);font-size:12px;text-decoration:none">View all · 查看全部 →</a></div></div>`
-          : '<p style="color:var(--muted);font-size:13px;padding:14px 0;text-align:center">🎉 No price alerts · 暂无价格预警</p>'}
+          : '<p style="color:var(--muted);font-size:13px;padding:14px 0;text-align:center">No alerts to review. · 暂无预警</p>'}
       </div>
     </div>
 
@@ -4096,8 +4103,8 @@ async function renderDashboard() {
       </div>
       <div>
         ${addons.map(a => `
-          <div onclick="navigate('products');setTimeout(()=>viewProduct(${a.product_id}),200)" onmouseover="this.style.background='#faf8f3'" onmouseout="this.style.background=''" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0ece6;cursor:pointer">
-            <div style="width:22px;height:22px;border-radius:50%;background:#e07b50;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">＋</div>
+          <div onclick="navigate('products');setTimeout(()=>viewProduct(${a.product_id}),200)" onmouseover="this.style.background='var(--bg-elev-1)'" onmouseout="this.style.background=''" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-soft);cursor:pointer">
+            <div style="width:22px;height:22px;border-radius:50%;background:rgba(176,141,74,.14);color:var(--brass);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">＋</div>
             <div style="flex:1;font-size:13px;font-weight:600">${esc(a.name)}${a.name_cn?` <span style="font-weight:400;color:var(--muted);font-size:11px">${esc(a.name_cn)}</span>`:''}</div>
             <div style="font-size:11px;color:var(--muted)">${fmt(a.units)} 件</div>
             <div style="font-size:11px;color:var(--muted)">${a.occurrences} order${a.occurrences===1?'':'s'} · 单</div>
@@ -4108,7 +4115,7 @@ async function renderDashboard() {
     <div class="card" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
       <div>
         <div style="font-size:11px;color:var(--text-3);letter-spacing:.12em;text-transform:uppercase;font-weight:600">Quick actions · 快捷操作</div>
-        <div style="font-size:12px;color:var(--text-3);margin-top:4px">Roots v2 · Guangzhou 广州 · ${new Date().toLocaleDateString('zh-CN')}</div>
+        <div style="font-size:12px;color:var(--text-3);margin-top:4px;font-family:var(--f-mono);letter-spacing:.04em">FC_SYS_v3.0 · Guangzhou 广州 · ${new Date().toLocaleDateString('zh-CN')}</div>
       </div>
       <div id="dashShortcutsWrap" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"></div>
     </div>`;
@@ -4234,13 +4241,13 @@ function kpiCard({ icon, value, label, onClick, tone = '', hint = '' }) {
   // data table, not a billboard. Lime/red are reserved for the hero metric
   // and "needs attention" signals.
   const numColor = tone === 'accent' ? 'var(--accent)'
-                 : tone === 'danger' ? 'var(--danger, #e05252)'
+                 : tone === 'danger' ? 'var(--brass)'
                                      : 'var(--text-1)';
-  const iconBg = tone === 'accent' ? 'rgba(204, 217, 0, .12)'
-               : tone === 'danger' ? 'rgba(224, 82, 82, .10)'
+  const iconBg = tone === 'accent' ? 'rgba(107, 142, 111, .12)'
+               : tone === 'danger' ? 'rgba(176, 141, 74, .12)'
                                    : 'var(--bg-elev-1)';
   const iconColor = tone === 'accent' ? 'var(--accent)'
-                  : tone === 'danger' ? 'var(--danger, #e05252)'
+                  : tone === 'danger' ? 'var(--brass)'
                                       : 'var(--text-3)';
   return `<div class="card kpi-tile"${onClickAttr} style="padding:18px 18px 16px;${extraStyle}"
     ${onClick ? 'onmouseover="this.style.transform=\'translateY(-1px)\';this.style.borderColor=\'var(--line-strong, rgba(255,255,255,.12))\'" onmouseout="this.style.transform=\'\';this.style.borderColor=\'\'"' : ''}>
@@ -4250,7 +4257,7 @@ function kpiCard({ icon, value, label, onClick, tone = '', hint = '' }) {
       </div>
       <div style="flex:1; min-width:0; font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:.08em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${label}</div>
     </div>
-    <div style="font-family: var(--f-display, inherit); font-size:30px; font-weight:700; line-height:1; color:${numColor}; font-variant-numeric: tabular-nums; letter-spacing:-.01em;">${value}</div>
+    <div style="font-family: var(--f-sans); font-size:34px; font-weight:300; line-height:1; color:${numColor}; font-variant-numeric: tabular-nums; letter-spacing:-.01em;">${value}</div>
     ${hint ? `<div style="font-size:11px; color:var(--text-3); margin-top:6px;">${hint}</div>` : ''}
   </div>`;
 }
