@@ -3272,32 +3272,31 @@
        action, not a design knob. The visual pickers (BACKGROUND / TAB BAR)
        moved into the left pane above the Blocks list. -->
   <div class="page-picker" id="page-picker">
-    <span class="label">PAGE</span>
+    <span class="label"><span class="i18n-en">PAGE</span><span class="i18n-cn">页面</span></span>
     <span class="name" id="page-picker-name">Home</span>
     <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     <div class="page-menu" id="page-menu"></div>
   </div>
   <div class="status-pill" id="status">
-    <span class="dot"></span><span id="status-text">Loading…</span>
+    <span class="dot"></span><span id="status-text"><span class="i18n-en">Loading…</span><span class="i18n-cn">加载中…</span></span>
   </div>
   <div class="grow"></div>
   <span class="who" id="who"></span>
-  <button class="btn btn-icon" id="theme-toggle" type="button" onclick="cmsToggleTheme()" title="Toggle light / dark mode · 切换浅色 / 深色模式" aria-label="Toggle theme">
+  <button class="btn btn-icon" id="theme-toggle" type="button" onclick="cmsToggleTheme()" data-ti-en="Toggle light / dark mode" data-ti-cn="切换浅色 / 深色模式" title="Toggle light / dark mode" aria-label="Toggle theme">
     <svg id="theme-icon-dark"  viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     <svg id="theme-icon-light" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2"  x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2"  y1="12" x2="4"  y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93"  y1="4.93"  x2="6.34"  y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="4.93"  y1="19.07" x2="6.34"  y2="17.66"/><line x1="17.66" y1="6.34"  x2="19.07" y2="4.93"/></svg>
   </button>
-  <a class="topbar-link" href="/retail-admin" target="_blank" rel="noopener">Mini App Backend</a>
-  <a class="topbar-link" href="/" target="_blank" rel="noopener">Dashboard</a>
-  <button class="btn btn-icon" id="btn-help" onclick="showHelp()" title="Keyboard shortcuts (?)" aria-label="Help">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-  </button>
-  <button class="btn" id="btn-revert" onclick="revertDraft()" title="Discard draft, reload published">
+  <!-- Language toggle — same control as the Mini App Backend topbar: one text
+       button that flips the WHOLE editor (chrome + preview) EN ⇄ 中. Shares
+       LANG_KEY with the rest of the admin suite so the choice follows you. -->
+  <button class="topbar-link" id="lang-toggle" type="button" onclick="cmsToggleLang()" data-ti-en="Switch language" data-ti-cn="切换语言" title="Switch language" style="border:none;background:transparent;cursor:pointer;font-weight:600;letter-spacing:.02em;">中文</button>
+  <button class="btn" id="btn-revert" onclick="revertDraft()" data-ti-en="Discard draft, reload published" data-ti-cn="放弃草稿,重新加载已发布版本" title="Discard draft, reload published">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-    Revert
+    <span class="i18n-en">Revert</span><span class="i18n-cn">还原</span>
   </button>
-  <button class="btn btn-primary" id="btn-publish" onclick="publish()" title="Publish to live (⌘⇧P)">
+  <button class="btn btn-primary" id="btn-publish" onclick="publish()" data-ti-en="Publish to live (⌘⇧P)" data-ti-cn="发布到线上 (⌘⇧P)" title="Publish to live (⌘⇧P)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
-    Publish
+    <span class="i18n-en">Publish</span><span class="i18n-cn">发布</span>
   </button>
 </div>
 
@@ -3311,17 +3310,17 @@
          navigation action, not a design knob — it belongs with Revert /
          Publish. Compact styling lives under `.design-pickers` in CSS. -->
     <div class="pane-section">
-      <h3 style="margin:0 0 8px">Design</h3>
+      <h3 style="margin:0 0 8px"><span class="i18n-en">Design</span><span class="i18n-cn">设计</span></h3>
       <div class="design-pickers">
         <div class="theme-picker" id="theme-picker">
           <span class="swatch" id="theme-picker-swatch" aria-hidden="true"></span>
-          <span class="label">BACKGROUND</span>
+          <span class="label"><span class="i18n-en">BACKGROUND</span><span class="i18n-cn">背景</span></span>
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           <div class="theme-menu" id="theme-menu"></div>
         </div>
         <div class="theme-picker tabbar-picker" id="tabbar-picker">
           <span class="swatch" id="tabbar-picker-swatch" aria-hidden="true"></span>
-          <span class="label">TAB BAR</span>
+          <span class="label"><span class="i18n-en">TAB BAR</span><span class="i18n-cn">标签栏</span></span>
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           <div class="theme-menu tabbar-menu" id="tabbar-menu"></div>
         </div>
@@ -3331,7 +3330,7 @@
              Recomputes every time the menu opens so the count badge stays fresh. -->
         <div class="theme-picker design-check-picker" id="design-check-picker">
           <span class="swatch" id="design-check-swatch" aria-hidden="true">✓</span>
-          <span class="label">DESIGN CHECK</span>
+          <span class="label"><span class="i18n-en">DESIGN CHECK</span><span class="i18n-cn">设计检查</span></span>
           <span class="dc-badge" id="design-check-badge" hidden></span>
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           <div class="theme-menu design-check-menu" id="design-check-menu"></div>
@@ -3340,23 +3339,23 @@
     </div>
     <div class="pane-section">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
-        <h3 style="margin:0">Blocks</h3>
+        <h3 style="margin:0"><span class="i18n-en">Blocks</span><span class="i18n-cn">模块</span></h3>
         <button type="button" class="palette-reset-btn"
                 onclick="resetPaletteOrder()"
-                title="Reset palette order to default · 重置左侧块栏顺序">Reset order</button>
+                data-ti-en="Reset palette order to default" data-ti-cn="重置左侧块栏顺序" title="Reset palette order to default"><span class="i18n-en">Reset order</span><span class="i18n-cn">重置顺序</span></button>
       </div>
       <div class="hint" style="margin:6px 0 10px;font-size:11px;color:var(--text-3)">
-        Drag a block onto the phone to add it. Drag a block onto another to reorder this list.
+        <span class="i18n-en">Drag a block onto the phone to add it. Drag a block onto another to reorder this list.</span><span class="i18n-cn">把模块拖到手机上即可添加;把一个模块拖到另一个上可重新排序。</span>
       </div>
       <div class="palette" id="palette"></div>
     </div>
     <div class="pane-section">
-      <h3>Tips</h3>
+      <h3><span class="i18n-en">Tips</span><span class="i18n-cn">提示</span></h3>
       <div class="hint">
-        <p>Drag a block onto the phone to add it.</p>
-        <p>Grab any block in the preview to reorder.</p>
-        <p>Click a block to edit it on the right.</p>
-        <p>Press <kbd>?</kbd> for keyboard shortcuts.</p>
+        <p><span class="i18n-en">Drag a block onto the phone to add it.</span><span class="i18n-cn">把模块拖到手机上即可添加。</span></p>
+        <p><span class="i18n-en">Grab any block in the preview to reorder.</span><span class="i18n-cn">在预览中拖动任意模块可重新排序。</span></p>
+        <p><span class="i18n-en">Click a block to edit it on the right.</span><span class="i18n-cn">点击模块即可在右侧编辑。</span></p>
+        <p><span class="i18n-en">Press <kbd>?</kbd> for keyboard shortcuts.</span><span class="i18n-cn">按 <kbd>?</kbd> 查看快捷键。</span></p>
       </div>
     </div>
   </div>
@@ -3364,34 +3363,30 @@
   <!-- ─── CANVAS (CENTRE) ─── -->
   <div class="canvas">
     <div class="canvas-meta">
-      <div class="lang-toggle" id="lang-toggle" title="Preview language — customers see one or the other, not both">
-        <button class="active" data-lang="en">EN</button>
-        <button data-lang="cn">中</button>
-      </div>
       <select id="resolution-picker" title="Preview device"></select>
       <!-- Single Preview entry point — opens a small menu with the two
            distinct ways to see what the customer will see. The inline
            phone-frame on this same canvas is the *editor stage*, not a
            "preview", so it doesn't appear in this menu. -->
       <div class="preview-menu" id="preview-menu">
-        <button class="btn-phone-preview" id="btn-preview-menu" onclick="togglePreviewMenu()" title="See what the customer will see · 顾客视角">
+        <button class="btn-phone-preview" id="btn-preview-menu" onclick="togglePreviewMenu()" data-ti-en="See what the customer will see" data-ti-cn="顾客视角" title="See what the customer will see">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
-          Preview
+          <span class="i18n-en">Preview</span><span class="i18n-cn">预览</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 12px; height: 12px; margin-left: 2px;"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="preview-menu-pop" id="preview-menu-pop" hidden>
           <button type="button" onclick="closePreviewMenu(); openLivePreview()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><rect x="2" y="4" width="20" height="14" rx="2"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="18" x2="12" y2="20"/></svg>
             <div>
-              <div class="pm-title">H5 mirror (web)</div>
-              <div class="pm-sub">The /storefront renderer in a side panel</div>
+              <div class="pm-title"><span class="i18n-en">H5 mirror (web)</span><span class="i18n-cn">H5 镜像(网页)</span></div>
+              <div class="pm-sub"><span class="i18n-en">The /storefront renderer in a side panel</span><span class="i18n-cn">在侧栏中显示 /storefront 渲染</span></div>
             </div>
           </button>
           <button type="button" onclick="closePreviewMenu(); openPhonePreview()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><rect x="5" y="2" width="14" height="20" rx="2.5"/><line x1="12" y1="18" x2="12" y2="18.01"/></svg>
             <div>
-              <div class="pm-title">On phone (WeChat / QR)</div>
-              <div class="pm-sub">Scan to open the real mini app in draft mode</div>
+              <div class="pm-title"><span class="i18n-en">On phone (WeChat / QR)</span><span class="i18n-cn">真机(微信 / 扫码)</span></div>
+              <div class="pm-sub"><span class="i18n-en">Scan to open the real mini app in draft mode</span><span class="i18n-cn">扫码以草稿模式打开真实小程序</span></div>
             </div>
           </button>
         </div>
@@ -3418,7 +3413,7 @@
     <div class="inspector" id="inspector">
       <div class="empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-        <div>Select a block on the phone to edit it.</div>
+        <div><span class="i18n-en">Select a block on the phone to edit it.</span><span class="i18n-cn">在手机上点选一个模块进行编辑。</span></div>
       </div>
     </div>
   </div>
@@ -3433,60 +3428,60 @@
   <div class="phone-preview-card">
     <div class="phone-preview-head">
       <div>
-        <h3>Preview on phone · 手机预览</h3>
-        <div class="muted">See the current draft in the actual mini app, not just the H5 mirror.</div>
+        <h3><span class="i18n-en">Preview on phone</span><span class="i18n-cn">手机预览</span></h3>
+        <div class="muted"><span class="i18n-en">See the current draft in the actual mini app, not just the H5 mirror.</span><span class="i18n-cn">在真实小程序中查看当前草稿,而非仅 H5 镜像。</span></div>
       </div>
-      <button class="btn" onclick="closePhonePreview()">Close · 关闭</button>
+      <button class="btn" onclick="closePhonePreview()"><span class="i18n-en">Close</span><span class="i18n-cn">关闭</span></button>
     </div>
     <div class="phone-preview-body">
       <!-- Real QR (rendered when WeChat merchant cert is configured). -->
       <div class="phone-preview-qr" id="phone-preview-qr" hidden>
         <img id="phone-preview-qr-img" alt="Mini-app QR" style="width: 200px; height: 200px;">
-        <div class="muted" style="margin-top: 8px; text-align: center; font-size: 11px;">Scan with WeChat to open the mini app in draft mode.</div>
+        <div class="muted" style="margin-top: 8px; text-align: center; font-size: 11px;"><span class="i18n-en">Scan with WeChat to open the mini app in draft mode.</span><span class="i18n-cn">用微信扫码,以草稿模式打开小程序。</span></div>
       </div>
       <!-- Fallback: DevTools path. Always shown so the office can paste it. -->
       <div class="phone-preview-devtools">
         <div class="pp-lead">
-          <div><b>What this does · 这是什么</b></div>
-          <div class="pp-lead-sub">Loads the mini app on a real phone using the layout you're editing right now (your unpublished draft), so you can see the changes before pressing Publish.<br>用您当前正在编辑的草稿(未发布)在真机上打开小程序,发布前先确认效果。</div>
+          <div><b><span class="i18n-en">What this does</span><span class="i18n-cn">这是什么</span></b></div>
+          <div class="pp-lead-sub"><span class="i18n-en">Loads the mini app on a real phone using the layout you're editing right now (your unpublished draft), so you can see the changes before pressing Publish.</span><span class="i18n-cn">用您当前正在编辑的草稿(未发布)在真机上打开小程序,发布前先确认效果。</span></div>
         </div>
 
-        <div class="kicker">Steps · 操作步骤</div>
+        <div class="kicker"><span class="i18n-en">Steps</span><span class="i18n-cn">操作步骤</span></div>
         <ol class="pp-steps">
           <li>
-            Open <b>WeChat DevTools</b> on your computer and load this mini-app project.
-            <span class="pp-step-cn">在电脑上打开 <b>微信开发者工具</b>,并加载本小程序项目。</span>
+            <span class="i18n-en">Open <b>WeChat DevTools</b> on your computer and load this mini-app project.</span>
+            <span class="pp-step-cn i18n-cn">在电脑上打开 <b>微信开发者工具</b>,并加载本小程序项目。</span>
           </li>
           <li>
-            At the top, click the <b>Compile · 编译</b> dropdown (next to the green ▶ button) → choose <b>Add Compilation Mode · 添加编译模式</b>.
-            <span class="pp-step-cn">在顶部点击 <b>编译</b> 下拉(绿色 ▶ 按钮旁) → 选择 <b>添加编译模式</b>。</span>
+            <span class="i18n-en">At the top, click the <b>Compile</b> dropdown (next to the green ▶ button) → choose <b>Add Compilation Mode</b>.</span>
+            <span class="pp-step-cn i18n-cn">在顶部点击 <b>编译</b> 下拉(绿色 ▶ 按钮旁) → 选择 <b>添加编译模式</b>。</span>
           </li>
           <li>
-            In the dialog, paste this into the <b>Startup Page · 启动页面</b> field:
-            <span class="pp-step-cn">在弹窗中,把下方路径粘贴到 <b>启动页面</b> 字段:</span>
+            <span class="i18n-en">In the dialog, paste this into the <b>Startup Page</b> field:</span>
+            <span class="pp-step-cn i18n-cn">在弹窗中,把下方路径粘贴到 <b>启动页面</b> 字段:</span>
             <div class="path-row" style="margin-top: 8px;">
               <code id="phone-preview-page">pages/index/index</code>
-              <button class="btn btn-primary" onclick="copyPreviewField('phone-preview-page','Startup Page')">Copy · 复制</button>
+              <button class="btn btn-primary" onclick="copyPreviewField('phone-preview-page','Startup Page')"><span class="i18n-en">Copy</span><span class="i18n-cn">复制</span></button>
             </div>
           </li>
           <li>
-            Paste this into the <b>Parameters · 启动参数</b> field (no leading <code>?</code>):
-            <span class="pp-step-cn">把下方内容粘贴到 <b>启动参数</b> 字段(无需开头的 <code>?</code>):</span>
+            <span class="i18n-en">Paste this into the <b>Parameters</b> field (no leading <code>?</code>):</span>
+            <span class="pp-step-cn i18n-cn">把下方内容粘贴到 <b>启动参数</b> 字段(无需开头的 <code>?</code>):</span>
             <div class="path-row" style="margin-top: 8px;">
               <code id="phone-preview-params">preview_draft=1&amp;page=home</code>
-              <button class="btn btn-primary" onclick="copyPreviewField('phone-preview-params','Parameters')">Copy · 复制</button>
+              <button class="btn btn-primary" onclick="copyPreviewField('phone-preview-params','Parameters')"><span class="i18n-en">Copy</span><span class="i18n-cn">复制</span></button>
             </div>
             <div class="muted" id="phone-preview-expiry" style="font-size: 10px; margin-top: 4px;"></div>
           </li>
           <li>
-            Give the mode any <b>Mode Name · 名称</b> (e.g. "draft preview") → click <b>OK · 确定</b> → click <b>Compile · 编译</b>. The simulator (and any phone scanning the DevTools preview QR) launches into your current draft layout.
-            <span class="pp-step-cn">任意起一个 <b>名称</b>(例如「草稿预览」) → 点击 <b>确定</b> → 点击 <b>编译</b>。模拟器(以及扫描预览二维码的真机)将以当前草稿启动。</span>
+            <span class="i18n-en">Give the mode any <b>Mode Name</b> (e.g. "draft preview") → click <b>OK</b> → click <b>Compile</b>. The simulator (and any phone scanning the DevTools preview QR) launches into your current draft layout.</span>
+            <span class="pp-step-cn i18n-cn">任意起一个 <b>名称</b>(例如「草稿预览」) → 点击 <b>确定</b> → 点击 <b>编译</b>。模拟器(以及扫描预览二维码的真机)将以当前草稿启动。</span>
           </li>
         </ol>
 
         <div class="pp-footnote">
-          <b>Tip · 提示</b> — once <code>WECHAT_APP_ID</code> and <code>WECHAT_APP_SECRET</code> are configured in <code>.env</code> (and pm2 restarted), this modal will show a real scannable QR — your teammates can open the draft in their own WeChat directly, without DevTools.<br>
-          配置 <code>WECHAT_APP_ID</code> 及 <code>WECHAT_APP_SECRET</code> 后,重启 pm2,本页将显示可直接扫码的二维码,无需开发者工具,同事用微信即可打开草稿。
+          <span class="i18n-en"><b>Tip</b> — once <code>WECHAT_APP_ID</code> and <code>WECHAT_APP_SECRET</code> are configured in <code>.env</code> (and pm2 restarted), this modal will show a real scannable QR — your teammates can open the draft in their own WeChat directly, without DevTools.</span>
+          <span class="i18n-cn"><b>提示</b> — 配置 <code>WECHAT_APP_ID</code> 及 <code>WECHAT_APP_SECRET</code> 后,重启 pm2,本页将显示可直接扫码的二维码,无需开发者工具,同事用微信即可打开草稿。</span>
         </div>
       </div>
     </div>
@@ -3546,28 +3541,28 @@ const RESOLUTIONS = [
 ];
 
 const BLOCK_META = {
-  announcement_bar: { name: 'Announcement bar', desc: 'Slim banner across the top' },
-  hero_banner:      { name: 'Hero banner',      desc: 'Full-bleed image with CTA' },
-  category_tabs:    { name: 'Category tabs',    desc: '2-up colour-block tiles' },
-  featured_item:    { name: 'Featured item',    desc: 'Single highlighted product' },
-  product_grid:     { name: 'Product grid',     desc: 'N-up grid from a category' },
-  spacer:           { name: 'Spacer',           desc: 'Vertical breathing room' },
-  sticker_collage:  { name: 'Sticker collage',  desc: 'Rotated brand stickers (onboarding-style)' },
-  progress_dots:    { name: 'Progress dots',    desc: 'N-step dot indicator (slide markers)' },
-  countdown_timer:  { name: 'Countdown timer',  desc: 'Generic countdown to any date/time' },
-  flash_sale_strip: { name: 'Flash sale',       desc: 'Live 秒杀 · strip / hero / banner views' },
-  coupon_block:     { name: 'Coupon',            desc: '¥ off / % off promo with claim CTA' },
-  points_widget:    { name: 'Points',            desc: 'Earn-rate promo · Roots Club' },
-  review_card:      { name: 'Review',            desc: 'Featured customer testimonial' },
-  store_info:       { name: 'Stores',           desc: 'One or many locations · live open · hours · ETA' },
-  voting_block:     { name: 'Voting',             desc: 'Poll teaser — tap to vote, earn pts' },
-  affiliate_block:  { name: 'Refer a friend',     desc: 'Customer\'s live invite code + share CTA' },
-  greeting:         { name: 'Greeting',            desc: 'Time-of-day "Good morning, {name} · pts"' },
-  kitchen_status:   { name: 'Kitchen status',     desc: 'Legacy — use the Stores block instead', hidden: true },
-  recipe_story:     { name: 'Recipe story',        desc: 'Editorial image + serif headline + paragraphs' },
-  bundle:           { name: 'Bundle',              desc: '3–5 products with one-tap add-all-to-cart' },
-  wecom_contact:    { name: 'Add us on WeCom',    desc: '企业微信 · contact button + 联系我 QR' },
-  favorites_block:  { name: 'Favorites',          desc: 'Your saved — pulls from each customer\'s wishlist' },
+  announcement_bar: { name: 'Announcement bar', name_cn: '公告栏',     desc: 'Slim banner across the top',                desc_cn: '顶部细长横幅' },
+  hero_banner:      { name: 'Hero banner',      name_cn: '主图横幅',   desc: 'Full-bleed image with CTA',                 desc_cn: '全幅图片 + 行动按钮' },
+  category_tabs:    { name: 'Category tabs',    name_cn: '分类标签',   desc: '2-up colour-block tiles',                   desc_cn: '两列色块磁贴' },
+  featured_item:    { name: 'Featured item',    name_cn: '精选单品',   desc: 'Single highlighted product',                desc_cn: '单个重点商品' },
+  product_grid:     { name: 'Product grid',     name_cn: '商品网格',   desc: 'N-up grid from a category',                 desc_cn: '按分类的多列网格' },
+  spacer:           { name: 'Spacer',           name_cn: '间距',       desc: 'Vertical breathing room',                   desc_cn: '垂直留白' },
+  sticker_collage:  { name: 'Sticker collage',  name_cn: '贴纸拼贴',   desc: 'Rotated brand stickers (onboarding-style)', desc_cn: '旋转品牌贴纸(引导风格)' },
+  progress_dots:    { name: 'Progress dots',    name_cn: '进度圆点',   desc: 'N-step dot indicator (slide markers)',      desc_cn: 'N 步圆点指示(滑动标记)' },
+  countdown_timer:  { name: 'Countdown timer',  name_cn: '倒计时',     desc: 'Generic countdown to any date/time',        desc_cn: '到任意日期/时间的通用倒计时' },
+  flash_sale_strip: { name: 'Flash sale',       name_cn: '限时秒杀',   desc: 'Live 秒杀 · strip / hero / banner views',   desc_cn: '秒杀:条幅 / 主图 / 横幅视图' },
+  coupon_block:     { name: 'Coupon',           name_cn: '优惠券',     desc: '¥ off / % off promo with claim CTA',        desc_cn: '满减 / 折扣促销,带领取按钮' },
+  points_widget:    { name: 'Points',           name_cn: '积分',       desc: 'Earn-rate promo · Roots Club',              desc_cn: '赚分促销 · 萌芽会员' },
+  review_card:      { name: 'Review',           name_cn: '评价',       desc: 'Featured customer testimonial',             desc_cn: '精选顾客好评' },
+  store_info:       { name: 'Stores',           name_cn: '门店',       desc: 'One or many locations · live open · hours · ETA', desc_cn: '单个或多个门店 · 营业状态 · 营业时间 · 送达时间' },
+  voting_block:     { name: 'Voting',           name_cn: '投票',       desc: 'Poll teaser — tap to vote, earn pts',       desc_cn: '投票预告 — 点击投票,赚取积分' },
+  affiliate_block:  { name: 'Refer a friend',   name_cn: '邀请好友',   desc: 'Customer\'s live invite code + share CTA',  desc_cn: '顾客的实时邀请码 + 分享按钮' },
+  greeting:         { name: 'Greeting',         name_cn: '问候语',     desc: 'Time-of-day "Good morning, {name} · pts"',  desc_cn: '按时段「早上好,{name} · 积分」' },
+  kitchen_status:   { name: 'Kitchen status',   name_cn: '厨房状态',   desc: 'Legacy — use the Stores block instead',     desc_cn: '旧版 — 请改用门店模块', hidden: true },
+  recipe_story:     { name: 'Recipe story',     name_cn: '食谱故事',   desc: 'Editorial image + serif headline + paragraphs', desc_cn: '编辑配图 + 衬线标题 + 正文段落' },
+  bundle:           { name: 'Bundle',           name_cn: '套装',       desc: '3–5 products with one-tap add-all-to-cart', desc_cn: '3–5 件商品,一键全部加入购物车' },
+  wecom_contact:    { name: 'Add us on WeCom',  name_cn: '添加企业微信', desc: '企业微信 · contact button + 联系我 QR',     desc_cn: '企业微信 · 联系按钮 + 联系我二维码' },
+  favorites_block:  { name: 'Favorites',        name_cn: '收藏',       desc: 'Your saved — pulls from each customer\'s wishlist', desc_cn: '顾客收藏 — 来自各自的心愿单' },
 };
 
 const state = {
@@ -3586,11 +3581,11 @@ const state = {
 };
 
 const PAGES = [
-  { id: 'home',       name: 'Home',         cn: '首页',   desc: 'Customer landing — opens when the mini app launches' },
-  { id: 'promotions', name: 'Promotions',   cn: '优惠',   desc: 'Curated deals & specials — link here from CTAs anywhere' },
-  { id: 'categories', name: 'Shop landing', cn: '商品',   desc: 'Intro / banners shown on the Shop tab above the category browser' },
-  { id: 'membership', name: 'Membership',   cn: '会员',   desc: 'Roots Club tier perks, benefits, hero' },
-  { id: 'onboarding', name: 'Onboarding',   cn: '欢迎',   desc: 'First-launch welcome — uses sticker collage + progress dots' },
+  { id: 'home',       name: 'Home',         cn: '首页',   desc: 'Customer landing — opens when the mini app launches',              desc_cn: '顾客落地页 — 小程序打开时显示' },
+  { id: 'promotions', name: 'Promotions',   cn: '优惠',   desc: 'Curated deals & specials — link here from CTAs anywhere',          desc_cn: '精选优惠与特惠 — 可从任意按钮链接至此' },
+  { id: 'categories', name: 'Shop landing', cn: '商品',   desc: 'Intro / banners shown on the Shop tab above the category browser', desc_cn: '「商品」标签页分类浏览上方的介绍 / 横幅' },
+  { id: 'membership', name: 'Membership',   cn: '会员',   desc: 'Roots Club tier perks, benefits, hero',                            desc_cn: '萌芽会员等级权益、福利、主图' },
+  { id: 'onboarding', name: 'Onboarding',   cn: '欢迎',   desc: 'First-launch welcome — uses sticker collage + progress dots',      desc_cn: '首次启动欢迎页 — 使用贴纸拼贴 + 进度圆点' },
 ];
 
 const TAB_LABELS = {
@@ -3738,8 +3733,8 @@ function buildPagePicker() {
   const menu = $('#page-menu');
   menu.innerHTML = PAGES.map(p => `
     <div class="item ${p.id === state.page ? 'current' : ''}" data-id="${p.id}">
-      <div class="name">${p.name} <span style="color:var(--text-3);font-weight:500"> · ${p.cn}</span></div>
-      <div class="desc">${p.desc}</div>
+      <div class="name">${B(p.name, p.cn)}</div>
+      <div class="desc">${B(p.desc, p.desc_cn || p.desc)}</div>
     </div>`).join('');
 
   const picker = $('#page-picker');
@@ -3766,7 +3761,7 @@ function buildPagePicker() {
 
 function updatePagePickerLabel() {
   const p = PAGES.find(x => x.id === state.page) || PAGES[0];
-  $('#page-picker-name').textContent = p.name;
+  $('#page-picker-name').innerHTML = B(p.name, p.cn);
   $('#page-menu').querySelectorAll('.item').forEach(it => {
     it.classList.toggle('current', it.dataset.id === state.page);
   });
@@ -3820,7 +3815,7 @@ async function buildThemePicker() {
     const swatches = BRAND_COLOR_OPTIONS.map(opt => {
       const css = HEX[opt.value] || '';
       const active = opt.value === current ? 'active' : '';
-      return `<div class="sw ${active}" data-token="${opt.value}" style="background:${css}" title="${opt.label}"></div>`;
+      return `<div class="sw ${active}" data-token="${opt.value}" style="background:${css}" title="${splitT(opt.label)}"></div>`;
     }).join('');
     const resetActive = !current ? 'active' : '';
     const transActive = current === 'transparent' ? 'active' : '';
@@ -3864,7 +3859,7 @@ async function buildThemePicker() {
   function labelFor(tok) {
     if (tok === 'transparent') return 'transparent';
     const opt = BRAND_COLOR_OPTIONS.find(o => o.value === tok);
-    return opt ? opt.label.toLowerCase() : tok;
+    return opt ? splitT(opt.label).toLowerCase() : tok;
   }
   function updateSwatchIcon() {
     const sw = $('#theme-picker-swatch');
@@ -3947,24 +3942,24 @@ const TABBAR_ICONS = {
   },
 };
 const TABBAR_THEMES = {
-  oat:    { bg: '#F2E7DF', color: '#7a6f64', active: '#365329', border: 'rgba(0,0,0,0.06)',  label: 'Oat',    sub: 'Warm cream' },
-  paper:  { bg: '#FBF6E8', color: '#8a8174', active: '#365329', border: 'rgba(0,0,0,0.06)',  label: 'Paper',  sub: 'Off-white' },
-  forest: { bg: '#2a3a22', color: '#a8b8a0', active: '#ccd900', border: 'rgba(255,255,255,0.06)', label: 'Forest', sub: 'Night' },
-  lime:   { bg: '#ccd900', color: '#5a6300', active: '#16161a', border: 'rgba(0,0,0,0.10)',  label: 'Lime',   sub: 'Brand bold' },
+  oat:    { bg: '#F2E7DF', color: '#7a6f64', active: '#365329', border: 'rgba(0,0,0,0.06)',  label: 'Oat',    label_cn: '燕麦', sub: 'Warm cream', sub_cn: '温暖奶油' },
+  paper:  { bg: '#FBF6E8', color: '#8a8174', active: '#365329', border: 'rgba(0,0,0,0.06)',  label: 'Paper',  label_cn: '纸白', sub: 'Off-white',  sub_cn: '米白' },
+  forest: { bg: '#2a3a22', color: '#a8b8a0', active: '#ccd900', border: 'rgba(255,255,255,0.06)', label: 'Forest', label_cn: '森绿', sub: 'Night',  sub_cn: '夜色' },
+  lime:   { bg: '#ccd900', color: '#5a6300', active: '#16161a', border: 'rgba(0,0,0,0.10)',  label: 'Lime',   label_cn: '青柠', sub: 'Brand bold', sub_cn: '品牌亮色' },
 };
 const TABBAR_STYLES = [
-  { key: 'outline', label: 'Outline' },
-  { key: 'solid',   label: 'Solid'   },
-  { key: 'rounded', label: 'Rounded' },
-  { key: 'duotone', label: 'Duotone' },
+  { key: 'outline', label: 'Outline', label_cn: '描边' },
+  { key: 'solid',   label: 'Solid',   label_cn: '实心' },
+  { key: 'rounded', label: 'Rounded', label_cn: '圆角' },
+  { key: 'duotone', label: 'Duotone', label_cn: '双色' },
 ];
 
 let tabBarState = { theme: 'oat', iconStyle: 'outline', color: '', selectedColor: '', icons: {} };
 const TAB_NAMES = [
-  { name: 'home', en: 'Home' },
-  { name: 'shop', en: 'Shop' },
-  { name: 'cart', en: 'Cart' },
-  { name: 'me',   en: 'Me'   },
+  { name: 'home', en: 'Home', cn: '首页' },
+  { name: 'shop', en: 'Shop', cn: '商城' },
+  { name: 'cart', en: 'Cart', cn: '购物车' },
+  { name: 'me',   en: 'Me',   cn: '我的' },
 ];
 
 function svgIcon(style, name, color) {
@@ -4029,22 +4024,22 @@ async function buildTabBarPicker() {
     const c = resolveTabBarColors(tabBarState);
     const themeCards = Object.entries(TABBAR_THEMES).map(([key, t]) => `
       <div class="theme-card ${tabBarState.theme === key ? 'active' : ''}"
-           data-theme="${key}" title="${t.label} — ${t.sub}">
+           data-theme="${key}" data-ti-en="${t.label} — ${t.sub}" data-ti-cn="${t.label_cn} — ${t.sub_cn}" title="${t.label} — ${t.sub}">
         <div class="preview" style="background:${t.bg}; border-top-color:${t.border};">
           <span style="background:${t.active}"></span>
           <span style="background:${t.color}"></span>
           <span style="background:${t.color}"></span>
           <span style="background:${t.color}"></span>
         </div>
-        <div class="name">${t.label}</div>
+        <div class="name">${B(t.label, t.label_cn)}</div>
       </div>`).join('');
     // One representative glyph per style — keeps cards compact and the
     // four styles directly comparable side-by-side.
     const iconCards = TABBAR_STYLES.map(s => `
       <div class="theme-card icon-card ${tabBarState.iconStyle === s.key ? 'active' : ''}"
-           data-style="${s.key}" title="${s.label}">
+           data-style="${s.key}" data-ti-en="${s.label}" data-ti-cn="${s.label_cn}" title="${s.label}">
         <div class="preview" style="background:${c.bg};">${svgIcon(s.key, 'home', c.active)}</div>
-        <div class="name">${s.label}</div>
+        <div class="name">${B(s.label, s.label_cn)}</div>
       </div>`).join('');
     const uploadCells = TAB_NAMES.map(t => {
       const url = (tabBarState.icons || {})[t.name];
@@ -4054,9 +4049,9 @@ async function buildTabBarPicker() {
       return `
         <label class="upload-cell ${url ? 'has-custom' : ''}" data-tab="${t.name}">
           <div class="thumb">${thumb}</div>
-          <div class="lbl">${t.en}</div>
+          <div class="lbl">${B(t.en, t.cn)}</div>
           <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden data-tab-upload="${t.name}">
-          <button type="button" class="clear-x" data-tab-clear="${t.name}" title="Reset to design">×</button>
+          <button type="button" class="clear-x" data-tab-clear="${t.name}" data-ti-en="Reset to design" data-ti-cn="恢复默认设计" title="Reset to design">×</button>
         </label>`;
     }).join('');
     const colHex   = /^#[0-9a-f]{6}$/i.test(tabBarState.color)         ? tabBarState.color         : (TABBAR_THEMES[tabBarState.theme]?.color  || '#7a6f64');
@@ -4177,7 +4172,7 @@ async function buildTabBarPicker() {
         method: 'PUT',
         body: { 'tabBar.icons': Object.keys(next).length ? next : null },
       });
-      toast('Tab icon updated');
+      toast(T('Tab icon updated', '标签图标已更新'));
     } catch (err) {
       tabBarState.icons = prev;
       renderPhoneTabs();
@@ -4196,7 +4191,7 @@ async function buildTabBarPicker() {
       const body = {};
       for (const k of Object.keys(patch)) body[`tabBar.${k}`] = (patch[k] ?? '') || null;
       await api('/api/retail-admin/config', { method: 'PUT', body });
-      toast('Tab bar updated');
+      toast(T('Tab bar updated', '标签栏已更新'));
     } catch (err) {
       tabBarState = prev;
       renderPhoneTabs();
@@ -4326,22 +4321,22 @@ async function renderLinkStatus() {
     el.className = 'link-status linked';
     el.innerHTML = `
       <span class="dot"></span>
-      <div class="msg"><b>${escapeHtml(pageDef.name)}</b> is reachable — Home has ${liveLinks.length} link${liveLinks.length === 1 ? '' : 's'} to it.</div>
-      <button class="action ghost" onclick="switchPage('home')">Open Home →</button>`;
+      <div class="msg">${B(`<b>${escapeHtml(pageDef.name)}</b> is reachable — Home has ${liveLinks.length} link${liveLinks.length === 1 ? '' : 's'} to it.`, `<b>${escapeHtml(pageDef.cn || pageDef.name)}</b> 已可访问 — 首页有 ${liveLinks.length} 个链接指向它。`)}</div>
+      <button class="action ghost" onclick="switchPage('home')">${B('Open Home →', '打开首页 →')}</button>`;
   } else if (draftLinks.length) {
     el.className = 'link-status linked';
     el.innerHTML = `
       <span class="dot"></span>
-      <div class="msg">Home's <b>draft</b> has a link to <b>${escapeHtml(pageDef.name)}</b>. Publish Home to expose it.</div>
-      <button class="action ghost" onclick="switchPage('home')">Open Home →</button>`;
+      <div class="msg">${B(`Home's <b>draft</b> has a link to <b>${escapeHtml(pageDef.name)}</b>. Publish Home to expose it.`, `首页<b>草稿</b>有一个指向 <b>${escapeHtml(pageDef.cn || pageDef.name)}</b> 的链接。发布首页后即可生效。`)}</div>
+      <button class="action ghost" onclick="switchPage('home')">${B('Open Home →', '打开首页 →')}</button>`;
   } else {
     el.className = 'link-status unlinked';
     el.innerHTML = `
       <span class="dot"></span>
-      <div class="msg">No one can reach <b>${escapeHtml(pageDef.name)}</b> yet — Home isn't linking to it. <span class="target">target: ${escapeHtml(target)}</span></div>
+      <div class="msg">${B(`No one can reach <b>${escapeHtml(pageDef.name)}</b> yet — Home isn't linking to it. <span class="target">target: ${escapeHtml(target)}</span>`, `目前无法访问 <b>${escapeHtml(pageDef.cn || pageDef.name)}</b> — 首页未链接到它。<span class="target">目标: ${escapeHtml(target)}</span>`)}</div>
       <button class="action" id="link-add-btn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Add link from Home
+        ${B('Add link from Home', '从首页添加链接')}
       </button>`;
     $('#link-add-btn').addEventListener('click', () => addLinkFromHomeToCurrentPage());
   }
@@ -4374,7 +4369,7 @@ async function addLinkFromHomeToCurrentPage() {
       body: { page: 'home', blocks: nextDraft },
     });
     _homeLayoutCache = null;  // force re-fetch
-    toast(`Added a link bar to Home's draft. Open Home to position + publish.`);
+    toast(T(`Added a link bar to Home's draft. Open Home to position + publish.`, `已在首页草稿中添加链接栏。打开首页调整位置并发布。`));
     renderLinkStatus();
   } catch (e) {
     toast('Failed: ' + e.message, 'err');
@@ -4382,7 +4377,7 @@ async function addLinkFromHomeToCurrentPage() {
 }
 
 async function loadPage() {
-  setStatusText('Loading…', 'saving');
+  setStatusText({ en: 'Loading…', cn: '加载中…' }, 'saving');
   try {
     const layoutResp = await api('/api/retail-admin/cms/layout?page=' + encodeURIComponent(state.page));
     let draft = layoutResp.data.draft || [];
@@ -4403,7 +4398,7 @@ async function loadPage() {
       setStatusText(`Removed ${stripped} deprecated block${stripped === 1 ? '' : 's'} — saving…`, 'saving');
       scheduleSave();
     } else if (state.draft.length === 0) {
-      setStatusText('Empty draft — drag a block to begin', '');
+      setStatusText({ en: 'Empty draft — drag a block to begin', cn: '空白草稿 — 拖入一个模块开始' }, '');
     }
   } catch (e) {
     setStatusText('Failed to load: ' + e.message, 'err');
@@ -4511,7 +4506,8 @@ function dcBlockAccent(block) {
   return dcResolveHex(block[fields.accent]);
 }
 function dcBlockLabel(block) {
-  return (BLOCK_META[block.type]?.name || block.type).replace(/_/g, ' ');
+  const m = BLOCK_META[block.type];
+  return (T(m?.name, m?.name_cn) || block.type).replace(/_/g, ' ');
 }
 
 // Runs all rules and returns an array of findings.
@@ -4597,7 +4593,7 @@ function dcRunChecks() {
   if (accentTokens.size > 3) {
     const list = [...accentTokens].map(t => {
       const opt = BRAND_COLOR_OPTIONS.find(o => o.value === t);
-      return opt ? opt.label : t;
+      return opt ? splitT(opt.label) : t;
     }).join(', ');
     findings.push({
       sev: 'warn',
@@ -5046,28 +5042,32 @@ const LANG_KEY = 'roots-admin-lang';
 function buildLangToggle() {
   try { state.lang = localStorage.getItem(LANG_KEY) || 'en'; } catch {}
   if (!['en', 'cn'].includes(state.lang)) state.lang = 'en';
+  syncChromeLang();   // sets data-cms-lang + the topbar button's 中文/EN label
+  applyTabLabels();
+}
+// Flip the WHOLE editor (chrome + preview) EN ⇄ CN. Mirrors the Mini App
+// Backend's cuToggleLang(): same shared LANG_KEY, same single 中文/EN button.
+function cmsToggleLang() {
+  state.lang = state.lang === 'cn' ? 'en' : 'cn';
+  try { localStorage.setItem(LANG_KEY, state.lang); } catch {}
   syncChromeLang();
   applyTabLabels();
-  document.querySelectorAll('#lang-toggle button').forEach(b => {
-    b.classList.toggle('active', b.dataset.lang === state.lang);
-    b.addEventListener('click', () => {
-      state.lang = b.dataset.lang;
-      document.querySelectorAll('#lang-toggle button').forEach(x =>
-        x.classList.toggle('active', x === b));
-      try { localStorage.setItem(LANG_KEY, state.lang); } catch {}
-      syncChromeLang();
-      applyTabLabels();
-      render();             // preview + inspector (so dropdown labels re-split)
-      reloadLivePreview();  // keep the Customer view iframe in sync
-    });
-  });
+  render();             // preview + inspector (so dropdown labels re-split)
+  reloadLivePreview();  // keep the Customer view iframe in sync
 }
 // Push the active language into the chrome: paired-span visibility (root
-// attr → CSS), tooltip text, and the live-preview drawer's JS-set subline.
+// attr → CSS), tooltip text, the toggle button's label, and the
+// live-preview drawer's JS-set subline.
 function syncChromeLang() {
   document.documentElement.setAttribute('data-cms-lang', state.lang);
   applyChromeTitles();
-  if (document.getElementById('lp-mode-sub')) _lpRefreshChrome();
+  // Button shows the language you'll switch TO (中文 while in EN, EN while in CN).
+  const langBtn = document.getElementById('lang-toggle');
+  if (langBtn) langBtn.textContent = state.lang === 'cn' ? 'EN' : '中文';
+  // Refresh the live-preview drawer's JS-set subline. Guarded because the
+  // first call fires during bootstrap, before `_lpMode` is initialised — the
+  // static subline is a paired span, so CSS shows the right language anyway.
+  try { if (document.getElementById('lp-mode-sub')) _lpRefreshChrome(); } catch {}
 }
 
 function buildResolutionPicker() {
@@ -5119,7 +5119,7 @@ function _orderedPaletteEntries() {
   return out;
 }
 function resetPaletteOrder() {
-  if (!confirm('Reset palette order to default? · 重置左侧块栏顺序?')) return;
+  if (!confirm(T('Reset palette order to default?', '重置左侧块栏顺序?'))) return;
   try { localStorage.removeItem(PALETTE_ORDER_KEY); } catch {}
   buildPalette();
 }
@@ -5134,8 +5134,8 @@ function buildPalette() {
     el.innerHTML = `
       <div class="icon">${ICONS[type]}</div>
       <div class="info">
-        <div class="name">${meta.name}</div>
-        <div class="desc">${meta.desc}</div>
+        <div class="name">${B(meta.name, meta.name_cn || meta.name)}</div>
+        <div class="desc">${B(meta.desc, meta.desc_cn || meta.desc)}</div>
       </div>
       <div class="palette-grip" data-ti-en="Drag to reorder" data-ti-cn="拖动排序" title="Drag to reorder">⋮⋮</div>`;
     mount.appendChild(el);
@@ -5149,14 +5149,20 @@ function setStatus(state) {
   const el = $('#status');
   el.className = 'status-pill ' + state;
 }
+// Accepts either a plain string (dynamic/error text — set via textContent, safe)
+// or a {en, cn} object for fixed status copy — rendered as paired spans so it
+// switches live with the language toggle (no re-render needed).
 function setStatusText(msg, kind = '') {
-  $('#status-text').textContent = msg;
+  const el = $('#status-text');
+  if (msg && typeof msg === 'object') el.innerHTML = B(msg.en, msg.cn);
+  else el.textContent = msg;
   setStatus(kind);
 }
 function setDirty(v) {
   state.dirty = v;
   if (state.saving) return;
-  setStatusText(v ? 'Unsaved changes' : 'All changes saved', v ? 'dirty' : 'clean');
+  setStatusText(v ? { en: 'Unsaved changes', cn: '未保存的更改' }
+                  : { en: 'All changes saved', cn: '已保存全部更改' }, v ? 'dirty' : 'clean');
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -5170,11 +5176,11 @@ function scheduleSave() {
 }
 async function saveDraft() {
   state.saving = true;
-  setStatusText('Saving…', 'saving');
+  setStatusText({ en: 'Saving…', cn: '保存中…' }, 'saving');
   try {
     await api('/api/retail-admin/cms/layout/draft', { method: 'PUT', body: { page: state.page, blocks: state.draft } });
     state.saving = false;
-    setStatusText('All changes saved', 'clean');
+    setStatusText({ en: 'All changes saved', cn: '已保存全部更改' }, 'clean');
     if (state.page === 'home') _homeLayoutCache = null;  // outbound links may have changed
     // Nudge the live-mirror iframe (if currently visible) to re-fetch
     // the draft so what the office sees stays in lock-step with the save.
@@ -5194,7 +5200,7 @@ async function publish() {
     state.live = JSON.parse(JSON.stringify(state.draft));
     setDirty(false);
     if (state.page === 'home') _homeLayoutCache = null;
-    toast(`Published ${pageName}`);
+    toast(T(`Published ${pageName}`, `已发布 ${pageName}`));
   } catch (e) {
     toast('Publish failed: ' + e.message, 'err');
   }
@@ -5207,7 +5213,7 @@ async function revertDraft() {
     state.selectedId = null;
     setDirty(false);
     render();
-    toast('Reverted to published version');
+    toast(T('Reverted to published version', '已恢复到已发布版本'));
   } catch (e) {
     toast('Revert failed: ' + e.message, 'err');
   }
@@ -7041,7 +7047,7 @@ function renderInspector() {
     mount.innerHTML = `
       <div class="empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        <div>Select a block on the phone to edit it.</div>
+        <div><span class="i18n-en">Select a block on the phone to edit it.</span><span class="i18n-cn">在手机上点选一个模块进行编辑。</span></div>
       </div>`;
     return;
   }
@@ -7049,7 +7055,7 @@ function renderInspector() {
     <div class="inspector-head">
       <div class="type-row">
         <div class="icon">${ICONS[b.type] || ''}</div>
-        <div class="type">${(BLOCK_META[b.type]?.name || b.type).replace('_', ' ')}</div>
+        <div class="type">${(T(BLOCK_META[b.type]?.name, BLOCK_META[b.type]?.name_cn) || b.type).replace('_', ' ')}</div>
       </div>
       <div class="id">id: ${b.id}</div>
     </div>
@@ -7083,7 +7089,7 @@ function renderInspector() {
   dz.className = 'danger-zone';
   const btn = document.createElement('button');
   btn.className = 'btn btn-danger';
-  btn.innerHTML = ICONS.trash + ' Delete this block';
+  btn.innerHTML = ICONS.trash + ' ' + B('Delete this block', '删除此模块');
   btn.addEventListener('click', () => deleteBlock(b.id));
   dz.appendChild(btn);
   body.appendChild(dz);
@@ -7232,70 +7238,70 @@ function updateBlock(id, patch) {
 
 function buildAnnouncementForm(m, b) {
   const COLORS = [
-    { value: 'lime-leaf',   label: 'Lime' },
-    { value: 'forest-kale', label: 'Forest' },
-    { value: 'berry-punch', label: 'Berry' },
-    { value: 'carrot-blaze',label: 'Carrot' },
-    { value: 'papaya-glow', label: 'Papaya' },
-    { value: 'oat-milk',    label: 'Oat' },
-    { value: 'ink',         label: 'Ink' },
+    { value: 'lime-leaf',   label: T('Lime', '青柠') },
+    { value: 'forest-kale', label: T('Forest', '森绿') },
+    { value: 'berry-punch', label: T('Berry', '莓红') },
+    { value: 'carrot-blaze',label: T('Carrot', '胡萝卜橙') },
+    { value: 'papaya-glow', label: T('Papaya', '木瓜') },
+    { value: 'oat-milk',    label: T('Oat', '燕麦') },
+    { value: 'ink',         label: T('Ink', '墨黑') },
   ];
   const ANIMATIONS = [
-    { value: 'static',           label: 'Static — no motion' },
-    { value: 'marquee_rtl',      label: 'Marquee — right to left' },
-    { value: 'marquee_ltr',      label: 'Marquee — left to right' },
-    { value: 'scroll_up',        label: 'Scroll up' },
-    { value: 'scroll_down',      label: 'Scroll down' },
-    { value: 'typewriter',       label: 'Typewriter — letter by letter' },
-    { value: 'fade_in_letters',  label: 'Fade in — letter by letter' },
-    { value: 'wave',             label: 'Wave — letters bounce' },
-    { value: 'flicker',          label: 'Flicker — neon' },
+    { value: 'static',           label: T('Static — no motion', '静态 — 无动画') },
+    { value: 'marquee_rtl',      label: T('Marquee — right to left', '跑马灯 — 从右到左') },
+    { value: 'marquee_ltr',      label: T('Marquee — left to right', '跑马灯 — 从左到右') },
+    { value: 'scroll_up',        label: T('Scroll up', '向上滚动') },
+    { value: 'scroll_down',      label: T('Scroll down', '向下滚动') },
+    { value: 'typewriter',       label: T('Typewriter — letter by letter', '打字机 — 逐字显示') },
+    { value: 'fade_in_letters',  label: T('Fade in — letter by letter', '淡入 — 逐字显示') },
+    { value: 'wave',             label: T('Wave — letters bounce', '波浪 — 文字跳动') },
+    { value: 'flicker',          label: T('Flicker — neon', '闪烁 — 霓虹') },
   ];
   const SPEEDS = [
-    { value: 'slow',   label: 'Slow' },
-    { value: 'normal', label: 'Normal' },
-    { value: 'fast',   label: 'Fast' },
+    { value: 'slow',   label: T('Slow', '慢') },
+    { value: 'normal', label: T('Normal', '正常') },
+    { value: 'fast',   label: T('Fast', '快') },
   ];
-  m.appendChild(field('Text', 'Leave one blank to show only the other language.',
+  m.appendChild(field(T('Text', '正文'), T('Leave one blank to show only the other language.', '留空一种语言则只显示另一种。'),
     txtPair(b.text_en, b.text_cn, ({ en, cn }) => updateBlockSilent(b.id, { text_en: en, text_cn: cn }))));
-  m.appendChild(field('Background',     '', sel(b.bg_color, COLORS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour',    '', sel(b.fg_color, COLORS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field('Animation',
-    'How the text moves. Per-letter styles look best on short messages (under ~30 chars).',
+  m.appendChild(field(T('Background', '背景颜色'),     '', sel(b.bg_color, COLORS, v => updateBlock(b.id, { bg_color: v }))));
+  m.appendChild(field(T('Text colour', '文字颜色'),    '', sel(b.fg_color, COLORS, v => updateBlock(b.id, { fg_color: v }))));
+  m.appendChild(field(T('Animation', '动画'),
+    T('How the text moves. Per-letter styles look best on short messages (under ~30 chars).', '文字如何运动。逐字样式最适合短消息(约 30 字以内)。'),
     sel(b.animation || 'static', ANIMATIONS, v => updateBlock(b.id, { animation: v }))));
-  m.appendChild(field('Speed', '',
+  m.appendChild(field(T('Speed', '速度'), '',
     sel(b.speed || 'normal', SPEEDS, v => updateBlock(b.id, { speed: v }))));
-  m.appendChild(field('Link target',
-    'Optional — makes the whole bar tappable. e.g. promotions · membership · coupons · product:12. Blank keeps it decorative.',
+  m.appendChild(field(T('Link target', '链接目标'),
+    T('Optional — makes the whole bar tappable. e.g. promotions · membership · coupons · product:12. Blank keeps it decorative.', '可选 — 让整条横幅可点击。例如 promotions · membership · coupons · product:12。留空则仅作装饰。'),
     txt(b.link_target, v => updateBlockSilent(b.id, { link_target: v }), 'promotions')));
 }
 function buildHeroForm(m, b) {
   const view = b.view || 'full';
-  m.appendChild(field('Layout',
-    'Full = image fills, CTAs float over the image. Split = image on the left, headline + button on a coloured panel on the right (good for lighter, copy-driven designs).',
+  m.appendChild(field(T('Layout', '版式'),
+    T('Full = image fills, CTAs float over the image. Split = image on the left, headline + button on a coloured panel on the right (good for lighter, copy-driven designs).', '全幅 = 图片铺满,按钮浮于图上。分栏 = 图片在左,标题 + 按钮在右侧色块面板(适合更轻、以文案为主的设计)。'),
     sel(view, [
-      { value: 'full',  label: 'Full — image fills with floating CTAs' },
-      { value: 'split', label: 'Split — image left, copy panel right' },
+      { value: 'full',  label: T('Full — image fills with floating CTAs', '全幅 — 图片铺满,浮动按钮') },
+      { value: 'split', label: T('Split — image left, copy panel right', '分栏 — 图片在左,文案面板在右') },
     ], v => updateBlock(b.id, { view: v }))));
 
   m.appendChild(field(
-    'Image',
+    T('Image', '图片'),
     view === 'split'
-      ? 'Cropped to a square on the left side of the panel.'
-      : 'Banner height auto-fits the image — no stretch, no crop.',
+      ? T('Cropped to a square on the left side of the panel.', '裁剪为正方形,置于面板左侧。')
+      : T('Banner height auto-fits the image — no stretch, no crop.', '横幅高度自动适配图片 — 不拉伸、不裁剪。'),
     imgPicker(b.image_url, ({ url, aspect }) => updateBlock(b.id, { image_url: url, image_aspect: aspect }))
   ));
 
   if (view === 'split') {
     const hl = getBi(b, 'headline');
     const sub = getBi(b, 'subtitle');
-    m.appendChild(field('Headline', '',
+    m.appendChild(field(T('Headline', '标题'), '',
       txtPair(hl.en, hl.cn, ({ en, cn }) => updateBlockSilent(b.id, { headline_en: en, headline_cn: cn }))));
-    m.appendChild(field('Subtitle', 'One short supporting line.',
+    m.appendChild(field(T('Subtitle', '副标题'), T('One short supporting line.', '一行简短的辅助文案。'),
       txtPair(sub.en, sub.cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
-    m.appendChild(field('Panel background', '',
+    m.appendChild(field(T('Panel background', '面板背景颜色'), '',
       sel(b.panel_bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { panel_bg_color: v }))));
-    m.appendChild(field('Panel text colour', '',
+    m.appendChild(field(T('Panel text colour', '面板文字颜色'), '',
       sel(b.panel_fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { panel_fg_color: v }))));
   }
 
@@ -7304,7 +7310,7 @@ function buildHeroForm(m, b) {
   const btnWrap = document.createElement('div');
   btnWrap.className = 'field';
   const btnLbl = document.createElement('label');
-  btnLbl.textContent = `Buttons (${ctas.length})`;
+  btnLbl.textContent = T(`Buttons (${ctas.length})`, `按钮(${ctas.length})`);
   btnWrap.appendChild(btnLbl);
 
   const list = document.createElement('div');
@@ -7313,7 +7319,7 @@ function buildHeroForm(m, b) {
   if (!ctas.length) {
     const empty = document.createElement('div');
     empty.className = 'helper';
-    empty.textContent = 'No buttons. The banner shows the image alone.';
+    empty.textContent = T('No buttons. The banner shows the image alone.', '暂无按钮。横幅仅显示图片。');
     list.appendChild(empty);
   }
   btnWrap.appendChild(list);
@@ -7322,7 +7328,7 @@ function buildHeroForm(m, b) {
   addBtn.className = 'btn btn-ghost';
   addBtn.style.marginTop = '8px';
   addBtn.style.width = '100%';
-  addBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add button`;
+  addBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> ${T('Add button', '添加按钮')}`;
   addBtn.addEventListener('click', () => {
     const next = [...getCtas(b), { label: 'NEW BUTTON', target: '', style: 'primary' }];
     updateBlock(b.id, { ctas: next, cta_label: undefined, cta_target: undefined });
@@ -7330,13 +7336,13 @@ function buildHeroForm(m, b) {
   btnWrap.appendChild(addBtn);
   m.appendChild(btnWrap);
 
-  m.appendChild(field('Placeholder height (px)', 'Only used while no image is set.', num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+  m.appendChild(field(T('Placeholder height (px)', '占位高度(像素)'), T('Only used while no image is set.', '仅在未设置图片时使用。'), num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
   if (view === 'full') {
-    m.appendChild(field('Image scrim', 'Dim the bottom of the image so floating CTAs stay legible on bright photography.',
+    m.appendChild(field(T('Image scrim', '图片遮罩'), T('Dim the bottom of the image so floating CTAs stay legible on bright photography.', '压暗图片底部,让浮动按钮在明亮照片上仍清晰可读。'),
       sel(b.scrim || 'medium', SCRIM_OPTIONS,
           v => updateBlock(b.id, { scrim: v }))));
   }
-  m.appendChild(field('Entrance animation', 'How the banner enters on first paint.',
+  m.appendChild(field(T('Entrance animation', '入场动画'), T('How the banner enters on first paint.', '横幅首次渲染时的入场方式。'),
     sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS,
         v => updateBlock(b.id, { entrance_anim: v }))));
 }
@@ -7400,24 +7406,24 @@ function buildCatTabsForm(m, b) {
   const k = getBi(b, 'kicker');
   const t = getBi(b, 'title');
   const view = b.view || 'tiles';
-  m.appendChild(field('Layout', 'Tiles = 2-col coloured rectangles. Icons = N-col circles with labels. Scroll = single row, drag left/right.',
+  m.appendChild(field(T('Layout', '版式'), T('Tiles = 2-col coloured rectangles. Icons = N-col circles with labels. Scroll = single row, drag left/right.', '色块 = 双列彩色矩形。图标 = N 列带标签的圆形。横滑 = 单行,左右拖动。'),
     sel(view, [
-      { value: 'tiles',  label: 'Tiles — 2-col coloured rectangles' },
-      { value: 'icons',  label: 'Icons — N-col circles with labels' },
-      { value: 'scroll', label: 'Scroll — single row, drag left/right' },
+      { value: 'tiles',  label: T('Tiles — 2-col coloured rectangles', '色块 — 双列彩色矩形') },
+      { value: 'icons',  label: T('Icons — N-col circles with labels', '图标 — N 列带标签的圆形') },
+      { value: 'scroll', label: T('Scroll — single row, drag left/right', '横滑 — 单行,左右拖动') },
     ], v => updateBlock(b.id, { view: v }))));
 
-  m.appendChild(field('Kicker', '',
+  m.appendChild(field(T('Kicker', '小标题'), '',
     txtPair(k.en, k.cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn, kicker: undefined }))));
-  m.appendChild(field('Section title', '',
+  m.appendChild(field(T('Section title', '区块标题'), '',
     txtPair(t.en, t.cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn, title: undefined }))));
 
   if (view === 'icons') {
-    m.appendChild(field('Columns', '3, 4, or 5 circles per row.',
+    m.appendChild(field(T('Columns', '列数'), T('3, 4, or 5 circles per row.', '每行 3、4 或 5 个圆形。'),
       num(b.columns, v => updateBlock(b.id, { columns: Math.max(3, Math.min(5, v)) }), { min: 3, max: 5 })));
   }
 
-  const wrap = field('Categories to show', 'Click to toggle. Manage the master list in the main admin.', document.createElement('div'));
+  const wrap = field(T('Categories to show', '要显示的分类'), T('Click to toggle. Manage the master list in the main admin.', '点击切换。在主后台管理分类总表。'), document.createElement('div'));
   const chips = wrap.querySelector('.helper').previousElementSibling;
   chips.className = 'chips';
   state.categories.forEach(c => {
@@ -7433,48 +7439,48 @@ function buildCatTabsForm(m, b) {
   });
   m.appendChild(wrap);
   // Background colour — `null` = transparent (inherits page bg).
-  m.appendChild(field('Background', 'Optional surface colour behind the block. Transparent by default.',
-    sel(b.bg_color || '', [{ value: '', label: '— transparent —' }, ...BRAND_COLOR_OPTIONS],
+  m.appendChild(field(T('Background', '背景颜色'), T('Optional surface colour behind the block. Transparent by default.', '可选 — 模块背后的底色。默认透明。'),
+    sel(b.bg_color || '', [{ value: '', label: T('— transparent —', '— 透明 —') }, ...BRAND_COLOR_OPTIONS],
         v => updateBlock(b.id, { bg_color: v || null }))));
 }
 function buildFeaturedForm(m, b) {
   const view = b.view || 'card';
-  m.appendChild(field('Layout', 'Card = image on top, copy below. Banner = wide image with copy floated. Split = image left, copy right.',
+  m.appendChild(field(T('Layout', '版式'), T('Card = image on top, copy below. Banner = wide image with copy floated. Split = image left, copy right.', '卡片 = 图片在上,文案在下。横幅 = 宽图配浮动文案。分栏 = 图片在左,文案在右。'),
     sel(view, [
-      { value: 'card',   label: 'Card — image top, copy below' },
-      { value: 'banner', label: 'Banner — wide image, copy overlay' },
-      { value: 'split',  label: 'Split — image left, copy right' },
+      { value: 'card',   label: T('Card — image top, copy below', '卡片 — 图片在上,文案在下') },
+      { value: 'banner', label: T('Banner — wide image, copy overlay', '横幅 — 宽图,文案覆盖') },
+      { value: 'split',  label: T('Split — image left, copy right', '分栏 — 图片在左,文案在右') },
     ], v => updateBlock(b.id, { view: v }))));
-  m.appendChild(field('Product', 'Search to filter. Click again to deselect.', productPicker({
+  m.appendChild(field(T('Product', '商品'), T('Search to filter. Click again to deselect.', '搜索筛选。再次点击取消选择。'), productPicker({
     multi: false,
     value: b.product_id,
     onChange: (v) => updateBlockSilent(b.id, { product_id: v }),
   })));
   const k = getBi(b, 'kicker');
-  m.appendChild(field('Kicker label', 'Small uppercase line above the product name.',
+  m.appendChild(field(T('Kicker label', '小标题'), T('Small uppercase line above the product name.', '商品名称上方的小号大写文字。'),
     txtPair(k.en, k.cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn, kicker: undefined }))));
   // Background colour — `null` (default) = transparent, inherits page bg.
-  m.appendChild(field('Block background', 'Colour behind the whole block (outside the card). Transparent by default.',
-    sel(b.bg_color || '', [{ value: '', label: '— transparent —' }, ...BRAND_COLOR_OPTIONS],
+  m.appendChild(field(T('Block background', '模块背景颜色'), T('Colour behind the whole block (outside the card). Transparent by default.', '整个模块背后的底色(卡片以外)。默认透明。'),
+    sel(b.bg_color || '', [{ value: '', label: T('— transparent —', '— 透明 —') }, ...BRAND_COLOR_OPTIONS],
         v => updateBlock(b.id, { bg_color: v || null }))));
   // Inner card surface — was hardcoded ink/white. Defaults preserve the
   // legacy look (ink card + oat text) when missing on existing blocks.
-  m.appendChild(field('Card background', 'Surface of the product card itself. Default: Ink.',
+  m.appendChild(field(T('Card background', '卡片背景颜色'), T('Surface of the product card itself. Default: Ink.', '商品卡片本身的底色。默认:墨黑。'),
     sel(b.card_bg_color || 'ink', BRAND_COLOR_OPTIONS,
         v => updateBlock(b.id, { card_bg_color: v }))));
-  m.appendChild(field('Card text', 'Text colour on top of the card. Pick something legible against the card background.',
+  m.appendChild(field(T('Card text', '卡片文字颜色'), T('Text colour on top of the card. Pick something legible against the card background.', '卡片上的文字颜色。选择与卡片背景对比清晰的颜色。'),
     sel(b.card_fg_color || 'oat-milk', BRAND_COLOR_OPTIONS,
         v => updateBlock(b.id, { card_fg_color: v }))));
-  m.appendChild(field('Corner radius', 'Sharp = 0 rounding · Subtle = legacy default · Bold = pronounced rounding.',
+  m.appendChild(field(T('Corner radius', '圆角'), T('Sharp = 0 rounding · Subtle = legacy default · Bold = pronounced rounding.', '直角 = 无圆角 · 微圆角 = 默认 · 大圆角 = 明显圆角。'),
     sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
         v => updateBlock(b.id, { corner_radius: v }))));
-  m.appendChild(field('Price display', 'How the price reads under the product name.',
+  m.appendChild(field(T('Price display', '价格显示'), T('How the price reads under the product name.', '商品名称下方价格的显示方式。'),
     sel(b.price_mode || 'both', PRICE_MODE_OPTIONS,
         v => updateBlock(b.id, { price_mode: v }))));
-  m.appendChild(field('Sale ribbon', 'Auto-overlay a SALE badge when the product is on a live flash sale.',
+  m.appendChild(field(T('Sale ribbon', '促销标签'), T('Auto-overlay a SALE badge when the product is on a live flash sale.', '商品处于进行中的限时秒杀时,自动叠加 SALE 角标。'),
     sel(b.sale_badge || 'auto', SALE_BADGE_OPTIONS,
         v => updateBlock(b.id, { sale_badge: v }))));
-  m.appendChild(field('Entrance animation', 'How the block enters the viewport on first paint.',
+  m.appendChild(field(T('Entrance animation', '入场动画'), T('How the block enters the viewport on first paint.', '模块首次进入视口时的入场方式。'),
     sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS,
         v => updateBlock(b.id, { entrance_anim: v }))));
 }
@@ -7482,46 +7488,46 @@ function buildGridForm(m, b) {
   const k = getBi(b, 'kicker');
   const t = getBi(b, 'title');
   const view = b.view || 'grid';
-  m.appendChild(field('Layout', 'Grid = fixed N columns. Scroll = horizontal rail (good for "related products"). List = single column with bigger images.',
+  m.appendChild(field(T('Layout', '版式'), T('Grid = fixed N columns. Scroll = horizontal rail (good for "related products"). List = single column with bigger images.', '网格 = 固定 N 列。横滑 = 横向滑动条(适合「相关商品」)。列表 = 单列大图。'),
     sel(view, [
-      { value: 'grid',   label: 'Grid — N columns' },
-      { value: 'scroll', label: 'Scroll — horizontal rail' },
-      { value: 'list',   label: 'List — single column, big images' },
+      { value: 'grid',   label: T('Grid — N columns', '网格 — N 列') },
+      { value: 'scroll', label: T('Scroll — horizontal rail', '横滑 — 横向滑动') },
+      { value: 'list',   label: T('List — single column, big images', '列表 — 单列大图') },
     ], v => updateBlock(b.id, { view: v }))));
-  m.appendChild(field('Kicker', '',
+  m.appendChild(field(T('Kicker', '小标题'), '',
     txtPair(k.en, k.cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn, kicker: undefined }))));
-  m.appendChild(field('Section title', '',
+  m.appendChild(field(T('Section title', '区块标题'), '',
     txtPair(t.en, t.cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn, title: undefined }))));
-  m.appendChild(field('Source', '', sel(b.source_type, [
-    { value: 'category',    label: 'By category' },
-    { value: 'manual',      label: 'Hand-picked products' },
-    { value: 'top_selling', label: 'Top sellers — auto from sales data' },
+  m.appendChild(field(T('Source', '来源'), '', sel(b.source_type, [
+    { value: 'category',    label: T('By category', '按分类') },
+    { value: 'manual',      label: T('Hand-picked products', '手动挑选商品') },
+    { value: 'top_selling', label: T('Top sellers — auto from sales data', '热销 — 自动取自销售数据') },
   ], v => updateBlock(b.id, { source_type: v }))));
   if (b.source_type === 'category') {
-    m.appendChild(field('Category', '', sel(b.category_id || '', [
-      { value: '', label: '— pick one —' },
+    m.appendChild(field(T('Category', '分类'), '', sel(b.category_id || '', [
+      { value: '', label: T('— pick one —', '— 选择一个 —') },
       ...state.categories.map(c => ({ value: c.id, label: c.name })),
     ], v => updateBlock(b.id, { category_id: v ? Number(v) : null }))));
   } else if (b.source_type === 'top_selling') {
-    m.appendChild(field('Window', 'Sales period to aggregate.',
+    m.appendChild(field(T('Window', '时间窗口'), T('Sales period to aggregate.', '用于汇总的销售周期。'),
       sel(b.top_window || '7d', [
-        { value: '7d',  label: 'Last 7 days' },
-        { value: '30d', label: 'Last 30 days' },
-        { value: '90d', label: 'Last 90 days' },
-        { value: 'all', label: 'All time' },
+        { value: '7d',  label: T('Last 7 days', '最近 7 天') },
+        { value: '30d', label: T('Last 30 days', '最近 30 天') },
+        { value: '90d', label: T('Last 90 days', '最近 90 天') },
+        { value: 'all', label: T('All time', '全部时间') },
       ], v => updateBlock(b.id, { top_window: v }))));
-    m.appendChild(field('Channel', 'Where the sales come from.',
+    m.appendChild(field(T('Channel', '渠道'), T('Where the sales come from.', '销售数据的来源渠道。'),
       sel(b.top_channel || 'combined', [
-        { value: 'combined', label: 'Combined — mini app + in-store (recommended)' },
-        { value: 'retail',   label: 'Mini app only' },
-        { value: 'kitchen',  label: 'In-store / cafe only' },
+        { value: 'combined', label: T('Combined — mini app + in-store (recommended)', '合并 — 小程序 + 门店(推荐)') },
+        { value: 'retail',   label: T('Mini app only', '仅小程序') },
+        { value: 'kitchen',  label: T('In-store / cafe only', '仅门店 / 咖啡店') },
       ], v => updateBlock(b.id, { top_channel: v }))));
     // Live preview hint — order count from the cached endpoint so authors
     // know whether there's enough data behind the block.
     const hintWrap = document.createElement('div');
     hintWrap.className = 'helper';
     hintWrap.style.cssText = 'margin: -4px 0 12px; padding: 8px 10px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
-    hintWrap.textContent = 'Loading order data…';
+    hintWrap.textContent = T('Loading order data…', '正在加载订单数据…');
     m.appendChild(hintWrap);
     fetch(`/api/retail/products/top?channel=${encodeURIComponent(b.top_channel || 'combined')}&window=${encodeURIComponent(b.top_window || '7d')}&limit=${b.limit || 6}`)
       .then(r => r.json())
@@ -7530,63 +7536,63 @@ function buildGridForm(m, b) {
         const have = (j.data || []).length;
         const candidates = j.meta?.total_candidates || 0;
         if (!have) {
-          hintWrap.innerHTML = `<b>No sales yet</b> in this window — block will render empty. Try a longer window or wait for orders.`;
+          hintWrap.innerHTML = B(`<b>No sales yet</b> in this window — block will render empty. Try a longer window or wait for orders.`, `<b>此窗口暂无销量</b> — 模块将渲染为空。请尝试更长的窗口或等待订单。`);
         } else {
-          hintWrap.innerHTML = `<b>${have}</b> top product${have === 1 ? '' : 's'} from <b>${candidates}</b> with sales in this window. Updates every 5 minutes.`;
+          hintWrap.innerHTML = B(`<b>${have}</b> top product${have === 1 ? '' : 's'} from <b>${candidates}</b> with sales in this window. Updates every 5 minutes.`, `本窗口内 <b>${candidates}</b> 件有销量商品中的 <b>${have}</b> 件热销品。每 5 分钟更新一次。`);
         }
       })
-      .catch(() => { hintWrap.textContent = 'Could not load order count.'; });
+      .catch(() => { hintWrap.textContent = T('Could not load order count.', '无法加载订单数量。'); });
   } else {
-    m.appendChild(field('Products', 'Click to toggle. Search to filter.', productPicker({
+    m.appendChild(field(T('Products', '商品'), T('Click to toggle. Search to filter.', '点击切换。搜索筛选。'), productPicker({
       multi: true,
       value: b.product_ids || [],
       onChange: (v) => updateBlockSilent(b.id, { product_ids: v }),
     })));
   }
   if (view === 'grid') {
-    m.appendChild(field('Columns', '', sel(b.columns, [
+    m.appendChild(field(T('Columns', '列数'), '', sel(b.columns, [
       { value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' },
     ], v => updateBlock(b.id, { columns: Number(v) }))));
   }
-  m.appendChild(field('Limit (max products)', view === 'scroll' ? 'Cap the rail. Scrolls horizontally if more fit.' : '',
+  m.appendChild(field(T('Limit (max products)', '数量上限(最多商品)'), view === 'scroll' ? T('Cap the rail. Scrolls horizontally if more fit.', '限制滑动条数量。超出则横向滚动。') : '',
     num(b.limit, v => updateBlock(b.id, { limit: v }), { min: 1, max: 24 })));
-  m.appendChild(field('Card corner radius', '',
+  m.appendChild(field(T('Card corner radius', '卡片圆角'), '',
     sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
         v => updateBlock(b.id, { corner_radius: v }))));
-  m.appendChild(field('Density', 'How much breathing room between cards.',
+  m.appendChild(field(T('Density', '密度'), T('How much breathing room between cards.', '卡片之间的留白程度。'),
     sel(b.density || 'normal', DENSITY_OPTIONS,
         v => updateBlock(b.id, { density: v }))));
   if (b.source_type === 'top_selling') {
-    m.appendChild(field('Rank badges', 'Number ribbons on the top sellers.',
+    m.appendChild(field(T('Rank badges', '排名角标'), T('Number ribbons on the top sellers.', '热销品上的数字角标。'),
       sel(b.rank_badge || 'top_3', RANK_BADGE_OPTIONS,
           v => updateBlock(b.id, { rank_badge: v }))));
   }
 }
 function buildSpacerForm(m, b) {
-  m.appendChild(field('Height (px)', '', num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 4, max: 200 })));
-  m.appendChild(field('Divider', 'Optional centred divider that turns the spacer into a section break.',
+  m.appendChild(field(T('Height (px)', '高度(像素)'), '', num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 4, max: 200 })));
+  m.appendChild(field(T('Divider', '分隔线'), T('Optional centred divider that turns the spacer into a section break.', '可选 — 居中分隔线,把留白变成区块分隔。'),
     sel(b.divider_style || 'none', DIVIDER_STYLE_OPTIONS,
         v => updateBlock(b.id, { divider_style: v }))));
   if ((b.divider_style || 'none') !== 'none') {
-    m.appendChild(field('Divider colour', '',
+    m.appendChild(field(T('Divider colour', '分隔线颜色'), '',
       sel(b.divider_color || 'olive-moss', BRAND_COLOR_OPTIONS,
           v => updateBlock(b.id, { divider_color: v }))));
   }
 }
 
 const BRAND_COLOR_OPTIONS = [
-  { value: 'lime-leaf',   label: 'Lime' },
-  { value: 'forest-kale', label: 'Forest' },
-  { value: 'berry-punch', label: 'Berry' },
-  { value: 'carrot-blaze',label: 'Carrot' },
-  { value: 'papaya-glow', label: 'Papaya' },
-  { value: 'golden-corn', label: 'Corn' },
-  { value: 'skyberry',    label: 'Sky' },
-  { value: 'lotus',       label: 'Lotus' },
-  { value: 'citrus-zest', label: 'Citrus' },
-  { value: 'pea-sprout',  label: 'Pea' },
-  { value: 'pink-guava',  label: 'Pink' },
-  { value: 'ink',         label: 'Ink' },
+  { value: 'lime-leaf',   label: 'Lime · 青柠' },
+  { value: 'forest-kale', label: 'Forest · 森绿' },
+  { value: 'berry-punch', label: 'Berry · 莓红' },
+  { value: 'carrot-blaze',label: 'Carrot · 胡萝卜橙' },
+  { value: 'papaya-glow', label: 'Papaya · 木瓜' },
+  { value: 'golden-corn', label: 'Corn · 玉米黄' },
+  { value: 'skyberry',    label: 'Sky · 天蓝' },
+  { value: 'lotus',       label: 'Lotus · 莲粉' },
+  { value: 'citrus-zest', label: 'Citrus · 柑橘' },
+  { value: 'pea-sprout',  label: 'Pea · 豌豆绿' },
+  { value: 'pink-guava',  label: 'Pink · 粉红' },
+  { value: 'ink',         label: 'Ink · 墨黑' },
 ];
 
 // Shared option sets for the cross-cutting fields introduced in the
@@ -7646,7 +7652,7 @@ function buildStickerCollageForm(m, b) {
   const stickers = b.stickers || [];
   const wrap = document.createElement('div'); wrap.className = 'field';
   const lbl = document.createElement('label');
-  lbl.textContent = `Stickers (${stickers.length})`;
+  lbl.textContent = T(`Stickers (${stickers.length})`, `贴纸(${stickers.length})`);
   wrap.appendChild(lbl);
 
   const list = document.createElement('div'); list.className = 'cta-list';
@@ -7654,7 +7660,7 @@ function buildStickerCollageForm(m, b) {
   if (!stickers.length) {
     const empty = document.createElement('div');
     empty.className = 'helper';
-    empty.textContent = 'No stickers. Add the first one below.';
+    empty.textContent = T('No stickers. Add the first one below.', '暂无贴纸。在下方添加第一个。');
     list.appendChild(empty);
   }
   wrap.appendChild(list);
@@ -7663,7 +7669,7 @@ function buildStickerCollageForm(m, b) {
   addBtn.className = 'btn btn-ghost';
   addBtn.style.marginTop = '8px';
   addBtn.style.width = '100%';
-  addBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add sticker`;
+  addBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> ${T('Add sticker', '添加贴纸')}`;
   addBtn.addEventListener('click', () => {
     const next = [...stickers, { label_en: 'NEW', label_cn: '新', color: 'citrus-zest', rotate: 0 }];
     updateBlock(b.id, { stickers: next });
@@ -7728,9 +7734,9 @@ function buildStickerRow(b, sticker, idx) {
 }
 
 function buildProgressDotsForm(m, b) {
-  m.appendChild(field('Number of dots', '', num(b.count, v => updateBlock(b.id, { count: Math.max(1, Math.min(10, v)) }), { min: 1, max: 10 })));
-  m.appendChild(field('Active dot (0-indexed)', 'Which dot is filled — represents the current step', num(b.active_index ?? 0, v => updateBlock(b.id, { active_index: Math.max(0, Math.min((b.count || 3) - 1, v)) }), { min: 0, max: 9 })));
-  m.appendChild(field('Active colour', '',
+  m.appendChild(field(T('Number of dots', '圆点数量'), '', num(b.count, v => updateBlock(b.id, { count: Math.max(1, Math.min(10, v)) }), { min: 1, max: 10 })));
+  m.appendChild(field(T('Active dot (0-indexed)', '当前圆点(从 0 起)'), T('Which dot is filled — represents the current step', '哪个圆点为实心 — 代表当前步骤'), num(b.active_index ?? 0, v => updateBlock(b.id, { active_index: Math.max(0, Math.min((b.count || 3) - 1, v)) }), { min: 0, max: 9 })));
+  m.appendChild(field(T('Active colour', '当前颜色'), '',
     sel(b.color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { color: v }))));
 }
 
@@ -7741,40 +7747,42 @@ function buildFlashStripForm(m, b) {
   banner.className = 'helper';
   banner.style.cssText = 'margin: -8px 0 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
   if (liveCount === 0 && upcoming === 0) {
-    banner.innerHTML = `<b>No flash sales scheduled.</b><br>Configure a flash sale in <a href="/retail-admin#flash" target="_blank" style="color: var(--text-1)">Mini App Backend → Flash sales</a>. Until at least one is active, this block will ${b.hide_when_empty ? 'be hidden' : 'show your empty-state message'} on the live mini app.`;
+    banner.innerHTML = B(`<b>No flash sales scheduled.</b><br>Configure a flash sale in <a href="/retail-admin#flash" target="_blank" style="color: var(--text-1)">Mini App Backend → Flash sales</a>. Until at least one is active, this block will ${b.hide_when_empty ? 'be hidden' : 'show your empty-state message'} on the live mini app.`,
+                         `<b>暂无限时秒杀。</b><br>请在 <a href="/retail-admin#flash" target="_blank" style="color: var(--text-1)">小程序后台 → 限时秒杀</a> 中配置。在至少有一个生效之前,本模块在线上小程序中将${b.hide_when_empty ? '被隐藏' : '显示你的空状态文案'}。`);
   } else {
-    banner.innerHTML = `<b>${liveCount}</b> active · <b>${upcoming}</b> upcoming flash sale${(liveCount + upcoming) === 1 ? '' : 's'}. The countdown binds to the soonest-ending active sale.`;
+    banner.innerHTML = B(`<b>${liveCount}</b> active · <b>${upcoming}</b> upcoming flash sale${(liveCount + upcoming) === 1 ? '' : 's'}. The countdown binds to the soonest-ending active sale.`,
+                         `<b>${liveCount}</b> 个进行中 · <b>${upcoming}</b> 个即将开始的限时秒杀。倒计时绑定到最快结束的进行中秒杀。`);
   }
   m.appendChild(banner);
 
   const view = b.view || 'strip';
-  m.appendChild(field('Layout', 'Strip = compact row with small clock and product cards. Hero = big centered countdown above the products. Banner = countdown + CTA only, no products (good for "starts soon" announcements).',
+  m.appendChild(field(T('Layout', '版式'), T('Strip = compact row with small clock and product cards. Hero = big centered countdown above the products. Banner = countdown + CTA only, no products (good for "starts soon" announcements).', '条带 = 紧凑单行,小号时钟配商品卡。主视觉 = 商品上方居中大号倒计时。横幅 = 仅倒计时 + 按钮,无商品(适合「即将开始」通告)。'),
     sel(view, [
-      { value: 'strip',  label: 'Strip — compact row' },
-      { value: 'hero',   label: 'Hero — big countdown + products' },
-      { value: 'banner', label: 'Banner — countdown only, no products' },
+      { value: 'strip',  label: T('Strip — compact row', '条带 — 紧凑单行') },
+      { value: 'hero',   label: T('Hero — big countdown + products', '主视觉 — 大号倒计时 + 商品') },
+      { value: 'banner', label: T('Banner — countdown only, no products', '横幅 — 仅倒计时,无商品') },
     ], v => updateBlock(b.id, { view: v }))));
 
-  m.appendChild(field('Kicker', '',
+  m.appendChild(field(T('Kicker', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field('Title', '',
+  m.appendChild(field(T('Title', '标题'), '',
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', '',
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
 
   if (view !== 'banner') {
-    m.appendChild(field('Max products shown', view === 'hero'
-        ? 'Hero view focuses on the countdown — keep this small (1–3) so the visual stays bold.'
-        : 'Caps how many flash-sale items render. The strip horizontally scrolls if there are more.',
+    m.appendChild(field(T('Max products shown', '最多显示商品数'), view === 'hero'
+        ? T('Hero view focuses on the countdown — keep this small (1–3) so the visual stays bold.', '主视觉模式聚焦倒计时 — 数量保持较小(1–3),让视觉更醒目。')
+        : T('Caps how many flash-sale items render. The strip horizontally scrolls if there are more.', '限制渲染多少件秒杀商品。超出则条带横向滚动。'),
       num(b.product_limit, v => updateBlock(b.id, { product_limit: Math.max(1, Math.min(8, v)) }), { min: 1, max: 8 })));
   }
 
   if (view === 'hero' || view === 'banner') {
-    m.appendChild(field('Button label', 'Shown under the big clock. Leave both blank to hide the button.',
+    m.appendChild(field(T('Button label', '按钮文字'), T('Shown under the big clock. Leave both blank to hide the button.', '显示在大号时钟下方。两者留空则隐藏按钮。'),
       txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-    m.appendChild(field('Button target', 'e.g. shop · product:12 · category:5',
+    m.appendChild(field(T('Button target', '按钮目标'), T('e.g. shop · product:12 · category:5', '例如 shop · product:12 · category:5'),
       txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'shop')));
   }
 
@@ -7783,53 +7791,53 @@ function buildFlashStripForm(m, b) {
   hideWrap.innerHTML = `
     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
       <input type="checkbox" id="fs-hide-empty" ${b.hide_when_empty ? 'checked' : ''}>
-      <span>Hide block when no flash sales are active</span>
+      <span>${B('Hide block when no flash sales are active', '无进行中秒杀时隐藏本模块')}</span>
     </label>
-    <div class="helper">If unchecked, the block keeps rendering its header and empty-state message between sales.</div>`;
+    <div class="helper">${B('If unchecked, the block keeps rendering its header and empty-state message between sales.', '若不勾选,在两场秒杀之间本模块仍会渲染其标题和空状态文案。')}</div>`;
   hideWrap.querySelector('input').addEventListener('change', e => {
     updateBlock(b.id, { hide_when_empty: e.target.checked });
   });
   m.appendChild(hideWrap);
 
-  m.appendChild(field('Empty-state text', "Shown when no flash sales are active and 'Hide block' is unchecked.",
+  m.appendChild(field(T('Empty-state text', '空状态文案'), T("Shown when no flash sales are active and 'Hide block' is unchecked.", '当无进行中秒杀且未勾选「隐藏本模块」时显示。'),
     txtPair(b.empty_text_en, b.empty_text_cn, ({ en, cn }) => updateBlockSilent(b.id, { empty_text_en: en, empty_text_cn: cn }))));
 }
 
 function buildCouponForm(m, b) {
-  m.appendChild(field('Kicker', '',
+  m.appendChild(field(T('Kicker', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field('Title', '',
+  m.appendChild(field(T('Title', '标题'), '',
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  m.appendChild(field('Subtitle', 'Optional — e.g. minimum spend, expiry date.',
+  m.appendChild(field(T('Subtitle', '副标题'), T('Optional — e.g. minimum spend, expiry date.', '可选 — 例如最低消费、到期日期。'),
     txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
-  m.appendChild(field('Discount label', 'The big number on the left — e.g. "¥50", "8折", "20%". Designer-controlled, not bound to a real coupon.',
+  m.appendChild(field(T('Discount label', '折扣标签'), T('The big number on the left — e.g. "¥50", "8折", "20%". Designer-controlled, not bound to a real coupon.', '左侧的大号数字 — 例如「¥50」「8折」「20%」。由设计师控制,不绑定真实优惠券。'),
     txtPair(b.discount_label_en, b.discount_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { discount_label_en: en, discount_label_cn: cn }))));
-  m.appendChild(field('Coupon code', 'Optional — shown as "CODE: NEWBIE50" with a tap-to-copy hint. Leave blank for public coupons that don\'t need a code.',
+  m.appendChild(field(T('Coupon code', '优惠券码'), T('Optional — shown as "CODE: NEWBIE50" with a tap-to-copy hint. Leave blank for public coupons that don\'t need a code.', '可选 — 显示为「CODE: NEWBIE50」并带点击复制提示。无需券码的公开优惠券请留空。'),
     txt(b.code, v => updateBlockSilent(b.id, { code: (v || '').toUpperCase() }), 'NEWBIE50')));
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', '',
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field('Button label', 'Leave both blank to hide the button.',
+  m.appendChild(field(T('Button label', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-  m.appendChild(field('Button target', 'e.g. coupons · shop · category:5',
+  m.appendChild(field(T('Button target', '按钮目标'), T('e.g. coupons · shop · category:5', '例如 coupons · shop · category:5'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'coupons')));
 }
 
 function buildPointsForm(m, b) {
-  m.appendChild(field('Kicker', '',
+  m.appendChild(field(T('Kicker', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field('Title', 'The main earn-rate or perk headline.',
+  m.appendChild(field(T('Title', '标题'), T('The main earn-rate or perk headline.', '主要的积分获取率或权益标题。'),
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  m.appendChild(field('Subtitle', 'Optional — e.g. how points get redeemed.',
+  m.appendChild(field(T('Subtitle', '副标题'), T('Optional — e.g. how points get redeemed.', '可选 — 例如积分如何兑换。'),
     txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', '',
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field('Button label', '',
+  m.appendChild(field(T('Button label', '按钮文字'), '',
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-  m.appendChild(field('Button target', 'e.g. me · membership',
+  m.appendChild(field(T('Button target', '按钮目标'), T('e.g. me · membership', '例如 me · membership'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'me')));
 }
 
@@ -7837,28 +7845,28 @@ function buildVotingForm(m, b) {
   const view = b.view || 'peek';
   const src  = b.data_source || 'auto_pull';
 
-  m.appendChild(field('Layout',
-    'Teaser — just kicker/title/CTA (smallest).  Peek — shows the live poll question.  Inline — full poll with vote buttons.  Past result — winner card from the latest closed poll.',
+  m.appendChild(field(T('Layout', '版式'),
+    T('Teaser — just kicker/title/CTA (smallest).  Peek — shows the live poll question.  Inline — full poll with vote buttons.  Past result — winner card from the latest closed poll.', '预告 — 仅小标题/标题/按钮(最小)。  预览 — 显示进行中的投票问题。  内嵌 — 带投票按钮的完整投票。  往期结果 — 最近一次已结束投票的获胜卡片。'),
     sel(view, [
-      { value: 'teaser',      label: 'Teaser — kicker + title + CTA' },
-      { value: 'peek',        label: 'Peek — show live poll question' },
-      { value: 'inline',      label: 'Inline — vote without leaving home' },
-      { value: 'past_result', label: 'Past result — winner of last closed poll' },
+      { value: 'teaser',      label: T('Teaser — kicker + title + CTA', '预告 — 小标题 + 标题 + 按钮') },
+      { value: 'peek',        label: T('Peek — show live poll question', '预览 — 显示进行中投票问题') },
+      { value: 'inline',      label: T('Inline — vote without leaving home', '内嵌 — 在首页直接投票') },
+      { value: 'past_result', label: T('Past result — winner of last closed poll', '往期结果 — 上一场投票的获胜者') },
     ], v => updateBlock(b.id, { view: v }))));
 
   // Data source applies to peek/inline/past_result; teaser ignores it.
   if (view !== 'teaser') {
-    m.appendChild(field('Data source',
-      'Auto-pull binds to whichever poll is currently featured (or pinned below). Static lets you author the copy by hand — no live poll content.',
+    m.appendChild(field(T('Data source', '数据来源'),
+      T('Auto-pull binds to whichever poll is currently featured (or pinned below). Static lets you author the copy by hand — no live poll content.', '自动拉取绑定当前精选(或下方固定)的投票。静态则让你手动撰写文案 — 无实时投票内容。'),
       sel(src, [
-        { value: 'auto_pull', label: 'Auto-pull — bind to live poll' },
-        { value: 'static',    label: 'Static — author copy by hand' },
+        { value: 'auto_pull', label: T('Auto-pull — bind to live poll', '自动拉取 — 绑定实时投票') },
+        { value: 'static',    label: T('Static — author copy by hand', '静态 — 手动撰写文案') },
       ], v => updateBlock(b.id, { data_source: v }))));
   }
 
   if (view !== 'teaser' && src === 'auto_pull') {
     // Pin a specific poll. Optional — blank = auto.
-    const pollOptions = [{ value: '', label: '— Auto (featured open / latest closed)' }];
+    const pollOptions = [{ value: '', label: T('— Auto (featured open / latest closed)', '— 自动(精选进行中 / 最近已结束)') }];
     if (Array.isArray(state.polls)) {
       state.polls.forEach(p => {
         const stat = p.status === 'open' ? '●' : (p.status === 'closed' ? '◯' : '◷');
@@ -7869,8 +7877,8 @@ function buildVotingForm(m, b) {
       });
     }
     const pollIdStr = b.poll_id != null ? String(b.poll_id) : '';
-    m.appendChild(field('Specific poll',
-      'Optional — pin to one poll. Leave on Auto so the block tracks whatever is currently featured.',
+    m.appendChild(field(T('Specific poll', '指定投票'),
+      T('Optional — pin to one poll. Leave on Auto so the block tracks whatever is currently featured.', '可选 — 固定到某一场投票。保持「自动」则模块跟随当前精选的投票。'),
       sel(pollIdStr, pollOptions, v => updateBlock(b.id, { poll_id: v ? parseInt(v, 10) : null }))));
 
     const hideRow = document.createElement('div');
@@ -7882,7 +7890,7 @@ function buildVotingForm(m, b) {
     hideBox.addEventListener('change', () => updateBlock(b.id, { hide_when_empty: hideBox.checked ? 1 : 0 }));
     const hideLbl = document.createElement('label');
     hideLbl.style.cssText = 'cursor:pointer;font-size:13px;font-weight:500;';
-    hideLbl.textContent = 'Hide block when no matching poll exists';
+    hideLbl.textContent = T('Hide block when no matching poll exists', '无匹配投票时隐藏本模块');
     hideLbl.addEventListener('click', () => { hideBox.checked = !hideBox.checked; hideBox.dispatchEvent(new Event('change')); });
     hideRow.appendChild(hideBox); hideRow.appendChild(hideLbl);
     m.appendChild(hideRow);
@@ -7897,7 +7905,7 @@ function buildVotingForm(m, b) {
       fbBox.addEventListener('change', () => updateBlock(b.id, { fallback_to_past: fbBox.checked ? 1 : 0 }));
       const fbLbl = document.createElement('label');
       fbLbl.style.cssText = 'cursor:pointer;font-size:13px;font-weight:500;';
-      fbLbl.textContent = 'If no open poll, fall back to winner card';
+      fbLbl.textContent = T('If no open poll, fall back to winner card', '若无进行中投票,则回退到获胜卡片');
       fbLbl.addEventListener('click', () => { fbBox.checked = !fbBox.checked; fbBox.dispatchEvent(new Event('change')); });
       fbRow.appendChild(fbBox); fbRow.appendChild(fbLbl);
       m.appendChild(fbRow);
@@ -7907,26 +7915,26 @@ function buildVotingForm(m, b) {
   // Copy fields — used by teaser always, and by other views in static mode.
   const usesStaticCopy = view === 'teaser' || src === 'static';
   if (usesStaticCopy) {
-    m.appendChild(field('Kicker', '',
+    m.appendChild(field(T('Kicker', '小标题'), '',
       txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-    m.appendChild(field('Title', '',
+    m.appendChild(field(T('Title', '标题'), '',
       txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-    m.appendChild(field('Subtitle', 'Optional supporting copy.',
+    m.appendChild(field(T('Subtitle', '副标题'), T('Optional supporting copy.', '可选的辅助文案。'),
       txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
   }
 
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', '',
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field('Accent colour', 'Used for the vote CTA + result fill.',
+  m.appendChild(field(T('Accent colour', '强调色'), T('Used for the vote CTA + result fill.', '用于投票按钮 + 结果填充。'),
     sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 
   // CTA only applies to teaser/peek/past_result (inline has its own vote button).
   if (view !== 'inline') {
-    m.appendChild(field('Button label', '',
+    m.appendChild(field(T('Button label', '按钮文字'), '',
       txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-    m.appendChild(field('Button target', 'Default "voting" opens the Your-say page. Polls themselves live in Mini App Backend → Voting.',
+    m.appendChild(field(T('Button target', '按钮目标'), T('Default "voting" opens the Your-say page. Polls themselves live in Mini App Backend → Voting.', '默认「voting」打开「你的心声」页。投票本身在小程序后台 → 投票中管理。'),
       txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'voting')));
   }
 }
@@ -7934,119 +7942,121 @@ function buildVotingForm(m, b) {
 function buildAffiliateForm(m, b) {
   const view = b.view || 'card';
 
-  m.appendChild(field('Layout',
-    'Card — full lime card with code pill + copy/share buttons (richest, takes most room).  Strip — one-line compact code + buttons.  Stat — big ¥earned hero; pulls the customer\'s real number once they have invites.  Receipt — paper aesthetic with dashed border + perforated edge.',
+  m.appendChild(field(T('Layout', '版式'),
+    T('Card — full lime card with code pill + copy/share buttons (richest, takes most room).  Strip — one-line compact code + buttons.  Stat — big ¥earned hero; pulls the customer\'s real number once they have invites.  Receipt — paper aesthetic with dashed border + perforated edge.', '卡片 — 完整的青柠卡片,带邀请码胶囊 + 复制/分享按钮(最丰富,占地最大)。  条带 — 单行紧凑的邀请码 + 按钮。  数据 — 大号「已赚 ¥」主视觉;顾客有邀请后拉取其真实数字。  收据 — 纸质风格,带虚线边框 + 锯齿边。'),
     sel(view, [
-      { value: 'card',    label: 'Card — full hero with code pill' },
-      { value: 'strip',   label: 'Strip — one-line compact' },
-      { value: 'stat',    label: 'Stat — big earned-¥ headline' },
-      { value: 'receipt', label: 'Receipt — paper / dashed aesthetic' },
+      { value: 'card',    label: T('Card — full hero with code pill', '卡片 — 完整主视觉,带邀请码胶囊') },
+      { value: 'strip',   label: T('Strip — one-line compact', '条带 — 单行紧凑') },
+      { value: 'stat',    label: T('Stat — big earned-¥ headline', '数据 — 大号已赚 ¥ 标题') },
+      { value: 'receipt', label: T('Receipt — paper / dashed aesthetic', '收据 — 纸质 / 虚线风格') },
     ], v => updateBlock(b.id, { view: v }))));
 
-  m.appendChild(field('Kicker', 'Small uppercase label above the title.',
+  m.appendChild(field(T('Kicker', '小标题'), T('Small uppercase label above the title.', '标题上方的小号大写标签。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
 
   // Title/subtitle only meaningful for card/receipt views — strip & stat
   // have their own slot for the headline (code in strip, ¥earned in stat).
   if (view === 'card' || view === 'receipt') {
-    m.appendChild(field('Title', 'Main headline. Default echoes the program reward.',
+    m.appendChild(field(T('Title', '标题'), T('Main headline. Default echoes the program reward.', '主标题。默认呼应计划奖励。'),
       txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
   }
   if (view === 'card') {
-    m.appendChild(field('Subtitle', 'Optional supporting copy under the title.',
+    m.appendChild(field(T('Subtitle', '副标题'), T('Optional supporting copy under the title.', '标题下方可选的辅助文案。'),
       txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
   }
 
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', '',
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
 
   // Stats footer applies to all views; controls whether the "¥X earned · N
   // invited" line shows up once the customer has any activity.
-  m.appendChild(field('Show stats',
-    'Shows "¥X earned · N invited" once the customer has any history. Hide for a cleaner block on fresh accounts.',
+  m.appendChild(field(T('Show stats', '显示统计'),
+    T('Shows "¥X earned · N invited" once the customer has any history. Hide for a cleaner block on fresh accounts.', '顾客有记录后显示「已赚 ¥X · 已邀 N 人」。新账号可隐藏以保持模块简洁。'),
     sel(b.show_stats === false ? '0' : '1', [
-      { value: '1', label: 'Show (¥earned · invited)' },
-      { value: '0', label: 'Hide — keep the card minimal' },
+      { value: '1', label: T('Show (¥earned · invited)', '显示(已赚 ¥ · 已邀)') },
+      { value: '0', label: T('Hide — keep the card minimal', '隐藏 — 保持卡片简洁') },
     ], v => updateBlock(b.id, { show_stats: v === '1' }))));
 
-  m.appendChild(field('Tap-anywhere target',
-    'Tapping the block opens this destination. Default "affiliate" opens the Refer-a-friend page. Program rules + reward ¥ are managed in Mini App Backend → Affiliate.',
+  m.appendChild(field(T('Tap-anywhere target', '整块点击目标'),
+    T('Tapping the block opens this destination. Default "affiliate" opens the Refer-a-friend page. Program rules + reward ¥ are managed in Mini App Backend → Affiliate.', '点击模块打开此目标。默认「affiliate」打开「邀请好友」页。计划规则 + 奖励 ¥ 在小程序后台 → 邀请好友中管理。'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'affiliate')));
 }
 
 function buildGreetingForm(m, b) {
   const view = b.view || 'card';
-  m.appendChild(field('Layout',
-    'Card = bordered editorial card. Banner = full-bleed colour band, big greeting. Inline = compact one-line with pts pill on the right. Split = greeting left, big pts wallet right.',
+  m.appendChild(field(T('Layout', '版式'),
+    T('Card = bordered editorial card. Banner = full-bleed colour band, big greeting. Inline = compact one-line with pts pill on the right. Split = greeting left, big pts wallet right.',
+      '卡片 = 带边框的编辑卡片。横幅 = 全幅色带、大号问候语。行内 = 紧凑单行,积分胶囊在右侧。分栏 = 问候语在左,大号积分钱包在右。'),
     sel(view, [
-      { value: 'card',   label: 'Card — bordered (default)' },
-      { value: 'banner', label: 'Banner — full-bleed, oversized greeting' },
-      { value: 'inline', label: 'Inline — one-line, pts pill on right' },
-      { value: 'split',  label: 'Split — greeting left, wallet right' },
+      { value: 'card',   label: T('Card — bordered (default)', '卡片 — 带边框(默认)') },
+      { value: 'banner', label: T('Banner — full-bleed, oversized greeting', '横幅 — 全幅、超大问候语') },
+      { value: 'inline', label: T('Inline — one-line, pts pill on right', '行内 — 单行,积分胶囊在右') },
+      { value: 'split',  label: T('Split — greeting left, wallet right', '分栏 — 问候语在左,钱包在右') },
     ], v => updateBlock(b.id, { view: v }))));
-  m.appendChild(field('Kicker', 'Tiny uppercase label above the greeting (e.g. "WELCOME BACK").',
+  m.appendChild(field(T('Kicker', '小标题'), T('Tiny uppercase label above the greeting (e.g. "WELCOME BACK").', '问候语上方的小号大写标签(例如「WELCOME BACK」)。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
 
   const note = document.createElement('div');
   note.className = 'helper';
   note.style.cssText = 'margin-top:18px;padding:10px 12px;background:#fff7e6;border-left:3px solid #f2ca6c;font-size:12px;line-height:1.5;';
-  note.innerHTML = `<b>Tone overrides (optional)</b> — leave blank to use defaults: <i>Good morning · Good afternoon · Good evening · Hi night-owl</i>. The customer's first name + points balance are appended automatically.`;
+  note.innerHTML = B(`<b>Tone overrides (optional)</b> — leave blank to use defaults: <i>Good morning · Good afternoon · Good evening · Hi night-owl</i>. The customer's first name + points balance are appended automatically.`,
+                     `<b>语气覆盖(可选)</b> — 留空则使用默认:<i>早上好 · 下午好 · 晚上好 · 夜深了</i>。系统会自动在后面加上顾客的名字 + 积分余额。`);
   m.appendChild(note);
 
-  m.appendChild(field('Morning override', '5am – 12pm',
+  m.appendChild(field(T('Morning override', '早晨问候覆盖'), T('5am – 12pm', '上午 5 点 – 中午 12 点'),
     txtPair(b.greet_morning_en, b.greet_morning_cn,
       ({ en, cn }) => updateBlockSilent(b.id, { greet_morning_en: en, greet_morning_cn: cn }),
       { en: 'Good morning', cn: '早上好' })));
-  m.appendChild(field('Afternoon override', '12pm – 5pm',
+  m.appendChild(field(T('Afternoon override', '下午问候覆盖'), T('12pm – 5pm', '中午 12 点 – 下午 5 点'),
     txtPair(b.greet_afternoon_en, b.greet_afternoon_cn,
       ({ en, cn }) => updateBlockSilent(b.id, { greet_afternoon_en: en, greet_afternoon_cn: cn }),
       { en: 'Good afternoon', cn: '下午好' })));
-  m.appendChild(field('Evening override', '5pm – 10pm',
+  m.appendChild(field(T('Evening override', '傍晚问候覆盖'), T('5pm – 10pm', '下午 5 点 – 晚上 10 点'),
     txtPair(b.greet_evening_en, b.greet_evening_cn,
       ({ en, cn }) => updateBlockSilent(b.id, { greet_evening_en: en, greet_evening_cn: cn }),
       { en: 'Good evening', cn: '晚上好' })));
-  m.appendChild(field('Night override', '10pm – 5am',
+  m.appendChild(field(T('Night override', '夜间问候覆盖'), T('10pm – 5am', '晚上 10 点 – 凌晨 5 点'),
     txtPair(b.greet_night_en, b.greet_night_cn,
       ({ en, cn }) => updateBlockSilent(b.id, { greet_night_en: en, greet_night_cn: cn }),
       { en: 'Hi night-owl', cn: '夜深了' })));
 
-  m.appendChild(field('Show points balance',
-    'Off hides the "★ 228 pts · 抵¥2.28" line. Keep on to make the points feel valuable.',
+  m.appendChild(field(T('Show points balance', '显示积分余额'),
+    T('Off hides the "★ 228 pts · 抵¥2.28" line. Keep on to make the points feel valuable.', '关闭则隐藏「★ 228 积分 · 抵¥2.28」一行。保持开启可让积分更有价值感。'),
     sel(b.show_points === false ? '0' : '1', [
-      { value: '1', label: 'Show pts + ¥-value line' },
-      { value: '0', label: 'Hide — name + greeting only' },
+      { value: '1', label: T('Show pts + ¥-value line', '显示积分 + ¥ 价值行') },
+      { value: '0', label: T('Hide — name + greeting only', '隐藏 — 仅名字 + 问候语') },
     ], v => updateBlock(b.id, { show_points: v === '1' }))));
-  m.appendChild(field('Time-of-day emoji', 'Prepend 🌅 ☀️ 🌙 🌟 to the greeting based on hour.',
+  m.appendChild(field(T('Time-of-day emoji', '时段表情'), T('Prepend 🌅 ☀️ 🌙 🌟 to the greeting based on hour.', '根据时段在问候语前加上 🌅 ☀️ 🌙 🌟。'),
     sel(b.show_tod_emoji || 'off', TOD_EMOJI_OPTIONS,
         v => updateBlock(b.id, { show_tod_emoji: v }))));
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', '',
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field('Accent (points line)', '',
+  m.appendChild(field(T('Accent (points line)', '强调色(积分行)'), '',
     sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
-  m.appendChild(field('CTA label', 'Optional. Leave blank to hide the link line.',
+  m.appendChild(field(T('CTA label', '按钮文字'), T('Optional. Leave blank to hide the link line.', '可选。留空则隐藏链接行。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-  m.appendChild(field('CTA target', 'e.g. wallet · me · membership',
+  m.appendChild(field(T('CTA target', '按钮目标'), T('e.g. wallet · me · membership', '例如 wallet · me · membership'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'wallet')));
 }
 
 function buildKitchenStatusForm(m, b) {
-  m.appendChild(field('Kicker', '',
+  m.appendChild(field(T('Kicker', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field('Title', 'Kitchen / store name customers see.',
+  m.appendChild(field(T('Title', '标题'), T('Kitchen / store name customers see.', '顾客看到的厨房 / 门店名称。'),
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  m.appendChild(field('Hours label', 'Display text only — e.g. "10:00 – 21:00" or "Mon–Sat · 10am – 9pm".',
+  m.appendChild(field(T('Hours label', '营业时间标签'), T('Display text only — e.g. "10:00 – 21:00" or "Mon–Sat · 10am – 9pm".', '仅显示文字 — 例如「10:00 – 21:00」或「周一至周六 · 上午 10 点 – 晚 9 点」。'),
     txtPair(b.hours_en, b.hours_cn, ({ en, cn }) => updateBlockSilent(b.id, { hours_en: en, hours_cn: cn }))));
 
   const hoursRow = document.createElement('div');
   hoursRow.className = 'field';
-  hoursRow.innerHTML = '<label>Open / close hour (24h)</label>';
+  hoursRow.innerHTML = `<label>${B('Open / close hour (24h)', '开门 / 关门时间(24 小时制)')}</label>`;
   const hoursHelp = document.createElement('div');
   hoursHelp.className = 'helper';
-  hoursHelp.textContent = 'Drives the open/closed dot. Closing past midnight is OK — set close to 1 / 2 / 3.';
+  hoursHelp.textContent = T('Drives the open/closed dot. Closing past midnight is OK — set close to 1 / 2 / 3.', '驱动营业/打烊状态点。跨午夜打烊也可以 — 关门时间设为 1 / 2 / 3。');
   const pair = document.createElement('div');
   pair.style.cssText = 'display:flex;gap:10px;';
   const openIn  = num(b.open_hour,  v => updateBlockSilent(b.id, { open_hour: v }),  { min: 0, max: 23, step: 1 });
@@ -8057,70 +8067,70 @@ function buildKitchenStatusForm(m, b) {
   hoursRow.appendChild(hoursHelp);
   m.appendChild(hoursRow);
 
-  m.appendChild(field('ETA (minutes)', 'Shown next to the open dot — e.g. "~25 min delivery". Set 0 to hide.',
+  m.appendChild(field(T('ETA (minutes)', '预计时间(分钟)'), T('Shown next to the open dot — e.g. "~25 min delivery". Set 0 to hide.', '显示在营业状态点旁 — 例如「约 25 分钟送达」。设为 0 则隐藏。'),
     num(b.eta_minutes, v => updateBlockSilent(b.id, { eta_minutes: v }), { min: 0, max: 240, step: 5 })));
-  m.appendChild(field('Address line', 'Optional — sits under the ETA in small caps.',
+  m.appendChild(field(T('Address line', '地址行'), T('Optional — sits under the ETA in small caps.', '可选 — 以小号大写显示在预计时间下方。'),
     txtPair(b.address_en, b.address_cn, ({ en, cn }) => updateBlockSilent(b.id, { address_en: en, address_cn: cn }))));
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', '',
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field('Open dot colour', '',
+  m.appendChild(field(T('Open dot colour', '营业状态点颜色'), '',
     sel(b.open_color || 'pea-sprout', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { open_color: v }))));
-  m.appendChild(field('Closed dot colour', '',
+  m.appendChild(field(T('Closed dot colour', '打烊状态点颜色'), '',
     sel(b.closed_color || 'berry-punch', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { closed_color: v }))));
-  m.appendChild(field('CTA label', '',
+  m.appendChild(field(T('CTA label', '按钮文字'), '',
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-  m.appendChild(field('CTA target', 'e.g. shop · about · product:5',
+  m.appendChild(field(T('CTA target', '按钮目标'), T('e.g. shop · about · product:5', '例如 shop · about · product:5'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'shop')));
 }
 
 function buildRecipeStoryForm(m, b) {
-  m.appendChild(field('Layout',
-    'Top = full-width image above the copy (current editorial look). Side = image on the left, copy on the right (more compact).',
+  m.appendChild(field(T('Layout', '版式'),
+    T('Top = full-width image above the copy (current editorial look). Side = image on the left, copy on the right (more compact).', '顶部 = 全宽图片在文案上方(当前编辑风格)。侧边 = 图片在左,文案在右(更紧凑)。'),
     sel(b.image_view || 'top', [
-      { value: 'top',  label: 'Top — image fills, body below' },
-      { value: 'side', label: 'Side — image left, body right' },
+      { value: 'top',  label: T('Top — image fills, body below', '顶部 — 图片铺满,正文在下') },
+      { value: 'side', label: T('Side — image left, body right', '侧边 — 图片在左,正文在右') },
     ], v => updateBlock(b.id, { image_view: v }))));
 
-  m.appendChild(field('Image', 'The hero photo. Tall photos can dominate the block — pick a fixed ratio below to crop.',
+  m.appendChild(field(T('Image', '图片'), T('The hero photo. Tall photos can dominate the block — pick a fixed ratio below to crop.', '主视觉照片。竖长照片可能占据整个模块 — 在下方选择固定比例以裁剪。'),
     imgPicker(b.image_url, ({ url, aspect }) => updateBlock(b.id, { image_url: url, image_aspect: aspect }))));
 
-  m.appendChild(field('Image ratio',
-    'Auto = natural aspect of the photo (tall portraits will dominate). Fixed ratio = crop the photo to that shape so every story has identical visual weight.',
+  m.appendChild(field(T('Image ratio', '图片比例'),
+    T('Auto = natural aspect of the photo (tall portraits will dominate). Fixed ratio = crop the photo to that shape so every story has identical visual weight.', '自动 = 照片原始比例(竖图会占主导)。固定比例 = 将照片裁剪为该形状,使每篇故事视觉权重一致。'),
     sel(b.image_ratio || 'auto', [
-      { value: 'auto', label: 'Auto — natural aspect' },
-      { value: '16:9', label: '16:9 — landscape banner' },
-      { value: '4:3',  label: '4:3 — classic editorial' },
-      { value: '1:1',  label: '1:1 — square' },
-      { value: '3:4',  label: '3:4 — portrait card' },
-      { value: '21:9', label: '21:9 — cinematic strip' },
+      { value: 'auto', label: T('Auto — natural aspect', '自动 — 原始比例') },
+      { value: '16:9', label: T('16:9 — landscape banner', '16:9 — 横向横幅') },
+      { value: '4:3',  label: T('4:3 — classic editorial', '4:3 — 经典编辑') },
+      { value: '1:1',  label: T('1:1 — square', '1:1 — 正方形') },
+      { value: '3:4',  label: T('3:4 — portrait card', '3:4 — 竖向卡片') },
+      { value: '21:9', label: T('21:9 — cinematic strip', '21:9 — 电影宽幅') },
     ], v => updateBlock(b.id, { image_ratio: v }))));
 
-  m.appendChild(field('Crop anchor',
-    'When the photo doesn\'t match the chosen ratio, this picks which part stays in frame after the crop. Only applies when ratio is not Auto.',
+  m.appendChild(field(T('Crop anchor', '裁剪锚点'),
+    T('When the photo doesn\'t match the chosen ratio, this picks which part stays in frame after the crop. Only applies when ratio is not Auto.', '当照片与所选比例不符时,决定裁剪后保留哪一部分。仅在比例不为「自动」时生效。'),
     sel(b.image_position || 'center', [
-      { value: 'center', label: 'Center' },
-      { value: 'top',    label: 'Top — keep the upper part' },
-      { value: 'bottom', label: 'Bottom — keep the lower part' },
+      { value: 'center', label: T('Center', '居中') },
+      { value: 'top',    label: T('Top — keep the upper part', '顶部 — 保留上半部分') },
+      { value: 'bottom', label: T('Bottom — keep the lower part', '底部 — 保留下半部分') },
     ], v => updateBlock(b.id, { image_position: v }))));
 
-  m.appendChild(field('Kicker', '',
+  m.appendChild(field(T('Kicker', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field('Headline', 'Big Bear Serif headline — the story title.',
+  m.appendChild(field(T('Headline', '标题'), T('Big Bear Serif headline — the story title.', '大号 Bear Serif 标题 — 故事标题。'),
     txtPair(b.headline_en, b.headline_cn, ({ en, cn }) => updateBlockSilent(b.id, { headline_en: en, headline_cn: cn }))));
-  m.appendChild(field('Byline', 'Optional — e.g. "by Roots Kitchen", "Chef Sam".',
+  m.appendChild(field(T('Byline', '署名'), T('Optional — e.g. "by Roots Kitchen", "Chef Sam".', '可选 — 例如「by Roots Kitchen」「Chef Sam」。'),
     txtPair(b.byline_en, b.byline_cn, ({ en, cn }) => updateBlockSilent(b.id, { byline_en: en, byline_cn: cn }))));
-  m.appendChild(field('Read-time (minutes)', 'Optional — shows in the byline as "3 min". 0 to hide.',
+  m.appendChild(field(T('Read-time (minutes)', '阅读时长(分钟)'), T('Optional — shows in the byline as "3 min". 0 to hide.', '可选 — 在署名处显示为「3 min」。设为 0 则隐藏。'),
     num(b.read_time_minutes, v => updateBlockSilent(b.id, { read_time_minutes: v }), { min: 0, max: 60, step: 1 })));
 
   // Long-form body — bilingual textareas. Paragraphs split on blank lines.
   const bodyRow = document.createElement('div');
   bodyRow.className = 'field';
-  bodyRow.innerHTML = '<label>Body</label>';
+  bodyRow.innerHTML = `<label>${B('Body', '正文')}</label>`;
   const bodyHelp = document.createElement('div');
   bodyHelp.className = 'helper';
-  bodyHelp.textContent = 'Long-form text. Separate paragraphs with a blank line. Authored in both languages.';
+  bodyHelp.textContent = T('Long-form text. Separate paragraphs with a blank line. Authored in both languages.', '长篇文字。段落之间空一行分隔。需撰写两种语言。');
   const makeTA = (val, lng, ph) => {
     const row = document.createElement('div');
     row.className = 'txt-pair-row';
@@ -8146,20 +8156,20 @@ function buildRecipeStoryForm(m, b) {
   bodyRow.appendChild(bodyHelp);
   m.appendChild(bodyRow);
 
-  m.appendChild(field('Linked product (optional)',
-    'Surfaces a tappable product card at the bottom of the story.',
+  m.appendChild(field(T('Linked product (optional)', '关联商品(可选)'),
+    T('Surfaces a tappable product card at the bottom of the story.', '在故事底部显示一张可点击的商品卡。'),
     productPicker({ multi: false, value: b.product_id, onChange: v => updateBlock(b.id, { product_id: v }) })));
 
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', '',
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field('Card corner radius', '',
+  m.appendChild(field(T('Card corner radius', '卡片圆角'), '',
     sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
         v => updateBlock(b.id, { corner_radius: v }))));
-  m.appendChild(field('CTA label', 'Optional — e.g. "READ MORE". Leave blank to hide.',
+  m.appendChild(field(T('CTA label', '按钮文字'), T('Optional — e.g. "READ MORE". Leave blank to hide.', '可选 — 例如「READ MORE」。留空则隐藏。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-  m.appendChild(field('CTA target', 'e.g. product:5 · category:8 · promotions',
+  m.appendChild(field(T('CTA target', '按钮目标'), T('e.g. product:5 · category:8 · promotions', '例如 product:5 · category:8 · promotions'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }))));
 }
 
@@ -8211,20 +8221,20 @@ function syncBundleFlatPatch(patch, currentVariants) {
 
 function buildBundleForm(m, b) {
   // Shared header — these apply to every variant.
-  m.appendChild(field('Kicker (shared)',
-    'Sits above the variant pills — used as a section eyebrow.',
+  m.appendChild(field(T('Kicker (shared)', '小标题(共用)'),
+    T('Sits above the variant pills — used as a section eyebrow.', '位于变体胶囊上方 — 用作区块小标题。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
 
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', '',
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field('Button / pill colour', '',
+  m.appendChild(field(T('Button / pill colour', '按钮 / 胶囊颜色'), '',
     sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
-  m.appendChild(field('Card corner radius', '',
+  m.appendChild(field(T('Card corner radius', '卡片圆角'), '',
     sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
         v => updateBlock(b.id, { corner_radius: v }))));
-  m.appendChild(field('Entrance animation', 'How the bundle enters on first paint.',
+  m.appendChild(field(T('Entrance animation', '入场动画'), T('How the bundle enters on first paint.', '套装首次渲染时的入场方式。'),
     sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS,
         v => updateBlock(b.id, { entrance_anim: v }))));
 
@@ -8273,13 +8283,13 @@ function buildBundleForm(m, b) {
   const listWrap = document.createElement('div');
   listWrap.className = 'field';
   const lbl = document.createElement('label');
-  lbl.textContent = `Bundle variants (${variants.length})`;
+  lbl.textContent = T(`Bundle variants (${variants.length})`, `套装变体(${variants.length})`);
   listWrap.appendChild(lbl);
 
   const help = document.createElement('div');
   help.className = 'helper';
   help.style.marginTop = '4px';
-  help.textContent = 'Each variant is a swappable bundle in the same brick. Customers tap the pill at the top to switch. Mark one as "Recommended" — it loads first and gets a ★ badge.';
+  help.textContent = T('Each variant is a swappable bundle in the same brick. Customers tap the pill at the top to switch. Mark one as "Recommended" — it loads first and gets a ★ badge.', '每个变体都是同一模块内可切换的套装。顾客点击顶部胶囊切换。将其中一个标记为「推荐」 — 它会优先加载并显示 ★ 角标。');
   listWrap.appendChild(help);
 
   variants.forEach((v, idx) => {
@@ -8288,12 +8298,12 @@ function buildBundleForm(m, b) {
 
     const head = document.createElement('div');
     head.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 8px;';
-    head.innerHTML = `<div style="font: 700 10px var(--bf-toni); letter-spacing: .12em; color: var(--text-2)">VARIANT ${idx + 1}${v.recommended ? ' · ★ RECOMMENDED' : ''}</div>`;
+    head.innerHTML = `<div style="font: 700 10px var(--bf-toni); letter-spacing: .12em; color: var(--text-2)">${B(`VARIANT ${idx + 1}${v.recommended ? ' · ★ RECOMMENDED' : ''}`, `变体 ${idx + 1}${v.recommended ? ' · ★ 推荐' : ''}`)}</div>`;
     if (variants.length > 1) {
       const rm = document.createElement('button');
       rm.innerHTML = ICONS.x;
       rm.style.cssText = 'background: none; border: 0; color: var(--text-2); cursor: pointer; padding: 2px; display: flex;';
-      rm.title = 'Remove this variant';
+      rm.title = T('Remove this variant', '删除此变体');
       rm.addEventListener('click', () => removeVariant(idx));
       head.appendChild(rm);
     }
@@ -8310,27 +8320,27 @@ function buildBundleForm(m, b) {
     recInput.checked = !!v.recommended;
     recInput.addEventListener('change', () => { if (recInput.checked) setRecommended(idx); });
     recLbl.appendChild(recInput);
-    recLbl.appendChild(document.createTextNode('★ Mark as recommended (loads first, badge shown)'));
+    recLbl.appendChild(document.createTextNode(T('★ Mark as recommended (loads first, badge shown)', '★ 标记为推荐(优先加载,显示角标)')));
     recWrap.appendChild(recLbl);
     card.appendChild(recWrap);
 
-    card.appendChild(field('Pill label',
-      'Short — shows on the swap tab. e.g. "Starter", "Family", "Power".',
+    card.appendChild(field(T('Pill label', '胶囊标签'),
+      T('Short — shows on the swap tab. e.g. "Starter", "Family", "Power".', '简短 — 显示在切换标签上。例如「Starter」「Family」「Power」。'),
       txtPair(v.label_en, v.label_cn, ({ en, cn }) => updateVariant(idx, { label_en: en, label_cn: cn }))));
-    card.appendChild(field('Title', '',
+    card.appendChild(field(T('Title', '标题'), '',
       txtPair(v.title_en, v.title_cn, ({ en, cn }) => updateVariant(idx, { title_en: en, title_cn: cn }))));
-    card.appendChild(field('Subtitle', 'Optional supporting line.',
+    card.appendChild(field(T('Subtitle', '副标题'), T('Optional supporting line.', '可选的辅助文案。'),
       txtPair(v.subtitle_en, v.subtitle_cn, ({ en, cn }) => updateVariant(idx, { subtitle_en: en, subtitle_cn: cn }))));
-    card.appendChild(field('Products in this variant', 'Pick 2–5. Tap order is preserved.',
+    card.appendChild(field(T('Products in this variant', '此变体的商品'), T('Pick 2–5. Tap order is preserved.', '挑选 2–5 件。保留点击顺序。'),
       productPicker({ multi: true, value: v.product_ids, onChange: val => updateVariant(idx, { product_ids: val }) })));
-    card.appendChild(field('Bundle price (¥)',
-      'Optional — when below the sum, shows a strikethrough + "SAVE ¥X" badge. Items still add at their real prices; pair with the voucher field below to actually discount checkout.',
+    card.appendChild(field(T('Bundle price (¥)', '套装价格(¥)'),
+      T('Optional — when below the sum, shows a strikethrough + "SAVE ¥X" badge. Items still add at their real prices; pair with the voucher field below to actually discount checkout.', '可选 — 低于合计时显示划线价 + 「SAVE ¥X」角标。商品仍按真实价格加入;搭配下方的优惠券字段才能真正在结算时减价。'),
       num(v.bundle_price, val => updateVariant(idx, { bundle_price: val }), { min: 0, step: 0.01 })));
-    card.appendChild(field('Auto-applied voucher code',
-      'Optional — staged at checkout when this variant is added. Must match a real voucher.',
+    card.appendChild(field(T('Auto-applied voucher code', '自动应用的优惠券码'),
+      T('Optional — staged at checkout when this variant is added. Must match a real voucher.', '可选 — 加入此变体时在结算页预置。必须匹配真实优惠券。'),
       txt(v.auto_voucher_code, val => updateVariant(idx, { auto_voucher_code: (val || '').toUpperCase() }), 'BUNDLE10')));
-    card.appendChild(field('Button label (override)',
-      'Leave blank for the auto-label "ADD BUNDLE · N ITEMS".',
+    card.appendChild(field(T('Button label (override)', '按钮文字(覆盖)'),
+      T('Leave blank for the auto-label "ADD BUNDLE · N ITEMS".', '留空则使用自动标签「ADD BUNDLE · N ITEMS」。'),
       txtPair(v.cta_label_en, v.cta_label_cn, ({ en, cn }) => updateVariant(idx, { cta_label_en: en, cta_label_cn: cn }))));
 
     listWrap.appendChild(card);
@@ -8339,7 +8349,7 @@ function buildBundleForm(m, b) {
   const addBtn = document.createElement('button');
   addBtn.className = 'btn btn-ghost';
   addBtn.style.cssText = 'margin-top: 10px; width: 100%;';
-  addBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add bundle variant`;
+  addBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> ${T('Add bundle variant', '添加套装变体')}`;
   addBtn.addEventListener('click', () => addVariant());
   listWrap.appendChild(addBtn);
 
@@ -8367,18 +8377,18 @@ function getReviews(b) {
 
 function buildReviewForm(m, b) {
   const view = b.view || 'card';
-  m.appendChild(field('Layout',
-    'Card = single testimonial centered. Carousel = swipe through multiple reviews (add entries below).',
+  m.appendChild(field(T('Layout', '版式'),
+    T('Card = single testimonial centered. Carousel = swipe through multiple reviews (add entries below).', '卡片 = 居中单条评价。轮播 = 滑动浏览多条评价(在下方添加条目)。'),
     sel(view, [
-      { value: 'card',     label: 'Card — single testimonial' },
-      { value: 'carousel', label: 'Carousel — swipe through several' },
+      { value: 'card',     label: T('Card — single testimonial', '卡片 — 单条评价') },
+      { value: 'carousel', label: T('Carousel — swipe through several', '轮播 — 滑动浏览多条') },
     ], v => updateBlock(b.id, { view: v }))));
 
-  m.appendChild(field('Kicker', '',
+  m.appendChild(field(T('Kicker', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', '',
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
 
   // Reviews list — each entry editable; carousel shows all, card shows only the first.
@@ -8387,8 +8397,8 @@ function buildReviewForm(m, b) {
   listWrap.className = 'field';
   const lbl = document.createElement('label');
   lbl.textContent = view === 'carousel'
-    ? `Reviews (${reviews.length})`
-    : `Review ${reviews.length > 1 ? '(card view only shows the first)' : ''}`;
+    ? T(`Reviews (${reviews.length})`, `评价(${reviews.length})`)
+    : T(`Review ${reviews.length > 1 ? '(card view only shows the first)' : ''}`, `评价 ${reviews.length > 1 ? '(卡片模式仅显示第一条)' : ''}`);
   listWrap.appendChild(lbl);
 
   function updateReview(idx, patch) {
@@ -8417,34 +8427,34 @@ function buildReviewForm(m, b) {
     card.style.cssText = 'background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; padding: 10px 12px; margin-top: 8px; position: relative;';
     const head = document.createElement('div');
     head.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;';
-    head.innerHTML = `<div style="font: 700 10px var(--bf-toni); letter-spacing: .12em; color: var(--text-2)">REVIEW ${idx + 1}</div>`;
+    head.innerHTML = `<div style="font: 700 10px var(--bf-toni); letter-spacing: .12em; color: var(--text-2)">${B(`REVIEW ${idx + 1}`, `评价 ${idx + 1}`)}</div>`;
     if (reviews.length > 1) {
       const rm = document.createElement('button');
       rm.innerHTML = ICONS.x;
       rm.style.cssText = 'background: none; border: 0; color: var(--text-2); cursor: pointer; padding: 2px; display: flex;';
-      rm.title = 'Remove this review';
+      rm.title = T('Remove this review', '删除此评价');
       rm.addEventListener('click', () => removeReview(idx));
       head.appendChild(rm);
     }
     card.appendChild(head);
 
     // Rating
-    const ratingField = field('Stars (1–5)', '', num(r.rating, v =>
+    const ratingField = field(T('Stars (1–5)', '星级(1–5)'), '', num(r.rating, v =>
       updateReview(idx, { rating: Math.max(1, Math.min(5, parseInt(v, 10) || 5)) }), { min: 1, max: 5 }));
     ratingField.style.marginBottom = '8px';
     card.appendChild(ratingField);
 
     // Avatar (image picker)
-    const avatarField = field('Avatar image', 'Optional — round thumbnail next to the byline.',
+    const avatarField = field(T('Avatar image', '头像图片'), T('Optional — round thumbnail next to the byline.', '可选 — 署名旁的圆形缩略图。'),
       imgPicker(r.avatar_url, ({ url }) => updateReview(idx, { avatar_url: url })));
     avatarField.style.marginBottom = '8px';
     card.appendChild(avatarField);
 
-    card.appendChild(field('Quote', '',
+    card.appendChild(field(T('Quote', '评价内容'), '',
       txtPair(r.quote_en, r.quote_cn, ({ en, cn }) => updateReview(idx, { quote_en: en, quote_cn: cn }))));
-    card.appendChild(field('Author name', '',
+    card.appendChild(field(T('Author name', '作者姓名'), '',
       txt(r.author_name, v => updateReview(idx, { author_name: v }), 'Linda')));
-    card.appendChild(field('Author subline', 'Optional — e.g. tier or location.',
+    card.appendChild(field(T('Author subline', '作者副行'), T('Optional — e.g. tier or location.', '可选 — 例如会员等级或地点。'),
       txtPair(r.author_subline_en, r.author_subline_cn, ({ en, cn }) =>
         updateReview(idx, { author_subline_en: en, author_subline_cn: cn }))));
     listWrap.appendChild(card);
@@ -8453,7 +8463,7 @@ function buildReviewForm(m, b) {
   const addBtn = document.createElement('button');
   addBtn.className = 'btn btn-ghost';
   addBtn.style.cssText = 'margin-top: 10px; width: 100%;';
-  addBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add review`;
+  addBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> ${T('Add review', '添加评价')}`;
   addBtn.addEventListener('click', () => addReview());
   listWrap.appendChild(addBtn);
   m.appendChild(listWrap);
@@ -8468,15 +8478,15 @@ function buildStoreInfoForm(m, b) {
     b.stores = seed;
   }
 
-  m.appendChild(field('Kicker', '',
+  m.appendChild(field(T('Kicker', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', '',
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field('Open dot colour', '',
+  m.appendChild(field(T('Open dot colour', '营业状态点颜色'), '',
     sel(b.open_color || 'pea-sprout', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { open_color: v }))));
-  m.appendChild(field('Closed dot colour', '',
+  m.appendChild(field(T('Closed dot colour', '打烊状态点颜色'), '',
     sel(b.closed_color || 'berry-punch', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { closed_color: v }))));
 
   // ── Stores repeater ────────────────────────────────────────────────
@@ -8485,7 +8495,7 @@ function buildStoreInfoForm(m, b) {
   listWrap.innerHTML = `<label>${B('Stores', '门店')}</label>`;
   const helper = document.createElement('div');
   helper.className = 'helper';
-  helper.textContent = 'Add one card per location. Open / close hour drives the live status dot; ETA shows only while open.';
+  helper.textContent = T('Add one card per location. Open / close hour drives the live status dot; ETA shows only while open.', '每个门店添加一张卡片。开门 / 关门时间驱动实时状态点;预计时间仅在营业时显示。');
   listWrap.appendChild(helper);
 
   const cardsHost = document.createElement('div');
@@ -8505,10 +8515,10 @@ function buildStoreInfoForm(m, b) {
 
       const head = document.createElement('div');
       head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;';
-      head.innerHTML = `<b style="font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);">Store ${idx + 1}</b>`;
+      head.innerHTML = `<b style="font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);">${B(`Store ${idx + 1}`, `门店 ${idx + 1}`)}</b>`;
       const rm = document.createElement('button');
       rm.type = 'button'; rm.className = 'btn';
-      rm.textContent = 'Remove';
+      rm.textContent = T('Remove', '删除');
       rm.onclick = () => {
         const next = b.stores.slice();
         next.splice(idx, 1);
@@ -8526,20 +8536,20 @@ function buildStoreInfoForm(m, b) {
       };
       const setField = (key, val) => setFields({ [key]: val });
 
-      card.appendChild(field('Store name', '',
+      card.appendChild(field(T('Store name', '门店名称'), '',
         txtPair(s.name_en, s.name_cn, ({ en, cn }) => setFields({ name_en: en, name_cn: cn }))));
-      card.appendChild(field('Address', '',
+      card.appendChild(field(T('Address', '地址'), '',
         txtPair(s.address_en, s.address_cn, ({ en, cn }) => setFields({ address_en: en, address_cn: cn }))));
-      card.appendChild(field('Hours label', 'Display text — e.g. "10:00 – 21:00" or "Mon–Sat · 10am–9pm".',
+      card.appendChild(field(T('Hours label', '营业时间标签'), T('Display text — e.g. "10:00 – 21:00" or "Mon–Sat · 10am–9pm".', '显示文字 — 例如「10:00 – 21:00」或「周一至周六 · 上午 10 点 – 晚 9 点」。'),
         txtPair(s.hours_en, s.hours_cn, ({ en, cn }) => setFields({ hours_en: en, hours_cn: cn }))));
 
       // Open / close hour pair
       const hoursRow = document.createElement('div');
       hoursRow.className = 'field';
-      hoursRow.innerHTML = '<label>Open / close hour (24h)</label>';
+      hoursRow.innerHTML = `<label>${B('Open / close hour (24h)', '开门 / 关门时间(24 小时制)')}</label>`;
       const hoursHelp = document.createElement('div');
       hoursHelp.className = 'helper';
-      hoursHelp.textContent = 'Drives the live open/closed dot. Leave both blank to hide the dot. Closing past midnight is OK — set close to 1 / 2 / 3.';
+      hoursHelp.textContent = T('Drives the live open/closed dot. Leave both blank to hide the dot. Closing past midnight is OK — set close to 1 / 2 / 3.', '驱动实时营业/打烊状态点。两者留空则隐藏状态点。跨午夜打烊也可以 — 关门时间设为 1 / 2 / 3。');
       const pair = document.createElement('div');
       pair.style.cssText = 'display:flex;gap:10px;';
       const openIn  = num(s.open_hour,  v => setField('open_hour',  v), { min: 0, max: 23, step: 1 });
@@ -8550,13 +8560,13 @@ function buildStoreInfoForm(m, b) {
       hoursRow.appendChild(hoursHelp);
       card.appendChild(hoursRow);
 
-      card.appendChild(field('ETA (minutes)', 'Shown next to the open dot while open — e.g. "~25 min delivery". Set 0 to hide.',
+      card.appendChild(field(T('ETA (minutes)', '预计时间(分钟)'), T('Shown next to the open dot while open — e.g. "~25 min delivery". Set 0 to hide.', '营业时显示在状态点旁 — 例如「约 25 分钟送达」。设为 0 则隐藏。'),
         num(s.eta_minutes, v => setField('eta_minutes', v), { min: 0, max: 240, step: 5 })));
-      card.appendChild(field('Phone', 'Optional — tap-to-call when set.',
+      card.appendChild(field(T('Phone', '电话'), T('Optional — tap-to-call when set.', '可选 — 设置后可点击拨打。'),
         txt(s.phone, v => setField('phone', v), '020-1234-5678')));
-      card.appendChild(field('Button label', 'Leave both blank to hide the button.',
+      card.appendChild(field(T('Button label', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
         txtPair(s.cta_label_en, s.cta_label_cn, ({ en, cn }) => setFields({ cta_label_en: en, cta_label_cn: cn }))));
-      card.appendChild(field('Button target', 'e.g. about · category:5 · product:7',
+      card.appendChild(field(T('Button target', '按钮目标'), T('e.g. about · category:5 · product:7', '例如 about · category:5 · product:7'),
         txt(s.cta_target, v => setField('cta_target', v), 'about')));
 
       cardsHost.appendChild(card);
@@ -8587,60 +8597,60 @@ function buildStoreInfoForm(m, b) {
 }
 
 function buildWecomContactForm(m, b) {
-  m.appendChild(field('Layout',
-    'Card — vertical, big button + QR. Strip — compact horizontal, smaller QR on the right.',
+  m.appendChild(field(T('Layout', '版式'),
+    T('Card — vertical, big button + QR. Strip — compact horizontal, smaller QR on the right.', '卡片 — 纵向,大按钮 + 二维码。条带 — 紧凑横向,二维码较小置于右侧。'),
     sel(b.view || 'card', [
-      { value: 'card',  label: 'Card — full, centred QR' },
-      { value: 'strip', label: 'Strip — compact, side QR' },
+      { value: 'card',  label: T('Card — full, centred QR', '卡片 — 完整、居中二维码') },
+      { value: 'strip', label: T('Strip — compact, side QR', '条带 — 紧凑、侧边二维码') },
     ], v => updateBlock(b.id, { view: v }))));
 
-  m.appendChild(field('Kicker', 'Tiny uppercase label above the title.',
+  m.appendChild(field(T('Kicker', '小标题'), T('Tiny uppercase label above the title.', '标题上方的小号大写标签。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field('Title', '',
+  m.appendChild(field(T('Title', '标题'), '',
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  m.appendChild(field('Subtitle', 'One-line pitch — why add us.',
+  m.appendChild(field(T('Subtitle', '副标题'), T('One-line pitch — why add us.', '一行话术 — 为什么添加我们。'),
     txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
 
-  m.appendChild(field('Chat button',
-    'Three modes (priority order): (1) if you upload a QR below, the button opens the QR full-screen so the customer can long-press → 添加朋友. (2) Else if you paste a WeCom 微信客服 URL below, the button calls wx.openCustomerServiceChat and lands the customer in your WeCom CSR session. (3) Else the button falls back to <button open-type="contact"> — routes to whichever CSR is bound in 小程序管理后台 → 设置 → 客服.',
+  m.appendChild(field(T('Chat button', '客服按钮'),
+    T('Three modes (priority order): (1) if you upload a QR below, the button opens the QR full-screen so the customer can long-press → 添加朋友. (2) Else if you paste a WeCom 微信客服 URL below, the button calls wx.openCustomerServiceChat and lands the customer in your WeCom CSR session. (3) Else the button falls back to <button open-type="contact"> — routes to whichever CSR is bound in 小程序管理后台 → 设置 → 客服.', '三种模式(优先级顺序):(1)若在下方上传二维码,按钮会全屏打开二维码,顾客可长按 → 添加朋友。(2)否则若在下方粘贴企业微信「微信客服」链接,按钮调用 wx.openCustomerServiceChat,把顾客带入你的企微客服会话。(3)否则按钮回退到 <button open-type="contact"> — 路由到小程序管理后台 → 设置 → 客服中绑定的客服。'),
     sel(b.show_chat_button === false ? '0' : '1', [
-      { value: '1', label: 'Show — adapts to what you configure below' },
-      { value: '0', label: 'Hide' },
+      { value: '1', label: T('Show — adapts to what you configure below', '显示 — 按下方配置自动适配') },
+      { value: '0', label: T('Hide', '隐藏') },
     ], v => updateBlock(b.id, { show_chat_button: v === '1' }))));
 
-  m.appendChild(field('Chat button label', '',
+  m.appendChild(field(T('Chat button label', '客服按钮文字'), '',
     txtPair(b.button_label_en, b.button_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { button_label_en: en, button_label_cn: cn }), { en: 'Chat with us', cn: '联系客服' })));
 
-  m.appendChild(field('WeCom 微信客服 URL',
-    'Paste a 微信客服 接入链接 from 企业微信管理后台 → 微信客服 → 创建/选择客服账号 → 接入网页/小程序 → 复制接入链接. Looks like "https://work.weixin.qq.com/kfid/kfc12345abc". When set (and no QR), the chat button routes to WeCom — not the OA\'s 公众号客服.',
+  m.appendChild(field(T('WeCom 微信客服 URL', '企业微信「微信客服」链接'),
+    T('Paste a 微信客服 接入链接 from 企业微信管理后台 → 微信客服 → 创建/选择客服账号 → 接入网页/小程序 → 复制接入链接. Looks like "https://work.weixin.qq.com/kfid/kfc12345abc". When set (and no QR), the chat button routes to WeCom — not the OA\'s 公众号客服.', '从企业微信管理后台 → 微信客服 → 创建/选择客服账号 → 接入网页/小程序 → 复制接入链接,粘贴该「微信客服」接入链接。形如「https://work.weixin.qq.com/kfid/kfc12345abc」。设置后(且无二维码时),客服按钮将路由到企业微信 — 而非公众号客服。'),
     txt(b.wecom_kf_url, v => updateBlockSilent(b.id, { wecom_kf_url: (v || '').trim() }), 'https://work.weixin.qq.com/kfid/kfc…')));
 
-  m.appendChild(field('WeCom Corp ID (optional)',
-    'Required only for 企业微信外部联系人 routing — leave blank for unified 微信客服 links. Find in 企业微信 → 我的企业 → 企业信息 → CorpID.',
+  m.appendChild(field(T('WeCom Corp ID (optional)', '企业微信 Corp ID(可选)'),
+    T('Required only for 企业微信外部联系人 routing — leave blank for unified 微信客服 links. Find in 企业微信 → 我的企业 → 企业信息 → CorpID.', '仅企业微信外部联系人路由需要 — 使用统一「微信客服」链接时请留空。在企业微信 → 我的企业 → 企业信息 → CorpID 中查找。'),
     txt(b.wecom_corp_id, v => updateBlockSilent(b.id, { wecom_corp_id: (v || '').trim() }), 'wxxxxxxxxxxx')));
 
-  m.appendChild(field('联系我 QR',
-    'Works on every device — customer long-presses → 识别二维码 → adds your WeCom employee as a contact (becomes a 客户 in your 企微 CRM). Recommended even when the chat button is on.',
+  m.appendChild(field(T('联系我 QR', '「联系我」二维码'),
+    T('Works on every device — customer long-presses → 识别二维码 → adds your WeCom employee as a contact (becomes a 客户 in your 企微 CRM). Recommended even when the chat button is on.', '在所有设备上都可用 — 顾客长按 → 识别二维码 → 将你的企微员工添加为联系人(成为企微 CRM 中的客户)。即使开启客服按钮也建议使用。'),
     sel(b.show_qr === false ? '0' : '1', [
-      { value: '1', label: 'Show QR' },
-      { value: '0', label: 'Hide' },
+      { value: '1', label: T('Show QR', '显示二维码') },
+      { value: '0', label: T('Hide', '隐藏') },
     ], v => updateBlock(b.id, { show_qr: v === '1' }))));
 
-  m.appendChild(field('QR code image',
-    'Upload your 联系我 QR PNG. Generate it in 企业微信管理后台 → 客户联系 → 联系我 → 添加联系方式 (single employee or 活码 for a team). Minimum 300×300.',
+  m.appendChild(field(T('QR code image', '二维码图片'),
+    T('Upload your 联系我 QR PNG. Generate it in 企业微信管理后台 → 客户联系 → 联系我 → 添加联系方式 (single employee or 活码 for a team). Minimum 300×300.', '上传你的「联系我」二维码 PNG。在企业微信管理后台 → 客户联系 → 联系我 → 添加联系方式中生成(单个员工或团队活码)。最小 300×300。'),
     imgPicker(b.qr_image_url, ({ url }) => updateBlock(b.id, { qr_image_url: url }))));
 
-  m.appendChild(field('Agent display name', 'Optional — shown under the QR (e.g. "Roots Sales · 客服小李"). Leave blank to hide.',
+  m.appendChild(field(T('Agent display name', '客服显示名称'), T('Optional — shown under the QR (e.g. "Roots Sales · 客服小李"). Leave blank to hide.', '可选 — 显示在二维码下方(例如「Roots Sales · 客服小李」)。留空则隐藏。'),
     txt(b.agent_name, v => updateBlockSilent(b.id, { agent_name: v }), 'Roots Sales · 客服小李')));
 
-  m.appendChild(field('Hint text', 'Short instruction under the QR. Leave both blank to use the default "Long-press QR · tap Add" / "长按二维码 · 识别添加".',
+  m.appendChild(field(T('Hint text', '提示文字'), T('Short instruction under the QR. Leave both blank to use the default "Long-press QR · tap Add" / "长按二维码 · 识别添加".', '二维码下方的简短说明。两者留空则使用默认「Long-press QR · tap Add」/「长按二维码 · 识别添加」。'),
     txtPair(b.hint_en, b.hint_cn, ({ en, cn }) => updateBlockSilent(b.id, { hint_en: en, hint_cn: cn }))));
 
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', '',
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field('Button colour', 'Background of the chat button.',
+  m.appendChild(field(T('Button colour', '按钮颜色'), T('Background of the chat button.', '客服按钮的背景颜色。'),
     sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 }
 
@@ -8649,45 +8659,45 @@ function buildFavoritesForm(m, b) {
   const note = document.createElement('div');
   note.className = 'helper';
   note.style.cssText = 'margin: -4px 0 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
-  note.innerHTML = 'This block pulls from <b>each customer\'s own saved products</b> at runtime. The preview on the left is a stand-in using your catalogue so you can see the shape.';
+  note.innerHTML = B('This block pulls from <b>each customer\'s own saved products</b> at runtime. The preview on the left is a stand-in using your catalogue so you can see the shape.', '此模块在运行时从<b>每位顾客自己收藏的商品</b>中拉取。左侧预览使用你的商品目录作为占位,方便你查看版式。');
   m.appendChild(note);
 
-  m.appendChild(field('Layout',
-    'Scroll — horizontal rail, good for sandwiching between other content. Grid — 2-up grid, gives the block more presence.',
+  m.appendChild(field(T('Layout', '版式'),
+    T('Scroll — horizontal rail, good for sandwiching between other content. Grid — 2-up grid, gives the block more presence.', '横滑 — 横向滑动条,适合夹在其他内容之间。网格 — 双列网格,让模块更有存在感。'),
     sel(b.view || 'scroll', [
-      { value: 'scroll', label: 'Scroll — horizontal rail' },
-      { value: 'grid',   label: 'Grid — 2-up' },
+      { value: 'scroll', label: T('Scroll — horizontal rail', '横滑 — 横向滑动') },
+      { value: 'grid',   label: T('Grid — 2-up', '网格 — 双列') },
     ], v => updateBlock(b.id, { view: v }))));
 
-  m.appendChild(field('Kicker', 'Tiny uppercase label above the title.',
+  m.appendChild(field(T('Kicker', '小标题'), T('Tiny uppercase label above the title.', '标题上方的小号大写标签。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field('Title', '',
+  m.appendChild(field(T('Title', '标题'), '',
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
 
-  m.appendChild(field('Limit (max products)',
-    'Cap how many saved items appear. The "See all" link routes to the full Favorites page.',
+  m.appendChild(field(T('Limit (max products)', '数量上限(最多商品)'),
+    T('Cap how many saved items appear. The "See all" link routes to the full Favorites page.', '限制显示多少件收藏商品。「查看全部」链接跳转到完整的收藏页。'),
     num(b.limit, v => updateBlock(b.id, { limit: v }), { min: 1, max: 12 })));
 
-  m.appendChild(field('When the customer has nothing saved',
-    'Hide — the block disappears completely (recommended; keeps the home page clean for new customers). Show empty state — a small nudge appears pointing at the heart pip.',
+  m.appendChild(field(T('When the customer has nothing saved', '当顾客没有收藏时'),
+    T('Hide — the block disappears completely (recommended; keeps the home page clean for new customers). Show empty state — a small nudge appears pointing at the heart pip.', '隐藏 — 模块完全消失(推荐;为新顾客保持首页整洁)。显示空状态 — 出现一条指向心形标记的小提示。'),
     sel(b.hide_when_empty === false ? 'show' : 'hide', [
-      { value: 'hide', label: 'Hide the block' },
-      { value: 'show', label: 'Show an empty-state nudge' },
+      { value: 'hide', label: T('Hide the block', '隐藏本模块') },
+      { value: 'show', label: T('Show an empty-state nudge', '显示空状态提示') },
     ], v => updateBlock(b.id, { hide_when_empty: v === 'hide' }))));
 
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', '',
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field('Card corner radius', '',
+  m.appendChild(field(T('Card corner radius', '卡片圆角'), '',
     sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
         v => updateBlock(b.id, { corner_radius: v }))));
 }
 
 function buildCountdownForm(m, b) {
-  m.appendChild(field('Kicker', 'Small uppercase label above the title.',
+  m.appendChild(field(T('Kicker', '小标题'), T('Small uppercase label above the title.', '标题上方的小号大写标签。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field('Title', '',
+  m.appendChild(field(T('Title', '标题'), '',
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
 
   // datetime-local needs `YYYY-MM-DDTHH:mm` in local time; convert from
@@ -8708,22 +8718,22 @@ function buildCountdownForm(m, b) {
     const d = new Date(dt.value);
     if (!isNaN(d.getTime())) updateBlock(b.id, { ends_at: d.toISOString() });
   });
-  m.appendChild(field('Ends at', 'Local time. The clock ticks down to this moment, then shows the ended message.', dt));
+  m.appendChild(field(T('Ends at', '结束时间'), T('Local time. The clock ticks down to this moment, then shows the ended message.', '本地时间。倒计时归零到此刻后,显示结束文案。'), dt));
 
-  m.appendChild(field('Background colour', '',
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field('Text colour', 'Use a contrasting brand colour for the digits.',
+  m.appendChild(field(T('Text colour', '文字颜色'), T('Use a contrasting brand colour for the digits.', '为数字选择对比鲜明的品牌色。'),
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field('Urgency animation', 'Pulse the digit cells as the deadline approaches.',
+  m.appendChild(field(T('Urgency animation', '紧迫感动画'), T('Pulse the digit cells as the deadline approaches.', '临近截止时让数字格闪动。'),
     sel(b.urgency_anim || 'pulse', URGENCY_ANIM_OPTIONS,
         v => updateBlock(b.id, { urgency_anim: v }))));
 
-  m.appendChild(field('Button label', 'Leave both blank to hide the button.',
+  m.appendChild(field(T('Button label', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-  m.appendChild(field('Button target', 'e.g. shop · category:5 · product:12',
+  m.appendChild(field(T('Button target', '按钮目标'), T('e.g. shop · category:5 · product:12', '例如 shop · category:5 · product:12'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'shop')));
 
-  m.appendChild(field('Ended message', "Shown once the clock hits zero.",
+  m.appendChild(field(T('Ended message', '结束文案'), T("Shown once the clock hits zero.", '倒计时归零后显示。'),
     txtPair(b.ended_text_en, b.ended_text_cn, ({ en, cn }) => updateBlockSilent(b.id, { ended_text_en: en, ended_text_cn: cn }))));
 }
 
@@ -8826,7 +8836,7 @@ function productPicker({ multi, value, onChange }) {
       if (!nm) {
         nm = document.createElement('div');
         nm.className = 'no-match';
-        nm.textContent = 'No products match.';
+        nm.textContent = T('No products match.', '没有匹配的商品。');
         listEl.appendChild(nm);
       }
     } else if (nm) {
@@ -8935,7 +8945,7 @@ function imgPicker(currentUrl, onSet) {
 
 async function uploadImage(file) {
   const fd = new FormData(); fd.append('file', file);
-  setStatusText('Uploading…', 'saving');
+  setStatusText({ en: 'Uploading…', cn: '上传中…' }, 'saving');
   try {
     const r = await fetch('/api/retail-admin/cms/media', { method: 'POST', credentials: 'same-origin', body: fd });
     if (r.status === 401) { location.href = '/login'; return null; }
@@ -8946,8 +8956,8 @@ async function uploadImage(file) {
                 : 'Upload failed: ' + j.error;
       toast(msg, 'err'); setStatusText(msg, 'err'); return null;
     }
-    toast('Uploaded', 'ok');
-    setStatusText('Image uploaded', 'clean');
+    toast(T('Uploaded', '已上传'), 'ok');
+    setStatusText({ en: 'Image uploaded', cn: '图片已上传' }, 'clean');
     return j.data.url;
   } catch (e) {
     toast('Upload failed: ' + e.message, 'err'); return null;
@@ -9005,7 +9015,7 @@ async function openMediaLibrary(onPick) {
 // BLOCK OPS
 // ═══════════════════════════════════════════════════════════════════════
 function deleteBlock(id) {
-  if (!confirm('Delete this block?')) return;
+  if (!confirm(T('Delete this block?', '确定删除此模块?'))) return;
   state.draft = state.draft.filter(b => b.id !== id);
   if (state.selectedId === id) state.selectedId = null;
   render(); scheduleSave();
@@ -9142,9 +9152,7 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape') e.target.blur();
     return;
   }
-  if (e.key === '?' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); showHelp(); return; }
   if (e.key === 'Escape') {
-    if (document.querySelector('.help-overlay')) { document.querySelector('.help-overlay').remove(); return; }
     if (document.querySelector('.modal-bg')) { document.querySelector('.modal-bg').remove(); return; }
     if (state.selectedId) { state.selectedId = null; render(); }
     return;
@@ -9162,29 +9170,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowDown') { e.preventDefault(); moveBlock(idx, +1); return; }
 });
 
-function showHelp() {
-  if (document.querySelector('.modal-bg.help-overlay')) return;
-  const isMac = navigator.platform.toUpperCase().includes('MAC');
-  const M = isMac ? '⌘' : 'Ctrl';
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-bg help-overlay';
-  overlay.innerHTML = `
-    <div class="help-card">
-      <h3>Keyboard shortcuts</h3>
-      <table>
-        <tr><td class="key"><kbd>${M}</kbd> + <kbd>S</kbd></td><td>Save draft now</td></tr>
-        <tr><td class="key"><kbd>${M}</kbd> + <kbd>⇧</kbd> + <kbd>P</kbd></td><td>Publish to live</td></tr>
-        <tr><td class="key"><kbd>${M}</kbd> + <kbd>D</kbd></td><td>Duplicate selected</td></tr>
-        <tr><td class="key"><kbd>Del</kbd> · <kbd>⌫</kbd></td><td>Delete selected</td></tr>
-        <tr><td class="key"><kbd>↑</kbd> · <kbd>↓</kbd></td><td>Move selected up / down</td></tr>
-        <tr><td class="key"><kbd>Esc</kbd></td><td>Deselect / close dialog</td></tr>
-        <tr><td class="key"><kbd>?</kbd></td><td>Show this cheat sheet</td></tr>
-      </table>
-      <div class="close" onclick="this.closest('.modal-bg').remove()">Close</div>
-    </div>`;
-  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-  document.body.appendChild(overlay);
-}
 
 // ═══════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -9502,24 +9487,24 @@ document.addEventListener('keydown', (e) => {
 <aside id="live-preview-drawer" class="lp-drawer" aria-hidden="true">
   <div class="lp-head">
     <div>
-      <h3 style="margin: 0; font-size: 14px;">Customer view · 顾客视角</h3>
-      <div class="muted" id="lp-mode-sub" style="font-size: 11px; margin-top: 2px;">Draft — what customers will see once you publish · 草稿:发布后顾客所见</div>
+      <h3 style="margin: 0; font-size: 14px;"><span class="i18n-en">Customer view</span><span class="i18n-cn">顾客视角</span></h3>
+      <div class="muted" id="lp-mode-sub" style="font-size: 11px; margin-top: 2px;"><span class="i18n-en">Draft — what customers will see once you publish</span><span class="i18n-cn">草稿:发布后顾客所见</span></div>
       <div class="lp-mode-seg" id="lp-mode-seg" style="margin-top: 10px;">
-        <button class="active" data-mode="draft" onclick="setLivePreviewMode('draft')">Draft · 草稿</button>
-        <button data-mode="live" onclick="setLivePreviewMode('live')">Published · 已发布</button>
+        <button class="active" data-mode="draft" onclick="setLivePreviewMode('draft')"><span class="i18n-en">Draft</span><span class="i18n-cn">草稿</span></button>
+        <button data-mode="live" onclick="setLivePreviewMode('live')"><span class="i18n-en">Published</span><span class="i18n-cn">已发布</span></button>
       </div>
     </div>
     <!-- Header actions — icon-only so the row stays one line regardless of
          which language the title renders in. Each has a title attribute
          (bilingual) for hover tooltips. -->
     <div class="lp-head-actions">
-      <button class="btn btn-icon" type="button" onclick="reloadLivePreview()" title="Reload · 刷新" aria-label="Reload">
+      <button class="btn btn-icon" type="button" onclick="reloadLivePreview()" data-ti-en="Reload" data-ti-cn="刷新" title="Reload" aria-label="Reload">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><polyline points="22 4 22 10 16 10"/><polyline points="2 20 2 14 8 14"/><path d="M3.5 9a9 9 0 0 1 15-3.4L22 9"/><path d="M20.5 15a9 9 0 0 1-15 3.4L2 15"/></svg>
       </button>
-      <button class="btn btn-icon" type="button" onclick="popOutLivePreview()" title="Open in new tab · 在新标签打开" aria-label="Pop out">
+      <button class="btn btn-icon" type="button" onclick="popOutLivePreview()" data-ti-en="Open in new tab" data-ti-cn="在新标签打开" title="Open in new tab" aria-label="Pop out">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
       </button>
-      <button class="btn btn-icon" type="button" onclick="_lpClose()" title="Close · 关闭 (Esc)" aria-label="Close">
+      <button class="btn btn-icon" type="button" onclick="_lpClose()" data-ti-en="Close (Esc)" data-ti-cn="关闭 (Esc)" title="Close (Esc)" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>

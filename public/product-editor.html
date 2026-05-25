@@ -199,11 +199,112 @@
   :root[data-theme="light"] .pe-brand-mark { background: linear-gradient(135deg, var(--accent), #98a300); }
   .pe-brand-name { font-weight: 600; font-size: 13px; letter-spacing: -.005em; color: var(--text-2); }
   .pe-brand-divider { width: 1px; height: 16px; background: var(--line); }
-  .pe-topbar-title { display: flex; align-items: center; gap: var(--s3); min-width: 0; flex: 1; }
+  .pe-topbar-title { display: flex; align-items: center; gap: var(--s3); min-width: 0; flex: 1; position: relative; }
   #pe-name {
     font-size: 15px; font-weight: 600; color: var(--text-1);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  /* ── Product switcher (click the title to jump to another product) ── */
+  .pe-switcher-btn {
+    display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%;
+    background: transparent; border: 1px solid transparent;
+    border-radius: var(--r-md); padding: 4px 8px; margin: -4px -8px;
+    cursor: pointer; color: var(--text-1); font: inherit;
+    transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
+  }
+  .pe-switcher-btn:hover:not(:disabled) { background: var(--bg-elev-1); border-color: var(--line); }
+  .pe-switcher-btn:disabled { cursor: default; }
+  .pe-switcher-chev { width: 14px; height: 14px; color: var(--text-3); flex-shrink: 0; transition: transform var(--t-fast) ease; }
+  .pe-switcher-btn[aria-expanded="true"] .pe-switcher-chev { transform: rotate(180deg); }
+  .pe-switcher-btn:disabled .pe-switcher-chev { display: none; }
+  .pe-switcher-panel {
+    position: absolute; top: calc(100% + 8px); left: 0; z-index: 60;
+    width: 380px; max-width: 80vw;
+    background: var(--bg-pane); border: 1px solid var(--line-strong);
+    border-radius: var(--r-lg); box-shadow: var(--sh-3);
+    padding: 8px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .pe-switcher-panel[hidden] { display: none; }
+  .pe-switcher-search {
+    width: 100%; padding: 8px 10px; font-size: 13px;
+    background: var(--bg-input); color: var(--text-1);
+    border: 1px solid var(--line); border-radius: var(--r-md);
+  }
+  .pe-switcher-search:focus { outline: none; border-color: var(--line-strong); box-shadow: 0 0 0 3px var(--ring); }
+  .pe-switcher-list { max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+  .pe-switcher-item {
+    display: flex; align-items: center; gap: 8px; justify-content: space-between;
+    padding: 8px 10px; border-radius: var(--r-md); cursor: pointer;
+    border: 1px solid transparent; text-align: left; width: 100%;
+    background: transparent; color: var(--text-1); font: inherit; font-size: 13px;
+  }
+  .pe-switcher-item:hover, .pe-switcher-item.active { background: var(--bg-elev-1); }
+  .pe-switcher-item.current { border-color: var(--line-strong); background: var(--bg-elev-1); }
+  .pe-switcher-item-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pe-switcher-item-name small { color: var(--text-3); font-weight: 400; }
+  .pe-switcher-item-badge {
+    flex-shrink: 0; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--text-3);
+  }
+  .pe-switcher-item-badge.pub { background: rgba(204, 217, 0, .14); color: var(--accent-hi); border-color: rgba(204, 217, 0, .35); }
+  .pe-switcher-empty { padding: 16px; text-align: center; color: var(--text-3); font-size: 12px; }
+
+  /* ── Smart paste (AI text → sections) ── */
+  .pe-smart-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
+    font-size: 11px; font-weight: 600;
+    padding: 6px 8px; border-radius: var(--r-md);
+    border: 1px dashed var(--line-strong); background: transparent; color: var(--text-2);
+    cursor: pointer; transition: background var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .pe-smart-btn:hover { background: var(--bg-elev-1); border-color: var(--accent); color: var(--text-1); }
+  .pe-smart-btn svg { width: 14px; height: 14px; color: var(--accent); flex-shrink: 0; }
+  .pe-modal-overlay {
+    position: fixed; inset: 0; z-index: 80;
+    background: var(--bg-overlay);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .pe-modal-overlay[hidden] { display: none; }
+  .pe-modal {
+    width: 560px; max-width: 100%; max-height: 86vh; overflow-y: auto;
+    background: var(--bg-pane); border: 1px solid var(--line-strong);
+    border-radius: var(--r-xl); box-shadow: var(--sh-3);
+    padding: var(--s5); display: flex; flex-direction: column; gap: var(--s4);
+  }
+  .pe-modal-head { display: flex; align-items: center; justify-content: space-between; }
+  .pe-modal-title { font-size: 15px; font-weight: 600; color: var(--text-1); }
+  .pe-modal-x { padding: 4px 9px; }
+  .pe-modal-hint { font-size: 12px; color: var(--text-2); line-height: 1.6; }
+  .pe-smart-text {
+    width: 100%; min-height: 200px; resize: vertical; margin: var(--s3) 0;
+    padding: 12px; font: 13px var(--f-sans); line-height: 1.6;
+    background: var(--bg-input); color: var(--text-1);
+    border: 1px solid var(--line); border-radius: var(--r-md);
+  }
+  .pe-smart-text:focus { outline: none; border-color: var(--line-strong); box-shadow: 0 0 0 3px var(--ring); }
+  .pe-smart-translate { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); cursor: pointer; margin-bottom: var(--s4); }
+  .pe-smart-translate input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+  .pe-modal-actions { display: flex; justify-content: flex-end; gap: var(--s2); }
+  .pe-smart-spinner {
+    width: 28px; height: 28px; margin: 24px auto 10px;
+    border: 3px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: pe-spin .8s linear infinite;
+  }
+  @keyframes pe-spin { to { transform: rotate(360deg); } }
+  .pe-smart-preview-list { display: flex; flex-direction: column; gap: 6px; margin: var(--s3) 0 var(--s4); }
+  .pe-smart-prev-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: var(--r-md); background: var(--bg-elev-1);
+  }
+  .pe-smart-prev-glyph { font-size: 15px; line-height: 1.5; flex-shrink: 0; }
+  .pe-smart-prev-body { min-width: 0; flex: 1; }
+  .pe-smart-prev-name { font-size: 13px; font-weight: 600; color: var(--text-1); }
+  .pe-smart-prev-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Cold-start picker (shown in #pe-loading when opened with no ?id). */
+  .pe-picker { width: min(460px, 90vw); display: flex; flex-direction: column; gap: 14px; }
+  .pe-picker-title { font-size: 18px; font-weight: 600; color: var(--text-1); margin: 0; }
+  .pe-picker-sub { font-size: 12px; color: var(--text-3); margin: 0; line-height: 1.55; }
   .pe-badge {
     flex-shrink: 0;
     font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
@@ -527,6 +628,11 @@
     font-size: 13px; font-weight: 500; color: var(--text-1);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  /* Bilingual block names: paired spans, CSS shows only the active language.
+     Used because some names contain a literal " · " (e.g. "Ingredients · Chips")
+     which the text-node splitter would otherwise mis-split. */
+  html[data-ui-lang="en"] [data-lang-block="cn"] { display: none !important; }
+  html[data-ui-lang="cn"] [data-lang-block="en"] { display: none !important; }
   .pa-block-row .pbr-sub {
     font-size: 11px; color: var(--text-3);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
@@ -762,8 +868,15 @@
       <span class="pe-brand-divider"></span>
     </div>
     <div class="pe-topbar-title">
-      <span id="pe-name">Loading… · 加载中…</span>
+      <button id="pe-switcher-btn" class="pe-switcher-btn" type="button" onclick="peToggleSwitcher()" title="Switch product · 切换产品" disabled>
+        <span id="pe-name">Loading… · 加载中…</span>
+        <svg class="pe-switcher-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
       <span id="pe-badge" class="pe-badge" style="display:none"></span>
+      <div id="pe-switcher-panel" class="pe-switcher-panel" hidden>
+        <input id="pe-switcher-search" class="pe-switcher-search" type="text" oninput="peRenderSwitcherList()" onkeydown="peSwitcherKeydown(event)" autocomplete="off" spellcheck="false">
+        <div id="pe-switcher-list" class="pe-switcher-list" data-no-i18n></div>
+      </div>
     </div>
     <div class="pe-topbar-actions">
       <div class="lang-toggle" id="lang-toggle">
@@ -815,6 +928,10 @@
           <select id="pa-blocks-picker" onchange="paBlocksAdd(this.value);this.value=''" style="font-size:11px;padding:5px 8px;font-weight:500;width:100%">
             <option value="">+ Add section… · + 添加板块…</option>
           </select>
+          <button type="button" class="pe-smart-btn" onclick="peSmartOpen()" title="Paste text, let the editor split it into sections · 粘贴文字,自动拆分成板块">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.8L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.7L12 3z"/><path d="M19 14l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg>
+            Smart paste · 智能粘贴
+          </button>
         </div>
         <div id="pa-blocks-list" class="pe-blocks-list"></div>
       </div>
@@ -852,6 +969,40 @@
         <!-- BLOCK mode: the selected block's form (default) -->
         <div id="pe-block-pane">
           <div id="pa-block-editor-mount"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Smart paste → AI divides pasted text into sections -->
+  <div id="pe-smart-overlay" class="pe-modal-overlay" hidden onmousedown="if(event.target===this)peSmartClose()">
+    <div class="pe-modal" role="dialog" aria-modal="true">
+      <div class="pe-modal-head">
+        <span class="pe-modal-title">Smart paste · 智能粘贴</span>
+        <button class="btn btn-ghost pe-modal-x" type="button" onclick="peSmartClose()" aria-label="Close" data-no-i18n>✕</button>
+      </div>
+
+      <div id="pe-smart-step-input">
+        <p class="pe-modal-hint">Paste any product copy — a label, a blurb, scattered notes — and the editor splits it into sections for you to review before adding. · 粘贴任意产品文案,编辑器会拆分成板块,添加前可先审阅。</p>
+        <textarea id="pe-smart-text" class="pe-smart-text" data-no-i18n placeholder="Paste product text here…  ·  在此粘贴产品文字…"></textarea>
+        <label class="pe-smart-translate"><input type="checkbox" id="pe-smart-translate"> <span>Also draft the other language (中文 ⇄ EN) · 同时起草另一种语言</span></label>
+        <div class="pe-modal-actions">
+          <button class="btn" type="button" onclick="peSmartClose()">Cancel · 取消</button>
+          <button class="btn btn-primary" type="button" id="pe-smart-go" onclick="peSmartDivide()">Divide into sections · 拆分为板块</button>
+        </div>
+      </div>
+
+      <div id="pe-smart-step-loading" hidden>
+        <div class="pe-smart-spinner"></div>
+        <p class="pe-modal-hint" style="text-align:center">Reading your text… · 正在解析文字…</p>
+      </div>
+
+      <div id="pe-smart-step-preview" hidden>
+        <p class="pe-modal-hint" id="pe-smart-preview-hint"></p>
+        <div id="pe-smart-preview-list" class="pe-smart-preview-list" data-no-i18n></div>
+        <div class="pe-modal-actions">
+          <button class="btn" type="button" onclick="peSmartBack()">← Back · 返回</button>
+          <button class="btn btn-primary" type="button" id="pe-smart-apply" onclick="peSmartApply()">Add sections · 添加板块</button>
         </div>
       </div>
     </div>
@@ -1095,29 +1246,285 @@ const PA_PAGE_PRESETS = [
 // ── State ──
 let PA_CURRENT = null;          // the product being edited
 let PA_SELECTED_BLOCK_ID = null;
+let PA_ALL_PRODUCTS = [];       // full catalog, kept for the in-editor switcher
+let PA_SAVED_SNAPSHOT = null;   // serialized state at last load/save — drives the dirty guard
 window._paBlocks = [];
 
 // ── Boot — read ?id= from URL, fetch the product, paint the editor ──
 async function peBoot() {
   const id = Number(new URLSearchParams(location.search).get('id'));
-  if (!id) { peFatal('No product id in URL · 网址缺少产品 id'); return; }
+  // No ?id — opened as a standalone tool (e.g. from the backend's Content menu).
+  // Show a product picker instead of dead-ending.
+  if (!id) { peShowPicker(); return; }
   try {
     const res = await fetch('/api/retail-admin/products', { credentials: 'same-origin' });
     if (res.status === 401 || res.status === 403) { location.href = '/'; return; }
     const j = await res.json();
     if (!j.success) throw new Error(j.error || 'load_failed');
-    const p = (j.data || []).find(x => x.id === id);
+    PA_ALL_PRODUCTS = j.data || [];
+    const p = PA_ALL_PRODUCTS.find(x => x.id === id);
     if (!p) { peFatal('Product #' + id + ' not found · 未找到产品'); return; }
     peMount(p);
   } catch (e) {
     peFatal('Failed to load · 加载失败: ' + escapeHtml(e.message));
   }
 }
+
+// Cold-start landing: choose a product, then jump into its editor (?id=).
+async function peShowPicker() {
+  const el = document.getElementById('pe-loading');
+  el.classList.remove('hide');
+  el.innerHTML = '<div class="pe-picker">Loading… · 加载中…</div>';
+  try {
+    const res = await fetch('/api/retail-admin/products', { credentials: 'same-origin' });
+    if (res.status === 401 || res.status === 403) { location.href = '/'; return; }
+    const j = await res.json();
+    if (!j.success) throw new Error(j.error || 'load_failed');
+    PA_ALL_PRODUCTS = j.data || [];
+    peRenderPicker();
+  } catch (e) {
+    peFatal('Failed to load · 加载失败: ' + escapeHtml(e.message));
+  }
+}
+function peRenderPicker() {
+  const el = document.getElementById('pe-loading');
+  if (!el) return;
+  el.innerHTML =
+    '<div class="pe-picker">' +
+      '<div>' +
+        '<h2 class="pe-picker-title">Product Page Editor · 产品页编辑器</h2>' +
+        '<p class="pe-picker-sub">Pick a product to edit its mini-app detail page. · 选择要编辑其小程序详情页的产品。</p>' +
+      '</div>' +
+      '<input id="pe-picker-search" class="pe-switcher-search" type="text" autocomplete="off" spellcheck="false" ' +
+        'oninput="peRenderPickerList()" placeholder="' + (cuLang() === 'cn' ? '搜索产品…' : 'Search products…') + '">' +
+      '<div id="pe-picker-list" class="pe-switcher-list" data-no-i18n></div>' +
+    '</div>';
+  peRenderPickerList();
+  const s = document.getElementById('pe-picker-search'); if (s) s.focus();
+}
+function peRenderPickerList() {
+  const list = document.getElementById('pe-picker-list');
+  if (!list) return;
+  const q = (document.getElementById('pe-picker-search')?.value || '').trim().toLowerCase();
+  let rows = PA_ALL_PRODUCTS.slice().sort((a, b) => (a.name_en || '').localeCompare(b.name_en || ''));
+  if (q) rows = rows.filter(p =>
+    ((p.name_en || '') + ' ' + (p.name_cn || '') + ' ' + (p.sku || '')).toLowerCase().includes(q));
+  if (!rows.length) {
+    list.innerHTML = '<div class="pe-switcher-empty">' + (cuLang() === 'cn' ? '没有匹配的产品。' : 'No products match.') + '</div>';
+    return;
+  }
+  list.innerHTML = rows.map(p => {
+    const pub  = p.is_published === 1;
+    const name = escapeHtml(p.name_en || '—') + (p.name_cn ? ' <small>' + escapeHtml(p.name_cn) + '</small>' : '');
+    const badge = pub
+      ? '<span class="pe-switcher-item-badge pub">' + (cuLang() === 'cn' ? '已上架' : 'Live') + '</span>'
+      : '<span class="pe-switcher-item-badge">' + (cuLang() === 'cn' ? '草稿' : 'Draft') + '</span>';
+    return '<button type="button" class="pe-switcher-item" data-id="' + p.id +
+      '" onclick="location.href=\'/product-editor?id=' + p.id + '\'">' +
+      '<span class="pe-switcher-item-name">' + name + '</span>' + badge + '</button>';
+  }).join('');
+}
 function peFatal(msg) {
   const el = document.getElementById('pe-loading');
   el.classList.remove('hide');
   el.innerHTML = '<div style="text-align:center;line-height:1.7">' + msg +
     '<br><button class="btn" style="margin-top:14px" onclick="peClose()">Back · 返回</button></div>';
+}
+
+// ── Product switcher — jump to another product without leaving the editor ──
+function peToggleSwitcher() {
+  const panel = document.getElementById('pe-switcher-panel');
+  if (!panel) return;
+  if (panel.hidden) peOpenSwitcher(); else peCloseSwitcher();
+}
+function peOpenSwitcher() {
+  const panel = document.getElementById('pe-switcher-panel');
+  const btn   = document.getElementById('pe-switcher-btn');
+  const search = document.getElementById('pe-switcher-search');
+  if (!panel || btn.disabled) return;
+  panel.hidden = false;
+  btn.setAttribute('aria-expanded', 'true');
+  if (search) {
+    search.value = '';
+    search.placeholder = cuT('Search products… · 搜索产品…', 'Search products… · 搜索产品…');
+  }
+  _peSwitcherActive = -1;
+  peRenderSwitcherList();
+  if (search) search.focus();
+  // Close on the next outside click / Escape.
+  setTimeout(() => document.addEventListener('mousedown', _peSwitcherOutside), 0);
+}
+function peCloseSwitcher() {
+  const panel = document.getElementById('pe-switcher-panel');
+  const btn   = document.getElementById('pe-switcher-btn');
+  if (!panel) return;
+  panel.hidden = true;
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('mousedown', _peSwitcherOutside);
+}
+function _peSwitcherOutside(e) {
+  const title = document.querySelector('.pe-topbar-title');
+  if (title && !title.contains(e.target)) peCloseSwitcher();
+}
+let _peSwitcherActive = -1;   // keyboard-highlighted row in the filtered list
+function _peSwitcherFiltered() {
+  const q = (document.getElementById('pe-switcher-search')?.value || '').trim().toLowerCase();
+  const rows = PA_ALL_PRODUCTS.slice().sort((a, b) =>
+    (a.name_en || '').localeCompare(b.name_en || ''));
+  if (!q) return rows;
+  return rows.filter(p => (
+    (p.name_en || '') + ' ' + (p.name_cn || '') + ' ' + (p.sku || '')
+  ).toLowerCase().includes(q));
+}
+function peRenderSwitcherList() {
+  const list = document.getElementById('pe-switcher-list');
+  if (!list) return;
+  const rows = _peSwitcherFiltered();
+  if (!rows.length) {
+    list.innerHTML = '<div class="pe-switcher-empty">' +
+      cuT('No products match. · 没有匹配的产品。', 'No products match. · 没有匹配的产品。') + '</div>';
+    return;
+  }
+  list.innerHTML = rows.map((p, i) => {
+    const cur = PA_CURRENT && p.id === PA_CURRENT.id;
+    const pub = p.is_published === 1;
+    const name = escapeHtml(p.name_en || '—') +
+      (p.name_cn ? ' <small>' + escapeHtml(p.name_cn) + '</small>' : '');
+    const badge = pub
+      ? '<span class="pe-switcher-item-badge pub">' + cuT('Live', '已上架') + '</span>'
+      : '<span class="pe-switcher-item-badge">' + cuT('Draft', '草稿') + '</span>';
+    return '<button type="button" class="pe-switcher-item' + (cur ? ' current' : '') +
+      '" data-idx="' + i + '" data-id="' + p.id + '" onclick="peSwitchProduct(' + p.id + ')">' +
+      '<span class="pe-switcher-item-name">' + name + '</span>' + badge + '</button>';
+  }).join('');
+}
+function peSwitchProduct(id) {
+  id = Number(id);
+  if (PA_CURRENT && id === PA_CURRENT.id) { peCloseSwitcher(); return; }
+  const p = PA_ALL_PRODUCTS.find(x => x.id === id);
+  if (!p) return;
+  if (peIsDirty() && !confirm(cuT(
+    'You have unsaved changes that will be lost. Switch product anyway? · 有未保存的更改将会丢失,仍要切换产品吗?',
+    'You have unsaved changes that will be lost. Switch product anyway? · 有未保存的更改将会丢失,仍要切换产品吗?'))) {
+    return;
+  }
+  peCloseSwitcher();
+  peMount(p);
+}
+// Arrow-key navigation inside the switcher search box.
+function peSwitcherKeydown(e) {
+  const panel = document.getElementById('pe-switcher-panel');
+  if (!panel || panel.hidden) return;
+  const items = Array.from(panel.querySelectorAll('.pe-switcher-item'));
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!items.length) return;
+    _peSwitcherActive += (e.key === 'ArrowDown' ? 1 : -1);
+    if (_peSwitcherActive < 0) _peSwitcherActive = items.length - 1;
+    if (_peSwitcherActive >= items.length) _peSwitcherActive = 0;
+    items.forEach((el, i) => el.classList.toggle('active', i === _peSwitcherActive));
+    items[_peSwitcherActive].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    const el = items[_peSwitcherActive] || items[0];
+    if (el) { e.preventDefault(); peSwitchProduct(Number(el.dataset.id)); }
+  } else if (e.key === 'Escape') {
+    e.preventDefault(); peCloseSwitcher();
+  }
+}
+
+// ── Smart paste — paste raw copy, AI divides it into typed sections ──
+let _peSmartBlocks = [];   // proposed blocks awaiting the operator's confirm
+function peSmartOpen() {
+  _peSmartBlocks = [];
+  const t = document.getElementById('pe-smart-text'); if (t) t.value = '';
+  const tr = document.getElementById('pe-smart-translate'); if (tr) tr.checked = false;
+  peSmartStep('input');
+  document.getElementById('pe-smart-overlay').hidden = false;
+  if (t) setTimeout(() => t.focus(), 30);
+}
+function peSmartClose() { const o = document.getElementById('pe-smart-overlay'); if (o) o.hidden = true; }
+function peSmartBack() { peSmartStep('input'); }
+function peSmartStep(step) {
+  ['input', 'loading', 'preview'].forEach(s => {
+    const el = document.getElementById('pe-smart-step-' + s);
+    if (el) el.hidden = (s !== step);
+  });
+}
+async function peSmartDivide() {
+  const text = (document.getElementById('pe-smart-text').value || '').trim();
+  if (!text) { toast(cuT('Paste some text first · 请先粘贴文字', '请先粘贴文字'), 'err'); return; }
+  const translate = !!document.getElementById('pe-smart-translate').checked;
+  peSmartStep('loading');
+  try {
+    const r = await fetch('/api/ai/compose-blocks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        text, translate,
+        product: PA_CURRENT
+          ? { id: PA_CURRENT.id, name_en: PA_CURRENT.name_en, name_cn: PA_CURRENT.name_cn, category: PA_CURRENT.category }
+          : {},
+      }),
+    });
+    if (r.status === 401 || r.status === 403) { location.href = '/'; return; }
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 503) { toast(cuT('AI is not configured yet · AI 尚未配置', 'AI 尚未配置'), 'err'); peSmartStep('input'); return; }
+    if (!r.ok || !j.success) throw new Error(j.error || 'compose_failed');
+    _peSmartBlocks = (j.blocks || []).map(b => ({ ...b, id: paBlocksGenId() }));
+    if (!_peSmartBlocks.length) {
+      toast(cuT('Couldn’t find sections in that text · 未能从文字中识别出板块', '未能从文字中识别出板块'), 'err');
+      peSmartStep('input'); return;
+    }
+    peRenderSmartPreview();
+    peSmartStep('preview');
+  } catch (e) {
+    toast(cuT('Smart paste failed · 智能粘贴失败: ', '智能粘贴失败: ') + e.message, 'err');
+    peSmartStep('input');
+  }
+}
+function peRenderSmartPreview() {
+  const list = document.getElementById('pe-smart-preview-list');
+  const hint = document.getElementById('pe-smart-preview-hint');
+  const n = _peSmartBlocks.length;
+  if (hint) hint.textContent = cuT(
+    n + (n === 1 ? ' section found — review, then add it below.' : ' sections found — review, then add them below.'),
+    '识别出 ' + n + ' 个板块 — 审阅后点击下方添加。');
+  if (!list) return;
+  list.innerHTML = _peSmartBlocks.map(b => {
+    const glyph = PA_TYPE_GLYPH[b.type] || '◻';
+    const nm = PA_TYPE_NAME[b.type] || { en: b.type, cn: b.type };
+    const sub = _paBlockSubLabel(b);
+    return '<div class="pe-smart-prev-item">' +
+      '<span class="pe-smart-prev-glyph">' + escapeHtml(glyph) + '</span>' +
+      '<div class="pe-smart-prev-body">' +
+        '<div class="pe-smart-prev-name">' + escapeHtml(cuT(nm.en, nm.cn)) + '</div>' +
+        (sub ? '<div class="pe-smart-prev-sub">' + escapeHtml(sub) + '</div>' : '') +
+      '</div></div>';
+  }).join('');
+}
+function peSmartApply() {
+  if (!_peSmartBlocks.length) { peSmartClose(); return; }
+  paBlocksSyncFromDOM();
+  if (!window._paBlocks) window._paBlocks = [];
+  let added = 0, firstId = null, skippedNutrition = false;
+  _peSmartBlocks.forEach(b => {
+    // Only one nutrition block per product (maps to a single column) — skip a
+    // second one rather than create an unsavable duplicate.
+    if (b.type === 'nutrition_facts' && window._paBlocks.some(x => x.type === 'nutrition_facts')) {
+      skippedNutrition = true; return;
+    }
+    window._paBlocks.push(b);
+    if (!firstId) firstId = b.id;
+    added++;
+  });
+  if (firstId) PA_SELECTED_BLOCK_ID = firstId;
+  paRenderAll();
+  peInspTab('block');
+  peSmartClose();
+  let msg = cuT('Added ' + added + ' section' + (added === 1 ? '' : 's') + ' ✓', '已添加 ' + added + ' 个板块 ✓');
+  if (skippedNutrition) msg += cuT(' · nutrition already present', ' · 营养成分已存在');
+  toast(msg);
 }
 
 function peMount(p) {
@@ -1162,16 +1569,28 @@ function peMount(p) {
   paRenderPresets();
   paRenderAll();
 
-  // Wire chrome inputs → live preview + page-dot refresh
-  [
-    'pa-edit-keywords-en', 'pa-edit-keywords-cn',
-    'pa-edit-tagline-en',  'pa-edit-tagline-cn',
-    'pa-edit-colophon-tagline-en', 'pa-edit-colophon-tagline-cn',
-  ].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('input', () => { paRenderPreview(); peUpdatePageDot(); });
-  });
+  // Wire chrome inputs → live preview + page-dot refresh. Bind ONCE — peMount
+  // re-runs when switching products, and re-binding would stack duplicate
+  // listeners on the same (persistent) inputs.
+  if (!window._peChromeBound) {
+    [
+      'pa-edit-keywords-en', 'pa-edit-keywords-cn',
+      'pa-edit-tagline-en',  'pa-edit-tagline-cn',
+      'pa-edit-colophon-tagline-en', 'pa-edit-colophon-tagline-cn',
+    ].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => { paRenderPreview(); peUpdatePageDot(); });
+    });
+    window._peChromeBound = true;
+  }
   peUpdatePageDot();
+
+  // Enable the product switcher now that the catalog is loaded.
+  const swBtn = document.getElementById('pe-switcher-btn');
+  if (swBtn) swBtn.disabled = PA_ALL_PRODUCTS.length < 2;
+  // Keep the URL in sync so a refresh reopens the product you switched to.
+  try { history.replaceState(null, '', '?id=' + p.id); } catch (e) {}
+  PA_SAVED_SNAPSHOT = peSerializeState();
 
   // Default tab: if the page already has blocks, open Block (the common
   // case — you came here to edit a section). If it's a blank page, open
@@ -1267,13 +1686,10 @@ function paLivePreview() {
   paRefreshTabLabels();
 }
 
-// ── Save (PATCH) — stays on the page; updates badge + toast ──
-async function paSaveEdit() {
-  if (!PA_CURRENT) return;
-  const btn = document.getElementById('pe-save-btn');
-  const status = document.getElementById('pe-save-status');
-  btn.disabled = true; status.textContent = 'Saving… · 保存中…';
-  const body = {
+// Build the PATCH body from the live form + block state. Shared by save and
+// the dirty guard so both see exactly the same shape.
+function peCollectBody() {
+  return {
     keywords_en:           document.getElementById('pa-edit-keywords-en').value.trim() || null,
     keywords_cn:           document.getElementById('pa-edit-keywords-cn').value.trim() || null,
     tagline_en:            document.getElementById('pa-edit-tagline-en').value.trim()  || null,
@@ -1284,6 +1700,24 @@ async function paSaveEdit() {
     description_blocks:    paBlocksCollect(),
     nutrition:             paCollectNutrition(),
   };
+}
+// Serialized fingerprint of the editable state — compared against the
+// snapshot to know if there are unsaved changes.
+function peSerializeState() {
+  paBlocksSyncFromDOM();
+  return JSON.stringify(peCollectBody());
+}
+function peIsDirty() {
+  return PA_SAVED_SNAPSHOT !== null && peSerializeState() !== PA_SAVED_SNAPSHOT;
+}
+
+// ── Save (PATCH) — stays on the page; updates badge + toast ──
+async function paSaveEdit() {
+  if (!PA_CURRENT) return;
+  const btn = document.getElementById('pe-save-btn');
+  const status = document.getElementById('pe-save-status');
+  btn.disabled = true; status.textContent = 'Saving… · 保存中…';
+  const body = peCollectBody();
   try {
     const r = await fetch('/api/retail-admin/products/' + PA_CURRENT.id, {
       method: 'PATCH',
@@ -1295,6 +1729,11 @@ async function paSaveEdit() {
     const j = await r.json();
     if (!j.success) throw new Error(j.error || 'save_failed');
     PA_CURRENT = { ...PA_CURRENT, ...j.data };
+    // Reflect the save into the cached catalog row so the switcher list and a
+    // subsequent re-mount show the fresh values.
+    const idx = PA_ALL_PRODUCTS.findIndex(x => x.id === PA_CURRENT.id);
+    if (idx !== -1) PA_ALL_PRODUCTS[idx] = { ...PA_ALL_PRODUCTS[idx], ...j.data };
+    PA_SAVED_SNAPSHOT = peSerializeState();
     status.textContent = 'Saved ✓ · 已保存 ' + new Date().toLocaleTimeString();
     toast('Saved ✓ · 已保存');
   } catch (e) {
@@ -1579,7 +2018,7 @@ function paRenderTabs() {
     return `<div class="pa-block-row${active}" draggable="true" data-blockid="${b.id}" data-idx="${i}" onclick="paBlocksSelect('${b.id}')" title="${escapeAttr(tName.en + (tName.cn ? ' · ' + tName.cn : ''))}">
       <div class="pbr-icon">${icon}</div>
       <div class="pbr-info">
-        <div class="pbr-name">${escapeHtml(tName.en)}</div>
+        <div class="pbr-name" data-no-i18n><span data-lang-block="en">${escapeHtml(tName.en)}</span><span data-lang-block="cn">${escapeHtml(tName.cn || tName.en)}</span></div>
         ${sub ? `<div class="pbr-sub">${escapeHtml(sub)}</div>` : ''}
       </div>
       <div class="pbr-grip" title="Drag to reorder · 拖动排序">⋮⋮</div>
@@ -1840,8 +2279,7 @@ function paRenderSelectedEditor() {
     <div class="pa-inspector-head" data-blockid="${b.id}">
       <div class="pa-inspector-head-left">
         <div class="pa-inspector-icon">${icon}</div>
-        <span class="pa-inspector-title">${escapeHtml(tName.en)}</span>
-        ${tName.cn ? `<span class="pa-inspector-sub">· ${escapeHtml(tName.cn)}</span>` : ''}
+        <span class="pa-inspector-title" data-no-i18n><span data-lang-block="en">${escapeHtml(tName.en)}</span><span data-lang-block="cn">${escapeHtml(tName.cn || tName.en)}</span></span>
       </div>
       <div class="pa-inspector-actions">
         <button type="button" class="btn btn-icon danger" title="Delete block · 删除板块" onclick="paBlocksRemove('${b.id}')">${PE_UI.x}</button>
@@ -2040,9 +2478,15 @@ function paRenderPreview() {
     </div>`;
 }
 
-// Ctrl/Cmd+S → save
+// Ctrl/Cmd+S → save; Escape closes the smart-paste modal / product switcher
 window.addEventListener('keydown', (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); paSaveEdit(); }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); paSaveEdit(); return; }
+  if (e.key === 'Escape') {
+    const ov = document.getElementById('pe-smart-overlay');
+    if (ov && !ov.hidden) { e.preventDefault(); peSmartClose(); return; }
+    const sw = document.getElementById('pe-switcher-panel');
+    if (sw && !sw.hidden) { e.preventDefault(); peCloseSwitcher(); }
+  }
 });
 
 // ── i18n / Language toggle ──────────────────────────────────────────────

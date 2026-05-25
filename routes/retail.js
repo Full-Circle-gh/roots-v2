@@ -2823,6 +2823,48 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      WHERE date(created_at, '${TZ}') BETWEEN ? AND ? AND scene IS NOT NULL
      GROUP BY scene ORDER BY visits DESC LIMIT 12`).all(from, to);
 
+  // ── Demand heatmap (day-of-week × hour-of-day, paid orders) ──
+  // dow: 0=Sun … 6=Sat (strftime '%w'); hour: 0–23. Drives the staffing grid.
+  const heat = db.prepare(`
+    SELECT CAST(strftime('%w', placed_at, '${TZ}') AS INTEGER) AS dow,
+           CAST(strftime('%H', placed_at, '${TZ}') AS INTEGER) AS hour,
+           COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
+      FROM retail_orders
+     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+     GROUP BY dow, hour`).all(from, to);
+
+  // ── Cohort retention (monthly, full history — NOT window-clipped) ──
+  // cohort_month = the month of a customer's first-ever paid order;
+  // active_month = any month they placed a paid order. The frontend pivots
+  // these into a cohort × months-since-first retention matrix.
+  const cohorts = db.prepare(`
+    WITH first_order AS (
+      SELECT customer_id, strftime('%Y-%m', MIN(placed_at), '${TZ}') AS cohort_month
+        FROM retail_orders WHERE ${PAID} GROUP BY customer_id),
+         activity AS (
+      SELECT DISTINCT customer_id, strftime('%Y-%m', placed_at, '${TZ}') AS active_month
+        FROM retail_orders WHERE ${PAID})
+    SELECT f.cohort_month, a.active_month,
+           COUNT(DISTINCT a.customer_id) AS active_customers
+      FROM activity a JOIN first_order f ON f.customer_id = a.customer_id
+     GROUP BY f.cohort_month, a.active_month`).all();
+  const cohortSizes = db.prepare(`
+    WITH first_order AS (
+      SELECT customer_id, strftime('%Y-%m', MIN(placed_at), '${TZ}') AS cohort_month
+        FROM retail_orders WHERE ${PAID} GROUP BY customer_id)
+    SELECT cohort_month, COUNT(*) AS size
+      FROM first_order GROUP BY cohort_month ORDER BY cohort_month`).all();
+
+  // ── Revenue composition (product subtotal vs delivery vs discounts) ──
+  const composition = db.prepare(`
+    SELECT COALESCE(SUM(subtotal), 0)       AS product_total,
+           COALESCE(SUM(shipping_fee), 0)   AS delivery_fee,
+           COALESCE(SUM(voucher_amount), 0) AS voucher_total,
+           COALESCE(SUM(points_amount), 0)  AS points_total,
+           COALESCE(SUM(total), 0)          AS net_total
+      FROM retail_orders
+     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?`).get(from, to);
+
   const conversion = vis.sessions > 0 ? (kpi.orders / vis.sessions) * 100 : null;
   const pct = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 
@@ -2867,6 +2909,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       geoCities, geoDistricts,
       marketing: { vouchers, points },
       traffic: { scenes },
+      heat, cohorts, cohortSizes, composition,
     },
   });
 });

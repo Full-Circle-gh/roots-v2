@@ -505,6 +505,31 @@
   .db-muted { color: var(--text-3); font-size: 12px; padding: var(--s3) 0; }
   .db-pill { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 10px; font-weight: 600; background: var(--bg-elev-2); color: var(--text-2); }
 
+  /* Demand heatmap — hour × day-of-week grid */
+  .db-heat { display: flex; flex-direction: column; gap: 3px; overflow-x: auto; }
+  .db-heat-row { display: grid; grid-template-columns: 54px repeat(24, 1fr); gap: 3px; align-items: center; min-width: 560px; }
+  .db-heat-row .dl { font-size: 11px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .db-heat-row.hdr .hh { font-size: 9px; color: var(--text-4); text-align: center; }
+  .db-heat-cell { aspect-ratio: 1; border-radius: 3px; min-height: 12px; }
+  .db-heat-legend { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-3); margin-top: var(--s3); }
+  .db-heat-legend .sw { width: 13px; height: 13px; border-radius: 3px; }
+
+  /* Cohort retention — curve + matrix */
+  .db-cohort-curve { width: 100%; height: auto; display: block; margin-bottom: var(--s3); }
+  .db-cohort-curve .grid-line { stroke: var(--line-soft); stroke-width: 1; }
+  .db-cohort-curve .ax { fill: var(--text-3); font-size: 10px; }
+  .db-cohort-curve .line { fill: none; stroke: var(--accent); stroke-width: 2; }
+  .db-cohort-curve .area { fill: var(--accent); opacity: .12; }
+  .db-cohort-curve .dot { fill: var(--accent); }
+  .db-cohort-wrap { overflow-x: auto; }
+  .db-cohort-tbl { border-collapse: separate; border-spacing: 3px; font-size: 11px; }
+  .db-cohort-tbl th { color: var(--text-3); font-size: 10px; font-weight: 600; padding: 4px 6px; text-align: center; white-space: nowrap; }
+  .db-cohort-tbl th.l { text-align: left; }
+  .db-cohort-tbl td { text-align: center; padding: 6px 4px; border-radius: 4px; font-variant-numeric: tabular-nums; min-width: 38px; color: #fff; }
+  .db-cohort-tbl td.lbl { background: var(--bg-elev-1); color: var(--text-1); font-weight: 600; text-align: left; white-space: nowrap; }
+  .db-cohort-tbl td.empty { background: var(--bg-elev-1); color: var(--text-4); }
+  .db-cohort-note { font-size: 11px; color: var(--text-3); line-height: 1.55; margin-top: var(--s3); }
+
   /* ═══════════════════════════════════════════════════════════════════
      PRODUCTS TAB — mini-app product surface editor
      ═══════════════════════════════════════════════════════════════════ */
@@ -3039,13 +3064,11 @@
     <svg id="theme-icon-light" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; display: none;"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2"  x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2"  y1="12" x2="4"  y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93"  y1="4.93"  x2="6.34"  y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="4.93"  y1="19.07" x2="6.34"  y2="17.66"/><line x1="17.66" y1="6.34"  x2="19.07" y2="4.93"/></svg>
   </button>
   <button class="topbar-link" id="lang-toggle" type="button" onclick="cuToggleLang()" title="Switch language" style="border:none;background:transparent;cursor:pointer;font-weight:600;letter-spacing:.02em;">中文</button>
-  <a class="topbar-link" href="/cms" target="_blank" rel="noopener">Mini App Editor</a>
   <!-- Live Preview removed 2026-05-20: the /cms page is the live preview
        surface; an extra "Live Preview" button in the backend topbar was
        redundant and added topbar weight. The openLivePreview() handler +
        drawer markup are kept so anything that programmatically calls
        them (or any deep link) still works, just no chrome entry point. -->
-  <a class="topbar-link" href="/" target="_blank" rel="noopener">Dashboard</a>
 </div>
 
 <div class="tabs">
@@ -3130,6 +3153,23 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         Media · 媒体库
       </button>
+      <!-- Divider — separates the in-app content sections above from the
+           external editor launcher below. -->
+      <div style="height:1px;background:var(--line);margin:4px 6px;"></div>
+      <!-- Mini App Editor — separate tool (/cms), opens in a new tab. Lives
+           under Content because it edits the mini-app storefront layout. -->
+      <button type="button" onclick="window.open('/cms','_blank','noopener')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="13" y2="10"/></svg>
+        Mini App Editor · 小程序编辑器
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;opacity:.55;margin-left:auto"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </button>
+      <!-- Product Page Editor — separate tool (/product-editor), opens in a new
+           tab to a product picker, then edits that product's detail-page sections. -->
+      <button type="button" onclick="window.open('/product-editor','_blank','noopener')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+        Product Page Editor · 产品页编辑器
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;opacity:.55;margin-left:auto"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </button>
     </div>
   </div>
 
@@ -3192,6 +3232,14 @@
       <div id="db-trend"></div>
     </div>
 
+    <!-- Demand heatmap — when orders land, hour × day-of-week -->
+    <div class="card">
+      <div class="db-card-head">
+        <h3>Demand heatmap · 需求热力图 <span style="color:var(--text-3);font-weight:400">When orders land · 下单时段 — darker = busier · 颜色越深越繁忙</span></h3>
+      </div>
+      <div id="db-heatmap"></div>
+    </div>
+
     <div class="db-grid-2">
       <div class="card">
         <div class="db-card-head"><h3>Order status · 订单状态</h3></div>
@@ -3233,6 +3281,17 @@
       <div class="card">
         <div class="db-card-head"><h3>Traffic & sources · 流量与来源</h3></div>
         <div id="db-traffic"></div>
+      </div>
+    </div>
+
+    <div class="db-grid-2">
+      <div class="card">
+        <div class="db-card-head"><h3>Revenue composition · 收入构成</h3></div>
+        <div id="db-composition"></div>
+      </div>
+      <div class="card">
+        <div class="db-card-head"><h3>Cohort retention · 客户留存</h3></div>
+        <div id="db-cohorts"></div>
       </div>
     </div>
   </section>
@@ -3662,14 +3721,16 @@
   <!-- ─── PRODUCTS ─── -->
   <section id="tab-products">
     <h2>Products · 产品</h2>
-    <p class="helper" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
+    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
       Mini-app product surface — <b>Designer Sections</b>, keywords, tagline.
-      Master data (price, stock, recipe, allergens) is edited in the kitchen Products page.<br>
+      Master data (price, stock, recipe, allergens) is edited in the kitchen Products page.
+    </p>
+    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
       小程序产品页编辑入口：「设计板块」、关键词、宣传短句。后厨主数据在后厨 Products 页面编辑。
     </p>
 
     <div class="pa-toolbar">
-      <input id="pa-search" type="text" placeholder="Search by name, SKU… · 按名称、SKU 搜索…">
+      <input id="pa-search" type="text" data-ph-en="Search by name, SKU…" data-ph-cn="按名称、SKU 搜索…" placeholder="Search by name, SKU…">
       <select id="pa-filter">
         <option value="all">All products · 全部</option>
         <option value="authored">Designed · 已设计</option>
@@ -4382,7 +4443,7 @@
         <button type="button" class="dz-subtab active" data-view="pricing" onclick="setZoneView('pricing')">Pricing · 定价</button>
         <button type="button" class="dz-subtab"        data-view="scheduling" onclick="setZoneView('scheduling')">Scheduling · 时间</button>
       </div>
-      <input type="text" id="dz-search" placeholder="Search zone · 搜索配送区…" oninput="renderZoneTable()">
+      <input type="text" id="dz-search" data-ph-en="Search zone" data-ph-cn="搜索配送区…" placeholder="Search zone" oninput="renderZoneTable()">
       <button class="btn btn-primary" onclick="openZoneDrawer()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Add zone · 添加配送区
@@ -4432,7 +4493,7 @@
             <!-- City chip-input — type, Enter or comma adds a chip -->
             <div id="dz-city-picker" style="display: none;">
               <div id="dz-city-chips" class="dz-chip-grid" style="margin-bottom: 8px;"></div>
-              <input type="text" list="china-cities-datalist" id="dz-city-input" placeholder="Type 深圳 or Shenzhen, then Enter · 输入城市,回车添加" style="width: 100%;" onkeydown="onCityChipKey(event)" onchange="onCityChipCommit()">
+              <input type="text" list="china-cities-datalist" id="dz-city-input" data-ph-en="Type 深圳 or Shenzhen, then Enter" data-ph-cn="输入城市,回车添加" placeholder="Type 深圳 or Shenzhen, then Enter" style="width: 100%;" onkeydown="onCityChipKey(event)" onchange="onCityChipCommit()">
               <div class="muted" style="font-size: 11px; margin-top: 4px;">Press Enter (or comma) to add each city. · 按回车或逗号添加城市。</div>
             </div>
             <div id="dz-multi-count" class="dz-multi-count" style="display: none;"></div>
@@ -5182,13 +5243,13 @@
         <div class="ml-side-h">Folders · 文件夹</div>
         <div id="ml-folders"></div>
         <div class="ml-fld-add">
-          <input type="text" id="ml-new-folder" placeholder="+ New folder · 新建文件夹" onkeydown="onNewFolderKey(event)">
+          <input type="text" id="ml-new-folder" data-ph-en="+ New folder" data-ph-cn="+ 新建文件夹" placeholder="+ New folder" onkeydown="onNewFolderKey(event)">
         </div>
       </aside>
 
       <div>
         <div class="ml-toolbar">
-          <input type="text" id="ml-search" placeholder="Search filename or alt text · 搜索文件名/alt" oninput="debouncedMediaLoad()">
+          <input type="text" id="ml-search" data-ph-en="Search filename or alt text" data-ph-cn="搜索文件名/alt" placeholder="Search filename or alt text" oninput="debouncedMediaLoad()">
           <select id="ml-mime" onchange="loadMedia()">
             <option value="">All types · 全部类型</option>
             <option value="image/jpeg">JPEG</option>
@@ -6919,6 +6980,7 @@ async function dashLoad() {
 function dashRenderAll() {
   dashRenderKpis();
   dashRenderTrend();
+  dashRenderHeatmap();
   dashRenderFunnel();
   dashRenderSplits();
   dashRenderProducts();
@@ -6927,6 +6989,8 @@ function dashRenderAll() {
   dashRenderGeo();
   dashRenderMarketing();
   dashRenderTraffic();
+  dashRenderComposition();
+  dashRenderCohorts();
 }
 
 function dashRenderKpis() {
@@ -7163,6 +7227,168 @@ function dashRenderTraffic() {
   html += '<div style="font-size:11px;color:var(--text-3);margin:14px 0 6px;font-weight:600">ENTRY SCENES · 进入场景</div>';
   html += scenes.length ? dashBarList(scenes.map(s => ({ k: DASH_SCENES[s.scene] || ('Scene ' + s.scene), value: dashNum(s.visits), valueSub: `${dashNum(s.sessions)} sess.`, frac: s.visits }))) : '<div class="db-muted">No scene data · 无场景数据</div>';
   $('#db-traffic').innerHTML = html;
+}
+
+// ── Demand heatmap (hour-of-day × day-of-week) ──
+const DASH_DOW = ['日 Sun', '一 Mon', '二 Tue', '三 Wed', '四 Thu', '五 Fri', '六 Sat'];
+function dashRenderHeatmap() {
+  const host = $('#db-heatmap');
+  if (!host) return;
+  const heat = DASH_DATA.heat || [];
+  if (!heat.length) { host.innerHTML = '<div class="db-muted">No orders in range · 区间内无订单</div>'; return; }
+  const grid = {};
+  let max = 1;
+  heat.forEach(h => { grid[h.dow + '-' + h.hour] = h; if (h.orders > max) max = h.orders; });
+  const hdr = Array.from({ length: 24 }, (_, h) => `<div class="hh">${h}</div>`).join('');
+  let rows = `<div class="db-heat-row hdr"><div class="dl"></div>${hdr}</div>`;
+  for (let d = 0; d < 7; d++) {
+    let cells = '';
+    for (let h = 0; h < 24; h++) {
+      const cell = grid[d + '-' + h];
+      const intensity = cell ? cell.orders / max : 0;
+      const bg = intensity === 0 ? 'var(--bg-elev-1)' : `rgba(109,179,63,${(0.16 + intensity * 0.84).toFixed(2)})`;
+      const hh = String(h).padStart(2, '0');
+      const tip = cell
+        ? `${DASH_DOW[d]} ${hh}:00 — ${dashNum(cell.orders)} orders · ${dashMoney(cell.revenue)}`
+        : `${DASH_DOW[d]} ${hh}:00 — 0`;
+      cells += `<div class="db-heat-cell" style="background:${bg}" title="${escapeAttr(tip)}"></div>`;
+    }
+    rows += `<div class="db-heat-row"><div class="dl">${DASH_DOW[d]}</div>${cells}</div>`;
+  }
+  host.innerHTML = `<div class="db-heat">${rows}</div>
+    <div class="db-heat-legend"><span>Fewer · 少</span>
+      <span class="sw" style="background:var(--bg-elev-1)"></span>
+      <span class="sw" style="background:rgba(109,179,63,.32)"></span>
+      <span class="sw" style="background:rgba(109,179,63,.58)"></span>
+      <span class="sw" style="background:rgba(109,179,63,.84)"></span>
+      <span class="sw" style="background:rgba(109,179,63,1)"></span>
+      <span>More · 多</span></div>`;
+}
+
+// ── Revenue composition (product subtotal vs delivery, with discounts) ──
+function dashRenderComposition() {
+  const host = $('#db-composition');
+  if (!host) return;
+  const c = DASH_DATA.composition || {};
+  const product  = Number(c.product_total || 0);
+  const delivery = Number(c.delivery_fee || 0);
+  const discount = Number(c.voucher_total || 0) + Number(c.points_total || 0);
+  const net      = Number(c.net_total || 0);
+  if (!product && !delivery && !net) { host.innerHTML = '<div class="db-muted">No revenue in range · 区间内无收入</div>'; return; }
+  const base = (product + delivery) || 1;
+  const pctOf = a => Math.round(a / base * 1000) / 10;
+  const row = (lbl, val, color) => `
+    <div class="db-bar-row" style="grid-template-columns:130px 1fr auto">
+      <div class="k"><span style="width:10px;height:10px;border-radius:3px;background:${color};flex:none"></span>${lbl}</div>
+      <div class="db-track"><span style="width:${(val / base * 100).toFixed(1)}%;background:${color}"></span></div>
+      <div class="v">${dashMoney(val)} <span class="sub">${pctOf(val)}%</span></div>
+    </div>`;
+  let html = `<div style="display:flex;height:14px;border-radius:99px;overflow:hidden;background:var(--bg-elev-1);margin-bottom:14px">
+      <div title="${escapeAttr('Product · 商品')}" style="width:${(product / base * 100).toFixed(1)}%;background:var(--accent)"></div>
+      <div title="${escapeAttr('Delivery · 配送')}" style="width:${(delivery / base * 100).toFixed(1)}%;background:#3b82f6"></div>
+    </div>`;
+  html += '<div class="db-bars">' + row('Product · 商品', product, 'var(--accent)') + row('Delivery · 配送', delivery, '#3b82f6') + '</div>';
+  html += `<div class="db-row" style="border-bottom:0;padding:10px 0 0">
+      <div class="nm"><b>Net revenue · 实收</b></div>
+      <div class="mny"><b style="color:var(--accent);font-size:15px">${dashMoney(net)}</b></div></div>`;
+  if (discount > 0) html += `<div class="db-muted" style="color:#c77d2e">− ${dashMoney(discount)} in voucher &amp; point discounts · 优惠券与积分让利</div>`;
+  host.innerHTML = html;
+}
+
+// ── Cohort retention (summary tiles + weighted curve + matrix) ──
+function dashRenderCohorts() {
+  const host = $('#db-cohorts');
+  if (!host) return;
+  const sizes = DASH_DATA.cohortSizes || [];
+  const rows  = DASH_DATA.cohorts || [];
+  if (!sizes.length) { host.innerHTML = '<div class="db-muted">Not enough history yet · 暂无足够留存数据</div>'; return; }
+
+  const byMonth = {};
+  rows.forEach(c => { if (!byMonth[c.cohort_month]) byMonth[c.cohort_month] = {}; byMonth[c.cohort_month][c.active_month] = c.active_customers; });
+  const sizeMap = {};
+  sizes.forEach(c => { sizeMap[c.cohort_month] = c.size; });
+  const months = sizes.map(c => c.cohort_month);
+
+  const monthAdd = (m, n) => {
+    const [y, mo] = m.split('-').map(Number);
+    const t = (mo - 1) + n;
+    return `${y + Math.floor(t / 12)}-${String(((t % 12) + 12) % 12 + 1).padStart(2, '0')}`;
+  };
+  const monthsBetween = (a, b) => {
+    const [ay, am] = a.split('-').map(Number);
+    const [by, bm] = b.split('-').map(Number);
+    return (by - ay) * 12 + (bm - am);
+  };
+  const todayYM = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 7);
+  const age = {};
+  months.forEach(m => { age[m] = monthsBetween(m, todayYM); });
+  const maxOffset = Math.max(0, ...Object.values(age));
+
+  // Weighted-average retention curve (only cohorts with ≥M months of history).
+  const curve = [];
+  for (let m = 0; m <= maxOffset; m++) {
+    let active = 0, size = 0;
+    for (const cm of months) {
+      if (age[cm] < m) continue;
+      const s = sizeMap[cm] || 0;
+      if (!s) continue;
+      active += byMonth[cm] && byMonth[cm][monthAdd(cm, m)] || 0;
+      size += s;
+    }
+    if (size > 0) curve.push({ offset: m, pct: Math.round(active / size * 1000) / 10 });
+  }
+  const kpi = m => { const c = curve.find(x => x.offset === m); return c ? c.pct : null; };
+  const tile = (m, lbl) => { const v = kpi(m); return `<div class="db-tile"><div class="t-val">${v == null ? '—' : v + '%'}</div><div class="t-lbl">${lbl}</div></div>`; };
+
+  let curveSvg = '';
+  if (curve.length > 1) {
+    const W = 760, H = 150, padL = 30, padR = 10, padT = 10, padB = 22;
+    const iw = W - padL - padR, ih = H - padT - padB;
+    const xs = i => padL + (i / (curve.length - 1)) * iw;
+    const ys = v => padT + ih - (v / 100) * ih;
+    let grid = '', xl = '', dots = '';
+    [0, 25, 50, 75, 100].forEach(v => {
+      const gy = ys(v);
+      grid += `<line class="grid-line" x1="${padL}" y1="${gy.toFixed(1)}" x2="${W - padR}" y2="${gy.toFixed(1)}"/>`;
+      grid += `<text class="ax" x="${padL - 4}" y="${(gy + 3).toFixed(1)}" text-anchor="end">${v}%</text>`;
+    });
+    const pts = curve.map((c, i) => `${xs(i).toFixed(1)},${ys(c.pct).toFixed(1)}`);
+    const area = `<path class="area" d="M ${pts.join(' L ')} L ${xs(curve.length - 1).toFixed(1)},${(padT + ih).toFixed(1)} L ${padL},${(padT + ih).toFixed(1)} Z"/>`;
+    const line = `<polyline class="line" points="${pts.join(' ')}"/>`;
+    curve.forEach((c, i) => {
+      dots += `<circle class="dot" cx="${xs(i).toFixed(1)}" cy="${ys(c.pct).toFixed(1)}" r="2.5"><title>M${c.offset}: ${c.pct}%</title></circle>`;
+      xl += `<text class="ax" x="${xs(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">M${c.offset}</text>`;
+    });
+    curveSvg = `<svg class="db-cohort-curve" viewBox="0 0 ${W} ${H}">${grid}${area}${line}${dots}${xl}</svg>`;
+  }
+
+  // Matrix — most recent 12 cohorts, newest first.
+  const shown = months.slice(-12).reverse();
+  const cols = Math.min(maxOffset + 1, 12);
+  const cellColor = p => p >= 75 ? '#1b5e20' : p >= 50 ? '#388e3c' : p >= 25 ? '#5b9c34' : p > 0 ? '#9ac46f' : null;
+  let head = `<th class="l">Cohort · 队列</th><th>Size</th>`;
+  for (let i = 0; i < cols; i++) head += `<th>M${i}</th>`;
+  let body = '';
+  shown.forEach(cm => {
+    const size = sizeMap[cm] || 0;
+    let cells = `<td class="lbl">${cm}</td><td class="lbl" style="text-align:right">${dashNum(size)}</td>`;
+    for (let i = 0; i < cols; i++) {
+      if (age[cm] < i) { cells += `<td class="empty" style="opacity:.4">·</td>`; continue; }
+      const active = byMonth[cm] && byMonth[cm][monthAdd(cm, i)] || 0;
+      const p = size > 0 ? Math.round(active / size * 1000) / 10 : 0;
+      const col = cellColor(p);
+      cells += col
+        ? `<td style="background:${col}" title="${escapeAttr(active + ' of ' + size + ' returned in ' + monthAdd(cm, i))}">${p.toFixed(0)}%</td>`
+        : `<td class="empty">—</td>`;
+    }
+    body += `<tr>${cells}</tr>`;
+  });
+
+  host.innerHTML =
+    `<div class="db-tiles" style="margin-bottom:14px">${tile(1, 'M1 · 1月')}${tile(3, 'M3 · 3月')}${tile(6, 'M6 · 6月')}${tile(12, 'M12 · 12月')}</div>`
+    + curveSvg
+    + `<div class="db-cohort-wrap"><table class="db-cohort-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+    + `<div class="db-cohort-note"><b>How to read · 阅读说明:</b> Each row is the customers whose first order was that month. M0 = their first month (always 100%); M1, M2… show the share who ordered again that many months later. · 每行为该月首单的客户群，M0 为入群当月(恒为 100%)，M1、M2… 为之后第 N 个月再次下单的占比。</div>`;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -8558,7 +8784,7 @@ function openRefundApproveDialog(orderId) {
         </div>
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">Staff note (shown to customer) · 客服备注(顾客可见)</label>
-          <textarea id="rf-note" rows="2" style="width: 100%;" placeholder="Optional · 可选"></textarea>
+          <textarea id="rf-note" rows="2" style="width: 100%;" data-ph-en="Optional" data-ph-cn="可选" placeholder="Optional"></textarea>
         </div>
         <div class="field" id="rf-points-wrap" style="margin-bottom: 14px; display: none;">
           <label style="display: flex; align-items: center; gap: 8px;">
@@ -8661,7 +8887,7 @@ function openRefundPayoutDialog(orderId) {
         </div>
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">Reference / txn id · 凭证号</label>
-          <input type="text" id="rfp-ref" placeholder="Provider txn id, bank ref, etc. · 第三方交易号、银行参考号等" style="width: 100%;">
+          <input type="text" id="rfp-ref" data-ph-en="Provider txn id, bank ref, etc." data-ph-cn="第三方交易号、银行参考号等" placeholder="Provider txn id, bank ref, etc." style="width: 100%;">
         </div>
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">Amount · 金额 (¥)</label>
@@ -14176,6 +14402,16 @@ cuApplyThemeIcon();
   // Same idea for help tooltips: their text lives in the data-tip attribute,
   // not a text node, so it needs its own registry. { el, en, cn }.
   const _tipReg = [];
+  // Opt-in bilingual placeholders: tag an input/textarea with data-ph-en +
+  // data-ph-cn and we swap its `placeholder` on toggle. Opt-in (not auto-split
+  // like text) because many placeholders carry a decorative " · " that is NOT a
+  // translation divider (e.g. "Mon–Sat · 9am–6pm", "ROOTS CLUB · LEADERBOARD").
+  const _phReg = [];
+  // Native HTML title="" hover tooltips. Same "EN · CN" model as data-tip,
+  // but the text-node/data-tip walkers never see title attributes — so without
+  // this, bilingual title labels stay frozen and always show the Chinese half
+  // on hover regardless of the active language. { el, en, cn }.
+  const _titleReg = [];
 
   // Never touch text inside these — code, user input, or vector graphics
   // (chart labels). Translating them would corrupt rendering.
@@ -14283,6 +14519,43 @@ cuApplyThemeIcon();
     scope.querySelectorAll && scope.querySelectorAll('[data-tip]').forEach(processTip);
   }
 
+  // Opt-in bilingual placeholders — see _phReg note above.
+  function processPh(el) {
+    if (el.__i18nPhDone) return;
+    const en = el.getAttribute('data-ph-en'), cn = el.getAttribute('data-ph-cn');
+    if (en == null || cn == null) return;
+    el.__i18nPhDone = true;
+    el.setAttribute('placeholder', _lang === 'cn' ? cn : en);
+    _phReg.push({ el, en, cn });
+  }
+  function processPhs(root) {
+    const scope = (root && root.nodeType === 1) ? root : document.body;
+    if (scope.hasAttribute && scope.hasAttribute('data-ph-en')) processPh(scope);
+    scope.querySelectorAll && scope.querySelectorAll('[data-ph-en]').forEach(processPh);
+  }
+
+  // Native title="" tooltips — same split-once model as data-tip. Only treat
+  // it as bilingual when the half after the first " · " contains Chinese, so
+  // data-bearing titles ("asher · 18613159912", "5 orders · ¥320") and
+  // single-language titles are left untouched.
+  function processTitle(el) {
+    if (el.__i18nTitleDone) return;
+    const raw = el.getAttribute('title') || '';
+    const idx = raw.indexOf(' · ');
+    if (idx === -1) return;
+    const en = raw.slice(0, idx).trim();
+    const cn = raw.slice(idx + 3).trim();
+    if (!en || !cn || !hasChinese(cn)) return;
+    el.__i18nTitleDone = true;
+    el.setAttribute('title', _lang === 'cn' ? cn : en);
+    _titleReg.push({ el, en, cn });
+  }
+  function processTitles(root) {
+    const scope = (root && root.nodeType === 1) ? root : document.body;
+    if (scope.hasAttribute && scope.hasAttribute('title')) processTitle(scope);
+    scope.querySelectorAll && scope.querySelectorAll('[title]').forEach(processTitle);
+  }
+
   function processSubtree(root) {
     if (!root) return;
     if (root.nodeType === 3) { processNode(root); return; }
@@ -14298,6 +14571,8 @@ cuApplyThemeIcon();
     nodes.forEach(processNode);
     processBlocks(root);
     processTips(root);
+    processPhs(root);
+    processTitles(root);
   }
 
   function applyLang(lang) {
@@ -14312,6 +14587,16 @@ cuApplyThemeIcon();
       const e = _tipReg[i];
       if (!e.el.isConnected) { _tipReg.splice(i, 1); continue; }
       e.el.setAttribute('data-tip', lang === 'cn' ? e.cn : e.en);
+    }
+    for (let i = _phReg.length - 1; i >= 0; i--) {
+      const e = _phReg[i];
+      if (!e.el.isConnected) { _phReg.splice(i, 1); continue; }
+      e.el.setAttribute('placeholder', lang === 'cn' ? e.cn : e.en);
+    }
+    for (let i = _titleReg.length - 1; i >= 0; i--) {
+      const e = _titleReg[i];
+      if (!e.el.isConnected) { _titleReg.splice(i, 1); continue; }
+      e.el.setAttribute('title', lang === 'cn' ? e.cn : e.en);
     }
     processSubtree(document.body);  // pick up anything not yet registered
     try { localStorage.setItem(LANG_KEY, lang); } catch {}

@@ -364,6 +364,181 @@ ${JSON.stringify({ monthly, topProducts, wasteMonthly }, null, 2)}
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// SMART PASTE → BLOCKS  (POST /api/ai/compose-blocks)
+// ─────────────────────────────────────────────────────────────────────
+// The product editor (/product-editor) lets the operator paste a wall of
+// raw product copy and have Claude auto-divide it into the editor's typed,
+// bilingual "description blocks". The model returns a block list via a
+// forced tool call; we sanitise it against the known block types here
+// before handing it back. The editor trusts the response shape, so the
+// validation lives on this side of the wire, not in the browser.
+//
+// COMPOSE_SCHEMA mirrors PA_BLOCK_TYPES in public/product-editor.html —
+// keep the two in sync when block types or their fields change.
+const COMPOSE_SCHEMA = {
+  spec_strip:        { arrays: { cells: ['k_en', 'k_cn', 'v_en', 'v_cn'] } },
+  hero_intro:        { scalars: ['kicker_en', 'kicker_cn', 'body_en', 'body_cn', 'highlight_en', 'highlight_cn'] },
+  why:               { arrays: { rows: ['claim_en', 'claim_cn'] } },
+  ingredients_chips: { arrays: { items: ['name_en', 'name_cn', 'pct', 'lead'] } },
+  ingredients_line:  { arrays: { items: ['name_en', 'name_cn', 'pct', 'lead'] } },
+  allergen_card:     { scalars: ['contains_en', 'contains_cn', 'may_contain_en', 'may_contain_cn'] },
+  how_to_use:        { arrays: { tiles: ['icon', 'label_en', 'label_cn', 'sub_en', 'sub_cn'] } },
+  storage_box:       { scalars: ['note_en', 'note_cn'], objects: {
+                         left:  ['icon', 'head_en', 'head_cn', 'num', 'unit_en', 'unit_cn', 'alt'],
+                         right: ['icon', 'head_en', 'head_cn', 'num', 'unit_en', 'unit_cn', 'alt'] } },
+  notes_callout:     { scalars: ['text_en', 'text_cn'] },
+  big_stat:          { scalars: ['stat', 'what_en', 'what_cn', 'claim_en', 'claim_cn', 'bg'] },
+  pull_quote:        { scalars: ['text_en', 'text_cn', 'who_en', 'who_cn'] },
+  nutrition_facts:   { scalars: ['basis_en', 'basis_cn'], arrays: { rows: ['label_en', 'label_cn', 'value'] } },
+};
+
+// Coerce a model-emitted block down to ONLY the fields its type allows.
+// Unknown types → dropped; unknown fields → ignored; everything stringified
+// (except the known booleans) so the editor never sees a surprise shape.
+function sanitizeComposedBlock(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const type = String(raw.type || '').trim();
+  const spec = COMPOSE_SCHEMA[type];
+  if (!spec) return null;
+  const str = v => (v == null ? '' : String(v));
+  const out = { type };
+  for (const k of (spec.scalars || [])) out[k] = str(raw[k]);
+  for (const [arrKey, keys] of Object.entries(spec.arrays || {})) {
+    const src = Array.isArray(raw[arrKey]) ? raw[arrKey] : [];
+    out[arrKey] = src.map(item => {
+      const o = {};
+      for (const k of keys) o[k] = (k === 'lead') ? !!(item && item[k]) : str(item && item[k]);
+      return o;
+    });
+  }
+  for (const [objKey, keys] of Object.entries(spec.objects || {})) {
+    const src = (raw[objKey] && typeof raw[objKey] === 'object') ? raw[objKey] : {};
+    const o = {};
+    for (const k of keys) o[k] = (k === 'alt') ? !!src[k] : str(src[k]);
+    out[objKey] = o;
+  }
+  return out;
+}
+
+// Did the model actually put text in this block, or just emit an empty husk?
+function composedBlockHasContent(b) {
+  const spec = COMPOSE_SCHEMA[b.type];
+  if (!spec) return false;
+  const has = v => typeof v === 'string' && v.trim() !== '';
+  for (const k of (spec.scalars || [])) if (has(b[k])) return true;
+  for (const [arrKey, keys] of Object.entries(spec.arrays || {}))
+    for (const it of (b[arrKey] || [])) for (const k of keys) if (has(it[k])) return true;
+  for (const [objKey, keys] of Object.entries(spec.objects || {}))
+    for (const k of keys) if (has((b[objKey] || {})[k])) return true;
+  return false;
+}
+
+const COMPOSE_TOOL = {
+  name: 'emit_blocks',
+  description: 'Return the product copy organised into ordered Roots description blocks.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      blocks: {
+        type: 'array',
+        description: 'Blocks in top-to-bottom display order. Each must have a "type" from the allowed list plus that type\'s fields.',
+        items: {
+          type: 'object',
+          properties: { type: { type: 'string', enum: Object.keys(COMPOSE_SCHEMA) } },
+          required: ['type'],
+          additionalProperties: true,
+        },
+      },
+    },
+    required: ['blocks'],
+  },
+};
+
+const COMPOSE_SYSTEM = `You are the layout assistant for **Roots**, a small bilingual (English + 中文) plant-based food brand in Guangzhou. The operator pastes raw product copy — a label, a supplier blurb, scattered notes — and your job is to divide it into the product page's structured "blocks", choosing the right block type for each piece of content.
+
+Return your answer ONLY by calling the \`emit_blocks\` tool. Do not write prose.
+
+VOICE: warm, plain-spoken, editorial. Never marketing-fluff. Keep the operator's own wording where it's already good; tighten where it rambles.
+
+BLOCK TYPES (pick the ones that fit — skip the rest, never force-fill):
+- **spec_strip** — three quick meta facts. Fields: cells[] of { k_en, k_cn, v_en, v_cn } (k = label like "Net Wt", v = value). Use ~3 cells.
+- **hero_intro** — the opening editorial paragraph. Fields: kicker_en/cn (tiny eyebrow line, optional), body_en/cn (the paragraph), highlight_en/cn (one pull-out phrase, optional).
+- **why** — why people choose it, as short numbered claims. Fields: rows[] of { claim_en, claim_cn }. 3–5 rows.
+- **ingredients_chips** — ingredient list as pills. Fields: items[] of { name_en, name_cn, pct (string % or ""), lead (boolean: true for a hero ingredient) }.
+- **ingredients_line** — same data as a typographic run instead of pills. Only use ONE of chips/line, not both.
+- **allergen_card** — Fields: contains_en/cn, may_contain_en/cn (comma-separated allergens).
+- **how_to_use** — usage ideas as a grid. Fields: tiles[] of { icon (one emoji), label_en/cn, sub_en/cn (optional). 6 tiles ideal.
+- **storage_box** — storage conditions. Fields: left & right each { icon, head_en/cn, num (e.g. "0–4°"), unit_en/cn, alt (boolean) }; plus note_en/cn.
+- **notes_callout** — fine-print note. Fields: text_en/cn.
+- **big_stat** — one big number. Fields: stat (the number/figure), what_en/cn (what it measures), claim_en/cn (short line), bg ("lime").
+- **pull_quote** — sourcing / provenance line. Fields: text_en/cn, who_en/cn (attribution, optional).
+- **nutrition_facts** — only if the text has a nutrition table. Fields: basis_en/cn (e.g. "Per 100g"), rows[] of { label_en, label_cn, value }.
+
+RULES:
+- Order blocks the way they should read on the page (intro first, fine-print/notes last).
+- Don't duplicate content across blocks. Each fact lives in one block.
+- Only emit a block if the source text actually supports it. A sparse paste might be just hero_intro + ingredients. That's fine — fewer, accurate blocks beat many empty ones.
+- pct is a string ("12%" or "") and lead/alt are booleans.`;
+
+const COMPOSE_TRANSLATE_ON = `
+
+TRANSLATION: For EVERY text field, fill BOTH the _en and _cn variants. If the source is only in one language, render the other yourself — idiomatic and on-brand, NOT a literal word-for-word gloss.`;
+
+const COMPOSE_TRANSLATE_OFF = `
+
+TRANSLATION: Fill ONLY the language the source copy is written in. Leave the opposite-language fields as empty strings (""). Do not invent translations — the operator will write the other language themselves.`;
+
+router.post('/api/ai/compose-blocks', requireAuth, requirePermission('retail'), express.json(), async (req, res) => {
+  const _provider = pickProvider();
+  if (!providerKey(_provider)) {
+    return res.status(503).json({
+      error: 'AI not configured · AI 未配置',
+      detail: `Set ${_provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'DEEPSEEK_API_KEY'} in /root/roots-v2/.env then restart pm2.`,
+    });
+  }
+
+  const text      = (req.body && req.body.text ? String(req.body.text) : '').trim();
+  const translate = !!(req.body && req.body.translate);
+  const product   = (req.body && req.body.product && typeof req.body.product === 'object') ? req.body.product : {};
+  if (!text) return res.status(400).json({ error: 'No text provided · 未提供文字' });
+
+  try {
+    const ctxBits = [product.name_en, product.name_cn, product.category].filter(Boolean).join(' · ');
+    const userMsg =
+      (ctxBits ? `Product: ${ctxBits}\n\n` : '') +
+      'Raw copy to organise into blocks:\n\n' + text.slice(0, 12000) +
+      '\n\nCall emit_blocks now with the organised blocks.';
+
+    const result = await callLLM({
+      max_tokens: 2400,
+      system: { static: COMPOSE_SYSTEM + (translate ? COMPOSE_TRANSLATE_ON : COMPOSE_TRANSLATE_OFF), dynamic: '' },
+      tools: [COMPOSE_TOOL],
+      messages: [{ role: 'user', content: userMsg }],
+    });
+
+    let rawBlocks = [];
+    const toolUse = (result.content_blocks || []).find(b => b.type === 'tool_use' && b.name === 'emit_blocks');
+    if (toolUse && Array.isArray(toolUse.input && toolUse.input.blocks)) {
+      rawBlocks = toolUse.input.blocks;
+    } else {
+      // Fallback: a provider returned JSON as text instead of a tool call.
+      const txt = (result.content_blocks || []).filter(b => b.type === 'text').map(b => b.text || '').join('\n');
+      const m = txt.match(/\{[\s\S]*\}/);
+      if (m) { try { const o = JSON.parse(m[0]); if (Array.isArray(o.blocks)) rawBlocks = o.blocks; } catch (e) {} }
+    }
+
+    const blocks = rawBlocks.map(sanitizeComposedBlock).filter(b => b && composedBlockHasContent(b));
+    logActivity(req.user.id, req.user.username, 'ai_compose_blocks', 'product', product.id || null,
+      { count: blocks.length, translate, tokens: result.usage, provider: _provider }, req.ip);
+    res.json({ success: true, blocks, usage: result.usage, provider: _provider });
+  } catch (e) {
+    if (e.code === 'no_key') return res.status(503).json({ error: e.message });
+    if (e.status)            return res.status(502).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
 // SPROUT · 苗 — Conversational agent with read-only DB tools.
 // ─────────────────────────────────────────────────────────────────────
 //
