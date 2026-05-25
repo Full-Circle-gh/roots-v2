@@ -3,8 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" id="meta-theme-color" content="#16161a">
+<meta name="theme-color" id="meta-theme-color" content="#12161A">
 <title>Product Editor · Roots</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script>
   // Apply theme before first paint (mirror of retail-admin.html).
   (function () {
@@ -31,56 +34,64 @@
 
   /* ── DESIGN TOKENS (mirror of /cms + retail-admin) ── */
   :root {
-    --bg-app:     #16161a;
-    --bg-pane:    #1f1f24;
-    --bg-elev-1:  #25252b;
-    --bg-elev-2:  #2e2e35;
-    --bg-input:   #1a1a1f;
-    --bg-overlay: rgba(10, 10, 12, .72);
-    --line-soft:  rgba(255, 255, 255, .055);
-    --line:       rgba(255, 255, 255, .09);
-    --line-strong: rgba(255, 255, 255, .15);
-    --ring:       rgba(204, 217, 0, .35);
-    --text-1:     #ecebe5;
-    --text-2:     #aeaba2;
+    /* Full Circle palette · dark-mode-first. Tea = active/selected/live,
+       Brass = primary action (Save/language/Block) + attention. */
+    --bg-app:     #12161A;   /* Ink Charcoal */
+    --bg-pane:    #1A1F24;
+    --bg-elev-1:  #1F252B;
+    --bg-elev-2:  #262E35;
+    --bg-input:   #12161A;
+    --bg-overlay: rgba(8, 10, 12, .72);
+    --line-soft:  rgba(232, 229, 220, .06);
+    --line:       rgba(232, 229, 220, .10);
+    --line-strong: rgba(232, 229, 220, .16);
+    --ring:       rgba(107, 142, 111, .40);   /* Tea focus */
+    --text-1:     #E8E5DC;   /* Deeper Paper */
+    --text-2:     #AEABA2;
     --text-3:     #7d7a72;
     --text-4:     #56544f;
-    --accent:     #ccd900;
-    --accent-hi:  #dde858;
-    --accent-ink: #16161a;
+    --accent:     #6B8E6F;   /* Tea Green */
+    --accent-hi:  #7BA07F;
+    --accent-ink: #12161A;
+    --brass:      #B08D4A;   /* Aged Brass */
+    --brass-hi:   #C29B54;
     --danger:     #e8556a;
     --danger-soft: rgba(232, 85, 106, .14);
-    --warn:       #e9a35a;
-    --success:    #80c462;
+    --warn:       #B08D4A;
+    --success:    #6B8E6F;
     --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s7: 32px;
     --r-sm: 4px; --r-md: 6px; --r-lg: 10px; --r-xl: 14px;
     --sh-1: 0 1px 2px rgba(0, 0, 0, .25);
     --sh-2: 0 4px 16px rgba(0, 0, 0, .25);
     --sh-3: 0 24px 60px rgba(0, 0, 0, .5);
-    --f-sans:  -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', system-ui, sans-serif;
-    --f-mono:  ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+    --f-sans:  'IBM Plex Sans', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+    --f-mono:  'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
     --ease-out: cubic-bezier(.16, 1, .3, 1);
     --t-fast: 120ms;
     --t-med:  220ms;
   }
   :root[data-theme="light"] {
-    --bg-app:     #e3ddcc;
-    --bg-pane:    #f0ebdd;
-    --bg-elev-1:  #eae3d2;
-    --bg-elev-2:  #ddd6c2;
-    --bg-input:   #f5f1e3;
-    --bg-overlay: rgba(20, 20, 22, .46);
-    --line-soft:   rgba(30, 25, 5, .085);
-    --line:        rgba(30, 25, 5, .18);
-    --line-strong: rgba(30, 25, 5, .28);
-    --ring:        rgba(140, 152, 0, .38);
-    --text-1: #1a1a17;
+    --bg-app:     #E8E5DC;   /* Deeper Paper */
+    --bg-pane:    #FFFFFF;
+    --bg-elev-1:  #F1EEE7;
+    --bg-elev-2:  #E3DFD5;
+    --bg-input:   #FFFFFF;
+    --bg-overlay: rgba(18, 22, 26, .46);
+    --line-soft:   rgba(18, 22, 26, .07);
+    --line:        rgba(18, 22, 26, .12);
+    --line-strong: rgba(18, 22, 26, .20);
+    --ring:        rgba(107, 142, 111, .40);   /* Tea focus */
+    --text-1: #12161A;
     --text-2: #43413a;
     --text-3: #6a675c;
     --text-4: #9a978c;
-    --accent:     #b1bd00;
-    --accent-hi:  #9ea800;
-    --accent-ink: #16161a;
+    --accent:     #6B8E6F;
+    --accent-hi:  #5E7E62;
+    --accent-ink: #12161A;
+    --brass:      #B08D4A;
+    --brass-hi:   #9D7C3F;
+    --warn:       #B08D4A;
+    --success:    #6B8E6F;
     --danger-soft: rgba(232, 85, 106, .11);
     --sh-1: 0 1px 3px rgba(40, 30, 5, .10);
     --sh-2: 0 6px 18px rgba(40, 30, 5, .12);
@@ -119,11 +130,12 @@
   .btn:active { transform: translateY(1px); }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
   .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+  /* Primary action (Save) = Aged Brass; Tea is reserved for selection/live. */
   .btn-primary {
-    background: var(--accent); color: var(--accent-ink);
-    border-color: var(--accent); font-weight: 600;
+    background: var(--brass); color: var(--accent-ink);
+    border-color: var(--brass); font-weight: 600;
   }
-  .btn-primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+  .btn-primary:hover { background: var(--brass-hi); border-color: var(--brass-hi); }
   .btn-ghost {
     background: transparent; border-color: transparent; color: var(--text-2);
   }
@@ -145,7 +157,7 @@
     transition: border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
   }
   input:focus, select:focus, textarea:focus {
-    border-color: rgba(204, 217, 0, .45);
+    border-color: rgba(107, 142, 111, .45);
     box-shadow: 0 0 0 3px var(--ring);
   }
   input:hover:not(:focus), select:hover:not(:focus), textarea:hover:not(:focus) {
@@ -189,15 +201,15 @@
   .pe-back svg { width: 18px; height: 18px; }
   /* Brand lockup — mirrors the Mini App Editor's .brand / .brand-mark */
   .pe-brand { display: flex; align-items: center; gap: var(--s3); flex-shrink: 0; }
+  /* Full Circle mark — Tea ensō, no backplate (rings carry their own
+     Brass + Tea; main stroke follows currentColor = Tea). */
   .pe-brand-mark {
-    width: 26px; height: 26px; border-radius: var(--r-md);
-    background: linear-gradient(135deg, var(--accent), #b3bf00);
+    width: 26px; height: 26px;
     display: flex; align-items: center; justify-content: center;
-    color: var(--accent-ink); font-weight: 700; font-size: 13px;
-    box-shadow: var(--sh-1);
+    color: var(--accent); flex-shrink: 0;
   }
-  :root[data-theme="light"] .pe-brand-mark { background: linear-gradient(135deg, var(--accent), #98a300); }
-  .pe-brand-name { font-weight: 600; font-size: 13px; letter-spacing: -.005em; color: var(--text-2); }
+  .pe-brand-mark svg { width: 22px; height: 22px; display: block; }
+  .pe-brand-name { font-family: var(--f-mono); font-weight: 500; font-size: 11px; letter-spacing: .20em; text-transform: uppercase; color: var(--text-1); }
   .pe-brand-divider { width: 1px; height: 16px; background: var(--line); }
   .pe-topbar-title { display: flex; align-items: center; gap: var(--s3); min-width: 0; flex: 1; position: relative; }
   #pe-name {
@@ -246,7 +258,7 @@
     flex-shrink: 0; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
     padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--text-3);
   }
-  .pe-switcher-item-badge.pub { background: rgba(204, 217, 0, .14); color: var(--accent-hi); border-color: rgba(204, 217, 0, .35); }
+  .pe-switcher-item-badge.pub { background: rgba(107, 142, 111, .14); color: var(--accent-hi); border-color: rgba(107, 142, 111, .35); }
   .pe-switcher-empty { padding: 16px; text-align: center; color: var(--text-3); font-size: 12px; }
 
   /* ── Smart paste (AI text → sections) ── */
@@ -257,8 +269,8 @@
     border: 1px dashed var(--line-strong); background: transparent; color: var(--text-2);
     cursor: pointer; transition: background var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease;
   }
-  .pe-smart-btn:hover { background: var(--bg-elev-1); border-color: var(--accent); color: var(--text-1); }
-  .pe-smart-btn svg { width: 14px; height: 14px; color: var(--accent); flex-shrink: 0; }
+  .pe-smart-btn:hover { background: rgba(176, 141, 74, .08); border-color: var(--brass); color: var(--text-1); }
+  .pe-smart-btn svg { width: 14px; height: 14px; color: var(--brass); flex-shrink: 0; }
   .pe-modal-overlay {
     position: fixed; inset: 0; z-index: 80;
     background: var(--bg-overlay);
@@ -316,8 +328,8 @@
     border: 1px solid var(--line);
     background: var(--bg-elev-1); color: var(--text-3);
   }
-  .pe-badge.pub { background: rgba(204, 217, 0, .14); color: var(--accent-hi); border-color: rgba(204, 217, 0, .35); }
-  .pe-badge.draft { background: rgba(233, 163, 90, .14); color: var(--warn); border-color: rgba(233, 163, 90, .35); }
+  .pe-badge.pub { background: rgba(107, 142, 111, .14); color: var(--accent-hi); border-color: rgba(107, 142, 111, .35); }
+  .pe-badge.draft { background: rgba(176, 141, 74, .14); color: var(--brass); border-color: rgba(176, 141, 74, .35); }
   .pe-topbar-actions { display: flex; align-items: center; gap: var(--s2); flex-shrink: 0; }
   #pe-save-status { font-size: 11px; color: var(--text-3); margin-right: 4px; }
   /* EN / 中 language toggle — mirrors the Mini App Editor's .lang-toggle */
@@ -336,7 +348,7 @@
     transition: color var(--t-fast) ease, background var(--t-fast) ease;
   }
   .lang-toggle button:hover { color: var(--text-1); }
-  .lang-toggle button.active { background: var(--accent); color: var(--accent-ink); }
+  .lang-toggle button.active { background: var(--brass); color: var(--accent-ink); }
 
   #pe-body {
     height: calc(100vh - 56px);
@@ -402,7 +414,7 @@
   .pa-edit-canvas {
     background: var(--bg-app);
     background-image:
-      radial-gradient(ellipse at top, rgba(204, 217, 0, .04), transparent 55%),
+      radial-gradient(ellipse at top, rgba(107, 142, 111, .04), transparent 55%),
       radial-gradient(ellipse at bottom, rgba(54, 83, 41, .05), transparent 55%);
     overflow-y: auto;
     overflow-x: auto;
@@ -453,14 +465,15 @@
   }
   .pe-insp-seg button svg { width: 13px; height: 13px; }
   .pe-insp-seg button:hover { color: var(--text-1); }
-  .pe-insp-seg button.active { background: var(--accent); color: var(--accent-ink); }
+  .pe-insp-seg button.active { background: var(--brass); color: var(--accent-ink); }
   /* ── Left rail: PAGE settings group (card chrome + colophon accordions) ── */
   .pe-left-scroll { flex: 1; overflow-y: auto; min-height: 0; }
   .pe-left-group { padding: var(--s3) var(--s3) var(--s2); }
   .pe-left-grouptitle {
-    font-size: 10px; font-weight: 600;
-    letter-spacing: .12em; text-transform: uppercase;
-    color: var(--text-3); padding: 2px 2px var(--s2);
+    font-family: var(--f-mono);
+    font-size: 10px; font-weight: 500;
+    letter-spacing: .3em; text-transform: uppercase;
+    color: var(--brass); padding: 2px 2px var(--s2);
   }
   .pa-left-acc {
     border: 1px solid var(--line-soft);
@@ -475,7 +488,7 @@
   }
   .pa-left-acc > summary::-webkit-details-marker { display: none; }
   .pa-left-acc > summary::before {
-    content: '▶'; font-size: 8px; color: var(--text-4);
+    content: '▶'; font-size: 8px; color: var(--brass);
     transition: transform var(--t-fast);
   }
   .pa-left-acc[open] > summary::before { transform: rotate(90deg); }
@@ -626,13 +639,13 @@
   .pa-block-row.active { background: var(--bg-elev-2); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
   .pa-block-row .pbr-icon {
     width: 32px; height: 32px;
-    background: rgba(204, 217, 0, .08);
+    background: rgba(107, 142, 111, .08);
     border-radius: var(--r-md);
     display: flex; align-items: center; justify-content: center;
     color: var(--accent); flex-shrink: 0;
   }
   .pa-block-row .pbr-icon svg { width: 18px; height: 18px; }
-  .pa-block-row.active .pbr-icon { background: rgba(204, 217, 0, .16); }
+  .pa-block-row.active .pbr-icon { background: rgba(107, 142, 111, .16); }
   .pa-block-row .pbr-info { flex: 1; min-width: 0; }
   .pa-block-row .pbr-name {
     font-size: 13px; font-weight: 500; color: var(--text-1);
@@ -653,7 +666,7 @@
     font-size: 9px; font-weight: 700;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
-  .pa-block-row.active .pbr-num { background: var(--accent); color: var(--accent-ink); }
+  .pa-block-row.active .pbr-num { background: var(--accent); color: #E8E5DC; }
   /* Drag-to-reorder: a grip cue that fades in on hover, plus a lime drop
      line above/below the target row. Mirrors the mini-app editor. */
   .pa-block-row { cursor: grab; }
@@ -684,7 +697,7 @@
   .pa-inspector-head-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .pa-inspector-icon {
     width: 24px; height: 24px;
-    background: rgba(204, 217, 0, .1);
+    background: rgba(107, 142, 111, .1);
     border-radius: var(--r-sm);
     display: flex; align-items: center; justify-content: center;
     color: var(--accent); flex-shrink: 0;
@@ -766,7 +779,7 @@
   }
   .pa-prev-hero-hl {
     color: #365329; font-weight: 700;
-    background: linear-gradient(transparent 60%, rgba(204, 217, 0, 0.55) 60%); padding: 0 2px;
+    background: linear-gradient(transparent 60%, rgba(107, 142, 111, 0.55) 60%); padding: 0 2px;
   }
   .pa-prev-stat {
     margin-left: -22px; margin-right: -22px; padding: 26px 22px;
@@ -873,7 +886,13 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
     </button>
     <div class="pe-brand">
-      <span class="pe-brand-mark">R</span>
+      <span class="pe-brand-mark">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.55" stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
+          <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.55" stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
+          <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </span>
       <span class="pe-brand-name">Product Editor · 产品编辑器</span>
       <span class="pe-brand-divider"></span>
     </div>
