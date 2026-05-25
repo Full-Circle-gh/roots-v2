@@ -213,12 +213,9 @@
     background: rgba(107, 142, 111, .14);
     color: var(--accent);
   }
-  /* Canvas radial-gradient overlays were tuned for dark mode — on cream
-     they read as olive/dirty. Strip them in light mode so the cream
-     background stays clean. */
-  :root[data-theme="light"] .canvas {
-    background-image: none;
-  }
+  /* The canvas backdrop is now driven by [data-backdrop] (Tweaks ▸ Canvas
+     backdrop) and is theme-agnostic — no light-mode background-image reset
+     needed here (base canvas is flat by default). */
   /* Scrollbar thumb on cream — the dark mode rgba(255,255,255,.09) is
      invisible on light. Use a warm-dark alpha so the thumb has presence
      without going harsh. */
@@ -996,6 +993,40 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
+  /* ─── Block-library layout tweaks (Tweaks ▸ Block library) ───
+     Cards (default) / Tiles / List all reuse the SAME .palette-item DOM,
+     so drag-to-add and drag-to-reorder keep working — only the look flips. */
+  /* Tiles — icon-forward 2-up grid, name below, no description. */
+  .palette.pal-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .palette.pal-tiles .palette-item {
+    flex-direction: column; align-items: center; justify-content: center;
+    aspect-ratio: 1 / 1; padding: 8px; gap: 6px; text-align: center;
+  }
+  .palette.pal-tiles .palette-item .icon { width: 34px; height: 34px; }
+  .palette.pal-tiles .palette-item .info { flex: none; min-width: 0; width: 100%; }
+  .palette.pal-tiles .palette-item .name {
+    font-size: 10.5px; line-height: 1.15;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .palette.pal-tiles .palette-item .desc,
+  .palette.pal-tiles .palette-item .palette-grip { display: none; }
+  /* List — dense one-line rows with hairline dividers, no card chrome. */
+  .palette.pal-list { gap: 0; border: 1px solid var(--line-soft); border-radius: var(--r-md); overflow: hidden; }
+  .palette.pal-list .palette-item {
+    border: 0; border-radius: 0; padding: 7px 10px; gap: 10px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .palette.pal-list .palette-item:last-child { border-bottom: 0; }
+  .palette.pal-list .palette-item:hover { transform: none; }
+  .palette.pal-list .palette-item .icon {
+    width: 22px; height: 22px; background: transparent; border-radius: 0;
+  }
+  .palette.pal-list .palette-item .icon svg { width: 16px; height: 16px; }
+  .palette.pal-list .palette-item .name { font-size: 12.5px; }
+  .palette.pal-list .palette-item .desc,
+  .palette.pal-list .palette-item .palette-grip { display: none; }
+
   .hint {
     font-size: 11px; color: var(--text-3); line-height: 1.55;
   }
@@ -1015,9 +1046,8 @@
      ═══════════════════════════════════════════════════════════════════ */
   .canvas {
     background: var(--bg-canvas);
-    background-image:
-      radial-gradient(ellipse at top, rgba(107, 142, 111, .025), transparent 50%),
-      radial-gradient(ellipse at bottom, rgba(54, 83, 41, .035), transparent 50%);
+    /* Backdrop is set by the Tweaks ▸ Canvas backdrop control via the
+       [data-backdrop] attribute below; default (paper) is flat. */
     overflow-y: auto;
     overflow-x: auto;
     /* Column so the optional link-status banner stacks ABOVE the phone
@@ -1026,6 +1056,17 @@
     flex-direction: column;
     align-items: center;
     padding: var(--s8) var(--s6) 96px;
+  }
+  /* Canvas backdrops — Paper (flat) / Grid (dot field) / Studio (radial). */
+  .canvas[data-backdrop="grid"] {
+    background-image: radial-gradient(var(--line-strong) 1.1px, transparent 1.2px);
+    background-size: 22px 22px;
+    background-position: 11px 11px;
+  }
+  .canvas[data-backdrop="studio"] {
+    background-image:
+      radial-gradient(ellipse 72% 56% at 50% 40%, var(--bg-elev-1) 0%, transparent 60%),
+      radial-gradient(ellipse at bottom, rgba(54, 83, 41, .04), transparent 55%);
   }
   .phone {
     width: 390px;
@@ -1114,6 +1155,43 @@
   .preview-menu-pop button:hover svg { color: var(--text-1); }
   .preview-menu-pop .pm-title { font-size: 12px; font-weight: 600; }
   .preview-menu-pop .pm-sub   { font-size: 10.5px; color: var(--text-3); margin-top: 2px; line-height: 1.35; }
+
+  /* ─── Tweaks popover (Surface / Block library / Canvas backdrop) ─── */
+  .tweaks-pop {
+    position: fixed;            /* coords set by JS at open (getBoundingClientRect) */
+    min-width: 232px;
+    background: var(--bg-pane);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    padding: var(--s4) var(--s4) calc(var(--s4) - 2px);
+    z-index: 9999;
+    display: flex; flex-direction: column; gap: var(--s4);
+  }
+  .tweaks-pop[hidden] { display: none; }
+  .tweaks-pop .tw-label {
+    font: 500 10px var(--f-mono);
+    letter-spacing: .22em; text-transform: uppercase;
+    color: var(--brass); margin-bottom: 7px;
+  }
+  .tweaks-pop .tw-seg {
+    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+    gap: 4px;
+    background: var(--bg-app);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-md);
+    padding: 3px;
+  }
+  .tweaks-pop .tw-seg button {
+    border: 0; background: transparent; cursor: pointer;
+    padding: 6px 8px; border-radius: var(--r-sm);
+    font: 500 12px var(--f-sans); color: var(--text-2);
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .tweaks-pop .tw-seg button:hover { color: var(--text-1); background: var(--bg-elev-1); }
+  .tweaks-pop .tw-seg button.active {
+    background: var(--accent); color: var(--accent-ink); font-weight: 600;
+  }
 
   /* Phone-preview modal — full-screen scrim + centered card. The [hidden]
      attribute is undone by display:flex, so we explicitly re-hide it. */
@@ -3532,6 +3610,38 @@
           </button>
         </div>
       </div>
+      <!-- Tweaks — editor-view preferences imported from the Claude Design
+           "Tweaks" panel. Surface / Block library / Canvas backdrop, each
+           persisted in localStorage. -->
+      <button class="btn-phone-preview" id="btn-tweaks" onclick="toggleTweaksMenu()" data-ti-en="Editor view tweaks" data-ti-cn="编辑器视图微调" title="Editor view tweaks">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="8" cy="18" r="2" fill="currentColor" stroke="none"/></svg>
+        <span class="i18n-en">Tweaks</span><span class="i18n-cn">微调</span>
+      </button>
+    </div>
+    <div class="tweaks-pop" id="tweaks-pop" hidden>
+      <div class="tw-group">
+        <div class="tw-label"><span class="i18n-en">Surface</span><span class="i18n-cn">外观</span></div>
+        <div class="tw-seg">
+          <button type="button" data-tweak="theme" data-val="light" onclick="cmsSetTheme('light')"><span class="i18n-en">Light</span><span class="i18n-cn">浅色</span></button>
+          <button type="button" data-tweak="theme" data-val="dark" onclick="cmsSetTheme('dark')"><span class="i18n-en">Dark</span><span class="i18n-cn">深色</span></button>
+        </div>
+      </div>
+      <div class="tw-group">
+        <div class="tw-label"><span class="i18n-en">Block library</span><span class="i18n-cn">模块栏</span></div>
+        <div class="tw-seg">
+          <button type="button" data-tweak="lib" data-val="cards" onclick="cmsSetLibraryStyle('cards')"><span class="i18n-en">Cards</span><span class="i18n-cn">卡片</span></button>
+          <button type="button" data-tweak="lib" data-val="tiles" onclick="cmsSetLibraryStyle('tiles')"><span class="i18n-en">Tiles</span><span class="i18n-cn">磁贴</span></button>
+          <button type="button" data-tweak="lib" data-val="list" onclick="cmsSetLibraryStyle('list')"><span class="i18n-en">List</span><span class="i18n-cn">列表</span></button>
+        </div>
+      </div>
+      <div class="tw-group">
+        <div class="tw-label"><span class="i18n-en">Canvas backdrop</span><span class="i18n-cn">画布背景</span></div>
+        <div class="tw-seg">
+          <button type="button" data-tweak="bg" data-val="paper" onclick="cmsSetBackdrop('paper')"><span class="i18n-en">Paper</span><span class="i18n-cn">纸面</span></button>
+          <button type="button" data-tweak="bg" data-val="grid" onclick="cmsSetBackdrop('grid')"><span class="i18n-en">Grid</span><span class="i18n-cn">网格</span></button>
+          <button type="button" data-tweak="bg" data-val="studio" onclick="cmsSetBackdrop('studio')"><span class="i18n-en">Studio</span><span class="i18n-cn">影棚</span></button>
+        </div>
+      </div>
     </div>
     <div class="link-status" id="link-status" hidden></div>
     <div class="phone" data-platform="ios">
@@ -3762,6 +3872,7 @@ async function api(path, opts = {}) {
 // ═══════════════════════════════════════════════════════════════════════
 (async () => {
   buildPalette();
+  cmsApplyEditorTweaks();
   buildPagePicker();
   buildThemePicker();
   buildTabBarPicker();
@@ -9400,14 +9511,101 @@ function cmsApplyThemeIcon() {
   const meta = $('#meta-theme-color');
   if (meta) meta.setAttribute('content', t === 'light' ? '#E8E5DC' : '#12161A');
 }
-function cmsToggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') || 'dark';
-  const next    = current === 'dark' ? 'light' : 'dark';
+function cmsSetTheme(next) {
+  if (next !== 'light' && next !== 'dark') return;
   document.documentElement.setAttribute('data-theme', next);
   try { localStorage.setItem('cms-theme', next); } catch (e) {}
   cmsApplyThemeIcon();
+  cmsSyncTweakControls();
+}
+function cmsToggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  cmsSetTheme(current === 'dark' ? 'light' : 'dark');
 }
 cmsApplyThemeIcon();
+
+// ═══════════════════════════════════════════════════════════════════════
+// EDITOR TWEAKS — imported from the Claude Design "Tweaks" panel so staff
+// can reshape the editor's feel. Three knobs, each persisted in localStorage:
+//   · Surface         → light / dark   (shared with the theme toggle)
+//   · Block library   → cards / tiles / list   (left-pane palette layout)
+//   · Canvas backdrop → paper / grid / studio  (centre stage background)
+// libraryStyle is a class on #palette; backdrop is a data-attr on .canvas —
+// both reuse existing DOM so drag/drop + rendering are untouched.
+// ═══════════════════════════════════════════════════════════════════════
+const TWEAK_LIB_KEY = 'cms.libraryStyle';
+const TWEAK_BG_KEY  = 'cms.backdrop';
+const TWEAK_LIB_VALUES = ['cards', 'tiles', 'list'];
+const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
+function cmsGetTweak(key, values, fallback) {
+  try { const v = localStorage.getItem(key); if (values.includes(v)) return v; } catch (e) {}
+  return fallback;
+}
+function cmsApplyLibraryStyle(v) {
+  const pal = document.getElementById('palette');
+  if (!pal) return;
+  pal.classList.remove('pal-cards', 'pal-tiles', 'pal-list');
+  pal.classList.add('pal-' + v);
+}
+function cmsApplyBackdrop(v) {
+  const cv = document.querySelector('.canvas');
+  if (cv) cv.setAttribute('data-backdrop', v);
+}
+function cmsSetLibraryStyle(v) {
+  if (!TWEAK_LIB_VALUES.includes(v)) return;
+  try { localStorage.setItem(TWEAK_LIB_KEY, v); } catch (e) {}
+  cmsApplyLibraryStyle(v);
+  cmsSyncTweakControls();
+}
+function cmsSetBackdrop(v) {
+  if (!TWEAK_BG_VALUES.includes(v)) return;
+  try { localStorage.setItem(TWEAK_BG_KEY, v); } catch (e) {}
+  cmsApplyBackdrop(v);
+  cmsSyncTweakControls();
+}
+// Apply saved tweaks on boot (called from BOOTSTRAP after the palette +
+// canvas exist).
+function cmsApplyEditorTweaks() {
+  cmsApplyLibraryStyle(cmsGetTweak(TWEAK_LIB_KEY, TWEAK_LIB_VALUES, 'cards'));
+  cmsApplyBackdrop(cmsGetTweak(TWEAK_BG_KEY, TWEAK_BG_VALUES, 'paper'));
+  cmsSyncTweakControls();
+}
+// Reflect current values onto the segmented controls in the Tweaks popover.
+function cmsSyncTweakControls() {
+  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+  const lib   = cmsGetTweak(TWEAK_LIB_KEY, TWEAK_LIB_VALUES, 'cards');
+  const bg    = cmsGetTweak(TWEAK_BG_KEY, TWEAK_BG_VALUES, 'paper');
+  const cur = { theme, lib, bg };
+  document.querySelectorAll('#tweaks-pop [data-tweak]').forEach(btn => {
+    btn.classList.toggle('active', cur[btn.dataset.tweak] === btn.dataset.val);
+  });
+}
+function toggleTweaksMenu() {
+  const pop = document.getElementById('tweaks-pop');
+  const btn = document.getElementById('btn-tweaks');
+  if (!pop || !btn) return;
+  if (pop.hidden) {
+    if (pop.parentNode !== document.body) document.body.appendChild(pop);
+    // Unhide BEFORE measuring so offsetWidth is real (right-align to button).
+    pop.hidden = false;
+    const r = btn.getBoundingClientRect();
+    pop.style.top  = (r.bottom + 6) + 'px';
+    pop.style.left = Math.max(8, r.right - pop.offsetWidth) + 'px';
+    cmsSyncTweakControls();
+    setTimeout(() => document.addEventListener('click', _closeTweaksOnOutside, true), 0);
+  } else {
+    closeTweaksMenu();
+  }
+}
+function closeTweaksMenu() {
+  const pop = document.getElementById('tweaks-pop');
+  if (pop) pop.hidden = true;
+  document.removeEventListener('click', _closeTweaksOnOutside, true);
+}
+function _closeTweaksOnOutside(e) {
+  if (e.target.closest('#tweaks-pop') || e.target.closest('#btn-tweaks')) return;
+  closeTweaksMenu();
+}
 
 // ─── Live Preview drawer ────────────────────────────────────────────────
 // Same affordance as in /retail-admin: opens /storefront (the customer-
