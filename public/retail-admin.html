@@ -7799,8 +7799,11 @@ function dashTrendTip(e) {
   const W = 820, padL = 8, padR = 8;
   const sc = r.width / W;
   const innerW = (W - padL - padR) * sc;
-  const xIn = (e.clientX - r.left) - padL * sc;
-  if (xIn < 0 || xIn > innerW) return dashTrendHide();
+  // Clamp into the plot range rather than hiding near the edges. The last
+  // bucket sits exactly at innerW and its hover zone (plus the right padding)
+  // extends past it, so an early `xIn > innerW` hide created a dead zone on
+  // the right where no tooltip showed. idx is clamped below regardless.
+  const xIn = Math.max(0, Math.min((e.clientX - r.left) - padL * sc, innerW));
   const n = t.length;
   let idx = n === 1 ? 0 : Math.round((xIn / innerW) * (n - 1));
   idx = Math.max(0, Math.min(n - 1, idx));
