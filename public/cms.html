@@ -3324,12 +3324,18 @@
   .topbar .page-picker {
     background: rgba(232, 229, 220, .06);
     border-color: rgba(232, 229, 220, .12);
-    color: var(--chrome-fg);
   }
   .topbar .page-picker:hover { background: rgba(232, 229, 220, .10); border-color: rgba(232, 229, 220, .20); }
-  .topbar .page-picker .name { color: var(--chrome-fg); }
-  .topbar .page-picker .label { color: rgba(232, 229, 220, .50); }
-  .topbar .page-picker .chev { color: rgba(232, 229, 220, .50); }
+  /* Scope to the picker's OWN chip — must not bleed into the dropdown
+     items below it (.page-menu .item .name), which sit on a paper card. */
+  .topbar .page-picker > .name { color: var(--chrome-fg); }
+  .topbar .page-picker > .label { color: rgba(232, 229, 220, .50); }
+  .topbar .page-picker > .chev { color: rgba(232, 229, 220, .50); }
+  /* Dropdown reads as a white card (brand: white surfaces + 1px borders),
+     not the paper body tone — so it lifts cleanly off the canvas. */
+  .page-menu { background: var(--bg-elev-1); border-color: var(--line); }
+  .page-menu .item .name { color: var(--text-1); }
+  .page-menu .item .desc { color: var(--text-3); }
   .topbar .status-pill {
     background: rgba(232, 229, 220, .06);
     border-color: rgba(232, 229, 220, .10);
