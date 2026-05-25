@@ -8706,7 +8706,19 @@ function odvSet(key, val) {
   ODV[key] = val;
   try { localStorage.setItem('retail-admin-order-detail-tweaks', JSON.stringify(ODV)); } catch (e) {}
   _ODV_OPEN = true;                       // keep the popover open across the re-render
-  if (_OPEN_ORDER) renderOpenOrder(_OPEN_ORDER);
+  // Defer the re-render to the next tick. Re-rendering synchronously inside
+  // the click handler detaches the clicked button before the drawer's
+  // click-outside-to-dismiss handler runs; that handler's `closest('.side-drawer')`
+  // guard then fails on the orphaned target and closes the whole drawer.
+  // Deferring lets the click fully resolve (button still attached → no dismiss)
+  // before we rebuild. Preserve scroll so the drawer doesn't jump to the top.
+  if (_OPEN_ORDER) setTimeout(() => {
+    if (!_OPEN_ORDER) return;
+    const body = document.querySelector('#order-drawer .drawer-body');
+    const y = body ? body.scrollTop : 0;
+    renderOpenOrder(_OPEN_ORDER);
+    if (body) body.scrollTop = y;
+  }, 0);
 }
 function odvToggle() {
   _ODV_OPEN = !_ODV_OPEN;
