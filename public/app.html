@@ -785,6 +785,37 @@ body.user-no-delete .btn-icon[onclick*="Delete"] { display:none !important; }
 /* KPI tile chrome — let the global .card take care of background +
    border; we just add a subtle hover affordance. */
 .kpi-tile { border: 1px solid var(--line-soft); }
+
+/* ── View popover (ported from /retail-admin) for the dashboard tweaks ── */
+.ovp-wrap { position: relative; display: inline-flex; }
+.ovp { position: absolute; top: calc(100% + 8px); right: 0; z-index: 50; width: 300px; padding: 12px; background: var(--bg-pane); border: 1px solid var(--line-strong, var(--line)); border-radius: var(--r-lg); box-shadow: var(--shadow-lg, 0 16px 40px rgba(0,0,0,.4)); display: flex; flex-direction: column; gap: 12px; }
+.ovp[hidden] { display: none; }
+.ovp-head { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.ovp-group { display: flex; flex-direction: column; gap: 6px; }
+.ovp-label { font-size: 11px; color: var(--text-3); }
+.ovp-seg { display: flex; gap: 4px; background: var(--bg-input, var(--bg-app)); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 3px; }
+.ovp-seg button { flex: 1; min-width: 0; padding: 6px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); cursor: pointer; font: 500 11px var(--f-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ovp-seg button:hover { color: var(--text-1); }
+.ovp-seg button.active { background: var(--accent); color: var(--accent-ink); }
+.mv-btn { background: transparent; border: 1px solid var(--line); color: var(--text-2); padding: 5px 10px; border-radius: var(--r-md); font: 500 12px var(--f-sans); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.mv-btn:hover { background: var(--bg-elev-1); color: var(--text-1); }
+
+/* ── Dashboard View tweaks (per-operator) — stat numbers + card surface.
+   Defaults (hero / bordered) reproduce the base look. ── */
+.kpi-val { font-family: var(--f-sans); font-size: 34px; font-weight: 300; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+#dash-root.sv-num-tabular .kpi-val { font-family: var(--f-mono); font-weight: 500; font-size: 26px; letter-spacing: 0; }
+#dash-root.sv-num-display .kpi-val { font-weight: 700; font-size: 44px; letter-spacing: -.02em; }
+#dash-root.cs-floating .card { background: var(--bg-elev-1); border-color: transparent; }
+#dash-root.cs-bare .card { background: transparent; border-color: transparent; padding-left: 0; padding-right: 0; }
+
+/* ── Sidebar density (global) — override --sidebar-w so the sidebar + main
+   margin move together. Icons = glyph-only narrow rail; Compact = tighter. ── */
+body.sd-icons { --sidebar-w: 64px; }
+body.sd-icons .nav-item span:not(.nav-icon):not(.nav-badge):not(.nav-caret) { display: none; }
+body.sd-icons .nav-item { justify-content: center; padding-left: 0; padding-right: 0; }
+body.sd-icons .nav-caret { display: none; }
+body.sd-compact { --sidebar-w: 184px; }
+body.sd-compact .nav-item { padding-top: 6px; padding-bottom: 6px; font-size: 12px; }
 .fin-kpi { background:#fff; border:1px solid var(--border); border-radius:14px; padding:22px 24px; box-shadow:0 1px 4px rgba(0,0,0,.05); transition:transform .18s, box-shadow .18s; }
 .fin-kpi:hover { transform:translateY(-3px); box-shadow:0 8px 24px rgba(0,0,0,.10); }
 .fin-kpi.highlight { background:var(--dk); border-color:var(--dk); }
@@ -2859,6 +2890,60 @@ function resetSidebarOrder() {
   renderSidebar();
 }
 
+// ── Main dashboard · per-operator View tweaks ──────────────────────────
+// The Full Circle Dashboard "Tweaks" panel: stat-number style + card surface
+// (ride on #dash-root, dashboard only) and sidebar density (rides on <body>,
+// global chrome). Persisted; defaults reproduce the base look. The mock's
+// "Sections" sidebar is adapted to "Compact" — the real sidebar is a
+// user-reorderable list, which a fixed section grouping would fight.
+const MAIN_VIEW_DEFAULTS = { statNumbers: 'hero', cardSurface: 'bordered', sidebar: 'labeled' };
+function mdvLoad() {
+  try { return { ...MAIN_VIEW_DEFAULTS, ...(JSON.parse(localStorage.getItem('roots_dash_view') || '{}')) }; }
+  catch (e) { return { ...MAIN_VIEW_DEFAULTS }; }
+}
+let MDV = mdvLoad();
+function mdvApplySidebar() {
+  document.body.classList.remove('sd-labeled', 'sd-icons', 'sd-compact');
+  document.body.classList.add('sd-' + MDV.sidebar);
+}
+function mdvApplyDash() {
+  const r = document.getElementById('dash-root'); if (!r) return;
+  r.classList.remove('sv-num-hero', 'sv-num-tabular', 'sv-num-display', 'cs-bordered', 'cs-floating', 'cs-bare');
+  r.classList.add('sv-num-' + MDV.statNumbers, 'cs-' + MDV.cardSurface);
+}
+function mdvSet(key, val) {
+  MDV[key] = val;
+  try { localStorage.setItem('roots_dash_view', JSON.stringify(MDV)); } catch (e) {}
+  if (key === 'sidebar') mdvApplySidebar(); else mdvApplyDash();
+  mdvSyncPanel();
+}
+function mdvSyncPanel() {
+  const pop = document.getElementById('mv-pop'); if (!pop) return;
+  pop.querySelectorAll('.ovp-seg').forEach(seg => {
+    const key = seg.getAttribute('data-mv');
+    seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.getAttribute('data-v') === MDV[key]));
+  });
+}
+function mdvToggle() { const p = document.getElementById('mv-pop'); if (!p) return; if (p.hidden) { p.hidden = false; mdvSyncPanel(); setTimeout(() => document.addEventListener('mousedown', mdvOutside), 0); } else mdvClose(); }
+function mdvClose() { const p = document.getElementById('mv-pop'); if (p) p.hidden = true; document.removeEventListener('mousedown', mdvOutside); }
+function mdvOutside(e) { if (!(e.target.closest && e.target.closest('.ovp-wrap'))) mdvClose(); }
+function renderMainViewPopover() {
+  const seg = (key, opts) => `<div class="ovp-seg" data-mv="${key}">${opts.map(([v, l]) => `<button data-v="${v}"${MDV[key] === v ? ' class="active"' : ''} onclick="mdvSet('${key}','${v}')">${l}</button>`).join('')}</div>`;
+  return `
+    <div class="ovp-wrap">
+      <button class="mv-btn" id="mv-btn" onclick="mdvToggle()" aria-haspopup="true" title="Display options · 显示选项">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M4 6h10M4 12h7M4 18h10"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+        View · 视图
+      </button>
+      <div id="mv-pop" class="ovp" hidden>
+        <div class="ovp-head">Display options · 显示选项</div>
+        <div class="ovp-group"><div class="ovp-label">Stat numbers · 数字</div>${seg('statNumbers', [['hero', 'Hero · 轻'], ['tabular', 'Tabular · 等宽'], ['display', 'Display · 大']])}</div>
+        <div class="ovp-group"><div class="ovp-label">Card surface · 卡片</div>${seg('cardSurface', [['bordered', 'Bordered · 描边'], ['floating', 'Floating · 浮起'], ['bare', 'Bare · 无框']])}</div>
+        <div class="ovp-group"><div class="ovp-label">Sidebar · 侧栏</div>${seg('sidebar', [['labeled', 'Labeled · 标签'], ['icons', 'Icons · 图标'], ['compact', 'Compact · 紧凑']])}</div>
+      </div>
+    </div>`;
+}
+
 function renderSidebar() {
   const perms = _user.permissions || {};
   let html = '';
@@ -2918,6 +3003,7 @@ function renderSidebar() {
         <span class="nav-icon">${navIconSvg('reset')}</span><span>Reset · 重置</span></div>`;
   }
   document.getElementById('sidebarNav').innerHTML = html;
+  mdvApplySidebar();   // keep the per-operator sidebar density applied
   // Topbar button reflects current mode: ✏️ to enter edit, ✓ to exit.
   // Sits next to the 🌙 theme toggle so it's always visible — the old
   // in-sidebar position got hidden when the sidebar collapsed on tablet.
@@ -3971,11 +4057,13 @@ async function renderDashboard() {
   const fmt = n => Number(n||0).toLocaleString('zh-CN', { minimumFractionDigits:0, maximumFractionDigits:0 });
 
   document.getElementById('main').innerHTML = `
+    <div id="dash-root" class="dash-root sv-num-${MDV.statNumbers} cs-${MDV.cardSurface}">
     <div class="page-header">
       <div>
         <div class="page-title"><span>DASHBOARD · 主页</span></div>
         <div style="font-size:13px;color:var(--muted);margin-top:4px">Welcome back · 欢迎回来, ${esc(_user.display_name || _user.username)}</div>
       </div>
+      ${renderMainViewPopover()}
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
@@ -4118,6 +4206,7 @@ async function renderDashboard() {
         <div style="font-size:12px;color:var(--text-3);margin-top:4px;font-family:var(--f-mono);letter-spacing:.04em">FC_SYS_v3.0 · Guangzhou 广州 · ${new Date().toLocaleDateString('zh-CN')}</div>
       </div>
       <div id="dashShortcutsWrap" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"></div>
+    </div>
     </div>`;
   _paintDashboardShortcuts();
 }
@@ -4257,7 +4346,7 @@ function kpiCard({ icon, value, label, onClick, tone = '', hint = '' }) {
       </div>
       <div style="flex:1; min-width:0; font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:.08em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${label}</div>
     </div>
-    <div style="font-family: var(--f-sans); font-size:34px; font-weight:300; line-height:1; color:${numColor}; font-variant-numeric: tabular-nums; letter-spacing:-.01em;">${value}</div>
+    <div class="kpi-val" style="color:${numColor}">${value}</div>
     ${hint ? `<div style="font-size:11px; color:var(--text-3); margin-top:6px;">${hint}</div>` : ''}
   </div>`;
 }
