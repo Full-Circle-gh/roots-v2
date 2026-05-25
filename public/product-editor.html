@@ -407,11 +407,17 @@
     overflow-y: auto;
     overflow-x: auto;
     display: flex;
-    align-items: flex-start;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
     padding: var(--s6) var(--s5);
     min-width: 0;
   }
+  /* Preview-language switch — shows the page as an EN or CN customer sees it.
+     Independent of the top-bar chrome toggle (you can read EN labels while
+     previewing the 中文 customer view). */
+  .pa-prev-langbar { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 14px; flex-shrink: 0; }
+  .pa-prev-langbar-hint { font-size: 11px; color: var(--text-3); letter-spacing: .02em; }
 
   /* ── Right: inspector panel (chrome + form) ── */
   .pa-edit-inspector {
@@ -943,6 +949,13 @@
 
     <!-- CENTER: phone canvas -->
     <div class="pa-edit-canvas">
+      <div class="pa-prev-langbar">
+        <span class="pa-prev-langbar-hint">Preview as · 预览语言</span>
+        <div class="lang-toggle pa-prev-langtoggle" data-no-i18n>
+          <button type="button" data-plang="en" class="active" onclick="paSetPreviewLang('en')">EN</button>
+          <button type="button" data-plang="cn" onclick="paSetPreviewLang('cn')">中</button>
+        </div>
+      </div>
       <div class="pa-prev-frame">
         <div class="pa-prev-screen" id="pa-preview-screen"></div>
       </div>
@@ -1261,6 +1274,7 @@ let PA_CURRENT = null;          // the product being edited
 let PA_SELECTED_BLOCK_ID = null;
 let PA_ALL_PRODUCTS = [];       // full catalog, kept for the in-editor switcher
 let PA_SAVED_SNAPSHOT = null;   // serialized state at last load/save — drives the dirty guard
+let _paPreviewLang = null;      // 'en' | 'cn' — language the phone preview renders (independent of chrome lang)
 window._paBlocks = [];
 
 // ── Boot — read ?id= from URL, fetch the product, paint the editor ──
@@ -2320,7 +2334,12 @@ function _paInlineHl(body, phrase) {
 function _paSplitChips(s) { return String(s || '').split(/[,、，]/g).map(x => x.trim()).filter(Boolean); }
 function _paPreviewBlockHtml(b) {
   const esc = escapeHtml;
-  const pickT = (en, cn) => ((en || '').trim() || (cn || '').trim());
+  const PL = _paPreviewLang || 'en';
+  // Content picker — mirrors the mini-app's utils/lang.pick: prefer the
+  // chosen language, fall back to the other side when it's empty.
+  const pickT = (en, cn) => { const a = (en || '').trim(), b2 = (cn || '').trim(); return PL === 'cn' ? (b2 || a) : (a || b2); };
+  // Static section-heading picker — the live mini-app localises these too.
+  const T = (en, cn) => (PL === 'cn' ? cn : en);
   if (b.type === 'spec_strip') {
     const cells = (b.cells || []).map(c => ({ k: pickT(c.k_en, c.k_cn), v: pickT(c.v_en, c.v_cn) })).filter(c => c.k || c.v);
     if (!cells.length) return '';
@@ -2337,7 +2356,7 @@ function _paPreviewBlockHtml(b) {
     const rows = (b.rows || []).map(r => pickT(r.claim_en, r.claim_cn)).filter(Boolean);
     if (!rows.length) return '';
     return `<div class="pa-prev-block pa-prev-why">
-      <div class="pa-prev-why-head"><span class="pa-prev-why-l">Why people choose it</span><span class="pa-prev-why-r">${String(rows.length).padStart(2, '0')}</span></div>
+      <div class="pa-prev-why-head"><span class="pa-prev-why-l">${T('Why people choose it', '为什么选它')}</span><span class="pa-prev-why-r">${String(rows.length).padStart(2, '0')}</span></div>
       ${rows.map((c, i) => `<div class="pa-prev-why-row ${i === 0 ? 'first' : ''}"><span class="pa-prev-why-n">${String(i + 1).padStart(2, '0')}</span><span class="pa-prev-why-claim">${esc(c)}</span></div>`).join('')}
     </div>`;
   }
@@ -2345,7 +2364,7 @@ function _paPreviewBlockHtml(b) {
     const items = (b.items || []).map(it => ({ name: pickT(it.name_en, it.name_cn), pct: it.pct != null && it.pct !== '' ? Number(it.pct) : null, lead: !!it.lead })).filter(it => it.name);
     if (!items.length) return '';
     return `<div class="pa-prev-block pa-prev-ing">
-      <div class="pa-prev-section-head"><span class="pa-prev-section-h3">Ingredients</span><span class="pa-prev-section-tag">${items.length} items · chips</span></div>
+      <div class="pa-prev-section-head"><span class="pa-prev-section-h3">${T('Ingredients', '配料表')}</span><span class="pa-prev-section-tag">${items.length} ${T('items · chip cloud', '项 · 云标签')}</span></div>
       <div class="pa-prev-ing-chips">${items.map(it => `<span class="pa-prev-chip ${it.lead ? 'lead' : ''}">${esc(it.name)}${it.pct != null && !isNaN(it.pct) && it.pct >= 10 ? `<span class="pa-prev-chip-pct">${it.pct}%</span>` : ''}</span>`).join('')}</div>
     </div>`;
   }
@@ -2357,16 +2376,16 @@ function _paPreviewBlockHtml(b) {
       const pct = it.pct != null && !isNaN(it.pct) ? `<span class="pa-prev-ing-line-pct"> ${it.pct}%</span>` : '';
       return `${sep}${esc(it.name)}${pct}`;
     }).join(' ');
-    return `<div class="pa-prev-block pa-prev-ing"><div class="pa-prev-section-head"><span class="pa-prev-section-h3">Ingredients</span><span class="pa-prev-section-tag">editorial run</span></div><div class="pa-prev-ing-line">${run}</div></div>`;
+    return `<div class="pa-prev-block pa-prev-ing"><div class="pa-prev-section-head"><span class="pa-prev-section-h3">${T('Ingredients', '配料表')}</span><span class="pa-prev-section-tag">${T('editorial run', '编辑式排版')}</span></div><div class="pa-prev-ing-line">${run}</div></div>`;
   }
   if (b.type === 'allergen_card') {
-    const contains = _paSplitChips(b.contains_en || b.contains_cn);
-    const mayContain = _paSplitChips(b.may_contain_en || b.may_contain_cn);
+    const contains = _paSplitChips(pickT(b.contains_en, b.contains_cn));
+    const mayContain = _paSplitChips(pickT(b.may_contain_en, b.may_contain_cn));
     const chips = (arr, cls) => arr.map(c => `<span class="pa-prev-allergen-chip ${cls}">${esc(c)}</span>`).join('');
     return `<div class="pa-prev-block pa-prev-allergen">
-      <div class="pa-prev-allergen-top"><span class="pa-prev-allergen-ttl"><span class="pa-prev-allergen-warn">!</span> Allergens</span><span class="pa-prev-allergen-meta">GB-7718</span></div>
-      <div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">Contains</span><span class="pa-prev-allergen-chips">${contains.length ? chips(contains, 'strong') : '<span class="pa-prev-allergen-empty">None declared</span>'}</span></div>
-      ${mayContain.length ? `<div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">May contain<br>traces of</span><span class="pa-prev-allergen-chips">${chips(mayContain, 'soft')}</span></div>` : ''}
+      <div class="pa-prev-allergen-top"><span class="pa-prev-allergen-ttl"><span class="pa-prev-allergen-warn">!</span> ${T('Allergens', '过敏原')}</span><span class="pa-prev-allergen-meta">GB-7718</span></div>
+      <div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">${T('Contains', '含有')}</span><span class="pa-prev-allergen-chips">${contains.length ? chips(contains, 'strong') : `<span class="pa-prev-allergen-empty">${T('None declared', '未声明')}</span>`}</span></div>
+      ${mayContain.length ? `<div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">${T('May contain<br>traces of', '可能含有<br>微量')}</span><span class="pa-prev-allergen-chips">${chips(mayContain, 'soft')}</span></div>` : ''}
     </div>`;
   }
   if (b.type === 'how_to_use') {
@@ -2374,7 +2393,7 @@ function _paPreviewBlockHtml(b) {
     if (!tiles.length) return '';
     const cols = tiles.length >= 8 ? 4 : 3;
     return `<div class="pa-prev-block pa-prev-how">
-      <div class="pa-prev-section-head"><span class="pa-prev-section-h3">How to use</span><span class="pa-prev-section-tag">${tiles.length} moments</span></div>
+      <div class="pa-prev-section-head"><span class="pa-prev-section-h3">${T('How to use', '用法')}</span><span class="pa-prev-section-tag">${tiles.length}${T(' moments', ' 种用法')}</span></div>
       <div class="pa-prev-how-grid" style="grid-template-columns:repeat(${cols},1fr)">${tiles.map(t => `<div class="pa-prev-how-tile">${t.icon ? `<span class="pa-prev-how-ic">${esc(t.icon)}</span>` : ''}${t.lbl ? `<span class="pa-prev-how-lbl">${esc(t.lbl)}</span>` : ''}${t.sub ? `<span class="pa-prev-how-sub">${esc(t.sub)}</span>` : ''}</div>`).join('')}</div>
     </div>`;
   }
@@ -2387,7 +2406,7 @@ function _paPreviewBlockHtml(b) {
     };
     const L = cardHtml(b.left), R = cardHtml(b.right), note = pickT(b.note_en, b.note_cn);
     if (!L && !R && !note) return '';
-    return `<div class="pa-prev-block pa-prev-storage"><div class="pa-prev-section-head"><span class="pa-prev-section-h3">Storage</span><span class="pa-prev-section-tag">keep it right</span></div><div class="pa-prev-storage-pair">${L}${R}</div>${note ? `<div class="pa-prev-storage-note">${esc(note)}</div>` : ''}</div>`;
+    return `<div class="pa-prev-block pa-prev-storage"><div class="pa-prev-section-head"><span class="pa-prev-section-h3">${T('Storage', '储存')}</span><span class="pa-prev-section-tag">${T('keep it right', '保鲜方法')}</span></div><div class="pa-prev-storage-pair">${L}${R}</div>${note ? `<div class="pa-prev-storage-note">${esc(note)}</div>` : ''}</div>`;
   }
   if (b.type === 'notes_callout') {
     const text = pickT(b.text_en, b.text_cn);
@@ -2426,7 +2445,7 @@ function _paPreviewBlockHtml(b) {
     return `<div class="pa-prev-block pa-prev-nutrition">
       <div class="pa-prev-nut-card">
         <div class="pa-prev-nut-top">
-          <span class="pa-prev-nut-ttl">Nutrition</span>
+          <span class="pa-prev-nut-ttl">${T('Nutrition', '营养成分')}</span>
           ${basis ? `<span class="pa-prev-nut-basis">${esc(basis)}</span>` : ''}
         </div>
         ${rows.map(r => `<div class="pa-prev-nrow ${r.kind}">
@@ -2455,21 +2474,40 @@ function _paResolveColophonChar(override, category) {
   const hit = PA_COLOPHON_AUTO_MAP.find(([rx]) => rx.test(cat));
   return hit ? hit[1] : 'soilsoul';
 }
+// Switch the phone preview between the EN and 中文 customer view. Independent
+// of the top-bar chrome toggle — re-renders the preview in the chosen language.
+function paSetPreviewLang(l) {
+  _paPreviewLang = (l === 'cn' ? 'cn' : 'en');
+  _paSyncPreviewLangToggle();
+  paRenderPreview();
+}
+function _paSyncPreviewLangToggle() {
+  document.querySelectorAll('.pa-prev-langtoggle button[data-plang]').forEach(b =>
+    b.classList.toggle('active', b.dataset.plang === _paPreviewLang));
+}
 function paRenderPreview() {
   const screen = document.getElementById('pa-preview-screen'); if (!screen || !PA_CURRENT) return;
   const p = PA_CURRENT;
+  // Default the preview language to whatever the editor UI is in, then it
+  // moves independently via the EN/中 toggle on the phone frame.
+  if (_paPreviewLang === null) _paPreviewLang = (typeof cuLang === 'function' ? cuLang() : 'en');
+  _paSyncPreviewLangToggle();
+  const PL = _paPreviewLang;
+  const pick = (en, cn) => { const a = (en || '').trim(), b = (cn || '').trim(); return PL === 'cn' ? (b || a) : (a || b); };
   const kwEN = document.getElementById('pa-edit-keywords-en').value || '';
   const kwCN = document.getElementById('pa-edit-keywords-cn').value || '';
   const tgEN = document.getElementById('pa-edit-tagline-en').value  || '';
   const tgCN = document.getElementById('pa-edit-tagline-cn').value  || '';
-  const keywords = kwEN || kwCN;
-  const tagline  = tgEN || tgCN;
-  const otherLang = p.name_cn || '';
+  const keywords = pick(kwEN, kwCN);
+  const tagline  = pick(tgEN, tgCN);
+  const title    = pick(p.name_en, p.name_cn) || '—';
+  // Subtitle carries the OTHER language's name (blank if there isn't one).
+  const otherLang = (PL === 'cn' ? (p.name_en || '') : (p.name_cn || ''));
   const colChar  = (document.getElementById('pa-edit-colophon-character').value || '').trim();
   const colTagEN = (document.getElementById('pa-edit-colophon-tagline-en').value || '').trim();
   const colTagCN = (document.getElementById('pa-edit-colophon-tagline-cn').value || '').trim();
   const colResChar = _paResolveColophonChar(colChar, p.category);
-  const colResTag  = colTagEN || colTagCN || 'From Soil to Soul';
+  const colResTag  = pick(colTagEN, colTagCN) || (PL === 'cn' ? '从土壤到灵魂' : 'From Soil to Soul');
   const colIsAuto  = !colChar;
   const img = p.image_data || p.image_url || '';
   const heroStyle = img ? `background-image:url('${escapeAttr(img)}'); background-color:transparent;` : '';
@@ -2480,10 +2518,10 @@ function paRenderPreview() {
   screen.innerHTML = `
     <div class="pa-prev-hero" style="${heroStyle}">${img ? '' : '🛍'}</div>
     <div class="pa-prev-body">
-      <div class="pa-prev-name">${escapeHtml(p.name_en || '—')}</div>
+      <div class="pa-prev-name">${escapeHtml(title)}</div>
       ${(otherLang || keywords) ? `<div class="pa-prev-subtitle">${otherLang ? escapeHtml(otherLang) : ''}${otherLang && keywords ? ' · ' : ''}${keywords ? escapeHtml(keywords) : ''}</div>` : ''}
       ${tagline ? `<div class="pa-prev-tagline">${escapeHtml(tagline)}</div>` : ''}
-      ${blocksHtml || (!keywords && !tagline ? '<div class="pa-prev-empty">No designer sections yet. Add one to compose the page.</div>' : '')}
+      ${blocksHtml || (!keywords && !tagline ? `<div class="pa-prev-empty">${_paPreviewLang === 'cn' ? '还没有板块,点上方“添加板块”开始排版。' : 'No designer sections yet. Add one to compose the page.'}</div>` : '')}
       <div class="pa-prev-colophon">
         <img class="pa-prev-colophon-img" src="/assets/brand/ip-${colResChar}.jpg" alt="">
         <div class="pa-prev-colophon-tagline">${escapeHtml(colResTag)}</div>
