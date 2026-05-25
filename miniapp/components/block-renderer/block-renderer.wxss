@@ -1939,7 +1939,9 @@
   letter-spacing: 0.04em;
 }
 
-.greet-blk-split { padding: 28rpx 32rpx; }
+/* Split, like Banner, is a full-width greeting band — drop the side inset
+   so the coloured field reaches both edges; copy keeps a 44rpx gutter. */
+.greet-blk-split { margin-left: 0; margin-right: 0; padding: 28rpx 44rpx; }
 .gr-split-row {
   display: flex;
   align-items: stretch;
