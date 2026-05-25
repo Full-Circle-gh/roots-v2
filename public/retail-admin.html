@@ -597,12 +597,62 @@
     font-variant-numeric: tabular-nums;
     margin-left: auto;
   }
+  /* Layout switcher — Grid / Compact / List. Squared segmented control in the
+     Full Circle language; the active segment fills Aged Brass. Sits in the
+     toolbar next to the "View" (display tweaks) popover. */
+  .pa-view-seg {
+    display: inline-flex; flex-shrink: 0;
+    border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden;
+  }
+  .pa-view-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0;
+    background: var(--bg-pane); color: var(--text-3);
+    border: none; cursor: pointer;
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .pa-view-btn + .pa-view-btn { border-left: 1px solid var(--line); }
+  .pa-view-btn:hover { color: var(--text-1); background: var(--bg-elev-1); }
+  .pa-view-btn.active { background: var(--brass); color: #12161A; }
+  .pa-view-btn svg { display: block; }
 
   .pa-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: var(--s3);
   }
+  /* Compact = denser grid, smaller cards (more per row). Same card markup, so
+     the "View" popover's crop / status tweaks still compose on top. */
+  .pa-grid.pa-grid-compact { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); }
+  .pa-grid-compact .pa-card-body { padding: var(--s2) var(--s3) var(--s3); min-height: 0; }
+  .pa-grid-compact .pa-card-name { font-size: 12px; -webkit-line-clamp: 1; }
+  .pa-grid-compact .pa-card-sub  { font-size: 10px; }
+  .pa-grid-compact .pa-pill { height: 18px; font-size: 8px; padding: 0 6px; }
+
+  /* List = one product per row: thumbnail + name/sub + status pills, text-dense
+     for scanning the full catalogue. #pa-grid swaps to this layout. */
+  .pa-list { display: flex; flex-direction: column; gap: 6px; }
+  .pa-row {
+    display: flex; align-items: center; gap: var(--s3);
+    padding: 8px 12px;
+    background: var(--bg-pane); border: 1px solid var(--line-soft);
+    border-radius: var(--r-md); cursor: pointer;
+    transition: border-color var(--t-fast) ease, transform var(--t-fast) ease;
+  }
+  .pa-row:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+  .pa-row-img {
+    width: 44px; height: 44px; flex-shrink: 0;
+    border-radius: var(--r-sm); overflow: hidden;
+    background: var(--bg-elev-2);
+    display: flex; align-items: center; justify-content: center; color: var(--text-4);
+  }
+  .pa-row-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pa-row-img svg { width: 18px; height: 18px; opacity: .5; }
+  .pa-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .pa-row-name { font-size: 13px; font-weight: 500; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pa-row-sub  { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pa-row-sub .pa-row-meta { font-family: var(--f-mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; }
+  .pa-row-pills { display: flex; gap: 4px; flex-shrink: 0; }
 
   .pa-card {
     background: var(--bg-pane);
@@ -4298,6 +4348,11 @@
         <option value="published">Published only · 仅上架</option>
       </select>
       <div id="pa-count" class="pa-count"></div>
+      <div id="pa-view-seg" class="pa-view-seg" role="group" aria-label="Product layout · 产品布局">
+        <button type="button" class="pa-view-btn" data-view="grid" title="Grid view · 网格视图" aria-label="Grid view"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></button>
+        <button type="button" class="pa-view-btn" data-view="compact" title="Compact view · 紧凑视图" aria-label="Compact view"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9.5" y="2" width="5" height="5" rx="1"/><rect x="17" y="2" width="5" height="5" rx="1"/><rect x="2" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><rect x="17" y="9.5" width="5" height="5" rx="1"/><rect x="2" y="17" width="5" height="5" rx="1"/><rect x="9.5" y="17" width="5" height="5" rx="1"/><rect x="17" y="17" width="5" height="5" rx="1"/></svg></button>
+        <button type="button" class="pa-view-btn" data-view="list" title="List view · 列表视图" aria-label="List view"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg></button>
+      </div>
       <div class="ovp-wrap" style="margin-left:auto">
         <button class="btn btn-sm" id="pv-btn" onclick="pvToggle()" aria-haspopup="true" title="Display options · 显示选项">View · 视图</button>
         <div id="pv-pop" class="ovp" hidden>
@@ -14020,6 +14075,14 @@ document.querySelector('[data-tab="customers"]').addEventListener('click', () =>
 let PA_LOADED = false;
 let PA_PRODUCTS = [];   // server response
 let PA_CURRENT = null;  // currently open product (when modal is showing)
+// Product layout: 'grid' (rich cards) | 'compact' (denser) | 'list' (one row
+// each). Separate from the "View" display-tweaks popover; persisted per-browser.
+let PA_VIEW = (() => { try { const v = localStorage.getItem('pa-view'); return (v === 'compact' || v === 'list') ? v : 'grid'; } catch { return 'grid'; } })();
+function paSetView(v) {
+  PA_VIEW = (v === 'compact' || v === 'list') ? v : 'grid';
+  try { localStorage.setItem('pa-view', PA_VIEW); } catch {}
+  paRender();
+}
 
 // Block schema. Adding a new block type requires:
 //   1) An entry here (label + factory for empty data)
@@ -14238,6 +14301,8 @@ document.querySelector('[data-tab="products"]').addEventListener('click', () => 
 
 document.getElementById('pa-search').addEventListener('input', _paDebouncedRender);
 document.getElementById('pa-filter').addEventListener('change', paRender);
+document.querySelectorAll('#pa-view-seg .pa-view-btn').forEach(btn =>
+  btn.addEventListener('click', () => paSetView(btn.dataset.view)));
 
 let _paT = null;
 function _paDebouncedRender() { clearTimeout(_paT); _paT = setTimeout(paRender, 200); }
@@ -14257,6 +14322,16 @@ async function paLoad() {
 }
 
 function _paHasBlocks(p) { return Array.isArray(p.description_blocks) && p.description_blocks.length > 0; }
+
+// Status pills (Designed/Plain + Draft) — used by the List view rows.
+function _paPills(p) {
+  const designed = _paHasBlocks(p);
+  const pub = p.is_published === 1;
+  return `${designed
+      ? `<span class="pa-pill pa-pill-designed" title="Designer sections authored · 已配置设计板块">${PA_ICON_SPARKLE}Designed</span>`
+      : `<span class="pa-pill pa-pill-plain" title="No designer sections yet · 尚未配置设计板块">Plain</span>`}
+    ${pub ? '' : '<span class="pa-pill pa-pill-draft" title="Not published in mini-app · 未在小程序上架">Draft</span>'}`;
+}
 
 // Full Circle brand glyphs for the product cards — inline so they inherit
 // currentColor from the badge / empty-state. Sparkle marks a DESIGNED card;
@@ -14320,6 +14395,35 @@ function paRender() {
   count.textContent = `${rows.length} of ${PA_PRODUCTS.length} · 共 ${PA_PRODUCTS.length} 件,显示 ${rows.length} 件`;
   empty.style.display = rows.length ? 'none' : 'block';
 
+  // Reflect the active layout in the toolbar segmented control.
+  document.querySelectorAll('#pa-view-seg .pa-view-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === PA_VIEW));
+
+  if (PA_VIEW === 'list') {
+    grid.className = 'pa-list';
+    grid.innerHTML = rows.map(p => {
+      const img  = p.image_data || p.image_url || '';
+      const meta = [p.sku, p.size].filter(Boolean).map(escapeHtml).join(' · ');
+      const sub  = [
+        p.name_cn ? escapeHtml(p.name_cn) : '',
+        meta ? `<span class="pa-row-meta">${meta}</span>` : '',
+      ].filter(Boolean).join(' · ');
+      return `
+        <div class="pa-row" onclick="paOpenEdit(${p.id})">
+          <div class="pa-row-img">${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : PA_ICON_BROKEN}</div>
+          <div class="pa-row-main">
+            <div class="pa-row-name">${escapeHtml(p.name_en || '—')}</div>
+            ${sub ? `<div class="pa-row-sub">${sub}</div>` : ''}
+          </div>
+          <div class="pa-row-pills">${_paPills(p)}</div>
+        </div>`;
+    }).join('');
+    return;
+  }
+
+  // Grid (default) or Compact — same card markup so the "View" popover's
+  // crop / status / empty tweaks keep composing on top.
+  grid.className = PA_VIEW === 'compact' ? 'pa-grid pa-grid-compact' : 'pa-grid';
   grid.innerHTML = rows.map(p => {
     const img = p.image_data || p.image_url || '';
     const designed = _paHasBlocks(p);
