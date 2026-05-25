@@ -3867,6 +3867,16 @@ async function api(path, opts = {}) {
   return j;
 }
 
+// Editor-tweak keys live here (above BOOTSTRAP) because the async IIFE
+// below runs synchronously during script eval and calls cmsApplyEditorTweaks()
+// — which reads these. As `const`s they'd be in the Temporal Dead Zone if
+// declared further down, throwing during boot. (Functions are hoisted; consts
+// are not.)
+const TWEAK_LIB_KEY = 'cms.libraryStyle';
+const TWEAK_BG_KEY  = 'cms.backdrop';
+const TWEAK_LIB_VALUES = ['cards', 'tiles', 'list'];
+const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
+
 // ═══════════════════════════════════════════════════════════════════════
 // BOOTSTRAP
 // ═══════════════════════════════════════════════════════════════════════
@@ -9533,10 +9543,8 @@ cmsApplyThemeIcon();
 // libraryStyle is a class on #palette; backdrop is a data-attr on .canvas —
 // both reuse existing DOM so drag/drop + rendering are untouched.
 // ═══════════════════════════════════════════════════════════════════════
-const TWEAK_LIB_KEY = 'cms.libraryStyle';
-const TWEAK_BG_KEY  = 'cms.backdrop';
-const TWEAK_LIB_VALUES = ['cards', 'tiles', 'list'];
-const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
+// (TWEAK_LIB_KEY / TWEAK_BG_KEY / *_VALUES are declared above the BOOTSTRAP
+//  IIFE so they're initialized before cmsApplyEditorTweaks() runs on boot.)
 function cmsGetTweak(key, values, fallback) {
   try { const v = localStorage.getItem(key); if (values.includes(v)) return v; } catch (e) {}
   return fallback;
