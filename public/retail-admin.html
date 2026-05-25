@@ -3786,6 +3786,10 @@
          tea = tier/positive, brass = attention, neutral otherwise. */
       .cu-pill {
         display: inline-flex; align-items: center;
+        /* Space between a label and its value span (Joined / Last login).
+           Flex strips the whitespace between text runs, so gap restores it.
+           Single-text pills have one flex item, so this is a no-op for them. */
+        gap: .4em;
         padding: 4px 10px;
         font-family: var(--f-mono);
         font-size: 10px; font-weight: 400; letter-spacing: .2em; text-transform: uppercase;
