@@ -596,7 +596,7 @@
   }
   .pa-card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
   .pa-card-img {
-    aspect-ratio: 4 / 3;
+    aspect-ratio: 1 / 1;                 /* square crop — recommended Full Circle treatment */
     background: var(--bg-elev-2);
     overflow: hidden;
     position: relative;
@@ -604,7 +604,10 @@
     color: var(--text-4);
   }
   .pa-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .pa-card-img-empty { font-size: 26px; opacity: 0.5; }
+  /* Undesigned products have no photography yet — keep the empty state minimal
+     and honest: a faint broken-image glyph on the neutral placeholder ground. */
+  .pa-card-img-empty { display: flex; color: var(--text-4); opacity: .5; }
+  .pa-card-img-empty svg { display: block; }
   .pa-card-pills {
     position: absolute; top: 8px; left: 8px;
     display: flex; gap: 4px; flex-wrap: wrap;
@@ -612,24 +615,40 @@
   .pa-card-body {
     padding: var(--s3) var(--s4) var(--s4);
     flex: 1;
-    display: flex; flex-direction: column; gap: 2px;
+    display: flex; flex-direction: column; gap: var(--s1);
+    min-height: 64px;
   }
-  .pa-card-name { font-size: 13px; font-weight: 600; color: var(--text-1); line-height: 1.3; }
-  .pa-card-sub  { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  /* Name clamps to two lines so long bilingual product names ("12pc Whole
+     Wheat Wrap (XL - 10 inch)") stay readable without blowing out the card. */
+  .pa-card-name {
+    font-size: 13px; font-weight: 500; color: var(--text-1); line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .pa-card-sub  {
+    font-size: 11px; color: var(--text-3); line-height: 1.3;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .pa-card-meta { font-family: var(--f-mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; }
 
-  /* Status pills on cards */
+  /* Status badges on cards — Full Circle brand treatment. Squared mono chips
+     with fixed brand colors: they overlay product photography, so they read
+     identically in both themes rather than following the theme tokens.
+     DESIGNED = Tea Green (has designer sections) · PLAIN = no sections yet ·
+     DRAFT = Aged Brass (not published to the mini-app). */
   .pa-pill {
-    display: inline-flex; align-items: center; gap: 4px;
-    font-size: 10px; font-weight: 600; letter-spacing: .04em;
-    padding: 2px 8px; border-radius: 999px;
-    line-height: 1.4;
-    text-transform: uppercase;
-    backdrop-filter: blur(8px);
+    display: inline-flex; align-items: center; gap: 5px;
+    box-sizing: border-box;
+    height: 22px; padding: 0 9px; border-radius: 3px;
+    font-family: var(--f-mono); font-size: 9px; font-weight: 400;
+    letter-spacing: .18em; text-transform: uppercase; line-height: 1;
+    backdrop-filter: blur(6px);
   }
-  .pa-pill-on    { background: rgba(107, 142, 111, .85);  color: var(--accent-ink); }
-  .pa-pill-off   { background: rgba(0, 0, 0, .55);      color: var(--text-1); }
-  .pa-pill-draft { background: rgba(233, 163, 90, .92); color: #1a1a17; }
-  :root[data-theme="light"] .pa-pill-off { background: rgba(255, 255, 255, .85); color: var(--text-2); }
+  .pa-pill svg { display: block; flex-shrink: 0; }
+  .pa-pill-designed { background: #6B8E6F; color: #E8E5DC; }                       /* Tea Green · Deeper Paper */
+  .pa-pill-plain    { background: rgba(232, 229, 220, .70); color: rgba(18, 22, 26, .55);
+                      border: 1px solid rgba(18, 22, 26, .15); }
+  .pa-pill-draft    { background: rgba(176, 141, 74, .15); color: #B08D4A;
+                      border: 1px solid rgba(176, 141, 74, .30); }
 
   /* Empty state */
   .pa-empty {
@@ -3380,6 +3399,49 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
         Bulk attach tracking
       </button>
+
+      <!-- View options (tweaks) — reshape the table's surface, status signaling,
+           row rhythm and type character. Per-operator, persisted to localStorage. -->
+      <div class="ovp-wrap">
+        <button class="btn" id="ord-view-btn" onclick="ordTweakToggle()" aria-haspopup="true" title="Display options · 显示选项">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h7M4 18h10"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+          View · 视图
+        </button>
+        <div id="ord-view-pop" class="ovp" hidden>
+          <div class="ovp-head">Display options · 显示选项</div>
+          <div class="ovp-group">
+            <div class="ovp-label">Surface · 主题</div>
+            <div class="ovp-seg" data-tw="theme">
+              <button data-v="light" onclick="ordTweakSet('theme','light')">Light · 浅色</button>
+              <button data-v="dark"  onclick="ordTweakSet('theme','dark')">Dark · 深色</button>
+            </div>
+          </div>
+          <div class="ovp-group">
+            <div class="ovp-label">Status signaling · 状态样式</div>
+            <div class="ovp-seg" data-tw="statusStyle">
+              <button data-v="pill"  onclick="ordTweakSet('statusStyle','pill')">Pill · 胶囊</button>
+              <button data-v="bar"   onclick="ordTweakSet('statusStyle','bar')">Bar · 竖条</button>
+              <button data-v="glyph" onclick="ordTweakSet('statusStyle','glyph')">Glyph · 圆点</button>
+            </div>
+          </div>
+          <div class="ovp-group">
+            <div class="ovp-label">Row rhythm · 行样式</div>
+            <div class="ovp-seg" data-tw="rowTreat">
+              <button data-v="hairlines" onclick="ordTweakSet('rowTreat','hairlines')">Hairlines · 细线</button>
+              <button data-v="striped"   onclick="ordTweakSet('rowTreat','striped')">Striped · 斑马</button>
+              <button data-v="cards"     onclick="ordTweakSet('rowTreat','cards')">Cards · 卡片</button>
+            </div>
+          </div>
+          <div class="ovp-group">
+            <div class="ovp-label">Type character · 字体</div>
+            <div class="ovp-seg" data-tw="typeMode">
+              <button data-v="mixed"      onclick="ordTweakSet('typeMode','mixed')">Mixed · 混合</button>
+              <button data-v="mono-heavy" onclick="ordTweakSet('typeMode','mono-heavy')">Mono-heavy · 偏等宽</button>
+              <button data-v="all-mono"   onclick="ordTweakSet('typeMode','all-mono')">All-mono · 全等宽</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Bulk attach tracking modal -->
@@ -3423,6 +3485,65 @@
       /* Order # cell — fixed-width digit alignment so the live-poll refresh
          doesn't jitter the column when a row swaps in. */
       #orders-table td:first-child { font-variant-numeric: tabular-nums; }
+
+      /* ── View options (tweaks) popover ── */
+      .ovp-wrap { position: relative; display: inline-flex; }
+      .ovp {
+        position: absolute; top: calc(100% + 8px); right: 0; z-index: 50;
+        width: 300px; padding: 12px;
+        background: var(--bg-pane); border: 1px solid var(--line-strong, var(--line));
+        border-radius: var(--r-lg); box-shadow: var(--sh-3, 0 24px 60px rgba(0,0,0,.5));
+        display: flex; flex-direction: column; gap: 12px;
+      }
+      .ovp[hidden] { display: none; }
+      .ovp-head { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+      .ovp-group { display: flex; flex-direction: column; gap: 6px; }
+      .ovp-label { font-size: 11px; color: var(--text-3); }
+      .ovp-seg { display: flex; gap: 4px; background: var(--bg-input, var(--bg-app)); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 3px; }
+      .ovp-seg button {
+        flex: 1; min-width: 0; padding: 6px 4px; border: 0; border-radius: 4px;
+        background: transparent; color: var(--text-2); cursor: pointer;
+        font: 500 11px var(--f-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        transition: background var(--t-fast) ease, color var(--t-fast) ease;
+      }
+      .ovp-seg button:hover { color: var(--text-1); }
+      .ovp-seg button.active { background: var(--accent); color: var(--accent-ink, #16161a); }
+
+      /* ── Tweak: status signaling (default = pill, the existing look) ── */
+      #orders-table.os-bar .pill {
+        background: none; border: none; border-left: 2px solid currentColor;
+        border-radius: 0; padding: 2px 0 2px 9px;
+      }
+      #orders-table.os-bar .pill .dot { display: none; }
+      #orders-table.os-glyph .pill {
+        background: none; border: none; border-radius: 0; padding: 2px 0;
+      }
+
+      /* ── Tweak: row rhythm (default = hairlines, the existing look) ── */
+      #orders-table.rt-striped tbody td { border-bottom: none; }
+      #orders-table.rt-striped tbody tr.order-row:nth-child(even) td { background: var(--bg-elev-1); }
+      #orders-table.rt-cards { border-collapse: separate; border-spacing: 0 6px; }
+      #orders-table.rt-cards thead th { border-bottom: none; }
+      #orders-table.rt-cards tbody td {
+        background: var(--bg-elev-1);
+        border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);
+      }
+      #orders-table.rt-cards tbody td:first-child {
+        border-left: 1px solid var(--line-soft);
+        border-top-left-radius: 8px; border-bottom-left-radius: 8px;
+      }
+      #orders-table.rt-cards tbody td:last-child {
+        border-right: 1px solid var(--line-soft);
+        border-top-right-radius: 8px; border-bottom-right-radius: 8px;
+      }
+
+      /* ── Tweak: type character (default = mixed, the existing look) ── */
+      #orders-table.tm-mono-heavy .oc-total,
+      #orders-table.tm-mono-heavy .oc-store,
+      #orders-table.tm-all-mono .oc-total,
+      #orders-table.tm-all-mono .oc-store { font-family: var(--f-mono); }
+      #orders-table.tm-all-mono tbody td:not(.status-cell),
+      #orders-table.tm-all-mono tbody td:not(.status-cell) div { font-family: var(--f-mono); }
     </style>
     <div class="table-wrap">
       <table id="orders-table">
@@ -3437,8 +3558,9 @@
   <!-- ─── CUSTOMERS ─── -->
   <section id="tab-customers">
     <style>
-      .cu-grid-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3); margin-bottom: var(--s4); }
-      @media (max-width: 900px) { .cu-grid-stats { grid-template-columns: 1fr; } }
+      /* Three summary cards. auto-fit/minmax wraps on the drawer's own width
+         (not the viewport) so the 44px headline never clips in a narrow drawer. */
+      .cu-grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--s4); margin-bottom: var(--s4); }
       .cu-tile {
         background: var(--bg-pane);
         border: 1px solid var(--line-soft);
@@ -7612,6 +7734,55 @@ async function applySplitSuggestion(orderId) {
 
 // `silent` = called by the poller. Skip the "Loading…" placeholder, skip
 // the rebuild when the fingerprint matches, flash new rows on arrival.
+// ── Orders view options (tweaks) ──────────────────────────────────────
+// Per-operator display preferences for the orders table: status signaling,
+// row rhythm and type character. Theme rides the global retail-admin theme.
+// Applied as classes on #orders-table (which persists across tbody re-renders)
+// + scoped CSS, so the row template never has to know about them.
+const ORDER_TWEAK_DEFAULTS = { statusStyle: 'pill', rowTreat: 'hairlines', typeMode: 'mixed' };
+function ordTweaksLoad() {
+  try { return { ...ORDER_TWEAK_DEFAULTS, ...(JSON.parse(localStorage.getItem('retail-admin-order-tweaks') || '{}')) }; }
+  catch (e) { return { ...ORDER_TWEAK_DEFAULTS }; }
+}
+let ORD_TWEAKS = ordTweaksLoad();
+function ordTweaksApply() {
+  const tbl = document.getElementById('orders-table'); if (!tbl) return;
+  tbl.classList.remove('os-pill', 'os-bar', 'os-glyph', 'rt-hairlines', 'rt-striped', 'rt-cards', 'tm-mixed', 'tm-mono-heavy', 'tm-all-mono');
+  tbl.classList.add('os-' + ORD_TWEAKS.statusStyle, 'rt-' + ORD_TWEAKS.rowTreat, 'tm-' + ORD_TWEAKS.typeMode);
+}
+function ordTweakSet(key, val) {
+  if (key === 'theme') { cuSetTheme(val); ordTweakSyncPanel(); return; }
+  ORD_TWEAKS[key] = val;
+  try { localStorage.setItem('retail-admin-order-tweaks', JSON.stringify(ORD_TWEAKS)); } catch (e) {}
+  ordTweaksApply();
+  ordTweakSyncPanel();
+}
+function ordTweakSyncPanel() {
+  const pop = document.getElementById('ord-view-pop'); if (!pop) return;
+  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+  const vals = { theme, statusStyle: ORD_TWEAKS.statusStyle, rowTreat: ORD_TWEAKS.rowTreat, typeMode: ORD_TWEAKS.typeMode };
+  pop.querySelectorAll('.ovp-seg').forEach(seg => {
+    const key = seg.getAttribute('data-tw');
+    seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.getAttribute('data-v') === vals[key]));
+  });
+}
+function ordTweakToggle() {
+  const pop = document.getElementById('ord-view-pop'); if (!pop) return;
+  if (pop.hidden) {
+    pop.hidden = false;
+    ordTweakSyncPanel();
+    setTimeout(() => document.addEventListener('mousedown', ordTweakOutside), 0);
+  } else { ordTweakClose(); }
+}
+function ordTweakClose() {
+  const pop = document.getElementById('ord-view-pop'); if (pop) pop.hidden = true;
+  document.removeEventListener('mousedown', ordTweakOutside);
+}
+function ordTweakOutside(e) {
+  const wrap = e.target.closest && e.target.closest('.ovp-wrap');
+  if (!wrap) ordTweakClose();
+}
+
 async function loadOrders(opts = {}) {
   const silent = !!opts.silent;
 
@@ -7712,18 +7883,19 @@ async function loadOrders(opts = {}) {
           <div>${escapeHtml(o.nickname || o.recipient_name || '—')}</div>
           <div class="muted" style="font-size: 11px; margin-top: 2px">${o.recipient_phone || ''}</div>
         </td>
-        <td>
+        <td class="oc-store">
           ${o.store_code ? `<div>${escapeHtml(o.store_name_en || o.store_code)}</div>
             ${routingNote(o.routing_reason) ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${routingNote(o.routing_reason)}</div>` : ''}` : '<span class="muted">—</span>'}
         </td>
         <td>${o.item_count}</td>
-        <td class="numeric">¥${fmt(o.total)}</td>
+        <td class="numeric oc-total">¥${fmt(o.total)}</td>
         <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status)}</span>${refundBadge(o)}</div></td>
         <td>${renderTrackingCell(o)}</td>
         <td>${renderShipByCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
     }).join('');
+    ordTweaksApply();
 
     _ORDERS_SEEN_IDS = newIds;
 
@@ -13217,6 +13389,12 @@ async function paLoad() {
 
 function _paHasBlocks(p) { return Array.isArray(p.description_blocks) && p.description_blocks.length > 0; }
 
+// Full Circle brand glyphs for the product cards — inline so they inherit
+// currentColor from the badge / empty-state. Sparkle marks a DESIGNED card;
+// the broken-image glyph is the honest empty state for unphotographed products.
+const PA_ICON_SPARKLE = '<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6z"/><circle cx="19" cy="5" r="1.2"/><circle cx="6" cy="18" r="1"/></svg>';
+const PA_ICON_BROKEN  = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 17l5-4 4 3 4-5 5 5"/><path d="M3 5l18 14"/></svg>';
+
 function paRender() {
   const grid   = document.getElementById('pa-grid');
   const empty  = document.getElementById('pa-empty');
@@ -13243,18 +13421,22 @@ function paRender() {
     const img = p.image_data || p.image_url || '';
     const designed = _paHasBlocks(p);
     const pub      = p.is_published === 1;
+    const meta = [p.sku, p.size].filter(Boolean).map(escapeHtml).join(' · ');
     return `
       <div class="pa-card" onclick="paOpenEdit(${p.id})">
         <div class="pa-card-img">
-          ${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : '<div class="pa-card-img-empty">🛍</div>'}
+          ${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : `<div class="pa-card-img-empty">${PA_ICON_BROKEN}</div>`}
           <div class="pa-card-pills">
-            ${designed ? '<span class="pa-pill pa-pill-on" title="Designer sections authored · 已配置设计板块">🎨 Designed</span>' : '<span class="pa-pill pa-pill-off" title="No designer sections yet · 尚未配置设计板块">Plain</span>'}
+            ${designed
+              ? `<span class="pa-pill pa-pill-designed" title="Designer sections authored · 已配置设计板块">${PA_ICON_SPARKLE}Designed</span>`
+              : `<span class="pa-pill pa-pill-plain" title="No designer sections yet · 尚未配置设计板块">Plain</span>`}
             ${pub ? '' : '<span class="pa-pill pa-pill-draft" title="Not published in mini-app · 未在小程序上架">Draft</span>'}
           </div>
         </div>
         <div class="pa-card-body">
           <div class="pa-card-name">${escapeHtml(p.name_en || '—')}</div>
-          <div class="pa-card-sub">${escapeHtml(p.name_cn || '')}${p.sku ? ' · ' + escapeHtml(p.sku) : ''}</div>
+          ${p.name_cn ? `<div class="pa-card-sub">${escapeHtml(p.name_cn)}</div>` : ''}
+          ${meta ? `<div class="pa-card-meta">${meta}</div>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -14380,12 +14562,15 @@ function cuApplyThemeIcon() {
   const meta = $('#meta-theme-color');
   if (meta) meta.setAttribute('content', t === 'light' ? '#E8E5DC' : '#12161A');
 }
-function cuToggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') || 'dark';
-  const next    = current === 'dark' ? 'light' : 'dark';
+function cuSetTheme(t) {
+  const next = t === 'light' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
   try { localStorage.setItem('retail-admin-theme', next); } catch (e) {}
   cuApplyThemeIcon();
+}
+function cuToggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  cuSetTheme(current === 'dark' ? 'light' : 'dark');
 }
 cuApplyThemeIcon();
 
