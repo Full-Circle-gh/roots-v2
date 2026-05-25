@@ -1917,7 +1917,9 @@
 .gr-headline-sm { font-size: calc(38rpx * var(--font-scale)); line-height: 1.1; margin-top: 6rpx; }
 .gr-headline-lg { font-size: calc(88rpx * var(--font-scale)); line-height: 0.94; }
 
-.greet-blk-banner { border: 0; padding: 44rpx 36rpx 38rpx; }
+/* Banner = full-bleed colour band: drop the side inset so the field
+   stretches edge-to-edge. Inner copy keeps its own horizontal padding. */
+.greet-blk-banner { border: 0; margin-left: 0; margin-right: 0; padding: 44rpx 44rpx 38rpx; }
 .greet-blk-banner .gr-kicker { opacity: 0.6; }
 
 .greet-blk-inline { padding: 22rpx 28rpx; }
