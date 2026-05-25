@@ -13300,8 +13300,8 @@ function cuRenderDetail() {
         <div class="cu-tags">
           <span class="cu-pill tier-${escapeHtml(c.tier_key || 'seed')}">${escapeHtml(c.tier_key || 'seed')}</span>
           ${c.is_blocked ? '<span class="cu-pill blocked">Blocked · 已封禁</span>' : ''}
-          <span class="cu-pill">Joined · 加入 ${cuFmtDate(c.created_at) || '—'}</span>
-          <span class="cu-pill">Last login · 最近登录 ${cuFmtTime(c.last_login_at) || 'never · 从未'}</span>
+          <span class="cu-pill">Joined · 加入 <span>${cuFmtDate(c.created_at) || '—'}</span></span>
+          <span class="cu-pill">Last login · 最近登录 <span>${cuFmtTime(c.last_login_at) || 'never · 从未'}</span></span>
           <span class="cu-pill${sessions >= 5 ? ' brass' : ''}">${sessions} active sessions · 活跃会话</span>
         </div>
         <div class="cu-openid" style="margin-top: 14px; word-break: break-all;">openid: ${escapeHtml(c.openid || '')}</div>
