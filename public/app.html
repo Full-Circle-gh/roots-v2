@@ -7823,7 +7823,27 @@ async function saveCostSheet(recipeId) {
 // ─────────────────────────────────────────────────────────────────────────────
 // PRODUCTS
 // ─────────────────────────────────────────────────────────────────────────────
-async function renderProducts() {
+async function renderProducts(opts) {
+  const reload = !!(opts && opts.reload);
+  // "Back" from a product page (and most re-entries) already hold the list in
+  // memory. Paint it instantly so navigation feels immediate, then reconcile
+  // from the server in the background — only the body is repainted, so the
+  // header/search/filters the user may already be touching are preserved.
+  // A cold cache (or an explicit {reload:true}) waits on the network instead.
+  if (!reload && Array.isArray(_products) && _products.length > 0) {
+    _paintProductsPage();
+    _reloadProductsData()
+      .then(() => { if (document.getElementById('prodViewBody')) filterProducts(); })
+      .catch(() => {});
+    return;
+  }
+  await _reloadProductsData();
+  _paintProductsPage();
+}
+
+// Fetch the product list + per-store inventory grid; refresh module caches and
+// (re)arm the per-store auto-refresh. Mutates _products / _prodInvGrid.
+async function _reloadProductsData() {
   // Drop the per-store stock cache so re-entering the page sees fresh data.
   _prodInvGrid = null;
   if (_prodInvAutoRefresh) { clearInterval(_prodInvAutoRefresh); _prodInvAutoRefresh = null; }
@@ -7833,14 +7853,19 @@ async function renderProducts() {
   const res = await fetch('/api/products');
   const data = await res.json();
   _products = data.data || [];
-  // Wait for stores to land before painting so per-store columns are
-  // available when the column picker opens.
+  // Wait for stores to land so per-store columns are available when the
+  // column picker opens.
   await invPromise.catch(() => {});
   _registerStoreColumns();
   // Background refresh: any view that shows per-store data (Stock view,
   // or List view with a store column ticked on) stays current as other
   // stores update. Self-clears when navigating away.
   if (!_prodInvAutoRefresh) _prodInvAutoRefresh = setInterval(_prodInvAutoRefreshTick, 20000);
+}
+
+// Paint the full Products page (header, filters, view body) from the in-memory
+// _products cache. No network — callers fetch first when they need fresh data.
+function _paintProductsPage() {
   const cats = [...new Set(_products.map(p=>p.category).filter(Boolean))].sort();
   const statuses = ['Active','Inactive','Seasonal','Coming Soon'];
 
@@ -12869,6 +12894,10 @@ async function _pfAutoSave(id) {
     if (!res.success) throw new Error(res.error || 'save failed');
     _pfAutoSaveDirty = false;
     _pfAutoSaveListNeedsRefresh = true;
+    // Patch the in-memory list so the instant "Back" paint (and any return to
+    // the list) shows the edit immediately, without waiting for the refetch.
+    const _ci = (_products || []).findIndex(p => Number(p.id) === Number(id));
+    if (_ci !== -1) _products[_ci] = { ..._products[_ci], ...data };
     _pfSetStatus('saved');
   } catch (e) {
     _pfSetStatus('error');
@@ -12918,7 +12947,7 @@ async function deleteProduct(id, name) {
   if (!confirm('Delete "'+name+'"? · 删除 "'+name+'"?')) return;
   const r = await fetch('/api/products/'+id, {method:'DELETE'});
   const d = await r.json();
-  if (d.success) { toast('✅ Deleted 已删除','success'); await renderProducts(); }
+  if (d.success) { toast('✅ Deleted 已删除','success'); _products = (_products || []).filter(p => Number(p.id) !== Number(id)); await renderProducts(); }
   else toast('Error · 错误: '+d.error,'error');
 }
 
