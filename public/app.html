@@ -5627,13 +5627,14 @@ async function _handleImageUpload(file, opts = {}) {
   }
 }
 
-// Tuned preset for mini-app product photos. They display at most full-phone
-// width, so 1200px on the long edge is ~1:1 even on 3× screens — larger is just
-// wasted bytes that slow the mini-app product pages. JPEG q0.82 looks the same
-// as q0.90 on photos at roughly half the size; forcing JPEG also stops heavy
-// lossless PNG exports from shipping as-is (the "2.2MB → 2MB" case). A typical
-// 2–5MB upload lands around 150–350KB. Already-small (<200KB) JPEGs pass through.
-const PROD_IMG_OPTS = { maxLong: 1200, quality: 0.82, format: 'jpeg', passThroughBelow: 200 * 1024 };
+// Tuned preset for mini-app product photos. 1440px on the long edge stays crisp
+// at full phone width even on 3× screens and leaves headroom for tap-to-zoom,
+// while still being far lighter than the raw upload. JPEG q0.88 keeps photos
+// looking clean with no visible compression artifacts; forcing JPEG also stops
+// heavy lossless PNG exports from shipping as-is (the "2.2MB → 2MB" case).
+// A typical 2–5MB upload lands around 300–600KB. Already-small (<200KB) JPEGs
+// pass through untouched.
+const PROD_IMG_OPTS = { maxLong: 1440, quality: 0.88, format: 'jpeg', passThroughBelow: 200 * 1024 };
 
 async function onSupplierQRUpload(input) {
   const f = input.files?.[0]; if (!f) return;
