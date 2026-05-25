@@ -1787,6 +1787,17 @@
   .dz-extras { color: var(--text-3); font-size: 11px; }
   .dz-sd-yes { color: var(--st-delivered); font-weight: 600; }
   .dz-sd-no  { color: var(--text-4); }
+
+  /* ── Delivery Zones View tweaks (per-operator) — row density + zone-badge
+     style. Defaults (comfortable / pill) reproduce the base look. ── */
+  #dz-table.dz-compact th { padding-top: 6px; padding-bottom: 6px; }
+  #dz-table.dz-compact td { padding-top: 7px; padding-bottom: 7px; }
+  #dz-table.dzb-square .dz-type-chip { border-radius: var(--r-sm); }
+  #dz-table.dzb-underline .dz-type-chip {
+    background: transparent !important; border-color: transparent !important;
+    padding-left: 0; padding-right: 0; border-radius: 0;
+    text-decoration: underline; text-underline-offset: 3px;
+  }
   /* Actions sit at the far right, on one line. width:1% shrinks the column to
      its content and nowrap stops the two 28px buttons from wrapping onto
      stacked lines (the old fixed 36px was narrower than the pair). */
@@ -5026,6 +5037,27 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Add zone · 添加配送区
       </button>
+      <div class="ovp-wrap">
+        <button class="btn btn-sm" id="dzv-btn" onclick="dzvToggle()" aria-haspopup="true" title="Display options · 显示选项">View · 视图</button>
+        <div id="dzv-pop" class="ovp" hidden>
+          <div class="ovp-head">Display options · 显示选项</div>
+          <div class="ovp-group">
+            <div class="ovp-label">Row density · 行密度</div>
+            <div class="ovp-seg" data-dzv="density">
+              <button data-v="comfortable" onclick="dzvSet('density','comfortable')">Comfortable · 舒适</button>
+              <button data-v="compact"     onclick="dzvSet('density','compact')">Compact · 紧凑</button>
+            </div>
+          </div>
+          <div class="ovp-group">
+            <div class="ovp-label">Zone badge · 区域徽章</div>
+            <div class="ovp-seg" data-dzv="badge">
+              <button data-v="pill"      onclick="dzvSet('badge','pill')">Pill · 胶囊</button>
+              <button data-v="square"    onclick="dzvSet('badge','square')">Square · 方形</button>
+              <button data-v="underline" onclick="dzvSet('badge','underline')">Underline · 下划线</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="table-wrap">
@@ -11115,9 +11147,40 @@ function setZoneView(view) {
   renderZoneTable();
 }
 
+// ── Delivery Zones · per-operator View tweaks — row density + zone-badge style.
+const DZ_VIEW_DEFAULTS = { density: 'comfortable', badge: 'pill' };
+function dzvLoad() {
+  try { return { ...DZ_VIEW_DEFAULTS, ...(JSON.parse(localStorage.getItem('retail-admin-dz-view') || '{}')) }; }
+  catch (e) { return { ...DZ_VIEW_DEFAULTS }; }
+}
+let DZ_VIEW = dzvLoad();
+function dzvApply() {
+  const tbl = document.getElementById('dz-table'); if (!tbl) return;
+  tbl.classList.remove('dz-compact', 'dzb-pill', 'dzb-square', 'dzb-underline');
+  if (DZ_VIEW.density === 'compact') tbl.classList.add('dz-compact');
+  tbl.classList.add('dzb-' + DZ_VIEW.badge);
+  dzvSyncPanel();
+}
+function dzvSet(key, val) {
+  DZ_VIEW[key] = val;
+  try { localStorage.setItem('retail-admin-dz-view', JSON.stringify(DZ_VIEW)); } catch (e) {}
+  dzvApply();
+}
+function dzvSyncPanel() {
+  const pop = document.getElementById('dzv-pop'); if (!pop) return;
+  pop.querySelectorAll('.ovp-seg').forEach(seg => {
+    const key = seg.getAttribute('data-dzv');
+    seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.getAttribute('data-v') === DZ_VIEW[key]));
+  });
+}
+function dzvToggle() { const p = document.getElementById('dzv-pop'); if (!p) return; if (p.hidden) { p.hidden = false; dzvSyncPanel(); setTimeout(() => document.addEventListener('mousedown', dzvOutside), 0); } else dzvClose(); }
+function dzvClose() { const p = document.getElementById('dzv-pop'); if (p) p.hidden = true; document.removeEventListener('mousedown', dzvOutside); }
+function dzvOutside(e) { if (!(e.target.closest && e.target.closest('.ovp-wrap'))) dzvClose(); }
+
 function renderZoneTable() {
   const head = $('#dz-thead');
   const body = $('#dz-tbody');
+  dzvApply();
   const q = ($('#dz-search')?.value || '').trim().toLowerCase();
   const rows = _zones.filter(z => {
     if (!q) return true;
