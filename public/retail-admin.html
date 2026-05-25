@@ -7079,9 +7079,9 @@ function dashTrendTip(e) {
   if (!tip) return;
   tip.innerHTML =
     `<div class="b">${escapeHtml(String(p.bucket))}</div>` +
-    `<div class="r"><span>Revenue · 营收</span><b>${dashMoney(p.revenue)}</b></div>` +
-    `<div class="r"><span>Orders · 订单</span><b>${dashNum(p.orders)}</b></div>` +
-    `<div class="r"><span>Visits · 访问</span><b>${dashNum(p.visits)}</b></div>`;
+    `<div class="r"><span>${cuT('Revenue','营收')}</span><b>${dashMoney(p.revenue)}</b></div>` +
+    `<div class="r"><span>${cuT('Orders','订单')}</span><b>${dashNum(p.orders)}</b></div>` +
+    `<div class="r"><span>${cuT('Visits','访问')}</span><b>${dashNum(p.visits)}</b></div>`;
   tip.style.display = 'block';
   const host = document.getElementById('db-trend');
   const hr = host.getBoundingClientRect();
