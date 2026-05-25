@@ -501,7 +501,9 @@
      and resets on every column while sweeping). */
   #db-trend { position: relative; }
   .db-trend-tip {
-    position: absolute; display: none; pointer-events: none; z-index: 8;
+    /* position:fixed + body-level (see dashTrendTip) so no overflow:hidden
+       ancestor can crop it; positioned in viewport coords. */
+    position: fixed; display: none; pointer-events: none; z-index: 9999;
     background: #12161A; color: #E8E5DC; border-radius: 10px; padding: 9px 12px;
     font-size: 12px; line-height: 1.5; white-space: nowrap; min-width: 168px;
     border: 1px solid rgba(232,229,220,.12);
@@ -7714,7 +7716,7 @@ function dashRenderTrend() {
   const svgLine = cs === 'curve' ? line : '';
   const svgDots = cs !== 'bars' ? dots : '';
 
-  $('#db-trend').innerHTML = `<svg class="db-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" onmousemove="dashTrendTip(event)" onmouseleave="dashTrendHide()">${grid}${svgArea}${svgLine}${bars}${svgDots}${hover}${xl}</svg><div id="db-trend-tip" class="db-trend-tip"></div>`;
+  $('#db-trend').innerHTML = `<svg class="db-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" onmousemove="dashTrendTip(event)" onmouseleave="dashTrendHide()">${grid}${svgArea}${svgLine}${bars}${svgDots}${hover}${xl}</svg>`;  /* tooltip is a body-level singleton (dashTrendTip) */
 }
 
 // Cursor-following tooltip for the trend chart. Computes the nearest data
@@ -7737,20 +7739,26 @@ function dashTrendTip(e) {
   idx = Math.max(0, Math.min(n - 1, idx));
   const p = t[idx];
   if (!p) return dashTrendHide();
-  const tip = document.getElementById('db-trend-tip');
-  if (!tip) return;
+  // Singleton tooltip lives on <body> so no overflow:hidden ancestor (the
+  // chart card) can crop it.
+  let tip = document.getElementById('db-trend-tip');
+  if (!tip || tip.parentNode !== document.body) {
+    if (!tip) { tip = document.createElement('div'); tip.id = 'db-trend-tip'; tip.className = 'db-trend-tip'; }
+    document.body.appendChild(tip);
+  }
   tip.innerHTML =
     `<div class="b">${escapeHtml(String(p.bucket))}</div>` +
     `<div class="r"><span>${cuT('Revenue','营收')}</span><b>${dashMoney(p.revenue)}</b></div>` +
     `<div class="r"><span>${cuT('Orders','订单')}</span><b>${dashNum(p.orders)}</b></div>` +
     `<div class="r"><span>${cuT('Visits','访问')}</span><b>${dashNum(p.visits)}</b></div>`;
   tip.style.display = 'block';
-  const host = document.getElementById('db-trend');
-  const hr = host.getBoundingClientRect();
-  let x = (e.clientX - hr.left) + 14;
-  let y = (e.clientY - hr.top) - 12;
-  if (x + tip.offsetWidth + 8 > hr.width) x = (e.clientX - hr.left) - tip.offsetWidth - 14;
-  if (y < 0) y = 4;
+  // Viewport coords (position:fixed). Flip left of the cursor near the right
+  // edge, then hard-clamp inside the viewport on every side.
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  let x = e.clientX + 14;
+  if (x + tw + 8 > window.innerWidth) x = e.clientX - tw - 14;
+  x = Math.max(6, Math.min(x, window.innerWidth - tw - 6));
+  let y = Math.max(6, Math.min(e.clientY - 12, window.innerHeight - th - 6));
   tip.style.left = x + 'px';
   tip.style.top = y + 'px';
   svg.querySelectorAll('.hovercol').forEach((c, i) => c.classList.toggle('on', i === idx));
