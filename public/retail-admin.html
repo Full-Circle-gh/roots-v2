@@ -3779,6 +3779,7 @@
       /* Orders-by-month chart — Tea bars (peak full, others 80%), faint
          baseline strip for empty months. */
       .cu-bar-row { display: flex; align-items: flex-end; gap: 8px; height: 120px; }
+      .cu-bar-row.cu-bars-tall { height: 178px; }   /* View tweak: stretch chart taller */
       .cu-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
       .cu-bar { width: 100%; background: var(--accent); opacity: .8; border-radius: 2px 2px 0 0; min-height: 3px; transition: opacity var(--t-fast) ease; }
       .cu-bar.peak  { opacity: 1; }
@@ -12920,6 +12921,7 @@ function cuPage(d) {
 
 async function cuOpenDetail(id) {
   openDrawer('#cu-drawer');
+  _CDV_OPEN = false;               // View popover starts closed on a fresh open
   $('#cu-drawer-actions').innerHTML = '';
   $('#cu-detail-body').innerHTML = '<div class="muted" style="padding: var(--s5);">Loading… · 加载中…</div>';
   let j;
@@ -12970,6 +12972,75 @@ onDrawerClose('#cu-drawer', () => {
 // is always visible, that just means close the drawer.
 function cuShowList() { closeDrawer('#cu-drawer'); }
 
+// ── Customer detail · per-operator View tweaks ────────────────────────
+// The Full Circle Customer Detail "Tweaks" panel, made operator-selectable:
+// open the Recent-orders ledger by default, and stretch the orders chart
+// taller. Persisted to localStorage; defaults match the standard look
+// (collapsed ledger, normal chart) so nothing changes until a pick.
+const CUSTOMER_DETAIL_TWEAK_DEFAULTS = { recentOpen: false, chartTall: false };
+function cdvLoad() {
+  try { return { ...CUSTOMER_DETAIL_TWEAK_DEFAULTS, ...(JSON.parse(localStorage.getItem('retail-admin-customer-detail-tweaks') || '{}')) }; }
+  catch (e) { return { ...CUSTOMER_DETAIL_TWEAK_DEFAULTS }; }
+}
+let CDV = cdvLoad();
+let _CDV_OPEN = false;
+function cdvSet(key, val) {
+  CDV[key] = val;
+  try { localStorage.setItem('retail-admin-customer-detail-tweaks', JSON.stringify(CDV)); } catch (e) {}
+  _CDV_OPEN = true;                        // keep the popover open across the re-render
+  // Defer + preserve scroll, same rationale as the order drawer: re-rendering
+  // synchronously inside the click detaches the target before the dw-dismiss
+  // handler runs, which would then close the whole drawer.
+  if (CU_CURRENT) setTimeout(() => {
+    if (!CU_CURRENT) return;
+    const body = document.querySelector('#cu-drawer .drawer-body');
+    const y = body ? body.scrollTop : 0;
+    cuRenderDetail();
+    if (body) body.scrollTop = y;
+  }, 0);
+}
+function cdvToggle() {
+  _CDV_OPEN = !_CDV_OPEN;
+  const pop = document.getElementById('cdv-pop'); if (pop) pop.hidden = !_CDV_OPEN;
+  if (_CDV_OPEN) setTimeout(() => document.addEventListener('mousedown', cdvOutside), 0);
+  else document.removeEventListener('mousedown', cdvOutside);
+}
+function cdvOutside(e) {
+  if (e.target.closest && e.target.closest('.ovp-wrap')) return;
+  _CDV_OPEN = false;
+  const pop = document.getElementById('cdv-pop'); if (pop) pop.hidden = true;
+  document.removeEventListener('mousedown', cdvOutside);
+}
+function cdvBtn(key, val, label) {
+  return `<button class="${CDV[key] === val ? 'active' : ''}" onclick="cdvSet('${key}',${val})">${label}</button>`;
+}
+function renderCustomerViewPopover() {
+  return `
+    <div class="ovp-wrap" style="margin-left: auto;">
+      <button class="btn btn-sm" id="cdv-btn" onclick="cdvToggle()" aria-haspopup="true" title="Display options · 显示选项">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h7M4 18h10"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+        View · 视图
+      </button>
+      <div id="cdv-pop" class="ovp" ${_CDV_OPEN ? '' : 'hidden'}>
+        <div class="ovp-head">Display options · 显示选项</div>
+        <div class="ovp-group">
+          <div class="ovp-label">Recent orders · 近期订单</div>
+          <div class="ovp-seg">
+            ${cdvBtn('recentOpen', false, 'Collapsed · 收起')}
+            ${cdvBtn('recentOpen', true, 'Open · 展开')}
+          </div>
+        </div>
+        <div class="ovp-group">
+          <div class="ovp-label">Chart height · 图表高度</div>
+          <div class="ovp-seg">
+            ${cdvBtn('chartTall', false, 'Normal · 标准')}
+            ${cdvBtn('chartTall', true, 'Tall · 加高')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
 function cuRenderDetail() {
   const d = CU_CURRENT;
   const c = d.customer;
@@ -12984,6 +13055,7 @@ function cuRenderDetail() {
     <button class="btn" onclick="cuOpenEdit()">Edit profile · 编辑资料</button>
     <button class="${blockCls}" id="cu-block-btn" onclick="cuToggleBlock()">${blockLabel}</button>
     <button class="btn btn-brass" onclick="cuForceLogout()">Force logout · 强制登出</button>
+    ${renderCustomerViewPopover()}
   `;
 
   // 12-month bars — pad missing months with zero
@@ -12996,9 +13068,10 @@ function cuRenderDetail() {
     months.push({ key, n: row ? row.n : 0, revenue: row ? row.revenue : 0 });
   }
   const maxN = Math.max(1, ...months.map(m => m.n));
+  const barMax = CDV.chartTall ? 162 : 110;   // View tweak: taller bars when stretched
   const monthBars = months.map(m => `
     <div class="cu-bar-col">
-      <div class="cu-bar ${m.n === 0 ? 'empty' : (m.n === maxN ? 'peak' : '')}" style="height: ${m.n === 0 ? 3 : Math.max(8, (m.n / maxN) * 110)}px;" title="${m.key}: ${m.n} orders, ¥${Number(m.revenue || 0).toFixed(2)}"></div>
+      <div class="cu-bar ${m.n === 0 ? 'empty' : (m.n === maxN ? 'peak' : '')}" style="height: ${m.n === 0 ? 3 : Math.max(8, (m.n / maxN) * barMax)}px;" title="${m.key}: ${m.n} orders, ¥${Number(m.revenue || 0).toFixed(2)}"></div>
       <div class="cu-bar-label">${m.key.slice(5)}</div>
     </div>
   `).join('');
@@ -13134,7 +13207,7 @@ function cuRenderDetail() {
          stay open because the operator scans them at-a-glance. -->
     <div style="margin-bottom: var(--s7);">
       <div class="cu-sec-title" style="margin-bottom: var(--s3);">Orders by month (last 12) · 月度订单数(近 12 个月)</div>
-      <div class="cu-bar-row">${monthBars}</div>
+      <div class="cu-bar-row${CDV.chartTall ? ' cu-bars-tall' : ''}">${monthBars}</div>
     </div>
 
     <div class="cu-detail-pairs">
@@ -13160,7 +13233,7 @@ function cuRenderDetail() {
          accordions, closed by default. Per operator request: recent orders,
          points ledger, top-up ledger, and Affiliate. The chart / top items /
          addresses above DO NOT collapse. -->
-    <details class="cu-fold">
+    <details class="cu-fold"${CDV.recentOpen ? ' open' : ''}>
       <summary>Recent orders · 近期订单</summary>
       <div class="cu-fold-body">
         <div class="table-wrap">
