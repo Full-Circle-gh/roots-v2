@@ -1,25 +1,7 @@
 {
-  "libVersion": "3.5.5",
+  "libVersion": "3.16.1",
   "projectname": "Roots",
-  "condition": {
-    "miniprogram": {
-      "list": [
-        {
-          "name": "pages/home/home",
-          "pathName": "pages/home/home",
-          "query": "",
-          "scene": null,
-          "launchMode": "default",
-          "partialCompile": {
-            "enabled": false,
-            "pages": [
-              "pages/index/index?preview_draft=1&page=home&preview_token=0f402148"
-            ]
-          }
-        }
-      ]
-    }
-  },
+  "condition": {},
   "setting": {
     "urlCheck": false,
     "coverView": true,
@@ -35,6 +17,7 @@
     "compileHotReLoad": true,
     "checkInvalidKey": true,
     "ignoreDevUnusedFiles": true,
-    "bigPackageSizeSupport": false
+    "bigPackageSizeSupport": false,
+    "useApiHostProcess": true
   }
 }
