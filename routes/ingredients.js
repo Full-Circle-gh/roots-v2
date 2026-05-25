@@ -197,7 +197,11 @@ router.patch('/api/ingredients/bulk-update', requireAuth, requirePermission('ing
 
 // DELETE (soft delete)
 router.delete('/api/ingredients/:id', requireAuth, requireDelete, requirePermission('ingredients'), (req, res) => {
-  db.prepare('UPDATE ingredients SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
+  // Release the SKU on delete so the code can be reused. sku is UNIQUE, and a
+  // soft-deleted row would otherwise reserve it forever; SQLite allows many
+  // NULLs in a UNIQUE column, so nulling it frees the namespace without
+  // dropping the row (recipes/POs still reference ingredient_id).
+  db.prepare('UPDATE ingredients SET is_active = 0, sku = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
   logActivity(req.user.id, req.user.username, 'delete', 'ingredient', req.params.id, null, req.ip);
   res.json({ success: true });
 });

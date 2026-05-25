@@ -38,6 +38,10 @@ addColumn('recipes',       'image_data',      'TEXT');
 addColumn('recipe_ingredients', 'substitutes', 'TEXT');
 addColumn('ingredients', 'pack_contents_qty',  'REAL');
 addColumn('ingredients', 'pack_contents_unit', 'TEXT');
+// One-time: free SKUs still held by already soft-deleted ingredients so the
+// codes can be reused (the DELETE handler now nulls SKU on delete going
+// forward). A deleted item never needs a unique SKU; PO lines snapshot it.
+try { db.prepare('UPDATE ingredients SET sku = NULL WHERE is_active = 0 AND sku IS NOT NULL').run(); } catch {}
 addColumn('packaging_types', 'image_data',     'TEXT');
 // Switching products from hard-delete to soft-delete (waste/restock reference
 // product_id and would orphan otherwise). New rows default to active=1.
