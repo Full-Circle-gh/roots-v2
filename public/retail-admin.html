@@ -7566,7 +7566,7 @@ function dvSet(key, val) {
   DASH_VIEW[key] = val;
   try { localStorage.setItem('retail-admin-dash-view', JSON.stringify(DASH_VIEW)); } catch (e) {}
   dvApply();
-  if (key === 'chart' && window.DASH_DATA && DASH_DATA.trend) dashRenderTrend();
+  if (key === 'chart' && typeof DASH_DATA !== 'undefined' && DASH_DATA && DASH_DATA.trend) dashRenderTrend();
 }
 function dvSyncPanel() {
   const pop = document.getElementById('dv-pop'); if (!pop) return;
