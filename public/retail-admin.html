@@ -7818,7 +7818,19 @@ function dashTrendTip(e) {
   let y = Math.max(6, Math.min(e.clientY - 12, window.innerHeight - th - 6));
   tip.style.left = x + 'px';
   tip.style.top = y + 'px';
+  fcClampToViewport(tip);
   svg.querySelectorAll('.hovercol').forEach((c, i) => c.classList.toggle('on', i === idx));
+}
+// Final safety net: re-measure the actually-rendered box and nudge it fully
+// on-screen. Covers any offsetWidth mis-measure / sub-pixel rounding so a
+// cursor-following tooltip can never be cropped at a screen edge.
+function fcClampToViewport(el) {
+  const r = el.getBoundingClientRect();
+  const m = 6;
+  if (r.right  > window.innerWidth  - m) el.style.left = Math.max(m, window.innerWidth  - r.width  - m) + 'px';
+  if (r.left   < m)                      el.style.left = m + 'px';
+  if (r.bottom > window.innerHeight - m) el.style.top  = Math.max(m, window.innerHeight - r.height - m) + 'px';
+  if (r.top    < m)                      el.style.top  = m + 'px';
 }
 function dashTrendHide() {
   const tip = document.getElementById('db-trend-tip');
@@ -7852,6 +7864,7 @@ function cuBarTip(e) {
   let y = Math.max(6, Math.min(e.clientY - 12, window.innerHeight - th - 6));
   tip.style.left = x + 'px';
   tip.style.top = y + 'px';
+  fcClampToViewport(tip);
 }
 function cuBarTipHide() {
   const tip = document.getElementById('cu-bar-tip');
