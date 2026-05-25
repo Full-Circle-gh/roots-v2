@@ -275,6 +275,15 @@
   }
   .brand .divider { width: 1px; height: 16px; background: var(--line); margin: 0 4px; }
   .brand .sub { color: var(--text-3); font-weight: 500; }
+  /* Logo + wordmark link back to the Mini App Backend. Keep the original
+     mark↔wordmark spacing and inherit colour; just add a pointer + hover. */
+  .brand-home {
+    display: flex; align-items: center; gap: var(--s3);
+    color: inherit; text-decoration: none; cursor: pointer;
+    border-radius: var(--r-md); transition: opacity .12s ease;
+  }
+  .brand-home:hover { opacity: .82; }
+  .brand-home:focus-visible { outline: 2px solid var(--brass, #B08D4A); outline-offset: 2px; }
 
   /* Page picker — sits next to the brand title in the topbar */
   .page-picker {
@@ -3377,20 +3386,26 @@
 <!-- ═══════════════ TOPBAR ═══════════════ -->
 <div class="topbar">
   <div class="brand">
-    <div class="brand-mark" aria-hidden="true">
-      <svg width="20" height="20" viewBox="0 0 24 24">
-        <!-- Outer Aged Brass ring, cut ~48°/228° -->
-        <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.55"
-                stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
-        <!-- Inner Tea Green ring, cut ~40°/220° (staggered) -->
-        <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.55"
-                stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
-        <!-- Ensō — imperfect open circle in currentColor -->
-        <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1"
-              fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-    </div>
-    <span class="wordmark">FULL CIRCLE</span>
+    <!-- Logo + wordmark double as a "back to Mini App Backend" link. The editor
+         opens from /retail-admin, so this returns the operator there. -->
+    <a class="brand-home" href="/retail-admin" onclick="goToBackend(event)"
+       data-ti-en="Back to Mini App Backend" data-ti-cn="返回小程序后台"
+       title="Back to Mini App Backend" aria-label="Back to Mini App Backend">
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24">
+          <!-- Outer Aged Brass ring, cut ~48°/228° -->
+          <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.55"
+                  stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
+          <!-- Inner Tea Green ring, cut ~40°/220° (staggered) -->
+          <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.55"
+                  stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
+          <!-- Ensō — imperfect open circle in currentColor -->
+          <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1"
+                fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="wordmark">FULL CIRCLE</span>
+    </a>
     <span class="brass-dot" aria-hidden="true">·</span>
     <span class="sub">Mini App Editor</span>
   </div>
@@ -5316,6 +5331,17 @@ async function saveDraft() {
     setStatusText('Save failed: ' + e.message, 'err');
     toast('Save failed: ' + e.message, 'err');
   }
+}
+// Clicking the FULL CIRCLE logo / wordmark returns to the Mini App Backend
+// dashboard. Flush any pending draft save first (mirrors switchPage) so
+// in-flight edits aren't lost on the way out.
+async function goToBackend(e) {
+  if (e) e.preventDefault();
+  if (state.dirty || state.saving) {
+    clearTimeout(saveTimer);
+    try { await saveDraft(); } catch {}
+  }
+  window.location.href = '/retail-admin';
 }
 async function publish() {
   if (state.saving) await new Promise(r => setTimeout(r, 900));
