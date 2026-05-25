@@ -8818,8 +8818,19 @@ function humanStatus(s) {
 }
 function formatDate(iso) {
   if (!iso) return '';
-  // SQLite returns 'YYYY-MM-DD HH:MM:SS' — keep first 16 chars, drop seconds
-  return iso.slice(0, 16).replace('T', ' ');
+  // SQLite stores timestamps in UTC as 'YYYY-MM-DD HH:MM:SS' (no zone marker).
+  // Parse as UTC, then render in Guangzhou time (UTC+8) — the store's local
+  // clock — so "Placed" matches the wall clock instead of showing raw UTC.
+  let s = String(iso).trim().replace(' ', 'T');
+  if (!/[zZ]$|[+-]\d\d:?\d\d$/.test(s)) s += 'Z';
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ' ');
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d).reduce((o, x) => (o[x.type] = x.value, o), {});
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
 }
 
 // Status transition button labels — bilingual per the EN · 中文 admin rule
@@ -14029,12 +14040,9 @@ async function cuDeleteAddr(addrId) {
 }
 
 function cuFmtTime(iso) {
-  if (!iso) return '';
-  // SQLite CURRENT_TIMESTAMP is UTC, format "YYYY-MM-DD HH:MM:SS"
-  const d = new Date((typeof iso === 'string' && iso.indexOf('T') < 0 ? iso.replace(' ', 'T') + 'Z' : iso));
-  if (isNaN(d)) return String(iso);
-  const pad = n => String(n).padStart(2, '0');
-  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  // Single source of truth — Guangzhou (UTC+8) formatting, correct on any
+  // machine regardless of the browser's own timezone.
+  return formatDate(iso);
 }
 
 // Recency bucket for the Last-login highlight tweak: 'today' / 'week' / 'old'.
