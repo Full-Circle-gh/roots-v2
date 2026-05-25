@@ -623,17 +623,11 @@ router.post('/api/ai/compose-blocks', requireAuth, requirePermission('retail'), 
     }
 
     let blocks = rawBlocks.map(sanitizeComposedBlock).filter(b => b && composedBlockHasContent(b));
-    const rawCount = blocks.length;
     // Repair the common "all-English blocks, then all-Chinese blocks" output
     // into properly paired bilingual blocks.
     if (hasEn && hasCn) blocks = mergeStackedBilingual(blocks);
-    // Diagnostic: how many blocks came back with each language filled?
-    // Lets us tell "model ignored the Chinese" apart from a pipeline bug.
-    const withEn = blocks.filter(b => composedBlockLangFilled(b, 'en')).length;
-    const withCn = blocks.filter(b => composedBlockLangFilled(b, 'cn')).length;
-    console.log(`[compose-blocks] in(en=${hasEn},cn=${hasCn},translate=${translate}) -> raw=${rawCount} merged=${blocks.length} withEn=${withEn} withCn=${withCn}`);
     logActivity(req.user.id, req.user.username, 'ai_compose_blocks', 'product', product.id || null,
-      { count: blocks.length, withEn, withCn, translate, tokens: result.usage, provider: _provider }, req.ip);
+      { count: blocks.length, translate, tokens: result.usage, provider: _provider }, req.ip);
     res.json({ success: true, blocks, usage: result.usage, provider: _provider });
   } catch (e) {
     if (e.code === 'no_key') return res.status(503).json({ error: e.message });
