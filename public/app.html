@@ -9272,7 +9272,7 @@ async function _loadProductCtx(id) {
   const descCombined = (p.description_en||'') + (p.description_cn ? (p.description_en?'\n\n':'')+p.description_cn : '');
   const safeName = (p.name_en||'').replace(/['"\\]/g,'');
   const zoomCall = p.image_data ? `onclick="zoomImage(this.querySelector('img').src,'${safeName}')"` : '';
-  return { p, sc, costInfo, allergens, freeOfList, allergenEmoji, descCombined, safeName, zoomCall };
+  return { p, costInfo, allergens, freeOfList, allergenEmoji, descCombined, safeName, zoomCall };
 }
 
 function _renderProdTopBar(ctx) {
@@ -9323,7 +9323,7 @@ async function _prodHeroUpload(productId) {
 }
 
 function _renderProdHero(ctx) {
-  const { p, sc, safeName, zoomCall } = ctx;
+  const { p, safeName, zoomCall } = ctx;
   // Hero-image cell. When there's an image: zoom on click. When there isn't:
   // act as an inline upload target — clicking opens the file picker and
   // PUTs to /api/products/:id with the new image_data so the user doesn't
