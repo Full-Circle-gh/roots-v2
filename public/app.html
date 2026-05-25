@@ -2763,19 +2763,21 @@ let _sidebarEditMode = false;
 function _saveSidebarOrder() {
   try { localStorage.setItem(SIDEBAR_ORDER_KEY, JSON.stringify(_sidebarOrder || [])); } catch {}
 }
-// Collapsible nav groups (e.g. "Mini App") — remember which are expanded so
-// picking a child bounces out to /cms or /retail-admin and the group is still
-// open when the user comes back to this page.
+// Collapsible nav groups (e.g. "Mini App") — collapsed by default on a fresh
+// visit. State lives in sessionStorage (NOT localStorage) so it survives
+// picking a child that bounces out to /cms or /retail-admin and back within
+// the same tab, but resets to collapsed whenever the user opens the website
+// fresh (new tab / reopened browser) — so the menu never greets them expanded.
 const NAV_GROUPS_OPEN_KEY = 'sidebar.groupsOpen';
 let _navGroupsOpen = new Set();
 try {
-  const raw = localStorage.getItem(NAV_GROUPS_OPEN_KEY);
+  const raw = sessionStorage.getItem(NAV_GROUPS_OPEN_KEY);
   if (raw) _navGroupsOpen = new Set(JSON.parse(raw));
 } catch {}
 function toggleNavGroup(id) {
   const open = !_navGroupsOpen.has(id);
   if (open) _navGroupsOpen.add(id); else _navGroupsOpen.delete(id);
-  try { localStorage.setItem(NAV_GROUPS_OPEN_KEY, JSON.stringify([..._navGroupsOpen])); } catch {}
+  try { sessionStorage.setItem(NAV_GROUPS_OPEN_KEY, JSON.stringify([..._navGroupsOpen])); } catch {}
   // Toggle classes on the existing DOM rather than re-rendering the whole
   // sidebar. Rebuilding innerHTML mid-click recreates the clicked element and
   // makes a real mouse click register twice — the group flashed open then
