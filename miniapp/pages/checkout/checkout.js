@@ -531,7 +531,18 @@ Page({
         // longer in the fresh list (zone changed, day rolled over, etc.),
         // clear it so the customer is forced to pick again.
         const validSlotIds = new Set(['right_away', ...((sch?.slots || []).map(s => s.slot_id))]);
-        const stillValid = this.data.deliverySlotId && validSlotIds.has(this.data.deliverySlotId);
+        // A "schedule for later" pick is a bare YYYY-MM-DD inside the open
+        // calendar window — it is NOT enumerated in sch.slots (those are only
+        // today/tomorrow's time-slots), so validSlotIds would never contain it.
+        // Without this, re-quoting after the customer picks a future date
+        // clears deliverySlotId and the pick silently vanishes. Treat it as
+        // still-valid when the kind is 'schedule' and it falls inside [min,max].
+        const _schWin = sch?.schedule || null;
+        const _curId  = this.data.deliverySlotId;
+        const _isScheduledPick = this.data.selectedSlotKind === 'schedule'
+          && !!_curId && /^\d{4}-\d{2}-\d{2}$/.test(_curId)
+          && !!_schWin && _curId >= _schWin.min_date && _curId <= _schWin.max_date;
+        const stillValid = !!_curId && (validSlotIds.has(_curId) || _isScheduledPick);
         let nextSlotId    = stillValid ? this.data.deliverySlotId    : '';
         let nextSlotLabel = stillValid ? this.data.deliverySlotLabel : '';
         let nextSlotSurcharge = stillValid ? this.data.deliverySurcharge : 0;
