@@ -4186,14 +4186,14 @@ function _paintDashboardShortcuts() {
     const adders = remaining.length
       ? remaining.map(s => {
           const ico = s.iconKey ? `<span class="btn-lead-icon" style="display:inline-flex;align-items:center;justify-content:center">${navIconSvg(s.iconKey)}</span>` : (s.icon || '');
-          return `<button onclick="_shortcutAdd('${s.id}')" title="Add · 添加" style="background:rgba(204,217,0,.18);border:1.5px dashed var(--lime);color:var(--lime);border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px">+ ${ico}<span>${s.label.split(' ')[0]}</span></button>`;
+          return `<button onclick="_shortcutAdd('${s.id}')" title="Add · 添加" style="background:rgba(107,142,111,.12);border:1.5px dashed var(--accent);color:var(--accent);border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px">+ ${ico}<span>${s.label.split(' ')[0]}</span></button>`;
         }).join('')
-      : '<span style="font-size:11px;color:rgba(242,231,223,.4)">All shortcuts added · 已添加全部</span>';
+      : '<span style="font-size:11px;color:var(--text-3)">All shortcuts added · 已添加全部</span>';
     wrap.innerHTML = chips + adders +
-      `<button onclick="_shortcutEditMode=false;_paintDashboardShortcuts()" title="Done · 完成" style="background:var(--lime);color:var(--dk);border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:800;cursor:pointer;margin-left:6px">✓ Done · 完成</button>`;
+      `<button onclick="_shortcutEditMode=false;_paintDashboardShortcuts()" title="Done · 完成" style="background:var(--accent);color:var(--accent-ink);border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px">✓ Done · 完成</button>`;
   } else {
     wrap.innerHTML = chips +
-      `<button onclick="_shortcutEditMode=true;_paintDashboardShortcuts()" title="Customize shortcuts · 自定义快捷方式" style="background:none;border:1px solid rgba(242,231,223,.2);color:rgba(242,231,223,.6);border-radius:6px;padding:6px 9px;font-size:12px;cursor:pointer;margin-left:4px">✏️</button>`;
+      `<button onclick="_shortcutEditMode=true;_paintDashboardShortcuts()" title="Customize shortcuts · 自定义快捷方式" style="background:none;border:1px solid var(--line);color:var(--text-3);border-radius:6px;padding:6px 9px;font-size:12px;cursor:pointer;margin-left:4px">✏️</button>`;
   }
 }
 function _shortcutAdd(id) {
