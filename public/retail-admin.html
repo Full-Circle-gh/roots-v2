@@ -167,12 +167,13 @@
   }
   /* Tier / status pills used a translucent overlay tuned for the dark bg.
      Bump opacity so they read on white. SEED = Tea per Full Circle. */
-  :root[data-theme="light"] .cu-pill                { background: rgba(0, 0, 0, .06); color: var(--text-2); }
-  :root[data-theme="light"] .cu-pill.tier-seed      { background: rgba(107, 142, 111, .18);  color: #4e6b52; }
-  :root[data-theme="light"] .cu-pill.tier-sprout    { background: rgba(107, 142, 111, .14);  color: #5e7e62; }
-  :root[data-theme="light"] .cu-pill.tier-root      { background: rgba(176, 141, 74, .20);   color: #8a6a2e; }
-  :root[data-theme="light"] .cu-pill.tier-tree      { background: rgba(176, 141, 74, .26);   color: #6f521f; }
-  :root[data-theme="light"] .cu-pill.blocked        { background: rgba(232, 85, 106, .18);  color: #a01f33; }
+  :root[data-theme="light"] .cu-pill                { background: rgba(18, 22, 26, .06); color: var(--text-3); }
+  :root[data-theme="light"] .cu-pill.brass          { background: rgba(176, 141, 74, .12);  border-color: rgba(176, 141, 74, .30); color: #8a6a2e; }
+  :root[data-theme="light"] .cu-pill.tier-seed      { background: rgba(107, 142, 111, .16);  border-color: rgba(107, 142, 111, .30); color: #4e6b52; }
+  :root[data-theme="light"] .cu-pill.tier-sprout    { background: rgba(107, 142, 111, .14);  border-color: rgba(107, 142, 111, .28); color: #5e7e62; }
+  :root[data-theme="light"] .cu-pill.tier-root      { background: rgba(176, 141, 74, .16);   border-color: rgba(176, 141, 74, .28); color: #8a6a2e; }
+  :root[data-theme="light"] .cu-pill.tier-tree      { background: rgba(176, 141, 74, .20);   border-color: rgba(176, 141, 74, .34); color: #6f521f; }
+  :root[data-theme="light"] .cu-pill.blocked        { background: rgba(232, 85, 106, .16);  border-color: rgba(232, 85, 106, .32); color: #a01f33; }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
@@ -3564,24 +3565,20 @@
       .cu-tile {
         background: var(--bg-pane);
         border: 1px solid var(--line-soft);
-        border-radius: var(--r-lg);
-        padding: var(--s4);
+        border-radius: var(--r-sm);
+        padding: 22px 22px 20px;
       }
-      /* Tile header: title left, action button right. The Adjust button
-         label ("Adjust · 调整") used to wrap inside the button on narrow
-         tile widths and pushed the bilingual title ("WALLET · 钱包") onto
-         a second line ("钱 / 包"). Fix: gap so they breathe, nowrap on the
-         title so 钱包 stays intact, nowrap + flex-shrink:0 on the button
-         so it never wraps inside itself. */
       .cu-tile-head {
         display: flex; align-items: center; justify-content: space-between;
         gap: 8px;
         margin-bottom: var(--s3);
         min-width: 0;
       }
+      /* Card label — Aged Brass mono caps, the Full Circle section marker. */
       .cu-tile-title {
-        font-size: 11px; font-weight: 600; letter-spacing: .06em;
-        text-transform: uppercase; color: var(--text-3);
+        font-family: var(--f-mono);
+        font-size: 10px; font-weight: 400; letter-spacing: .26em;
+        text-transform: uppercase; color: var(--brass);
         white-space: nowrap;
         min-width: 0;
       }
@@ -3589,34 +3586,82 @@
         flex-shrink: 0;
         white-space: nowrap;
       }
+      /* Headline number — Plex Sans Light, the hero of each card. Tabular
+         nums so the balance doesn't jitter when the drawer re-renders. */
       .cu-tile-big {
-        font-size: 28px; font-weight: 700; line-height: 1.1; margin-bottom: var(--s3);
-        /* Tabular nums so the big balance doesn't jitter (different glyph
-           widths) when the drawer re-renders after a save. */
+        font-family: var(--f-sans);
+        font-size: 44px; font-weight: 300; line-height: 1;
+        letter-spacing: -.02em; margin-bottom: var(--s4);
+        color: var(--text-1);
         font-variant-numeric: tabular-nums;
       }
-      .cu-kv { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; font-size: 12px; }
-      .cu-kv span { color: var(--text-3); min-width: 0; }
-      .cu-kv b { color: var(--text-1); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .cu-kv { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 3px 0; }
+      .cu-kv span { font-family: var(--f-sans); font-weight: 300; font-size: 12px; color: var(--text-3); min-width: 0; }
+      .cu-kv b { font-family: var(--f-mono); font-weight: 500; font-size: 12px; color: var(--text-1); font-variant-numeric: tabular-nums; white-space: nowrap; }
+      /* Value accents: positive (tea), attention (brass), zero (muted, fades
+         to the background), humanized relative time (sans, not mono). */
+      .cu-kv b.is-tea   { color: var(--accent); }
+      .cu-kv b.is-brass { color: var(--brass); }
+      .cu-kv b.is-zero  { color: var(--text-4); }
+      .cu-kv b.is-human { font-family: var(--f-sans); font-weight: 400; color: var(--text-2); }
+
+      /* Tag — Full Circle mono chip (4px radius, tracked caps). Replaces the
+         old rounded pill; used in both the list tier column and the drawer.
+         tea = tier/positive, brass = attention, neutral otherwise. */
       .cu-pill {
-        display: inline-block; padding: 2px 8px;
-        font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
-        border-radius: 99px; background: var(--bg-elev-2); color: var(--text-3);
+        display: inline-flex; align-items: center;
+        padding: 4px 10px;
+        font-family: var(--f-mono);
+        font-size: 10px; font-weight: 400; letter-spacing: .2em; text-transform: uppercase;
+        border-radius: var(--r-sm);
+        border: 1px solid transparent;
+        background: rgba(127, 122, 114, .12); color: var(--text-3);
       }
-      .cu-pill.tier-seed   { background: rgba(107,142,111,.18);  color: #8FB093; }
-      .cu-pill.tier-sprout { background: rgba(107,142,111,.13);  color: #7BA07F; }
-      .cu-pill.tier-root   { background: rgba(176,141,74,.16);   color: #C29B54; }
-      .cu-pill.tier-tree   { background: rgba(176,141,74,.22);   color: #B08D4A; }
-      .cu-pill.blocked     { background: rgba(232,85,106,.15);  color: #e8556a; }
-      .cu-bar-row { display: flex; align-items: flex-end; gap: 6px; height: 70px; padding: 0 var(--s2); }
-      .cu-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
-      .cu-bar { width: 100%; max-width: 24px; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
-      .cu-bar.empty { background: var(--bg-elev-2); }
-      .cu-bar-label { font-size: 9px; color: var(--text-4); }
-      .cu-detail-pairs { display: flex; gap: var(--s4); flex-wrap: wrap; }
-      .cu-detail-pairs > * { flex: 1; min-width: 280px; }
-      .cu-detail-pairs > * { align-self: flex-start; }
-      .cu-openid { font-family: var(--f-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; }
+      .cu-pill.brass       { background: rgba(176,141,74,.10);  border-color: rgba(176,141,74,.25); color: var(--brass); }
+      .cu-pill.tier-seed   { background: rgba(107,142,111,.12); border-color: rgba(107,142,111,.25); color: #8FB093; }
+      .cu-pill.tier-sprout { background: rgba(107,142,111,.12); border-color: rgba(107,142,111,.25); color: #7BA07F; }
+      .cu-pill.tier-root   { background: rgba(176,141,74,.10);  border-color: rgba(176,141,74,.25); color: #C29B54; }
+      .cu-pill.tier-tree   { background: rgba(176,141,74,.12);  border-color: rgba(176,141,74,.30); color: #B08D4A; }
+      .cu-pill.blocked     { background: rgba(232,85,106,.14);  border-color: rgba(232,85,106,.30); color: #e8556a; }
+
+      /* Identity — open block (no card chrome), hairline divider beneath. */
+      .cu-identity { display: flex; gap: var(--s5); align-items: flex-start; padding-bottom: var(--s7); margin-bottom: var(--s7); border-bottom: 1px solid var(--line-soft); }
+      .cu-avatar { width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: rgba(127,122,114,.12); color: var(--text-3); object-fit: cover; }
+      .cu-name { font-family: var(--f-sans); font-size: 22px; font-weight: 500; letter-spacing: .015em; line-height: 1.1; color: var(--text-1); }
+      .cu-id { font-family: var(--f-mono); font-size: 12px; color: var(--text-3); margin-top: 4px; word-break: break-word; }
+      .cu-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+
+      /* Open section heading for the chart / top items / addresses. */
+      .cu-sec-title { font-family: var(--f-sans); font-size: 13px; font-weight: 500; color: var(--text-2); }
+
+      /* Orders-by-month chart — Tea bars (peak full, others 80%), faint
+         baseline strip for empty months. */
+      .cu-bar-row { display: flex; align-items: flex-end; gap: 8px; height: 120px; }
+      .cu-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+      .cu-bar { width: 100%; background: var(--accent); opacity: .8; border-radius: 2px 2px 0 0; min-height: 3px; transition: opacity var(--t-fast) ease; }
+      .cu-bar.peak  { opacity: 1; }
+      .cu-bar.empty { background: var(--line); opacity: 1; }
+      .cu-bar-label { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; color: var(--text-4); }
+
+      .cu-detail-pairs { display: grid; grid-template-columns: 55fr 45fr; gap: var(--s6); align-items: start; }
+      @media (max-width: 720px) { .cu-detail-pairs { grid-template-columns: 1fr; } }
+      .cu-openid { font-family: var(--f-mono); font-size: 11px; color: var(--text-4); letter-spacing: .02em; user-select: text; }
+
+      /* Address card — white card, 1px hairline; Edit (neutral) + Delete
+         (brass ghost). Address text truncates to one line. */
+      .cu-addr { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: var(--r-sm); padding: 12px 14px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+      .cu-addr-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+      .cu-addr-id { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .cu-addr-name { font-family: var(--f-sans); font-size: 13px; font-weight: 500; color: var(--text-1); }
+      .cu-addr-phone { font-family: var(--f-mono); font-size: 11px; color: var(--text-3); }
+      .cu-addr-text { font-size: 11px; font-weight: 300; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .cu-addr-default { display: inline-flex; padding: 2px 6px; background: rgba(107,142,111,.12); border-radius: 3px; font-family: var(--f-mono); font-size: 9px; letter-spacing: .2em; text-transform: uppercase; color: var(--accent); }
+      .cu-addr-acts { display: flex; gap: 6px; flex-shrink: 0; }
+
+      /* Brass ghost button — destructive-but-deliberate (Block, Force logout,
+         Delete address): Aged Brass border + text, no fill. */
+      .btn-brass { background: transparent; color: var(--brass); border-color: rgba(176,141,74,.30); }
+      .btn-brass:hover { background: rgba(176,141,74,.10); border-color: var(--brass); }
 
       /* Drawer section rhythm — every H3 below the stats grid gets the same
          breathing room so the address card / chart / ledger tables don't bleed
@@ -3648,7 +3693,11 @@
          Force the header line to stay together; the row's natural overflow
          handling (table-wrap is overflow-x:auto) still lets the user scroll
          horizontally on tiny windows without breaking the header layout. */
-      #cu-detail-body thead th { white-space: nowrap; }
+      #cu-detail-body thead th {
+        white-space: nowrap;
+        font-family: var(--f-mono); font-weight: 400; font-size: 10px;
+        letter-spacing: .14em; text-transform: uppercase; color: var(--text-4);
+      }
 
       /* Collapsible sub-sections (Recent orders / Points ledger / Top-up
          ledger / etc.) — native <details>+<summary> so the operator gets
@@ -3685,10 +3734,9 @@
         flex-shrink: 0;
         width: 0; height: 0;
         margin-right: var(--s1);
-        border-left: 5px solid currentColor;
+        border-left: 5px solid var(--brass);
         border-top: 4px solid transparent;
         border-bottom: 4px solid transparent;
-        opacity: .6;
         transition: transform var(--t-fast) ease;
       }
       #cu-detail-body .cu-fold[open] > summary::before { transform: rotate(90deg); }
@@ -12612,14 +12660,15 @@ function cuRenderDetail() {
   const c = d.customer;
   const s = d.stats;
 
-  // Drawer action bar — Edit / Block / Force-logout. Block label and
-  // colour reflect current state.
+  // Drawer action bar — Edit / Block / Force-logout. Block and Force logout
+  // are destructive-but-deliberate: Aged Brass ghost (not red), confirmed on
+  // click. Unblock reverts to neutral since it isn't destructive.
   const blockLabel = c.is_blocked ? 'Unblock · 解封' : 'Block · 封禁';
-  const blockCls   = c.is_blocked ? 'btn' : 'btn btn-danger';
+  const blockCls   = c.is_blocked ? 'btn' : 'btn btn-brass';
   $('#cu-drawer-actions').innerHTML = `
     <button class="btn" onclick="cuOpenEdit()">Edit profile · 编辑资料</button>
     <button class="${blockCls}" id="cu-block-btn" onclick="cuToggleBlock()">${blockLabel}</button>
-    <button class="btn" onclick="cuForceLogout()">Force logout · 强制登出</button>
+    <button class="btn btn-brass" onclick="cuForceLogout()">Force logout · 强制登出</button>
   `;
 
   // 12-month bars — pad missing months with zero
@@ -12634,7 +12683,7 @@ function cuRenderDetail() {
   const maxN = Math.max(1, ...months.map(m => m.n));
   const monthBars = months.map(m => `
     <div class="cu-bar-col">
-      <div class="cu-bar ${m.n === 0 ? 'empty' : ''}" style="height: ${(m.n / maxN) * 60}px;" title="${m.key}: ${m.n} orders, ¥${Number(m.revenue || 0).toFixed(2)}"></div>
+      <div class="cu-bar ${m.n === 0 ? 'empty' : (m.n === maxN ? 'peak' : '')}" style="height: ${m.n === 0 ? 3 : Math.max(8, (m.n / maxN) * 110)}px;" title="${m.key}: ${m.n} orders, ¥${Number(m.revenue || 0).toFixed(2)}"></div>
       <div class="cu-bar-label">${m.key.slice(5)}</div>
     </div>
   `).join('');
@@ -12662,7 +12711,7 @@ function cuRenderDetail() {
     ? d.recent_points.map(p => `
         <tr>
           <td><span class="cu-pill">${escapeHtml(p.source)}</span></td>
-          <td class="numeric" style="color: ${p.delta >= 0 ? '#80c462' : '#e8556a'}; font-weight: 600;">${p.delta >= 0 ? '+' : ''}${p.delta}</td>
+          <td class="numeric" style="color: ${p.delta >= 0 ? 'var(--accent)' : 'var(--danger)'}; font-weight: 600;">${p.delta >= 0 ? '+' : ''}${p.delta}</td>
           <td class="numeric">${p.balance_after}</td>
           <td class="muted">${escapeHtml(p.note || '')}</td>
           <td class="muted">${cuFmtTime(p.created_at)}</td>
@@ -12682,26 +12731,26 @@ function cuRenderDetail() {
 
   const addressesHtml = d.addresses.length
     ? d.addresses.map(a => `
-        <div style="padding: 10px 12px; background: var(--bg-elev-1); border-radius: var(--r-md); margin-bottom: 8px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
-            <div style="min-width: 0; flex: 1;">
-              <div style="font-weight: 600; font-size: 13px;">
-                ${escapeHtml(a.recipient_name)} · ${escapeHtml(a.phone)}
-                ${a.is_default ? ' <span class="cu-pill" style="margin-left: 6px;">Default</span>' : ''}
-              </div>
-              <div class="muted" style="font-size: 12px; margin-top: 4px;">${escapeHtml([a.province, a.city, a.district, a.address, a.detail].filter(Boolean).join(' '))}</div>
+        <div class="cu-addr">
+          <div class="cu-addr-main">
+            <div class="cu-addr-id">
+              <span class="cu-addr-name">${escapeHtml(a.recipient_name)}</span>
+              <span style="color: var(--text-4);">·</span>
+              <span class="cu-addr-phone">${escapeHtml(a.phone)}</span>
+              ${a.is_default ? '<span class="cu-addr-default">Default</span>' : ''}
             </div>
-            <div class="row" style="gap: 4px; flex-shrink: 0;">
-              <button class="btn btn-sm" onclick="cuOpenAddrModal(${a.id})">Edit · 编辑</button>
-              <button class="btn btn-sm btn-danger" onclick="cuDeleteAddr(${a.id})">Delete · 删除</button>
-            </div>
+            <div class="cu-addr-text">${escapeHtml([a.province, a.city, a.district, a.address, a.detail].filter(Boolean).join(' ')) || '—'}</div>
+          </div>
+          <div class="cu-addr-acts">
+            <button class="btn btn-sm" onclick="cuOpenAddrModal(${a.id})">Edit · 编辑</button>
+            <button class="btn btn-sm btn-brass" onclick="cuDeleteAddr(${a.id})">Delete · 删除</button>
           </div>
         </div>`).join('')
-    : '<div class="muted" style="font-size: 12px; margin-bottom: 8px;">No saved addresses. · 暂无收货地址。</div>';
+    : '<div class="muted" style="font-size: 12px;">No saved addresses. · 暂无收货地址。</div>';
 
   const avatar = c.avatar_url
-    ? `<img src="${escapeHtml(c.avatar_url)}" style="width: 56px; height: 56px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" onerror="this.style.display='none'">`
-    : `<div style="width: 56px; height: 56px; border-radius: 50%; background: var(--bg-elev-2); flex-shrink: 0;"></div>`;
+    ? `<img src="${escapeHtml(c.avatar_url)}" class="cu-avatar" onerror="this.style.display='none'">`
+    : `<div class="cu-avatar"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg></div>`;
 
   // Defensive guards — the server could omit a key for newly-onboarded
   // customers with no orders/points/topup history. Coerce everything to
@@ -12713,21 +12762,19 @@ function cuRenderDetail() {
   const rev = (s.reviews  || {});
   const sessions = Number(s.active_sessions) || 0;
   $('#cu-detail-body').innerHTML = `
-    <div class="card" style="display: flex; gap: var(--s4); align-items: flex-start;">
+    <div class="cu-identity">
       ${avatar}
       <div style="flex: 1; min-width: 0;">
-        <div style="font-size: 18px; font-weight: 700;">${escapeHtml(c.nickname || '—')}</div>
-        <div class="muted" style="font-size: 12px; margin-top: 4px; word-break: break-word;">
-          ID #${c.id} · ${escapeHtml(c.phone || 'no phone · 无电话')} · ${escapeHtml(c.email || 'no email · 无邮箱')}
-        </div>
-        <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+        <div class="cu-name">${escapeHtml(c.nickname || '—')}</div>
+        <div class="cu-id">ID #${c.id}${c.phone ? ' · ' + escapeHtml(c.phone) : ''}${c.email ? ' · ' + escapeHtml(c.email) : ''}</div>
+        <div class="cu-tags">
           <span class="cu-pill tier-${escapeHtml(c.tier_key || 'seed')}">${escapeHtml(c.tier_key || 'seed')}</span>
           ${c.is_blocked ? '<span class="cu-pill blocked">Blocked · 已封禁</span>' : ''}
-          <span class="cu-pill">Joined · 加入 <span>${cuFmtDate(c.created_at) || '—'}</span></span>
-          <span class="cu-pill">Last login · 最近登录 <span>${cuFmtTime(c.last_login_at) || 'never · 从未'}</span></span>
-          <span class="cu-pill">${sessions} <span>active sessions · 活跃会话</span></span>
+          <span class="cu-pill">Joined · 加入 ${cuFmtDate(c.created_at) || '—'}</span>
+          <span class="cu-pill">Last login · 最近登录 ${cuFmtTime(c.last_login_at) || 'never · 从未'}</span>
+          <span class="cu-pill${sessions >= 5 ? ' brass' : ''}">${sessions} active sessions · 活跃会话</span>
         </div>
-        <div class="muted cu-openid" style="margin-top: 8px; word-break: break-all;">openid: ${escapeHtml(c.openid || '')}</div>
+        <div class="cu-openid" style="margin-top: 14px; word-break: break-all;">openid: ${escapeHtml(c.openid || '')}</div>
       </div>
     </div>
 
@@ -12737,10 +12784,10 @@ function cuRenderDetail() {
         <div class="cu-tile-big">${ord.orders_count || 0}</div>
         <div class="cu-kv"><span>Revenue · 收入</span><b>¥${Number(ord.revenue || 0).toFixed(2)}</b></div>
         <div class="cu-kv"><span>AOV · 客单价</span><b>¥${Number(ord.aov || 0).toFixed(2)}</b></div>
-        <div class="cu-kv"><span>Completed · 已完成</span><b>${ord.completed_count || 0}</b></div>
-        <div class="cu-kv"><span>Refunded · 退款</span><b>${ord.refunded_count || 0}</b></div>
-        <div class="cu-kv"><span>Cancelled · 已取消</span><b>${ord.cancelled_count || 0}</b></div>
-        <div class="cu-kv"><span>Last order · 最近订单</span><b>${ord.days_since_last_order === null || ord.days_since_last_order === undefined ? '—' : ord.days_since_last_order + ' days ago · 天前'}</b></div>
+        <div class="cu-kv"><span>Completed · 已完成</span><b class="${(ord.completed_count || 0) > 0 ? 'is-tea' : 'is-zero'}">${ord.completed_count || 0}</b></div>
+        <div class="cu-kv"><span>Refunded · 退款</span><b class="${(ord.refunded_count || 0) === 0 ? 'is-zero' : ''}">${ord.refunded_count || 0}</b></div>
+        <div class="cu-kv"><span>Cancelled · 已取消</span><b class="${(ord.cancelled_count || 0) === 0 ? 'is-zero' : ''}">${ord.cancelled_count || 0}</b></div>
+        <div class="cu-kv"><span>Last order · 最近订单</span><b class="is-human">${ord.days_since_last_order === null || ord.days_since_last_order === undefined ? '—' : ord.days_since_last_order + ' days ago · 天前'}</b></div>
       </div>
       <div class="cu-tile">
         <div class="cu-tile-head">
@@ -12748,11 +12795,11 @@ function cuRenderDetail() {
           <button class="btn btn-sm" onclick="cuOpenAdjust('points')">Adjust · 调整</button>
         </div>
         <div class="cu-tile-big">${c.points_balance || 0}</div>
-        <div class="cu-kv"><span>Earned (lifetime) · 累计获得</span><b>${pts.earned || 0}</b></div>
-        <div class="cu-kv"><span>Redeemed · 已兑换</span><b>${pts.redeemed || 0}</b></div>
-        <div class="cu-kv"><span>Expired · 已过期</span><b>${pts.expired || 0}</b></div>
-        <div class="cu-kv"><span>Admin adjust · 后台调整</span><b>${pts.admin_adjust >= 0 ? '+' : ''}${pts.admin_adjust || 0}</b></div>
-        <div class="cu-kv"><span>Expiring next 30d · 30 天内过期</span><b style="color: ${pts.expiring_30d > 0 ? 'var(--warning, #f2ca6c)' : 'inherit'};">${pts.expiring_30d || 0}</b></div>
+        <div class="cu-kv"><span>Earned (lifetime) · 累计获得</span><b class="${(pts.earned || 0) === 0 ? 'is-zero' : ''}">${pts.earned || 0}</b></div>
+        <div class="cu-kv"><span>Redeemed · 已兑换</span><b class="${(pts.redeemed || 0) === 0 ? 'is-zero' : ''}">${pts.redeemed || 0}</b></div>
+        <div class="cu-kv"><span>Expired · 已过期</span><b class="${(pts.expired || 0) === 0 ? 'is-zero' : ''}">${pts.expired || 0}</b></div>
+        <div class="cu-kv"><span>Admin adjust · 后台调整</span><b class="${(pts.admin_adjust || 0) === 0 ? 'is-zero' : ''}">${pts.admin_adjust >= 0 ? '+' : ''}${pts.admin_adjust || 0}</b></div>
+        <div class="cu-kv"><span>Expiring next 30d · 30 天内过期</span><b class="${(pts.expiring_30d || 0) > 0 ? 'is-brass' : 'is-zero'}">${pts.expiring_30d || 0}</b></div>
       </div>
       <div class="cu-tile">
         <div class="cu-tile-head">
@@ -12760,24 +12807,24 @@ function cuRenderDetail() {
           <button class="btn btn-sm" onclick="cuOpenAdjust('wallet')">Adjust · 调整</button>
         </div>
         <div class="cu-tile-big">¥${Number(c.balance || 0).toFixed(2)}</div>
-        <div class="cu-kv"><span>Topped up (lifetime) · 累计充值</span><b>¥${Number(top.topup_total || 0).toFixed(2)}</b></div>
-        <div class="cu-kv"><span>Bonus pts from top-up · 充值赠送积分</span><b>${top.bonus_pts_total || 0}</b></div>
-        <div class="cu-kv"><span>Admin adjust · 后台调整</span><b>¥${Number(top.admin_adjust_total || 0).toFixed(2)}</b></div>
-        <div class="cu-kv"><span>Vouchers (unused/used) · 优惠券(未用/已用)</span><b>${vch.unused || 0} / ${vch.used || 0}</b></div>
-        <div class="cu-kv"><span>Reviews · 评价</span><b>${rev.count || 0}${rev.avg_rating ? ' · ' + Number(rev.avg_rating).toFixed(1) + '★' : ''}</b></div>
+        <div class="cu-kv"><span>Topped up (lifetime) · 累计充值</span><b class="${Number(top.topup_total || 0) === 0 ? 'is-zero' : ''}">¥${Number(top.topup_total || 0).toFixed(2)}</b></div>
+        <div class="cu-kv"><span>Bonus pts from top-up · 充值赠送积分</span><b class="${(top.bonus_pts_total || 0) === 0 ? 'is-zero' : ''}">${top.bonus_pts_total || 0}</b></div>
+        <div class="cu-kv"><span>Admin adjust · 后台调整</span><b class="${Number(top.admin_adjust_total || 0) === 0 ? 'is-zero' : ''}">¥${Number(top.admin_adjust_total || 0).toFixed(2)}</b></div>
+        <div class="cu-kv"><span>Vouchers (unused/used) · 优惠券(未用/已用)</span><b class="${(vch.unused || 0) === 0 && (vch.used || 0) === 0 ? 'is-zero' : ''}">${vch.unused || 0} / ${vch.used || 0}</b></div>
+        <div class="cu-kv"><span>Reviews · 评价</span><b class="${(rev.count || 0) === 0 ? 'is-zero' : ''}">${rev.count || 0}${rev.avg_rating ? ' · ' + Number(rev.avg_rating).toFixed(1) + '★' : ''}</b></div>
       </div>
     </div>
 
     <!-- Above the fold: Orders by month chart, Top items, Addresses — these
          stay open because the operator scans them at-a-glance. -->
-    <div class="card">
-      <h3 style="margin-top: 0;">Orders by month (last 12) · 月度订单数(近 12 个月)</h3>
+    <div style="margin-bottom: var(--s7);">
+      <div class="cu-sec-title" style="margin-bottom: var(--s3);">Orders by month (last 12) · 月度订单数(近 12 个月)</div>
       <div class="cu-bar-row">${monthBars}</div>
     </div>
 
     <div class="cu-detail-pairs">
       <div>
-        <h3>Top items · 热销商品</h3>
+        <div class="cu-sec-title" style="margin-bottom: var(--s3);">Top items · 热销商品</div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Item · 商品</th><th class="numeric">Qty · 数量</th><th class="numeric">Spend · 消费</th></tr></thead>
@@ -12786,8 +12833,8 @@ function cuRenderDetail() {
         </div>
       </div>
       <div>
-        <div style="display: flex; align-items: center; justify-content: space-between; margin: var(--s6) 0 var(--s3);">
-          <h3 style="margin: 0;">Addresses · 地址</h3>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s3);">
+          <div class="cu-sec-title">Addresses · 地址</div>
           <button class="btn btn-sm" onclick="cuOpenAddrModal(null)">+ Add address · 添加地址</button>
         </div>
         ${addressesHtml}
