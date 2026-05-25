@@ -1748,10 +1748,14 @@
   .dz-extras { color: var(--text-3); font-size: 11px; }
   .dz-sd-yes { color: var(--st-delivered); font-weight: 600; }
   .dz-sd-no  { color: var(--text-4); }
-  .dz-rowact { text-align: center; width: 36px; }
+  /* Actions sit at the far right, on one line. width:1% shrinks the column to
+     its content and nowrap stops the two 28px buttons from wrapping onto
+     stacked lines (the old fixed 36px was narrower than the pair). */
+  .dz-rowact { white-space: nowrap; width: 1%; text-align: right; }
   .dz-rowact .btn {
     width: 28px; height: 28px; padding: 0;
     display: inline-flex; align-items: center; justify-content: center;
+    vertical-align: middle;
     font-size: 14px; line-height: 1; color: var(--text-3);
   }
 
