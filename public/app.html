@@ -8065,9 +8065,8 @@ function _renderProdList(prods) {
           <td style="text-align:center"><input type="checkbox" ${checked?'checked':''} onclick="event.stopPropagation();_prodToggleSelected(${p.id}, this.checked)" style="width:16px;height:16px;accent-color:var(--lime);cursor:pointer"></td>
           <td style="width:44px"><div style="width:36px;height:36px;border-radius:6px;background:var(--gray);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:18px">${p.image_data?`<img src="${esc(p.image_data)}" style="width:100%;height:100%;object-fit:cover">`:(p.category?getCategoryEmoji(p.category):'🛍')}</div></td>
           ${cols.map(id => PROD_LIST_COLS[id] ? PROD_LIST_COLS[id].cell(p) : '').join('')}
-          <td style="white-space:nowrap" onclick="event.stopPropagation()">
-            <button class="btn btn-secondary btn-sm" onclick="showProductForm(${p.id})">✏️</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id},'${(p.name_en||'').replace(/'/g,'')}')">🗑</button>
+          <td style="white-space:nowrap;text-align:right" onclick="event.stopPropagation()">
+            <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id},'${(p.name_en||'').replace(/'/g,'')}')" title="Delete · 删除">🗑</button>
           </td>
         </tr>`;
       }).join('')}</tbody>
