@@ -433,6 +433,21 @@ function composedBlockHasContent(b) {
   return false;
 }
 
+// Does the block have any non-empty field for a specific language ('en'|'cn')?
+// Used only for diagnostics — to log whether the model actually filled each side.
+function composedBlockLangFilled(b, suffix) {
+  const spec = COMPOSE_SCHEMA[b.type];
+  if (!spec) return false;
+  const has = v => typeof v === 'string' && v.trim() !== '';
+  const ends = k => k.endsWith('_' + suffix);
+  for (const k of (spec.scalars || [])) if (ends(k) && has(b[k])) return true;
+  for (const [arrKey, keys] of Object.entries(spec.arrays || {}))
+    for (const it of (b[arrKey] || [])) for (const k of keys) if (ends(k) && has(it[k])) return true;
+  for (const [objKey, keys] of Object.entries(spec.objects || {}))
+    for (const k of keys) if (ends(k) && has((b[objKey] || {})[k])) return true;
+  return false;
+}
+
 const COMPOSE_TOOL = {
   name: 'emit_blocks',
   description: 'Return the product copy organised into ordered Roots description blocks.',
@@ -487,7 +502,12 @@ function composeLangDirective(hasEn, hasCn, translate) {
   if (hasEn && hasCn) {
     return `
 
-LANGUAGES: You are given the English copy AND the Chinese copy of the SAME product — they describe the same thing. For each block, fill the _en fields from the English source and the _cn fields from the MATCHING Chinese content, pairing the same piece of content across the two languages into ONE block (never make a separate Chinese-only block beside an English one). Use the operator's provided Chinese verbatim in spirit — do NOT machine-translate or rewrite it. If a detail appears in only one language, fill that side and leave the other empty ("").`;
+LANGUAGES — THIS IS THE MOST IMPORTANT RULE: You have the FULL English copy AND the FULL Chinese (中文) copy of the SAME product. They are translations of each other and cover the same facts. EVERY block you emit MUST be fully bilingual:
+- For every _en field you fill, you MUST ALSO fill its matching _cn field (and vice-versa). A block with English but blank Chinese is WRONG.
+- Get the Chinese from the Chinese copy — find the phrase that matches the English and put it in the _cn field. Use the operator's own Chinese wording; only translate yourself if that exact detail is genuinely absent from the Chinese copy.
+- Pair the same piece of content into ONE bilingual block. NEVER emit a separate Chinese-only block next to an English one.
+- Examples: spec_strip cell → fill k_en AND k_cn, v_en AND v_cn. why row → claim_en AND claim_cn. hero_intro → body_en AND body_cn. ingredients item → name_en AND name_cn.
+Before calling emit_blocks, re-read your blocks and confirm NO _cn field is empty where its _en counterpart has text. If any is empty, fill it from the Chinese copy first.`;
   }
   if (hasEn) {
     return translate
@@ -554,8 +574,13 @@ router.post('/api/ai/compose-blocks', requireAuth, requirePermission('retail'), 
     }
 
     const blocks = rawBlocks.map(sanitizeComposedBlock).filter(b => b && composedBlockHasContent(b));
+    // Diagnostic: how many blocks actually came back with each language filled?
+    // Lets us tell "model ignored the Chinese" apart from a pipeline bug.
+    const withEn = blocks.filter(b => composedBlockLangFilled(b, 'en')).length;
+    const withCn = blocks.filter(b => composedBlockLangFilled(b, 'cn')).length;
+    console.log(`[compose-blocks] in(en=${hasEn},cn=${hasCn},translate=${translate}) -> blocks=${blocks.length} withEn=${withEn} withCn=${withCn}`);
     logActivity(req.user.id, req.user.username, 'ai_compose_blocks', 'product', product.id || null,
-      { count: blocks.length, translate, tokens: result.usage, provider: _provider }, req.ip);
+      { count: blocks.length, withEn, withCn, translate, tokens: result.usage, provider: _provider }, req.ip);
     res.json({ success: true, blocks, usage: result.usage, provider: _provider });
   } catch (e) {
     if (e.code === 'no_key') return res.status(503).json({ error: e.message });
