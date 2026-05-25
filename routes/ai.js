@@ -480,13 +480,33 @@ RULES:
 - Only emit a block if the source text actually supports it. A sparse paste might be just hero_intro + ingredients. That's fine — fewer, accurate blocks beat many empty ones.
 - pct is a string ("12%" or "") and lead/alt are booleans.`;
 
-const COMPOSE_TRANSLATE_ON = `
+// Build the language directive from which source texts are present + whether
+// the operator opted into drafting the empty side. Both texts present is the
+// primary path: pair the SAME content across the two languages into one block.
+function composeLangDirective(hasEn, hasCn, translate) {
+  if (hasEn && hasCn) {
+    return `
 
-TRANSLATION: For EVERY text field, fill BOTH the _en and _cn variants. If the source is only in one language, render the other yourself — idiomatic and on-brand, NOT a literal word-for-word gloss.`;
+LANGUAGES: You are given the English copy AND the Chinese copy of the SAME product — they describe the same thing. For each block, fill the _en fields from the English source and the _cn fields from the MATCHING Chinese content, pairing the same piece of content across the two languages into ONE block (never make a separate Chinese-only block beside an English one). Use the operator's provided Chinese verbatim in spirit — do NOT machine-translate or rewrite it. If a detail appears in only one language, fill that side and leave the other empty ("").`;
+  }
+  if (hasEn) {
+    return translate
+      ? `
 
-const COMPOSE_TRANSLATE_OFF = `
+LANGUAGES: Only English copy is provided. Fill the _en fields from it, then also draft the _cn fields yourself — idiomatic and on-brand, NOT a literal word-for-word gloss.`
+      : `
 
-TRANSLATION: Fill ONLY the language the source copy is written in. Leave the opposite-language fields as empty strings (""). Do not invent translations — the operator will write the other language themselves.`;
+LANGUAGES: Only English copy is provided. Fill the _en fields and leave every _cn field as an empty string (""). Do not invent Chinese — the operator will write it.`;
+  }
+  // Chinese only
+  return translate
+    ? `
+
+LANGUAGES: Only Chinese copy is provided. Fill the _cn fields from it, then also draft the _en fields yourself — idiomatic and on-brand, NOT a literal word-for-word gloss.`
+    : `
+
+LANGUAGES: Only Chinese copy is provided. Fill the _cn fields and leave every _en field as an empty string (""). Do not invent English — the operator will write it.`;
+}
 
 router.post('/api/ai/compose-blocks', requireAuth, requirePermission('retail'), express.json(), async (req, res) => {
   const _provider = pickProvider();
@@ -497,21 +517,27 @@ router.post('/api/ai/compose-blocks', requireAuth, requirePermission('retail'), 
     });
   }
 
-  const text      = (req.body && req.body.text ? String(req.body.text) : '').trim();
+  const textEn    = (req.body && req.body.text_en ? String(req.body.text_en) : '').trim();
+  const textCn    = (req.body && req.body.text_cn ? String(req.body.text_cn) : '').trim();
+  // Back-compat: an older client may still send a single `text` field.
+  const textLegacy = (req.body && req.body.text ? String(req.body.text) : '').trim();
   const translate = !!(req.body && req.body.translate);
   const product   = (req.body && req.body.product && typeof req.body.product === 'object') ? req.body.product : {};
-  if (!text) return res.status(400).json({ error: 'No text provided · 未提供文字' });
+  const hasEn = !!(textEn || textLegacy);
+  const hasCn = !!textCn;
+  if (!hasEn && !hasCn) return res.status(400).json({ error: 'No text provided · 未提供文字' });
 
   try {
     const ctxBits = [product.name_en, product.name_cn, product.category].filter(Boolean).join(' · ');
-    const userMsg =
-      (ctxBits ? `Product: ${ctxBits}\n\n` : '') +
-      'Raw copy to organise into blocks:\n\n' + text.slice(0, 12000) +
-      '\n\nCall emit_blocks now with the organised blocks.';
+    const parts = [];
+    if (ctxBits) parts.push(`Product: ${ctxBits}`);
+    if (textEn || textLegacy) parts.push('English copy:\n' + (textEn || textLegacy).slice(0, 9000));
+    if (textCn)               parts.push('Chinese copy · 中文文案:\n' + textCn.slice(0, 9000));
+    const userMsg = parts.join('\n\n') + '\n\nCall emit_blocks now with the organised blocks.';
 
     const result = await callLLM({
       max_tokens: 2400,
-      system: { static: COMPOSE_SYSTEM + (translate ? COMPOSE_TRANSLATE_ON : COMPOSE_TRANSLATE_OFF), dynamic: '' },
+      system: { static: COMPOSE_SYSTEM, dynamic: composeLangDirective(hasEn, hasCn, translate) },
       tools: [COMPOSE_TOOL],
       messages: [{ role: 'user', content: userMsg }],
     });

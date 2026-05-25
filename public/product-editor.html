@@ -275,8 +275,12 @@
   .pe-modal-title { font-size: 15px; font-weight: 600; color: var(--text-1); }
   .pe-modal-x { padding: 4px 9px; }
   .pe-modal-hint { font-size: 12px; color: var(--text-2); line-height: 1.6; }
+  .pe-smart-fields { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); margin: var(--s3) 0; }
+  @media (max-width: 560px) { .pe-smart-fields { grid-template-columns: 1fr; } }
+  .pe-smart-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .pe-smart-label { font-size: 11px; font-weight: 600; letter-spacing: .04em; color: var(--text-3); }
   .pe-smart-text {
-    width: 100%; min-height: 200px; resize: vertical; margin: var(--s3) 0;
+    width: 100%; min-height: 170px; resize: vertical;
     padding: 12px; font: 13px var(--f-sans); line-height: 1.6;
     background: var(--bg-input); color: var(--text-1);
     border: 1px solid var(--line); border-radius: var(--r-md);
@@ -929,7 +933,7 @@
             <option value="">+ Add section… · + 添加板块…</option>
           </select>
           <button type="button" class="pe-smart-btn" onclick="peSmartOpen()" title="Paste text, let the editor split it into sections · 粘贴文字,自动拆分成板块">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.8L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.7L12 3z"/><path d="M19 14l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 3l1.9 4.8L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.7L12 3z"/><path d="M19 14l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg>
             Smart paste · 智能粘贴
           </button>
         </div>
@@ -983,9 +987,18 @@
       </div>
 
       <div id="pe-smart-step-input">
-        <p class="pe-modal-hint">Paste any product copy — a label, a blurb, scattered notes — and the editor splits it into sections for you to review before adding. · 粘贴任意产品文案,编辑器会拆分成板块,添加前可先审阅。</p>
-        <textarea id="pe-smart-text" class="pe-smart-text" data-no-i18n placeholder="Paste product text here…  ·  在此粘贴产品文字…"></textarea>
-        <label class="pe-smart-translate"><input type="checkbox" id="pe-smart-translate"> <span>Also draft the other language (中文 ⇄ EN) · 同时起草另一种语言</span></label>
+        <p class="pe-modal-hint">Paste the product copy and the editor splits it into sections for you to review before adding. Fill both languages to get bilingual sections in one go. · 粘贴产品文案,编辑器会拆分成板块供你审阅后添加。两种语言都填写即可一次生成双语板块。</p>
+        <div class="pe-smart-fields">
+          <div class="pe-smart-field">
+            <label class="pe-smart-label" for="pe-smart-text-en">English</label>
+            <textarea id="pe-smart-text-en" class="pe-smart-text" data-no-i18n placeholder="Paste the English copy here…"></textarea>
+          </div>
+          <div class="pe-smart-field">
+            <label class="pe-smart-label" for="pe-smart-text-cn">中文</label>
+            <textarea id="pe-smart-text-cn" class="pe-smart-text" data-no-i18n placeholder="在此粘贴中文文案…"></textarea>
+          </div>
+        </div>
+        <label class="pe-smart-translate"><input type="checkbox" id="pe-smart-translate"> <span>If a language box is empty, draft it for me · 若某语言留空,则替我起草</span></label>
         <div class="pe-modal-actions">
           <button class="btn" type="button" onclick="peSmartClose()">Cancel · 取消</button>
           <button class="btn btn-primary" type="button" id="pe-smart-go" onclick="peSmartDivide()">Divide into sections · 拆分为板块</button>
@@ -1436,11 +1449,12 @@ function peSwitcherKeydown(e) {
 let _peSmartBlocks = [];   // proposed blocks awaiting the operator's confirm
 function peSmartOpen() {
   _peSmartBlocks = [];
-  const t = document.getElementById('pe-smart-text'); if (t) t.value = '';
+  const en = document.getElementById('pe-smart-text-en'); if (en) en.value = '';
+  const cn = document.getElementById('pe-smart-text-cn'); if (cn) cn.value = '';
   const tr = document.getElementById('pe-smart-translate'); if (tr) tr.checked = false;
   peSmartStep('input');
   document.getElementById('pe-smart-overlay').hidden = false;
-  if (t) setTimeout(() => t.focus(), 30);
+  if (en) setTimeout(() => en.focus(), 30);
 }
 function peSmartClose() { const o = document.getElementById('pe-smart-overlay'); if (o) o.hidden = true; }
 function peSmartBack() { peSmartStep('input'); }
@@ -1451,8 +1465,9 @@ function peSmartStep(step) {
   });
 }
 async function peSmartDivide() {
-  const text = (document.getElementById('pe-smart-text').value || '').trim();
-  if (!text) { toast(cuT('Paste some text first · 请先粘贴文字', '请先粘贴文字'), 'err'); return; }
+  const textEn = (document.getElementById('pe-smart-text-en').value || '').trim();
+  const textCn = (document.getElementById('pe-smart-text-cn').value || '').trim();
+  if (!textEn && !textCn) { toast(cuT('Paste some text first · 请先粘贴文字', '请先粘贴文字'), 'err'); return; }
   const translate = !!document.getElementById('pe-smart-translate').checked;
   peSmartStep('loading');
   try {
@@ -1461,7 +1476,7 @@ async function peSmartDivide() {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
       body: JSON.stringify({
-        text, translate,
+        text_en: textEn, text_cn: textCn, translate,
         product: PA_CURRENT
           ? { id: PA_CURRENT.id, name_en: PA_CURRENT.name_en, name_cn: PA_CURRENT.name_cn, category: PA_CURRENT.category }
           : {},
