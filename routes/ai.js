@@ -434,7 +434,7 @@ function composedBlockHasContent(b) {
 }
 
 // Does the block have any non-empty field for a specific language ('en'|'cn')?
-// Used only for diagnostics — to log whether the model actually filled each side.
+// Used for diagnostics and for the stacked-output merge below.
 function composedBlockLangFilled(b, suffix) {
   const spec = COMPOSE_SCHEMA[b.type];
   if (!spec) return false;
@@ -446,6 +446,54 @@ function composedBlockLangFilled(b, suffix) {
   for (const [objKey, keys] of Object.entries(spec.objects || {}))
     for (const k of keys) if (ends(k) && has((b[objKey] || {})[k])) return true;
   return false;
+}
+
+// Combine one English-only block with the matching Chinese-only block of the
+// same type into a single bilingual block: _en fields from `en`, _cn fields
+// from `cn`, language-neutral fields (pct, num, value, icon, bg, stat…) from
+// whichever has them. Arrays/objects are zipped element-by-element.
+function mergeEnCnBlock(en, cn) {
+  const spec = COMPOSE_SCHEMA[en.type] || {};
+  const out = { type: en.type };
+  const merge = (k, a, b) => k.endsWith('_cn') ? (b || a) : (a || b);
+  for (const k of (spec.scalars || [])) out[k] = merge(k, en[k] || '', cn[k] || '');
+  for (const [arrKey, keys] of Object.entries(spec.arrays || {})) {
+    const ea = Array.isArray(en[arrKey]) ? en[arrKey] : [];
+    const ca = Array.isArray(cn[arrKey]) ? cn[arrKey] : [];
+    const n = Math.max(ea.length, ca.length);
+    out[arrKey] = [];
+    for (let i = 0; i < n; i++) {
+      const e = ea[i] || {}, c = ca[i] || {}, o = {};
+      for (const k of keys) o[k] = (k === 'lead') ? !!(e[k] || c[k]) : merge(k, e[k] || '', c[k] || '');
+      out[arrKey].push(o);
+    }
+  }
+  for (const [objKey, keys] of Object.entries(spec.objects || {})) {
+    const e = en[objKey] || {}, c = cn[objKey] || {}, o = {};
+    for (const k of keys) o[k] = (k === 'alt') ? !!(e[k] || c[k]) : merge(k, e[k] || '', c[k] || '');
+    out[objKey] = o;
+  }
+  return out;
+}
+
+// The model often ignores "pair into one bilingual block" and instead emits
+// every English block followed by a parallel run of Chinese blocks. Detect
+// that clean stacked shape and zip the two halves back together. Conservative:
+// only merges when every block is single-language and the EN-only and CN-only
+// blocks form two equal, same-typed sequences — otherwise returns input as-is.
+function mergeStackedBilingual(blocks) {
+  if (blocks.length < 2) return blocks;
+  const tag = b => {
+    const en = composedBlockLangFilled(b, 'en'), cn = composedBlockLangFilled(b, 'cn');
+    return en && cn ? 'both' : en ? 'en' : cn ? 'cn' : 'empty';
+  };
+  const tags = blocks.map(tag);
+  if (tags.some(t => t === 'both' || t === 'empty')) return blocks;  // already paired / odd
+  const enOnly = blocks.filter((_, i) => tags[i] === 'en');
+  const cnOnly = blocks.filter((_, i) => tags[i] === 'cn');
+  if (!enOnly.length || enOnly.length !== cnOnly.length) return blocks;
+  if (enOnly.some((b, i) => b.type !== cnOnly[i].type)) return blocks;  // sequences don't line up
+  return enOnly.map((en, i) => mergeEnCnBlock(en, cnOnly[i]));
 }
 
 const COMPOSE_TOOL = {
@@ -507,7 +555,8 @@ LANGUAGES — THIS IS THE MOST IMPORTANT RULE: You have the FULL English copy AN
 - Get the Chinese from the Chinese copy — find the phrase that matches the English and put it in the _cn field. Use the operator's own Chinese wording; only translate yourself if that exact detail is genuinely absent from the Chinese copy.
 - Pair the same piece of content into ONE bilingual block. NEVER emit a separate Chinese-only block next to an English one.
 - Examples: spec_strip cell → fill k_en AND k_cn, v_en AND v_cn. why row → claim_en AND claim_cn. hero_intro → body_en AND body_cn. ingredients item → name_en AND name_cn.
-Before calling emit_blocks, re-read your blocks and confirm NO _cn field is empty where its _en counterpart has text. If any is empty, fill it from the Chinese copy first.`;
+Before calling emit_blocks, re-read your blocks and confirm NO _cn field is empty where its _en counterpart has text. If any is empty, fill it from the Chinese copy first.
+- When a block has a LIST (spec_strip cells, ingredients items, why rows, how_to_use tiles), keep the items in the SAME order regardless of language — item 1 is the same fact in both _en and _cn.`;
   }
   if (hasEn) {
     return translate
@@ -573,12 +622,16 @@ router.post('/api/ai/compose-blocks', requireAuth, requirePermission('retail'), 
       if (m) { try { const o = JSON.parse(m[0]); if (Array.isArray(o.blocks)) rawBlocks = o.blocks; } catch (e) {} }
     }
 
-    const blocks = rawBlocks.map(sanitizeComposedBlock).filter(b => b && composedBlockHasContent(b));
-    // Diagnostic: how many blocks actually came back with each language filled?
+    let blocks = rawBlocks.map(sanitizeComposedBlock).filter(b => b && composedBlockHasContent(b));
+    const rawCount = blocks.length;
+    // Repair the common "all-English blocks, then all-Chinese blocks" output
+    // into properly paired bilingual blocks.
+    if (hasEn && hasCn) blocks = mergeStackedBilingual(blocks);
+    // Diagnostic: how many blocks came back with each language filled?
     // Lets us tell "model ignored the Chinese" apart from a pipeline bug.
     const withEn = blocks.filter(b => composedBlockLangFilled(b, 'en')).length;
     const withCn = blocks.filter(b => composedBlockLangFilled(b, 'cn')).length;
-    console.log(`[compose-blocks] in(en=${hasEn},cn=${hasCn},translate=${translate}) -> blocks=${blocks.length} withEn=${withEn} withCn=${withCn}`);
+    console.log(`[compose-blocks] in(en=${hasEn},cn=${hasCn},translate=${translate}) -> raw=${rawCount} merged=${blocks.length} withEn=${withEn} withCn=${withCn}`);
     logActivity(req.user.id, req.user.username, 'ai_compose_blocks', 'product', product.id || null,
       { count: blocks.length, withEn, withCn, translate, tokens: result.usage, provider: _provider }, req.ip);
     res.json({ success: true, blocks, usage: result.usage, provider: _provider });

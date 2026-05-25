@@ -1026,6 +1026,7 @@
       <div id="pe-smart-step-preview" hidden>
         <p class="pe-modal-hint" id="pe-smart-preview-hint"></p>
         <div id="pe-smart-preview-list" class="pe-smart-preview-list" data-no-i18n></div>
+        <label class="pe-smart-translate" id="pe-smart-replace-wrap"><input type="checkbox" id="pe-smart-replace"> <span>Replace the page's existing sections (instead of adding to them) · 替换页面现有板块(而非追加)</span></label>
         <div class="pe-modal-actions">
           <button class="btn" type="button" onclick="peSmartBack()">← Back · 返回</button>
           <button class="btn btn-primary" type="button" id="pe-smart-apply" onclick="peSmartApply()">Add sections · 添加板块</button>
@@ -1466,6 +1467,7 @@ function peSmartOpen() {
   const en = document.getElementById('pe-smart-text-en'); if (en) en.value = '';
   const cn = document.getElementById('pe-smart-text-cn'); if (cn) cn.value = '';
   const tr = document.getElementById('pe-smart-translate'); if (tr) tr.checked = false;
+  const rp = document.getElementById('pe-smart-replace'); if (rp) rp.checked = false;
   peSmartStep('input');
   document.getElementById('pe-smart-overlay').hidden = false;
   if (en) setTimeout(() => en.focus(), 30);
@@ -1519,6 +1521,9 @@ function peRenderSmartPreview() {
   if (hint) hint.textContent = cuT(
     n + (n === 1 ? ' section found — review, then add it below.' : ' sections found — review, then add them below.'),
     '识别出 ' + n + ' 个板块 — 审阅后点击下方添加。');
+  // Offer "replace" only when the page already has sections to replace.
+  const rpWrap = document.getElementById('pe-smart-replace-wrap');
+  if (rpWrap) rpWrap.style.display = (window._paBlocks && window._paBlocks.length) ? '' : 'none';
   if (!list) return;
   list.innerHTML = _peSmartBlocks.map(b => {
     const glyph = PA_TYPE_GLYPH[b.type] || '◻';
@@ -1536,6 +1541,10 @@ function peSmartApply() {
   if (!_peSmartBlocks.length) { peSmartClose(); return; }
   paBlocksSyncFromDOM();
   if (!window._paBlocks) window._paBlocks = [];
+  // Replace mode wipes the page's current sections first (e.g. to clear an
+  // old, badly-paired generation) instead of appending to them.
+  const replace = !!(document.getElementById('pe-smart-replace') || {}).checked;
+  if (replace) { window._paBlocks = []; PA_SELECTED_BLOCK_ID = null; }
   let added = 0, firstId = null, skippedNutrition = false;
   _peSmartBlocks.forEach(b => {
     // Only one nutrition block per product (maps to a single column) — skip a
