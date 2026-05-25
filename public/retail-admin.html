@@ -2204,6 +2204,62 @@
   .pack-badge.land  { background: rgba(242, 202, 108, .14); color: #f2ca6c; border-color: rgba(242, 202, 108, .35); }
   .pack-badge.ice   { background: rgba(123, 189, 237, .16); color: #7bbdf2; border-color: rgba(123, 189, 237, .4); }
 
+  /* ─── Order total banner — hero strip below the drawer header ─── */
+  .order-total-banner {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: var(--s4);
+    padding: var(--s4) var(--s5);
+    background: var(--bg-app);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-md);
+    margin-bottom: var(--s5);
+  }
+  .order-total-banner .otb-label {
+    font-family: var(--f-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: .28em; text-transform: uppercase; color: var(--text-3);
+  }
+  .order-total-banner .otb-sub {
+    font-family: var(--f-mono); font-size: 11px; color: var(--text-3);
+    margin-top: 4px; letter-spacing: .02em;
+  }
+  .order-total-banner .otb-amount {
+    font-size: 40px; font-weight: 300; color: var(--text-1);
+    line-height: 1; letter-spacing: -.02em; white-space: nowrap;
+  }
+  @media (max-width: 560px) {
+    .order-total-banner .otb-amount { font-size: 30px; }
+  }
+
+  /* ─── Items rendered as a numbered packing manifest (01, 02…) ───
+     Sits inside a .shipment-card, so it needs no card chrome of its own —
+     just hairline-separated rows. Line numbers in Aged Brass. */
+  .manifest { display: flex; flex-direction: column; }
+  .manifest .mf-row {
+    display: flex; align-items: flex-start; gap: var(--s4);
+    padding: var(--s3) 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .manifest .mf-row:first-child { padding-top: var(--s1); }
+  .manifest .mf-row:last-child  { border-bottom: none; padding-bottom: 0; }
+  .manifest .mf-num {
+    font-family: var(--f-mono); font-size: 11px; color: var(--brass);
+    letter-spacing: .04em; flex-shrink: 0; min-width: 22px; padding-top: 2px;
+  }
+  .manifest .mf-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .manifest .mf-top {
+    display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3);
+  }
+  .manifest .mf-name { font-size: 13px; font-weight: 500; color: var(--text-1); }
+  .manifest .prod-link { text-decoration: none; color: inherit; min-width: 0; }
+  .manifest .prod-link:hover .mf-name { text-decoration: underline; }
+  .manifest .mf-total { font-size: 14px; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .manifest .mf-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .manifest .mf-zh { font-family: var(--f-sans); font-size: 11px; font-weight: 300; color: var(--text-3); }
+  .manifest .mf-spec { font-family: var(--f-mono); font-size: 10.5px; color: var(--text-4); letter-spacing: .03em; }
+  .manifest .mf-qty { color: var(--text-3); }
+  .manifest .mf-packs { margin-left: auto; display: inline-flex; align-items: center; }
+  .manifest .mf-packs .pack-badge { margin-right: 0; margin-left: 4px; }
+
   .sort-chips {
     display: flex; flex-wrap: wrap; gap: 6px;
     align-items: center;
@@ -8316,26 +8372,34 @@ function renderPackBadges(it) {
   return parts.join('');
 }
 
+// One line of the packing manifest. `opts.index` (1-based) renders the
+// 01 / 02 … brass line number; `opts.showPack` toggles the pack badges.
 function renderItemRow(it, opts = {}) {
   const showPack = opts.showPack !== false;
+  const num = opts.index != null ? String(opts.index).padStart(2, '0') : '';
+  const name = `<span class="mf-name">${escapeHtml(it.name_en || '')}</span>`;
   const nameCell = it.product_id
-    ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab">
-         <div>${escapeHtml(it.name_en || '')}</div>
-         <div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(it.name_cn || '')}${it.size ? ' · ' + escapeHtml(it.size) : ''}</div>
-       </a>`
-    : `<div>${escapeHtml(it.name_en || '')}</div>
-       <div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(it.name_cn || '')}${it.size ? ' · ' + escapeHtml(it.size) : ''}</div>`;
-  const skuLine = it.sku
-    ? `<div class="sku-line">${escapeHtml(it.sku)}</div>`
-    : `<div class="sku-line" style="color: var(--text-4)">no SKU</div>`;
+    ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab">${name}</a>`
+    : name;
+  const zh = (it.name_cn || it.size)
+    ? `<span class="mf-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</span>`
+    : '';
+  const sku = it.sku ? escapeHtml(it.sku) : 'no SKU';
   return `
-    <tr>
-      <td>${nameCell}${skuLine}</td>
-      <td class="numeric">×${it.qty}</td>
-      <td class="numeric">¥${fmt(it.unit_price)}</td>
-      <td class="numeric"><b>¥${fmt(it.line_total)}</b></td>
-      ${showPack ? `<td class="pack-cell">${renderPackBadges(it)}</td>` : ''}
-    </tr>`;
+    <div class="mf-row">
+      <span class="mf-num">${num}</span>
+      <div class="mf-body">
+        <div class="mf-top">
+          ${nameCell}
+          <span class="mf-total">¥${fmt(it.line_total)}</span>
+        </div>
+        <div class="mf-meta">
+          ${zh}
+          <span class="mf-spec">${sku} · <span class="mf-qty">×${it.qty} @ ¥${fmt(it.unit_price)}</span></span>
+          ${showPack ? `<span class="mf-packs">${renderPackBadges(it)}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
 }
 
 function renderSortChips() {
@@ -8359,19 +8423,13 @@ function setItemsSort(mode) {
   if (_OPEN_ORDER) renderOpenOrder(_OPEN_ORDER);
 }
 
+// Items render as a numbered packing manifest (per shipment). Sort order
+// is preserved from sortOrderItems so the Packaging / SKU / Shipping chips
+// still re-order the list; numbering follows the rendered order.
 function renderItemsTable(items, showPack = true) {
   const sorted = sortOrderItems(items, _ITEMS_SORT_MODE);
-  return `<div class="table-wrap">
-    <table>
-      <thead><tr>
-        <th>Item · 商品</th>
-        <th class="numeric">Qty · 数量</th>
-        <th class="numeric">Unit · 单价</th>
-        <th class="numeric">Total · 合计</th>
-        ${showPack ? '<th>Pack · 包装</th>' : ''}
-      </tr></thead>
-      <tbody>${sorted.map(it => renderItemRow(it, { showPack })).join('')}</tbody>
-    </table>
+  return `<div class="manifest">
+    ${sorted.map((it, i) => renderItemRow(it, { showPack, index: i + 1 })).join('')}
   </div>`;
 }
 
@@ -8513,6 +8571,16 @@ function renderOpenOrder(o) {
         ${drawerRefundBanner(o)}
         ${renderRefundPanel(o)}
 
+        <!-- Order total as a full-width hero banner (invoice feel) — the
+             inline Total tile below was retired in favour of this. -->
+        <div class="order-total-banner">
+          <div>
+            <div class="otb-label">Order total · 订单总额</div>
+            <div class="otb-sub">subtotal ¥${fmt(o.subtotal)} · shipping ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · voucher −¥' + fmt(o.voucher_amount) : ''}</div>
+          </div>
+          <div class="otb-amount">¥${fmt(o.total)}</div>
+        </div>
+
         <div class="order-detail">
           <div>
             <div class="kicker">Ship to ${copyChip([o.recipient_name, o.recipient_phone, o.address_full].filter(Boolean).join('\n'), 'Ship-to')}</div>
@@ -8528,11 +8596,6 @@ function renderOpenOrder(o) {
             <div class="kicker">Payment ${o.payments?.[0]?.transaction_id ? copyChip(o.payments[0].transaction_id, 'Txn ID') : ''}</div>
             <div class="val">${paymentBrandHTML(o.payment_method, 'lg')} · ${escapeHtml((o.payments?.[0]?.status) || '—')}</div>
           </div>
-          <div>
-            <div class="kicker">Total</div>
-            <div class="val"><b style="font-size: 16px">¥${fmt(o.total)}</b></div>
-            <div class="sub">subtotal ¥${fmt(o.subtotal)} · shipping ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · voucher −¥' + fmt(o.voucher_amount) : ''}</div>
-          </div>
           ${renderShipByTile(o)}
           ${o.store_code ? `<div>
             <div class="kicker">Fulfilled by</div>
@@ -8547,7 +8610,7 @@ function renderOpenOrder(o) {
         </div>
 
         <div class="order-items">
-          <div class="kicker" style="font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin-bottom: var(--s2);">Items &amp; shipments</div>
+          <div class="kicker" style="font-size: 10px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--brass); margin-bottom: var(--s2);">Items &amp; shipments</div>
           ${_DISMISSED_SPLIT.has(o.id) ? '' : splitSuggestionBanner(o)}
           ${o.outside_guangzhou && (o.shipments?.length > 1) ? `
             <div class="outside-gz-note">
@@ -8563,7 +8626,7 @@ function renderOpenOrder(o) {
 
         ${(o.reservations && o.reservations.length) ? `
         <div class="order-items">
-          <div class="kicker" style="font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin-bottom: var(--s2);">Stock reservations · 库存预留</div>
+          <div class="kicker" style="font-size: 10px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--brass); margin-bottom: var(--s2);">Stock reservations · 库存预留</div>
           <div class="table-wrap">
             <!-- nowrap on every header so the bilingual EN · 中文 labels
                  don't wrap mid-word ("STATUS · 状 / 态", "EXPIRES · / 到期")
