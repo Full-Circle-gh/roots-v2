@@ -3,8 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" id="meta-theme-color" content="#16161a">
-<title>Roots · Mini App Editor</title>
+<meta name="theme-color" id="meta-theme-color" content="#12161A">
+<title>Full Circle · Mini App Editor</title>
+<!-- Full Circle editor chrome type — IBM Plex Sans / Mono (+ SC for 中文).
+     Degrades to system fonts if the network blocks Google Fonts. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script>
   // Apply theme BEFORE first paint to prevent flash. Reads saved choice
   // first; otherwise honours the OS preference. Toggle logic lives at the
@@ -43,35 +48,40 @@
      DESIGN TOKENS
      ═══════════════════════════════════════════════════════════════════ */
   :root {
-    /* Surfaces — warm-dark grays, three elevation tiers */
-    --bg-app:     #16161a;
-    --bg-canvas:  #1c1c20;
-    --bg-pane:    #1f1f24;
-    --bg-elev-1:  #25252b;
-    --bg-elev-2:  #2e2e35;
-    --bg-input:   #1a1a1f;
-    --bg-overlay: rgba(10, 10, 12, .72);
+    /* ── Full Circle — Ink Charcoal surfaces, three elevation tiers ── */
+    --bg-app:     #12161A;   /* Ink Charcoal */
+    --bg-canvas:  #171B20;
+    --bg-pane:    #161A1F;
+    --bg-elev-1:  #1F252B;
+    --bg-elev-2:  #283038;
+    --bg-input:   #12161A;
+    --bg-overlay: rgba(8, 10, 12, .72);
 
-    /* Borders */
-    --line-soft:  rgba(255, 255, 255, .055);
-    --line:       rgba(255, 255, 255, .09);
-    --line-strong: rgba(255, 255, 255, .15);
-    --ring:       rgba(204, 217, 0, .35);
+    /* Borders — Deeper Paper alphas on the dark chrome */
+    --line-soft:  rgba(232, 229, 220, .06);
+    --line:       rgba(232, 229, 220, .10);
+    --line-strong: rgba(232, 229, 220, .16);
+    --ring:       rgba(107, 142, 111, .40);
 
-    /* Text */
-    --text-1:     #ecebe5;
-    --text-2:     #aeaba2;
-    --text-3:     #7d7a72;
-    --text-4:     #56544f;
+    /* Text — Deeper Paper on Ink */
+    --text-1:     #E8E5DC;
+    --text-2:     rgba(232, 229, 220, .72);
+    --text-3:     rgba(232, 229, 220, .50);
+    --text-4:     rgba(232, 229, 220, .34);
 
-    /* Brand accent — used SPARINGLY */
-    --accent:     #ccd900;
-    --accent-hi:  #dde858;
-    --accent-ink: #16161a;
-    --danger:     #e8556a;
-    --danger-soft: rgba(232, 85, 106, .14);
-    --warn:       #e9a35a;
-    --success:    #80c462;
+    /* Brand accents — strict Tea + Brass. Tea = active/selected/live,
+       Brass = primary action (Publish/Save). Used SPARINGLY. */
+    --accent:     #6B8E6F;   /* Tea Green */
+    --accent-hi:  #7BA07F;
+    --accent-ink: #12161A;
+    --brass:      #B08D4A;   /* Aged Brass */
+    --brass-hi:   #C29B54;
+    --chrome-bg:  #12161A;   /* top bar stays Ink in both themes */
+    --chrome-fg:  #E8E5DC;
+    --danger:     #B65656;
+    --danger-soft: rgba(182, 86, 86, .14);
+    --warn:       #B08D4A;   /* attention = Brass, never amber/red */
+    --success:    #6B8E6F;   /* positive = Tea */
 
     /* Brand colors (for previewing customer-side blocks) */
     --b-lime: #CCD900; --b-forest: #365329; --b-olive: #6A6E2D; --b-oat: #F2E7DF;
@@ -85,16 +95,18 @@
     /* Radii */
     --r-sm: 4px; --r-md: 6px; --r-lg: 10px; --r-xl: 14px;
 
-    /* Shadows */
-    --sh-1: 0 1px 2px rgba(0, 0, 0, .25);
-    --sh-2: 0 4px 16px rgba(0, 0, 0, .25), 0 1px 2px rgba(0, 0, 0, .35);
-    --sh-3: 0 24px 60px rgba(0, 0, 0, .5), 0 2px 4px rgba(0, 0, 0, .4);
-    --sh-phone: 0 32px 80px rgba(0, 0, 0, .45), 0 8px 24px rgba(0, 0, 0, .3), 0 0 0 8px #0a0a0c, inset 0 0 0 1px rgba(255, 255, 255, .04);
+    /* Shadows — brand favours 1px borders over elevation; keep these soft.
+       Phone bezel is Ink Charcoal hardware, not pure black. */
+    --sh-1: none;
+    --sh-2: 0 2px 10px rgba(0, 0, 0, .22);
+    --sh-3: 0 12px 36px rgba(0, 0, 0, .34);
+    --sh-phone: 0 18px 50px rgba(0, 0, 0, .30), 0 0 0 8px #12161A, inset 0 0 0 1px rgba(232, 229, 220, .05);
 
-    /* Typography — editor chrome uses neutral system fonts */
-    --f-sans:  -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+    /* Typography — editor chrome is IBM Plex (Full Circle). Phone-preview
+       customer brand fonts (--bf-*) below are left untouched. */
+    --f-sans:  'IBM Plex Sans', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
     --f-serif: 'New York', 'Iowan Old Style', Georgia, serif;
-    --f-mono:  ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+    --f-mono:  'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
 
     /* Brand fonts — for the phone preview only. DF Yuan as CJK fallback. */
     --bf-bear:   'Bear Serif',   'DF Yuan', 'New York', Georgia, serif;
@@ -116,53 +128,54 @@
      Mirrors the retail-admin oat-paper palette for cross-tool consistency.
      ═══════════════════════════════════════════════════════════════════ */
   :root[data-theme="light"] {
-    /* Soft parchment — pulled one full step away from paper-white so the
-       editor isn't a wall of glare. Pane is mid-cream (not near-white),
-       canvas is a clearly darker oat so the phone preview pops, app shell
-       sits between them. Tweak: if it still feels bright, drop pane another
-       6 points toward the canvas value.
-       Pre-2026-05-19 used #fbf8ee for pane — too close to white. */
-    --bg-app:     #e0d8c3;
-    --bg-canvas:  #d4cbb2;
-    --bg-pane:    #ebe4d0;
-    --bg-elev-1:  #e3dcc6;
-    --bg-elev-2:  #d8d0b8;
-    --bg-input:   #f0e9d4;
-    --bg-overlay: rgba(20, 20, 22, .48);
+    /* ── Full Circle light — Deeper Paper body, white cards. The sidebars
+       are a delineated area of the canvas (body tone), not floating cards;
+       cards inside them are white. The top bar stays Ink in both themes
+       (see --chrome-* + the Full Circle skin block below). ── */
+    --bg-app:     #E8E5DC;   /* Deeper Paper */
+    --bg-canvas:  #E1DDD2;   /* a touch deeper so the phone preview pops */
+    --bg-pane:    #E8E5DC;
+    --bg-elev-1:  #FFFFFF;   /* white cards */
+    --bg-elev-2:  #F2EFE6;
+    --bg-input:   #FFFFFF;
+    --bg-overlay: rgba(18, 22, 26, .48);
 
-    /* Lines need to be a touch firmer now that the surfaces are darker. */
-    --line-soft:   rgba(30, 25, 5, .09);
-    --line:        rgba(30, 25, 5, .18);
-    --line-strong: rgba(30, 25, 5, .30);
-    --ring:        rgba(140, 152, 0, .38);
+    /* Lines — Ink Charcoal alphas (brand: 1px @ ~8% in place of shadows). */
+    --line-soft:   rgba(18, 22, 26, .06);
+    --line:        rgba(18, 22, 26, .10);
+    --line-strong: rgba(18, 22, 26, .18);
+    --ring:        rgba(107, 142, 111, .40);
 
-    --text-1: #1a1a17;
-    --text-2: #3f3d36;
-    --text-3: #67645a;
-    --text-4: #94918a;
+    --text-1: #12161A;
+    --text-2: rgba(18, 22, 26, .72);
+    --text-3: rgba(18, 22, 26, .50);
+    --text-4: rgba(18, 22, 26, .34);
 
-    /* 2026-05-20 lime dim: drop neon #ccd900 to a softer olive-lime on
-       the cream surfaces. Dark mode keeps the punchy original. */
-    --accent:     #b1bd00;
-    --accent-hi:  #9ea800;
-    --accent-ink: #16161a;
-    --lime:       #b1bd00;
-    --danger-soft: rgba(232, 85, 106, .11);
+    /* Tea + Brass carry across themes unchanged. */
+    --accent:     #6B8E6F;
+    --accent-hi:  #5E7E62;
+    --accent-ink: #12161A;
+    --brass:      #B08D4A;
+    --brass-hi:   #9D7C3F;
+    --lime:       #6B8E6F;
+    --warn:       #B08D4A;
+    --success:    #6B8E6F;
+    --danger:     #B65656;
+    --danger-soft: rgba(182, 86, 86, .12);
 
-    /* Warm shadows — paper on a desk. Slightly stronger now that the
-       surfaces are darker so cards still feel lifted. */
-    --sh-1: 0 1px 3px rgba(40, 30, 5, .12);
-    --sh-2: 0 6px 18px rgba(40, 30, 5, .14);
-    --sh-3: 0 24px 60px rgba(40, 30, 5, .26);
-    /* Phone preview shadow rim — keep a soft dark ring for hardware feel. */
-    --sh-phone: 0 32px 80px rgba(40, 30, 5, .26), 0 8px 24px rgba(40, 30, 5, .16), 0 0 0 8px #2a2a30, inset 0 0 0 1px rgba(255, 255, 255, .06);
+    /* Near-flat — brand uses borders, not elevation. */
+    --sh-1: none;
+    --sh-2: 0 1px 0 rgba(18, 22, 26, .05);
+    --sh-3: 0 8px 28px rgba(18, 22, 26, .10);
+    /* Phone bezel — Ink Charcoal hardware + a whisper of lift on paper. */
+    --sh-phone: 0 14px 40px rgba(18, 22, 26, .12), 0 0 0 8px #12161A, inset 0 0 0 1px rgba(232, 229, 220, .06);
   }
   :root[data-theme="light"] body { color-scheme: light; }
   :root[data-theme="light"] input,
   :root[data-theme="light"] select,
   :root[data-theme="light"] textarea { color-scheme: light; }
   /* Make ::selection legible on the cream palette. */
-  :root[data-theme="light"] ::selection { background: rgba(204, 217, 0, .42); color: var(--text-1); }
+  :root[data-theme="light"] ::selection { background: rgba(107, 142, 111, .42); color: var(--text-1); }
   /* Float toolbars + drop-zones use rgba-white assumptions that flip
      poorly on cream — re-tint them with warm-dark alphas. */
   :root[data-theme="light"] .block-toolbar {
@@ -180,27 +193,25 @@
   }
   :root[data-theme="light"] .block-toolbar .label { color: rgba(251, 248, 238, .55); }
   :root[data-theme="light"] .block-toolbar .sep   { background: rgba(255, 255, 255, .14); }
-  /* Palette block tiles — the lime tint behind icons + bright-lime icon
-     stroke were both tuned for dark surfaces and read as a washed-out
-     yellowish-green mush against cream. Re-tint icons to deep olive on
-     a neutral warm backplate, and lift the tile body just enough that
-     it's clearly a chip rather than blending into the pane. */
+  /* Palette block tiles — Full Circle: white card, Ink hairline border,
+     icon in Tea Green on a quiet Ink backplate (matches the design's
+     block-library cards). */
   :root[data-theme="light"] .palette-item {
-    background: #f1ead7;                     /* cream chip, > pane tone */
-    border-color: rgba(30, 25, 5, .14);
+    background: #fff;
+    border-color: rgba(18, 22, 26, .08);
   }
   :root[data-theme="light"] .palette-item:hover {
-    background: #ebe2cc;
-    border-color: rgba(30, 25, 5, .26);
+    background: #fff;
+    border-color: rgba(107, 142, 111, .30);
   }
   :root[data-theme="light"] .palette-item .icon {
-    background: rgba(30, 25, 5, .06);        /* neutral warm-dark backplate */
-    color: #5a6b1a;                          /* deep olive, readable on cream */
+    background: rgba(18, 22, 26, .06);
+    color: var(--accent);
   }
-  /* Inspector header icon — same lime-on-lime fix as the palette. */
+  /* Inspector header icon — Tea on a quiet Ink backplate. */
   :root[data-theme="light"] .inspector-head .type-row .icon {
-    background: rgba(30, 25, 5, .07);
-    color: #5a6b1a;
+    background: rgba(107, 142, 111, .14);
+    color: var(--accent);
   }
   /* Canvas radial-gradient overlays were tuned for dark mode — on cream
      they read as olive/dirty. Strip them in light mode so the cream
@@ -257,11 +268,10 @@
     font-weight: 600; font-size: 13px; letter-spacing: -.005em; color: var(--text-1);
   }
   .brand-mark {
-    width: 26px; height: 26px; border-radius: var(--r-md);
-    background: linear-gradient(135deg, var(--accent), #b3bf00);
+    width: 28px; height: 28px; border-radius: var(--r-md);
+    background: transparent;
     display: flex; align-items: center; justify-content: center;
-    color: var(--accent-ink); font-weight: 700; font-size: 13px;
-    box-shadow: var(--sh-1);
+    color: var(--chrome-fg); font-weight: 700; font-size: 13px;
   }
   .brand .divider { width: 1px; height: 16px; background: var(--line); margin: 0 4px; }
   .brand .sub { color: var(--text-3); font-weight: 500; }
@@ -351,7 +361,7 @@
     cursor: pointer;
   }
   .page-menu .item:hover { background: var(--bg-elev-1); }
-  .page-menu .item.current { background: rgba(204, 217, 0, .08); }
+  .page-menu .item.current { background: rgba(107, 142, 111, .08); }
   .page-menu .item .name { font-size: 13px; font-weight: 600; color: var(--text-1); }
   /* Active checkmark: lime-on-light was nearly invisible (lime accent
      against pane bg = ~2:1 contrast). Render as a filled pill — lime fill
@@ -427,7 +437,7 @@
   .theme-menu .sw:hover { transform: scale(1.08); }
   .theme-menu .sw.active {
     border-color: var(--accent);
-    box-shadow: inset 0 0 0 1px rgba(0,0,0,.12), 0 0 0 2px rgba(204, 217, 0, .25);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.12), 0 0 0 2px rgba(107, 142, 111, .25);
   }
   /* RESET / TRANS swatches used to render the literal text "RESET" / "TRANS"
      inside ~30px circles — at 9px font that bumps up against the circle's
@@ -557,8 +567,8 @@
     display: flex; align-items: center; gap: 8px;
     width: 100%; margin-top: 10px;
     padding: 9px 10px;
-    background: linear-gradient(135deg, rgba(204, 217, 0, 0.18), rgba(204, 217, 0, 0.08));
-    border: 1px solid rgba(204, 217, 0, 0.35);
+    background: linear-gradient(135deg, rgba(107, 142, 111, 0.18), rgba(107, 142, 111, 0.08));
+    border: 1px solid rgba(107, 142, 111, 0.35);
     border-radius: 8px;
     color: var(--text-1);
     font-size: 12px; font-weight: 600;
@@ -567,8 +577,8 @@
     transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
   }
   .design-check-menu .dc-sprout-cta:hover {
-    background: linear-gradient(135deg, rgba(204, 217, 0, 0.28), rgba(204, 217, 0, 0.12));
-    border-color: rgba(204, 217, 0, 0.55);
+    background: linear-gradient(135deg, rgba(107, 142, 111, 0.28), rgba(107, 142, 111, 0.12));
+    border-color: rgba(107, 142, 111, 0.55);
   }
   .design-check-menu .dc-sprout-cta:disabled { opacity: 0.6; cursor: progress; }
   .design-check-menu .dc-sprout-cta .em { font-size: 14px; }
@@ -617,7 +627,7 @@
     border-radius: 7px;
     transition: border-color var(--t-fast) ease, background var(--t-fast) ease;
   }
-  .design-check-menu .dc-apply-card:hover { border-color: rgba(204, 217, 0, 0.4); }
+  .design-check-menu .dc-apply-card:hover { border-color: rgba(107, 142, 111, 0.4); }
   .design-check-menu .dc-apply-card.applied {
     background: rgba(123, 189, 59, 0.08);
     border-color: rgba(123, 189, 59, 0.35);
@@ -937,7 +947,7 @@
   .palette-item:active { cursor: grabbing; transform: translateY(0); }
   .palette-item .icon {
     width: 32px; height: 32px;
-    background: rgba(204, 217, 0, .08);
+    background: rgba(107, 142, 111, .08);
     border-radius: var(--r-md);
     display: flex; align-items: center; justify-content: center;
     color: var(--accent);
@@ -997,7 +1007,7 @@
   .canvas {
     background: var(--bg-canvas);
     background-image:
-      radial-gradient(ellipse at top, rgba(204, 217, 0, .025), transparent 50%),
+      radial-gradient(ellipse at top, rgba(107, 142, 111, .025), transparent 50%),
       radial-gradient(ellipse at bottom, rgba(54, 83, 41, .035), transparent 50%);
     overflow-y: auto;
     overflow-x: auto;
@@ -1128,14 +1138,14 @@
      have to parse DevTools jargon before they know whether this is the
      right modal for them. */
   .pp-lead {
-    background: rgba(204, 217, 0, .08);
-    border: 1px solid rgba(204, 217, 0, .25);
+    background: rgba(107, 142, 111, .08);
+    border: 1px solid rgba(107, 142, 111, .25);
     border-radius: var(--r-md);
     padding: 12px 14px;
     margin-bottom: 16px;
     font-size: 13px; color: var(--text-1); line-height: 1.5;
   }
-  .pp-lead b { color: var(--accent-hi, #ccd900); }
+  .pp-lead b { color: var(--accent-hi, #6B8E6F); }
   .pp-lead .pp-lead-sub { color: var(--text-2); font-size: 11.5px; margin-top: 4px; }
   /* Numbered step list — each step is a bordered row with a circled
      number on the left. Way easier to follow than a wall of inline
@@ -1340,12 +1350,12 @@
   .block-wrap:active { cursor: grabbing; }
   .block-wrap:hover { outline-color: rgba(26, 35, 20, .15); }
   .block-wrap.selected {
-    /* Muted olive — was the full `--accent` (#ccd900) which read as
+    /* Muted olive — was the full `--accent` (#6B8E6F) which read as
        neon-bright against the cream canvas. The darker shade keeps a
        brand-tinted selection without dominating the page. */
-    outline-color: #6a7400;
+    outline-color: #6B8E6F;
     outline-width: 1.5px;
-    box-shadow: 0 0 0 3px rgba(106, 116, 0, .08);
+    box-shadow: 0 0 0 3px rgba(107, 142, 111, .08);
     z-index: 3;
   }
   /* Brief "ping" pulse when the user clicks Locate from the Design
@@ -1358,9 +1368,9 @@
     z-index: 4;
   }
   @keyframes dc-located-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(204, 217, 0, .55), 0 0 0 0 rgba(204, 217, 0, .25); outline-color: #ccd900; }
-    35%  { box-shadow: 0 0 0 8px rgba(204, 217, 0, .35), 0 0 0 14px rgba(204, 217, 0, .12); outline-color: #ccd900; }
-    100% { box-shadow: 0 0 0 3px rgba(106, 116, 0, .08), 0 0 0 0 rgba(204, 217, 0, 0); outline-color: #6a7400; }
+    0%   { box-shadow: 0 0 0 0 rgba(107, 142, 111, .55), 0 0 0 0 rgba(107, 142, 111, .25); outline-color: #6B8E6F; }
+    35%  { box-shadow: 0 0 0 8px rgba(107, 142, 111, .35), 0 0 0 14px rgba(107, 142, 111, .12); outline-color: #6B8E6F; }
+    100% { box-shadow: 0 0 0 3px rgba(107, 142, 111, .08), 0 0 0 0 rgba(107, 142, 111, 0); outline-color: #6B8E6F; }
   }
   body.dragging .block-wrap.dragging-self {
     opacity: .35;
@@ -1423,18 +1433,18 @@
     content: '';
     position: absolute; top: 50%; left: 22px; right: 22px;
     height: 2px; transform: translateY(-50%);
-    background: repeating-linear-gradient(90deg, rgba(204, 217, 0, .35) 0 6px, transparent 6px 12px);
+    background: repeating-linear-gradient(90deg, rgba(107, 142, 111, .35) 0 6px, transparent 6px 12px);
     border-radius: 1px;
   }
   body.dragging .drop-zone.tail { height: 64px; }
   body.dragging .drop-zone.tail::after {
     top: 50%; left: 18px; right: 18px; height: 2px;
   }
-  .drop-zone.hover { height: 56px; background: rgba(204, 217, 0, .08); }
+  .drop-zone.hover { height: 56px; background: rgba(107, 142, 111, .08); }
   .drop-zone.hover::after {
     background: var(--accent);
     height: 2px;
-    box-shadow: 0 0 12px rgba(204, 217, 0, .4);
+    box-shadow: 0 0 12px rgba(107, 142, 111, .4);
   }
   .drop-zone.hover::before {
     content: 'Drop here';
@@ -1465,7 +1475,7 @@
   }
   .inspector-head .type-row .icon {
     width: 22px; height: 22px;
-    background: rgba(204, 217, 0, .1);
+    background: rgba(107, 142, 111, .1);
     border-radius: var(--r-sm);
     display: flex; align-items: center; justify-content: center;
     color: var(--accent);
@@ -1502,7 +1512,7 @@
     transition: border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
   }
   input:focus, select:focus, textarea:focus {
-    border-color: rgba(204, 217, 0, .45);
+    border-color: rgba(107, 142, 111, .45);
     box-shadow: 0 0 0 3px var(--ring);
   }
   input:hover:not(:focus), select:hover:not(:focus), textarea:hover:not(:focus) {
@@ -1532,7 +1542,7 @@
   }
   .chip:hover { border-color: var(--line-strong); color: var(--text-1); }
   .chip.on {
-    background: rgba(204, 217, 0, .15);
+    background: rgba(107, 142, 111, .15);
     border-color: var(--accent);
     color: var(--accent-hi);
   }
@@ -1576,7 +1586,7 @@
   }
   .product-picker .item:last-child { border-bottom: 0; }
   .product-picker .item:hover { background: var(--bg-elev-1); }
-  .product-picker .item.on { background: rgba(204, 217, 0, .07); }
+  .product-picker .item.on { background: rgba(107, 142, 111, .07); }
   .product-picker .item .thumb {
     width: 36px; height: 36px;
     background: var(--bg-elev-2);
@@ -1661,7 +1671,7 @@
     transition: border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
   }
   .txt-pair-row:focus-within {
-    border-color: rgba(204, 217, 0, .45);
+    border-color: rgba(107, 142, 111, .45);
     box-shadow: 0 0 0 3px var(--ring);
   }
   .txt-pair-row .lang-tag {
@@ -3256,6 +3266,104 @@
     text-transform: uppercase; letter-spacing: .08em;
   }
   .help-card .close:hover { color: var(--text-1); }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     FULL CIRCLE SKIN — brand-language overrides layered on top of the
+     base chrome. Keeps the editor's IA + layout; restyles the surface.
+       · Top bar is Ink Charcoal in BOTH themes (the signature look).
+       · Wordmark FULL CIRCLE (Plex Sans bold caps) + brass middot.
+       · Ensō logo mark (brass + tea rings).
+       · Publish = Aged Brass (the one primary action). Tea = selection/live.
+       · Section labels in Plex Mono, Aged Brass, wide tracking.
+     The phone-preview customer brand (fonts + --b-* colours) is untouched.
+     ═══════════════════════════════════════════════════════════════════ */
+  .topbar {
+    background: var(--chrome-bg);
+    border-bottom: 1px solid rgba(232, 229, 220, .08);
+  }
+  /* Brand lockup ------------------------------------------------------ */
+  .topbar .brand { color: var(--chrome-fg); }
+  .brand-mark {
+    background: transparent;
+    border: 1px solid rgba(232, 229, 220, .15);
+    box-shadow: none;
+    color: var(--chrome-fg);
+  }
+  .brand .wordmark {
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--chrome-fg);
+  }
+  .brand .brass-dot { color: var(--brass); margin: 0 2px; font-weight: 700; }
+  .brand .sub {
+    font-family: var(--f-mono);
+    font-size: 10px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: rgba(232, 229, 220, .60);
+    font-weight: 500;
+  }
+  /* Top-bar controls on the dark chrome ------------------------------- */
+  .topbar .who {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: .04em;
+    color: rgba(232, 229, 220, .45);
+  }
+  .topbar .topbar-link { color: rgba(232, 229, 220, .60); }
+  .topbar .topbar-link:hover { background: rgba(232, 229, 220, .08); color: var(--chrome-fg); }
+  .topbar .btn {
+    background: transparent;
+    color: var(--chrome-fg);
+    border-color: rgba(232, 229, 220, .15);
+  }
+  .topbar .btn:hover { background: rgba(232, 229, 220, .08); border-color: rgba(232, 229, 220, .26); }
+  .topbar .btn-icon { color: rgba(232, 229, 220, .60); }
+  .topbar .page-picker {
+    background: rgba(232, 229, 220, .06);
+    border-color: rgba(232, 229, 220, .12);
+    color: var(--chrome-fg);
+  }
+  .topbar .page-picker:hover { background: rgba(232, 229, 220, .10); border-color: rgba(232, 229, 220, .20); }
+  .topbar .page-picker .name { color: var(--chrome-fg); }
+  .topbar .page-picker .label { color: rgba(232, 229, 220, .50); }
+  .topbar .page-picker .chev { color: rgba(232, 229, 220, .50); }
+  .topbar .status-pill {
+    background: rgba(232, 229, 220, .06);
+    border-color: rgba(232, 229, 220, .10);
+    color: rgba(232, 229, 220, .70);
+  }
+  /* Publish — the single Aged Brass primary action -------------------- */
+  .btn-primary {
+    background: var(--brass);
+    border-color: var(--brass);
+    color: #12161A;
+  }
+  .btn-primary:hover { background: var(--brass-hi); border-color: var(--brass-hi); }
+  /* "Unsaved changes" — Tea Green pulsing dot (the system is live) ----- */
+  .status-pill.clean .dot,
+  .status-pill.dirty .dot { background: var(--accent); }
+  .status-pill.dirty {
+    color: rgba(232, 229, 220, .80);
+    border-color: rgba(107, 142, 111, .30);
+  }
+  .status-pill.dirty .dot {
+    animation: fc-live-pulse 2.5s ease-in-out infinite;
+  }
+  @keyframes fc-live-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(107, 142, 111, .45); }
+    50%      { box-shadow: 0 0 0 5px rgba(107, 142, 111, 0); }
+  }
+  /* Section labels — Plex Mono, Aged Brass, wide tracking ------------- */
+  .pane-section h3 {
+    font-family: var(--f-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .26em;
+    color: var(--brass);
+  }
 </style>
 </head>
 <body>
@@ -3263,9 +3371,21 @@
 <!-- ═══════════════ TOPBAR ═══════════════ -->
 <div class="topbar">
   <div class="brand">
-    <div class="brand-mark">R</div>
-    <span>Roots</span>
-    <span class="divider"></span>
+    <div class="brand-mark" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 24 24">
+        <!-- Outer Aged Brass ring, cut ~48°/228° -->
+        <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.55"
+                stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
+        <!-- Inner Tea Green ring, cut ~40°/220° (staggered) -->
+        <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.55"
+                stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
+        <!-- Ensō — imperfect open circle in currentColor -->
+        <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1"
+              fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <span class="wordmark">FULL CIRCLE</span>
+    <span class="brass-dot" aria-hidden="true">·</span>
     <span class="sub">Mini App Editor</span>
   </div>
   <!-- PAGE picker stays in the topbar — page-switching is a navigation
@@ -3944,8 +4064,8 @@ const TABBAR_ICONS = {
 const TABBAR_THEMES = {
   oat:    { bg: '#F2E7DF', color: '#7a6f64', active: '#365329', border: 'rgba(0,0,0,0.06)',  label: 'Oat',    label_cn: '燕麦', sub: 'Warm cream', sub_cn: '温暖奶油' },
   paper:  { bg: '#FBF6E8', color: '#8a8174', active: '#365329', border: 'rgba(0,0,0,0.06)',  label: 'Paper',  label_cn: '纸白', sub: 'Off-white',  sub_cn: '米白' },
-  forest: { bg: '#2a3a22', color: '#a8b8a0', active: '#ccd900', border: 'rgba(255,255,255,0.06)', label: 'Forest', label_cn: '森绿', sub: 'Night',  sub_cn: '夜色' },
-  lime:   { bg: '#ccd900', color: '#5a6300', active: '#16161a', border: 'rgba(0,0,0,0.10)',  label: 'Lime',   label_cn: '青柠', sub: 'Brand bold', sub_cn: '品牌亮色' },
+  forest: { bg: '#2a3a22', color: '#a8b8a0', active: '#CCD900', border: 'rgba(255,255,255,0.06)', label: 'Forest', label_cn: '森绿', sub: 'Night',  sub_cn: '夜色' },
+  lime:   { bg: '#CCD900', color: '#5a6300', active: '#16161a', border: 'rgba(0,0,0,0.10)',  label: 'Lime',   label_cn: '青柠', sub: 'Brand bold', sub_cn: '品牌亮色' },
 };
 const TABBAR_STYLES = [
   { key: 'outline', label: 'Outline', label_cn: '描边' },
@@ -9246,7 +9366,7 @@ function cmsApplyThemeIcon() {
   if (showSun)  showSun.style.display  = t === 'dark'  ? '' : 'none';
   if (showMoon) showMoon.style.display = t === 'light' ? '' : 'none';
   const meta = $('#meta-theme-color');
-  if (meta) meta.setAttribute('content', t === 'light' ? '#ece6d8' : '#16161a');
+  if (meta) meta.setAttribute('content', t === 'light' ? '#E8E5DC' : '#12161A');
 }
 function cmsToggleTheme() {
   const current = document.documentElement.getAttribute('data-theme') || 'dark';
@@ -9560,7 +9680,7 @@ document.addEventListener('keydown', (e) => {
     transition: color var(--t-fast) ease, background var(--t-fast) ease;
   }
   .lp-mode-seg button:hover { color: var(--text-1, #fff); }
-  .lp-mode-seg button.active { background: var(--accent, #ccd900); color: var(--accent-ink, #1a1a17); }
+  .lp-mode-seg button.active { background: var(--accent, #6B8E6F); color: var(--accent-ink, #1a1a17); }
   .lp-head {
     padding: 14px 18px;
     display: flex; align-items: center; justify-content: space-between;
