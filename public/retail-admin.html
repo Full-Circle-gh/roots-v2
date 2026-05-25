@@ -19,6 +19,13 @@
     } catch (e) {
       document.documentElement.setAttribute('data-theme', 'dark');
     }
+    // UI scale (text size) — apply BEFORE first paint too, so the backend
+    // doesn't visibly resize after load. Default 110%. Toggle: cuCycleUiScale.
+    try {
+      var s = parseFloat(localStorage.getItem('retail-admin-ui-scale'));
+      if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
+      document.documentElement.style.zoom = String(s);
+    } catch (e) {}
   })();
 </script>
 
@@ -3327,6 +3334,10 @@
   </div>
   <div class="grow"></div>
   <span class="who" id="who"></span>
+  <button class="topbar-link" id="ui-scale-toggle" type="button" onclick="cuCycleUiScale()" title="Text size · 字号" style="border:none;background:transparent;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+    <span style="font-weight:700;line-height:1;"><span style="font-size:16px;">A</span><span style="font-size:10px;">A</span></span>
+    <span class="ui-scale-val" style="font-size:11px;font-weight:600;letter-spacing:.02em;">110%</span>
+  </button>
   <button class="topbar-link" id="theme-toggle" type="button" onclick="cuToggleTheme()" title="Toggle light / dark mode · 切换浅色 / 深色模式" style="border: none; background: transparent; cursor: pointer;">
     <svg id="theme-icon-dark"  viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; display: none;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     <svg id="theme-icon-light" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; display: none;"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2"  x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2"  y1="12" x2="4"  y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93"  y1="4.93"  x2="6.34"  y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="4.93"  y1="19.07" x2="6.34"  y2="17.66"/><line x1="17.66" y1="6.34"  x2="19.07" y2="4.93"/></svg>
@@ -15395,6 +15406,30 @@ function cuToggleTheme() {
   cuSetTheme(current === 'dark' ? 'light' : 'dark');
 }
 cuApplyThemeIcon();
+
+// ── UI scale (text size) ──
+// The whole backend is px-based, so instead of rewriting hundreds of sizes
+// we scale the document with `zoom` — text, spacing, icons and modals all
+// grow together. Cycles 100 → 110 → 125%, persisted per operator, default
+// 110%. The initial value is also applied pre-paint in the <head> script.
+const UI_SCALES = [1, 1.1, 1.25];
+function cuGetUiScale() {
+  let v = parseFloat(localStorage.getItem('retail-admin-ui-scale'));
+  if (!UI_SCALES.includes(v)) v = 1.1;
+  return v;
+}
+function cuApplyUiScale(v) {
+  document.documentElement.style.zoom = String(v);
+  const lbl = document.querySelector('#ui-scale-toggle .ui-scale-val');
+  if (lbl) lbl.textContent = Math.round(v * 100) + '%';
+}
+function cuCycleUiScale() {
+  const next = UI_SCALES[(UI_SCALES.indexOf(cuGetUiScale()) + 1) % UI_SCALES.length];
+  try { localStorage.setItem('retail-admin-ui-scale', String(next)); } catch (e) {}
+  cuApplyUiScale(next);
+  if (typeof toast === 'function') toast('Text size · 字号 → ' + Math.round(next * 100) + '%');
+}
+cuApplyUiScale(cuGetUiScale());
 
 
 // ── i18n / Language toggle ──
