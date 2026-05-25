@@ -458,7 +458,8 @@
     font-size: 10px; text-transform: uppercase; letter-spacing: .14em;
     color: var(--text-3); font-weight: 500;
   }
-  .db-kpi .val { font-size: 23px; font-weight: 700; color: var(--text-1); font-variant-numeric: tabular-nums; line-height: 1.1; }
+  /* Headline stat — Plex Sans Light billboard number (brand: never bold). */
+  .db-kpi .val { font-size: 32px; font-weight: 300; letter-spacing: -.01em; color: var(--text-1); font-variant-numeric: tabular-nums; line-height: 1.05; }
   /* Revenue is the hero financial signal — Tea Green per the brand. */
   .db-kpi.accent .val { color: var(--accent); }
   .db-kpi .sub { font-size: 11px; color: var(--text-3); }
@@ -532,7 +533,7 @@
 
   .db-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: var(--s2); }
   .db-tile { background: var(--bg-elev-1); border-radius: var(--r-md); padding: var(--s3); text-align: center; }
-  .db-tile .t-val { font-size: 18px; font-weight: 700; color: var(--text-1); font-variant-numeric: tabular-nums; }
+  .db-tile .t-val { font-size: 20px; font-weight: 300; color: var(--text-1); font-variant-numeric: tabular-nums; }
   .db-tile .t-lbl { font-family: var(--f-mono); font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: .12em; }
   .db-muted { color: var(--text-3); font-size: 12px; padding: var(--s3) 0; }
   .db-pill { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 10px; font-weight: 600; background: var(--bg-elev-2); color: var(--text-2); }
@@ -1741,7 +1742,9 @@
     background: var(--bg-elev-1); color: var(--text-3);
   }
   .dz-type-chip.gz   { background: rgba(107, 142, 111, .12); color: var(--accent-hi);  border-color: rgba(107, 142, 111, .35); }
-  .dz-type-chip.city { background: rgba(178, 207, 237, .12); color: var(--st-paid);  border-color: rgba(178, 207, 237, .35); }
+  /* CITY = neutral ink chip (was an off-palette light-blue). GZ stays Tea so
+     the two zone types still read apart, on-palette. */
+  .dz-type-chip.city { background: var(--bg-elev-1); color: var(--text-2); border-color: var(--line); }
   .dz-extras { color: var(--text-3); font-size: 11px; }
   .dz-sd-yes { color: var(--st-delivered); font-weight: 600; }
   .dz-sd-no  { color: var(--text-4); }
@@ -2487,18 +2490,40 @@
   /* Inline help icon — sits next to a label/header. Used in <th>, drawer
      <label>s, and any other context that needs a "?" tooltip. The popup
      shows below the icon so a parent overflow:hidden can't clip it. */
+  /* Info markers carry the Aged Brass attention accent (Full Circle: brass =
+     info/attention), kept subtle at ~70% so dense forms don't shout. */
   .help-i {
     position: relative;
     display: inline-flex; align-items: center; justify-content: center;
     width: 14px; height: 14px;
     margin-left: 4px;
-    border: 1px solid var(--text-3); border-radius: 50%;
+    border: 1px solid rgba(176, 141, 74, .45); border-radius: 50%;
     font-size: 9px; font-weight: 700; line-height: 1;
-    color: var(--text-3);
+    color: rgba(176, 141, 74, .85);
     cursor: help; vertical-align: middle;
     text-transform: none; letter-spacing: 0;
   }
-  .help-i:hover { color: var(--text-1); border-color: var(--text-1); }
+  .help-i:hover { color: var(--brass); border-color: var(--brass); }
+
+  /* Tea-green toggle switch — a real on/off slider (replaces bare checkboxes
+     where a stateful toggle reads better than a tickbox, e.g. Holiday mode). */
+  .fc-switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .fc-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .fc-switch-track {
+    position: relative; flex-shrink: 0;
+    width: 38px; height: 20px; border-radius: 999px;
+    background: var(--bg-elev-2); border: 1px solid var(--line);
+    transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
+  }
+  .fc-switch-track::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--text-2);
+    transition: transform var(--t-fast) ease, background var(--t-fast) ease;
+  }
+  .fc-switch input:checked + .fc-switch-track { background: var(--accent); border-color: var(--accent); }
+  .fc-switch input:checked + .fc-switch-track::after { transform: translateX(18px); background: var(--accent-ink); }
+  .fc-switch input:focus-visible + .fc-switch-track { box-shadow: 0 0 0 3px var(--ring); }
   /* Help tooltip — a single popup appended to <body> and positioned by JS
      (see the help-tip controller). position:fixed + viewport clamping means
      it never clips inside a scrollable drawer or at a screen edge, so we no
@@ -3790,6 +3815,11 @@
       @media (max-width: 720px) { .cu-detail-pairs { grid-template-columns: 1fr; } }
       .cu-openid { font-family: var(--f-mono); font-size: 11px; color: var(--text-4); letter-spacing: .02em; user-select: text; }
 
+      /* List table: zero metrics fade to the background so active customers
+         stand out (matches the drawer's zero-muting). */
+      #cu-table td.cu-num { font-variant-numeric: tabular-nums; }
+      #cu-table td.cu-num.is-zero { color: var(--text-4); }
+
       /* Address card — white card, 1px hairline; Edit (neutral) + Delete
          (brass ghost). Address text truncates to one line. */
       .cu-addr { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: var(--r-sm); padding: 12px 14px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
@@ -4773,8 +4803,9 @@
       <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
         <div class="field" style="margin: 0;">
           <label class="stacked">Status · 状态</label>
-          <label class="switch" style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer;">
-            <input type="checkbox" id="dlv-holiday-mode" style="width: 18px; height: 18px;">
+          <label class="fc-switch">
+            <input type="checkbox" id="dlv-holiday-mode">
+            <span class="fc-switch-track"></span>
             <span id="dlv-holiday-status-label" style="font-size: 12px;">OFF · 关闭</span>
           </label>
         </div>
@@ -12893,16 +12924,16 @@ async function cuLoad() {
       <tr class="cu-row" style="cursor: pointer;" onclick="cuOpenDetail(${r.id})">
         <td class="muted">${r.id}</td>
         <td>
-          <div style="font-weight: 600;">${escapeHtml(r.nickname || '—')}</div>
+          <div style="font-weight: 500;">${escapeHtml(r.nickname || '—')}</div>
         </td>
         <td>${escapeHtml(r.phone || '—')}</td>
         <td>
           <span class="cu-pill tier-${escapeHtml(r.tier_key || 'seed')}">${escapeHtml(r.tier_key || 'seed')}</span>
           ${r.is_blocked ? ' <span class="cu-pill blocked">Blocked</span>' : ''}
         </td>
-        <td class="numeric">${r.orders_count || 0}</td>
-        <td class="numeric">${r.points_balance || 0}</td>
-        <td class="numeric">¥${Number(r.balance || 0).toFixed(2)}</td>
+        <td class="numeric cu-num ${(r.orders_count || 0) === 0 ? 'is-zero' : ''}">${r.orders_count || 0}</td>
+        <td class="numeric cu-num ${(r.points_balance || 0) === 0 ? 'is-zero' : ''}">${r.points_balance || 0}</td>
+        <td class="numeric cu-num ${Number(r.balance || 0) === 0 ? 'is-zero' : ''}">¥${Number(r.balance || 0).toFixed(2)}</td>
         <td class="muted">${cuFmtTime(r.last_login_at) || '—'}</td>
       </tr>
     `).join('');
