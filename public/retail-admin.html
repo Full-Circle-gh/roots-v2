@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" id="meta-theme-color" content="#16161a">
+<meta name="theme-color" id="meta-theme-color" content="#12161A">
 <title>Roots · Mini App Backend</title>
 <script>
   // Apply theme BEFORE first paint to prevent flash. Reads saved choice
@@ -21,6 +21,13 @@
     }
   })();
 </script>
+
+<!-- Full Circle backend chrome type — IBM Plex Sans / Mono (+ SC for 中文).
+     Same stack the Mini App Editor (/cms) loads. Brand display fonts below
+     stay for the mini-app product previews. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   /* Brand fonts — used by mini-app previews (Products tab / Designer
      Sections, future popup previews). Same files /cms loads. */
@@ -39,44 +46,51 @@
      DESIGN TOKENS (mirror of /cms)
      ═══════════════════════════════════════════════════════════════════ */
   :root {
-    --bg-app:     #16161a;
-    --bg-pane:    #1f1f24;
-    --bg-elev-1:  #25252b;
-    --bg-elev-2:  #2e2e35;
-    --bg-input:   #1a1a1f;
-    --bg-overlay: rgba(10, 10, 12, .72);
+    /* ── Full Circle palette · dark-mode-first ──
+       Ink Charcoal canvas, Deeper Paper type, strict Tea + Brass accents.
+       Tea = active / live / positive; Brass = primary action / attention. */
+    --bg-app:     #12161A;   /* Ink Charcoal */
+    --bg-pane:    #1A1F24;   /* lifted Ink — cards / topbar */
+    --bg-elev-1:  #1F252B;
+    --bg-elev-2:  #262E35;
+    --bg-input:   #12161A;
+    --bg-overlay: rgba(8, 10, 12, .72);
 
-    --line-soft:  rgba(255, 255, 255, .055);
-    --line:       rgba(255, 255, 255, .09);
-    --line-strong: rgba(255, 255, 255, .15);
-    --ring:       rgba(204, 217, 0, .35);
+    --line-soft:  rgba(232, 229, 220, .06);
+    --line:       rgba(232, 229, 220, .10);
+    --line-strong: rgba(232, 229, 220, .16);
+    --ring:       rgba(107, 142, 111, .40);   /* Tea focus */
 
-    --text-1:     #ecebe5;
-    --text-2:     #aeaba2;
+    --text-1:     #E8E5DC;   /* Deeper Paper */
+    --text-2:     #AEABA2;
     --text-3:     #7d7a72;
     --text-4:     #56544f;
 
-    --accent:     #ccd900;
-    --accent-hi:  #dde858;
-    --accent-ink: #16161a;
+    --accent:     #6B8E6F;   /* Tea Green — active / selected / live */
+    --accent-hi:  #7BA07F;
+    --accent-ink: #12161A;
+    --brass:      #B08D4A;   /* Aged Brass — primary action / attention */
+    --brass-hi:   #C29B54;
+    --lime:       #6B8E6F;   /* legacy alias → Tea */
     --danger:     #e8556a;
     --danger-soft: rgba(232, 85, 106, .14);
-    --warn:       #e9a35a;
-    --success:    #80c462;
+    --warn:       #B08D4A;   /* attention = Brass */
+    --success:    #6B8E6F;   /* positive = Tea */
 
-    /* Order status pill colors — muted, dark-theme friendly */
-    --st-pending_payment: #e9a35a;
-    --st-paid:            #b2cfed;
-    --st-preparing:       #f2ca6c;
-    --st-dispatched:      #7bbd3b;
-    --st-delivered:       #80c462;
+    /* Order status colors — mapped onto the strict Tea + Brass + neutral
+       system. Tea = money-in / done (paid, delivered); Brass = needs-action
+       / in-flight (pending, preparing, dispatched, awaiting restock);
+       neutral = closed (cancelled, refunded). */
+    --st-pending_payment: #B08D4A;
+    --st-paid:            #6B8E6F;
+    --st-preparing:       #B08D4A;
+    --st-dispatched:      #B08D4A;
+    --st-delivered:       #6B8E6F;
     --st-cancelled:       #8a8780;
-    --st-refunded:        #e8556a;
+    --st-refunded:        #8a8780;
     /* Awaiting-restock: order paid + parked, waiting for missing items to
-       arrive at the routed store before it can move to preparing. Lilac
-       tint so it reads as "paused / standby" and doesn't get confused with
-       Pending (warm) or Paid (cool blue). */
-    --st-awaiting_restock: #b8a3d9;
+       arrive before it can move to preparing. Brass = attention/standby. */
+    --st-awaiting_restock: #B08D4A;
 
     --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s7: 32px;
     --r-sm: 4px; --r-md: 6px; --r-lg: 10px; --r-xl: 14px;
@@ -85,8 +99,8 @@
     --sh-2: 0 4px 16px rgba(0, 0, 0, .25);
     --sh-3: 0 24px 60px rgba(0, 0, 0, .5);
 
-    --f-sans:  -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', system-ui, sans-serif;
-    --f-mono:  ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+    --f-sans:  'IBM Plex Sans', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+    --f-mono:  'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
 
     --ease-out: cubic-bezier(.16, 1, .3, 1);
     --t-fast: 120ms;
@@ -99,39 +113,35 @@
      so there is no flash on load. Toggle persists to localStorage.
      ═══════════════════════════════════════════════════════════════════ */
   :root[data-theme="light"] {
-    /* Oat-paper palette — warmer + slightly darker than near-white.
-       2026-05-20 dim pass: dropped every surface 5-7% lightness because
-       the prior cream (#fbf8ee / #fefcf3) glowed on calibrated displays.
-       Hue preserved, just less brightness; borders + shadows nudged
-       a touch stronger so layer separation survives the dim. */
-    --bg-app:     #e3ddcc;   /* was #ece6d8 */
-    --bg-pane:    #f0ebdd;   /* was #fbf8ee — primary card surface */
-    --bg-elev-1:  #eae3d2;   /* was #f4efdf */
-    --bg-elev-2:  #ddd6c2;   /* was #e9e3d0 */
-    --bg-input:   #f5f1e3;   /* was #fefcf3 — inputs no longer pure-white */
-    --bg-overlay: rgba(20, 20, 22, .46);
+    /* Full Circle light — Deeper Paper page, white cards, Ink type.
+       Tea + Brass carry across themes unchanged (just darkened a touch
+       for legibility on the light ground). */
+    --bg-app:     #E8E5DC;   /* Deeper Paper */
+    --bg-pane:    #FFFFFF;    /* white cards / chrome */
+    --bg-elev-1:  #F1EEE7;
+    --bg-elev-2:  #E3DFD5;
+    --bg-input:   #FFFFFF;
+    --bg-overlay: rgba(18, 22, 26, .46);
 
-    /* Slightly stronger lines so cards still have visible edges on the
-       deeper cream. */
-    --line-soft:   rgba(30, 25, 5, .085);
-    --line:        rgba(30, 25, 5, .18);
-    --line-strong: rgba(30, 25, 5, .28);
-    --ring:        rgba(140, 152, 0, .38);
+    /* Ink-alpha lines (brand: 1px @ 8% borders instead of shadows). */
+    --line-soft:   rgba(18, 22, 26, .07);
+    --line:        rgba(18, 22, 26, .12);
+    --line-strong: rgba(18, 22, 26, .20);
+    --ring:        rgba(107, 142, 111, .40);   /* Tea focus */
 
-    /* Text colours nudged darker for legibility on cream — especially
-       --text-3, which is used for kicker labels and muted hints. */
-    --text-1: #1a1a17;
+    --text-1: #12161A;   /* Ink Charcoal */
     --text-2: #43413a;
     --text-3: #6a675c;
     --text-4: #9a978c;
 
-    /* 2026-05-20 lime dim: the dark-theme --accent (#ccd900) read as neon
-       on cream surfaces. Drop it to a confident olive-lime in light mode
-       only; dark mode keeps #ccd900 because the dark bg balances it. */
-    --accent:     #b1bd00;
-    --accent-hi:  #9ea800;   /* darker hover on light bg for legibility */
-    --accent-ink: #16161a;
-    --lime:       #b1bd00;   /* keep legacy alias in step with --accent */
+    --accent:     #6B8E6F;   /* Tea Green */
+    --accent-hi:  #5E7E62;   /* darker tea hover on light */
+    --accent-ink: #12161A;
+    --brass:      #B08D4A;   /* Aged Brass */
+    --brass-hi:   #9D7C3F;   /* darker brass hover on light */
+    --lime:       #6B8E6F;   /* legacy alias → Tea */
+    --warn:       #B08D4A;
+    --success:    #6B8E6F;
     --danger-soft: rgba(232, 85, 106, .11);
 
     /* Warm-tinted shadows so cards feel like paper sitting on a desk
@@ -149,18 +159,19 @@
   :root[data-theme="light"] select {
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23767369' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
   }
-  /* Brand mark gradient looks washed out on white — anchor the dark side. */
+  /* Brand mark is an ensō on an Ink backplate in both themes — keep it
+     Ink so it reads the same on Deeper Paper as on the dark canvas. */
   :root[data-theme="light"] .brand-mark {
-    background: linear-gradient(135deg, var(--accent), #98a300);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, .15);
+    background: #12161A;
+    box-shadow: none;
   }
   /* Tier / status pills used a translucent overlay tuned for the dark bg.
-     Bump opacity so they read on white. */
+     Bump opacity so they read on white. SEED = Tea per Full Circle. */
   :root[data-theme="light"] .cu-pill                { background: rgba(0, 0, 0, .06); color: var(--text-2); }
-  :root[data-theme="light"] .cu-pill.tier-seed      { background: rgba(168, 199, 90, .22);  color: #5e7028; }
-  :root[data-theme="light"] .cu-pill.tier-sprout    { background: rgba(204, 217, 0,  .22);  color: #6a7400; }
-  :root[data-theme="light"] .cu-pill.tier-root      { background: rgba(232, 122, 58, .22);  color: #9c4a18; }
-  :root[data-theme="light"] .cu-pill.tier-tree      { background: rgba(196, 58, 106, .22);  color: #8a1f45; }
+  :root[data-theme="light"] .cu-pill.tier-seed      { background: rgba(107, 142, 111, .18);  color: #4e6b52; }
+  :root[data-theme="light"] .cu-pill.tier-sprout    { background: rgba(107, 142, 111, .14);  color: #5e7e62; }
+  :root[data-theme="light"] .cu-pill.tier-root      { background: rgba(176, 141, 74, .20);   color: #8a6a2e; }
+  :root[data-theme="light"] .cu-pill.tier-tree      { background: rgba(176, 141, 74, .26);   color: #6f521f; }
   :root[data-theme="light"] .cu-pill.blocked        { background: rgba(232, 85, 106, .18);  color: #a01f33; }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -189,18 +200,34 @@
     position: sticky; top: 0; z-index: 10;
   }
   .brand {
-    display: flex; align-items: center; gap: var(--s3);
-    font-weight: 600; font-size: 13px; color: var(--text-1);
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--text-1);
   }
+  /* Full Circle mark — ensō on a quiet Ink backplate (rings stay
+     Brass + Tea; main stroke is Paper so it reads in both themes). */
   .brand-mark {
     width: 26px; height: 26px; border-radius: var(--r-md);
-    background: linear-gradient(135deg, var(--accent), #b3bf00);
+    background: #12161A;
+    border: 1px solid var(--line-strong);
     display: flex; align-items: center; justify-content: center;
-    color: var(--accent-ink); font-weight: 700; font-size: 13px;
-    box-shadow: var(--sh-1);
+    color: #E8E5DC;
+    box-shadow: none;
   }
-  .brand .divider { width: 1px; height: 16px; background: var(--line); margin: 0 4px; }
-  .brand .sub { color: var(--text-3); font-weight: 500; }
+  .brand-mark svg { width: 18px; height: 18px; display: block; }
+  .brand .brand-name {
+    font-family: var(--f-sans); font-weight: 700; font-size: 12px;
+    letter-spacing: .20em; text-transform: uppercase; color: var(--text-1);
+  }
+  .brand .divider {
+    width: auto; height: auto; background: none; margin: 0 1px;
+    color: var(--brass); font-size: 13px; line-height: 1;
+  }
+  .brand .divider::before { content: '·'; }
+  .brand .sub {
+    font-family: var(--f-mono); color: var(--text-3);
+    font-weight: 400; font-size: 10px;
+    letter-spacing: .18em; text-transform: uppercase;
+  }
   .grow { flex: 1; }
   .who { font-size: 12px; color: var(--text-3); }
   .topbar-link {
@@ -232,7 +259,7 @@
     display: inline-flex; align-items: center; gap: 6px;
   }
   .tabs button:hover { color: var(--text-1); }
-  .tabs button.active { color: var(--text-1); border-bottom-color: var(--accent); }
+  .tabs button.active { color: var(--text-1); border-bottom-color: var(--brass); }
   .tabs button svg { width: 14px; height: 14px; }
 
   /* Unseen-orders notification on the Orders tab. Hidden by default;
@@ -276,7 +303,7 @@
   /* Grouped category dropdowns inside the tab bar. Trigger sits inline with
      direct tabs; popover drops below + uses .tabs-popover-item styling. */
   .tabs-group { position: relative; display: inline-flex; }
-  .tabs-group.has-active > .tabs-group-trigger { color: var(--text-1); border-bottom-color: var(--accent); }
+  .tabs-group.has-active > .tabs-group-trigger { color: var(--text-1); border-bottom-color: var(--brass); }
   .tabs-chev { width: 10px !important; height: 10px !important; opacity: .7; margin-left: 2px; transition: transform var(--t-fast) ease; }
   .tabs-group.open .tabs-chev { transform: rotate(180deg); }
   .tabs-popover {
@@ -310,7 +337,7 @@
   }
   .tabs-popover button.active::after {
     content: ''; width: 3px; height: 16px;
-    background: var(--accent); border-radius: 2px;
+    background: var(--brass); border-radius: 2px;
     position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
   }
   /* Push the settings gear (and its sibling live-dot) to the right edge. */
@@ -345,9 +372,9 @@
     min-width: 10px; min-height: 10px;
     flex: 0 0 10px;
     border-radius: 50%;
-    background: #7bbd3b;
-    box-shadow: 0 0 0 0 rgba(123, 189, 59, .6);
-    animation: tabs-live-dot-pulse 2.2s ease-out infinite;
+    background: var(--accent);   /* Tea Green — the system is live */
+    box-shadow: 0 0 0 0 rgba(107, 142, 111, .6);
+    animation: tabs-live-dot-pulse 2.5s ease-in-out infinite;
   }
   .tabs > button.tabs-live-dot.paused .dot {
     background: var(--text-4);
@@ -355,9 +382,8 @@
     box-shadow: none;
   }
   @keyframes tabs-live-dot-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(123, 189, 59, .55); }
-    70%  { box-shadow: 0 0 0 6px rgba(123, 189, 59, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(123, 189, 59, 0); }
+    0%, 100% { box-shadow: 0 0 0 0   rgba(107, 142, 111, .45); }
+    50%      { box-shadow: 0 0 0 8px rgba(107, 142, 111, 0); }
   }
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -368,9 +394,10 @@
   section.active { display: block; }
 
   h2 {
-    font-size: 11px; font-weight: 600;
-    letter-spacing: .12em; text-transform: uppercase;
-    color: var(--text-3);
+    font-family: var(--f-mono);
+    font-size: 11px; font-weight: 500;
+    letter-spacing: .16em; text-transform: uppercase;
+    color: var(--brass);
     margin: var(--s6) 0 var(--s3);
   }
   h2:first-child { margin-top: var(--s2); }
@@ -414,7 +441,7 @@
     border-radius: var(--r-md); padding: 6px 12px; font-size: 12px; cursor: pointer;
   }
   .db-btn:hover { border-color: var(--line-strong); }
-  .db-btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .db-btn.primary { background: var(--brass); color: var(--accent-ink); border-color: var(--brass); font-weight: 600; }
 
   .db-kpis {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
@@ -595,7 +622,7 @@
     text-transform: uppercase;
     backdrop-filter: blur(8px);
   }
-  .pa-pill-on    { background: rgba(204, 217, 0, .85);  color: var(--accent-ink); }
+  .pa-pill-on    { background: rgba(107, 142, 111, .85);  color: var(--accent-ink); }
   .pa-pill-off   { background: rgba(0, 0, 0, .55);      color: var(--text-1); }
   .pa-pill-draft { background: rgba(233, 163, 90, .92); color: #1a1a17; }
   :root[data-theme="light"] .pa-pill-off { background: rgba(255, 255, 255, .85); color: var(--text-2); }
@@ -661,7 +688,7 @@
   .pa-edit-canvas {
     background: var(--bg-app);
     background-image:
-      radial-gradient(ellipse at top, rgba(204, 217, 0, .04), transparent 55%),
+      radial-gradient(ellipse at top, rgba(107, 142, 111, .04), transparent 55%),
       radial-gradient(ellipse at bottom, rgba(54, 83, 41, .05), transparent 55%);
     overflow-y: auto;
     overflow-x: auto;
@@ -853,12 +880,12 @@
   }
   .pa-block-row .pbr-icon {
     width: 28px; height: 28px;
-    background: rgba(204, 217, 0, .08);
+    background: rgba(107, 142, 111, .08);
     border-radius: var(--r-md);
     display: flex; align-items: center; justify-content: center;
     font-size: 14px; flex-shrink: 0;
   }
-  .pa-block-row.active .pbr-icon { background: rgba(204, 217, 0, .16); }
+  .pa-block-row.active .pbr-icon { background: rgba(107, 142, 111, .16); }
   .pa-block-row .pbr-info { flex: 1; min-width: 0; }
   .pa-block-row .pbr-name {
     font-size: 12px; font-weight: 500; color: var(--text-1);
@@ -890,7 +917,7 @@
   }
   .pa-inspector-icon {
     width: 26px; height: 26px;
-    background: rgba(204, 217, 0, .12);
+    background: rgba(107, 142, 111, .12);
     border-radius: var(--r-sm);
     display: flex; align-items: center; justify-content: center;
     font-size: 14px; flex-shrink: 0;
@@ -997,7 +1024,7 @@
   .pa-prev-hero-hl {
     color: #365329;
     font-weight: 700;
-    background: linear-gradient(transparent 60%, rgba(204, 217, 0, 0.55) 60%);
+    background: linear-gradient(transparent 60%, rgba(107, 142, 111, 0.55) 60%);
     padding: 0 2px;
   }
 
@@ -1415,11 +1442,13 @@
   .btn:active { transform: translateY(1px); }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
   .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+  /* Primary action = Aged Brass (the single brass CTA per surface —
+     Attach tracking, Save, Apply…). Tea is reserved for active/live. */
   .btn-primary {
-    background: var(--accent); color: var(--accent-ink);
-    border-color: var(--accent); font-weight: 600;
+    background: var(--brass); color: var(--accent-ink);
+    border-color: var(--brass); font-weight: 600;
   }
-  .btn-primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+  .btn-primary:hover { background: var(--brass-hi); border-color: var(--brass-hi); }
   .btn-ghost {
     background: transparent; border-color: transparent; color: var(--text-2);
   }
@@ -1479,7 +1508,7 @@
   input[type=datetime-local]::-webkit-datetime-edit-hour-field:focus,
   input[type=datetime-local]::-webkit-datetime-edit-minute-field:focus,
   input[type=datetime-local]::-webkit-datetime-edit-ampm-field:focus {
-    background: rgba(204, 217, 0, 0.18);
+    background: rgba(107, 142, 111, 0.20);
     color: var(--text-1);
     border-radius: 3px;
     outline: none;
@@ -1499,7 +1528,7 @@
     opacity: 1;
   }
   input:focus, select:focus, textarea:focus {
-    border-color: rgba(204, 217, 0, .45);
+    border-color: rgba(107, 142, 111, .50);
     box-shadow: 0 0 0 3px var(--ring);
   }
   input:hover:not(:focus), select:hover:not(:focus), textarea:hover:not(:focus) {
@@ -1563,15 +1592,15 @@
   /* Clickable order rows in the Orders tab — whole row opens the drawer. */
   tbody tr.order-row { cursor: pointer; }
   tbody tr.order-row:focus-visible {
-    outline: 2px solid var(--ring, rgba(204, 217, 0, .55));
+    outline: 2px solid var(--ring, rgba(107, 142, 111, .55));
     outline-offset: -2px;
   }
   /* New-order arrival flash — fires once per row when an unseen order id
      appears via the auto-refresh poller. Soft lime wash that fades out. */
   @keyframes order-row-flash {
-    0%   { background: rgba(204, 217, 0, .35); box-shadow: inset 3px 0 0 var(--accent); }
-    60%  { background: rgba(204, 217, 0, .18); box-shadow: inset 3px 0 0 var(--accent); }
-    100% { background: transparent;             box-shadow: inset 0   0 0 transparent; }
+    0%   { background: rgba(107, 142, 111, .28); box-shadow: inset 3px 0 0 var(--accent); }
+    60%  { background: rgba(107, 142, 111, .14); box-shadow: inset 3px 0 0 var(--accent); }
+    100% { background: transparent;              box-shadow: inset 0   0 0 transparent; }
   }
   tbody tr.order-row.is-fresh { animation: order-row-flash 6s ease-out 1; }
   /* Status cell wraps status + refund pills as a small flex column so
@@ -1588,9 +1617,9 @@
     display: inline-flex; align-items: center; gap: 4px;
     padding: 2px 8px; border-radius: 999px;
     font-size: 10px; font-weight: 700; letter-spacing: .03em;
-    background: rgba(232, 85, 106, .14);
-    color: var(--st-refunded);
-    border: 1px solid rgba(232, 85, 106, .4);
+    background: rgba(176, 141, 74, .12);
+    color: var(--brass);
+    border: 1px solid rgba(176, 141, 74, .30);
     white-space: nowrap;
   }
   /* Drawer-prominent refund banner — sits between the order's status pill
@@ -1687,7 +1716,7 @@
     border: 1px solid var(--line);
     background: var(--bg-elev-1); color: var(--text-3);
   }
-  .dz-type-chip.gz   { background: rgba(204, 217, 0, .12); color: var(--accent-hi);  border-color: rgba(204, 217, 0, .35); }
+  .dz-type-chip.gz   { background: rgba(107, 142, 111, .12); color: var(--accent-hi);  border-color: rgba(107, 142, 111, .35); }
   .dz-type-chip.city { background: rgba(178, 207, 237, .12); color: var(--st-paid);  border-color: rgba(178, 207, 237, .35); }
   .dz-extras { color: var(--text-3); font-size: 11px; }
   .dz-sd-yes { color: var(--st-delivered); font-weight: 600; }
@@ -1756,7 +1785,7 @@
   }
   .dz-chip:hover { background: var(--bg-elev-2); }
   .dz-chip.on {
-    background: rgba(204, 217, 0, .18);
+    background: rgba(107, 142, 111, .18);
     border-color: var(--accent);
     color: var(--accent-hi);
   }
@@ -1841,25 +1870,26 @@
     border: 1px solid;
   }
   .pill .dot { width: 6px; height: 6px; border-radius: 50%; }
-  .pill.pub { background: rgba(204, 217, 0, .12); color: var(--accent-hi); border-color: rgba(204, 217, 0, .25); }
+  .pill.pub { background: rgba(107, 142, 111, .12); color: var(--accent); border-color: rgba(107, 142, 111, .30); }
   .pill.pub .dot { background: var(--accent); }
   .pill.draft { background: var(--bg-elev-1); color: var(--text-3); border-color: var(--line); }
   .pill.draft .dot { background: var(--text-4); }
-  .pill.st-pending_payment { background: rgba(233, 163, 90, .14); color: var(--st-pending_payment); border-color: rgba(233, 163, 90, .3); }
+  /* Brass = needs-action / in-flight; Tea = money-in / done; neutral = closed. */
+  .pill.st-pending_payment { background: rgba(176, 141, 74, .12); color: var(--st-pending_payment); border-color: rgba(176, 141, 74, .30); }
   .pill.st-pending_payment .dot { background: var(--st-pending_payment); }
-  .pill.st-paid            { background: rgba(178, 207, 237, .12); color: var(--st-paid); border-color: rgba(178, 207, 237, .3); }
+  .pill.st-paid            { background: rgba(107, 142, 111, .12); color: var(--st-paid); border-color: rgba(107, 142, 111, .30); }
   .pill.st-paid .dot       { background: var(--st-paid); }
-  .pill.st-preparing       { background: rgba(242, 202, 108, .14); color: var(--st-preparing); border-color: rgba(242, 202, 108, .3); }
+  .pill.st-preparing       { background: rgba(176, 141, 74, .12); color: var(--st-preparing); border-color: rgba(176, 141, 74, .30); }
   .pill.st-preparing .dot  { background: var(--st-preparing); }
-  .pill.st-dispatched      { background: rgba(123, 189, 59, .14); color: var(--st-dispatched); border-color: rgba(123, 189, 59, .3); }
+  .pill.st-dispatched      { background: rgba(176, 141, 74, .12); color: var(--st-dispatched); border-color: rgba(176, 141, 74, .30); }
   .pill.st-dispatched .dot { background: var(--st-dispatched); }
-  .pill.st-delivered       { background: rgba(128, 196, 98, .14); color: var(--st-delivered); border-color: rgba(128, 196, 98, .35); }
+  .pill.st-delivered       { background: rgba(107, 142, 111, .14); color: var(--st-delivered); border-color: rgba(107, 142, 111, .35); }
   .pill.st-delivered .dot  { background: var(--st-delivered); }
   .pill.st-cancelled       { background: var(--bg-elev-1); color: var(--text-3); border-color: var(--line); }
   .pill.st-cancelled .dot  { background: var(--text-4); }
-  .pill.st-refunded        { background: rgba(232, 85, 106, .12); color: var(--st-refunded); border-color: rgba(232, 85, 106, .3); }
+  .pill.st-refunded        { background: var(--bg-elev-1); color: var(--st-refunded); border-color: var(--line); }
   .pill.st-refunded .dot   { background: var(--st-refunded); }
-  .pill.st-awaiting_restock      { background: rgba(184, 163, 217, .14); color: var(--st-awaiting_restock); border-color: rgba(184, 163, 217, .35); }
+  .pill.st-awaiting_restock      { background: rgba(176, 141, 74, .14); color: var(--st-awaiting_restock); border-color: rgba(176, 141, 74, .35); }
   .pill.st-awaiting_restock .dot { background: var(--st-awaiting_restock); }
 
   /* Semantic pill variants — use these instead of ad-hoc inline styles so
@@ -1873,16 +1903,16 @@
        .danger   → failed, rejected, expired-bad (red)
        .paused   → on hold, awaiting, standby (lilac)
        .neutral  → archived, generic (muted grey) */
-  .pill.success      { background: rgba(128, 196, 98, .14); color: #80c462; border-color: rgba(128, 196, 98, .35); }
-  .pill.success .dot { background: #80c462; }
-  .pill.info         { background: rgba(108, 174, 255, .14); color: #6caeff; border-color: rgba(108, 174, 255, .3); }
-  .pill.info .dot    { background: #6caeff; }
-  .pill.warn         { background: rgba(233, 163, 90, .14); color: #e9a35a; border-color: rgba(233, 163, 90, .3); }
-  .pill.warn .dot    { background: #e9a35a; }
+  .pill.success      { background: rgba(107, 142, 111, .14); color: var(--success); border-color: rgba(107, 142, 111, .35); }
+  .pill.success .dot { background: var(--success); }
+  .pill.info         { background: rgba(107, 142, 111, .12); color: var(--accent); border-color: rgba(107, 142, 111, .30); }
+  .pill.info .dot    { background: var(--accent); }
+  .pill.warn         { background: rgba(176, 141, 74, .14); color: var(--brass); border-color: rgba(176, 141, 74, .30); }
+  .pill.warn .dot    { background: var(--brass); }
   .pill.danger       { background: rgba(232, 85, 106, .12); color: #e8556a; border-color: rgba(232, 85, 106, .3); }
   .pill.danger .dot  { background: #e8556a; }
-  .pill.paused       { background: rgba(184, 163, 217, .14); color: #b8a3d9; border-color: rgba(184, 163, 217, .35); }
-  .pill.paused .dot  { background: #b8a3d9; }
+  .pill.paused       { background: rgba(176, 141, 74, .14); color: var(--brass); border-color: rgba(176, 141, 74, .35); }
+  .pill.paused .dot  { background: var(--brass); }
   .pill.neutral      { background: var(--bg-elev-1); color: var(--text-3); border-color: var(--line); }
   .pill.neutral .dot { background: var(--text-4); }
 
@@ -1909,16 +1939,16 @@
   .status-chip:active { transform: translateY(1px); }
   .status-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-4); }
   .status-chip.active                     { background: var(--bg-elev-2); color: var(--text-1); border-color: var(--line-strong); }
-  .status-chip.active.st-all              { background: rgba(204, 217, 0, .12); color: var(--accent-hi); border-color: rgba(204, 217, 0, .35); }
+  .status-chip.active.st-all              { background: rgba(107, 142, 111, .14); color: var(--accent); border-color: rgba(107, 142, 111, .40); }
   .status-chip.active.st-all .dot         { background: var(--accent); }
-  .status-chip.active.st-pending_payment  { background: rgba(233, 163, 90, .14); color: var(--st-pending_payment); border-color: rgba(233, 163, 90, .45); }
-  .status-chip.active.st-paid             { background: rgba(178, 207, 237, .14); color: var(--st-paid); border-color: rgba(178, 207, 237, .45); }
-  .status-chip.active.st-preparing        { background: rgba(242, 202, 108, .16); color: var(--st-preparing); border-color: rgba(242, 202, 108, .45); }
-  .status-chip.active.st-dispatched       { background: rgba(123, 189, 59, .16);  color: var(--st-dispatched); border-color: rgba(123, 189, 59, .45); }
-  .status-chip.active.st-delivered        { background: rgba(128, 196, 98, .16);  color: var(--st-delivered); border-color: rgba(128, 196, 98, .45); }
-  .status-chip.active.st-awaiting_restock { background: rgba(184, 163, 217, .16); color: var(--st-awaiting_restock); border-color: rgba(184, 163, 217, .45); }
+  .status-chip.active.st-pending_payment  { background: rgba(176, 141, 74, .14); color: var(--st-pending_payment); border-color: rgba(176, 141, 74, .45); }
+  .status-chip.active.st-paid             { background: rgba(107, 142, 111, .14); color: var(--st-paid); border-color: rgba(107, 142, 111, .45); }
+  .status-chip.active.st-preparing        { background: rgba(176, 141, 74, .16); color: var(--st-preparing); border-color: rgba(176, 141, 74, .45); }
+  .status-chip.active.st-dispatched       { background: rgba(176, 141, 74, .16);  color: var(--st-dispatched); border-color: rgba(176, 141, 74, .45); }
+  .status-chip.active.st-delivered        { background: rgba(107, 142, 111, .16);  color: var(--st-delivered); border-color: rgba(107, 142, 111, .45); }
+  .status-chip.active.st-awaiting_restock { background: rgba(176, 141, 74, .16); color: var(--st-awaiting_restock); border-color: rgba(176, 141, 74, .45); }
   .status-chip.active.st-cancelled        { background: var(--bg-elev-2); color: var(--text-2); border-color: var(--line-strong); }
-  .status-chip.active.st-refunded         { background: rgba(232, 85, 106, .14);  color: var(--st-refunded); border-color: rgba(232, 85, 106, .4); }
+  .status-chip.active.st-refunded         { background: var(--bg-elev-2);  color: var(--st-refunded); border-color: var(--line-strong); }
   .status-chip.active .dot                { background: currentColor; }
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -2174,7 +2204,7 @@
     user-select: none;
   }
   .sort-chip:hover { background: var(--bg-elev-2); color: var(--text-2); }
-  .sort-chip.active { background: rgba(204, 217, 0, .12); color: var(--accent-hi); border-color: rgba(204, 217, 0, .35); }
+  .sort-chip.active { background: rgba(107, 142, 111, .12); color: var(--accent-hi); border-color: rgba(107, 142, 111, .35); }
 
   /* ─── Shipment cards (1 or 2 per order) ─── */
   .shipment-card {
@@ -2339,7 +2369,7 @@
     transition: border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
   }
   .snip-row .pair .lang-wrap:focus-within {
-    border-color: rgba(204, 217, 0, .45);
+    border-color: rgba(107, 142, 111, .45);
     box-shadow: 0 0 0 3px var(--ring);
   }
   .snip-row .pair .lang-tag {
@@ -2412,7 +2442,7 @@
   }
   .fs-picker-trigger:hover { border-color: var(--line-strong); }
   .fs-picker.open .fs-picker-trigger {
-    border-color: rgba(204, 217, 0, .45);
+    border-color: rgba(107, 142, 111, .45);
     box-shadow: 0 0 0 3px var(--ring);
   }
   .fs-picker.disabled .fs-picker-trigger {
@@ -2493,7 +2523,7 @@
   .fs-picker-item:hover, .fs-picker-item.focus {
     background: var(--bg-elev-1);
   }
-  .fs-picker-item.selected { background: rgba(204, 217, 0, .08); }
+  .fs-picker-item.selected { background: rgba(107, 142, 111, .08); }
   .fs-picker-item .thumb {
     width: 36px; height: 36px; flex-shrink: 0;
     border-radius: 4px;
@@ -2671,8 +2701,8 @@
   .visual .caption strong { color: var(--text-1); font-weight: 600; }
   .visual .caption .tag {
     display: inline-block;
-    background: rgba(204, 217, 0, .12); color: var(--accent-hi);
-    border: 1px solid rgba(204, 217, 0, .25);
+    background: rgba(107, 142, 111, .12); color: var(--accent-hi);
+    border: 1px solid rgba(107, 142, 111, .25);
     padding: 2px 8px; border-radius: 999px;
     font-size: 10px; font-weight: 600;
     letter-spacing: .08em; text-transform: uppercase;
@@ -2701,7 +2731,7 @@
   }
   @keyframes pv-pulse {
     0%, 100% { outline-color: var(--accent); }
-    50%      { outline-color: rgba(204, 217, 0, .35); }
+    50%      { outline-color: rgba(107, 142, 111, .35); }
   }
 
   .save-bar {
@@ -2751,7 +2781,7 @@
   .opt:hover { border-color: var(--line-strong); background: var(--bg-elev-2); }
   .opt.active {
     border-color: var(--accent);
-    background: rgba(204, 217, 0, .06);
+    background: rgba(107, 142, 111, .06);
     box-shadow: 0 0 0 3px var(--ring);
   }
   .opt.active .opt-screen { transform: translateY(-1px); }
@@ -2831,7 +2861,7 @@
     transition: opacity 120ms;
   }
   .chip-strip .chip.dim { opacity: .25; }
-  .chip-strip .chip.lit { background: rgba(204,217,0,.12); border-color: rgba(204,217,0,.35); color: var(--accent-hi); }
+  .chip-strip .chip.lit { background: rgba(107,142,111,.12); border-color: rgba(107,142,111,.35); color: var(--accent-hi); }
 
   /* Hide the underlying select when a picker drives it */
   .picker-source { display: none; }
@@ -2890,7 +2920,7 @@
   }
   .ml-fld:hover { background: var(--bg-elev-1); color: var(--text-1); }
   .ml-fld.active { background: var(--bg-elev-2); color: var(--text-1); }
-  .ml-fld.over   { background: rgba(204, 217, 0, .14); color: var(--accent-hi); outline: 1px dashed var(--accent); outline-offset: -2px; }
+  .ml-fld.over   { background: rgba(107, 142, 111, .14); color: var(--accent-hi); outline: 1px dashed var(--accent); outline-offset: -2px; }
   .ml-fld .ico  { color: var(--text-4); display: inline-flex; }
   .ml-fld.active .ico { color: var(--accent-hi); }
   .ml-fld .lbl  { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2921,7 +2951,7 @@
     transition: background var(--t-fast) ease, color var(--t-fast) ease;
   }
   .ml-tag-chip:hover { color: var(--text-2); background: var(--bg-elev-2); }
-  .ml-tag-chip.active { background: rgba(204, 217, 0, .12); color: var(--accent-hi); border-color: rgba(204, 217, 0, .35); }
+  .ml-tag-chip.active { background: rgba(107, 142, 111, .12); color: var(--accent-hi); border-color: rgba(107, 142, 111, .35); }
   .ml-tag-chip .n { color: var(--text-4); font-weight: 500; font-variant-numeric: tabular-nums; }
 
   #ml-dropzone {
@@ -2932,7 +2962,7 @@
     transition: border-color var(--t-fast) ease, background var(--t-fast) ease;
     min-height: 240px;
   }
-  #ml-dropzone.drag { border-color: var(--accent); background: rgba(204, 217, 0, .04); }
+  #ml-dropzone.drag { border-color: var(--accent); background: rgba(107, 142, 111, .04); }
   #ml-dropzone .ml-empty {
     text-align: center; color: var(--text-3);
     padding: 60px 20px; font-size: 13px;
@@ -2953,7 +2983,7 @@
     transition: border-color var(--t-fast) ease, transform var(--t-fast) ease;
   }
   .ml-card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
-  .ml-card.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(204, 217, 0, .25); }
+  .ml-card.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(107, 142, 111, .25); }
   .ml-thumb {
     aspect-ratio: 1 / 1; width: 100%;
     background: var(--bg-elev-2);
@@ -3022,8 +3052,8 @@
   .ml-tag-input-row .ml-tag {
     display: inline-flex; align-items: center; gap: 4px;
     padding: 3px 8px; border-radius: 999px;
-    background: rgba(204, 217, 0, .12); color: var(--accent-hi);
-    border: 1px solid rgba(204, 217, 0, .35);
+    background: rgba(107, 142, 111, .12); color: var(--accent-hi);
+    border: 1px solid rgba(107, 142, 111, .35);
     font-size: 11px; font-weight: 600;
   }
   .ml-tag-input-row .ml-tag .x {
@@ -3052,8 +3082,14 @@
 
 <div class="topbar">
   <div class="brand">
-    <div class="brand-mark">R</div>
-    <span>Roots</span>
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.55" stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
+        <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.55" stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
+        <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <span class="brand-name">Roots</span>
     <span class="divider"></span>
     <span class="sub">Mini App Backend</span>
   </div>
@@ -3441,10 +3477,10 @@
         font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
         border-radius: 99px; background: var(--bg-elev-2); color: var(--text-3);
       }
-      .cu-pill.tier-seed   { background: rgba(168,199,90,.15);  color: #a8c75a; }
-      .cu-pill.tier-sprout { background: rgba(204,217,0,.15);   color: #ccd900; }
-      .cu-pill.tier-root   { background: rgba(232,122,58,.15);  color: #e87a3a; }
-      .cu-pill.tier-tree   { background: rgba(196,58,106,.15);  color: #c43a6a; }
+      .cu-pill.tier-seed   { background: rgba(107,142,111,.18);  color: #8FB093; }
+      .cu-pill.tier-sprout { background: rgba(107,142,111,.13);  color: #7BA07F; }
+      .cu-pill.tier-root   { background: rgba(176,141,74,.16);   color: #C29B54; }
+      .cu-pill.tier-tree   { background: rgba(176,141,74,.22);   color: #B08D4A; }
       .cu-pill.blocked     { background: rgba(232,85,106,.15);  color: #e8556a; }
       .cu-bar-row { display: flex; align-items: flex-end; gap: 6px; height: 70px; padding: 0 var(--s2); }
       .cu-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
@@ -4175,7 +4211,7 @@
         margin: 3px;
       }
       .pu-page-chip.on {
-        background: rgba(204,217,0,.14);
+        background: rgba(107,142,111,.14);
         border-color: var(--accent);
         color: var(--accent-hi);
       }
@@ -5631,7 +5667,7 @@
         transition: background 120ms, opacity 120ms;
       }
       .cat-item.dragging { opacity: 0.35; }
-      .cat-item.drop-target { background: rgba(204, 217, 0, .12); }
+      .cat-item.drop-target { background: rgba(107, 142, 111, .12); }
       .cat-handle { cursor: grab; user-select: none; font-size: 18px; color: var(--text-3); padding: 0 4px; }
       .cat-handle:active { cursor: grabbing; }
       .cat-name { flex: 1; font-size: 14px; background: transparent; border: 0; padding: 4px 6px; border-radius: 4px; color: var(--text-1); }
@@ -5882,7 +5918,7 @@
               Drag-and-drop hero banners, announcement bars, product grids, sticker collages, and more. Edit copy in EN + 中, preview on 6 device sizes, then Publish.
             </div>
           </div>
-          <div class="card" style="display: flex; gap: var(--s4); align-items: center; background: linear-gradient(135deg, rgba(204,217,0,.06), transparent); border-color: rgba(204,217,0,.18);">
+          <div class="card" style="display: flex; gap: var(--s4); align-items: center; background: linear-gradient(135deg, rgba(107,142,111,.06), transparent); border-color: rgba(107,142,111,.18);">
             <div style="flex: 1;">
               <h3 style="font-size: 13px; margin-bottom: 4px;">Open the Mini App editor · 打开小程序编辑器</h3>
               <div class="muted" style="font-size: 12px;">All six editable mini-app pages live in /cms. Changes go live on Publish. · 全部 6 个可编辑的小程序页面在 /cms 管理;点击"发布"后生效。</div>
@@ -14334,7 +14370,7 @@ function cuApplyThemeIcon() {
   if (showSun)  showSun.style.display  = t === 'dark'  ? '' : 'none';
   if (showMoon) showMoon.style.display = t === 'light' ? '' : 'none';
   const meta = $('#meta-theme-color');
-  if (meta) meta.setAttribute('content', t === 'light' ? '#f6f5f0' : '#16161a');
+  if (meta) meta.setAttribute('content', t === 'light' ? '#E8E5DC' : '#12161A');
 }
 function cuToggleTheme() {
   const current = document.documentElement.getAttribute('data-theme') || 'dark';
