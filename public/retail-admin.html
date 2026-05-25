@@ -1758,6 +1758,11 @@
     vertical-align: middle;
     font-size: 14px; line-height: 1; color: var(--text-3);
   }
+  /* Delete = Aged Brass (destructive but on-palette); duplicate stays neutral. */
+  .dz-rowact-del { border-color: rgba(176, 141, 74, .25); color: var(--brass); }
+  .dz-rowact-del:hover { background: rgba(176, 141, 74, .08); border-color: rgba(176, 141, 74, .45); color: var(--brass-hi); }
+  /* ON toggle — Tea Green checked fill with a white check (was browser blue). */
+  #dz-table input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 
   /* Edit drawer form */
   .dz-edit-form { display: flex; flex-direction: column; gap: 14px; }
@@ -10987,7 +10992,7 @@ function renderZoneTable() {
           <button class="btn dz-rowact-btn" title="Duplicate · 复制配送区" onclick="duplicateZone(${z.id})" aria-label="Duplicate">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
-          <button class="btn dz-rowact-btn" title="Delete · 删除" onclick="deleteZone(${z.id}, '${zoneLabel(z).replace(/'/g,'')}')">×</button>
+          <button class="btn dz-rowact-btn dz-rowact-del" title="Delete · 删除" onclick="deleteZone(${z.id}, '${zoneLabel(z).replace(/'/g,'')}')">×</button>
         </td>
       </tr>`).join('');
   } else {
@@ -11016,7 +11021,7 @@ function renderZoneTable() {
           <button class="btn dz-rowact-btn" title="Duplicate · 复制配送区" onclick="duplicateZone(${z.id})" aria-label="Duplicate">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
-          <button class="btn dz-rowact-btn" title="Delete · 删除" onclick="deleteZone(${z.id}, '${zoneLabel(z).replace(/'/g,'')}')">×</button>
+          <button class="btn dz-rowact-btn dz-rowact-del" title="Delete · 删除" onclick="deleteZone(${z.id}, '${zoneLabel(z).replace(/'/g,'')}')">×</button>
         </td>
       </tr>`).join('');
   }
