@@ -5542,6 +5542,7 @@ async function resizeImage(file, opts = {}) {
   const maxLong          = opts.maxLong          || 1800;
   const quality          = opts.quality          || 0.90;
   const passThroughBelow = opts.passThroughBelow || (600 * 1024);
+  const forceJpeg        = opts.format === 'jpeg';   // always emit JPEG, flattening any transparency
   const originalBytes    = file.size;
   const readAsDataURL = (blob) => new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -5549,8 +5550,10 @@ async function resizeImage(file, opts = {}) {
     r.onerror = () => reject(r.error);
     r.readAsDataURL(blob);
   });
-  // Fast path — already small enough.
-  if (originalBytes <= passThroughBelow) {
+  // Fast path — already small enough. Skipped when we must convert a non-JPEG
+  // to JPEG (e.g. a small-but-lossless PNG product photo that should still ship
+  // as a lighter JPEG).
+  if (originalBytes <= passThroughBelow && !(forceJpeg && file.type !== 'image/jpeg')) {
     return { dataURL: await readAsDataURL(file), originalBytes, finalBytes: originalBytes, resized: false };
   }
   // Decode with EXIF orientation applied. Fallback to <img> path if
@@ -5578,9 +5581,15 @@ async function resizeImage(file, opts = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
+  const outType = forceJpeg ? 'image/jpeg' : ((file.type === 'image/png') ? 'image/png' : 'image/jpeg');
+  if (outType === 'image/jpeg') {
+    // JPEG has no alpha channel — paint white first so transparent PNG areas
+    // (cut-outs, logos) flatten to white instead of black.
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+  }
   ctx.drawImage(bitmap, 0, 0, w, h);
   if (bitmap.close) try { bitmap.close(); } catch {}
-  const outType = (file.type === 'image/png') ? 'image/png' : 'image/jpeg';
   const outQ    = outType === 'image/jpeg' ? quality : undefined;
   const blob = await new Promise(res => canvas.toBlob(res, outType, outQ));
   if (!blob) throw new Error('toBlob failed');
@@ -5617,6 +5626,14 @@ async function _handleImageUpload(file, opts = {}) {
     return null;
   }
 }
+
+// Tuned preset for mini-app product photos. They display at most full-phone
+// width, so 1200px on the long edge is ~1:1 even on 3× screens — larger is just
+// wasted bytes that slow the mini-app product pages. JPEG q0.82 looks the same
+// as q0.90 on photos at roughly half the size; forcing JPEG also stops heavy
+// lossless PNG exports from shipping as-is (the "2.2MB → 2MB" case). A typical
+// 2–5MB upload lands around 150–350KB. Already-small (<200KB) JPEGs pass through.
+const PROD_IMG_OPTS = { maxLong: 1200, quality: 0.82, format: 'jpeg', passThroughBelow: 200 * 1024 };
 
 async function onSupplierQRUpload(input) {
   const f = input.files?.[0]; if (!f) return;
@@ -9329,7 +9346,7 @@ async function _prodHeroUpload(productId) {
   input.onchange = async function() {
     const file = this.files && this.files[0];
     if (!file) return;
-    const data = await _handleImageUpload(file);
+    const data = await _handleImageUpload(file, PROD_IMG_OPTS);
     if (!data) return;
     try {
       const r = await fetch('/api/products/' + productId, {
@@ -11036,7 +11053,7 @@ function setupPfImgInputs() {
   imgInput.type='file'; imgInput.id='pfImgFileGlobal'; imgInput.accept='image/*'; imgInput.style.display='none';
   imgInput.addEventListener('change', async function() {
     if (!this.files[0]) return;
-    const data = await _handleImageUpload(this.files[0]);
+    const data = await _handleImageUpload(this.files[0], PROD_IMG_OPTS);
     if (!data) return;
     const hidden = document.getElementById('pf_img_data');
     hidden.value = data;
