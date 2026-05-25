@@ -22,7 +22,7 @@
     // UI scale (text size) — apply BEFORE first paint too, so the backend
     // doesn't visibly resize after load. Default 110%. Toggle: cuCycleUiScale.
     try {
-      var s = parseFloat(localStorage.getItem('retail-admin-ui-scale'));
+      var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
       if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
       document.documentElement.style.zoom = String(s);
     } catch (e) {}
@@ -15589,7 +15589,7 @@ cuApplyThemeIcon();
 // 110%. The initial value is also applied pre-paint in the <head> script.
 const UI_SCALES = [1, 1.1, 1.25];
 function cuGetUiScale() {
-  let v = parseFloat(localStorage.getItem('retail-admin-ui-scale'));
+  let v = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
   if (!UI_SCALES.includes(v)) v = 1.1;
   return v;
 }
@@ -15600,7 +15600,7 @@ function cuApplyUiScale(v) {
 }
 function cuCycleUiScale() {
   const next = UI_SCALES[(UI_SCALES.indexOf(cuGetUiScale()) + 1) % UI_SCALES.length];
-  try { localStorage.setItem('retail-admin-ui-scale', String(next)); } catch (e) {}
+  try { localStorage.setItem('roots-admin-ui-scale', String(next)); } catch (e) {}
   cuApplyUiScale(next);
   if (typeof toast === 'function') toast('Text size · 字号 → ' + Math.round(next * 100) + '%');
 }

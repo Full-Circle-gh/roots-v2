@@ -20,6 +20,13 @@
     } catch (e) {
       document.documentElement.setAttribute('data-theme', 'dark');
     }
+    // UI scale (text size) — shared suite-wide preference (roots-admin-ui-scale,
+    // set from the backend topbar). Apply pre-paint so the editor matches.
+    try {
+      var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
+      if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
+      document.documentElement.style.zoom = String(s);
+    } catch (e) {}
   })();
 </script>
 <style>
@@ -914,6 +921,10 @@
       </div>
     </div>
     <div class="pe-topbar-actions">
+      <button class="btn btn-ghost" id="ui-scale-toggle" type="button" onclick="cuCycleUiScale()" title="Text size · 字号" style="gap:4px;padding:6px 9px;">
+        <span style="font-weight:700;line-height:1;"><span style="font-size:15px;">A</span><span style="font-size:10px;">A</span></span>
+        <span class="ui-scale-val" style="font-size:11px;font-weight:600;">110%</span>
+      </button>
       <div class="lang-toggle" id="lang-toggle">
         <button data-lang="en" onclick="cuSetLang('en')">EN</button>
         <button data-lang="cn" onclick="cuSetLang('cn')">中</button>
@@ -2688,6 +2699,28 @@ window.addEventListener('keydown', (e) => {
   updateBtn();
   _mo.observe(document.body, { childList: true, subtree: true });
 })();
+
+// ── UI scale (text size) — shared suite-wide setting (roots-admin-ui-scale) ──
+// Same control as the backend topbar: scales the whole document with `zoom`
+// so the editor honours the size the operator picked anywhere in the suite.
+const UI_SCALES = [1, 1.1, 1.25];
+function cuGetUiScale() {
+  let v = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
+  if (!UI_SCALES.includes(v)) v = 1.1;
+  return v;
+}
+function cuApplyUiScale(v) {
+  document.documentElement.style.zoom = String(v);
+  const lbl = document.querySelector('#ui-scale-toggle .ui-scale-val');
+  if (lbl) lbl.textContent = Math.round(v * 100) + '%';
+}
+function cuCycleUiScale() {
+  const next = UI_SCALES[(UI_SCALES.indexOf(cuGetUiScale()) + 1) % UI_SCALES.length];
+  try { localStorage.setItem('roots-admin-ui-scale', String(next)); } catch (e) {}
+  cuApplyUiScale(next);
+  if (typeof toast === 'function') toast('Text size · 字号 → ' + Math.round(next * 100) + '%');
+}
+cuApplyUiScale(cuGetUiScale());
 
 // Go.
 peBoot();
