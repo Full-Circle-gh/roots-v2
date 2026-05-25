@@ -1897,7 +1897,10 @@ function paBlocksSyncFromDOM() {
   const card = mount.querySelector('[data-blockid]'); if (!card) return;
   const id = card.getAttribute('data-blockid');
   const b = (window._paBlocks || []).find(x => x.id === id); if (!b) return;
-  card.querySelectorAll('[data-bkey]').forEach(el => {
+  // The editable inputs live in the .pa-inspector-body sibling, NOT inside the
+  // .pa-inspector-head element that carries data-blockid — so query the whole
+  // mount (it only ever holds the one selected block's form at a time).
+  mount.querySelectorAll('[data-bkey]').forEach(el => {
     const k    = el.getAttribute('data-bkey');
     const val  = el.type === 'checkbox' ? !!el.checked : el.value;
     const cIdx = el.getAttribute('data-cellidx');
