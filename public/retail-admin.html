@@ -2271,6 +2271,74 @@
   .manifest .mf-packs { margin-left: auto; display: inline-flex; align-items: center; }
   .manifest .mf-packs .pack-badge { margin-right: 0; margin-left: 4px; }
 
+  /* ─── Order detail · per-operator View tweaks ───────────────────────────
+     The Full Circle Order Detail "Tweaks" panel made operator-selectable:
+     total placement (banner / inline / footer), items layout (manifest /
+     table / cards), and density. Defaults (banner / manifest / comfortable)
+     reproduce the standard look, so nothing changes until an operator picks. */
+
+  /* Total — inline tile inside the info grid */
+  .od-total-inline .od-total-big { font-size: 28px; font-weight: 300; color: var(--text-1); line-height: 1; letter-spacing: -.02em; }
+  .od-total-inline .od-total-sub { font-family: var(--f-mono); font-size: 11px; color: var(--text-3); margin-top: 4px; letter-spacing: .02em; }
+
+  /* Total — sticky footer receipt bar that follows you as you scroll */
+  .order-total-banner.otb-footer {
+    position: sticky; bottom: 0; z-index: 3;
+    align-items: center;
+    margin-top: var(--s5); margin-bottom: 0;
+    box-shadow: 0 -6px 18px rgba(0, 0, 0, .18);
+  }
+  .order-total-banner.otb-footer .otb-amount { font-size: 26px; }
+  .order-total-banner.otb-footer .otb-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+
+  /* Items — table (grid columns) */
+  .oi-grid { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: var(--r-md); overflow: hidden; }
+  .oi-grid .oi-th, .oi-grid .oi-row {
+    display: grid; grid-template-columns: 1fr 52px 80px 84px auto;
+    align-items: center; gap: var(--s3); padding: var(--s3) var(--s4);
+  }
+  .oi-grid .oi-th { background: var(--bg-app); border-bottom: 1px solid var(--line-soft); }
+  .oi-grid .oi-th span { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-4); }
+  .oi-grid .oi-row { border-bottom: 1px solid var(--line-soft); }
+  .oi-grid .oi-row:last-child { border-bottom: none; }
+  .oi-grid .oi-name { font-size: 13px; font-weight: 500; color: var(--text-1); }
+  .oi-grid .oi-zh { font-family: var(--f-sans); font-size: 11px; font-weight: 300; color: var(--text-3); margin-top: 2px; }
+  .oi-grid .oi-sku { font-family: var(--f-mono); font-size: 10px; color: var(--text-4); letter-spacing: .03em; margin-top: 2px; }
+  .oi-grid .oi-c { font-family: var(--f-mono); font-size: 12px; color: var(--text-2); text-align: center; }
+  .oi-grid .oi-r { font-family: var(--f-mono); font-size: 12px; color: var(--text-2); text-align: right; }
+  .oi-grid .oi-total { font-size: 13px; font-weight: 600; color: var(--text-1); text-align: right; }
+  .oi-grid .oi-packs { text-align: right; white-space: nowrap; }
+  .oi-grid .oi-packs .pack-badge { margin-right: 0; margin-left: 4px; }
+
+  /* Items — cards */
+  .oi-cards { display: flex; flex-direction: column; gap: var(--s2); }
+  .oi-cards .oic { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: var(--s3) var(--s4); }
+  .oi-cards .oic-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); }
+  .oi-cards .oic-name { font-size: 14px; font-weight: 500; color: var(--text-1); }
+  .oi-cards .oic-zh { font-family: var(--f-sans); font-size: 11px; font-weight: 300; color: var(--text-3); margin-top: 2px; }
+  .oi-cards .oic-total { font-size: 18px; font-weight: 400; color: var(--text-1); white-space: nowrap; }
+  .oi-cards .oic-bot { display: flex; align-items: center; gap: 10px; margin-top: var(--s2); padding-top: var(--s2); border-top: 1px solid var(--line-soft); flex-wrap: wrap; }
+  .oi-cards .oic-meta { font-family: var(--f-mono); font-size: 11px; color: var(--text-3); letter-spacing: .02em; }
+  .oi-cards .oic-packs { margin-left: auto; display: inline-flex; }
+  .oi-cards .oic-packs .pack-badge { margin-right: 0; margin-left: 4px; }
+
+  /* Density — compact / editorial reshape the drawer rhythm */
+  .order-card.odd-compact .order-detail { gap: var(--s3) var(--s4); margin-bottom: var(--s4); padding-bottom: var(--s4); }
+  .order-card.odd-compact .order-total-banner { padding: var(--s3) var(--s4); margin-bottom: var(--s4); }
+  .order-card.odd-compact .order-total-banner .otb-amount { font-size: 32px; }
+  .order-card.odd-compact .manifest .mf-row { padding: 10px 0; }
+  .order-card.odd-compact .oi-grid .oi-th,
+  .order-card.odd-compact .oi-grid .oi-row { padding-top: 9px; padding-bottom: 9px; }
+  .order-card.odd-compact .oi-cards .oic { padding: 10px var(--s3); }
+
+  .order-card.odd-editorial .order-detail { gap: var(--s6) var(--s7); margin-bottom: var(--s6); padding-bottom: var(--s6); }
+  .order-card.odd-editorial .order-total-banner { padding: var(--s5) var(--s6); margin-bottom: var(--s6); }
+  .order-card.odd-editorial .order-total-banner .otb-amount { font-size: 52px; }
+  .order-card.odd-editorial .manifest .mf-row { padding: var(--s4) 0; }
+  .order-card.odd-editorial .manifest .mf-name { font-size: 14px; }
+  .order-card.odd-editorial .oi-grid .oi-th,
+  .order-card.odd-editorial .oi-grid .oi-row { padding-top: var(--s4); padding-bottom: var(--s4); }
+
   .sort-chips {
     display: flex; flex-wrap: wrap; gap: 6px;
     align-items: center;
@@ -8441,14 +8509,69 @@ function setItemsSort(mode) {
   if (_OPEN_ORDER) renderOpenOrder(_OPEN_ORDER);
 }
 
-// Items render as a numbered packing manifest (per shipment). Sort order
-// is preserved from sortOrderItems so the Packaging / SKU / Shipping chips
-// still re-order the list; numbering follows the rendered order.
+// Items render as a numbered packing manifest (per shipment) by default.
+// The operator's View tweak (ODV.itemsLayout) can swap to a column table or
+// stacked cards. Sort order is preserved from sortOrderItems so the
+// Packaging / SKU / Shipping chips still re-order the list.
 function renderItemsTable(items, showPack = true) {
   const sorted = sortOrderItems(items, _ITEMS_SORT_MODE);
+  if (ODV.itemsLayout === 'table') return renderItemsAsGrid(sorted, showPack);
+  if (ODV.itemsLayout === 'cards') return renderItemsAsCards(sorted, showPack);
   return `<div class="manifest">
     ${sorted.map((it, i) => renderItemRow(it, { showPack, index: i + 1 })).join('')}
   </div>`;
+}
+
+// Items layout · TABLE — aligned columns (Item / Qty / Unit / Total / Pack).
+function renderItemsAsGrid(items, showPack = true) {
+  const head = `<div class="oi-th">
+    <span>Item · 商品</span>
+    <span style="text-align:center">Qty · 数量</span>
+    <span style="text-align:right">Unit · 单价</span>
+    <span style="text-align:right">Total · 小计</span>
+    <span style="text-align:right">Pack · 包装</span>
+  </div>`;
+  const rows = items.map(it => {
+    const nm = `<span class="oi-name">${escapeHtml(it.name_en || '')}</span>`;
+    const nameCell = it.product_id
+      ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab">${nm}</a>`
+      : nm;
+    const zh = (it.name_cn || it.size)
+      ? `<div class="oi-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
+    return `<div class="oi-row">
+      <div style="min-width:0">${nameCell}${zh}<div class="oi-sku">${it.sku ? escapeHtml(it.sku) : 'no SKU'}</div></div>
+      <span class="oi-c">×${it.qty}</span>
+      <span class="oi-r">¥${fmt(it.unit_price)}</span>
+      <span class="oi-total">¥${fmt(it.line_total)}</span>
+      <span class="oi-packs">${showPack ? renderPackBadges(it) : ''}</span>
+    </div>`;
+  }).join('');
+  return `<div class="oi-grid">${head}${rows}</div>`;
+}
+
+// Items layout · CARDS — each line a bordered card, total emphasised.
+function renderItemsAsCards(items, showPack = true) {
+  const cards = items.map(it => {
+    const nm = `<span class="oic-name">${escapeHtml(it.name_en || '')}</span>`;
+    const nameCell = it.product_id
+      ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab">${nm}</a>`
+      : nm;
+    const zh = (it.name_cn || it.size)
+      ? `<div class="oic-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
+    return `<div class="oic">
+      <div class="oic-top">
+        <div style="min-width:0">${nameCell}${zh}</div>
+        <span class="oic-total">¥${fmt(it.line_total)}</span>
+      </div>
+      <div class="oic-bot">
+        <span class="oic-meta">${it.sku ? escapeHtml(it.sku) : 'no SKU'}</span>
+        <span style="color:var(--text-4)">·</span>
+        <span class="oic-meta">×${it.qty} @ ¥${fmt(it.unit_price)}</span>
+        ${showPack ? `<span class="oic-packs">${renderPackBadges(it)}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="oi-cards">${cards}</div>`;
 }
 
 // Render one shipment block: header pill + items table + tracking row.
@@ -8473,6 +8596,7 @@ function renderShipmentCard(o, s) {
 async function openOrder(id) {
   _OPEN_ORDER = null;
   _ORDER_BACK_CUSTOMER = null;
+  _ODV_OPEN = false;               // View popover starts closed on a fresh open
   const mount = $('#order-detail-mount');
   mount.innerHTML = '<div class="order-card muted">Loading order…</div>';
   openDrawer('#order-drawer');
@@ -8566,6 +8690,105 @@ document.addEventListener('keydown', (e) => {
   if (id) openOrder(Number(id));
 });
 
+// ── Order detail · per-operator View tweaks ───────────────────────────
+// The Full Circle Order Detail "Tweaks" panel, made operator-selectable:
+// total placement (banner / inline / footer), items layout (manifest /
+// table / cards), and density. Persisted to localStorage; defaults match
+// the standard banner+manifest look so nothing changes until a pick.
+const ORDER_DETAIL_TWEAK_DEFAULTS = { totalPlacement: 'banner', itemsLayout: 'manifest', density: 'comfortable' };
+function odvLoad() {
+  try { return { ...ORDER_DETAIL_TWEAK_DEFAULTS, ...(JSON.parse(localStorage.getItem('retail-admin-order-detail-tweaks') || '{}')) }; }
+  catch (e) { return { ...ORDER_DETAIL_TWEAK_DEFAULTS }; }
+}
+let ODV = odvLoad();
+let _ODV_OPEN = false;
+function odvSet(key, val) {
+  ODV[key] = val;
+  try { localStorage.setItem('retail-admin-order-detail-tweaks', JSON.stringify(ODV)); } catch (e) {}
+  _ODV_OPEN = true;                       // keep the popover open across the re-render
+  if (_OPEN_ORDER) renderOpenOrder(_OPEN_ORDER);
+}
+function odvToggle() {
+  _ODV_OPEN = !_ODV_OPEN;
+  const pop = document.getElementById('odv-pop'); if (pop) pop.hidden = !_ODV_OPEN;
+  if (_ODV_OPEN) setTimeout(() => document.addEventListener('mousedown', odvOutside), 0);
+  else document.removeEventListener('mousedown', odvOutside);
+}
+function odvOutside(e) {
+  if (e.target.closest && e.target.closest('.ovp-wrap')) return;
+  _ODV_OPEN = false;
+  const pop = document.getElementById('odv-pop'); if (pop) pop.hidden = true;
+  document.removeEventListener('mousedown', odvOutside);
+}
+function odvBtn(key, val, label) {
+  return `<button data-v="${val}" class="${ODV[key] === val ? 'active' : ''}" onclick="odvSet('${key}','${val}')">${label}</button>`;
+}
+function renderOrderViewPopover() {
+  return `
+    <div class="ovp-wrap" style="margin-right: 40px; flex-shrink: 0;">
+      <button class="btn btn-sm" id="odv-btn" onclick="odvToggle()" aria-haspopup="true" title="Display options · 显示选项">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h7M4 18h10"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+        View · 视图
+      </button>
+      <div id="odv-pop" class="ovp" ${_ODV_OPEN ? '' : 'hidden'}>
+        <div class="ovp-head">Display options · 显示选项</div>
+        <div class="ovp-group">
+          <div class="ovp-label">Total placement · 总额位置</div>
+          <div class="ovp-seg">
+            ${odvBtn('totalPlacement', 'banner', 'Banner · 横幅')}
+            ${odvBtn('totalPlacement', 'inline', 'Inline · 行内')}
+            ${odvBtn('totalPlacement', 'footer', 'Footer · 底栏')}
+          </div>
+        </div>
+        <div class="ovp-group">
+          <div class="ovp-label">Items layout · 商品布局</div>
+          <div class="ovp-seg">
+            ${odvBtn('itemsLayout', 'manifest', 'Manifest · 清单')}
+            ${odvBtn('itemsLayout', 'table', 'Table · 表格')}
+            ${odvBtn('itemsLayout', 'cards', 'Cards · 卡片')}
+          </div>
+        </div>
+        <div class="ovp-group">
+          <div class="ovp-label">Density · 密度</div>
+          <div class="ovp-seg">
+            ${odvBtn('density', 'comfortable', 'Comfortable · 舒适')}
+            ${odvBtn('density', 'compact', 'Compact · 紧凑')}
+            ${odvBtn('density', 'editorial', 'Editorial · 宽松')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+function renderOrderTotalBanner(o) {
+  return `
+    <div class="order-total-banner">
+      <div>
+        <div class="otb-label">Order total · 订单总额</div>
+        <div class="otb-sub">subtotal ¥${fmt(o.subtotal)} · shipping ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · voucher −¥' + fmt(o.voucher_amount) : ''}</div>
+      </div>
+      <div class="otb-amount">¥${fmt(o.total)}</div>
+    </div>`;
+}
+function renderOrderTotalInline(o) {
+  return `
+    <div class="od-total-inline">
+      <div class="kicker">Order total · 订单总额</div>
+      <div class="od-total-big">¥${fmt(o.total)}</div>
+      <div class="od-total-sub">subtotal ¥${fmt(o.subtotal)} · shipping ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · voucher −¥' + fmt(o.voucher_amount) : ''}</div>
+    </div>`;
+}
+function renderOrderTotalFooter(o, transitionsHtml) {
+  return `
+    <div class="order-total-banner otb-footer">
+      <div>
+        <div class="otb-label">Order total · 订单总额</div>
+        <div class="otb-sub">subtotal ¥${fmt(o.subtotal)} · shipping ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · voucher −¥' + fmt(o.voucher_amount) : ''}</div>
+      </div>
+      <div class="otb-amount">¥${fmt(o.total)}</div>
+      ${transitionsHtml ? `<div class="otb-actions">${transitionsHtml}</div>` : ''}
+    </div>`;
+}
+
 function renderOpenOrder(o) {
   const mount = $('#order-detail-mount');
   const transitions = (NEXT_STATUS[o.status] || []).map(([next, label]) => {
@@ -8573,7 +8796,7 @@ function renderOpenOrder(o) {
       return `<button class="btn ${cls} btn-sm" onclick="transition(${o.id}, '${next}')">${label}</button>`;
     }).join('');
     mount.innerHTML = `
-      <div class="order-card">
+      <div class="order-card odd-${ODV.density}">
         ${_ORDER_BACK_CUSTOMER ? `<button class="btn btn-sm" style="margin-bottom: var(--s3);" onclick="cuBackToCustomer()">← Back to customer · 返回顾客</button>` : ''}
         <div class="order-head">
           <div>
@@ -8584,20 +8807,16 @@ function renderOpenOrder(o) {
             </div>
             <div class="od-eyebrow">Order placed · 下单于 ${formatDate(o.placed_at)}</div>
           </div>
+          ${renderOrderViewPopover()}
         </div>
 
         ${drawerRefundBanner(o)}
         ${renderRefundPanel(o)}
 
-        <!-- Order total as a full-width hero banner (invoice feel) — the
-             inline Total tile below was retired in favour of this. -->
-        <div class="order-total-banner">
-          <div>
-            <div class="otb-label">Order total · 订单总额</div>
-            <div class="otb-sub">subtotal ¥${fmt(o.subtotal)} · shipping ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · voucher −¥' + fmt(o.voucher_amount) : ''}</div>
-          </div>
-          <div class="otb-amount">¥${fmt(o.total)}</div>
-        </div>
+        <!-- Order total — placement is an operator View tweak: a full-width
+             hero banner here (default), an inline tile in the info grid, or a
+             sticky footer receipt at the bottom. -->
+        ${ODV.totalPlacement === 'banner' ? renderOrderTotalBanner(o) : ''}
 
         <div class="order-detail">
           <div>
@@ -8614,6 +8833,7 @@ function renderOpenOrder(o) {
             <div class="kicker">Payment ${o.payments?.[0]?.transaction_id ? copyChip(o.payments[0].transaction_id, 'Txn ID') : ''}</div>
             <div class="val">${paymentBrandHTML(o.payment_method, 'lg')} · ${escapeHtml((o.payments?.[0]?.status) || '—')}</div>
           </div>
+          ${ODV.totalPlacement === 'inline' ? renderOrderTotalInline(o) : ''}
           ${renderShipByTile(o)}
           ${o.store_code ? `<div>
             <div class="kicker">Fulfilled by</div>
@@ -8680,9 +8900,11 @@ function renderOpenOrder(o) {
           </div>
         </div>` : ''}
 
-        <div class="transitions">
+        ${ODV.totalPlacement === 'footer'
+          ? renderOrderTotalFooter(o, transitions)
+          : `<div class="transitions">
           ${transitions || '<span class="muted" style="font-size: 12px;">No further transitions available. · 暂无可执行的状态变更。</span>'}
-        </div>
+        </div>`}
       </div>`;
   // Drawer body manages its own scroll position; reset to top on each
   // render so re-renders after a transition don't leave it mid-scroll.
