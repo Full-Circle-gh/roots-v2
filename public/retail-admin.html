@@ -7454,6 +7454,16 @@ document.addEventListener('click', (ev) => {
     $$('.tabs-group.open').forEach(g => g.classList.remove('open'));
   }
 });
+// Deep-link: /retail-admin?tab=orders opens that tab directly. Used by the
+// new-order push notification so clicking it lands the operator on Orders.
+(function () {
+  try {
+    const want = new URLSearchParams(location.search).get('tab');
+    if (!want || !/^[a-z_]+$/.test(want)) return;
+    const b = document.querySelector('.tabs [data-tab="' + want + '"]');
+    if (b) b.click();
+  } catch (e) {}
+})();
 
 // ── Settings sub-nav switcher ──
 $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
@@ -8604,9 +8614,16 @@ function _markOrdersSeenNow() {
   _setOrdersLastSeen(new Date().toISOString());
   _paintOrdersBadge(0);
 }
+// Browser-tab title badge — prefixes the page title with "(N) " so unseen
+// orders are visible even when the whole backend tab is in the background.
+const _BASE_TITLE = document.title;
+function _setOrdersTitleBadge(count) {
+  document.title = count > 0 ? '(' + (count > 99 ? '99+' : count) + ') ' + _BASE_TITLE : _BASE_TITLE;
+}
 function _paintOrdersBadge(count) {
   const btn   = document.querySelector('.tabs [data-tab="orders"]');
   const badge = document.getElementById('ordersTabBadge');
+  _setOrdersTitleBadge(count);
   if (!btn || !badge) return;
   if (count > 0) {
     btn.classList.add('has-unseen');

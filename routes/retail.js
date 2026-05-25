@@ -21,6 +21,9 @@ const geocode = require('../lib/geocode');
 const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
+// Web Push — optional; wrapped so a missing module never breaks order flow.
+let _push = null;
+try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
 const router = express.Router();
 
 // Hoisted here so any admin route defined later in the file can use it
@@ -662,6 +665,22 @@ function markOrderPaid(orderId) {
     // Credit referrer if this is the invitee's first paid order. Guarded
     // inside creditReferralReward by status='joined' so retries are safe.
     try { creditReferralReward(orderId); } catch (e) { console.error('[creditReferralReward]', e); }
+    // Notify retail operators of the new order via Web Push — reaches their
+    // device even when the backend isn't open. Fires once per genuine
+    // transition (r.changes>0 guards against wechat retry callbacks).
+    try {
+      if (_push && _push.sendPushByPermission) {
+        const o = db.prepare('SELECT order_no, total FROM retail_orders WHERE id = ?').get(orderId);
+        if (o) {
+          _push.sendPushByPermission('retail', {
+            title: isWait ? '🌿 New order · 新订单(待补货)' : '🌿 New paid order · 新订单已付款',
+            body: `${o.order_no} · ¥${Number(o.total || 0).toFixed(2)}`,
+            url: '/retail-admin?tab=orders',
+            tag: 'retail-order-' + orderId,
+          });
+        }
+      }
+    } catch (e) { console.warn('[markOrderPaid push]', e.message); }
   }
 }
 
