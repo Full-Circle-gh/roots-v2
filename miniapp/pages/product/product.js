@@ -4,9 +4,10 @@
 // Reads /api/retail/products/:id which already returns full details
 // including options[].choices[] for any per-product Q&A.
 
-const api  = require('../../utils/api');
-const lang = require('../../utils/lang');
-const cart = require('../../utils/cart');
+const api   = require('../../utils/api');
+const lang  = require('../../utils/lang');
+const cart  = require('../../utils/cart');
+const track = require('../../utils/track');
 
 function absUrl(u) {
   if (!u) return '';
@@ -53,6 +54,14 @@ function socialProofText(sp, L) {
   if (sp.window === 'week')  return `${n} ${ppl} bought this in the past week`;
   if (sp.window === 'month') return `${n} ${ppl} bought this in the past month`;
   return n === 1 ? '1 person has bought this' : `${n} people have bought this`;
+}
+
+// Live "N people viewing now" — only meaningful with at least one OTHER
+// person present, so we hide it below 2 (a lone viewer seeing "1 viewing"
+// reads as broken). Count comes from the server's in-memory presence map.
+function viewingText(n, L) {
+  if (!n || n < 2) return '';
+  return L === 'cn' ? `${n} 人正在浏览` : `${n} people viewing now`;
 }
 
 function reviewTagMap() {
@@ -109,6 +118,8 @@ Page({
     nutritionBasis: '',    // resolved label e.g. "Per 100ml" / "每100毫升"
     nutritionRows: [],     // [{label, value}]
     socialProof: '',       // "N people bought this today" — '' hides the line
+    viewingCount: 0,       // live concurrent viewers (from presence heartbeat)
+    viewingText: '',       // "N people viewing now" — '' hides the line (count < 2)
     isFavorited: false,    // heart pip state — driven by /api/retail/favorites/ids
     favoritePending: false, // de-dupe rapid taps on the pip
   },
@@ -129,6 +140,7 @@ Page({
       this.recomputeDisplay();
     }
     this.startFlashTick();
+    this.startViewingPing();
     // User may have removed this product from favorites on another tab;
     // re-check on every show so the heart pip stays accurate.
     this.refreshFavoriteState();
@@ -165,8 +177,36 @@ Page({
     }
   },
 
-  onHide()   { this.stopFlashTick(); },
-  onUnload() { this.stopFlashTick(); },
+  onHide()   { this.stopFlashTick(); this.stopViewingPing(true); },
+  onUnload() { this.stopFlashTick(); this.stopViewingPing(true); },
+
+  // ─── "N viewing now" presence heartbeat ────────────────────────────
+  // Ping while the page is open so the server keeps us in its live-viewer
+  // set; on leave, send one { leaving:true } ping so our slot frees fast
+  // instead of waiting for the server's TTL to expire.
+  startViewingPing() {
+    this.stopViewingPing();
+    this.pingViewing(false);
+    this._viewTimer = setInterval(() => this.pingViewing(false), 25000);
+  },
+  stopViewingPing(leaving) {
+    if (this._viewTimer) { clearInterval(this._viewTimer); this._viewTimer = null; }
+    if (leaving) this.pingViewing(true);
+  },
+  async pingViewing(leaving) {
+    if (!this.data.id) return;
+    try {
+      const res = await api.post('/api/retail/products/' + this.data.id + '/viewing', {
+        viewer_id: track.getSession(),
+        leaving: !!leaving,
+      });
+      if (leaving) return;  // page is going away — don't touch UI
+      const count = Number(res && res.count) || 0;
+      this.setData({ viewingCount: count, viewingText: viewingText(count, this.data.lang) });
+    } catch (e) {
+      // Presence is nice-to-have — never surface a failure to the user.
+    }
+  },
 
   startFlashTick() {
     this.stopFlashTick();
@@ -431,6 +471,7 @@ Page({
       nutritionBasis,
       nutritionRows,
       socialProof: socialProofText(p.social_proof, L),
+      viewingText: viewingText(this.data.viewingCount, L),
     });
     this.recomputeFlashCountdown();
   },

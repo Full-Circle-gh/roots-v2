@@ -548,6 +548,46 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
   res.json({ success: true, data: out });
 });
 
+// ── "N viewing now" presence ────────────────────────────────────────────────
+// Live concurrent-viewer count per product. Pure in-memory (no DB writes): the
+// product page heartbeats every ~25s while open and once with { leaving:true }
+// on exit; a viewer counts as present if seen within VIEW_TTL_MS. Keyed by the
+// mini-app's per-launch session id so repeat pings from one client dedupe.
+// Ephemeral by design — a PM2 restart just resets it and clients re-register on
+// their next heartbeat. Assumes a single app instance (this PM2 fork is one).
+const VIEWING = new Map();   // product_id → Map<viewerKey, lastSeenMs>
+const VIEW_TTL_MS = 45 * 1000;
+
+function pruneAllViewers(now) {
+  for (const [pid, viewers] of VIEWING) {
+    for (const [k, ts] of viewers) if (now - ts > VIEW_TTL_MS) viewers.delete(k);
+    if (viewers.size === 0) VIEWING.delete(pid);
+  }
+}
+const _viewSweep = setInterval(() => pruneAllViewers(Date.now()), 60 * 1000);
+if (_viewSweep.unref) _viewSweep.unref();
+
+router.post('/api/retail/products/:id/viewing', express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
+  const now = Date.now();
+  const b = req.body || {};
+  // Stable per-client key (the mini-app's per-launch session id); fall back to
+  // IP + UA so anonymous clients without one still dedupe roughly.
+  const vid = (b.viewer_id ? String(b.viewer_id).slice(0, 64) : '')
+            || ((req.ip || '') + '|' + String(req.get('user-agent') || '').slice(0, 40));
+
+  let viewers = VIEWING.get(id);
+  if (!viewers) { viewers = new Map(); VIEWING.set(id, viewers); }
+  if (b.leaving) viewers.delete(vid);
+  else viewers.set(vid, now);
+  for (const [k, ts] of viewers) if (now - ts > VIEW_TTL_MS) viewers.delete(k);
+  if (viewers.size === 0) VIEWING.delete(id);
+
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, data: { count: viewers.size } });
+});
+
 // Active + upcoming flash sales — feeds the flash_sale_strip CMS block and
 // any homepage surface that wants "what's on flash right now?". Active
 // items come first (sorted by soonest end), then upcoming (sorted by
