@@ -86,6 +86,32 @@ function clear() {
   save();
 }
 
+// Re-price cart rows from the server's authoritative /quote line breakdown
+// so the display reflects the CURRENT effective price — e.g. a flash sale
+// that started or ended while items sat in the cart. (The /orders endpoint
+// already charges this price; this just keeps the checkout DISPLAY honest.)
+// Matches each server line to its cart row by product_id + normalised
+// choice ids. Returns true if anything changed.
+function reprice(lines) {
+  if (!Array.isArray(lines) || !lines.length) return false;
+  load();
+  const keyOf = (pid, ids) => pid + '|' + (ids || []).map(Number).filter(Boolean).sort((a, b) => a - b).join(',');
+  const byKey = {};
+  for (const ln of lines) byKey[keyOf(ln.product_id, ln.choice_ids)] = ln;
+  let changed = false;
+  for (const it of state.items) {
+    const ln = byKey[keyOf(it.product_id, (it.options || []).map(o => o.choice_id))];
+    if (ln && ln.unit_price != null && Number(it.unit_price) !== Number(ln.unit_price)) {
+      it.unit_price    = Number(ln.unit_price);
+      it.is_flash      = !!ln.is_flash;
+      it.regular_price = ln.regular_price != null ? Number(ln.regular_price) : null;
+      changed = true;
+    }
+  }
+  if (changed) save();
+  return changed;
+}
+
 function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
 function updateBadge() {
@@ -106,4 +132,4 @@ function updateBadge() {
   } catch (e) { /* swallow — badge is cosmetic, never break cart writes */ }
 }
 
-module.exports = { get, count, subtotal, add, setQty, remove, clear, subscribe, updateBadge };
+module.exports = { get, count, subtotal, add, setQty, remove, clear, subscribe, updateBadge, reprice };

@@ -6862,6 +6862,7 @@ function priceCart(items, customerId) {
   if (!Array.isArray(items) || !items.length) return { error: 'no_items', subtotal: 0, totalQty: 0 };
   const now = Date.now();
   let subtotal = 0, totalQty = 0;
+  const lines = [];
   for (const it of items) {
     const pid = parseInt(it.product_id, 10);
     const qty = Number(it.qty);
@@ -6892,8 +6893,19 @@ function priceCart(items, customerId) {
     const unit = eff.price + optionDelta;
     subtotal += unit * qty;
     totalQty += qty;
+    // Per-line breakdown so the checkout page can re-price its cart display
+    // to the CURRENT effective price (flash sales that started/ended while
+    // an item sat in the cart). choice_ids is normalised (numeric, sorted)
+    // so the client can key-match each line to its cart row.
+    lines.push({
+      product_id: pid,
+      choice_ids: (Array.isArray(it.choices) ? it.choices : []).map(Number).filter(Boolean).sort((a, b) => a - b),
+      unit_price: Math.round(unit * 100) / 100,
+      is_flash: !!eff.is_flash,
+      regular_price: eff.is_flash ? Math.round((Number(p.price) + optionDelta) * 100) / 100 : null,
+    });
   }
-  return { subtotal: Math.round(subtotal * 100) / 100, totalQty };
+  return { subtotal: Math.round(subtotal * 100) / 100, totalQty, lines };
 }
 
 // 100 RMB → 1 point (default). Configurable.
@@ -7230,6 +7242,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
     success: true,
     data: {
       subtotal: priced.subtotal,
+      lines: priced.lines || [],
       total_qty: priced.totalQty,
       delivery_fee: fees.deliveryFee,
       packing_fee:  fees.packingFee,

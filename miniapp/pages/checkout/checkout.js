@@ -511,12 +511,26 @@ Page({
         // The endpoint returns { success: false, error: 'no_zone_match', data } when
         // no zone matches. api.js may surface that as a thrown error OR as a
         // resolved value depending on the helper — defensively handle both.
+        // Re-price the cart from the server's authoritative line breakdown so
+        // the displayed line prices + subtotal reflect the CURRENT flash state
+        // (a sale may have started/ended while items sat in the cart). The
+        // /orders endpoint already charges this; this keeps the display honest.
+        if (Array.isArray(data.lines)) cart.reprice(data.lines);
+        const srvSubtotal = Number(data.subtotal != null ? data.subtotal : cart.subtotal());
+        this.setData({
+          items: cart.get().items.map(it => ({
+            ...it,
+            display_name: lang.pick(it.name_en, it.name_cn, L),
+            line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
+          })),
+          subtotal: srvSubtotal.toFixed(2),
+        });
         const deliveryFee = Number(data.delivery_fee) || 0;
         const packingFee  = Number(data.packing_fee)  || 0;
         let effectiveDelivery = deliveryFee;
         if (this.data.voucherFreeShip) effectiveDelivery = 0;
         const voucherDiscount = Number(this.data.voucherDiscount) || 0;
-        const grossTotal = Math.max(0, subtotal + effectiveDelivery + packingFee - voucherDiscount);
+        const grossTotal = Math.max(0, srvSubtotal + effectiveDelivery + packingFee - voucherDiscount);
         const payingWithPoints = !!this.data.usePoints && data.points_affordable;
         // Partial-points stack: server clamped points_to_use → applied amount + discount.
         const pointsMaxUsable    = Number(data.points_max_usable) || 0;
