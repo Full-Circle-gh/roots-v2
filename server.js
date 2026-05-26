@@ -138,6 +138,7 @@ app.get(/^\/(?:MP_verify_[A-Za-z0-9]+|[A-Za-z0-9]{6,32})\.txt$/, (req, res) => {
 // Routes
 app.use(require('./routes/auth'));
 app.use(require('./routes/backend-auth'));   // Mini App Backend operator realm (separate from kitchen auth)
+app.use(require('./routes/billing'));        // Mini App Backend billing control plane (plans / subscriptions / invoices)
 app.use(require('./routes/ingredients'));
 app.use(require('./routes/recipes'));
 app.use(require('./routes/admin'));
@@ -180,6 +181,13 @@ app.get('/backend/account', (req, res) => {
   if (!req.session?.backendUserId) return res.redirect('/backend/login');
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'backend-account.html'));
+});
+
+// Mini App Backend billing — plans / subscription / invoices for the tenant.
+app.get('/backend/billing', (req, res) => {
+  if (!req.session?.backendUserId) return res.redirect('/backend/login');
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'backend-billing.html'));
 });
 
 // Main app - serves the SPA shell

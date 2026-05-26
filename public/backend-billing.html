@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Full Circle · Billing</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#12161A" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+SC:wght@300;400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:#12161A; --pane:#1A1F24; --elev:#1F252B; --paper:#E8E5DC; --muted:#AEABA2; --faint:#7d7a72;
+    --line:rgba(232,229,220,.10); --line-2:rgba(232,229,220,.16);
+    --tea:#6B8E6F; --brass:#B08D4A; --brass-hi:#C29B54; --danger:#e8556a;
+    --f-sans:'IBM Plex Sans','IBM Plex Sans SC',system-ui,sans-serif;
+    --f-mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--ink); color: var(--paper); font-family: var(--f-sans);
+    display: flex; justify-content: center; padding: 48px 24px;
+    background-image: radial-gradient(120% 60% at 50% 0%, rgba(107,142,111,.06) 0%, transparent 55%);
+  }
+  .wrap { width: 100%; max-width: 720px; }
+  .back { display: inline-block; color: var(--faint); text-decoration: none; font-size: 12.5px; margin-bottom: 18px; }
+  .back:hover { color: var(--muted); }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .mark { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line-2); display: flex; align-items: center; justify-content: center; }
+  .brand .word { font-size: 13px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; }
+  .sub { font-family: var(--f-mono); font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: var(--faint); margin: 2px 0 22px; }
+  h2 { font-size: 13px; font-weight: 600; margin: 26px 0 12px; letter-spacing: .01em; }
+  .card { background: var(--pane); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
+  .alert { font-size: 13px; line-height: 1.5; padding: 12px 14px; border-radius: 10px; margin-bottom: 16px; display: none; }
+  .alert.show { display: block; }
+  .alert.warn { background: rgba(176,141,74,.12); border: 1px solid rgba(176,141,74,.32); color: #d8b676; }
+  .alert.bad  { background: rgba(232,85,106,.12); border: 1px solid rgba(232,85,106,.34); color: #f0a3ae; }
+  /* current plan card */
+  .cur-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .cur-name { font-size: 22px; font-weight: 300; letter-spacing: -.01em; }
+  .pill { font-family: var(--f-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; }
+  .pill.active    { background: rgba(107,142,111,.16); color: #a7c6ab; border: 1px solid rgba(107,142,111,.4); }
+  .pill.attention { background: rgba(176,141,74,.15); color: #d8b676; border: 1px solid rgba(176,141,74,.34); }
+  .pill.bad       { background: rgba(232,85,106,.14); color: #f0a3ae; border: 1px solid rgba(232,85,106,.34); }
+  .cur-meta { margin-top: 12px; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 13px; }
+  .cur-meta dt { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); align-self: center; }
+  .cur-meta dd { margin: 0; }
+  /* plan grid */
+  .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .plan { background: var(--pane); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; }
+  .plan.current { border-color: rgba(107,142,111,.5); box-shadow: inset 0 0 0 1px rgba(107,142,111,.25); }
+  .plan .pname { font-size: 15px; font-weight: 600; }
+  .plan .price { margin: 8px 0 14px; font-size: 24px; font-weight: 300; }
+  .plan .price small { font-size: 12px; color: var(--faint); font-weight: 400; }
+  .plan ul { list-style: none; padding: 0; margin: 0 0 16px; flex: 1; }
+  .plan li { font-size: 12.5px; color: var(--muted); padding: 4px 0 4px 18px; position: relative; line-height: 1.4; }
+  .plan li::before { content: ''; position: absolute; left: 2px; top: 9px; width: 6px; height: 6px; border-radius: 50%; background: var(--tea); }
+  .plan button { font-family: var(--f-sans); width: 100%; border-radius: 8px; font-size: 13px; font-weight: 600; padding: 9px; cursor: pointer; }
+  .plan .choose { background: var(--brass); color: var(--ink); border: 0; }
+  .plan .choose:hover { background: var(--brass-hi); }
+  .plan .is-current { background: transparent; color: var(--tea); border: 1px solid rgba(107,142,111,.4); cursor: default; }
+  /* invoices */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-family: var(--f-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 0 10px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 11px 10px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: 0; }
+  .inv-status { font-family: var(--f-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+  .inv-status.paid { color: #a7c6ab; }
+  .inv-status.open, .inv-status.past_due { color: #d8b676; }
+  .empty { color: var(--faint); font-size: 13px; padding: 8px 0; }
+  .note { font-size: 12px; color: var(--faint); line-height: 1.5; margin-top: 10px; }
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--elev); border: 1px solid var(--line-2); color: var(--paper); font-size: 13px; padding: 11px 16px; border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.4); opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back" href="/retail-admin">← Back to backend · 返回后台</a>
+    <div class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.6" stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
+          <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.6" stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
+          <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1" fill="none" stroke="#E8E5DC" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="word">Full Circle</span>
+    </div>
+    <div class="sub">Billing · 账单</div>
+
+    <div class="alert" id="alert"></div>
+
+    <div class="card" id="curCard">
+      <div class="empty">Loading… · 加载中…</div>
+    </div>
+
+    <h2>Plans · 套餐</h2>
+    <div class="plans" id="plans"><div class="empty">Loading… · 加载中…</div></div>
+
+    <h2>Invoices · 发票</h2>
+    <div class="card">
+      <div id="invoices"><div class="empty">Loading… · 加载中…</div></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const money = (cents, cur) => (cur === 'CNY' || !cur ? '¥' : cur + ' ') + (Number(cents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  const fmtDate = s => { if (!s) return '—'; const d = new Date(String(s).replace(' ', 'T') + 'Z'); return isNaN(d) ? esc(s) : d.toISOString().slice(0, 10); };
+
+  let CURRENT_CODE = null;
+
+  function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2600); }
+
+  function renderAlert(view) {
+    const a = $('#alert'); const dl = view.daysLeft;
+    const map = {
+      expiring:     ['warn', 'Your subscription ends in ' + dl + ' day(s). Renew to avoid interruption. · 订阅将在 ' + dl + ' 天后到期,请及时续订。'],
+      trial_ending: ['warn', 'Your trial ends in ' + dl + ' day(s). · 试用将在 ' + dl + ' 天后结束。'],
+      past_due:     ['bad',  'Payment is past due — please settle your latest invoice to keep access. · 账单逾期,请尽快支付以保持访问。'],
+      suspended:    ['bad',  'This account is suspended for non-payment. Settle the outstanding invoice to restore access. · 账户因欠费已暂停,支付后恢复。'],
+    };
+    if (map[view.alert]) { a.className = 'alert show ' + map[view.alert][0]; a.textContent = map[view.alert][1]; }
+    else a.className = 'alert';
+  }
+
+  function renderCurrent(view) {
+    const sub = view.subscription, plan = view.plan;
+    if (!sub) { $('#curCard').innerHTML = '<div class="empty">No subscription on file. · 暂无订阅。</div>'; return; }
+    CURRENT_CODE = plan ? plan.code : null;
+    const statusCls = sub.status === 'active' || sub.status === 'trialing' ? 'active' : (sub.status === 'past_due' || sub.status === 'grace' ? 'attention' : 'bad');
+    const perpetual = sub.is_internal ? true : false;
+    const renew = perpetual ? 'Perpetual (internal) · 永久(内部)' :
+      (sub.current_period_end ? fmtDate(sub.current_period_end) + (view.daysLeft != null ? ' · ' + view.daysLeft + ' day(s) left' : '') : '—');
+    $('#curCard').innerHTML =
+      '<div class="cur-top">' +
+        '<div class="cur-name">' + esc(plan ? plan.name : 'No plan') + (plan && plan.name_cn ? ' <span style="font-size:14px;color:var(--faint)">' + esc(plan.name_cn) + '</span>' : '') + '</div>' +
+        '<span class="pill ' + statusCls + '">' + esc(sub.status) + '</span>' +
+      '</div>' +
+      '<dl class="cur-meta">' +
+        '<dt>Price</dt><dd>' + (plan ? (plan.price_cents ? money(plan.price_cents, plan.currency) + ' / ' + esc(plan.billing_interval) : 'Free · 免费') : '—') + '</dd>' +
+        '<dt>Renews</dt><dd>' + esc(renew) + '</dd>' +
+        '<dt>Company</dt><dd id="cur-company">—</dd>' +
+      '</dl>';
+  }
+
+  function renderPlans(plans) {
+    if (!plans.length) { $('#plans').innerHTML = '<div class="empty">No plans available. · 暂无套餐。</div>'; return; }
+    $('#plans').innerHTML = plans.map(p => {
+      const isCur = p.code === CURRENT_CODE;
+      const feats = (p.features || []).map(f => '<li>' + esc(f.en || f) + (f.cn ? ' · ' + esc(f.cn) : '') + '</li>').join('');
+      const btn = isCur
+        ? '<button class="is-current" disabled>Current plan · 当前套餐</button>'
+        : '<button class="choose" data-code="' + esc(p.code) + '" data-name="' + esc(p.name) + '">Choose · 选择</button>';
+      return '<div class="plan' + (isCur ? ' current' : '') + '">' +
+        '<div class="pname">' + esc(p.name) + (p.name_cn ? ' <span style="color:var(--faint);font-weight:400">' + esc(p.name_cn) + '</span>' : '') + '</div>' +
+        '<div class="price">' + money(p.price_cents, p.currency) + ' <small>/ ' + esc(p.billing_interval) + '</small></div>' +
+        '<ul>' + feats + '</ul>' + btn +
+      '</div>';
+    }).join('');
+    document.querySelectorAll('.plan .choose').forEach(b => b.addEventListener('click', () => {
+      toast('Online payment is coming soon — contact your account manager to change plans. · 在线支付即将开放,如需更改套餐请联系客户经理。');
+    }));
+  }
+
+  function renderInvoices(invoices) {
+    if (!invoices.length) { $('#invoices').innerHTML = '<div class="empty">No invoices yet. · 暂无发票。</div>'; return; }
+    $('#invoices').innerHTML =
+      '<table><thead><tr><th>Invoice · 发票</th><th>Period · 周期</th><th>Amount · 金额</th><th>Status · 状态</th></tr></thead><tbody>' +
+      invoices.map(iv =>
+        '<tr><td>' + esc(iv.invoice_no || ('#' + iv.id)) + '</td>' +
+        '<td>' + fmtDate(iv.period_start) + ' – ' + fmtDate(iv.period_end) + '</td>' +
+        '<td>' + money(iv.amount_cents, iv.currency) + '</td>' +
+        '<td><span class="inv-status ' + esc(iv.status) + '">' + esc(iv.status) + '</span></td></tr>'
+      ).join('') + '</tbody></table>';
+  }
+
+  // Gate + load
+  fetch('/api/backend/me', { credentials: 'same-origin' }).then(r => r.json()).then(j => {
+    if (!j || !j.user) { location.replace('/backend/login'); return; }
+    const company = (j.user.tenant && (j.user.tenant.brand || j.user.tenant.name)) || '—';
+    Promise.all([
+      fetch('/api/backend/billing', { credentials: 'same-origin' }).then(r => r.json()),
+      fetch('/api/backend/plans', { credentials: 'same-origin' }).then(r => r.json()),
+    ]).then(([bill, plansRes]) => {
+      if (bill && bill.success) {
+        renderAlert(bill);
+        renderCurrent(bill);
+        const c = document.getElementById('cur-company'); if (c) c.textContent = company;
+        renderInvoices(bill.invoices || []);
+      }
+      if (plansRes && plansRes.success) renderPlans(plansRes.plans || []);
+    }).catch(() => toast('Failed to load billing · 加载账单失败'));
+  }).catch(() => location.replace('/backend/login'));
+})();
+</script>
+</body>
+</html>
