@@ -1712,6 +1712,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   const needsInvoice  = body.needs_invoice ? 1 : 0;
   const invoiceTitle  = needsInvoice ? (body.invoice_title || null) : null;
   const invoiceTaxId  = needsInvoice ? (body.invoice_tax_id || null) : null;
+  const invoiceType   = needsInvoice ? (body.invoice_type === 'company' ? 'company' : 'personal') : null;
+  const invoiceEmail  = needsInvoice ? (body.invoice_email || null) : null;
   const voucherCode   = body.voucher_code || null;
   // Future: voucher resolution + points redemption. For now: voucher_amount
   // and points_amount stay at 0 — record the code so admin can reconcile
@@ -2128,9 +2130,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
          voucher_code, voucher_amount,
          points_used, points_amount, total,
          customer_note, needs_cutlery, needs_invoice, invoice_title, invoice_tax_id,
+         invoice_type, invoice_email,
          store_id, routing_reason, channel,
          fallback_choice, awaiting_restock_pids
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       orderNo, req.customer.id, 'pending_payment', paymentMethod,
       address.recipient_name, address.phone,
@@ -2144,6 +2147,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       voucher ? voucher.code : null, voucherDiscount,
       pointsUsed, pointsAmount, total,
       customerNote, needsCutlery, needsInvoice, invoiceTitle, invoiceTaxId,
+      invoiceType, invoiceEmail,
       fulfillingStore.id, routingReason, 'wechat',
       fallbackChoice, awaitingRestockPids ? JSON.stringify(awaitingRestockPids) : null
     );
@@ -2290,6 +2294,7 @@ function loadOrderForCustomer(orderId, customerId) {
             voucher_code, voucher_amount,
             points_used, points_amount, points_earned, total,
             customer_note, needs_cutlery, needs_invoice, invoice_title, invoice_tax_id,
+            invoice_type, invoice_email,
             staff_note, cancelled_reason,
             refund_requested_at, refund_reason, refund_status, refund_review_note,
             refund_amount_requested, refund_amount_approved, refund_amount_paid,

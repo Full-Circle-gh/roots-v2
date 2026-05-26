@@ -9350,10 +9350,8 @@ function renderOpenOrder(o) {
             <div class="sub">${escapeHtml(o.store_name_cn || '')}${routingNote(o.routing_reason) ? ' · ' + routingNote(o.routing_reason) : ''}${(o.channel && o.channel.toLowerCase() !== 'wechat') ? ' · ' + escapeHtml(o.channel) : ''}</div>
           </div>` : ''}
           ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}
-          ${o.needs_cutlery || o.needs_invoice ? `<div class="full" style="display: flex; gap: 10px; flex-wrap: wrap;">
-            ${o.needs_cutlery ? '<span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;">🍴 Cutlery requested · 需要餐具</span>' : ''}
-            ${o.needs_invoice ? `<span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;">🧾 Invoice · 发票${(o.invoice_title || o.invoice_tax_id) ? ': ' + escapeHtml(((o.invoice_title || '') + ' ' + (o.invoice_tax_id || '')).trim()) : ''}</span>` : ''}
-          </div>` : ''}
+          ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;">🍴 Cutlery requested · 需要餐具</span></div>` : ''}
+          ${o.needs_invoice ? renderInvoiceBlock(o) : ''}
         </div>
 
         <div class="order-items">
@@ -12325,6 +12323,49 @@ const COPY_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 function copyChip(payload, label) {
   if (!payload) return '';
   return `<button type="button" class="copy-mini" title="Copy · 复制" data-copy="${escapeAttr(payload)}" onclick="event.stopPropagation(); copyKicker(this, '${escapeAttr(label || 'Copied')}')">${COPY_ICON_SVG}</button>`;
+}
+
+// ── Fapiao (发票) — order-drawer block + one-click accounting export ──
+// Builds a plain-text bundle (invoice header + total + line items) for the
+// "Copy for accounting" button. Stored verbatim on the button's data-copy and
+// pushed to the clipboard by copyKicker — newlines survive the attribute.
+// Type may be unset on legacy orders (column added later) — infer company from
+// a present tax ID so the export stays accurate for pre-existing invoices.
+function invoiceIsCompany(o) { return o.invoice_type ? o.invoice_type === 'company' : !!o.invoice_tax_id; }
+function invoiceAccountingText(o) {
+  const money = n => '¥' + Number(n || 0).toFixed(2);
+  const company = invoiceIsCompany(o);
+  const L = [];
+  L.push('开票申请 Invoice request');
+  L.push('订单号 Order: ' + (o.order_no || o.id));
+  L.push('类型 Type: ' + (company ? '企业 Company' : '个人 Personal'));
+  L.push('抬头 Title: ' + (o.invoice_title || ''));
+  if (company) L.push('税号 Tax ID: ' + (o.invoice_tax_id || ''));
+  if (o.invoice_email) L.push('邮箱 Email: ' + o.invoice_email);
+  L.push('————————————');
+  L.push('订单总额 Total: ' + money(o.total));
+  L.push('明细 Items:');
+  (o.items || []).forEach(it => {
+    L.push('  ' + (it.name_cn || it.name_en || ('#' + it.product_id)) + ' ×' + it.qty + '  ' + money(it.line_total));
+  });
+  if (o.shipping_fee) L.push('  配送费 Delivery  ' + money(o.shipping_fee));
+  return L.join('\n');
+}
+
+function renderInvoiceBlock(o) {
+  const isCompany = invoiceIsCompany(o);
+  const row = (label, val, mono) => `<span style="color: var(--text-3);">${label}</span><span style="color: var(--text-1); font-weight: 600;${mono ? ' font-variant-numeric: tabular-nums;' : ''}">${escapeHtml(val || '—')}</span>`;
+  return `<div class="full" style="background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
+      <span style="font-weight: 700; color: var(--text-1); font-size: 13px;">🧾 Invoice requested · 需要发票<span style="font-weight: 600; color: var(--text-3); font-size: 11px; margin-left: 6px;">${isCompany ? '企业 Company' : '个人 Personal'}</span></span>
+      <button type="button" class="db-btn" data-copy="${escapeAttr(invoiceAccountingText(o))}" onclick="event.stopPropagation(); copyKicker(this, 'Invoice info · 开票信息')">📋 Copy for accounting · 复制开票信息</button>
+    </div>
+    <div style="display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 12px;">
+      ${row('抬头 Title', o.invoice_title)}
+      ${isCompany ? row('税号 Tax ID', o.invoice_tax_id, true) : ''}
+      ${row('邮箱 Email', o.invoice_email)}
+    </div>
+  </div>`;
 }
 
 // ── Bulk ─────────────────────────────────────────────────────────────

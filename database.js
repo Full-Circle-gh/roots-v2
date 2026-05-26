@@ -2191,6 +2191,10 @@ db.exec(`
 //                              = 'wait_for_restock')
 addColumn('retail_orders', 'fallback_choice',         'TEXT');
 addColumn('retail_orders', 'awaiting_restock_pids',   'TEXT');
+// Fapiao (发票) — invoice_title + invoice_tax_id were in the original schema;
+// these add the e-general invoice extras the mini-app fapiao form collects.
+addColumn('retail_orders', 'invoice_type',  'TEXT');   // 'personal' | 'company'
+addColumn('retail_orders', 'invoice_email', 'TEXT');   // recipient for the 电子发票 (e-fapiao)
 // Item-level: when this row is a substitute, point back to the original
 // product the customer was trying to buy. Lets us show "replaces X" on
 // receipts and analytics.
