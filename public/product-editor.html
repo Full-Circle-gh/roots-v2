@@ -513,17 +513,6 @@
     width: 6px; height: 6px; border-radius: 50%;
     background: var(--accent); margin-left: auto; display: none;
   }
-  /* Variants panel rows */
-  .pe-var-list { display: flex; flex-direction: column; gap: 6px; }
-  .pe-var-row { display: flex; align-items: center; gap: 8px; }
-  .pe-var-label { width: 92px; flex: none; font-size: 12px; padding: 5px 7px; }
-  .pe-var-name { flex: 1; min-width: 0; font-size: 11px; color: var(--text-2);
-                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pe-var-x { flex: none; border: none; background: none; cursor: pointer;
-              color: var(--text-3); font-size: 13px; padding: 2px 4px; line-height: 1; }
-  .pe-var-x:hover { color: var(--brass, #B08D4A); }
-  .pe-var-actions { display: flex; gap: 8px; margin-top: 10px; }
-  .pe-var-actions .btn { flex: 1; justify-content: center; font-size: 12px; }
   /* small lime SVG icon used in accordion summaries / labels */
   .pe-ic { display: inline-flex; align-items: center; color: var(--accent); flex-shrink: 0; }
   .pe-ic svg { width: 14px; height: 14px; }
@@ -977,10 +966,6 @@
               <div class="field" style="margin-bottom:2px"><label class="stacked">Tagline CN · 标语(中文)</label><input id="pa-edit-colophon-tagline-cn" type="text" placeholder="从土壤到灵魂"></div>
               <input type="hidden" id="pa-edit-colophon-character" value="">
             </div>
-          </details>
-          <details class="pa-left-acc" id="pe-acc-variants">
-            <summary><span class="pe-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="7" r="2.5"/><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 7H14M8.5 17H14M14 7l2 4M14 17l2-4"/></svg></span> Variants · 规格 <span id="pe-variants-dot" class="pe-acc-dot"></span></summary>
-            <div class="pa-left-acc-body" id="pe-variants-body"></div>
           </details>
         </div>
         <!-- SECTIONS — the main task, sticky header keeps + Add reachable -->
@@ -1657,7 +1642,6 @@ function peMount(p) {
   paBlocksPopulatePicker();
   paRenderPresets();
   paRenderAll();
-  peLoadVariants();
 
   // Wire chrome inputs → live preview + page-dot refresh. Bind ONCE — peMount
   // re-runs when switching products, and re-binding would stack duplicate
@@ -1802,124 +1786,6 @@ function peIsDirty() {
 }
 
 // ── Save (PATCH) — stays on the page; updates badge + toast ──
-// ── Variants panel ──────────────────────────────────────────────────────────
-// Each variant is its own master-data product sharing variant_group_id. This
-// panel manages the group for PA_CURRENT (list members, set labels, add/remove),
-// then PUTs the full set. Price/stock stay in master data (inventory).
-let PE_VARIANTS = [];          // [{ id, label, name, self }]
-let PE_VARIANT_PICKING = false;
-
-function _peProdName(p) { return (p.name_en || '—') + (p.name_cn ? ' · ' + p.name_cn : ''); }
-
-async function peLoadVariants() {
-  PE_VARIANTS = [];
-  PE_VARIANT_PICKING = false;
-  if (!PA_CURRENT) return;
-  const selfRow = { id: PA_CURRENT.id, label: PA_CURRENT.variant_label || '', name: _peProdName(PA_CURRENT), self: true };
-  try {
-    const r = await fetch('/api/retail-admin/products/' + PA_CURRENT.id + '/variants', { credentials: 'same-origin' });
-    const j = await r.json();
-    const members = (j && j.success && j.data && j.data.members) || [];
-    if (members.length) {
-      PE_VARIANTS = members.map(m => ({
-        id: m.id, label: m.variant_label || '',
-        name: (m.name_en || '—') + (m.name_cn ? ' · ' + m.name_cn : ''),
-        self: m.id === PA_CURRENT.id,
-      }));
-      if (!PE_VARIANTS.some(v => v.self)) PE_VARIANTS.unshift(selfRow);
-    } else {
-      PE_VARIANTS = [selfRow];
-    }
-  } catch { PE_VARIANTS = [selfRow]; }
-  peRenderVariants();
-}
-
-function peVariantsDot() {
-  const dot = document.getElementById('pe-variants-dot');
-  if (dot) dot.style.display = PE_VARIANTS.length >= 2 ? 'inline-block' : 'none';
-}
-
-function peRenderVariants() {
-  const el = document.getElementById('pe-variants-body');
-  if (!el) return;
-  const cn = (typeof cuLang === 'function' && cuLang() === 'cn');
-  const hint = cn
-    ? '把多个产品组成一组规格(如 小 / 大)。每个变体是独立产品,价格与库存在主数据中维护。'
-    : 'Group products into one variant set (e.g. Small / Large). Each variant is its own product — price & stock stay in master data.';
-  const rows = PE_VARIANTS.map(v => `
-    <div class="pe-var-row">
-      <input class="pe-var-label" type="text" value="${escapeAttr(v.label)}"
-             placeholder="${cn ? '标签(如 大)' : 'Label (e.g. Large)'}" oninput="peVariantLabelInput(${v.id}, this.value)">
-      <span class="pe-var-name" title="${escapeAttr(v.name)}">${escapeHtml(v.name)}${v.self ? (cn ? ' · 本产品' : ' · this') : ''}</span>
-      ${v.self ? '' : `<button type="button" class="pe-var-x" title="${cn ? '移除' : 'Remove'}" onclick="peVariantRemove(${v.id})">✕</button>`}
-    </div>`).join('');
-  const picker = PE_VARIANT_PICKING ? `
-    <input id="pe-var-search" class="pe-switcher-search" type="text" autocomplete="off" spellcheck="false"
-           placeholder="${cn ? '搜索产品加入…' : 'Search a product to add…'}" oninput="peVariantPickerList()">
-    <div id="pe-var-picklist" class="pe-switcher-list" data-no-i18n></div>` : '';
-  el.innerHTML =
-    `<div class="helper" style="font-size:11px;margin-bottom:8px">${hint}</div>` +
-    `<div class="pe-var-list">${rows}</div>` +
-    `<div class="pe-var-actions">` +
-      `<button type="button" class="btn" onclick="peVariantTogglePicker()">${PE_VARIANT_PICKING ? (cn ? '关闭' : 'Close') : (cn ? '+ 添加变体' : '+ Add variant')}</button>` +
-      `<button type="button" class="btn btn-primary" onclick="peSaveVariants()">${cn ? '保存规格' : 'Save variants'}</button>` +
-    `</div>` + picker;
-  peVariantsDot();
-  if (PE_VARIANT_PICKING) { const s = document.getElementById('pe-var-search'); if (s) s.focus(); peVariantPickerList(); }
-}
-
-function peVariantLabelInput(id, val) { const v = PE_VARIANTS.find(x => x.id === id); if (v) v.label = val; }
-function peVariantRemove(id) { PE_VARIANTS = PE_VARIANTS.filter(v => v.self || v.id !== id); peRenderVariants(); }
-function peVariantTogglePicker() { PE_VARIANT_PICKING = !PE_VARIANT_PICKING; peRenderVariants(); }
-
-function peVariantPickerList() {
-  const box = document.getElementById('pe-var-picklist'); if (!box) return;
-  const cn = (typeof cuLang === 'function' && cuLang() === 'cn');
-  const q = (document.getElementById('pe-var-search')?.value || '').toLowerCase().trim();
-  const have = new Set(PE_VARIANTS.map(v => v.id));
-  const matches = (PA_ALL_PRODUCTS || [])
-    .filter(p => !have.has(p.id))
-    .filter(p => !q || (p.name_en || '').toLowerCase().includes(q) || (p.name_cn || '').includes(q) || (p.sku || '').toLowerCase().includes(q))
-    .slice(0, 40);
-  box.innerHTML = matches.length
-    ? matches.map(p => `<div class="pe-switcher-item" onclick="peVariantPick(${p.id})">${escapeHtml(_peProdName(p))}${p.variant_group_id ? (cn ? ' <span style="opacity:.55">(已分组)</span>' : ' <span style="opacity:.55">(grouped)</span>') : ''}</div>`).join('')
-    : `<div class="pe-switcher-item" style="opacity:.6">${cn ? '无匹配产品' : 'No matches'}</div>`;
-}
-
-function peVariantPick(id) {
-  const p = (PA_ALL_PRODUCTS || []).find(x => x.id === id);
-  if (!p || PE_VARIANTS.some(v => v.id === id)) return;
-  PE_VARIANTS.push({ id: p.id, label: p.variant_label || '', name: _peProdName(p), self: false });
-  PE_VARIANT_PICKING = false;
-  peRenderVariants();
-}
-
-async function peSaveVariants() {
-  if (!PA_CURRENT) return;
-  const cn = (typeof cuLang === 'function' && cuLang() === 'cn');
-  const members = PE_VARIANTS.map(v => ({ id: v.id, label: v.label || '' }));
-  try {
-    const r = await fetch('/api/retail-admin/products/' + PA_CURRENT.id + '/variants', {
-      method: 'PUT', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ members }),
-    });
-    const j = await r.json();
-    if (!j || !j.success) throw new Error((j && j.error) || 'save_failed');
-    // Keep the local catalog in sync so the picker + switcher reflect the change.
-    const gid = j.group_id, ids = new Set(members.map(m => m.id));
-    (PA_ALL_PRODUCTS || []).forEach(p => {
-      if (ids.has(p.id)) { p.variant_group_id = gid; p.variant_label = (members.find(m => m.id === p.id) || {}).label || null; }
-      else if (p.variant_group_id === PA_CURRENT.id) { p.variant_group_id = null; p.variant_label = null; }
-    });
-    if (PA_CURRENT) PA_CURRENT.variant_group_id = gid;
-    toast(cn ? '规格已保存' : 'Variants saved');
-    peVariantsDot();
-  } catch (e) {
-    toast((cn ? '保存失败:' : 'Save failed: ') + e.message, 'err');
-  }
-}
-
 async function paSaveEdit() {
   if (!PA_CURRENT) return;
   const btn = document.getElementById('pe-save-btn');
