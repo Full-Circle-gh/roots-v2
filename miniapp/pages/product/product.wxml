@@ -156,6 +156,22 @@
         </view>
       </view>
 
+      <!-- Variant switcher — sibling products in the same variant group.
+           Tapping loads that variant (its own price / stock / image). -->
+      <block wx:if="{{hasVariants}}">
+        <view class="option-group">
+          <view class="option-label f-toni">{{lang === 'cn' ? '规格' : 'Variants'}}</view>
+          <view class="option-choices">
+            <view wx:for="{{variants}}" wx:for-item="v" wx:key="id"
+                  class="choice variant-choice {{v.isCurrent ? 'on' : ''}} {{v.soldOut ? 'sold-out' : ''}}"
+                  data-id="{{v.id}}" bindtap="pickVariant">
+              <text>{{v.label}}</text>
+              <text wx:if="{{v.price}}" class="choice-delta">{{v.price}}</text>
+            </view>
+          </view>
+        </view>
+      </block>
+
       <!-- Per-product options (size, cutlery, etc.) -->
       <block wx:if="{{options.length}}">
         <view wx:for="{{options}}" wx:for-item="opt" wx:key="id" class="option-group">

@@ -192,7 +192,8 @@ const RETAIL_PRODUCT_COLS = `
   p.description_blocks,
   p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,
   p.flash_price, p.flash_starts_at, p.flash_ends_at,
-  p.flash_stock_limit, p.flash_sold
+  p.flash_stock_limit, p.flash_sold,
+  p.variant_group_id, p.variant_label
 `;
 
 // Parse JSON-string columns (nutrition, description_blocks) into objects for
@@ -492,6 +493,28 @@ router.get('/api/retail/products/:id', (req, res) => {
     for (const c of choices) (choicesByOpt[c.option_id] ||= []).push(c);
   }
   product.options = options.map(o => ({ ...o, choices: choicesByOpt[o.id] || [] }));
+
+  // Variant siblings — every purchasable product in the same variant_group_id
+  // (includes this one, so the app highlights the current pick). Powers the
+  // product-page variant switcher. Only published + active members show; the
+  // app hides the switcher when there's 0–1 member.
+  if (product.variant_group_id) {
+    product.variants = tdb().prepare(
+      `SELECT p.id, p.variant_label, p.name_en, p.name_cn, p.sell_price AS price,
+              p.image_data, p.image_url,
+              COALESCE(
+                (SELECT SUM(rss.physical_qty) FROM retail_store_stock rss
+                   JOIN retail_stores rs ON rs.id = rss.store_id
+                  WHERE rss.product_id = p.id AND rs.is_active = 1),
+                p.stock_qty
+              ) AS stock
+         FROM products p
+        WHERE p.variant_group_id = ? AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
+        ORDER BY COALESCE(p.variant_label, p.name_en), p.id`
+    ).all(product.variant_group_id);
+  } else {
+    product.variants = [];
+  }
 
   product.social_proof = socialProofForProduct(id);
 
@@ -5015,6 +5038,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     description_en, description_cn,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
                     description_blocks, nutrition,
+                    variant_group_id, variant_label,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn
                FROM products WHERE COALESCE(is_active, 1) = 1`;
   const params = [];
@@ -5045,6 +5069,66 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
     return r;
   });
   res.json({ success: true, data: rows });
+});
+
+// ── Variant grouping (retail-admin scope) ───────────────────────────────────
+// Each variant is its own master-data product; siblings share variant_group_id
+// (same model + data shape as the staff /api/products/variants/group and the
+// app.html grouping UI). These endpoints let the Product Page Editor manage the
+// group under the retail-admin session.
+router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const p = tdb().prepare('SELECT id, variant_group_id FROM products WHERE id = ?').get(id);
+  if (!p) return res.status(404).json({ success: false, error: 'not_found' });
+  let members = [];
+  if (p.variant_group_id) {
+    members = tdb().prepare(
+      `SELECT id, name_en, name_cn, sku, variant_label, sell_price AS price,
+              stock_qty AS stock, image_data, image_url, is_published
+         FROM products
+        WHERE variant_group_id = ? AND COALESCE(is_active, 1) = 1
+        ORDER BY COALESCE(variant_label, name_en), id`
+    ).all(p.variant_group_id);
+  }
+  res.json({ success: true, data: { group_id: p.variant_group_id || null, members } });
+});
+
+// PUT — set this product's variant group. body: { members: [{ id, label }] }.
+// `members` is the FULL desired set; the edited product always belongs and owns
+// the group_id. Reconciles: relabel/add listed members, drop any current member
+// not listed, and disband (clear all) when fewer than 2 remain.
+router.put('/api/retail-admin/products/:id/variants', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const self = tdb().prepare('SELECT id, variant_group_id, variant_label FROM products WHERE id = ?').get(id);
+  if (!self) return res.status(404).json({ success: false, error: 'not_found' });
+  const raw = Array.isArray(req.body?.members) ? req.body.members : [];
+  const byId = new Map();
+  for (const m of raw) {
+    const mid = parseInt(m && m.id, 10);
+    if (Number.isFinite(mid) && mid > 0) byId.set(mid, (m.label || '').toString().trim() || null);
+  }
+  if (!byId.has(id)) byId.set(id, self.variant_label || null);   // edited product always belongs
+  const desired = [...byId.entries()];
+  const prevGid = self.variant_group_id;
+  const groupId = id;   // edited product owns the group id
+  try {
+    const count = tdb().transaction(() => {
+      if (desired.length < 2) {
+        if (prevGid) tdb().prepare('UPDATE products SET variant_group_id=NULL, variant_label=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=?').run(prevGid);
+        tdb().prepare('UPDATE products SET variant_group_id=NULL, variant_label=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
+        return 0;
+      }
+      if (prevGid) {
+        const keep = desired.map(([mid]) => mid);
+        const ph = keep.map(() => '?').join(',');
+        tdb().prepare(`UPDATE products SET variant_group_id=NULL, variant_label=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=? AND id NOT IN (${ph})`).run(prevGid, ...keep);
+      }
+      const upd = tdb().prepare('UPDATE products SET variant_group_id=?, variant_label=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
+      for (const [mid, label] of desired) upd.run(groupId, label, mid);
+      return desired.length;
+    })();
+    res.json({ success: true, group_id: count >= 2 ? groupId : null, count });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // Retail orders queue — list + detail + status transitions.

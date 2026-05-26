@@ -102,6 +102,8 @@ Page({
     badges: [],
     options: [],
     selectedChoices: {},   // { [option_id]: choice_id }
+    variants: [],          // sibling products in the same variant_group_id
+    hasVariants: false,    // true when ≥2 purchasable members → show switcher
     qty: 1,
     lang: 'en',
     loading: true,
@@ -299,6 +301,15 @@ Page({
       if (def) selected[o.id] = def.id;
       else if (o.is_required && o.choices.length === 1) selected[o.id] = o.choices[0].id;
     });
+    // Variant siblings — show a switcher when there are ≥2 purchasable members.
+    const variants = (p.variants || []).map(v => ({
+      id: v.id,
+      label: v.variant_label || lang.pick(v.name_en, v.name_cn, L) || ('#' + v.id),
+      price: Number(v.price) > 0 ? '¥' + Number(v.price).toFixed(2) : '',
+      isCurrent: v.id === p.id,
+      soldOut: v.stock != null && Number(v.stock) <= 0,
+    }));
+    const hasVariants = variants.length > 1;
     // Stock state — null means untracked (treat as in-stock).
     let soldOut = false, stockTag = '', stockTagKind = '';
     if (p.stock != null) {
@@ -457,6 +468,8 @@ Page({
       badges,
       options,
       selectedChoices: selected,
+      variants,
+      hasVariants,
       addBtnLabel: soldOut
         ? (L === 'cn' ? '已售罄' : 'SOLD OUT')
         : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET'),
@@ -480,6 +493,14 @@ Page({
     const { optionId, choiceId } = e.currentTarget.dataset;
     const selected = { ...this.data.selectedChoices, [optionId]: choiceId };
     this.setData({ selectedChoices: selected });
+  },
+
+  // Tap a variant chip → load that sibling product. redirectTo (not navigateTo)
+  // so switching between variants doesn't stack pages on the back button.
+  pickVariant(e) {
+    const vid = e.currentTarget.dataset.id;
+    if (!vid || vid === this.data.id) return;
+    wx.redirectTo({ url: '/pages/product/product?id=' + vid });
   },
 
   decQty() { this.setData({ qty: Math.max(1, this.data.qty - 1) }); },

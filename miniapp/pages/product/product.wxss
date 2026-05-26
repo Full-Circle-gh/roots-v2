@@ -593,6 +593,8 @@
   font-size: calc(22rpx * var(--font-scale));
   opacity: 0.75;
 }
+/* Variant chips reuse .choice; sold-out members read as dimmed + struck. */
+.variant-choice.sold-out { opacity: 0.42; text-decoration: line-through; }
 
 /* Sticky bottom bar */
 .sticky-bar {
