@@ -178,6 +178,10 @@ app.use(require('./routes/markets'));
 app.use(require('./routes/push'));
 app.use(require('./routes/events'));
 app.use(require('./routes/feedback'));
+// Public storefront tenant scope — maps the mini-app's AppID → tenant before
+// the retail routes run. Path-scoped to /api/retail (does NOT match the
+// segment-distinct /api/retail-admin, which has its own gate). No-op for Roots.
+app.use('/api/retail', require('./middleware/public-tenant').publicTenantScope);
 app.use(require('./routes/retail'));
 app.use(require('./routes/retail-inventory'));
 

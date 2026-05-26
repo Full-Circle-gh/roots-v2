@@ -199,16 +199,17 @@
 
   // ── Brand ──
   function brandModal(t) {
-    openModal('Brand · 品牌 — '+(t.brand||t.name));
+    openModal('Brand & storefront · 品牌与门店 — '+(t.brand||t.name));
     $('#mBody').innerHTML =
       '<div class="field"><label>Brand name · 品牌名</label><input type="text" id="b-name" value="'+esc(t.brand||'')+'"></div>' +
       '<div class="field"><label>Accent colour · 强调色</label><div class="row2"><input type="color" id="b-accent" value="'+(t.accent||'#B08D4A')+'"><span class="zh mono" id="b-accent-v">'+esc(t.accent||'#B08D4A')+'</span></div></div>' +
-      '<button class="btn btn-brass" id="b-save" style="width:100%;padding:11px">Save brand · 保存</button>';
+      '<div class="field"><label>WeChat mini-program AppID · 小程序 AppID</label><input type="text" id="b-appid" value="'+esc(t.wxAppid||'')+'" placeholder="wx…………" autocapitalize="off" spellcheck="false"><div class="zh" style="margin-top:4px">Routes this company’s storefront to its own data. · 将该公司小程序的请求路由到其自有数据。</div></div>' +
+      '<button class="btn btn-brass" id="b-save" style="width:100%;padding:11px">Save · 保存</button>';
     $('#b-accent').addEventListener('input', e => $('#b-accent-v').textContent = e.target.value);
     $('#b-save').addEventListener('click', () => {
       api('/api/saas-admin/tenants/'+t.id+'/brand',{method:'PATCH',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ brand_name:$('#b-name').value.trim(), brand_accent:$('#b-accent').value })})
-        .then(j=>{ if(j.success){ toast('Brand saved'); closeModal(); load(); } else mMsg(j.error||'Failed','err'); });
+        body:JSON.stringify({ brand_name:$('#b-name').value.trim(), brand_accent:$('#b-accent').value, wx_appid:$('#b-appid').value.trim() })})
+        .then(j=>{ if(j.success){ toast('Saved'); closeModal(); load(); } else mMsg(j.error||'Failed','err'); });
     });
   }
 

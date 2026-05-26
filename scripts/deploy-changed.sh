@@ -38,8 +38,8 @@ esac
 # (a dependency change needs a manual `npm install` + restart on the server).
 is_deployable() {
   case "$1" in
-    public/*|routes/*|lib/*|scripts/*) return 0 ;;
-    server.js|database.js) return 0 ;;
+    public/*|routes/*|lib/*|middleware/*|scripts/*) return 0 ;;
+    server.js|database.js|schema.sql) return 0 ;;
     *) return 1 ;;
   esac
 }

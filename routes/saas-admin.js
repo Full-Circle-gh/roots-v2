@@ -12,6 +12,9 @@ const router = express.Router();
 
 // Per-tenant accent colour for white-label branding (#3). Idempotent.
 try { db.exec('ALTER TABLE tenants ADD COLUMN brand_accent TEXT'); } catch (e) { /* already added */ }
+// Per-tenant WeChat mini-program AppID — maps a shopper's request to this tenant
+// (see middleware/public-tenant.js). Idempotent.
+try { db.exec('ALTER TABLE tenants ADD COLUMN wx_appid TEXT'); } catch (e) { /* already added */ }
 
 function requireSaasAdmin(req, res, next) {
   if (!req.session?.userId) return res.status(401).json({ error: 'Admin login required · 需要管理员登录' });
@@ -31,7 +34,7 @@ router.get('/api/saas-admin/tenants', requireSaasAdmin, (req, res) => {
     const operators = db.prepare('SELECT COUNT(*) c FROM tenant_users WHERE tenant_id = ?').get(t.id).c;
     const openInvoices = db.prepare("SELECT COUNT(*) c FROM billing_invoices WHERE tenant_id = ? AND status = 'open'").get(t.id).c;
     return {
-      id: t.id, name: t.name, brand: t.brand_name, accent: t.brand_accent, status: t.status,
+      id: t.id, name: t.name, brand: t.brand_name, accent: t.brand_accent, wxAppid: t.wx_appid, status: t.status,
       owner: owner ? (owner.display_name || owner.username) : null,
       ownerUsername: owner ? owner.username : null,
       operators, openInvoices, plan,
@@ -51,7 +54,7 @@ router.get('/api/saas-admin/tenants/:id', requireSaasAdmin, (req, res) => {
   if (sub && sub.plan_id) plan = db.prepare('SELECT code, name, price_cents, currency, billing_interval FROM billing_plans WHERE id = ?').get(sub.plan_id) || null;
   const invoices = db.prepare('SELECT id, invoice_no, period_start, period_end, amount_cents, currency, status, due_date, paid_at, provider FROM billing_invoices WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 50').all(t.id);
   const operators = db.prepare('SELECT id, username, display_name, role, is_active, last_login FROM tenant_users WHERE tenant_id = ? ORDER BY id ASC').all(t.id);
-  res.json({ success: true, tenant: { id: t.id, name: t.name, brand: t.brand_name, accent: t.brand_accent, status: t.status }, subscription: sub, plan, invoices, operators });
+  res.json({ success: true, tenant: { id: t.id, name: t.name, brand: t.brand_name, accent: t.brand_accent, wxAppid: t.wx_appid, status: t.status }, subscription: sub, plan, invoices, operators });
 });
 
 function isInternal(tenantId) {
@@ -76,12 +79,29 @@ router.post('/api/saas-admin/tenants/:id/reactivate', requireSaasAdmin, (req, re
 router.patch('/api/saas-admin/tenants/:id/brand', requireSaasAdmin, express.json(), (req, res) => {
   const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
-  const { brand_name, brand_accent } = req.body || {};
+  const body = req.body || {};
+  const { brand_name, brand_accent } = body;
   if (brand_accent && !/^#[0-9a-fA-F]{6}$/.test(brand_accent)) {
     return res.status(400).json({ error: 'Accent must be a #RRGGBB hex colour · 强调色需为 #RRGGBB' });
   }
-  db.prepare("UPDATE tenants SET brand_name = COALESCE(NULLIF(?, ''), brand_name), brand_accent = ? WHERE id = ?")
-    .run(brand_name != null ? String(brand_name).trim() : '', brand_accent || null, req.params.id);
+  const sets = ["brand_name = COALESCE(NULLIF(?, ''), brand_name)", 'brand_accent = ?'];
+  const params = [brand_name != null ? String(brand_name).trim() : '', brand_accent || null];
+  // Only touch the AppID when the client actually sends the key (so a brand-only
+  // edit can't wipe it). Validate shape + global uniqueness.
+  if (Object.prototype.hasOwnProperty.call(body, 'wx_appid')) {
+    const appid = body.wx_appid != null ? String(body.wx_appid).trim() : '';
+    if (appid && !/^wx[0-9a-zA-Z]{16}$/.test(appid)) {
+      return res.status(400).json({ error: 'AppID looks invalid (expected wx + 16 chars) · AppID 格式不正确' });
+    }
+    if (appid) {
+      const clash = db.prepare('SELECT id FROM tenants WHERE wx_appid = ? AND id != ?').get(appid, req.params.id);
+      if (clash) return res.status(409).json({ error: 'That AppID is already assigned to another tenant · 该 AppID 已分配给其他租户' });
+    }
+    sets.push('wx_appid = ?');
+    params.push(appid || null);
+  }
+  params.push(req.params.id);
+  db.prepare(`UPDATE tenants SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   res.json({ success: true });
 });
 
