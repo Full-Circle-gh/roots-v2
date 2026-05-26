@@ -8902,8 +8902,8 @@ const NEXT_STATUS = {
 };
 
 // Sort modes for the items table inside an open order. Persisted per-order
-// in memory; default = 'packaging' (ice-pack items first, then dry).
-let _ITEMS_SORT_MODE = 'packaging';
+// in memory; default = 'sku'.
+let _ITEMS_SORT_MODE = 'sku';
 let _OPEN_ORDER = null;
 // When an order is opened from a customer's Recent-orders row, remember that
 // customer's id so the order drawer can offer a "back to customer" button.
@@ -8914,13 +8914,6 @@ function sortOrderItems(items, mode) {
   const arr = [...items];
   if (mode === 'sku') {
     return arr.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
-  }
-  if (mode === 'packaging') {
-    // Ice-pack items first (so packer pulls ice once), then alpha by SKU.
-    return arr.sort((a, b) =>
-      ((b.needs_ice_pack ? 1 : 0) - (a.needs_ice_pack ? 1 : 0)) ||
-      (a.sku || '').localeCompare(b.sku || '')
-    );
   }
   if (mode === 'shipping') {
     // Air-only → mixed → land-only.
@@ -8951,8 +8944,6 @@ function renderPackBadges(it) {
     parts.push('<span class="pack-badge air" title="Air shipping only · 仅空运">✈︎ Air · 空运</span>');
   else
     parts.push('<span class="pack-badge land" title="Land shipping only — airline rejected · 仅陆运">Land · 陆运</span>');
-  if (it.needs_ice_pack)
-    parts.push('<span class="pack-badge ice" title="Cold-chain — pack with ice · 冷链,需加冰袋">❄︎ Ice · 冷链</span>');
   return parts.join('');
 }
 
@@ -8995,7 +8986,6 @@ function renderSortChips() {
   // active state; text labels read cleaner and bilingual now.
   return `<div class="sort-chips">
     <span class="sort-label">Sort items · 排序:</span>
-    ${mk('packaging', 'Packaging · 包装')}
     ${mk('sku',       'SKU')}
     ${mk('shipping',  'Shipping · 配送')}
     ${mk('default',   'As ordered · 原顺序')}

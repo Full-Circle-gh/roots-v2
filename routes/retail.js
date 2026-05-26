@@ -1339,13 +1339,13 @@ function parseShipModes(csv) {
   return out.length ? out : ['air', 'land'];
 }
 
-// Bucket assignment for one item under the split-package suggestion spec:
-//   Ice (cold chain) → air (regardless of ship_modes)
-//   Air-only         → air
-//   Land-only        → land
-//   Any (both)       → land (cheaper; admin can override via Apply suggestion)
+// Bucket assignment for one item, purely by its allowed ship modes:
+//   Air-only   → air
+//   Land-only  → land
+//   Any (both) → land (cheaper; admin can override via Apply suggestion)
+// (Cold chain is no longer a per-item factor — anything in the air shipment
+// is packed with ice anyway, so there's no separate ice flag to force air.)
 function bucketForItem(it) {
-  if (it.needs_ice_pack) return 'air';
   const modes = parseShipModes(it.ship_modes);
   const hasAir  = modes.includes('air');
   const hasLand = modes.includes('land');

@@ -181,10 +181,11 @@ const FIELDS = [
   // Retail / mini-app surface — single toggle, no separate retail price
   // or description. Mini app uses sell_price + description_en/cn directly.
   'is_published',
-  // Warehouse / packing flags. ship_modes is a csv subset of {'air','land'}
+  // Warehouse / packing flag. ship_modes is a csv subset of {'air','land'}
   // — items the airline rejects (liquid, lithium, frozen) are 'land' only.
-  // needs_ice_pack flags cold-chain so the packer pulls ice.
-  'ship_modes', 'needs_ice_pack',
+  // (The legacy needs_ice_pack cold-chain flag was retired — anything shipped
+  // by air is packed with ice anyway, so it added no signal.)
+  'ship_modes',
   // Nutrition panel — JSON: { basis_en, basis_cn, rows:[{label_en,label_cn,value}] }
   'nutrition',
   // Mini-app card chrome (bilingual)
@@ -204,7 +205,6 @@ function pickBody(body) {
     else if (k === 'is_market')          out[k] = body[k] ? 1 : 0;
     else if (k === 'is_restock_only')    out[k] = body[k] ? 1 : 0;
     else if (k === 'is_published')       out[k] = body[k] ? 1 : 0;
-    else if (k === 'needs_ice_pack')     out[k] = body[k] ? 1 : 0;
     else if (k === 'ship_modes') {
       // Accept either a csv string ("air,land") or an array (['air','land']).
       // Normalize to a stable csv with at least one mode; default to 'air,land'.

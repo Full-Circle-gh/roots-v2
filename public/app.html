@@ -9990,13 +9990,6 @@ async function showProductForm(id) {
           </label>
         </div>
         <div class="form-group form-col-2">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
-            <input type="checkbox" id="pf_needs_ice_pack" ${prod && prod.needs_ice_pack === 1 ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--lime)">
-            <span>❄️ Needs ice pack · 需要冰袋</span>
-            <span class="help-tip" data-help="Tick for cold-chain items (chocolate, fermented goods, raw juices, anything spoilable at room temp). When set, retail-admin shows a ❄️ badge on this item in the order detail so the packer pulls ice from the freezer at packing time.<br><br>需要冷链运输的商品请勾选（巧克力、发酵食品、鲜榨果汁等室温下易变质的产品）。勾选后，零售后台订单详情会显示 ❄️ 标识，提醒打包员从冰柜取冰袋。"></span>
-          </label>
-        </div>
-        <div class="form-group form-col-2">
           <label style="display:block;font-weight:600;margin-bottom:6px">
             ✈️🚚 Allowed shipping modes · 可用快递方式
             <span class="help-tip" data-help="Most items can ship either by air or by land — leave both ticked. Uncheck Air for items the airline rejects (liquids over the volume limit, lithium batteries, frozen goods). Uncheck Land if the item must arrive within 24h (perishable, premium fresh). When a customer outside Guangzhou orders a mix of air-only + land-only items, retail-admin auto-splits the order into two shipments with separate tracking.<br><br>大多数商品空运陆运皆可，保持两项勾选。航空运输不接受的商品（超量液体、锂电池、冷冻品）请取消 Air。必须24小时内送达的商品（易变质鲜活）请取消 Land。当广州市外顾客订购了空运专属+陆运专属商品的混合订单时，零售后台会自动拆分为两个独立运单。"></span>
@@ -12916,7 +12909,6 @@ function _pfCollect() {
     is_market: document.getElementById('pf_is_market')?.checked ? 1 : 0,
     is_restock_only: document.getElementById('pf_is_restock_only')?.checked ? 1 : 0,
     is_published: document.getElementById('pf_is_published')?.checked ? 1 : 0,
-    needs_ice_pack: document.getElementById('pf_needs_ice_pack')?.checked ? 1 : 0,
     ship_modes: (() => {
       const modes = [];
       if (document.getElementById('pf_ship_air')?.checked)  modes.push('air');
