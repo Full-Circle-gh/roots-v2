@@ -2337,13 +2337,12 @@
     line-height: 1.6;
     white-space: nowrap;
   }
-  /* Strict Tea + Brass: shipping modes (air/land) = Aged Brass, cold-chain
-     (ice) = Tea Green, flexible (any) = neutral. Mode is distinguished by
-     icon + label, not by an off-palette colour. */
+  /* Strict Tea + Brass: shipping modes (air/land) = Aged Brass, flexible
+     (any) = neutral. Mode is distinguished by icon + label, not by an
+     off-palette colour. (Ice / cold-chain pack-type was dropped.) */
   .pack-badge.any   { background: var(--bg-elev-1); color: var(--text-3); border-color: var(--line); }
   .pack-badge.air   { background: rgba(176, 141, 74, .14); color: var(--brass); border-color: rgba(176, 141, 74, .3); }
   .pack-badge.land  { background: rgba(176, 141, 74, .14); color: var(--brass); border-color: rgba(176, 141, 74, .3); }
-  .pack-badge.ice   { background: rgba(107, 142, 111, .14); color: var(--accent); border-color: rgba(107, 142, 111, .3); }
 
   /* ─── Order total banner — hero strip below the drawer header ─── */
   .order-total-banner {
