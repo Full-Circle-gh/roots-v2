@@ -4438,11 +4438,28 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     sets.push('nutrition = ?');
     params.push(obj ? JSON.stringify(obj) : null);
   }
+  // ── Core commercial fields (the standalone Mini App Backend product page) ──
+  // name_en is NOT NULL — never blank it; fall back to the existing value.
+  if ('name_en' in body) { sets.push('name_en = ?'); params.push((body.name_en || '').trim() || existing.name_en); }
+  for (const k of ['name_cn', 'sku', 'category', 'weight', 'description_en', 'description_cn', 'image_data', 'image_url']) {
+    if (k in body) { sets.push(`${k} = ?`); params.push((body[k] == null || body[k] === '') ? null : body[k]); }
+  }
+  if ('sell_price' in body) { sets.push('sell_price = ?'); params.push(Math.max(0, parseFloat(body.sell_price) || 0)); }
+  if ('stock_qty'  in body) { sets.push('stock_qty = ?');  params.push(Math.max(0, parseInt(body.stock_qty, 10) || 0)); }
+  if ('ship_modes' in body) {
+    const arr = [...new Set(String(body.ship_modes || '').split(',').map(s => s.trim().toLowerCase()).filter(m => m === 'air' || m === 'land'))];
+    sets.push('ship_modes = ?'); params.push(arr.length ? arr.join(',') : 'air,land');
+  }
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
 
   sets.push('updated_at = CURRENT_TIMESTAMP');
   params.push(id);
-  db.prepare(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  try {
+    db.prepare(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  } catch (e) {
+    if (String(e.message || '').includes('UNIQUE')) return res.status(409).json({ success: false, error: 'sku_taken' });
+    throw e;
+  }
 
   logActivity(req.user.id, req.user.username, 'update', 'product_retail', id, { fields: Object.keys(body), name: existing.name_en }, req.ip);
 
@@ -4450,7 +4467,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // hydrated description_blocks JSON, so the page can update its card
   // and re-open the editor with fresh data.
   const row = db.prepare(
-    `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price,
+    `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, stock_qty, ship_modes,
             description_en, description_cn, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
@@ -4470,6 +4487,57 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     row.nutrition = null;
   }
   res.json({ success: true, data: row });
+});
+
+// Create a product straight from the Mini App Backend product page. Standalone
+// path (no kitchen needed): name + the basic commercial fields, is_active=1.
+router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (req, res) => {
+  const b = req.body || {};
+  const name_en = (b.name_en || '').trim();
+  const name_cn = (b.name_cn || '').trim();
+  if (!name_en && !name_cn) return res.status(400).json({ success: false, error: 'name_required' });
+  const ship = [...new Set(String(b.ship_modes || 'air,land').split(',').map(s => s.trim().toLowerCase()).filter(m => m === 'air' || m === 'land'))];
+  let info;
+  try {
+    info = db.prepare(
+      `INSERT INTO products
+         (name_en, name_cn, sku, category, weight, sell_price, stock_qty, ship_modes,
+          description_en, description_cn, image_data, is_published, is_active, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+    ).run(
+      name_en || name_cn, name_cn || null,
+      (b.sku || '').trim() || null, (b.category || '').trim() || null, (b.weight || '').trim() || null,
+      Math.max(0, parseFloat(b.sell_price) || 0), Math.max(0, parseInt(b.stock_qty, 10) || 0),
+      ship.length ? ship.join(',') : 'air,land',
+      (b.description_en || '').trim() || null, (b.description_cn || '').trim() || null,
+      b.image_data || null, b.is_published ? 1 : 0
+    );
+  } catch (e) {
+    if (String(e.message || '').includes('UNIQUE')) return res.status(409).json({ success: false, error: 'sku_taken' });
+    throw e;
+  }
+  const id = info.lastInsertRowid;
+  logActivity(req.user.id, req.user.username, 'create', 'product_retail', id, { name: name_en || name_cn }, req.ip);
+  const row = db.prepare(
+    `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, stock_qty, ship_modes,
+            description_en, description_cn, image_data, image_url, is_published, sort_order,
+            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
+            colophon_character, colophon_tagline_en, colophon_tagline_cn
+       FROM products WHERE id = ?`
+  ).get(id);
+  row.description_blocks = null;
+  row.nutrition = null;
+  res.json({ success: true, data: row });
+});
+
+// Soft-delete a product from the Mini App Backend (hide from shop + lists).
+router.delete('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const existing = db.prepare('SELECT id, name_en FROM products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
+  if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
+  db.prepare('UPDATE products SET is_active = 0, is_published = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  logActivity(req.user.id, req.user.username, 'delete', 'product_retail', id, { name: existing.name_en }, req.ip);
+  res.json({ success: true });
 });
 
 // ─── Flash sales (秒杀) admin ─────────────────────────────────────────────
@@ -4669,7 +4737,7 @@ router.delete('/api/retail-admin/categories/:id', requireRetailAdmin, (req, res)
 router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   const { q, published } = req.query;
   let sql = `SELECT id, name_en, name_cn, sku, category, weight AS size,
-                    sell_price, image_data, image_url,
+                    sell_price, stock_qty, ship_modes, image_data, image_url,
                     is_published, sort_order,
                     description_en, description_cn,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,

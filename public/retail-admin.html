@@ -4370,6 +4370,7 @@
         <option value="published">Published only · 仅上架</option>
       </select>
       <div id="pa-count" class="pa-count"></div>
+      <button class="btn btn-primary" id="pa-add-btn" type="button" onclick="pdOpen(null)" style="white-space:nowrap;">＋ Add product · 新增产品</button>
       <div id="pa-view-seg" class="pa-view-seg" role="group" aria-label="Product layout · 产品布局">
         <button type="button" class="pa-view-btn" data-view="grid" title="Grid view · 网格视图" aria-label="Grid view"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></button>
         <button type="button" class="pa-view-btn" data-view="compact" title="Compact view · 紧凑视图" aria-label="Compact view"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9.5" y="2" width="5" height="5" rx="1"/><rect x="17" y="2" width="5" height="5" rx="1"/><rect x="2" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><rect x="17" y="9.5" width="5" height="5" rx="1"/><rect x="2" y="17" width="5" height="5" rx="1"/><rect x="9.5" y="17" width="5" height="5" rx="1"/><rect x="17" y="17" width="5" height="5" rx="1"/></svg></button>
@@ -4409,6 +4410,58 @@
 
     <div id="pa-grid" class="pa-grid"></div>
     <div id="pa-empty" class="pa-empty" style="display:none">No products match this filter. · 没有匹配此筛选条件的产品。</div>
+
+    <!-- ── Product details (commercial) — the Mini App Backend's own product
+         editor: basic store fields + stock. Page design lives in the standalone
+         Product Page Editor window (launched from the button below). ── -->
+    <div id="pd-bg" class="pu-editor-bg">
+      <div class="pu-editor" style="width: 640px; max-width: 94vw;">
+        <div class="pu-editor-head">
+          <h3 id="pd-title" style="margin:0;font-size:14px;">Product · 产品</h3>
+          <button class="btn" onclick="pdClose()">Close · 关闭</button>
+        </div>
+        <div class="pu-editor-body" style="grid-template-columns: 1fr 1fr; gap: 14px; padding: 18px;">
+          <input type="hidden" id="pd-id">
+          <div class="field"><label class="stacked">Name EN · 名称(英文)</label><input type="text" id="pd-name-en"></div>
+          <div class="field"><label class="stacked">Name 中文</label><input type="text" id="pd-name-cn"></div>
+          <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
+          <div class="field"><label class="stacked">Stock · 库存</label><input type="number" id="pd-stock" min="0" step="1"></div>
+          <div class="field"><label class="stacked">SKU · 货号</label><input type="text" id="pd-sku" placeholder="optional · 可选"></div>
+          <div class="field"><label class="stacked">Category · 分类</label><input type="text" id="pd-category" list="pd-cat-list" placeholder="e.g. Drinks · 例如 饮品"><datalist id="pd-cat-list"></datalist></div>
+          <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
+          <div class="field" style="margin-bottom:0;">
+            <label class="stacked">Shipping · 配送方式</label>
+            <div style="display:flex;gap:16px;align-items:center;padding-top:8px;">
+              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-air" style="width:15px;height:15px;"> ✈ Air · 空运</label>
+              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-land" style="width:15px;height:15px;"> 🚚 Land · 陆运</label>
+            </div>
+          </div>
+          <div class="field" style="grid-column:1/-1;"><label class="stacked">Description EN · 描述(英文)</label><textarea id="pd-desc-en" rows="2"></textarea></div>
+          <div class="field" style="grid-column:1/-1;"><label class="stacked">Description 中文</label><textarea id="pd-desc-cn" rows="2"></textarea></div>
+          <div class="field" style="grid-column:1/-1;">
+            <label class="stacked">Photo · 图片</label>
+            <div style="display:flex;gap:12px;align-items:center;">
+              <div id="pd-img-preview" style="width:72px;height:72px;border-radius:8px;border:1px solid var(--line);background-color:var(--bg-app);background-size:cover;background-position:center;flex-shrink:0;"></div>
+              <input type="file" id="pd-img-file" accept="image/*" onchange="pdPickImage(event)" style="font-size:12px;">
+              <button type="button" class="btn btn-sm" onclick="pdClearImage()">Clear · 清除</button>
+            </div>
+          </div>
+          <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;margin-bottom:0;">
+            <input type="checkbox" id="pd-published" style="width:16px;height:16px;"> 🛍 Show in shop · 在店面显示
+          </label>
+        </div>
+        <div class="pu-editor-foot" style="justify-content:space-between;">
+          <div style="display:flex;gap:8px;">
+            <button class="btn" id="pd-pagedesign-btn" type="button" onclick="pdOpenPageDesign()" title="Open the Product Page Editor in its own window · 在独立窗口打开产品页编辑器">🎨 Edit page design · 编辑产品页 ↗</button>
+            <button class="btn" id="pd-delete-btn" type="button" onclick="pdDelete()" style="color:var(--danger);border-color:rgba(182,86,86,.4);">Delete · 删除</button>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn" onclick="pdClose()">Cancel · 取消</button>
+            <button class="btn btn-primary" onclick="pdSave()">Save · 保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- ── Designer Sections editor modal — split-pane (forms + live preview) ── -->
     <div id="pa-edit-bg" class="pu-editor-bg">
@@ -14589,10 +14642,100 @@ function paRender() {
 // and PATCHes the same /api/retail-admin/products/:id endpoint on save.
 // (Replaces the old in-page modal — kept the function name since the grid
 // cards call paOpenEdit(id).)
-function paOpenEdit(id) {
-  const p = PA_PRODUCTS.find(x => x.id === id);
-  if (!p) return;
-  window.open('/product-editor?id=' + encodeURIComponent(id), '_blank', 'noopener');
+// Clicking a product card opens the commercial details form (name, price,
+// stock, photo, description…). The page-design tool is launched from a button
+// inside that form, in its own window.
+function paOpenEdit(id) { pdOpen(id); }
+
+// ── Product details (commercial) editor — the Mini App Backend's own product
+// page. Edits the basic store fields + stock via /api/retail-admin/products.
+// Standalone: needs no kitchen/main system behind it. ──
+let _pdImage;  // undefined = unchanged, '' = cleared, string = new base64
+function pdCats() {
+  return [...new Set((PA_PRODUCTS || []).map(p => (p.category || '').trim()).filter(Boolean))].sort();
+}
+function pdOpen(id) {
+  const p = id != null ? (PA_PRODUCTS || []).find(x => x.id === id) : null;
+  const set = (el, v) => { const n = document.getElementById(el); if (n) n.value = (v == null ? '' : v); };
+  document.getElementById('pd-id').value = p ? p.id : '';
+  document.getElementById('pd-title').textContent = p ? (p.name_en || p.name_cn || 'Product · 产品') : 'New product · 新增产品';
+  set('pd-name-en', p && p.name_en); set('pd-name-cn', p && p.name_cn);
+  set('pd-price', p ? p.sell_price : ''); set('pd-stock', p ? (p.stock_qty != null ? p.stock_qty : 0) : '');
+  set('pd-sku', p && p.sku); set('pd-category', p && p.category); set('pd-weight', p && p.size);
+  set('pd-desc-en', p && p.description_en); set('pd-desc-cn', p && p.description_cn);
+  const modes = String((p && p.ship_modes) || 'air,land').toLowerCase();
+  document.getElementById('pd-ship-air').checked  = !p || modes.includes('air');
+  document.getElementById('pd-ship-land').checked = !p || modes.includes('land');
+  document.getElementById('pd-published').checked = p ? p.is_published === 1 : false;
+  _pdImage = undefined;
+  const img = (p && (p.image_data || p.image_url)) || '';
+  document.getElementById('pd-img-preview').style.backgroundImage = img ? `url("${img}")` : 'none';
+  document.getElementById('pd-img-file').value = '';
+  document.getElementById('pd-cat-list').innerHTML = pdCats().map(c => `<option value="${escapeAttr(c)}">`).join('');
+  // Page-design + delete only apply to an existing product.
+  document.getElementById('pd-pagedesign-btn').style.display = p ? '' : 'none';
+  document.getElementById('pd-delete-btn').style.display = p ? '' : 'none';
+  document.getElementById('pd-bg').classList.add('show');
+}
+function pdClose() { document.getElementById('pd-bg').classList.remove('show'); _pdImage = undefined; }
+function pdPickImage(e) {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { _pdImage = rd.result; document.getElementById('pd-img-preview').style.backgroundImage = `url("${rd.result}")`; };
+  rd.readAsDataURL(f);
+}
+function pdClearImage() {
+  _pdImage = '';
+  document.getElementById('pd-img-preview').style.backgroundImage = 'none';
+  document.getElementById('pd-img-file').value = '';
+}
+function pdOpenPageDesign() {
+  const id = document.getElementById('pd-id').value;
+  if (id) window.open('/product-editor?id=' + encodeURIComponent(id), '_blank', 'noopener');
+}
+async function pdSave() {
+  const id = document.getElementById('pd-id').value;
+  const g = el => (document.getElementById(el) && document.getElementById(el).value || '').trim();
+  const modes = [];
+  if (document.getElementById('pd-ship-air').checked)  modes.push('air');
+  if (document.getElementById('pd-ship-land').checked) modes.push('land');
+  const body = {
+    name_en: g('pd-name-en'), name_cn: g('pd-name-cn'),
+    sku: g('pd-sku'), category: g('pd-category'), weight: g('pd-weight'),
+    sell_price: parseFloat(g('pd-price')) || 0,
+    stock_qty: parseInt(g('pd-stock'), 10) || 0,
+    ship_modes: modes.join(',') || 'air,land',
+    description_en: g('pd-desc-en'), description_cn: g('pd-desc-cn'),
+    is_published: document.getElementById('pd-published').checked ? 1 : 0,
+  };
+  if (_pdImage !== undefined) body.image_data = _pdImage;  // only send when changed/cleared
+  if (!body.name_en && !body.name_cn) { alert('A name is required · 需要填写名称'); return; }
+  try {
+    const url = id ? '/api/retail-admin/products/' + id : '/api/retail-admin/products';
+    const r = await fetch(url, { method: id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error === 'sku_taken' ? 'That SKU is already in use · 该货号已被占用' : (j.error || 'save_failed'));
+    if (id) {
+      const i = PA_PRODUCTS.findIndex(x => x.id === Number(id));
+      if (i >= 0) PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...j.data };
+    } else if (j.data) {
+      PA_PRODUCTS.unshift(j.data);
+    }
+    pdClose();
+    paRender();
+  } catch (e) { alert('Save failed · 保存失败: ' + e.message); }
+}
+async function pdDelete() {
+  const id = document.getElementById('pd-id').value; if (!id) return;
+  if (!confirm('Delete this product? · 删除此产品?\nIt will be hidden from the shop. · 将从店面隐藏。')) return;
+  try {
+    const r = await fetch('/api/retail-admin/products/' + id, { method: 'DELETE' });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'delete_failed');
+    PA_PRODUCTS = PA_PRODUCTS.filter(x => x.id !== Number(id));
+    pdClose();
+    paRender();
+  } catch (e) { alert('Delete failed · 删除失败: ' + e.message); }
 }
 
 // Paint the IP character tiles. The hidden input #pa-edit-colophon-character
