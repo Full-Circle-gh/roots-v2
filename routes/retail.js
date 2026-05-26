@@ -6908,6 +6908,17 @@ function priceCart(items, customerId) {
   return { subtotal: Math.round(subtotal * 100) / 100, totalQty, lines };
 }
 
+// POST /api/retail/cart/price — lightweight cart re-pricing with NO address
+// or delivery context. The cart page calls this on open so it can show the
+// CURRENT effective (flash) prices + savings: cart unit_prices are frozen at
+// add-time, so a flash sale that started/ended since would otherwise show a
+// stale price. Returns the same per-line breakdown the checkout quote does.
+router.post('/api/retail/cart/price', requireRetailAuth, express.json(), (req, res) => {
+  const priced = priceCart(req.body && req.body.items, req.customer.id);
+  if (priced.error) return res.status(400).json({ success: false, error: priced.error });
+  res.json({ success: true, data: { subtotal: priced.subtotal, total_qty: priced.totalQty, lines: priced.lines || [] } });
+});
+
 // 100 RMB → 1 point (default). Configurable.
 function pointsEarnedFor(subtotal) {
   const rate = Number(cfgValue('points.earnRate', 100));

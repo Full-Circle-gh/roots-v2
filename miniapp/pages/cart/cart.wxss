@@ -120,6 +120,10 @@
 }
 .total-label { font-size: calc(28rpx * var(--font-scale)); }
 .total-amount { font-size: calc(60rpx * var(--font-scale)); }
+/* "You saved" — green so the total discount reads as a win above the total. */
+.saved-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8rpx; }
+.saved-label { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.12em; color: #5a8a2f; }
+.saved-amount { font-size: calc(30rpx * var(--font-scale)); color: #5a8a2f; font-weight: 700; }
 .checkout-btn {
   margin-top: 20rpx;
   background: var(--ink);

@@ -41,6 +41,10 @@
     </view>
 
     <view class="checkout">
+      <view wx:if="{{savedTotal}}" class="saved-row">
+        <view class="saved-label f-toni">{{lang === 'cn' ? '已省' : 'YOU SAVED'}}</view>
+        <view class="saved-amount f-gothic">−¥{{savedTotal}}</view>
+      </view>
       <view class="total-row">
         <view class="f-bear total-label">Total</view>
         <view class="f-bear total-amount">¥{{subtotal}}</view>

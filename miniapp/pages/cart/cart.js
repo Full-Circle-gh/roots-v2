@@ -4,11 +4,13 @@
 const cart   = require('../../utils/cart');
 const config = require('../../utils/config');
 const lang   = require('../../utils/lang');
+const api    = require('../../utils/api');
 
 Page({
   data: {
     items: [],
     subtotal: 0,
+    savedTotal: '',
     threshold: 399,
     remaining: 0,
     unlocked: false,
@@ -29,6 +31,9 @@ Page({
     const app = getApp();
     this.setData({ lang: app.globalData.lang });
     this.recompute();
+    // Cart unit_prices are frozen at add-time; re-price against the server so
+    // flash sales that started/ended since show the CURRENT price + savings.
+    this.repriceFromServer();
     // Defensive: re-fire the tab-badge update on every cart-tab show.
     // Some base-library versions silently ignore wx.removeTabBarBadge
     // when it's invoked from a non-tab page (e.g. during checkout's
@@ -55,14 +60,21 @@ Page({
     // discounts, but the cart bar reads cleaner as a round number.
     const remainingRaw = Math.max(0, t - subtotal);
     const remaining = Math.ceil(remainingRaw);
-    this.setData({
-      items: state.items.map(it => ({
+    let flashSavings = 0;
+    const itemRows = state.items.map(it => {
+      const onFlash = !!it.is_flash && it.regular_price && Number(it.regular_price) > Number(it.unit_price);
+      if (onFlash) flashSavings += (Number(it.regular_price) - Number(it.unit_price)) * it.qty;
+      return {
         ...it,
         display_name: lang.pick(it.name_en, it.name_cn, L),
         line_total: (it.unit_price * it.qty).toFixed(2),
-        regular_total: it.is_flash && it.regular_price ? (it.regular_price * it.qty).toFixed(2) : '',
-      })),
+        regular_total: onFlash ? (it.regular_price * it.qty).toFixed(2) : '',
+      };
+    });
+    this.setData({
+      items: itemRows,
       subtotal: subtotal.toFixed(2),
+      savedTotal: flashSavings > 0 ? flashSavings.toFixed(2) : '',
       threshold: t,
       remaining,
       unlocked: remainingRaw <= 0,
@@ -74,6 +86,28 @@ Page({
         checkout:  this.tx('copy.cart.checkout_btn', L === 'cn' ? '结账'                     : 'CHECK OUT'),
       },
     });
+  },
+
+  // Pull current effective prices for the cart from the server (no address /
+  // delivery needed) and update the stored unit_prices, so the cart shows the
+  // live flash price + savings instead of whatever was frozen at add-time.
+  async repriceFromServer() {
+    const items = cart.get().items;
+    if (!items.length) return;
+    const app = getApp();
+    if (app && app.authReady) { try { await app.authReady; } catch {} }
+    const body = {
+      items: items.map(it => ({
+        product_id: it.product_id,
+        qty: it.qty,
+        choices: (it.options || []).map(o => o.choice_id).filter(Boolean),
+      })),
+    };
+    try {
+      const resp = await api.post('/api/retail/cart/price', body);
+      const data = resp && (resp.data || resp) || {};
+      if (Array.isArray(data.lines) && cart.reprice(data.lines)) this.recompute();
+    } catch (e) { /* offline / not yet authed — keep the frozen prices */ }
   },
 
   tx(key, fallback) {
