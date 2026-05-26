@@ -6,4 +6,21 @@
 # the live site. Logic lives in scripts/deploy-changed.sh. This runs AFTER the
 # commit is saved, so a deploy failure never blocks or undoes the commit.
 root=$(git rev-parse --show-toplevel)
-exec bash "$root/scripts/deploy-changed.sh"
+
+# Serialize deploys with an atomic mkdir mutex. Every worktree on this machine
+# shares one lock, so two commits landing at once can't fire overlapping PM2
+# restarts on the server (which trip the health check → false rollback). flock
+# isn't available in Git Bash, hence mkdir. Released on exit; a deploy that dies
+# leaves a stale lock the next run steals after 10 minutes.
+LOCK="${HOME:-/tmp}/.roots-v2-deploy.lock"
+_tries=0
+until mkdir "$LOCK" 2>/dev/null; do
+  if find "$LOCK" -maxdepth 0 -mmin +10 >/dev/null 2>&1; then rm -rf "$LOCK" 2>/dev/null; continue; fi
+  [ "$_tries" -eq 0 ] && echo "[deploy] another deploy is running — waiting for the lock…"
+  _tries=$((_tries + 1))
+  [ "$_tries" -ge 300 ] && { echo "[deploy] waited 5 min for the deploy lock; proceeding anyway."; break; }
+  sleep 1
+done
+trap 'rm -rf "$LOCK" 2>/dev/null' EXIT INT TERM
+
+bash "$root/scripts/deploy-changed.sh"
