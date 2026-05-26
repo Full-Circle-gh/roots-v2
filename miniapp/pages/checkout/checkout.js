@@ -517,14 +517,23 @@ Page({
         // /orders endpoint already charges this; this keeps the display honest.
         if (Array.isArray(data.lines)) cart.reprice(data.lines);
         const srvSubtotal = Number(data.subtotal != null ? data.subtotal : cart.subtotal());
-        this.setData({
-          items: cart.get().items.map(it => ({
+        // Per-line flash treatment (strikethrough original + "save ¥X" tag)
+        // and tally the flash savings for the "You saved" line below.
+        let flashSavings = 0;
+        const itemRows = cart.get().items.map(it => {
+          const onFlash = !!it.is_flash && it.regular_price != null && Number(it.regular_price) > Number(it.unit_price);
+          const lineSave = onFlash ? (Number(it.regular_price) - Number(it.unit_price)) * it.qty : 0;
+          if (lineSave > 0) flashSavings += lineSave;
+          return {
             ...it,
             display_name: lang.pick(it.name_en, it.name_cn, L),
             line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
-          })),
-          subtotal: srvSubtotal.toFixed(2),
+            on_flash: onFlash,
+            was_total: onFlash ? '¥' + (Number(it.regular_price) * it.qty).toFixed(2) : '',
+            save_text: onFlash ? (L === 'cn' ? '省 ¥' : 'save ¥') + lineSave.toFixed(2) : '',
+          };
         });
+        this.setData({ items: itemRows, subtotal: srvSubtotal.toFixed(2) });
         const deliveryFee = Number(data.delivery_fee) || 0;
         const packingFee  = Number(data.packing_fee)  || 0;
         let effectiveDelivery = deliveryFee;
@@ -589,10 +598,15 @@ Page({
         const fallbackExtraKm  = routing?.fallback?.extra_km ?? null;
         const fallbackExtraMin = routing?.fallback?.extra_min_estimate ?? null;
         const missingItems     = Array.isArray(routing?.missing_items) ? routing.missing_items : [];
+        // "You saved" total — flash savings + voucher + points + waived
+        // delivery (free-ship voucher). Empty string hides the summary row.
+        const savedTotal = flashSavings + voucherDiscount + pointsDiscount
+          + (this.data.voucherFreeShip ? deliveryFee : 0);
         this.setData({
           zone: data.zone || null,
           zoneError: '',
           deliveryFee: effectiveDelivery.toFixed(2),
+          savedTotal: savedTotal > 0 ? savedTotal.toFixed(2) : '',
           packingFee:  packingFee.toFixed(2),
           freeShipping: !!data.free_shipping,
           pointsEarnedPreview: Number(data.points_earned_preview) || 0,

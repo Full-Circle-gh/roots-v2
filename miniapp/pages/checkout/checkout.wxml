@@ -20,7 +20,10 @@
           <text>{{item.display_name}}</text>
           <text class="line-meta"> ×{{item.qty}}</text>
         </view>
-        <view class="line-total f-gothic">{{item.line_total}}</view>
+        <view class="line-total f-gothic">
+          <view class="lt-now"><text wx:if="{{item.on_flash}}" class="line-was">{{item.was_total}}</text>{{item.line_total}}</view>
+          <text wx:if="{{item.on_flash}}" class="line-save">{{item.save_text}}</text>
+        </view>
       </view>
       <view wx:if="{{voucherCode}}" class="order-line voucher-line">
         <view class="line-name">{{voucherCode}}</view>
@@ -383,6 +386,10 @@
     <view wx:if="{{paymentMethod === 'points' && pointsToUse > 0}}" class="bd-row">
       <view class="bd-label">{{lang === 'cn' ? '积分抵扣 · ' : 'Points · '}}{{pointsToUse}}{{lang === 'cn' ? ' 积分' : ' pts'}}</view>
       <view class="bd-val f-gothic">−¥{{pointsDiscount}}</view>
+    </view>
+    <view wx:if="{{savedTotal}}" class="bd-row bd-saved">
+      <view class="bd-label">{{lang === 'cn' ? '已省' : 'You saved'}}</view>
+      <view class="bd-val f-gothic">−¥{{savedTotal}}</view>
     </view>
     <view wx:if="{{pointsEarnedPreview > 0}}" class="bd-row bd-points">
       <view class="bd-label">{{lang === 'cn' ? '本单获得积分' : "You'll earn"}}</view>

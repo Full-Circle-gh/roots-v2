@@ -59,7 +59,10 @@
   white-space: nowrap;
 }
 .line-meta { color: var(--olive); }
-.line-total { font-size: calc(28rpx * var(--font-scale)); }
+.line-total { font-size: calc(28rpx * var(--font-scale)); display: flex; flex-direction: column; align-items: flex-end; }
+/* Flash-sale line: struck-through original price + a green "save ¥X" tag. */
+.line-was { color: var(--olive); text-decoration: line-through; margin-right: 10rpx; font-size: calc(24rpx * var(--font-scale)); }
+.line-save { color: #5a8a2f; font-size: calc(22rpx * var(--font-scale)); margin-top: 2rpx; }
 .voucher-line {
   margin-top: 8rpx;
   padding-top: 10rpx;
@@ -480,6 +483,8 @@
 .bd-label { font-size: calc(26rpx * var(--font-scale)); color: var(--olive); }
 .bd-val { font-size: calc(28rpx * var(--font-scale)); color: var(--ink); }
 .bd-points .bd-val { color: #5a8a2f; }
+/* "You saved" summary — green + emphasised so the total discount stands out. */
+.bd-saved .bd-label, .bd-saved .bd-val { color: #5a8a2f; font-weight: 600; }
 
 /* Sticky bottom footer */
 .sticky-bar {
