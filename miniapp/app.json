@@ -10,6 +10,7 @@
     "pages/order/order",
     "pages/orders/orders",
     "pages/invoices/invoices",
+    "pages/notifications/notifications",
     "pages/addresses/addresses",
     "pages/membership/membership",
     "pages/leaderboard/leaderboard",

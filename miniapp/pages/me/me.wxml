@@ -82,6 +82,16 @@
 
   <!-- Menu rows (borderless, hairline-separated) -->
   <view class="rows">
+    <view class="row {{notifUnread > 0 ? 'row-accent' : ''}}" bindtap="goNotifications">
+      <view class="row-body">
+        <view class="row-title">
+          <text class="f-bear">{{copy.menuNotif}}</text>
+          <text class="row-cn muted">  · {{copy.menuNotifCn}}</text>
+        </view>
+        <view wx:if="{{notifUnread > 0}}" class="row-meta">{{notifUnread}} {{copy.notifMeta}}</view>
+      </view>
+      <view class="row-arrow">→</view>
+    </view>
     <view class="row" bindtap="goAddresses">
       <view class="row-body">
         <view class="row-title">

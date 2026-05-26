@@ -1079,6 +1079,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_orders_status   ON retail_orders(status);
   CREATE INDEX IF NOT EXISTS idx_retail_orders_placed   ON retail_orders(placed_at);
 
+  -- Customer in-app notification center. One row per event (order status,
+  -- refund transition, invoice issued, …). read_at NULL = unread. ref_type +
+  -- ref_id deep-link the mini app to the relevant order/invoice.
+  CREATE TABLE IF NOT EXISTS retail_notifications (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL,
+    category    TEXT NOT NULL,          -- 'order' | 'refund' | 'invoice'
+    type        TEXT NOT NULL,          -- specific event, e.g. 'order_preparing'
+    title_en    TEXT, title_cn TEXT,
+    body_en     TEXT, body_cn TEXT,
+    ref_type    TEXT,                   -- 'order' | 'invoice'
+    ref_id      TEXT,                   -- deep-link target id
+    read_at     DATETIME,               -- NULL = unread
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_notif_customer ON retail_notifications(customer_id, read_at);
+  CREATE INDEX IF NOT EXISTS idx_retail_notif_created  ON retail_notifications(created_at);
+
   CREATE TABLE IF NOT EXISTS retail_order_items (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     order_id        INTEGER NOT NULL,

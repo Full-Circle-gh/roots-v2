@@ -1095,9 +1095,29 @@ async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/
   }
 }
 
-// Helper used by the admin status-transition endpoint — looks up the
-// active order-status template ID from config and fires a notification.
+// Bilingual titles for the in-app notification on each order status.
+const ORDER_STATUS_NOTIF = {
+  paid:       { en: 'Payment confirmed',            cn: '支付成功' },
+  preparing:  { en: 'Your order is being prepared', cn: '订单准备中' },
+  dispatched: { en: 'Your order has shipped',       cn: '订单已发货' },
+  delivered:  { en: 'Your order was delivered',     cn: '订单已送达' },
+  cancelled:  { en: 'Your order was cancelled',     cn: '订单已取消' },
+  refunded:   { en: 'Your order was refunded',      cn: '订单已退款' },
+};
+
+// Helper used by the admin status-transition endpoint — fires the in-app
+// notification (always) and, when configured, the WeChat subscribe-message.
 function notifyOrderStatusChange(orderId, newStatus) {
+  // In-app notification first — independent of WeChat push configuration.
+  notifyForOrder(orderId, (o) => {
+    const m = ORDER_STATUS_NOTIF[newStatus];
+    if (!m) return null;
+    return {
+      category: 'order', type: 'order_' + newStatus,
+      title_en: m.en, title_cn: m.cn,
+      body_en: `Order ${o.order_no}`, body_cn: `订单 ${o.order_no}`,
+    };
+  });
   try {
     const cfg = loadConfig();
     const tplId = cfg.notifications?.order_status_template_id;
@@ -1153,6 +1173,80 @@ function notifyTrackingScenario(orderId, scenario) {
       .catch(e => console.warn('[notify-scenario]', e));
   } catch (e) { console.error('[notify-scenario]', e); }
 }
+
+// ─── In-app notification center ───────────────────────────────────────────
+// Persistent per-customer inbox (orders / refunds / invoices for v1), written
+// from the same server events that fire the WeChat push. Surfaced in the mini
+// app's Notifications page. Best-effort — never throws into the caller.
+function notifyCustomer(customerId, n) {
+  if (!customerId || !n || !n.category || !n.type) return;
+  try {
+    db.prepare(
+      `INSERT INTO retail_notifications
+         (customer_id, category, type, title_en, title_cn, body_en, body_cn, ref_type, ref_id)
+       VALUES (?,?,?,?,?,?,?,?,?)`
+    ).run(
+      customerId, n.category, n.type,
+      n.title_en || '', n.title_cn || '',
+      n.body_en || null, n.body_cn || null,
+      n.ref_type || null, n.ref_id != null ? String(n.ref_id) : null
+    );
+  } catch (e) { console.warn('[notify]', e.message); }
+}
+
+// Resolve an order's customer + order_no, then write a notification. `build`
+// receives the order row {customer_id, order_no} and returns the fields.
+function notifyForOrder(orderId, build) {
+  try {
+    const o = db.prepare('SELECT customer_id, order_no FROM retail_orders WHERE id = ?').get(orderId);
+    if (!o || !o.customer_id) return;
+    const n = build(o);
+    if (n) notifyCustomer(o.customer_id, { ref_type: 'order', ref_id: orderId, ...n });
+  } catch (e) { console.warn('[notify order]', e.message); }
+}
+
+// GET /api/retail/notifications — newest-first page + unread count. Cursor by
+// `before` (id) for "load more".
+router.get('/api/retail/notifications', requireRetailAuth, (req, res) => {
+  const limit  = Math.min(parseInt(req.query.limit || '30', 10) || 30, 50);
+  const before = req.query.before ? parseInt(req.query.before, 10) : null;
+  let sql = `SELECT id, category, type, title_en, title_cn, body_en, body_cn,
+                    ref_type, ref_id, read_at, created_at
+               FROM retail_notifications WHERE customer_id = ?`;
+  const params = [req.customer.id];
+  if (before) { sql += ' AND id < ?'; params.push(before); }
+  sql += ' ORDER BY id DESC LIMIT ?'; params.push(limit);
+  const rows = db.prepare(sql).all(...params);
+  const unread = db.prepare(
+    'SELECT COUNT(*) AS n FROM retail_notifications WHERE customer_id = ? AND read_at IS NULL'
+  ).get(req.customer.id).n;
+  res.json({ success: true, data: rows, meta: { unread: unread || 0, limit } });
+});
+
+// GET /api/retail/notifications/unread-count — lightweight badge poll.
+router.get('/api/retail/notifications/unread-count', requireRetailAuth, (req, res) => {
+  const n = db.prepare(
+    'SELECT COUNT(*) AS n FROM retail_notifications WHERE customer_id = ? AND read_at IS NULL'
+  ).get(req.customer.id).n;
+  res.json({ success: true, data: { count: n || 0 } });
+});
+
+// POST /api/retail/notifications/read-all — mark every unread one read.
+router.post('/api/retail/notifications/read-all', requireRetailAuth, (req, res) => {
+  db.prepare(
+    'UPDATE retail_notifications SET read_at = CURRENT_TIMESTAMP WHERE customer_id = ? AND read_at IS NULL'
+  ).run(req.customer.id);
+  res.json({ success: true });
+});
+
+// POST /api/retail/notifications/:id/read — mark a single one read.
+router.post('/api/retail/notifications/:id/read', requireRetailAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  db.prepare(
+    'UPDATE retail_notifications SET read_at = CURRENT_TIMESTAMP WHERE id = ? AND customer_id = ? AND read_at IS NULL'
+  ).run(id, req.customer.id);
+  res.json({ success: true });
+});
 
 // ─── requireRetailAuth middleware ────────────────────────────────────────
 function requireRetailAuth(req, res, next) {
@@ -5114,6 +5208,12 @@ router.put('/api/retail-admin/orders/:id/invoice', requireRetailAdmin, express.j
         SET invoice_status = 'issued', invoice_file_url = ?, invoice_number = ?, invoice_issued_at = CURRENT_TIMESTAMP
       WHERE id = ?`
   ).run(fileUrl, number, id);
+  notifyForOrder(id, (o) => ({
+    category: 'invoice', type: 'invoice_issued', ref_type: 'invoice',
+    title_en: 'Invoice issued', title_cn: '发票已开具',
+    body_en: `The invoice for order ${o.order_no} is ready`,
+    body_cn: `订单 ${o.order_no} 的发票已开具`,
+  }));
   res.json({ success: true });
 });
 
@@ -6092,6 +6192,12 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   });
   logActivity(req.user.id, req.user.username, 'refund_approve', 'retail_order', id, { amount, is_full: isFull, lines }, req.ip);
   notifyOrderStatusChange(id, isFull ? 'refunded' : null);
+  notifyForOrder(id, (o) => ({
+    category: 'refund', type: 'refund_approved',
+    title_en: 'Refund approved', title_cn: '退款已通过',
+    body_en: `Your ¥${Number(amount).toFixed(2)} refund for order ${o.order_no} was approved`,
+    body_cn: `订单 ${o.order_no} 的 ¥${Number(amount).toFixed(2)} 退款已通过`,
+  }));
   res.json({ success: true, is_full: isFull, amount, lines });
 });
 
@@ -6147,6 +6253,12 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
   });
   logActivity(req.user.id, req.user.username, 'refund_payout', 'retail_order', id, { amount, method, reference }, req.ip);
   notifyOrderStatusChange(id, null);
+  notifyForOrder(id, (o) => ({
+    category: 'refund', type: 'refund_paid',
+    title_en: 'Refund paid', title_cn: '退款已到账',
+    body_en: `¥${Number(amount).toFixed(2)} has been refunded for order ${o.order_no}`,
+    body_cn: `订单 ${o.order_no} 的 ¥${Number(amount).toFixed(2)} 退款已退回`,
+  }));
   res.json({ success: true, amount, method, reference });
 });
 
@@ -6170,6 +6282,12 @@ function rejectRefundHandler(req, res) {
   logRefundEvent({ orderId: id, event: 'rejected', note: note || null, userId: req.user.id });
   logActivity(req.user.id, req.user.username, 'refund_reject', 'retail_order', id, { note }, req.ip);
   notifyOrderStatusChange(id, null);
+  notifyForOrder(id, (o) => ({
+    category: 'refund', type: 'refund_rejected',
+    title_en: 'Refund declined', title_cn: '退款未通过',
+    body_en: `Your refund for order ${o.order_no} was declined` + (note ? `: ${note}` : ''),
+    body_cn: `订单 ${o.order_no} 的退款申请未通过` + (note ? `:${note}` : ''),
+  }));
   res.json({ success: true });
 }
 router.post('/api/retail-admin/orders/:id/refund/reject', requireRetailAdmin, express.json(), rejectRefundHandler);

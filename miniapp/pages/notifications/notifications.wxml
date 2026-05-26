@@ -1,0 +1,28 @@
+<view class="page">
+  <view class="head">
+    <view class="kicker f-toni">{{copy.kicker}}</view>
+    <view class="title-row">
+      <view class="title f-bear">{{copy.title}}</view>
+      <view wx:if="{{anyUnread}}" class="mark-all f-toni" bindtap="onMarkAll">{{copy.markAll}}</view>
+    </view>
+  </view>
+
+  <view wx:if="{{!loading && items.length === 0}}" class="empty">
+    <view class="empty-t f-bear">{{copy.emptyTitle}}</view>
+    <view class="empty-s muted">{{copy.emptySub}}</view>
+  </view>
+
+  <view class="list">
+    <view wx:for="{{items}}" wx:key="id"
+          class="n {{item.unread ? 'unread' : ''}}"
+          data-id="{{item.id}}" data-reftype="{{item.refType}}" data-refid="{{item.refId}}"
+          bindtap="onTapItem">
+      <view class="n-top">
+        <view class="n-cat f-toni cat-{{item.cat}}">{{item.catLabel}}</view>
+        <view class="n-time muted">{{item.time}}</view>
+      </view>
+      <view class="n-title f-bear">{{item.title}}</view>
+      <view wx:if="{{item.body}}" class="n-body muted">{{item.body}}</view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,27 @@
+.page { padding: 32rpx 28rpx 60rpx; }
+.head { margin-bottom: 24rpx; }
+.kicker { font-size: 22rpx; letter-spacing: 2rpx; color: #8a8275; }
+.title-row { display: flex; justify-content: space-between; align-items: baseline; gap: 16rpx; margin-top: 6rpx; }
+.title { font-size: 52rpx; color: #1a1a17; }
+.mark-all { font-size: 22rpx; letter-spacing: 1rpx; color: #6B8E6F; text-decoration: underline; white-space: nowrap; }
+
+.empty { text-align: center; padding: 90rpx 24rpx; }
+.empty-t { font-size: 34rpx; color: #1a1a17; }
+.empty-s { font-size: 24rpx; margin-top: 10rpx; line-height: 1.5; }
+
+.list { display: flex; flex-direction: column; gap: 16rpx; }
+.n { background: #FFFCF7; border: 2rpx solid #1a1a17; padding: 22rpx; }
+/* Unread — Tea Green left rail (matches the backend "new" cue). */
+.n.unread { box-shadow: inset 6rpx 0 0 #6B8E6F; }
+.n-top { display: flex; justify-content: space-between; align-items: center; gap: 12rpx; }
+.n-cat {
+  font-size: 19rpx; letter-spacing: 2rpx;
+  padding: 3rpx 12rpx; border: 2rpx solid #1a1a17; color: #1a1a17; white-space: nowrap;
+}
+.cat-order   { background: #CCD900; }   /* lime */
+.cat-refund  { background: #E8E0CF; }   /* warm paper */
+.cat-invoice { background: #FFFCF7; }
+.n-time { font-size: 22rpx; }
+.n-title { font-size: 30rpx; color: #1a1a17; margin-top: 10rpx; }
+.n-body { font-size: 24rpx; margin-top: 6rpx; line-height: 1.5; }
+.muted { color: #8a8275; }

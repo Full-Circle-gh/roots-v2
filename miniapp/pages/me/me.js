@@ -37,6 +37,9 @@ const COPY_EN = {
   couponsMeta: 'active',
   menuInvoices: 'Invoices',
   menuInvoicesCn: '我的发票',
+  menuNotif: 'Notifications',
+  menuNotifCn: '通知',
+  notifMeta: 'new',
   menuFavorites: 'Favorites',
   menuFavoritesCn: '收藏夹',
   favoritesMeta: 'saved',
@@ -85,6 +88,9 @@ const COPY_CN = {
   couponsMeta: '张可用',
   menuInvoices: '我的发票',
   menuInvoicesCn: 'INVOICES',
+  menuNotif: '通知',
+  menuNotifCn: 'NOTIFICATIONS',
+  notifMeta: '条未读',
   menuFavorites: '收藏夹',
   menuFavoritesCn: 'FAVORITES',
   favoritesMeta: '件已收藏',
@@ -145,12 +151,14 @@ Page({
     if (!app.globalData.token) return;
     this.setData({ loading: true });
     try {
-      const [cust, stats] = await Promise.all([
+      const [cust, stats, notif] = await Promise.all([
         api.get('/api/retail/customer').catch(() => null),
         api.get('/api/retail/orders/stats').catch(() => ({ data: {} })),
+        api.get('/api/retail/notifications/unread-count').catch(() => null),
       ]);
       const statsData = (stats && stats.data) || stats || {};
       const next = { loading: false };
+      next.notifUnread = (notif && notif.data && notif.data.count) || 0;
       if (cust) {
         next.customer = cust;
         next.balanceDisplay = Number(cust.balance || 0).toFixed(2);
@@ -219,6 +227,7 @@ Page({
   goTopup()      { wx.navigateTo({ url: '/pages/topup/topup' }); },
   goCoupons()    { wx.navigateTo({ url: '/pages/coupons/coupons' }); },
   goInvoices()   { wx.navigateTo({ url: '/pages/invoices/invoices' }); },
+  goNotifications() { wx.navigateTo({ url: '/pages/notifications/notifications' }); },
   goFavorites()  { wx.navigateTo({ url: '/pages/favorites/favorites' }); },
   goProfile()    { wx.navigateTo({ url: '/pages/profile/profile' }); },
   goAbout()      { wx.navigateTo({ url: '/pages/about/about' }); },
