@@ -3846,6 +3846,11 @@
       /* ── Tweak: row rhythm (default = hairlines, the existing look) ── */
       #orders-table.rt-striped tbody td { border-bottom: none; }
       #orders-table.rt-striped tbody tr.order-row:nth-child(even) td { background: var(--bg-elev-1); }
+      /* In striped view the zebra bands already separate rows, so the row-hover
+         tint just makes the stripes "jump" as the cursor moves. Disable the
+         hover background here — stripes stay put; cursor:pointer still signals
+         the row is clickable. */
+      #orders-table.rt-striped tbody tr.order-row:hover { background: transparent; }
       #orders-table.rt-cards { border-collapse: separate; border-spacing: 0 6px; }
       #orders-table.rt-cards thead th { border-bottom: none; }
       #orders-table.rt-cards tbody td {
