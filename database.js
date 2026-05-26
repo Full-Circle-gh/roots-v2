@@ -2043,6 +2043,20 @@ addColumn('retail_orders', 'store_id',        'INTEGER');
 addColumn('retail_orders', 'routing_reason',  'TEXT');   // 'nearest' | 'fallback_no_stock' | 'manual' | 'only_store'
 addColumn('retail_orders', 'channel',         "TEXT DEFAULT 'wechat'");
 
+// Staff "seen" timestamp — stamped the first time ANY operator opens the
+// order detail (shared across devices). NULL = unread; powers the bold + dot
+// "unread until opened" treatment in the backend Orders list. On the deploy
+// that first adds the column, backfill existing orders as already-seen so only
+// orders placed AFTER this point show as unread. Guarded by a column-exists
+// check so a later restart can't re-clear genuine unread flags.
+{
+  const hadSeenAt = db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('retail_orders') WHERE name = 'seen_at'").get().n > 0;
+  addColumn('retail_orders', 'seen_at', 'DATETIME');
+  if (!hadSeenAt) {
+    db.prepare("UPDATE retail_orders SET seen_at = COALESCE(placed_at, datetime('now')) WHERE seen_at IS NULL").run();
+  }
+}
+
 // Outbound logistics — populated when staff (or the JD API, once wired)
 // attaches a carrier + waybill to a dispatched order. tracking_events_json
 // is the cached carrier feed so the customer mini app can render the

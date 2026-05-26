@@ -533,6 +533,10 @@ Page({
       image_url: raw.image_url,
       image_data: raw.image_data,
       price: Number(raw.price ?? raw.sell_price) || 0,
+      // Carry the flash fields through so cart.add() prices the line at the
+      // active flash rate (was dropped here → checkout showed regular price).
+      effective_price: raw.effective_price,
+      is_on_flash: raw.is_on_flash,
     }, 1, []);
 
     const imgUrl = absUrl(raw.image_url) || raw.image_data || '';

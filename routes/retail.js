@@ -4704,7 +4704,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.placed_at, o.paid_at, o.dispatched_at, o.delivered_at,
                     o.scheduled_for, o.delivery_slot_label,
                     o.delivery_mode, o.same_day_surcharge_fee,
-                    o.updated_at,
+                    o.updated_at, o.seen_at,
                     o.refund_status, o.refund_amount_requested,
                     o.refund_requested_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
@@ -4753,6 +4753,14 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
       WHERE o.id = ?`
   ).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  // Mark the order seen by staff the first time anyone opens it (shared across
+  // operators) — clears the "unread" (bold + dot) treatment in the Orders list.
+  // Idempotent: only the first open stamps seen_at.
+  if (!o.seen_at) {
+    const nowIso = new Date().toISOString();
+    try { db.prepare('UPDATE retail_orders SET seen_at = ? WHERE id = ? AND seen_at IS NULL').run(nowIso, id); } catch {}
+    o.seen_at = nowIso;
+  }
   if (o.address_json) { try { o.address = JSON.parse(o.address_json); } catch {} }
   delete o.address_json;
 
