@@ -152,6 +152,16 @@ app.use((req, res, next) => {
   return res.redirect('/backend/billing?provisioning=1');
 });
 
+// API responses must NEVER be cached — not by the browser, a CDN, or an
+// intermediary proxy/VPN. A stale cached GET silently breaks the app: a
+// cached {user:null} or a stale 401/302 on a polled endpoint bounces a
+// logged-in user to /login. (Observed in the field behind a caching VPN.)
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  next();
+});
+
 // Routes
 app.use(require('./routes/auth'));
 app.use(require('./routes/backend-auth'));   // Mini App Backend operator realm (separate from kitchen auth)
