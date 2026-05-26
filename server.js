@@ -158,6 +158,7 @@ app.use(require('./routes/backend-auth'));   // Mini App Backend operator realm 
 app.use(require('./routes/billing'));        // Mini App Backend billing control plane (plans / subscriptions / invoices)
 app.use(require('./routes/billing-pay'));    // Mini App Backend billing payments & lifecycle (select-plan / checkout / mark-paid)
 app.use(require('./routes/backend-signup')); // Mini App Backend tenant signup / provisioning (gated in Phase 2)
+app.use(require('./routes/saas-admin'));     // Platform owner console — tenants / subscriptions / branding (kitchen-admin gated)
 app.use(require('./routes/ingredients'));
 app.use(require('./routes/recipes'));
 app.use(require('./routes/admin'));
@@ -200,6 +201,15 @@ app.get('/backend/account', (req, res) => {
   if (!req.session?.backendUserId) return res.redirect('/backend/login');
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'backend-account.html'));
+});
+
+// SaaS-admin console — platform owner only (a kitchen `admin` session).
+app.get('/saas-admin', (req, res) => {
+  const dbx = require('./database');
+  const u = req.session?.userId && dbx.prepare('SELECT role FROM users WHERE id = ? AND is_active = 1').get(req.session.userId);
+  if (!u || u.role !== 'admin') return res.redirect('/login');
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'saas-admin.html'));
 });
 
 // Mini App Backend signup — create a new tenant backend (gated in Phase 2).

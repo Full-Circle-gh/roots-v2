@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Full Circle · SaaS Admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#12161A" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+SC:wght@300;400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:#12161A; --pane:#1A1F24; --elev:#1F252B; --paper:#E8E5DC; --muted:#AEABA2; --faint:#7d7a72;
+    --line:rgba(232,229,220,.10); --line-2:rgba(232,229,220,.16);
+    --tea:#6B8E6F; --brass:#B08D4A; --brass-hi:#C29B54; --danger:#e8556a;
+    --f-sans:'IBM Plex Sans','IBM Plex Sans SC',system-ui,sans-serif;
+    --f-mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { background: var(--ink); color: var(--paper); font-family: var(--f-sans); padding: 32px 24px 80px; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  .top { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .mark { width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line-2); display: flex; align-items: center; justify-content: center; }
+  .word { font-size: 13px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; }
+  .sub { font-family: var(--f-mono); font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: var(--faint); margin: 2px 0 24px; }
+  .bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 12px; flex-wrap: wrap; }
+  .bar h1 { font-size: 16px; font-weight: 600; margin: 0; }
+  button { font-family: var(--f-sans); cursor: pointer; }
+  .btn { background: transparent; color: var(--muted); border: 1px solid var(--line-2); border-radius: 7px; font-size: 12px; font-weight: 500; padding: 7px 12px; }
+  .btn:hover { color: var(--paper); border-color: var(--paper); }
+  .btn-brass { background: var(--brass); color: var(--ink); border: 0; font-weight: 600; }
+  .btn-brass:hover { background: var(--brass-hi); }
+  .btn-sm { font-size: 11px; padding: 5px 9px; }
+  .btn-danger:hover { color: #f0a3ae; border-color: rgba(232,85,106,.5); background: rgba(232,85,106,.08); }
+  .card { background: var(--pane); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-family: var(--f-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 12px 14px; background: rgba(232,229,220,.03); border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  .co { font-weight: 600; }
+  .co .brandchip { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 7px; vertical-align: middle; border: 1px solid var(--line-2); }
+  .zh { color: var(--faint); font-size: 11px; }
+  .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+  .pill { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .pill.active, .pill.trialing { background: rgba(107,142,111,.16); color: #a7c6ab; border: 1px solid rgba(107,142,111,.4); }
+  .pill.past_due, .pill.grace { background: rgba(176,141,74,.15); color: #d8b676; border: 1px solid rgba(176,141,74,.34); }
+  .pill.suspended, .pill.cancelled { background: rgba(232,85,106,.14); color: #f0a3ae; border: 1px solid rgba(232,85,106,.34); }
+  .pill.internal { background: rgba(232,229,220,.08); color: var(--muted); border: 1px solid var(--line-2); }
+  .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .empty { color: var(--faint); padding: 24px; text-align: center; }
+  /* modal */
+  .modal { position: fixed; inset: 0; background: rgba(8,10,12,.62); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 50; }
+  .modal.show { display: flex; }
+  .modal-card { background: var(--pane); border: 1px solid var(--line-2); border-radius: 14px; padding: 22px; max-width: 520px; width: 100%; max-height: 88vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,.5); }
+  .modal-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .modal-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .modal-x { background: transparent; border: 0; color: var(--faint); font-size: 20px; line-height: 1; cursor: pointer; }
+  .modal-x:hover { color: var(--paper); }
+  label { display: block; font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .field { margin-bottom: 13px; }
+  input[type=text], input[type=password] { width: 100%; background: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; color: var(--paper); font-family: var(--f-sans); font-size: 14px; padding: 10px 12px; outline: none; }
+  input:focus { border-color: var(--tea); box-shadow: 0 0 0 3px rgba(107,142,111,.22); }
+  input[type=color] { width: 44px; height: 36px; padding: 0; border: 1px solid var(--line-2); border-radius: 8px; background: var(--ink); cursor: pointer; vertical-align: middle; }
+  .row2 { display: flex; gap: 12px; align-items: center; }
+  .msg { display: none; font-size: 12.5px; padding: 9px 12px; border-radius: 8px; margin-bottom: 12px; }
+  .msg.show { display: block; }
+  .msg.err { background: rgba(232,85,106,.12); border: 1px solid rgba(232,85,106,.35); color: #f0a3ae; }
+  .msg.ok  { background: rgba(107,142,111,.14); border: 1px solid rgba(107,142,111,.4); color: #a7c6ab; }
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--elev); border: 1px solid var(--line-2); color: var(--paper); font-size: 13px; padding: 11px 16px; border-radius: 10px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 60; }
+  .toast.show { opacity: 1; }
+  .det-sec { margin-top: 16px; }
+  .det-sec h4 { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.6" stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
+          <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.6" stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
+          <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1" fill="none" stroke="#E8E5DC" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="word">Full Circle</span>
+    </div>
+    <div class="sub">SaaS Admin · 平台管理</div>
+
+    <div class="bar">
+      <h1>Tenants · 租户 <span class="zh mono" id="count"></span></h1>
+      <button class="btn btn-brass" id="newBtn">+ New tenant · 新建租户</button>
+    </div>
+
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>Company · 公司</th><th>Owner · 负责人</th><th>Plan · 套餐</th><th>Subscription · 订阅</th>
+          <th>Renews / Trial · 续订/试用</th><th class="mono">Ops</th><th class="mono">Open inv</th><th></th>
+        </tr></thead>
+        <tbody id="rows"><tr><td colspan="8" class="empty">Loading… · 加载中…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- New / brand / detail modals -->
+  <div class="modal" id="modal"><div class="modal-card">
+    <div class="modal-head"><h3 id="mTitle">—</h3><button class="modal-x" id="mClose">×</button></div>
+    <div class="msg" id="mMsg"></div>
+    <div id="mBody"></div>
+  </div></div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const money = (c, cur) => (cur === 'CNY' || !cur ? '¥' : cur + ' ') + (Number(c||0)/100).toLocaleString(undefined,{maximumFractionDigits:2});
+  const fdate = s => { if (!s) return '—'; const d = new Date(String(s).replace(' ','T')+'Z'); return isNaN(d)?esc(s):d.toISOString().slice(0,10); };
+  const api = (url, opts) => fetch(url, Object.assign({ credentials:'same-origin' }, opts)).then(r => r.status===401||r.status===403 ? (location.href='/login', Promise.reject()) : r.json());
+  function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
+  function openModal(title){ $('#mTitle').textContent=title; $('#mMsg').className='msg'; $('#modal').classList.add('show'); }
+  function closeModal(){ $('#modal').classList.remove('show'); }
+  function mMsg(t,k){ const m=$('#mMsg'); m.textContent=t; m.className='msg show '+k; }
+  $('#mClose').addEventListener('click', closeModal);
+  $('#modal').addEventListener('click', e => { if (e.target.id==='modal') closeModal(); });
+
+  let TENANTS = [];
+
+  function load() {
+    api('/api/saas-admin/tenants').then(j => {
+      if (!j || !j.success) return;
+      TENANTS = j.tenants || [];
+      $('#count').textContent = TENANTS.length;
+      renderRows();
+    }).catch(()=>{});
+  }
+
+  function renderRows() {
+    if (!TENANTS.length) { $('#rows').innerHTML = '<tr><td colspan="8" class="empty">No tenants yet. · 暂无租户。</td></tr>'; return; }
+    $('#rows').innerHTML = TENANTS.map(t => {
+      const chip = t.accent ? '<span class="brandchip" style="background:'+esc(t.accent)+'"></span>' : '';
+      const subPill = t.isInternal ? '<span class="pill internal">internal</span>'
+        : (t.subStatus ? '<span class="pill '+esc(t.subStatus)+'">'+esc(t.subStatus)+'</span>' : '<span class="zh">—</span>');
+      const renew = t.isInternal ? '<span class="zh">perpetual</span>'
+        : (t.subStatus==='trialing' ? 'trial → '+fdate(t.trialEnd) : fdate(t.periodEnd));
+      const planTxt = t.plan ? esc(t.plan.name)+' · '+money(t.plan.price_cents,t.plan.currency)+'/'+esc(t.plan.billing_interval) : '<span class="zh">—</span>';
+      const susBtn = t.isInternal ? ''
+        : (t.status==='active'
+            ? '<button class="btn btn-sm btn-danger" data-act="suspend" data-id="'+t.id+'">Suspend</button>'
+            : '<button class="btn btn-sm" data-act="reactivate" data-id="'+t.id+'">Reactivate</button>');
+      return '<tr>' +
+        '<td class="co">'+chip+esc(t.brand||t.name)+(t.brand && t.brand!==t.name ? ' <span class="zh">('+esc(t.name)+')</span>':'')+'</td>' +
+        '<td>'+esc(t.owner||'—')+(t.ownerUsername?' <span class="zh mono">@'+esc(t.ownerUsername)+'</span>':'')+'</td>' +
+        '<td>'+planTxt+'</td>' +
+        '<td>'+subPill+(t.status!=='active'&&!t.isInternal?' <span class="pill suspended">'+esc(t.status)+'</span>':'')+'</td>' +
+        '<td class="mono">'+renew+'</td>' +
+        '<td class="mono">'+t.operators+'</td>' +
+        '<td class="mono">'+(t.openInvoices||0)+'</td>' +
+        '<td><div class="acts">' +
+          '<button class="btn btn-sm" data-act="detail" data-id="'+t.id+'">Details</button>' +
+          '<button class="btn btn-sm" data-act="brand" data-id="'+t.id+'">Brand</button>' +
+          susBtn +
+        '</div></td></tr>';
+    }).join('');
+    document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => onAct(b.getAttribute('data-act'), b.getAttribute('data-id'))));
+  }
+
+  function onAct(act, id) {
+    const t = TENANTS.find(x => String(x.id)===String(id));
+    if (act==='suspend') {
+      if (!confirm('Suspend '+(t.brand||t.name)+'? They lose backend access until reactivated. · 暂停后该租户将无法访问后台。')) return;
+      api('/api/saas-admin/tenants/'+id+'/suspend',{method:'POST'}).then(j=>{ toast(j.success?'Suspended':j.error||'Failed'); load(); });
+    } else if (act==='reactivate') {
+      api('/api/saas-admin/tenants/'+id+'/reactivate',{method:'POST'}).then(j=>{ toast(j.success?'Reactivated':j.error||'Failed'); load(); });
+    } else if (act==='brand') { brandModal(t); }
+    else if (act==='detail') { detailModal(id); }
+  }
+
+  // ── New tenant ──
+  $('#newBtn').addEventListener('click', () => {
+    openModal('New tenant · 新建租户');
+    $('#mBody').innerHTML =
+      '<div class="field"><label>Company · 公司</label><input type="text" id="f-company"></div>' +
+      '<div class="field"><label>Brand (shown to operators) · 品牌名</label><input type="text" id="f-brand" placeholder="defaults to company"></div>' +
+      '<div class="field"><label>Owner name · 负责人</label><input type="text" id="f-owner"></div>' +
+      '<div class="field"><label>Username · 用户名</label><input type="text" id="f-username" autocapitalize="off" spellcheck="false"></div>' +
+      '<div class="field"><label>Password (10+ chars) · 密码</label><input type="password" id="f-password"></div>' +
+      '<button class="btn btn-brass" id="f-create" style="width:100%;padding:11px">Create tenant · 创建</button>';
+    $('#f-create').addEventListener('click', () => {
+      const body = { company:$('#f-company').value.trim(), brand:$('#f-brand').value.trim(),
+        owner_name:$('#f-owner').value.trim(), username:$('#f-username').value.trim(), password:$('#f-password').value };
+      if (!body.company || !body.username || body.password.length<10) { mMsg('Company, username, and a 10+ char password required · 请填写公司、用户名和至少 10 位密码','err'); return; }
+      api('/api/saas-admin/provision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+        .then(j=>{ if(j.success){ mMsg('Tenant #'+j.tenantId+' created (14-day trial). · 已创建,14 天试用。','ok'); setTimeout(()=>{closeModal();load();},1100); } else mMsg(j.error||'Failed','err'); });
+    });
+  });
+
+  // ── Brand ──
+  function brandModal(t) {
+    openModal('Brand · 品牌 — '+(t.brand||t.name));
+    $('#mBody').innerHTML =
+      '<div class="field"><label>Brand name · 品牌名</label><input type="text" id="b-name" value="'+esc(t.brand||'')+'"></div>' +
+      '<div class="field"><label>Accent colour · 强调色</label><div class="row2"><input type="color" id="b-accent" value="'+(t.accent||'#B08D4A')+'"><span class="zh mono" id="b-accent-v">'+esc(t.accent||'#B08D4A')+'</span></div></div>' +
+      '<button class="btn btn-brass" id="b-save" style="width:100%;padding:11px">Save brand · 保存</button>';
+    $('#b-accent').addEventListener('input', e => $('#b-accent-v').textContent = e.target.value);
+    $('#b-save').addEventListener('click', () => {
+      api('/api/saas-admin/tenants/'+t.id+'/brand',{method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ brand_name:$('#b-name').value.trim(), brand_accent:$('#b-accent').value })})
+        .then(j=>{ if(j.success){ toast('Brand saved'); closeModal(); load(); } else mMsg(j.error||'Failed','err'); });
+    });
+  }
+
+  // ── Detail (subscription + invoices + operators) ──
+  function detailModal(id) {
+    openModal('Tenant detail · 租户详情');
+    $('#mBody').innerHTML = '<div class="empty">Loading… · 加载中…</div>';
+    api('/api/saas-admin/tenants/'+id).then(j => {
+      if (!j || !j.success) { $('#mBody').innerHTML = '<div class="empty">Not found</div>'; return; }
+      const s = j.subscription, plan = j.plan;
+      $('#mTitle').textContent = (j.tenant.brand||j.tenant.name) + ' · 详情';
+      const subLine = s ? (s.is_internal ? 'internal · perpetual' : esc(s.status)+' · '+(plan?esc(plan.name):'no plan')+(s.current_period_end?' · until '+fdate(s.current_period_end):'')) : 'no subscription';
+      const invRows = (j.invoices||[]).length ? j.invoices.map(iv =>
+        '<tr><td class="mono">'+esc(iv.invoice_no||('#'+iv.id))+'</td><td class="mono">'+fdate(iv.period_start)+'–'+fdate(iv.period_end)+'</td><td class="mono">'+money(iv.amount_cents,iv.currency)+'</td>'+
+        '<td><span class="pill '+esc(iv.status)+'">'+esc(iv.status)+'</span></td>'+
+        '<td>'+(iv.status!=='paid'?'<button class="btn btn-sm" data-mp="'+iv.id+'">Mark paid</button>':'<span class="zh">'+fdate(iv.paid_at)+'</span>')+'</td></tr>'
+      ).join('') : '<tr><td colspan="5" class="empty">No invoices · 暂无发票</td></tr>';
+      const opRows = (j.operators||[]).map(o => '<tr><td>'+esc(o.display_name||o.username)+' <span class="zh mono">@'+esc(o.username)+'</span></td><td class="zh">'+esc(o.role)+'</td><td class="zh mono">'+(o.last_login?fdate(o.last_login):'never')+'</td></tr>').join('');
+      $('#mBody').innerHTML =
+        '<div class="zh" style="margin-bottom:4px">Subscription · 订阅</div><div style="margin-bottom:8px">'+subLine+'</div>' +
+        '<div class="det-sec"><h4>Invoices · 发票</h4><div class="card"><table><tbody>'+invRows+'</tbody></table></div></div>' +
+        '<div class="det-sec"><h4>Operators · 操作员</h4><div class="card"><table><tbody>'+opRows+'</tbody></table></div></div>';
+      document.querySelectorAll('[data-mp]').forEach(b => b.addEventListener('click', () => {
+        api('/api/saas-admin/invoices/'+b.getAttribute('data-mp')+'/mark-paid',{method:'POST'}).then(j=>{ toast(j.success?'Marked paid':j.error||'Failed'); detailModal(id); load(); });
+      }));
+    });
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

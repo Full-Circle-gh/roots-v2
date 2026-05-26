@@ -108,10 +108,10 @@ router.get('/api/backend/me', (req, res) => {
   if (!req.session || !req.session.backendUserId) return res.json({ user: null });
   const u = db.prepare('SELECT id, tenant_id, username, display_name, role, last_login FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
   if (!u) return res.json({ user: null });
-  const tenant = db.prepare('SELECT id, name, brand_name, status FROM tenants WHERE id = ?').get(u.tenant_id);
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
   res.json({
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role, lastLogin: u.last_login,
-            tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, status: tenant.status } : null },
+            tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status } : null },
   });
 });
 

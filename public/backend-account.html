@@ -121,6 +121,10 @@
     .then(j => {
       if (!j || !j.user) { location.replace('/backend/login'); return; }
       const u = j.user;
+      const tn = u.tenant || {};
+      // White-label: show this tenant's brand in the chrome (Roots → "Full Circle").
+      if (tn.brand) { const w = document.querySelector('.word'); if (w) w.textContent = tn.brand; document.title = tn.brand + ' · Account'; }
+      if (tn.accent) { const m = document.querySelector('.mark'); if (m) m.style.borderColor = tn.accent; }
       const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
       $('#ident').innerHTML =
         '<dt>Name</dt><dd>' + esc(u.displayName || u.username) + '</dd>' +

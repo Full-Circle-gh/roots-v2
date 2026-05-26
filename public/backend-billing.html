@@ -249,7 +249,11 @@
   // Gate + initial load
   fetch('/api/backend/me', { credentials: 'same-origin' }).then(r => r.json()).then(j => {
     if (!j || !j.user) { location.replace('/backend/login'); return; }
-    COMPANY = (j.user.tenant && (j.user.tenant.brand || j.user.tenant.name)) || '—';
+    const tn = j.user.tenant || {};
+    COMPANY = tn.brand || tn.name || '—';
+    // White-label: show this tenant's brand in the chrome (Roots → "Full Circle").
+    if (tn.brand) { const w = document.querySelector('.word'); if (w) w.textContent = tn.brand; document.title = tn.brand + ' · Billing'; }
+    if (tn.accent) { const m = document.querySelector('.mark'); if (m) m.style.borderColor = tn.accent; }
     loadAll();
   }).catch(() => location.replace('/backend/login'));
 })();
