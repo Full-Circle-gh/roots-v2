@@ -153,6 +153,7 @@
               <view class="row-body">
                 <view class="row-name f-bear">{{item.name}}</view>
                 <view wx:if="{{item.subline}}" class="row-sub f-yuan">{{item.subline}}</view>
+                <view wx:if="{{item.isFlash}}" class="row-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
                 <view wx:if="{{item.badge}}" class="row-badge f-gothic">{{item.badge}}</view>
                 <view wx:if="{{item.outOfStock}}" class="row-oos f-toni">{{oosLabel}}</view>
               </view>

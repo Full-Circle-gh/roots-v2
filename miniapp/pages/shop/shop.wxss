@@ -390,6 +390,14 @@
   padding: 2rpx 12rpx;
   font-size: calc(22rpx * var(--font-scale)); letter-spacing: 0.08em;
 }
+/* FLASH tag for list / list-compact rows — same pink pill as the grid &
+   gallery cards (card-flash / gal-flash) so the badge shows in every view. */
+.row-flash {
+  display: inline-block; margin-top: 10rpx;
+  background: #E96174; color: #fff; font-weight: 700;
+  padding: 2rpx 12rpx; border-radius: 4rpx;
+  font-size: calc(22rpx * var(--font-scale)); letter-spacing: 0.08em;
+}
 .row-oos {
   display: inline-block; margin-top: 10rpx; margin-left: 8rpx;
   background: rgba(0,0,0,.1); color: var(--olive);
