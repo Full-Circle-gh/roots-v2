@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Full Circle · Create your backend</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#12161A" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+SC:wght@300;400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:#12161A; --pane:#1A1F24; --paper:#E8E5DC; --muted:#AEABA2; --faint:#7d7a72;
+    --line:rgba(232,229,220,.10); --line-2:rgba(232,229,220,.16);
+    --tea:#6B8E6F; --brass:#B08D4A; --brass-hi:#C29B54; --danger:#e8556a;
+    --f-sans:'IBM Plex Sans','IBM Plex Sans SC',system-ui,sans-serif;
+    --f-mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--ink); color: var(--paper); font-family: var(--f-sans);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+    background-image: radial-gradient(120% 80% at 50% 0%, rgba(107,142,111,.06) 0%, transparent 55%);
+  }
+  .card { width: 100%; max-width: 400px; background: var(--pane); border: 1px solid var(--line); border-radius: 14px; padding: 32px 28px 28px; box-shadow: 0 24px 60px rgba(0,0,0,.45); }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .brand .mark { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line-2); display: flex; align-items: center; justify-content: center; }
+  .brand .word { font-size: 13px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; }
+  .sub { font-family: var(--f-mono); font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: var(--faint); margin: 2px 0 24px; }
+  label { display: block; font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .field { margin-bottom: 14px; }
+  .hint { font-size: 11px; color: var(--faint); margin: -8px 0 14px; line-height: 1.4; }
+  input { width: 100%; background: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; color: var(--paper); font-family: var(--f-sans); font-size: 14px; padding: 11px 13px; outline: none; transition: border-color .12s ease, box-shadow .12s ease; }
+  input:focus { border-color: var(--tea); box-shadow: 0 0 0 3px rgba(107,142,111,.25); }
+  .msg { display: none; font-size: 12.5px; line-height: 1.4; padding: 9px 12px; border-radius: 8px; margin-bottom: 14px; }
+  .msg.show { display: block; }
+  .msg.err { background: rgba(232,85,106,.12); border: 1px solid rgba(232,85,106,.35); color: #f0a3ae; }
+  .msg.ok  { background: rgba(107,142,111,.14); border: 1px solid rgba(107,142,111,.4); color: #a7c6ab; }
+  button { font-family: var(--f-sans); cursor: pointer; }
+  .btn-primary { width: 100%; background: var(--brass); color: var(--ink); border: 0; border-radius: 8px; font-size: 14px; font-weight: 600; padding: 12px; margin-top: 4px; transition: background .12s ease, transform .06s ease; }
+  .btn-primary:hover { background: var(--brass-hi); }
+  .btn-primary:active { transform: translateY(1px); }
+  .btn-primary:disabled { opacity: .5; cursor: default; }
+  .closed { background: rgba(176,141,74,.12); border: 1px solid rgba(176,141,74,.3); color: #d8b676; font-size: 12.5px; line-height: 1.5; padding: 11px 13px; border-radius: 8px; margin-bottom: 16px; }
+  .foot { margin-top: 20px; font-size: 11.5px; color: var(--faint); text-align: center; }
+  .foot a { color: var(--muted); }
+</style>
+</head>
+<body>
+  <form class="card" id="signupForm" autocomplete="on">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.6" stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
+          <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.6" stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
+          <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1" fill="none" stroke="#E8E5DC" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="word">Full Circle</span>
+    </div>
+    <div class="sub">Create your backend · 创建后台</div>
+
+    <div class="closed" id="closedNote" style="display:none">Signups are invite-only right now. · 目前为邀请制注册。</div>
+    <div class="msg" id="msg"></div>
+
+    <div class="field">
+      <label for="company">Company · 公司名称</label>
+      <input type="text" id="company" name="company" required>
+    </div>
+    <div class="field">
+      <label for="owner_name">Your name · 您的姓名</label>
+      <input type="text" id="owner_name" name="owner_name">
+    </div>
+    <div class="field">
+      <label for="username">Username · 用户名</label>
+      <input type="text" id="username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required>
+      <div class="hint">Letters, numbers, . _ - · 字母、数字和 . _ -</div>
+    </div>
+    <div class="field">
+      <label for="password">Password · 密码</label>
+      <input type="password" id="password" name="password" autocomplete="new-password" minlength="10" required>
+      <div class="hint">At least 10 characters · 至少 10 位</div>
+    </div>
+
+    <button type="submit" class="btn-primary" id="submitBtn">Create backend · 创建后台</button>
+
+    <div class="foot">Already have an account? <a href="/backend/login">Sign in</a> · 已有账户?<a href="/backend/login">登录</a></div>
+  </form>
+
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const errEl = $('#msg'), btn = $('#submitBtn');
+  function show(msg, kind) { errEl.textContent = msg; errEl.className = 'msg show ' + kind; }
+
+  // Reflect whether signup is open. If closed (and not an admin), disable the form.
+  fetch('/api/backend/signup/status', { credentials: 'same-origin' }).then(r => r.json()).then(s => {
+    if (!s.open && !s.canProvision) {
+      $('#closedNote').style.display = 'block';
+      btn.disabled = true;
+      ['company','owner_name','username','password'].forEach(id => { const el = $('#' + id); if (el) el.disabled = true; });
+    }
+  }).catch(() => {});
+
+  $('#signupForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.classList.remove('show');
+    const body = {
+      company: $('#company').value.trim(),
+      owner_name: $('#owner_name').value.trim(),
+      username: $('#username').value.trim(),
+      password: $('#password').value,
+    };
+    if (!body.company || !body.username || body.password.length < 10) { show('Fill in company, username, and a 10+ char password · 请填写公司、用户名及至少 10 位密码', 'err'); return; }
+    btn.disabled = true; btn.textContent = 'Creating… · 创建中…';
+    try {
+      const j = await fetch('/api/backend/signup', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify(body),
+      }).then(r => r.json());
+      if (j.success) {
+        show('Backend created. Sign in with “' + body.username + '”. · 后台已创建,请使用「' + body.username + '」登录。', 'ok');
+        setTimeout(() => location.href = '/backend/login', 1800);
+        return;
+      }
+      show(j.error || 'Could not create backend · 创建失败', 'err');
+    } catch (e) { show('Network error — please try again · 网络错误,请重试', 'err'); }
+    btn.disabled = false; btn.textContent = 'Create backend · 创建后台';
+  });
+})();
+</script>
+</body>
+</html>

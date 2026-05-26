@@ -135,11 +135,29 @@ app.get(/^\/(?:MP_verify_[A-Za-z0-9]+|[A-Za-z0-9]{6,32})\.txt$/, (req, res) => {
   });
 });
 
+// Phase 2 safety gate: until per-tenant data isolation is cut over
+// (TENANT_DATA_ISOLATION=1), hold NON-Roots backend tenants out of the shared
+// data backend so a freshly-provisioned tenant can never read Roots' data.
+// Roots (tenant #1), kitchen users, and the billing/account/signup surfaces
+// are unaffected (those are already tenant-scoped or shared by design).
+const tenantDb = require('./lib/tenant-db');
+app.use((req, res, next) => {
+  if (tenantDb.DATA_ISOLATION_READY) return next();
+  const tid = req.session?.tenantId;
+  if (!req.session?.backendUserId || !tid || tid === tenantDb.ROOTS_TENANT_ID) return next();
+  const guarded = req.path === '/retail-admin' || req.path.startsWith('/api/retail-admin') ||
+                  req.path.startsWith('/product-editor') || req.path.startsWith('/cms');
+  if (!guarded) return next();
+  if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Your workspace is being set up · 工作区正在配置中' });
+  return res.redirect('/backend/billing?provisioning=1');
+});
+
 // Routes
 app.use(require('./routes/auth'));
 app.use(require('./routes/backend-auth'));   // Mini App Backend operator realm (separate from kitchen auth)
 app.use(require('./routes/billing'));        // Mini App Backend billing control plane (plans / subscriptions / invoices)
 app.use(require('./routes/billing-pay'));    // Mini App Backend billing payments & lifecycle (select-plan / checkout / mark-paid)
+app.use(require('./routes/backend-signup')); // Mini App Backend tenant signup / provisioning (gated in Phase 2)
 app.use(require('./routes/ingredients'));
 app.use(require('./routes/recipes'));
 app.use(require('./routes/admin'));
@@ -182,6 +200,13 @@ app.get('/backend/account', (req, res) => {
   if (!req.session?.backendUserId) return res.redirect('/backend/login');
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'backend-account.html'));
+});
+
+// Mini App Backend signup — create a new tenant backend (gated in Phase 2).
+app.get('/backend/signup', (req, res) => {
+  if (req.session?.backendUserId) return res.redirect('/retail-admin');
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'backend-signup.html'));
 });
 
 // Mini App Backend billing — plans / subscription / invoices for the tenant.
