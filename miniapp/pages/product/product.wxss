@@ -226,7 +226,12 @@
    routes/retail.js) so it never shows a fabricated or zero count. */
 .social-proof {
   display: flex;
-  align-items: center;
+  /* Baseline (not centre): WeChat doesn't centre the uppercase f-toni
+     glyphs within the flex line-box, so align-items:center floats the dot
+     high. Pinning the dot's bottom to the text baseline — with the dot
+     height ≈ the cap height — lands its centre on the caps' optical centre,
+     and stays correct at any --font-scale. */
+  align-items: baseline;
   gap: 14rpx;
   margin-top: 28rpx;
 }
