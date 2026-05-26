@@ -184,6 +184,9 @@
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
+  /* Reserve the scrollbar gutter so locking page scroll (when a modal/drawer
+     is open) doesn't shift the layout sideways. */
+  html { scrollbar-gutter: stable; }
   body {
     font: 13px var(--f-sans);
     background: var(--bg-app);
@@ -4823,6 +4826,15 @@
         padding: 24px;
       }
       .pu-editor-bg.show { display: flex; }
+      /* Scroll isolation: when a floating modal or side-drawer is open, lock
+         the page behind it so wheel/touch scroll inside the modal doesn't
+         chain through to the list/page underneath. Covers the static modals
+         (.pu-editor-bg.show), the dynamically-built ones (inline display:flex)
+         and the side-drawers (.open). scrollbar-gutter:stable on <html> keeps
+         the layout from shifting when the scrollbar hides. */
+      html:has(.pu-editor-bg.show),
+      html:has(.pu-editor-bg[style*="display: flex"]),
+      html:has(.side-drawer.open) { overflow: hidden; }
       .pu-editor {
         background: var(--bg-pane); border: 1px solid var(--line);
         border-radius: 12px;
@@ -4835,7 +4847,7 @@
         border-bottom: 1px solid var(--line);
       }
       .pu-editor-foot { border-bottom: none; border-top: 1px solid var(--line); gap: 8px; justify-content: flex-end; }
-      .pu-editor-body { padding: 18px; overflow-y: auto; display: grid; grid-template-columns: 1fr 360px; gap: 20px; }
+      .pu-editor-body { padding: 18px; overflow-y: auto; overscroll-behavior: contain; display: grid; grid-template-columns: 1fr 360px; gap: 20px; }
       @media (max-width: 760px) { .pu-editor-body { grid-template-columns: 1fr; } }
       /* When the pop-up editor body lives directly inside a side-drawer
          (rather than the old centered .pu-editor modal shell), it needs
