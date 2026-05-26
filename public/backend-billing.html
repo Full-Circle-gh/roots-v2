@@ -70,8 +70,17 @@
   .inv-status.open, .inv-status.past_due { color: #d8b676; }
   .empty { color: var(--faint); font-size: 13px; padding: 8px 0; }
   .note { font-size: 12px; color: var(--faint); line-height: 1.5; margin-top: 10px; }
-  .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--elev); border: 1px solid var(--line-2); color: var(--paper); font-size: 13px; padding: 11px 16px; border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.4); opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--elev); border: 1px solid var(--line-2); color: var(--paper); font-size: 13px; padding: 11px 16px; border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.4); opacity: 0; transition: opacity .2s ease; pointer-events: none; z-index: 60; }
   .toast.show { opacity: 1; }
+  /* payment-instructions modal */
+  .modal { position: fixed; inset: 0; background: rgba(8,10,12,.6); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 50; }
+  .modal.show { display: flex; }
+  .modal-card { background: var(--pane); border: 1px solid var(--line-2); border-radius: 14px; padding: 22px; max-width: 440px; width: 100%; box-shadow: 0 24px 60px rgba(0,0,0,.5); }
+  .modal-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .modal-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .modal-x { background: transparent; border: 0; color: var(--faint); font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; }
+  .modal-x:hover { color: var(--paper); }
+  .modal-note { margin-top: 16px; font-size: 11px; color: var(--faint); line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -101,6 +110,17 @@
     <h2>Invoices · 发票</h2>
     <div class="card">
       <div id="invoices"><div class="empty">Loading… · 加载中…</div></div>
+    </div>
+  </div>
+
+  <div class="modal" id="payModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="payTitle">Payment · 支付</h3>
+        <button class="modal-x" id="payClose" aria-label="Close">×</button>
+      </div>
+      <div id="payBody"></div>
+      <div class="modal-note">Online payment (WeChat / Alipay / card) is coming soon. For now, pay by the method above — we'll mark the invoice paid on receipt. · 在线支付(微信 / 支付宝 / 银行卡)即将开放。目前请使用以上方式付款,到账后我们将标记为已付。</div>
     </div>
   </div>
 
@@ -163,9 +183,35 @@
         '<ul>' + feats + '</ul>' + btn +
       '</div>';
     }).join('');
-    document.querySelectorAll('.plan .choose').forEach(b => b.addEventListener('click', () => {
-      toast('Online payment is coming soon — contact your account manager to change plans. · 在线支付即将开放,如需更改套餐请联系客户经理。');
-    }));
+    document.querySelectorAll('.plan .choose').forEach(b =>
+      b.addEventListener('click', () => onChoosePlan(b.getAttribute('data-code'), b.getAttribute('data-name'))));
+  }
+
+  async function onChoosePlan(code, name) {
+    if (!confirm('Select the ' + name + ' plan? An invoice will be created for you to pay. · 选择「' + name + '」套餐?系统将生成一张待支付发票。')) return;
+    try {
+      const j = await fetch('/api/backend/billing/select-plan', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ plan_code: code }),
+      }).then(r => r.json());
+      if (!j.success) { toast(j.error || 'Could not select plan · 无法选择套餐'); return; }
+      const c = await fetch('/api/backend/billing/checkout', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ invoice_id: j.invoice.id, provider: 'manual' }),
+      }).then(r => r.json());
+      if (c.success && c.checkout) showCheckout(name, c.checkout);
+      else toast(c.error || 'Checkout unavailable · 暂无法结算');
+      loadAll();
+    } catch (e) { toast('Network error · 网络错误'); }
+  }
+
+  function showCheckout(planName, ck) {
+    document.getElementById('payTitle').textContent = planName + ' · 待支付';
+    document.getElementById('payBody').innerHTML =
+      '<p style="margin:0 0 8px;font-size:13px;line-height:1.55">' + esc(ck.instructions_en || '') + '</p>' +
+      '<p style="margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.6">' + esc(ck.instructions_cn || '') + '</p>' +
+      (ck.reference ? '<div style="font-family:var(--f-mono);font-size:12px;color:var(--faint)">Ref · 单号: ' + esc(ck.reference) + '</div>' : '');
+    document.getElementById('payModal').classList.add('show');
   }
 
   function renderInvoices(invoices) {
@@ -180,22 +226,31 @@
       ).join('') + '</tbody></table>';
   }
 
-  // Gate + load
-  fetch('/api/backend/me', { credentials: 'same-origin' }).then(r => r.json()).then(j => {
-    if (!j || !j.user) { location.replace('/backend/login'); return; }
-    const company = (j.user.tenant && (j.user.tenant.brand || j.user.tenant.name)) || '—';
-    Promise.all([
+  let COMPANY = '—';
+  function loadAll() {
+    return Promise.all([
       fetch('/api/backend/billing', { credentials: 'same-origin' }).then(r => r.json()),
       fetch('/api/backend/plans', { credentials: 'same-origin' }).then(r => r.json()),
     ]).then(([bill, plansRes]) => {
       if (bill && bill.success) {
         renderAlert(bill);
         renderCurrent(bill);
-        const c = document.getElementById('cur-company'); if (c) c.textContent = company;
+        const c = document.getElementById('cur-company'); if (c) c.textContent = COMPANY;
         renderInvoices(bill.invoices || []);
       }
       if (plansRes && plansRes.success) renderPlans(plansRes.plans || []);
     }).catch(() => toast('Failed to load billing · 加载账单失败'));
+  }
+
+  // Modal close wiring
+  document.getElementById('payClose').addEventListener('click', () => document.getElementById('payModal').classList.remove('show'));
+  document.getElementById('payModal').addEventListener('click', (e) => { if (e.target.id === 'payModal') document.getElementById('payModal').classList.remove('show'); });
+
+  // Gate + initial load
+  fetch('/api/backend/me', { credentials: 'same-origin' }).then(r => r.json()).then(j => {
+    if (!j || !j.user) { location.replace('/backend/login'); return; }
+    COMPANY = (j.user.tenant && (j.user.tenant.brand || j.user.tenant.name)) || '—';
+    loadAll();
   }).catch(() => location.replace('/backend/login'));
 })();
 </script>

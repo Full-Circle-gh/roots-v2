@@ -139,6 +139,7 @@ app.get(/^\/(?:MP_verify_[A-Za-z0-9]+|[A-Za-z0-9]{6,32})\.txt$/, (req, res) => {
 app.use(require('./routes/auth'));
 app.use(require('./routes/backend-auth'));   // Mini App Backend operator realm (separate from kitchen auth)
 app.use(require('./routes/billing'));        // Mini App Backend billing control plane (plans / subscriptions / invoices)
+app.use(require('./routes/billing-pay'));    // Mini App Backend billing payments & lifecycle (select-plan / checkout / mark-paid)
 app.use(require('./routes/ingredients'));
 app.use(require('./routes/recipes'));
 app.use(require('./routes/admin'));
@@ -213,6 +214,19 @@ app.get('/', requireAuth, (req, res) => {
 
 // Storefront / retail admin shell. Page self-auths via /api/auth/me.
 app.get('/retail-admin', (req, res) => {
+  // Access gate: a Mini App Backend operator whose tenant is suspended (set by
+  // the billing lifecycle job for non-payment) is sent to Billing to pay,
+  // rather than into a backend whose APIs would 401. Kitchen users and
+  // in-good-standing tenants pass straight through. Internal tenants (Roots)
+  // are never suspended, so they always reach the backend.
+  if (req.session?.backendUserId) {
+    try {
+      const dbx = require('./database');
+      const u = dbx.prepare('SELECT tenant_id FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+      const tenant = u && dbx.prepare('SELECT status FROM tenants WHERE id = ?').get(u.tenant_id);
+      if (tenant && tenant.status !== 'active') return res.redirect('/backend/billing?suspended=1');
+    } catch (e) { /* tables not ready — fail open to the page's own auth */ }
+  }
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'retail-admin.html'));
 });
