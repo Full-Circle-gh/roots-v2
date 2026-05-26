@@ -231,8 +231,10 @@
   margin-top: 28rpx;
 }
 .sp-dot {
-  width: 16rpx;
-  height: 16rpx;
+  /* Scale with the text so the dot stays proportional at larger
+     accessibility font sizes (otherwise it shrinks relative to the copy). */
+  width: calc(16rpx * var(--font-scale));
+  height: calc(16rpx * var(--font-scale));
   border-radius: 999rpx;
   background: var(--carrot);
   flex-shrink: 0;
@@ -242,6 +244,10 @@
   font-size: calc(24rpx * var(--font-scale));
   font-weight: 600;
   letter-spacing: 0.04em;
+  /* Tight line-height so the uppercase caps fill their box — lets
+     align-items:center sit the dot on the optical centre of the text
+     instead of floating high against an inherited tall line-box. */
+  line-height: 1;
   color: var(--forest);
 }
 @keyframes sp-pulse {
