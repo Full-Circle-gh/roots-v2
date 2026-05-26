@@ -7832,7 +7832,7 @@ function dashTrendTip(e) {
   const cr = col.getBoundingClientRect();
   const tw = tip.offsetWidth;
   let x = cr.right + 12;
-  if (x + tw + 6 > window.innerWidth) x = cr.left - tw - 12;
+  if (x + tw + 6 > fcViewport().w) x = cr.left - tw - 12;
   let y = cr.top + 8;
   tip.style.left = x + 'px';
   tip.style.top = y + 'px';
@@ -7844,12 +7844,23 @@ function dashTrendTip(e) {
 // on-screen. Covers any offsetWidth mis-measure / sub-pixel rounding so a
 // cursor-following tooltip can never be cropped at a screen edge.
 function fcClampToViewport(el) {
+  // The text-size control applies `zoom` to <html>, which scales
+  // getBoundingClientRect() but not window.innerWidth/innerHeight. Scale the
+  // viewport bounds by the zoom so the comparison + clamp are in the same
+  // space (and left/top, also in the zoomed space, land correctly).
   const r = el.getBoundingClientRect();
   const m = 6;
-  if (r.right  > window.innerWidth  - m) el.style.left = Math.max(m, window.innerWidth  - r.width  - m) + 'px';
-  if (r.left   < m)                      el.style.left = m + 'px';
-  if (r.bottom > window.innerHeight - m) el.style.top  = Math.max(m, window.innerHeight - r.height - m) + 'px';
-  if (r.top    < m)                      el.style.top  = m + 'px';
+  const vw = fcViewport().w, vh = fcViewport().h;
+  if (r.right  > vw - m) el.style.left = Math.max(m, vw - r.width  - m) + 'px';
+  if (r.left   < m)      el.style.left = m + 'px';
+  if (r.bottom > vh - m) el.style.top  = Math.max(m, vh - r.height - m) + 'px';
+  if (r.top    < m)      el.style.top  = m + 'px';
+}
+// Viewport size in the getBoundingClientRect coordinate space, accounting for
+// the root `zoom` set by the text-size control.
+function fcViewport() {
+  const z = (typeof cuGetUiScale === 'function' && cuGetUiScale()) || 1;
+  return { w: window.innerWidth * z, h: window.innerHeight * z, z };
 }
 function dashTrendHide() {
   const tip = document.getElementById('db-trend-tip');
@@ -7874,15 +7885,16 @@ function cuBarTip(e) {
     `<div class="r"><span>${cuT('Orders', '订单')}</span><b>${escapeHtml(n)}</b></div>` +
     `<div class="r"><span>${cuT('Revenue', '营收')}</span><b>¥${escapeHtml(rev)}</b></div>`;
   tip.style.display = 'block';
-  // Viewport coords (position:fixed). Flip left near the right edge, then
-  // hard-clamp inside the viewport on every side.
-  const tw = tip.offsetWidth, th = tip.offsetHeight;
-  let x = e.clientX + 14;
-  if (x + tw + 8 > window.innerWidth) x = e.clientX - tw - 14;
-  x = Math.max(6, Math.min(x, window.innerWidth - tw - 6));
-  let y = Math.max(6, Math.min(e.clientY - 12, window.innerHeight - th - 6));
+  // Anchor off the hovered column's own rect (same coord space as the
+  // position:fixed tooltip) rather than e.clientX, so it stays correct under
+  // the html `zoom` from the text-size control. Flip left near the right
+  // edge; fcClampToViewport handles the final on-screen nudge.
+  const cr = col.getBoundingClientRect();
+  const tw = tip.offsetWidth;
+  let x = cr.right + 12;
+  if (x + tw + 6 > fcViewport().w) x = cr.left - tw - 12;
   tip.style.left = x + 'px';
-  tip.style.top = y + 'px';
+  tip.style.top = (cr.top + 8) + 'px';
   fcClampToViewport(tip);
 }
 function cuBarTipHide() {
