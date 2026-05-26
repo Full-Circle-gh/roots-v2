@@ -107,6 +107,10 @@ Page({
     note: '',
     needsCutlery: false,
     needsInvoice: false,
+    invoiceType: 'personal',   // 'personal' | 'company' (fapiao 发票)
+    invoiceTitle: '',
+    invoiceTaxId: '',
+    invoiceEmail: '',
     placing: false,
     // True when the customer has bound their WeChat profile (nickname is the
     // gate field — set when /pages/profile/profile saves). Unbound customers
@@ -134,6 +138,11 @@ Page({
       detailPlaceholder: 'Floor / unit / apartment (optional)',
       cutlery: 'Include cutlery',
       invoice: 'Need an invoice',
+      invPersonal: 'Personal',
+      invCompany: 'Company',
+      invTitlePh: 'Invoice title (your name or company)',
+      invTaxIdPh: 'Company tax ID 统一社会信用代码',
+      invEmailPh: 'Email to receive the e-invoice',
       noteLabel: 'Note for the kitchen (optional)',
       standardOpt: 'Standard',
       sameDayOpt: 'Same-day',
@@ -426,6 +435,11 @@ Page({
         detailPlaceholder: '楼层 / 单元 / 公寓 (可选)',
         cutlery: '需要餐具',
         invoice: '需要发票',
+        invPersonal: '个人',
+        invCompany: '企业',
+        invTitlePh: '发票抬头 (姓名或公司名称)',
+        invTaxIdPh: '企业税号 统一社会信用代码',
+        invEmailPh: '接收电子发票的邮箱',
         noteLabel: '给厨房的备注 (可选)',
         standardOpt: '标准配送',
         sameDayOpt: '当日达',
@@ -1023,6 +1037,10 @@ Page({
   onNoteChange(e)    { this.setData({ note: e.detail.value }); },
   onCutleryToggle(e) { this.setData({ needsCutlery: e.detail.value }); },
   onInvoiceToggle(e) { this.setData({ needsInvoice: e.detail.value }); },
+  onInvoiceType(e)   { this.setData({ invoiceType: e.currentTarget.dataset.type }); },
+  onInvoiceTitle(e)  { this.setData({ invoiceTitle: e.detail.value }); },
+  onInvoiceTaxId(e)  { this.setData({ invoiceTaxId: e.detail.value }); },
+  onInvoiceEmail(e)  { this.setData({ invoiceEmail: e.detail.value }); },
   setDelivery(e) {
     this.setData({ deliveryMethod: e.currentTarget.dataset.method });
     this.refreshQuote();
@@ -1203,6 +1221,14 @@ Page({
       // payment_method is always the picked radio — when the discount
       // equals grossTotal, server sets order.total=0 and /payment/create
       // short-circuits to paid (the radio is just the fallback rail).
+      // Fapiao — require what's needed to actually issue the e-invoice. Throws
+      // route to the same catch as the address check (resets `placing`, toasts).
+      if (this.data.needsInvoice) {
+        const cn = this.data.lang === 'cn';
+        if (!(this.data.invoiceTitle || '').trim()) throw new Error(cn ? '请填写发票抬头' : 'Enter the invoice title');
+        if (this.data.invoiceType === 'company' && !(this.data.invoiceTaxId || '').trim()) throw new Error(cn ? '请填写企业税号' : 'Enter the company tax ID');
+        if (!/^\S+@\S+\.\S+$/.test((this.data.invoiceEmail || '').trim())) throw new Error(cn ? '请填写有效的发票邮箱' : 'Enter a valid email for the e-invoice');
+      }
       const usingPoints = !!this.data.usePoints;
       const orderPayload = {
         items: orderItems,
@@ -1215,6 +1241,10 @@ Page({
         customer_note: this.data.note || null,
         needs_cutlery: this.data.needsCutlery,
         needs_invoice: this.data.needsInvoice,
+        invoice_type:   this.data.needsInvoice ? this.data.invoiceType : null,
+        invoice_title:  this.data.needsInvoice ? (this.data.invoiceTitle || '').trim() : null,
+        invoice_tax_id: this.data.needsInvoice && this.data.invoiceType === 'company' ? (this.data.invoiceTaxId || '').trim() : null,
+        invoice_email:  this.data.needsInvoice ? (this.data.invoiceEmail || '').trim() : null,
         points_to_use:  usingPoints ? (this.data.pointsBalance || 0) : 0,
         ...(extra || {}),
       };

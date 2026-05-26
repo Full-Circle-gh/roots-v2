@@ -317,6 +317,22 @@
       <switch checked="{{needsInvoice}}" bindchange="onInvoiceToggle" color="#1a1a17"/>
       <view class="checkbox-label">{{copy.invoice}}</view>
     </view>
+    <!-- Fapiao form — appears when an invoice is requested -->
+    <view wx:if="{{needsInvoice}}" class="invoice-form">
+      <view class="invoice-type">
+        <view class="it-opt {{invoiceType === 'personal' ? 'on' : ''}}" data-type="personal" bindtap="onInvoiceType">{{copy.invPersonal}}</view>
+        <view class="it-opt {{invoiceType === 'company' ? 'on' : ''}}" data-type="company" bindtap="onInvoiceType">{{copy.invCompany}}</view>
+      </view>
+      <view class="field" style="margin-top: 12rpx">
+        <input class="input" placeholder="{{copy.invTitlePh}}" value="{{invoiceTitle}}" bindinput="onInvoiceTitle" maxlength="100"/>
+      </view>
+      <view wx:if="{{invoiceType === 'company'}}" class="field" style="margin-top: 12rpx">
+        <input class="input" placeholder="{{copy.invTaxIdPh}}" value="{{invoiceTaxId}}" bindinput="onInvoiceTaxId" maxlength="40"/>
+      </view>
+      <view class="field" style="margin-top: 12rpx">
+        <input class="input" placeholder="{{copy.invEmailPh}}" value="{{invoiceEmail}}" bindinput="onInvoiceEmail" maxlength="80"/>
+      </view>
+    </view>
     <view class="field" style="margin-top: 16rpx">
       <input class="input" placeholder="{{copy.noteLabel}}" value="{{note}}" bindinput="onNoteChange" maxlength="200"/>
     </view>

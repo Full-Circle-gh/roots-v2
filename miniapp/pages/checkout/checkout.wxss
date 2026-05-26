@@ -171,6 +171,23 @@
   box-sizing: border-box;
 }
 
+/* Fapiao (发票) form — shown under the invoice switch */
+.invoice-form { margin-top: 12rpx; }
+.invoice-type { display: flex; gap: 12rpx; }
+.it-opt {
+  flex: 1;
+  text-align: center;
+  background: #FFFCF7;
+  border: 2rpx solid var(--ink);
+  height: 72rpx;
+  line-height: 72rpx;
+  font-size: calc(26rpx * var(--font-scale));
+  font-family: inherit;
+  border-radius: 0;
+  box-sizing: border-box;
+}
+.it-opt.on { background: var(--lime); font-weight: 700; }
+
 /* Radio dot — used for delivery/payment/address rows. The row itself stays
    unstyled when selected; only the dot fills. Matches the design. */
 .dot {
