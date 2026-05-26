@@ -115,4 +115,23 @@ router.get('/api/backend/me', (req, res) => {
   });
 });
 
+// Change own password — requires the current password, mirrors the kitchen
+// /api/auth/password policy (min 10 chars, must differ). Closes the seeded
+// default-password gap for backend operators.
+router.put('/api/backend/password', express.json(), (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const { current_password, new_password } = req.body || {};
+  if (!new_password || new_password.length < 10) return res.status(400).json({ error: 'New password must be at least 10 characters · 新密码至少需要 10 位' });
+  const u = db.prepare('SELECT password FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
+  if (!u) return res.status(404).json({ error: 'Operator not found · 未找到操作员' });
+  if (!current_password || !bcrypt.compareSync(current_password, u.password)) {
+    return res.status(400).json({ error: 'Current password is incorrect · 当前密码不正确' });
+  }
+  if (bcrypt.compareSync(new_password, u.password)) {
+    return res.status(400).json({ error: 'New password must differ from the current one · 新密码不能与当前密码相同' });
+  }
+  db.prepare('UPDATE tenant_users SET password = ? WHERE id = ?').run(bcrypt.hashSync(new_password, 10), req.session.backendUserId);
+  res.json({ success: true });
+});
+
 module.exports = router;

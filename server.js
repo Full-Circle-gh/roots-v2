@@ -175,6 +175,13 @@ app.get('/backend/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'backend-login.html'));
 });
 
+// Mini App Backend account — change password / sign out for backend operators.
+app.get('/backend/account', (req, res) => {
+  if (!req.session?.backendUserId) return res.redirect('/backend/login');
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'backend-account.html'));
+});
+
 // Main app - serves the SPA shell
 const { requireAuth } = require('./middleware/auth');
 app.get('/', requireAuth, (req, res) => {
