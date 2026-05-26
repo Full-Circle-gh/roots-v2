@@ -1,0 +1,5 @@
+<view wx:if="{{items.length && !dismissed}}" class="rb {{visible ? 'rb-in' : ''}}">
+  <view class="rb-dot"></view>
+  <text class="rb-text f-toni">{{text}}</text>
+  <view class="rb-x" catchtap="dismiss">×</view>
+</view>

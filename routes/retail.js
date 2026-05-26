@@ -489,6 +489,65 @@ router.get('/api/retail/products/:id', (req, res) => {
   res.json({ success: true, data: product });
 });
 
+// ── Recent-buyers ticker feed ──────────────────────────────────────────────
+// Powers the live "李** just bought X" toast that cycles on the home page.
+// Real recent orders only; buyer names are masked here (first char + dots) so
+// no full name leaves the server. One representative product per order, newest
+// first, capped to a recent window so the feed reads "live" not stale. 60s
+// cache — the feed is identical for every visitor.
+function maskBuyerName(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  const first = [...s][0];
+  // CJK given names: keep the surname/first glyph, mask the rest.
+  if (/[一-鿿぀-ヿ가-힯]/.test(first)) return first + '**';
+  return first.toUpperCase() + '***';
+}
+
+const RECENT_BUYERS_TTL_MS = 60 * 1000;
+let RECENT_BUYERS_CACHE = { t: 0, value: [] };
+
+router.get('/api/retail/social/recent-buyers', (req, res) => {
+  const now = Date.now();
+  if (now - RECENT_BUYERS_CACHE.t < RECENT_BUYERS_TTL_MS) {
+    res.set('Cache-Control', 'public, max-age=30');
+    return res.json({ success: true, data: RECENT_BUYERS_CACHE.value });
+  }
+
+  let out = [];
+  try {
+    const rows = db.prepare(`
+      SELECT o.id, o.placed_at,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer,
+             (SELECT oi.name_en FROM retail_order_items oi
+               WHERE oi.order_id = o.id ORDER BY oi.id LIMIT 1) AS p_en,
+             (SELECT oi.name_cn FROM retail_order_items oi
+               WHERE oi.order_id = o.id ORDER BY oi.id LIMIT 1) AS p_cn
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE ${SOCIAL_PROOF_PAID}
+         AND o.placed_at >= datetime('now', '-7 days')
+       ORDER BY o.placed_at DESC
+       LIMIT 20
+    `).all();
+    out = rows
+      .filter(r => r.p_en || r.p_cn)
+      .map(r => ({
+        name:       maskBuyerName(r.buyer),
+        product_en: r.p_en || r.p_cn || '',
+        product_cn: r.p_cn || r.p_en || '',
+        ts: Date.parse(String(r.placed_at).replace(' ', 'T') + 'Z') || null,
+      }))
+      .filter(r => r.ts);
+  } catch (e) {
+    console.error('[recent-buyers]', e.message);
+  }
+
+  RECENT_BUYERS_CACHE = { t: now, value: out };
+  res.set('Cache-Control', 'public, max-age=30');
+  res.json({ success: true, data: out });
+});
+
 // Active + upcoming flash sales — feeds the flash_sale_strip CMS block and
 // any homepage surface that wants "what's on flash right now?". Active
 // items come first (sorted by soonest end), then upcoming (sorted by

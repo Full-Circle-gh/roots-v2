@@ -4,7 +4,8 @@
   "usingComponents": {
     "block-renderer": "/components/block-renderer/block-renderer",
     "cs-button": "/components/cs-button/cs-button",
-    "popup-manager": "/components/popup-manager/popup-manager"
+    "popup-manager": "/components/popup-manager/popup-manager",
+    "recent-buyers": "/components/recent-buyers/recent-buyers"
   },
   "enablePullDownRefresh": true,
   "backgroundColor": "#F2E7DF"

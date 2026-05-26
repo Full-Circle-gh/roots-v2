@@ -38,4 +38,5 @@
 
   <cs-button variant="fab" placement="home"></cs-button>
   <popup-manager page="home"></popup-manager>
+  <recent-buyers lang="{{lang}}"></recent-buyers>
 </view>

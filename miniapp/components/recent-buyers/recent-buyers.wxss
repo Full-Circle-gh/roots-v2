@@ -1,0 +1,58 @@
+/* Recent-buyers ticker — floating toast, bottom-left, clears the tab bar.
+   Slides in from the left + fades; the lime dot pulses for a "live" read.
+   Off-screen state is pointer-events:none so it never eats taps. */
+.rb {
+  position: fixed;
+  left: 22rpx;
+  bottom: calc(var(--tabbar-clear) + 24rpx);
+  z-index: 90;
+  max-width: 600rpx;
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  padding: 16rpx 20rpx;
+  background: rgba(26, 26, 23, 0.92);
+  border-radius: 999rpx;
+  box-shadow: 0 10rpx 28rpx rgba(0, 0, 0, 0.22);
+  transform: translateX(-130%);
+  opacity: 0;
+  transition: transform 0.5s cubic-bezier(0.18, 0.9, 0.24, 1), opacity 0.4s ease;
+  pointer-events: none;
+}
+.rb-in {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.rb-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 999rpx;
+  background: var(--lime);
+  flex-shrink: 0;
+  animation: rb-pulse 1.8s ease-out infinite;
+}
+
+.rb-text {
+  color: #fff;
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rb-x {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: calc(30rpx * var(--font-scale));
+  line-height: 1;
+  flex-shrink: 0;
+  padding: 0 2rpx 0 4rpx;
+}
+
+@keyframes rb-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(204, 217, 0, 0.5); }
+  70%  { box-shadow: 0 0 0 12rpx rgba(204, 217, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(204, 217, 0, 0); }
+}
