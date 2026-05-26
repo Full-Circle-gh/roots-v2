@@ -21,7 +21,6 @@ const geocode = require('../lib/geocode');
 const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
-const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb } = require('../lib/tenant-db');
 // Web Push — optional; wrapped so a missing module never breaks order flow.
 let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
@@ -48,12 +47,7 @@ function requireRetailAdmin(req, res, next) {
         if (tenant && tenant.status === 'active') {
           req.backendUser = u;
           req.tenant = tenant;
-          // Per-tenant data connection (Phase 2 slice 2). Roots → global db;
-          // other tenants → their own file. The request runs inside a tenant
-          // ALS context so handlers reach the right connection via tdb();
-          // control-plane reads above + logActivity stay on the global `db`.
-          req.tenantDb = getTenantDb(tenant.id);
-          return tenantAls.run(req.tenantDb, () => next());
+          return next();
         }
       }
     } catch (e) { /* tables not ready — fall through to the kitchen path */ }
@@ -61,11 +55,7 @@ function requireRetailAdmin(req, res, next) {
   // (2) legacy kitchen path: must be authed AND hold the `retail` permission.
   requireAuth(req, res, (err) => {
     if (err) return next(err);
-    _retailKitchenPermission(req, res, (err2) => {
-      if (err2) return next(err2);
-      req.tenantDb = getTenantDb(ROOTS_TENANT_ID);   // kitchen staff operate on Roots
-      tenantAls.run(req.tenantDb, () => next());
-    });
+    _retailKitchenPermission(req, res, next);
   });
 }
 
@@ -86,14 +76,14 @@ const upload = multer({
 const PRIVATE_CONFIG_PREFIXES = ['integrations.'];
 
 function loadConfig() {
-  const rows = tdb().prepare('SELECT key, value_json FROM storefront_config').all();
+  const rows = db.prepare('SELECT key, value_json FROM storefront_config').all();
   const out = { version: 0 };
   for (const { key, value_json } of rows) {
     if (PRIVATE_CONFIG_PREFIXES.some(p => key.startsWith(p))) continue;
     let v; try { v = JSON.parse(value_json); } catch { v = value_json; }
     setPath(out, key.split('.'), v);
   }
-  const t = tdb().prepare("SELECT COALESCE(MAX(strftime('%s', updated_at)), 0) AS t FROM storefront_config").get();
+  const t = db.prepare("SELECT COALESCE(MAX(strftime('%s', updated_at)), 0) AS t FROM storefront_config").get();
   out.version = Number(t?.t || 0);
   return out;
 }
@@ -117,7 +107,7 @@ function parseJsonArray(s) {
 // is staff-only) but unauthenticated so the mini app + public preview can
 // render category-tile labels without holding a session token.
 router.get('/api/retail/categories', (req, res) => {
-  const rows = tdb().prepare("SELECT id, name FROM categories WHERE kind = 'product' ORDER BY sort_order, name").all();
+  const rows = db.prepare("SELECT id, name FROM categories WHERE kind = 'product' ORDER BY sort_order, name").all();
   res.set('Cache-Control', 'public, max-age=60');
   res.json({ success: true, data: rows });
 });
@@ -136,7 +126,7 @@ router.get('/api/retail/config', (req, res) => {
     const previewToken = req.query?.preview_token;
     if (previewToken && validatePreviewToken(previewToken)) {
       for (const page of ALLOWED_PAGES) {
-        const r = tdb().prepare(
+        const r = db.prepare(
           'SELECT value_json FROM storefront_config WHERE key = ?'
         ).get(`cms.draft.${page}_layout`);
         if (!r) continue;
@@ -243,10 +233,10 @@ router.get('/api/retail/products', (req, res) => {
   params.push(limit, offset);
 
   const now = Date.now();
-  const rows = tdb().prepare(sql).all(...params)
+  const rows = db.prepare(sql).all(...params)
     .map(hydrateNutrition)
     .map(r => flashsales.decorateProduct(r, now));
-  const total = tdb().prepare(`SELECT COUNT(*) AS n FROM products p
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM products p
                             WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
                             ${q ? 'AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)' : ''}
                             ${category ? 'AND p.category = ?' : ''}`)
@@ -308,7 +298,7 @@ router.get('/api/retail/products/top', (req, res) => {
     try {
       const retailWindow = windowSpec === 'all' ? '' :
         `AND o.paid_at >= datetime('now', '-${parseInt(windowSpec, 10) || 7} days')`;
-      retailRows = tdb().prepare(`
+      retailRows = db.prepare(`
         SELECT oi.product_id AS product_id,
                SUM(oi.qty)   AS units_sold,
                SUM(oi.line_total) AS revenue
@@ -328,7 +318,7 @@ router.get('/api/retail/products/top', (req, res) => {
     try {
       const kitchenWindow = windowSpec === 'all' ? '' :
         `AND s.date >= date('now', '-${parseInt(windowSpec, 10) || 7} days')`;
-      kitchenRows = tdb().prepare(`
+      kitchenRows = db.prepare(`
         SELECT s.product_id AS product_id,
                SUM(s.qty)   AS units_sold,
                SUM(s.total) AS revenue
@@ -362,7 +352,7 @@ router.get('/api/retail/products/top', (req, res) => {
   let products = [];
   if (candidateIds.length) {
     const placeholders = candidateIds.map(() => '?').join(',');
-    products = tdb().prepare(
+    products = db.prepare(
       `SELECT ${RETAIL_PRODUCT_COLS} FROM products p
         WHERE p.id IN (${placeholders})
           AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`
@@ -414,7 +404,7 @@ function socialProofForProduct(id) {
 
   let value = null;
   try {
-    const row = tdb().prepare(`
+    const row = db.prepare(`
       SELECT
         COUNT(DISTINCT CASE WHEN date(o.placed_at, '+8 hours') = date('now', '+8 hours')
                             THEN o.customer_id END) AS c_today,
@@ -445,19 +435,19 @@ router.get('/api/retail/products/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
 
-  const product = flashsales.decorateProduct(hydrateNutrition(tdb().prepare(
+  const product = flashsales.decorateProduct(hydrateNutrition(db.prepare(
     `SELECT ${RETAIL_PRODUCT_COLS} FROM products p
      WHERE p.id = ? AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`
   ).get(id)));
   if (!product) return res.status(404).json({ success: false, error: 'not_found' });
 
   // Review summary — avg rating + count + 3 most recent visible reviews.
-  const summary = tdb().prepare(
+  const summary = db.prepare(
     'SELECT AVG(rating) AS avg, COUNT(*) AS count FROM retail_reviews WHERE product_id = ? AND is_visible = 1'
   ).get(id);
   product.review_count = summary.count || 0;
   product.review_avg   = summary.count ? Number((summary.avg || 0).toFixed(2)) : 0;
-  product.reviews_recent = tdb().prepare(
+  product.reviews_recent = db.prepare(
     `SELECT r.id, r.rating, r.comment, r.created_at, r.tags_json, r.photos_json,
             c.nickname AS customer_name, c.avatar_url AS customer_avatar
        FROM retail_reviews r
@@ -471,7 +461,7 @@ router.get('/api/retail/products/:id', (req, res) => {
     tags_json: undefined, photos_json: undefined,
   }));
 
-  const options = tdb().prepare(
+  const options = db.prepare(
     `SELECT id, question_en, question_cn, type, is_required, sort_order
        FROM retail_product_options WHERE product_id = ?
       ORDER BY sort_order ASC, id ASC`
@@ -483,7 +473,7 @@ router.get('/api/retail/products/:id', (req, res) => {
   const choicesByOpt = {};
   if (optionIds.length) {
     const placeholders = optionIds.map(() => '?').join(',');
-    const choices = tdb().prepare(
+    const choices = db.prepare(
       `SELECT id, option_id, label_en, label_cn, price_delta, is_default, sort_order
          FROM retail_product_option_choices
         WHERE option_id IN (${placeholders})
@@ -526,7 +516,7 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
 
   let out = [];
   try {
-    const rows = tdb().prepare(`
+    const rows = db.prepare(`
       SELECT o.id, o.placed_at,
              COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer,
              (SELECT oi.name_en FROM retail_order_items oi
@@ -605,7 +595,7 @@ router.post('/api/retail/products/:id/viewing', express.json(), (req, res) => {
 router.get('/api/retail/flash-sales', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit || '12', 10) || 12, 50);
   const now = Date.now();
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT ${RETAIL_PRODUCT_COLS} FROM products p
       WHERE p.is_published = 1
         AND COALESCE(p.is_active, 1) = 1
@@ -650,7 +640,7 @@ if (WECHAT_DEV_MODE) {
   // Loud at startup — this is unsafe on a public box. Quantify the exposure
   // so the operator sees how much real customer data is currently spoofable.
   try {
-    const n = tdb().prepare("SELECT COUNT(*) AS n FROM retail_customers WHERE openid LIKE 'dev:%'").get().n;
+    const n = db.prepare("SELECT COUNT(*) AS n FROM retail_customers WHERE openid LIKE 'dev:%'").get().n;
     console.error('[security] ⚠️  retail/auth is in DEV MODE (WECHAT_APP_ID/SECRET unset).');
     console.error('[security]    ' + n + ' customer(s) currently authenticate via spoofable dev:* openids.');
     console.error('[security]    Anyone who reaches POST /api/retail/auth with a known code can impersonate that customer.');
@@ -676,7 +666,7 @@ async function exchangeCodeForOpenid(code) {
 function issueToken(customerId, ua) {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
-  tdb().prepare(
+  db.prepare(
     `INSERT INTO retail_auth_tokens (token, customer_id, expires_at, user_agent)
      VALUES (?, ?, ?, ?)`
   ).run(token, customerId, expiresAt, ua || null);
@@ -697,17 +687,17 @@ router.post('/api/retail/auth', express.json(), async (req, res) => {
 
   // Upsert customer. On first login we set nickname/avatar from the body
   // if present (the mini app collects them via wx.getUserProfile separately).
-  let customer = tdb().prepare('SELECT * FROM retail_customers WHERE openid = ?').get(openid);
+  let customer = db.prepare('SELECT * FROM retail_customers WHERE openid = ?').get(openid);
   if (!customer) {
-    const info = tdb().prepare(
+    const info = db.prepare(
       `INSERT INTO retail_customers (openid, unionid, nickname, avatar_url, last_login_at)
        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`
     ).run(openid, unionid, nickname || null, avatar_url || null);
-    customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(info.lastInsertRowid);
+    customer = db.prepare('SELECT * FROM retail_customers WHERE id = ?').get(info.lastInsertRowid);
   } else {
     // Refresh last_login_at; opportunistically fill nickname/avatar if we
     // didn't have them before and the client just sent them.
-    tdb().prepare(
+    db.prepare(
       `UPDATE retail_customers
           SET last_login_at = CURRENT_TIMESTAMP,
               nickname   = COALESCE(NULLIF(nickname, ''), ?),
@@ -716,7 +706,7 @@ router.post('/api/retail/auth', express.json(), async (req, res) => {
     ).run(nickname || customer.nickname || null,
           avatar_url || customer.avatar_url || null,
           customer.id);
-    customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(customer.id);
+    customer = db.prepare('SELECT * FROM retail_customers WHERE id = ?').get(customer.id);
   }
 
   if (customer.is_blocked) return res.status(403).json({ success: false, error: 'account_blocked' });
@@ -826,20 +816,20 @@ function markOrderPaid(orderId) {
   // not 'paid'. The kitchen waits, and checkAwaitingRestockForRestock()
   // promotes them to 'paid' once every missing product is restocked. No
   // stock is deducted on payment for these — they have no reservations.
-  const meta = tdb().prepare(
+  const meta = db.prepare(
     "SELECT fallback_choice, awaiting_restock_pids FROM retail_orders WHERE id = ?"
   ).get(orderId);
   const isWait = meta?.fallback_choice === 'wait_for_restock' && meta?.awaiting_restock_pids;
 
   const r = isWait
-    ? tdb().prepare(
+    ? db.prepare(
         "UPDATE retail_orders SET status = 'awaiting_restock', paid_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending_payment'"
       ).run(orderId)
-    : tdb().prepare(
+    : db.prepare(
         "UPDATE retail_orders SET status = 'paid', paid_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending_payment'"
       ).run(orderId);
 
-  tdb().prepare(
+  db.prepare(
     "UPDATE retail_payments SET status = 'success', completed_at = CURRENT_TIMESTAMP WHERE order_id = ? AND status = 'pending'"
   ).run(orderId);
   if (r.changes > 0) {
@@ -860,7 +850,7 @@ function markOrderPaid(orderId) {
     // transition (r.changes>0 guards against wechat retry callbacks).
     try {
       if (_push && _push.sendPushByPermission) {
-        const o = tdb().prepare('SELECT order_no, total FROM retail_orders WHERE id = ?').get(orderId);
+        const o = db.prepare('SELECT order_no, total FROM retail_orders WHERE id = ?').get(orderId);
         if (o) {
           _push.sendPushByPermission('retail', {
             title: isWait ? '🌿 New order · 新订单(待补货)' : '🌿 New paid order · 新订单已付款',
@@ -877,7 +867,7 @@ function markOrderPaid(orderId) {
 router.post('/api/retail/payment/create', requireRetailAuth, express.json(), async (req, res) => {
   const orderId = parseInt(req.body?.order_id, 10);
   if (!orderId) return res.status(400).json({ success: false, error: 'order_id_required' });
-  const order = tdb().prepare(
+  const order = db.prepare(
     'SELECT id, order_no, status, payment_method, total, customer_id FROM retail_orders WHERE id = ? AND customer_id = ?'
   ).get(orderId, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'order_not_found' });
@@ -911,14 +901,14 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
   if (order.payment_method === 'wechat') {
     try {
       // Pull the customer's openid for the JSAPI call
-      const cust = tdb().prepare('SELECT openid FROM retail_customers WHERE id = ?').get(order.customer_id);
+      const cust = db.prepare('SELECT openid FROM retail_customers WHERE id = ?').get(order.customer_id);
       if (!cust?.openid || cust.openid.startsWith('dev:')) {
         return res.status(409).json({ success: false, error: 'no_real_openid' });
       }
       const prepayId = await wechatPayCreate(order, cust.openid);
       const params   = buildWxRequestPaymentParams(prepayId);
       // Save the out_trade_no link for the async callback to find this order
-      tdb().prepare(
+      db.prepare(
         "UPDATE retail_payments SET out_trade_no = ? WHERE order_id = ? AND status = 'pending'"
       ).run(order.order_no, orderId);
       return res.json({ success: true, data: { method: 'wechat', ...params } });
@@ -935,7 +925,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
 // Polling endpoint — mini-app calls this every ~2s while waiting on
 // Alipay-QR confirmation, or as a sanity check after wx.requestPayment.
 router.get('/api/retail/payment/status/:orderId', requireRetailAuth, (req, res) => {
-  const order = tdb().prepare(
+  const order = db.prepare(
     'SELECT id, order_no, status, paid_at, total FROM retail_orders WHERE id = ? AND customer_id = ?'
   ).get(parseInt(req.params.orderId, 10), req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
@@ -986,11 +976,11 @@ router.post('/api/retail/payment/wechat/callback', express.json(), (req, res) =>
     const txn = JSON.parse(plain);
     // txn.trade_state === 'SUCCESS' means paid
     if (txn.trade_state === 'SUCCESS' && txn.out_trade_no) {
-      const pay = tdb().prepare(
+      const pay = db.prepare(
         'SELECT order_id FROM retail_payments WHERE out_trade_no = ? AND status = ?'
       ).get(txn.out_trade_no, 'pending');
       if (pay) {
-        tdb().prepare(
+        db.prepare(
           "UPDATE retail_payments SET status = 'success', transaction_id = ?, raw_callback_json = ?, completed_at = CURRENT_TIMESTAMP WHERE out_trade_no = ?"
         ).run(txn.transaction_id || null, plain, txn.out_trade_no);
         markOrderPaid(pay.order_id);
@@ -1019,10 +1009,10 @@ router.post('/api/retail/notifications/subscribe', requireRetailAuth, express.js
   if (!template_id) return res.status(400).json({ success: false, error: 'template_id_required' });
   const orderId = order_id ? parseInt(order_id, 10) : null;
   if (orderId) {
-    const order = tdb().prepare('SELECT id FROM retail_orders WHERE id = ? AND customer_id = ?').get(orderId, req.customer.id);
+    const order = db.prepare('SELECT id FROM retail_orders WHERE id = ? AND customer_id = ?').get(orderId, req.customer.id);
     if (!order) return res.status(404).json({ success: false, error: 'order_not_found' });
   }
-  tdb().prepare(
+  db.prepare(
     'INSERT INTO retail_subscriptions (customer_id, template_id, order_id) VALUES (?, ?, ?)'
   ).run(req.customer.id, template_id, orderId);
   res.json({ success: true });
@@ -1066,17 +1056,17 @@ async function getWeChatAccessToken() {
 // can't fire twice. In DEV mode (no WECHAT_APP_ID set), logs only.
 async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/me/me') {
   if (!templateId) return { sent: false, reason: 'no_template_id' };
-  const sub = tdb().prepare(
+  const sub = db.prepare(
     'SELECT id FROM retail_subscriptions WHERE customer_id = ? AND template_id = ? AND used = 0 ORDER BY id DESC LIMIT 1'
   ).get(customerId, templateId);
   if (!sub) return { sent: false, reason: 'no_consent' };
 
-  const cust = tdb().prepare('SELECT openid FROM retail_customers WHERE id = ?').get(customerId);
+  const cust = db.prepare('SELECT openid FROM retail_customers WHERE id = ?').get(customerId);
   if (!cust?.openid) return { sent: false, reason: 'no_openid' };
 
   // Mark used eagerly — even if the WeChat send fails, the consent is gone
   // either way (one-shot from the customer's perspective).
-  tdb().prepare("UPDATE retail_subscriptions SET used = 1, used_at = CURRENT_TIMESTAMP WHERE id = ?").run(sub.id);
+  db.prepare("UPDATE retail_subscriptions SET used = 1, used_at = CURRENT_TIMESTAMP WHERE id = ?").run(sub.id);
 
   if (WECHAT_DEV_MODE || cust.openid.startsWith('dev:')) {
     console.log(`[subscribe-message] DEV — would send template=${templateId} to=${cust.openid}, data=${JSON.stringify(data)}`);
@@ -1132,7 +1122,7 @@ function notifyOrderStatusChange(orderId, newStatus) {
     const cfg = loadConfig();
     const tplId = cfg.notifications?.order_status_template_id;
     if (!tplId) return;
-    const o = tdb().prepare('SELECT order_no, customer_id, total FROM retail_orders WHERE id = ?').get(orderId);
+    const o = db.prepare('SELECT order_no, customer_id, total FROM retail_orders WHERE id = ?').get(orderId);
     if (!o) return;
     const labels = {
       paid: '已支付', preparing: '准备中', dispatched: '配送中',
@@ -1164,7 +1154,7 @@ function notifyTrackingScenario(orderId, scenario) {
     const cfg = loadConfig();
     const tplId = cfg.notifications?.order_status_template_id;
     if (!tplId) return;
-    const o = tdb().prepare('SELECT order_no, customer_id, total FROM retail_orders WHERE id = ?').get(orderId);
+    const o = db.prepare('SELECT order_no, customer_id, total FROM retail_orders WHERE id = ?').get(orderId);
     if (!o) return;
     // Pack the most actionable detail into phrase2. Capped at ~20 CN
     // chars to fit WeChat's phrase-type length limit; pickup_code wins
@@ -1191,7 +1181,7 @@ function notifyTrackingScenario(orderId, scenario) {
 function notifyCustomer(customerId, n) {
   if (!customerId || !n || !n.category || !n.type) return;
   try {
-    tdb().prepare(
+    db.prepare(
       `INSERT INTO retail_notifications
          (customer_id, category, type, title_en, title_cn, body_en, body_cn, ref_type, ref_id)
        VALUES (?,?,?,?,?,?,?,?,?)`
@@ -1208,7 +1198,7 @@ function notifyCustomer(customerId, n) {
 // receives the order row {customer_id, order_no} and returns the fields.
 function notifyForOrder(orderId, build) {
   try {
-    const o = tdb().prepare('SELECT customer_id, order_no FROM retail_orders WHERE id = ?').get(orderId);
+    const o = db.prepare('SELECT customer_id, order_no FROM retail_orders WHERE id = ?').get(orderId);
     if (!o || !o.customer_id) return;
     const n = build(o);
     if (n) notifyCustomer(o.customer_id, { ref_type: 'order', ref_id: orderId, ...n });
@@ -1226,8 +1216,8 @@ router.get('/api/retail/notifications', requireRetailAuth, (req, res) => {
   const params = [req.customer.id];
   if (before) { sql += ' AND id < ?'; params.push(before); }
   sql += ' ORDER BY id DESC LIMIT ?'; params.push(limit);
-  const rows = tdb().prepare(sql).all(...params);
-  const unread = tdb().prepare(
+  const rows = db.prepare(sql).all(...params);
+  const unread = db.prepare(
     'SELECT COUNT(*) AS n FROM retail_notifications WHERE customer_id = ? AND read_at IS NULL'
   ).get(req.customer.id).n;
   res.json({ success: true, data: rows, meta: { unread: unread || 0, limit } });
@@ -1235,7 +1225,7 @@ router.get('/api/retail/notifications', requireRetailAuth, (req, res) => {
 
 // GET /api/retail/notifications/unread-count — lightweight badge poll.
 router.get('/api/retail/notifications/unread-count', requireRetailAuth, (req, res) => {
-  const n = tdb().prepare(
+  const n = db.prepare(
     'SELECT COUNT(*) AS n FROM retail_notifications WHERE customer_id = ? AND read_at IS NULL'
   ).get(req.customer.id).n;
   res.json({ success: true, data: { count: n || 0 } });
@@ -1243,7 +1233,7 @@ router.get('/api/retail/notifications/unread-count', requireRetailAuth, (req, re
 
 // POST /api/retail/notifications/read-all — mark every unread one read.
 router.post('/api/retail/notifications/read-all', requireRetailAuth, (req, res) => {
-  tdb().prepare(
+  db.prepare(
     'UPDATE retail_notifications SET read_at = CURRENT_TIMESTAMP WHERE customer_id = ? AND read_at IS NULL'
   ).run(req.customer.id);
   res.json({ success: true });
@@ -1252,7 +1242,7 @@ router.post('/api/retail/notifications/read-all', requireRetailAuth, (req, res) 
 // POST /api/retail/notifications/:id/read — mark a single one read.
 router.post('/api/retail/notifications/:id/read', requireRetailAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  tdb().prepare(
+  db.prepare(
     'UPDATE retail_notifications SET read_at = CURRENT_TIMESTAMP WHERE id = ? AND customer_id = ? AND read_at IS NULL'
   ).run(id, req.customer.id);
   res.json({ success: true });
@@ -1264,7 +1254,7 @@ function requireRetailAuth(req, res, next) {
   const m = /^Bearer\s+([A-Za-z0-9]+)$/.exec(h);
   if (!m) return res.status(401).json({ success: false, error: 'missing_token' });
   const token = m[1];
-  const row = tdb().prepare(
+  const row = db.prepare(
     `SELECT t.*, c.id AS cid FROM retail_auth_tokens t
        JOIN retail_customers c ON c.id = t.customer_id
       WHERE t.token = ? AND datetime(t.expires_at) > CURRENT_TIMESTAMP
@@ -1273,9 +1263,9 @@ function requireRetailAuth(req, res, next) {
   if (!row) return res.status(401).json({ success: false, error: 'invalid_or_expired_token' });
   // Best-effort touch (don't block on contention)
   try {
-    tdb().prepare('UPDATE retail_auth_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE token = ?').run(token);
+    db.prepare('UPDATE retail_auth_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE token = ?').run(token);
   } catch {}
-  req.customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(row.cid);
+  req.customer = db.prepare('SELECT * FROM retail_customers WHERE id = ?').get(row.cid);
   next();
 }
 
@@ -1312,7 +1302,7 @@ router.post('/api/retail/track', express.json(), (req, res) => {
     // Optional token → attribute to a known customer.
     const m = /^Bearer\s+([A-Za-z0-9]+)$/.exec(req.headers.authorization || '');
     if (m) {
-      const row = tdb().prepare(
+      const row = db.prepare(
         `SELECT c.id AS id, c.openid AS openid FROM retail_auth_tokens t
            JOIN retail_customers c ON c.id = t.customer_id
           WHERE t.token = ? AND datetime(t.expires_at) > CURRENT_TIMESTAMP`
@@ -1321,7 +1311,7 @@ router.post('/api/retail/track', express.json(), (req, res) => {
     }
 
     const scene = Number.isFinite(+b.scene) ? Math.trunc(+b.scene) : null;
-    tdb().prepare(
+    db.prepare(
       `INSERT INTO retail_visits (customer_id, openid, session_id, page, scene, referrer, user_agent)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(
@@ -1354,7 +1344,7 @@ const _RIDER_PICKUP_MIN = 8;
 function computeRiderEta(address, lat, lng) {
   // Pull all active stores once per request; per-address we just pick the
   // nearest by Haversine. Same fallback (district centroid) as routing.
-  const stores = tdb().prepare(
+  const stores = db.prepare(
     `SELECT id, code, name_en, name_cn, lat, lng FROM retail_stores
       WHERE COALESCE(is_active, 1) = 1`
   ).all();
@@ -1378,7 +1368,7 @@ function computeRiderEta(address, lat, lng) {
 }
 
 router.get('/api/retail/addresses', requireRetailAuth, (req, res) => {
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT ${ADDRESS_PUBLIC_COLS}, lat, lng FROM retail_customer_addresses
       WHERE customer_id = ? ORDER BY is_default DESC, updated_at DESC`
   ).all(req.customer.id);
@@ -1466,11 +1456,11 @@ router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, re
   if (!a.province || !a.city || !a.district) {
     return res.status(400).json({ success: false, error: 'missing_region' });
   }
-  const tx = tdb().transaction(() => {
+  const tx = db.transaction(() => {
     if (a.is_default) {
-      tdb().prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(req.customer.id);
+      db.prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(req.customer.id);
     }
-    const info = tdb().prepare(
+    const info = db.prepare(
       `INSERT INTO retail_customer_addresses
          (customer_id, recipient_name, phone, province, city, district,
           address, detail, postal_code, is_default)
@@ -1488,7 +1478,7 @@ router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, re
   // distance. Customer doesn't wait — we respond immediately and write
   // lat/lng back to the row when the API call returns.
   geocodeAddressAsync(id, a);
-  res.json({ success: true, data: tdb().prepare(`SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses WHERE id = ?`).get(id) });
+  res.json({ success: true, data: db.prepare(`SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses WHERE id = ?`).get(id) });
 });
 
 // Background geocode helper — never throws, writes lat/lng + geocoded_at
@@ -1503,7 +1493,7 @@ function geocodeAddressAsync(addressId, a) {
         address: [a.address, a.detail].filter(Boolean).join(' '),
       });
       if (!coords) return;
-      tdb().prepare(
+      db.prepare(
         'UPDATE retail_customer_addresses SET lat = ?, lng = ?, geocoded_at = CURRENT_TIMESTAMP WHERE id = ?'
       ).run(coords.lat, coords.lng, addressId);
     } catch (e) { console.warn('[geocodeAddressAsync]', e.message); }
@@ -1512,18 +1502,18 @@ function geocodeAddressAsync(addressId, a) {
 
 router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare('SELECT id FROM retail_customer_addresses WHERE id = ? AND customer_id = ?').get(id, req.customer.id);
+  const existing = db.prepare('SELECT id FROM retail_customer_addresses WHERE id = ? AND customer_id = ?').get(id, req.customer.id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
   // Normalize only the fields actually present in the body — PUT is partial.
   const incoming = req.body || {};
   const a = (incoming.province || incoming.city || incoming.district || incoming.address)
     ? normalizeChinaAddress(incoming)
     : incoming;
-  const tx = tdb().transaction(() => {
+  const tx = db.transaction(() => {
     if (a.is_default) {
-      tdb().prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(req.customer.id);
+      db.prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(req.customer.id);
     }
-    tdb().prepare(
+    db.prepare(
       `UPDATE retail_customer_addresses
           SET recipient_name = COALESCE(?, recipient_name),
               phone          = COALESCE(?, phone),
@@ -1553,14 +1543,14 @@ router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req,
   });
   tx();
   // Re-geocode in the background using the row's merged values.
-  const merged = tdb().prepare('SELECT province, city, district, address, detail FROM retail_customer_addresses WHERE id = ?').get(id);
+  const merged = db.prepare('SELECT province, city, district, address, detail FROM retail_customer_addresses WHERE id = ?').get(id);
   if (merged) geocodeAddressAsync(id, merged);
-  res.json({ success: true, data: tdb().prepare(`SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses WHERE id = ?`).get(id) });
+  res.json({ success: true, data: db.prepare(`SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses WHERE id = ?`).get(id) });
 });
 
 router.delete('/api/retail/addresses/:id', requireRetailAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const r = tdb().prepare('DELETE FROM retail_customer_addresses WHERE id = ? AND customer_id = ?').run(id, req.customer.id);
+  const r = db.prepare('DELETE FROM retail_customer_addresses WHERE id = ? AND customer_id = ?').run(id, req.customer.id);
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
   res.json({ success: true });
 });
@@ -1574,7 +1564,7 @@ router.delete('/api/retail/addresses/:id', requireRetailAuth, (req, res) => {
 // created — the actual wechat/alipay integration kicks in from there.
 
 function cfgValue(key, fallback) {
-  const row = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+  const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
   if (!row) return fallback;
   try { return JSON.parse(row.value_json); } catch { return fallback; }
 }
@@ -1693,12 +1683,12 @@ function planShipments(items, destCity) {
 // .shipment_id. Used both at order-creation time (fresh rows) and when
 // loading an old order in the office UI (lazy-fill).
 function ensureShipments(orderId) {
-  const existing = tdb().prepare(
+  const existing = db.prepare(
     `SELECT * FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
   ).all(orderId);
   if (existing.length) return existing;
 
-  const o = tdb().prepare(
+  const o = db.prepare(
     `SELECT id, address_json, tracking_carrier, tracking_number, tracking_status,
             tracking_events_json, tracking_synced_at, tracking_last_error,
             tracking_kd100_subscribed, tracking_scenario, tracking_scenario_data_json,
@@ -1709,7 +1699,7 @@ function ensureShipments(orderId) {
   let destCity = '';
   try { destCity = JSON.parse(o.address_json || '{}').city || ''; } catch {}
 
-  const items = tdb().prepare(
+  const items = db.prepare(
     `SELECT id,
             COALESCE(ship_modes, 'air,land') AS ship_modes,
             COALESCE(needs_ice_pack, 0)      AS needs_ice_pack
@@ -1717,13 +1707,13 @@ function ensureShipments(orderId) {
   ).all(orderId);
   const plan = planShipments(items, destCity);
 
-  const ins = tdb().prepare(
+  const ins = db.prepare(
     `INSERT INTO retail_shipments (order_id, mode, label, created_at, updated_at)
      VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
   );
-  const assignItem = tdb().prepare(`UPDATE retail_order_items SET shipment_id = ? WHERE id = ?`);
+  const assignItem = db.prepare(`UPDATE retail_order_items SET shipment_id = ? WHERE id = ?`);
   const created = [];
-  const tx = tdb().transaction(() => {
+  const tx = db.transaction(() => {
     for (const seg of plan) {
       const r = ins.run(orderId, seg.mode, seg.label);
       const shipmentId = r.lastInsertRowid;
@@ -1734,7 +1724,7 @@ function ensureShipments(orderId) {
     // existing waybills don't appear lost in the new UI. Only if the
     // legacy fields have data.
     if (o.tracking_number && o.tracking_carrier && created.length) {
-      tdb().prepare(
+      db.prepare(
         `UPDATE retail_shipments
             SET tracking_carrier = ?, tracking_number = ?, tracking_status = ?,
                 tracking_events_json = ?, tracking_synced_at = ?,
@@ -1756,7 +1746,7 @@ function ensureShipments(orderId) {
     }
   });
   tx();
-  return tdb().prepare(
+  return db.prepare(
     `SELECT * FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
   ).all(orderId);
 }
@@ -1776,7 +1766,7 @@ const SAVINGS_THRESHOLD = 10;       // ¥10 — see project_roots_v2_split_packa
 const LAND_FLOOR_VALUE  = 50;       // ¥50 — land bucket below this folds back
 const LAND_FLOOR_GRAMS  = 2000;     // 2 kg
 function buildShipmentSuggestion(orderId) {
-  const order = tdb().prepare(
+  const order = db.prepare(
     `SELECT id, address_json, delivery_slot_label, status
        FROM retail_orders WHERE id = ?`
   ).get(orderId);
@@ -1794,7 +1784,7 @@ function buildShipmentSuggestion(orderId) {
     return { eligible: false, reason: 'asap_paid' };
   }
 
-  const items = tdb().prepare(
+  const items = db.prepare(
     `SELECT id, qty, unit_price, size,
             COALESCE(ship_modes, 'air,land') AS ship_modes,
             COALESCE(needs_ice_pack, 0)      AS needs_ice_pack,
@@ -1816,7 +1806,7 @@ function buildShipmentSuggestion(orderId) {
   const rates = getShippingRates();
 
   // Current bucketing — read from each item's actual shipment row.
-  const shipments = tdb().prepare(
+  const shipments = db.prepare(
     `SELECT id, mode FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
   ).all(orderId);
   const modeById = new Map(shipments.map(s => [s.id, s.mode]));
@@ -1947,7 +1937,7 @@ function nextOrderNo() {
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
   const datePrefix = `R${yy}${mm}${dd}`;
-  const last = tdb().prepare(
+  const last = db.prepare(
     `SELECT order_no FROM retail_orders WHERE order_no LIKE ? ORDER BY id DESC LIMIT 1`
   ).get(datePrefix + '%');
   const lastSeq = last ? parseInt(last.order_no.slice(datePrefix.length), 10) || 0 : 0;
@@ -1991,7 +1981,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   }
   if (!deliverySlotId) return res.status(400).json({ success: false, error: 'delivery_slot_required' });
 
-  const address = tdb().prepare(
+  const address = db.prepare(
     'SELECT * FROM retail_customer_addresses WHERE id = ? AND customer_id = ?'
   ).get(addressId, req.customer.id);
   if (!address) return res.status(400).json({ success: false, error: 'address_not_found' });
@@ -2004,7 +1994,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     const qty = Number(it.qty);
     if (!pid || !(qty > 0)) return res.status(400).json({ success: false, error: 'invalid_item' });
 
-    const p = tdb().prepare(
+    const p = db.prepare(
       `SELECT id, name_en, name_cn, sku, weight AS size,
               sell_price AS price, stock_qty AS stock, image_data,
               flash_price, flash_starts_at, flash_ends_at,
@@ -2019,7 +2009,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     const chosenLabels = [];
     if (Array.isArray(it.choices) && it.choices.length) {
       const placeholders = it.choices.map(() => '?').join(',');
-      const choices = tdb().prepare(
+      const choices = db.prepare(
         `SELECT c.id, c.option_id, c.label_en, c.price_delta, o.product_id, o.type
            FROM retail_product_option_choices c
            JOIN retail_product_options o ON o.id = c.option_id
@@ -2122,7 +2112,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       for (const r of resolved) {
         if (!repMap.has(r.product.id)) { mutatedItems.push(r); continue; }
         const { subId, qty: subQty } = repMap.get(r.product.id);
-        const sub = tdb().prepare(
+        const sub = db.prepare(
           `SELECT id, name_en, name_cn, sku, weight AS size, sell_price AS price, image_data,
                   ship_modes, needs_ice_pack
              FROM products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
@@ -2301,7 +2291,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // Customer sends voucher_code; server re-validates + computes discount.
   let voucher = null, voucherDiscount = 0;
   if (voucherCode) {
-    voucher = tdb().prepare(
+    voucher = db.prepare(
       'SELECT * FROM retail_vouchers WHERE UPPER(code) = ? AND is_active = 1'
     ).get(String(voucherCode).trim().toUpperCase());
     if (voucher) {
@@ -2311,7 +2301,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
         if (result.free_shipping) shippingFee = 0;
         // Per-customer limit re-check on server side
         if (voucher.per_customer_limit && voucher.per_customer_limit > 0) {
-          const used = tdb().prepare(
+          const used = db.prepare(
             `SELECT COUNT(*) AS n FROM retail_orders
               WHERE customer_id = ? AND voucher_code = ?
                 AND status NOT IN ('cancelled')`
@@ -2338,7 +2328,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   let pointsUsed = 0, pointsAmount = 0;
   if (paymentMethod === 'points') {
     sweepExpiredPoints(req.customer.id);
-    const cust = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
+    const cust = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
     const have = cust?.points_balance || 0;
     pointsUsed   = pointsRequiredFor(grossTotal);
     pointsAmount = grossTotal;
@@ -2352,7 +2342,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     }
   } else if (Number(body.points_to_use) > 0) {
     sweepExpiredPoints(req.customer.id);
-    const cust = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
+    const cust = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
     const have = cust?.points_balance || 0;
     const requested = Math.floor(Number(body.points_to_use));
     // Cap at the customer's balance AND at the points needed to fully
@@ -2376,8 +2366,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // model. Stock at the routed store is soft-held until payment commits
   // (or expiry releases it). See lib/inventory.js for the math.
   const orderNo = nextOrderNo();
-  const tx = tdb().transaction(() => {
-    const info = tdb().prepare(
+  const tx = db.transaction(() => {
+    const info = db.prepare(
       `INSERT INTO retail_orders (
          order_no, customer_id, status, payment_method,
          recipient_name, recipient_phone, address_full, address_json,
@@ -2412,17 +2402,17 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     // Decrement voucher max_uses pool. Bumps used_count atomically inside
     // the same transaction so two simultaneous orders can't exceed it.
     if (voucher) {
-      tdb().prepare('UPDATE retail_vouchers SET used_count = used_count + 1 WHERE id = ?').run(voucher.id);
+      db.prepare('UPDATE retail_vouchers SET used_count = used_count + 1 WHERE id = ?').run(voucher.id);
       // If this customer had a personal grant for this voucher, mark the
       // grant used so it disappears from their wallet/checkout list.
-      tdb().prepare(
+      db.prepare(
         `UPDATE retail_customer_vouchers
             SET used_at = CURRENT_TIMESTAMP, used_order_id = ?
           WHERE customer_id = ? AND voucher_id = ? AND used_at IS NULL`
       ).run(orderId, req.customer.id, voucher.id);
     }
 
-    const insertItem = tdb().prepare(
+    const insertItem = db.prepare(
       `INSERT INTO retail_order_items
          (order_id, product_id, name_en, name_cn, sku, size, image_url,
           qty, unit_price, line_total, options_json,
@@ -2450,7 +2440,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     // set) — `changes !== 1` means a concurrent order beat us to the last
     // unit, so we roll back. Items with no stock cap still increment so
     // analytics + admin UI can show how many sold during the window.
-    const bumpCapped = tdb().prepare(
+    const bumpCapped = db.prepare(
       `UPDATE products
           SET flash_sold = COALESCE(flash_sold, 0) + ?
         WHERE id = ?
@@ -2488,7 +2478,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       });
     }
 
-    tdb().prepare(
+    db.prepare(
       `INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no)
        VALUES (?, ?, ?, 'pending', ?)`
     ).run(orderId, paymentMethod, total, orderNo);
@@ -2498,7 +2488,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     // The order is still 'pending_payment' at this stage — markOrderPaid()
     // (called from /payment/create) flips it to 'paid' and awards earn-points.
     if (pointsUsed > 0) {
-      const upd = tdb().prepare(
+      const upd = db.prepare(
         'UPDATE retail_customers SET points_balance = points_balance - ? WHERE id = ? AND points_balance >= ?'
       ).run(pointsUsed, req.customer.id, pointsUsed);
       if (upd.changes !== 1) {
@@ -2506,8 +2496,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
         err.code = 'insufficient_points';
         throw err;
       }
-      const after = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id).points_balance;
-      tdb().prepare(
+      const after = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id).points_balance;
+      db.prepare(
         `INSERT INTO retail_points_transactions
            (customer_id, delta, balance_after, source, order_id, note)
          VALUES (?, ?, ?, 'order_redeem', ?, ?)`
@@ -2543,7 +2533,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
 });
 
 function loadOrderForCustomer(orderId, customerId) {
-  const o = tdb().prepare(
+  const o = db.prepare(
     `SELECT id, order_no, status, payment_method,
             recipient_name, recipient_phone, address_full, address_json,
             subtotal, shipping_fee, packing_fee, delivery_mode, delivery_zone_id,
@@ -2577,7 +2567,7 @@ function loadOrderForCustomer(orderId, customerId) {
   // product image so order/review thumbnails actually render. The tradeoff
   // is that if staff later swaps the product photo, old orders show the
   // new one — acceptable for "remind me what I bought" UX.
-  o.items = tdb().prepare(
+  o.items = db.prepare(
     `SELECT oi.id, oi.product_id, oi.name_en, oi.name_cn, oi.sku, oi.size,
             COALESCE(NULLIF(oi.image_url, ''), p.image_url, p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json
@@ -2683,19 +2673,19 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
   sql += ' ORDER BY placed_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
-  const rows = tdb().prepare(sql).all(...params);
+  const rows = db.prepare(sql).all(...params);
 
   // Attach a tiny preview of items so the order list can render thumbs
   // without N+1 follow-up requests.
   for (const r of rows) {
-    r.items_preview = tdb().prepare(
+    r.items_preview = db.prepare(
       `SELECT oi.product_id, oi.name_en, oi.name_cn, oi.qty,
               COALESCE(NULLIF(oi.image_url, ''), p.image_url, p.image_data) AS image_url
          FROM retail_order_items oi
     LEFT JOIN products p ON p.id = oi.product_id
         WHERE oi.order_id = ? ORDER BY oi.id ASC LIMIT 3`
     ).all(r.id);
-    r.item_count = tdb().prepare('SELECT COUNT(*) AS n FROM retail_order_items WHERE order_id = ?').get(r.id).n;
+    r.item_count = db.prepare('SELECT COUNT(*) AS n FROM retail_order_items WHERE order_id = ?').get(r.id).n;
   }
   res.json({ success: true, data: rows, meta: { limit, offset } });
 });
@@ -2704,7 +2694,7 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
 // profile. Lists every order where an invoice was requested, with its derived
 // state (issued vs requested) and the fapiao link/number once issued.
 router.get('/api/retail/invoices', requireRetailAuth, (req, res) => {
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT id, order_no, total, placed_at,
             invoice_type, invoice_title, invoice_tax_id, invoice_email,
             invoice_number, invoice_file_url, invoice_issued_at,
@@ -2722,17 +2712,17 @@ router.get('/api/retail/invoices', requireRetailAuth, (req, res) => {
 // compat (= pending + preparing). `to_review` = delivered orders that the
 // customer hasn't yet reviewed, `total` = lifetime order count.
 router.get('/api/retail/orders/stats', requireRetailAuth, (req, res) => {
-  const buckets = tdb().prepare(
+  const buckets = db.prepare(
     `SELECT status, COUNT(*) AS n FROM retail_orders WHERE customer_id = ? GROUP BY status`
   ).all(req.customer.id);
   const counts = {};
   for (const b of buckets) counts[b.status] = b.n;
-  const totalRow = tdb().prepare(
+  const totalRow = db.prepare(
     'SELECT COUNT(*) AS n FROM retail_orders WHERE customer_id = ?'
   ).get(req.customer.id);
   // Count items, not orders — the Review bucket on the Me tab opens a
   // per-item list, so the badge number must match the list length.
-  const toReviewRow = tdb().prepare(
+  const toReviewRow = db.prepare(
     `SELECT COUNT(*) AS n
        FROM retail_order_items oi
        JOIN retail_orders o ON o.id = oi.order_id
@@ -2757,7 +2747,7 @@ router.get('/api/retail/orders/stats', requireRetailAuth, (req, res) => {
       // Open buckets nudge the customer to check progress; terminal buckets
       // surface their history.
       after_sales: (() => {
-        const r = tdb().prepare(
+        const r = db.prepare(
           `SELECT COUNT(*) AS n FROM retail_orders
             WHERE customer_id = ?
               AND (status = 'refunded'
@@ -2781,7 +2771,7 @@ router.get('/api/retail/orders/:id', requireRetailAuth, (req, res) => {
 // don't yet have a row in retail_reviews for (customer, order, product).
 // Powers the Me-tab Review bucket's dedicated list page.
 router.get('/api/retail/reviews/pending', requireRetailAuth, (req, res) => {
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT oi.product_id, oi.name_en, oi.name_cn,
             COALESCE(NULLIF(oi.image_url, ''), p.image_url, p.image_data) AS image_url,
             oi.qty,
@@ -2827,7 +2817,7 @@ function computeVoucherDiscount(voucher, subtotal, shippingFee) {
 // when a token is present we also strip ones the customer has already
 // hit their per_customer_limit on.
 router.get('/api/retail/vouchers/public', (req, res) => {
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT id, code, type, value, min_subtotal, max_uses, used_count,
             per_customer_limit, expires_at, title_en, title_cn, description
        FROM retail_vouchers
@@ -2844,7 +2834,7 @@ router.get('/api/retail/vouchers/public', (req, res) => {
   const h = req.headers.authorization || '';
   const m = /^Bearer\s+([A-Za-z0-9]+)$/.exec(h);
   if (m) {
-    const tokRow = tdb().prepare(
+    const tokRow = db.prepare(
       `SELECT c.id FROM retail_auth_tokens t
          JOIN retail_customers c ON c.id = t.customer_id
         WHERE t.token = ? AND datetime(t.expires_at) > CURRENT_TIMESTAMP
@@ -2855,7 +2845,7 @@ router.get('/api/retail/vouchers/public', (req, res) => {
 
   const filtered = rows.filter(v => {
     if (!customer || !v.per_customer_limit || v.per_customer_limit <= 0) return true;
-    const used = tdb().prepare(
+    const used = db.prepare(
       `SELECT COUNT(*) AS n FROM retail_orders
         WHERE customer_id = ? AND voucher_code = ? AND status NOT IN ('cancelled')`
     ).get(customer.id, v.code).n;
@@ -2868,7 +2858,7 @@ router.get('/api/retail/vouchers/public', (req, res) => {
 // Customer's own granted vouchers — admin-granted, unused, still-valid.
 // These appear as tappable cards in the wallet + checkout (no code).
 router.get('/api/retail/my-vouchers', requireRetailAuth, (req, res) => {
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT v.id, v.code, v.type, v.value, v.min_subtotal, v.expires_at,
             v.title_en, v.title_cn, v.description,
             g.id AS grant_id, g.granted_at, g.granted_note
@@ -2890,13 +2880,13 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
   const code = String(req.body?.code || '').trim().toUpperCase();
   const subtotal = Number(req.body?.subtotal || 0);
   if (!code) return res.status(400).json({ success: false, error: 'code_required' });
-  const v = tdb().prepare(
+  const v = db.prepare(
     'SELECT * FROM retail_vouchers WHERE UPPER(code) = ? AND is_active = 1'
   ).get(code);
   if (!v) return res.status(404).json({ success: false, error: 'not_found' });
   // Per-customer limit check
   if (v.per_customer_limit && v.per_customer_limit > 0) {
-    const used = tdb().prepare(
+    const used = db.prepare(
       `SELECT COUNT(*) AS n FROM retail_orders
         WHERE customer_id = ? AND voucher_code = ?
           AND status NOT IN ('cancelled')`
@@ -2961,8 +2951,8 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COUNT(DISTINCT customer_id) AS buyers
       FROM retail_orders
      WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?`;
-  const kpi     = tdb().prepare(kpiSql).get(from, to);
-  const kpiPrev = tdb().prepare(kpiSql).get(prevFrom, prevTo);
+  const kpi     = db.prepare(kpiSql).get(from, to);
+  const kpiPrev = db.prepare(kpiSql).get(prevFrom, prevTo);
 
   const visitsSql = `
     SELECT COUNT(*) AS visits,
@@ -2970,15 +2960,15 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COUNT(DISTINCT COALESCE(CAST(customer_id AS TEXT), openid, session_id)) AS visitors
       FROM retail_visits
      WHERE date(created_at, '${TZ}') BETWEEN ? AND ?`;
-  const vis     = tdb().prepare(visitsSql).get(from, to);
-  const visPrev = tdb().prepare(visitsSql).get(prevFrom, prevTo);
+  const vis     = db.prepare(visitsSql).get(from, to);
+  const visPrev = db.prepare(visitsSql).get(prevFrom, prevTo);
 
   const newCustSql = `SELECT COUNT(*) AS n FROM retail_customers WHERE date(created_at, '${TZ}') BETWEEN ? AND ?`;
-  const newCust     = tdb().prepare(newCustSql).get(from, to).n;
-  const newCustPrev = tdb().prepare(newCustSql).get(prevFrom, prevTo).n;
+  const newCust     = db.prepare(newCustSql).get(from, to).n;
+  const newCustPrev = db.prepare(newCustSql).get(prevFrom, prevTo).n;
 
   // ── Status funnel (gross — every status in the window) ──
-  const funnel = tdb().prepare(`
+  const funnel = db.prepare(`
     SELECT status, COUNT(*) AS n, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
      WHERE date(placed_at, '${TZ}') BETWEEN ? AND ?
@@ -2992,13 +2982,13 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // ── Trend (zero-filled). Hourly for a single day, else daily. ──
   let trend;
   if (hourly) {
-    const o = tdb().prepare(`
+    const o = db.prepare(`
       SELECT CAST(strftime('%H', placed_at, '${TZ}') AS INTEGER) AS b,
              COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
         FROM retail_orders
        WHERE ${PAID} AND date(placed_at, '${TZ}') = ?
        GROUP BY b`).all(from);
-    const v = tdb().prepare(`
+    const v = db.prepare(`
       SELECT CAST(strftime('%H', created_at, '${TZ}') AS INTEGER) AS b,
              COUNT(*) AS visits, COUNT(DISTINCT session_id) AS sessions
         FROM retail_visits
@@ -3014,13 +3004,13 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       sessions: vm[h]?.sessions || 0,
     }));
   } else {
-    const o = tdb().prepare(`
+    const o = db.prepare(`
       SELECT date(placed_at, '${TZ}') AS b,
              COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
         FROM retail_orders
        WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
        GROUP BY b`).all(from, to);
-    const v = tdb().prepare(`
+    const v = db.prepare(`
       SELECT date(created_at, '${TZ}') AS b,
              COUNT(*) AS visits, COUNT(DISTINCT session_id) AS sessions
         FROM retail_visits
@@ -3042,7 +3032,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   }
 
   // ── Payment-method split ──
-  const payments = tdb().prepare(`
+  const payments = db.prepare(`
     SELECT COALESCE(payment_method, 'unknown') AS method,
            COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
@@ -3050,7 +3040,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      GROUP BY method ORDER BY revenue DESC`).all(from, to);
 
   // ── Delivery-mode split ──
-  const delivery = tdb().prepare(`
+  const delivery = db.prepare(`
     SELECT COALESCE(delivery_mode, 'unknown') AS mode,
            COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
@@ -3058,21 +3048,21 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      GROUP BY mode ORDER BY orders DESC`).all(from, to);
 
   // ── Fulfilling store + routing reason ──
-  const stores = tdb().prepare(`
+  const stores = db.prepare(`
     SELECT o.store_id, s.name_en, s.name_cn,
            COUNT(*) AS orders, COALESCE(SUM(o.total), 0) AS revenue
       FROM retail_orders o
       LEFT JOIN retail_stores s ON s.id = o.store_id
      WHERE ${PAIDO} AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?
      GROUP BY o.store_id ORDER BY orders DESC`).all(from, to);
-  const routing = tdb().prepare(`
+  const routing = db.prepare(`
     SELECT COALESCE(routing_reason, 'unknown') AS reason, COUNT(*) AS orders
       FROM retail_orders
      WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
      GROUP BY reason ORDER BY orders DESC`).all(from, to);
 
   // ── Top products (by revenue) ──
-  const topProducts = tdb().prepare(`
+  const topProducts = db.prepare(`
     SELECT i.product_id, i.name_en, i.name_cn, i.image_url, i.sku,
            COALESCE(SUM(i.qty), 0) AS units,
            COALESCE(SUM(i.line_total), 0) AS revenue,
@@ -3083,7 +3073,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      GROUP BY i.product_id ORDER BY revenue DESC LIMIT 15`).all(from, to);
 
   // ── Top customers (by spend in window) ──
-  const topCustomers = tdb().prepare(`
+  const topCustomers = db.prepare(`
     SELECT o.customer_id, c.nickname, c.phone, c.tier_key,
            COUNT(*) AS orders, COALESCE(SUM(o.total), 0) AS revenue,
            MAX(o.placed_at) AS last_order
@@ -3093,7 +3083,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      GROUP BY o.customer_id ORDER BY revenue DESC LIMIT 15`).all(from, to);
 
   // ── New vs returning buyers (first-ever paid order in window = new) ──
-  const nvr = tdb().prepare(`
+  const nvr = db.prepare(`
     SELECT COUNT(DISTINCT o.customer_id) AS buyers,
            COUNT(DISTINCT CASE WHEN fo.first_day BETWEEN ? AND ? THEN o.customer_id END) AS new_buyers
       FROM retail_orders o
@@ -3103,13 +3093,13 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      WHERE ${PAIDO} AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?`).get(from, to, from, to);
 
   // ── Loyalty-tier distribution (active customer base snapshot) ──
-  const tiers = tdb().prepare(`
+  const tiers = db.prepare(`
     SELECT COALESCE(tier_key, 'seed') AS tier, COUNT(*) AS n
       FROM retail_customers WHERE is_blocked = 0
      GROUP BY tier ORDER BY n DESC`).all();
 
   // ── Geography (address_json snapshot) ──
-  const geoCities = tdb().prepare(`
+  const geoCities = db.prepare(`
     SELECT json_extract(address_json, '$.city') AS city,
            COUNT(*) AS orders, COUNT(DISTINCT customer_id) AS customers,
            COALESCE(SUM(total), 0) AS revenue
@@ -3117,7 +3107,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
        AND address_json IS NOT NULL AND json_extract(address_json, '$.city') IS NOT NULL
      GROUP BY city ORDER BY revenue DESC LIMIT 15`).all(from, to);
-  const geoDistricts = tdb().prepare(`
+  const geoDistricts = db.prepare(`
     SELECT json_extract(address_json, '$.city') AS city,
            json_extract(address_json, '$.district') AS district,
            COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
@@ -3127,7 +3117,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      GROUP BY city, district ORDER BY revenue DESC LIMIT 20`).all(from, to);
 
   // ── Marketing impact ──
-  const vouchers = tdb().prepare(`
+  const vouchers = db.prepare(`
     SELECT voucher_code AS code, COUNT(*) AS uses,
            COALESCE(SUM(voucher_amount), 0) AS discount,
            COALESCE(SUM(total), 0) AS revenue
@@ -3135,14 +3125,14 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
        AND voucher_code IS NOT NULL AND voucher_code != ''
      GROUP BY voucher_code ORDER BY uses DESC LIMIT 15`).all(from, to);
-  const points = tdb().prepare(`
+  const points = db.prepare(`
     SELECT COUNT(*) AS orders, COALESCE(SUM(points_used), 0) AS points_used,
            COALESCE(SUM(points_amount), 0) AS points_value
       FROM retail_orders
      WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ? AND points_used > 0`).get(from, to);
 
   // ── Traffic: WeChat launch-scene breakdown ──
-  const scenes = tdb().prepare(`
+  const scenes = db.prepare(`
     SELECT scene, COUNT(*) AS visits, COUNT(DISTINCT session_id) AS sessions
       FROM retail_visits
      WHERE date(created_at, '${TZ}') BETWEEN ? AND ? AND scene IS NOT NULL
@@ -3150,7 +3140,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
 
   // ── Demand heatmap (day-of-week × hour-of-day, paid orders) ──
   // dow: 0=Sun … 6=Sat (strftime '%w'); hour: 0–23. Drives the staffing grid.
-  const heat = tdb().prepare(`
+  const heat = db.prepare(`
     SELECT CAST(strftime('%w', placed_at, '${TZ}') AS INTEGER) AS dow,
            CAST(strftime('%H', placed_at, '${TZ}') AS INTEGER) AS hour,
            COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
@@ -3162,7 +3152,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // cohort_month = the month of a customer's first-ever paid order;
   // active_month = any month they placed a paid order. The frontend pivots
   // these into a cohort × months-since-first retention matrix.
-  const cohorts = tdb().prepare(`
+  const cohorts = db.prepare(`
     WITH first_order AS (
       SELECT customer_id, strftime('%Y-%m', MIN(placed_at), '${TZ}') AS cohort_month
         FROM retail_orders WHERE ${PAID} GROUP BY customer_id),
@@ -3173,7 +3163,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COUNT(DISTINCT a.customer_id) AS active_customers
       FROM activity a JOIN first_order f ON f.customer_id = a.customer_id
      GROUP BY f.cohort_month, a.active_month`).all();
-  const cohortSizes = tdb().prepare(`
+  const cohortSizes = db.prepare(`
     WITH first_order AS (
       SELECT customer_id, strftime('%Y-%m', MIN(placed_at), '${TZ}') AS cohort_month
         FROM retail_orders WHERE ${PAID} GROUP BY customer_id)
@@ -3181,7 +3171,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       FROM first_order GROUP BY cohort_month ORDER BY cohort_month`).all();
 
   // ── Revenue composition (product subtotal vs delivery vs discounts) ──
-  const composition = tdb().prepare(`
+  const composition = db.prepare(`
     SELECT COALESCE(SUM(subtotal), 0)       AS product_total,
            COALESCE(SUM(shipping_fee), 0)   AS delivery_fee,
            COALESCE(SUM(voucher_amount), 0) AS voucher_total,
@@ -3241,7 +3231,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
 
 // Admin CRUD for vouchers.
 router.get('/api/retail-admin/vouchers', requireRetailAdmin, (req, res) => {
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT v.*,
             (SELECT COUNT(*) FROM retail_customer_vouchers g WHERE g.voucher_id = v.id)              AS grant_count,
             (SELECT COUNT(*) FROM retail_customer_vouchers g WHERE g.voucher_id = v.id AND g.used_at IS NOT NULL) AS grant_used_count
@@ -3260,7 +3250,7 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
     return res.status(400).json({ success: false, error: 'invalid_type' });
   }
   try {
-    const info = tdb().prepare(
+    const info = db.prepare(
       `INSERT INTO retail_vouchers
          (code, type, value, min_subtotal, max_uses, per_customer_limit, expires_at,
           is_active, is_public, title_en, title_cn, description, created_by)
@@ -3278,7 +3268,7 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
       req.user.id
     );
     logActivity(req.user.id, req.user.username, 'create', 'voucher', info.lastInsertRowid, { code, type: b.type }, req.ip);
-    res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_vouchers WHERE id = ?').get(info.lastInsertRowid) });
+    res.json({ success: true, data: db.prepare('SELECT * FROM retail_vouchers WHERE id = ?').get(info.lastInsertRowid) });
   } catch (e) {
     if (/UNIQUE/.test(e.message)) return res.status(409).json({ success: false, error: 'code_exists' });
     res.status(500).json({ success: false, error: e.message });
@@ -3287,7 +3277,7 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
 
 router.patch('/api/retail-admin/vouchers/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const v = tdb().prepare('SELECT id FROM retail_vouchers WHERE id = ?').get(id);
+  const v = db.prepare('SELECT id FROM retail_vouchers WHERE id = ?').get(id);
   if (!v) return res.status(404).json({ success: false, error: 'not_found' });
   const fields = ['value', 'min_subtotal', 'max_uses', 'per_customer_limit', 'expires_at',
                   'is_active', 'is_public', 'title_en', 'title_cn', 'description'];
@@ -3298,12 +3288,12 @@ router.patch('/api/retail-admin/vouchers/:id', requireRetailAdmin, express.json(
   if ('is_public' in updates) updates.is_public = updates.is_public ? 1 : 0;
   if ('expires_at' in updates && !updates.expires_at) updates.expires_at = null;
   const sets = Object.keys(updates).map(k => `${k} = ?`).join(', ');
-  tdb().prepare(`UPDATE retail_vouchers SET ${sets} WHERE id = ?`).run(...Object.values(updates), id);
+  db.prepare(`UPDATE retail_vouchers SET ${sets} WHERE id = ?`).run(...Object.values(updates), id);
   res.json({ success: true });
 });
 
 router.delete('/api/retail-admin/vouchers/:id', requireRetailAdmin, (req, res) => {
-  tdb().prepare('UPDATE retail_vouchers SET is_active = 0 WHERE id = ?').run(parseInt(req.params.id, 10));
+  db.prepare('UPDATE retail_vouchers SET is_active = 0 WHERE id = ?').run(parseInt(req.params.id, 10));
   res.json({ success: true });
 });
 
@@ -3346,9 +3336,9 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   else if (sort === 'points_balance') orderClause = 'points_balance DESC, id DESC';
   else                                orderClause = 'last_login_at IS NULL, last_login_at DESC, id DESC';
 
-  const total = tdb().prepare(`SELECT COUNT(*) AS n FROM retail_customers ${whereSql}`).get(...params).n;
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM retail_customers ${whereSql}`).get(...params).n;
 
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT id, nickname, phone, openid, email, tier_key, lifetime_spend,
             points_balance, balance, is_blocked, created_at, last_login_at,
             (SELECT COUNT(*) FROM retail_orders WHERE customer_id = retail_customers.id) AS orders_count
@@ -3364,7 +3354,7 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
 // List grants for a voucher (who has it, who used it).
 router.get('/api/retail-admin/vouchers/:id/grants', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT g.id, g.customer_id, g.granted_at, g.granted_note,
             g.used_at, g.used_order_id,
             c.nickname, c.phone
@@ -3381,7 +3371,7 @@ router.get('/api/retail-admin/vouchers/:id/grants', requireRetailAdmin, (req, re
 // UNIQUE constraint — customers who already have a grant are skipped.
 router.post('/api/retail-admin/vouchers/:id/grant', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const v = tdb().prepare('SELECT id, code FROM retail_vouchers WHERE id = ?').get(id);
+  const v = db.prepare('SELECT id, code FROM retail_vouchers WHERE id = ?').get(id);
   if (!v) return res.status(404).json({ success: false, error: 'voucher_not_found' });
 
   const toAll = req.body?.to_all === true;
@@ -3389,19 +3379,19 @@ router.post('/api/retail-admin/vouchers/:id/grant', requireRetailAdmin, express.
 
   let ids;
   if (toAll) {
-    ids = tdb().prepare('SELECT id FROM retail_customers WHERE is_blocked = 0').all().map(r => r.id);
+    ids = db.prepare('SELECT id FROM retail_customers WHERE is_blocked = 0').all().map(r => r.id);
   } else {
     ids = Array.isArray(req.body?.customer_ids) ? req.body.customer_ids : [];
   }
   if (!ids.length) return res.status(400).json({ success: false, error: 'no_customers' });
 
-  const ins = tdb().prepare(
+  const ins = db.prepare(
     `INSERT OR IGNORE INTO retail_customer_vouchers
        (customer_id, voucher_id, granted_by, granted_note)
      VALUES (?, ?, ?, ?)`
   );
   let granted = 0, skipped = 0;
-  const tx = tdb().transaction(() => {
+  const tx = db.transaction(() => {
     for (const cid of ids) {
       const n = parseInt(cid, 10);
       if (!n) continue;
@@ -3418,7 +3408,7 @@ router.post('/api/retail-admin/vouchers/:id/grant', requireRetailAdmin, express.
 // Revoke an unused grant.
 router.delete('/api/retail-admin/voucher-grants/:grantId', requireRetailAdmin, (req, res) => {
   const gid = parseInt(req.params.grantId, 10);
-  const r = tdb().prepare(
+  const r = db.prepare(
     'DELETE FROM retail_customer_vouchers WHERE id = ? AND used_at IS NULL'
   ).run(gid);
   if (!r.changes) return res.status(409).json({ success: false, error: 'already_used_or_missing' });
@@ -3433,14 +3423,14 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
 
-  const customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(id);
+  const customer = db.prepare('SELECT * FROM retail_customers WHERE id = ?').get(id);
   if (!customer) return res.status(404).json({ success: false, error: 'not_found' });
 
-  const addresses = tdb().prepare(
+  const addresses = db.prepare(
     'SELECT * FROM retail_customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id DESC'
   ).all(id);
 
-  const orders = tdb().prepare(
+  const orders = db.prepare(
     `SELECT
        COUNT(*) AS orders_count,
        SUM(CASE WHEN status NOT IN ('cancelled','refunded','pending_payment') THEN 1 ELSE 0 END) AS completed_count,
@@ -3453,7 +3443,7 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
        FROM retail_orders WHERE customer_id = ?`
   ).get(id);
 
-  const points = tdb().prepare(
+  const points = db.prepare(
     `SELECT
        COALESCE(SUM(CASE WHEN delta > 0 AND source IN ('order_earn','topup_bonus') THEN delta ELSE 0 END), 0) AS earned,
        COALESCE(SUM(CASE WHEN delta < 0 AND source = 'order_redeem'                 THEN -delta ELSE 0 END), 0) AS redeemed,
@@ -3462,7 +3452,7 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
        FROM retail_points_transactions WHERE customer_id = ?`
   ).get(id);
 
-  const expiringSoon = tdb().prepare(
+  const expiringSoon = db.prepare(
     `SELECT COALESCE(SUM(delta), 0) AS pts
        FROM retail_points_transactions
       WHERE customer_id = ? AND delta > 0
@@ -3470,7 +3460,7 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
         AND expires_at <= datetime('now', '+30 days')`
   ).get(id).pts;
 
-  const topup = tdb().prepare(
+  const topup = db.prepare(
     `SELECT
        COALESCE(SUM(CASE WHEN status='success' AND COALESCE(payment_method,'') != 'admin_adjust' THEN amount       ELSE 0 END), 0) AS topup_total,
        COALESCE(SUM(CASE WHEN status='success' AND COALESCE(payment_method,'') != 'admin_adjust' THEN bonus_points ELSE 0 END), 0) AS bonus_pts_total,
@@ -3478,23 +3468,23 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
        FROM retail_topup_transactions WHERE customer_id = ?`
   ).get(id);
 
-  const vouchers = tdb().prepare(
+  const vouchers = db.prepare(
     `SELECT
        COALESCE(SUM(CASE WHEN used_at IS NULL     THEN 1 ELSE 0 END), 0) AS unused,
        COALESCE(SUM(CASE WHEN used_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS used
        FROM retail_customer_vouchers WHERE customer_id = ?`
   ).get(id);
 
-  const reviews = tdb().prepare(
+  const reviews = db.prepare(
     `SELECT COUNT(*) AS count, AVG(rating) AS avg_rating
        FROM retail_reviews WHERE customer_id = ?`
   ).get(id);
 
-  const sessions = tdb().prepare(
+  const sessions = db.prepare(
     "SELECT COUNT(*) AS n FROM retail_auth_tokens WHERE customer_id = ? AND expires_at > datetime('now')"
   ).get(id).n;
 
-  const topItems = tdb().prepare(
+  const topItems = db.prepare(
     `SELECT i.name_en, i.name_cn, SUM(i.qty) AS qty, SUM(i.line_total) AS spend
        FROM retail_order_items i
        JOIN retail_orders o ON o.id = i.order_id
@@ -3505,7 +3495,7 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
       LIMIT 5`
   ).all(id);
 
-  const ordersByMonth = tdb().prepare(
+  const ordersByMonth = db.prepare(
     `SELECT strftime('%Y-%m', placed_at) AS month,
             COUNT(*) AS n,
             COALESCE(SUM(CASE WHEN status NOT IN ('cancelled','refunded','pending_payment') THEN total ELSE 0 END), 0) AS revenue
@@ -3516,21 +3506,21 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
       ORDER BY month`
   ).all(id);
 
-  const recentOrders = tdb().prepare(
+  const recentOrders = db.prepare(
     `SELECT id, order_no, status, total, placed_at AS created_at
        FROM retail_orders
       WHERE customer_id = ?
       ORDER BY id DESC LIMIT 10`
   ).all(id);
 
-  const recentPoints = tdb().prepare(
+  const recentPoints = db.prepare(
     `SELECT id, delta, balance_after, source, order_id, note, created_at, expires_at
        FROM retail_points_transactions
       WHERE customer_id = ?
       ORDER BY id DESC LIMIT 20`
   ).all(id);
 
-  const recentTopups = tdb().prepare(
+  const recentTopups = db.prepare(
     `SELECT id, amount, bonus_points, payment_method, status, created_at, paid_at
        FROM retail_topup_transactions
       WHERE customer_id = ?
@@ -3545,10 +3535,10 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
   }
 
   // Affiliate context: this customer's own invites + their referrer (if any).
-  const referrer = customer.referred_by_customer_id ? tdb().prepare(
+  const referrer = customer.referred_by_customer_id ? db.prepare(
     'SELECT id, nickname, phone, referral_code FROM retail_customers WHERE id = ?'
   ).get(customer.referred_by_customer_id) : null;
-  const referralsByMe = tdb().prepare(
+  const referralsByMe = db.prepare(
     `SELECT r.id, r.status, r.reward_amount, r.code_used, r.joined_at, r.rewarded_at,
             r.first_paid_order_id,
             ci.id AS invitee_id, ci.nickname AS invitee_nickname, ci.phone AS invitee_phone
@@ -3558,7 +3548,7 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
       ORDER BY r.id DESC
       LIMIT 50`
   ).all(id);
-  const referralsAgg = tdb().prepare(
+  const referralsAgg = db.prepare(
     `SELECT COUNT(*) AS total,
             COALESCE(SUM(CASE WHEN status='ordered' THEN 1 ELSE 0 END), 0) AS converted,
             COALESCE(SUM(CASE WHEN status='ordered' THEN reward_amount ELSE 0 END), 0) AS earned
@@ -3599,7 +3589,7 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
 router.patch('/api/retail-admin/customers/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
-  const c = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(id);
+  const c = db.prepare('SELECT * FROM retail_customers WHERE id = ?').get(id);
   if (!c) return res.status(404).json({ success: false, error: 'not_found' });
 
   const b = req.body || {};
@@ -3647,7 +3637,7 @@ router.patch('/api/retail-admin/customers/:id', requireRetailAdmin, express.json
   if (!updates.length) return res.json({ success: true, changed: {} });
 
   params.push(id);
-  tdb().prepare(`UPDATE retail_customers SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+  db.prepare(`UPDATE retail_customers SET ${updates.join(', ')} WHERE id = ?`).run(...params);
   logActivity(req.user.id, req.user.username, 'update', 'retail_customer', id, changed, req.ip);
   res.json({ success: true, changed });
 });
@@ -3657,14 +3647,14 @@ router.patch('/api/retail-admin/customers/:id', requireRetailAdmin, express.json
 router.post('/api/retail-admin/customers/:id/block', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const reason = req.body?.reason ? String(req.body.reason).slice(0, 200) : null;
-  const r = tdb().prepare('UPDATE retail_customers SET is_blocked = 1 WHERE id = ?').run(id);
+  const r = db.prepare('UPDATE retail_customers SET is_blocked = 1 WHERE id = ?').run(id);
   if (!r.changes) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'block', 'retail_customer', id, { reason }, req.ip);
   res.json({ success: true });
 });
 router.post('/api/retail-admin/customers/:id/unblock', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const r = tdb().prepare('UPDATE retail_customers SET is_blocked = 0 WHERE id = ?').run(id);
+  const r = db.prepare('UPDATE retail_customers SET is_blocked = 0 WHERE id = ?').run(id);
   if (!r.changes) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'unblock', 'retail_customer', id, {}, req.ip);
   res.json({ success: true });
@@ -3674,9 +3664,9 @@ router.post('/api/retail-admin/customers/:id/unblock', requireRetailAdmin, (req,
 // next mini-app open.
 router.post('/api/retail-admin/customers/:id/force-logout', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const c  = tdb().prepare('SELECT id FROM retail_customers WHERE id = ?').get(id);
+  const c  = db.prepare('SELECT id FROM retail_customers WHERE id = ?').get(id);
   if (!c) return res.status(404).json({ success: false, error: 'not_found' });
-  const r = tdb().prepare('DELETE FROM retail_auth_tokens WHERE customer_id = ?').run(id);
+  const r = db.prepare('DELETE FROM retail_auth_tokens WHERE customer_id = ?').run(id);
   logActivity(req.user.id, req.user.username, 'force_logout', 'retail_customer', id, { revoked: r.changes }, req.ip);
   res.json({ success: true, revoked: r.changes });
 });
@@ -3691,14 +3681,14 @@ router.post('/api/retail-admin/customers/:id/points-adjust', requireRetailAdmin,
   if (!id || !Number.isFinite(delta) || delta === 0) return res.status(400).json({ success: false, error: 'bad_delta' });
   if (!reason) return res.status(400).json({ success: false, error: 'reason_required' });
 
-  const c = tdb().prepare('SELECT id, points_balance FROM retail_customers WHERE id = ?').get(id);
+  const c = db.prepare('SELECT id, points_balance FROM retail_customers WHERE id = ?').get(id);
   if (!c) return res.status(404).json({ success: false, error: 'not_found' });
   const after = (c.points_balance || 0) + delta;
   if (after < 0) return res.status(409).json({ success: false, error: 'would_go_negative', current: c.points_balance });
 
-  const tx = tdb().transaction(() => {
-    tdb().prepare('UPDATE retail_customers SET points_balance = ? WHERE id = ?').run(after, id);
-    tdb().prepare(
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE retail_customers SET points_balance = ? WHERE id = ?').run(after, id);
+    db.prepare(
       `INSERT INTO retail_points_transactions (customer_id, delta, balance_after, source, note)
        VALUES (?, ?, ?, 'admin_adjust', ?)`
     ).run(id, delta, after, `[${req.user.username}] ${reason}`);
@@ -3718,14 +3708,14 @@ router.post('/api/retail-admin/customers/:id/wallet-adjust', requireRetailAdmin,
   if (!id || !Number.isFinite(delta) || delta === 0) return res.status(400).json({ success: false, error: 'bad_delta' });
   if (!reason) return res.status(400).json({ success: false, error: 'reason_required' });
 
-  const c = tdb().prepare('SELECT id, balance FROM retail_customers WHERE id = ?').get(id);
+  const c = db.prepare('SELECT id, balance FROM retail_customers WHERE id = ?').get(id);
   if (!c) return res.status(404).json({ success: false, error: 'not_found' });
   const after = Math.round(((c.balance || 0) + delta) * 100) / 100;
   if (after < 0) return res.status(409).json({ success: false, error: 'would_go_negative', current: c.balance });
 
-  const tx = tdb().transaction(() => {
-    tdb().prepare('UPDATE retail_customers SET balance = ? WHERE id = ?').run(after, id);
-    tdb().prepare(
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE retail_customers SET balance = ? WHERE id = ?').run(after, id);
+    db.prepare(
       `INSERT INTO retail_topup_transactions
          (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
        VALUES (?, ?, 0, 'admin_adjust', 'success', CURRENT_TIMESTAMP, ?, ?)`
@@ -3742,17 +3732,17 @@ router.post('/api/retail-admin/customers/:id/wallet-adjust', requireRetailAdmin,
 router.post('/api/retail-admin/customers/:id/addresses', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
-  const c = tdb().prepare('SELECT id FROM retail_customers WHERE id = ?').get(id);
+  const c = db.prepare('SELECT id FROM retail_customers WHERE id = ?').get(id);
   if (!c) return res.status(404).json({ success: false, error: 'not_found' });
   const a = normalizeChinaAddress(req.body || {});
   if (!a.recipient_name || !a.phone || !a.address) {
     return res.status(400).json({ success: false, error: 'missing_required' });
   }
-  const tx = tdb().transaction(() => {
+  const tx = db.transaction(() => {
     if (a.is_default) {
-      tdb().prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(id);
+      db.prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(id);
     }
-    const info = tdb().prepare(
+    const info = db.prepare(
       `INSERT INTO retail_customer_addresses
          (customer_id, recipient_name, phone, province, city, district,
           address, detail, postal_code, is_default)
@@ -3773,24 +3763,24 @@ router.post('/api/retail-admin/customers/:id/addresses', requireRetailAdmin, exp
   });
   const newId = tx();
   logActivity(req.user.id, req.user.username, 'create', 'retail_customer_address', newId, { customer_id: id }, req.ip);
-  const row = tdb().prepare(`SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses WHERE id = ?`).get(newId);
+  const row = db.prepare(`SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses WHERE id = ?`).get(newId);
   res.json({ success: true, data: row });
 });
 
 router.put('/api/retail-admin/customers/:id/addresses/:addrId', requireRetailAdmin, express.json(), (req, res) => {
   const id     = parseInt(req.params.id, 10);
   const addrId = parseInt(req.params.addrId, 10);
-  const existing = tdb().prepare('SELECT id FROM retail_customer_addresses WHERE id = ? AND customer_id = ?').get(addrId, id);
+  const existing = db.prepare('SELECT id FROM retail_customer_addresses WHERE id = ? AND customer_id = ?').get(addrId, id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
   const incoming = req.body || {};
   const a = (incoming.province || incoming.city || incoming.district || incoming.address)
     ? normalizeChinaAddress(incoming)
     : incoming;
-  const tx = tdb().transaction(() => {
+  const tx = db.transaction(() => {
     if (a.is_default) {
-      tdb().prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(id);
+      db.prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(id);
     }
-    tdb().prepare(
+    db.prepare(
       `UPDATE retail_customer_addresses
           SET recipient_name = COALESCE(?, recipient_name),
               phone          = COALESCE(?, phone),
@@ -3818,14 +3808,14 @@ router.put('/api/retail-admin/customers/:id/addresses/:addrId', requireRetailAdm
   });
   tx();
   logActivity(req.user.id, req.user.username, 'update', 'retail_customer_address', addrId, { customer_id: id }, req.ip);
-  const row = tdb().prepare(`SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses WHERE id = ?`).get(addrId);
+  const row = db.prepare(`SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses WHERE id = ?`).get(addrId);
   res.json({ success: true, data: row });
 });
 
 router.delete('/api/retail-admin/customers/:id/addresses/:addrId', requireRetailAdmin, (req, res) => {
   const id     = parseInt(req.params.id, 10);
   const addrId = parseInt(req.params.addrId, 10);
-  const r = tdb().prepare('DELETE FROM retail_customer_addresses WHERE id = ? AND customer_id = ?').run(addrId, id);
+  const r = db.prepare('DELETE FROM retail_customer_addresses WHERE id = ? AND customer_id = ?').run(addrId, id);
   if (!r.changes) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'delete', 'retail_customer_address', addrId, { customer_id: id }, req.ip);
   res.json({ success: true });
@@ -3873,15 +3863,15 @@ function newReferralCodeBody() {
 }
 
 function ensureReferralCode(customerId) {
-  const row = tdb().prepare('SELECT referral_code FROM retail_customers WHERE id = ?').get(customerId);
+  const row = db.prepare('SELECT referral_code FROM retail_customers WHERE id = ?').get(customerId);
   if (!row) return null;
   if (row.referral_code) return row.referral_code;
   const prefix = affiliateSettings().codePrefix;
   for (let i = 0; i < 8; i++) {
     const candidate = prefix + newReferralCodeBody();
     try {
-      tdb().prepare('UPDATE retail_customers SET referral_code = ? WHERE id = ? AND referral_code IS NULL').run(candidate, customerId);
-      const fresh = tdb().prepare('SELECT referral_code FROM retail_customers WHERE id = ?').get(customerId);
+      db.prepare('UPDATE retail_customers SET referral_code = ? WHERE id = ? AND referral_code IS NULL').run(candidate, customerId);
+      const fresh = db.prepare('SELECT referral_code FROM retail_customers WHERE id = ?').get(customerId);
       if (fresh.referral_code) return fresh.referral_code;
     } catch (e) { /* UNIQUE collision — retry */ }
   }
@@ -3889,7 +3879,7 @@ function ensureReferralCode(customerId) {
 }
 
 function affiliateInvitesFor(referrerId) {
-  return tdb().prepare(
+  return db.prepare(
     `SELECT r.id, r.invitee_id, r.code_used, r.status, r.reward_amount,
             r.first_paid_order_id, r.joined_at, r.rewarded_at,
             c.nickname, c.avatar_url
@@ -3901,7 +3891,7 @@ function affiliateInvitesFor(referrerId) {
 }
 
 function affiliateStatsFor(referrerId) {
-  const agg = tdb().prepare(
+  const agg = db.prepare(
     `SELECT
        COUNT(*) AS total_invites,
        COALESCE(SUM(CASE WHEN status IN ('joined','ordered') THEN 1 ELSE 0 END), 0) AS joined,
@@ -3920,7 +3910,7 @@ function affiliateStatsFor(referrerId) {
 router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
   const s = affiliateSettings();
   const code = ensureReferralCode(req.customer.id);
-  const referredBy = tdb().prepare(
+  const referredBy = db.prepare(
     `SELECT c.id, c.nickname, c.referral_code
        FROM retail_customers me
        LEFT JOIN retail_customers c ON c.id = me.referred_by_customer_id
@@ -3951,25 +3941,25 @@ router.post('/api/retail/affiliate/apply', requireRetailAuth, express.json(), (r
   const raw = String(req.body?.code || '').trim().toUpperCase();
   if (!raw) return res.status(400).json({ success: false, error: 'code_required' });
 
-  const me = tdb().prepare('SELECT id, referred_by_customer_id FROM retail_customers WHERE id = ?').get(req.customer.id);
+  const me = db.prepare('SELECT id, referred_by_customer_id FROM retail_customers WHERE id = ?').get(req.customer.id);
   if (me.referred_by_customer_id) {
     return res.status(409).json({ success: false, error: 'already_referred' });
   }
-  const inviter = tdb().prepare('SELECT id, referred_by_customer_id FROM retail_customers WHERE referral_code = ?').get(raw);
+  const inviter = db.prepare('SELECT id, referred_by_customer_id FROM retail_customers WHERE referral_code = ?').get(raw);
   if (!inviter)         return res.status(404).json({ success: false, error: 'code_not_found' });
   if (inviter.id === me.id) return res.status(409).json({ success: false, error: 'cannot_refer_self' });
   if (inviter.referred_by_customer_id === me.id) {
     return res.status(409).json({ success: false, error: 'mutual_referral' });
   }
 
-  const tx = tdb().transaction(() => {
-    tdb().prepare(
+  const tx = db.transaction(() => {
+    db.prepare(
       `UPDATE retail_customers
           SET referred_by_customer_id = ?,
               referral_applied_at     = CURRENT_TIMESTAMP
         WHERE id = ? AND referred_by_customer_id IS NULL`
     ).run(inviter.id, me.id);
-    tdb().prepare(
+    db.prepare(
       `INSERT OR IGNORE INTO retail_referrals
          (referrer_id, invitee_id, code_used, status, reward_amount)
        VALUES (?, ?, ?, 'joined', ?)`
@@ -3995,9 +3985,9 @@ router.post('/api/retail/affiliate/apply', requireRetailAuth, express.json(), (r
 function creditReferralReward(orderId) {
   const s = affiliateSettings();
   if (!s.enabled) return;
-  const o = tdb().prepare('SELECT id, customer_id, status FROM retail_orders WHERE id = ?').get(orderId);
+  const o = db.prepare('SELECT id, customer_id, status FROM retail_orders WHERE id = ?').get(orderId);
   if (!o || o.status !== 'paid') return;
-  const ref = tdb().prepare(
+  const ref = db.prepare(
     `SELECT id, referrer_id, invitee_id, reward_amount, status
        FROM retail_referrals
       WHERE invitee_id = ? AND status = 'joined'`
@@ -4006,20 +3996,20 @@ function creditReferralReward(orderId) {
   // Only the FIRST paid order counts — if there's already an earlier paid
   // order for this customer, skip (defensive; status='joined' should
   // already block this once the first order rewards).
-  const earlier = tdb().prepare(
+  const earlier = db.prepare(
     "SELECT 1 FROM retail_orders WHERE customer_id = ? AND id < ? AND paid_at IS NOT NULL LIMIT 1"
   ).get(o.customer_id, orderId);
   if (earlier) {
-    tdb().prepare("UPDATE retail_referrals SET status = 'void', voided_at = CURRENT_TIMESTAMP, voided_reason = 'not_first_order' WHERE id = ?").run(ref.id);
+    db.prepare("UPDATE retail_referrals SET status = 'void', voided_at = CURRENT_TIMESTAMP, voided_reason = 'not_first_order' WHERE id = ?").run(ref.id);
     return;
   }
   const reward = Number(ref.reward_amount) || 0;
-  const tx = tdb().transaction(() => {
+  const tx = db.transaction(() => {
     if (reward > 0) {
-      const cur = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(ref.referrer_id);
+      const cur = db.prepare('SELECT balance FROM retail_customers WHERE id = ?').get(ref.referrer_id);
       const after = Math.round(((cur?.balance || 0) + reward) * 100) / 100;
-      tdb().prepare('UPDATE retail_customers SET balance = ? WHERE id = ?').run(after, ref.referrer_id);
-      tdb().prepare(
+      db.prepare('UPDATE retail_customers SET balance = ? WHERE id = ?').run(after, ref.referrer_id);
+      db.prepare(
         `INSERT INTO retail_topup_transactions
            (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
          VALUES (?, ?, 0, 'referral_reward', 'success', CURRENT_TIMESTAMP, ?, ?)`
@@ -4029,7 +4019,7 @@ function creditReferralReward(orderId) {
         JSON.stringify({ referral_id: ref.id, invitee_id: ref.invitee_id, order_id: orderId })
       );
     }
-    tdb().prepare(
+    db.prepare(
       `UPDATE retail_referrals
           SET status = 'ordered',
               first_paid_order_id = ?,
@@ -4060,12 +4050,12 @@ router.patch('/api/retail-admin/affiliate/settings', requireRetailAdmin, express
     writes.push(['affiliate.codePrefix', p || REFERRAL_CODE_PREFIX]);
   }
   if (!writes.length) return res.status(400).json({ success: false, error: 'no_fields' });
-  const up = tdb().prepare(
+  const up = db.prepare(
     `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
      VALUES (?, ?, CURRENT_TIMESTAMP, ?)
      ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at, updated_by = excluded.updated_by`
   );
-  const tx = tdb().transaction(() => {
+  const tx = db.transaction(() => {
     for (const [k, v] of writes) up.run(k, JSON.stringify(v), req.user.id);
   });
   tx();
@@ -4091,14 +4081,14 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
   }
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
-  const total = tdb().prepare(
+  const total = db.prepare(
     `SELECT COUNT(*) AS n FROM retail_referrals r
        JOIN retail_customers cr ON cr.id = r.referrer_id
        JOIN retail_customers ci ON ci.id = r.invitee_id
        ${whereSql}`
   ).get(...params).n;
 
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT r.id, r.referrer_id, r.invitee_id, r.code_used, r.status,
             r.reward_amount, r.first_paid_order_id, r.joined_at, r.rewarded_at,
             r.voided_at, r.voided_reason,
@@ -4112,7 +4102,7 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
        LIMIT ? OFFSET ?`
   ).all(...params, pageSize, offset);
 
-  const agg = tdb().prepare(
+  const agg = db.prepare(
     `SELECT
        COUNT(*) AS total,
        COALESCE(SUM(CASE WHEN status = 'joined'  THEN 1 ELSE 0 END), 0) AS joined,
@@ -4131,7 +4121,7 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
 // the existing wallet-adjust endpoint to claw back if needed.
 router.patch('/api/retail-admin/affiliate/referrals/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const row = tdb().prepare('SELECT * FROM retail_referrals WHERE id = ?').get(id);
+  const row = db.prepare('SELECT * FROM retail_referrals WHERE id = ?').get(id);
   if (!row) return res.status(404).json({ success: false, error: 'not_found' });
   const b = req.body || {};
   const updates = [];
@@ -4154,9 +4144,9 @@ router.patch('/api/retail-admin/affiliate/referrals/:id', requireRetailAdmin, ex
   }
   if (!updates.length) return res.status(400).json({ success: false, error: 'no_fields' });
   params.push(id);
-  tdb().prepare(`UPDATE retail_referrals SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+  db.prepare(`UPDATE retail_referrals SET ${updates.join(', ')} WHERE id = ?`).run(...params);
   logActivity(req.user.id, req.user.username, 'update', 'referral', id, b, req.ip);
-  res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_referrals WHERE id = ?').get(id) });
+  res.json({ success: true, data: db.prepare('SELECT * FROM retail_referrals WHERE id = ?').get(id) });
 });
 
 // Reissue a customer's referral code (e.g., admin wants a new one after a
@@ -4164,9 +4154,9 @@ router.patch('/api/retail-admin/affiliate/referrals/:id', requireRetailAdmin, ex
 // code_used snapshot so history is unaffected.
 router.post('/api/retail-admin/customers/:id/referral-code', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const c = tdb().prepare('SELECT id FROM retail_customers WHERE id = ?').get(id);
+  const c = db.prepare('SELECT id FROM retail_customers WHERE id = ?').get(id);
   if (!c) return res.status(404).json({ success: false, error: 'not_found' });
-  tdb().prepare('UPDATE retail_customers SET referral_code = NULL WHERE id = ?').run(id);
+  db.prepare('UPDATE retail_customers SET referral_code = NULL WHERE id = ?').run(id);
   const code = ensureReferralCode(id);
   logActivity(req.user.id, req.user.username, 'referral_code_reissue', 'retail_customer', id, { code }, req.ip);
   res.json({ success: true, data: { code } });
@@ -4212,7 +4202,7 @@ router.get('/api/retail/products/:id/reviews', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const limit  = Math.min(parseInt(req.query.limit  || '20', 10) || 20, 50);
   const offset = Math.max(parseInt(req.query.offset || '0',  10) || 0, 0);
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT r.id, r.rating, r.comment, r.created_at, r.tags_json, r.photos_json,
             c.nickname AS customer_name, c.avatar_url AS customer_avatar
        FROM retail_reviews r
@@ -4226,7 +4216,7 @@ router.get('/api/retail/products/:id/reviews', (req, res) => {
     photos: parseJsonArray(r.photos_json),
     tags_json: undefined, photos_json: undefined,
   }));
-  const total = tdb().prepare(
+  const total = db.prepare(
     'SELECT COUNT(*) AS n FROM retail_reviews WHERE product_id = ? AND is_visible = 1'
   ).get(id).n;
   res.set('Cache-Control', 'public, max-age=30');
@@ -4249,7 +4239,7 @@ router.post('/api/retail/review-photos', requireRetailAuth, express.json({ limit
     return res.status(400).json({ success: false, error: 'too_large' });
   }
   try {
-    const info = tdb().prepare(
+    const info = db.prepare(
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
        VALUES (?, ?, ?, ?, NULL)`
     ).run('review-photo', mime, sizeBytes, data);
@@ -4285,7 +4275,7 @@ router.post('/api/retail/products/:id/reviews', requireRetailAuth, express.json(
     .filter(p => typeof p === 'string' && /^\/api\/retail\/media\/\d+$/.test(p))
     .slice(0, REVIEW_MAX_PHOTOS);
   // Verify the customer actually bought this product on a delivered order
-  const eligible = tdb().prepare(
+  const eligible = db.prepare(
     `SELECT 1 FROM retail_orders o
        JOIN retail_order_items i ON i.order_id = o.id
       WHERE o.id = ? AND o.customer_id = ?
@@ -4294,7 +4284,7 @@ router.post('/api/retail/products/:id/reviews', requireRetailAuth, express.json(
   ).get(orderId, req.customer.id, productId);
   if (!eligible) return res.status(403).json({ success: false, error: 'not_eligible' });
   try {
-    const info = tdb().prepare(
+    const info = db.prepare(
       `INSERT INTO retail_reviews
          (customer_id, product_id, order_id, rating, comment, tags_json, photos_json)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -4338,7 +4328,7 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
     args.push(productId);
   }
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT r.id, r.rating, r.comment, r.is_visible, r.created_at,
             r.tags_json, r.photos_json,
             r.product_id, r.order_id, r.customer_id,
@@ -4360,12 +4350,12 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
     photos: parseJsonArray(r.photos_json),
     tags_json: undefined, photos_json: undefined,
   }));
-  const total = tdb().prepare(
+  const total = db.prepare(
     `SELECT COUNT(*) AS n FROM retail_reviews r ${whereSql}`
   ).get(...args).n;
   // Aggregate counts for the filter chips so staff can see "12 hidden"
   // without flipping the filter.
-  const summary = tdb().prepare(
+  const summary = db.prepare(
     `SELECT
        SUM(CASE WHEN is_visible = 1 THEN 1 ELSE 0 END) AS visible,
        SUM(CASE WHEN is_visible = 0 THEN 1 ELSE 0 END) AS hidden,
@@ -4383,10 +4373,10 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
 // shape PATCH-style so we can grow this without an API rename.
 router.patch('/api/retail-admin/reviews/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const exists = tdb().prepare('SELECT id FROM retail_reviews WHERE id = ?').get(id);
+  const exists = db.prepare('SELECT id FROM retail_reviews WHERE id = ?').get(id);
   if (!exists) return res.status(404).json({ success: false, error: 'not_found' });
   if ('is_visible' in (req.body || {})) {
-    tdb().prepare('UPDATE retail_reviews SET is_visible = ? WHERE id = ?')
+    db.prepare('UPDATE retail_reviews SET is_visible = ? WHERE id = ?')
       .run(req.body.is_visible ? 1 : 0, id);
   }
   res.json({ success: true });
@@ -4406,7 +4396,7 @@ router.patch('/api/retail-admin/reviews/:id', requireRetailAdmin, express.json()
 // Staff transitions live under /api/retail-admin/orders/:id/refund/...
 function logRefundEvent({ orderId, event, amount = null, note = null, userId = null, customerId = null, meta = null }) {
   try {
-    tdb().prepare(
+    db.prepare(
       `INSERT INTO retail_refund_events (order_id, event, amount, note, user_id, customer_id, meta_json)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(orderId, event, amount, note, userId, customerId, meta ? JSON.stringify(meta) : null);
@@ -4417,7 +4407,7 @@ function logRefundEvent({ orderId, event, amount = null, note = null, userId = n
 // list + total amount. Validates against the order's actual items + qty caps.
 function normalizeRefundLines(orderId, lines) {
   if (!Array.isArray(lines) || !lines.length) return { lines: null, amount: 0 };
-  const items = tdb().prepare(
+  const items = db.prepare(
     'SELECT id, product_id, qty, unit_price, line_total FROM retail_order_items WHERE order_id = ?'
   ).all(orderId);
   const byId = new Map(items.map(it => [it.id, it]));
@@ -4440,7 +4430,7 @@ function normalizeRefundLines(orderId, lines) {
 
 router.post('/api/retail/orders/:id/refund-request', requireRetailAuth, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const order = tdb().prepare(
+  const order = db.prepare(
     'SELECT id, status, refund_status, total FROM retail_orders WHERE id = ? AND customer_id = ?'
   ).get(id, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
@@ -4467,7 +4457,7 @@ router.post('/api/retail/orders/:id/refund-request', requireRetailAuth, express.
     const a = Math.max(0, Math.min(Number(req.body.amount) || 0, Number(order.total) || 0));
     amount = a > 0 ? +a.toFixed(2) : null;
   }
-  tdb().prepare(
+  db.prepare(
     `UPDATE retail_orders
         SET refund_requested_at = CURRENT_TIMESTAMP,
             refund_reason = ?,
@@ -4499,14 +4489,14 @@ router.post('/api/retail/orders/:id/refund-request', requireRetailAuth, express.
 // Terminal — to re-open they file a fresh request.
 router.post('/api/retail/orders/:id/refund-withdraw', requireRetailAuth, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const order = tdb().prepare(
+  const order = db.prepare(
     'SELECT id, refund_status FROM retail_orders WHERE id = ? AND customer_id = ?'
   ).get(id, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
   if (!['pending', 'reviewing'].includes(order.refund_status)) {
     return res.status(409).json({ success: false, error: 'not_open', refund_status: order.refund_status });
   }
-  tdb().prepare(
+  db.prepare(
     "UPDATE retail_orders SET refund_status = 'withdrawn', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
   ).run(id);
   logRefundEvent({ orderId: id, event: 'withdrawn', customerId: req.customer.id });
@@ -4519,7 +4509,7 @@ router.post('/api/retail/orders/:id/refund-withdraw', requireRetailAuth, express
 // to contact staff who use the admin status-transition endpoint.
 router.post('/api/retail/orders/:id/cancel', requireRetailAuth, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const order = tdb().prepare(
+  const order = db.prepare(
     'SELECT id, status FROM retail_orders WHERE id = ? AND customer_id = ?'
   ).get(id, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
@@ -4527,11 +4517,11 @@ router.post('/api/retail/orders/:id/cancel', requireRetailAuth, express.json(), 
     return res.status(409).json({ success: false, error: 'not_cancellable', current: order.status });
   }
   const reason = (req.body?.reason || '').slice(0, 200);
-  tdb().prepare(
+  db.prepare(
     "UPDATE retail_orders SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, cancelled_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
   ).run(reason || 'customer_cancelled', id);
   // Also flip the pending payment row so the admin queue stays consistent
-  tdb().prepare(
+  db.prepare(
     "UPDATE retail_payments SET status = 'cancelled' WHERE order_id = ? AND status = 'pending'"
   ).run(id);
   // Release soft-reservations so the stock returns to the available pool.
@@ -4546,15 +4536,15 @@ router.get('/api/retail/customer', requireRetailAuth, (req, res) => {
   // matches what they'd actually be able to redeem. Cheap when there's
   // nothing due, idempotent when called repeatedly.
   sweepExpiredPoints(req.customer.id);
-  const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(req.customer.id);
-  const addresses = tdb().prepare(
+  const fresh = db.prepare('SELECT * FROM retail_customers WHERE id = ?').get(req.customer.id);
+  const addresses = db.prepare(
     `SELECT id, recipient_name, phone, province, city, district, address, detail,
             postal_code, is_default, created_at, updated_at
        FROM retail_customer_addresses
       WHERE customer_id = ?
       ORDER BY is_default DESC, updated_at DESC`
   ).all(req.customer.id);
-  const favoriteCount = tdb().prepare(
+  const favoriteCount = db.prepare(
     'SELECT COUNT(*) AS n FROM retail_customer_favorites WHERE customer_id = ?'
   ).get(req.customer.id).n;
   res.json({
@@ -4583,8 +4573,8 @@ router.patch('/api/retail/customer', requireRetailAuth, express.json(), (req, re
   }
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
   params.push(req.customer.id);
-  tdb().prepare(`UPDATE retail_customers SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-  const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(req.customer.id);
+  db.prepare(`UPDATE retail_customers SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  const fresh = db.prepare('SELECT * FROM retail_customers WHERE id = ?').get(req.customer.id);
   res.json({ success: true, data: publicCustomer(fresh) });
 });
 
@@ -4605,7 +4595,7 @@ router.post('/api/retail/customer/avatar', requireRetailAuth, express.json({ lim
     return res.status(400).json({ success: false, error: 'too_large' });
   }
   try {
-    const info = tdb().prepare(
+    const info = db.prepare(
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
        VALUES (?, ?, ?, ?, NULL)`
     ).run('avatar', mime, sizeBytes, data);
@@ -4637,7 +4627,7 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), (req,
   const entries = Object.entries(body);
   if (!entries.length) return res.status(400).json({ success: false, error: 'no_updates' });
 
-  const upsert = tdb().prepare(
+  const upsert = db.prepare(
     `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
      VALUES (?, ?, CURRENT_TIMESTAMP, ?)
      ON CONFLICT(key) DO UPDATE SET
@@ -4645,7 +4635,7 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), (req,
        updated_at = CURRENT_TIMESTAMP,
        updated_by = excluded.updated_by`
   );
-  const tx = tdb().transaction(() => {
+  const tx = db.transaction(() => {
     for (const [k, v] of entries) upsert.run(k, JSON.stringify(v), req.user.id);
   });
   try { tx(); }
@@ -4666,7 +4656,7 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), (req,
 // Any field absent from the body is left untouched.
 router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare('SELECT id, name_en FROM products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
+  const existing = db.prepare('SELECT id, name_en FROM products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
 
   const sets = [];
@@ -4728,7 +4718,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   sets.push('updated_at = CURRENT_TIMESTAMP');
   params.push(id);
   try {
-    tdb().prepare(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+    db.prepare(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   } catch (e) {
     if (String(e.message || '').includes('UNIQUE')) return res.status(409).json({ success: false, error: 'sku_taken' });
     throw e;
@@ -4739,7 +4729,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // Return the same shape as GET /api/retail-admin/products row + the
   // hydrated description_blocks JSON, so the page can update its card
   // and re-open the editor with fresh data.
-  const row = tdb().prepare(
+  const row = db.prepare(
     `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, stock_qty, ship_modes,
             description_en, description_cn, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
@@ -4772,7 +4762,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   const ship = [...new Set(String(b.ship_modes || 'air,land').split(',').map(s => s.trim().toLowerCase()).filter(m => m === 'air' || m === 'land'))];
   let info;
   try {
-    info = tdb().prepare(
+    info = db.prepare(
       `INSERT INTO products
          (name_en, name_cn, sku, category, weight, sell_price, stock_qty, ship_modes,
           description_en, description_cn, image_data, is_published, is_active, created_at, updated_at)
@@ -4791,7 +4781,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   }
   const id = info.lastInsertRowid;
   logActivity(req.user.id, req.user.username, 'create', 'product_retail', id, { name: name_en || name_cn }, req.ip);
-  const row = tdb().prepare(
+  const row = db.prepare(
     `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, stock_qty, ship_modes,
             description_en, description_cn, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
@@ -4806,9 +4796,9 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
 // Soft-delete a product from the Mini App Backend (hide from shop + lists).
 router.delete('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare('SELECT id, name_en FROM products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
+  const existing = db.prepare('SELECT id, name_en FROM products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
-  tdb().prepare('UPDATE products SET is_active = 0, is_published = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  db.prepare('UPDATE products SET is_active = 0, is_published = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
   logActivity(req.user.id, req.user.username, 'delete', 'product_retail', id, { name: existing.name_en }, req.ip);
   res.json({ success: true });
 });
@@ -4822,7 +4812,7 @@ router.delete('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) =
 
 router.get('/api/retail-admin/flash-sales', requireRetailAdmin, (req, res) => {
   const now = Date.now();
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT p.id, p.name_en, p.name_cn, p.sku, p.weight AS size,
             p.sell_price, p.image_url, p.image_data, p.is_published,
             p.flash_price, p.flash_starts_at, p.flash_ends_at,
@@ -4850,7 +4840,7 @@ router.get('/api/retail-admin/flash-sales', requireRetailAdmin, (req, res) => {
 
 router.put('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare('SELECT id, name_en, flash_starts_at, flash_ends_at FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1').get(id);
+  const existing = db.prepare('SELECT id, name_en, flash_starts_at, flash_ends_at FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
 
   const body = req.body || {};
@@ -4880,7 +4870,7 @@ router.put('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, expr
     String(existing.flash_starts_at || '') !== String(starts || '') ||
     String(existing.flash_ends_at   || '') !== String(ends   || '');
 
-  tdb().prepare(
+  db.prepare(
     `UPDATE products
         SET flash_price       = ?,
             flash_starts_at   = ?,
@@ -4894,7 +4884,7 @@ router.put('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, expr
   logActivity(req.user.id, req.user.username, 'update', 'product_flash_sale', id,
     { name: existing.name_en, price, starts, ends, limit, reset: windowChanged }, req.ip);
 
-  const fresh = tdb().prepare(
+  const fresh = db.prepare(
     `SELECT id, name_en, flash_price, flash_starts_at, flash_ends_at,
             flash_stock_limit, flash_sold
        FROM products WHERE id = ?`
@@ -4904,9 +4894,9 @@ router.put('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, expr
 
 router.delete('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare('SELECT id, name_en FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1').get(id);
+  const existing = db.prepare('SELECT id, name_en FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
-  tdb().prepare(
+  db.prepare(
     `UPDATE products
         SET flash_price = NULL, flash_starts_at = NULL, flash_ends_at = NULL,
             flash_stock_limit = NULL, flash_sold = 0,
@@ -4923,7 +4913,7 @@ router.delete('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, (
 // carries a usage_count so the admin can see how many published products
 // reference it before deleting.
 router.get('/api/retail-admin/categories', requireRetailAdmin, (req, res) => {
-  const rows = tdb().prepare(`
+  const rows = db.prepare(`
     SELECT c.id, c.name, c.sort_order,
       (SELECT COUNT(*) FROM products p
         WHERE p.category = c.name AND COALESCE(p.is_active, 1) = 1) AS usage_count
@@ -4940,8 +4930,8 @@ router.get('/api/retail-admin/categories', requireRetailAdmin, (req, res) => {
 router.post('/api/retail-admin/categories/reorder', requireRetailAdmin, express.json(), (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids : null;
   if (!ids || !ids.length) return res.status(400).json({ success: false, error: 'ids_required' });
-  const stmt = tdb().prepare("UPDATE categories SET sort_order = ? WHERE id = ? AND kind = 'product'");
-  const tx = tdb().transaction((ordered) => {
+  const stmt = db.prepare("UPDATE categories SET sort_order = ? WHERE id = ? AND kind = 'product'");
+  const tx = db.transaction((ordered) => {
     ordered.forEach((id, i) => stmt.run(i + 1, id));
   });
   try {
@@ -4957,15 +4947,15 @@ router.post('/api/retail-admin/categories/reorder', requireRetailAdmin, express.
 
 router.patch('/api/retail-admin/categories/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare("SELECT id, name FROM categories WHERE id = ? AND kind = 'product'").get(id);
+  const existing = db.prepare("SELECT id, name FROM categories WHERE id = ? AND kind = 'product'").get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
   const name = (req.body?.name || '').trim();
   if (!name) return res.status(400).json({ success: false, error: 'name_required' });
   if (name === existing.name) return res.json({ success: true, data: existing });
   try {
-    tdb().prepare("UPDATE categories SET name = ? WHERE id = ?").run(name, id);
+    db.prepare("UPDATE categories SET name = ? WHERE id = ?").run(name, id);
     // Propagate the rename to products that referenced the old name.
-    tdb().prepare("UPDATE products SET category = ? WHERE category = ?").run(name, existing.name);
+    db.prepare("UPDATE products SET category = ? WHERE category = ?").run(name, existing.name);
     logActivity(req.user.id, req.user.username, 'update', 'category', id,
                 { kind: 'product', from: existing.name, to: name }, req.ip);
     res.json({ success: true, data: { id, name } });
@@ -4979,9 +4969,9 @@ router.post('/api/retail-admin/categories', requireRetailAdmin, express.json(), 
   const name = (req.body?.name || '').trim();
   if (!name) return res.status(400).json({ success: false, error: 'name_required' });
   // Append to the end so new entries don't reshuffle existing ordering.
-  const maxRow = tdb().prepare("SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories WHERE kind = 'product'").get();
+  const maxRow = db.prepare("SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories WHERE kind = 'product'").get();
   try {
-    const r = tdb().prepare("INSERT INTO categories (kind, name, sort_order) VALUES ('product', ?, ?)").run(name, (maxRow.m || 0) + 1);
+    const r = db.prepare("INSERT INTO categories (kind, name, sort_order) VALUES ('product', ?, ?)").run(name, (maxRow.m || 0) + 1);
     logActivity(req.user.id, req.user.username, 'create', 'category', r.lastInsertRowid,
                 { kind: 'product', name }, req.ip);
     res.json({ success: true, data: { id: r.lastInsertRowid, name, sort_order: (maxRow.m || 0) + 1, usage_count: 0 } });
@@ -4993,11 +4983,11 @@ router.post('/api/retail-admin/categories', requireRetailAdmin, express.json(), 
 
 router.delete('/api/retail-admin/categories/:id', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare("SELECT id, name FROM categories WHERE id = ? AND kind = 'product'").get(id);
+  const existing = db.prepare("SELECT id, name FROM categories WHERE id = ? AND kind = 'product'").get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
-  const usage = tdb().prepare("SELECT COUNT(*) AS n FROM products WHERE category = ? AND COALESCE(is_active, 1) = 1").get(existing.name).n;
+  const usage = db.prepare("SELECT COUNT(*) AS n FROM products WHERE category = ? AND COALESCE(is_active, 1) = 1").get(existing.name).n;
   if (usage > 0) return res.status(409).json({ success: false, error: 'in_use', usage_count: usage });
-  tdb().prepare('DELETE FROM categories WHERE id = ?').run(id);
+  db.prepare('DELETE FROM categories WHERE id = ?').run(id);
   logActivity(req.user.id, req.user.username, 'delete', 'category', id, { kind: 'product', name: existing.name }, req.ip);
   res.json({ success: true });
 });
@@ -5025,7 +5015,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   if (published === '1') sql += ' AND is_published = 1';
   if (published === '0') sql += ' AND is_published = 0';
   sql += ' ORDER BY is_published DESC, sort_order ASC, name_en ASC LIMIT 500';
-  const rows = tdb().prepare(sql).all(...params).map(r => {
+  const rows = db.prepare(sql).all(...params).map(r => {
     // Parse description_blocks server-side so the page gets an array,
     // not a string it has to JSON.parse itself on every render.
     if (typeof r.description_blocks === 'string' && r.description_blocks) {
@@ -5059,7 +5049,7 @@ router.get('/api/retail-admin/orders/unseen-count', requireRetailAdmin, (req, re
   // SQLite datetime() tolerates ISO strings; default to "epoch" when missing
   // so a fresh client sees a count of every non-cancelled order.
   const sinceSql = since || '1970-01-01T00:00:00.000Z';
-  const row = tdb().prepare(
+  const row = db.prepare(
     `SELECT COUNT(*) AS n, MAX(placed_at) AS latest
        FROM retail_orders
       WHERE status NOT IN ('cancelled','pending_payment')
@@ -5109,16 +5099,16 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   sql += ' ORDER BY o.placed_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
-  const rows = tdb().prepare(sql).all(...params);
+  const rows = db.prepare(sql).all(...params);
   for (const r of rows) {
-    r.item_count = tdb().prepare('SELECT COUNT(*) AS n FROM retail_order_items WHERE order_id = ?').get(r.id).n;
+    r.item_count = db.prepare('SELECT COUNT(*) AS n FROM retail_order_items WHERE order_id = ?').get(r.id).n;
   }
   res.json({ success: true, data: rows, meta: { limit, offset } });
 });
 
 router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const o = tdb().prepare(
+  const o = db.prepare(
     `SELECT o.*, c.nickname, c.avatar_url, c.phone AS customer_phone,
             s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
        FROM retail_orders o
@@ -5132,7 +5122,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
   // Idempotent: only the first open stamps seen_at.
   if (!o.seen_at) {
     const nowIso = new Date().toISOString();
-    try { tdb().prepare('UPDATE retail_orders SET seen_at = ? WHERE id = ? AND seen_at IS NULL').run(nowIso, id); } catch {}
+    try { db.prepare('UPDATE retail_orders SET seen_at = ? WHERE id = ? AND seen_at IS NULL').run(nowIso, id); } catch {}
     o.seen_at = nowIso;
   }
   if (o.address_json) { try { o.address = JSON.parse(o.address_json); } catch {} }
@@ -5142,7 +5132,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
   // This is idempotent — if rows already exist, nothing changes.
   const shipmentRows = ensureShipments(id);
 
-  o.items = tdb().prepare(
+  o.items = db.prepare(
     `SELECT id, product_id, name_en, name_cn, sku, size, image_url,
             qty, unit_price, line_total, options_json,
             ship_modes, needs_ice_pack, shipment_id
@@ -5154,12 +5144,12 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
     it.ship_modes_arr = parseShipModes(it.ship_modes);
     return it;
   });
-  o.payments = tdb().prepare(
+  o.payments = db.prepare(
     `SELECT id, method, amount, status, transaction_id, out_trade_no,
             qr_image_url, refunded_amount, created_at, completed_at
        FROM retail_payments WHERE order_id = ? ORDER BY id ASC`
   ).all(id);
-  o.reservations = tdb().prepare(
+  o.reservations = db.prepare(
     `SELECT r.id, r.store_id, r.product_id, r.qty, r.channel, r.status,
             r.expires_at, r.created_at, r.committed_at, r.released_at,
             p.name_en AS product_name_en, p.name_cn AS product_name_cn
@@ -5203,17 +5193,17 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
 // which then surfaces in the customer's profile. `unissue` reverts a mistake.
 router.put('/api/retail-admin/orders/:id/invoice', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const o = tdb().prepare('SELECT id, needs_invoice FROM retail_orders WHERE id = ?').get(id);
+  const o = db.prepare('SELECT id, needs_invoice FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (!o.needs_invoice) return res.status(400).json({ success: false, error: 'no_invoice_requested' });
   if (req.body?.action === 'unissue') {
-    tdb().prepare("UPDATE retail_orders SET invoice_status = 'requested', invoice_issued_at = NULL WHERE id = ?").run(id);
+    db.prepare("UPDATE retail_orders SET invoice_status = 'requested', invoice_issued_at = NULL WHERE id = ?").run(id);
     return res.json({ success: true });
   }
   const fileUrl = (req.body?.file_url || '').trim() || null;
   const number  = (req.body?.number || '').trim() || null;
   if (!fileUrl && !number) return res.status(400).json({ success: false, error: 'need_file_or_number' });
-  tdb().prepare(
+  db.prepare(
     `UPDATE retail_orders
         SET invoice_status = 'issued', invoice_file_url = ?, invoice_number = ?, invoice_issued_at = CURRENT_TIMESTAMP
       WHERE id = ?`
@@ -5236,7 +5226,7 @@ router.post('/api/retail-admin/invoice-file', requireRetailAdmin, express.json({
   const sizeBytes = Math.floor(m[2].length * 3 / 4);
   if (sizeBytes > 10 * 1024 * 1024) return res.status(400).json({ success: false, error: 'too_large' });
   try {
-    const info = tdb().prepare(
+    const info = db.prepare(
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
        VALUES (?, ?, ?, ?, NULL)`
     ).run('fapiao.pdf', 'application/pdf', sizeBytes, data);
@@ -5256,7 +5246,7 @@ router.get('/api/retail-admin/invoices', requireRetailAdmin, (req, res) => {
   let where = 'o.needs_invoice = 1';
   if (status === 'issued')        where += " AND o.invoice_status = 'issued'";
   else if (status === 'requested') where += " AND COALESCE(o.invoice_status, 'requested') <> 'issued'";
-  const orders = tdb().prepare(
+  const orders = db.prepare(
     `SELECT o.id, o.order_no, o.total, o.shipping_fee, o.placed_at,
             o.invoice_type, o.invoice_title, o.invoice_tax_id, o.invoice_email,
             o.invoice_status, o.invoice_file_url, o.invoice_number, o.invoice_issued_at,
@@ -5267,7 +5257,7 @@ router.get('/api/retail-admin/invoices', requireRetailAdmin, (req, res) => {
       ORDER BY (CASE WHEN o.invoice_status = 'issued' THEN 1 ELSE 0 END) ASC, o.placed_at DESC
       LIMIT 200`
   ).all();
-  const itemStmt = tdb().prepare(
+  const itemStmt = db.prepare(
     'SELECT product_id, name_en, name_cn, qty, line_total FROM retail_order_items WHERE order_id = ? ORDER BY id ASC'
   );
   for (const o of orders) o.items = itemStmt.all(o.id);
@@ -5275,8 +5265,8 @@ router.get('/api/retail-admin/invoices', requireRetailAdmin, (req, res) => {
     success: true,
     data: orders,
     counts: {
-      requested: tdb().prepare("SELECT COUNT(*) AS n FROM retail_orders WHERE needs_invoice = 1 AND COALESCE(invoice_status, 'requested') <> 'issued'").get().n,
-      issued:    tdb().prepare("SELECT COUNT(*) AS n FROM retail_orders WHERE needs_invoice = 1 AND invoice_status = 'issued'").get().n,
+      requested: db.prepare("SELECT COUNT(*) AS n FROM retail_orders WHERE needs_invoice = 1 AND COALESCE(invoice_status, 'requested') <> 'issued'").get().n,
+      issued:    db.prepare("SELECT COUNT(*) AS n FROM retail_orders WHERE needs_invoice = 1 AND invoice_status = 'issued'").get().n,
     },
   });
 });
@@ -5292,7 +5282,7 @@ router.post('/api/retail-admin/orders/:id/shipment-suggestion/apply',
   if (!sug || !sug.eligible) {
     return res.status(422).json({ success: false, error: 'not_eligible', reason: sug?.reason || 'unknown' });
   }
-  const shipments = tdb().prepare(
+  const shipments = db.prepare(
     `SELECT id, mode FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
   ).all(id);
   const byMode = new Map(shipments.map(s => [s.mode, s.id]));
@@ -5300,7 +5290,7 @@ router.post('/api/retail-admin/orders/:id/shipment-suggestion/apply',
   const ensureShipmentRow = (mode) => {
     if (byMode.has(mode)) return byMode.get(mode);
     const label = mode === 'air' ? 'Air shipment · 空运' : 'Land shipment · 陆运';
-    const r = tdb().prepare(
+    const r = db.prepare(
       `INSERT INTO retail_shipments (order_id, mode, label, created_at, updated_at)
        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
     ).run(id, mode, label);
@@ -5308,17 +5298,17 @@ router.post('/api/retail-admin/orders/:id/shipment-suggestion/apply',
     return r.lastInsertRowid;
   };
 
-  const reassign = tdb().prepare(
+  const reassign = db.prepare(
     `UPDATE retail_order_items SET shipment_id = ? WHERE id = ? AND order_id = ?`
   );
-  const tx = tdb().transaction(() => {
+  const tx = db.transaction(() => {
     for (const bk of sug.suggested.plan) {
       const sid = ensureShipmentRow(bk.mode);
       for (const itemId of bk.item_ids) reassign.run(sid, itemId, id);
     }
     // Delete now-empty shipments (only when the new plan collapses to one
     // bucket — rare here, but covers the land-floor fold-back path).
-    const emptyIds = tdb().prepare(
+    const emptyIds = db.prepare(
       `SELECT s.id FROM retail_shipments s
         WHERE s.order_id = ?
           AND NOT EXISTS (SELECT 1 FROM retail_order_items i WHERE i.shipment_id = s.id)`
@@ -5328,7 +5318,7 @@ router.post('/api/retail-admin/orders/:id/shipment-suggestion/apply',
       // edited it manually after the suggestion was built.
       const s = shipments.find(x => x.id === row.id);
       if (s && (s.tracking_number || s.tracking_carrier)) continue;
-      tdb().prepare(`DELETE FROM retail_shipments WHERE id = ?`).run(row.id);
+      db.prepare(`DELETE FROM retail_shipments WHERE id = ?`).run(row.id);
     }
   });
   tx();
@@ -5384,7 +5374,7 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
 router.put('/api/retail-admin/integrations', requireRetailAdmin, express.json(), (req, res) => {
   const body = req.body || {};
   const changedKeys = [];
-  const upsert = tdb().prepare(
+  const upsert = db.prepare(
     `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
        VALUES (?, ?, CURRENT_TIMESTAMP, ?)
      ON CONFLICT(key) DO UPDATE SET
@@ -5392,7 +5382,7 @@ router.put('/api/retail-admin/integrations', requireRetailAdmin, express.json(),
        updated_at = CURRENT_TIMESTAMP,
        updated_by = excluded.updated_by`
   );
-  const tx = tdb().transaction(() => {
+  const tx = db.transaction(() => {
     for (const [svc, fields] of Object.entries(INTEGRATION_KEYS)) {
       const incoming = body[svc];
       if (!incoming || typeof incoming !== 'object') continue;
@@ -5404,7 +5394,7 @@ router.put('/api/retail-admin/integrations', requireRetailAdmin, express.json(),
         if (val === undefined) continue;
         const cfgKey = `integrations.${svc}.${field}`;
         if (val === null || val === '') {
-          tdb().prepare('DELETE FROM storefront_config WHERE key = ?').run(cfgKey);
+          db.prepare('DELETE FROM storefront_config WHERE key = ?').run(cfgKey);
           delete process.env[meta.env];
         } else {
           upsert.run(cfgKey, JSON.stringify(String(val)), req.user.id);
@@ -5477,7 +5467,7 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
   if (!number || number.length > 64 || !/^[A-Za-z0-9\-]+$/.test(number)) {
     return res.status(400).json({ success: false, error: 'invalid_tracking_number' });
   }
-  const o = tdb().prepare('SELECT id, status, recipient_phone FROM retail_orders WHERE id = ?').get(id);
+  const o = db.prepare('SELECT id, status, recipient_phone FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (!['dispatched', 'delivered'].includes(o.status)) {
     return res.status(409).json({ success: false, error: 'not_shipped', status: o.status });
@@ -5494,7 +5484,7 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
   if (!shipment) return res.status(400).json({ success: false, error: 'invalid_shipment_id' });
 
   const derived = tracking.deriveStatusFromOrder(o.status);
-  tdb().prepare(
+  db.prepare(
     `UPDATE retail_shipments
         SET tracking_carrier = ?, tracking_number = ?,
             tracking_status = ?,
@@ -5511,7 +5501,7 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
   // keep working. When attaching to a non-primary shipment we don't touch
   // the legacy fields — the new shipments[] array is authoritative.
   if (shipment.id === shipments[0].id) {
-    tdb().prepare(
+    db.prepare(
       `UPDATE retail_orders
           SET tracking_carrier = ?, tracking_number = ?,
               tracking_status = ?,
@@ -5534,21 +5524,21 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
       recipientPhone: o.recipient_phone,
     }).then(r => {
       if (r.ok) {
-        tdb().prepare("UPDATE retail_shipments SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(shipment.id);
+        db.prepare("UPDATE retail_shipments SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(shipment.id);
         if (shipment.id === shipments[0].id) {
-          tdb().prepare("UPDATE retail_orders SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(id);
+          db.prepare("UPDATE retail_orders SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(id);
         }
       } else {
-        tdb().prepare("UPDATE retail_shipments SET tracking_kd100_subscribed = 0, tracking_last_error = ? WHERE id = ?").run(r.error, shipment.id);
+        db.prepare("UPDATE retail_shipments SET tracking_kd100_subscribed = 0, tracking_last_error = ? WHERE id = ?").run(r.error, shipment.id);
         console.warn(`[kd100.subscribe] order=${id} shipment=${shipment.id} number=${number}:`, r.error);
       }
     }).catch(e => {
-      tdb().prepare("UPDATE retail_shipments SET tracking_last_error = ? WHERE id = ?").run('subscribe_threw: ' + e.message, shipment.id);
+      db.prepare("UPDATE retail_shipments SET tracking_last_error = ? WHERE id = ?").run('subscribe_threw: ' + e.message, shipment.id);
       console.error(`[kd100.subscribe] threw for order=${id} shipment=${shipment.id}:`, e);
     });
   }
 
-  const fresh = tdb().prepare('SELECT * FROM retail_shipments WHERE id = ?').get(shipment.id);
+  const fresh = db.prepare('SELECT * FROM retail_shipments WHERE id = ?').get(shipment.id);
   res.json({
     success: true,
     data: {
@@ -5570,7 +5560,7 @@ router.get('/track/:orderNo/:trackingNumber', (req, res) => {
   const orderNo = String(req.params.orderNo || '');
   const number  = String(req.params.trackingNumber || '');
   const lang    = (req.query.lang === 'cn') ? 'cn' : 'en';
-  const o = tdb().prepare(
+  const o = db.prepare(
     `SELECT order_no, status, tracking_carrier, tracking_number,
             tracking_status, tracking_events_json, tracking_synced_at,
             tracking_scenario_data_json
@@ -5720,7 +5710,7 @@ router.post(
       if (!parsed || !parsed.number) {
         return res.json({ result: false, returnCode: '400', message: 'invalid payload' });
       }
-      const order = tdb().prepare(
+      const order = db.prepare(
         'SELECT id, status, tracking_number, tracking_status, tracking_scenario_notified FROM retail_orders WHERE tracking_number = ? ORDER BY id DESC LIMIT 1'
       ).get(parsed.number);
       if (!order) {
@@ -5747,7 +5737,7 @@ router.post(
       const scenarioCode = scenario?.scenario || null;
       const scenarioJson = scenario ? JSON.stringify(scenario) : null;
 
-      tdb().prepare(
+      db.prepare(
         `UPDATE retail_orders
             SET tracking_status            = ?,
                 tracking_events_json       = ?,
@@ -5764,7 +5754,7 @@ router.post(
       // kd100 push (same scenario) doesn't double-notify.
       if (scenario && scenarioCode !== order.tracking_scenario_notified) {
         notifyTrackingScenario(order.id, scenario);
-        tdb().prepare("UPDATE retail_orders SET tracking_scenario_notified = ? WHERE id = ?").run(scenarioCode, order.id);
+        db.prepare("UPDATE retail_orders SET tracking_scenario_notified = ? WHERE id = ?").run(scenarioCode, order.id);
       }
 
       // If delivered and the order is still 'dispatched', auto-flip to
@@ -5772,7 +5762,7 @@ router.post(
       // unlocks the review prompt for the customer.
       if (parsed.delivered && order.status === 'dispatched') {
         try {
-          tdb().prepare(
+          db.prepare(
             "UPDATE retail_orders SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'dispatched'"
           ).run(order.id);
           notifyOrderStatusChange(order.id, 'delivered');
@@ -5816,7 +5806,7 @@ router.post('/api/retail-admin/orders/bulk-tracking', requireRetailAdmin, expres
       continue;
     }
 
-    const o = tdb().prepare('SELECT id, status, recipient_phone FROM retail_orders WHERE order_no = ?').get(orderNo);
+    const o = db.prepare('SELECT id, status, recipient_phone FROM retail_orders WHERE order_no = ?').get(orderNo);
     if (!o) {
       results.push({ order_no: orderNo, ok: false, error: 'order_not_found' });
       continue;
@@ -5827,14 +5817,14 @@ router.post('/api/retail-admin/orders/bulk-tracking', requireRetailAdmin, expres
     // bail with a clear error on any earlier state.
     let autoDispatched = false;
     if (o.status === 'paid' || o.status === 'preparing') {
-      tdb().prepare("UPDATE retail_orders SET status = 'dispatched', dispatched_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('paid','preparing')").run(o.id);
+      db.prepare("UPDATE retail_orders SET status = 'dispatched', dispatched_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('paid','preparing')").run(o.id);
       autoDispatched = true;
     } else if (o.status !== 'dispatched' && o.status !== 'delivered') {
       results.push({ order_no: orderNo, ok: false, error: 'wrong_status:' + o.status });
       continue;
     }
 
-    tdb().prepare(
+    db.prepare(
       `UPDATE retail_orders
           SET tracking_carrier = ?, tracking_number = ?,
               tracking_status = ?,
@@ -5867,12 +5857,12 @@ router.post('/api/retail-admin/orders/bulk-tracking', requireRetailAdmin, expres
       orderId: q.orderId, carrierCode: q.carrier, trackingNumber: q.number, recipientPhone: q.phone,
     }).then(r => {
       if (r.ok) {
-        tdb().prepare("UPDATE retail_orders SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(q.orderId);
+        db.prepare("UPDATE retail_orders SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(q.orderId);
       } else {
-        tdb().prepare("UPDATE retail_orders SET tracking_kd100_subscribed = 0, tracking_last_error = ? WHERE id = ?").run(r.error, q.orderId);
+        db.prepare("UPDATE retail_orders SET tracking_kd100_subscribed = 0, tracking_last_error = ? WHERE id = ?").run(r.error, q.orderId);
       }
     }).catch(e => {
-      tdb().prepare("UPDATE retail_orders SET tracking_last_error = ? WHERE id = ?").run('subscribe_threw: ' + e.message, q.orderId);
+      db.prepare("UPDATE retail_orders SET tracking_last_error = ? WHERE id = ?").run('subscribe_threw: ' + e.message, q.orderId);
     });
   }
 });
@@ -5881,7 +5871,7 @@ router.post('/api/retail-admin/orders/bulk-tracking', requireRetailAdmin, expres
 router.post('/api/retail-admin/orders/:id/tracking/resubscribe', requireRetailAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const shipmentIdReq = req.query.shipment_id ? parseInt(req.query.shipment_id, 10) : null;
-  const o = tdb().prepare('SELECT id, recipient_phone FROM retail_orders WHERE id = ?').get(id);
+  const o = db.prepare('SELECT id, recipient_phone FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (!tracking.kd100Enabled()) return res.status(409).json({ success: false, error: 'kd100_not_configured' });
   const shipments = ensureShipments(id);
@@ -5894,12 +5884,12 @@ router.post('/api/retail-admin/orders/:id/tracking/resubscribe', requireRetailAd
     recipientPhone: o.recipient_phone,
   });
   if (r.ok) {
-    tdb().prepare("UPDATE retail_shipments SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(s.id);
+    db.prepare("UPDATE retail_shipments SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(s.id);
     if (s.id === shipments[0].id) {
-      tdb().prepare("UPDATE retail_orders SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(id);
+      db.prepare("UPDATE retail_orders SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(id);
     }
   } else {
-    tdb().prepare("UPDATE retail_shipments SET tracking_kd100_subscribed = 0, tracking_last_error = ? WHERE id = ?").run(r.error, s.id);
+    db.prepare("UPDATE retail_shipments SET tracking_kd100_subscribed = 0, tracking_last_error = ? WHERE id = ?").run(r.error, s.id);
   }
   res.json({ success: r.ok, error: r.error });
 });
@@ -5907,14 +5897,14 @@ router.post('/api/retail-admin/orders/:id/tracking/resubscribe', requireRetailAd
 router.delete('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const shipmentIdReq = req.query.shipment_id ? parseInt(req.query.shipment_id, 10) : null;
-  const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
+  const o = db.prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   const shipments = ensureShipments(id);
   const s = shipmentIdReq
     ? shipments.find(x => x.id === shipmentIdReq)
     : shipments[0];
   if (!s) return res.status(400).json({ success: false, error: 'invalid_shipment_id' });
-  tdb().prepare(
+  db.prepare(
     `UPDATE retail_shipments
         SET tracking_carrier = NULL, tracking_number = NULL,
             tracking_status = NULL, tracking_events_json = NULL,
@@ -5925,7 +5915,7 @@ router.delete('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, (req,
   ).run(s.id);
   // Mirror clear to legacy fields only when clearing the primary shipment.
   if (s.id === shipments[0].id) {
-    tdb().prepare(
+    db.prepare(
       `UPDATE retail_orders
           SET tracking_carrier = NULL, tracking_number = NULL,
               tracking_status = NULL, tracking_events_json = NULL,
@@ -5956,7 +5946,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   const def = STATUS_TRANSITIONS[status];
   if (!def) return res.status(400).json({ success: false, error: 'invalid_status' });
 
-  const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
+  const o = db.prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (!def.prev.includes(o.status)) {
     return res.status(409).json({ success: false, error: 'invalid_transition', from: o.status, to: status });
@@ -5972,7 +5962,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     sets.push("refund_status = 'approved'");
   }
   params.push(id);
-  tdb().prepare(`UPDATE retail_orders SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  db.prepare(`UPDATE retail_orders SET ${sets.join(', ')} WHERE id = ?`).run(...params);
 
   logActivity(req.user.id, req.user.username, 'status_change', 'retail_order', id, { from: o.status, to: status, reason }, req.ip);
 
@@ -6002,8 +5992,8 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // Fast-forward all the way through approve + paid in one shot — legacy
     // path. New flows should use POST /refund/approve + /refund/payout for
     // explicit, auditable steps.
-    const fullTotal = +(tdb().prepare('SELECT total FROM retail_orders WHERE id = ?').get(id)?.total || 0);
-    tdb().prepare(
+    const fullTotal = +(db.prepare('SELECT total FROM retail_orders WHERE id = ?').get(id)?.total || 0);
+    db.prepare(
       `UPDATE retail_orders
           SET refund_amount_approved = COALESCE(refund_amount_approved, ?),
               refund_amount_paid     = COALESCE(refund_amount_paid,     ?),
@@ -6021,7 +6011,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     catch (e) { console.error('[inventory.reverse (refund)]', e); }
     // Mirror onto retail_payments for the audit trail.
     try {
-      tdb().prepare(
+      db.prepare(
         `UPDATE retail_payments SET refunded_amount = amount, status = 'refunded' WHERE order_id = ? AND status = 'success'`
       ).run(id);
     } catch (e) { console.error('[retail_payments refund-mirror]', e); }
@@ -6031,7 +6021,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   // Doesn't block the response — push is best-effort.
   notifyOrderStatusChange(id, status);
 
-  res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(id) });
+  res.json({ success: true, data: db.prepare('SELECT * FROM retail_orders WHERE id = ?').get(id) });
 });
 
 // ─── Refund processing workflow ───────────────────────────────────────
@@ -6068,7 +6058,7 @@ router.get('/api/retail-admin/refunds', requireRetailAdmin, (req, res) => {
   };
   const states = stateSets[filter] || stateSets.open;
   const placeholders = states.map(() => '?').join(',');
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT o.id, o.order_no, o.status, o.total, o.placed_at, o.delivered_at,
             o.refund_requested_at, o.refund_reviewed_at, o.refund_approved_at, o.refund_paid_at,
             o.refund_status, o.refund_reason, o.refund_review_note,
@@ -6101,12 +6091,12 @@ router.get('/api/retail-admin/refunds', requireRetailAdmin, (req, res) => {
 router.post('/api/retail-admin/orders/:id/refund/review', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const note = (req.body?.note || '').slice(0, 500);
-  const o = tdb().prepare('SELECT id, refund_status FROM retail_orders WHERE id = ?').get(id);
+  const o = db.prepare('SELECT id, refund_status FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (!['pending', 'reviewing'].includes(o.refund_status)) {
     return res.status(409).json({ success: false, error: 'not_reviewable', refund_status: o.refund_status });
   }
-  tdb().prepare(
+  db.prepare(
     `UPDATE retail_orders
         SET refund_status = 'reviewing',
             refund_reviewed_at = COALESCE(refund_reviewed_at, CURRENT_TIMESTAMP),
@@ -6129,7 +6119,7 @@ router.post('/api/retail-admin/orders/:id/refund/review', requireRetailAdmin, ex
 //   reverse_points: explicit override; default = full-refund? then true
 router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const o = tdb().prepare(
+  const o = db.prepare(
     'SELECT id, status, total, refund_status, refund_amount_requested, refund_lines_json FROM retail_orders WHERE id = ?'
   ).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
@@ -6167,7 +6157,7 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   const isFull = amount + 0.005 >= Number(o.total); // tolerance for ¥0.01 rounding
   const reversePoints = req.body?.reverse_points != null ? !!req.body.reverse_points : isFull;
 
-  tdb().prepare(
+  db.prepare(
     `UPDATE retail_orders
         SET refund_status = 'approved',
             refund_amount_approved = ?,
@@ -6193,7 +6183,7 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   }
   // Full refund flips the order's main status too.
   if (isFull && o.status !== 'refunded' && o.status !== 'cancelled') {
-    tdb().prepare("UPDATE retail_orders SET status = 'refunded' WHERE id = ?").run(id);
+    db.prepare("UPDATE retail_orders SET status = 'refunded' WHERE id = ?").run(id);
   }
 
   logRefundEvent({
@@ -6215,7 +6205,7 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
 // body: { method, reference?, amount?, note? }
 router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const o = tdb().prepare(
+  const o = db.prepare(
     'SELECT id, total, refund_status, refund_amount_approved FROM retail_orders WHERE id = ?'
   ).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
@@ -6234,7 +6224,7 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
     : Number(o.refund_amount_approved) || 0;
   if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount' });
 
-  tdb().prepare(
+  db.prepare(
     `UPDATE retail_orders
         SET refund_status = 'paid',
             refund_amount_paid = ?,
@@ -6249,7 +6239,7 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
 
   // Mirror onto retail_payments so reconciliation reports see it.
   try {
-    tdb().prepare(
+    db.prepare(
       `UPDATE retail_payments
           SET refunded_amount = MIN(amount, COALESCE(refunded_amount, 0) + ?),
               status = CASE WHEN amount <= COALESCE(refunded_amount, 0) + ? THEN 'refunded' ELSE status END
@@ -6276,12 +6266,12 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
 function rejectRefundHandler(req, res) {
   const id = parseInt(req.params.id, 10);
   const note = (req.body?.note || '').slice(0, 500);
-  const o = tdb().prepare('SELECT id, refund_status FROM retail_orders WHERE id = ?').get(id);
+  const o = db.prepare('SELECT id, refund_status FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (!['pending', 'reviewing'].includes(o.refund_status)) {
     return res.status(409).json({ success: false, error: 'no_pending_request', refund_status: o.refund_status });
   }
-  tdb().prepare(
+  db.prepare(
     `UPDATE retail_orders
         SET refund_status = 'rejected',
             refund_review_note = ?,
@@ -6307,7 +6297,7 @@ router.post('/api/retail-admin/orders/:id/refund-reject', requireRetailAdmin, ex
 // Event log — show the audit trail for one order's refund history.
 router.get('/api/retail-admin/orders/:id/refund/events', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const events = tdb().prepare(
+  const events = db.prepare(
     `SELECT e.id, e.event, e.amount, e.note, e.user_id, e.customer_id, e.meta_json, e.created_at,
             u.username AS user_username,
             c.nickname AS customer_nickname
@@ -6384,23 +6374,19 @@ function validateBlocks(blocks) {
 }
 
 function readLayout(key) {
-  const row = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+  const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
   if (!row) return [];
   try { const v = JSON.parse(row.value_json); return Array.isArray(v) ? v : []; }
   catch { return []; }
 }
-// Per-call (not a module-level prepared statement) so it binds to the
-// request's tenant connection via tdb(), not whatever db existed at load.
-function writeLayout(key, json, by) {
-  tdb().prepare(
-    `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
-     VALUES (?, ?, CURRENT_TIMESTAMP, ?)
-     ON CONFLICT(key) DO UPDATE SET
-       value_json = excluded.value_json,
-       updated_at = CURRENT_TIMESTAMP,
-       updated_by = excluded.updated_by`
-  ).run(key, json, by);
-}
+const writeLayout = db.prepare(
+  `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+   VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+   ON CONFLICT(key) DO UPDATE SET
+     value_json = excluded.value_json,
+     updated_at = CURRENT_TIMESTAMP,
+     updated_by = excluded.updated_by`
+);
 
 // ── CMS preview tokens ──────────────────────────────────────────────────
 // Short-lived bearer (string) tokens that gate the mini app's "preview
@@ -6503,7 +6489,7 @@ router.get('/api/retail-admin/storefront/preview-config', requireRetailAdmin, (r
   const live = loadConfig();
   // Walk the allowed-pages list and overlay any existing draft.
   for (const page of ALLOWED_PAGES) {
-    const draftRow = tdb().prepare(
+    const draftRow = db.prepare(
       'SELECT value_json FROM storefront_config WHERE key = ?'
     ).get(`cms.draft.${page}_layout`);
     if (!draftRow) continue;
@@ -6547,7 +6533,7 @@ router.put('/api/retail-admin/cms/layout/draft', requireRetailAdmin, express.jso
   const blocks = req.body?.blocks;
   const v = validateBlocks(blocks);
   if (v.error) return res.status(400).json({ success: false, error: v.error, details: v.details });
-  writeLayout(`cms.draft.${page}_layout`, JSON.stringify(blocks), req.user.id);
+  writeLayout.run(`cms.draft.${page}_layout`, JSON.stringify(blocks), req.user.id);
   res.json({ success: true, data: { page } });
 });
 
@@ -6558,7 +6544,7 @@ router.post('/api/retail-admin/cms/publish', requireRetailAdmin, express.json(),
   // Re-validate in case the draft was somehow written outside the editor
   const v = validateBlocks(draft);
   if (v.error) return res.status(400).json({ success: false, error: 'draft_invalid', details: v });
-  writeLayout(`${page}.layout`, JSON.stringify(draft), req.user.id);
+  writeLayout.run(`${page}.layout`, JSON.stringify(draft), req.user.id);
   logActivity(req.user.id, req.user.username, 'publish', `${page}_layout`, null, { blocks: draft.length, page }, req.ip);
   res.json({ success: true, data: { page, live: draft } });
 });
@@ -6569,7 +6555,7 @@ router.post('/api/retail-admin/cms/publish', requireRetailAdmin, express.json(),
 // the block reference, so cache invalidation is a non-issue.
 router.get('/api/retail/media/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const row = tdb().prepare('SELECT mime_type, data FROM retail_media WHERE id = ?').get(id);
+  const row = db.prepare('SELECT mime_type, data FROM retail_media WHERE id = ?').get(id);
   if (!row) return res.status(404).end();
   // data is "data:image/jpeg;base64,..." — strip prefix and stream bytes
   const m = /^data:[^;]+;base64,(.+)$/.exec(row.data);
@@ -6582,7 +6568,7 @@ router.get('/api/retail/media/:id', (req, res) => {
 // List for the picker UI. Lightweight — no `data` column so the response
 // stays small even with many uploads.
 router.get('/api/retail-admin/cms/media', requireRetailAdmin, (req, res) => {
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT id, filename, mime_type, size_bytes, width, height, uploaded_at
        FROM retail_media ORDER BY uploaded_at DESC LIMIT 200`
   ).all();
@@ -6599,7 +6585,7 @@ router.post('/api/retail-admin/cms/media', requireRetailAdmin, (req, res, next) 
     }
     if (!req.file) return res.status(400).json({ success: false, error: 'no_file' });
     const dataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    const info = tdb().prepare(
+    const info = db.prepare(
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
        VALUES (?, ?, ?, ?, ?)`
     ).run(
@@ -6623,7 +6609,7 @@ router.post('/api/retail-admin/cms/media', requireRetailAdmin, (req, res, next) 
 });
 
 router.delete('/api/retail-admin/cms/media/:id', requireRetailAdmin, (req, res) => {
-  const r = tdb().prepare('DELETE FROM retail_media WHERE id = ?').run(parseInt(req.params.id, 10));
+  const r = db.prepare('DELETE FROM retail_media WHERE id = ?').run(parseInt(req.params.id, 10));
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
   res.json({ success: true });
 });
@@ -6664,8 +6650,8 @@ router.get('/api/retail-admin/media/list', requireRetailAdmin, (req, res) => {
   else if (folder && /^\d+$/.test(folder)) { where.push('folder_id = ?'); params.push(parseInt(folder, 10)); }
 
   const sqlWhere = where.length ? 'WHERE ' + where.join(' AND ') : '';
-  const total = tdb().prepare(`SELECT COUNT(*) AS n FROM retail_media ${sqlWhere}`).get(...params).n;
-  const rows = tdb().prepare(
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM retail_media ${sqlWhere}`).get(...params).n;
+  const rows = db.prepare(
     `SELECT id, filename, mime_type, size_bytes, width, height, alt_text, tags, folder_id, uploaded_at, uploaded_by
        FROM retail_media ${sqlWhere}
        ORDER BY uploaded_at DESC, id DESC
@@ -6676,14 +6662,14 @@ router.get('/api/retail-admin/media/list', requireRetailAdmin, (req, res) => {
 
 // ── Folders ─────────────────────────────────────────────────────────
 router.get('/api/retail-admin/media/folders', requireRetailAdmin, (req, res) => {
-  const folders = tdb().prepare(
+  const folders = db.prepare(
     `SELECT f.id, f.name, f.parent_id, f.sort_order,
             (SELECT COUNT(*) FROM retail_media m WHERE m.folder_id = f.id) AS count
        FROM retail_media_folders f
        ORDER BY f.sort_order ASC, LOWER(f.name) ASC, f.id ASC`
   ).all();
-  const unsorted = tdb().prepare('SELECT COUNT(*) AS n FROM retail_media WHERE folder_id IS NULL').get().n;
-  const total    = tdb().prepare('SELECT COUNT(*) AS n FROM retail_media').get().n;
+  const unsorted = db.prepare('SELECT COUNT(*) AS n FROM retail_media WHERE folder_id IS NULL').get().n;
+  const total    = db.prepare('SELECT COUNT(*) AS n FROM retail_media').get().n;
   res.json({ success: true, data: { folders, unsorted_count: unsorted, total_count: total } });
 });
 
@@ -6692,10 +6678,10 @@ router.post('/api/retail-admin/media/folders', requireRetailAdmin, express.json(
   if (!name) return res.status(400).json({ success: false, error: 'name_required' });
   const parent_id = req.body?.parent_id ? parseInt(req.body.parent_id, 10) : null;
   if (parent_id != null) {
-    const ok = tdb().prepare('SELECT 1 FROM retail_media_folders WHERE id = ?').get(parent_id);
+    const ok = db.prepare('SELECT 1 FROM retail_media_folders WHERE id = ?').get(parent_id);
     if (!ok) return res.status(400).json({ success: false, error: 'parent_not_found' });
   }
-  const info = tdb().prepare(
+  const info = db.prepare(
     `INSERT INTO retail_media_folders (name, parent_id) VALUES (?, ?)`
   ).run(name, parent_id);
   res.json({ success: true, data: { id: info.lastInsertRowid } });
@@ -6720,7 +6706,7 @@ router.patch('/api/retail-admin/media/folders/:id', requireRetailAdmin, express.
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
   sets.push('updated_at = CURRENT_TIMESTAMP');
   params.push(id);
-  const r = tdb().prepare(`UPDATE retail_media_folders SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  const r = db.prepare(`UPDATE retail_media_folders SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
   res.json({ success: true });
 });
@@ -6730,9 +6716,9 @@ router.patch('/api/retail-admin/media/folders/:id', requireRetailAdmin, express.
 // SET NULL).
 router.delete('/api/retail-admin/media/folders/:id', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const tx = tdb().transaction(() => {
-    tdb().prepare('UPDATE retail_media SET folder_id = NULL WHERE folder_id = ?').run(id);
-    tdb().prepare('DELETE FROM retail_media_folders WHERE id = ?').run(id);
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE retail_media SET folder_id = NULL WHERE folder_id = ?').run(id);
+    db.prepare('DELETE FROM retail_media_folders WHERE id = ?').run(id);
   });
   tx();
   res.json({ success: true });
@@ -6743,18 +6729,18 @@ router.post('/api/retail-admin/media/bulk-move', requireRetailAdmin, express.jso
   if (!ids.length) return res.status(400).json({ success: false, error: 'no_ids' });
   const folder_id = req.body?.folder_id == null ? null : parseInt(req.body.folder_id, 10);
   if (folder_id != null) {
-    const ok = tdb().prepare('SELECT 1 FROM retail_media_folders WHERE id = ?').get(folder_id);
+    const ok = db.prepare('SELECT 1 FROM retail_media_folders WHERE id = ?').get(folder_id);
     if (!ok) return res.status(400).json({ success: false, error: 'folder_not_found' });
   }
-  const stmt = tdb().prepare('UPDATE retail_media SET folder_id = ? WHERE id = ?');
+  const stmt = db.prepare('UPDATE retail_media SET folder_id = ? WHERE id = ?');
   let moved = 0;
-  const tx = tdb().transaction(() => { for (const id of ids) moved += stmt.run(folder_id, id).changes; });
+  const tx = db.transaction(() => { for (const id of ids) moved += stmt.run(folder_id, id).changes; });
   tx();
   res.json({ success: true, data: { moved } });
 });
 
 router.get('/api/retail-admin/media/tags', requireRetailAdmin, (req, res) => {
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT je.value AS tag, COUNT(*) AS n
        FROM retail_media m, json_each(COALESCE(m.tags,'[]')) je
        GROUP BY je.value
@@ -6770,10 +6756,10 @@ router.get('/api/retail-admin/media/usage', requireRetailAdmin, (req, res) => {
   const counts = {};
   const re = /\/api\/retail\/media\/(\d+)/g;
   const sources = [];
-  try { sources.push(...tdb().prepare(`SELECT value_json AS txt FROM storefront_config`).all()); } catch {}
-  try { sources.push(...tdb().prepare(`SELECT image_url AS txt FROM products WHERE image_url LIKE '%/api/retail/media/%'`).all()); } catch {}
-  try { sources.push(...tdb().prepare(`SELECT label_url AS txt FROM products WHERE label_url LIKE '%/api/retail/media/%'`).all()); } catch {}
-  try { sources.push(...tdb().prepare(`SELECT description_blocks AS txt FROM products WHERE description_blocks LIKE '%/api/retail/media/%'`).all()); } catch {}
+  try { sources.push(...db.prepare(`SELECT value_json AS txt FROM storefront_config`).all()); } catch {}
+  try { sources.push(...db.prepare(`SELECT image_url AS txt FROM products WHERE image_url LIKE '%/api/retail/media/%'`).all()); } catch {}
+  try { sources.push(...db.prepare(`SELECT label_url AS txt FROM products WHERE label_url LIKE '%/api/retail/media/%'`).all()); } catch {}
+  try { sources.push(...db.prepare(`SELECT description_blocks AS txt FROM products WHERE description_blocks LIKE '%/api/retail/media/%'`).all()); } catch {}
   for (const { txt } of sources) {
     if (!txt) continue;
     let m;
@@ -6795,7 +6781,7 @@ router.patch('/api/retail-admin/media/:id', requireRetailAdmin, express.json(), 
   if ('folder_id' in b) { sets.push('folder_id = ?'); params.push(b.folder_id == null ? null : parseInt(b.folder_id, 10)); }
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
   params.push(id);
-  const r = tdb().prepare(`UPDATE retail_media SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  const r = db.prepare(`UPDATE retail_media SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
   res.json({ success: true });
 });
@@ -6803,9 +6789,9 @@ router.patch('/api/retail-admin/media/:id', requireRetailAdmin, express.json(), 
 router.post('/api/retail-admin/media/bulk-delete', requireRetailAdmin, express.json(), (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(x => parseInt(x, 10)).filter(Boolean) : [];
   if (!ids.length) return res.status(400).json({ success: false, error: 'no_ids' });
-  const stmt = tdb().prepare('DELETE FROM retail_media WHERE id = ?');
+  const stmt = db.prepare('DELETE FROM retail_media WHERE id = ?');
   let deleted = 0;
-  const tx = tdb().transaction(() => { for (const id of ids) deleted += stmt.run(id).changes; });
+  const tx = db.transaction(() => { for (const id of ids) deleted += stmt.run(id).changes; });
   tx();
   res.json({ success: true, data: { deleted } });
 });
@@ -6816,9 +6802,9 @@ router.post('/api/retail-admin/media/bulk-tag', requireRetailAdmin, express.json
   const remove = normalizeTagList(req.body?.remove || []);
   if (!ids.length) return res.status(400).json({ success: false, error: 'no_ids' });
   if (!add.length && !remove.length) return res.status(400).json({ success: false, error: 'no_changes' });
-  const get = tdb().prepare('SELECT tags FROM retail_media WHERE id = ?');
-  const upd = tdb().prepare('UPDATE retail_media SET tags = ? WHERE id = ?');
-  const tx = tdb().transaction(() => {
+  const get = db.prepare('SELECT tags FROM retail_media WHERE id = ?');
+  const upd = db.prepare('UPDATE retail_media SET tags = ? WHERE id = ?');
+  const tx = db.transaction(() => {
     for (const id of ids) {
       const row = get.get(id); if (!row) continue;
       const cur = new Set(parseTags(row.tags));
@@ -6847,7 +6833,7 @@ router.post('/api/retail-admin/media/upload', requireRetailAdmin, (req, res) => 
     let tags = [];
     try { tags = normalizeTagList(JSON.parse(req.body?.tags || '[]')); } catch {}
     const dataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    const info = tdb().prepare(
+    const info = db.prepare(
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, alt_text, tags, uploaded_by)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(
@@ -6878,7 +6864,7 @@ router.post('/api/retail-admin/cms/revert-draft', requireRetailAdmin, express.js
   const page = pageKey(req);
   if (!page) return res.status(400).json({ success: false, error: 'invalid_page' });
   const live = readLayout(`${page}.layout`);
-  writeLayout(`cms.draft.${page}_layout`, JSON.stringify(live), req.user.id);
+  writeLayout.run(`cms.draft.${page}_layout`, JSON.stringify(live), req.user.id);
   res.json({ success: true, data: { page, draft: live } });
 });
 
@@ -6930,7 +6916,7 @@ function matchDeliveryZone(address) {
   const inGuangzhou = isGuangzhou(address.city) || /广州/.test(blob) || /guangzhou/i.test(blob);
 
   if (inGuangzhou) {
-    const rows = tdb().prepare(
+    const rows = db.prepare(
       `SELECT * FROM retail_delivery_zones WHERE zone_type = 'gz_district' AND is_active = 1`
     ).all();
     for (const r of rows) {
@@ -6942,7 +6928,7 @@ function matchDeliveryZone(address) {
     }
     return null;
   }
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT * FROM retail_delivery_zones WHERE zone_type = 'city' AND is_active = 1`
   ).all();
   for (const r of rows) {
@@ -7319,7 +7305,7 @@ function priceCart(items, customerId) {
     const pid = parseInt(it.product_id, 10);
     const qty = Number(it.qty);
     if (!pid || !(qty > 0)) return { error: 'invalid_item', subtotal: 0, totalQty: 0 };
-    const p = tdb().prepare(
+    const p = db.prepare(
       `SELECT id, sell_price AS price,
               flash_price, flash_starts_at, flash_ends_at,
               flash_stock_limit, flash_sold
@@ -7330,7 +7316,7 @@ function priceCart(items, customerId) {
     let optionDelta = 0;
     if (Array.isArray(it.choices) && it.choices.length) {
       const placeholders = it.choices.map(() => '?').join(',');
-      const choices = tdb().prepare(
+      const choices = db.prepare(
         `SELECT c.price_delta, o.product_id
            FROM retail_product_option_choices c
            JOIN retail_product_options o ON o.id = c.option_id
@@ -7386,7 +7372,7 @@ function nextEarnExpiry() {
   if (!(months > 0)) return null;
   // SQLite computes the date — pass as ISO string to keep TZ consistent
   // with CURRENT_TIMESTAMP (UTC).
-  const row = tdb().prepare(`SELECT datetime('now', ?) AS dt`).get(`+${months} months`);
+  const row = db.prepare(`SELECT datetime('now', ?) AS dt`).get(`+${months} months`);
   return row?.dt || null;
 }
 
@@ -7397,7 +7383,7 @@ function nextEarnExpiry() {
 // any balance-affecting operation (award / redeem / customer read).
 function sweepExpiredPoints(customerId) {
   if (!customerId) return 0;
-  const due = tdb().prepare(
+  const due = db.prepare(
     `SELECT id, delta, expires_at FROM retail_points_transactions
       WHERE customer_id = ?
         AND delta > 0
@@ -7407,28 +7393,28 @@ function sweepExpiredPoints(customerId) {
   ).all(customerId);
   if (!due.length) return 0;
   // Mark the original earn rows as swept so we don't re-process them.
-  const markSwept = tdb().prepare(
+  const markSwept = db.prepare(
     `UPDATE retail_points_transactions SET expired_at = CURRENT_TIMESTAMP WHERE id = ?`
   );
-  const insertExpiry = tdb().prepare(
+  const insertExpiry = db.prepare(
     `INSERT INTO retail_points_transactions
        (customer_id, delta, balance_after, source, note, created_at)
      VALUES (?, ?, ?, 'expiry', ?, CURRENT_TIMESTAMP)`
   );
   let totalExpired = 0;
-  const tx = tdb().transaction(() => {
+  const tx = db.transaction(() => {
     for (const b of due) {
       // Only deduct what's still on the books — clamp at the current
       // balance so we don't drive it negative for batches the customer
       // already redeemed away (we accept that an already-spent batch
       // expiring is a no-op from the customer's view).
-      const cur = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(customerId).points_balance;
+      const cur = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(customerId).points_balance;
       const take = Math.min(b.delta, cur);
       if (take > 0) {
-        tdb().prepare(
+        db.prepare(
           'UPDATE retail_customers SET points_balance = points_balance - ? WHERE id = ?'
         ).run(take, customerId);
-        const after = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(customerId).points_balance;
+        const after = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(customerId).points_balance;
         insertExpiry.run(customerId, -take, after, `Expired batch from ${b.expires_at}`);
         totalExpired += take;
       }
@@ -7457,21 +7443,21 @@ function pointsRequiredFor(cash) {
 // Reverse a redemption when an order is refunded. Idempotent — checks for
 // an existing 'refund_reverse' row tagged to this order's redeem.
 function reverseOrderRedeem(orderId) {
-  const redeem = tdb().prepare(
+  const redeem = db.prepare(
     "SELECT customer_id, delta FROM retail_points_transactions WHERE order_id = ? AND source = 'order_redeem'"
   ).get(orderId);
   if (!redeem || redeem.delta >= 0) return 0;
   const refundedPts = -redeem.delta;
-  const already = tdb().prepare(
+  const already = db.prepare(
     "SELECT id FROM retail_points_transactions WHERE order_id = ? AND source = 'refund_reverse' AND delta > 0"
   ).get(orderId);
   if (already) return 0;
-  const tx = tdb().transaction(() => {
-    tdb().prepare(
+  const tx = db.transaction(() => {
+    db.prepare(
       'UPDATE retail_customers SET points_balance = points_balance + ? WHERE id = ?'
     ).run(refundedPts, redeem.customer_id);
-    const after = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(redeem.customer_id).points_balance;
-    tdb().prepare(
+    const after = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(redeem.customer_id).points_balance;
+    db.prepare(
       `INSERT INTO retail_points_transactions
          (customer_id, delta, balance_after, source, order_id, note)
        VALUES (?, ?, ?, 'refund_reverse', ?, 'Redemption returned on refund')`
@@ -7484,13 +7470,13 @@ function reverseOrderRedeem(orderId) {
 // Award earn-points on payment success. Idempotent — checks the ledger
 // for an existing order_earn row for this order before inserting.
 function awardOrderPoints(orderId) {
-  const o = tdb().prepare(
+  const o = db.prepare(
     'SELECT id, customer_id, subtotal, points_earned FROM retail_orders WHERE id = ?'
   ).get(orderId);
   if (!o) return 0;
   // Sweep first so the awarded balance is based on a clean (post-expiry) state.
   sweepExpiredPoints(o.customer_id);
-  const already = tdb().prepare(
+  const already = db.prepare(
     "SELECT id FROM retail_points_transactions WHERE order_id = ? AND source = 'order_earn'"
   ).get(orderId);
   if (already) return o.points_earned || 0;
@@ -7501,20 +7487,20 @@ function awardOrderPoints(orderId) {
   // single idempotency marker for both points-award AND lifetime_spend bump
   // — otherwise sub-rate orders (subtotal below points.earnRate) would be
   // double-counted on retries.
-  const tx = tdb().transaction(() => {
-    tdb().prepare(
+  const tx = db.transaction(() => {
+    db.prepare(
       'UPDATE retail_customers SET lifetime_spend = COALESCE(lifetime_spend, 0) + ?, points_balance = points_balance + ? WHERE id = ?'
     ).run(spend, pts, o.customer_id);
-    const after = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(o.customer_id).points_balance;
+    const after = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(o.customer_id).points_balance;
     const note  = pts > 0
       ? `Order ${orderId} earned ${pts} pts`
       : `Order ${orderId} (subtotal ¥${spend.toFixed(2)}, below earn threshold)`;
-    tdb().prepare(
+    db.prepare(
       `INSERT INTO retail_points_transactions
          (customer_id, delta, balance_after, source, order_id, note, expires_at)
        VALUES (?, ?, ?, 'order_earn', ?, ?, ?)`
     ).run(o.customer_id, pts, after, orderId, note, expiresAt);
-    tdb().prepare('UPDATE retail_orders SET points_earned = ? WHERE id = ?').run(pts, orderId);
+    db.prepare('UPDATE retail_orders SET points_earned = ? WHERE id = ?').run(pts, orderId);
   });
   try { tx(); } catch (e) { console.error('[awardOrderPoints]', e); return 0; }
   return pts;
@@ -7526,22 +7512,22 @@ function awardOrderPoints(orderId) {
 // The refund_reverse row is the idempotency marker; it is always inserted
 // so a sub-rate order (earn delta=0) still gets its spend reversed exactly once.
 function reverseOrderPoints(orderId) {
-  const earn = tdb().prepare(
+  const earn = db.prepare(
     "SELECT customer_id, delta FROM retail_points_transactions WHERE order_id = ? AND source = 'order_earn'"
   ).get(orderId);
   if (!earn) return 0;
-  const already = tdb().prepare(
+  const already = db.prepare(
     "SELECT id FROM retail_points_transactions WHERE order_id = ? AND source = 'refund_reverse'"
   ).get(orderId);
   if (already) return 0;
-  const o = tdb().prepare('SELECT subtotal FROM retail_orders WHERE id = ?').get(orderId);
+  const o = db.prepare('SELECT subtotal FROM retail_orders WHERE id = ?').get(orderId);
   const spend = Math.max(0, Number(o?.subtotal) || 0);
-  const tx = tdb().transaction(() => {
-    tdb().prepare(
+  const tx = db.transaction(() => {
+    db.prepare(
       'UPDATE retail_customers SET lifetime_spend = MAX(0, COALESCE(lifetime_spend, 0) - ?), points_balance = points_balance - ? WHERE id = ?'
     ).run(spend, earn.delta, earn.customer_id);
-    const after = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(earn.customer_id).points_balance;
-    tdb().prepare(
+    const after = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(earn.customer_id).points_balance;
+    db.prepare(
       `INSERT INTO retail_points_transactions
          (customer_id, delta, balance_after, source, order_id, note)
        VALUES (?, ?, ?, 'refund_reverse', ?, 'Reversed on refund')`
@@ -7564,7 +7550,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
   // payload so the new-address form can preview fees before saving.
   let address;
   if (addressId) {
-    address = tdb().prepare(
+    address = db.prepare(
       'SELECT * FROM retail_customer_addresses WHERE id = ? AND customer_id = ?'
     ).get(addressId, req.customer.id);
     if (!address) return res.status(400).json({ success: false, error: 'address_not_found' });
@@ -7606,7 +7592,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
   // The always-on fields (balance / rate / max usable) let the mini-app
   // render the "Use my points" toggle even before a payment method is set.
   sweepExpiredPoints(req.customer.id);
-  const _c = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
+  const _c = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
   const pointsBalance = _c?.points_balance || 0;
   const redeemRate = pointsRedeemRate();
   const paymentMethodPreview = body.payment_method || null;
@@ -7739,7 +7725,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
 
 // ─── Top-up packages (customer-facing) ──────────────────────────────────
 router.get('/api/retail/topup-packages', requireRetailAuth, (req, res) => {
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT id, amount, bonus_points, title_en, title_cn, description_en, description_cn
        FROM retail_topup_packages WHERE is_active = 1
       ORDER BY sort_order ASC, amount ASC`
@@ -7758,11 +7744,11 @@ router.post('/api/retail/topup/create', requireRetailAuth, express.json(), (req,
   if (!packageId) return res.status(400).json({ success: false, error: 'package_id_required' });
   if (!['wechat','alipay'].includes(paymentMethod)) return res.status(400).json({ success: false, error: 'invalid_payment_method' });
 
-  const pkg = tdb().prepare('SELECT * FROM retail_topup_packages WHERE id = ? AND is_active = 1').get(packageId);
+  const pkg = db.prepare('SELECT * FROM retail_topup_packages WHERE id = ? AND is_active = 1').get(packageId);
   if (!pkg) return res.status(404).json({ success: false, error: 'package_not_found' });
 
   const outTradeNo = `TU${Date.now()}${req.customer.id}`;
-  const info = tdb().prepare(
+  const info = db.prepare(
     `INSERT INTO retail_topup_transactions
        (customer_id, package_id, amount, bonus_points, payment_method, status, out_trade_no)
      VALUES (?, ?, ?, ?, ?, 'pending', ?)`
@@ -7789,20 +7775,20 @@ router.post('/api/retail/topup/create', requireRetailAuth, express.json(), (req,
 // writes a points-ledger row. Idempotent. Used both from DEV-mode auto-pay
 // and from the real WeChat/Alipay async callbacks.
 function finalizeTopup(topupId) {
-  const t = tdb().prepare('SELECT * FROM retail_topup_transactions WHERE id = ?').get(topupId);
+  const t = db.prepare('SELECT * FROM retail_topup_transactions WHERE id = ?').get(topupId);
   if (!t || t.status === 'success') return false;
   sweepExpiredPoints(t.customer_id);
   const expiresAt = nextEarnExpiry();
-  const tx = tdb().transaction(() => {
-    tdb().prepare(
+  const tx = db.transaction(() => {
+    db.prepare(
       "UPDATE retail_topup_transactions SET status = 'success', paid_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'"
     ).run(topupId);
-    tdb().prepare(
+    db.prepare(
       'UPDATE retail_customers SET balance = balance + ?, points_balance = points_balance + ? WHERE id = ?'
     ).run(t.amount, t.bonus_points || 0, t.customer_id);
     if (t.bonus_points && t.bonus_points > 0) {
-      const after = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(t.customer_id).points_balance;
-      tdb().prepare(
+      const after = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(t.customer_id).points_balance;
+      db.prepare(
         `INSERT INTO retail_points_transactions
            (customer_id, delta, balance_after, source, topup_id, note, expires_at)
          VALUES (?, ?, ?, 'topup_bonus', ?, ?, ?)`
@@ -7817,7 +7803,7 @@ router.get('/api/retail/points/transactions', requireRetailAuth, (req, res) => {
   sweepExpiredPoints(req.customer.id);
   const limit  = Math.min(parseInt(req.query.limit, 10) || 50, 200);
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT id, delta, balance_after, source, order_id, topup_id, note, created_at,
             expires_at, expired_at
        FROM retail_points_transactions WHERE customer_id = ?
@@ -7829,7 +7815,7 @@ router.get('/api/retail/points/transactions', requireRetailAuth, (req, res) => {
 router.get('/api/retail/topup/transactions', requireRetailAuth, (req, res) => {
   const limit  = Math.min(parseInt(req.query.limit, 10) || 50, 200);
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT id, amount, bonus_points, payment_method, status, out_trade_no, created_at, paid_at
        FROM retail_topup_transactions WHERE customer_id = ?
       ORDER BY id DESC LIMIT ? OFFSET ?`
@@ -7856,7 +7842,7 @@ router.get('/api/retail-admin/china-regions', requireRetailAdmin, (req, res) => 
 });
 
 router.get('/api/retail-admin/delivery-zones', requireRetailAdmin, (req, res) => {
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT * FROM retail_delivery_zones ORDER BY zone_type ASC, sort_order ASC, id ASC`
   ).all();
   res.json({ success: true, data: rows });
@@ -7876,7 +7862,7 @@ router.post('/api/retail-admin/delivery-zones', requireRetailAdmin, express.json
   // Defaults are GZ-friendly: same-day allowed, no surcharge, 10am–8pm
   // 2-hour slots. City zones override min_lead_days to 3 below.
   const defaultMinLead = b.zone_type === 'city' ? 3 : 0;
-  const info = tdb().prepare(
+  const info = db.prepare(
     `INSERT INTO retail_delivery_zones
        (zone_type, name_en, name_cn, match_city, match_district, base_fee, max_fee,
         free_threshold, packing_fee_per_item, packing_fee_cap, is_active, sort_order,
@@ -7933,7 +7919,7 @@ router.patch('/api/retail-admin/delivery-zones/:id', requireRetailAdmin, express
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
   sets.push('updated_at = CURRENT_TIMESTAMP');
   params.push(id);
-  const r = tdb().prepare(`UPDATE retail_delivery_zones SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  const r = db.prepare(`UPDATE retail_delivery_zones SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'update', 'delivery_zone', id, b, req.ip);
   res.json({ success: true });
@@ -7941,7 +7927,7 @@ router.patch('/api/retail-admin/delivery-zones/:id', requireRetailAdmin, express
 
 router.delete('/api/retail-admin/delivery-zones/:id', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const r = tdb().prepare('DELETE FROM retail_delivery_zones WHERE id = ?').run(id);
+  const r = db.prepare('DELETE FROM retail_delivery_zones WHERE id = ?').run(id);
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'delete', 'delivery_zone', id, null, req.ip);
   res.json({ success: true });
@@ -7949,7 +7935,7 @@ router.delete('/api/retail-admin/delivery-zones/:id', requireRetailAdmin, (req, 
 
 // Top-up packages CRUD
 router.get('/api/retail-admin/topup-packages', requireRetailAdmin, (req, res) => {
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT * FROM retail_topup_packages ORDER BY sort_order ASC, amount ASC`
   ).all();
   res.json({ success: true, data: rows });
@@ -7958,7 +7944,7 @@ router.get('/api/retail-admin/topup-packages', requireRetailAdmin, (req, res) =>
 router.post('/api/retail-admin/topup-packages', requireRetailAdmin, express.json(), (req, res) => {
   const b = req.body || {};
   if (!(Number(b.amount) > 0)) return res.status(400).json({ success: false, error: 'amount_required' });
-  const info = tdb().prepare(
+  const info = db.prepare(
     `INSERT INTO retail_topup_packages
        (amount, bonus_points, title_en, title_cn, description_en, description_cn, is_active, sort_order)
      VALUES (?,?,?,?,?,?,?,?)`
@@ -7991,7 +7977,7 @@ router.patch('/api/retail-admin/topup-packages/:id', requireRetailAdmin, express
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
   sets.push('updated_at = CURRENT_TIMESTAMP');
   params.push(id);
-  const r = tdb().prepare(`UPDATE retail_topup_packages SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  const r = db.prepare(`UPDATE retail_topup_packages SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'update', 'topup_package', id, b, req.ip);
   res.json({ success: true });
@@ -7999,7 +7985,7 @@ router.patch('/api/retail-admin/topup-packages/:id', requireRetailAdmin, express
 
 router.delete('/api/retail-admin/topup-packages/:id', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const r = tdb().prepare('DELETE FROM retail_topup_packages WHERE id = ?').run(id);
+  const r = db.prepare('DELETE FROM retail_topup_packages WHERE id = ?').run(id);
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'delete', 'topup_package', id, null, req.ip);
   res.json({ success: true });
@@ -8008,7 +7994,7 @@ router.delete('/api/retail-admin/topup-packages/:id', requireRetailAdmin, (req, 
 // Top-up transactions view (read-only for support)
 router.get('/api/retail-admin/topup-transactions', requireRetailAdmin, (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT t.id, t.customer_id, c.nickname, c.phone, t.amount, t.bonus_points,
             t.payment_method, t.status, t.out_trade_no, t.created_at, t.paid_at
        FROM retail_topup_transactions t
@@ -8054,7 +8040,7 @@ const LEADERBOARD_DEFAULTS = {
 };
 
 function loadLeaderboardConfig() {
-  const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'leaderboard.config'").get();
+  const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'leaderboard.config'").get();
   if (!row) return { ...LEADERBOARD_DEFAULTS };
   let parsed;
   try { parsed = JSON.parse(row.value_json); }
@@ -8081,7 +8067,7 @@ function computeLeaderboard(cfg) {
   let rows;
   if (cfg.metric === 'lifetime_spend') {
     if (cutoff) {
-      rows = tdb().prepare(
+      rows = db.prepare(
         `SELECT c.id, c.nickname, c.avatar_url, c.tier_key,
                 COALESCE(SUM(o.total), 0) AS value
            FROM retail_customers c
@@ -8096,7 +8082,7 @@ function computeLeaderboard(cfg) {
           LIMIT ?`
       ).all(topN);
     } else {
-      rows = tdb().prepare(
+      rows = db.prepare(
         `SELECT id, nickname, avatar_url, tier_key, lifetime_spend AS value
            FROM retail_customers
           WHERE is_blocked = 0 AND lifetime_spend > 0
@@ -8105,7 +8091,7 @@ function computeLeaderboard(cfg) {
       ).all(topN);
     }
   } else if (cfg.metric === 'orders_count') {
-    rows = tdb().prepare(
+    rows = db.prepare(
       `SELECT c.id, c.nickname, c.avatar_url, c.tier_key,
               COUNT(o.id) AS value
          FROM retail_customers c
@@ -8120,7 +8106,7 @@ function computeLeaderboard(cfg) {
         LIMIT ?`
     ).all(topN);
   } else { // points_balance — point-in-time, period is ignored
-    rows = tdb().prepare(
+    rows = db.prepare(
       `SELECT id, nickname, avatar_url, tier_key, points_balance AS value
          FROM retail_customers
         WHERE is_blocked = 0 AND points_balance > 0
@@ -8180,7 +8166,7 @@ router.get('/api/retail/leaderboard', requireRetailAuth, (req, res) => {
     if (cfg.metric === 'lifetime_spend') {
       myValue = Number(req.customer.lifetime_spend) || 0;
       if (myValue > 0) {
-        const ahead = tdb().prepare(
+        const ahead = db.prepare(
           `SELECT COUNT(*) AS n FROM retail_customers
             WHERE is_blocked = 0 AND lifetime_spend > ?`
         ).get(myValue).n;
@@ -8189,7 +8175,7 @@ router.get('/api/retail/leaderboard', requireRetailAuth, (req, res) => {
     } else if (cfg.metric === 'points_balance') {
       myValue = Number(req.customer.points_balance) || 0;
       if (myValue > 0) {
-        const ahead = tdb().prepare(
+        const ahead = db.prepare(
           `SELECT COUNT(*) AS n FROM retail_customers
             WHERE is_blocked = 0 AND points_balance > ?`
         ).get(myValue).n;
@@ -8264,7 +8250,7 @@ router.put('/api/retail-admin/leaderboard/config', requireRetailAdmin, express.j
     reward_top10_cn: String(body.reward_top10_cn || '').slice(0, 240),
   };
 
-  tdb().prepare(
+  db.prepare(
     `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
      VALUES (?, ?, CURRENT_TIMESTAMP, ?)
      ON CONFLICT(key) DO UPDATE SET
@@ -8299,7 +8285,7 @@ router.get('/api/retail-admin/leaderboard/preview', requireRetailAdmin, (req, re
 // closes polls from the retail-admin Voting tab.
 
 function loadPollOptions(pollId) {
-  return tdb().prepare(
+  return db.prepare(
     `SELECT id, label_en, label_cn, color_hex, image_url, sort_order, votes
        FROM retail_poll_options
       WHERE poll_id = ?
@@ -8313,7 +8299,7 @@ function hydratePoll(poll, customerId) {
   const options = loadPollOptions(poll.id);
   let myVoteOptionId = null;
   if (customerId) {
-    const v = tdb().prepare('SELECT option_id FROM retail_poll_votes WHERE poll_id = ? AND customer_id = ?')
+    const v = db.prepare('SELECT option_id FROM retail_poll_votes WHERE poll_id = ? AND customer_id = ?')
       .get(poll.id, customerId);
     if (v) myVoteOptionId = v.option_id;
   }
@@ -8322,7 +8308,7 @@ function hydratePoll(poll, customerId) {
 
 // Customer-facing list — only `open` and `closed` polls (drafts hidden).
 router.get('/api/retail/polls', requireRetailAuth, (req, res) => {
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT * FROM retail_polls
       WHERE status IN ('open', 'closed')
       ORDER BY
@@ -8339,7 +8325,7 @@ router.get('/api/retail/polls', requireRetailAuth, (req, res) => {
 // Single poll detail — useful for share-link landing pages.
 router.get('/api/retail/polls/:id', requireRetailAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const poll = tdb().prepare(
+  const poll = db.prepare(
     `SELECT * FROM retail_polls
       WHERE id = ? AND status IN ('open', 'closed')`
   ).get(id);
@@ -8354,36 +8340,36 @@ router.post('/api/retail/polls/:id/vote', requireRetailAuth, express.json(), (re
   const optionId = parseInt(req.body?.option_id, 10);
   if (!pollId || !optionId) return res.status(400).json({ success: false, error: 'bad_request' });
 
-  const poll = tdb().prepare('SELECT id, status, reward_points FROM retail_polls WHERE id = ?').get(pollId);
+  const poll = db.prepare('SELECT id, status, reward_points FROM retail_polls WHERE id = ?').get(pollId);
   if (!poll) return res.status(404).json({ success: false, error: 'not_found' });
   if (poll.status !== 'open') return res.status(409).json({ success: false, error: 'poll_not_open' });
 
-  const opt = tdb().prepare('SELECT id FROM retail_poll_options WHERE id = ? AND poll_id = ?').get(optionId, pollId);
+  const opt = db.prepare('SELECT id FROM retail_poll_options WHERE id = ? AND poll_id = ?').get(optionId, pollId);
   if (!opt) return res.status(400).json({ success: false, error: 'bad_option' });
 
-  const existing = tdb().prepare('SELECT id, option_id FROM retail_poll_votes WHERE poll_id = ? AND customer_id = ?')
+  const existing = db.prepare('SELECT id, option_id FROM retail_poll_votes WHERE poll_id = ? AND customer_id = ?')
     .get(pollId, req.customer.id);
   if (existing) {
     // Already voted — return current state, do NOT re-award.
     return res.json({
       success: true,
-      data: { already_voted: true, poll: hydratePoll(tdb().prepare('SELECT * FROM retail_polls WHERE id = ?').get(pollId), req.customer.id) },
+      data: { already_voted: true, poll: hydratePoll(db.prepare('SELECT * FROM retail_polls WHERE id = ?').get(pollId), req.customer.id) },
     });
   }
 
   const reward = Math.max(0, parseInt(poll.reward_points, 10) || 0);
-  const tx = tdb().transaction(() => {
-    tdb().prepare(
+  const tx = db.transaction(() => {
+    db.prepare(
       `INSERT INTO retail_poll_votes (poll_id, option_id, customer_id, awarded_points)
        VALUES (?, ?, ?, ?)`
     ).run(pollId, optionId, req.customer.id, reward);
-    tdb().prepare('UPDATE retail_poll_options SET votes = votes + 1 WHERE id = ?').run(optionId);
-    tdb().prepare('UPDATE retail_polls SET total_votes = total_votes + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(pollId);
+    db.prepare('UPDATE retail_poll_options SET votes = votes + 1 WHERE id = ?').run(optionId);
+    db.prepare('UPDATE retail_polls SET total_votes = total_votes + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(pollId);
     if (reward > 0) {
-      tdb().prepare('UPDATE retail_customers SET points_balance = points_balance + ? WHERE id = ?')
+      db.prepare('UPDATE retail_customers SET points_balance = points_balance + ? WHERE id = ?')
         .run(reward, req.customer.id);
-      const after = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id).points_balance;
-      tdb().prepare(
+      const after = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id).points_balance;
+      db.prepare(
         `INSERT INTO retail_points_transactions (customer_id, delta, balance_after, source, note)
          VALUES (?, ?, ?, 'poll_vote', ?)`
       ).run(req.customer.id, reward, after, 'Poll #' + pollId);
@@ -8397,8 +8383,8 @@ router.post('/api/retail/polls/:id/vote', requireRetailAuth, express.json(), (re
     throw e;
   }
 
-  const updatedPoll = tdb().prepare('SELECT * FROM retail_polls WHERE id = ?').get(pollId);
-  const updatedCust = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
+  const updatedPoll = db.prepare('SELECT * FROM retail_polls WHERE id = ?').get(pollId);
+  const updatedCust = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
   res.json({
     success: true,
     data: {
@@ -8416,7 +8402,7 @@ router.post('/api/retail/polls/:id/vote', requireRetailAuth, express.json(), (re
 // idempotent. ─────────────────────────────────────────────────────────
 router.get('/api/retail/favorites', requireRetailAuth, (req, res) => {
   const now = Date.now();
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT ${RETAIL_PRODUCT_COLS}, f.created_at AS favorited_at
        FROM retail_customer_favorites f
        JOIN products p ON p.id = f.product_id
@@ -8434,7 +8420,7 @@ router.get('/api/retail/favorites', requireRetailAuth, (req, res) => {
 // to render the heart pip in its filled/empty state without paying for
 // the full product columns. Cached briefly per-customer.
 router.get('/api/retail/favorites/ids', requireRetailAuth, (req, res) => {
-  const ids = tdb().prepare(
+  const ids = db.prepare(
     `SELECT product_id FROM retail_customer_favorites WHERE customer_id = ?`
   ).all(req.customer.id).map(r => r.product_id);
   res.json({ success: true, data: ids });
@@ -8443,26 +8429,26 @@ router.get('/api/retail/favorites/ids', requireRetailAuth, (req, res) => {
 router.post('/api/retail/favorites/:productId', requireRetailAuth, (req, res) => {
   const productId = parseInt(req.params.productId, 10);
   if (!productId) return res.status(400).json({ success: false, error: 'bad_request' });
-  const prod = tdb().prepare('SELECT id FROM products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1').get(productId);
+  const prod = db.prepare('SELECT id FROM products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1').get(productId);
   if (!prod) return res.status(404).json({ success: false, error: 'product_not_found' });
   try {
-    tdb().prepare(
+    db.prepare(
       `INSERT OR IGNORE INTO retail_customer_favorites (customer_id, product_id)
        VALUES (?, ?)`
     ).run(req.customer.id, productId);
   } catch (e) {
     return res.status(500).json({ success: false, error: 'db_insert_failed' });
   }
-  const count = tdb().prepare('SELECT COUNT(*) AS n FROM retail_customer_favorites WHERE customer_id = ?').get(req.customer.id).n;
+  const count = db.prepare('SELECT COUNT(*) AS n FROM retail_customer_favorites WHERE customer_id = ?').get(req.customer.id).n;
   res.json({ success: true, data: { favorited: true, count } });
 });
 
 router.delete('/api/retail/favorites/:productId', requireRetailAuth, (req, res) => {
   const productId = parseInt(req.params.productId, 10);
   if (!productId) return res.status(400).json({ success: false, error: 'bad_request' });
-  tdb().prepare('DELETE FROM retail_customer_favorites WHERE customer_id = ? AND product_id = ?')
+  db.prepare('DELETE FROM retail_customer_favorites WHERE customer_id = ? AND product_id = ?')
     .run(req.customer.id, productId);
-  const count = tdb().prepare('SELECT COUNT(*) AS n FROM retail_customer_favorites WHERE customer_id = ?').get(req.customer.id).n;
+  const count = db.prepare('SELECT COUNT(*) AS n FROM retail_customer_favorites WHERE customer_id = ?').get(req.customer.id).n;
   res.json({ success: true, data: { favorited: false, count } });
 });
 
@@ -8472,7 +8458,7 @@ router.delete('/api/retail/favorites/:productId', requireRetailAuth, (req, res) 
 const POLL_STATUSES = new Set(['draft', 'open', 'closed']);
 
 router.get('/api/retail-admin/polls', requireRetailAdmin, (req, res) => {
-  const rows = tdb().prepare(
+  const rows = db.prepare(
     `SELECT * FROM retail_polls
       ORDER BY
         CASE status WHEN 'open' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END,
@@ -8486,7 +8472,7 @@ router.get('/api/retail-admin/polls', requireRetailAdmin, (req, res) => {
 
 router.get('/api/retail-admin/polls/:id', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const poll = tdb().prepare('SELECT * FROM retail_polls WHERE id = ?').get(id);
+  const poll = db.prepare('SELECT * FROM retail_polls WHERE id = ?').get(id);
   if (!poll) return res.status(404).json({ success: false, error: 'not_found' });
   res.json({ success: true, data: { ...poll, options: loadPollOptions(id) } });
 });
@@ -8518,8 +8504,8 @@ router.post('/api/retail-admin/polls', requireRetailAdmin, express.json(), (req,
   const options = normalizePollOptions(b.options);
   if (options.length < 2) return res.status(400).json({ success: false, error: 'need_at_least_two_options' });
 
-  const tx = tdb().transaction(() => {
-    const r = tdb().prepare(
+  const tx = db.transaction(() => {
+    const r = db.prepare(
       `INSERT INTO retail_polls
         (question_en, question_cn, explainer_en, explainer_cn, category_en, category_cn,
          status, closes_at, reward_points, is_featured, sort_order)
@@ -8538,7 +8524,7 @@ router.post('/api/retail-admin/polls', requireRetailAdmin, express.json(), (req,
       parseInt(b.sort_order, 10) || 0,
     );
     const pollId = r.lastInsertRowid;
-    const insOpt = tdb().prepare(
+    const insOpt = db.prepare(
       `INSERT INTO retail_poll_options (poll_id, label_en, label_cn, color_hex, image_url, sort_order)
        VALUES (?,?,?,?,?,?)`
     );
@@ -8549,13 +8535,13 @@ router.post('/api/retail-admin/polls', requireRetailAdmin, express.json(), (req,
   });
   const pollId = tx();
   logActivity(req.user.id, req.user.username, 'create', 'retail_poll', pollId, { question_en, status }, req.ip);
-  const poll = tdb().prepare('SELECT * FROM retail_polls WHERE id = ?').get(pollId);
+  const poll = db.prepare('SELECT * FROM retail_polls WHERE id = ?').get(pollId);
   res.json({ success: true, data: { ...poll, options: loadPollOptions(pollId) } });
 });
 
 router.put('/api/retail-admin/polls/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const poll = tdb().prepare('SELECT * FROM retail_polls WHERE id = ?').get(id);
+  const poll = db.prepare('SELECT * FROM retail_polls WHERE id = ?').get(id);
   if (!poll) return res.status(404).json({ success: false, error: 'not_found' });
 
   const b = req.body || {};
@@ -8575,7 +8561,7 @@ router.put('/api/retail-admin/polls/:id', requireRetailAdmin, express.json(), (r
   if ('winner_option_id' in b) {
     const wid = parseInt(b.winner_option_id, 10);
     if (wid) {
-      const own = tdb().prepare('SELECT id FROM retail_poll_options WHERE id = ? AND poll_id = ?').get(wid, id);
+      const own = db.prepare('SELECT id FROM retail_poll_options WHERE id = ? AND poll_id = ?').get(wid, id);
       if (!own) return res.status(400).json({ success: false, error: 'bad_winner_option' });
       updates.winner_option_id = wid;
     } else {
@@ -8590,19 +8576,19 @@ router.put('/api/retail-admin/polls/:id', requireRetailAdmin, express.json(), (r
   // colors / order on the existing rows by id.
   const incomingOptions = Array.isArray(b.options) ? b.options : null;
 
-  const tx = tdb().transaction(() => {
+  const tx = db.transaction(() => {
     if (Object.keys(updates).length) {
       const sets = Object.keys(updates).map(k => `${k} = ?`).join(', ');
-      tdb().prepare(`UPDATE retail_polls SET ${sets}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      db.prepare(`UPDATE retail_polls SET ${sets}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
         .run(...Object.values(updates), id);
     }
     if (incomingOptions) {
       if (b.replace_options) {
         // Hard reset — clears votes! Confirms required from the UI.
-        tdb().prepare('DELETE FROM retail_poll_options WHERE poll_id = ?').run(id);
-        tdb().prepare('UPDATE retail_polls SET total_votes = 0 WHERE id = ?').run(id);
+        db.prepare('DELETE FROM retail_poll_options WHERE poll_id = ?').run(id);
+        db.prepare('UPDATE retail_polls SET total_votes = 0 WHERE id = ?').run(id);
         const normalized = normalizePollOptions(incomingOptions);
-        const insOpt = tdb().prepare(
+        const insOpt = db.prepare(
           `INSERT INTO retail_poll_options (poll_id, label_en, label_cn, color_hex, image_url, sort_order)
            VALUES (?,?,?,?,?,?)`
         );
@@ -8611,14 +8597,14 @@ router.put('/api/retail-admin/polls/:id', requireRetailAdmin, express.json(), (r
         }
       } else {
         // In-place edit / add — preserve vote counts on existing rows.
-        const existingIds = new Set(tdb().prepare('SELECT id FROM retail_poll_options WHERE poll_id = ?').all(id).map(r => r.id));
+        const existingIds = new Set(db.prepare('SELECT id FROM retail_poll_options WHERE poll_id = ?').all(id).map(r => r.id));
         const seenIds = new Set();
-        const upd = tdb().prepare(
+        const upd = db.prepare(
           `UPDATE retail_poll_options SET
              label_en = ?, label_cn = ?, color_hex = ?, image_url = ?, sort_order = ?
            WHERE id = ? AND poll_id = ?`
         );
-        const ins = tdb().prepare(
+        const ins = db.prepare(
           `INSERT INTO retail_poll_options (poll_id, label_en, label_cn, color_hex, image_url, sort_order)
            VALUES (?,?,?,?,?,?)`
         );
@@ -8642,9 +8628,9 @@ router.put('/api/retail-admin/polls/:id', requireRetailAdmin, express.json(), (r
           if (!seenIds.has(oldId)) {
             // Refuse to delete an option that has votes — admin must
             // either close the poll (winner pick) or hard-reset.
-            const votes = tdb().prepare('SELECT votes FROM retail_poll_options WHERE id = ?').get(oldId)?.votes || 0;
+            const votes = db.prepare('SELECT votes FROM retail_poll_options WHERE id = ?').get(oldId)?.votes || 0;
             if (votes > 0) continue;
-            tdb().prepare('DELETE FROM retail_poll_options WHERE id = ?').run(oldId);
+            db.prepare('DELETE FROM retail_poll_options WHERE id = ?').run(oldId);
           }
         }
       }
@@ -8654,13 +8640,13 @@ router.put('/api/retail-admin/polls/:id', requireRetailAdmin, express.json(), (r
   catch (e) { return res.status(400).json({ success: false, error: e.message }); }
 
   logActivity(req.user.id, req.user.username, 'update', 'retail_poll', id, { updates: Object.keys(updates), replaced_options: !!(incomingOptions && b.replace_options) }, req.ip);
-  const fresh = tdb().prepare('SELECT * FROM retail_polls WHERE id = ?').get(id);
+  const fresh = db.prepare('SELECT * FROM retail_polls WHERE id = ?').get(id);
   res.json({ success: true, data: { ...fresh, options: loadPollOptions(id) } });
 });
 
 router.delete('/api/retail-admin/polls/:id', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const r = tdb().prepare('DELETE FROM retail_polls WHERE id = ?').run(id);
+  const r = db.prepare('DELETE FROM retail_polls WHERE id = ?').run(id);
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'delete', 'retail_poll', id, null, req.ip);
   res.json({ success: true });
