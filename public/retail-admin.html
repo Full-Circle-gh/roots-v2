@@ -9349,10 +9349,10 @@ function renderOpenOrder(o) {
             <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
             <div class="sub">${escapeHtml(o.store_name_cn || '')}${routingNote(o.routing_reason) ? ' · ' + routingNote(o.routing_reason) : ''}${(o.channel && o.channel.toLowerCase() !== 'wechat') ? ' · ' + escapeHtml(o.channel) : ''}</div>
           </div>` : ''}
-          ${o.customer_note ? `<div class="full"><div class="kicker">Customer note</div><div>${escapeHtml(o.customer_note)}</div></div>` : ''}
-          ${o.needs_cutlery || o.needs_invoice ? `<div class="full" style="display: flex; gap: 16px; flex-wrap: wrap; color: var(--text-2); font-size: 12px;">
-            ${o.needs_cutlery ? '<span>· Cutlery requested</span>' : ''}
-            ${o.needs_invoice ? `<span>· Invoice: ${escapeHtml(o.invoice_title || '')} ${escapeHtml(o.invoice_tax_id || '')}</span>` : ''}
+          ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}
+          ${o.needs_cutlery || o.needs_invoice ? `<div class="full" style="display: flex; gap: 10px; flex-wrap: wrap;">
+            ${o.needs_cutlery ? '<span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;">🍴 Cutlery requested · 需要餐具</span>' : ''}
+            ${o.needs_invoice ? `<span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;">🧾 Invoice · 发票${(o.invoice_title || o.invoice_tax_id) ? ': ' + escapeHtml(((o.invoice_title || '') + ' ' + (o.invoice_tax_id || '')).trim()) : ''}</span>` : ''}
           </div>` : ''}
         </div>
 
