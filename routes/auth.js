@@ -88,6 +88,11 @@ router.post('/api/auth/logout', (req, res) => {
 });
 
 router.get('/api/auth/me', (req, res) => {
+  // Auth state must NEVER be cached — not by the browser, a CDN, or an
+  // intermediary proxy/VPN. This response otherwise carries only an ETag and
+  // no Cache-Control, so some caches store the anonymous {user:null} and keep
+  // serving it after the user logs in — bouncing a logged-in user to /login.
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   // Bridge for the separate Mini App Backend realm: if there's no kitchen
   // session but a backend-operator session, return that operator as the
   // current principal (with `retail` access) so the backend page's existing
