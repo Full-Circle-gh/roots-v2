@@ -88,6 +88,24 @@ router.post('/api/auth/logout', (req, res) => {
 });
 
 router.get('/api/auth/me', (req, res) => {
+  // Bridge for the separate Mini App Backend realm: if there's no kitchen
+  // session but a backend-operator session, return that operator as the
+  // current principal (with `retail` access) so the backend page's existing
+  // auth check passes without a second endpoint. Wrapped so a missing
+  // tenant_users table never breaks the kitchen response below.
+  if (!req.session?.userId && req.session?.backendUserId) {
+    try {
+      const bu = db.prepare('SELECT id, tenant_id, username, display_name, role FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+      if (bu) {
+        const tenant = db.prepare('SELECT id, name, brand_name FROM tenants WHERE id = ?').get(bu.tenant_id);
+        return res.json({ user: {
+          id: bu.id, username: bu.username, role: 'backend', displayName: bu.display_name,
+          permissions: { retail: 1 }, is_backend: true,
+          tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name } : null,
+        } });
+      }
+    } catch (e) { /* tenant_users not ready — fall through to kitchen logic */ }
+  }
   if (!req.session?.userId) return res.json({ user: null });
   const user = db.prepare('SELECT id,username,role,display_name,last_login,created_at,market_id,retail_store_id FROM users WHERE id = ?').get(req.session.userId);
   if (!user) return res.json({ user: null });

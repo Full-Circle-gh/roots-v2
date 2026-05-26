@@ -26,10 +26,38 @@ let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
 const router = express.Router();
 
-// Hoisted here so any admin route defined later in the file can use it
-// (const isn't hoisted; this avoids a TDZ error when later sections
-// reference requireRetailAdmin before the original declaration site).
-const requireRetailAdmin = [requireAuth, requirePermission('retail')];
+// Mini App Backend access gate. Two ways in during the single-tenant → SaaS
+// transition:
+//   (1) a Mini App Backend operator session (tenant_users), or
+//   (2) the legacy path — a kitchen user carrying the `retail` permission.
+// Backend operator sessions never set req.session.userId, so they're never
+// mistaken for kitchen users; the kitchen path below is byte-for-byte the
+// old behaviour, so Roots staff access is unchanged.
+// Declared as a function (hoisted) so later sections can reference it before
+// this point — same reason the previous const needed a comment.
+const _retailKitchenPermission = requirePermission('retail');
+function requireRetailAdmin(req, res, next) {
+  // (1) Mini App Backend operator. Guarded so a not-yet-created tenant_users
+  // table can never 500 the kitchen path — on any error we just fall through.
+  if (req.session && req.session.backendUserId) {
+    try {
+      const u = db.prepare('SELECT * FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+      if (u) {
+        const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
+        if (tenant && tenant.status === 'active') {
+          req.backendUser = u;
+          req.tenant = tenant;
+          return next();
+        }
+      }
+    } catch (e) { /* tables not ready — fall through to the kitchen path */ }
+  }
+  // (2) legacy kitchen path: must be authed AND hold the `retail` permission.
+  requireAuth(req, res, (err) => {
+    if (err) return next(err);
+    _retailKitchenPermission(req, res, next);
+  });
+}
 
 // In-memory multer for image uploads — files small enough to base64 inline.
 const upload = multer({

@@ -137,6 +137,7 @@ app.get(/^\/(?:MP_verify_[A-Za-z0-9]+|[A-Za-z0-9]{6,32})\.txt$/, (req, res) => {
 
 // Routes
 app.use(require('./routes/auth'));
+app.use(require('./routes/backend-auth'));   // Mini App Backend operator realm (separate from kitchen auth)
 app.use(require('./routes/ingredients'));
 app.use(require('./routes/recipes'));
 app.use(require('./routes/admin'));
@@ -164,6 +165,14 @@ app.get('/login', (req, res) => {
   if (req.session?.userId) return res.redirect('/');
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// Mini App Backend login — separate branded sign-in for backend operators
+// (tenant_users realm). Self-redirects to /retail-admin if already signed in.
+app.get('/backend/login', (req, res) => {
+  if (req.session?.backendUserId) return res.redirect('/retail-admin');
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'backend-login.html'));
 });
 
 // Main app - serves the SPA shell
