@@ -3441,6 +3441,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
     Orders · 订单<span id="ordersTabBadge" class="tab-badge" aria-label="Unseen new orders"></span>
   </button>
+  <button data-tab="invoices">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="13" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+    Invoices · 发票
+  </button>
   <button data-tab="customers">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     Customers · 顾客
@@ -3684,6 +3688,23 @@
         <div id="db-cohorts"></div>
       </div>
     </div>
+  </section>
+
+  <!-- ─── INVOICES ─── -->
+  <section id="tab-invoices">
+    <div class="db-head">
+      <h2 style="margin:0">Invoices · 发票</h2>
+      <div class="db-range">
+        <div class="seg" id="inv-filter">
+          <button data-f="requested" class="active" onclick="invSetFilter('requested')">Pending · 待开 <span id="inv-count-requested"></span></button>
+          <button data-f="issued" onclick="invSetFilter('issued')">Issued · 已开 <span id="inv-count-issued"></span></button>
+          <button data-f="all" onclick="invSetFilter('all')">All · 全部</button>
+        </div>
+        <button class="db-btn" onclick="loadInvoices()" title="Refresh · 刷新">↻</button>
+      </div>
+    </div>
+    <p style="color:var(--text-3); font-size:12px; margin:0 0 var(--s4)">Send info to your accountant with “Copy for accounting”, then paste the link / attach the PDF + Mark issued. · 用“复制开票信息”发给会计,开好后粘贴链接/上传 PDF 并标记已开。</p>
+    <div id="invoices-list"></div>
   </section>
 
   <!-- ─── ORDERS ─── -->
@@ -8707,6 +8728,12 @@ function toggleOrdersLive() {
   });
 })();
 
+// Load the Invoices tab each time it's opened.
+(function () {
+  const btn = document.querySelector('.tabs [data-tab="invoices"]');
+  if (btn) btn.addEventListener('click', () => setTimeout(loadInvoices, 50));
+})();
+
 // ── Unseen-orders badge (red pulsing dot on the Orders tab) ─────────────
 // Polls a lightweight count endpoint independent of the heavy orders list
 // (which only refreshes when the tab is active). Tracks the "last seen at"
@@ -12461,15 +12488,55 @@ async function markInvoiceIssued(id) {
   try {
     await api('/api/retail-admin/orders/' + id + '/invoice', { method: 'PUT', body: { action: 'issue', file_url: url, number } });
     toast('Invoice marked issued · 已标记开票');
-    openOrder(id);
+    _invoiceRefreshAfter(id);
   } catch (e) { toast('Failed · 失败: ' + e.message, 'err'); }
 }
 async function unissueInvoice(id) {
   try {
     await api('/api/retail-admin/orders/' + id + '/invoice', { method: 'PUT', body: { action: 'unissue' } });
     toast('Back to requested · 已恢复待开');
-    openOrder(id);
+    _invoiceRefreshAfter(id);
   } catch (e) { toast('Failed · 失败: ' + e.message, 'err'); }
+}
+// After issuing/reverting, refresh whichever view the action came from: the
+// Invoices tab list (when active) or the open order drawer.
+function _invoiceRefreshAfter(id) {
+  const sec = document.getElementById('tab-invoices');
+  if (sec && sec.classList.contains('active')) loadInvoices();
+  else if (typeof _OPEN_ORDER !== 'undefined' && _OPEN_ORDER && Number(_OPEN_ORDER.id) === Number(id)) openOrder(id);
+}
+
+// ── Invoices tab — list every needs_invoice order so staff issue from one
+// place. Each row reuses renderInvoiceBlock (issue form / issued view + copy).
+let INV_FILTER = 'requested';
+function invSetFilter(f) {
+  INV_FILTER = f;
+  document.querySelectorAll('#inv-filter button').forEach(b => b.classList.toggle('active', b.dataset.f === f));
+  loadInvoices();
+}
+async function loadInvoices() {
+  const host = document.getElementById('invoices-list');
+  if (!host) return;
+  host.innerHTML = '<div class="db-muted">Loading… · 加载中…</div>';
+  try {
+    const j = await api('/api/retail-admin/invoices?status=' + INV_FILTER);
+    const list = j.data || [];
+    if (j.counts) {
+      const rq = document.getElementById('inv-count-requested'); if (rq) rq.textContent = j.counts.requested ? '(' + j.counts.requested + ')' : '';
+      const is = document.getElementById('inv-count-issued');    if (is) is.textContent = j.counts.issued ? '(' + j.counts.issued + ')' : '';
+    }
+    if (!list.length) { host.innerHTML = '<div class="db-muted">No invoices here · 这里暂无发票</div>'; return; }
+    host.innerHTML = list.map(o => `
+      <div class="card" style="margin-bottom: var(--s3);">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
+          <div><b>#${escapeHtml(o.order_no)}</b> <span style="color: var(--text-3); font-size: 12px;">${escapeHtml(o.nickname || '')}</span></div>
+          <div style="color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums;">${escapeHtml(String(o.placed_at || '').slice(0, 10))} · ${dashMoney(o.total)}</div>
+        </div>
+        ${renderInvoiceBlock(o)}
+      </div>`).join('');
+  } catch (e) {
+    host.innerHTML = `<div class="db-muted">Failed to load · 加载失败: ${escapeHtml(e.message)}</div>`;
+  }
 }
 async function uploadInvoicePdf(id, input) {
   const file = input.files && input.files[0];

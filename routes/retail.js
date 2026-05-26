@@ -5038,6 +5038,40 @@ router.post('/api/retail-admin/invoice-file', requireRetailAdmin, express.json({
   }
 });
 
+// Invoices tab — every order that requested a fapiao, so staff can issue from
+// one list instead of opening each order. ?status=requested (pending, default
+// surfaced first) | issued | all. Includes items so the per-row block can copy
+// the accounting bundle. `counts` powers the filter chips.
+router.get('/api/retail-admin/invoices', requireRetailAdmin, (req, res) => {
+  const status = ['requested', 'issued', 'all'].includes(req.query.status) ? req.query.status : 'all';
+  let where = 'o.needs_invoice = 1';
+  if (status === 'issued')        where += " AND o.invoice_status = 'issued'";
+  else if (status === 'requested') where += " AND COALESCE(o.invoice_status, 'requested') <> 'issued'";
+  const orders = db.prepare(
+    `SELECT o.id, o.order_no, o.total, o.shipping_fee, o.placed_at,
+            o.invoice_type, o.invoice_title, o.invoice_tax_id, o.invoice_email,
+            o.invoice_status, o.invoice_file_url, o.invoice_number, o.invoice_issued_at,
+            c.nickname
+       FROM retail_orders o
+       LEFT JOIN retail_customers c ON c.id = o.customer_id
+      WHERE ${where}
+      ORDER BY (CASE WHEN o.invoice_status = 'issued' THEN 1 ELSE 0 END) ASC, o.placed_at DESC
+      LIMIT 200`
+  ).all();
+  const itemStmt = db.prepare(
+    'SELECT product_id, name_en, name_cn, qty, line_total FROM retail_order_items WHERE order_id = ? ORDER BY id ASC'
+  );
+  for (const o of orders) o.items = itemStmt.all(o.id);
+  res.json({
+    success: true,
+    data: orders,
+    counts: {
+      requested: db.prepare("SELECT COUNT(*) AS n FROM retail_orders WHERE needs_invoice = 1 AND COALESCE(invoice_status, 'requested') <> 'issued'").get().n,
+      issued:    db.prepare("SELECT COUNT(*) AS n FROM retail_orders WHERE needs_invoice = 1 AND invoice_status = 'issued'").get().n,
+    },
+  });
+});
+
 // Apply the split-package suggestion: re-bucket items between the order's
 // air/land shipments to match buildShipmentSuggestion's suggested plan,
 // creating a missing shipment if the order currently has only one bucket.
