@@ -7687,12 +7687,14 @@ document.addEventListener('input', e => {
 });
 
 // Sign out a kitchen user from here. Kitchen accounts have a single
-// (main-app) session, so destroying it logs them out everywhere — same
-// as the main app's logout. Backend operators use /backend/account instead.
+// (main-app) session, so destroying it logs them out everywhere. We land
+// them on the Mini App Backend's own login (/backend/login) — not the
+// kitchen /login — so signing out of this surface keeps them in the
+// backend product context. Backend operators use /backend/account instead.
 async function retailSignOut() {
   if (!confirm('Sign out? · 确定退出登录？')) return;
   try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch {}
-  location.href = '/login';
+  location.href = '/backend/login';
 }
 
 // ── Bootstrap ──
