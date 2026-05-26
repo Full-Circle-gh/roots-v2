@@ -28,8 +28,25 @@ mapfile -t FILES < <(cd "$STAGE" && find . -type f | sed 's|^\./||')
 [ ${#FILES[@]} -eq 0 ] && { echo "ABORT: $STAGE is empty"; exit 1; }
 echo "staged files:"; printf '  %s\n' "${FILES[@]}"
 
-echo "=== 1/4 syntax-check staged .js (live files untouched) ==="
-for f in "${FILES[@]}"; do case "$f" in *.js) node --check "$STAGE/$f" || { echo "ABORT: $f syntax error"; exit 1; };; esac; done
+echo "=== 1/4 syntax-check staged .js + .html inline scripts (live files untouched) ==="
+HTML_CHECK="$APP/scripts/check-html-js.js"
+for f in "${FILES[@]}"; do
+  case "$f" in
+    *.js)
+      node --check "$STAGE/$f" || { echo "ABORT: $f syntax error"; exit 1; }
+      ;;
+    *.html)
+      # Inline <script> in .html ships otherwise-unchecked, and a syntax error
+      # there kills the whole page. Gate it too. Guard against the bootstrap
+      # commit that first installs the checker (it won't exist yet).
+      if [ -f "$HTML_CHECK" ]; then
+        node "$HTML_CHECK" "$STAGE/$f" || { echo "ABORT: $f inline-script syntax error"; exit 1; }
+      else
+        echo "  (skip inline-JS check — checker not on server yet) $f"
+      fi
+      ;;
+  esac
+done
 echo "OK"
 
 # Stamp the service-worker cache version on any deploy that ships sw.js, so every
