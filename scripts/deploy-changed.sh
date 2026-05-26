@@ -78,4 +78,10 @@ done
 
 # Hand off to the safe installer (syntax-check, backup, install, restart,
 # auto-rollback). Its RESULT= line is the source of truth.
-ssh "$SERVER" "bash '$APP/scripts/deploy-apply.sh'"
+#
+# Run it from a throwaway /tmp copy: a deploy that ships a NEW deploy-apply.sh
+# would otherwise overwrite this script WHILE bash is still reading it (bash
+# re-reads scripts lazily by byte offset), corrupting the running process
+# mid-deploy. The snapshot is immune — installs land in $APP/scripts/, never on
+# the temp copy.
+ssh "$SERVER" "cp '$APP/scripts/deploy-apply.sh' /tmp/roots-v2-apply.sh && bash /tmp/roots-v2-apply.sh"
