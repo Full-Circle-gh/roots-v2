@@ -1719,16 +1719,21 @@
     100% { background: transparent;              box-shadow: inset 0   0 0 transparent; }
   }
   tbody tr.order-row.is-fresh { animation: order-row-flash 6s ease-out 1; }
-  /* Unread order — stays bold with a brass left-rail + dot from arrival until
-     any operator opens the detail (server seen_at). Complements the one-shot
-     arrival flash above (which fades after 6s); this persists until opened. */
+  /* Unread order — a Tea "NEW" chip + bold order#/customer + a soft Tea wash
+     over the whole row, persisting from arrival until any operator opens the
+     detail (server seen_at). The wash is an inset box-shadow so it layers above
+     whatever background the row-rhythm tweak (striped / cards) paints, without a
+     specificity fight. Complements the one-shot 6s arrival flash above. */
   .ord-no { font-family: var(--f-mono); font-weight: 600; }
-  tbody tr.order-row.is-unread td:first-child { box-shadow: inset 3px 0 0 var(--brass); }
+  tr.order-row.is-unread td { box-shadow: inset 0 0 0 999px rgba(107, 142, 111, .12); }
   tr.order-row.is-unread .ord-no,
   tr.order-row.is-unread .ord-cust { font-weight: 700; color: var(--text-1); }
-  .unread-dot {
-    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
-    background: var(--brass); margin-right: 7px; vertical-align: middle;
+  .new-chip {
+    display: inline-block; vertical-align: middle; margin-right: 8px;
+    padding: 2px 7px; border-radius: 3px;
+    background: #6B8E6F; color: #E8E5DC;   /* Tea Green · Deeper Paper — the brand "live/new" chip */
+    font-family: var(--f-mono); font-size: 9px; font-weight: 700;
+    letter-spacing: .16em; text-transform: uppercase; line-height: 1.5; white-space: nowrap;
   }
   /* Status cell wraps status + refund pills as a small flex column so
      a narrow column shows the refund pill directly below the status pill
@@ -8530,7 +8535,7 @@ async function loadOrders(opts = {}) {
       const unread = isUnread ? ' is-unread' : '';
       return `
       <tr class="order-row${fresh}${unread}" data-order-id="${o.id}" tabindex="0">
-        <td>${isUnread ? '<span class="unread-dot" aria-label="Unread order · 未读订单"></span>' : ''}<span class="ord-no">${o.order_no}</span></td>
+        <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no">${o.order_no}</span></td>
         <td>
           <div class="ord-cust">${escapeHtml(o.nickname || o.recipient_name || '—')}</div>
           <div class="muted" style="font-size: 11px; margin-top: 2px">${o.recipient_phone || ''}</div>
@@ -9093,8 +9098,8 @@ async function openOrder(id) {
     const _row = document.querySelector('tr.order-row[data-order-id="' + id + '"]');
     if (_row) {
       _row.classList.remove('is-unread');
-      const _dot = _row.querySelector('.unread-dot');
-      if (_dot) _dot.remove();
+      const _chip = _row.querySelector('.new-chip');
+      if (_chip) _chip.remove();
     }
   } catch (e) {
     mount.innerHTML = `<div class="order-card err">Failed: ${escapeHtml(e.message)}</div>`;
