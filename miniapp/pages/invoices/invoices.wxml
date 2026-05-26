@@ -1,0 +1,27 @@
+<view class="page">
+  <view class="head">
+    <view class="kicker f-toni">{{copy.kicker}}</view>
+    <view class="title f-bear">{{copy.title}}</view>
+  </view>
+
+  <view wx:if="{{!loading && invoices.length === 0}}" class="empty">
+    <view class="empty-t f-bear">{{copy.emptyTitle}}</view>
+    <view class="empty-s muted">{{copy.emptySub}}</view>
+  </view>
+
+  <view class="list">
+    <view wx:for="{{invoices}}" wx:key="id" class="inv">
+      <view class="inv-top">
+        <view class="inv-order f-bear">{{copy.orderWord}} #{{item.orderNo}}</view>
+        <view class="badge {{item.issued ? 'on' : ''}}">{{item.stateLabel}}</view>
+      </view>
+      <view class="inv-meta muted">{{item.date}} · ¥{{item.total}} · {{item.typeLabel}}</view>
+      <view wx:if="{{item.title}}" class="inv-title">{{item.title}}</view>
+      <view wx:if="{{item.number}}" class="inv-no muted">No. {{item.number}}</view>
+      <view wx:if="{{item.issued}}" class="inv-actions">
+        <view wx:if="{{item.fileUrl}}" class="btn" data-url="{{item.fileUrl}}" bindtap="onViewInvoice">{{copy.view}} →</view>
+        <view wx:else class="muted sm">{{copy.noFile}}</view>
+      </view>
+    </view>
+  </view>
+</view>

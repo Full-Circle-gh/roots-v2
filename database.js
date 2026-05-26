@@ -2195,6 +2195,13 @@ addColumn('retail_orders', 'awaiting_restock_pids',   'TEXT');
 // these add the e-general invoice extras the mini-app fapiao form collects.
 addColumn('retail_orders', 'invoice_type',  'TEXT');   // 'personal' | 'company'
 addColumn('retail_orders', 'invoice_email', 'TEXT');   // recipient for the 电子发票 (e-fapiao)
+// Fapiao issuance workflow (Phase 3a). Status is DERIVED: a NULL invoice_status
+// with needs_invoice reads as 'requested' (so legacy invoice orders show as
+// requested); staff "mark issued" flips it to 'issued' and fills the rest.
+addColumn('retail_orders', 'invoice_status',    'TEXT');      // null/'requested' | 'issued'
+addColumn('retail_orders', 'invoice_file_url',  'TEXT');      // pasted link OR /api/retail/media/<id> (uploaded PDF)
+addColumn('retail_orders', 'invoice_number',    'TEXT');      // 发票号码
+addColumn('retail_orders', 'invoice_issued_at', 'DATETIME');
 // Item-level: when this row is a substitute, point back to the original
 // product the customer was trying to buy. Lets us show "replaces X" on
 // receipts and analytics.

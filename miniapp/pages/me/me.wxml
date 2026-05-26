@@ -132,6 +132,15 @@
       </view>
       <view class="row-arrow">→</view>
     </view>
+    <view class="row" bindtap="goInvoices">
+      <view class="row-body">
+        <view class="row-title">
+          <text class="f-bear">{{copy.menuInvoices}}</text>
+          <text class="row-cn muted">  · {{copy.menuInvoicesCn}}</text>
+        </view>
+      </view>
+      <view class="row-arrow">→</view>
+    </view>
     <view class="row" bindtap="goFavorites">
       <view class="row-body">
         <view class="row-title">

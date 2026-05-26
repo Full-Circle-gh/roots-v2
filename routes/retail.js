@@ -2295,6 +2295,7 @@ function loadOrderForCustomer(orderId, customerId) {
             points_used, points_amount, points_earned, total,
             customer_note, needs_cutlery, needs_invoice, invoice_title, invoice_tax_id,
             invoice_type, invoice_email,
+            invoice_status, invoice_file_url, invoice_number, invoice_issued_at,
             staff_note, cancelled_reason,
             refund_requested_at, refund_reason, refund_status, refund_review_note,
             refund_amount_requested, refund_amount_approved, refund_amount_paid,
@@ -2441,6 +2442,22 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
     r.item_count = db.prepare('SELECT COUNT(*) AS n FROM retail_order_items WHERE order_id = ?').get(r.id).n;
   }
   res.json({ success: true, data: rows, meta: { limit, offset } });
+});
+
+// Customer's fapiao list — powers the "My Invoices 我的发票" section in the
+// profile. Lists every order where an invoice was requested, with its derived
+// state (issued vs requested) and the fapiao link/number once issued.
+router.get('/api/retail/invoices', requireRetailAuth, (req, res) => {
+  const rows = db.prepare(
+    `SELECT id, order_no, total, placed_at,
+            invoice_type, invoice_title, invoice_tax_id, invoice_email,
+            invoice_number, invoice_file_url, invoice_issued_at,
+            CASE WHEN invoice_status = 'issued' THEN 'issued' ELSE 'requested' END AS invoice_state
+       FROM retail_orders
+      WHERE customer_id = ? AND needs_invoice = 1
+      ORDER BY placed_at DESC LIMIT 100`
+  ).all(req.customer.id);
+  res.json({ success: true, data: rows });
 });
 
 // Counts by status — powers the Me-tab bucket icons (Unpaid / Pending /
@@ -4922,6 +4939,50 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
   // Split-package suggestion — drives the banner above Items in the drawer.
   try { o.shipment_suggestion = buildShipmentSuggestion(id); } catch (e) { o.shipment_suggestion = null; }
   res.json({ success: true, data: o });
+});
+
+// ── Fapiao issuance (Phase 3a) ──────────────────────────────────────────────
+// The fapiao is issued at the accounting company; this is the system of record.
+// Staff "mark issued" + attach the fapiao (a pasted link or an uploaded PDF),
+// which then surfaces in the customer's profile. `unissue` reverts a mistake.
+router.put('/api/retail-admin/orders/:id/invoice', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = db.prepare('SELECT id, needs_invoice FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!o.needs_invoice) return res.status(400).json({ success: false, error: 'no_invoice_requested' });
+  if (req.body?.action === 'unissue') {
+    db.prepare("UPDATE retail_orders SET invoice_status = 'requested', invoice_issued_at = NULL WHERE id = ?").run(id);
+    return res.json({ success: true });
+  }
+  const fileUrl = (req.body?.file_url || '').trim() || null;
+  const number  = (req.body?.number || '').trim() || null;
+  if (!fileUrl && !number) return res.status(400).json({ success: false, error: 'need_file_or_number' });
+  db.prepare(
+    `UPDATE retail_orders
+        SET invoice_status = 'issued', invoice_file_url = ?, invoice_number = ?, invoice_issued_at = CURRENT_TIMESTAMP
+      WHERE id = ?`
+  ).run(fileUrl, number, id);
+  res.json({ success: true });
+});
+
+// Store an uploaded fapiao PDF (base64 data URI) in retail_media; returns a
+// servable URL (GET /api/retail/media/:id streams it with the stored mime).
+router.post('/api/retail-admin/invoice-file', requireRetailAdmin, express.json({ limit: '12mb' }), (req, res) => {
+  const { data } = req.body || {};
+  const m = /^data:(application\/pdf);base64,([A-Za-z0-9+/=]+)$/.exec(typeof data === 'string' ? data : '');
+  if (!m) return res.status(400).json({ success: false, error: 'not_a_pdf' });
+  const sizeBytes = Math.floor(m[2].length * 3 / 4);
+  if (sizeBytes > 10 * 1024 * 1024) return res.status(400).json({ success: false, error: 'too_large' });
+  try {
+    const info = db.prepare(
+      `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
+       VALUES (?, ?, ?, ?, NULL)`
+    ).run('fapiao.pdf', 'application/pdf', sizeBytes, data);
+    res.json({ success: true, data: { url: `/api/retail/media/${info.lastInsertRowid}` } });
+  } catch (e) {
+    console.error('[retail-admin/invoice-file] insert failed:', e.message);
+    res.status(500).json({ success: false, error: 'db_insert_failed' });
+  }
 });
 
 // Apply the split-package suggestion: re-bucket items between the order's

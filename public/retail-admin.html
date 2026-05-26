@@ -12406,10 +12406,29 @@ function invoiceAccountingText(o) {
 
 function renderInvoiceBlock(o) {
   const isCompany = invoiceIsCompany(o);
+  const issued = o.invoice_status === 'issued';
   const row = (label, val, mono) => `<span style="color: var(--text-3);">${label}</span><span style="color: var(--text-1); font-weight: 600;${mono ? ' font-variant-numeric: tabular-nums;' : ''}">${escapeHtml(val || '—')}</span>`;
+  const badge = `<span style="font-weight: 700; font-size: 11px; padding: 2px 9px; border-radius: 99px; ${issued ? 'background: var(--success); color: #fff;' : 'background: var(--bg-elev-2); color: var(--text-2); border: 1px solid var(--line);'}">${issued ? 'Issued · 已开' : 'Requested · 待开'}</span>`;
+  const inS = 'background: var(--bg-input); border: 1px solid var(--line); color: var(--text-1); border-radius: var(--r-md); padding: 6px 9px; font-size: 12px; font-family: inherit;';
+  const footer = issued
+    ? `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px;">
+        ${o.invoice_number ? `<div style="margin-bottom: 4px;"><span style="color: var(--text-3);">发票号码 No.</span> <b>${escapeHtml(o.invoice_number)}</b></div>` : ''}
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+          ${o.invoice_file_url ? `<a href="${escapeAttr(o.invoice_file_url)}" target="_blank" rel="noopener" class="db-btn primary" style="text-decoration: none;">📄 View fapiao · 查看发票</a>` : '<span style="color: var(--text-3);">No file attached · 未附文件</span>'}
+          <span style="color: var(--text-3);">${o.invoice_issued_at ? 'Issued ' + escapeHtml(String(o.invoice_issued_at).slice(0, 10)) : ''}</span>
+          <a href="#" onclick="event.preventDefault(); unissueInvoice(${o.id})" style="color: var(--text-3); font-size: 11px;">edit · 修改</a>
+        </div>
+      </div>`
+    : `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+        <input id="inv-url-${o.id}" placeholder="Fapiao link 发票链接 (or attach PDF)" style="${inS} flex: 1; min-width: 180px;">
+        <input id="inv-no-${o.id}" placeholder="发票号码 (optional)" style="${inS} width: 140px;">
+        <input id="inv-pdf-${o.id}" type="file" accept="application/pdf" style="display: none;" onchange="uploadInvoicePdf(${o.id}, this)">
+        <button type="button" class="db-btn" onclick="document.getElementById('inv-pdf-${o.id}').click()">📎 PDF</button>
+        <button type="button" class="db-btn primary" onclick="markInvoiceIssued(${o.id})">Mark issued · 标记已开</button>
+      </div>`;
   return `<div class="full" style="background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px;">
     <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
-      <span style="font-weight: 700; color: var(--text-1); font-size: 13px;">🧾 Invoice requested · 需要发票<span style="font-weight: 600; color: var(--text-3); font-size: 11px; margin-left: 6px;">${isCompany ? '企业 Company' : '个人 Personal'}</span></span>
+      <span style="font-weight: 700; color: var(--text-1); font-size: 13px;">🧾 Invoice · 发票 ${badge}<span style="font-weight: 600; color: var(--text-3); font-size: 11px; margin-left: 6px;">${isCompany ? '企业 Company' : '个人 Personal'}</span></span>
       <button type="button" class="db-btn" data-copy="${escapeAttr(invoiceAccountingText(o))}" onclick="event.stopPropagation(); copyKicker(this, 'Invoice info · 开票信息')">📋 Copy for accounting · 复制开票信息</button>
     </div>
     <div style="display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 12px;">
@@ -12417,7 +12436,46 @@ function renderInvoiceBlock(o) {
       ${isCompany ? row('税号 Tax ID', o.invoice_tax_id, true) : ''}
       ${row('邮箱 Email', o.invoice_email)}
     </div>
+    ${footer}
   </div>`;
+}
+
+// Mark an order's fapiao issued (attach a pasted link and/or 发票号码), revert
+// a mistake, or upload the fapiao PDF (→ retail_media, fills the link field).
+async function markInvoiceIssued(id) {
+  const url = (document.getElementById('inv-url-' + id)?.value || '').trim();
+  const number = (document.getElementById('inv-no-' + id)?.value || '').trim();
+  if (!url && !number) { toast('Add a fapiao link/PDF or 发票号码 · 请填写发票链接或号码', 'err'); return; }
+  try {
+    await api('/api/retail-admin/orders/' + id + '/invoice', { method: 'PUT', body: { action: 'issue', file_url: url, number } });
+    toast('Invoice marked issued · 已标记开票');
+    openOrder(id);
+  } catch (e) { toast('Failed · 失败: ' + e.message, 'err'); }
+}
+async function unissueInvoice(id) {
+  try {
+    await api('/api/retail-admin/orders/' + id + '/invoice', { method: 'PUT', body: { action: 'unissue' } });
+    toast('Back to requested · 已恢复待开');
+    openOrder(id);
+  } catch (e) { toast('Failed · 失败: ' + e.message, 'err'); }
+}
+async function uploadInvoicePdf(id, input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (file.type !== 'application/pdf') { toast('PDF only · 仅限 PDF', 'err'); input.value = ''; return; }
+  if (file.size > 10 * 1024 * 1024) { toast('PDF too large (max 10MB) · 文件过大', 'err'); input.value = ''; return; }
+  toast('Uploading PDF… · 上传中…');
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const res = await api('/api/retail-admin/invoice-file', { method: 'POST', body: { data: reader.result } });
+      const url = res && res.data && res.data.url;
+      const el = document.getElementById('inv-url-' + id);
+      if (el && url) el.value = url;
+      toast('PDF attached — tap Mark issued · 已附加,点击标记已开');
+    } catch (e) { toast('Upload failed · 上传失败: ' + e.message, 'err'); }
+  };
+  reader.readAsDataURL(file);
 }
 
 // ── Bulk ─────────────────────────────────────────────────────────────

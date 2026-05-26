@@ -1,0 +1,25 @@
+.page { padding: 32rpx 28rpx 60rpx; }
+.head { margin-bottom: 24rpx; }
+.kicker { font-size: 22rpx; letter-spacing: 2rpx; color: #8a8275; }
+.title { font-size: 52rpx; color: #1a1a17; margin-top: 6rpx; }
+
+.empty { text-align: center; padding: 90rpx 24rpx; }
+.empty-t { font-size: 34rpx; color: #1a1a17; }
+.empty-s { font-size: 24rpx; margin-top: 10rpx; line-height: 1.5; }
+
+.list { display: flex; flex-direction: column; gap: 18rpx; }
+.inv { background: #FFFCF7; border: 2rpx solid #1a1a17; padding: 22rpx; }
+.inv-top { display: flex; justify-content: space-between; align-items: center; gap: 12rpx; }
+.inv-order { font-size: 30rpx; color: #1a1a17; }
+.badge {
+  font-size: 20rpx; padding: 4rpx 16rpx; border-radius: 999rpx;
+  border: 2rpx solid #1a1a17; color: #1a1a17; white-space: nowrap;
+}
+.badge.on { background: #CCD900; }
+.inv-meta { font-size: 24rpx; margin-top: 8rpx; }
+.inv-title { font-size: 26rpx; color: #1a1a17; margin-top: 8rpx; font-weight: 600; }
+.inv-no { font-size: 22rpx; margin-top: 4rpx; font-variant-numeric: tabular-nums; }
+.inv-actions { margin-top: 16rpx; }
+.btn { display: inline-block; background: #1a1a17; color: #fff; font-size: 24rpx; padding: 12rpx 26rpx; }
+.sm { font-size: 22rpx; }
+.muted { color: #8a8275; }
