@@ -36,6 +36,25 @@ const DEFAULT_REVIEW_TAGS = [
   { id: 'will-buy',  en: 'Will reorder',    cn: '会回购', color: 'pink'     },
 ];
 
+// Social proof — turns the server's resolved { count, window } into a short
+// localized line. The server only sends a window it has real data for (see
+// socialProofForProduct in routes/retail.js), so we never invent a number.
+function socialProofText(sp, L) {
+  if (!sp || !sp.count) return '';
+  const n = sp.count;
+  if (L === 'cn') {
+    if (sp.window === 'today') return `今日 ${n} 人购买`;
+    if (sp.window === 'week')  return `本周 ${n} 人购买`;
+    if (sp.window === 'month') return `近30天 ${n} 人购买`;
+    return `${n} 人已购买`;
+  }
+  const ppl = n === 1 ? 'person' : 'people';
+  if (sp.window === 'today') return `${n} ${ppl} bought this today`;
+  if (sp.window === 'week')  return `${n} ${ppl} bought this in the past week`;
+  if (sp.window === 'month') return `${n} ${ppl} bought this in the past month`;
+  return n === 1 ? '1 person has bought this' : `${n} people have bought this`;
+}
+
 function reviewTagMap() {
   const cfg = getApp()?.globalData?.config;
   const list = (cfg?.reviews?.tags && cfg.reviews.tags.length)
@@ -89,6 +108,7 @@ Page({
     reviewsRecent: [],
     nutritionBasis: '',    // resolved label e.g. "Per 100ml" / "每100毫升"
     nutritionRows: [],     // [{label, value}]
+    socialProof: '',       // "N people bought this today" — '' hides the line
     isFavorited: false,    // heart pip state — driven by /api/retail/favorites/ids
     favoritePending: false, // de-dupe rapid taps on the pip
   },
@@ -410,6 +430,7 @@ Page({
       reviewsRecent,
       nutritionBasis,
       nutritionRows,
+      socialProof: socialProofText(p.social_proof, L),
     });
     this.recomputeFlashCountdown();
   },

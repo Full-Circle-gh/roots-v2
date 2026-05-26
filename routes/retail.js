@@ -380,6 +380,57 @@ router.get('/api/retail/products/top', (req, res) => {
   res.json({ success: true, data: out, meta });
 });
 
+// ── Social proof ("N people bought this …") ────────────────────────────────
+// Real-data nudge for the product page. We count DISTINCT buyers (real sales
+// only) across widening windows and surface the NARROWEST window that clears a
+// minimum bar — so a hot product reads "today", a slower one falls back to
+// week / month / all-time, and a product no one has bought shows nothing
+// (never a fabricated or zero count). Day boundary is HK-local (+8h) to match
+// the retail-admin dashboard. Cached briefly since the product detail route is
+// hit on every product open.
+const SOCIAL_PROOF_TTL_MS = 90 * 1000;
+const SOCIAL_PROOF_CACHE  = new Map();   // product_id → { t, value }
+const SOCIAL_PROOF_MIN    = { today: 2, week: 2, month: 1, all: 2 };
+const SOCIAL_PROOF_WINDOWS = [
+  ['today', 'c_today'], ['week', 'c_week'], ['month', 'c_month'], ['all', 'c_all'],
+];
+const SOCIAL_PROOF_PAID =
+  "o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+
+function socialProofForProduct(id) {
+  const now = Date.now();
+  const cached = SOCIAL_PROOF_CACHE.get(id);
+  if (cached && (now - cached.t) < SOCIAL_PROOF_TTL_MS) return cached.value;
+
+  let value = null;
+  try {
+    const row = db.prepare(`
+      SELECT
+        COUNT(DISTINCT CASE WHEN date(o.placed_at, '+8 hours') = date('now', '+8 hours')
+                            THEN o.customer_id END) AS c_today,
+        COUNT(DISTINCT CASE WHEN o.placed_at >= datetime('now', '-7 days')
+                            THEN o.customer_id END) AS c_week,
+        COUNT(DISTINCT CASE WHEN o.placed_at >= datetime('now', '-30 days')
+                            THEN o.customer_id END) AS c_month,
+        COUNT(DISTINCT o.customer_id) AS c_all
+        FROM retail_order_items oi
+        JOIN retail_orders o ON o.id = oi.order_id
+       WHERE oi.product_id = ?
+         AND ${SOCIAL_PROOF_PAID}
+    `).get(id);
+    if (row) {
+      for (const [w, col] of SOCIAL_PROOF_WINDOWS) {
+        const n = Number(row[col]) || 0;
+        if (n >= SOCIAL_PROOF_MIN[w]) { value = { count: n, window: w }; break; }
+      }
+    }
+  } catch (e) {
+    console.error('[social-proof]', e.message);
+  }
+  SOCIAL_PROOF_CACHE.set(id, { t: now, value });
+  return value;
+}
+
 router.get('/api/retail/products/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
@@ -431,6 +482,8 @@ router.get('/api/retail/products/:id', (req, res) => {
     for (const c of choices) (choicesByOpt[c.option_id] ||= []).push(c);
   }
   product.options = options.map(o => ({ ...o, choices: choicesByOpt[o.id] || [] }));
+
+  product.social_proof = socialProofForProduct(id);
 
   res.set('Cache-Control', 'public, max-age=10');
   res.json({ success: true, data: product });

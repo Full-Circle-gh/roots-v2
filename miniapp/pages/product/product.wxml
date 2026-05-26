@@ -79,6 +79,13 @@
         </view>
       </view>
 
+      <!-- Social proof — live "N people bought this …" nudge. Real sales
+           only (narrowest window with data); hidden when there's none. -->
+      <view wx:if="{{socialProof}}" class="social-proof">
+        <view class="sp-dot"></view>
+        <text class="sp-text f-toni">{{socialProof}}</text>
+      </view>
+
       <!-- Block-based body (designer-styled per-section). When present,
            the legacy description parts are skipped. -->
       <product-blocks wx:if="{{descriptionBlocks.length}}"
