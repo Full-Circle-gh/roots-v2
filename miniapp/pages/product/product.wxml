@@ -177,22 +177,6 @@
         </view>
       </view>
 
-      <!-- Variant switcher — sibling products in the same variant group.
-           Tapping loads that variant (its own price / stock / image). -->
-      <block wx:if="{{hasVariants}}">
-        <view class="option-group">
-          <view class="option-label f-toni">{{lang === 'cn' ? '规格' : 'Variants'}}</view>
-          <view class="option-choices">
-            <view wx:for="{{variants}}" wx:for-item="v" wx:key="id"
-                  class="choice variant-choice {{v.isCurrent ? 'on' : ''}} {{v.soldOut ? 'sold-out' : ''}}"
-                  data-id="{{v.id}}" bindtap="pickVariant">
-              <text>{{v.label}}</text>
-              <text wx:if="{{v.price}}" class="choice-delta">{{v.price}}</text>
-            </view>
-          </view>
-        </view>
-      </block>
-
       <!-- Per-product options (size, cutlery, etc.) -->
       <block wx:if="{{options.length}}">
         <view wx:for="{{options}}" wx:for-item="opt" wx:key="id" class="option-group">
@@ -243,6 +227,35 @@
           <text class="add-price f-gothic">{{price}}</text>
         </view>
       </button>
+    </view>
+
+    <!-- Variant size picker — bottom sheet opened from "Add to basket" on a
+         product with ≥2 siblings. Choosing a size adds that sibling. -->
+    <view wx:if="{{vpShow}}" class="vp-mask" bindtap="closeVariantPicker">
+      <view class="vp-sheet" catchtap="vpStop">
+        <view class="vp-head">
+          <view>
+            <view class="vp-title f-bear">{{vpTitle}}</view>
+            <view wx:if="{{vpName}}" class="vp-name f-yuan">{{vpName}}</view>
+          </view>
+          <view class="vp-close" bindtap="closeVariantPicker">×</view>
+        </view>
+        <view class="vp-opts">
+          <view wx:for="{{vpOptions}}" wx:key="id" wx:for-item="opt"
+                class="vp-opt {{opt.soldOut ? 'sold-out' : ''}}"
+                data-id="{{opt.id}}" bindtap="vpChoose">
+            <view class="vp-opt-main">
+              <text class="vp-opt-label f-bear">{{opt.label}}</text>
+              <text wx:if="{{opt.low}}" class="vp-opt-low f-toni">{{opt.low}}</text>
+              <text wx:if="{{opt.soldOut}}" class="vp-opt-oos f-toni">{{oosLabel}}</text>
+            </view>
+            <view class="vp-opt-price-stack">
+              <text wx:if="{{opt.isFlash}}" class="vp-opt-was f-aleo">{{opt.priceWas}}</text>
+              <text class="vp-opt-price f-gothic {{opt.isFlash ? 'is-flash' : ''}}">{{opt.price}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
     </view>
   </block>
   <popup-manager page="product"></popup-manager>

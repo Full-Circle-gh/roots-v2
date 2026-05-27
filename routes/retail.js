@@ -595,8 +595,12 @@ router.get('/api/retail/products/:id', (req, res) => {
   // product-page variant switcher. Only published + active members show; the
   // app hides the switcher when there's 0–1 member.
   if (product.variant_group_id) {
+    const nowMs = Date.now();
     product.variants = tdb().prepare(
-      `SELECT p.id, p.variant_label, p.name_en, p.name_cn, p.sell_price AS price,
+      `SELECT p.id, p.variant_label, p.name_en, p.name_cn, p.sku, p.weight AS size,
+              p.sell_price AS price,
+              p.flash_price, p.flash_starts_at, p.flash_ends_at,
+              p.flash_stock_limit, p.flash_sold,
               p.image_data, p.image_url,
               COALESCE(
                 (SELECT SUM(rss.physical_qty) FROM retail_store_stock rss
@@ -607,7 +611,7 @@ router.get('/api/retail/products/:id', (req, res) => {
          FROM products p
         WHERE p.variant_group_id = ? AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
         ORDER BY COALESCE(p.variant_label, p.name_en), p.id`
-    ).all(product.variant_group_id);
+    ).all(product.variant_group_id).map(v => flashsales.decorateProduct(v, nowMs));
   } else {
     product.variants = [];
   }

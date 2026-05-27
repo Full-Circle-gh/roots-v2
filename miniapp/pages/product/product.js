@@ -122,8 +122,15 @@ Page({
     badges: [],
     options: [],
     selectedChoices: {},   // { [option_id]: choice_id }
-    variants: [],          // sibling products in the same variant_group_id
-    hasVariants: false,    // true when ≥2 purchasable members → show switcher
+    hasVariants: false,    // ≥2 purchasable siblings → "Add" opens the size picker
+    // Variant size-picker bottom sheet (same UX as the shop grid's +). Opened
+    // from "Add to basket" when the product has ≥2 siblings; choosing a size
+    // adds that specific sibling (its own price / stock) to the cart.
+    vpShow: false,
+    vpName: '',
+    vpTitle: 'Choose a size',
+    vpOptions: [],
+    oosLabel: 'SOLD OUT',
     qty: 1,
     lang: 'en',
     loading: true,
@@ -332,18 +339,18 @@ Page({
       if (def) selected[o.id] = def.id;
       else if (o.is_required && o.choices.length === 1) selected[o.id] = o.choices[0].id;
     });
-    // Variant siblings — show a switcher when there are ≥2 purchasable members.
-    const variants = (p.variants || []).map(v => ({
-      id: v.id,
-      label: v.variant_label || lang.pick(v.name_en, v.name_cn, L) || ('#' + v.id),
-      price: Number(v.price) > 0 ? '¥' + Number(v.price).toFixed(2) : '',
-      isCurrent: v.id === p.id,
-      soldOut: v.stock != null && Number(v.stock) <= 0,
-    }));
-    const hasVariants = variants.length > 1;
+    // Variant siblings (decorated server-side with effective price + stock).
+    // Kept raw on the instance for the size picker; ≥2 members → "Add" opens
+    // the picker instead of adding the viewed product directly.
+    this._variants = Array.isArray(p.variants) ? p.variants : [];
+    const hasVariants = this._variants.length > 1;
     // Stock state — null means untracked (treat as in-stock).
     let soldOut = false, stockTag = '', stockTagKind = '';
-    if (p.stock != null) {
+    if (hasVariants) {
+      // Variant product: sold out only when EVERY size is out. Per-size
+      // "Only N left" lives in the picker, so the hero badge stays quiet.
+      soldOut = this._variants.every(v => v.stock != null && Number(v.stock) <= 0);
+    } else if (p.stock != null) {
       if (Number(p.stock) <= 0) {
         soldOut = true;
         stockTag = L === 'cn' ? '已售罄' : 'SOLD OUT';
@@ -507,11 +514,13 @@ Page({
       badges,
       options,
       selectedChoices: selected,
-      variants,
       hasVariants,
+      oosLabel: L === 'cn' ? '售罄' : 'SOLD OUT',
       addBtnLabel: soldOut
         ? (L === 'cn' ? '已售罄' : 'SOLD OUT')
-        : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET'),
+        : hasVariants
+          ? (L === 'cn' ? '选择规格' : 'CHOOSE A SIZE')
+          : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET'),
       soldOut,
       stockTag,
       stockTagKind,
@@ -533,14 +542,6 @@ Page({
     const { optionId, choiceId } = e.currentTarget.dataset;
     const selected = { ...this.data.selectedChoices, [optionId]: choiceId };
     this.setData({ selectedChoices: selected });
-  },
-
-  // Tap a variant chip → load that sibling product. redirectTo (not navigateTo)
-  // so switching between variants doesn't stack pages on the back button.
-  pickVariant(e) {
-    const vid = e.currentTarget.dataset.id;
-    if (!vid || vid === this.data.id) return;
-    wx.redirectTo({ url: '/pages/product/product?id=' + vid });
   },
 
   decQty() { this.setData({ qty: Math.max(1, this.data.qty - 1) }); },
@@ -591,6 +592,9 @@ Page({
   addToCart() {
     const p = this.data.product;
     if (!p) return;
+    // Variant product → pick the size in a bottom-sheet (each sibling has its
+    // own price / stock). Same gesture as the shop grid's + button.
+    if (this.data.hasVariants) { this._openVariantPicker(); return; }
     if (this.data.soldOut) {
       wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
       return;
@@ -623,11 +627,77 @@ Page({
       image_data: p.image_data,
       price: this.data.priceN + delta,
     }, this.data.qty, chosen);
+    this._finishAdd();
+  },
+
+  // Shared post-add: confirm toast + pop back to where they came from.
+  _finishAdd() {
     wx.showToast({
       title: this.data.lang === 'cn' ? '已加入购物车' : 'Added to cart',
       icon: 'success',
       duration: 1200,
     });
     setTimeout(() => wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/home' }) }), 500);
+  },
+
+  // ── Variant size picker ───────────────────────────────────────────
+  // Bottom sheet listing each sibling size with its own price / stock.
+  // Prices mirror the shop grid: server-decorated effective_price wins when
+  // a flash sale is active on that specific size.
+  _openVariantPicker() {
+    const L = this.data.lang;
+    const money = v => '¥' + (Number.isInteger(v) ? v : v.toFixed(2));
+    const options = this._variants.map(m => {
+      const regular = Number(m.price ?? m.sell_price) || 0;
+      const eff = Number(m.effective_price) > 0 ? Number(m.effective_price) : regular;
+      const isFlash = !!m.is_on_flash && eff < regular;
+      const stock = m.stock == null ? null : Number(m.stock);
+      const soldOut = stock != null && stock <= 0;
+      return {
+        id: m.id,
+        label: m.variant_label || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
+        price: eff > 0 ? money(eff) : '',
+        priceWas: isFlash && regular > 0 ? money(regular) : '',
+        isFlash,
+        soldOut,
+        low: (!soldOut && stock != null && stock <= 5)
+          ? (L === 'cn' ? `仅剩 ${stock}` : `Only ${stock} left`)
+          : '',
+      };
+    });
+    this.setData({
+      vpShow: true,
+      vpName: this.data.name,
+      vpTitle: L === 'cn' ? '选择规格' : 'Choose a size',
+      vpOptions: options,
+    });
+  },
+
+  closeVariantPicker() { this.setData({ vpShow: false }); },
+  vpStop() { /* catchtap on the sheet body so taps don't dismiss it */ },
+
+  vpChoose(e) {
+    const id = Number(e.currentTarget.dataset.id);
+    const m = (this._variants || []).find(x => Number(x.id) === id);
+    if (!m) return;
+    const stock = m.stock == null ? null : Number(m.stock);
+    if (stock != null && stock <= 0) {
+      wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
+      return;
+    }
+    cart.add({
+      id: m.id,
+      name_en: m.name_en,
+      name_cn: m.name_cn,
+      sku: m.sku,
+      size: m.size || m.variant_label,
+      image_url: m.image_url,
+      image_data: m.image_data,
+      price: Number(m.price ?? m.sell_price) || 0,
+      effective_price: m.effective_price,
+      is_on_flash: m.is_on_flash,
+    }, this.data.qty, []);
+    this.setData({ vpShow: false });
+    this._finishAdd();
   },
 });
