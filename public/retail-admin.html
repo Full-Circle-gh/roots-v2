@@ -699,13 +699,40 @@
   .pd-desc-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   @media (max-width: 760px) { .pd-desc-cols { grid-template-columns: 1fr; } }
   .pd-desc-lang { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin-bottom: 4px; font-family: var(--f-mono); }
-  .pd-rte-toolbar { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
-  .pd-rte-toolbar button { min-width: 30px; height: 28px; padding: 0 8px; border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-1); border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1; }
-  .pd-rte-toolbar button:hover { border-color: var(--brass, #B08D4A); }
+  /* Advanced rich-text toolbar — grouped icon buttons, format dropdown,
+     colour swatches and a fullscreen toggle. Commands run on whichever
+     EN/CN box was last focused (selection tracked in JS). */
+  .pd-rte-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-bottom: 8px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-pane); position: sticky; top: 0; z-index: 2; }
+  .pd-rte-toolbar button { min-width: 30px; height: 30px; padding: 0 7px; border: 1px solid transparent; background: transparent; color: var(--text-1); border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+  .pd-rte-toolbar button:hover { background: var(--bg-elev-1, rgba(255,255,255,.06)); border-color: var(--line); }
+  .pd-rte-toolbar button:active { transform: translateY(1px); }
+  .pd-rte-toolbar button svg { width: 16px; height: 16px; display: block; }
+  .pd-rte-toolbar .pd-rte-clr { font-size: 13px; font-weight: 600; }
+  .pd-rte-toolbar .pd-rte-clr sub { font-size: 9px; }
+  .pd-rte-sep { width: 1px; align-self: stretch; margin: 3px 4px; background: var(--line); }
+  .pd-rte-sel { height: 30px; border: 1px solid var(--line); background: var(--bg-app); color: var(--text-1); border-radius: 6px; font-size: 12px; padding: 0 6px; cursor: pointer; }
+  .pd-rte-sel:hover { border-color: var(--brass, #B08D4A); }
+  /* Colour controls — native picker behind an "A"/highlight glyph; the bar
+     under the glyph reflects the chosen colour. */
+  .pd-rte-color { position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+  .pd-rte-color:hover { background: var(--bg-elev-1, rgba(255,255,255,.06)); border-color: var(--line); }
+  .pd-rte-color > span { font-size: 13px; font-weight: 700; line-height: 1; pointer-events: none; }
+  .pd-rte-color > i { display: block; width: 16px; height: 3px; border-radius: 2px; margin-top: 1px; background: #e23b3b; pointer-events: none; }
+  .pd-rte-color.pd-rte-hl > i { background: #ffe680; }
+  .pd-rte-color input[type=color] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: none; padding: 0; margin: 0; cursor: pointer; }
   .pd-rte { min-height: 140px; max-height: 340px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; color: var(--text-1); background: var(--bg-app); }
   .pd-rte:focus { outline: none; border-color: var(--brass, #B08D4A); }
+  .pd-rte h2 { font-size: 17px; margin: 8px 0 4px; font-weight: 700; }
   .pd-rte h3 { font-size: 15px; margin: 6px 0; }
   .pd-rte ul, .pd-rte ol { padding-left: 20px; margin: 6px 0; }
+  .pd-rte blockquote { margin: 6px 0; padding: 2px 0 2px 12px; border-left: 3px solid var(--line); color: var(--text-2); }
+  .pd-rte hr { border: none; border-top: 1px solid var(--line); margin: 10px 0; }
+  .pd-rte a { color: var(--brass, #B08D4A); }
+  /* Fullscreen — lift the whole formatted block over the page so the office
+     can write a long description without the cramped modal. */
+  #pd-desc-rich.pd-rte-fs { position: fixed; inset: 0; z-index: 9999; margin: 0; padding: 16px 20px 20px; background: var(--bg-app); overflow-y: auto; }
+  #pd-desc-rich.pd-rte-fs .pd-rte { max-height: calc(100vh - 200px); min-height: 50vh; }
+  body.pd-rte-fs-lock { overflow: hidden; }
   .va-x { flex: none; border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 14px; padding: 2px 6px; line-height: 1; }
   .va-x:hover { color: var(--brass); }
   .va-actions { display: flex; gap: 8px; margin-top: 12px; }
@@ -4558,19 +4585,44 @@
             <!-- Formatted mode — toolbar + English | 中文 side by side -->
             <div id="pd-desc-rich" style="display:none;">
               <div class="pd-rte-toolbar">
+                <select class="pd-rte-sel" title="Paragraph format · 段落格式" onmousedown="pdRteSaveSel()" onchange="pdRteBlock(this.value); this.selectedIndex=0;">
+                  <option value="" selected>¶ Format · 格式</option>
+                  <option value="p">Paragraph · 正文</option>
+                  <option value="h2">Heading · 标题</option>
+                  <option value="h3">Subheading · 副标题</option>
+                  <option value="blockquote">Quote · 引用</option>
+                </select>
+                <span class="pd-rte-sep"></span>
                 <button type="button" title="Bold · 加粗"        onmousedown="return false" onclick="pdRte('bold')"><b>B</b></button>
                 <button type="button" title="Italic · 斜体"      onmousedown="return false" onclick="pdRte('italic')"><i>I</i></button>
-                <button type="button" title="Heading · 标题"     onmousedown="return false" onclick="pdRte('formatBlock','h3')">H</button>
-                <button type="button" title="Bulleted list · 项目符号" onmousedown="return false" onclick="pdRte('insertUnorderedList')">•</button>
-                <button type="button" title="Numbered list · 编号" onmousedown="return false" onclick="pdRte('insertOrderedList')">1.</button>
-                <button type="button" title="Link · 链接"        onmousedown="return false" onclick="pdRteLink()">🔗</button>
-                <button type="button" title="Clear formatting · 清除格式" onmousedown="return false" onclick="pdRte('removeFormat')">⌫</button>
+                <button type="button" title="Underline · 下划线"  onmousedown="return false" onclick="pdRte('underline')"><span style="text-decoration:underline">U</span></button>
+                <button type="button" title="Strikethrough · 删除线" onmousedown="return false" onclick="pdRte('strikeThrough')"><span style="text-decoration:line-through">S</span></button>
+                <span class="pd-rte-sep"></span>
+                <label class="pd-rte-color" title="Text colour · 文字颜色"><span>A</span><i></i><input type="color" value="#1a1a17" onmousedown="pdRteSaveSel()" oninput="pdRteColor(this.value); this.parentNode.querySelector('i').style.background=this.value;"></label>
+                <label class="pd-rte-color pd-rte-hl" title="Highlight · 高亮"><span>A</span><i></i><input type="color" value="#ffe680" onmousedown="pdRteSaveSel()" oninput="pdRteHilite(this.value); this.parentNode.querySelector('i').style.background=this.value;"></label>
+                <span class="pd-rte-sep"></span>
+                <button type="button" title="Align left · 左对齐"   onmousedown="return false" onclick="pdRte('justifyLeft')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h8M2 12h11"/></svg></button>
+                <button type="button" title="Align centre · 居中"   onmousedown="return false" onclick="pdRte('justifyCenter')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M4 8h8M3 12h10"/></svg></button>
+                <button type="button" title="Align right · 右对齐"  onmousedown="return false" onclick="pdRte('justifyRight')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M6 8h8M4 12h10"/></svg></button>
+                <span class="pd-rte-sep"></span>
+                <button type="button" title="Bulleted list · 项目符号" onmousedown="return false" onclick="pdRte('insertUnorderedList')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 4h8M6 8h8M6 12h8"/><circle cx="3" cy="4" r="1" fill="currentColor" stroke="none"/><circle cx="3" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="3" cy="12" r="1" fill="currentColor" stroke="none"/></svg></button>
+                <button type="button" title="Numbered list · 编号"  onmousedown="return false" onclick="pdRte('insertOrderedList')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 4h8M6 8h8M6 12h8"/><text x="0.5" y="5.6" font-size="5.5" fill="currentColor" stroke="none">1</text><text x="0.5" y="9.6" font-size="5.5" fill="currentColor" stroke="none">2</text><text x="0.5" y="13.6" font-size="5.5" fill="currentColor" stroke="none">3</text></svg></button>
+                <button type="button" title="Decrease indent · 减少缩进" onmousedown="return false" onclick="pdRte('outdent')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h7M7 12h7M2 8h7M6 6L3 8l3 2"/></svg></button>
+                <button type="button" title="Increase indent · 增加缩进" onmousedown="return false" onclick="pdRte('indent')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h7M2 12h7M7 8h7M3 6l3 2-3 2"/></svg></button>
+                <span class="pd-rte-sep"></span>
+                <button type="button" title="Link · 链接"          onmousedown="return false" onclick="pdRteLink()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9.5a2.5 2.5 0 010-3.5l2-2a2.5 2.5 0 013.5 3.5l-1 1"/><path d="M9.5 6.5a2.5 2.5 0 010 3.5l-2 2a2.5 2.5 0 01-3.5-3.5l1-1"/></svg></button>
+                <button type="button" title="Horizontal rule · 分隔线" onmousedown="return false" onclick="pdRte('insertHorizontalRule')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 8h12"/></svg></button>
+                <button type="button" class="pd-rte-clr" title="Clear formatting · 清除格式" onmousedown="return false" onclick="pdRteClear()">T<sub>x</sub></button>
+                <span class="pd-rte-sep"></span>
+                <button type="button" title="Undo · 撤销"          onmousedown="return false" onclick="pdRte('undo')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7H10a3 3 0 010 6H6M5 7l2.5-2.5M5 7l2.5 2.5"/></svg></button>
+                <button type="button" title="Redo · 重做"          onmousedown="return false" onclick="pdRte('redo')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 7H6a3 3 0 000 6h4M11 7L8.5 4.5M11 7L8.5 9.5"/></svg></button>
+                <button type="button" title="Fullscreen · 全屏"     onmousedown="return false" onclick="pdRteFullscreen()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg></button>
               </div>
               <div class="pd-desc-cols">
                 <div><div class="pd-desc-lang">English</div><div id="pd-rte-en" class="pd-rte" contenteditable="true"></div></div>
                 <div><div class="pd-desc-lang">中文</div><div id="pd-rte-cn" class="pd-rte" contenteditable="true"></div></div>
               </div>
-              <div class="muted" style="font-size:11px;margin-top:6px;">Supported on the mini-app: bold, italic, headings, lists, links. · 小程序支持:加粗、斜体、标题、列表、链接。</div>
+              <div class="muted" style="font-size:11px;margin-top:6px;">Shown on the mini-app: headings, bold, italic, underline, strikethrough, colour, highlight, alignment, lists, quotes, rules, links. · 小程序支持:标题、加粗、斜体、下划线、删除线、颜色、高亮、对齐、列表、引用、分隔线、链接。</div>
             </div>
           </div>
           <div class="field" style="grid-column:1/-1;">
@@ -14982,7 +15034,7 @@ function pdOpen(id) {
   pdSyncFullscreenBtn(wantFull);
   document.getElementById('pd-bg').classList.add('show');
 }
-function pdClose() { document.getElementById('pd-bg').classList.remove('show'); _pdGallery = []; _pdGalleryDirty = false; }
+function pdClose() { document.getElementById('pd-bg').classList.remove('show'); _pdGallery = []; _pdGalleryDirty = false; const ri = document.getElementById('pd-desc-rich'); if (ri) ri.classList.remove('pd-rte-fs'); document.body.classList.remove('pd-rte-fs-lock'); }
 // Editor size: large by default, ⤢ toggles full-screen. Preference is
 // remembered per-operator so it opens the way they last left it.
 function pdSyncFullscreenBtn(on) {
@@ -15172,6 +15224,7 @@ function pdApplyDescMode() {
   const pl = document.getElementById('pd-desc-plain'); const ri = document.getElementById('pd-desc-rich');
   if (pl) pl.style.display = m === 'plain' ? '' : 'none';
   if (ri) ri.style.display = m === 'rich' ? '' : 'none';
+  if (m !== 'rich' && ri) { ri.classList.remove('pd-rte-fs'); document.body.classList.remove('pd-rte-fs-lock'); }
   document.querySelectorAll('.pd-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
 }
 function pdDescMode(m) {
@@ -15188,8 +15241,50 @@ function pdDescMode(m) {
   _pdDescMode = m;
   pdApplyDescMode();
 }
-function pdRte(cmd, val) { try { document.execCommand(cmd, false, val || null); } catch (e) {} }
+// The single toolbar drives whichever EN/CN box the cursor is in. Native
+// controls (the Format <select>, the colour pickers) steal focus and would
+// collapse the selection, so we track the live range from `selectionchange`
+// and restore it before running a command.
+let _pdRteActive = null, _pdRteRange = null;
+document.addEventListener('selectionchange', () => {
+  const s = document.getSelection();
+  if (!s || !s.rangeCount) return;
+  let n = s.anchorNode;
+  if (n && n.nodeType === 3) n = n.parentElement;
+  const ed = n && n.closest && n.closest('.pd-rte');
+  if (ed) { _pdRteActive = ed; _pdRteRange = s.getRangeAt(0).cloneRange(); }
+});
+function pdRteSaveSel() {
+  const s = document.getSelection();
+  if (s && s.rangeCount) {
+    let n = s.anchorNode; if (n && n.nodeType === 3) n = n.parentElement;
+    const ed = n && n.closest && n.closest('.pd-rte');
+    if (ed) { _pdRteActive = ed; _pdRteRange = s.getRangeAt(0).cloneRange(); }
+  }
+}
+function pdRteRestore() {
+  if (!_pdRteActive) _pdRteActive = document.getElementById('pd-rte-en');
+  _pdRteActive.focus();
+  if (_pdRteRange) { const s = document.getSelection(); s.removeAllRanges(); s.addRange(_pdRteRange); }
+}
+function pdRte(cmd, val) {
+  pdRteRestore();
+  // styleWithCSS makes colour/decoration come out as <span style> (which the
+  // mini-app <rich-text> renders) instead of legacy <font>/<u> tags it drops.
+  try { document.execCommand('styleWithCSS', false, true); } catch (e) {}
+  try { document.execCommand(cmd, false, (val == null ? null : val)); } catch (e) {}
+  pdRteSaveSel();
+}
+function pdRteBlock(tag) { if (tag) pdRte('formatBlock', tag); }
+function pdRteColor(c) { pdRte('foreColor', c); }
+function pdRteHilite(c) { try { pdRte('hiliteColor', c); } catch (e) { pdRte('backColor', c); } }
+function pdRteClear() { pdRte('removeFormat'); pdRte('formatBlock', 'p'); }
 function pdRteLink() { const url = prompt('Link URL · 链接地址:'); if (url) pdRte('createLink', url); }
+function pdRteFullscreen() {
+  const wrap = document.getElementById('pd-desc-rich'); if (!wrap) return;
+  const on = wrap.classList.toggle('pd-rte-fs');
+  document.body.classList.toggle('pd-rte-fs-lock', on);
+}
 function pdPlainToHtml(t) { return escapeHtml(String(t || '')).replace(/\n/g, '<br>'); }
 function pdHtmlToPlain(h) { const d = document.createElement('div'); d.innerHTML = h || ''; return (d.innerText || '').trim(); }
 // A visually-empty rich box (just <br>/&nbsp;) saves as '' rather than junk markup.
