@@ -7,7 +7,7 @@
 
 const BASE = 'https://rootskitchenchina.com';
 
-function request(path, opts = {}) {
+function request(path, opts = {}, _retried = false) {
   const app = getApp();
   const token = app?.globalData?.token || '';
   const headers = { 'Content-Type': 'application/json', ...(opts.header || {}) };
@@ -24,6 +24,22 @@ function request(path, opts = {}) {
         if (res.statusCode >= 500) return reject(new Error('server_error_' + res.statusCode));
         const body = res.data;
         if (res.statusCode === 401) {
+          // The token is gone server-side — expired, or an admin hit "force
+          // logout" (which deletes every retail_auth_token row). The stale
+          // token in globalData/storage will 401 on every subsequent call,
+          // and nothing else re-runs wx.login mid-session, so without this
+          // the customer is stuck on "unauthenticated" until they kill and
+          // reopen the mini app. Recover transparently: run one fresh silent
+          // login, then replay this request once. Give up only if re-login
+          // fails (e.g. the account is also blocked) or the replay still 401s.
+          const canReauth = !_retried && app && typeof app.reauth === 'function'
+                            && path !== '/api/retail/auth';
+          if (canReauth) {
+            return app.reauth().then(
+              () => request(path, opts, true).then(resolve, reject),
+              (e) => reject(e instanceof Error ? e : new Error('unauthenticated')),
+            );
+          }
           if (app) app.globalData.token = '';
           try { wx.removeStorageSync('token'); } catch {}
           return reject(new Error('unauthenticated'));

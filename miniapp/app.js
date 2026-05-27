@@ -188,6 +188,26 @@ App({
     } catch {}
   },
 
+  // Mid-session token recovery. api.js calls this when a request comes back
+  // 401 (token expired, or an admin "force logout" wiped the server-side
+  // tokens), then replays the failed request. We drop the dead token first
+  // so a concurrent request can't keep reusing it, then run a fresh silent
+  // login. Concurrent 401s coalesce onto one wx.login round-trip via the
+  // in-flight guard, which clears once the login settles so a *later*
+  // force-logout can trigger another recovery.
+  reauth() {
+    if (!this._reauthPromise) {
+      this.globalData.token = '';
+      try { wx.removeStorageSync('token'); } catch {}
+      this._reauthPromise = this.silentLogin();
+      this._reauthPromise.then(
+        () => { this._reauthPromise = null; },
+        () => { this._reauthPromise = null; },
+      );
+    }
+    return this._reauthPromise;
+  },
+
   async silentLogin() {
     const { code } = await new Promise((resolve, reject) =>
       wx.login({ success: resolve, fail: reject }));
