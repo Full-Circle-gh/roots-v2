@@ -203,6 +203,18 @@ router.get('/api/retail/delivery-zones', (req, res) => {
   }
 });
 
+// Bilingual district list for one city — powers the English-mode address
+// picker's city→district step (Chinese mode uses WeChat's native region
+// picker, no data needed). Keyed by the catalogue city name_cn, e.g.
+// ?city=北京市 → [{ name_cn:'朝阳区', name_en:'Chaoyang' }, ...]. Pricing is
+// still gated by the zone matcher at /quote, same as the city list.
+router.get('/api/retail/districts', (req, res) => {
+  const city = String(req.query.city || '').trim();
+  const list = (city && CHINA_DISTRICTS[city]) || [];
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.json({ success: true, data: list });
+});
+
 // ─── Products ───────────────────────────────────────────────────────────
 // Only published rows show. Customer-facing endpoint pulls from the SAME
 // master product fields as the rest of the system — sell_price is the
@@ -8166,6 +8178,9 @@ router.get('/api/retail/topup/transactions', requireRetailAuth, (req, res) => {
 // cities, served to the admin UI to populate the delivery-zone dropdowns.
 // Static dataset (loaded once at boot from reference/china_regions.json).
 const CHINA_REGIONS = require('../reference/china_regions.json');
+// Bilingual districts per city (current/complete CN + EN), for the English-mode
+// address picker's city→district step. See scripts/build-regions-dataset.js.
+const CHINA_DISTRICTS = require('../lib/china_districts.json');
 
 // City → canonical Chinese province, built once from the same dataset. The
 // served-zone picker stores only a city for plain 'city' zones, so couriers +
