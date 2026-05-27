@@ -56,6 +56,22 @@ function socialProofText(sp, L) {
   return n === 1 ? '1 person has bought this' : `${n} people have bought this`;
 }
 
+// "Last ordered X ago" — a freshness/urgency nudge from the most recent sale.
+// Only shown when genuinely recent (< 24h) AND the bought-count line isn't
+// already signalling recent activity (today/week windows), so the two lines
+// stay complementary rather than redundant.
+function recencyText(sp, L) {
+  if (!sp || !sp.last_order_ms) return '';
+  if (sp.window === 'today' || sp.window === 'week') return '';
+  const ms = Date.now() - sp.last_order_ms;
+  if (ms < 0 || ms > 24 * 3600 * 1000) return '';
+  const min = Math.floor(ms / 60000);
+  if (min < 1)  return L === 'cn' ? '刚刚有人下单' : 'Just ordered';
+  if (min < 60) return L === 'cn' ? `${min} 分钟前有人下单` : `Last ordered ${min} min ago`;
+  const hr = Math.floor(min / 60);
+  return L === 'cn' ? `${hr} 小时前有人下单` : `Last ordered ${hr}h ago`;
+}
+
 // Live "N people viewing now" — only meaningful with at least one OTHER
 // person present, so we hide it below 2 (a lone viewer seeing "1 viewing"
 // reads as broken). Count comes from the server's in-memory presence map.
@@ -120,6 +136,7 @@ Page({
     nutritionBasis: '',    // resolved label e.g. "Per 100ml" / "每100毫升"
     nutritionRows: [],     // [{label, value}]
     socialProof: '',       // "N people bought this today" — '' hides the line
+    recency: '',           // "Last ordered X ago" — '' hides the line
     viewingCount: 0,       // live concurrent viewers (from presence heartbeat)
     viewingText: '',       // "N people viewing now" — '' hides the line (count < 2)
     isFavorited: false,    // heart pip state — driven by /api/retail/favorites/ids
@@ -484,6 +501,7 @@ Page({
       nutritionBasis,
       nutritionRows,
       socialProof: socialProofText(p.social_proof, L),
+      recency: recencyText(p.social_proof, L),
       viewingText: viewingText(this.data.viewingCount, L),
     });
     this.recomputeFlashCountdown();

@@ -85,6 +85,10 @@
         <view class="sp-dot"></view>
         <text class="sp-text f-toni">{{socialProof}}</text>
       </view>
+      <view wx:if="{{recency}}" class="social-proof">
+        <view class="sp-dot"></view>
+        <text class="sp-text f-toni">{{recency}}</text>
+      </view>
       <view wx:if="{{viewingText}}" class="social-proof">
         <view class="sp-dot sp-dot-view"></view>
         <text class="sp-text f-toni">{{viewingText}}</text>

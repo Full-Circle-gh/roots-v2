@@ -423,17 +423,23 @@ function socialProofForProduct(id) {
                             THEN o.customer_id END) AS c_week,
         COUNT(DISTINCT CASE WHEN o.placed_at >= datetime('now', '-30 days')
                             THEN o.customer_id END) AS c_month,
-        COUNT(DISTINCT o.customer_id) AS c_all
+        COUNT(DISTINCT o.customer_id) AS c_all,
+        MAX(o.placed_at) AS last_order
         FROM retail_order_items oi
         JOIN retail_orders o ON o.id = oi.order_id
        WHERE oi.product_id = ?
          AND ${SOCIAL_PROOF_PAID}
     `).get(id);
-    if (row) {
+    if (row && (Number(row.c_all) > 0 || row.last_order)) {
+      let count = 0, window = null;
       for (const [w, col] of SOCIAL_PROOF_WINDOWS) {
         const n = Number(row[col]) || 0;
-        if (n >= SOCIAL_PROOF_MIN[w]) { value = { count: n, window: w }; break; }
+        if (n >= SOCIAL_PROOF_MIN[w]) { count = n; window = w; break; }
       }
+      const last_order_ms = row.last_order
+        ? (Date.parse(String(row.last_order).replace(' ', 'T') + 'Z') || null)
+        : null;
+      value = { count, window, last_order_ms };
     }
   } catch (e) {
     console.error('[social-proof]', e.message);
