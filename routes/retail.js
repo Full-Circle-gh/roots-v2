@@ -4954,6 +4954,74 @@ router.delete('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) =
   res.json({ success: true });
 });
 
+// Duplicate a product. Copies all commercial fields (name, description, photos,
+// price, compare-at, page design, etc.) into a NEW product. SKU is blanked
+// (unique), stock reset to 0, and it starts hidden (is_published=0) so a
+// half-edited copy never leaks into the shop. body: { as_variant, label }.
+// as_variant also joins the copy to the source's variant group (creating one,
+// owned by the source, if it doesn't have one yet) with the given label —
+// the smooth path for "same product, different size".
+router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const src = tdb().prepare(
+    `SELECT name_en, name_cn, category, weight, sell_price, compare_at_price,
+            ship_modes, description_en, description_cn, description_format, image_data, images,
+            keywords_en, keywords_cn, tagline_en, tagline_cn, free_of, tags, nutrition,
+            description_blocks, colophon_character, colophon_tagline_en, colophon_tagline_cn,
+            variant_group_id, sort_order
+       FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1`
+  ).get(id);
+  if (!src) return res.status(404).json({ success: false, error: 'not_found' });
+
+  const asVariant = !!(req.body && req.body.as_variant);
+  const label = (req.body && req.body.label != null) ? (String(req.body.label).trim() || null) : null;
+
+  const newId = tdb().transaction(() => {
+    let groupId = null;
+    if (asVariant) {
+      // Ensure the source belongs to a group (owner = source id) so the copy joins it.
+      groupId = src.variant_group_id || id;
+      if (!src.variant_group_id) {
+        tdb().prepare('UPDATE products SET variant_group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(groupId, id);
+      }
+    }
+    const info = tdb().prepare(
+      `INSERT INTO products
+         (name_en, name_cn, sku, category, weight, sell_price, compare_at_price, stock_qty, ship_modes,
+          description_en, description_cn, description_format, image_data, images,
+          keywords_en, keywords_cn, tagline_en, tagline_cn, free_of, tags, nutrition,
+          description_blocks, colophon_character, colophon_tagline_en, colophon_tagline_cn,
+          variant_group_id, variant_label, sort_order, is_published, is_active, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+    ).run(
+      src.name_en, src.name_cn, null, src.category, src.weight, src.sell_price, src.compare_at_price, 0, src.ship_modes,
+      src.description_en, src.description_cn, src.description_format, src.image_data, src.images,
+      src.keywords_en, src.keywords_cn, src.tagline_en, src.tagline_cn, src.free_of, src.tags, src.nutrition,
+      src.description_blocks, src.colophon_character, src.colophon_tagline_en, src.colophon_tagline_cn,
+      asVariant ? groupId : null, asVariant ? label : null, src.sort_order
+    );
+    return info.lastInsertRowid;
+  })();
+
+  logActivity(req.user.id, req.user.username, 'duplicate', 'product_retail', newId, { from: id, as_variant: asVariant }, req.ip);
+
+  const row = tdb().prepare(
+    `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
+            description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
+            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
+            variant_group_id, variant_label,
+            colophon_character, colophon_tagline_en, colophon_tagline_cn
+       FROM products WHERE id = ?`
+  ).get(newId);
+  if (row && typeof row.description_blocks === 'string' && row.description_blocks) {
+    try { row.description_blocks = JSON.parse(row.description_blocks); } catch { row.description_blocks = null; }
+  } else { row.description_blocks = null; }
+  if (row && typeof row.nutrition === 'string' && row.nutrition.trim()) {
+    try { const n = JSON.parse(row.nutrition); row.nutrition = (n && (n.basis_en || n.basis_cn || (n.rows || []).length)) ? n : null; } catch { row.nutrition = null; }
+  } else { row.nutrition = null; }
+  res.json({ success: true, data: row });
+});
+
 // ─── Flash sales (秒杀) admin ─────────────────────────────────────────────
 // Each product has at most one flash window at a time — to schedule a new
 // one, overwrite the four columns via PUT (we reset flash_sold to 0 then).

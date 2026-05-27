@@ -725,6 +725,26 @@
     display: flex; flex-direction: column;
   }
   .pa-card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+  /* Quick-duplicate button — hover-revealed top-right on cards, trailing on rows. */
+  .pa-card { position: relative; }
+  .pa-dup {
+    position: absolute; top: 6px; right: 6px; z-index: 3;
+    width: 26px; height: 26px; padding: 0; display: none;
+    align-items: center; justify-content: center;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--bg-pane); color: var(--text-2); cursor: pointer;
+    font-size: 13px; line-height: 1;
+  }
+  .pa-card:hover .pa-dup { display: flex; }
+  .pa-dup:hover { border-color: var(--brass, #B08D4A); color: var(--text-1); }
+  .pa-dup-row {
+    flex: none; width: 28px; height: 28px; padding: 0;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--bg-pane); color: var(--text-3); cursor: pointer;
+    font-size: 13px; line-height: 1; opacity: 0; transition: opacity .12s;
+  }
+  .pa-row:hover .pa-dup-row { opacity: 1; }
+  .pa-dup-row:hover { border-color: var(--brass, #B08D4A); color: var(--text-1); }
   .pa-card-img {
     aspect-ratio: 1 / 1;                 /* square crop — recommended Full Circle treatment */
     background: var(--bg-elev-2);
@@ -4569,6 +4589,8 @@
         <div class="pu-editor-foot" style="justify-content:space-between;">
           <div style="display:flex;gap:8px;">
             <button class="btn" id="pd-pagedesign-btn" type="button" onclick="pdOpenPageDesign()" title="Open the Product Page Editor in its own window · 在独立窗口打开产品页编辑器">🎨 Edit page design · 编辑产品页 ↗</button>
+            <button class="btn" id="pd-dup-btn" type="button" onclick="pdDuplicate(false)" title="Make a copy as a new product · 复制为新产品">⧉ Duplicate · 复制</button>
+            <button class="btn" id="pd-dupvar-btn" type="button" onclick="pdDuplicate(true)" title="Copy and add as a variant — same product, different size · 复制并作为变体(同款不同规格)">+ Variant · 变体</button>
             <button class="btn" id="pd-delete-btn" type="button" onclick="pdDelete()" style="color:var(--danger);border-color:rgba(182,86,86,.4);">Delete · 删除</button>
           </div>
           <div style="display:flex;gap:8px;">
@@ -14850,6 +14872,7 @@ function paRender() {
             ${sub ? `<div class="pa-row-sub">${sub}</div>` : ''}
           </div>
           <div class="pa-row-pills">${_paPills(p)}</div>
+          <button class="pa-dup-row" type="button" title="Duplicate · 复制" onclick="event.stopPropagation(); paDuplicate(${p.id})">⧉</button>
         </div>`;
     }).join('');
     return;
@@ -14865,6 +14888,7 @@ function paRender() {
     const meta = [p.sku, p.size].filter(Boolean).map(escapeHtml).join(' · ');
     return `
       <div class="pa-card ${designed ? 'is-designed' : 'is-plain'}${pub ? '' : ' is-draft'}" onclick="paOpenEdit(${p.id})">
+        <button class="pa-dup" type="button" title="Duplicate · 复制" onclick="event.stopPropagation(); paDuplicate(${p.id})">⧉</button>
         <div class="pa-card-img">
           ${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : `<div class="pa-card-img-empty">${PA_ICON_BROKEN}</div>`}
           <div class="pa-card-pills">
@@ -14948,6 +14972,8 @@ function pdOpen(id) {
   document.getElementById('pd-cat-list').innerHTML = pdCats().map(c => `<option value="${escapeAttr(c)}">`).join('');
   // Page-design + delete only apply to an existing product.
   document.getElementById('pd-pagedesign-btn').style.display = p ? '' : 'none';
+  document.getElementById('pd-dup-btn').style.display = p ? '' : 'none';
+  document.getElementById('pd-dupvar-btn').style.display = p ? '' : 'none';
   document.getElementById('pd-delete-btn').style.display = p ? '' : 'none';
   vaLoad(p ? p.id : null);
   // Restore the operator's preferred editor size (large vs full-screen).
@@ -15207,6 +15233,28 @@ async function pdSave() {
     paRender();
   } catch (e) { alert('Save failed · 保存失败: ' + e.message); }
 }
+// Duplicate a product. asVariant=true also joins the copy to the source's
+// variant group and prompts for the new variant label. Opens the copy so the
+// operator can set its new price / size / SKU, then publish.
+async function pdDoDuplicate(id, asVariant) {
+  if (id == null || id === '') return;
+  let label = null;
+  if (asVariant) {
+    label = prompt(cuT('Variant label for the copy (e.g. 500g):', '副本的规格标签(如 500克):'), '');
+    if (label === null) return;   // cancelled
+    label = (label || '').trim();
+  }
+  try {
+    const j = await api('/api/retail-admin/products/' + id + '/duplicate', { method: 'POST', body: { as_variant: !!asVariant, label } });
+    if (!j.success || !j.data) throw new Error(j.error || 'duplicate_failed');
+    PA_PRODUCTS.unshift(j.data);
+    paRender();
+    pdOpen(j.data.id);   // open the copy for tweaking (blank SKU, new price/size)
+    toast(cuT('Duplicated — set the new SKU / price / size, then publish.', '已复制 — 请设置新货号 / 价格 / 规格后再上架。'));
+  } catch (e) { toast(cuT('Duplicate failed: ', '复制失败:') + e.message, 'err'); }
+}
+function pdDuplicate(asVariant) { pdDoDuplicate(document.getElementById('pd-id').value || null, asVariant); }
+function paDuplicate(id) { pdDoDuplicate(id, false); }
 async function pdDelete() {
   const id = document.getElementById('pd-id').value; if (!id) return;
   if (!confirm('Delete this product? · 删除此产品?\nIt will be hidden from the shop. · 将从店面隐藏。')) return;
