@@ -8212,7 +8212,9 @@ function provinceForCity(city) {
 // customer can pick any of these; pricing is still gated server-side by the
 // zone matcher, so a city not yet added in the delivery section resolves no
 // fee/slots until the operator adds it. GZ districts first (the live area),
-// then all cities in catalogue order.
+// then all mainland cities A→Z by English name. Hong Kong / Macau are dropped:
+// they're 特别行政区 (cross-border customs), not standard domestic SF/JD —
+// and SF/JD reach every mainland prefecture city, so nothing else is excluded.
 let _regionPickerRows = null;
 function regionPickerRows() {
   if (_regionPickerRows) return _regionPickerRows;
@@ -8224,14 +8226,17 @@ function regionPickerRows() {
     match_city: '广州市',
     match_district: d.name_cn,
   }));
-  const cities = (CHINA_REGIONS.cities || []).map(c => ({
-    id: 'city:' + c.name_cn,
-    zone_type: 'city',
-    name_en: c.name_en,
-    name_cn: c.name_cn,
-    match_city: c.name_cn,
-    match_district: null,
-  }));
+  const cities = (CHINA_REGIONS.cities || [])
+    .filter(c => !/特别行政区/.test(c.province_cn || ''))
+    .map(c => ({
+      id: 'city:' + c.name_cn,
+      zone_type: 'city',
+      name_en: c.name_en,
+      name_cn: c.name_cn,
+      match_city: c.name_cn,
+      match_district: null,
+    }))
+    .sort((a, b) => a.name_en.localeCompare(b.name_en));
   _regionPickerRows = [...gz, ...cities];
   return _regionPickerRows;
 }

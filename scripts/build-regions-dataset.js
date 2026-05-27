@@ -88,6 +88,9 @@ try {
   }
 } catch {}
 
+// Sort each city's districts A→Z by English name (the EN picker shows English).
+for (const k of Object.keys(out)) out[k].sort((a, b) => a.name_en.localeCompare(b.name_en));
+
 fs.writeFileSync('lib/china_districts.json', JSON.stringify(out), 'utf8');
 console.log('cities:', Object.keys(out).length, '| districts:', total, '| english from gb2260:', fromGb, '| from pinyin:', fromPy, '| none:', noEn);
 console.log('size (KB):', Math.round(fs.statSync('lib/china_districts.json').size / 1024));
