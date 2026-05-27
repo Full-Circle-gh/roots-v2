@@ -855,6 +855,7 @@
                       border: 1px solid rgba(18, 22, 26, .15); }
   .pa-pill-draft    { background: rgba(176, 141, 74, .15); color: #B08D4A;
                       border: 1px solid rgba(176, 141, 74, .30); }
+  .pa-pill-variants { background: rgba(18, 22, 26, .60); color: #E8E5DC; }          /* Dark chip — "N sizes" on a collapsed variant family */
 
   /* Empty state */
   .pa-empty {
@@ -14865,6 +14866,40 @@ function _paPills(p) {
     ${pub ? '' : '<span class="pa-pill pa-pill-draft" title="Not published in mini-app · 未在小程序上架">Draft</span>'}`;
 }
 
+// Variant siblings (same variant_group_id) are ONE product in different sizes,
+// not separate products — collapse them into a single card so the grid doesn't
+// read as duplicates. Returns display units in the original row order; a group
+// renders once (at its first surviving member's spot) when 2+ of its members
+// pass the active search/filter, otherwise the lone survivor is a normal card.
+function _paUnits(rows) {
+  const byGid = new Map();
+  rows.forEach(p => {
+    const gid = p.variant_group_id;
+    if (!gid) return;
+    if (!byGid.has(gid)) byGid.set(gid, []);
+    byGid.get(gid).push(p);
+  });
+  const units = [], seen = new Set();
+  rows.forEach(p => {
+    const gid = p.variant_group_id;
+    if (!gid) { units.push({ group: false, p }); return; }
+    if (seen.has(gid)) return;
+    seen.add(gid);
+    const members = byGid.get(gid);
+    if (members.length < 2) { units.push({ group: false, p: members[0] }); return; }
+    // Open the group owner (id === gid) so the editor's variant rows list all
+    // siblings; fall back to the first member if the owner was filtered out.
+    const rep = members.find(m => m.id === gid) || members[0];
+    units.push({ group: true, p: rep, members });
+  });
+  return units;
+}
+// Per-size tag on a collapsed card: the operator's label (Small/Big) if set,
+// else the size/weight, else the SKU.
+function _paVariantTag(m) {
+  return escapeHtml((m.variant_label || '').trim() || m.size || m.sku || '—');
+}
+
 // Full Circle brand glyphs for the product cards — inline so they inherit
 // currentColor from the badge / empty-state. Sparkle marks a DESIGNED card;
 // the broken-image glyph is the honest empty state for unphotographed products.
@@ -14933,9 +14968,12 @@ function paRender() {
 
   if (PA_VIEW === 'list') {
     grid.className = 'pa-list';
-    grid.innerHTML = rows.map(p => {
+    grid.innerHTML = _paUnits(rows).map(u => {
+      const p = u.p;
       const img  = p.image_data || p.image_url || '';
-      const meta = [p.sku, p.size].filter(Boolean).map(escapeHtml).join(' · ');
+      const meta = u.group
+        ? `${u.members.length} ${cuT('sizes', '规格')} · ${u.members.map(_paVariantTag).join(' · ')}`
+        : [p.sku, p.size].filter(Boolean).map(escapeHtml).join(' · ');
       const sub  = [
         p.name_cn ? escapeHtml(p.name_cn) : '',
         meta ? `<span class="pa-row-meta">${meta}</span>` : '',
@@ -14957,17 +14995,27 @@ function paRender() {
   // Grid (default) or Compact — same card markup so the "View" popover's
   // crop / status / empty tweaks keep composing on top.
   grid.className = PA_VIEW === 'compact' ? 'pa-grid pa-grid-compact' : 'pa-grid';
-  grid.innerHTML = rows.map(p => {
+  grid.innerHTML = _paUnits(rows).map(u => {
+    const p = u.p;
     const img = p.image_data || p.image_url || '';
-    const designed = _paHasBlocks(p);
-    const pub      = p.is_published === 1;
-    const meta = [p.sku, p.size].filter(Boolean).map(escapeHtml).join(' · ');
+    // A group reflects the whole family: designed if ANY size has sections,
+    // and only Draft when EVERY size is unpublished (so a partly-live family
+    // doesn't read as a draft).
+    const designed = u.group ? u.members.some(_paHasBlocks) : _paHasBlocks(p);
+    const pub      = u.group ? u.members.some(m => m.is_published === 1) : p.is_published === 1;
+    const meta = u.group
+      ? u.members.map(_paVariantTag).join(' · ')
+      : [p.sku, p.size].filter(Boolean).map(escapeHtml).join(' · ');
+    const variantPill = u.group
+      ? `<span class="pa-pill pa-pill-variants" title="${cuT('Sizes of one product · 同一产品的多个规格', 'Sizes of one product · 同一产品的多个规格')}">${u.members.length} ${cuT('sizes', '规格')}</span>`
+      : '';
     return `
       <div class="pa-card ${designed ? 'is-designed' : 'is-plain'}${pub ? '' : ' is-draft'}" onclick="paOpenEdit(${p.id})">
         <button class="pa-dup" type="button" title="Duplicate · 复制" onclick="event.stopPropagation(); paDuplicate(${p.id})">⧉</button>
         <div class="pa-card-img">
           ${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : `<div class="pa-card-img-empty">${PA_ICON_BROKEN}</div>`}
           <div class="pa-card-pills">
+            ${variantPill}
             ${designed
               ? `<span class="pa-pill pa-pill-designed" title="Designer sections authored · 已配置设计板块">${PA_ICON_SPARKLE}Designed</span>`
               : `<span class="pa-pill pa-pill-plain" title="No designer sections yet · 尚未配置设计板块">Plain</span>`}
