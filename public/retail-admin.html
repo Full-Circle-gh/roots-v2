@@ -659,6 +659,11 @@
 
   /* Variants section inside the product editor (#pd-bg) */
   .pd-variants { border-top: 1px solid var(--line-soft); padding-top: var(--s4); margin-top: var(--s2); }
+  /* Product editor (#pd-bg) — large by default; the ⤢ button toggles true
+     full-screen. Bigger than the generic .pu-editor modal because it holds
+     photos, variants and side-by-side EN/CN description. (id beats .pu-editor) */
+  #pd-editor { width: min(1180px, 94vw); height: 90vh; max-width: 94vw; }
+  #pd-editor.pd-full { width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh; border-radius: 0; }
   .pd-var-head { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); margin-bottom: 6px; }
   .va-list { display: flex; flex-direction: column; gap: 8px; }
   .va-row { display: flex; align-items: center; gap: 10px; }
@@ -4455,10 +4460,13 @@
          editor: basic store fields + stock. Page design lives in the standalone
          Product Page Editor window (launched from the button below). ── -->
     <div id="pd-bg" class="pu-editor-bg">
-      <div class="pu-editor" style="width: 640px; max-width: 94vw;">
+      <div class="pu-editor" id="pd-editor">
         <div class="pu-editor-head">
           <h3 id="pd-title" style="margin:0;font-size:14px;">Product · 产品</h3>
-          <button class="btn" onclick="pdClose()">Close · 关闭</button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-sm" id="pd-expand-btn" type="button" onclick="pdToggleFullscreen()" title="Expand / shrink editor · 全屏 / 还原">⤢ Expand · 全屏</button>
+            <button class="btn" onclick="pdClose()">Close · 关闭</button>
+          </div>
         </div>
         <div class="pu-editor-body" style="grid-template-columns: 1fr 1fr; gap: 14px; padding: 18px;">
           <input type="hidden" id="pd-id">
@@ -14849,9 +14857,24 @@ function pdOpen(id) {
   document.getElementById('pd-pagedesign-btn').style.display = p ? '' : 'none';
   document.getElementById('pd-delete-btn').style.display = p ? '' : 'none';
   vaLoad(p ? p.id : null);
+  // Restore the operator's preferred editor size (large vs full-screen).
+  const wantFull = (() => { try { return localStorage.getItem('pd-editor-full') === '1'; } catch (e) { return false; } })();
+  document.getElementById('pd-editor').classList.toggle('pd-full', wantFull);
+  pdSyncFullscreenBtn(wantFull);
   document.getElementById('pd-bg').classList.add('show');
 }
 function pdClose() { document.getElementById('pd-bg').classList.remove('show'); _pdImage = undefined; }
+// Editor size: large by default, ⤢ toggles full-screen. Preference is
+// remembered per-operator so it opens the way they last left it.
+function pdSyncFullscreenBtn(on) {
+  const btn = document.getElementById('pd-expand-btn');
+  if (btn) btn.innerHTML = on ? '⤡ Shrink · 还原' : '⤢ Expand · 全屏';
+}
+function pdToggleFullscreen() {
+  const on = document.getElementById('pd-editor').classList.toggle('pd-full');
+  pdSyncFullscreenBtn(on);
+  try { localStorage.setItem('pd-editor-full', on ? '1' : '0'); } catch (e) {}
+}
 
 // ── Product variants (managed inside the product editor) ────────────────────
 // Group sibling products as variants. Each variant is its own master-data
