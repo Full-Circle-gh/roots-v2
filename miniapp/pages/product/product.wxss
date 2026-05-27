@@ -652,9 +652,21 @@
   font-size: calc(28rpx * var(--font-scale));
   margin-left: 28rpx;
 }
+/* Compare-at + live price grouped on the right of the add button. */
+.add-prices {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  margin-right: 28rpx;
+}
 .add-price {
   font-size: calc(36rpx * var(--font-scale));
-  margin-right: 28rpx;
+}
+/* "Was" price — struck through, faded, smaller than the live price. */
+.add-compare {
+  font-size: calc(26rpx * var(--font-scale));
+  text-decoration: line-through;
+  opacity: 0.55;
 }
 
 .loading { padding: 0 0 60rpx; }

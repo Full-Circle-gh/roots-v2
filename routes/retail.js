@@ -169,6 +169,7 @@ router.get('/api/retail/config', (req, res) => {
 const RETAIL_PRODUCT_COLS = `
   p.id, p.name_en, p.name_cn, p.sku, p.category, p.weight AS size, p.barcode,
   p.sell_price AS price,
+  p.compare_at_price,
   -- Stock surfaced to the mini-app. Prefer the SUM of per-store physical_qty
   -- across ACTIVE stores (Tianhe + Yuexiu today) — that's the inventory the
   -- /retail-admin per-store grid actually edits. Fall back to the legacy
@@ -4807,6 +4808,11 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     if (k in body) { sets.push(`${k} = ?`); params.push((body[k] == null || body[k] === '') ? null : body[k]); }
   }
   if ('sell_price' in body) { sets.push('sell_price = ?'); params.push(Math.max(0, parseFloat(body.sell_price) || 0)); }
+  if ('compare_at_price' in body) {
+    // 0 / blank / invalid clears the strike-through (stored NULL).
+    const v = parseFloat(body.compare_at_price);
+    sets.push('compare_at_price = ?'); params.push(Number.isFinite(v) && v > 0 ? v : null);
+  }
   if ('stock_qty'  in body) { sets.push('stock_qty = ?');  params.push(Math.max(0, parseInt(body.stock_qty, 10) || 0)); }
   if ('ship_modes' in body) {
     const arr = [...new Set(String(body.ship_modes || '').split(',').map(s => s.trim().toLowerCase()).filter(m => m === 'air' || m === 'land'))];
@@ -4829,7 +4835,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // hydrated description_blocks JSON, so the page can update its card
   // and re-open the editor with fresh data.
   const row = tdb().prepare(
-    `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, stock_qty, ship_modes,
+    `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
@@ -4863,13 +4869,15 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   try {
     info = tdb().prepare(
       `INSERT INTO products
-         (name_en, name_cn, sku, category, weight, sell_price, stock_qty, ship_modes,
+         (name_en, name_cn, sku, category, weight, sell_price, compare_at_price, stock_qty, ship_modes,
           description_en, description_cn, image_data, is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       name_en || name_cn, name_cn || null,
       (b.sku || '').trim() || null, (b.category || '').trim() || null, (b.weight || '').trim() || null,
-      Math.max(0, parseFloat(b.sell_price) || 0), Math.max(0, parseInt(b.stock_qty, 10) || 0),
+      Math.max(0, parseFloat(b.sell_price) || 0),
+      (() => { const v = parseFloat(b.compare_at_price); return Number.isFinite(v) && v > 0 ? v : null; })(),
+      Math.max(0, parseInt(b.stock_qty, 10) || 0),
       ship.length ? ship.join(',') : 'air,land',
       (b.description_en || '').trim() || null, (b.description_cn || '').trim() || null,
       b.image_data || null, b.is_published ? 1 : 0
@@ -4881,7 +4889,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   const id = info.lastInsertRowid;
   logActivity(req.user.id, req.user.username, 'create', 'product_retail', id, { name: name_en || name_cn }, req.ip);
   const row = tdb().prepare(
-    `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, stock_qty, ship_modes,
+    `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
@@ -5099,7 +5107,7 @@ router.delete('/api/retail-admin/categories/:id', requireRetailAdmin, (req, res)
 router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   const { q, published } = req.query;
   let sql = `SELECT id, name_en, name_cn, sku, category, weight AS size,
-                    sell_price, stock_qty, ship_modes, image_data, image_url,
+                    sell_price, compare_at_price, stock_qty, ship_modes, image_data, image_url,
                     is_published, sort_order,
                     description_en, description_cn,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,

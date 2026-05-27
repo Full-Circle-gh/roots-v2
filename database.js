@@ -66,6 +66,10 @@ try { db.prepare('CREATE INDEX IF NOT EXISTS idx_products_external_id ON product
 addColumn('products', 'variant_group_id', 'INTEGER');
 addColumn('products', 'variant_label',    'TEXT');
 try { db.prepare('CREATE INDEX IF NOT EXISTS idx_products_variant_group ON products(variant_group_id)').run(); } catch {}
+// Storefront "compare-at" / was-price (划线价). When set and higher than
+// sell_price, the mini-app shows it struck through next to the live price.
+// NULL/0 = no strike-through shown.
+addColumn('products', 'compare_at_price', 'REAL');
 // Barcode for the tablet POS (market vendors scan products in with a
 // keyboard-wedge gun). Stored as text — keeps leading zeros (EAN-13 etc.)
 // and lets us hold non-numeric internal codes too. Indexed for instant
