@@ -1226,9 +1226,18 @@
     color: var(--danger); border-color: rgba(232, 85, 106, .35);
   }
   .pa-inspector-actions .btn.danger:hover { background: var(--danger-soft); }
-  .pa-inspector-body { padding: var(--s4) var(--s5) var(--s7); }
+  .pa-inspector-body { padding: var(--s4) var(--s5); }
+  /* Compact the block-editor form so the common case (e.g. a 3-cell Spec
+     Strip = 12 inputs) fits the inspector without a scrollbar. Scoped to the
+     designer inspector, so the rest of the admin's forms keep their spacing. */
+  .pa-inspector-body label.stacked { margin-bottom: 3px; }
+  .pa-inspector-body .field input[type=text],
+  .pa-inspector-body .field input[type=number],
+  .pa-inspector-body .field input[type=url],
+  .pa-inspector-body .field select,
+  .pa-inspector-body .field textarea { padding: 6px 9px; }
 
-  .pa-edit-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+  .pa-edit-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
   @media (max-width: 620px) { .pa-edit-grid-2 { grid-template-columns: 1fr; } }
   .pa-edit-grid-2 .field { margin-bottom: 0; }
 
@@ -15969,10 +15978,10 @@ function _paBlockEditorBody(b) {
          { k_en:'Net Wt',k_cn:'净重',v_en:'',v_cn:'' },
          { k_en:'Origin',k_cn:'产地',v_en:'',v_cn:'' }];
     return `
-      <div class="helper" style="margin:-4px 0 14px">Meta facts shown as a quiet strip under the product header. Labels are caps; values are serif. Designed for 3 cells but you can add/remove as needed. · 产品头部下方的安静一行,小标签 + 衬线值。默认 3 格,可按需增删。</div>
+      <div class="helper" style="margin:-4px 0 10px">Meta facts shown as a quiet strip under the product header. Labels are caps; values are serif. Designed for 3 cells but you can add/remove as needed. · 产品头部下方的安静一行,小标签 + 衬线值。默认 3 格,可按需增删。</div>
       ${cells.map((c, i) => `
-        <div class="pa-edit-section" style="padding:12px 14px;background:var(--bg-pane);margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="pa-edit-section" style="padding:9px 11px;background:var(--bg-pane);margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
             <span class="pa-edit-section-title">Cell · 第 ${i + 1} 格</span>
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','cells',${i})" ${cells.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
