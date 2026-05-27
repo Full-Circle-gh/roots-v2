@@ -664,6 +664,25 @@
      photos, variants and side-by-side EN/CN description. (id beats .pu-editor) */
   #pd-editor { width: min(1180px, 94vw); height: 90vh; max-width: 94vw; }
   #pd-editor.pd-full { width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh; border-radius: 0; }
+  /* Two-pane editor: a main column (photos → name → description) and a narrow
+     commercial sidebar (visibility, pricing, inventory, organization). Inputs
+     fill their cell so short fields no longer float in empty space; variants
+     span the full width beneath both columns. (id+class beats .pu-editor-body) */
+  #pd-editor .pu-editor-body { grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+  @media (max-width: 880px) { #pd-editor .pu-editor-body { grid-template-columns: 1fr; } }
+  #pd-editor .pd-main { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+  #pd-editor .pd-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  #pd-editor .pd-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  #pd-editor .field { margin-bottom: 0; }
+  #pd-editor .field input[type=text],
+  #pd-editor .field input[type=number],
+  #pd-editor .field input[type=url],
+  #pd-editor .field select { width: 100%; box-sizing: border-box; }
+  #pd-editor .pd-card { background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  #pd-editor .pd-sec-h, #pd-editor .pd-card-h { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); margin: 0; }
+  #pd-editor .pd-pub { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; }
+  #pd-editor .pd-pub input { width: 16px; height: 16px; }
+  #pd-editor #pd-variants { grid-column: 1 / -1; margin-top: 0; }
   /* Product photo gallery (editor) — thumbnails, drag-to-reorder, first = main. */
   .pd-gallery { display: flex; flex-wrap: wrap; gap: 10px; min-height: 8px; }
   .pd-gallery .pd-thumb {
@@ -4559,24 +4578,23 @@
             <button class="btn" onclick="pdClose()">Close · 关闭</button>
           </div>
         </div>
-        <div class="pu-editor-body" style="grid-template-columns: 1fr 1fr; gap: 14px; padding: 18px;">
+        <div class="pu-editor-body">
           <input type="hidden" id="pd-id">
-          <div class="field"><label class="stacked">Name EN · 名称(英文)</label><input type="text" id="pd-name-en"></div>
-          <div class="field"><label class="stacked">Name 中文</label><input type="text" id="pd-name-cn"></div>
-          <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
-          <div class="field"><label class="stacked">Compare-at ¥ · 原价(划线价)</label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="optional · 可选"><div class="muted" style="font-size:11px;margin-top:4px;">Higher "was" price — shown struck through next to the price. Leave blank for none. · 划线原价(需高于售价),留空则不显示。</div></div>
-          <div class="field"><label class="stacked">Stock · 库存</label><input type="number" id="pd-stock" min="0" step="1"></div>
-          <div class="field"><label class="stacked">SKU · 货号</label><input type="text" id="pd-sku" placeholder="optional · 可选"></div>
-          <div class="field"><label class="stacked">Category · 分类</label><input type="text" id="pd-category" list="pd-cat-list" placeholder="e.g. Drinks · 例如 饮品"><datalist id="pd-cat-list"></datalist></div>
-          <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
-          <div class="field" style="margin-bottom:0;">
-            <label class="stacked">Shipping · 配送方式</label>
-            <div style="display:flex;gap:16px;align-items:center;padding-top:8px;">
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-air" style="width:15px;height:15px;"> ✈ Air · 空运</label>
-              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-land" style="width:15px;height:15px;"> 🚚 Land · 陆运</label>
+          <!-- MAIN COLUMN — photos first, then name, then description -->
+          <div class="pd-main">
+            <section class="pd-sec">
+              <div class="pd-sec-h" style="margin-bottom:8px;">Photos · 图片 <span class="muted" style="font-weight:400;font-size:11px;letter-spacing:0;text-transform:none;font-family:var(--f-sans);">— first photo is the main one; drag to reorder · 第一张为主图,可拖动排序</span></div>
+              <div id="pd-gallery" class="pd-gallery"></div>
+              <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+                <input type="file" id="pd-img-file" accept="image/*" multiple onchange="pdAddPhotos(event)" style="font-size:12px;">
+                <span class="muted" style="font-size:11px;">Up to 8 · 最多 8 张</span>
+              </div>
+            </section>
+            <div class="pd-row2">
+              <div class="field"><label class="stacked">Name EN · 名称(英文)</label><input type="text" id="pd-name-en"></div>
+              <div class="field"><label class="stacked">Name 中文</label><input type="text" id="pd-name-cn"></div>
             </div>
-          </div>
-          <div class="field" style="grid-column:1/-1;">
+            <section class="pd-sec">
             <label class="stacked">Description · 描述
               <span class="pd-desc-modebar">
                 <button type="button" class="pd-mode-btn active" data-mode="classic" onclick="pdDescMode()" title="Edit the description here with the rich-text toolbar · 在此用富文本工具栏编辑描述">Classic · 经典</button>
@@ -4628,19 +4646,42 @@
               </div>
               <div class="muted" style="font-size:11px;margin-top:6px;">Shown on the mini-app: headings, bold, italic, underline, strikethrough, colour, highlight, alignment, lists, quotes, rules, links, images, tables. · 小程序支持:标题、加粗、斜体、下划线、删除线、颜色、高亮、对齐、列表、引用、分隔线、链接、图片、表格。</div>
             </div>
+            </section>
           </div>
-          <div class="field" style="grid-column:1/-1;">
-            <label class="stacked">Photos · 图片 <span class="muted" style="font-weight:400;font-size:11px;">— first photo is the main one; drag to reorder · 第一张为主图,可拖动排序</span></label>
-            <div id="pd-gallery" class="pd-gallery"></div>
-            <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
-              <input type="file" id="pd-img-file" accept="image/*" multiple onchange="pdAddPhotos(event)" style="font-size:12px;">
-              <span class="muted" style="font-size:11px;">Up to 8 · 最多 8 张</span>
-            </div>
-          </div>
-          <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;margin-bottom:0;">
-            <input type="checkbox" id="pd-published" style="width:16px;height:16px;"> 🛍 Show in shop · 在店面显示
-          </label>
-          <div id="pd-variants" class="pd-variants" style="grid-column:1/-1;"></div>
+          <!-- SIDEBAR — visibility + commercial details -->
+          <aside class="pd-side">
+            <label class="pd-card pd-pub">
+              <input type="checkbox" id="pd-published"> 🛍 Show in shop · 在店面显示
+            </label>
+            <section class="pd-card">
+              <div class="pd-card-h">Pricing · 价格</div>
+              <div class="pd-row2">
+                <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
+                <div class="field"><label class="stacked">Compare-at ¥ · 划线价</label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="optional · 可选"></div>
+              </div>
+              <div class="muted" style="font-size:11px;">Higher "was" price — shown struck through next to the price. Leave blank for none. · 划线原价(需高于售价),留空则不显示。</div>
+            </section>
+            <section class="pd-card">
+              <div class="pd-card-h">Inventory · 库存</div>
+              <div class="pd-row2">
+                <div class="field"><label class="stacked">Stock · 库存</label><input type="number" id="pd-stock" min="0" step="1"></div>
+                <div class="field"><label class="stacked">SKU · 货号</label><input type="text" id="pd-sku" placeholder="optional · 可选"></div>
+              </div>
+            </section>
+            <section class="pd-card">
+              <div class="pd-card-h">Organization · 分类</div>
+              <div class="field"><label class="stacked">Category · 分类</label><input type="text" id="pd-category" list="pd-cat-list" placeholder="e.g. Drinks · 例如 饮品"><datalist id="pd-cat-list"></datalist></div>
+              <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
+              <div class="field">
+                <label class="stacked">Shipping · 配送方式</label>
+                <div style="display:flex;gap:16px;align-items:center;padding-top:4px;">
+                  <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-air" style="width:15px;height:15px;"> ✈ Air · 空运</label>
+                  <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-land" style="width:15px;height:15px;"> 🚚 Land · 陆运</label>
+                </div>
+              </div>
+            </section>
+          </aside>
+          <div id="pd-variants" class="pd-variants"></div>
         </div>
         <div class="pu-editor-foot" style="justify-content:space-between;">
           <div style="display:flex;gap:8px;">
