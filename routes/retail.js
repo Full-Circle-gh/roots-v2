@@ -5273,14 +5273,22 @@ router.delete('/api/retail-admin/categories/:id', requireRetailAdmin, (req, res)
 // open the editor pre-populated.
 router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   const { q, published } = req.query;
+  // The grid only needs a thumbnail and a "has designer sections" flag — not
+  // the full base64 image_data or the description_blocks JSON. Shipping those
+  // for every product (up to 500) made the catalogue payload balloon to many
+  // MB and the page slow to load. So: omit image_data (send a lazy image URL
+  // instead) and description_blocks (send a has_blocks flag). The per-product
+  // editor fetches the real image + blocks on demand.
   let sql = `SELECT id, name_en, name_cn, sku, category, weight AS size,
-                    sell_price, compare_at_price, stock_qty, ship_modes, image_data, image_url,
-                    is_published, sort_order,
+                    sell_price, compare_at_price, stock_qty, ship_modes, image_url,
+                    is_published, sort_order, updated_at,
                     description_en, description_cn, description_format,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
-                    description_blocks, nutrition,
+                    nutrition,
                     variant_group_id, variant_label,
-                    colophon_character, colophon_tagline_en, colophon_tagline_cn
+                    colophon_character, colophon_tagline_en, colophon_tagline_cn,
+                    (image_data IS NOT NULL AND image_data != '') AS has_image_data,
+                    (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks
                FROM products WHERE COALESCE(is_active, 1) = 1`;
   const params = [];
   if (q) {
@@ -5291,14 +5299,16 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   if (published === '0') sql += ' AND is_published = 0';
   sql += ' ORDER BY is_published DESC, sort_order ASC, name_en ASC LIMIT 500';
   const rows = tdb().prepare(sql).all(...params).map(r => {
-    // Parse description_blocks server-side so the page gets an array,
-    // not a string it has to JSON.parse itself on every render.
-    if (typeof r.description_blocks === 'string' && r.description_blocks) {
-      try { r.description_blocks = JSON.parse(r.description_blocks); } catch { r.description_blocks = null; }
-    } else {
-      r.description_blocks = null;
-    }
-    // Same for the nutrition panel JSON so the editor can pre-fill it.
+    // Replace the (omitted) base64 image with a tiny URL the browser lazy-loads
+    // and caches; ?v=updated_at busts it when the photo changes. Products with
+    // only an image_url (no base64) keep falling back to that URL on the card.
+    r.image_data = r.has_image_data
+      ? `/api/retail-admin/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`
+      : null;
+    delete r.has_image_data;
+    // has_blocks is a 0/1 from SQLite — normalise to a real boolean.
+    r.has_blocks = !!r.has_blocks;
+    // Parse the nutrition panel JSON so the editor can pre-fill it.
     if (typeof r.nutrition === 'string' && r.nutrition.trim()) {
       try {
         const n = JSON.parse(r.nutrition);
@@ -5310,6 +5320,24 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
     return r;
   });
   res.json({ success: true, data: rows });
+});
+
+// GET /api/retail-admin/products/:id/image — stream a product's primary photo
+// as real image bytes so the catalogue list can ship a small URL per row
+// instead of an inline base64 blob. image_data is a data: URI: decode and send
+// with a long cache window (?v=updated_at busts it). Plain-URL images redirect.
+router.get('/api/retail-admin/products/:id/image', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const row = tdb().prepare('SELECT image_data FROM products WHERE id = ?').get(id);
+  const data = row && row.image_data;
+  if (!data) return res.status(404).end();
+  const m = /^data:([^;,]*?)(;base64)?,([\s\S]*)$/.exec(data);
+  if (!m) return res.redirect(String(data));
+  const mime = m[1] || 'application/octet-stream';
+  const buf  = m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]), 'utf8');
+  res.set('Content-Type', mime);
+  res.set('Cache-Control', 'private, max-age=31536000, immutable');
+  res.send(buf);
 });
 
 // Photo gallery for the editor — returns the ordered image list, falling back

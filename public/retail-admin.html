@@ -4627,6 +4627,7 @@
       </div>
     </div>
 
+    <div id="pa-pager" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;margin:0 0 var(--s3)"></div>
     <div id="pa-grid" class="pa-grid"></div>
     <div id="pa-empty" class="pa-empty" style="display:none">No products match this filter. · 没有匹配此筛选条件的产品。</div>
 
@@ -14675,7 +14676,49 @@ let PA_VIEW = (() => { try { const v = localStorage.getItem('pa-view'); return (
 function paSetView(v) {
   PA_VIEW = (v === 'compact' || v === 'list') ? v : 'grid';
   try { localStorage.setItem('pa-view', PA_VIEW); } catch {}
+  PA_PAGE = 1;
   paRender();
+}
+
+// ── Catalogue pagination — caps how many cards render at once so the grid
+// paints fast even with the full 200+ catalogue. Page size persists; any
+// search / filter / view change resets to page 1.
+let PA_PAGE_SIZE = (() => {
+  try {
+    const v = localStorage.getItem('pa-page-size');
+    if (v === 'all') return 'all';
+    const n = parseInt(v, 10);
+    return [20, 50, 100].includes(n) ? n : 50;
+  } catch { return 50; }
+})();
+let PA_PAGE = 1;
+function paSetPageSize(v) {
+  PA_PAGE_SIZE = (v === 'all') ? 'all' : (parseInt(v, 10) || 50);
+  try { localStorage.setItem('pa-page-size', String(PA_PAGE_SIZE)); } catch {}
+  PA_PAGE = 1;
+  paRender();
+}
+function paSetPage(n) {
+  PA_PAGE = n;
+  paRender();
+  const g = document.getElementById('pa-grid');
+  if (g) g.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+// Pager bar: "showing X–Y of Z", page-size selector, prev/next.
+function _paPagerHtml(total, pages, start, shown) {
+  const from = total === 0 ? 0 : start + 1;
+  const to   = start + shown;
+  const sizeOpts = [20, 50, 100].map(n =>
+    `<option value="${n}"${PA_PAGE_SIZE === n ? ' selected' : ''}>${n} / page · 每页 ${n}</option>`).join('')
+    + `<option value="all"${PA_PAGE_SIZE === 'all' ? ' selected' : ''}>All · 全部</option>`;
+  const btn = (label, page, dis) =>
+    `<button class="btn btn-sm" type="button" ${dis ? 'disabled' : ''} onclick="paSetPage(${page})">${label}</button>`;
+  return `<span class="muted" style="font-size:12px">Showing <b>${from}–${to}</b> of <b>${total}</b> · 显示 ${from}–${to} / 共 ${total}</span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <select onchange="paSetPageSize(this.value)" title="Products per page · 每页产品数"
+        style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;background:var(--bg-elev-1);color:var(--text-1)">${sizeOpts}</select>
+      ${PA_PAGE_SIZE === 'all' ? '' : `${btn('‹ Prev 上一页', PA_PAGE - 1, PA_PAGE <= 1)}<span style="font-size:12px;white-space:nowrap">${PA_PAGE} / ${pages}</span>${btn('Next 下一页 ›', PA_PAGE + 1, PA_PAGE >= pages)}`}
+    </div>`;
 }
 
 // Block schema. Adding a new block type requires:
@@ -14894,12 +14937,12 @@ document.querySelector('[data-tab="products"]').addEventListener('click', () => 
 });
 
 document.getElementById('pa-search').addEventListener('input', _paDebouncedRender);
-document.getElementById('pa-filter').addEventListener('change', paRender);
+document.getElementById('pa-filter').addEventListener('change', () => { PA_PAGE = 1; paRender(); });
 document.querySelectorAll('#pa-view-seg .pa-view-btn').forEach(btn =>
   btn.addEventListener('click', () => paSetView(btn.dataset.view)));
 
 let _paT = null;
-function _paDebouncedRender() { clearTimeout(_paT); _paT = setTimeout(paRender, 200); }
+function _paDebouncedRender() { clearTimeout(_paT); _paT = setTimeout(() => { PA_PAGE = 1; paRender(); }, 200); }
 
 async function paLoad() {
   const grid = document.getElementById('pa-grid');
@@ -14915,7 +14958,16 @@ async function paLoad() {
   }
 }
 
-function _paHasBlocks(p) { return Array.isArray(p.description_blocks) && p.description_blocks.length > 0; }
+// "Has designer sections?" The catalogue list now sends a lightweight
+// has_blocks flag instead of the full description_blocks JSON. But a row
+// freshly patched in-place (paSaveEdit) carries the real description_blocks
+// array from the save response — prefer that when present so the Designed
+// badge updates immediately after an edit.
+function _paHasBlocks(p) {
+  if (!p) return false;
+  if (Array.isArray(p.description_blocks)) return p.description_blocks.length > 0;
+  return !!p.has_blocks;
+}
 
 // Status pills (Designed/Plain + Draft) — used by the List view rows.
 function _paPills(p) {
@@ -15021,7 +15073,22 @@ function paRender() {
   if (filter === 'published')  rows = rows.filter(p => p.is_published === 1);
 
   count.textContent = `${rows.length} of ${PA_PRODUCTS.length} · 共 ${PA_PRODUCTS.length} 件,显示 ${rows.length} 件`;
-  empty.style.display = rows.length ? 'none' : 'block';
+
+  // Collapse variant siblings into display units, then paginate the units so
+  // only one page of cards renders at a time (keeps the grid fast on the full
+  // catalogue). Variant groups are kept whole — they count as one unit.
+  const units = _paUnits(rows);
+  const total = units.length;
+  empty.style.display = total ? 'none' : 'block';
+  const paged = PA_PAGE_SIZE !== 'all' && total > 0;
+  const size  = paged ? PA_PAGE_SIZE : total;
+  const pages = paged ? Math.max(1, Math.ceil(total / size)) : 1;
+  if (PA_PAGE > pages) PA_PAGE = pages;
+  if (PA_PAGE < 1) PA_PAGE = 1;
+  const start = paged ? (PA_PAGE - 1) * size : 0;
+  const pageUnits = paged ? units.slice(start, start + size) : units;
+  const pager = document.getElementById('pa-pager');
+  if (pager) pager.innerHTML = total ? _paPagerHtml(total, pages, start, pageUnits.length) : '';
 
   // Reflect the active layout in the toolbar segmented control.
   document.querySelectorAll('#pa-view-seg .pa-view-btn').forEach(b =>
@@ -15029,7 +15096,7 @@ function paRender() {
 
   if (PA_VIEW === 'list') {
     grid.className = 'pa-list';
-    grid.innerHTML = _paUnits(rows).map(u => {
+    grid.innerHTML = pageUnits.map(u => {
       const p = u.p;
       const img  = p.image_data || p.image_url || '';
       const meta = u.group
@@ -15056,7 +15123,7 @@ function paRender() {
   // Grid (default) or Compact — same card markup so the "View" popover's
   // crop / status / empty tweaks keep composing on top.
   grid.className = PA_VIEW === 'compact' ? 'pa-grid pa-grid-compact' : 'pa-grid';
-  grid.innerHTML = _paUnits(rows).map(u => {
+  grid.innerHTML = pageUnits.map(u => {
     const p = u.p;
     const img = p.image_data || p.image_url || '';
     // A group reflects the whole family: designed if ANY size has sections,
