@@ -25,6 +25,7 @@
       var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
       if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
       document.documentElement.style.zoom = String(s);
+      document.documentElement.style.setProperty('--ui-scale', String(s));
     } catch (e) {}
   })();
 </script>
@@ -664,8 +665,13 @@
   /* Product editor (#pd-bg) — large by default; the ⤢ button toggles true
      full-screen. Bigger than the generic .pu-editor modal because it holds
      photos, variants and side-by-side EN/CN description. (id beats .pu-editor) */
-  #pd-editor { width: min(1180px, 94vw); height: 90vh; max-width: 94vw; }
-  #pd-editor.pd-full { width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh; border-radius: 0; }
+  /* vh/vw are NOT divided by the html `zoom` the text-size control applies, so
+     a raw 90vh renders ~zoom× too tall and the centered modal's head + foot
+     overflow off-screen (unreachable while the page is scroll-locked). Divide
+     the viewport units by --ui-scale (kept in sync with zoom) so the modal
+     fits the real viewport at any text size; px caps still grow with zoom. */
+  #pd-editor { width: min(1180px, calc(94vw / var(--ui-scale, 1))); height: calc(90vh / var(--ui-scale, 1)); max-width: calc(94vw / var(--ui-scale, 1)); }
+  #pd-editor.pd-full { width: calc(100vw / var(--ui-scale, 1)); height: calc(100vh / var(--ui-scale, 1)); max-width: calc(100vw / var(--ui-scale, 1)); max-height: calc(100vh / var(--ui-scale, 1)); border-radius: 0; }
   /* Two-pane editor: a main column (photos → name → sizes → description) and a
      narrow commercial sidebar (visibility, pricing, inventory, organization).
      Inputs fill their cell so short fields no longer float in empty space.
@@ -5074,7 +5080,9 @@
       .pu-editor {
         background: var(--bg-pane); border: 1px solid var(--line);
         border-radius: 12px;
-        width: 880px; max-width: 100%; max-height: 90vh;
+        /* max-height divided by --ui-scale: raw vh ignores the html `zoom`
+           the text-size control applies, overflowing the viewport at >100%. */
+        width: 880px; max-width: 100%; max-height: calc(90vh / var(--ui-scale, 1));
         display: flex; flex-direction: column;
         box-shadow: var(--sh-3);
       }
@@ -16609,6 +16617,9 @@ function cuGetUiScale() {
 }
 function cuApplyUiScale(v) {
   document.documentElement.style.zoom = String(v);
+  // Mirror the zoom into a CSS var so modals can divide their vh/vw sizes by
+  // it — raw viewport units ignore `zoom` and otherwise overflow at >100%.
+  document.documentElement.style.setProperty('--ui-scale', String(v));
   const lbl = document.querySelector('#ui-scale-toggle .ui-scale-val');
   if (lbl) lbl.textContent = Math.round(v * 100) + '%';
 }
