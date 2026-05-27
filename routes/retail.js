@@ -1531,6 +1531,16 @@ function normalizeChinaAddress(a) {
   out.address  = trim(out.address)  || '';
   out.detail   = trim(out.detail)   || null;
 
+  // Backfill the province from the city when the picker didn't supply one.
+  // Plain 'city' served-zones store only the city; this gives every served
+  // city its 省 automatically, the same way Guangzhou districts carry 广东省.
+  // Runs before the suffix block below so municipalities normalize too
+  // (e.g. derived '北京市' → '北京').
+  if (!out.province && out.city) {
+    const prov = provinceForCity(out.city);
+    if (prov) out.province = prov;
+  }
+
   // Add 省 suffix to bare province names (except direct-administered cities).
   if (out.province) {
     const stem = out.province.replace(/省$|自治区$|特别行政区$|市$/, '');
@@ -1573,7 +1583,10 @@ router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, re
   if (!a.recipient_name || !a.phone || !a.address) {
     return res.status(400).json({ success: false, error: 'missing_required' });
   }
-  if (!a.province || !a.city || !a.district) {
+  // Province is auto-derived from the city (normalizeChinaAddress), so a served
+  // city always resolves a 省/市. District stays optional: GZ-district zones
+  // supply one, plain city zones deliver city-wide and don't need it.
+  if (!a.province || !a.city) {
     return res.status(400).json({ success: false, error: 'missing_region' });
   }
   const tx = tdb().transaction(() => {
@@ -8156,6 +8169,27 @@ router.get('/api/retail/topup/transactions', requireRetailAuth, (req, res) => {
 // cities, served to the admin UI to populate the delivery-zone dropdowns.
 // Static dataset (loaded once at boot from reference/china_regions.json).
 const CHINA_REGIONS = require('../reference/china_regions.json');
+
+// City → canonical Chinese province, built once from the same dataset. The
+// served-zone picker stores only a city for plain 'city' zones, so couriers +
+// address records lose the 省. This lets normalizeChinaAddress() backfill the
+// province for ANY served city automatically — the same way Guangzhou
+// districts already carry 广东省 — without an admin field. Keyed on the city
+// name minus its 市/自治州/地区/盟 suffix so '北京市' and '北京' both match.
+let _cityProvinceMap = null;
+function provinceForCity(city) {
+  if (!city) return null;
+  if (!_cityProvinceMap) {
+    _cityProvinceMap = new Map();
+    for (const c of (CHINA_REGIONS.cities || [])) {
+      const key = String(c.name_cn || '').replace(/(市|自治州|地区|盟)$/u, '');
+      if (key && c.province_cn) _cityProvinceMap.set(key, c.province_cn);
+    }
+  }
+  const key = String(city).replace(/(市|自治州|地区|盟)$/u, '');
+  return _cityProvinceMap.get(key) || null;
+}
+
 router.get('/api/retail-admin/china-regions', requireRetailAdmin, (req, res) => {
   res.json({
     success: true,
