@@ -692,7 +692,7 @@
   .va-name { min-width: 0; font-size: 12px; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .va-facts { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .va-open { flex: none; }
-  /* Description editor — Plain/Formatted toggle, EN|CN side-by-side, rich toolbar. */
+  /* Description editor — Classic (rich) editor + "Product editor" launch, EN|CN side-by-side. */
   .pd-desc-modebar { display: inline-flex; gap: 4px; margin-left: 10px; vertical-align: middle; }
   .pd-mode-btn { font-size: 11px; padding: 3px 10px; border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-2); border-radius: 6px; cursor: pointer; font-weight: 500; }
   .pd-mode-btn.active { background: var(--brass, #B08D4A); color: #fff; border-color: var(--brass, #B08D4A); }
@@ -4579,18 +4579,12 @@
           <div class="field" style="grid-column:1/-1;">
             <label class="stacked">Description · 描述
               <span class="pd-desc-modebar">
-                <button type="button" class="pd-mode-btn" data-mode="plain" onclick="pdDescMode('plain')">Plain · 纯文本</button>
-                <button type="button" class="pd-mode-btn" data-mode="rich" onclick="pdDescMode('rich')">Formatted · 富文本</button>
+                <button type="button" class="pd-mode-btn active" data-mode="classic" onclick="pdDescMode()" title="Edit the description here with the rich-text toolbar · 在此用富文本工具栏编辑描述">Classic · 经典</button>
+                <button type="button" class="pd-mode-btn" onclick="pdOpenPageDesign()" title="Open the full Product Page Editor in a new tab · 在新标签页打开整页编辑器">Product editor · 产品页编辑器 ↗</button>
               </span>
-              <span class="muted" style="font-weight:400;font-size:11px;margin-left:8px;">…or design a full page with "Edit page design" below. · 或用下方“编辑产品页”做整页设计。</span>
             </label>
-            <!-- Plain text mode — English | 中文 side by side -->
-            <div id="pd-desc-plain" class="pd-desc-cols">
-              <div><div class="pd-desc-lang">English</div><textarea id="pd-desc-en" rows="6"></textarea></div>
-              <div><div class="pd-desc-lang">中文</div><textarea id="pd-desc-cn" rows="6"></textarea></div>
-            </div>
-            <!-- Formatted mode — toolbar + English | 中文 side by side -->
-            <div id="pd-desc-rich" style="display:none;">
+            <!-- Classic editor — rich-text toolbar + English | 中文 side by side -->
+            <div id="pd-desc-rich">
               <div class="pd-rte-toolbar">
                 <select class="pd-rte-sel" title="Paragraph format · 段落格式" onmousedown="pdRteSaveSel()" onchange="pdRteBlock(this.value); this.selectedIndex=0;">
                   <option value="" selected>¶ Format · 格式</option>
@@ -4650,7 +4644,6 @@
         </div>
         <div class="pu-editor-foot" style="justify-content:space-between;">
           <div style="display:flex;gap:8px;">
-            <button class="btn" id="pd-pagedesign-btn" type="button" onclick="pdOpenPageDesign()" title="Open the Product Page Editor in its own window · 在独立窗口打开产品页编辑器">🎨 Edit page design · 编辑产品页 ↗</button>
             <button class="btn" id="pd-dup-btn" type="button" onclick="pdDuplicate(false)" title="Make a copy as a new product · 复制为新产品">⧉ Duplicate · 复制</button>
             <button class="btn" id="pd-dupvar-btn" type="button" onclick="pdDuplicate(true)" title="Copy and add as a variant — same product, different size · 复制并作为变体(同款不同规格)">+ Variant · 变体</button>
             <button class="btn" id="pd-delete-btn" type="button" onclick="pdDelete()" style="color:var(--danger);border-color:rgba(182,86,86,.4);">Delete · 删除</button>
@@ -14978,20 +14971,12 @@ function pdOpen(id) {
   set('pd-price', p ? p.sell_price : ''); set('pd-stock', p ? (p.stock_qty != null ? p.stock_qty : 0) : '');
   set('pd-compare', p && p.compare_at_price ? p.compare_at_price : '');
   set('pd-sku', p && p.sku); set('pd-category', p && p.category); set('pd-weight', p && p.size);
-  set('pd-desc-en', p && p.description_en); set('pd-desc-cn', p && p.description_cn);
-  // Description mode (plain vs formatted). For a rich product the HTML goes into
-  // the contenteditable boxes; the plain textareas hold a stripped mirror so
-  // switching to Plain never shows raw tags.
-  _pdDescMode = (p && p.description_format === 'rich') ? 'rich' : 'plain';
-  if (_pdDescMode === 'rich') {
-    document.getElementById('pd-rte-en').innerHTML = (p && p.description_en) || '';
-    document.getElementById('pd-rte-cn').innerHTML = (p && p.description_cn) || '';
-    document.getElementById('pd-desc-en').value = pdHtmlToPlain((p && p.description_en) || '');
-    document.getElementById('pd-desc-cn').value = pdHtmlToPlain((p && p.description_cn) || '');
-  } else {
-    document.getElementById('pd-rte-en').innerHTML = '';
-    document.getElementById('pd-rte-cn').innerHTML = '';
-  }
+  // Description is always the Classic (rich-text) editor now. A legacy plain
+  // row is promoted to HTML so old text still shows formatted; on next save it
+  // is stored as rich.
+  const wasRich = p && p.description_format === 'rich';
+  document.getElementById('pd-rte-en').innerHTML = wasRich ? (p.description_en || '') : pdPlainToHtml(p && p.description_en);
+  document.getElementById('pd-rte-cn').innerHTML = wasRich ? (p.description_cn || '') : pdPlainToHtml(p && p.description_cn);
   pdApplyDescMode();
   const modes = String((p && p.ship_modes) || 'air,land').toLowerCase();
   document.getElementById('pd-ship-air').checked  = !p || modes.includes('air');
@@ -15009,8 +14994,7 @@ function pdOpen(id) {
       .catch(() => {});
   }
   document.getElementById('pd-cat-list').innerHTML = pdCats().map(c => `<option value="${escapeAttr(c)}">`).join('');
-  // Page-design + delete only apply to an existing product.
-  document.getElementById('pd-pagedesign-btn').style.display = p ? '' : 'none';
+  // Duplicate + delete only apply to an existing product.
   document.getElementById('pd-dup-btn').style.display = p ? '' : 'none';
   document.getElementById('pd-dupvar-btn').style.display = p ? '' : 'none';
   document.getElementById('pd-delete-btn').style.display = p ? '' : 'none';
@@ -15200,34 +15184,19 @@ function pdGalleryWire() {
     _pdDragFrom = null;
   });
 }
+// "Product editor" — opens the full page designer in a new tab. Needs a saved
+// product (the editor loads it by id), so prompt to save a brand-new one first.
 function pdOpenPageDesign() {
   const id = document.getElementById('pd-id').value;
-  if (id) window.open('/product-editor?id=' + encodeURIComponent(id), '_blank', 'noopener');
+  if (!id) { toast(cuT('Save the product first, then open the Product editor', '请先保存产品,再打开产品页编辑器'), 'err'); return; }
+  window.open('/product-editor?id=' + encodeURIComponent(id), '_blank', 'noopener');
 }
-// ── Description editor (plain text ⇄ formatted rich-text) ────────────────────
-let _pdDescMode = 'plain';
+// ── Description editor — the Classic (rich-text) editor is the only inline
+// mode; "Product editor" in the mode bar launches the full page designer. ───
 function pdApplyDescMode() {
-  const m = _pdDescMode;
-  const pl = document.getElementById('pd-desc-plain'); const ri = document.getElementById('pd-desc-rich');
-  if (pl) pl.style.display = m === 'plain' ? '' : 'none';
-  if (ri) ri.style.display = m === 'rich' ? '' : 'none';
-  if (m !== 'rich' && ri) { ri.classList.remove('pd-rte-fs'); document.body.classList.remove('pd-rte-fs-lock'); }
-  document.querySelectorAll('.pd-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+  document.querySelectorAll('.pd-mode-btn[data-mode="classic"]').forEach(b => b.classList.add('active'));
 }
-function pdDescMode(m) {
-  m = (m === 'rich') ? 'rich' : 'plain';
-  if (m === _pdDescMode) { pdApplyDescMode(); return; }
-  // Carry content across when switching modes so nothing is lost.
-  if (m === 'rich') {
-    document.getElementById('pd-rte-en').innerHTML = pdPlainToHtml(document.getElementById('pd-desc-en').value);
-    document.getElementById('pd-rte-cn').innerHTML = pdPlainToHtml(document.getElementById('pd-desc-cn').value);
-  } else {
-    document.getElementById('pd-desc-en').value = pdHtmlToPlain(document.getElementById('pd-rte-en').innerHTML);
-    document.getElementById('pd-desc-cn').value = pdHtmlToPlain(document.getElementById('pd-rte-cn').innerHTML);
-  }
-  _pdDescMode = m;
-  pdApplyDescMode();
-}
+function pdDescMode() { pdApplyDescMode(); }
 // The single toolbar drives whichever EN/CN box the cursor is in. Native
 // controls (the Format <select>, the colour pickers) steal focus and would
 // collapse the selection, so we track the live range from `selectionchange`
@@ -15322,7 +15291,6 @@ function pdRteFullscreen() {
   document.body.classList.toggle('pd-rte-fs-lock', on);
 }
 function pdPlainToHtml(t) { return escapeHtml(String(t || '')).replace(/\n/g, '<br>'); }
-function pdHtmlToPlain(h) { const d = document.createElement('div'); d.innerHTML = h || ''; return (d.innerText || '').trim(); }
 // A visually-empty rich box (just <br>/&nbsp;) saves as '' rather than junk markup.
 function pdRteClean(html) { const d = document.createElement('div'); d.innerHTML = html || ''; return (d.innerText || '').trim() ? (html || '').trim() : ''; }
 async function pdSave() {
@@ -15331,12 +15299,11 @@ async function pdSave() {
   const modes = [];
   if (document.getElementById('pd-ship-air').checked)  modes.push('air');
   if (document.getElementById('pd-ship-land').checked) modes.push('land');
-  // Description: formatted mode sends the (cleaned) HTML from the rich boxes;
-  // plain mode sends the textarea text. description_format tells the mini-app
-  // how to render it.
-  const descFormat = _pdDescMode === 'rich' ? 'rich' : 'plain';
-  const descEn = descFormat === 'rich' ? pdRteClean(document.getElementById('pd-rte-en').innerHTML) : g('pd-desc-en');
-  const descCn = descFormat === 'rich' ? pdRteClean(document.getElementById('pd-rte-cn').innerHTML) : g('pd-desc-cn');
+  // Description: always the cleaned HTML from the Classic (rich) boxes;
+  // description_format='rich' tells the mini-app to render it via <rich-text>.
+  const descFormat = 'rich';
+  const descEn = pdRteClean(document.getElementById('pd-rte-en').innerHTML);
+  const descCn = pdRteClean(document.getElementById('pd-rte-cn').innerHTML);
   const body = {
     name_en: g('pd-name-en'), name_cn: g('pd-name-cn'),
     sku: g('pd-sku'), category: g('pd-category'), weight: g('pd-weight'),
