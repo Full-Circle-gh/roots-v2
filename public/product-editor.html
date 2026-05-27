@@ -2245,11 +2245,10 @@ function _paBlockEditorBody(b) {
             <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','tiles',${i})" ${tiles.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
-          <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px">
-            <div class="field"><label class="stacked">Icon · 图标</label><input data-rowidx="${i}" data-bkey="icon" type="text" value="${escapeAttr(tl.icon || '')}" placeholder="🥖" style="text-align:center;font-size:18px"></div>
+          <div class="field" style="max-width:128px;margin-bottom:10px"><label class="stacked">Icon · 图标</label><input data-rowidx="${i}" data-bkey="icon" type="text" value="${escapeAttr(tl.icon || '')}" placeholder="🥖" style="text-align:center;font-size:18px"></div>
+          <div class="pa-edit-grid-2">
             <div class="field"><label class="stacked">Label EN · 标签(英文)</label><input data-rowidx="${i}" data-bkey="label_en" type="text" value="${escapeAttr(tl.label_en || '')}" placeholder="Toast"></div>
             <div class="field"><label class="stacked">Label CN · 标签(中文)</label><input data-rowidx="${i}" data-bkey="label_cn" type="text" value="${escapeAttr(tl.label_cn || '')}" placeholder="吐司"></div>
-            <div></div>
             <div class="field"><label class="stacked">Sub EN (optional) · 副标(英文,可选)</label><input data-rowidx="${i}" data-bkey="sub_en" type="text" value="${escapeAttr(tl.sub_en || '')}" placeholder="over eggs"></div>
             <div class="field"><label class="stacked">Sub CN · 副标(中文,可选)</label><input data-rowidx="${i}" data-bkey="sub_cn" type="text" value="${escapeAttr(tl.sub_cn || '')}" placeholder="盖在鸡蛋上"></div>
           </div>
@@ -2262,13 +2261,11 @@ function _paBlockEditorBody(b) {
     const card = (which, c) => `
       <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
         <div class="pa-edit-section-title" style="margin-bottom:8px">${which === 'left' ? 'Left card · 左卡' : 'Right card · 右卡'}</div>
-        <div style="display:grid;grid-template-columns:60px 1fr 1fr;gap:10px">
-          <div class="field"><label class="stacked">Icon · 图标</label><input data-sub="${which}" data-bkey="icon" type="text" value="${escapeAttr(c.icon || '')}" placeholder="❄" style="text-align:center;font-size:18px"></div>
+        <div class="pa-edit-grid-2">
           <div class="field"><label class="stacked">Head EN · 标题(英文)</label><input data-sub="${which}" data-bkey="head_en" type="text" value="${escapeAttr(c.head_en || '')}" placeholder="Refrigerated"></div>
           <div class="field"><label class="stacked">Head CN · 标题(中文)</label><input data-sub="${which}" data-bkey="head_cn" type="text" value="${escapeAttr(c.head_cn || '')}" placeholder="冷藏"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:8px">
           <div class="field"><label class="stacked">Number · 数值</label><input data-sub="${which}" data-bkey="num" type="text" value="${escapeAttr(c.num || '')}" placeholder="0–4°"></div>
+          <div class="field"><label class="stacked">Icon · 图标</label><input data-sub="${which}" data-bkey="icon" type="text" value="${escapeAttr(c.icon || '')}" placeholder="❄" style="text-align:center;font-size:18px"></div>
           <div class="field"><label class="stacked">Unit EN · 单位(英文)</label><input data-sub="${which}" data-bkey="unit_en" type="text" value="${escapeAttr(c.unit_en || '')}" placeholder="Celsius"></div>
           <div class="field"><label class="stacked">Unit CN · 单位(中文)</label><input data-sub="${which}" data-bkey="unit_cn" type="text" value="${escapeAttr(c.unit_cn || '')}" placeholder="摄氏度"></div>
         </div>
@@ -2341,10 +2338,10 @@ function _paBlockEditorBody(b) {
             <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','rows',${i})" ${rows.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 0.8fr;gap:10px">
+          <div class="pa-edit-grid-2">
             <div class="field"><label class="stacked">Label EN · 标签(英文)</label><input data-rowidx="${i}" data-bkey="label_en" type="text" value="${escapeAttr(r.label_en || '')}" placeholder="Energy"></div>
             <div class="field"><label class="stacked">Label CN · 标签(中文)</label><input data-rowidx="${i}" data-bkey="label_cn" type="text" value="${escapeAttr(r.label_cn || '')}" placeholder="能量"></div>
-            <div class="field"><label class="stacked">Value · 数值</label><input data-rowidx="${i}" data-bkey="value" type="text" value="${escapeAttr(r.value || '')}" placeholder="2100 kJ"></div>
+            <div class="field" style="grid-column:span 2"><label class="stacked">Value · 数值</label><input data-rowidx="${i}" data-bkey="value" type="text" value="${escapeAttr(r.value || '')}" placeholder="2100 kJ"></div>
           </div>
         </div>`).join('')}
       <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','rows',{label_en:'',label_cn:'',value:''})">+ Add row · 添加一行</button>`;
