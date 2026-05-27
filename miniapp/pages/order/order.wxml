@@ -200,6 +200,13 @@
     <view wx:elif="{{order.status === 'paid' || order.status === 'preparing' || order.status === 'dispatched'}}" class="cust-actions">
       <button wx:if="{{!order.refund_status || order.refund_status === 'rejected' || order.refund_status === 'withdrawn'}}" class="btn ghost f-toni" bindtap="openRefundSheet">{{copy.refundBtn}}</button>
     </view>
+
+    <!-- Invoice (发票) — request post-purchase, or show its state. Paid orders only. -->
+    <view wx:if="{{order.status !== 'pending_payment' && order.status !== 'cancelled'}}" class="cust-actions">
+      <view wx:if="{{order.invoice_status === 'issued'}}" class="inv-state muted">{{copy.invoiceIssued}}</view>
+      <view wx:elif="{{order.needs_invoice}}" class="inv-state muted">{{copy.invoiceProcessing}}</view>
+      <button wx:else class="btn ghost f-toni" bindtap="openInvoiceSheet">{{copy.invoiceBtn}}</button>
+    </view>
   </block>
 </view>
 
@@ -254,6 +261,41 @@
       <button class="btn ghost f-toni" bindtap="closeRefundSheet" disabled="{{refundBusy}}">{{copy.refundCancelBtn}}</button>
       <button class="btn primary f-toni" bindtap="submitRefund" disabled="{{refundBusy}}">
         {{refundBusy ? (lang === 'cn' ? '提交中…' : 'Submitting…') : copy.refundSubmit}}
+      </button>
+    </view>
+  </view>
+</view>
+
+<!-- ── Invoice (发票) request bottom sheet ──────────────────────────── -->
+<view wx:if="{{invoiceSheetOpen}}" class="rs-mask" bindtap="onInvoiceSheetMaskTap">
+  <view class="rs-sheet" catchtap="noop">
+    <view class="rs-handle"></view>
+    <view class="rs-title f-toni">{{copy.invoiceTitle}}</view>
+
+    <view class="rs-modes">
+      <view class="rs-mode {{invoiceType === 'personal' ? 'on' : ''}}" data-type="personal" bindtap="onInvTypeTap">{{copy.invPersonal}}</view>
+      <view class="rs-mode {{invoiceType === 'company'  ? 'on' : ''}}" data-type="company"  bindtap="onInvTypeTap">{{copy.invCompany}}</view>
+    </view>
+
+    <view class="rs-field">
+      <text class="rs-label">{{copy.invTitleLabel}}</text>
+      <input class="rs-input" value="{{invoiceTitle}}" placeholder="{{copy.invTitlePh}}" bindinput="onInvTitleInput"/>
+    </view>
+
+    <view wx:if="{{invoiceType === 'company'}}" class="rs-field">
+      <text class="rs-label">{{copy.invTaxLabel}}</text>
+      <input class="rs-input" value="{{invoiceTaxId}}" placeholder="{{copy.invTaxPh}}" bindinput="onInvTaxInput"/>
+    </view>
+
+    <view class="rs-field">
+      <text class="rs-label">{{copy.invEmailLabel}}</text>
+      <input class="rs-input" value="{{invoiceEmail}}" placeholder="{{copy.invEmailPh}}" bindinput="onInvEmailInput"/>
+    </view>
+
+    <view class="rs-actions">
+      <button class="btn ghost f-toni" bindtap="closeInvoiceSheet" disabled="{{invoiceBusy}}">{{copy.refundCancelBtn}}</button>
+      <button class="btn primary f-toni" bindtap="submitInvoice" disabled="{{invoiceBusy}}">
+        {{invoiceBusy ? (lang === 'cn' ? '提交中…' : 'Submitting…') : copy.invoiceSubmit}}
       </button>
     </view>
   </view>

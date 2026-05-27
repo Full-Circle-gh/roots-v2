@@ -2836,6 +2836,36 @@ router.get('/api/retail/orders/:id', requireRetailAuth, (req, res) => {
   res.json({ success: true, data: order });
 });
 
+// Request a fapiao (发票) for an existing PAID order — for shoppers who didn't
+// tick "need an invoice" at checkout. Sets the same fields the checkout flow
+// stores; the office then issues it (it appears in My Invoices). Re-requesting
+// before issuance just updates the details.
+router.post('/api/retail/orders/:id/invoice-request', requireRetailAuth, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const order = tdb().prepare(
+    'SELECT id, status, invoice_status FROM retail_orders WHERE id = ? AND customer_id = ?'
+  ).get(id, req.customer.id);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  if (order.status === 'pending_payment' || order.status === 'cancelled') {
+    return res.status(400).json({ success: false, error: 'not_eligible' });   // unpaid / cancelled
+  }
+  if (order.invoice_status === 'issued') {
+    return res.status(400).json({ success: false, error: 'already_issued' });
+  }
+  const b = req.body || {};
+  const type  = b.invoice_type === 'company' ? 'company' : 'personal';
+  const title = String(b.invoice_title || '').trim();
+  const taxId = type === 'company' ? String(b.invoice_tax_id || '').trim() : null;
+  const email = String(b.invoice_email || '').trim();
+  if (!title) return res.status(400).json({ success: false, error: 'title_required' });
+  if (type === 'company' && !taxId) return res.status(400).json({ success: false, error: 'tax_id_required' });
+  if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ success: false, error: 'email_invalid' });
+  tdb().prepare(
+    'UPDATE retail_orders SET needs_invoice = 1, invoice_type = ?, invoice_title = ?, invoice_tax_id = ?, invoice_email = ? WHERE id = ?'
+  ).run(type, title, taxId, email, id);
+  res.json({ success: true });
+});
+
 // Items the customer still needs to review — delivered orders' items that
 // don't yet have a row in retail_reviews for (customer, order, product).
 // Powers the Me-tab Review bucket's dedicated list page.

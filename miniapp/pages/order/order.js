@@ -91,6 +91,19 @@ Page({
       refundStatePaid:       '✓ Refund paid back to you.',
       refundStateRejected:   '✗ Refund request rejected',
       refundStateWithdrawn:  '↺ You withdrew this refund request.',
+      invoiceBtn: 'Request invoice',
+      invoiceTitle: 'Request an invoice (fapiao)',
+      invPersonal: 'Personal',
+      invCompany: 'Company',
+      invTitleLabel: 'Invoice title',
+      invTitlePh: 'Your name or company',
+      invTaxLabel: 'Company tax ID',
+      invTaxPh: '统一社会信用代码 / 税号',
+      invEmailLabel: 'Email for the e-invoice',
+      invEmailPh: 'you@example.com',
+      invoiceSubmit: 'Submit request',
+      invoiceProcessing: '🧾 Invoice requested — we\'ll email it once issued.',
+      invoiceIssued: '✓ Invoice issued',
     },
     // Refund sheet state
     refundSheetOpen: false,
@@ -102,6 +115,13 @@ Page({
     refundLinesTotalDisp: '¥0.00',
     refundStateLabel: '',     // banner copy for current refund_status
     refundShowAmounts: false, // show amount summary block in banner
+    // Invoice (发票) request sheet state
+    invoiceSheetOpen: false,
+    invoiceBusy: false,
+    invoiceType: 'personal',  // 'personal' | 'company'
+    invoiceTitle: '',
+    invoiceTaxId: '',
+    invoiceEmail: '',
   },
 
   async onLoad(query) {
@@ -161,6 +181,19 @@ Page({
         refundStatePaid:       '✓ 退款已退回您的账户。',
         refundStateRejected:   '✗ 退款申请未通过',
         refundStateWithdrawn:  '↺ 您已撤回退款申请。',
+        invoiceBtn: '申请发票',
+        invoiceTitle: '申请发票',
+        invPersonal: '个人',
+        invCompany: '企业',
+        invTitleLabel: '发票抬头',
+        invTitlePh: '姓名或公司名称',
+        invTaxLabel: '企业税号',
+        invTaxPh: '统一社会信用代码 / 税号',
+        invEmailLabel: '接收电子发票的邮箱',
+        invEmailPh: 'you@example.com',
+        invoiceSubmit: '提交申请',
+        invoiceProcessing: '🧾 发票已申请 — 开具后将发送至您的邮箱。',
+        invoiceIssued: '✓ 发票已开具',
       },
     });
   },
@@ -456,6 +489,52 @@ Page({
   onRefundSheetMaskTap() { this.closeRefundSheet(); },
   // Stop tap-through so taps inside the sheet body don't bubble up to the mask.
   noop() {},
+
+  // ── Invoice (发票) request ───────────────────────────────────────────
+  openInvoiceSheet() {
+    const o = this.data.order || {};
+    this.setData({
+      invoiceSheetOpen: true,
+      invoiceType:  o.invoice_type === 'company' ? 'company' : 'personal',
+      invoiceTitle: o.invoice_title || '',
+      invoiceTaxId: o.invoice_tax_id || '',
+      invoiceEmail: o.invoice_email || '',
+    });
+  },
+  closeInvoiceSheet() {
+    if (this.data.invoiceBusy) return;
+    this.setData({ invoiceSheetOpen: false });
+  },
+  onInvoiceSheetMaskTap() { this.closeInvoiceSheet(); },
+  onInvTypeTap(e)    { this.setData({ invoiceType: e.currentTarget.dataset.type }); },
+  onInvTitleInput(e) { this.setData({ invoiceTitle: e.detail.value }); },
+  onInvTaxInput(e)   { this.setData({ invoiceTaxId: e.detail.value }); },
+  onInvEmailInput(e) { this.setData({ invoiceEmail: e.detail.value }); },
+  async submitInvoice() {
+    const cn = this.data.lang === 'cn';
+    const title = (this.data.invoiceTitle || '').trim();
+    const taxId = (this.data.invoiceTaxId || '').trim();
+    const email = (this.data.invoiceEmail || '').trim();
+    if (!title) { wx.showToast({ title: cn ? '请填写发票抬头' : 'Enter the invoice title', icon: 'none' }); return; }
+    if (this.data.invoiceType === 'company' && !taxId) { wx.showToast({ title: cn ? '请填写企业税号' : 'Enter the tax ID', icon: 'none' }); return; }
+    if (!/^\S+@\S+\.\S+$/.test(email)) { wx.showToast({ title: cn ? '请填写有效邮箱' : 'Enter a valid email', icon: 'none' }); return; }
+    this.setData({ invoiceBusy: true });
+    try {
+      await api.post('/api/retail/orders/' + this.data.id + '/invoice-request', {
+        invoice_type:   this.data.invoiceType,
+        invoice_title:  title,
+        invoice_tax_id: this.data.invoiceType === 'company' ? taxId : null,
+        invoice_email:  email,
+      });
+      wx.showToast({ title: cn ? '发票已申请 ✓' : 'Invoice requested ✓', icon: 'success' });
+      this.setData({ invoiceSheetOpen: false });
+      await this.refresh();
+    } catch (e) {
+      wx.showToast({ title: e.message, icon: 'none' });
+    } finally {
+      this.setData({ invoiceBusy: false });
+    }
+  },
   onRefundModeTap(e) {
     const mode = e.currentTarget.dataset.mode;
     if (!mode || mode === this.data.refundMode) return;
