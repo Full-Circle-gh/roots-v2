@@ -48,6 +48,14 @@ function requireRetailAdmin(req, res, next) {
         if (tenant && tenant.status === 'active') {
           req.backendUser = u;
           req.tenant = tenant;
+          // Admin write handlers below read req.user.id / req.user.username for
+          // activity logging and created_by/updated_by columns. The kitchen path
+          // sets req.user via requireAuth; the backend realm has no kitchen user,
+          // so without a shim those handlers throw mid-request *after* the DB
+          // mutation has already run (e.g. force-logout deletes the tokens, then
+          // 500s on req.user.id — the client sees "failed" yet the customer is
+          // logged out). Represent the operator faithfully so logging works.
+          req.user = { id: u.id, username: u.username, role: u.role, display_name: u.display_name };
           // Per-tenant data connection (Phase 2 slice 2). Roots → global db;
           // other tenants → their own file. The request runs inside a tenant
           // ALS context so handlers reach the right connection via tdb();

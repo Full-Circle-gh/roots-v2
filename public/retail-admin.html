@@ -14366,7 +14366,7 @@ async function cuToggleBlock() {
 
 async function cuForceLogout() {
   if (!CU_CURRENT?.customer) return;
-  if (!confirm('Revoke all active sessions? The customer will need to re-open the mini app to log in again. · 撤销所有活跃会话?顾客需要重新打开小程序登录。')) return;
+  if (!confirm('Revoke all active sessions? This ends the current login, but an unblocked customer can sign back in. To keep them out, Block them first. · 撤销所有活跃会话?这将结束当前登录,但未封禁的顾客可重新登录。如需阻止,请先封禁。')) return;
   try {
     const j = await cuWriteRequest({
       url: '/api/retail-admin/customers/' + CU_CURRENT.customer.id + '/force-logout', method: 'POST',
