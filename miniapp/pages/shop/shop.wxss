@@ -384,6 +384,15 @@
 .row-name { font-size: calc(30rpx * var(--font-scale)); line-height: 1.35; color: var(--ink); }
 .row-compact .row-name { font-size: calc(34rpx * var(--font-scale)); line-height: 1.35; }
 .row-sub { font-size: calc(22rpx * var(--font-scale)); color: var(--olive); margin-top: 8rpx; line-height: 1.35; }
+/* "X SOLD" popularity caption — matches the home cards' .sold-caption
+   (block-renderer.wxss) so the badge reads identically across surfaces. */
+.sold-cap {
+  margin-top: 6rpx;
+  font-weight: 700;
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  color: var(--olive);
+}
 .row-badge {
   display: inline-block; margin-top: 10rpx;
   background: var(--ink); color: var(--lime);

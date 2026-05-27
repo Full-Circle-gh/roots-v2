@@ -347,11 +347,15 @@ Page({
       const subline = (p.size || '').toString().trim();
       const stockNum = p.stock == null ? null : Number(p.stock);
       const outOfStock = stockNum != null && stockNum <= 0;
+      // All-time units sold (server min-gates this to 0 below the badge
+      // threshold), shown as a small "X SOLD" popularity caption on the card.
+      const soldUnits = Number(p.units_sold) || 0;
       return {
         id: p.id,
         name: lang.pick(p.name_en, p.name_cn, L),
         subline,
         badge: pickBadge(p.tags),
+        soldCaption: soldUnits > 0 ? (L === 'cn' ? `已售 ${soldUnits}` : `${soldUnits} SOLD`) : '',
         outOfStock,
         image: absUrl(p.image_url) || p.image_data || '',
         price: eff > 0 ? '¥' + (Number.isInteger(eff) ? eff : eff.toFixed(2)) : '—',

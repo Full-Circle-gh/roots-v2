@@ -247,6 +247,7 @@ router.get('/api/retail/products', (req, res) => {
   const rows = tdb().prepare(sql).all(...params)
     .map(hydrateNutrition)
     .map(r => flashsales.decorateProduct(r, now));
+  attachSoldCounts(rows);
   const total = tdb().prepare(`SELECT COUNT(*) AS n FROM products p
                             WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
                             ${q ? 'AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)' : ''}
@@ -407,6 +408,35 @@ const SOCIAL_PROOF_WINDOWS = [
 ];
 const SOCIAL_PROOF_PAID =
   "o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+
+// Catalogue "X SOLD" badge. Attaches all-time paid units per product to the
+// list response so shop + home cards can flaunt popularity. Gated to a minimum
+// so low-sellers stay neutral (no badge) rather than advertising a weak count —
+// raise SOLD_BADGE_MIN to show the badge on fewer (more popular) products, or
+// lower to 1 to show it wherever anything has sold. Mutates rows in place.
+const SOLD_BADGE_MIN = 3;
+function attachSoldCounts(rows) {
+  if (!rows || !rows.length) return;
+  try {
+    const ids = rows.map(r => r.id);
+    const placeholders = ids.map(() => '?').join(',');
+    const counts = tdb().prepare(`
+      SELECT oi.product_id AS pid, SUM(oi.qty) AS units
+        FROM retail_order_items oi
+        JOIN retail_orders o ON o.id = oi.order_id
+       WHERE oi.product_id IN (${placeholders})
+         AND ${SOCIAL_PROOF_PAID}
+       GROUP BY oi.product_id
+    `).all(...ids);
+    const map = new Map(counts.map(c => [c.pid, Math.round(Number(c.units) || 0)]));
+    for (const r of rows) {
+      const u = map.get(r.id) || 0;
+      r.units_sold = u >= SOLD_BADGE_MIN ? u : 0;
+    }
+  } catch (e) {
+    console.error('[sold-counts]', e.message);
+  }
+}
 
 function socialProofForProduct(id) {
   const now = Date.now();

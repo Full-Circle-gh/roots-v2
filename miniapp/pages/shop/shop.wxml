@@ -153,6 +153,7 @@
               <view class="row-body">
                 <view class="row-name f-bear">{{item.name}}</view>
                 <view wx:if="{{item.subline}}" class="row-sub f-yuan">{{item.subline}}</view>
+                <view wx:if="{{item.soldCaption}}" class="sold-cap f-toni">{{item.soldCaption}}</view>
                 <view wx:if="{{item.isFlash}}" class="row-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
                 <view wx:if="{{item.badge}}" class="row-badge f-gothic">{{item.badge}}</view>
                 <view wx:if="{{item.outOfStock}}" class="row-oos f-toni">{{oosLabel}}</view>
@@ -207,6 +208,7 @@
             <view class="gal-meta">
               <view class="gal-name f-bear">{{item.name}}</view>
               <view wx:if="{{item.subline}}" class="gal-sub f-yuan">{{item.subline}}</view>
+              <view wx:if="{{item.soldCaption}}" class="sold-cap f-toni">{{item.soldCaption}}</view>
             </view>
             <view class="gal-foot">
               <view class="gal-price-stack">
@@ -253,6 +255,7 @@
               <view wx:if="{{item.outOfStock}}" class="card-oos f-toni">{{oosLabel}}</view>
             </view>
             <view class="name f-bear">{{item.name}}</view>
+            <view wx:if="{{item.soldCaption}}" class="sold-cap f-toni">{{item.soldCaption}}</view>
             <view class="card-foot">
               <view class="price-stack">
                 <text wx:if="{{item.isFlash}}" class="price-was f-aleo">{{item.priceWas}}</text>

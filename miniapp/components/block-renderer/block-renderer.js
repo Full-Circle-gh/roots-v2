@@ -282,8 +282,12 @@ Component({
             const rankLabel = !rank ? '' :
               rank === 1 ? `🏆 NO. 01` :
               `NO. ${rank < 10 ? '0' + rank : rank}`;
+            // Show "X SOLD" on any card with a count: top-selling blocks get
+            // their windowed units from the top endpoint; ordinary cards get
+            // all-time units from the catalogue list (already min-gated server
+            // side, so a non-zero value here is always worth showing).
             const units = Number(p.units_sold) || 0;
-            const soldCaption = isTopSelling && units > 0
+            const soldCaption = units > 0
               ? (L === 'cn' ? `已售 ${units}` : `${units} SOLD`)
               : '';
             return {
