@@ -679,6 +679,9 @@
   #pd-editor .field input[type=url],
   #pd-editor .field select { width: 100%; box-sizing: border-box; }
   #pd-editor .pd-card { background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  /* Override the global `section { display:none }` (used for page-level views) —
+     these <section> wrappers are content groups inside the editor. */
+  #pd-editor .pd-sec { display: block; }
   #pd-editor .pd-sec-h, #pd-editor .pd-card-h { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); margin: 0; }
   #pd-editor .pd-pub { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; }
   #pd-editor .pd-pub input { width: 16px; height: 16px; }
