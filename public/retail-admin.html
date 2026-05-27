@@ -7651,7 +7651,7 @@ async function api(path, opts = {}) {
     opts.body = JSON.stringify(opts.body);
   }
   const r = await fetch(path, { credentials: 'same-origin', ...opts, headers });
-  if (r.status === 401) { location.href = '/login'; throw new Error('401'); }
+  if (r.status === 401) { location.href = '/backend/login'; throw new Error('401'); }
   const j = await r.json();
   if (!j.success) throw new Error(j.error || 'request_failed');
   return j;
@@ -7852,50 +7852,27 @@ document.addEventListener('input', e => {
   if (e.target.id?.startsWith('cfg-fees-')) applyFeePreviews();
 });
 
-// Sign out a kitchen user from here. Kitchen accounts have a single
-// (main-app) session, so destroying it logs them out everywhere. We land
-// them on the Mini App Backend's own login (/backend/login) — not the
-// kitchen /login — so signing out of this surface keeps them in the
-// backend product context. Backend operators use /backend/account instead.
-async function retailSignOut() {
-  if (!confirm('Sign out? · 确定退出登录？')) return;
-  try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch {}
-  location.href = '/backend/login';
-}
-
 // ── Bootstrap ──
 (async () => {
   try {
-    const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.json());
-    if (!me?.user) { location.href = '/login'; return; }
+    // Mini App Backend is its own auth realm — authenticate against the
+    // backend operator endpoint, not the kitchen one, so an unauthenticated
+    // visitor lands on the backend's own login rather than in the kitchen app.
+    const me = await fetch('/api/backend/me', { credentials: 'same-origin' }).then(r => r.json());
+    if (!me?.user) { location.href = '/backend/login'; return; }
     const u = me.user;
-    $('#who').textContent = (u.displayName || u.display_name || u.username) + ' · ' + (u.role || '');
-    // Mini App Backend operators (separate realm) manage their account —
-    // change password / sign out — on /backend/account. Make the name a link
-    // there for them. Kitchen users are unaffected (no is_backend flag).
-    if (u.is_backend) {
-      const whoEl = $('#who');
-      whoEl.innerHTML = '';
-      const a = document.createElement('a');
-      a.href = '/backend/account';
-      a.textContent = (u.displayName || u.username) + ' · ' + (u.role || '');
-      a.title = 'Account · 账户';
-      a.style.cssText = 'color:inherit;text-decoration:none;border-bottom:1px dotted currentColor;opacity:.85';
-      whoEl.appendChild(a);
-    } else {
-      // Kitchen users: clicking the name signs out of their (single) session
-      // right here, so they don't have to bounce back to the main app to do it.
-      const whoEl = $('#who');
-      whoEl.style.cursor = 'pointer';
-      whoEl.title = 'Sign out · 退出登录';
-      whoEl.style.borderBottom = '1px dotted currentColor';
-      whoEl.onclick = retailSignOut;
-    }
-    if (u.role !== 'admin' && !(u.permissions || {}).retail) {
-      document.body.innerHTML = '<main style="padding: 80px; text-align: center;"><h3 style="margin-bottom: 8px">No retail permission · 无零售权限</h3><p class="muted">Ask an admin to grant you the <b>retail</b> permission. · 请联系管理员授予 <b>retail</b> 权限。</p></main>';
-      return;
-    }
-  } catch (e) { location.href = '/login'; return; }
+    // Operator name links to the backend account page (change password / sign
+    // out). Every authenticated operator has full backend access — the backend
+    // realm has no per-module permission gate.
+    const whoEl = $('#who');
+    whoEl.innerHTML = '';
+    const a = document.createElement('a');
+    a.href = '/backend/account';
+    a.textContent = (u.displayName || u.username) + ' · ' + (u.role || '');
+    a.title = 'Account · 账户';
+    a.style.cssText = 'color:inherit;text-decoration:none;border-bottom:1px dotted currentColor;opacity:.85';
+    whoEl.appendChild(a);
+  } catch (e) { location.href = '/backend/login'; return; }
   dashInit();          // landing tab — set up date range + first load
   loadOrders();
   loadConfig();
@@ -10725,7 +10702,7 @@ async function uploadCsQr(file) {
   toast('Uploading QR… · 上传二维码中…');
   try {
     const r = await fetch('/api/retail-admin/cms/media', { method: 'POST', credentials: 'same-origin', body: fd });
-    if (r.status === 401) { location.href = '/login'; return; }
+    if (r.status === 401) { location.href = '/backend/login'; return; }
     const j = await r.json();
     if (!j.success) { toast('Upload failed · 上传失败: ' + (j.error || ''), 'err'); return; }
     $('#cfg-cs-qr_image_url').value = j.data.url;

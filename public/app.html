@@ -2456,7 +2456,6 @@ const MODULES = [
   { id:'products',    label:'Products · 产品',      iconKey:'bag' },
   { id:'miniapp',     label:'Mini App · 小程序',    iconKey:'storefront', permKey:'retail', children:[
     { id:'retail',       label:'Editor · 编辑器',   iconKey:'storefront' },
-    { id:'retail-admin', label:'Backend · 后台',    iconKey:'clipboard'  },
   ]},
   { id:'purchases',   label:'Purchases · 采购',     iconKey:'cart' },
   { id:'finance',     label:'Finance · 财务',       iconKey:'coin' },
@@ -3970,7 +3969,6 @@ function _paintAutoRefreshIndicator() {
 async function navigate(module) {
   // Storefront CMS lives at its own URL — bounce out of the SPA.
   if (module === 'retail')       { window.location.href = '/cms'; return; }
-  if (module === 'retail-admin') { window.location.href = '/retail-admin'; return; }
   // Stop any auto-refresh from the previous page so a stale poller can't
   // hit the wrong endpoint after the user has moved on.
   unregisterAutoRefresh();
