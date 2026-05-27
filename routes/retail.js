@@ -274,6 +274,41 @@ function hydrateNutrition(row) {
   return row;
 }
 
+// "Buy together" bundle stored on a product. sanitizeBundle → a JSON string for
+// the `bundle` column (or null to clear). resolveBundle → the customer shape,
+// with each listed product expanded to a lightweight card (published + active
+// only, in the operator's chosen order). There is NO bundle SKU: each item is a
+// real product, so stock/price live on the items themselves.
+function sanitizeBundle(input) {
+  let v = input;
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = null; } }
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const ids = Array.isArray(v.ids) ? [...new Set(v.ids.map(n => parseInt(n, 10)).filter(Number.isFinite))] : [];
+  if (!ids.length) return null;
+  const title_en = (v.title_en ? String(v.title_en) : '').trim();
+  const title_cn = (v.title_cn ? String(v.title_cn) : '').trim();
+  const price = Math.max(0, parseFloat(v.price) || 0);
+  const voucher = (v.voucher ? String(v.voucher) : '').trim();
+  return JSON.stringify({ title_en: title_en || null, title_cn: title_cn || null, ids, price: price || 0, voucher: voucher || null });
+}
+function resolveBundle(jsonStr) {
+  if (typeof jsonStr !== 'string' || !jsonStr.trim()) return null;
+  let b; try { b = JSON.parse(jsonStr); } catch { return null; }
+  const ids = Array.isArray(b && b.ids) ? b.ids.map(n => parseInt(n, 10)).filter(Number.isFinite) : [];
+  if (!ids.length) return null;
+  const ph = ids.map(() => '?').join(',');
+  const rows = tdb().prepare(
+    `SELECT id, name_en, name_cn, sku, weight AS size, sell_price AS price, stock_qty AS stock,
+            image_data, image_url
+       FROM products
+      WHERE id IN (${ph}) AND is_published = 1 AND COALESCE(is_active, 1) = 1`
+  ).all(...ids);
+  const byId = new Map(rows.map(r => [r.id, r]));
+  const items = ids.map(i => byId.get(i)).filter(Boolean);   // keep chosen order
+  if (!items.length) return null;
+  return { title_en: b.title_en || null, title_cn: b.title_cn || null, price: Number(b.price) || 0, voucher: b.voucher || null, ids, items };
+}
+
 router.get('/api/retail/products', (req, res) => {
   const { q, category, sort } = req.query;
   const limit  = Math.min(parseInt(req.query.limit  || '50', 10) || 50, 100);
@@ -615,6 +650,10 @@ router.get('/api/retail/products/:id', (req, res) => {
   } else {
     product.variants = [];
   }
+
+  // "Buy together" bundle — resolved to item cards (each its own product/stock).
+  const bundleRow = tdb().prepare('SELECT bundle FROM products WHERE id = ?').get(id);
+  product.bundle = resolveBundle(bundleRow && bundleRow.bundle);
 
   product.social_proof = socialProofForProduct(id);
 
@@ -4911,6 +4950,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     sets.push('images = ?');     params.push(arr.length ? JSON.stringify(arr) : null);
     sets.push('image_data = ?'); params.push(arr.length ? arr[0] : null);
   }
+  if ('bundle' in body) { sets.push('bundle = ?'); params.push(sanitizeBundle(body.bundle)); }
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
 
   sets.push('updated_at = CURRENT_TIMESTAMP');
@@ -4930,7 +4970,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
-            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
+            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM products WHERE id = ?`
   ).get(id);
@@ -4938,6 +4978,11 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     try { row.description_blocks = JSON.parse(row.description_blocks); } catch { row.description_blocks = null; }
   } else {
     row.description_blocks = null;
+  }
+  if (row && typeof row.bundle === 'string' && row.bundle.trim()) {
+    try { row.bundle = JSON.parse(row.bundle); } catch { row.bundle = null; }
+  } else {
+    row.bundle = null;
   }
   if (row && typeof row.nutrition === 'string' && row.nutrition.trim()) {
     try {
@@ -5284,7 +5329,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     is_published, sort_order, updated_at,
                     description_en, description_cn, description_format,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
-                    nutrition,
+                    nutrition, bundle,
                     variant_group_id, variant_label,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
                     (image_data IS NOT NULL AND image_data != '') AS has_image_data,
@@ -5316,6 +5361,12 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
       } catch { r.nutrition = null; }
     } else {
       r.nutrition = null;
+    }
+    // Parse the buy-together bundle JSON so the editor can pre-fill it.
+    if (typeof r.bundle === 'string' && r.bundle.trim()) {
+      try { r.bundle = JSON.parse(r.bundle); } catch { r.bundle = null; }
+    } else {
+      r.bundle = null;
     }
     return r;
   });
