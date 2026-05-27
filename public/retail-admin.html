@@ -994,7 +994,11 @@
     min-width: 0;
   }
   .pa-edit-inspector-scroll {
-    flex: 1; overflow-y: auto;
+    /* overflow-x:hidden is explicit: a lone overflow-y:auto makes the browser
+       compute overflow-x to `auto` too, so a few px of vertical overflow spawns
+       a phantom horizontal scrollbar (which then eats height and keeps the
+       vertical one alive). Pinning x hidden kills the loop. */
+    flex: 1; overflow-y: auto; overflow-x: hidden;
   }
   /* Chrome fields inside inspector */
   .pa-inspector-chrome {
