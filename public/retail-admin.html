@@ -714,13 +714,21 @@
     color: #fff; font-size: 9px; letter-spacing: .04em; text-align: center; padding: 2px 0;
   }
   .pd-var-head { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); margin-bottom: 6px; }
-  .va-list { display: flex; flex-direction: column; gap: 8px; }
-  .va-row { display: flex; align-items: center; gap: 10px; }
-  .va-label { width: 120px; flex: none; }
-  .va-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-  .va-name { min-width: 0; font-size: 12px; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .va-facts { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .va-open { flex: none; }
+  /* Sizes table — every size of a product on one inline-editable row
+     (label · price · stock · show), so the operator never has to open a size
+     just to set its stock. The size you opened is read-only here (edit it in
+     the form); sibling sizes are editable inline. */
+  .va-table { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+  .va-row { display: grid; grid-template-columns: minmax(0,1fr) 84px 72px 44px 24px; gap: 8px; align-items: center; }
+  .va-row-head span { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-4); font-family: var(--f-mono); }
+  .va-row-head .va-num { text-align: right; }
+  .va-label { width: 100%; box-sizing: border-box; }
+  .va-num { width: 100%; box-sizing: border-box; text-align: right; font-variant-numeric: tabular-nums; }
+  .va-ro { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; }
+  .va-show { display: flex; justify-content: center; }
+  .va-self { color: var(--brass); font-size: 12px; text-align: center; cursor: help; }
+  .va-link { background: none; border: none; color: var(--text-3); text-decoration: underline; cursor: pointer; font-size: 11px; padding: 0 2px; }
+  .va-link:hover { color: var(--text-1); }
   /* Description editor — Classic (rich) editor + "Product editor" launch, EN|CN side-by-side. */
   .pd-desc-modebar { display: inline-flex; gap: 4px; margin-left: 10px; vertical-align: middle; }
   .pd-mode-btn { font-size: 11px; padding: 3px 10px; border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-2); border-radius: 6px; cursor: pointer; font-weight: 500; }
@@ -4697,7 +4705,6 @@
         <div class="pu-editor-foot" style="justify-content:space-between;">
           <div style="display:flex;gap:8px;">
             <button class="btn" id="pd-dup-btn" type="button" onclick="pdDuplicate(false)" title="Make a copy as a new product · 复制为新产品">⧉ Duplicate · 复制</button>
-            <button class="btn" id="pd-dupvar-btn" type="button" onclick="pdDuplicate(true)" title="Copy and add as a variant — same product, different size · 复制并作为变体(同款不同规格)">+ Variant · 变体</button>
             <button class="btn" id="pd-delete-btn" type="button" onclick="pdDelete()" style="color:var(--danger);border-color:rgba(182,86,86,.4);">Delete · 删除</button>
           </div>
           <div style="display:flex;gap:8px;">
@@ -15097,7 +15104,6 @@ function pdOpen(id) {
   document.getElementById('pd-cat-list').innerHTML = pdCats().map(c => `<option value="${escapeAttr(c)}">`).join('');
   // Duplicate + delete only apply to an existing product.
   document.getElementById('pd-dup-btn').style.display = p ? '' : 'none';
-  document.getElementById('pd-dupvar-btn').style.display = p ? '' : 'none';
   document.getElementById('pd-delete-btn').style.display = p ? '' : 'none';
   vaLoad(p ? p.id : null);
   // Restore the operator's preferred editor size (large vs full-screen).
@@ -15124,21 +15130,22 @@ function pdToggleFullscreen() {
 // product (own stock/price); this only sets variant_group_id + variant_label,
 // via /api/retail-admin/products/:id/variants. Same model as the customer
 // switcher + the staff grouping.
-let VA_ID = null, VA_MEMBERS = [], VA_PICKING = false;
+let VA_ID = null, VA_MEMBERS = [], VA_PICKING = false, VA_HAD_GROUP = false;
 function _vaName(p) { return (p.name_en || '—') + (p.name_cn ? ' · ' + p.name_cn : ''); }
 async function vaLoad(id) {
   const box = document.getElementById('pd-variants'); if (!box) return;
-  VA_ID = id; VA_MEMBERS = []; VA_PICKING = false;
+  VA_ID = id; VA_MEMBERS = []; VA_PICKING = false; VA_HAD_GROUP = false;
   if (!id) {
-    box.innerHTML = `<div class="pd-var-head">${cuT('Variants', '规格')}</div>` +
-      `<div class="helper" style="font-size:11px">${cuT('Save the product first, then group it with variants.', '请先保存产品,再设置变体规格。')}</div>`;
+    box.innerHTML = `<div class="pd-var-head">${cuT('Sizes', '规格')}</div>` +
+      `<div class="helper" style="font-size:11px">${cuT('Save the product first, then add its sizes here.', '请先保存产品,再在此添加规格。')}</div>`;
     return;
   }
-  box.innerHTML = `<div class="pd-var-head">${cuT('Variants', '规格')}</div><div class="helper" style="font-size:11px">${cuT('Loading…', '加载中…')}</div>`;
+  box.innerHTML = `<div class="pd-var-head">${cuT('Sizes', '规格')}</div><div class="helper" style="font-size:11px">${cuT('Loading…', '加载中…')}</div>`;
   const p = (PA_PRODUCTS || []).find(x => x.id === id) || { id };
   try {
     const j = await api('/api/retail-admin/products/' + id + '/variants');
     const members = (j.data && j.data.members) || [];
+    VA_HAD_GROUP = !!(j.data && j.data.group_id);
     const self = { id, label: p.variant_label || '', name: _vaName(p), sku: p.sku || '', size: p.size || '', price: p.sell_price, stock: p.stock_qty, published: p.is_published, self: true };
     VA_MEMBERS = members.length
       ? members.map(m => ({ id: m.id, label: m.variant_label || '', name: _vaName(m), sku: m.sku || '', size: m.size || '', price: m.price, stock: m.stock, published: m.is_published, self: m.id === id }))
@@ -15149,42 +15156,65 @@ async function vaLoad(id) {
 }
 function vaRender() {
   const box = document.getElementById('pd-variants'); if (!box || VA_ID == null) return;
-  const rows = VA_MEMBERS.map(v => `
-    <div class="va-row">
-      <input class="va-label" type="text" value="${escapeAttr(v.label)}" placeholder="${cuT('Label (e.g. 500g)', '标签(如 500克)')}" oninput="vaLabel(${v.id}, this.value)">
-      <div class="va-meta">
-        <span class="va-name" title="${escapeAttr(v.name)}">${escapeHtml(v.name)}${v.self ? cuT(' · this', ' · 本产品') : ''}</span>
-        <span class="va-facts">${vaFacts(v)}</span>
-      </div>
-      ${v.self ? '' : `<button type="button" class="btn btn-sm va-open" onclick="pdOpen(${v.id})" title="${cuT('Open this variant to edit its price / size / SKU', '打开此变体以编辑价格 / 规格 / 货号')}">${cuT('Open', '打开')}</button>`}
-      ${v.self ? '' : `<button type="button" class="va-x" title="${cuT('Remove from group', '移出此组')}" onclick="vaRemove(${v.id})">✕</button>`}
-    </div>`).join('');
+  const head = `<div class="va-row va-row-head"><span>${cuT('Size', '规格')}</span>` +
+    `<span class="va-num">¥</span><span class="va-num">${cuT('Stock', '库存')}</span>` +
+    `<span style="text-align:center">${cuT('Show', '上架')}</span><span></span></div>`;
+  const rows = VA_MEMBERS.map(v => {
+    const price = (v.price != null && v.price !== '') ? Number(v.price) : '';
+    const stock = (v.stock != null && v.stock !== '') ? v.stock : '';
+    const label = `<input class="va-label" type="text" value="${escapeAttr(v.label)}" placeholder="${cuT('e.g. 500g', '如 500克')}" title="${escapeAttr(v.name)}" oninput="vaLabel(${v.id}, this.value)">`;
+    if (v.self) {
+      return `<div class="va-row">${label}` +
+        `<span class="va-ro">${price === '' ? '—' : price.toFixed(2)}</span>` +
+        `<span class="va-ro">${stock === '' ? '—' : escapeHtml(String(stock))}</span>` +
+        `<span class="va-ro" style="text-align:center">${v.published === 0 ? '—' : '✓'}</span>` +
+        `<span class="va-self" title="${cuT('The size you’re editing in the form above — set its price, stock & SKU there.', '你正在上方表单中编辑的规格 — 价格、库存、货号在那里设置。')}">●</span></div>`;
+    }
+    return `<div class="va-row">${label}` +
+      `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaField(${v.id}, 'price', this.value)">` +
+      `<input class="va-num" type="number" min="0" step="1" value="${stock}" placeholder="0" oninput="vaField(${v.id}, 'stock', this.value)">` +
+      `<span class="va-show"><input type="checkbox" ${v.published === 0 ? '' : 'checked'} title="${cuT('Show this size in the shop', '在店面显示此规格')}" onchange="vaField(${v.id}, 'published', this.checked ? 1 : 0)"></span>` +
+      `<button type="button" class="va-x" title="${cuT('Remove this size', '移除此规格')}" onclick="vaRemove(${v.id})">✕</button></div>`;
+  }).join('');
   const picker = VA_PICKING ? `
-    <input id="va-search" class="va-search" type="text" autocomplete="off" placeholder="${cuT('Search a product to add…', '搜索产品加入…')}" oninput="vaPickerList()">
+    <input id="va-search" class="va-search" type="text" autocomplete="off" placeholder="${cuT('Search a product to link…', '搜索产品以关联…')}" oninput="vaPickerList()">
     <div id="va-picklist" class="va-picklist"></div>` : '';
   box.innerHTML =
-    `<div class="pd-var-head">${cuT('Variants', '规格')}</div>` +
-    `<div class="helper" style="font-size:11px;margin-bottom:10px">${cuT('Group products into one set (e.g. Small / Large). Each variant is its own product — price & stock are set per product.', '把多个产品组成一组规格(如 小 / 大)。每个变体是独立产品,价格与库存按各自产品设置。')}</div>` +
-    `<div class="va-list">${rows}</div>` +
+    `<div class="pd-var-head">${cuT('Sizes', '规格')}</div>` +
+    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT('Sell this product in several sizes. Each size has its own price & stock — set them right here.', '以多种规格出售本产品。每种规格有独立价格与库存,直接在此设置。')}</div>` +
+    `<div class="va-table">${head}${rows}</div>` +
     `<div class="va-actions">` +
-      `<button type="button" class="btn btn-sm" onclick="vaTogglePicker()">${VA_PICKING ? cuT('Close', '关闭') : cuT('+ Add variant', '+ 添加变体')}</button>` +
-      `<button type="button" class="btn btn-sm btn-primary" onclick="vaSave()">${cuT('Save variants', '保存规格')}</button>` +
+      `<button type="button" class="btn btn-sm" onclick="vaAddSize()">${cuT('+ Add size', '+ 新增规格')}</button>` +
+      `<button type="button" class="va-link" onclick="vaTogglePicker()">${VA_PICKING ? cuT('Close', '关闭') : cuT('Link an existing product', '关联已有商品')}</button>` +
     `</div>` + picker;
   if (VA_PICKING) { const s = document.getElementById('va-search'); if (s) s.focus(); vaPickerList(); }
 }
-// At-a-glance facts for a variant row (SKU · size · price · stock · hidden).
-// These are read-only here — edit them by opening that variant's own product.
-function vaFacts(v) {
-  const parts = [];
-  if (v.sku) parts.push(escapeHtml(v.sku));
-  if (v.size) parts.push(escapeHtml(v.size));
-  if (v.price != null && v.price !== '') parts.push('¥' + Number(v.price).toFixed(2));
-  if (v.stock != null && v.stock !== '') parts.push(cuT(v.stock + ' in stock', '库存 ' + v.stock));
-  if (v.published === 0) parts.push(cuT('hidden', '未上架'));
-  return parts.join(' · ');
-}
 function vaLabel(id, val) { const v = VA_MEMBERS.find(x => x.id === id); if (v) v.label = val; }
+// Inline edit of a sibling size's commercial fields. Mutates the model only
+// (no re-render, so the input keeps focus); persisted by the main Save.
+function vaField(id, key, val) {
+  const v = VA_MEMBERS.find(x => x.id === id); if (!v || v.self) return;
+  if (key === 'price')      v.price = (val === '' ? '' : Math.max(0, parseFloat(val) || 0));
+  else if (key === 'stock') v.stock = (val === '' ? '' : Math.max(0, parseInt(val, 10) || 0));
+  else if (key === 'published') v.published = val ? 1 : 0;
+  v._dirty = true;
+}
 function vaRemove(id) { VA_MEMBERS = VA_MEMBERS.filter(v => v.self || v.id !== id); vaRender(); }
+// Add a new size: clone the current product (inherits photos/description/etc.,
+// blank SKU, 0 stock, hidden) and drop it straight into the list — no leaving
+// the editor. Price/stock/label are then set inline and saved with the product.
+async function vaAddSize() {
+  if (VA_ID == null) { toast(cuT('Save the product first.', '请先保存产品。'), 'err'); return; }
+  try {
+    const j = await api('/api/retail-admin/products/' + VA_ID + '/duplicate', { method: 'POST', body: { as_variant: true, label: '' } });
+    const d = j.data; if (!d) throw new Error('add_failed');
+    if (Array.isArray(PA_PRODUCTS)) PA_PRODUCTS.unshift(d);
+    VA_MEMBERS.push({ id: d.id, label: d.variant_label || '', name: _vaName(d), sku: d.sku || '', size: d.size || '', price: d.sell_price, stock: d.stock_qty, published: d.is_published, self: false });
+    vaRender();
+    const last = document.querySelector('#pd-variants .va-row:last-child .va-label'); if (last) last.focus();
+    toast(cuT('Size added — set its price & stock, then Save.', '已添加规格 — 设置价格与库存后保存。'));
+  } catch (e) { toast(cuT('Could not add size: ', '无法添加规格:') + e.message, 'err'); }
+}
 function vaTogglePicker() { VA_PICKING = !VA_PICKING; vaRender(); }
 function vaPickerList() {
   const el = document.getElementById('va-picklist'); if (!el) return;
@@ -15200,13 +15230,12 @@ function vaPickerList() {
 function vaPick(id) {
   const p = (PA_PRODUCTS || []).find(x => x.id === id);
   if (!p || VA_MEMBERS.some(v => v.id === id)) return;
-  VA_MEMBERS.push({ id: p.id, label: p.variant_label || '', name: _vaName(p), self: false });
+  VA_MEMBERS.push({ id: p.id, label: p.variant_label || '', name: _vaName(p), sku: p.sku || '', size: p.size || p.weight || '', price: p.sell_price, stock: p.stock_qty, published: p.is_published, self: false });
   VA_PICKING = false; vaRender();
 }
 // Persist the current variant grouping + labels and reflect them in the
-// in-memory product list. Shared by the explicit "Save variants" button AND
-// folded into the product's main Save (pdSave) so a single Save covers the
-// whole editor — labels included. Throws on failure for the caller to handle.
+// in-memory product list. Folded into the product's main Save (pdSave) so a
+// single Save covers the whole editor. Throws on failure for the caller.
 async function vaPersist() {
   if (VA_ID == null) return null;
   const members = VA_MEMBERS.map(v => ({ id: v.id, label: v.label || '' }));
@@ -15218,12 +15247,24 @@ async function vaPersist() {
   });
   return gid;
 }
-async function vaSave() {
-  if (VA_ID == null) return;
-  try {
-    await vaPersist();
-    toast(cuT('Variants saved', '规格已保存'));
-  } catch (e) { toast(cuT('Save failed: ', '保存失败:') + e.message, 'err'); }
+// Push inline price / stock / show edits for sibling sizes to their own
+// product rows. The opened ("self") size is saved via the main form fields.
+// Partial PATCH — only the listed fields change.
+async function vaPersistSiblings() {
+  const dirty = VA_MEMBERS.filter(v => !v.self && v._dirty);
+  for (const v of dirty) {
+    const body = {};
+    if (typeof v.stock !== 'undefined') body.stock_qty = (v.stock === '' || v.stock == null) ? 0 : v.stock;
+    if (v.price !== '' && v.price != null) body.sell_price = v.price;
+    if (v.published === 0 || v.published === 1) body.is_published = v.published;
+    if (!Object.keys(body).length) { v._dirty = false; continue; }
+    const j = await api('/api/retail-admin/products/' + v.id, { method: 'PATCH', body });
+    if (j && j.data && Array.isArray(PA_PRODUCTS)) {
+      const i = PA_PRODUCTS.findIndex(x => x.id === v.id);
+      if (i >= 0) PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...j.data };
+    }
+    v._dirty = false;
+  }
 }
 // ── Product photo gallery (editor) ──────────────────────────────────────────
 const PD_MAX_PHOTOS = 8;
@@ -15441,8 +15482,8 @@ async function pdSave() {
     // into this one Save so the operator never has to hit a second button.
     // Only when a real group is loaded (>=2 members) so we never clear a group
     // as a side effect of an ordinary product save.
-    if (id && VA_ID === Number(id) && VA_MEMBERS.length >= 2) {
-      try { await vaPersist(); }
+    if (id && VA_ID === Number(id) && (VA_MEMBERS.length >= 2 || VA_HAD_GROUP)) {
+      try { await vaPersist(); await vaPersistSiblings(); }
       catch (e) { alert('Variants not saved · 规格未保存: ' + e.message); return; }
     }
     pdClose();
