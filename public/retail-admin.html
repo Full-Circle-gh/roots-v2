@@ -795,6 +795,19 @@
   .va-x { flex: none; border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 14px; padding: 2px 6px; line-height: 1; }
   .va-x:hover { color: var(--brass); }
   .va-actions { display: flex; gap: 8px; margin-top: 12px; }
+  /* "Buy together" bundle editor (#pd-bundle) — chips of chosen products + a
+     search picker. No bundle SKU; items keep their own price/stock. */
+  .bu-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+  .bu-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 2px; }
+  .bu-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 14px; padding: 3px 6px 3px 10px; font-size: 12px; color: var(--text-1); max-width: 220px; }
+  .bu-chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bu-chip-x { border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 13px; line-height: 1; padding: 0 2px; flex: none; }
+  .bu-chip-x:hover { color: var(--brass); }
+  .bu-search { width: 100%; margin-top: 8px; box-sizing: border-box; }
+  .bu-picklist { margin-top: 6px; max-height: 220px; overflow-y: auto; border: 1px solid var(--line-soft); border-radius: var(--r-md); }
+  .bu-pick { padding: 8px 12px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--line-soft); }
+  .bu-pick:last-child { border-bottom: none; }
+  .bu-pick:hover { background: var(--bg-elev-1); color: var(--text-1); }
 
   .pa-card {
     background: var(--bg-pane);
@@ -4627,7 +4640,7 @@
       </div>
     </div>
 
-    <div id="pa-pager" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;margin:0 0 var(--s3)"></div>
+    <div id="pa-pager" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;margin:0 0 var(--s3);font-family:var(--f-sans);font-variant-numeric:tabular-nums;color:var(--text-3)"></div>
     <div id="pa-grid" class="pa-grid"></div>
     <div id="pa-empty" class="pa-empty" style="display:none">No products match this filter. · 没有匹配此筛选条件的产品。</div>
 
@@ -4660,6 +4673,7 @@
               <div class="field"><label class="stacked">Name 中文</label><input type="text" id="pd-name-cn"></div>
             </div>
             <div id="pd-variants" class="pd-variants"></div>
+            <div id="pd-bundle" class="pd-variants"></div>
             <section class="pd-sec">
             <label class="stacked">Description · 描述
               <span class="pd-desc-modebar">
@@ -14699,10 +14713,11 @@ function paSetPageSize(v) {
   paRender();
 }
 function paSetPage(n) {
+  // Re-render in place — deliberately NO scroll, so paging doesn't jump the
+  // viewport (the pager sits above the grid; scrolling the grid into view
+  // nudged the page down on every click).
   PA_PAGE = n;
   paRender();
-  const g = document.getElementById('pa-grid');
-  if (g) g.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 // Pager bar: "showing X–Y of Z", page-size selector, prev/next.
 function _paPagerHtml(total, pages, start, shown) {
@@ -14712,11 +14727,11 @@ function _paPagerHtml(total, pages, start, shown) {
     `<option value="${n}"${PA_PAGE_SIZE === n ? ' selected' : ''}>${n} / page · 每页 ${n}</option>`).join('')
     + `<option value="all"${PA_PAGE_SIZE === 'all' ? ' selected' : ''}>All · 全部</option>`;
   const btn = (label, page, dis) =>
-    `<button class="btn btn-sm" type="button" ${dis ? 'disabled' : ''} onclick="paSetPage(${page})">${label}</button>`;
-  return `<span class="muted" style="font-size:12px">Showing <b>${from}–${to}</b> of <b>${total}</b> · 显示 ${from}–${to} / 共 ${total}</span>
+    `<button class="btn btn-sm" type="button" ${dis ? 'disabled' : ''} onclick="paSetPage(${page})" style="font-family:var(--f-sans)">${label}</button>`;
+  return `<span class="muted" style="font-size:12px;font-family:var(--f-sans)">Showing <b>${from}–${to}</b> of <b>${total}</b> · 显示 ${from}–${to} / 共 ${total}</span>
     <div style="display:flex;align-items:center;gap:8px">
       <select onchange="paSetPageSize(this.value)" title="Products per page · 每页产品数"
-        style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;background:var(--bg-elev-1);color:var(--text-1)">${sizeOpts}</select>
+        style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;background:var(--bg-elev-1);color:var(--text-1);font-family:var(--f-sans)">${sizeOpts}</select>
       ${PA_PAGE_SIZE === 'all' ? '' : `${btn('‹ Prev 上一页', PA_PAGE - 1, PA_PAGE <= 1)}<span style="font-size:12px;white-space:nowrap">${PA_PAGE} / ${pages}</span>${btn('Next 下一页 ›', PA_PAGE + 1, PA_PAGE >= pages)}`}
     </div>`;
 }
@@ -15227,6 +15242,7 @@ function pdOpen(id) {
   document.getElementById('pd-dup-btn').style.display = p ? '' : 'none';
   document.getElementById('pd-delete-btn').style.display = p ? '' : 'none';
   vaLoad(p ? p.id : null);
+  buLoad(p ? p.id : null);
   // Restore the operator's preferred editor size (large vs full-screen).
   const wantFull = (() => { try { return localStorage.getItem('pd-editor-full') === '1'; } catch (e) { return false; } })();
   document.getElementById('pd-editor').classList.toggle('pd-full', wantFull);
@@ -15419,6 +15435,89 @@ async function vaPersistSiblings() {
     }
     v._dirty = false;
   }
+}
+// ── "Buy together" bundle (editor) ──────────────────────────────────────────
+// A bundle is a curated set of products shown on THIS product's page with one
+// "add all to cart" tap. No bundle SKU — each item keeps its own price/stock.
+// Stored on the product as the `bundle` JSON column; saved with the main Save.
+let BU_ID = null, BU = { title_en: '', title_cn: '', ids: [], price: '', voucher: '' }, BU_PICKING = false;
+function buLoad(id) {
+  const box = document.getElementById('pd-bundle'); if (!box) return;
+  BU_ID = id; BU_PICKING = false;
+  BU = { title_en: '', title_cn: '', ids: [], price: '', voucher: '' };
+  if (!id) {
+    box.innerHTML = `<div class="pd-var-head">${cuT('Bundle', '套装')}</div>` +
+      `<div class="helper" style="font-size:11px">${cuT('Save the product first, then build a bundle here.', '请先保存产品,再在此创建套装。')}</div>`;
+    return;
+  }
+  const p = (PA_PRODUCTS || []).find(x => x.id === id);
+  const b = p && p.bundle && typeof p.bundle === 'object' ? p.bundle : null;
+  if (b) {
+    BU = {
+      title_en: b.title_en || '', title_cn: b.title_cn || '',
+      ids: Array.isArray(b.ids) ? b.ids.slice() : [],
+      price: (b.price != null && b.price > 0) ? b.price : '',
+      voucher: b.voucher || '',
+    };
+  }
+  buRender();
+}
+function buRender() {
+  const box = document.getElementById('pd-bundle'); if (!box || BU_ID == null) return;
+  const nameOf = id => { const p = (PA_PRODUCTS || []).find(x => x.id === id); return p ? _vaName(p) : ('#' + id); };
+  const chips = BU.ids.length
+    ? BU.ids.map(id => `<span class="bu-chip"><span title="${escapeAttr(nameOf(id))}">${escapeHtml(nameOf(id))}</span><button type="button" class="bu-chip-x" title="${cuT('Remove', '移除')}" onclick="buRemove(${id})">✕</button></span>`).join('')
+    : `<span class="helper" style="font-size:11px">${cuT('No products yet — add some below.', '尚未添加商品 — 在下方添加。')}</span>`;
+  const picker = BU_PICKING ? `
+    <input id="bu-search" class="bu-search" type="text" autocomplete="off" placeholder="${cuT('Search a product to add…', '搜索商品以添加…')}" oninput="buPickerList()">
+    <div id="bu-picklist" class="bu-picklist"></div>` : '';
+  box.innerHTML =
+    `<div class="pd-var-head">${cuT('Bundle', '套装')}</div>` +
+    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT("Group this product with others as a “buy together” set on its page. Each item keeps its own price & stock — no separate inventory.", '在本产品页面将其与其他商品组成“一起买”套装。每件商品保留各自价格与库存,无需单独管理库存。')}</div>` +
+    `<div class="bu-row2">` +
+      `<div class="field"><label class="stacked">${cuT('Title EN', '标题(英文)')}</label><input type="text" value="${escapeAttr(BU.title_en)}" placeholder="Buy together" oninput="buField('title_en', this.value)"></div>` +
+      `<div class="field"><label class="stacked">${cuT('Title CN', '标题(中文)')}</label><input type="text" value="${escapeAttr(BU.title_cn)}" placeholder="一起买" oninput="buField('title_cn', this.value)"></div>` +
+    `</div>` +
+    `<div class="bu-chips">${chips}</div>` +
+    `<div class="bu-row2">` +
+      `<div class="field"><label class="stacked">${cuT('Bundle price ¥ (optional)', '套装价 ¥(可选)')}</label><input type="number" min="0" step="0.01" value="${BU.price === '' ? '' : BU.price}" placeholder="${cuT('blank = item total', '留空 = 各项合计')}" oninput="buField('price', this.value)"></div>` +
+      `<div class="field"><label class="stacked">${cuT('Auto voucher (optional)', '自动优惠券(可选)')}</label><input type="text" value="${escapeAttr(BU.voucher)}" placeholder="${cuT('code', '券码')}" oninput="buField('voucher', this.value)"></div>` +
+    `</div>` +
+    `<div class="va-actions">` +
+      `<button type="button" class="btn btn-sm" onclick="buTogglePicker()">${BU_PICKING ? cuT('Close', '关闭') : cuT('+ Add product', '+ 添加商品')}</button>` +
+    `</div>` + picker;
+  if (BU_PICKING) { const s = document.getElementById('bu-search'); if (s) s.focus(); buPickerList(); }
+}
+function buField(key, val) {
+  if (key === 'price') BU.price = (val === '' ? '' : Math.max(0, parseFloat(val) || 0));
+  else BU[key] = val;
+}
+function buRemove(id) { BU.ids = BU.ids.filter(x => x !== id); buRender(); }
+function buTogglePicker() { BU_PICKING = !BU_PICKING; buRender(); }
+function buPickerList() {
+  const el = document.getElementById('bu-picklist'); if (!el) return;
+  const q = (document.getElementById('bu-search')?.value || '').toLowerCase().trim();
+  const have = new Set(BU.ids);   // hide products already in the bundle
+  const matches = (PA_PRODUCTS || []).filter(p => !have.has(p.id))
+    .filter(p => !q || (p.name_en || '').toLowerCase().includes(q) || (p.name_cn || '').includes(q) || (p.sku || '').toLowerCase().includes(q))
+    .slice(0, 40);
+  el.innerHTML = matches.length
+    ? matches.map(p => `<div class="bu-pick" onclick="buPick(${p.id})">${escapeHtml(_vaName(p))}</div>`).join('')
+    : `<div class="bu-pick muted">${cuT('No matches', '无匹配')}</div>`;
+}
+function buPick(id) {
+  if (!BU.ids.includes(id)) BU.ids.push(id);
+  const s = document.getElementById('bu-search'); if (s) s.value = '';
+  buRender();
+}
+// The bundle object for saving (null clears it). Folded into pdSave's body.
+function buBody() {
+  if (!BU.ids.length) return null;
+  return {
+    title_en: (BU.title_en || '').trim(), title_cn: (BU.title_cn || '').trim(),
+    ids: BU.ids.slice(), price: BU.price === '' ? 0 : (Number(BU.price) || 0),
+    voucher: (BU.voucher || '').trim(),
+  };
 }
 // ── Product photo gallery (editor) ──────────────────────────────────────────
 const PD_MAX_PHOTOS = 8;
@@ -15620,6 +15719,7 @@ async function pdSave() {
     is_published: document.getElementById('pd-published').checked ? 1 : 0,
   };
   if (_pdGalleryDirty) body.images = _pdGallery;  // gallery drives image_data (first = main)
+  if (id && BU_ID === Number(id)) body.bundle = buBody();  // buy-together bundle (null clears)
   if (!body.name_en && !body.name_cn) { alert('A name is required · 需要填写名称'); return; }
   try {
     const url = id ? '/api/retail-admin/products/' + id : '/api/retail-admin/products';
