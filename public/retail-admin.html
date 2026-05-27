@@ -15146,16 +15146,25 @@ function vaPick(id) {
   VA_MEMBERS.push({ id: p.id, label: p.variant_label || '', name: _vaName(p), self: false });
   VA_PICKING = false; vaRender();
 }
+// Persist the current variant grouping + labels and reflect them in the
+// in-memory product list. Shared by the explicit "Save variants" button AND
+// folded into the product's main Save (pdSave) so a single Save covers the
+// whole editor — labels included. Throws on failure for the caller to handle.
+async function vaPersist() {
+  if (VA_ID == null) return null;
+  const members = VA_MEMBERS.map(v => ({ id: v.id, label: v.label || '' }));
+  const j = await api('/api/retail-admin/products/' + VA_ID + '/variants', { method: 'PUT', body: { members } });
+  const gid = j.group_id, ids = new Set(members.map(m => m.id));
+  (PA_PRODUCTS || []).forEach(p => {
+    if (ids.has(p.id)) { p.variant_group_id = gid; p.variant_label = (members.find(m => m.id === p.id) || {}).label || null; }
+    else if (p.variant_group_id === VA_ID) { p.variant_group_id = null; p.variant_label = null; }
+  });
+  return gid;
+}
 async function vaSave() {
   if (VA_ID == null) return;
-  const members = VA_MEMBERS.map(v => ({ id: v.id, label: v.label || '' }));
   try {
-    const j = await api('/api/retail-admin/products/' + VA_ID + '/variants', { method: 'PUT', body: { members } });
-    const gid = j.group_id, ids = new Set(members.map(m => m.id));
-    (PA_PRODUCTS || []).forEach(p => {
-      if (ids.has(p.id)) { p.variant_group_id = gid; p.variant_label = (members.find(m => m.id === p.id) || {}).label || null; }
-      else if (p.variant_group_id === VA_ID) { p.variant_group_id = null; p.variant_label = null; }
-    });
+    await vaPersist();
     toast(cuT('Variants saved', '规格已保存'));
   } catch (e) { toast(cuT('Save failed: ', '保存失败:') + e.message, 'err'); }
 }
@@ -15370,6 +15379,14 @@ async function pdSave() {
       if (i >= 0) PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...j.data };
     } else if (j.data) {
       PA_PRODUCTS.unshift(j.data);
+    }
+    // The variant rows live in this same editor — fold their labels/grouping
+    // into this one Save so the operator never has to hit a second button.
+    // Only when a real group is loaded (>=2 members) so we never clear a group
+    // as a side effect of an ordinary product save.
+    if (id && VA_ID === Number(id) && VA_MEMBERS.length >= 2) {
+      try { await vaPersist(); }
+      catch (e) { alert('Variants not saved · 规格未保存: ' + e.message); return; }
     }
     pdClose();
     paRender();
