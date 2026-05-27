@@ -24,6 +24,15 @@ function absUrl(u) {
   return u;
 }
 
+// Effective (display) price of a product row: the flash/effective price when
+// one is active, otherwise the regular sell price. Shared by the variant
+// collapse + size-picker so cards and the picker price siblings identically.
+function _effPrice(p) {
+  const regular = Number(p.price ?? p.sell_price) || 0;
+  const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
+  return eff;
+}
+
 const DIETARY_FILTERS = [
   { key: 'gluten', en: 'GLUTEN FREE', cn: '无麸质' },
   { key: 'nuts',   en: 'NUT FREE',    cn: '无坚果' },
@@ -129,6 +138,14 @@ Page({
     flyShow: false,
     flyImg: '',
     flyStartX: 0, flyStartY: 0, flyDx: 0, flyDy: 0,
+
+    // Variant size-picker bottom sheet. Opened when tapping + on a card that
+    // collapses ≥2 sibling products (same variant_group_id). Choosing an
+    // option adds that specific sibling to the cart.
+    vpShow: false,
+    vpName: '',
+    vpTitle: 'Choose a size',
+    vpOptions: [],
   },
 
   onLoad() {
@@ -285,7 +302,14 @@ Page({
         label: lang.splitMixed(c.name, L),
       }));
 
-      const sections = this._buildSections(raw, categories, L);
+      // Collapse variant siblings (same variant_group_id) into one
+      // representative card. Standalone products pass through untouched.
+      // _memberMap lets addToCart find a card's siblings for the size picker.
+      const display = this._collapseVariants(raw);
+      this._memberMap = {};
+      for (const p of display) if (p._members) this._memberMap[p.id] = p._members;
+
+      const sections = this._buildSections(display, categories, L);
       const totalCount = sections.reduce((sum, s) => sum + s.items.length, 0);
 
       this.setData({
@@ -340,16 +364,39 @@ Page({
   },
 
   _toRows(products, L) {
+    const money = v => '¥' + (Number.isInteger(v) ? v : v.toFixed(2));
     return products.map(p => {
+      const members = p._members || null;
       const regular = Number(p.price ?? p.sell_price) || 0;
       const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
-      const isFlash = !!p.is_on_flash && eff < regular;
-      const subline = (p.size || '').toString().trim();
-      const stockNum = p.stock == null ? null : Number(p.stock);
-      const outOfStock = stockNum != null && stockNum <= 0;
-      // All-time units sold (server min-gates this to 0 below the badge
-      // threshold), shown as a small "X SOLD" popularity caption on the card.
-      const soldUnits = Number(p.units_sold) || 0;
+      const isFlash = !members && !!p.is_on_flash && eff < regular;
+
+      let price, priceWas = '', outOfStock, soldUnits, subline;
+      if (members) {
+        // Collapsed variant card: price reads "from ¥<lowest>" (or a plain
+        // price when every size costs the same). Sold-out only when ALL
+        // sizes are out. Sold count sums across the group. The per-size
+        // weight subline is dropped — sizes differ, the picker shows them.
+        const prices = members.map(_effPrice).filter(v => v > 0);
+        const minP = prices.length ? Math.min(...prices) : 0;
+        const allSame = prices.length > 0 && prices.every(v => v === minP);
+        price = minP > 0
+          ? (allSame ? money(minP) : (L === 'cn' ? money(minP) + ' 起' : 'from ' + money(minP)))
+          : '—';
+        outOfStock = members.every(m => m.stock != null && Number(m.stock) <= 0);
+        soldUnits = members.reduce((s, m) => s + (Number(m.units_sold) || 0), 0);
+        subline = '';
+      } else {
+        const stockNum = p.stock == null ? null : Number(p.stock);
+        outOfStock = stockNum != null && stockNum <= 0;
+        // All-time units sold (server min-gates this to 0 below the badge
+        // threshold), shown as a small "X SOLD" popularity caption on the card.
+        soldUnits = Number(p.units_sold) || 0;
+        price = eff > 0 ? money(eff) : '—';
+        priceWas = isFlash && regular > 0 ? money(regular) : '';
+        subline = (p.size || '').toString().trim();
+      }
+
       return {
         id: p.id,
         name: lang.pick(p.name_en, p.name_cn, L),
@@ -358,11 +405,45 @@ Page({
         soldCaption: soldUnits > 0 ? (L === 'cn' ? `已售 ${soldUnits}` : `${soldUnits} SOLD`) : '',
         outOfStock,
         image: absUrl(p.image_url) || p.image_data || '',
-        price: eff > 0 ? '¥' + (Number.isInteger(eff) ? eff : eff.toFixed(2)) : '—',
-        priceWas: isFlash && regular > 0 ? '¥' + (Number.isInteger(regular) ? regular : regular.toFixed(2)) : '',
+        price,
+        priceWas,
         isFlash,
+        hasVariants: !!members,
+        variantHint: members
+          ? (L === 'cn' ? `${members.length} 规格` : `${members.length} sizes`)
+          : '',
       };
     });
+  },
+
+  // Group products by variant_group_id and collapse each group (≥2 members)
+  // into a single representative card. The representative is the group owner
+  // (id === variant_group_id) when present, otherwise the cheapest member.
+  // Members are stashed on `_members` (sorted cheapest-first) for the picker.
+  // Standalone products — and groups that survive filtering with only one
+  // member — pass through unchanged, preserving the server's sort order.
+  _collapseVariants(raw) {
+    const groups = new Map();
+    for (const p of raw) {
+      if (!p.variant_group_id) continue;
+      if (!groups.has(p.variant_group_id)) groups.set(p.variant_group_id, []);
+      groups.get(p.variant_group_id).push(p);
+    }
+    const emitted = new Set();
+    const out = [];
+    for (const p of raw) {
+      const gid = p.variant_group_id;
+      const members = gid ? groups.get(gid) : null;
+      if (!members || members.length < 2) { out.push(p); continue; }
+      if (emitted.has(gid)) continue;
+      emitted.add(gid);
+      const sorted = members.slice().sort((a, b) =>
+        (_effPrice(a) - _effPrice(b)) ||
+        String(a.variant_label || '').localeCompare(String(b.variant_label || '')));
+      const rep = sorted.find(m => m.id === gid) || sorted[0];
+      out.push({ ...rep, _members: sorted });
+    }
+    return out;
   },
 
   // Measure each section header's absolute top offset (relative to the
@@ -525,9 +606,21 @@ Page({
 
   addToCart(e) {
     const id = Number(e.currentTarget.dataset.id);
+    // Variant card → open the size picker instead of adding directly.
+    const members = this._memberMap && this._memberMap[id];
+    if (members && members.length > 1) {
+      this._openVariantPicker(id, members);
+      return;
+    }
     const raw = (this.data._raw || []).find(p => Number(p.id) === id);
     if (!raw) return;
+    this._addRawToCart(raw, id);
+  },
 
+  // Add one product row to the cart + run the fly-to-cart animation. originId
+  // is the id of the card whose + button anchors the animation (the
+  // representative card, even when the chosen size is a different sibling).
+  _addRawToCart(raw, originId) {
     cart.add({
       id: raw.id,
       name_en: raw.name_en,
@@ -546,7 +639,7 @@ Page({
     const imgUrl = absUrl(raw.image_url) || raw.image_data || '';
     wx.createSelectorQuery()
       .in(this)
-      .select('#plus-' + id)
+      .select('#plus-' + originId)
       .boundingClientRect()
       .exec((res) => {
         const rect = res && res[0];
@@ -558,6 +651,57 @@ Page({
         const startY = rect.top  + (rect.height / 2) - 20;
         this._launchFly(startX, startY, imgUrl);
       });
+  },
+
+  // ── Variant size picker ───────────────────────────────────────────
+  // Bottom sheet listing each sibling size with its own price / stock.
+  _openVariantPicker(repId, members) {
+    const L = this.data.lang;
+    const money = v => '¥' + (Number.isInteger(v) ? v : v.toFixed(2));
+    const options = members.map(m => {
+      const regular = Number(m.price ?? m.sell_price) || 0;
+      const eff = _effPrice(m);
+      const isFlash = !!m.is_on_flash && eff < regular;
+      const stock = m.stock == null ? null : Number(m.stock);
+      const soldOut = stock != null && stock <= 0;
+      return {
+        id: m.id,
+        label: m.variant_label || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
+        price: eff > 0 ? money(eff) : '',
+        priceWas: isFlash && regular > 0 ? money(regular) : '',
+        isFlash,
+        soldOut,
+        low: (!soldOut && stock != null && stock <= 5)
+          ? (L === 'cn' ? `仅剩 ${stock}` : `Only ${stock} left`)
+          : '',
+      };
+    });
+    const rep = (this.data._raw || []).find(p => Number(p.id) === repId);
+    this._vpRepId = repId;
+    this.setData({
+      vpShow: true,
+      vpName: rep ? lang.pick(rep.name_en, rep.name_cn, L) : '',
+      vpTitle: L === 'cn' ? '选择规格' : 'Choose a size',
+      vpOptions: options,
+    });
+  },
+
+  closeVariantPicker() { this.setData({ vpShow: false }); },
+  vpStop() { /* catchtap on the sheet body so taps don't close it */ },
+
+  vpChoose(e) {
+    const id = Number(e.currentTarget.dataset.id);
+    const members = (this._memberMap && this._memberMap[this._vpRepId]) || [];
+    const m = members.find(x => Number(x.id) === id);
+    if (!m) return;
+    const stock = m.stock == null ? null : Number(m.stock);
+    if (stock != null && stock <= 0) {
+      wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
+      return;
+    }
+    this.setData({ vpShow: false });
+    // Fly from the representative card's + button (still in the DOM).
+    this._addRawToCart(m, this._vpRepId);
   },
 
   _launchFly(startX, startY, imgUrl) {
