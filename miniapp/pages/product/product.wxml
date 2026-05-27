@@ -23,7 +23,7 @@
 
   <block wx:else>
     <view class="hero" style="{{aspectRatio ? 'aspect-ratio:' + aspectRatio + ';height:auto' : 'height: 880rpx'}}">
-      <swiper wx:if="{{images.length > 1}}" class="hero-swiper" indicator-dots indicator-color="rgba(255,255,255,0.45)" indicator-active-color="#ffffff">
+      <swiper wx:if="{{images.length > 1}}" class="hero-swiper" current="{{heroIndex}}" bindchange="onHeroSwiperChange" indicator-dots indicator-color="rgba(255,255,255,0.45)" indicator-active-color="#ffffff">
         <swiper-item wx:for="{{images}}" wx:key="*this">
           <image src="{{item}}" mode="aspectFill" class="hero-img"/>
         </swiper-item>
@@ -32,6 +32,17 @@
       <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="hero-placeholder-img"/>
       <view wx:if="{{stockTag}}" class="stock-badge stock-{{stockTagKind}} f-toni">{{stockTag}}</view>
     </view>
+
+    <!-- Thumbnail strip — only when a product has more than one photo. Tap a
+         thumb to jump the hero to it; the active thumb is ringed. Scrolls
+         horizontally when there are more than fit on screen. -->
+    <scroll-view wx:if="{{images.length > 1}}" class="thumb-strip" scroll-x enable-flex>
+      <view wx:for="{{images}}" wx:key="*this"
+            class="thumb {{heroIndex === index ? 'on' : ''}}"
+            data-idx="{{index}}" bindtap="pickHeroImage">
+        <image src="{{item}}" mode="aspectFill" class="thumb-img"/>
+      </view>
+    </scroll-view>
 
     <view class="body">
       <view wx:if="{{isFlash}}" class="flash-banner">

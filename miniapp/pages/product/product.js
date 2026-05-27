@@ -104,6 +104,7 @@ Page({
     flashWas: '',
     compareAtText: '',
     images: [],
+    heroIndex: 0,
     descHtml: '',
     flashOff: '',
     flashEnds: '',
@@ -480,6 +481,7 @@ Page({
     this.setData({
       image: img,
       images: gallery,
+      heroIndex: 0,
       aspectRatio: p.image_aspect ? String(p.image_aspect) : '',
       name: lang.pick(p.name_en, p.name_cn, L),
       subtitle: lang.pick(p.name_cn, p.name_en, L === 'en' ? 'cn' : 'en'),
@@ -543,6 +545,17 @@ Page({
 
   decQty() { this.setData({ qty: Math.max(1, this.data.qty - 1) }); },
   incQty() { this.setData({ qty: Math.min(99, this.data.qty + 1) }); },
+
+  // Hero gallery: keep the thumbnail strip in sync as the user swipes, and
+  // let a thumbnail tap drive the hero swiper to that photo.
+  onHeroSwiperChange(e) {
+    const i = e.detail.current;
+    if (i !== this.data.heroIndex) this.setData({ heroIndex: i });
+  },
+  pickHeroImage(e) {
+    const i = Number(e.currentTarget.dataset.idx);
+    if (Number.isFinite(i) && i !== this.data.heroIndex) this.setData({ heroIndex: i });
+  },
 
   back() { wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/home' }) }); },
 
