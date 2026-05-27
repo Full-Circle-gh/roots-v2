@@ -236,7 +236,7 @@ Page({
     // in onShow once the customer comes back from the bind page.
     if (!isBound) return;
 
-    // areaOptions were already kicked off above (before the empty-cart bail).
+    // The area-picker options were already kicked off above (pre empty-cart bail).
     await this.loadAddressesAndQuote();
     this.loadPublicCoupons();
     this.loadPointsBalance();

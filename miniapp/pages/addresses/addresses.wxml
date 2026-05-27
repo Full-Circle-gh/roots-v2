@@ -78,20 +78,40 @@
     <view class="field">
       <input class="input" placeholder-class="input-placeholder" placeholder="{{copy.placeholders.phone}}" type="number" value="{{form.phone}}" data-field="phone" bindinput="onField"/>
     </view>
-    <!-- Delivery-area selector — single list of the areas we actually deliver
-         to, labelled in the customer's language (utils/zones). Replaces WeChat's
-         Chinese-only region wheel so English-mode users can read the options,
-         and still kills the "广州" vs "广州市" mismatch by storing canonical
-         match values underneath. -->
-    <view class="field region-field">
-      <picker mode="selector" range="{{areaOptions}}" range-key="label" value="{{areaIndex}}" bindchange="onAreaChange">
-        <view class="region-pick {{areaLabel ? '' : 'placeholder'}}">
-          <text wx:if="{{areaLabel}}">{{areaLabel}}</text>
-          <text wx:else>{{copy.placeholders.region}}</text>
-          <text class="region-chevron">›</text>
-        </view>
-      </picker>
-    </view>
+    <!-- Delivery-area selector. CN → WeChat native region picker (complete +
+         current, Chinese). EN → bilingual city → district from our dataset.
+         Both write canonical Chinese province/city/district onto the form. -->
+    <block wx:if="{{lang === 'cn'}}">
+      <view class="field region-field">
+        <picker mode="region" value="{{regionValue}}" bindchange="onRegionChange">
+          <view class="region-pick {{areaLabel ? '' : 'placeholder'}}">
+            <text wx:if="{{areaLabel}}">{{areaLabel}}</text>
+            <text wx:else>{{copy.placeholders.region}}</text>
+            <text class="region-chevron">›</text>
+          </view>
+        </picker>
+      </view>
+    </block>
+    <block wx:else>
+      <view class="field region-field">
+        <picker mode="selector" range="{{cityOptions}}" range-key="label" value="{{cityIndex}}" bindchange="onCityChange">
+          <view class="region-pick {{cityLabel ? '' : 'placeholder'}}">
+            <text wx:if="{{cityLabel}}">{{cityLabel}}</text>
+            <text wx:else>{{copy.placeholders.region}}</text>
+            <text class="region-chevron">›</text>
+          </view>
+        </picker>
+      </view>
+      <view wx:if="{{districtOptions.length}}" class="field region-field">
+        <picker mode="selector" range="{{districtOptions}}" range-key="label" value="{{districtIndex}}" bindchange="onDistrictChange">
+          <view class="region-pick {{form.district ? '' : 'placeholder'}}">
+            <text wx:if="{{form.district}}">{{districtOptions[districtIndex].label}}</text>
+            <text wx:else>Choose district</text>
+            <text class="region-chevron">›</text>
+          </view>
+        </picker>
+      </view>
+    </block>
     <view class="field">
       <input class="input" placeholder-class="input-placeholder" placeholder="{{copy.placeholders.addr}}" value="{{form.address}}" data-field="address" bindinput="onField"/>
     </view>

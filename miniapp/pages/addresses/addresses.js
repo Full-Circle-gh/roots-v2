@@ -22,13 +22,18 @@ Page({
     addresses: [],
     mode: 'list',           // 'list' | 'form'
     form: { ...EMPTY_FORM },
-    // Bilingual delivery-area selector. Options come from the served-zone list
-    // (utils/zones) so customers pick from areas we actually deliver to, labelled
-    // in their own language — WeChat's native region wheel is Chinese-only. The
-    // picked option writes canonical Chinese province/city/district onto `form`.
-    areaOptions: [],   // [{ id, label, zone_type, province, city, district }]
-    areaIndex: 0,      // selected index into areaOptions
-    areaLabel: '',     // localized label shown on the trigger
+    // Delivery-area selector, split by language (mirrors checkout):
+    //  • CN → WeChat native region picker (省/市/区, always current/complete).
+    //  • EN → bilingual city → district cascade (utils/zones + /api/retail/
+    //    districts). Both write canonical Chinese province/city/district onto
+    //    `form`, which is what the zone matcher needs.
+    areaLabel: '',        // localized summary on the trigger ("Guangzhou · Tianhe")
+    regionValue: [],      // CN native picker position [省, 市, 区]
+    cityOptions: [],      // EN: [{ label, name_cn, name_en }]
+    cityIndex: 0,
+    cityLabel: '',        // EN: selected city label (before district)
+    districtOptions: [],  // EN: [{ label, name_cn, name_en }] for the picked city
+    districtIndex: 0,
     lang: 'en',
     loading: true,
     saving: false,
@@ -92,26 +97,30 @@ Page({
   async loadAreaOptions() {
     try {
       const list = await zones.loadZones();
-      this.setData({ areaOptions: zones.buildAreaOptions(list, this.data.lang) });
+      this.setData({ cityOptions: zones.cityOptions(list, this.data.lang) });
     } catch (e) {
       console.warn('[addresses] loadAreaOptions failed:', e && e.message);
     }
   },
 
-  // Re-derive `areaLabel` + `areaIndex` from the current form's city/district.
-  // Used after editing an existing address or importing from WeChat. Falls back
-  // to raw text when the address isn't in a served zone.
+  // Re-derive the trigger label (and CN picker position) from the current form.
+  // Used after editing an existing address or importing from WeChat. In EN we
+  // localize the city to English when it's a known catalogue city.
   syncAreaLabel() {
-    const opts = this.data.areaOptions || [];
-    const opt = zones.matchOption(opts, this.data.form);
-    if (opt) {
-      const idx = opts.findIndex(o => o.id === opt.id);
-      this.setData({ areaLabel: opt.label, areaIndex: idx < 0 ? 0 : idx });
-      return;
-    }
     const f = this.data.form || {};
-    const raw = [f.city, f.district].filter(Boolean).join(' · ');
-    this.setData({ areaLabel: raw, areaIndex: 0 });
+    let cityLabel = f.city || '';
+    if (this.data.lang !== 'cn') {
+      const m = (this.data.cityOptions || []).find(o => o.name_cn === f.city);
+      if (m) cityLabel = m.name_en;
+    }
+    const patch = {
+      cityLabel,
+      areaLabel: [cityLabel, f.district].filter(Boolean).join(' · '),
+    };
+    if (this.data.lang === 'cn' && f.province) {
+      patch.regionValue = [f.province, f.city, f.district].filter(Boolean);
+    }
+    this.setData(patch);
   },
 
   // Re-check bind state on every show so returning from /pages/profile via
@@ -185,7 +194,11 @@ Page({
       mode: 'form',
       form: { ...EMPTY_FORM },
       areaLabel: '',
-      areaIndex: 0,
+      regionValue: [],
+      cityLabel: '',
+      cityIndex: 0,
+      districtOptions: [],
+      districtIndex: 0,
     });
   },
   showEditForm(e) {
@@ -214,23 +227,63 @@ Page({
       mode: 'list',
       form: { ...EMPTY_FORM },
       areaLabel: '',
-      areaIndex: 0,
+      regionValue: [],
+      cityLabel: '',
+      cityIndex: 0,
+      districtOptions: [],
+      districtIndex: 0,
     });
   },
 
-  // Delivery-area selector change — the customer picked one served zone from
-  // the localized list. Write the option's canonical Chinese province/city/
-  // district onto the form so save() persists matcher-ready values.
-  onAreaChange(e) {
-    const idx = Number(e.detail.value);
-    const opt = (this.data.areaOptions || [])[idx];
-    if (!opt) return;
+  // CN — WeChat native region picker. value = [省, 市, 区] (Chinese). Fold a
+  // 市辖区 city column onto the province (municipalities) so the matcher sees a
+  // real city.
+  onRegionChange(e) {
+    const v = e.detail.value || [];
+    let [province, city, district] = v;
+    if (city === '市辖区' || city === '县') city = province;
     this.setData({
-      areaIndex: idx,
-      areaLabel: opt.label,
-      'form.province': opt.province,
-      'form.city': opt.city,
-      'form.district': opt.district,
+      regionValue: v,
+      areaLabel: v.filter(Boolean).join(' · '),
+      'form.province': province || '',
+      'form.city': city || '',
+      'form.district': district || '',
+    });
+  },
+
+  // EN — city step. Writes the city, clears any prior district, loads that
+  // city's districts. Province is blank; the server backfills it.
+  async onCityChange(e) {
+    const idx = Number(e.detail.value);
+    const c = (this.data.cityOptions || [])[idx];
+    if (!c) return;
+    this.setData({
+      cityIndex: idx,
+      cityLabel: c.label,
+      areaLabel: c.label,
+      'form.province': '',
+      'form.city': c.name_cn,
+      'form.district': '',
+      districtOptions: [],
+      districtIndex: 0,
+    });
+    try {
+      const dists = await zones.loadDistricts(c.name_cn);
+      this.setData({
+        districtOptions: dists.map(d => ({ label: d.name_en, name_cn: d.name_cn, name_en: d.name_en })),
+      });
+    } catch (e2) { console.warn('[addresses] loadDistricts failed:', e2 && e2.message); }
+  },
+
+  // EN — district step.
+  onDistrictChange(e) {
+    const idx = Number(e.detail.value);
+    const d = (this.data.districtOptions || [])[idx];
+    if (!d) return;
+    this.setData({
+      districtIndex: idx,
+      areaLabel: this.data.cityLabel + ' · ' + d.label,
+      'form.district': d.name_cn,
     });
   },
 
@@ -344,7 +397,11 @@ Page({
         mode: 'list',
         form: { ...EMPTY_FORM },
         areaLabel: '',
-        areaIndex: 0,
+        regionValue: [],
+        cityLabel: '',
+        cityIndex: 0,
+        districtOptions: [],
+        districtIndex: 0,
       });
       await this.refresh();
     } catch (e) {
