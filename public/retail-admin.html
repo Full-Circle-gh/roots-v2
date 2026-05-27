@@ -14018,7 +14018,7 @@ function cuRenderDetail() {
   $('#cu-drawer-actions').innerHTML = `
     <button class="btn" onclick="cuOpenEdit()">Edit profile · 编辑资料</button>
     <button class="${blockCls}" id="cu-block-btn" onclick="cuToggleBlock()">${blockLabel}</button>
-    <button class="btn btn-brass" onclick="cuForceLogout()">Force logout · 强制登出</button>
+    <button class="btn btn-brass" onclick="cuForceLogout()">Sign out all devices · 退出所有设备</button>
     ${renderCustomerViewPopover()}
   `;
 
@@ -14407,14 +14407,14 @@ async function cuToggleBlock() {
 
 async function cuForceLogout() {
   if (!CU_CURRENT?.customer) return;
-  if (!confirm('Revoke all active sessions? This ends the current login, but an unblocked customer can sign back in. To keep them out, Block them first. · 撤销所有活跃会话?这将结束当前登录,但未封禁的顾客可重新登录。如需阻止,请先封禁。')) return;
+  if (!confirm('Sign this customer out on all devices? Active sessions are revoked immediately — useful if a token may be compromised. She can sign back in normally; to lock her out, use Block instead. · 退出该顾客的所有设备?将立即撤销所有活跃会话——令牌可能泄露时适用。她可正常重新登录;如需锁定,请改用封禁。')) return;
   try {
     const j = await cuWriteRequest({
       url: '/api/retail-admin/customers/' + CU_CURRENT.customer.id + '/force-logout', method: 'POST',
-      errLabelEn: 'Logout failed', errLabelCn: '强制登出失败',
+      errLabelEn: 'Sign-out failed', errLabelCn: '退出失败',
     });
     const n = j.revoked || 0;
-    toast(`Revoked ${n} session${n === 1 ? '' : 's'} · 已撤销 ${n} 个会话`);
+    toast(`Signed out all devices · ${n} session${n === 1 ? '' : 's'} revoked · 已退出所有设备(${n} 个会话)`);
     cuOpenDetail(CU_CURRENT.customer.id);
   } catch {}
 }
