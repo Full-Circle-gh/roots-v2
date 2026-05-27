@@ -1,0 +1,65 @@
+// Served delivery-area options for the address pickers (checkout + addresses).
+// Driven by the admin's retail_delivery_zones so customers can only pick areas
+// we actually deliver to — with labels in their OWN language. WeChat's native
+// mode="region" picker is Chinese-only, so English-mode users couldn't read it;
+// this list carries name_en / name_cn instead.
+//
+// Each option shows a localized `label` but stores the canonical Chinese
+// match values (city / district) on the address, so the server-side zone
+// matcher + couriers still get the names they expect regardless of UI language.
+
+const api = require('./api');
+
+let _cache = null;
+let _at = 0;
+const TTL_MS = 5 * 60 * 1000;
+
+async function loadZones(force = false) {
+  if (!force && _cache && Date.now() - _at < TTL_MS) return _cache;
+  const r = await api.get('/api/retail/delivery-zones');
+  const list = Array.isArray(r) ? r : (r && r.data) || [];
+  _cache = list;
+  _at = Date.now();
+  return list;
+}
+
+// Build selector options for a given language. gz_district rows are prefixed
+// with the city ("Guangzhou · Tianhe") so the flat list still reads clearly;
+// city rows stand alone.
+function buildAreaOptions(zones, lang) {
+  const cn = lang === 'cn';
+  return (zones || []).map((z) => {
+    const isGz   = z.zone_type === 'gz_district';
+    const nameEn = z.name_en || z.name_cn || z.match_district || z.match_city || '';
+    const nameCn = z.name_cn || z.name_en || z.match_district || z.match_city || '';
+    const label  = isGz
+      ? (cn ? `广州 · ${nameCn}` : `Guangzhou · ${nameEn}`)
+      : (cn ? nameCn : nameEn);
+    return {
+      id: z.id,
+      label,
+      zone_type: z.zone_type,
+      // Canonical values written onto the address — Chinese, matcher-ready.
+      province: isGz ? '广东省' : '',
+      city:     isGz ? '广州市' : (z.match_city || z.name_cn || z.name_en || ''),
+      district: isGz ? (z.match_district || z.name_cn || z.name_en || '') : '',
+    };
+  });
+}
+
+// Find the option matching an already-set address (saved address / WeChat
+// import) so the trigger can show its localized label. Normalizes the 市/区/县/省
+// suffix on both sides, same as the server matcher. Returns null when the
+// address isn't in any served zone (caller falls back to the raw text).
+function matchOption(options, address) {
+  if (!address) return null;
+  const norm = (s) => String(s || '').trim().replace(/(市|区|县|省)$/u, '');
+  const aCity = norm(address.city);
+  const aDist = norm(address.district);
+  return (options || []).find((o) => {
+    if (o.zone_type === 'gz_district') return aDist && norm(o.district) === aDist;
+    return aCity && norm(o.city) === aCity;
+  }) || null;
+}
+
+module.exports = { loadZones, buildAreaOptions, matchOption };

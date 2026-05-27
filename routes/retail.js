@@ -177,6 +177,27 @@ router.get('/api/retail/config', (req, res) => {
   }
 });
 
+// Active delivery zones, customer-facing. Drives the bilingual address-area
+// selector on checkout + the addresses page so customers pick from areas we
+// actually deliver to (with labels in their own language) instead of free-
+// typing a city/district the zone matcher can't resolve. Only the columns the
+// picker needs — never the fee/scheduling internals.
+router.get('/api/retail/delivery-zones', (req, res) => {
+  try {
+    const rows = tdb().prepare(
+      `SELECT id, zone_type, name_en, name_cn, match_city, match_district
+         FROM retail_delivery_zones
+        WHERE is_active = 1
+        ORDER BY zone_type ASC, sort_order ASC, id ASC`
+    ).all();
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json({ success: true, data: rows });
+  } catch (e) {
+    console.error('[retail/delivery-zones]', e);
+    res.status(500).json({ success: false, error: 'zones_load_failed' });
+  }
+});
+
 // ─── Products ───────────────────────────────────────────────────────────
 // Only published rows show. Customer-facing endpoint pulls from the SAME
 // master product fields as the rest of the system — sell_price is the

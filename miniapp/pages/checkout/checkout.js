@@ -8,6 +8,7 @@ const cart   = require('../../utils/cart');
 const config = require('../../utils/config');
 const lang   = require('../../utils/lang');
 const notify = require('../../utils/notifications');
+const zones  = require('../../utils/zones');
 
 Page({
   data: {
@@ -105,10 +106,14 @@ Page({
       city: '',
       district: '',
     },
-    // Region picker value: [province, city, district]. Mirrors the addresses
-    // page so the inline new-address form can't free-type a city/district the
-    // delivery-zone matcher won't recognize (the "广州" vs "广州市" problem).
-    regionValue: ['', '', ''],
+    // Bilingual delivery-area selector. Options come from the served-zone list
+    // (utils/zones) so the customer picks from areas we actually deliver to,
+    // labelled in their own language — WeChat's native region wheel is
+    // Chinese-only. The picked option writes canonical Chinese city/district
+    // onto `address` underneath, which is what the zone matcher needs.
+    areaOptions: [],   // [{ id, label, zone_type, province, city, district }]
+    areaIndex: 0,      // selected index into areaOptions (drives the wheel position)
+    areaLabel: '',     // localized label shown on the trigger
     note: '',
     needsCutlery: false,
     needsInvoice: false,
@@ -152,8 +157,8 @@ Page({
       standardOpt: 'Standard',
       sameDayOpt: 'Same-day',
       maxOpt: 'MAX',
-      regionPlaceholder: 'Tap to choose province / city / district',
-      regionRequired: 'Please pick province / city / district',
+      regionPlaceholder: 'Tap to choose your delivery area',
+      regionRequired: 'Please choose your delivery area',
       wechatOpt: 'WeChat Pay',
       alipayOpt: 'Alipay',
       pointsOpt: 'Points',
@@ -219,6 +224,7 @@ Page({
     // in onShow once the customer comes back from the bind page.
     if (!isBound) return;
 
+    await this.loadAreaOptions();
     await this.loadAddressesAndQuote();
     this.loadPublicCoupons();
     this.loadPointsBalance();
@@ -269,12 +275,43 @@ Page({
     // coupons + points fetches — the rest only refresh the addresses list
     // and keep the current picked address selected when still present.
     if (boundChanged) {
+      await this.loadAreaOptions();
       await this.loadAddressesAndQuote();
       this.loadPublicCoupons();
       this.loadPointsBalance();
     } else {
       this.reloadSavedAddresses();
     }
+  },
+
+  // Fetch the served-zone list and build the localized area-selector options.
+  // Cheap + cached in utils/zones; safe to call on every bound land. After the
+  // options exist, re-derive the trigger label for whatever address is current.
+  async loadAreaOptions() {
+    try {
+      const list = await zones.loadZones();
+      this.setData({ areaOptions: zones.buildAreaOptions(list, this.data.lang) });
+      this.syncAreaLabel();
+    } catch (e) {
+      console.warn('[checkout] loadAreaOptions failed:', e && e.message);
+    }
+  },
+
+  // Re-derive `areaLabel` + `areaIndex` from the current address. Used after
+  // any path that sets `address` (default load, picking a saved address,
+  // returning from /addresses). Falls back to the raw city/district text when
+  // the address isn't in a served zone (legacy / WeChat-imported outliers).
+  syncAreaLabel() {
+    const opts = this.data.areaOptions || [];
+    const opt = zones.matchOption(opts, this.data.address);
+    if (opt) {
+      const idx = opts.findIndex(o => o.id === opt.id);
+      this.setData({ areaLabel: opt.label, areaIndex: idx < 0 ? 0 : idx });
+      return;
+    }
+    const a = this.data.address || {};
+    const raw = [a.city, a.district].filter(Boolean).join(' · ');
+    this.setData({ areaLabel: raw, areaIndex: 0 });
   },
 
   // Lightweight re-fetch used by onShow when the user navigates back from
@@ -309,10 +346,10 @@ Page({
           city: next.city || '',
           district: next.district || '',
         };
-        patch.regionValue = [next.province || '', next.city || '', next.district || ''];
         // Clear the cross-page flag so onShow doesn't keep re-applying it.
         if (justPicked) patch._addressJustPicked = null;
         this.setData(patch);
+        this.syncAreaLabel();
         // If the actual selected address changed, re-run /quote so the
         // zone-match, delivery fee, and packing fee all reflect the new
         // city/district instead of the previous one.
@@ -353,8 +390,8 @@ Page({
             city: def.city || '',
             district: def.district || '',
           },
-          regionValue: [def.province || '', def.city || '', def.district || ''],
         });
+        this.syncAreaLabel();
       }
     } catch {}
     this.refreshQuote();
@@ -453,8 +490,8 @@ Page({
         standardOpt: '标准配送',
         sameDayOpt: '当日达',
         maxOpt: '极速达',
-        regionPlaceholder: '点击选择省 / 市 / 区',
-        regionRequired: '请选择省 / 市 / 区',
+        regionPlaceholder: '点击选择配送区域',
+        regionRequired: '请选择配送区域',
         wechatOpt: '微信支付',
         alipayOpt: '支付宝',
         pointsOpt: '积分抵扣',
@@ -992,17 +1029,20 @@ Page({
     const field = e.currentTarget.dataset.field;
     this.setData({ ['address.' + field]: e.detail.value });
   },
-  // Region picker change — WeChat returns { value: [province, city, district] }.
-  // Same widget the addresses page uses, so the inline new-address form can no
-  // longer free-type a city/district string the zone matcher won't recognize.
-  // City/district drive the delivery-zone match, so re-quote on every pick.
-  onRegionChange(e) {
-    const [province, city, district] = e.detail.value || ['', '', ''];
+  // Delivery-area selector change — the customer picked one served zone from
+  // the localized list. Write the option's canonical Chinese city/district onto
+  // the address (what the zone matcher needs) and show its localized label.
+  // City/district drive the zone match, so re-quote on every pick.
+  onAreaChange(e) {
+    const idx = Number(e.detail.value);
+    const opt = (this.data.areaOptions || [])[idx];
+    if (!opt) return;
     this.setData({
-      regionValue: [province, city, district],
-      'address.province': province,
-      'address.city': city,
-      'address.district': district,
+      areaIndex: idx,
+      areaLabel: opt.label,
+      'address.province': opt.province,
+      'address.city': opt.city,
+      'address.district': opt.district,
     });
     this.refreshQuote();
   },
@@ -1023,17 +1063,18 @@ Page({
         city: a.city || '',
         district: a.district || '',
       },
-      regionValue: [a.province || '', a.city || '', a.district || ''],
     });
+    this.syncAreaLabel();
     this.refreshQuote();
   },
   showAddNew() {
-    // Clear the form so the user types fresh values
+    // Clear the form so the user picks a fresh area + types the street.
     this.setData({
       showNewForm: true,
       pickerOpen: false,
       address: { id: null, recipient_name: '', phone: '', address: '', detail: '', province: '', city: '', district: '' },
-      regionValue: ['', '', ''],
+      areaLabel: '',
+      areaIndex: 0,
     });
     this.refreshQuote();
   },
@@ -1050,8 +1091,8 @@ Page({
           address: def.address, detail: def.detail || '', province: def.province || '',
           city: def.city || '', district: def.district || '',
         },
-        regionValue: [def.province || '', def.city || '', def.district || ''],
       });
+      this.syncAreaLabel();
       this.refreshQuote();
     }
   },
@@ -1166,11 +1207,12 @@ Page({
       wx.showToast({ title: this.data.lang === 'cn' ? '请填写完整地址' : 'Please fill in the address', icon: 'none' });
       return;
     }
-    // Region must come from the picker, not free text — without province /
-    // city / district the zone matcher can't place the address. Surface a
-    // clear "pick your region" toast instead of the confusing downstream
-    // "pick a delivery time" error you'd otherwise hit (no zone → no slots).
-    if (!a.province || !a.city || !a.district) {
+    // Delivery area must come from the selector — every picked zone sets a
+    // city (GZ districts also set a district; non-GZ city zones don't need
+    // one). Without it the matcher can't place the address, so surface a clear
+    // "choose your area" toast instead of the confusing downstream "pick a
+    // delivery time" error you'd otherwise hit (no zone → no slots).
+    if (!a.city) {
       wx.showToast({ title: this.data.copy.regionRequired, icon: 'none' });
       return;
     }

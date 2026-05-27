@@ -78,13 +78,15 @@
     <view class="field">
       <input class="input" placeholder-class="input-placeholder" placeholder="{{copy.placeholders.phone}}" type="number" value="{{form.phone}}" data-field="phone" bindinput="onField"/>
     </view>
-    <!-- Region picker — 3-column WeChat-native province/city/district wheel.
-         Customer can't type these fields freeform any more, which kills the
-         "广州" vs "广州市" mismatch problem at the source. -->
+    <!-- Delivery-area selector — single list of the areas we actually deliver
+         to, labelled in the customer's language (utils/zones). Replaces WeChat's
+         Chinese-only region wheel so English-mode users can read the options,
+         and still kills the "广州" vs "广州市" mismatch by storing canonical
+         match values underneath. -->
     <view class="field region-field">
-      <picker mode="region" value="{{regionValue}}" bindchange="onRegionChange">
-        <view class="region-pick {{form.province ? '' : 'placeholder'}}">
-          <text wx:if="{{form.province}}">{{form.province}} · {{form.city}} · {{form.district}}</text>
+      <picker mode="selector" range="{{areaOptions}}" range-key="label" value="{{areaIndex}}" bindchange="onAreaChange">
+        <view class="region-pick {{areaLabel ? '' : 'placeholder'}}">
+          <text wx:if="{{areaLabel}}">{{areaLabel}}</text>
           <text wx:else>{{copy.placeholders.region}}</text>
           <text class="region-chevron">›</text>
         </view>

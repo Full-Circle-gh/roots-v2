@@ -3,6 +3,7 @@
 // One page, two modes: 'list' (show cards) and 'form' (add/edit).
 
 const api = require('../../utils/api');
+const zones = require('../../utils/zones');
 
 const EMPTY_FORM = {
   id: null,
@@ -21,10 +22,13 @@ Page({
     addresses: [],
     mode: 'list',           // 'list' | 'form'
     form: { ...EMPTY_FORM },
-    // Region picker value: [province, city, district]. Always 3 strings.
-    // Empty string means "not picked yet" — WeChat shows the first
-    // province/city/district in the wheel as the default starting position.
-    regionValue: ['', '', ''],
+    // Bilingual delivery-area selector. Options come from the served-zone list
+    // (utils/zones) so customers pick from areas we actually deliver to, labelled
+    // in their own language — WeChat's native region wheel is Chinese-only. The
+    // picked option writes canonical Chinese province/city/district onto `form`.
+    areaOptions: [],   // [{ id, label, zone_type, province, city, district }]
+    areaIndex: 0,      // selected index into areaOptions
+    areaLabel: '',     // localized label shown on the trigger
     lang: 'en',
     loading: true,
     saving: false,
@@ -55,10 +59,10 @@ Page({
         phone:  'Phone number',
         addr:   'Street address',
         detail: 'Floor / unit / apartment (optional)',
-        region: 'Tap to choose province / city / district',
+        region: 'Tap to choose your delivery area',
       },
       confirmDelete: 'Delete this address?',
-      regionRequired: 'Please pick province, city, district',
+      regionRequired: 'Please choose your delivery area',
       // Bind-WeChat empty state — shown for unbound customers landing
       // here from the Me tab. Tapping the CTA opens /pages/profile.
       bindTitle: 'Bind WeChat to save addresses',
@@ -77,8 +81,37 @@ Page({
     const cust = app.globalData.customer || {};
     this.setData({ lang: app.globalData.lang, isBound: !!cust.nickname });
     this.applyLangCopy();
+    this.loadAreaOptions();
     if (this.data.isBound) this.refresh();
     else this.setData({ loading: false });
+  },
+
+  // Fetch the served-zone list and build the localized area-selector options.
+  // Cheap + cached in utils/zones. Called on land so the options are ready
+  // whenever the customer opens the add/edit form.
+  async loadAreaOptions() {
+    try {
+      const list = await zones.loadZones();
+      this.setData({ areaOptions: zones.buildAreaOptions(list, this.data.lang) });
+    } catch (e) {
+      console.warn('[addresses] loadAreaOptions failed:', e && e.message);
+    }
+  },
+
+  // Re-derive `areaLabel` + `areaIndex` from the current form's city/district.
+  // Used after editing an existing address or importing from WeChat. Falls back
+  // to raw text when the address isn't in a served zone.
+  syncAreaLabel() {
+    const opts = this.data.areaOptions || [];
+    const opt = zones.matchOption(opts, this.data.form);
+    if (opt) {
+      const idx = opts.findIndex(o => o.id === opt.id);
+      this.setData({ areaLabel: opt.label, areaIndex: idx < 0 ? 0 : idx });
+      return;
+    }
+    const f = this.data.form || {};
+    const raw = [f.city, f.district].filter(Boolean).join(' · ');
+    this.setData({ areaLabel: raw, areaIndex: 0 });
   },
 
   // Re-check bind state on every show so returning from /pages/profile via
@@ -124,10 +157,10 @@ Page({
           phone:  '手机号码',
           addr:   '详细地址',
           detail: '楼层 / 单元 / 公寓 (可选)',
-          region: '点击选择省 / 市 / 区',
+          region: '点击选择配送区域',
         },
         confirmDelete: '删除此地址?',
-        regionRequired: '请选择省 / 市 / 区',
+        regionRequired: '请选择配送区域',
         bindTitle: '绑定微信,保存地址',
         bindBody: '我们从微信直接读取您的姓名、电话和地址 — 准确无误,无需手动输入。',
         bindCta: '绑定微信 →',
@@ -151,7 +184,8 @@ Page({
     this.setData({
       mode: 'form',
       form: { ...EMPTY_FORM },
-      regionValue: ['', '', ''],
+      areaLabel: '',
+      areaIndex: 0,
     });
   },
   showEditForm(e) {
@@ -171,28 +205,32 @@ Page({
         district: a.district || '',
         is_default: !!a.is_default,
       },
-      // Seed the picker's wheels with the saved region so editing doesn't
-      // wipe the values when the customer opens the picker.
-      regionValue: [a.province || '', a.city || '', a.district || ''],
     });
+    // Show the localized label for the saved area (if it's a served zone).
+    this.syncAreaLabel();
   },
   cancelForm() {
     this.setData({
       mode: 'list',
       form: { ...EMPTY_FORM },
-      regionValue: ['', '', ''],
+      areaLabel: '',
+      areaIndex: 0,
     });
   },
 
-  // Region picker change — WeChat returns { value: [province, city, district] }.
-  // Mirror the three strings into the form so save() picks them up.
-  onRegionChange(e) {
-    const [province, city, district] = e.detail.value || ['', '', ''];
+  // Delivery-area selector change — the customer picked one served zone from
+  // the localized list. Write the option's canonical Chinese province/city/
+  // district onto the form so save() persists matcher-ready values.
+  onAreaChange(e) {
+    const idx = Number(e.detail.value);
+    const opt = (this.data.areaOptions || [])[idx];
+    if (!opt) return;
     this.setData({
-      regionValue: [province, city, district],
-      'form.province': province,
-      'form.city': city,
-      'form.district': district,
+      areaIndex: idx,
+      areaLabel: opt.label,
+      'form.province': opt.province,
+      'form.city': opt.city,
+      'form.district': opt.district,
     });
   },
 
@@ -223,10 +261,11 @@ Page({
         // Without persisting it, GZ-district zone-match fails at checkout.
         'form.district': county || this.data.form.district,
         'form.province': province || this.data.form.province,
-        // Seed the visible region-picker wheel so it shows what WeChat gave us.
-        regionValue: [province, city, county],
         wxPicking: false,
       });
+      // Snap the area selector to the imported region if it's a served zone;
+      // otherwise the label falls back to the raw imported city/district.
+      this.syncAreaLabel();
       wx.showToast({ title: this.data.lang === 'cn' ? '已导入' : 'Imported', icon: 'success' });
     };
     const fail = (err) => {
@@ -275,7 +314,10 @@ Page({
       });
       return;
     }
-    if (!f.province || !f.city || !f.district) {
+    // Every served zone sets a city (GZ districts also set a district; non-GZ
+    // city zones don't need one), so requiring a city is enough to confirm an
+    // area was picked from the selector.
+    if (!f.city) {
       wx.showToast({ title: this.data.copy.regionRequired, icon: 'none' });
       return;
     }
@@ -301,7 +343,8 @@ Page({
         saving: false,
         mode: 'list',
         form: { ...EMPTY_FORM },
-        regionValue: ['', '', ''],
+        areaLabel: '',
+        areaIndex: 0,
       });
       await this.refresh();
     } catch (e) {
