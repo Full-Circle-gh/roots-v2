@@ -922,6 +922,10 @@
   .pa-edit-body {
     display: grid;
     grid-template-columns: 220px 1fr 400px;
+    /* Definite row height (not content-auto) so the three panes — and the
+       phone canvas inside — fill the modal instead of growing to content and
+       overflowing. Lets the phone stretch to fit at any zoom (no canvas scroll). */
+    grid-template-rows: minmax(0, 1fr);
     gap: 0;
     padding: 0;
     overflow: hidden;
@@ -970,7 +974,9 @@
     overflow-y: auto;
     overflow-x: auto;
     display: flex;
-    align-items: flex-start;
+    /* stretch (cross axis) lets the phone fill the canvas height; capped by
+       .pa-prev-frame max-height so it never grows past 580px on tall screens. */
+    align-items: stretch;
     justify-content: center;
     padding: var(--s6) var(--s5);
     min-width: 0;
@@ -1230,16 +1236,21 @@
     padding: 10px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0,0,0,.3);
     flex-shrink: 0;
+    /* Fill the canvas height (via align-items:stretch) but never exceed 580px,
+       so the device always fits without scrolling. Column flex lets the screen
+       child flex-fill the frame. */
+    display: flex;
+    flex-direction: column;
+    max-height: 580px;
   }
   .pa-prev-screen {
     background: #F2E7DF;      /* oat */
     width: 100%;
-    /* Fit the whole phone inside the canvas at every text size — no canvas
-       scroll. The modal caps at calc(90vh / --ui-scale); subtract the head +
-       canvas/frame padding (~150px) so the device never overflows. Caps at
-       580px so it doesn't grow huge on tall screens; the page still scrolls
-       inside the screen. (vh ignores the html `zoom`, hence /--ui-scale.) */
-    height: min(580px, calc(90vh / var(--ui-scale, 1) - 150px));
+    /* Flex-fill the frame instead of a fixed height: the frame is sized by the
+       canvas (stretch, capped at 580px), so the screen fits at every zoom and
+       the product page scrolls inside it — never the canvas. */
+    flex: 1;
+    min-height: 0;
     border-radius: 30px;
     overflow-y: auto;
     overflow-x: hidden;
