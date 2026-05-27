@@ -30,13 +30,30 @@ for (const line of csv) {
   const f = line.split(',');
   if (f[cE] && !/city area/i.test(f[cE])) enByCode.set(f[cC], f[cE]);
 }
+// gb2260 keeps the ethnic-group ("...zu") + special-zone ("tequ") tokens on
+// autonomous counties / special zones — drop them: "Sandu Shuizu" → "Sandu".
+function cleanGb(en) {
+  if (!en) return en;
+  return en.replace(/(\s+([A-Za-z'-]*zu|tequ|zizhixian?|zizhizhou|kuangqu))+$/gi, '').trim() || en;
+}
 
 let pinyin = null;
 try { pinyin = require('pinyin-pro').pinyin; } catch {}
+// Longest-first so compound suffixes (新区, 开发区) strip before a bare 区.
+// NOTE: no 林区 here — it'd eat the 林 in normal districts like 金林区/新林区.
+// Forest districts (神农架林区) just keep 林 in their romanization.
+const SUFFIX = /(经济技术开发区|高新技术产业开发区|高新区|新区|开发区|矿区|风景区|管理区|特区|区|县|市|旗|盟|自治州|自治县)$/u;
+// Conventional English for names pinyin romanizes wrong — heteronym place-names
+// + a few well-known forms. Highest priority (overrides gb2260 + pinyin).
+const CURATED = require('./regions-curated-en.json');
+// Ethnic-group markers in autonomous county/prefecture names — stripped so
+// 石柱土家族自治县 → 石柱 → Shizhu (not "Shizhutujiazu").
+// NOTE: 族 is required (not optional) — otherwise single-char ethnic markers
+// like 水/京/白/回 would eat legitimate place-name chars (彭水 → 彭).
+const ETHNIC = /(土家|布依|哈尼|傈僳|柯尔克孜|维吾尔|乌孜别克|鄂温克|鄂伦春|塔吉克|塔塔尔|撒拉|仫佬|毛南|仡佬|锡伯|阿昌|普米|景颇|拉祜|东乡|保安|裕固|京|独龙|赫哲|门巴|珞巴|基诺|苗|回|壮|蒙古|藏|彝|侗|白|傣|黎|佤|畲|水|羌|怒|满|瑶|朝鲜|哈萨克|纳西|德昂|俄罗斯|高山)族/gu;
 function toEnglish(nameCn) {
-  // strip the admin suffix, romanize the rest
-  const stem = nameCn.replace(/(区|县|市|旗|盟|自治州|自治县|特区|林区)$/u, '');
   if (!pinyin) return null;
+  const stem = (nameCn.replace(ETHNIC, '').replace(SUFFIX, '')) || nameCn;
   const py = pinyin(stem, { toneType: 'none', type: 'array' }).join('');
   return py ? py.charAt(0).toUpperCase() + py.slice(1) : null;
 }
@@ -54,8 +71,9 @@ for (const a of areas) {
   let city = cityName.get(cKey);
   if (!city || city === '市辖区' || city === '县') city = provName.get(prov);
   if (!city) continue;
-  let en = enByCode.get(a.code);
-  if (en) fromGb++; else { en = toEnglish(a.name); if (en) fromPy++; else noEn++; }
+  let en = CURATED[a.name];
+  if (en) { /* curated */ }
+  else { en = cleanGb(enByCode.get(a.code)); if (en) fromGb++; else { en = toEnglish(a.name); if (en) fromPy++; else noEn++; } }
   (out[city] = out[city] || []).push({ name_cn: a.name, name_en: en || a.name });
   total++;
 }
@@ -73,3 +91,23 @@ try {
 fs.writeFileSync('lib/china_districts.json', JSON.stringify(out), 'utf8');
 console.log('cities:', Object.keys(out).length, '| districts:', total, '| english from gb2260:', fromGb, '| from pinyin:', fromPy, '| none:', noEn);
 console.log('size (KB):', Math.round(fs.statSync('lib/china_districts.json').size / 1024));
+
+if (process.argv[2] === '--dump') {
+  for (const c of ['北京市','上海市','天津市','重庆市','深圳市','杭州市','成都市','南京市','武汉市','西安市']) {
+    console.log('\n' + c + ':', (out[c] || []).map(d => d.name_cn + '/' + d.name_en).join('  '));
+  }
+}
+// --scan <chars>: list every district whose name contains any of the given
+// heteronym characters, with its generated English — to find names to curate.
+if (process.argv[2] === '--scan' && process.argv[3]) {
+  const chars = [...process.argv[3]];
+  const seen = new Set();
+  for (const list of Object.values(out)) {
+    for (const d of list) {
+      if (chars.some(ch => d.name_cn.includes(ch)) && !seen.has(d.name_cn)) {
+        seen.add(d.name_cn);
+        console.log(d.name_cn, '=>', d.name_en);
+      }
+    }
+  }
+}
