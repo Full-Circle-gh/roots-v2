@@ -122,6 +122,7 @@ Page({
     badges: [],
     options: [],
     selectedChoices: {},   // { [option_id]: choice_id }
+    bundle: null,          // "buy together" set (resolved item cards) or null
     hasVariants: false,    // ≥2 purchasable siblings → "Add" opens the size picker
     // Variant size-picker bottom sheet (same UX as the shop grid's +). Opened
     // from "Add to basket" when the product has ≥2 siblings; choosing a size
@@ -485,7 +486,39 @@ Page({
     });
     flush();
 
+    // "Buy together" bundle — server resolves it to item cards (each a real
+    // product with its own price/stock). Raw kept on the instance for add-all;
+    // a display copy goes to the WXML.
+    this._bundle = (p.bundle && Array.isArray(p.bundle.items) && p.bundle.items.length) ? p.bundle : null;
+    let bundle = null;
+    if (this._bundle) {
+      const money = n => '¥' + (Number.isInteger(n) ? n : Number(n).toFixed(2));
+      const items = this._bundle.items.map(it => {
+        const st = it.stock == null ? null : Number(it.stock);
+        return {
+          id: it.id,
+          name: lang.pick(it.name_en, it.name_cn, L) || ('#' + it.id),
+          img: it.image_data || it.image_url || '',
+          price: Number(it.price) > 0 ? money(Number(it.price)) : '',
+          soldOut: st != null && st <= 0,
+        };
+      });
+      const sum = this._bundle.items.reduce((a, it) => a + (Number(it.price) || 0), 0);
+      const bp = Number(this._bundle.price) || 0;
+      const showSavings = bp > 0 && bp < sum;
+      bundle = {
+        title: lang.pick(this._bundle.title_en, this._bundle.title_cn, L) || (L === 'cn' ? '一起买' : 'Buy together'),
+        items,
+        priceLabel: bp > 0 ? money(bp) : (sum > 0 ? money(sum) : ''),
+        wasLabel: showSavings ? money(sum) : '',
+        savings: showSavings ? (L === 'cn' ? `省 ${money(sum - bp)}` : `SAVE ${money(sum - bp)}`) : '',
+        cta: L === 'cn' ? `全部加入购物车 · ${items.length} 件` : `ADD ALL · ${items.length} ITEMS`,
+        allOut: items.every(i => i.soldOut),
+      };
+    }
+
     this.setData({
+      bundle,
       image: img,
       images: gallery,
       heroIndex: 0,
@@ -638,6 +671,33 @@ Page({
       duration: 1200,
     });
     setTimeout(() => wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/home' }) }), 500);
+  },
+
+  // "Buy together" → add every in-stock item to the cart at its own price
+  // (each is a real product), optionally stash an auto-apply voucher for
+  // checkout. Mirrors the home page's bundle block; no separate bundle SKU.
+  onBundleAdd() {
+    const b = this._bundle;
+    if (!b || !Array.isArray(b.items)) return;
+    let added = 0;
+    b.items.forEach(it => {
+      const st = it.stock == null ? null : Number(it.stock);
+      if (st != null && st <= 0) return;   // skip sold-out items
+      cart.add({
+        id: it.id, name_en: it.name_en, name_cn: it.name_cn, sku: it.sku,
+        size: it.size, image_url: it.image_url, image_data: it.image_data,
+        price: Number(it.price) || 0,
+      }, 1, []);
+      added++;
+    });
+    if (added && b.voucher) { try { wx.setStorageSync('pending_voucher_code', b.voucher); } catch (e) {} }
+    wx.showToast({
+      title: added
+        ? (this.data.lang === 'cn' ? `${added} 件已加入购物车` : `${added} added to cart`)
+        : (this.data.lang === 'cn' ? '商品已售罄' : 'Items unavailable'),
+      icon: added ? 'success' : 'none',
+      duration: 1400,
+    });
   },
 
   // ── Variant size picker ───────────────────────────────────────────

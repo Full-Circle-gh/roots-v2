@@ -4,11 +4,6 @@
     <view class="back-glyph">←</view>
   </view>
 
-  <!-- Heart pip — top-right, toggles favorite. Filled berry when saved. -->
-  <view wx:if="{{!notFound}}" class="fav-pip {{isFavorited ? 'is-on' : ''}}" bindtap="onFavoriteToggle">
-    <view class="fav-glyph">♥</view>
-  </view>
-
   <view wx:if="{{notFound}}" class="empty">
     <view class="empty-title f-bear">Product not found</view>
     <view class="empty-sub">It might have been unpublished. Go back to the shop.</view>
@@ -31,6 +26,11 @@
       <image wx:elif="{{image}}" src="{{image}}" mode="aspectFill" class="hero-img"/>
       <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="hero-placeholder-img"/>
       <view wx:if="{{stockTag}}" class="stock-badge stock-{{stockTagKind}} f-toni">{{stockTag}}</view>
+
+      <!-- Heart pip — bottom-right of the hero, clear of WeChat's capsule. Filled berry when saved. -->
+      <view class="fav-pip {{isFavorited ? 'is-on' : ''}}" bindtap="onFavoriteToggle">
+        <view class="fav-glyph">♥</view>
+      </view>
     </view>
 
     <!-- Thumbnail strip — only when a product has more than one photo. Tap a
@@ -125,6 +125,35 @@
 
       <view wx:if="{{badges.length}}" class="badges">
         <view wx:for="{{badges}}" wx:key="*this" class="badge f-toni">{{item}}</view>
+      </view>
+
+      <!-- "Buy together" bundle — one tap adds every (in-stock) item. Each is a
+           real product with its own price/stock; sold-out items are skipped. -->
+      <view wx:if="{{bundle}}" class="pd-bundle">
+        <view class="pd-bundle-head">
+          <text class="pd-bundle-title f-bear">{{bundle.title}}</text>
+          <text wx:if="{{bundle.savings}}" class="pd-bundle-save f-toni">{{bundle.savings}}</text>
+        </view>
+        <scroll-view scroll-x class="pd-bundle-scroll">
+          <view class="pd-bundle-row">
+            <block wx:for="{{bundle.items}}" wx:key="id">
+              <view class="pd-bundle-card {{item.soldOut ? 'is-out' : ''}}">
+                <image class="pd-bundle-img" src="{{item.img}}" mode="aspectFill"/>
+                <text class="pd-bundle-name f-aleo">{{item.name}}</text>
+                <text wx:if="{{item.price}}" class="pd-bundle-price f-gothic">{{item.price}}</text>
+                <text wx:if="{{item.soldOut}}" class="pd-bundle-oos f-toni">{{lang === 'cn' ? '售罄' : 'OUT'}}</text>
+              </view>
+              <text wx:if="{{index < bundle.items.length - 1}}" class="pd-bundle-plus f-bear">+</text>
+            </block>
+          </view>
+        </scroll-view>
+        <view class="pd-bundle-foot">
+          <view class="pd-bundle-price-block">
+            <text wx:if="{{bundle.wasLabel}}" class="pd-bundle-was f-aleo">{{bundle.wasLabel}}</text>
+            <text wx:if="{{bundle.priceLabel}}" class="pd-bundle-total f-bear">{{bundle.priceLabel}}</text>
+          </view>
+          <button class="pd-bundle-cta f-toni" bindtap="onBundleAdd" disabled="{{bundle.allOut}}">{{bundle.allOut ? (lang === 'cn' ? '已售罄' : 'SOLD OUT') : bundle.cta}}</button>
+        </view>
       </view>
 
       <!-- Reviews summary + recent -->

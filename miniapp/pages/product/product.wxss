@@ -26,10 +26,10 @@
   line-height: 1;
 }
 
-/* Heart pip — mirrors the back button on the right edge */
+/* Heart pip — bottom-right of the hero, clear of WeChat's native capsule */
 .fav-pip {
-  position: fixed;
-  top: 88rpx;
+  position: absolute;
+  bottom: 30rpx;
   right: 30rpx;
   z-index: 100;
   width: 72rpx;
@@ -782,3 +782,57 @@
   letter-spacing: 0.1em;
   border-radius: 999rpx;
 }
+
+/* ─── "Buy together" bundle card ───────────────────────────────────────── */
+.pd-bundle {
+  margin: 40rpx 0 12rpx;
+  background: #FFFCF7;
+  border: 4rpx solid var(--ink);
+  border-radius: 20rpx;
+  padding: 24rpx 24rpx 28rpx;
+}
+.pd-bundle-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 16rpx;
+  margin-bottom: 18rpx;
+}
+.pd-bundle-title { font-size: calc(34rpx * var(--font-scale)); color: var(--ink); line-height: 1.1; }
+.pd-bundle-save {
+  font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.08em; color: #fff;
+  background: var(--berry); padding: 4rpx 14rpx; border-radius: 999rpx; flex-shrink: 0;
+}
+.pd-bundle-scroll { width: 100%; white-space: nowrap; }
+.pd-bundle-row { display: flex; align-items: flex-start; gap: 10rpx; padding-bottom: 6rpx; }
+.pd-bundle-card { width: 150rpx; flex-shrink: 0; display: flex; flex-direction: column; }
+.pd-bundle-card.is-out { opacity: 0.45; }
+.pd-bundle-img {
+  width: 150rpx; height: 150rpx; border-radius: 12rpx;
+  border: 3rpx solid var(--ink); background: var(--oat); box-sizing: border-box;
+}
+.pd-bundle-name {
+  margin-top: 8rpx; font-size: calc(22rpx * var(--font-scale)); color: var(--ink);
+  line-height: 1.25; white-space: normal; max-height: 2.5em; overflow: hidden;
+}
+.pd-bundle-price { margin-top: 2rpx; font-size: calc(24rpx * var(--font-scale)); color: var(--olive); }
+.pd-bundle-oos {
+  margin-top: 4rpx; align-self: flex-start; font-size: calc(16rpx * var(--font-scale));
+  letter-spacing: 0.1em; background: rgba(0,0,0,.1); color: var(--olive);
+  padding: 2rpx 10rpx; border-radius: 999rpx;
+}
+.pd-bundle-plus { font-size: calc(34rpx * var(--font-scale)); color: var(--olive); align-self: center; flex-shrink: 0; }
+.pd-bundle-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 20rpx;
+  margin-top: 22rpx;
+}
+.pd-bundle-price-block { display: flex; align-items: baseline; gap: 12rpx; flex-shrink: 0; }
+.pd-bundle-was {
+  font-size: calc(22rpx * var(--font-scale)); color: rgba(0,0,0,0.4); text-decoration: line-through;
+}
+.pd-bundle-total { font-size: calc(44rpx * var(--font-scale)); color: var(--ink); line-height: 1; }
+.pd-bundle-cta {
+  flex: 1; margin: 0; padding: 18rpx 24rpx;
+  background: var(--ink); color: var(--oat);
+  border-radius: 12rpx; border: none;
+  font-size: calc(24rpx * var(--font-scale)); letter-spacing: 0.08em; line-height: 1.2;
+}
+.pd-bundle-cta::after { border: none; }
+.pd-bundle-cta[disabled] { background: var(--olive); opacity: 0.55; color: var(--oat); }
