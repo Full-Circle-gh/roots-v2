@@ -146,8 +146,29 @@
 
 /* Form fields */
 .field { margin-bottom: 12rpx; }
-.field-pair { display: flex; gap: 16rpx; }
-.field-pair .input { flex: 1; }
+/* Region picker row — same visual frame as .input, but acts as a button that
+   opens the native WeChat 3-column province/city/district wheel. Mirrors the
+   addresses page so the inline new-address form can't free-type a region. */
+.region-pick {
+  background: #FFFCF7;
+  border: 2rpx solid var(--ink);
+  padding: 0 22rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  font-size: calc(26rpx * var(--font-scale));
+  font-family: inherit;
+  color: var(--ink);
+  border-radius: 0;
+  box-sizing: border-box;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.region-pick.placeholder { color: rgba(26, 26, 23, 0.42); }
+.region-chevron {
+  font-size: calc(32rpx * var(--font-scale));
+  color: rgba(26, 26, 23, 0.5);
+  margin-left: 16rpx;
+  line-height: 1;
+}
 .input {
   background: #FFFCF7;
   border: 2rpx solid var(--ink);

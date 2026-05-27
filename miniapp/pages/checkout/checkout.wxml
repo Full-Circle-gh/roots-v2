@@ -89,9 +89,18 @@
         <view class="field">
           <input class="input" placeholder="{{copy.phone}}" type="number" value="{{address.phone}}" data-field="phone" bindinput="onAddrField"/>
         </view>
-        <view class="field field-pair">
-          <input class="input" placeholder="{{copy.cityPlaceholder}}" value="{{address.city}}" data-field="city" bindinput="onAddrField"/>
-          <input class="input" placeholder="{{copy.districtPlaceholder}}" value="{{address.district}}" data-field="district" bindinput="onAddrField"/>
+        <!-- Region picker — 3-column WeChat-native province/city/district wheel,
+             same widget the addresses page uses. Replaces free-text city/district
+             so the customer can't enter a value the delivery-zone matcher won't
+             recognize ("广州" vs "广州市"). -->
+        <view class="field region-field">
+          <picker mode="region" value="{{regionValue}}" bindchange="onRegionChange">
+            <view class="region-pick {{address.province ? '' : 'placeholder'}}">
+              <text wx:if="{{address.province}}">{{address.province}} · {{address.city}} · {{address.district}}</text>
+              <text wx:else>{{copy.regionPlaceholder}}</text>
+              <text class="region-chevron">›</text>
+            </view>
+          </picker>
         </view>
         <view class="field">
           <input class="input" placeholder="{{copy.addr}}" value="{{address.address}}" data-field="address" bindinput="onAddrField"/>

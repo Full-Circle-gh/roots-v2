@@ -101,9 +101,14 @@ Page({
       phone: '',
       address: '',
       detail: '',
+      province: '',
       city: '',
       district: '',
     },
+    // Region picker value: [province, city, district]. Mirrors the addresses
+    // page so the inline new-address form can't free-type a city/district the
+    // delivery-zone matcher won't recognize (the "广州" vs "广州市" problem).
+    regionValue: ['', '', ''],
     note: '',
     needsCutlery: false,
     needsInvoice: false,
@@ -147,8 +152,8 @@ Page({
       standardOpt: 'Standard',
       sameDayOpt: 'Same-day',
       maxOpt: 'MAX',
-      cityPlaceholder: 'City',
-      districtPlaceholder: 'District',
+      regionPlaceholder: 'Tap to choose province / city / district',
+      regionRequired: 'Please pick province / city / district',
       wechatOpt: 'WeChat Pay',
       alipayOpt: 'Alipay',
       pointsOpt: 'Points',
@@ -300,9 +305,11 @@ Page({
           phone: next.phone || '',
           address: next.address || '',
           detail: next.detail || '',
+          province: next.province || '',
           city: next.city || '',
           district: next.district || '',
         };
+        patch.regionValue = [next.province || '', next.city || '', next.district || ''];
         // Clear the cross-page flag so onShow doesn't keep re-applying it.
         if (justPicked) patch._addressJustPicked = null;
         this.setData(patch);
@@ -342,9 +349,11 @@ Page({
             phone: def.phone || '',
             address: def.address || '',
             detail: def.detail || '',
+            province: def.province || '',
             city: def.city || '',
             district: def.district || '',
           },
+          regionValue: [def.province || '', def.city || '', def.district || ''],
         });
       }
     } catch {}
@@ -444,8 +453,8 @@ Page({
         standardOpt: '标准配送',
         sameDayOpt: '当日达',
         maxOpt: '极速达',
-        cityPlaceholder: '城市',
-        districtPlaceholder: '区',
+        regionPlaceholder: '点击选择省 / 市 / 区',
+        regionRequired: '请选择省 / 市 / 区',
         wechatOpt: '微信支付',
         alipayOpt: '支付宝',
         pointsOpt: '积分抵扣',
@@ -982,12 +991,20 @@ Page({
   onAddrField(e) {
     const field = e.currentTarget.dataset.field;
     this.setData({ ['address.' + field]: e.detail.value });
-    // City/district drive the delivery-zone match — re-quote (debounced)
-    // when either changes so the user sees their fee adjust live.
-    if (field === 'city' || field === 'district') {
-      clearTimeout(this._addrQuoteTimer);
-      this._addrQuoteTimer = setTimeout(() => this.refreshQuote(), 400);
-    }
+  },
+  // Region picker change — WeChat returns { value: [province, city, district] }.
+  // Same widget the addresses page uses, so the inline new-address form can no
+  // longer free-type a city/district string the zone matcher won't recognize.
+  // City/district drive the delivery-zone match, so re-quote on every pick.
+  onRegionChange(e) {
+    const [province, city, district] = e.detail.value || ['', '', ''];
+    this.setData({
+      regionValue: [province, city, district],
+      'address.province': province,
+      'address.city': city,
+      'address.district': district,
+    });
+    this.refreshQuote();
   },
   selectSaved(e) {
     const id = e.currentTarget.dataset.id;
@@ -1002,9 +1019,11 @@ Page({
         phone: a.phone || '',
         address: a.address || '',
         detail: a.detail || '',
+        province: a.province || '',
         city: a.city || '',
         district: a.district || '',
       },
+      regionValue: [a.province || '', a.city || '', a.district || ''],
     });
     this.refreshQuote();
   },
@@ -1013,7 +1032,8 @@ Page({
     this.setData({
       showNewForm: true,
       pickerOpen: false,
-      address: { id: null, recipient_name: '', phone: '', address: '', detail: '', city: '', district: '' },
+      address: { id: null, recipient_name: '', phone: '', address: '', detail: '', province: '', city: '', district: '' },
+      regionValue: ['', '', ''],
     });
     this.refreshQuote();
   },
@@ -1027,9 +1047,10 @@ Page({
         pickerOpen: false,
         address: {
           id: def.id, recipient_name: def.recipient_name, phone: def.phone,
-          address: def.address, detail: def.detail || '', city: def.city || '',
-          district: def.district || '',
+          address: def.address, detail: def.detail || '', province: def.province || '',
+          city: def.city || '', district: def.district || '',
         },
+        regionValue: [def.province || '', def.city || '', def.district || ''],
       });
       this.refreshQuote();
     }
@@ -1145,6 +1166,14 @@ Page({
       wx.showToast({ title: this.data.lang === 'cn' ? '请填写完整地址' : 'Please fill in the address', icon: 'none' });
       return;
     }
+    // Region must come from the picker, not free text — without province /
+    // city / district the zone matcher can't place the address. Surface a
+    // clear "pick your region" toast instead of the confusing downstream
+    // "pick a delivery time" error you'd otherwise hit (no zone → no slots).
+    if (!a.province || !a.city || !a.district) {
+      wx.showToast({ title: this.data.copy.regionRequired, icon: 'none' });
+      return;
+    }
     if (!this.data.deliverySlotId) {
       wx.showToast({ title: this.data.lang === 'cn' ? '请选择配送时间' : 'Please pick a delivery time', icon: 'none' });
       return;
@@ -1201,6 +1230,7 @@ Page({
           phone: a.phone,
           address: a.address,
           detail: a.detail || null,
+          province: a.province || null,
           city: a.city || null,
           district: a.district || null,
           is_default: true,
