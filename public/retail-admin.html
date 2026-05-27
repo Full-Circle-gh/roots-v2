@@ -765,11 +765,14 @@
   .pd-rte-color > i { display: block; width: 16px; height: 3px; border-radius: 2px; margin-top: 1px; background: #e23b3b; pointer-events: none; }
   .pd-rte-color.pd-rte-hl > i { background: #ffe680; }
   .pd-rte-color input[type=color] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: none; padding: 0; margin: 0; cursor: pointer; }
-  /* resize:vertical gives a drag handle so the office can make the box as
-     tall as they like (repeatedly); no max-height cap so the handle isn't
-     fought by a ceiling. Plain-mode <textarea>s already resize via the
-     global textarea rule. */
-  .pd-rte { min-height: 140px; overflow: auto; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; color: var(--text-1); background: var(--bg-app); }
+  /* Each editor is a fixed-height window: it scrolls its OWN content
+     (overflow:auto) instead of growing to fit a long description and pushing
+     the rest of the form down — so the office edits the text without scrolling
+     the whole modal. resize:vertical still lets them drag it, capped by
+     max-height. vh ÷ --ui-scale so the cap tracks the real viewport at any
+     text-size zoom (raw vh ignores the html `zoom`). Fullscreen overrides this
+     cap below. */
+  .pd-rte { min-height: 140px; max-height: calc(42vh / var(--ui-scale, 1)); overflow: auto; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; color: var(--text-1); background: var(--bg-app); }
   .pd-rte:focus { outline: none; border-color: var(--brass, #B08D4A); }
   .pd-rte h2 { font-size: 17px; margin: 8px 0 4px; font-weight: 700; }
   .pd-rte h3 { font-size: 15px; margin: 6px 0; }
@@ -1231,7 +1234,12 @@
   .pa-prev-screen {
     background: #F2E7DF;      /* oat */
     width: 100%;
-    height: 580px;
+    /* Fit the whole phone inside the canvas at every text size — no canvas
+       scroll. The modal caps at calc(90vh / --ui-scale); subtract the head +
+       canvas/frame padding (~150px) so the device never overflows. Caps at
+       580px so it doesn't grow huge on tall screens; the page still scrolls
+       inside the screen. (vh ignores the html `zoom`, hence /--ui-scale.) */
+    height: min(580px, calc(90vh / var(--ui-scale, 1) - 150px));
     border-radius: 30px;
     overflow-y: auto;
     overflow-x: hidden;
@@ -4115,6 +4123,11 @@
       .cu-kv b.is-brass { color: var(--brass); }
       .cu-kv b.is-zero  { color: var(--text-4); }
       .cu-kv b.is-human { font-family: var(--f-sans); font-weight: 400; color: var(--text-2); }
+      /* Rating star in the Reviews row: IBM Plex Mono has no ★ glyph, so it
+         falls back to a heavier, wider system star that breaks the value's
+         alignment and crowds the card edge. Size it down + tint it so it sits
+         neatly with the digits. */
+      .cu-kv b .rv-star { font-size: .82em; color: var(--accent); margin-left: 1px; }
 
       /* Tag — Full Circle mono chip (4px radius, tracked caps). Replaces the
          old rounded pill; used in both the list tier column and the drawer.
@@ -14188,7 +14201,7 @@ function cuRenderDetail() {
         <div class="cu-kv"><span>Bonus pts from top-up · 充值赠送积分</span><b class="${(top.bonus_pts_total || 0) === 0 ? 'is-zero' : ''}">${top.bonus_pts_total || 0}</b></div>
         <div class="cu-kv"><span>Admin adjust · 后台调整</span><b class="${Number(top.admin_adjust_total || 0) === 0 ? 'is-zero' : ''}">¥${Number(top.admin_adjust_total || 0).toFixed(2)}</b></div>
         <div class="cu-kv"><span>Vouchers (unused/used) · 优惠券(未用/已用)</span><b class="${(vch.unused || 0) === 0 && (vch.used || 0) === 0 ? 'is-zero' : ''}">${vch.unused || 0} / ${vch.used || 0}</b></div>
-        <div class="cu-kv"><span>Reviews · 评价</span><b class="${(rev.count || 0) === 0 ? 'is-zero' : ''}">${rev.count || 0}${rev.avg_rating ? ' · ' + Number(rev.avg_rating).toFixed(1) + '★' : ''}</b></div>
+        <div class="cu-kv"><span>Reviews · 评价</span><b class="${(rev.count || 0) === 0 ? 'is-zero' : ''}">${rev.count || 0}${rev.avg_rating ? ' · ' + Number(rev.avg_rating).toFixed(1) + '<span class="rv-star">★</span>' : ''}</b></div>
       </div>
     </div>
 
