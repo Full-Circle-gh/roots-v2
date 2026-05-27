@@ -188,6 +188,13 @@ Page({
     });
     this.applyLangCopy();
 
+    // Load the delivery-area options up front — BEFORE the empty-cart bail and
+    // the bind gate below — so the area picker is never blank in any transient
+    // state (e.g. landing on checkout with an empty cart, during the 800ms
+    // redirect window). Fire-and-forget: loadAreaOptions re-syncs the label
+    // when it resolves, so it needn't block the rest of onLoad.
+    this.loadAreaOptions();
+
     const state = cart.get();
     if (!state.items.length) {
       wx.showToast({ title: this.data.lang === 'cn' ? '购物车空空如也' : 'Your cart is empty', icon: 'none' });
@@ -224,7 +231,7 @@ Page({
     // in onShow once the customer comes back from the bind page.
     if (!isBound) return;
 
-    await this.loadAreaOptions();
+    // areaOptions were already kicked off above (before the empty-cart bail).
     await this.loadAddressesAndQuote();
     this.loadPublicCoupons();
     this.loadPointsBalance();
