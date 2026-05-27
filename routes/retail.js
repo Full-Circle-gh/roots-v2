@@ -489,6 +489,11 @@ router.get('/api/retail/products/:id', (req, res) => {
   ).get(id)));
   if (!product) return res.status(404).json({ success: false, error: 'not_found' });
 
+  // Photo gallery — extra images beyond the primary. Fetched here (detail
+  // only) so the shop-list payload stays small. [0] mirrors image_data.
+  const imgRow = tdb().prepare('SELECT images FROM products WHERE id = ?').get(id);
+  product.images = parseJsonArray(imgRow && imgRow.images);
+
   // Review summary — avg rating + count + 3 most recent visible reviews.
   const summary = tdb().prepare(
     'SELECT AVG(rating) AS avg, COUNT(*) AS count FROM retail_reviews WHERE product_id = ? AND is_visible = 1'
@@ -4818,6 +4823,14 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     const arr = [...new Set(String(body.ship_modes || '').split(',').map(s => s.trim().toLowerCase()).filter(m => m === 'air' || m === 'land'))];
     sets.push('ship_modes = ?'); params.push(arr.length ? arr.join(',') : 'air,land');
   }
+  if ('images' in body) {
+    // Ordered gallery (max 8). Keep the primary image_data in sync — shop
+    // cards, order items and legacy single-image consumers read image_data,
+    // not the gallery. Empty array clears both.
+    const arr = (Array.isArray(body.images) ? body.images : []).filter(s => typeof s === 'string' && s).slice(0, 8);
+    sets.push('images = ?');     params.push(arr.length ? JSON.stringify(arr) : null);
+    sets.push('image_data = ?'); params.push(arr.length ? arr[0] : null);
+  }
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
 
   sets.push('updated_at = CURRENT_TIMESTAMP');
@@ -4865,13 +4878,16 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   const name_cn = (b.name_cn || '').trim();
   if (!name_en && !name_cn) return res.status(400).json({ success: false, error: 'name_required' });
   const ship = [...new Set(String(b.ship_modes || 'air,land').split(',').map(s => s.trim().toLowerCase()).filter(m => m === 'air' || m === 'land'))];
+  // Gallery (max 8); primary image_data mirrors the first photo.
+  const gallery = (Array.isArray(b.images) ? b.images : []).filter(s => typeof s === 'string' && s).slice(0, 8);
+  const primaryImg = gallery.length ? gallery[0] : (b.image_data || null);
   let info;
   try {
     info = tdb().prepare(
       `INSERT INTO products
          (name_en, name_cn, sku, category, weight, sell_price, compare_at_price, stock_qty, ship_modes,
-          description_en, description_cn, image_data, is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+          description_en, description_cn, image_data, images, is_published, is_active, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       name_en || name_cn, name_cn || null,
       (b.sku || '').trim() || null, (b.category || '').trim() || null, (b.weight || '').trim() || null,
@@ -4880,7 +4896,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
       Math.max(0, parseInt(b.stock_qty, 10) || 0),
       ship.length ? ship.join(',') : 'air,land',
       (b.description_en || '').trim() || null, (b.description_cn || '').trim() || null,
-      b.image_data || null, b.is_published ? 1 : 0
+      primaryImg, gallery.length ? JSON.stringify(gallery) : null, b.is_published ? 1 : 0
     );
   } catch (e) {
     if (String(e.message || '').includes('UNIQUE')) return res.status(409).json({ success: false, error: 'sku_taken' });
@@ -5143,6 +5159,18 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
     return r;
   });
   res.json({ success: true, data: rows });
+});
+
+// Photo gallery for the editor — returns the ordered image list, falling back
+// to the single primary image for legacy products with no gallery yet. Kept
+// separate from the product list so list payloads stay light.
+router.get('/api/retail-admin/products/:id/images', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const row = tdb().prepare('SELECT images, image_data, image_url FROM products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  let images = parseJsonArray(row.images);
+  if (!images.length) { const primary = row.image_data || row.image_url; if (primary) images = [primary]; }
+  res.json({ success: true, images });
 });
 
 // ── Variant grouping (retail-admin scope) ───────────────────────────────────

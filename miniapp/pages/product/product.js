@@ -103,6 +103,7 @@ Page({
     isFlash: false,
     flashWas: '',
     compareAtText: '',
+    images: [],
     flashOff: '',
     flashEnds: '',
     flashCountdown: null,  // { d, h, m, s } padded strings; null when not on flash or ended
@@ -282,6 +283,11 @@ Page({
     const L = this.data.lang;
     if (!p) return;
     const img = absUrl(p.image_url) || p.image_data || '';
+    // Photo gallery — normalise each entry (data-URIs pass through; relative
+    // URLs get absolutised). Drives the hero swiper when there's >1 photo.
+    const gallery = (Array.isArray(p.images) ? p.images : [])
+      .filter(Boolean)
+      .map(s => (typeof s === 'string' && s.indexOf('data:') === 0) ? s : (absUrl(s) || s));
     // Use the server-resolved effective_price so what we charge matches
     // what we display (flash sale auto-applies when active).
     const regular = Number(p.price ?? p.sell_price) || 0;
@@ -468,6 +474,7 @@ Page({
 
     this.setData({
       image: img,
+      images: gallery,
       aspectRatio: p.image_aspect ? String(p.image_aspect) : '',
       name: lang.pick(p.name_en, p.name_cn, L),
       subtitle: lang.pick(p.name_cn, p.name_en, L === 'en' ? 'cn' : 'en'),

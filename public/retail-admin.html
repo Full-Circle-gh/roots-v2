@@ -664,6 +664,26 @@
      photos, variants and side-by-side EN/CN description. (id beats .pu-editor) */
   #pd-editor { width: min(1180px, 94vw); height: 90vh; max-width: 94vw; }
   #pd-editor.pd-full { width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh; border-radius: 0; }
+  /* Product photo gallery (editor) — thumbnails, drag-to-reorder, first = main. */
+  .pd-gallery { display: flex; flex-wrap: wrap; gap: 10px; min-height: 8px; }
+  .pd-gallery .pd-thumb {
+    position: relative; width: 84px; height: 84px; border-radius: 8px;
+    border: 1px solid var(--line); overflow: hidden; background: var(--bg-app);
+    cursor: grab; flex-shrink: 0;
+  }
+  .pd-gallery .pd-thumb.dragging { opacity: .4; }
+  .pd-gallery .pd-thumb.drop-target { border-color: var(--brand, #6B8E6F); box-shadow: 0 0 0 2px var(--brand, #6B8E6F); }
+  .pd-gallery .pd-thumb-img { width: 100%; height: 100%; background-size: cover; background-position: center; }
+  .pd-gallery .pd-thumb-x {
+    position: absolute; top: 3px; right: 3px; width: 20px; height: 20px;
+    border: none; border-radius: 50%; background: rgba(0,0,0,.62); color: #fff;
+    font-size: 14px; line-height: 1; cursor: pointer; display: flex;
+    align-items: center; justify-content: center; padding: 0;
+  }
+  .pd-gallery .pd-thumb-main {
+    position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.62);
+    color: #fff; font-size: 9px; letter-spacing: .04em; text-align: center; padding: 2px 0;
+  }
   .pd-var-head { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); margin-bottom: 6px; }
   .va-list { display: flex; flex-direction: column; gap: 8px; }
   .va-row { display: flex; align-items: center; gap: 10px; }
@@ -4488,11 +4508,11 @@
           <div class="field" style="grid-column:1/-1;"><label class="stacked">Description EN · 描述(英文)</label><textarea id="pd-desc-en" rows="2"></textarea></div>
           <div class="field" style="grid-column:1/-1;"><label class="stacked">Description 中文</label><textarea id="pd-desc-cn" rows="2"></textarea></div>
           <div class="field" style="grid-column:1/-1;">
-            <label class="stacked">Photo · 图片</label>
-            <div style="display:flex;gap:12px;align-items:center;">
-              <div id="pd-img-preview" style="width:72px;height:72px;border-radius:8px;border:1px solid var(--line);background-color:var(--bg-app);background-size:cover;background-position:center;flex-shrink:0;"></div>
-              <input type="file" id="pd-img-file" accept="image/*" onchange="pdPickImage(event)" style="font-size:12px;">
-              <button type="button" class="btn btn-sm" onclick="pdClearImage()">Clear · 清除</button>
+            <label class="stacked">Photos · 图片 <span class="muted" style="font-weight:400;font-size:11px;">— first photo is the main one; drag to reorder · 第一张为主图,可拖动排序</span></label>
+            <div id="pd-gallery" class="pd-gallery"></div>
+            <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+              <input type="file" id="pd-img-file" accept="image/*" multiple onchange="pdAddPhotos(event)" style="font-size:12px;">
+              <span class="muted" style="font-size:11px;">Up to 8 · 最多 8 张</span>
             </div>
           </div>
           <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;margin-bottom:0;">
@@ -14832,7 +14852,11 @@ function paOpenEdit(id) { pdOpen(id); }
 // ── Product details (commercial) editor — the Mini App Backend's own product
 // page. Edits the basic store fields + stock via /api/retail-admin/products.
 // Standalone: needs no kitchen/main system behind it. ──
-let _pdImage;  // undefined = unchanged, '' = cleared, string = new base64
+// Product photo gallery state. _pdGallery = ordered array of image srcs
+// (element [0] = the main photo). _pdGalleryDirty = send `images` on save.
+let _pdGallery = [];
+let _pdGalleryDirty = false;
+let _pdDragFrom = null;
 function pdCats() {
   return [...new Set((PA_PRODUCTS || []).map(p => (p.category || '').trim()).filter(Boolean))].sort();
 }
@@ -14850,10 +14874,17 @@ function pdOpen(id) {
   document.getElementById('pd-ship-air').checked  = !p || modes.includes('air');
   document.getElementById('pd-ship-land').checked = !p || modes.includes('land');
   document.getElementById('pd-published').checked = p ? p.is_published === 1 : false;
-  _pdImage = undefined;
-  const img = (p && (p.image_data || p.image_url)) || '';
-  document.getElementById('pd-img-preview').style.backgroundImage = img ? `url("${img}")` : 'none';
+  // Photo gallery — start empty, then (for an existing product) pull the
+  // ordered list from the lightweight images endpoint. New products start blank.
+  _pdGallery = []; _pdGalleryDirty = false;
+  pdRenderGallery(); pdGalleryWire();
   document.getElementById('pd-img-file').value = '';
+  if (p) {
+    fetch('/api/retail-admin/products/' + p.id + '/images', { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(j => { if (j && j.success && Array.isArray(j.images)) { _pdGallery = j.images.slice(); pdRenderGallery(); } })
+      .catch(() => {});
+  }
   document.getElementById('pd-cat-list').innerHTML = pdCats().map(c => `<option value="${escapeAttr(c)}">`).join('');
   // Page-design + delete only apply to an existing product.
   document.getElementById('pd-pagedesign-btn').style.display = p ? '' : 'none';
@@ -14865,7 +14896,7 @@ function pdOpen(id) {
   pdSyncFullscreenBtn(wantFull);
   document.getElementById('pd-bg').classList.add('show');
 }
-function pdClose() { document.getElementById('pd-bg').classList.remove('show'); _pdImage = undefined; }
+function pdClose() { document.getElementById('pd-bg').classList.remove('show'); _pdGallery = []; _pdGalleryDirty = false; }
 // Editor size: large by default, ⤢ toggles full-screen. Preference is
 // remembered per-operator so it opens the way they last left it.
 function pdSyncFullscreenBtn(on) {
@@ -14960,16 +14991,74 @@ async function vaSave() {
     toast(cuT('Variants saved', '规格已保存'));
   } catch (e) { toast(cuT('Save failed: ', '保存失败:') + e.message, 'err'); }
 }
-function pdPickImage(e) {
-  const f = e.target.files && e.target.files[0]; if (!f) return;
-  const rd = new FileReader();
-  rd.onload = () => { _pdImage = rd.result; document.getElementById('pd-img-preview').style.backgroundImage = `url("${rd.result}")`; };
-  rd.readAsDataURL(f);
+// ── Product photo gallery (editor) ──────────────────────────────────────────
+const PD_MAX_PHOTOS = 8;
+function pdRenderGallery() {
+  const wrap = document.getElementById('pd-gallery');
+  if (!wrap) return;
+  if (!_pdGallery.length) {
+    wrap.innerHTML = '<div class="muted" style="font-size:12px;">No photos yet · 暂无图片</div>';
+    return;
+  }
+  wrap.innerHTML = _pdGallery.map((src, i) => `
+    <div class="pd-thumb" draggable="true" data-i="${i}">
+      <div class="pd-thumb-img" style="background-image:url('${String(src).replace(/'/g, '%27')}')"></div>
+      ${i === 0 ? '<span class="pd-thumb-main">Main · 主图</span>' : ''}
+      <button type="button" class="pd-thumb-x" title="Remove · 移除" data-rm="${i}">×</button>
+    </div>`).join('');
 }
-function pdClearImage() {
-  _pdImage = '';
-  document.getElementById('pd-img-preview').style.backgroundImage = 'none';
-  document.getElementById('pd-img-file').value = '';
+function pdAddPhotos(e) {
+  const files = Array.from((e.target && e.target.files) || []);
+  const room = PD_MAX_PHOTOS - _pdGallery.length;
+  const take = files.slice(0, Math.max(0, room));
+  if (room <= 0) { toast(cuT('Up to 8 photos', '最多 8 张图片'), 'err'); e.target.value = ''; return; }
+  let pending = take.length;
+  if (!pending) { e.target.value = ''; return; }
+  take.forEach(f => {
+    const rd = new FileReader();
+    rd.onload = () => { _pdGallery.push(rd.result); _pdGalleryDirty = true; if (--pending === 0) pdRenderGallery(); };
+    rd.readAsDataURL(f);
+  });
+  e.target.value = '';
+}
+function pdRemovePhoto(i) {
+  if (i < 0 || i >= _pdGallery.length) return;
+  _pdGallery.splice(i, 1); _pdGalleryDirty = true; pdRenderGallery();
+}
+// Delegated drag-reorder + remove. Wired once on the container.
+function pdGalleryWire() {
+  const wrap = document.getElementById('pd-gallery');
+  if (!wrap || wrap._wired) return;
+  wrap._wired = true;
+  wrap.addEventListener('click', e => {
+    const x = e.target.closest('.pd-thumb-x'); if (x) pdRemovePhoto(parseInt(x.dataset.rm, 10));
+  });
+  wrap.addEventListener('dragstart', e => {
+    const t = e.target.closest('.pd-thumb'); if (!t) return;
+    _pdDragFrom = parseInt(t.dataset.i, 10); t.classList.add('dragging');
+  });
+  wrap.addEventListener('dragend', e => {
+    const t = e.target.closest('.pd-thumb'); if (t) t.classList.remove('dragging');
+    wrap.querySelectorAll('.drop-target').forEach(n => n.classList.remove('drop-target'));
+  });
+  wrap.addEventListener('dragover', e => {
+    e.preventDefault();
+    const t = e.target.closest('.pd-thumb');
+    wrap.querySelectorAll('.drop-target').forEach(n => n.classList.remove('drop-target'));
+    if (t) t.classList.add('drop-target');
+  });
+  wrap.addEventListener('drop', e => {
+    e.preventDefault();
+    const t = e.target.closest('.pd-thumb');
+    if (!t || _pdDragFrom == null) return;
+    const to = parseInt(t.dataset.i, 10);
+    if (Number.isFinite(to) && to !== _pdDragFrom) {
+      const [moved] = _pdGallery.splice(_pdDragFrom, 1);
+      _pdGallery.splice(to, 0, moved);
+      _pdGalleryDirty = true; pdRenderGallery();
+    }
+    _pdDragFrom = null;
+  });
 }
 function pdOpenPageDesign() {
   const id = document.getElementById('pd-id').value;
@@ -14991,7 +15080,7 @@ async function pdSave() {
     description_en: g('pd-desc-en'), description_cn: g('pd-desc-cn'),
     is_published: document.getElementById('pd-published').checked ? 1 : 0,
   };
-  if (_pdImage !== undefined) body.image_data = _pdImage;  // only send when changed/cleared
+  if (_pdGalleryDirty) body.images = _pdGallery;  // gallery drives image_data (first = main)
   if (!body.name_en && !body.name_cn) { alert('A name is required · 需要填写名称'); return; }
   try {
     const url = id ? '/api/retail-admin/products/' + id : '/api/retail-admin/products';

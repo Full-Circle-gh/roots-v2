@@ -70,6 +70,10 @@ try { db.prepare('CREATE INDEX IF NOT EXISTS idx_products_variant_group ON produ
 // sell_price, the mini-app shows it struck through next to the live price.
 // NULL/0 = no strike-through shown.
 addColumn('products', 'compare_at_price', 'REAL');
+// Product photo gallery — JSON array of image srcs (data-URI or URL), ordered;
+// element [0] mirrors image_data (the primary, used by shop cards/orders).
+// Detail-only: kept OUT of list SELECTs so the shop-grid payload stays small.
+addColumn('products', 'images', 'TEXT');
 // Barcode for the tablet POS (market vendors scan products in with a
 // keyboard-wedge gun). Stored as text — keeps leading zeros (EAN-13 etc.)
 // and lets us hold non-numeric internal codes too. Indexed for instant

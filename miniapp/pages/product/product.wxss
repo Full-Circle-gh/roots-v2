@@ -60,6 +60,9 @@
   position: relative;
 }
 .hero-img { width: 100%; height: 100%; display: block; }
+/* Multi-photo hero — swiper fills the hero box; each slide aspect-fills. */
+.hero-swiper { width: 100%; height: 100%; }
+.hero-swiper .hero-img { width: 100%; height: 100%; }
 
 /* Stock badge — top-right corner of the hero */
 .stock-badge {
