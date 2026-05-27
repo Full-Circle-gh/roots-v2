@@ -185,21 +185,18 @@ router.get('/api/retail/config', (req, res) => {
   }
 });
 
-// Active delivery zones, customer-facing. Drives the bilingual address-area
-// selector on checkout + the addresses page so customers pick from areas we
-// actually deliver to (with labels in their own language) instead of free-
-// typing a city/district the zone matcher can't resolve. Only the columns the
-// picker needs — never the fee/scheduling internals.
+// Customer-facing location list for the bilingual address-area selector on
+// checkout + the addresses page. Returns the SAME full set of cities + GZ
+// districts that the admin delivery section lets you choose from (the
+// china_regions catalogue), not just the zones added so far — operators add
+// the actual deliverable cities over time, and the picker should already
+// list them. Pricing is still gated by the zone matcher at /quote, so a city
+// that isn't an active zone yet just won't resolve a fee/slot until added.
+// Shaped to the columns the picker reads — never the fee/scheduling internals.
 router.get('/api/retail/delivery-zones', (req, res) => {
   try {
-    const rows = tdb().prepare(
-      `SELECT id, zone_type, name_en, name_cn, match_city, match_district
-         FROM retail_delivery_zones
-        WHERE is_active = 1
-        ORDER BY zone_type ASC, sort_order ASC, id ASC`
-    ).all();
     res.set('Cache-Control', 'public, max-age=60');
-    res.json({ success: true, data: rows });
+    res.json({ success: true, data: regionPickerRows() });
   } catch (e) {
     console.error('[retail/delivery-zones]', e);
     res.status(500).json({ success: false, error: 'zones_load_failed' });
@@ -8188,6 +8185,36 @@ function provinceForCity(city) {
   }
   const key = String(city).replace(/(市|自治州|地区|盟)$/u, '');
   return _cityProvinceMap.get(key) || null;
+}
+
+// The full set of locations choosable in the admin delivery section, shaped
+// like retail_delivery_zones rows so the customer address picker (which reads
+// zone_type / name_* / match_*) can render them unchanged. Built once. The
+// customer can pick any of these; pricing is still gated server-side by the
+// zone matcher, so a city not yet added in the delivery section resolves no
+// fee/slots until the operator adds it. GZ districts first (the live area),
+// then all cities in catalogue order.
+let _regionPickerRows = null;
+function regionPickerRows() {
+  if (_regionPickerRows) return _regionPickerRows;
+  const gz = (CHINA_REGIONS.guangzhou_districts || []).map(d => ({
+    id: 'gz:' + d.code,
+    zone_type: 'gz_district',
+    name_en: d.name_en,
+    name_cn: d.name_cn,
+    match_city: '广州市',
+    match_district: d.name_cn,
+  }));
+  const cities = (CHINA_REGIONS.cities || []).map(c => ({
+    id: 'city:' + c.name_cn,
+    zone_type: 'city',
+    name_en: c.name_en,
+    name_cn: c.name_cn,
+    match_city: c.name_cn,
+    match_district: null,
+  }));
+  _regionPickerRows = [...gz, ...cities];
+  return _regionPickerRows;
 }
 
 router.get('/api/retail-admin/china-regions', requireRetailAdmin, (req, res) => {
