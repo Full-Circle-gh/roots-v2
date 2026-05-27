@@ -7980,6 +7980,7 @@ async function _reloadProductsData() {
 // Paint the full Products page (header, filters, view body) from the in-memory
 // _products cache. No network — callers fetch first when they need fresh data.
 function _paintProductsPage() {
+  _prodPage = 1; // entering / re-painting the page starts at the first page
   const cats = [...new Set(_products.map(p=>p.category).filter(Boolean))].sort();
   const statuses = ['Active','Inactive','Seasonal','Coming Soon'];
 
@@ -8016,13 +8017,13 @@ function _paintProductsPage() {
       </div>
     </div>
     <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
-      <input type="text" id="prodSearch" placeholder="🔍 Search name, SKU... · 搜索名称/编号" oninput="filterProducts()"
+      <input type="text" id="prodSearch" placeholder="🔍 Search name, SKU... · 搜索名称/编号" oninput="_prodPage=1;filterProducts()"
         style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:240px;max-width:100%;flex:1 1 200px;min-width:140px;outline:none">
-      <select id="prodCatFilter" onchange="filterProducts()" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none">
+      <select id="prodCatFilter" onchange="_prodPage=1;filterProducts()" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none">
         <option value="">All Categories 全部分类</option>
         ${cats.map(c=>`<option value="${c}">${c}</option>`).join('')}
       </select>
-      <select id="prodStatusFilter" onchange="filterProducts()" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none">
+      <select id="prodStatusFilter" onchange="_prodPage=1;filterProducts()" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none">
         <option value="">All Status 全部状态</option>
         ${statuses.map(s=>`<option value="${s}">${statusLabel(s, PRODUCT_STATUS_CN)}</option>`).join('')}
       </select>
@@ -8061,12 +8062,12 @@ function _paintProductsPage() {
     <div id="prodViewBody">${
       _products.length === 0
         ? '<div class="empty"><div class="empty-icon">🛍</div><p style="font-weight:600">No products yet · 暂无产品</p><p style="color:var(--muted);margin-top:8px">Create products and link them to recipes · 创建产品并关联食谱</p></div>'
-        : _renderProdView(_products)
+        : ''
     }</div>`;
   // Filter state (search/category/status/no-sku chip/in-shop chip) is
-  // module-level — it persists when the user opens a product and comes
-  // back. The initial paint above uses the full _products array, so apply
-  // the active filter once more to keep the body in sync with the chips.
+  // module-level — it persists when the user opens a product and comes back.
+  // filterProducts() does the real body render (sorted + paged), so the
+  // container above starts empty rather than building the whole unpaged list.
   if (_products.length > 0) filterProducts();
 }
 
@@ -8926,6 +8927,60 @@ let _prodViewMode = 'list';
 // filter/search rebuilds; resets to default when navigating away.
 let _prodSortKey = '';   // '' means "default order from API" (name_en asc)
 let _prodSortDir = 'asc'; // 'asc' | 'desc'
+
+// Pagination — caps how many products render at once so the page paints fast
+// even with a big catalog. Applies to the flat views (List / Grid / Compact);
+// the grouped views (Category / Stock) intentionally show everything. Page
+// size persists; any filter/search/sort/view change resets to page 1.
+const PROD_PAGE_SIZE_KEY = 'roots-v2-prod-page-size-v1';
+let _prodPageSize = (() => {
+  const s = localStorage.getItem(PROD_PAGE_SIZE_KEY);
+  if (s === 'all') return 'all';
+  const n = parseInt(s, 10);
+  return [20, 50, 100].includes(n) ? n : 50;
+})();
+let _prodPage = 1;
+// Views that get paginated. Grouped/overview views render in full.
+const PROD_PAGED_VIEWS = new Set(['list', 'grid', 'compact']);
+
+function _setProdPageSize(v) {
+  _prodPageSize = (v === 'all') ? 'all' : (parseInt(v, 10) || 50);
+  try { localStorage.setItem(PROD_PAGE_SIZE_KEY, String(_prodPageSize)); } catch {}
+  _prodPage = 1;
+  filterProducts();
+}
+
+function _setProdPage(n) {
+  _prodPage = n;
+  filterProducts();
+  // Jump back to the top of the list so the new page starts in view.
+  const top = document.getElementById('prodViewBody');
+  if (top) top.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Pager footer: page-size selector + prev/next + "showing X–Y of Z".
+function _prodPager(total, pages, start, shown) {
+  const from = total === 0 ? 0 : start + 1;
+  const to   = start + shown;
+  const sizeOpts = [20, 50, 100].map(n =>
+    `<option value="${n}"${_prodPageSize === n ? ' selected' : ''}>${n} / page · 每页 ${n}</option>`).join('')
+    + `<option value="all"${_prodPageSize === 'all' ? ' selected' : ''}>All · 全部</option>`;
+  const navBtn = (label, page, disabled) =>
+    `<button onclick="_setProdPage(${page})" ${disabled ? 'disabled' : ''}
+       style="padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-family:inherit;font-size:12px;font-weight:600;cursor:${disabled ? 'default' : 'pointer'};opacity:${disabled ? '.4' : '1'}">${label}</button>`;
+  return `<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:space-between;padding:16px 4px 6px;font-size:12px;color:var(--muted)">
+    <span>Showing <strong style="color:var(--text)">${from}–${to}</strong> of <strong style="color:var(--text)">${total}</strong> · 显示 ${from}–${to} / 共 ${total}</span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <select onchange="_setProdPageSize(this.value)" title="Products per page · 每页产品数"
+        style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;outline:none;font-family:inherit">${sizeOpts}</select>
+      ${_prodPageSize === 'all' ? '' : `
+        ${navBtn('‹ Prev 上一页', _prodPage - 1, _prodPage <= 1)}
+        <span style="white-space:nowrap">Page ${_prodPage} / ${pages}</span>
+        ${navBtn('Next 下一页 ›', _prodPage + 1, _prodPage >= pages)}`}
+    </div>
+  </div>`;
+}
+
 // "Only products missing a SKU" filter. Set by the ⚠ count chip in the
 // page header; cleared by the chip's reset state. The chip is the only UI
 // that flips this, so no select element to keep in sync.
@@ -8958,6 +9013,7 @@ function _cycleProdPubFilter() {
     btn.innerHTML = '🛍 ' + pubCount + ' in shop'
       + (a === 'pub' ? ' ✓' : a === 'draft' ? ' (drafts only)' : '');
   }
+  _prodPage = 1;
   filterProducts();
 }
 
@@ -8995,6 +9051,7 @@ function _setProdSort(key) {
   // stay coherent across re-renders.
   const sel = document.getElementById('prodSortSel');
   if (sel) sel.value = `${_prodSortKey}:${_prodSortDir}`;
+  _prodPage = 1;
   filterProducts();
 }
 
@@ -9026,6 +9083,7 @@ function _setProdSortFromDropdown(val) {
     _prodSortKey = key;
     _prodSortDir = dir || 'asc';
   }
+  _prodPage = 1;
   filterProducts();
 }
 
@@ -9070,6 +9128,7 @@ function _thSort(key, en, cn, opts = {}) {
 function setProdView(mode) {
   const prevMode = _prodViewMode;
   _prodViewMode = mode;
+  _prodPage = 1; // a fresh view starts at the first page
   // No persistence — every navigation to the products page resets to
   // 'list' via the router (see navigate('products') case). Keep the
   // choice only for the lifetime of this in-page session.
@@ -9158,6 +9217,7 @@ function _toggleProdNoSkuFilter() {
     btn.title = _prodOnlyNoSku ? 'Show all products · 显示全部' : 'Show only products missing a SKU · 仅显示无编号产品';
     btn.innerHTML = '⚠ ' + cnt + ' No SKU' + (_prodOnlyNoSku ? ' ✕' : '');
   }
+  _prodPage = 1;
   filterProducts();
 }
 
@@ -9175,14 +9235,32 @@ function filterProducts() {
   });
   const cnt = document.getElementById('prodCount');
   if (cnt) cnt.textContent = filtered.length+' products';
+  // Sort the full result first so the sort applies across every page (not
+  // just the current slice), then page it. The view renderers re-run
+  // _sortProds on whatever they receive — harmless on an already-sorted slice.
+  const sorted = _sortProds(filtered);
+  const total  = sorted.length;
+  const paged  = PROD_PAGED_VIEWS.has(_prodViewMode) && _prodPageSize !== 'all' && total > 0;
+  const size   = paged ? _prodPageSize : total;
+  const pages  = paged ? Math.max(1, Math.ceil(total / size)) : 1;
+  if (_prodPage > pages) _prodPage = pages;
+  if (_prodPage < 1) _prodPage = 1;
+  const start  = paged ? (_prodPage - 1) * size : 0;
+  const slice  = paged ? sorted.slice(start, start + size) : sorted;
   // Always rebuild the entire body via the unified renderer — that way
   // a search/filter rebuild after a view toggle doesn't try to repaint
   // a container the previous view created.
   const host = document.getElementById('prodViewBody');
   if (host) {
-    host.innerHTML = filtered.length
-      ? _renderProdView(filtered)
-      : '<div class="empty"><div class="empty-icon">🛍</div><p>No results · 暂无结果</p></div>';
+    if (total === 0) {
+      host.innerHTML = '<div class="empty"><div class="empty-icon">🛍</div><p>No results · 暂无结果</p></div>';
+    } else {
+      // Show the pager whenever the flat view would page (>1 page) OR when
+      // it's a flat view at all (so the page-size control is reachable). The
+      // grouped views (Category / Stock) render in full, no pager.
+      const showPager = PROD_PAGED_VIEWS.has(_prodViewMode) && (_prodPageSize === 'all' ? total > 20 : true);
+      host.innerHTML = _renderProdView(slice) + (showPager ? _prodPager(total, pages, start, slice.length) : '');
+    }
   }
   // Keep the bulk-action bar's count + select-all checkbox in sync after
   // any filter/search/sort/view rebuild.

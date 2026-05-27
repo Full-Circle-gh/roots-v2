@@ -20,6 +20,26 @@ const PRODUCT_COLS = `
   r.name_en AS recipe_name
 `;
 
+// Lightweight column set for the LIST endpoint. The table/grid views never
+// render the heavy text/blob fields — most importantly image_data (a base64
+// 1800px JPEG per row) and label_data (a second base64 image), plus
+// description_blocks / nutrition / descriptions — so shipping them for every
+// product made the page payload balloon to megabytes. Here we drop them and
+// expose only a has_image flag; the row's image is fetched lazily from
+// GET /api/products/:id/image instead. The full GET /api/products/:id still
+// returns everything (PRODUCT_COLS) for the edit form and detail page.
+const PRODUCT_LIST_COLS = `
+  p.id, p.name_en, p.name_cn, p.sku, p.category, p.recipe_id, p.status,
+  p.sell_price, p.weight, p.barcode,
+  p.notes, p.created_at, p.updated_at,
+  p.external_id, p.sort_order, p.stock_qty, p.tags,
+  p.variant_group_id, p.variant_label,
+  p.is_market, p.is_restock_only, p.is_published,
+  p.ship_modes, p.needs_ice_pack,
+  (p.image_data IS NOT NULL AND p.image_data != '') AS has_image,
+  r.name_en AS recipe_name
+`;
+
 // GET all products (with linked recipe name for the table view)
 router.get('/api/products', requireAuth, requirePermission('products'), (req, res) => {
   const { search, category, status, deleted_only } = req.query;
@@ -27,7 +47,7 @@ router.get('/api/products', requireAuth, requirePermission('products'), (req, re
   //  - default            → active products (is_active=1)
   //  - ?deleted_only=1    → trash view (is_active=0) for the restore UI
   const onlyDeleted = deleted_only === '1' || deleted_only === 'true';
-  let q = `SELECT ${PRODUCT_COLS} FROM products p
+  let q = `SELECT ${PRODUCT_LIST_COLS} FROM products p
            LEFT JOIN recipes r ON r.id = p.recipe_id
            WHERE COALESCE(p.is_active, 1) = ${onlyDeleted ? 0 : 1}`;
   const params = [];
@@ -39,7 +59,37 @@ router.get('/api/products', requireAuth, requirePermission('products'), (req, re
   if (category) { q += ' AND p.category = ?'; params.push(category); }
   if (status)   { q += ' AND p.status = ?';   params.push(status); }
   q += onlyDeleted ? ' ORDER BY p.updated_at DESC' : ' ORDER BY p.name_en';
-  res.json({ success: true, data: db.prepare(q).all(...params) });
+  const rows = db.prepare(q).all(...params);
+  // Replace the (omitted) base64 image with a tiny URL the browser can lazy-
+  // load + cache. ?v=updated_at busts the cache when the photo changes. The
+  // front-end renders image_data straight into <img src>, so it doesn't care
+  // whether the value is a data: URI (detail view) or this URL (list view).
+  for (const r of rows) {
+    r.image_data = r.has_image
+      ? `/api/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`
+      : null;
+    delete r.has_image;
+  }
+  res.json({ success: true, data: rows });
+});
+
+// GET /api/products/:id/image — stream a product's stored photo as real image
+// bytes so the list endpoint can ship a small URL per row instead of an inline
+// base64 blob. image_data is a data: URI (data:image/jpeg;base64,...): decode
+// and send it with a long cache window (the ?v=updated_at query busts it when
+// the photo changes). NOT filtered by is_active so Trash-view thumbnails still
+// resolve. Gated by the same `products` permission as the list it serves.
+router.get('/api/products/:id/image', requireAuth, requirePermission('products'), (req, res) => {
+  const row = db.prepare('SELECT image_data FROM products WHERE id = ?').get(req.params.id);
+  const data = row && row.image_data;
+  if (!data) return res.status(404).end();
+  const m = /^data:([^;,]*?)(;base64)?,([\s\S]*)$/.exec(data);
+  if (!m) return res.redirect(String(data));   // stored as a plain URL, not a data: URI
+  const mime = m[1] || 'application/octet-stream';
+  const buf  = m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]), 'utf8');
+  res.set('Content-Type', mime);
+  res.set('Cache-Control', 'private, max-age=31536000, immutable');
+  res.send(buf);
 });
 
 // POST /api/products/:id/restore — un-soft-delete. Flips is_active back to
