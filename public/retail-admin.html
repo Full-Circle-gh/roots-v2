@@ -710,7 +710,10 @@
   .pd-rte-toolbar .pd-rte-clr { font-size: 13px; font-weight: 600; }
   .pd-rte-toolbar .pd-rte-clr sub { font-size: 9px; }
   .pd-rte-sep { width: 1px; align-self: stretch; margin: 3px 4px; background: var(--line); }
-  .pd-rte-sel { height: 30px; border: 1px solid var(--line); background: var(--bg-app); color: var(--text-1); border-radius: 6px; font-size: 12px; padding: 0 6px; cursor: pointer; }
+  /* Keep the global <select> chevron (set via background-image on `select`) —
+     only override colour/size, never the `background` shorthand (which would
+     wipe the arrow) and leave room on the right for it. */
+  .pd-rte-sel { height: 30px; border: 1px solid var(--line); background-color: var(--bg-app); color: var(--text-1); border-radius: 6px; font-size: 12px; padding: 0 26px 0 8px; cursor: pointer; }
   .pd-rte-sel:hover { border-color: var(--brass, #B08D4A); }
   /* Colour controls — native picker behind an "A"/highlight glyph; the bar
      under the glyph reflects the chosen colour. */
@@ -720,7 +723,11 @@
   .pd-rte-color > i { display: block; width: 16px; height: 3px; border-radius: 2px; margin-top: 1px; background: #e23b3b; pointer-events: none; }
   .pd-rte-color.pd-rte-hl > i { background: #ffe680; }
   .pd-rte-color input[type=color] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: none; padding: 0; margin: 0; cursor: pointer; }
-  .pd-rte { min-height: 140px; max-height: 340px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; color: var(--text-1); background: var(--bg-app); }
+  /* resize:vertical gives a drag handle so the office can make the box as
+     tall as they like (repeatedly); no max-height cap so the handle isn't
+     fought by a ceiling. Plain-mode <textarea>s already resize via the
+     global textarea rule. */
+  .pd-rte { min-height: 140px; overflow: auto; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; color: var(--text-1); background: var(--bg-app); }
   .pd-rte:focus { outline: none; border-color: var(--brass, #B08D4A); }
   .pd-rte h2 { font-size: 17px; margin: 8px 0 4px; font-weight: 700; }
   .pd-rte h3 { font-size: 15px; margin: 6px 0; }
@@ -4611,6 +4618,8 @@
                 <button type="button" title="Increase indent · 增加缩进" onmousedown="return false" onclick="pdRte('indent')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h7M2 12h7M7 8h7M3 6l3 2-3 2"/></svg></button>
                 <span class="pd-rte-sep"></span>
                 <button type="button" title="Link · 链接"          onmousedown="return false" onclick="pdRteLink()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9.5a2.5 2.5 0 010-3.5l2-2a2.5 2.5 0 013.5 3.5l-1 1"/><path d="M9.5 6.5a2.5 2.5 0 010 3.5l-2 2a2.5 2.5 0 01-3.5-3.5l1-1"/></svg></button>
+                <button type="button" title="Image · 插入图片"      onmousedown="return false" onclick="pdRteImage()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="5.5" cy="6.5" r="1.2" fill="currentColor" stroke="none"/><path d="M3 12l3.5-3.5 2.5 2.5 2.5-2.5L14 11"/></svg></button>
+                <button type="button" title="Table · 插入表格"      onmousedown="return false" onclick="pdRteTable()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.7h12M2 9.8h12M6.5 3.2v9.6M10 3.2v9.6"/></svg></button>
                 <button type="button" title="Horizontal rule · 分隔线" onmousedown="return false" onclick="pdRte('insertHorizontalRule')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 8h12"/></svg></button>
                 <button type="button" class="pd-rte-clr" title="Clear formatting · 清除格式" onmousedown="return false" onclick="pdRteClear()">T<sub>x</sub></button>
                 <span class="pd-rte-sep"></span>
@@ -4618,11 +4627,12 @@
                 <button type="button" title="Redo · 重做"          onmousedown="return false" onclick="pdRte('redo')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 7H6a3 3 0 000 6h4M11 7L8.5 4.5M11 7L8.5 9.5"/></svg></button>
                 <button type="button" title="Fullscreen · 全屏"     onmousedown="return false" onclick="pdRteFullscreen()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg></button>
               </div>
+              <input type="file" id="pd-rte-img-file" accept="image/*" style="display:none;" onchange="pdRteImagePick(event)">
               <div class="pd-desc-cols">
                 <div><div class="pd-desc-lang">English</div><div id="pd-rte-en" class="pd-rte" contenteditable="true"></div></div>
                 <div><div class="pd-desc-lang">中文</div><div id="pd-rte-cn" class="pd-rte" contenteditable="true"></div></div>
               </div>
-              <div class="muted" style="font-size:11px;margin-top:6px;">Shown on the mini-app: headings, bold, italic, underline, strikethrough, colour, highlight, alignment, lists, quotes, rules, links. · 小程序支持:标题、加粗、斜体、下划线、删除线、颜色、高亮、对齐、列表、引用、分隔线、链接。</div>
+              <div class="muted" style="font-size:11px;margin-top:6px;">Shown on the mini-app: headings, bold, italic, underline, strikethrough, colour, highlight, alignment, lists, quotes, rules, links, images, tables. · 小程序支持:标题、加粗、斜体、下划线、删除线、颜色、高亮、对齐、列表、引用、分隔线、链接、图片、表格。</div>
             </div>
           </div>
           <div class="field" style="grid-column:1/-1;">
@@ -15257,6 +15267,55 @@ function pdRteColor(c) { pdRte('foreColor', c); }
 function pdRteHilite(c) { try { pdRte('hiliteColor', c); } catch (e) { pdRte('backColor', c); } }
 function pdRteClear() { pdRte('removeFormat'); pdRte('formatBlock', 'p'); }
 function pdRteLink() { const url = prompt('Link URL · 链接地址:'); if (url) pdRte('createLink', url); }
+// Image: upload through the media library (same store the gallery uses), then
+// drop an absolute https URL into the HTML. Relative /api/... srcs wouldn't
+// resolve inside the mini-app's <rich-text>, so we anchor to the live origin
+// (falling back to the canonical domain when edited over http/IP in dev).
+function pdRteImage() {
+  pdRteSaveSel();
+  const inp = document.getElementById('pd-rte-img-file');
+  if (inp) { inp.value = ''; inp.click(); }
+}
+async function pdRteImagePick(e) {
+  const f = e.target.files && e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  const fd = new FormData(); fd.append('file', f);
+  toast(cuT('Uploading image…', '正在上传图片…'));
+  try {
+    const r = await fetch('/api/retail-admin/media/upload', { method: 'POST', credentials: 'same-origin', body: fd });
+    const j = await r.json();
+    if (!j || !j.success) throw new Error((j && j.error) || 'upload_failed');
+    const base = /^https:\/\//.test(location.origin) ? location.origin : 'https://rootskitchenchina.com';
+    const url = base + j.data.url;
+    pdRteRestore();
+    document.execCommand('insertHTML', false, `<img src="${url}" style="max-width:100%;height:auto;" alt="">`);
+    pdRteSaveSel();
+    toast(cuT('Image added', '图片已插入'), 'ok');
+  } catch (err) {
+    toast(cuT('Image upload failed', '图片上传失败') + (err && err.message ? ' · ' + err.message : ''), 'err');
+  }
+}
+// Table: ask for rows × cols and drop an inline-styled (class-free, so the
+// mini-app <rich-text> keeps the borders) editable grid; first row is <th>.
+function pdRteTable() {
+  pdRteSaveSel();
+  const spec = prompt(cuT('Table size — rows × columns (e.g. 3x3)', '表格大小 — 行 × 列(例如 3x3)'), '3x3');
+  if (!spec) return;
+  const nums = String(spec).toLowerCase().split(/[^0-9]+/).filter(Boolean).map(n => parseInt(n, 10));
+  let rows = Math.min(Math.max(nums[0] || 2, 1), 20);
+  let cols = Math.min(Math.max(nums[1] || 2, 1), 8);
+  const cell = tag => `<${tag} style="border:1px solid #d8d2c4;padding:6px 8px;min-width:48px;">&nbsp;</${tag}>`;
+  let html = '<table style="border-collapse:collapse;width:100%;margin:8px 0;font-size:inherit;">';
+  for (let r = 0; r < rows; r++) {
+    html += '<tr>';
+    for (let c = 0; c < cols; c++) html += cell(r === 0 ? 'th' : 'td');
+    html += '</tr>';
+  }
+  html += '</table><p><br></p>';
+  pdRteRestore();
+  document.execCommand('insertHTML', false, html);
+  pdRteSaveSel();
+}
 function pdRteFullscreen() {
   const wrap = document.getElementById('pd-desc-rich'); if (!wrap) return;
   const on = wrap.classList.toggle('pd-rte-fs');
