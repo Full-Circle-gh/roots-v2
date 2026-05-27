@@ -676,7 +676,12 @@
      narrow commercial sidebar (visibility, pricing, inventory, organization).
      Inputs fill their cell so short fields no longer float in empty space.
      (id+class beats .pu-editor-body) */
-  #pd-editor .pu-editor-body { grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+  /* The body is the scroll window: fill the height left between the pinned
+     head and foot (flex:1 + min-height:0 lets it shrink below content so the
+     base .pu-editor-body overflow-y:auto actually engages) instead of growing
+     to content height and pushing the foot off-screen. */
+  #pd-editor .pu-editor-body { grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; flex: 1 1 auto; min-height: 0; }
+  #pd-editor > .pu-editor-head, #pd-editor > .pu-editor-foot { flex: none; }
   @media (max-width: 880px) { #pd-editor .pu-editor-body { grid-template-columns: 1fr; } }
   #pd-editor .pd-main { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
   #pd-editor .pd-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
