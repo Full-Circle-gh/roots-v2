@@ -5185,7 +5185,7 @@ router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, 
   let members = [];
   if (p.variant_group_id) {
     members = tdb().prepare(
-      `SELECT id, name_en, name_cn, sku, variant_label, sell_price AS price,
+      `SELECT id, name_en, name_cn, sku, variant_label, weight AS size, sell_price AS price,
               stock_qty AS stock, image_data, image_url, is_published
          FROM products
         WHERE variant_group_id = ? AND COALESCE(is_active, 1) = 1

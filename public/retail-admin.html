@@ -688,7 +688,10 @@
   .va-list { display: flex; flex-direction: column; gap: 8px; }
   .va-row { display: flex; align-items: center; gap: 10px; }
   .va-label { width: 120px; flex: none; }
-  .va-name { flex: 1; min-width: 0; font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .va-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .va-name { min-width: 0; font-size: 12px; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .va-facts { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .va-open { flex: none; }
   .va-x { flex: none; border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 14px; padding: 2px 6px; line-height: 1; }
   .va-x:hover { color: var(--brass); }
   .va-actions { display: flex; gap: 8px; margin-top: 12px; }
@@ -14929,9 +14932,9 @@ async function vaLoad(id) {
   try {
     const j = await api('/api/retail-admin/products/' + id + '/variants');
     const members = (j.data && j.data.members) || [];
-    const self = { id, label: p.variant_label || '', name: _vaName(p), self: true };
+    const self = { id, label: p.variant_label || '', name: _vaName(p), sku: p.sku || '', size: p.size || '', price: p.sell_price, stock: p.stock_qty, published: p.is_published, self: true };
     VA_MEMBERS = members.length
-      ? members.map(m => ({ id: m.id, label: m.variant_label || '', name: _vaName(m), self: m.id === id }))
+      ? members.map(m => ({ id: m.id, label: m.variant_label || '', name: _vaName(m), sku: m.sku || '', size: m.size || '', price: m.price, stock: m.stock, published: m.is_published, self: m.id === id }))
       : [self];
     if (!VA_MEMBERS.some(v => v.self)) VA_MEMBERS.unshift(self);
   } catch { VA_MEMBERS = [{ id, label: p.variant_label || '', name: _vaName(p), self: true }]; }
@@ -14941,9 +14944,13 @@ function vaRender() {
   const box = document.getElementById('pd-variants'); if (!box || VA_ID == null) return;
   const rows = VA_MEMBERS.map(v => `
     <div class="va-row">
-      <input class="va-label" type="text" value="${escapeAttr(v.label)}" placeholder="${cuT('Label (e.g. Large)', '标签(如 大)')}" oninput="vaLabel(${v.id}, this.value)">
-      <span class="va-name" title="${escapeAttr(v.name)}">${escapeHtml(v.name)}${v.self ? cuT(' · this', ' · 本产品') : ''}</span>
-      ${v.self ? '' : `<button type="button" class="va-x" title="${cuT('Remove', '移除')}" onclick="vaRemove(${v.id})">✕</button>`}
+      <input class="va-label" type="text" value="${escapeAttr(v.label)}" placeholder="${cuT('Label (e.g. 500g)', '标签(如 500克)')}" oninput="vaLabel(${v.id}, this.value)">
+      <div class="va-meta">
+        <span class="va-name" title="${escapeAttr(v.name)}">${escapeHtml(v.name)}${v.self ? cuT(' · this', ' · 本产品') : ''}</span>
+        <span class="va-facts">${vaFacts(v)}</span>
+      </div>
+      ${v.self ? '' : `<button type="button" class="btn btn-sm va-open" onclick="pdOpen(${v.id})" title="${cuT('Open this variant to edit its price / size / SKU', '打开此变体以编辑价格 / 规格 / 货号')}">${cuT('Open', '打开')}</button>`}
+      ${v.self ? '' : `<button type="button" class="va-x" title="${cuT('Remove from group', '移出此组')}" onclick="vaRemove(${v.id})">✕</button>`}
     </div>`).join('');
   const picker = VA_PICKING ? `
     <input id="va-search" class="va-search" type="text" autocomplete="off" placeholder="${cuT('Search a product to add…', '搜索产品加入…')}" oninput="vaPickerList()">
@@ -14957,6 +14964,17 @@ function vaRender() {
       `<button type="button" class="btn btn-sm btn-primary" onclick="vaSave()">${cuT('Save variants', '保存规格')}</button>` +
     `</div>` + picker;
   if (VA_PICKING) { const s = document.getElementById('va-search'); if (s) s.focus(); vaPickerList(); }
+}
+// At-a-glance facts for a variant row (SKU · size · price · stock · hidden).
+// These are read-only here — edit them by opening that variant's own product.
+function vaFacts(v) {
+  const parts = [];
+  if (v.sku) parts.push(escapeHtml(v.sku));
+  if (v.size) parts.push(escapeHtml(v.size));
+  if (v.price != null && v.price !== '') parts.push('¥' + Number(v.price).toFixed(2));
+  if (v.stock != null && v.stock !== '') parts.push(cuT(v.stock + ' in stock', '库存 ' + v.stock));
+  if (v.published === 0) parts.push(cuT('hidden', '未上架'));
+  return parts.join(' · ');
 }
 function vaLabel(id, val) { const v = VA_MEMBERS.find(x => x.id === id); if (v) v.label = val; }
 function vaRemove(id) { VA_MEMBERS = VA_MEMBERS.filter(v => v.self || v.id !== id); vaRender(); }
