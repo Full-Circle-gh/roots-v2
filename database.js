@@ -74,6 +74,9 @@ addColumn('products', 'compare_at_price', 'REAL');
 // element [0] mirrors image_data (the primary, used by shop cards/orders).
 // Detail-only: kept OUT of list SELECTs so the shop-grid payload stays small.
 addColumn('products', 'images', 'TEXT');
+// Description rendering mode for the mini-app: 'plain' (text, ## headings) or
+// 'rich' (formatted HTML authored in the editor, rendered via <rich-text>).
+addColumn('products', 'description_format', "TEXT DEFAULT 'plain'");
 // Barcode for the tablet POS (market vendors scan products in with a
 // keyboard-wedge gun). Stored as text — keeps leading zeros (EAN-13 etc.)
 // and lets us hold non-numeric internal codes too. Indexed for instant

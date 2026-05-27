@@ -104,6 +104,7 @@
       <product-blocks wx:if="{{descriptionBlocks.length}}"
                       blocks="{{descriptionBlocks}}"
                       lang="{{lang}}"/>
+      <rich-text wx:elif="{{descHtml}}" class="description-rich" nodes="{{descHtml}}"></rich-text>
       <block wx:elif="{{descriptionParts.length}}">
         <block wx:for="{{descriptionParts}}" wx:key="text">
           <view wx:if="{{item.kind === 'heading'}}" class="desc-heading f-bear">{{item.text}}</view>

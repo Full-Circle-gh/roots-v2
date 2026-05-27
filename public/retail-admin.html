@@ -692,6 +692,20 @@
   .va-name { min-width: 0; font-size: 12px; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .va-facts { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .va-open { flex: none; }
+  /* Description editor — Plain/Formatted toggle, EN|CN side-by-side, rich toolbar. */
+  .pd-desc-modebar { display: inline-flex; gap: 4px; margin-left: 10px; vertical-align: middle; }
+  .pd-mode-btn { font-size: 11px; padding: 3px 10px; border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-2); border-radius: 6px; cursor: pointer; font-weight: 500; }
+  .pd-mode-btn.active { background: var(--brass, #B08D4A); color: #fff; border-color: var(--brass, #B08D4A); }
+  .pd-desc-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .pd-desc-cols { grid-template-columns: 1fr; } }
+  .pd-desc-lang { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin-bottom: 4px; font-family: var(--f-mono); }
+  .pd-rte-toolbar { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .pd-rte-toolbar button { min-width: 30px; height: 28px; padding: 0 8px; border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-1); border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1; }
+  .pd-rte-toolbar button:hover { border-color: var(--brass, #B08D4A); }
+  .pd-rte { min-height: 140px; max-height: 340px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; color: var(--text-1); background: var(--bg-app); }
+  .pd-rte:focus { outline: none; border-color: var(--brass, #B08D4A); }
+  .pd-rte h3 { font-size: 15px; margin: 6px 0; }
+  .pd-rte ul, .pd-rte ol { padding-left: 20px; margin: 6px 0; }
   .va-x { flex: none; border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 14px; padding: 2px 6px; line-height: 1; }
   .va-x:hover { color: var(--brass); }
   .va-actions { display: flex; gap: 8px; margin-top: 12px; }
@@ -4508,8 +4522,37 @@
               <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-land" style="width:15px;height:15px;"> 🚚 Land · 陆运</label>
             </div>
           </div>
-          <div class="field" style="grid-column:1/-1;"><label class="stacked">Description EN · 描述(英文)</label><textarea id="pd-desc-en" rows="2"></textarea></div>
-          <div class="field" style="grid-column:1/-1;"><label class="stacked">Description 中文</label><textarea id="pd-desc-cn" rows="2"></textarea></div>
+          <div class="field" style="grid-column:1/-1;">
+            <label class="stacked">Description · 描述
+              <span class="pd-desc-modebar">
+                <button type="button" class="pd-mode-btn" data-mode="plain" onclick="pdDescMode('plain')">Plain · 纯文本</button>
+                <button type="button" class="pd-mode-btn" data-mode="rich" onclick="pdDescMode('rich')">Formatted · 富文本</button>
+              </span>
+              <span class="muted" style="font-weight:400;font-size:11px;margin-left:8px;">…or design a full page with "Edit page design" below. · 或用下方“编辑产品页”做整页设计。</span>
+            </label>
+            <!-- Plain text mode — English | 中文 side by side -->
+            <div id="pd-desc-plain" class="pd-desc-cols">
+              <div><div class="pd-desc-lang">English</div><textarea id="pd-desc-en" rows="6"></textarea></div>
+              <div><div class="pd-desc-lang">中文</div><textarea id="pd-desc-cn" rows="6"></textarea></div>
+            </div>
+            <!-- Formatted mode — toolbar + English | 中文 side by side -->
+            <div id="pd-desc-rich" style="display:none;">
+              <div class="pd-rte-toolbar">
+                <button type="button" title="Bold · 加粗"        onmousedown="return false" onclick="pdRte('bold')"><b>B</b></button>
+                <button type="button" title="Italic · 斜体"      onmousedown="return false" onclick="pdRte('italic')"><i>I</i></button>
+                <button type="button" title="Heading · 标题"     onmousedown="return false" onclick="pdRte('formatBlock','h3')">H</button>
+                <button type="button" title="Bulleted list · 项目符号" onmousedown="return false" onclick="pdRte('insertUnorderedList')">•</button>
+                <button type="button" title="Numbered list · 编号" onmousedown="return false" onclick="pdRte('insertOrderedList')">1.</button>
+                <button type="button" title="Link · 链接"        onmousedown="return false" onclick="pdRteLink()">🔗</button>
+                <button type="button" title="Clear formatting · 清除格式" onmousedown="return false" onclick="pdRte('removeFormat')">⌫</button>
+              </div>
+              <div class="pd-desc-cols">
+                <div><div class="pd-desc-lang">English</div><div id="pd-rte-en" class="pd-rte" contenteditable="true"></div></div>
+                <div><div class="pd-desc-lang">中文</div><div id="pd-rte-cn" class="pd-rte" contenteditable="true"></div></div>
+              </div>
+              <div class="muted" style="font-size:11px;margin-top:6px;">Supported on the mini-app: bold, italic, headings, lists, links. · 小程序支持:加粗、斜体、标题、列表、链接。</div>
+            </div>
+          </div>
           <div class="field" style="grid-column:1/-1;">
             <label class="stacked">Photos · 图片 <span class="muted" style="font-weight:400;font-size:11px;">— first photo is the main one; drag to reorder · 第一张为主图,可拖动排序</span></label>
             <div id="pd-gallery" class="pd-gallery"></div>
@@ -14873,6 +14916,20 @@ function pdOpen(id) {
   set('pd-compare', p && p.compare_at_price ? p.compare_at_price : '');
   set('pd-sku', p && p.sku); set('pd-category', p && p.category); set('pd-weight', p && p.size);
   set('pd-desc-en', p && p.description_en); set('pd-desc-cn', p && p.description_cn);
+  // Description mode (plain vs formatted). For a rich product the HTML goes into
+  // the contenteditable boxes; the plain textareas hold a stripped mirror so
+  // switching to Plain never shows raw tags.
+  _pdDescMode = (p && p.description_format === 'rich') ? 'rich' : 'plain';
+  if (_pdDescMode === 'rich') {
+    document.getElementById('pd-rte-en').innerHTML = (p && p.description_en) || '';
+    document.getElementById('pd-rte-cn').innerHTML = (p && p.description_cn) || '';
+    document.getElementById('pd-desc-en').value = pdHtmlToPlain((p && p.description_en) || '');
+    document.getElementById('pd-desc-cn').value = pdHtmlToPlain((p && p.description_cn) || '');
+  } else {
+    document.getElementById('pd-rte-en').innerHTML = '';
+    document.getElementById('pd-rte-cn').innerHTML = '';
+  }
+  pdApplyDescMode();
   const modes = String((p && p.ship_modes) || 'air,land').toLowerCase();
   document.getElementById('pd-ship-air').checked  = !p || modes.includes('air');
   document.getElementById('pd-ship-land').checked = !p || modes.includes('land');
@@ -15082,12 +15139,47 @@ function pdOpenPageDesign() {
   const id = document.getElementById('pd-id').value;
   if (id) window.open('/product-editor?id=' + encodeURIComponent(id), '_blank', 'noopener');
 }
+// ── Description editor (plain text ⇄ formatted rich-text) ────────────────────
+let _pdDescMode = 'plain';
+function pdApplyDescMode() {
+  const m = _pdDescMode;
+  const pl = document.getElementById('pd-desc-plain'); const ri = document.getElementById('pd-desc-rich');
+  if (pl) pl.style.display = m === 'plain' ? '' : 'none';
+  if (ri) ri.style.display = m === 'rich' ? '' : 'none';
+  document.querySelectorAll('.pd-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+}
+function pdDescMode(m) {
+  m = (m === 'rich') ? 'rich' : 'plain';
+  if (m === _pdDescMode) { pdApplyDescMode(); return; }
+  // Carry content across when switching modes so nothing is lost.
+  if (m === 'rich') {
+    document.getElementById('pd-rte-en').innerHTML = pdPlainToHtml(document.getElementById('pd-desc-en').value);
+    document.getElementById('pd-rte-cn').innerHTML = pdPlainToHtml(document.getElementById('pd-desc-cn').value);
+  } else {
+    document.getElementById('pd-desc-en').value = pdHtmlToPlain(document.getElementById('pd-rte-en').innerHTML);
+    document.getElementById('pd-desc-cn').value = pdHtmlToPlain(document.getElementById('pd-rte-cn').innerHTML);
+  }
+  _pdDescMode = m;
+  pdApplyDescMode();
+}
+function pdRte(cmd, val) { try { document.execCommand(cmd, false, val || null); } catch (e) {} }
+function pdRteLink() { const url = prompt('Link URL · 链接地址:'); if (url) pdRte('createLink', url); }
+function pdPlainToHtml(t) { return escapeHtml(String(t || '')).replace(/\n/g, '<br>'); }
+function pdHtmlToPlain(h) { const d = document.createElement('div'); d.innerHTML = h || ''; return (d.innerText || '').trim(); }
+// A visually-empty rich box (just <br>/&nbsp;) saves as '' rather than junk markup.
+function pdRteClean(html) { const d = document.createElement('div'); d.innerHTML = html || ''; return (d.innerText || '').trim() ? (html || '').trim() : ''; }
 async function pdSave() {
   const id = document.getElementById('pd-id').value;
   const g = el => (document.getElementById(el) && document.getElementById(el).value || '').trim();
   const modes = [];
   if (document.getElementById('pd-ship-air').checked)  modes.push('air');
   if (document.getElementById('pd-ship-land').checked) modes.push('land');
+  // Description: formatted mode sends the (cleaned) HTML from the rich boxes;
+  // plain mode sends the textarea text. description_format tells the mini-app
+  // how to render it.
+  const descFormat = _pdDescMode === 'rich' ? 'rich' : 'plain';
+  const descEn = descFormat === 'rich' ? pdRteClean(document.getElementById('pd-rte-en').innerHTML) : g('pd-desc-en');
+  const descCn = descFormat === 'rich' ? pdRteClean(document.getElementById('pd-rte-cn').innerHTML) : g('pd-desc-cn');
   const body = {
     name_en: g('pd-name-en'), name_cn: g('pd-name-cn'),
     sku: g('pd-sku'), category: g('pd-category'), weight: g('pd-weight'),
@@ -15095,7 +15187,7 @@ async function pdSave() {
     compare_at_price: parseFloat(g('pd-compare')) || 0,
     stock_qty: parseInt(g('pd-stock'), 10) || 0,
     ship_modes: modes.join(',') || 'air,land',
-    description_en: g('pd-desc-en'), description_cn: g('pd-desc-cn'),
+    description_en: descEn, description_cn: descCn, description_format: descFormat,
     is_published: document.getElementById('pd-published').checked ? 1 : 0,
   };
   if (_pdGalleryDirty) body.images = _pdGallery;  // gallery drives image_data (first = main)

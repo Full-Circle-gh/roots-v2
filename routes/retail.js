@@ -113,6 +113,22 @@ function parseJsonArray(s) {
   catch { return []; }
 }
 
+// Light sanitiser for operator-authored rich description HTML. WeChat's
+// <rich-text> already ignores scripts/handlers, but we strip them server-side
+// too so stored HTML is safe if ever rendered as innerHTML in the admin.
+function sanitizeRichHtml(html) {
+  if (typeof html !== 'string' || !html) return null;
+  let s = html;
+  s = s.replace(/<\s*(script|style|iframe|object|embed)\b[\s\S]*?<\s*\/\s*\1\s*>/gi, '');
+  s = s.replace(/<\s*(script|style|iframe|object|embed)\b[^>]*>/gi, '');
+  s = s.replace(/\son\w+\s*=\s*"[^"]*"/gi, '');
+  s = s.replace(/\son\w+\s*=\s*'[^']*'/gi, '');
+  s = s.replace(/\son\w+\s*=\s*[^\s>]+/gi, '');
+  s = s.replace(/(href|src)\s*=\s*("|')\s*javascript:[^"']*\2/gi, '$1=$2#$2');
+  s = s.trim();
+  return s || null;
+}
+
 // Public product categories — same data as /api/categories/product (which
 // is staff-only) but unauthenticated so the mini app + public preview can
 // render category-tile labels without holding a session token.
@@ -186,7 +202,7 @@ const RETAIL_PRODUCT_COLS = `
     p.stock_qty
   ) AS stock,
   p.sort_order AS display_order,
-  p.description_en, p.description_cn,
+  p.description_en, p.description_cn, p.description_format,
   p.free_of, p.tags, p.image_data, p.image_url,
   p.nutrition,
   p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,
@@ -4809,8 +4825,17 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // ── Core commercial fields (the standalone Mini App Backend product page) ──
   // name_en is NOT NULL — never blank it; fall back to the existing value.
   if ('name_en' in body) { sets.push('name_en = ?'); params.push((body.name_en || '').trim() || existing.name_en); }
+  if ('description_format' in body) {
+    sets.push('description_format = ?'); params.push(body.description_format === 'rich' ? 'rich' : 'plain');
+  }
+  const richDesc = body.description_format === 'rich';
   for (const k of ['name_cn', 'sku', 'category', 'weight', 'description_en', 'description_cn', 'image_data', 'image_url']) {
-    if (k in body) { sets.push(`${k} = ?`); params.push((body[k] == null || body[k] === '') ? null : body[k]); }
+    if (k in body) {
+      let val = (body[k] == null || body[k] === '') ? null : body[k];
+      // Sanitise formatted description HTML; plain descriptions stored as-is.
+      if (val && richDesc && (k === 'description_en' || k === 'description_cn')) val = sanitizeRichHtml(val);
+      sets.push(`${k} = ?`); params.push(val);
+    }
   }
   if ('sell_price' in body) { sets.push('sell_price = ?'); params.push(Math.max(0, parseFloat(body.sell_price) || 0)); }
   if ('compare_at_price' in body) {
@@ -4849,7 +4874,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // and re-open the editor with fresh data.
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
-            description_en, description_cn, image_data, image_url, is_published, sort_order,
+            description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM products WHERE id = ?`
@@ -4881,13 +4906,16 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   // Gallery (max 8); primary image_data mirrors the first photo.
   const gallery = (Array.isArray(b.images) ? b.images : []).filter(s => typeof s === 'string' && s).slice(0, 8);
   const primaryImg = gallery.length ? gallery[0] : (b.image_data || null);
+  const descFormat = b.description_format === 'rich' ? 'rich' : 'plain';
+  const descEn = descFormat === 'rich' ? sanitizeRichHtml(b.description_en) : ((b.description_en || '').trim() || null);
+  const descCn = descFormat === 'rich' ? sanitizeRichHtml(b.description_cn) : ((b.description_cn || '').trim() || null);
   let info;
   try {
     info = tdb().prepare(
       `INSERT INTO products
          (name_en, name_cn, sku, category, weight, sell_price, compare_at_price, stock_qty, ship_modes,
-          description_en, description_cn, image_data, images, is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+          description_en, description_cn, description_format, image_data, images, is_published, is_active, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       name_en || name_cn, name_cn || null,
       (b.sku || '').trim() || null, (b.category || '').trim() || null, (b.weight || '').trim() || null,
@@ -4895,7 +4923,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
       (() => { const v = parseFloat(b.compare_at_price); return Number.isFinite(v) && v > 0 ? v : null; })(),
       Math.max(0, parseInt(b.stock_qty, 10) || 0),
       ship.length ? ship.join(',') : 'air,land',
-      (b.description_en || '').trim() || null, (b.description_cn || '').trim() || null,
+      descEn, descCn, descFormat,
       primaryImg, gallery.length ? JSON.stringify(gallery) : null, b.is_published ? 1 : 0
     );
   } catch (e) {
@@ -4906,7 +4934,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   logActivity(req.user.id, req.user.username, 'create', 'product_retail', id, { name: name_en || name_cn }, req.ip);
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
-            description_en, description_cn, image_data, image_url, is_published, sort_order,
+            description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM products WHERE id = ?`
@@ -5125,7 +5153,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   let sql = `SELECT id, name_en, name_cn, sku, category, weight AS size,
                     sell_price, compare_at_price, stock_qty, ship_modes, image_data, image_url,
                     is_published, sort_order,
-                    description_en, description_cn,
+                    description_en, description_cn, description_format,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
                     description_blocks, nutrition,
                     variant_group_id, variant_label,

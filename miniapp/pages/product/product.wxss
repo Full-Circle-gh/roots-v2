@@ -275,6 +275,14 @@
   100% { box-shadow: 0 0 0 0 rgba(123, 189, 59, 0); }
 }
 
+/* Formatted (rich-text) description — authored in the backend editor. */
+.description-rich {
+  display: block;
+  margin-top: 16rpx;
+  font-size: calc(28rpx * var(--font-scale));
+  line-height: 1.6;
+  color: var(--ink);
+}
 .description {
   margin-top: 16rpx;
   font-size: calc(28rpx * var(--font-scale));

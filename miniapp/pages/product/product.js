@@ -104,6 +104,7 @@ Page({
     flashWas: '',
     compareAtText: '',
     images: [],
+    descHtml: '',
     flashOff: '',
     flashEnds: '',
     flashCountdown: null,  // { d, h, m, s } padded strings; null when not on flash or ended
@@ -458,6 +459,10 @@ Page({
     // paragraph so the existing `white-space: pre-line` rendering still
     // honours single newlines for line breaks inside a section.
     const rawDesc = lang.pick(p.description_en, p.description_cn, L) || '';
+    // Formatted description — when the office authored rich HTML, render it via
+    // <rich-text>; otherwise fall back to the plain ## parsed parts below.
+    const isRichDesc = p.description_format === 'rich' && !!rawDesc;
+    const descHtml = isRichDesc ? rawDesc : '';
     const descParts = [];
     let buf = [];
     const flush = () => {
@@ -486,7 +491,8 @@ Page({
       flashEnds,
       compareAtText,
       description: rawDesc,
-      descriptionParts: descParts,
+      descHtml,
+      descriptionParts: isRichDesc ? [] : descParts,
       // Block-based body wins when present; legacy descParts only render
       // when the office hasn't migrated this product to blocks yet.
       descriptionBlocks: Array.isArray(p.description_blocks) ? p.description_blocks : [],
