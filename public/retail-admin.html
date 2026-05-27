@@ -724,14 +724,23 @@
      size just to set its stock. The size you opened is read-only here (edit it
      in the form); sibling sizes are editable inline; ✕ deletes the size. */
   .va-table { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
-  .va-row { display: grid; grid-template-columns: minmax(0,1fr) 92px 70px 58px 40px 22px; gap: 8px; align-items: center; }
+  /* grip · name · sku · ¥ · stock · show · ✕ · slack — name is capped so it
+     doesn't sprawl; the trailing slack track absorbs leftover width. */
+  .va-row { display: grid; grid-template-columns: 20px minmax(96px,190px) 92px 64px 56px 38px 22px minmax(0,1fr); gap: 8px; align-items: center; }
   .va-row-head span { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-4); font-family: var(--f-mono); }
   .va-row-head .va-num { text-align: right; }
+  .va-drag { cursor: grab; color: var(--text-4); text-align: center; user-select: none; font-size: 13px; line-height: 1; }
+  .va-drag:active { cursor: grabbing; }
+  .va-row.va-drop-before { box-shadow: inset 0 2px 0 var(--brass); }
+  .va-row.va-drop-after  { box-shadow: inset 0 -2px 0 var(--brass); }
   .va-label { width: 100%; box-sizing: border-box; }
   .va-num { width: 100%; box-sizing: border-box; text-align: right; font-variant-numeric: tabular-nums; }
   .va-ro { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; }
   .va-show { display: flex; justify-content: center; }
   .va-self { color: var(--brass); font-size: 12px; text-align: center; cursor: help; }
+  /* Out-of-stock size — faint row tint + red stock cell so it stands out. */
+  .va-row.va-oos { background: rgba(182,86,86,.06); border-radius: 6px; }
+  .va-row.va-oos .va-stk { color: var(--danger); border-color: rgba(182,86,86,.5); }
   .va-link { background: none; border: none; color: var(--text-3); text-decoration: underline; cursor: pointer; font-size: 11px; padding: 0 2px; }
   .va-link:hover { color: var(--text-1); }
   /* Description editor — Classic (rich) editor + "Product editor" launch, EN|CN side-by-side. */
@@ -879,6 +888,7 @@
   .pa-pill-draft    { background: rgba(176, 141, 74, .15); color: #B08D4A;
                       border: 1px solid rgba(176, 141, 74, .30); }
   .pa-pill-variants { background: rgba(18, 22, 26, .60); color: #E8E5DC; }          /* Dark chip — "N sizes" on a collapsed variant family */
+  .pa-pill-oos      { background: rgba(182, 86, 86, .92); color: #fff; }            /* Red chip — a live size is out of stock */
 
   /* Empty state */
   .pa-empty {
@@ -15054,12 +15064,21 @@ function paRender() {
     const variantPill = u.group
       ? `<span class="pa-pill pa-pill-variants" title="${cuT('Sizes of one product · 同一产品的多个规格', 'Sizes of one product · 同一产品的多个规格')}">${u.members.length} ${cuT('sizes', '规格')}</span>`
       : '';
+    // A live (published) size with no stock — flag it so a sold-out size is
+    // visible from the grid without opening the product.
+    const oosCount = u.group
+      ? u.members.filter(m => m.is_published === 1 && Number(m.stock_qty) <= 0).length
+      : ((p.is_published === 1 && Number(p.stock_qty) <= 0) ? 1 : 0);
+    const oosPill = oosCount
+      ? `<span class="pa-pill pa-pill-oos" title="${cuT('A live size is out of stock · 有上架规格缺货', 'A live size is out of stock · 有上架规格缺货')}">${u.group ? oosCount + ' ' + cuT('out', '缺货') : cuT('Out of stock', '缺货')}</span>`
+      : '';
     return `
       <div class="pa-card ${designed ? 'is-designed' : 'is-plain'}${pub ? '' : ' is-draft'}" onclick="paOpenEdit(${p.id})">
         <button class="pa-dup" type="button" title="Duplicate · 复制" onclick="event.stopPropagation(); paDuplicate(${p.id})">⧉</button>
         <div class="pa-card-img">
           ${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : `<div class="pa-card-img-empty">${PA_ICON_BROKEN}</div>`}
           <div class="pa-card-pills">
+            ${oosPill}
             ${variantPill}
             ${designed
               ? `<span class="pa-pill pa-pill-designed" title="Designer sections authored · 已配置设计板块">${PA_ICON_SPARKLE}Designed</span>`
@@ -15185,26 +15204,29 @@ async function vaLoad(id) {
 }
 function vaRender() {
   const box = document.getElementById('pd-variants'); if (!box || VA_ID == null) return;
-  const head = `<div class="va-row va-row-head"><span>${cuT('Name', '名称')}</span>` +
+  const head = `<div class="va-row va-row-head"><span></span><span>${cuT('Name', '名称')}</span>` +
     `<span>${cuT('SKU', '货号')}</span>` +
     `<span class="va-num">¥</span><span class="va-num">${cuT('Stock', '库存')}</span>` +
     `<span style="text-align:center">${cuT('Show', '上架')}</span><span></span></div>`;
-  const rows = VA_MEMBERS.map(v => {
+  const rows = VA_MEMBERS.map((v, i) => {
     const price = (v.price != null && v.price !== '') ? Number(v.price) : '';
     const stock = (v.stock != null && v.stock !== '') ? v.stock : '';
+    const oos = stock !== '' && Number(stock) <= 0;
+    const rowOpen = `<div class="va-row${oos ? ' va-oos' : ''}" draggable="false" ondragover="vaDragOver(event, ${i})" ondragleave="vaDragLeave(event)" ondrop="vaDrop(event, ${i})" ondragend="vaDragEnd()">`;
+    const grip = `<span class="va-drag" draggable="true" ondragstart="vaDragStart(event, ${i})" title="${cuT('Drag to reorder', '拖动以排序')}">⠿</span>`;
     const label = `<input class="va-label" type="text" value="${escapeAttr(v.label)}" placeholder="${cuT('e.g. 500g', '如 500克')}" title="${escapeAttr(v.name)}" oninput="vaLabel(${v.id}, this.value)">`;
     if (v.self) {
-      return `<div class="va-row">${label}` +
+      return rowOpen + grip + label +
         `<span class="va-ro" style="text-align:left">${v.sku ? escapeHtml(v.sku) : '—'}</span>` +
         `<span class="va-ro">${price === '' ? '—' : price.toFixed(2)}</span>` +
-        `<span class="va-ro">${stock === '' ? '—' : escapeHtml(String(stock))}</span>` +
+        `<span class="va-ro va-stk">${stock === '' ? '—' : escapeHtml(String(stock))}</span>` +
         `<span class="va-ro" style="text-align:center">${v.published === 0 ? '—' : '✓'}</span>` +
         `<span class="va-self" title="${cuT('The size you’re editing in the form above — set its name, SKU, price & stock there.', '你正在上方表单中编辑的规格 — 名称、货号、价格、库存在那里设置。')}">●</span></div>`;
     }
-    return `<div class="va-row">${label}` +
+    return rowOpen + grip + label +
       `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaField(${v.id}, 'sku', this.value)">` +
       `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaField(${v.id}, 'price', this.value)">` +
-      `<input class="va-num" type="number" min="0" step="1" value="${stock}" placeholder="0" oninput="vaField(${v.id}, 'stock', this.value)">` +
+      `<input class="va-num va-stk" type="number" min="0" step="1" value="${stock}" placeholder="0" oninput="vaStockInput(${v.id}, this)">` +
       `<span class="va-show"><input type="checkbox" ${v.published === 0 ? '' : 'checked'} title="${cuT('Show this size in the shop', '在店面显示此规格')}" onchange="vaField(${v.id}, 'published', this.checked ? 1 : 0)"></span>` +
       `<button type="button" class="va-x" title="${cuT('Delete this size', '删除此规格')}" onclick="vaRemove(${v.id})">✕</button></div>`;
   }).join('');
@@ -15213,7 +15235,7 @@ function vaRender() {
     <div id="va-picklist" class="va-picklist"></div>` : '';
   box.innerHTML =
     `<div class="pd-var-head">${cuT('Sizes', '规格')}</div>` +
-    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT('Sell this product in several sizes. Each size has its own name, SKU, price & stock — set them right here.', '以多种规格出售本产品。每种规格有独立的名称、货号、价格与库存,直接在此设置。')}</div>` +
+    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT('Sell this product in several sizes. Each has its own name, SKU, price & stock. Drag ⠿ to set the order shoppers see.', '以多种规格出售本产品。每种规格有独立的名称、货号、价格与库存。拖动 ⠿ 可调整顾客看到的顺序。')}</div>` +
     `<div class="va-table">${head}${rows}</div>` +
     `<div class="va-actions">` +
       `<button type="button" class="btn btn-sm" onclick="vaAddSize()">${cuT('+ Add size', '+ 新增规格')}</button>` +
@@ -15232,6 +15254,34 @@ function vaField(id, key, val) {
   else if (key === 'published') v.published = val ? 1 : 0;
   v._dirty = true;
 }
+// Stock edits also re-tint the row (out-of-stock = red) live, without a full
+// re-render that would drop input focus.
+function vaStockInput(id, el) {
+  vaField(id, 'stock', el.value);
+  const row = el.closest('.va-row');
+  if (row) row.classList.toggle('va-oos', el.value !== '' && Number(el.value) <= 0);
+}
+// Drag-to-reorder the sizes. The row order = the front-end display order; it
+// rides the main Save (vaPersist sends members in array order → variant_sort).
+let VA_DRAG = null;
+function vaDragStart(e, i) { VA_DRAG = i; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(i)); } catch (_) {} }
+function vaDragOver(e, i) {
+  if (VA_DRAG == null || VA_DRAG === i) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  const row = e.currentTarget;
+  row.classList.toggle('va-drop-before', i < VA_DRAG);
+  row.classList.toggle('va-drop-after',  i > VA_DRAG);
+}
+function vaDragLeave(e) { e.currentTarget.classList.remove('va-drop-before', 'va-drop-after'); }
+function vaDrop(e, i) {
+  e.preventDefault();
+  const from = VA_DRAG; VA_DRAG = null;
+  if (from == null || from === i) { vaDragEnd(); return; }
+  const [moved] = VA_MEMBERS.splice(from, 1);
+  VA_MEMBERS.splice(i, 0, moved);
+  vaRender();
+}
+function vaDragEnd() { VA_DRAG = null; document.querySelectorAll('#pd-variants .va-row').forEach(r => r.classList.remove('va-drop-before', 'va-drop-after')); }
 // ✕ deletes the size for good (its product is removed, like the main Delete).
 // The opened size ("self") can't be deleted from here.
 async function vaRemove(id) {

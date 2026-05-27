@@ -65,6 +65,9 @@ try { db.prepare('CREATE INDEX IF NOT EXISTS idx_products_external_id ON product
 // what the UI shows in chips next to siblings.
 addColumn('products', 'variant_group_id', 'INTEGER');
 addColumn('products', 'variant_label',    'TEXT');
+// Operator-chosen display order of siblings within a group (drag-to-reorder in
+// the product editor). Lower = shown first; ties fall back to label/id.
+addColumn('products', 'variant_sort',     'INTEGER DEFAULT 0');
 try { db.prepare('CREATE INDEX IF NOT EXISTS idx_products_variant_group ON products(variant_group_id)').run(); } catch {}
 // Storefront "compare-at" / was-price (划线价). When set and higher than
 // sell_price, the mini-app shows it struck through next to the live price.

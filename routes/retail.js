@@ -610,7 +610,7 @@ router.get('/api/retail/products/:id', (req, res) => {
               ) AS stock
          FROM products p
         WHERE p.variant_group_id = ? AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
-        ORDER BY COALESCE(p.variant_label, p.name_en), p.id`
+        ORDER BY COALESCE(p.variant_sort, 0), COALESCE(p.variant_label, p.name_en), p.id`
     ).all(product.variant_group_id).map(v => flashsales.decorateProduct(v, nowMs));
   } else {
     product.variants = [];
@@ -5340,7 +5340,7 @@ router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, 
               stock_qty AS stock, image_data, image_url, is_published
          FROM products
         WHERE variant_group_id = ? AND COALESCE(is_active, 1) = 1
-        ORDER BY COALESCE(variant_label, name_en), id`
+        ORDER BY COALESCE(variant_sort, 0), COALESCE(variant_label, name_en), id`
     ).all(p.variant_group_id);
   }
   res.json({ success: true, data: { group_id: p.variant_group_id || null, members } });
@@ -5376,8 +5376,8 @@ router.put('/api/retail-admin/products/:id/variants', requireRetailAdmin, expres
         const ph = keep.map(() => '?').join(',');
         tdb().prepare(`UPDATE products SET variant_group_id=NULL, variant_label=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=? AND id NOT IN (${ph})`).run(prevGid, ...keep);
       }
-      const upd = tdb().prepare('UPDATE products SET variant_group_id=?, variant_label=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
-      for (const [mid, label] of desired) upd.run(groupId, label, mid);
+      const upd = tdb().prepare('UPDATE products SET variant_group_id=?, variant_label=?, variant_sort=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
+      desired.forEach(([mid, label], idx) => upd.run(groupId, label, idx, mid));
       return desired.length;
     })();
     res.json({ success: true, group_id: count >= 2 ? groupId : null, count });
