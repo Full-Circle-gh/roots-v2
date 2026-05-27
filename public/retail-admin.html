@@ -720,11 +720,11 @@
   }
   .pd-var-head { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); margin-bottom: 6px; }
   /* Sizes table — every size of a product on one inline-editable row
-     (label · price · stock · show), so the operator never has to open a size
-     just to set its stock. The size you opened is read-only here (edit it in
-     the form); sibling sizes are editable inline. */
+     (name · sku · price · stock · show), so the operator never has to open a
+     size just to set its stock. The size you opened is read-only here (edit it
+     in the form); sibling sizes are editable inline; ✕ deletes the size. */
   .va-table { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
-  .va-row { display: grid; grid-template-columns: minmax(0,1fr) 84px 72px 44px 24px; gap: 8px; align-items: center; }
+  .va-row { display: grid; grid-template-columns: minmax(0,1fr) 92px 70px 58px 40px 22px; gap: 8px; align-items: center; }
   .va-row-head span { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-4); font-family: var(--f-mono); }
   .va-row-head .va-num { text-align: right; }
   .va-label { width: 100%; box-sizing: border-box; }
@@ -15174,7 +15174,8 @@ async function vaLoad(id) {
 }
 function vaRender() {
   const box = document.getElementById('pd-variants'); if (!box || VA_ID == null) return;
-  const head = `<div class="va-row va-row-head"><span>${cuT('Size', '规格')}</span>` +
+  const head = `<div class="va-row va-row-head"><span>${cuT('Name', '名称')}</span>` +
+    `<span>${cuT('SKU', '货号')}</span>` +
     `<span class="va-num">¥</span><span class="va-num">${cuT('Stock', '库存')}</span>` +
     `<span style="text-align:center">${cuT('Show', '上架')}</span><span></span></div>`;
   const rows = VA_MEMBERS.map(v => {
@@ -15183,23 +15184,25 @@ function vaRender() {
     const label = `<input class="va-label" type="text" value="${escapeAttr(v.label)}" placeholder="${cuT('e.g. 500g', '如 500克')}" title="${escapeAttr(v.name)}" oninput="vaLabel(${v.id}, this.value)">`;
     if (v.self) {
       return `<div class="va-row">${label}` +
+        `<span class="va-ro" style="text-align:left">${v.sku ? escapeHtml(v.sku) : '—'}</span>` +
         `<span class="va-ro">${price === '' ? '—' : price.toFixed(2)}</span>` +
         `<span class="va-ro">${stock === '' ? '—' : escapeHtml(String(stock))}</span>` +
         `<span class="va-ro" style="text-align:center">${v.published === 0 ? '—' : '✓'}</span>` +
-        `<span class="va-self" title="${cuT('The size you’re editing in the form above — set its price, stock & SKU there.', '你正在上方表单中编辑的规格 — 价格、库存、货号在那里设置。')}">●</span></div>`;
+        `<span class="va-self" title="${cuT('The size you’re editing in the form above — set its name, SKU, price & stock there.', '你正在上方表单中编辑的规格 — 名称、货号、价格、库存在那里设置。')}">●</span></div>`;
     }
     return `<div class="va-row">${label}` +
+      `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaField(${v.id}, 'sku', this.value)">` +
       `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaField(${v.id}, 'price', this.value)">` +
       `<input class="va-num" type="number" min="0" step="1" value="${stock}" placeholder="0" oninput="vaField(${v.id}, 'stock', this.value)">` +
       `<span class="va-show"><input type="checkbox" ${v.published === 0 ? '' : 'checked'} title="${cuT('Show this size in the shop', '在店面显示此规格')}" onchange="vaField(${v.id}, 'published', this.checked ? 1 : 0)"></span>` +
-      `<button type="button" class="va-x" title="${cuT('Remove this size', '移除此规格')}" onclick="vaRemove(${v.id})">✕</button></div>`;
+      `<button type="button" class="va-x" title="${cuT('Delete this size', '删除此规格')}" onclick="vaRemove(${v.id})">✕</button></div>`;
   }).join('');
   const picker = VA_PICKING ? `
     <input id="va-search" class="va-search" type="text" autocomplete="off" placeholder="${cuT('Search a product to link…', '搜索产品以关联…')}" oninput="vaPickerList()">
     <div id="va-picklist" class="va-picklist"></div>` : '';
   box.innerHTML =
     `<div class="pd-var-head">${cuT('Sizes', '规格')}</div>` +
-    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT('Sell this product in several sizes. Each size has its own price & stock — set them right here.', '以多种规格出售本产品。每种规格有独立价格与库存,直接在此设置。')}</div>` +
+    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT('Sell this product in several sizes. Each size has its own name, SKU, price & stock — set them right here.', '以多种规格出售本产品。每种规格有独立的名称、货号、价格与库存,直接在此设置。')}</div>` +
     `<div class="va-table">${head}${rows}</div>` +
     `<div class="va-actions">` +
       `<button type="button" class="btn btn-sm" onclick="vaAddSize()">${cuT('+ Add size', '+ 新增规格')}</button>` +
@@ -15214,10 +15217,24 @@ function vaField(id, key, val) {
   const v = VA_MEMBERS.find(x => x.id === id); if (!v || v.self) return;
   if (key === 'price')      v.price = (val === '' ? '' : Math.max(0, parseFloat(val) || 0));
   else if (key === 'stock') v.stock = (val === '' ? '' : Math.max(0, parseInt(val, 10) || 0));
+  else if (key === 'sku')   v.sku = val;
   else if (key === 'published') v.published = val ? 1 : 0;
   v._dirty = true;
 }
-function vaRemove(id) { VA_MEMBERS = VA_MEMBERS.filter(v => v.self || v.id !== id); vaRender(); }
+// ✕ deletes the size for good (its product is removed, like the main Delete).
+// The opened size ("self") can't be deleted from here.
+async function vaRemove(id) {
+  const v = VA_MEMBERS.find(x => x.id === id); if (!v || v.self) return;
+  const nm = (v.label && v.label.trim()) || v.name || ('#' + id);
+  if (!confirm(cuT('Delete the size “', '删除规格“') + nm + cuT('”? This removes that product for good.', '”?将永久删除该产品。'))) return;
+  try {
+    await api('/api/retail-admin/products/' + id, { method: 'DELETE' });
+    VA_MEMBERS = VA_MEMBERS.filter(m => m.id !== id);
+    if (Array.isArray(PA_PRODUCTS)) PA_PRODUCTS = PA_PRODUCTS.filter(x => x.id !== id);
+    vaRender();
+    toast(cuT('Size deleted', '规格已删除'));
+  } catch (e) { toast(cuT('Delete failed: ', '删除失败:') + e.message, 'err'); }
+}
 // Add a new size: clone the current product (inherits photos/description/etc.,
 // blank SKU, 0 stock, hidden) and drop it straight into the list — no leaving
 // the editor. Price/stock/label are then set inline and saved with the product.
@@ -15230,7 +15247,7 @@ async function vaAddSize() {
     VA_MEMBERS.push({ id: d.id, label: d.variant_label || '', name: _vaName(d), sku: d.sku || '', size: d.size || '', price: d.sell_price, stock: d.stock_qty, published: d.is_published, self: false });
     vaRender();
     const last = document.querySelector('#pd-variants .va-row:last-child .va-label'); if (last) last.focus();
-    toast(cuT('Size added — set its price & stock, then Save.', '已添加规格 — 设置价格与库存后保存。'));
+    toast(cuT('Size added — set its name, SKU, price & stock, then Save.', '已添加规格 — 设置名称、货号、价格、库存后保存。'));
   } catch (e) { toast(cuT('Could not add size: ', '无法添加规格:') + e.message, 'err'); }
 }
 function vaTogglePicker() { VA_PICKING = !VA_PICKING; vaRender(); }
@@ -15274,9 +15291,17 @@ async function vaPersistSiblings() {
     const body = {};
     if (typeof v.stock !== 'undefined') body.stock_qty = (v.stock === '' || v.stock == null) ? 0 : v.stock;
     if (v.price !== '' && v.price != null) body.sell_price = v.price;
+    if (v.sku != null) body.sku = v.sku;
     if (v.published === 0 || v.published === 1) body.is_published = v.published;
     if (!Object.keys(body).length) { v._dirty = false; continue; }
-    const j = await api('/api/retail-admin/products/' + v.id, { method: 'PATCH', body });
+    let j;
+    try { j = await api('/api/retail-admin/products/' + v.id, { method: 'PATCH', body }); }
+    catch (e) {
+      if (String(e.message).includes('sku_taken')) {
+        throw new Error(cuT('SKU already in use — size “', '货号已被占用 — 规格“') + ((v.label && v.label.trim()) || v.name || ('#' + v.id)) + '”');
+      }
+      throw e;
+    }
     if (j && j.data && Array.isArray(PA_PRODUCTS)) {
       const i = PA_PRODUCTS.findIndex(x => x.id === v.id);
       if (i >= 0) PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...j.data };
