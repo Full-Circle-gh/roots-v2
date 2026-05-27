@@ -106,14 +106,19 @@ Page({
       city: '',
       district: '',
     },
-    // Bilingual delivery-area selector. Options come from the served-zone list
-    // (utils/zones) so the customer picks from areas we actually deliver to,
-    // labelled in their own language — WeChat's native region wheel is
-    // Chinese-only. The picked option writes canonical Chinese city/district
-    // onto `address` underneath, which is what the zone matcher needs.
-    areaOptions: [],   // [{ id, label, zone_type, province, city, district }]
-    areaIndex: 0,      // selected index into areaOptions (drives the wheel position)
-    areaLabel: '',     // localized label shown on the trigger
+    // Delivery-area selector. Splits by language:
+    //  • CN → WeChat's native region picker (province/city/district, always
+    //    current/complete, Chinese labels).
+    //  • EN → a bilingual city → district cascade from utils/zones (city list)
+    //    + /api/retail/districts. Both write canonical Chinese province/city/
+    //    district onto `address`, which is what the zone matcher needs.
+    areaLabel: '',        // localized summary shown on the trigger ("Guangzhou · Tianhe")
+    regionValue: [],      // CN native picker position [省, 市, 区]
+    cityOptions: [],      // EN: [{ label, name_cn, name_en }]
+    cityIndex: 0,
+    cityLabel: '',        // EN: selected city label (before district)
+    districtOptions: [],  // EN: [{ label, name_cn, name_en }] for the picked city
+    districtIndex: 0,
     note: '',
     needsCutlery: false,
     needsInvoice: false,
@@ -297,28 +302,88 @@ Page({
   async loadAreaOptions() {
     try {
       const list = await zones.loadZones();
-      this.setData({ areaOptions: zones.buildAreaOptions(list, this.data.lang) });
+      this.setData({ cityOptions: zones.cityOptions(list, this.data.lang) });
       this.syncAreaLabel();
     } catch (e) {
       console.warn('[checkout] loadAreaOptions failed:', e && e.message);
     }
   },
 
-  // Re-derive `areaLabel` + `areaIndex` from the current address. Used after
-  // any path that sets `address` (default load, picking a saved address,
-  // returning from /addresses). Falls back to the raw city/district text when
-  // the address isn't in a served zone (legacy / WeChat-imported outliers).
+  // Re-derive the trigger label (and CN picker position) from the current
+  // address. Used after any path that sets `address` (default load, picking a
+  // saved address, returning from /addresses). In EN we localize the city to
+  // English when it's a known catalogue city; the district stays as stored.
   syncAreaLabel() {
-    const opts = this.data.areaOptions || [];
-    const opt = zones.matchOption(opts, this.data.address);
-    if (opt) {
-      const idx = opts.findIndex(o => o.id === opt.id);
-      this.setData({ areaLabel: opt.label, areaIndex: idx < 0 ? 0 : idx });
-      return;
-    }
     const a = this.data.address || {};
-    const raw = [a.city, a.district].filter(Boolean).join(' · ');
-    this.setData({ areaLabel: raw, areaIndex: 0 });
+    let cityLabel = a.city || '';
+    if (this.data.lang !== 'cn') {
+      const m = (this.data.cityOptions || []).find(o => o.name_cn === a.city);
+      if (m) cityLabel = m.name_en;
+    }
+    const patch = {
+      cityLabel,
+      areaLabel: [cityLabel, a.district].filter(Boolean).join(' · '),
+    };
+    if (this.data.lang === 'cn' && a.province) {
+      patch.regionValue = [a.province, a.city, a.district].filter(Boolean);
+    }
+    this.setData(patch);
+  },
+
+  // CN — WeChat native region picker. value = [省, 市, 区] (Chinese). For the
+  // direct-administered municipalities the city column can come back as 市辖区;
+  // fold that onto the province so the zone matcher sees a real city.
+  onRegionChange(e) {
+    const v = e.detail.value || [];
+    let [province, city, district] = v;
+    if (city === '市辖区' || city === '县') city = province;
+    this.setData({
+      regionValue: v,
+      areaLabel: v.filter(Boolean).join(' · '),
+      'address.province': province || '',
+      'address.city': city || '',
+      'address.district': district || '',
+    });
+    this.refreshQuote();
+  },
+
+  // EN — city step. Writes the city, clears any prior district, then loads that
+  // city's districts for the second wheel. Province is left blank; the server
+  // backfills it from the city.
+  async onCityChange(e) {
+    const idx = Number(e.detail.value);
+    const c = (this.data.cityOptions || [])[idx];
+    if (!c) return;
+    this.setData({
+      cityIndex: idx,
+      cityLabel: c.label,
+      areaLabel: c.label,
+      'address.province': '',
+      'address.city': c.name_cn,
+      'address.district': '',
+      districtOptions: [],
+      districtIndex: 0,
+    });
+    try {
+      const dists = await zones.loadDistricts(c.name_cn);
+      this.setData({
+        districtOptions: dists.map(d => ({ label: d.name_en, name_cn: d.name_cn, name_en: d.name_en })),
+      });
+    } catch (e2) { console.warn('[checkout] loadDistricts failed:', e2 && e2.message); }
+    this.refreshQuote();
+  },
+
+  // EN — district step.
+  onDistrictChange(e) {
+    const idx = Number(e.detail.value);
+    const d = (this.data.districtOptions || [])[idx];
+    if (!d) return;
+    this.setData({
+      districtIndex: idx,
+      areaLabel: this.data.cityLabel + ' · ' + d.label,
+      'address.district': d.name_cn,
+    });
+    this.refreshQuote();
   },
 
   // Lightweight re-fetch used by onShow when the user navigates back from
@@ -1036,23 +1101,6 @@ Page({
     const field = e.currentTarget.dataset.field;
     this.setData({ ['address.' + field]: e.detail.value });
   },
-  // Delivery-area selector change — the customer picked one served zone from
-  // the localized list. Write the option's canonical Chinese city/district onto
-  // the address (what the zone matcher needs) and show its localized label.
-  // City/district drive the zone match, so re-quote on every pick.
-  onAreaChange(e) {
-    const idx = Number(e.detail.value);
-    const opt = (this.data.areaOptions || [])[idx];
-    if (!opt) return;
-    this.setData({
-      areaIndex: idx,
-      areaLabel: opt.label,
-      'address.province': opt.province,
-      'address.city': opt.city,
-      'address.district': opt.district,
-    });
-    this.refreshQuote();
-  },
   selectSaved(e) {
     const id = e.currentTarget.dataset.id;
     const a = this.data.savedAddresses.find(x => x.id === id);
@@ -1081,7 +1129,11 @@ Page({
       pickerOpen: false,
       address: { id: null, recipient_name: '', phone: '', address: '', detail: '', province: '', city: '', district: '' },
       areaLabel: '',
-      areaIndex: 0,
+      regionValue: [],
+      cityLabel: '',
+      cityIndex: 0,
+      districtOptions: [],
+      districtIndex: 0,
     });
     this.refreshQuote();
   },

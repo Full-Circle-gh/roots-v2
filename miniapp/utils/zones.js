@@ -62,4 +62,32 @@ function matchOption(options, address) {
   }) || null;
 }
 
-module.exports = { loadZones, buildAreaOptions, matchOption };
+// City-only options for the English-mode picker's first step (the city→district
+// cascade). Chinese mode uses WeChat's native region picker instead, so this is
+// only consumed in EN. Each option carries the canonical Chinese city written
+// onto the address + the English label shown on the wheel.
+function cityOptions(zones, lang) {
+  const cn = lang === 'cn';
+  return (zones || [])
+    .filter((z) => z.zone_type === 'city')
+    .map((z) => {
+      const name_cn = z.match_city || z.name_cn || z.name_en || '';
+      const name_en = z.name_en || z.name_cn || '';
+      return { label: cn ? name_cn : name_en, name_cn, name_en };
+    });
+}
+
+// Districts for one city — bilingual, from /api/retail/districts. Cached per
+// city so re-opening the picker (or switching back) doesn't refetch. Returns
+// [] for a city with no districts (the picker then shows city-level only).
+const _distCache = {};
+async function loadDistricts(cityCn) {
+  if (!cityCn) return [];
+  if (_distCache[cityCn]) return _distCache[cityCn];
+  const r = await api.get('/api/retail/districts?city=' + encodeURIComponent(cityCn));
+  const list = Array.isArray(r) ? r : (r && r.data) || [];
+  _distCache[cityCn] = list;
+  return list;
+}
+
+module.exports = { loadZones, buildAreaOptions, matchOption, cityOptions, loadDistricts };
