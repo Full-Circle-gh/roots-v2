@@ -4923,6 +4923,13 @@
             <span class="muted">Browseable · 可浏览</span>
           </label>
         </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked" title="If checked, every newly-registered customer is automatically granted this voucher on their first sign-in. Used for welcome / Seed-tier perks. · 勾选后,新注册的顾客在首次登录时自动获得此券。用于新人/种子等级礼遇。">Auto-grant · 自动发放</label>
+          <label style="display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; background: var(--bg-input); border: 1px solid var(--line); border-radius: var(--r-md); cursor: pointer; font-size: 12px;">
+            <input type="checkbox" id="v-auto-grant" style="margin: 0;">
+            <span class="muted">New signups · 新注册顾客</span>
+          </label>
+        </div>
       </div>
 
       <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px;">
@@ -6244,6 +6251,7 @@
             <th style="padding: 6px 8px;">Name EN</th>
             <th style="padding: 6px 8px;">Name CN · 中文名</th>
             <th style="padding: 6px 8px; width: 110px;">Threshold ¥ · 门槛</th>
+            <th style="padding: 6px 8px; width: 100px;" title="Multiplier on points earned per ¥ spent. 1.0 = no boost; 2.0 = double points. Range 0.1–10.">Points × · 积分倍率</th>
             <th style="padding: 6px 8px;">Perks EN (one per line)</th>
             <th style="padding: 6px 8px;">Perks CN · 权益(每行一条)</th>
             <th style="padding: 6px 8px; width: 60px;"></th>
@@ -10595,12 +10603,15 @@ async function loadVouchers() {
       const publicBadge = v.is_public
         ? '<span class="pill pub" style="margin-left: 6px; font-size: 10px;">PUBLIC</span>'
         : '';
+      const autoBadge = v.auto_grant_signup
+        ? '<span class="pill info" style="margin-left: 6px; font-size: 10px;" title="Auto-granted to every new signup">AUTO</span>'
+        : '';
       const grantBadge = v.grant_count
         ? `<span class="pill info" style="margin-left: 6px; font-size: 10px;">GRANTED ${v.grant_used_count || 0}/${v.grant_count}</span>`
         : '';
       return `
       <tr data-id="${v.id}">
-        <td><span style="font-family: var(--f-mono); font-weight: 700">${escapeHtml(v.code)}</span>${publicBadge}${grantBadge}</td>
+        <td><span style="font-family: var(--f-mono); font-weight: 700">${escapeHtml(v.code)}</span>${publicBadge}${autoBadge}${grantBadge}</td>
         <td style="font-size: 12px;">${label}</td>
         <td class="muted">${v.type === 'fixed_amount' ? '¥ off' : v.type === 'percent' ? '% off' : 'Free ship'}</td>
         <td class="numeric">${v.type === 'percent' ? v.value + '%' : (v.type === 'free_shipping' ? '—' : '¥' + fmt(v.value))}</td>
@@ -10611,6 +10622,7 @@ async function loadVouchers() {
         <td style="white-space: nowrap;">
           <button class="btn btn-sm" onclick='openGrantModal(${v.id}, ${JSON.stringify(v.code)})'>Grant · 发放</button>
           <button class="btn btn-sm" onclick="togglePublic(${v.id}, ${v.is_public ? 0 : 1})">${v.is_public ? 'Make private' : 'Make public'}</button>
+          <button class="btn btn-sm" onclick="toggleAutoGrant(${v.id}, ${v.auto_grant_signup ? 0 : 1})" title="Auto-grant to every new signup">${v.auto_grant_signup ? 'Stop auto-grant' : 'Auto-grant'}</button>
           <button class="btn btn-sm" onclick="toggleVoucher(${v.id}, ${v.is_active ? 0 : 1})">${v.is_active ? 'Disable' : 'Enable'}</button>
         </td>
       </tr>`;
@@ -10630,6 +10642,7 @@ async function createVoucher() {
     per_customer_limit: Number($('#v-percust').value) || 0,
     expires_at: $('#v-expires').value.trim() || null,
     is_public: $('#v-public').checked,
+    auto_grant_signup: $('#v-auto-grant').checked,
     title_en: $('#v-title-en').value.trim() || null,
     title_cn: $('#v-title-cn').value.trim() || null,
   };
@@ -10644,6 +10657,7 @@ async function createVoucher() {
       .forEach(id => $('#' + id).value = '');
     $('#v-percust').value = '1';
     $('#v-public').checked = false;
+    $('#v-auto-grant').checked = false;
     await loadVouchers();
   } catch (e) {
     toast('Failed · 失败: ' + (e.message === 'code_exists' ? 'Code already exists · 编码已存在' : e.message), 'err');
@@ -10662,6 +10676,15 @@ async function toggleVoucher(id, value) {
 async function togglePublic(id, value) {
   try {
     await api('/api/retail-admin/vouchers/' + id, { method: 'PATCH', body: { is_public: !!value } });
+    await loadVouchers();
+  } catch (e) {
+    toast('Failed · 失败: ' + e.message, 'err');
+  }
+}
+async function toggleAutoGrant(id, value) {
+  try {
+    await api('/api/retail-admin/vouchers/' + id, { method: 'PATCH', body: { auto_grant_signup: !!value } });
+    toast(value ? 'Auto-grant enabled · 已开启自动发放' : 'Auto-grant disabled · 已关闭自动发放');
     await loadVouchers();
   } catch (e) {
     toast('Failed · 失败: ' + e.message, 'err');
@@ -13220,10 +13243,10 @@ async function savePointsSettings() {
 // /api/retail-admin/config under `roots_club.tiers`. Backend + mini-app both
 // read this same blob; defaults seed the editor on first load.
 const RCTIER_DEFAULTS = [
-  { key: 'seed',   name_en: 'Seed',   name_cn: '种子', threshold: 0,    perks_en: ['5% off your first order', 'Member newsletter'],                                              perks_cn: ['首单 5% 折扣', '会员通讯'] },
-  { key: 'sprout', name_en: 'Sprout', name_cn: '幼苗', threshold: 500,  perks_en: ['10% off all orders', 'Early access to drops', 'Free shipping ¥299+'],                         perks_cn: ['全场 10% 折扣', '新品优先购', '满 ¥299 包邮'] },
-  { key: 'root',   name_en: 'Root',   name_cn: '根',   threshold: 2000, perks_en: ['15% off all orders', 'Early access to drops', 'Free shipping ¥199+', 'Birthday gift'],         perks_cn: ['全场 15% 折扣', '新品优先购', '满 ¥199 包邮', '生日礼物'] },
-  { key: 'tree',   name_en: 'Tree',   name_cn: '大树', threshold: 5000, perks_en: ['20% off all orders', 'Early access to drops', 'Free shipping (no minimum)', 'Birthday gift', 'Exclusive tasting events'], perks_cn: ['全场 20% 折扣', '新品优先购', '免邮 (无门槛)', '生日礼物', '专属品鉴活动'] },
+  { key: 'seed',   name_en: 'Seed',   name_cn: '种子', threshold: 0,    points_mult: 1.0, perks_en: ['5% off your first order', 'Member newsletter'],                                              perks_cn: ['首单 5% 折扣', '会员通讯'] },
+  { key: 'sprout', name_en: 'Sprout', name_cn: '幼苗', threshold: 500,  points_mult: 1.2, perks_en: ['10% off all orders', 'Early access to drops', 'Free shipping ¥299+'],                         perks_cn: ['全场 10% 折扣', '新品优先购', '满 ¥299 包邮'] },
+  { key: 'root',   name_en: 'Root',   name_cn: '根',   threshold: 2000, points_mult: 1.5, perks_en: ['15% off all orders', 'Early access to drops', 'Free shipping ¥199+', 'Birthday gift'],         perks_cn: ['全场 15% 折扣', '新品优先购', '满 ¥199 包邮', '生日礼物'] },
+  { key: 'tree',   name_en: 'Tree',   name_cn: '大树', threshold: 5000, points_mult: 2.0, perks_en: ['20% off all orders', 'Early access to drops', 'Free shipping (no minimum)', 'Birthday gift', 'Exclusive tasting events'], perks_cn: ['全场 20% 折扣', '新品优先购', '免邮 (无门槛)', '生日礼物', '专属品鉴活动'] },
 ];
 let RCTIER_STATE = [];
 async function loadRctiers() {
@@ -13236,6 +13259,7 @@ async function loadRctiers() {
           name_en: String(t.name_en || '').trim(),
           name_cn: String(t.name_cn || '').trim(),
           threshold: Math.max(0, Number(t.threshold) || 0),
+          points_mult: (() => { const m = Number(t.points_mult); return Number.isFinite(m) && m > 0 ? Math.max(0.1, Math.min(10, m)) : 1.0; })(),
           perks_en: Array.isArray(t.perks_en) ? t.perks_en.slice() : [],
           perks_cn: Array.isArray(t.perks_cn) ? t.perks_cn.slice() : [],
         }))
@@ -13249,7 +13273,7 @@ function renderRctiersTable() {
   const tbody = document.querySelector('#rctier-table tbody');
   if (!tbody) return;
   if (!RCTIER_STATE.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="muted" style="padding: 8px;">No tiers — click "+ Add tier" to create one.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="muted" style="padding: 8px;">No tiers — click "+ Add tier" to create one.</td></tr>';
     return;
   }
   tbody.innerHTML = RCTIER_STATE.map((t, i) => `
@@ -13258,6 +13282,7 @@ function renderRctiersTable() {
       <td style="padding: 4px 8px;"><input type="text" value="${escapeAttr(t.name_en)}" oninput="updateRctier(${i},'name_en',this.value)" style="width: 100%;"></td>
       <td style="padding: 4px 8px;"><input type="text" value="${escapeAttr(t.name_cn)}" oninput="updateRctier(${i},'name_cn',this.value)" style="width: 100%;"></td>
       <td style="padding: 4px 8px;"><input type="number" value="${t.threshold}" min="0" step="1" oninput="updateRctier(${i},'threshold',this.value)" style="width: 100%;"></td>
+      <td style="padding: 4px 8px;"><input type="number" value="${t.points_mult ?? 1}" min="0.1" max="10" step="0.1" oninput="updateRctier(${i},'points_mult',this.value)" style="width: 100%;" title="Points-earn multiplier: 1.0 = no boost, 2.0 = double points per ¥ spent"></td>
       <td style="padding: 4px 8px;"><textarea rows="3" oninput="updateRctier(${i},'perks_en',this.value)" style="width: 100%; resize: vertical; font: inherit;">${escapeHtml((t.perks_en || []).join('\n'))}</textarea></td>
       <td style="padding: 4px 8px;"><textarea rows="3" oninput="updateRctier(${i},'perks_cn',this.value)" style="width: 100%; resize: vertical; font: inherit;">${escapeHtml((t.perks_cn || []).join('\n'))}</textarea></td>
       <td style="padding: 4px 8px;"><button class="btn" onclick="removeRctier(${i})">×</button></td>
@@ -13268,6 +13293,14 @@ function updateRctier(i, field, value) {
   if (!RCTIER_STATE[i]) return;
   if (field === 'threshold') {
     RCTIER_STATE[i].threshold = Math.max(0, parseInt(value, 10) || 0);
+  } else if (field === 'points_mult') {
+    // Clamp to backend-safe range so the editor and the server agree even when
+    // an operator types something silly. 0 → 1.0 (no boost) so an empty cell
+    // never accidentally zeroes out earns.
+    const m = parseFloat(value);
+    RCTIER_STATE[i].points_mult = (Number.isFinite(m) && m > 0)
+      ? Math.max(0.1, Math.min(10, m))
+      : 1.0;
   } else if (field === 'perks_en' || field === 'perks_cn') {
     RCTIER_STATE[i][field] = String(value || '').split('\n').map(s => s.trim()).filter(Boolean);
   } else if (field === 'key') {
@@ -13282,7 +13315,7 @@ function addRctierRow() {
   const top = RCTIER_STATE.reduce((m, t) => Math.max(m, Number(t.threshold) || 0), 0);
   RCTIER_STATE.push({
     key: '', name_en: '', name_cn: '', threshold: top + 1000,
-    perks_en: [], perks_cn: [],
+    points_mult: 1.0, perks_en: [], perks_cn: [],
   });
   renderRctiersTable();
 }

@@ -1339,6 +1339,7 @@ try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_refund_events_created ON re
 addColumn('retail_vouchers', 'is_public',         'INTEGER DEFAULT 0');  // 1 = browseable, no code needed
 addColumn('retail_vouchers', 'title_en',          'TEXT');               // customer-facing label for public coupons
 addColumn('retail_vouchers', 'title_cn',          'TEXT');
+addColumn('retail_vouchers', 'auto_grant_signup', 'INTEGER DEFAULT 0');  // 1 = auto-granted to new customers on first /api/retail/auth
 
 db.exec(`CREATE TABLE IF NOT EXISTS retail_subscriptions (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

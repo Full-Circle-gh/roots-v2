@@ -927,6 +927,12 @@ router.post('/api/retail/auth', express.json(), async (req, res) => {
        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`
     ).run(openid, unionid, nickname || null, avatar_url || null);
     customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(info.lastInsertRowid);
+    // Auto-grant any voucher flagged auto_grant_signup. Best-effort: a failure
+    // here must NOT block the auth response. Uses INSERT OR IGNORE so even if
+    // the same hook ran twice for the same (customer, voucher) we land on one
+    // grant. Filters out expired vouchers so we don't gift a dead coupon.
+    try { grantSignupVouchers(customer.id); }
+    catch (e) { console.warn('[retail/auth] signup voucher grant failed:', e.message); }
   } else {
     // Refresh last_login_at; opportunistically fill nickname/avatar if we
     // didn't have them before and the client just sent them.
@@ -1490,29 +1496,42 @@ router.post('/api/retail/notifications/:id/read', requireRetailAuth, (req, res) 
 const DEFAULT_ROOTS_CLUB_TIERS = [
   {
     key: 'seed',   name_en: 'Seed',    name_cn: '种子',
-    color: 'corn',   threshold: 0,
+    color: 'corn',   threshold: 0, points_mult: 1.0,
     perks_en: ['5% off your first order', 'Member newsletter'],
     perks_cn: ['首单 5% 折扣', '会员通讯'],
   },
   {
     key: 'sprout', name_en: 'Sprout',  name_cn: '幼苗',
-    color: 'pea',    threshold: 500,
+    color: 'pea',    threshold: 500, points_mult: 1.2,
     perks_en: ['10% off all orders', 'Early access to drops', 'Free shipping ¥299+'],
     perks_cn: ['全场 10% 折扣', '新品优先购', '满 ¥299 包邮'],
   },
   {
     key: 'root',   name_en: 'Root',    name_cn: '根',
-    color: 'forest', threshold: 2000,
+    color: 'forest', threshold: 2000, points_mult: 1.5,
     perks_en: ['15% off all orders', 'Early access to drops', 'Free shipping ¥199+', 'Birthday gift'],
     perks_cn: ['全场 15% 折扣', '新品优先购', '满 ¥199 包邮', '生日礼物'],
   },
   {
     key: 'tree',   name_en: 'Tree',    name_cn: '大树',
-    color: 'ink',    threshold: 5000,
+    color: 'ink',    threshold: 5000, points_mult: 2.0,
     perks_en: ['20% off all orders', 'Early access to drops', 'Free shipping (no minimum)', 'Birthday gift', 'Exclusive tasting events'],
     perks_cn: ['全场 20% 折扣', '新品优先购', '免邮 (无门槛)', '生日礼物', '专属品鉴活动'],
   },
 ];
+
+// Look up the points-earn multiplier for a customer's tier. Falls back to 1.0
+// (no boost) on unknown keys / malformed config rows. Clamped to [0.1, 10] so
+// an editor typo can't zero out earns or blow up the math.
+function tierMultiplierFor(tierKey) {
+  if (!tierKey) return 1;
+  const ladder = loadTierLadder();
+  const t = ladder.find(x => x.key === tierKey);
+  if (!t) return 1;
+  const m = Number(t.points_mult);
+  if (!Number.isFinite(m) || m <= 0) return 1;
+  return Math.max(0.1, Math.min(10, m));
+}
 // Cheap in-memory cache so we don't hit storefront_config + reparse on every
 // authenticated request. Invalidated by storefront_config.updated_at — any
 // admin save bumps the timestamp via the same UPSERT path.
@@ -3208,6 +3227,36 @@ router.get('/api/retail/reviews/pending', requireRetailAuth, (req, res) => {
 });
 
 // ─── Vouchers / coupons ──────────────────────────────────────────────────
+// Auto-grant every voucher flagged auto_grant_signup to a fresh customer.
+// Called from /api/retail/auth right after the INSERT INTO retail_customers.
+// Idempotent via INSERT OR IGNORE — the (customer_id, voucher_id) unique key
+// on retail_customer_vouchers means a re-run can't double-grant. Expired or
+// inactive vouchers are filtered out so we don't gift dead coupons.
+function grantSignupVouchers(customerId) {
+  if (!customerId) return 0;
+  const rows = tdb().prepare(
+    `SELECT id FROM retail_vouchers
+      WHERE auto_grant_signup = 1
+        AND is_active = 1
+        AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)`
+  ).all();
+  if (!rows.length) return 0;
+  const ins = tdb().prepare(
+    `INSERT OR IGNORE INTO retail_customer_vouchers
+       (customer_id, voucher_id, granted_by, granted_note)
+     VALUES (?, ?, NULL, 'Auto-granted on signup')`
+  );
+  let n = 0;
+  const tx = tdb().transaction(() => {
+    for (const r of rows) {
+      const info = ins.run(customerId, r.id);
+      if (info.changes) n++;
+    }
+  });
+  tx();
+  return n;
+}
+
 // Compute the discount a voucher would apply given the subtotal +
 // shipping fee. Returns { discount, free_shipping, applied }.
 function computeVoucherDiscount(voucher, subtotal, shippingFee) {
@@ -3669,8 +3718,8 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
     const info = tdb().prepare(
       `INSERT INTO retail_vouchers
          (code, type, value, min_subtotal, max_uses, per_customer_limit, expires_at,
-          is_active, is_public, title_en, title_cn, description, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          is_active, is_public, title_en, title_cn, description, auto_grant_signup, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       code, b.type, Number(b.value) || 0, Number(b.min_subtotal) || 0,
       b.max_uses != null && b.max_uses !== '' ? parseInt(b.max_uses, 10) : null,
@@ -3681,6 +3730,7 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
       b.title_en || null,
       b.title_cn || null,
       b.description || null,
+      b.auto_grant_signup ? 1 : 0,
       req.user.id
     );
     logActivity(req.user.id, req.user.username, 'create', 'voucher', info.lastInsertRowid, { code, type: b.type }, req.ip);
@@ -3696,12 +3746,14 @@ router.patch('/api/retail-admin/vouchers/:id', requireRetailAdmin, express.json(
   const v = tdb().prepare('SELECT id FROM retail_vouchers WHERE id = ?').get(id);
   if (!v) return res.status(404).json({ success: false, error: 'not_found' });
   const fields = ['value', 'min_subtotal', 'max_uses', 'per_customer_limit', 'expires_at',
-                  'is_active', 'is_public', 'title_en', 'title_cn', 'description'];
+                  'is_active', 'is_public', 'title_en', 'title_cn', 'description',
+                  'auto_grant_signup'];
   const updates = {};
   for (const f of fields) if (f in req.body) updates[f] = req.body[f];
   if (!Object.keys(updates).length) return res.status(400).json({ success: false, error: 'no_fields' });
   if ('is_active' in updates) updates.is_active = updates.is_active ? 1 : 0;
   if ('is_public' in updates) updates.is_public = updates.is_public ? 1 : 0;
+  if ('auto_grant_signup' in updates) updates.auto_grant_signup = updates.auto_grant_signup ? 1 : 0;
   if ('expires_at' in updates && !updates.expires_at) updates.expires_at = null;
   const sets = Object.keys(updates).map(k => `${k} = ?`).join(', ');
   tdb().prepare(`UPDATE retail_vouchers SET ${sets} WHERE id = ?`).run(...Object.values(updates), id);
@@ -7991,13 +8043,18 @@ router.post('/api/retail/cart/price', requireRetailAuth, express.json(), (req, r
 // Legacy single-sided points.earnRate (= yuan per point) is still read as
 // a fallback so old databases keep working until the backfill migration
 // stamps the new pair.
-function pointsEarnedFor(subtotal) {
+function pointsEarnedFor(subtotal, tierMult = 1) {
   const pts   = Number(cfgValue('points.earnPoints', 1));
   const spend = Number(cfgValue('points.earnSpend', null));
   // Fall back to the legacy key on databases that haven't been migrated yet.
   const denom = spend > 0 ? spend : Number(cfgValue('points.earnRate', 100));
   if (!(pts > 0) || !(denom > 0)) return 0;
-  return Math.floor((Number(subtotal || 0) * pts) / denom);
+  // tierMult comes from tierMultiplierFor(customer.tier_key); callers that
+  // don't know the tier (anonymous quote, fallback paths) pass the default 1.
+  // We floor once at the end so 1.5× on a sub-threshold subtotal still rounds
+  // toward zero — matches the historical no-multiplier behaviour for Seed.
+  const m = Number.isFinite(tierMult) && tierMult > 0 ? tierMult : 1;
+  return Math.floor((Number(subtotal || 0) * pts * m) / denom);
 }
 
 // SQLite ISO datetime N months from now, or NULL if expiry disabled. Used
@@ -8128,7 +8185,13 @@ function awardOrderPoints(orderId) {
     "SELECT id FROM retail_points_transactions WHERE order_id = ? AND source = 'order_earn'"
   ).get(orderId);
   if (already) return o.points_earned || 0;
-  const pts   = pointsEarnedFor(o.subtotal);
+  // Use the customer's tier_key at the moment of award. We pulled it directly
+  // (not via reconcileTier) — by the time award fires the tier is either
+  // already accurate from the previous order or it's about to be reconciled
+  // in the same transaction below.
+  const c = tdb().prepare('SELECT tier_key FROM retail_customers WHERE id = ?').get(o.customer_id);
+  const tierMult = tierMultiplierFor(c?.tier_key);
+  const pts   = pointsEarnedFor(o.subtotal, tierMult);
   const spend = Math.max(0, Number(o.subtotal) || 0);
   const expiresAt = pts > 0 ? nextEarnExpiry() : null;
   // We always insert the order_earn row (even at delta=0) so the row is the
@@ -8373,7 +8436,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
       points_to_use_applied: pointsToUseApplied,
       points_discount: pointsDiscount,
       points_cover_shipping: pointsCoverShipping(),
-      points_earned_preview: pointsEarnedFor(priced.subtotal),
+      points_earned_preview: pointsEarnedFor(priced.subtotal, tierMultiplierFor(req.customer?.tier_key)),
       delivery_mode: deliveryMode,
       zone: {
         id: zone.id,
