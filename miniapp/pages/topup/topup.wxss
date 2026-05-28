@@ -137,23 +137,6 @@
   line-height: 1;
 }
 
-/* ── How it works ── */
-.how {
-  margin: 44rpx 44rpx 0;
-}
-.how-lbl {
-  font-size: calc(20rpx * var(--font-scale));
-  letter-spacing: 0.22em;
-  color: var(--olive);
-}
-.how-lbl-alt { opacity: 0.7; margin-left: 4rpx; }
-.how-body {
-  margin-top: 14rpx;
-  font-size: calc(24rpx * var(--font-scale));
-  line-height: 1.55;
-  color: var(--forest);
-}
-
 /* ── Empty state ── */
 .empty {
   margin: 60rpx 44rpx;
@@ -222,10 +205,11 @@
 }
 .pf-cta {
   width: 100%;
-  padding: 28rpx 0;
+  padding: 28rpx 16rpx;
   text-align: center;
-  font-size: calc(34rpx * var(--font-scale));
-  letter-spacing: 0.12em;
+  font-size: calc(30rpx * var(--font-scale));
+  letter-spacing: 0.06em;
+  line-height: 1.25;
   border-radius: 0;
 }
 .pf-cta::after { border: none; }

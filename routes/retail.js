@@ -8268,15 +8268,13 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
 });
 
 // ─── Top-up packages (customer-facing) ──────────────────────────────────
-// Returns the redeem rate alongside packages so the top-up page can show
-// the live "1 point = ¥X" line that matches admin's configured rate.
 router.get('/api/retail/topup-packages', requireRetailAuth, (req, res) => {
   const rows = tdb().prepare(
     `SELECT id, amount, bonus_points, title_en, title_cn, description_en, description_cn
        FROM retail_topup_packages WHERE is_active = 1
       ORDER BY sort_order ASC, amount ASC`
   ).all();
-  res.json({ success: true, data: rows, points_redeem_rate: pointsRedeemRate() });
+  res.json({ success: true, data: rows });
 });
 
 // POST /api/retail/topup/create

@@ -57,11 +57,6 @@ Page({
         balanceLblAlt: cn ? 'BALANCE'             : '余额',
         ptsSuffix:     cn ? '积分'                : 'PTS',
         historyLink:   cn ? '查看历史 →'          : 'HISTORY →',
-        howLbl:        cn ? '说明'                : 'HOW IT WORKS',
-        howLblAlt:     cn ? 'HOW IT WORKS'        : '说明',
-        howBody:       cn
-          ? '1 积分 = ¥0.10,可用于任意订单抵扣。赠送积分与会员等级倍率叠加生效。无过期、无手续费。钱包余额不可退款。'
-          : '1 point = ¥0.10 off any order. Bonus points stack with your tier earn rate. No expiry, no fees. Wallet balance is non-refundable.',
         youPay:        cn ? '应付'                : 'YOU PAY',
         youPayAlt:     cn ? 'YOU PAY'             : '应付',
         youGet:        cn ? '到账'                : 'YOU GET',

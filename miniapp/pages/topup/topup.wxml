@@ -65,15 +65,6 @@
     <view class="empty-sub f-aleo">{{copy.emptySub}}</view>
   </view>
 
-  <!-- How it works -->
-  <view class="how">
-    <view class="how-lbl f-toni">
-      {{copy.howLbl}}
-      <text wx:if="{{lang !== 'en'}}" class="how-lbl-alt">· {{copy.howLblAlt}}</text>
-    </view>
-    <view class="how-body f-aleo">{{copy.howBody}}</view>
-  </view>
-
   <view class="footer-spacer"></view>
 
   <!-- Sticky pay footer -->
