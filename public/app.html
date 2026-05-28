@@ -8108,7 +8108,14 @@ const PROD_LIST_COLS = {
   },
   name_en: {
     en:'Name EN', cn:'英文名', sortKey:'name_en',
-    cell: p => `<td style="font-weight:600;cursor:pointer" onclick="viewProduct(${p.id})">${p.is_restock_only === 1 ? '<span title="Restock only · 仅用于补货" style="font-size:11px;margin-right:5px;background:#e0e7ff;color:#3730a3;border-radius:99px;padding:1px 7px;font-weight:700;vertical-align:1px">🔒 Internal</span>' : ''}${esc(p.name_en||'—')}</td>`,
+    cell: p => {
+      const cnt = p.__variantCount || 0;
+      const labels = (p.__variantLabels || []).join(' · ');
+      const variantChip = cnt > 1
+        ? `<span title="${cnt} variants · edit each one inside this product · ${cnt} 个规格 · 在此产品内编辑${labels?'\n'+esc(labels):''}" style="margin-left:6px;background:rgba(204,217,0,.15);color:#6d7a2a;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:700;vertical-align:1px">🎨 ${cnt} variants</span>`
+        : '';
+      return `<td style="font-weight:600;cursor:pointer" onclick="viewProduct(${p.id})">${p.is_restock_only === 1 ? '<span title="Restock only · 仅用于补货" style="font-size:11px;margin-right:5px;background:#e0e7ff;color:#3730a3;border-radius:99px;padding:1px 7px;font-weight:700;vertical-align:1px">🔒 Internal</span>' : ''}${esc(p.name_en||'—')}${variantChip}</td>`;
+    },
   },
   name_cn: {
     en:'Name CN', cn:'中文名', sortKey:'name_cn',
@@ -8124,7 +8131,14 @@ const PROD_LIST_COLS = {
   },
   sell_price: {
     en:'Sell Price', cn:'售价', sortKey:'sell_price', align:'right', width:'110px',
-    cell: p => `<td style="text-align:right;font-weight:600">¥${parseFloat(p.sell_price||0).toFixed(2)}</td>`,
+    cell: p => {
+      const min = p.__variantPriceMin, max = p.__variantPriceMax;
+      const cnt = p.__variantCount || 0;
+      const txt = (cnt > 1 && min != null && max != null && min !== max)
+        ? `¥${min.toFixed(2)}–¥${max.toFixed(2)}`
+        : `¥${parseFloat(p.sell_price||0).toFixed(2)}`;
+      return `<td style="text-align:right;font-weight:600;white-space:nowrap">${txt}</td>`;
+    },
   },
   status: {
     en:'Status', cn:'状态', sortKey:'status', width:'120px',
@@ -8246,18 +8260,20 @@ function _prodToggleSelectAll(checked) {
 
 function _prodCurrentFilteredIds() {
   // Mirror filterProducts() criteria so "Select all on page" actually
-  // matches what's rendered.
+  // matches what's rendered — and only target the visible reps, not
+  // collapsed variant siblings (those get edited from inside the parent).
   const q = (document.getElementById('prodSearch')?.value || '').toLowerCase();
   const cat = document.getElementById('prodCatFilter')?.value || '';
   const status = document.getElementById('prodStatusFilter')?.value || '';
-  return (_products || []).filter(p => {
+  const matchFn = p => {
     const mQ = !q || (p.name_en||'').toLowerCase().includes(q) || (p.name_cn||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q);
     const mC = !cat || p.category === cat;
     const mS = !status || p.status === status;
     const mN = !_prodOnlyNoSku || _isNoSku(p);
     const mP = !_prodPubFilter || (_prodPubFilter === 'pub' ? p.is_published === 1 : p.is_published !== 1);
     return mQ && mC && mS && mN && mP;
-  }).map(p => p.id);
+  };
+  return _collapseVariantUnits(matchFn).map(p => p.id);
 }
 
 function _prodClearSelection() {
@@ -8371,13 +8387,21 @@ function _renderProdCompact(prods) {
       </tr></thead>
       <tbody>${sorted.map(p => {
         const lowStock = (p.stock_qty != null && p.stock_qty <= 5);
+        const cnt = p.__variantCount || 0;
+        const variantChip = cnt > 1
+          ? ` <span title="${cnt} variants · 在此产品内编辑" style="background:rgba(204,217,0,.15);color:#6d7a2a;padding:0 6px;border-radius:99px;font-size:10px;font-weight:700">🎨 ${cnt}</span>`
+          : '';
+        const min = p.__variantPriceMin, max = p.__variantPriceMax;
+        const priceTxt = (cnt > 1 && min != null && max != null && min !== max)
+          ? `¥${min.toFixed(2)}–¥${max.toFixed(2)}`
+          : `¥${parseFloat(p.sell_price||0).toFixed(2)}`;
         return `<tr style="cursor:pointer" onclick="viewProduct(${p.id})">
           <td style="text-align:center">${p.image_data ? `<img src="${esc(p.image_data)}" style="width:24px;height:24px;border-radius:4px;object-fit:cover">` : `<span style="font-size:14px">${p.category?getCategoryEmoji(p.category):'🛍'}</span>`}</td>
           <td style="font-family:monospace;color:var(--muted);font-size:11px">${_skuCell(p, { small:true })}</td>
-          <td style="font-weight:600">${esc(p.name_en||'')}${p.name_cn?` <span style="color:var(--muted);font-weight:400">${esc(p.name_cn)}</span>`:''}</td>
+          <td style="font-weight:600">${esc(p.name_en||'')}${p.name_cn?` <span style="color:var(--muted);font-weight:400">${esc(p.name_cn)}</span>`:''}${variantChip}</td>
           <td style="color:var(--muted);font-size:11px">${esc(p.category||'—')}</td>
           <td style="text-align:right;font-weight:${lowStock?700:500};color:${lowStock?'#dc2626':'var(--text)'}">${p.stock_qty ?? 0}</td>
-          <td style="text-align:right;font-weight:600">¥${parseFloat(p.sell_price||0).toFixed(2)}</td>
+          <td style="text-align:right;font-weight:600;white-space:nowrap">${priceTxt}</td>
           <td>${getStatusBadge(p.status)}</td>
         </tr>`;
       }).join('')}</tbody>
@@ -8402,18 +8426,29 @@ function _renderProdByCategory(prods) {
         <div style="font-size:11px;color:var(--muted)">${groups.get(cat).length} item${groups.get(cat).length===1?'':'s'}</div>
       </div>
       <div class="prod-grid" style="padding:14px">
-        ${_sortProds(groups.get(cat)).map(p => `
+        ${_sortProds(groups.get(cat)).map(p => {
+          const cnt = p.__variantCount || 0;
+          const min = p.__variantPriceMin, max = p.__variantPriceMax;
+          const priceTxt = (cnt > 1 && min != null && max != null && min !== max)
+            ? `¥${min.toFixed(2)}–¥${max.toFixed(2)}`
+            : (p.sell_price?'¥'+parseFloat(p.sell_price).toFixed(2):'—');
+          const variantBadge = cnt > 1
+            ? `<span title="Edit each variant inside this product · 在此产品内编辑各规格" style="display:inline-block;background:rgba(204,217,0,.15);color:#6d7a2a;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;margin-top:4px">🎨 ${cnt} variants</span>`
+            : '';
+          return `
           <div class="prod-card" onclick="viewProduct(${p.id})">
             <div class="prod-card-img" style="${p.image_data?'background:#fff':''}">${p.image_data?`<img src="${esc(p.image_data)}" style="width:100%;height:100%;object-fit:cover" alt="${esc(p.name_en||'')}">`:(p.category?getCategoryEmoji(p.category):'🛍')}</div>
             <div class="prod-card-body">
               <div class="prod-card-name">${esc(p.name_en||'')}</div>
               <div class="prod-card-cn">${esc(p.name_cn||'')}</div>
+              ${variantBadge}
               <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
-                <div class="prod-card-price">${p.sell_price?'¥'+parseFloat(p.sell_price).toFixed(2):'—'}</div>
+                <div class="prod-card-price">${priceTxt}</div>
                 <div class="prod-card-sku">${_isNoSku(p) ? _skuCell(p, { small:true }) : esc(p.sku)}</div>
               </div>
             </div>
-          </div>`).join('')}
+          </div>`;
+        }).join('')}
       </div>
     </div>`).join('');
 }
@@ -9162,20 +9197,21 @@ function setProdView(mode) {
 }
 
 function renderProdGrid(prods) {
-  // Variant group counts so each card can display a "🎨 N variants" badge.
-  // Built from _products (the full list), not the filtered subset, so the
-  // count reflects the real group size even if some siblings are hidden
-  // by the active filter.
-  const variantCounts = _variantGroupCounts(_products || prods);
+  // prods has already been collapsed by filterProducts() — each row is a
+  // group rep with __variantCount / __variantPriceMin / __variantPriceMax.
   const sorted = _sortProds(prods);
   return '<div class="prod-grid">' + sorted.map(p => {
-    const count = (p.variant_group_id && variantCounts[p.variant_group_id]) || 0;
+    const count = p.__variantCount || 0;
     const variantBadge = count > 1
-      ? `<span style="display:inline-block;background:rgba(204,217,0,.15);color:#6d7a2a;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;margin-top:4px">🎨 ${count} variants${p.variant_label?` · ${esc(p.variant_label)}`:''}</span>`
+      ? `<span title="Edit each variant inside this product · 在此产品内编辑各规格" style="display:inline-block;background:rgba(204,217,0,.15);color:#6d7a2a;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;margin-top:4px">🎨 ${count} variants</span>`
       : '';
     const restockBadge = p.is_restock_only === 1
       ? `<span title="Restock only · 仅用于补货" style="display:inline-block;background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;margin-top:4px">🔒 Restock only · 仅内部</span>`
       : '';
+    const min = p.__variantPriceMin, max = p.__variantPriceMax;
+    const priceTxt = (count > 1 && min != null && max != null && min !== max)
+      ? `¥${min.toFixed(2)}–¥${max.toFixed(2)}`
+      : (p.sell_price ? '¥'+parseFloat(p.sell_price).toFixed(2) : '—');
     return `<div class="prod-card" onclick="viewProduct(${p.id})">
       <div class="prod-card-img" style="${p.image_data?'background:#fff':''}">${p.image_data?`<img src="${esc(p.image_data)}" style="width:100%;height:100%;object-fit:cover" alt="${esc(p.name_en||'')}">`:(p.category?getCategoryEmoji(p.category):'🛍')}</div>
       <div class="prod-card-body">
@@ -9184,7 +9220,7 @@ function renderProdGrid(prods) {
         ${variantBadge}
         ${restockBadge}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
-          <div class="prod-card-price">${p.sell_price?'¥'+parseFloat(p.sell_price).toFixed(2):'—'}</div>
+          <div class="prod-card-price">${priceTxt}</div>
           <div class="prod-card-sku">${_isNoSku(p) ? _skuCell(p, { small:true }) : esc(p.sku)}</div>
         </div>
         <div style="margin-top:6px">${getStatusBadge(p.status)}</div>
@@ -9201,6 +9237,49 @@ function _variantGroupCounts(prods) {
     if (p.variant_group_id) counts[p.variant_group_id] = (counts[p.variant_group_id] || 0) + 1;
   }
   return counts;
+}
+
+// Collapse variant siblings into one row per group so the Products list
+// doesn't double-count "Hummus Asli (Small)" + "Hummus Asli (Big)" as two
+// separate products. The group's rep (the owner, id === variant_group_id)
+// stands in for the family, with __variant* fields the renderers use to
+// show a "N variants" chip + price range. A non-rep variant only surfaces
+// when its parent doesn't exist in _products — defensive fallback.
+//
+// A group surfaces in the result as long as ANY sibling passes matchFn —
+// that way searching a child SKU (e.g. "1-10-2") still finds the parent.
+function _collapseVariantUnits(matchFn) {
+  const byGid = new Map();
+  for (const p of _products) {
+    if (p.variant_group_id) {
+      if (!byGid.has(p.variant_group_id)) byGid.set(p.variant_group_id, []);
+      byGid.get(p.variant_group_id).push(p);
+    }
+  }
+  const out = [];
+  const seen = new Set();
+  for (const p of _products) {
+    const gid = p.variant_group_id;
+    if (!gid) { if (matchFn(p)) out.push(p); continue; }
+    if (seen.has(gid)) continue;
+    seen.add(gid);
+    const members = byGid.get(gid) || [p];
+    if (!members.some(matchFn)) continue;
+    const ordered = members.slice().sort((a, b) =>
+      ((a.variant_sort ?? 0) - (b.variant_sort ?? 0)) ||
+      String(a.variant_label || '').localeCompare(String(b.variant_label || '')) ||
+      (a.id - b.id));
+    const rep = ordered.find(m => m.id === gid) || ordered[0];
+    const prices = ordered.map(m => parseFloat(m.sell_price || 0)).filter(n => n > 0);
+    out.push({
+      ...rep,
+      __variantCount:    ordered.length,
+      __variantPriceMin: prices.length ? Math.min(...prices) : null,
+      __variantPriceMax: prices.length ? Math.max(...prices) : null,
+      __variantLabels:   ordered.map(m => (m.variant_label || '').trim()).filter(Boolean),
+    });
+  }
+  return out;
 }
 
 function getCategoryEmoji(cat) {
@@ -9237,14 +9316,18 @@ function filterProducts() {
   const q = (document.getElementById('prodSearch')?.value||'').toLowerCase();
   const cat = document.getElementById('prodCatFilter')?.value||'';
   const status = document.getElementById('prodStatusFilter')?.value||'';
-  const filtered = _products.filter(p => {
+  const matchFn = p => {
     const mQ = !q||(p.name_en||'').toLowerCase().includes(q)||(p.name_cn||'').toLowerCase().includes(q)||(p.sku||'').toLowerCase().includes(q);
     const mC = !cat||p.category===cat;
     const mS = !status||p.status===status;
     const mN = !_prodOnlyNoSku || _isNoSku(p);
     const mP = !_prodPubFilter || (_prodPubFilter === 'pub' ? p.is_published === 1 : p.is_published !== 1);
     return mQ&&mC&&mS&&mN&&mP;
-  });
+  };
+  // Variant siblings collapse into one row per group (rep = the group owner),
+  // so the list doesn't read as duplicate products. Editing variants happens
+  // inside the parent's editor via the Siblings panel.
+  const filtered = _collapseVariantUnits(matchFn);
   const cnt = document.getElementById('prodCount');
   if (cnt) cnt.textContent = filtered.length+' products';
   // Sort the full result first so the sort applies across every page (not
