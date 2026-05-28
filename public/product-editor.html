@@ -366,7 +366,11 @@
   #pe-body {
     height: calc(100vh - 56px);
     display: grid;
-    grid-template-columns: 288px 1fr 380px;
+    /* Canvas is sized to just fit the 340px phone + breathing room; the
+       inspector takes the rest of the width (1fr) so its left edge sits
+       closer to the middle of the page and form fields have much more room
+       (it's no longer pinned to a fixed 380px on the far right). */
+    grid-template-columns: 288px 400px 1fr;
     /* Definite row so the panes (and the phone inside the canvas) fill the body
        instead of growing to content. Lets the phone fit at any zoom. */
     grid-template-rows: minmax(0, 1fr);
