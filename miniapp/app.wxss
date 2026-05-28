@@ -57,11 +57,16 @@ page {
 
   /* Brand fonts — loaded at runtime via wx.loadFontFace (see utils/fonts.js).
      Falls back to system fonts on first paint (font-display: swap behaviour). */
-  --f-bear:   'Bear Serif',   'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', serif;
-  --f-toni:   'Toni Grotesk', 'DF Yuan', -apple-system, sans-serif;
-  --f-gothic: 'League Gothic','DF Yuan', 'Bebas Neue', sans-serif;
-  --f-aleo:   'Aleo',         'DF Yuan', 'PingFang SC', serif;
-  --f-yuan:   'DF Yuan', 'PingFang SC', sans-serif;
+  /* CN fallback order is identical across families so a kicker (f-toni) and
+     headline (f-bear) — which never share a Latin face — still share the
+     SAME Chinese face when DF Yuan doesn't cover a glyph. Without this,
+     the kicker dropped to -apple-system's CJK pick while the headline
+     dropped to PingFang SC, and their first characters didn't line up. */
+  --f-bear:   'Bear Serif',   'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', -apple-system, serif;
+  --f-toni:   'Toni Grotesk', 'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', -apple-system, sans-serif;
+  --f-gothic: 'League Gothic','DF Yuan', 'PingFang SC', 'Hiragino Sans GB', 'Bebas Neue', sans-serif;
+  --f-aleo:   'Aleo',         'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', -apple-system, serif;
+  --f-yuan:   'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 
   /* Global text scaler — every `font-size: Nrpx` declaration in the app
      is rewritten as `font-size: calc(Nrpx * var(--font-scale))`. Tweak
