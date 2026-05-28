@@ -67,9 +67,6 @@
         <view wx:if="{{!item.soldOut}}" class="quick-add" data-id="{{item.id}}" catchtap="onQuickAdd">
           <text class="quick-add-glyph f-bear">+</text>
         </view>
-        <view wx:else class="quick-add quick-add-disabled">
-          <text class="quick-add-glyph f-bear">⌛</text>
-        </view>
       </view>
     </view>
   </view>
@@ -93,9 +90,6 @@
         <text class="row-price f-gothic">{{item.priceDisplay}}</text>
         <view wx:if="{{!item.soldOut}}" class="quick-add" data-id="{{item.id}}" catchtap="onQuickAdd">
           <text class="quick-add-glyph f-bear">+</text>
-        </view>
-        <view wx:else class="quick-add quick-add-disabled">
-          <text class="quick-add-glyph f-bear">⌛</text>
         </view>
       </view>
     </view>
