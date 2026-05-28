@@ -404,7 +404,10 @@ Page({
         badge: pickBadge(p.tags),
         soldCaption: soldUnits > 0 ? (L === 'cn' ? `已售 ${soldUnits}` : `${soldUnits} SOLD`) : '',
         outOfStock,
-        image: absUrl(p.image_url) || p.image_data || '',
+        // image_data may now be a streamed-image URL (/api/retail/products/:id/
+        // image) since the list omits inline base64 — absUrl() resolves it
+        // against the API host. data: URIs and absolute URLs pass through.
+        image: absUrl(p.image_url) || absUrl(p.image_data) || '',
         price,
         priceWas,
         isFlash,
@@ -636,7 +639,7 @@ Page({
       is_on_flash: raw.is_on_flash,
     }, 1, []);
 
-    const imgUrl = absUrl(raw.image_url) || raw.image_data || '';
+    const imgUrl = absUrl(raw.image_url) || absUrl(raw.image_data) || '';
     wx.createSelectorQuery()
       .in(this)
       .select('#plus-' + originId)

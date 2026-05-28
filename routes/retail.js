@@ -314,7 +314,7 @@ router.get('/api/retail/products', (req, res) => {
   const limit  = Math.min(parseInt(req.query.limit  || '50', 10) || 50, 100);
   const offset = Math.max(parseInt(req.query.offset || '0',  10) || 0, 0);
 
-  let sql = `SELECT ${RETAIL_PRODUCT_COLS} FROM products p
+  let sql = `SELECT ${RETAIL_PRODUCT_COLS}, p.updated_at FROM products p
              WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`;
   const params = [];
   if (q) {
@@ -337,6 +337,19 @@ router.get('/api/retail/products', (req, res) => {
   const rows = tdb().prepare(sql).all(...params)
     .map(hydrateNutrition)
     .map(r => flashsales.decorateProduct(r, now));
+  // Replace the heavy inline base64 primary photo with a tiny streamed-image
+  // URL the mini-app lazy-loads + caches — mirrors the retail-admin grid fix
+  // (see GET /api/retail-admin/products). Shipping image_data inline for up to
+  // 50 rows made this payload several MB and the shop slow to open. Products
+  // that store only a plain image_url keep it untouched; ?v=updated_at busts
+  // the cache when the photo changes. The PDP (/products/:id) still ships the
+  // full image so the detail page renders without an extra round-trip.
+  for (const r of rows) {
+    if (typeof r.image_data === 'string' && /^data:/i.test(r.image_data)) {
+      r.image_data = `/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`;
+    }
+    delete r.updated_at;
+  }
   attachSoldCounts(rows);
   const total = tdb().prepare(`SELECT COUNT(*) AS n FROM products p
                             WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
@@ -348,6 +361,31 @@ router.get('/api/retail/products', (req, res) => {
   // minutes, not the prior 30s used for static catalogue data.
   res.set('Cache-Control', 'public, max-age=10');
   res.json({ success: true, data: rows, meta: { total, limit, offset, server_time_ms: now } });
+});
+
+// GET /api/retail/products/:id/image — public: stream a product's primary
+// photo as real image bytes so the shop-list payload can ship a tiny URL per
+// row instead of an inline base64 blob (see GET /api/retail/products above).
+// image_data is a data: URI — decode and send with a long cache window
+// (?v=updated_at busts it when the photo changes). Plain-URL images redirect.
+// Only published + active products are exposed. This is the public twin of
+// /api/retail-admin/products/:id/image (no auth, public cache).
+router.get('/api/retail/products/:id/image', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).end();
+  const row = tdb().prepare(
+    `SELECT image_data FROM products
+      WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
+  ).get(id);
+  const data = row && row.image_data;
+  if (!data) return res.status(404).end();
+  const m = /^data:([^;,]*?)(;base64)?,([\s\S]*)$/.exec(data);
+  if (!m) return res.redirect(String(data));
+  const mime = m[1] || 'application/octet-stream';
+  const buf  = m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]), 'utf8');
+  res.set('Content-Type', mime);
+  res.set('Cache-Control', 'public, max-age=31536000, immutable');
+  res.send(buf);
 });
 
 // GET /api/retail/products/:productId/substitute-options?store_id=N

@@ -53,7 +53,9 @@ function add(product, qty = 1, options = []) {
       product_id: product.id,
       name_en: product.name_en, name_cn: product.name_cn,
       sku: product.sku, size: product.size || product.weight,
-      image: absUrl(product.image_url) || product.image_data || '',
+      // image_data may be a streamed-image URL (the shop list omits inline
+      // base64) — absUrl() resolves it; data:/absolute URLs pass through.
+      image: absUrl(product.image_url) || absUrl(product.image_data) || '',
       // Server reprices at /quote and /orders, so this is just display —
       // but keep it accurate so cart subtotal matches checkout.
       unit_price: eff,
