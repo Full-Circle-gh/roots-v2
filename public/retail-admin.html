@@ -662,16 +662,11 @@
      so the most-edited control is reachable without scrolling past the long
      description. Spacing comes from the .pd-main flex gap. */
   .pd-variants {}
-  /* Product editor (#pd-bg) — large by default; the ⤢ button toggles true
-     full-screen. Bigger than the generic .pu-editor modal because it holds
-     photos, variants and side-by-side EN/CN description. (id beats .pu-editor) */
-  /* vh/vw are NOT divided by the html `zoom` the text-size control applies, so
-     a raw 90vh renders ~zoom× too tall and the centered modal's head + foot
-     overflow off-screen (unreachable while the page is scroll-locked). Divide
-     the viewport units by --ui-scale (kept in sync with zoom) so the modal
-     fits the real viewport at any text size; px caps still grow with zoom. */
+  /* Product editor (#pd-editor) — docked in the right column of the Products
+     split view. The sizing below is the fallback shape (kept so the editor
+     still has reasonable bounds if anything ever renders it outside the split
+     container); .pa-split-editor #pd-editor overrides it for the live page. */
   #pd-editor { width: min(1180px, calc(94vw / var(--ui-scale, 1))); height: calc(90vh / var(--ui-scale, 1)); max-width: calc(94vw / var(--ui-scale, 1)); }
-  #pd-editor.pd-full { width: calc(100vw / var(--ui-scale, 1)); height: calc(100vh / var(--ui-scale, 1)); max-width: calc(100vw / var(--ui-scale, 1)); max-height: calc(100vh / var(--ui-scale, 1)); border-radius: 0; }
   /* Two-pane editor: a main column (photos → name → sizes → description) and a
      narrow commercial sidebar (visibility, pricing, inventory, organization).
      Inputs fill their cell so short fields no longer float in empty space.
@@ -698,6 +693,34 @@
   #pd-editor .pd-sec-h, #pd-editor .pd-card-h { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); margin: 0; }
   #pd-editor .pd-pub { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; }
   #pd-editor .pd-pub input { width: 16px; height: 16px; }
+
+  /* Products page split view: list on the left, editor docked on the right.
+     The editor used to open in a centered .pu-editor-bg overlay; now it lives
+     inline as a second column. Container collapses to one column on narrow
+     widths, and to a single column (list-only or editor-only) when the user
+     hits Expand on the editor or switches to grid/compact catalogue scan. */
+  .pa-split { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .pa-split-list { min-width: 0; }
+  .pa-split-editor { min-width: 0; position: sticky; top: 12px; }
+  @media (max-width: 1024px) { .pa-split { grid-template-columns: 1fr; } .pa-split-editor { position: static; } }
+  /* Catalogue-scan mode: grid/compact view hides the editor so the list takes
+     the full page width — same flow as before. List view → split. */
+  .pa-split.pa-split-listonly { grid-template-columns: 1fr; }
+  .pa-split.pa-split-listonly .pa-split-editor { display: none; }
+  /* Expand-editor mode: hide the list so the editor takes the full page. */
+  .pa-split.pa-split-editonly { grid-template-columns: 1fr; }
+  .pa-split.pa-split-editonly .pa-split-list { display: none; }
+  /* Selected row highlight — picks out the product currently loaded in the
+     docked editor so the operator never loses their place after a save. */
+  .pa-row.is-selected { border-color: var(--brass); background: var(--bg-elev-1); }
+  /* Docked editor: drop the modal sizing (centered 1180×90vh) and let it fill
+     the right column instead. The body still scrolls internally. */
+  .pa-split-editor #pd-editor { width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 32px); }
+  /* Empty state shown in the editor pane when no product is selected. */
+  .pd-empty { background: var(--bg-pane); border: 1px dashed var(--line-soft); border-radius: 12px; padding: 56px 24px; text-align: center; color: var(--text-3); font-family: var(--f-sans); }
+  .pd-empty .pd-empty-h { font-size: 13px; color: var(--text-2); margin: 0 0 6px; font-weight: 500; }
+  .pd-empty .pd-empty-sub { font-size: 12px; color: var(--text-4); margin: 0; }
+
   /* Product photo gallery (editor) — thumbnails, drag-to-reorder, first = main. */
   .pd-gallery { display: flex; flex-wrap: wrap; gap: 10px; min-height: 8px; }
   .pd-gallery .pd-thumb {
@@ -4642,20 +4665,34 @@
       </div>
     </div>
 
-    <div id="pa-pager" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;margin:0 0 var(--s3);font-family:var(--f-sans);font-variant-numeric:tabular-nums;color:var(--text-3)"></div>
-    <div id="pa-grid" class="pa-grid"></div>
-    <div id="pa-empty" class="pa-empty" style="display:none">No products match this filter. · 没有匹配此筛选条件的产品。</div>
+    <!-- ── Products page: list on the left, docked editor on the right. The
+         list (pager + grid + empty) and the editor live side-by-side in one
+         flow — clicking a product loads it into the right pane instead of
+         opening a modal. The view toggle in the toolbar switches between
+         split-mode (list view) and full-width catalogue scan (grid/compact). ── -->
+    <div id="pa-split" class="pa-split">
+      <div class="pa-split-list">
+        <div id="pa-pager" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;margin:0 0 var(--s3);font-family:var(--f-sans);font-variant-numeric:tabular-nums;color:var(--text-3)"></div>
+        <div id="pa-grid" class="pa-grid"></div>
+        <div id="pa-empty" class="pa-empty" style="display:none">No products match this filter. · 没有匹配此筛选条件的产品。</div>
+      </div>
 
-    <!-- ── Product details (commercial) — the Mini App Backend's own product
-         editor: basic store fields + stock. Page design lives in the standalone
-         Product Page Editor window (launched from the button below). ── -->
-    <div id="pd-bg" class="pu-editor-bg">
-      <div class="pu-editor" id="pd-editor">
+      <!-- ── Product details (commercial) — the Mini App Backend's own product
+           editor: basic store fields + stock. Page design lives in the standalone
+           Product Page Editor window (launched from the button below). Docked
+           in the right column; #pd-empty is the placeholder shown when nothing
+           is selected. ── -->
+      <div id="pd-bg" class="pa-split-editor">
+        <div id="pd-empty" class="pd-empty">
+          <p class="pd-empty-h">Pick a product on the left · 在左侧选择产品</p>
+          <p class="pd-empty-sub">…or click <b>＋ Add product</b> above to create a new one. · 或点击上方「＋ 新增产品」创建新产品。</p>
+        </div>
+        <div class="pu-editor" id="pd-editor" style="display:none;">
         <div class="pu-editor-head">
           <h3 id="pd-title" style="margin:0;font-size:14px;">Product · 产品</h3>
           <div style="display:flex;gap:8px;align-items:center;">
             <button class="btn btn-sm" id="pd-expand-btn" type="button" onclick="pdToggleFullscreen()" title="Expand / shrink editor · 全屏 / 还原">⤢ Expand · 全屏</button>
-            <button class="btn" onclick="pdClose()">Close · 关闭</button>
+            <button class="btn" onclick="pdClose()">Done · 完成</button>
           </div>
         </div>
         <div class="pu-editor-body">
@@ -4779,12 +4816,13 @@
             <button class="btn" id="pd-delete-btn" type="button" onclick="pdDelete()" style="color:var(--danger);border-color:rgba(182,86,86,.4);">Delete · 删除</button>
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn" onclick="pdClose()">Cancel · 取消</button>
+            <button class="btn" onclick="pdRevert()" title="Throw away unsaved edits and reload the saved version · 放弃未保存的修改,重新加载已保存版本">Discard changes · 撤销</button>
             <button class="btn btn-primary" onclick="pdSave()">Save · 保存</button>
           </div>
         </div>
       </div>
-    </div>
+      </div><!-- /#pd-bg pa-split-editor -->
+    </div><!-- /#pa-split -->
 
     <!-- ── Designer Sections editor modal — split-pane (forms + live preview) ── -->
     <div id="pa-edit-bg" class="pu-editor-bg">
@@ -15270,7 +15308,19 @@ const PA_PAGE_PRESETS = [
 ];
 
 document.querySelector('[data-tab="products"]').addEventListener('click', () => {
-  if (!PA_LOADED) { PA_LOADED = true; paLoad(); }
+  if (!PA_LOADED) {
+    PA_LOADED = true;
+    paLoad();
+    // Restore the operator's preferred editor size (split vs editor-only).
+    // The class is applied to the .pa-split container; pdToggleFullscreen also
+    // syncs the ⤢/⤡ button label so users see the right affordance.
+    try {
+      const wantFull = localStorage.getItem('pd-editor-full') === '1';
+      const split = document.getElementById('pa-split');
+      if (split && wantFull) split.classList.add('pa-split-editonly');
+      pdSyncFullscreenBtn(!!wantFull);
+    } catch (e) {}
+  }
 });
 
 document.getElementById('pa-search').addEventListener('input', _paDebouncedRender);
@@ -15436,6 +15486,15 @@ function paRender() {
   document.querySelectorAll('#pa-view-seg .pa-view-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.view === PA_VIEW));
 
+  // Sync the split-view container with the chosen layout: list = split (editor
+  // docked on the right), grid/compact = list-only (catalogue scan, full width).
+  // Expand-mode (.pa-split-editonly) is independent — only toggled from the
+  // editor's ⤢ button — and wins over listonly when both apply.
+  const _paSplit = document.getElementById('pa-split');
+  if (_paSplit && !_paSplit.classList.contains('pa-split-editonly')) {
+    _paSplit.classList.toggle('pa-split-listonly', PA_VIEW !== 'list');
+  }
+
   if (PA_VIEW === 'list') {
     grid.className = 'pa-list';
     grid.innerHTML = pageUnits.map(u => {
@@ -15459,6 +15518,7 @@ function paRender() {
           <button class="pa-dup-row" type="button" title="Duplicate · 复制" onclick="event.stopPropagation(); paDuplicate(${p.id})">⧉</button>
         </div>`;
     }).join('');
+    paApplyRowSelection();
     return;
   }
 
@@ -15509,6 +15569,7 @@ function paRender() {
       </div>`;
   }).join('');
   pvApply();   // re-assert per-operator View tweaks after each grid render
+  paApplyRowSelection();
 }
 
 // Open the dedicated full-page product editor in a new browser tab. The
@@ -15527,6 +15588,14 @@ function paOpenEdit(id) {
   if (CATALOG_MODE === 'upstream') {
     window.open('/product-editor?id=' + encodeURIComponent(id), '_blank', 'noopener');
     return;
+  }
+  // Grid/compact = catalogue-scan mode (editor pane hidden). Clicking a card
+  // = "I want to edit this" → swap to the list+editor split, preserving the
+  // current page so the operator's scroll position survives.
+  if (PA_VIEW !== 'list') {
+    PA_VIEW = 'list';
+    try { localStorage.setItem('pa-view', 'list'); } catch (e) {}
+    paRender();
   }
   pdOpen(id);
 }
@@ -15591,23 +15660,69 @@ function pdOpen(id) {
   document.getElementById('pd-delete-btn').style.display = p ? '' : 'none';
   vaLoad(p ? p.id : null);
   buLoad(p ? p.id : null);
-  // Restore the operator's preferred editor size (large vs full-screen).
-  const wantFull = (() => { try { return localStorage.getItem('pd-editor-full') === '1'; } catch (e) { return false; } })();
-  document.getElementById('pd-editor').classList.toggle('pd-full', wantFull);
-  pdSyncFullscreenBtn(wantFull);
-  document.getElementById('pd-bg').classList.add('show');
+  // Show the docked editor, hide the empty-state placeholder, and mark which
+  // row in the list is currently loaded so the operator never loses their place.
+  _pdSelectedId = p ? p.id : null;
+  pdShowDocked();
+  paApplyRowSelection();
 }
-function pdClose() { document.getElementById('pd-bg').classList.remove('show'); _pdGallery = []; _pdGalleryDirty = false; const ri = document.getElementById('pd-desc-rich'); if (ri) ri.classList.remove('pd-rte-fs'); document.body.classList.remove('pd-rte-fs-lock'); }
-// Editor size: large by default, ⤢ toggles full-screen. Preference is
-// remembered per-operator so it opens the way they last left it.
+// Docked editor visibility — pdShowDocked reveals the editor in the right
+// column; pdClose hides it back to the empty-state placeholder.
+// Also ensures the right pane is visible — pdOpen can be called from "+ Add
+// product" or from duplicate while the operator is in grid/compact scan mode
+// (where listonly hides the editor); reveal it so the new product isn't
+// invisible behind the catalogue.
+function pdShowDocked() {
+  const empty = document.getElementById('pd-empty');
+  const ed    = document.getElementById('pd-editor');
+  const split = document.getElementById('pa-split');
+  if (split) split.classList.remove('pa-split-listonly');
+  if (empty) empty.style.display = 'none';
+  if (ed)    ed.style.display = '';
+}
+function pdClose() {
+  // Deselect — the editor returns to the empty-state placeholder. (Closing the
+  // editor doesn't close the page; the list stays put.)
+  _pdSelectedId = null;
+  const empty = document.getElementById('pd-empty');
+  const ed    = document.getElementById('pd-editor');
+  if (ed)    ed.style.display = 'none';
+  if (empty) empty.style.display = '';
+  _pdGallery = []; _pdGalleryDirty = false;
+  const ri = document.getElementById('pd-desc-rich'); if (ri) ri.classList.remove('pd-rte-fs');
+  document.body.classList.remove('pd-rte-fs-lock');
+  paApplyRowSelection();
+}
+// Discard unsaved typing: reload the editor from the on-disk product. PA_PRODUCTS
+// is the post-save cache, so re-opening the same id resets every form field.
+function pdRevert() {
+  if (_pdSelectedId != null) pdOpen(_pdSelectedId);
+  else pdClose();
+}
+// Expand mode: hide the left list so the editor fills the page width.
 function pdSyncFullscreenBtn(on) {
   const btn = document.getElementById('pd-expand-btn');
   if (btn) btn.innerHTML = on ? '⤡ Shrink · 还原' : '⤢ Expand · 全屏';
 }
 function pdToggleFullscreen() {
-  const on = document.getElementById('pd-editor').classList.toggle('pd-full');
+  const split = document.getElementById('pa-split');
+  if (!split) return;
+  const on = split.classList.toggle('pa-split-editonly');
   pdSyncFullscreenBtn(on);
   try { localStorage.setItem('pd-editor-full', on ? '1' : '0'); } catch (e) {}
+}
+// Currently-selected product id (the one loaded in the docked editor). Used to
+// paint the row highlight and to power Discard / post-save reload.
+let _pdSelectedId = null;
+function paApplyRowSelection() {
+  const grid = document.getElementById('pa-grid');
+  if (!grid) return;
+  grid.querySelectorAll('.pa-row.is-selected, .pa-card.is-selected').forEach(el => el.classList.remove('is-selected'));
+  if (_pdSelectedId == null) return;
+  // Both row and card markups bind `onclick="paOpenEdit(<id>)"` — find the
+  // element whose handler references the selected id and flag it.
+  const sel = grid.querySelector(`[onclick*="paOpenEdit(${_pdSelectedId})"]`);
+  if (sel) sel.classList.add('is-selected');
 }
 
 // ── Product variants (managed inside the product editor) ────────────────────
@@ -16092,8 +16207,13 @@ async function pdSave() {
       try { await vaPersist(); await vaPersistSiblings(); }
       catch (e) { alert('Variants not saved · 规格未保存: ' + e.message); return; }
     }
-    pdClose();
+    // Stay on the just-saved product: refresh the list (so name/badges update)
+    // and reload the editor with the fresh row, keeping the row highlighted.
+    // For a brand-new product, j.data carries the assigned id.
+    const savedId = id ? Number(id) : (j.data && j.data.id);
     paRender();
+    if (savedId != null) pdOpen(savedId);
+    toast(cuT('Saved', '已保存'));
   } catch (e) { alert('Save failed · 保存失败: ' + e.message); }
 }
 // Duplicate a product. asVariant=true also joins the copy to the source's
