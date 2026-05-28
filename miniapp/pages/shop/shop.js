@@ -421,8 +421,9 @@ Page({
 
   // Group products by variant_group_id and collapse each group (≥2 members)
   // into a single representative card. The representative is the group owner
-  // (id === variant_group_id) when present, otherwise the cheapest member.
-  // Members are stashed on `_members` (sorted cheapest-first) for the picker.
+  // (id === variant_group_id) when present, otherwise the first member.
+  // Members are stashed on `_members` in the operator's chosen order
+  // (variant_sort, set by drag-to-reorder in the backend) for the picker.
   // Standalone products — and groups that survive filtering with only one
   // member — pass through unchanged, preserving the server's sort order.
   _collapseVariants(raw) {
@@ -441,8 +442,9 @@ Page({
       if (emitted.has(gid)) continue;
       emitted.add(gid);
       const sorted = members.slice().sort((a, b) =>
-        (_effPrice(a) - _effPrice(b)) ||
-        String(a.variant_label || '').localeCompare(String(b.variant_label || '')));
+        ((a.variant_sort ?? 0) - (b.variant_sort ?? 0)) ||
+        String(a.variant_label || '').localeCompare(String(b.variant_label || '')) ||
+        (a.id - b.id));
       const rep = sorted.find(m => m.id === gid) || sorted[0];
       out.push({ ...rep, _members: sorted });
     }

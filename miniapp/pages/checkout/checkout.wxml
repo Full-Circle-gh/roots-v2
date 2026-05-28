@@ -33,7 +33,7 @@
   </view>
 
   <!-- Deliver to -->
-  <view class="section">
+  <view class="section" id="addr-section">
     <view class="section-head">
       <view class="section-title f-bear">{{copy.shipToTitle}}</view>
       <view wx:if="{{isBound && address.id && !pickerOpen && !showNewForm}}" class="head-action f-toni" bindtap="openPicker">

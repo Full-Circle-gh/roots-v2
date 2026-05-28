@@ -248,7 +248,7 @@ const RETAIL_PRODUCT_COLS = `
   p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,
   p.flash_price, p.flash_starts_at, p.flash_ends_at,
   p.flash_stock_limit, p.flash_sold,
-  p.variant_group_id, p.variant_label
+  p.variant_group_id, p.variant_label, p.variant_sort
 `;
 
 // Parse JSON-string columns (nutrition, description_blocks) into objects for
@@ -2565,12 +2565,24 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   //      partial stack: deduct N points (cash-valued at configured rate)
   //      from the bill, customer pays the residual with wechat/alipay.
   let pointsUsed = 0, pointsAmount = 0;
+  // Cash base points are allowed to redeem against. When the store excludes
+  // shipping from points coverage, the residual (shipping) must always be
+  // paid in cash — so the legacy points-only payment method can't settle
+  // it alone and is rejected for orders that ship.
+  const redeemBase = pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount);
   if (paymentMethod === 'points') {
     sweepExpiredPoints(req.customer.id);
     const cust = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(req.customer.id);
     const have = cust?.points_balance || 0;
-    pointsUsed   = pointsRequiredFor(grossTotal);
-    pointsAmount = grossTotal;
+    if (redeemBase < grossTotal) {
+      return res.status(400).json({
+        success: false,
+        error: 'points_cannot_cover_shipping',
+        shipping_due: +(grossTotal - redeemBase).toFixed(2),
+      });
+    }
+    pointsUsed   = pointsRequiredFor(redeemBase);
+    pointsAmount = redeemBase;
     if (have < pointsUsed) {
       return res.status(409).json({
         success: false,
@@ -2585,8 +2597,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     const have = cust?.points_balance || 0;
     const requested = Math.floor(Number(body.points_to_use));
     // Cap at the customer's balance AND at the points needed to fully
-    // cover grossTotal — extra points beyond that would just be burned.
-    const maxByOrder = pointsRequiredFor(grossTotal);
+    // cover the redeemable base — extra points beyond that would just be
+    // burned (and can't reach the shipping line when policy excludes it).
+    const maxByOrder = pointsRequiredFor(redeemBase);
     pointsUsed = Math.min(requested, have, maxByOrder);
     pointsAmount = pointsCashValue(pointsUsed);
     if (requested > have) {
@@ -5386,7 +5399,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     description_en, description_cn, description_format,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
                     nutrition, bundle, tags,
-                    variant_group_id, variant_label,
+                    variant_group_id, variant_label, variant_sort,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
                     (image_data IS NOT NULL AND image_data != '') AS has_image_data,
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks
@@ -7925,6 +7938,18 @@ function pointsCashValue(pts) {
 function pointsRequiredFor(cash) {
   return Math.ceil(Number(cash || 0) * pointsRedeemRate());
 }
+// Store policy: are points allowed to pay the shipping fee? Default OFF —
+// points cover product subtotal + packing only; customer always pays
+// shipping in cash. Admin can flip this on per store.
+function pointsCoverShipping() {
+  return !!cfgValue('points.coverShipping', false);
+}
+// Cash base that points are allowed to redeem against. When shipping is
+// excluded by policy, the residual (shipping) is always paid in cash.
+function pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount = 0) {
+  const ship = pointsCoverShipping() ? Number(shippingFee || 0) : 0;
+  return Math.max(0, Number(subtotal || 0) + ship + Number(packingFee || 0) - Number(voucherDiscount || 0));
+}
 
 // Reverse a redemption when an order is refunded. Idempotent — checks for
 // an existing 'refund_reverse' row tagged to this order's redeem.
@@ -8082,7 +8107,11 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
   const pointsBalance = _c?.points_balance || 0;
   const redeemRate = pointsRedeemRate();
   const paymentMethodPreview = body.payment_method || null;
-  const pointsRequired   = pointsRequiredFor(grossTotal);
+  // When the store excludes shipping from points coverage, the redeemable
+  // base is subtotal + packing only; the customer always pays shipping in
+  // cash (so residual = shipping when the points side is "full").
+  const redeemBase       = pointsRedeemableBase(priced.subtotal, fees.deliveryFee, fees.packingFee);
+  const pointsRequired   = pointsRequiredFor(redeemBase);
   const pointsAffordable = pointsBalance >= pointsRequired;
   const pointsMaxUsable  = Math.min(pointsBalance, pointsRequired);
 
@@ -8090,7 +8119,11 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
   let pointsDiscount     = 0;
   let total;
   if (paymentMethodPreview === 'points') {
-    total = pointsAffordable ? 0 : grossTotal;
+    // Legacy points-only path. When shipping isn't covered there's a cash
+    // residual the points method can't settle — the mini-app no longer
+    // exposes this radio, but report the residual so any old client sees
+    // the right number.
+    total = pointsAffordable ? Math.max(0, grossTotal - redeemBase) : grossTotal;
   } else {
     const reqPts = Math.max(0, Math.floor(Number(body.points_to_use) || 0));
     pointsToUseApplied = Math.min(reqPts, pointsMaxUsable);
@@ -8192,6 +8225,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
       points_max_usable:  pointsMaxUsable,
       points_to_use_applied: pointsToUseApplied,
       points_discount: pointsDiscount,
+      points_cover_shipping: pointsCoverShipping(),
       points_earned_preview: pointsEarnedFor(priced.subtotal),
       delivery_mode: deliveryMode,
       zone: {

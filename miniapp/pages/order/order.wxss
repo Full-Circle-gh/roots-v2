@@ -292,7 +292,9 @@
   width: 100%;
   background: var(--oat);
   border-radius: 32rpx 32rpx 0 0;
-  padding: 24rpx 36rpx 48rpx;
+  /* Bottom pad clears the home indicator so the action buttons aren't
+     cropped against the safe-area bar on notch/pill phones. */
+  padding: 24rpx 36rpx calc(48rpx + env(safe-area-inset-bottom));
   max-height: 88vh;
   overflow-y: auto;
 }

@@ -1134,8 +1134,23 @@ Page({
       cityIndex: 0,
       districtOptions: [],
       districtIndex: 0,
-    });
+    }, () => this.scrollToAddrForm());
     this.refreshQuote();
+  },
+  // The "use a new address" link lives at the bottom of a long saved-address
+  // list, so when the list collapses into the (shorter) inline form the user
+  // is left scrolled past it. Pull the address section back up under the
+  // header so the empty form is the first thing in view.
+  scrollToAddrForm() {
+    wx.createSelectorQuery().in(this)
+      .select('#addr-section').boundingClientRect()
+      .selectViewport().scrollOffset()
+      .exec((res) => {
+        const rect = res && res[0];
+        const vp = res && res[1];
+        if (!rect || !vp) return;
+        wx.pageScrollTo({ scrollTop: vp.scrollTop + rect.top - 16, duration: 250 });
+      });
   },
   cancelNew() {
     // Restore selection to the default (or first) saved address
