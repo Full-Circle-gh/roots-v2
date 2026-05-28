@@ -224,7 +224,9 @@
 
     <view wx:if="{{refundMode === 'full' || refundMode === 'amount'}}" class="rs-field">
       <text class="rs-label">{{copy.refundAmountLabel}}</text>
-      <input class="rs-input" type="digit" value="{{refundAmount}}" bindinput="onRefundAmountInput" disabled="{{refundMode === 'full'}}"/>
+      <view class="rs-input-wrap">
+        <input class="rs-input" type="digit" value="{{refundAmount}}" bindinput="onRefundAmountInput" disabled="{{refundMode === 'full'}}"/>
+      </view>
       <view class="rs-hint muted">{{lang === 'cn' ? '订单总额' : 'Order total'}}: ¥{{order.total}}</view>
     </view>
 
@@ -254,7 +256,9 @@
     </view>
 
     <view class="rs-field">
-      <textarea class="rs-textarea" placeholder="{{copy.refundReasonPlaceholder}}" value="{{refundReason}}" bindinput="onRefundReasonInput" maxlength="500"/>
+      <view class="rs-input-wrap rs-input-wrap-area">
+        <textarea class="rs-textarea" placeholder="{{copy.refundReasonPlaceholder}}" value="{{refundReason}}" bindinput="onRefundReasonInput" maxlength="500"/>
+      </view>
     </view>
 
     <view class="rs-actions">
@@ -279,17 +283,23 @@
 
     <view class="rs-field">
       <text class="rs-label">{{copy.invTitleLabel}}</text>
-      <input class="rs-input" value="{{invoiceTitle}}" placeholder="{{copy.invTitlePh}}" bindinput="onInvTitleInput"/>
+      <view class="rs-input-wrap">
+        <input class="rs-input" value="{{invoiceTitle}}" placeholder="{{copy.invTitlePh}}" bindinput="onInvTitleInput"/>
+      </view>
     </view>
 
     <view wx:if="{{invoiceType === 'company'}}" class="rs-field">
       <text class="rs-label">{{copy.invTaxLabel}}</text>
-      <input class="rs-input" value="{{invoiceTaxId}}" placeholder="{{copy.invTaxPh}}" bindinput="onInvTaxInput"/>
+      <view class="rs-input-wrap">
+        <input class="rs-input" value="{{invoiceTaxId}}" placeholder="{{copy.invTaxPh}}" bindinput="onInvTaxInput"/>
+      </view>
     </view>
 
     <view class="rs-field">
       <text class="rs-label">{{copy.invEmailLabel}}</text>
-      <input class="rs-input" value="{{invoiceEmail}}" placeholder="{{copy.invEmailPh}}" bindinput="onInvEmailInput"/>
+      <view class="rs-input-wrap">
+        <input class="rs-input" value="{{invoiceEmail}}" placeholder="{{copy.invEmailPh}}" bindinput="onInvEmailInput"/>
+      </view>
     </view>
 
     <view class="rs-actions">

@@ -346,20 +346,40 @@
   margin-bottom: 10rpx;
   font-family: monospace;
 }
-.rs-input, .rs-textarea, .rs-qty {
+/* The wrapper owns the visual border + horizontal padding. WeChat's
+   native <input>/<textarea> ignore CSS padding for the text-render
+   area, so without a wrapper the first character ("2" in 229.00 or
+   "y" in a placeholder) hugs the border and looks clipped. With a
+   bare input inside this view, the text renders inside the wrapper's
+   32rpx side padding and breathes properly. */
+.rs-input-wrap {
   width: 100%;
-  /* WeChat <input>/<textarea> render their text right at the box edge
-     when horizontal padding is tight, so the first character (e.g.
-     "2" in 229.00 or "y" in placeholder) looks clipped against the
-     border. 32rpx side padding leaves a comfortable margin. */
   padding: 16rpx 32rpx;
+  border: 3rpx solid rgba(0,0,0,.15);
+  border-radius: 12rpx;
+  background: rgba(255,255,255,.4);
+  box-sizing: border-box;
+}
+.rs-input-wrap-area { padding: 16rpx 32rpx; }
+.rs-input, .rs-textarea {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: calc(28rpx * var(--font-scale));
+  box-sizing: border-box;
+}
+/* Inline quantity field — small, sits in a row with other text, keeps
+   its own visible box (no wrapper around it). */
+.rs-qty {
+  width: 140rpx;
+  padding: 16rpx 20rpx;
   border: 3rpx solid rgba(0,0,0,.15);
   border-radius: 12rpx;
   background: rgba(255,255,255,.4);
   font-size: calc(28rpx * var(--font-scale));
   box-sizing: border-box;
 }
-.rs-qty { width: 140rpx; }
 .rs-textarea { min-height: 140rpx; }
 .rs-hint {
   margin-top: 8rpx;
