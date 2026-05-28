@@ -4776,8 +4776,7 @@ async function addLinkFromHomeToCurrentPage() {
 async function renderOnboardingSettings(el) {
   let s = {
     show_to: 'new', version: 1,
-    skip_label: { en: 'SKIP',   cn: '跳过' },
-    next_label: { en: 'NEXT →', cn: '下一步 →' },
+    next_label: { en: 'GET STARTED', cn: '开始' },
   };
   try {
     const r = await api('/api/retail-admin/cms/onboarding-settings');
@@ -4795,7 +4794,6 @@ async function renderOnboardingSettings(el) {
   ].map(([v, label]) =>
     `<option value="${v}" ${s.show_to === v ? 'selected' : ''}>${label}</option>`
   ).join('');
-  const skipVal = `${s.skip_label.en} · ${s.skip_label.cn}`;
   const nextVal = `${s.next_label.en} · ${s.next_label.cn}`;
   const inputStyle = `
     font: inherit; color: var(--text-1);
@@ -4814,10 +4812,8 @@ async function renderOnboardingSettings(el) {
         )}">${B('Re-show to all', '向所有人重新显示')}</button>
       </div>
       <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; color:var(--text-2);">
-        <span>${B('Skip label', '跳过按钮')}</span>
-        <input id="onb-skip" type="text" maxlength="40" value="${escapeHtml(skipVal)}" style="${inputStyle} flex:1; min-width:140px;" placeholder="SKIP · 跳过"/>
-        <span>${B('Next label', '下一步按钮')}</span>
-        <input id="onb-next" type="text" maxlength="40" value="${escapeHtml(nextVal)}" style="${inputStyle} flex:1; min-width:140px;" placeholder="NEXT → · 下一步 →"/>
+        <span>${B('Button label', '按钮文字')}</span>
+        <input id="onb-next" type="text" maxlength="40" value="${escapeHtml(nextVal)}" style="${inputStyle} flex:1; min-width:200px;" placeholder="GET STARTED · 开始"/>
       </div>
     </div>`;
   $('#onb-show-to').addEventListener('change', async (ev) => {
@@ -4861,13 +4857,11 @@ async function renderOnboardingSettings(el) {
       toast('Failed: ' + e.message, 'err');
     }
   }
-  for (const [id, field] of [['#onb-skip', 'skip_label'], ['#onb-next', 'next_label']]) {
-    const inp = $(id);
-    inp.addEventListener('blur', () => saveLabel(field, inp.value));
-    inp.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
-    });
-  }
+  const inp = $('#onb-next');
+  inp.addEventListener('blur', () => saveLabel('next_label', inp.value));
+  inp.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
+  });
 }
 
 async function loadPage() {

@@ -7253,11 +7253,10 @@ router.post('/api/retail-admin/cms/publish', requireRetailAdmin, express.json(),
 // Stored as flat `onboarding.show_to` / `onboarding.version` keys in
 // storefront_config — loadConfig() nests them into cfg.onboarding for
 // the public /api/retail/config response.
-// Footer button label defaults — mirror the mini-app fallbacks. Stored as
-// nested JSON so the mini-app reads cfg.onboarding.skip_label.{en,cn}.
+// Footer button label defaults — mirror the mini-app fallback. Stored as
+// nested JSON so the mini-app reads cfg.onboarding.next_label.{en,cn}.
 const DEFAULT_ONBOARDING_LABELS = {
-  skip_label: { en: 'SKIP',    cn: '跳过' },
-  next_label: { en: 'NEXT →',  cn: '下一步 →' },
+  next_label: { en: 'GET STARTED', cn: '开始' },
 };
 
 function readLabelKey(key, fallback) {
@@ -7287,7 +7286,6 @@ function readOnboardingSettings() {
   }
   return {
     show_to, version,
-    skip_label: readLabelKey('onboarding.skip_label', DEFAULT_ONBOARDING_LABELS.skip_label),
     next_label: readLabelKey('onboarding.next_label', DEFAULT_ONBOARDING_LABELS.next_label),
   };
 }
@@ -7306,17 +7304,16 @@ router.put('/api/retail-admin/cms/onboarding-settings', requireRetailAdmin, expr
     }
     writeLayout('onboarding.show_to', JSON.stringify(body.show_to), req.user.id);
   }
-  for (const key of ['skip_label', 'next_label']) {
-    const node = body[key];
-    if (!node || typeof node !== 'object') continue;
+  const node = body.next_label;
+  if (node && typeof node === 'object') {
     for (const lang of ['en', 'cn']) {
       if (node[lang] === undefined) continue;
       const v = String(node[lang] || '').slice(0, 40).trim();
       // Blank value clears the row so the default reasserts; otherwise upsert.
       if (!v) {
-        tdb().prepare('DELETE FROM storefront_config WHERE key = ?').run(`onboarding.${key}.${lang}`);
+        tdb().prepare('DELETE FROM storefront_config WHERE key = ?').run(`onboarding.next_label.${lang}`);
       } else {
-        writeLayout(`onboarding.${key}.${lang}`, JSON.stringify(v), req.user.id);
+        writeLayout(`onboarding.next_label.${lang}`, JSON.stringify(v), req.user.id);
       }
     }
   }

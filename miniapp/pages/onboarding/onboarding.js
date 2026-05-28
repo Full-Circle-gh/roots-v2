@@ -3,10 +3,9 @@
 
 const config = require('../../utils/config');
 
-// Hardcoded fallbacks — used when the CMS hasn't overridden the labels
+// Hardcoded fallback — used when the CMS hasn't overridden the label
 // or when /api/retail/config fails to resolve.
-const DEFAULT_SKIP = { en: 'SKIP',     cn: '跳过' };
-const DEFAULT_NEXT = { en: 'NEXT →',   cn: '下一步 →' };
+const DEFAULT_NEXT = { en: 'GET STARTED', cn: '开始' };
 
 function pickLabel(node, lang, fallback) {
   const v = node && typeof node === 'object' ? String(node[lang] || '').trim() : '';
@@ -16,7 +15,6 @@ function pickLabel(node, lang, fallback) {
 Page({
   data: {
     layout: [], lang: 'en', loading: true, version: '1',
-    skipLabel: DEFAULT_SKIP.en,
     nextLabel: DEFAULT_NEXT.en,
   },
 
@@ -25,7 +23,6 @@ Page({
     const lang = app.globalData.lang || 'en';
     this.setData({
       lang,
-      skipLabel: DEFAULT_SKIP[lang] || DEFAULT_SKIP.en,
       nextLabel: DEFAULT_NEXT[lang] || DEFAULT_NEXT.en,
     });
     try {
@@ -35,7 +32,6 @@ Page({
       this.setData({
         layout: cfg?.onboarding?.layout || [],
         version: ver,
-        skipLabel: pickLabel(cfg?.onboarding?.skip_label, lang, DEFAULT_SKIP),
         nextLabel: pickLabel(cfg?.onboarding?.next_label, lang, DEFAULT_NEXT),
         loading: false,
       });

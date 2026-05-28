@@ -6,7 +6,6 @@
     lang="{{lang}}"/>
 
   <view class="footer">
-    <view class="skip f-toni" hover-class="btn-hover" bindtap="goHome">{{skipLabel}}</view>
     <view class="next f-toni" hover-class="btn-hover" bindtap="goHome">{{nextLabel}}</view>
   </view>
 </view>

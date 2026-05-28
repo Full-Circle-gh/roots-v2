@@ -10,29 +10,16 @@
   bottom: 60rpx;
   left: 44rpx;
   right: 44rpx;
-  display: flex;
-  gap: 16rpx;
 }
-/* Buttons are <view>s, not <button>s, because WeChat's native <button>
-   intermittently drops bindtap on the transparent-bg .skip variant on
-   some Android builds (reported 2026-05-28). <view bindtap> is reliable.
-   We add the chrome <button> would have given us by default. */
-.skip, .next {
+/* <view bindtap> instead of <button> — WeChat's native <button> drops
+   taps inconsistently on some Android builds. */
+.next {
   padding: 28rpx 0;
   font-size: calc(26rpx * var(--font-scale));
   letter-spacing: 0.1em;
   text-align: center;
   border-radius: 8rpx;
   line-height: 1.1;
-}
-.skip {
-  flex: 1;
-  background: transparent;
-  border: 3rpx solid var(--ink);
-  color: var(--ink);
-}
-.next {
-  flex: 2;
   background: var(--lime);
   color: var(--ink);
 }
