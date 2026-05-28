@@ -252,7 +252,6 @@
       <button class="add-btn f-toni {{soldOut ? 'sold-out' : ''}}" bindtap="addToCart" disabled="{{soldOut}}">
         <text class="add-label">{{addBtnLabel}}</text>
         <view wx:if="{{!soldOut}}" class="add-prices">
-          <text wx:if="{{compareAtText}}" class="add-compare f-aleo">{{compareAtText}}</text>
           <text class="add-price f-gothic">{{price}}</text>
         </view>
       </button>

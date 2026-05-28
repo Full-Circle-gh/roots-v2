@@ -102,7 +102,6 @@ Page({
     priceN: 0,
     isFlash: false,
     flashWas: '',
-    compareAtText: '',
     images: [],
     heroIndex: 0,
     descHtml: '',
@@ -306,11 +305,6 @@ Page({
     const flashWas = isFlash ? '¥' + regular.toFixed(2) : '';
     const flashOff = isFlash && regular > 0 ? '-' + Math.round(((regular - v) / regular) * 100) + '%' : '';
     const flashEnds = isFlash && p.flash?.ends_at ? p.flash.ends_at : '';
-    // Compare-at ("was") price — struck through next to the live price. Only
-    // when there's NO active flash sale (flash already shows its own was-price)
-    // and the compare-at is genuinely higher than what we charge.
-    const compareAt = Number(p.compare_at_price) || 0;
-    const compareAtText = (!isFlash && compareAt > v) ? '¥' + compareAt.toFixed(2) : '';
     // free_of (comma list like "gluten,nuts") → badges
     const freeOf = (p.free_of || '').split(',').map(s => s.trim()).filter(Boolean);
     const badgeMap = {
@@ -531,7 +525,6 @@ Page({
       flashWas,
       flashOff,
       flashEnds,
-      compareAtText,
       description: rawDesc,
       descHtml,
       descriptionParts: isRichDesc ? [] : descParts,

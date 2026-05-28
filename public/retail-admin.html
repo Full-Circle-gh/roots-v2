@@ -4774,11 +4774,7 @@
             </label>
             <section class="pd-card">
               <div class="pd-card-h">Pricing · 价格</div>
-              <div class="pd-row2">
-                <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
-                <div class="field"><label class="stacked">Compare-at ¥ · 划线价</label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="optional · 可选"></div>
-              </div>
-              <div class="muted" style="font-size:11px;">Higher "was" price — shown struck through next to the price. Leave blank for none. · 划线原价(需高于售价),留空则不显示。</div>
+              <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
             </section>
             <section class="pd-card">
               <div class="pd-card-h">Inventory · 库存</div>
@@ -15617,7 +15613,6 @@ function pdOpen(id) {
   document.getElementById('pd-title').textContent = p ? (p.name_en || p.name_cn || 'Product · 产品') : 'New product · 新增产品';
   set('pd-name-en', p && p.name_en); set('pd-name-cn', p && p.name_cn);
   set('pd-price', p ? p.sell_price : ''); set('pd-stock', p ? (p.stock_qty != null ? p.stock_qty : 0) : '');
-  set('pd-compare', p && p.compare_at_price ? p.compare_at_price : '');
   set('pd-sku', p && p.sku); set('pd-category', p && p.category); set('pd-weight', p && p.size);
   set('pd-badge', p ? pdBadgeOf(p.tags) : '');
   // Description is always the Classic (rich-text) editor now. A legacy plain
@@ -16166,7 +16161,6 @@ async function pdSave() {
     sku: g('pd-sku'), category: g('pd-category'), weight: g('pd-weight'),
     tags: g('pd-badge'),
     sell_price: parseFloat(g('pd-price')) || 0,
-    compare_at_price: parseFloat(g('pd-compare')) || 0,
     stock_qty: parseInt(g('pd-stock'), 10) || 0,
     ship_modes: modes.join(',') || 'air,land',
     description_en: descEn, description_cn: descCn, description_format: descFormat,

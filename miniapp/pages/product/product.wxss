@@ -760,12 +760,6 @@
 .add-price {
   font-size: calc(36rpx * var(--font-scale));
 }
-/* "Was" price — struck through, faded, smaller than the live price. */
-.add-compare {
-  font-size: calc(24rpx * var(--font-scale));
-  text-decoration: line-through;
-  opacity: 0.55;
-}
 
 .loading { padding: 0 0 60rpx; }
 .hero-skel  { width: 100%; height: 800rpx; }
