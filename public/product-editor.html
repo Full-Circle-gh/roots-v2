@@ -26,6 +26,12 @@
       var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
       if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
       document.documentElement.style.zoom = String(s);
+      // `zoom` scales the rendered layout, but the grid's fixed-px tracks
+      // (rail + inspector) stay at the same CSS-px count, so at scale > 1
+      // they take `s`× more physical pixels and push the inspector off
+      // the right edge. Expose the scale so layout can divide fixed tracks
+      // by it and keep the panes the same physical width at every zoom.
+      document.documentElement.style.setProperty('--ui-scale', String(s));
     } catch (e) {}
   })();
 </script>
@@ -364,14 +370,19 @@
   #pe-body {
     height: calc(100vh - 56px);
     display: grid;
-    grid-template-columns: 288px 1fr 380px;
+    /* Fixed tracks are divided by --ui-scale so document `zoom` (the Aa text
+       size) doesn't push the inspector off the right edge — at 125% the CSS
+       widths shrink to 230 / 304, then render at the original 288 / 380
+       physical pixels. Canvas (1fr) absorbs the slack. */
+    grid-template-columns:
+      calc(288px / var(--ui-scale, 1)) 1fr calc(380px / var(--ui-scale, 1));
     /* Definite row so the panes (and the phone inside the canvas) fill the body
        instead of growing to content. Lets the phone fit at any zoom. */
     grid-template-rows: minmax(0, 1fr);
     overflow: hidden;
   }
   @media (max-width: 1100px) {
-    #pe-body { grid-template-columns: 260px 1fr; }
+    #pe-body { grid-template-columns: calc(260px / var(--ui-scale, 1)) 1fr; }
     .pa-edit-inspector { display: none !important; }
   }
 
@@ -2719,6 +2730,9 @@ function cuGetUiScale() {
 }
 function cuApplyUiScale(v) {
   document.documentElement.style.zoom = String(v);
+  // Mirror the scale into a CSS var so the body grid can divide its fixed
+  // tracks by it and stop the inspector spilling off-screen at >100%.
+  document.documentElement.style.setProperty('--ui-scale', String(v));
   const lbl = document.querySelector('#ui-scale-toggle .ui-scale-val');
   if (lbl) lbl.textContent = Math.round(v * 100) + '%';
 }
