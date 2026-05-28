@@ -26309,19 +26309,21 @@ function sproutPageContext() {
   // Auto-translate content added by JS after load (drawers, table rows, etc.).
   // Rewriting nodeValue does NOT fire childList mutations, so there is no
   // feedback loop and no need to disconnect.
-  let _moTimer, _pending = [];
+  //
+  // Process synchronously inside the observer callback (a microtask), NOT
+  // via setTimeout — microtasks run before the next browser paint, so the
+  // user never sees the raw "EN · CN" string. The previous 60ms debounce
+  // let the browser paint the bilingual literal first, which showed up as
+  // an EN↔CN flicker on every sidebar nav click.
   const _mo = new MutationObserver(function (mutations) {
+    const batch = [];
     for (const m of mutations) {
       for (const node of m.addedNodes) {
-        if (node.nodeType === 1 || node.nodeType === 3) _pending.push(node);
+        if (node.nodeType === 1 || node.nodeType === 3) batch.push(node);
       }
     }
-    if (!_pending.length) return;
-    clearTimeout(_moTimer);
-    _moTimer = setTimeout(function () {
-      const batch = _pending; _pending = [];
-      batch.forEach(function (nd) { try { processSubtree(nd); } catch (e) {} });
-    }, 60);
+    if (!batch.length) return;
+    batch.forEach(function (nd) { try { processSubtree(nd); } catch (e) {} });
   });
 
   window.cuToggleLang  = function () { applyLang(_lang === 'cn' ? 'en' : 'cn'); };
