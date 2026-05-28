@@ -25,12 +25,9 @@
     try {
       var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
       if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
-      document.documentElement.style.zoom = String(s);
-      // `zoom` scales the rendered layout, but the grid's fixed-px tracks
-      // (rail + inspector) stay at the same CSS-px count, so at scale > 1
-      // they take `s`× more physical pixels and push the inspector off
-      // the right edge. Expose the scale so layout can divide fixed tracks
-      // by it and keep the panes the same physical width at every zoom.
+      // Drive UI scale via a CSS variable that body picks up with
+      // transform: scale + a viewport/scale size box. Avoid `zoom` here —
+      // it overflowed the 3-pane layout off the right edge at >100%.
       document.documentElement.style.setProperty('--ui-scale', String(s));
     } catch (e) {}
   })();
@@ -117,21 +114,23 @@
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  /* Shrink the document to viewport / ui-scale so `zoom` expands it back to
-     exactly the physical viewport. Without this, zoom:1.25 lays the page out
-     at viewport width then scales it 1.25× wider, pushing the right pane off
-     the screen. `vw`/`vh` always report the real viewport, so this works at
-     any zoom; at scale = 1 the calc collapses to 100vw/100vh (no change). */
-  html, body {
-    width:  calc(100vw / var(--ui-scale, 1));
-    height: calc(100vh / var(--ui-scale, 1));
-  }
+  html, body { height: 100%; }
   body {
     font: 13px var(--f-sans);
     background: var(--bg-app);
     color: var(--text-1);
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
+    /* UI scale: size body to viewport / scale, then transform-scale it back
+       up so it visually fills the viewport. Unlike `zoom` (which scales the
+       layout box and overflowed at >100%), transform doesn't affect layout
+       — the grid inside lays out in the smaller CSS coord system and is
+       guaranteed to fit. At scale = 1 these collapse to 100vw/100vh +
+       scale(1), so default behavior is unchanged. */
+    width:  calc(100vw / var(--ui-scale, 1));
+    height: calc(100vh / var(--ui-scale, 1));
+    transform: scale(var(--ui-scale, 1));
+    transform-origin: top left;
   }
 
   /* ── BUTTONS ── */
@@ -2735,9 +2734,8 @@ function cuGetUiScale() {
   return v;
 }
 function cuApplyUiScale(v) {
-  document.documentElement.style.zoom = String(v);
-  // Mirror the scale into a CSS var so the body grid can divide its fixed
-  // tracks by it and stop the inspector spilling off-screen at >100%.
+  // CSS picks this up via body { transform: scale; width/height: 100v*/scale }.
+  // No `zoom` here — it pushed the 3-pane layout off the right edge at >100%.
   document.documentElement.style.setProperty('--ui-scale', String(v));
   const lbl = document.querySelector('#ui-scale-toggle .ui-scale-val');
   if (lbl) lbl.textContent = Math.round(v * 100) + '%';
