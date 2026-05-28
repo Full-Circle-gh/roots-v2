@@ -260,7 +260,7 @@ const RETAIL_PRODUCT_COLS = `
   p.free_of, p.tags, p.image_data, p.image_url,
   p.nutrition,
   p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,
-  p.description_blocks,
+  p.description_blocks, p.use_block_design,
   p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,
   p.flash_price, p.flash_starts_at, p.flash_ends_at,
   p.flash_stock_limit, p.flash_sold,

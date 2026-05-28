@@ -977,6 +977,13 @@ addColumn('products', 'tagline_cn',             'TEXT');
 // textareas — products that haven't been migrated to blocks fall back to
 // the textareas so there's no flag day.
 addColumn('products', 'description_blocks',     'TEXT');
+// Per-product toggle: which description renderer the mini-app product page
+// uses. 0/NULL (default) → classic description_en/cn path (rich-text or
+// ## headings). 1 → designer block editor (description_blocks). Without
+// this flag, blocks would silently win the moment any were authored — too
+// sticky if the office wants to keep drafted blocks while still publishing
+// the classic copy. Set from the kitchen product editor's Description card.
+addColumn('products', 'use_block_design',       'INTEGER DEFAULT 0');
 // Page colophon overrides — v1 design renders a single IP character + a
 // brand tagline as the page sign-off. By default we auto-pick the
 // character by product category and use "From Soil to Soul" as the line,

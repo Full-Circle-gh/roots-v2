@@ -15,7 +15,7 @@ const PRODUCT_COLS = `
   p.ship_modes, p.needs_ice_pack,
   p.nutrition,
   p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,
-  p.description_blocks, p.bundle,
+  p.description_blocks, p.use_block_design, p.bundle,
   p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,
   r.name_en AS recipe_name
 `;
@@ -293,6 +293,9 @@ const FIELDS = [
   'keywords_en', 'keywords_cn', 'tagline_en', 'tagline_cn',
   // Block-based product page body (JSON array of `{id, type, ...data}`)
   'description_blocks',
+  // Office toggle (kitchen Description card): when 1, mini-app renders
+  // blocks; when 0/null (default), it renders the classic description path.
+  'use_block_design',
   // Colophon overrides — blank fields fall back to category-mapped character
   // + default "From Soil to Soul" tagline.
   'colophon_character', 'colophon_tagline_en', 'colophon_tagline_cn',
@@ -306,6 +309,7 @@ function pickBody(body) {
     else if (k === 'is_market')          out[k] = body[k] ? 1 : 0;
     else if (k === 'is_restock_only')    out[k] = body[k] ? 1 : 0;
     else if (k === 'is_published')       out[k] = body[k] ? 1 : 0;
+    else if (k === 'use_block_design')   out[k] = body[k] ? 1 : 0;
     else if (k === 'ship_modes') {
       // Accept either a csv string ("air,land") or an array (['air','land']).
       // Normalize to a stable csv with at least one mode; default to 'air,land'.

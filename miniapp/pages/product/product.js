@@ -526,11 +526,16 @@ Page({
       flashOff,
       flashEnds,
       description: rawDesc,
-      descHtml,
-      descriptionParts: isRichDesc ? [] : descParts,
-      // Block-based body wins when present; legacy descParts only render
-      // when the office hasn't migrated this product to blocks yet.
-      descriptionBlocks: Array.isArray(p.description_blocks) ? p.description_blocks : [],
+      // `use_block_design` is the office's per-product toggle in the kitchen
+      // Description card. When true → mini-app renders ONLY blocks (even if
+      // none were authored, in which case the description area is empty);
+      // when false (default) → mini-app renders ONLY the classic path
+      // (rich-text or ## parsed). The flag exists because blocks would
+      // otherwise silently win as soon as any were authored, with no way to
+      // preview the classic copy without deleting the drafted blocks.
+      descHtml: p.use_block_design ? '' : descHtml,
+      descriptionParts: p.use_block_design ? [] : (isRichDesc ? [] : descParts),
+      descriptionBlocks: p.use_block_design && Array.isArray(p.description_blocks) ? p.description_blocks : [],
       size: p.size || p.weight || '',
       keywords: lang.pick(p.keywords_en, p.keywords_cn, L),
       tagline: rawTag,

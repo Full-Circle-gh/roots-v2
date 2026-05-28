@@ -9848,7 +9848,26 @@ function _renderDescCard(ctx) {
   // changed one without re-rendering the page (keeps focus consistent if the
   // operator tabs between them). The .ied-textarea class shares the inline-edit
   // visual; it just doesn't swap elements like a click-to-edit field would.
-  return `<div class="card-title" style="margin-bottom:10px">📝 Description · 描述</div>
+  //
+  // The pill in the card title is the per-product renderer toggle: ON →
+  // mini-app uses the designer block editor (description_blocks); OFF
+  // (default) → mini-app uses these classic textareas. Persisted as
+  // `use_block_design` on products. Saving propagates on next mini-app
+  // product page open.
+  const blocksOn = p.use_block_design ? 1 : 0;
+  const pillBg   = blocksOn ? 'linear-gradient(135deg,#CCD900,#F2CA6C)' : '#f1f1ef';
+  const pillFg   = blocksOn ? '#1a1a17' : 'var(--muted)';
+  const pillTxt  = blocksOn
+    ? '🎨 Product editor design · ON'
+    : '📄 Classic description · ON';
+  return `<div class="card-title" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <span>📝 Description · 描述</span>
+      <button type="button" onclick="iedToggleBlockDesign(${p.id}, this)" data-on="${blocksOn}"
+              title="Toggle mini-app renderer · 切换商品页样式"
+              style="border:none;border-radius:999px;padding:5px 12px;font:inherit;font-size:11px;font-weight:700;letter-spacing:.04em;cursor:pointer;background:${pillBg};color:${pillFg};white-space:nowrap">
+        ${pillTxt}
+      </button>
+    </div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <label style="display:block">
         <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">EN</span>
@@ -9859,6 +9878,37 @@ function _renderDescCard(ctx) {
         <textarea rows="5" class="ied-textarea" data-pid="${p.id}" data-field="description_cn" data-original="${esc(p.description_cn||'')}" onblur="iedFieldBlur(this)" placeholder="中文描述…" style="width:100%;margin-top:4px;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font:inherit;font-size:13px;color:var(--dk);resize:vertical;outline:none;box-sizing:border-box;background:#fff">${esc(p.description_cn||'')}</textarea>
       </label>
     </div>`;
+}
+
+// Toggle the per-product `use_block_design` flag. When ON, the mini-app
+// product page renders description_blocks (designer block editor); when
+// OFF, it renders the classic EN/CN textareas above. We update the pill
+// in place (no full re-render) so the operator's textarea focus + scroll
+// position survive the click — same pattern as iedFieldBlur.
+async function iedToggleBlockDesign(pid, btn) {
+  if (btn.dataset.saving === '1') return;
+  const next = btn.dataset.on === '1' ? 0 : 1;
+  btn.dataset.saving = '1';
+  const prevTxt = btn.textContent;
+  btn.style.opacity = '.6';
+  try {
+    await iedSaveField(pid, 'use_block_design', next);
+    btn.dataset.on = String(next);
+    btn.textContent = next
+      ? '🎨 Product editor design · ON'
+      : '📄 Classic description · ON';
+    btn.style.background = next ? 'linear-gradient(135deg,#CCD900,#F2CA6C)' : '#f1f1ef';
+    btn.style.color = next ? '#1a1a17' : 'var(--muted)';
+    toast(next
+      ? 'Mini-app will use block design · 已切换到商品页设计'
+      : 'Mini-app will use classic description · 已切换到经典描述', 'ok');
+  } catch (e) {
+    btn.textContent = prevTxt;
+    toast('Save failed · 保存失败: ' + e.message, 'error');
+  } finally {
+    btn.style.opacity = '';
+    delete btn.dataset.saving;
+  }
 }
 
 function _renderNotesCard(ctx) {
