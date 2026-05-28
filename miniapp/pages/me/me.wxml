@@ -223,9 +223,15 @@
   </view>
 
   <view class="app-footer">
-    <image class="footer-mark" src="/assets/brand/roots-wordmark.png" mode="aspectFit"></image>
-    <view class="footer-sub">Food made from food. · 食物源于食物。</view>
-    <view class="footer-version">v1.0 · {{lang === 'cn' ? '由您的厨房用心制作' : 'Built by your kitchen'}}</view>
+    <!-- Wordmark: prefer an operator-uploaded image; fall back to a typed
+         brand text; else the legacy bundled image (so Roots looks unchanged
+         before any tenant config is set). Edited per-tenant from the Mini
+         App Backend → Settings → Mini-app footer. -->
+    <image wx:if="{{footer.wordmark_image}}" class="footer-mark" src="{{footer.wordmark_image}}" mode="aspectFit"></image>
+    <view  wx:elif="{{footer.wordmark_text}}" class="footer-mark-text">{{footer.wordmark_text}}</view>
+    <image wx:else class="footer-mark" src="/assets/brand/roots-wordmark.png" mode="aspectFit"></image>
+    <view class="footer-sub">{{footer.tagline}}</view>
+    <view class="footer-version">{{footer.credit}}</view>
   </view>
   <popup-manager page="me"></popup-manager>
 </view>

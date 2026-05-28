@@ -128,12 +128,23 @@ Page({
     lang: 'en',
     loading: false,
     copy: COPY_EN,
+    // Brand footer — wordmark / tagline / credit line. Hydrated from
+    // app.globalData.config.brand.me_footer (set by the operator in the Mini
+    // App Backend → Settings → Mini-app footer). Defaults match the legacy
+    // Roots footer so first paint is unchanged when no config has been saved.
+    footer: {
+      wordmark_image: '',
+      wordmark_text:  '',
+      tagline:        'Food made from food. · 食物源于食物。',
+      credit:         'v1.0 · Built by your kitchen',
+    },
   },
 
   onShow() {
     const app = getApp();
     this.setData({ lang: app.globalData.lang });
     this.applyLangCopy();
+    this.applyFooter();
     this.refresh();
     const tb = this.getTabBar && this.getTabBar();
     if (tb && tb.setSelected) tb.setSelected('pages/me/me');
@@ -145,6 +156,32 @@ Page({
 
   applyLangCopy() {
     this.setData({ copy: this.data.lang === 'cn' ? COPY_CN : COPY_EN });
+  },
+
+  // Resolve the brand-footer fields from app.globalData.config (loaded once
+  // at app launch from /api/retail/config). Tagline combines EN + CN with
+  // " · " when both are filled — matches the legacy hard-coded line. Credit
+  // is language-conditional. When nothing is configured, defaults preserve
+  // the pre-tenant-config look so Roots reads unchanged.
+  applyFooter() {
+    const app = getApp();
+    const cfg = (app.globalData.config && app.globalData.config.brand && app.globalData.config.brand.me_footer) || {};
+    const lang = this.data.lang;
+    const tEN = (cfg.tagline_en || '').trim();
+    const tCN = (cfg.tagline_cn || '').trim();
+    const tagline = (tEN && tCN) ? (tEN + ' · ' + tCN)
+                                  : (tEN || tCN || 'Food made from food. · 食物源于食物。');
+    const credit = lang === 'cn'
+      ? (cfg.credit_cn || 'v1.0 · 由您的厨房用心制作')
+      : (cfg.credit_en || 'v1.0 · Built by your kitchen');
+    this.setData({
+      footer: {
+        wordmark_image: cfg.wordmark_image || '',
+        wordmark_text:  cfg.wordmark_text  || '',
+        tagline,
+        credit,
+      },
+    });
   },
 
   async refresh() {
@@ -206,6 +243,7 @@ Page({
     lang.set(next);
     this.setData({ lang: next });
     this.applyLangCopy();
+    this.applyFooter();
     this.refresh();
   },
 

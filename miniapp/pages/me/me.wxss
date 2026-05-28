@@ -239,6 +239,17 @@
   height: 106rpx;
   margin: 0 auto;
 }
+/* Text-wordmark fallback when a tenant hasn't uploaded a logo image —
+   sized to roughly match the image wordmark's footprint so the footer
+   keeps its visual rhythm. */
+.footer-mark-text {
+  display: block;
+  text-align: center;
+  font-size: calc(56rpx * var(--font-scale));
+  line-height: 106rpx;
+  letter-spacing: 2rpx;
+  color: var(--olive);
+}
 .footer-sub {
   font-size: calc(22rpx * var(--font-scale));
   margin-top: 12rpx;

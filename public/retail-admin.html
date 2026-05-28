@@ -6945,6 +6945,53 @@
               </div>
             </div>
           </div>
+
+          <!-- Mini-app footer (Me page bottom): tenant-editable wordmark image
+               (with text fallback), tagline, and credit line. Stored under the
+               'brand.me_footer' storefront_config key; the mini-app reads it
+               from /api/retail/config via app.globalData.config.brand.me_footer.
+               Self-contained load/save — has its own Save button so updates
+               don't depend on the shared Settings save flow. -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Mini-app footer · 小程序页脚</h3>
+              <div class="muted">Brand mark, tagline and credit line shown at the bottom of the customer's <b>Me</b> page. · 顾客「我的」页面底部的品牌标识、宣传短语和落款。</div>
+            </div>
+
+            <div class="field">
+              <label class="stacked">Wordmark image · 品牌标识图</label>
+              <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
+                <div id="cfg-footer-wordmark-preview"
+                     style="width:160px; height:96px; display:flex; align-items:center; justify-content:center; background:var(--bg-elev-1); border:1px dashed var(--line); border-radius:6px;">
+                  <span style="color:var(--text-3); font-size:11px;">No image · 无图片</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                  <input type="file" id="cfg-footer-wordmark-file" accept="image/*">
+                  <button type="button" class="btn" id="cfg-footer-wordmark-clear" style="align-self:flex-start;">Clear · 清除</button>
+                </div>
+              </div>
+              <div class="muted" style="margin-top:6px;">PNG or SVG with transparent background recommended. Sized ~180×106 in the footer. · 推荐 PNG 或 SVG,背景透明。页脚显示约 180×106。</div>
+            </div>
+
+            <div class="field">
+              <label class="stacked">Wordmark text fallback · 文字备用</label>
+              <input type="text" id="cfg-footer-wordmark-text" placeholder="Your brand name · 您的品牌名">
+              <div class="muted">Shown only when no image is uploaded. · 仅在未上传图片时显示。</div>
+            </div>
+
+            <div class="pd-row2">
+              <div class="field"><label class="stacked">Tagline EN · 宣传语(英文)</label><input type="text" id="cfg-footer-tagline-en" placeholder="Food made from food."></div>
+              <div class="field"><label class="stacked">Tagline CN · 宣传语(中文)</label><input type="text" id="cfg-footer-tagline-cn" placeholder="食物源于食物。"></div>
+            </div>
+            <div class="pd-row2">
+              <div class="field"><label class="stacked">Credit line EN · 落款(英文)</label><input type="text" id="cfg-footer-credit-en" placeholder="v1.0 · Built by your kitchen"></div>
+              <div class="field"><label class="stacked">Credit line CN · 落款(中文)</label><input type="text" id="cfg-footer-credit-cn" placeholder="v1.0 · 由您的厨房用心制作"></div>
+            </div>
+
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+              <button class="btn btn-primary" type="button" onclick="saveFooterConfig()">Save footer · 保存页脚</button>
+            </div>
+          </div>
         </div>
 
         <!-- ────── HOME / CMS PAGES ────── -->
@@ -8030,6 +8077,7 @@ let CATALOG_MODE = 'self';
   dashInit();          // landing tab — set up date range + first load
   loadOrders();
   loadConfig();
+  loadFooterConfig();  // brand.me_footer — wordmark/tagline/credit
   loadSnippets();
   loadCategories();
   loadVouchers();
@@ -10972,6 +11020,77 @@ async function saveConfig() {
   } catch (e) {
     status.innerHTML = '<span class="err">Failed: ' + e.message + '</span>';
   }
+}
+
+// ════════════════════════════════════════════════════════════════
+// MINI-APP FOOTER (Me page) — tenant-editable wordmark / tagline /
+// credit. Stored under storefront_config['brand.me_footer']; rendered
+// by miniapp/pages/me/me.wxml via app.globalData.config.brand.me_footer.
+// Self-contained load/save so the operator gets a focused Save button
+// next to these fields, instead of sharing the giant shop-config flow.
+// ════════════════════════════════════════════════════════════════
+let _footerWordmarkData = null;  // base64 data URL held between upload + save
+
+function setFooterPreview(dataUrl) {
+  const el = document.getElementById('cfg-footer-wordmark-preview');
+  if (!el) return;
+  el.innerHTML = dataUrl
+    ? '<img src="' + dataUrl + '" style="max-width:100%; max-height:100%; object-fit:contain;">'
+    : '<span style="color:var(--text-3); font-size:11px;">No image · 无图片</span>';
+}
+
+async function loadFooterConfig() {
+  try {
+    const { data: c } = await api('/api/retail-admin/config');
+    const f = (c && c.brand && c.brand.me_footer) || {};
+    _footerWordmarkData = f.wordmark_image || null;
+    setFooterPreview(_footerWordmarkData);
+    const set = (id, v) => { const n = document.getElementById(id); if (n) n.value = v || ''; };
+    set('cfg-footer-wordmark-text', f.wordmark_text);
+    set('cfg-footer-tagline-en',    f.tagline_en);
+    set('cfg-footer-tagline-cn',    f.tagline_cn);
+    set('cfg-footer-credit-en',     f.credit_en);
+    set('cfg-footer-credit-cn',     f.credit_cn);
+  } catch (e) { console.warn('[footer cfg] load failed:', e); }
+}
+
+// File picker → base64 data URL (held in memory until Save). Keeping the
+// upload client-side means no extra endpoint + the image rides through the
+// existing storefront_config write path with the rest of the footer fields.
+document.addEventListener('change', e => {
+  if (e.target && e.target.id === 'cfg-footer-wordmark-file') {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (!f.type || !f.type.startsWith('image/')) { toast('Image only · 仅支持图片', 'err'); e.target.value = ''; return; }
+    const r = new FileReader();
+    r.onload = ev => { _footerWordmarkData = ev.target.result; setFooterPreview(_footerWordmarkData); };
+    r.readAsDataURL(f);
+  }
+});
+document.addEventListener('click', e => {
+  if (e.target && e.target.id === 'cfg-footer-wordmark-clear') {
+    _footerWordmarkData = null;
+    setFooterPreview(null);
+    const fi = document.getElementById('cfg-footer-wordmark-file'); if (fi) fi.value = '';
+  }
+});
+
+async function saveFooterConfig() {
+  const val = id => (document.getElementById(id)?.value || '').trim() || null;
+  const body = {
+    'brand.me_footer': {
+      wordmark_image: _footerWordmarkData || null,
+      wordmark_text:  val('cfg-footer-wordmark-text'),
+      tagline_en:     val('cfg-footer-tagline-en'),
+      tagline_cn:     val('cfg-footer-tagline-cn'),
+      credit_en:      val('cfg-footer-credit-en'),
+      credit_cn:      val('cfg-footer-credit-cn'),
+    },
+  };
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body });
+    toast('Footer saved · 页脚已保存');
+  } catch (e) { toast('Save failed · 保存失败: ' + (e.message || ''), 'err'); }
 }
 
 // ════════════════════════════════════════════════════════════════
