@@ -84,7 +84,7 @@
         <view class="title-row">
           <view class="name f-bear">{{name}}</view>
         </view>
-        <view wx:if="{{(subtitle && subtitle !== name) || keywords}}" class="subtitle f-yuan">
+        <view wx:if="{{(subtitle && subtitle !== name) || keywords}}" class="subtitle f-aleo">
           <text wx:if="{{subtitle && subtitle !== name}}">{{subtitle}}</text>
           <text wx:if="{{(subtitle && subtitle !== name) && keywords}}"> · </text>
           <text wx:if="{{keywords}}">{{keywords}}</text>

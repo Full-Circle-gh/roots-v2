@@ -62,14 +62,14 @@
 }
 .pb-spec-cell:last-child { border-right: 0; }
 .pb-spec-k {
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 19rpx;
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--ink-60);
 }
 .pb-spec-v {
-  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-family: var(--f-bear);
   font-size: 30rpx;
   line-height: 1.1;
   color: var(--ink);
@@ -87,7 +87,7 @@
   align-items: center;
   gap: 20rpx;
   margin-bottom: 28rpx;
-  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-family: var(--f-toni);
   font-size: 22rpx;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -101,7 +101,7 @@
   background: var(--forest);
 }
 .pb-hero-body {
-  font-family: 'Aleo', 'DF Yuan', serif;
+  font-family: var(--f-aleo);
   font-size: 30rpx;
   line-height: 1.55;
   color: var(--ink);
@@ -109,7 +109,7 @@
 }
 /* Inline ink-pull: serif slab on lime, highlighting one phrase mid-body */
 .pb-ink-pull {
-  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-family: var(--f-bear);
   font-style: normal;
   font-size: 34rpx;
   line-height: 1;
@@ -134,14 +134,14 @@
   padding: 40rpx 0 28rpx;
 }
 .pb-why-head-l {
-  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-family: var(--f-bear);
   font-size: 22rpx;
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--olive);
 }
 .pb-why-head-r {
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 22rpx;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -157,13 +157,13 @@
 }
 .pb-why-row.first { border-top: 2rpx solid var(--ink); }
 .pb-why-n {
-  font-family: 'League Gothic', 'DF Yuan', sans-serif;
+  font-family: var(--f-gothic);
   font-size: 68rpx;
   line-height: 0.85;
   color: var(--ink);
 }
 .pb-why-claim {
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 29rpx;
   line-height: 1.35;
   font-weight: 400;
@@ -179,7 +179,7 @@
   margin-bottom: 36rpx;
 }
 .pb-section-h3 {
-  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-family: var(--f-bear);
   font-weight: 400;
   font-size: 52rpx;
   line-height: 0.95;
@@ -187,7 +187,7 @@
   color: var(--ink);
 }
 .pb-section-tag {
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 20rpx;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -215,7 +215,7 @@
   border: 2rpx solid var(--ink);
   border-radius: 999rpx;
   background: transparent;
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 26rpx;
   line-height: 1;
   color: var(--ink);
@@ -223,12 +223,12 @@
 .pb-chip-lead {
   background: var(--ink);
   color: var(--oat);
-  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-family: var(--f-bear);
   font-size: 36rpx;
   padding: 22rpx 32rpx 20rpx;
 }
 .pb-chip-pct {
-  font-family: 'League Gothic', 'DF Yuan', sans-serif;
+  font-family: var(--f-gothic);
   font-size: 28rpx;
   letter-spacing: 0.02em;
   color: var(--berry);
@@ -239,7 +239,7 @@
    Single typographic run. Bear Serif 44rpx / 1.25. Separators are lime
    dots, % callouts are inline League Gothic in berry. */
 .pb-ing-line {
-  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-family: var(--f-bear);
   font-weight: 400;
   font-size: 44rpx;
   line-height: 1.25;
@@ -247,7 +247,7 @@
   color: var(--ink);
 }
 .pb-ing-line-pct {
-  font-family: 'League Gothic', 'DF Yuan', sans-serif;
+  font-family: var(--f-gothic);
   color: var(--berry);
   font-size: 0.85em;
   margin-left: 0.05em;
@@ -285,7 +285,7 @@
   display: flex;
   align-items: center;
   gap: 16rpx;
-  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-family: var(--f-bear);
   font-size: 36rpx;
   line-height: 1;
   color: var(--ink);
@@ -299,12 +299,12 @@
   background: var(--berry);
   color: var(--oat);
   border-radius: 8rpx;
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 26rpx;
   font-weight: 700;
 }
 .pb-allergen-meta {
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 19rpx;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -320,7 +320,7 @@
   border-top: 2rpx dashed var(--ink-30);
 }
 .pb-allergen-lbl {
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 20rpx;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -338,7 +338,7 @@
   display: inline-block;
   padding: 10rpx 20rpx 8rpx;
   border-radius: 999rpx;
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 23rpx;
   line-height: 1;
 }
@@ -352,7 +352,7 @@
   color: var(--ink);
 }
 .pb-allergen-empty {
-  font-family: 'Aleo', 'DF Yuan', serif;
+  font-family: var(--f-aleo);
   font-style: italic;
   font-size: 26rpx;
   color: var(--ink-60);
@@ -390,14 +390,14 @@
   line-height: 1;
 }
 .pb-how-lbl {
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 22rpx;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink);
 }
 .pb-how-sub {
-  font-family: 'Aleo', 'DF Yuan', serif;
+  font-family: var(--f-aleo);
   font-style: italic;
   font-size: 22rpx;
   color: var(--ink-60);
@@ -437,26 +437,26 @@
   line-height: 1;
 }
 .pb-storage-head {
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 20rpx;
   letter-spacing: 0.22em;
   text-transform: uppercase;
 }
 .pb-storage-num {
-  font-family: 'League Gothic', 'DF Yuan', sans-serif;
+  font-family: var(--f-gothic);
   font-size: 96rpx;
   line-height: 0.85;
   margin-top: auto;
 }
 .pb-storage-unit {
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 22rpx;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 .pb-storage-note {
   margin-top: 24rpx;
-  font-family: 'Aleo', 'DF Yuan', serif;
+  font-family: var(--f-aleo);
   font-style: italic;
   font-size: 24rpx;
   color: var(--ink-60);
@@ -470,7 +470,7 @@
   padding: 48rpx 44rpx 56rpx;
 }
 .pb-notes-p {
-  font-family: 'Aleo', 'DF Yuan', serif;
+  font-family: var(--f-aleo);
   font-style: italic;
   font-size: 25rpx;
   line-height: 1.55;
@@ -500,7 +500,7 @@
   overflow: hidden;
 }
 .pb-bigstat-num {
-  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-family: var(--f-bear);
   font-weight: 400;
   font-size: 220rpx;
   line-height: 0.85;
@@ -508,7 +508,7 @@
   color: var(--ink);
 }
 .pb-bigstat-what {
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 22rpx;
   letter-spacing: 0.32em;
   text-transform: uppercase;
@@ -516,7 +516,7 @@
   color: var(--ink);
 }
 .pb-bigstat-claim {
-  font-family: 'Aleo', 'DF Yuan', serif;
+  font-family: var(--f-aleo);
   font-style: italic;
   font-size: 28rpx;
   margin-top: 12rpx;
@@ -526,7 +526,7 @@
 .pb-bigstat::after {
   content: "·";
   position: absolute;
-  font-family: 'Bear Serif', 'DF Yuan', serif;
+  font-family: var(--f-bear);
   font-size: 120rpx;
   line-height: 1;
   top: 50%;
@@ -544,7 +544,7 @@
   background: var(--oat-deep);
 }
 .pb-pullquote-p {
-  font-family: 'Aleo', 'DF Yuan', serif;
+  font-family: var(--f-aleo);
   font-style: italic;
   font-size: 30rpx;
   line-height: 1.5;
@@ -552,7 +552,7 @@
 }
 .pb-pullquote-who {
   margin-top: 20rpx;
-  font-family: 'Toni Grotesk', sans-serif;
+  font-family: var(--f-toni);
   font-size: 20rpx;
   letter-spacing: 0.22em;
   text-transform: uppercase;
