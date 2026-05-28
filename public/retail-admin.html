@@ -6996,10 +6996,6 @@
               <div class="field"><label class="stacked">Credit line EN · 落款(英文)</label><input type="text" id="cfg-footer-credit-en" placeholder="Powered by Full Circle"></div>
               <div class="field"><label class="stacked">Credit line CN · 落款(中文)</label><input type="text" id="cfg-footer-credit-cn" placeholder="由 Full Circle 提供技术支持"></div>
             </div>
-
-            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
-              <button class="btn btn-primary" type="button" onclick="saveFooterConfig()">Save footer · 保存页脚</button>
-            </div>
           </div>
         </div>
 
@@ -8085,8 +8081,7 @@ let CATALOG_MODE = 'self';
   } catch (e) { location.href = '/backend/login'; return; }
   dashInit();          // landing tab — set up date range + first load
   loadOrders();
-  loadConfig();
-  loadFooterConfig();  // brand.me_footer — wordmark/tagline/credit
+  loadConfig();        // also hydrates the Mini-app footer fields
   loadSnippets();
   loadCategories();
   loadVouchers();
@@ -10970,6 +10965,16 @@ async function loadConfig() {
     $('#cfg-legal-privacy-cn').value = c.legal?.privacy?.body_cn || '';
     $('#cfg-legal-terms-en').value   = c.legal?.terms?.body_en   || '';
     $('#cfg-legal-terms-cn').value   = c.legal?.terms?.body_cn   || '';
+    // Mini-app footer (Me page bottom): wordmark image (held in
+    // _footerWordmarkData), wordmark-text fallback, tagline + credit per lang.
+    const mef = c.brand?.me_footer || {};
+    _footerWordmarkData = mef.wordmark_image || null;
+    setFooterPreview(_footerWordmarkData);
+    $('#cfg-footer-wordmark-text').value = mef.wordmark_text || '';
+    $('#cfg-footer-tagline-en').value    = mef.tagline_en    || '';
+    $('#cfg-footer-tagline-cn').value    = mef.tagline_cn    || '';
+    $('#cfg-footer-credit-en').value     = mef.credit_en     || '';
+    $('#cfg-footer-credit-cn').value     = mef.credit_cn     || '';
     applyVisualPreviews();
     syncAllPickers();
     applyShopFiltersPreview();
@@ -11021,6 +11026,15 @@ async function saveConfig() {
     'legal.terms.body_cn':   $('#cfg-legal-terms-cn').value,
     'legal.privacy.updated_at': new Date().toISOString().slice(0, 10),
     'legal.terms.updated_at':   new Date().toISOString().slice(0, 10),
+    // Mini-app footer (Me page) — single nested object under brand.me_footer.
+    'brand.me_footer': {
+      wordmark_image: _footerWordmarkData || null,
+      wordmark_text:  ($('#cfg-footer-wordmark-text').value || '').trim() || null,
+      tagline_en:     ($('#cfg-footer-tagline-en').value    || '').trim() || null,
+      tagline_cn:     ($('#cfg-footer-tagline-cn').value    || '').trim() || null,
+      credit_en:      ($('#cfg-footer-credit-en').value     || '').trim() || null,
+      credit_cn:      ($('#cfg-footer-credit-cn').value     || '').trim() || null,
+    },
   };
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
@@ -11035,8 +11049,10 @@ async function saveConfig() {
 // MINI-APP FOOTER (Me page) — tenant-editable wordmark / tagline /
 // credit. Stored under storefront_config['brand.me_footer']; rendered
 // by miniapp/pages/me/me.wxml via app.globalData.config.brand.me_footer.
-// Self-contained load/save so the operator gets a focused Save button
-// next to these fields, instead of sharing the giant shop-config flow.
+// Load + save are folded into loadConfig() / saveConfig() so these fields
+// move through the main "Save settings" button with every other setting —
+// just the wordmark-image upload + clear handlers live here, because they
+// manage a side-channel base64 buffer between picker → save.
 // ════════════════════════════════════════════════════════════════
 let _footerWordmarkData = null;  // base64 data URL held between upload + save
 
@@ -11048,24 +11064,9 @@ function setFooterPreview(dataUrl) {
     : '<span style="color:var(--text-3); font-size:11px;">No image · 无图片</span>';
 }
 
-async function loadFooterConfig() {
-  try {
-    const { data: c } = await api('/api/retail-admin/config');
-    const f = (c && c.brand && c.brand.me_footer) || {};
-    _footerWordmarkData = f.wordmark_image || null;
-    setFooterPreview(_footerWordmarkData);
-    const set = (id, v) => { const n = document.getElementById(id); if (n) n.value = v || ''; };
-    set('cfg-footer-wordmark-text', f.wordmark_text);
-    set('cfg-footer-tagline-en',    f.tagline_en);
-    set('cfg-footer-tagline-cn',    f.tagline_cn);
-    set('cfg-footer-credit-en',     f.credit_en);
-    set('cfg-footer-credit-cn',     f.credit_cn);
-  } catch (e) { console.warn('[footer cfg] load failed:', e); }
-}
-
-// File picker → base64 data URL (held in memory until Save). Keeping the
-// upload client-side means no extra endpoint + the image rides through the
-// existing storefront_config write path with the rest of the footer fields.
+// File picker → base64 data URL. Held in memory until the operator clicks
+// the main Save settings button; saveConfig() reads _footerWordmarkData
+// and ships it inside the brand.me_footer write.
 document.addEventListener('change', e => {
   if (e.target && e.target.id === 'cfg-footer-wordmark-file') {
     const f = e.target.files && e.target.files[0];
@@ -11083,24 +11084,6 @@ document.addEventListener('click', e => {
     const fi = document.getElementById('cfg-footer-wordmark-file'); if (fi) fi.value = '';
   }
 });
-
-async function saveFooterConfig() {
-  const val = id => (document.getElementById(id)?.value || '').trim() || null;
-  const body = {
-    'brand.me_footer': {
-      wordmark_image: _footerWordmarkData || null,
-      wordmark_text:  val('cfg-footer-wordmark-text'),
-      tagline_en:     val('cfg-footer-tagline-en'),
-      tagline_cn:     val('cfg-footer-tagline-cn'),
-      credit_en:      val('cfg-footer-credit-en'),
-      credit_cn:      val('cfg-footer-credit-cn'),
-    },
-  };
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body });
-    toast('Footer saved · 页脚已保存');
-  } catch (e) { toast('Save failed · 保存失败: ' + (e.message || ''), 'err'); }
-}
 
 // ════════════════════════════════════════════════════════════════
 // SHOP CATEGORIES — list, drag-and-drop reorder, rename, add, delete
