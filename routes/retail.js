@@ -353,9 +353,16 @@ router.get('/api/retail/products', (req, res) => {
   // that store only a plain image_url keep it untouched; ?v=updated_at busts
   // the cache when the photo changes. The PDP (/products/:id) still ships the
   // full image so the detail page renders without an extra round-trip.
+  //
+  // We emit ABSOLUTE URLs (not /api/...) so the live mini-app — which doesn't
+  // run absUrl() on the image_data fallback yet (that needs a WeChat publish) —
+  // still renders thumbnails for products that only have a base64 photo. The
+  // mini-app needs an http(s) URL in <image src>; a relative path won't load.
+  // trust-proxy is on (server.js) so req.protocol respects X-Forwarded-Proto.
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
   for (const r of rows) {
     if (typeof r.image_data === 'string' && /^data:/i.test(r.image_data)) {
-      r.image_data = `/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`;
+      r.image_data = `${baseUrl}/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`;
     }
     delete r.updated_at;
   }
