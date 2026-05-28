@@ -4770,10 +4770,15 @@ async function addLinkFromHomeToCurrentPage() {
 }
 
 // Onboarding gating UI — reuses the link-status banner shell. Shows a
-// "Show to" dropdown (new / version / always / off) and a manual
-// "Re-show to all" button that bumps cfg.onboarding.version.
+// "Show to" dropdown (new / version / always / off), a manual
+// "Re-show to all" button that bumps cfg.onboarding.version, and two
+// "EN · CN" label inputs for the SKIP / NEXT footer buttons.
 async function renderOnboardingSettings(el) {
-  let s = { show_to: 'new', version: 1 };
+  let s = {
+    show_to: 'new', version: 1,
+    skip_label: { en: 'SKIP',   cn: '跳过' },
+    next_label: { en: 'NEXT →', cn: '下一步 →' },
+  };
   try {
     const r = await api('/api/retail-admin/cms/onboarding-settings');
     s = r.data;
@@ -4790,20 +4795,31 @@ async function renderOnboardingSettings(el) {
   ].map(([v, label]) =>
     `<option value="${v}" ${s.show_to === v ? 'selected' : ''}>${label}</option>`
   ).join('');
+  const skipVal = `${s.skip_label.en} · ${s.skip_label.cn}`;
+  const nextVal = `${s.next_label.en} · ${s.next_label.cn}`;
+  const inputStyle = `
+    font: inherit; color: var(--text-1);
+    background: var(--bg-input); border: 1px solid var(--line);
+    padding: 3px 8px; border-radius: 4px; min-width: 0;
+  `.replace(/\s+/g, ' ');
   el.innerHTML = `
-    <div class="msg">
-      <b>${B('Onboarding', '引导页')}</b> · ${B('show to', '显示给')}
-      <select id="onb-show-to" style="
-        margin-left: 6px;
-        font: inherit; color: var(--text-1);
-        background: var(--bg-input); border: 1px solid var(--line);
-        padding: 3px 8px; border-radius: 4px;">${opts}</select>
-      <span class="target" style="margin-left: 8px;">v${s.version}</span>
-    </div>
-    <button class="action ghost" id="onb-bump-btn" title="${T(
-      'Increment the onboarding version so every returning user sees the page again on their next launch.',
-      '将引导版本号 +1,所有已访问过的用户下次启动时会再次看到引导页。'
-    )}">${B('Re-show to all', '向所有人重新显示')}</button>`;
+    <div style="display:flex; flex-direction:column; gap:8px; flex:1; min-width:0;">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <b>${B('Onboarding', '引导页')}</b> · ${B('show to', '显示给')}
+        <select id="onb-show-to" style="${inputStyle}">${opts}</select>
+        <span class="target">v${s.version}</span>
+        <button class="action ghost" id="onb-bump-btn" style="margin-left:auto;" title="${T(
+          'Increment the onboarding version so every returning user sees the page again on their next launch.',
+          '将引导版本号 +1,所有已访问过的用户下次启动时会再次看到引导页。'
+        )}">${B('Re-show to all', '向所有人重新显示')}</button>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; color:var(--text-2);">
+        <span>${B('Skip label', '跳过按钮')}</span>
+        <input id="onb-skip" type="text" maxlength="40" value="${escapeHtml(skipVal)}" style="${inputStyle} flex:1; min-width:140px;" placeholder="SKIP · 跳过"/>
+        <span>${B('Next label', '下一步按钮')}</span>
+        <input id="onb-next" type="text" maxlength="40" value="${escapeHtml(nextVal)}" style="${inputStyle} flex:1; min-width:140px;" placeholder="NEXT → · 下一步 →"/>
+      </div>
+    </div>`;
   $('#onb-show-to').addEventListener('change', async (ev) => {
     const v = ev.target.value;
     try {
@@ -4828,6 +4844,30 @@ async function renderOnboardingSettings(el) {
       toast('Failed: ' + e.message, 'err');
     }
   });
+  // Saves on blur (and on Enter) so we don't spam PUTs while typing.
+  // Empty side of "EN · CN" clears that lang back to the built-in default.
+  function parseLabelValue(raw) {
+    const parts = String(raw || '').split(/\s·\s|\s•\s/);
+    return { en: (parts[0] || '').trim(), cn: (parts[1] || '').trim() };
+  }
+  async function saveLabel(field, raw) {
+    try {
+      await api('/api/retail-admin/cms/onboarding-settings', {
+        method: 'PUT',
+        body: { [field]: parseLabelValue(raw) },
+      });
+      toast(T('Updated', '已更新'));
+    } catch (e) {
+      toast('Failed: ' + e.message, 'err');
+    }
+  }
+  for (const [id, field] of [['#onb-skip', 'skip_label'], ['#onb-next', 'next_label']]) {
+    const inp = $(id);
+    inp.addEventListener('blur', () => saveLabel(field, inp.value));
+    inp.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
+    });
+  }
 }
 
 async function loadPage() {

@@ -55,6 +55,15 @@ Page({
   },
 
   async _gateOnboarding() {
+    const app = getApp();
+    // One gate evaluation per app cold start. Without this, modes like
+    // 'always' (and 'version' right after a bump) would re-redirect every
+    // time the user finishes onboarding and lands back on Home — infinite
+    // loop. globalData lives until the mini-app is evicted by WeChat, so
+    // the next cold start naturally gets a fresh chance to gate.
+    if (app.globalData._onboardingChecked) return false;
+    app.globalData._onboardingChecked = true;
+
     let stored = '';
     try { stored = wx.getStorageSync('onboarded'); } catch {}
     let mode = 'new';

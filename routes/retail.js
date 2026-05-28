@@ -7253,6 +7253,27 @@ router.post('/api/retail-admin/cms/publish', requireRetailAdmin, express.json(),
 // Stored as flat `onboarding.show_to` / `onboarding.version` keys in
 // storefront_config — loadConfig() nests them into cfg.onboarding for
 // the public /api/retail/config response.
+// Footer button label defaults — mirror the mini-app fallbacks. Stored as
+// nested JSON so the mini-app reads cfg.onboarding.skip_label.{en,cn}.
+const DEFAULT_ONBOARDING_LABELS = {
+  skip_label: { en: 'SKIP',    cn: '跳过' },
+  next_label: { en: 'NEXT →',  cn: '下一步 →' },
+};
+
+function readLabelKey(key, fallback) {
+  const en = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(`${key}.en`);
+  const cn = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(`${key}.cn`);
+  const parse = (row, fb) => {
+    if (!row) return fb;
+    try { const v = JSON.parse(row.value_json); return typeof v === 'string' && v.trim() ? v : fb; }
+    catch { return fb; }
+  };
+  return {
+    en: parse(en, fallback.en),
+    cn: parse(cn, fallback.cn),
+  };
+}
+
 function readOnboardingSettings() {
   const showRow = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get('onboarding.show_to');
   const verRow  = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get('onboarding.version');
@@ -7264,7 +7285,11 @@ function readOnboardingSettings() {
   if (verRow) {
     try { const v = JSON.parse(verRow.value_json); if (Number.isFinite(v) && v >= 1) version = v; } catch {}
   }
-  return { show_to, version };
+  return {
+    show_to, version,
+    skip_label: readLabelKey('onboarding.skip_label', DEFAULT_ONBOARDING_LABELS.skip_label),
+    next_label: readLabelKey('onboarding.next_label', DEFAULT_ONBOARDING_LABELS.next_label),
+  };
 }
 
 router.get('/api/retail-admin/cms/onboarding-settings', requireRetailAdmin, (req, res) => {
@@ -7272,11 +7297,29 @@ router.get('/api/retail-admin/cms/onboarding-settings', requireRetailAdmin, (req
 });
 
 router.put('/api/retail-admin/cms/onboarding-settings', requireRetailAdmin, express.json(), (req, res) => {
-  const next = req.body?.show_to;
-  if (!ONBOARDING_MODES.has(next)) {
-    return res.status(400).json({ success: false, error: 'invalid_show_to' });
+  const body = req.body || {};
+  // show_to is optional — only validate when present so the label-only save
+  // path doesn't need to re-send the mode every time.
+  if (body.show_to !== undefined) {
+    if (!ONBOARDING_MODES.has(body.show_to)) {
+      return res.status(400).json({ success: false, error: 'invalid_show_to' });
+    }
+    writeLayout('onboarding.show_to', JSON.stringify(body.show_to), req.user.id);
   }
-  writeLayout('onboarding.show_to', JSON.stringify(next), req.user.id);
+  for (const key of ['skip_label', 'next_label']) {
+    const node = body[key];
+    if (!node || typeof node !== 'object') continue;
+    for (const lang of ['en', 'cn']) {
+      if (node[lang] === undefined) continue;
+      const v = String(node[lang] || '').slice(0, 40).trim();
+      // Blank value clears the row so the default reasserts; otherwise upsert.
+      if (!v) {
+        tdb().prepare('DELETE FROM storefront_config WHERE key = ?').run(`onboarding.${key}.${lang}`);
+      } else {
+        writeLayout(`onboarding.${key}.${lang}`, JSON.stringify(v), req.user.id);
+      }
+    }
+  }
   res.json({ success: true, data: readOnboardingSettings() });
 });
 
