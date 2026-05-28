@@ -7019,6 +7019,8 @@ const ALLOWED_BLOCK_TYPES = new Set([
   'bundle',           // 3–5 products with one-tap add-all-to-cart
   // Add-us-on-WeCom card: <button open-type="contact"> + 联系我 QR fallback
   'wecom_contact',
+  // Top members ranked by spend / points / orders — masked names, cached
+  'leaderboard',
   // ── Deprecated types kept on the whitelist so existing drafts/layouts
   // still validate. The CMS palette hides them; clients ignore them.
   'wechat_oa',        // replaced 2026-05-19 by wecom_contact
@@ -9064,6 +9066,48 @@ router.get('/api/retail-admin/leaderboard/preview', requireRetailAdmin, (req, re
       config: cfg,
       raw_entries: board,
       revealed_entries: board.map(b => applyRevealMode(b, cfg.reveal_mode)),
+    },
+  });
+});
+
+// Public storefront leaderboard — feeds the CMS `leaderboard` block. Params
+// come from the block itself (metric/period/top_n/reveal_mode), so an admin
+// can drop multiple leaderboards onto a page with different shapes. No auth
+// (storefront blocks render anonymously); the response omits the per-user
+// "my rank" footer that /api/retail/leaderboard returns.
+//
+// Cached 10 min in-process, keyed on (metric, period, top_n) — reveal mode
+// is applied AFTER the cache so changing names-only doesn't blow it away.
+const _leaderboardBlockCache = new Map();   // key -> { t, entries }
+const LEADERBOARD_BLOCK_TTL_MS = 10 * 60 * 1000;
+
+router.get('/api/retail/storefront/leaderboard', (req, res) => {
+  const allowedMetrics = ['lifetime_spend', 'points_balance', 'orders_count'];
+  const allowedPeriods = ['all', 'year', 'month', 'week'];
+  const allowedReveal  = ['full', 'first_char', 'masked'];
+
+  const metric = allowedMetrics.includes(req.query.metric) ? req.query.metric : 'lifetime_spend';
+  const period = allowedPeriods.includes(req.query.period) ? req.query.period : 'month';
+  const top_n  = Math.max(3, Math.min(10, parseInt(req.query.top_n, 10) || 5));
+  const reveal_mode = allowedReveal.includes(req.query.reveal_mode) ? req.query.reveal_mode : 'first_char';
+
+  const key = `${metric}|${period}|${top_n}`;
+  const now = Date.now();
+  let cached = _leaderboardBlockCache.get(key);
+  if (!cached || (now - cached.t) > LEADERBOARD_BLOCK_TTL_MS) {
+    const raw = computeLeaderboard({ metric, period, top_n });
+    cached = { t: now, entries: raw };
+    _leaderboardBlockCache.set(key, cached);
+  }
+
+  const revealed = cached.entries.map(e => applyRevealMode(e, reveal_mode));
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({
+    success: true,
+    data: {
+      metric, period, top_n, reveal_mode,
+      entries: revealed,
+      generated_at: new Date(cached.t).toISOString(),
     },
   });
 });

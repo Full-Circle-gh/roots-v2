@@ -719,6 +719,62 @@
     background: rgba(255, 255, 255, .92); color: var(--ink);
     border-radius: 999px;
   }
+  /* Leaderboard — editorial ranking of top customers. Server returns
+     masked names, this block just lays them out. Sits next to .b-review
+     stylistically: oat default surface, brand-color accent for values. */
+  .b-leaderboard { padding: 18px 22px; }
+  .b-leaderboard .lb-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 14px;
+  }
+  .b-leaderboard .lb-kicker {
+    font: 700 9px var(--bf-toni); letter-spacing: .22em;
+    text-transform: uppercase; opacity: .7;
+  }
+  .b-leaderboard .lb-ttl {
+    font: 500 22px var(--bf-bear); line-height: 1.05; margin-top: 4px;
+  }
+  .b-leaderboard .lb-sub {
+    font: 400 12px var(--bf-aleo); opacity: .7; margin-top: 4px; line-height: 1.4;
+  }
+  .b-leaderboard .lb-period {
+    font: 700 9px var(--bf-toni); letter-spacing: .14em;
+    text-transform: uppercase; opacity: .55;
+    padding-left: 12px; flex-shrink: 0;
+  }
+  .b-leaderboard .lb-list { display: flex; flex-direction: column; gap: 2px; }
+  .b-leaderboard .lb-row {
+    display: grid; grid-template-columns: 28px 1fr auto; align-items: center;
+    gap: 10px; padding: 10px 4px;
+    border-bottom: 1px solid rgba(0, 0, 0, .06);
+  }
+  .b-leaderboard .lb-row:last-child { border-bottom: none; }
+  .b-leaderboard .lb-medal { font-size: 18px; line-height: 1; text-align: center; }
+  .b-leaderboard .lb-rank {
+    font: 700 13px var(--bf-toni); text-align: center; opacity: .45;
+    letter-spacing: .02em;
+  }
+  .b-leaderboard .lb-name {
+    font: 500 15px var(--bf-bear); line-height: 1.15;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .b-leaderboard .lb-value {
+    font: 600 13px var(--bf-toni); letter-spacing: .03em;
+  }
+  .b-leaderboard .lb-footer {
+    margin-top: 12px; padding-top: 10px;
+    border-top: 1px dashed rgba(0, 0, 0, .12);
+    font: 400 12px var(--bf-aleo); opacity: .8; line-height: 1.4;
+    text-align: center;
+  }
+  /* Skeleton row used during the initial fetch so the block height
+     stays stable. Subtle pulse keeps the eye moving. */
+  @keyframes lb-skel-pulse { 0%, 100% { opacity: .35; } 50% { opacity: .65; } }
+  .b-leaderboard .lb-skeleton .lb-name {
+    background: rgba(0, 0, 0, .08); border-radius: 2px; height: 12px; width: 60%;
+    animation: lb-skel-pulse 1.2s ease-in-out infinite;
+  }
+
   .b-review { padding: 22px; }
   .b-review .kicker {
     font: 700 9px var(--bf-toni); letter-spacing: .18em; opacity: .75; text-align: center;
@@ -1185,6 +1241,32 @@ document.addEventListener('click', (e) => {
   e.preventDefault();
   routeCtaTarget(el.dataset.ctaTarget);
 });
+
+// Leaderboard fetch + cache — feeds the `leaderboard` block. 10-min TTL
+// to match the server-side cache; reveal_mode varies per block but the
+// server applies it post-cache, so we key on all four params here.
+state.leaderboardCache = state.leaderboardCache || new Map();
+state._lbInFlight = state._lbInFlight || new Set();
+function loadLeaderboard(metric, period, top_n, reveal_mode) {
+  const key = `${metric}|${period}|${top_n}|${reveal_mode}`;
+  const cached = state.leaderboardCache.get(key);
+  if (cached && (Date.now() - cached.t) < 10 * 60 * 1000) return cached;
+  if (state._lbInFlight.has(key)) return cached || { loaded: false, entries: [] };
+  state._lbInFlight.add(key);
+  const qs = `metric=${encodeURIComponent(metric)}&period=${encodeURIComponent(period)}&top_n=${top_n}&reveal_mode=${encodeURIComponent(reveal_mode)}`;
+  fetch(`/api/retail/storefront/leaderboard?${qs}`)
+    .then(r => r.json())
+    .then(j => {
+      state.leaderboardCache.set(key, { t: Date.now(), loaded: true, entries: j?.data?.entries || [] });
+      state._lbInFlight.delete(key);
+      if (state.config) render(state.config[currentPage()]?.layout || []);
+    })
+    .catch(() => {
+      state.leaderboardCache.set(key, { t: Date.now(), loaded: true, entries: [] });
+      state._lbInFlight.delete(key);
+    });
+  return cached || { loaded: false, entries: [] };
+}
 
 // Top-selling fetch + cache — same pattern as CMS: lazy fetch with a
 // 60s TTL, re-render the current page when fresh data arrives.
@@ -1660,6 +1742,78 @@ function renderBlock(b) {
       return `<div class="b-store b-store-multi" style="background:${bg};color:${fg}">
         ${k.en || k.cn ? `<div class="kicker">${biLabel(k.en, k.cn)}</div>` : ''}
         <div class="st-cards">${cards}</div>
+      </div>`;
+    }
+    case 'leaderboard': {
+      const bg = brandColorVar(b.bg_color) || 'var(--oat)';
+      const fg = brandColorVar(b.fg_color) || 'var(--ink)';
+      const accent = brandColorVar(b.accent_color) || 'var(--forest)';
+      const metric = b.metric || 'lifetime_spend';
+      const period = b.period || 'month';
+      const topN = Math.max(3, Math.min(10, parseInt(b.top_n, 10) || 5));
+      const reveal = b.reveal_mode || 'first_char';
+      const showValue = b.show_value !== false;
+      const hideUnder = Math.max(0, parseInt(b.hide_when_under, 10) || 0);
+
+      const data = loadLeaderboard(metric, period, topN, reveal);
+      // Only hide once we KNOW the data — otherwise blocks flicker on/off.
+      if (data.loaded && data.entries.length < hideUnder) return '';
+
+      const k = getBi(b, 'kicker');
+      const t = getBi(b, 'title');
+      const sub = pickLang(b.subhead_en, b.subhead_cn);
+      const footer = pickLang(b.footer_en, b.footer_cn);
+
+      const periodLabel =
+        period === 'week'  ? (state.lang === 'cn' ? '本周'   : 'This week') :
+        period === 'month' ? (state.lang === 'cn' ? '本月'   : 'This month') :
+        period === 'year'  ? (state.lang === 'cn' ? '今年'   : 'This year') :
+                             (state.lang === 'cn' ? '累计' : 'All time');
+
+      const MEDALS = ['🥇', '🥈', '🥉'];
+      const fmtValue = (v) => {
+        if (metric === 'lifetime_spend') return '¥' + Math.round(Number(v) || 0).toLocaleString();
+        if (metric === 'points_balance') return (Number(v) || 0) + (state.lang === 'cn' ? ' 分' : ' pts');
+        return (Number(v) || 0) + (state.lang === 'cn' ? ' 单' : ' orders');
+      };
+
+      let listHtml;
+      if (!data.loaded) {
+        // Skeleton — N empty rows so the block holds its height while
+        // the fetch is in flight. Avoids the home page jumping when the
+        // leaderboard finally lands.
+        listHtml = Array.from({ length: topN }).map((_, i) => `
+          <div class="lb-row lb-skeleton">
+            <span class="lb-rank">${i + 1}</span>
+            <span class="lb-name">&nbsp;</span>
+          </div>`).join('');
+      } else {
+        listHtml = data.entries.slice(0, topN).map((e, i) => {
+          const rankCell = i < 3
+            ? `<span class="lb-medal">${MEDALS[i]}</span>`
+            : `<span class="lb-rank">${i + 1}</span>`;
+          const valueCell = showValue
+            ? `<span class="lb-value" style="color:${accent}">${escapeHtml(fmtValue(e.value))}</span>`
+            : '';
+          return `<div class="lb-row">
+            ${rankCell}
+            <span class="lb-name">${escapeHtml(e.name || '')}</span>
+            ${valueCell}
+          </div>`;
+        }).join('');
+      }
+
+      return `<div class="b-leaderboard" data-block-id="${escapeAttr(b.id)}" style="background:${bg};color:${fg}">
+        <div class="lb-head">
+          <div>
+            ${(k.en || k.cn) ? `<div class="lb-kicker">${biLabel(k.en, k.cn)}</div>` : ''}
+            <div class="lb-ttl">${biLabel(t.en, t.cn) || (state.lang === 'cn' ? '本月铁粉' : 'Top customers')}</div>
+            ${sub ? `<div class="lb-sub">${escapeHtml(sub)}</div>` : ''}
+          </div>
+          <div class="lb-period">${escapeHtml(periodLabel)}</div>
+        </div>
+        <div class="lb-list">${listHtml}</div>
+        ${footer ? `<div class="lb-footer">${escapeHtml(footer)}</div>` : ''}
       </div>`;
     }
     case 'countdown_timer': {

@@ -2297,6 +2297,66 @@
     line-height: 1.4;
   }
 
+  /* Leaderboard block — ranks of top customers (real data at runtime,
+     sample data in this preview). Borrows the editorial typography from
+     .b-fav so it sits naturally next to product blocks. */
+  .b-leaderboard { padding: 18px 22px; }
+  .b-leaderboard .lb-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 14px;
+  }
+  .b-leaderboard .lb-kicker {
+    font: 700 9px var(--bf-toni); letter-spacing: .22em;
+    text-transform: uppercase; opacity: .7;
+  }
+  .b-leaderboard .lb-ttl {
+    font: 500 22px var(--bf-bear); line-height: 1.05; margin-top: 4px;
+  }
+  .b-leaderboard .lb-sub {
+    font: 400 12px var(--f-sans); opacity: .7; margin-top: 4px; line-height: 1.4;
+  }
+  .b-leaderboard .lb-period {
+    font: 700 9px var(--bf-toni); letter-spacing: .14em;
+    text-transform: uppercase; opacity: .55;
+    padding-left: 12px; flex-shrink: 0;
+  }
+  .b-leaderboard .lb-list { display: flex; flex-direction: column; gap: 2px; }
+  .b-leaderboard .lb-row {
+    display: grid; grid-template-columns: 28px 1fr auto; align-items: center;
+    gap: 10px; padding: 10px 4px;
+    border-bottom: 1px solid rgba(0, 0, 0, .06);
+  }
+  .b-leaderboard .lb-row:last-child { border-bottom: none; }
+  .b-leaderboard .lb-medal { font-size: 18px; line-height: 1; text-align: center; }
+  .b-leaderboard .lb-rank {
+    font: 700 13px var(--bf-toni); text-align: center; opacity: .45;
+    letter-spacing: .02em;
+  }
+  .b-leaderboard .lb-name {
+    font: 500 15px var(--bf-bear); line-height: 1.15;
+  }
+  .b-leaderboard .lb-value {
+    font: 600 13px var(--bf-toni); letter-spacing: .03em;
+  }
+  .b-leaderboard .lb-footer {
+    margin-top: 12px; padding-top: 10px;
+    border-top: 1px dashed rgba(0, 0, 0, .12);
+    font: 400 12px var(--f-sans); opacity: .8; line-height: 1.4;
+    text-align: center;
+  }
+  .b-leaderboard .lb-note {
+    margin-top: 10px;
+    font: 400 10px var(--f-sans);
+    opacity: .55;
+    line-height: 1.4;
+  }
+  .b-leaderboard .lb-empty {
+    color: rgba(0, 0, 0, .35); font: 400 12px var(--f-sans);
+    padding: 22px 0; text-align: center;
+    border: 1px dashed rgba(0, 0, 0, .15); border-radius: 4px;
+    line-height: 1.5;
+  }
+
   .b-spacer {
     background:
       linear-gradient(135deg, rgba(0, 0, 0, .025) 25%, transparent 25%) 0 0/8px 8px,
@@ -3824,6 +3884,7 @@ const ICONS = {
   bundle:           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 7l9 5 9-5-9-5z"/><polyline points="3 17 12 22 21 17"/><polyline points="3 12 12 17 21 12"/></svg>',
   wecom_contact:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>',
   favorites_block:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+  leaderboard:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="13" width="5" height="8" rx="1"/><rect x="9.5" y="9" width="5" height="12" rx="1"/><rect x="16" y="5" width="5" height="16" rx="1"/></svg>',
   duplicate:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   arrow_up:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>',
   arrow_down:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
@@ -3869,6 +3930,7 @@ const BLOCK_META = {
   bundle:           { name: 'Bundle',           name_cn: '套装',       desc: '3–5 products with one-tap add-all-to-cart', desc_cn: '3–5 件商品,一键全部加入购物车' },
   wecom_contact:    { name: 'Add us on WeCom',  name_cn: '添加企业微信', desc: '企业微信 · contact button + 联系我 QR',     desc_cn: '企业微信 · 联系按钮 + 联系我二维码' },
   favorites_block:  { name: 'Favorites',        name_cn: '收藏',       desc: 'Your saved — pulls from each customer\'s wishlist', desc_cn: '顾客收藏 — 来自各自的心愿单' },
+  leaderboard:      { name: 'Leaderboard',      name_cn: '排行榜',     desc: 'Top members ranked by spend / points / orders',     desc_cn: '会员排行 · 按消费 / 积分 / 订单数' },
 };
 
 const state = {
@@ -5981,6 +6043,37 @@ function makeBlock(type) {
         corner_radius: 'subtle',
       };
     }
+    case 'leaderboard': {
+      // Defaults match the choices we locked: top buyers by spend, this
+      // month, top 5, "First L." masking, show the spend number. Live data
+      // comes from /api/retail/storefront/leaderboard which is keyed on
+      // metric+period+top_n (10-min cache shared across blocks).
+      return {
+        id, type,
+        kicker_en: 'ROOTS CLUB', kicker_cn: '会员',
+        title_en: 'Top customers', title_cn: '本月铁粉',
+        subhead_en: '', subhead_cn: '',
+        // lifetime_spend | points_balance | orders_count
+        metric: 'lifetime_spend',
+        // all | year | month | week
+        period: 'month',
+        // 3..10 — clamped server-side anyway
+        top_n: 5,
+        // full | first_char | masked — masking happens server-side
+        reveal_mode: 'first_char',
+        // Show the spend / points / orders number next to each name.
+        show_value: true,
+        // Optional reward line shown under the list (e.g. "Top 3 get a
+        // coupon"). Purely cosmetic — no auto-reward wiring in v1.
+        footer_en: '', footer_cn: '',
+        // Hide the block when the leaderboard has fewer than this many
+        // rows — keeps the home page from showing a sad 1-row board in
+        // the early days.
+        hide_when_under: 3,
+        bg_color: 'oat-milk', fg_color: 'ink',
+        accent_color: 'forest-kale',
+      };
+    }
   }
   return null;
 }
@@ -7313,6 +7406,100 @@ function renderBlockBody(b) {
       }
       return d;
     }
+    case 'leaderboard': {
+      // CMS preview renders sample rows so the author sees the shape
+      // without waiting on a network round-trip. Runtime (storefront.html)
+      // pulls real data from /api/retail/storefront/leaderboard.
+      d.className = 'b-leaderboard';
+      d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
+      d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
+      const accent = brandColorVar(b.accent_color) || 'var(--b-forest)';
+      const lk = getBi(b, 'kicker');
+      const lt = getBi(b, 'title');
+      const sub = pickLang(b.subhead_en, b.subhead_cn);
+      const footer = pickLang(b.footer_en, b.footer_cn);
+      const topN = Math.max(3, Math.min(10, b.top_n || 5));
+      const metric = b.metric || 'lifetime_spend';
+      const period = b.period || 'month';
+      const showValue = b.show_value !== false;
+
+      const MEDALS = ['🥇', '🥈', '🥉'];
+      // Sample names exercise both EN + CN paths so the author can see
+      // how masking behaves. Values descend so rank ordering is visible.
+      const samplePool = [
+        { name: 'Sarah Liang', cn: '梁莎', spend: 4280, points: 428, orders: 24 },
+        { name: 'Mei Chen',    cn: '陈梅', spend: 3120, points: 312, orders: 19 },
+        { name: 'David Wu',    cn: '吴大', spend: 2640, points: 264, orders: 17 },
+        { name: 'Jia Hua',     cn: '华佳', spend: 1980, points: 198, orders: 14 },
+        { name: 'Mark Zhao',   cn: '赵明', spend: 1540, points: 154, orders: 12 },
+        { name: 'Lina Yu',     cn: '于丽', spend: 1290, points: 129, orders: 11 },
+        { name: 'Tom Sun',     cn: '孙涛', spend: 1080, points: 108, orders: 10 },
+        { name: 'Anna Li',     cn: '李安', spend:  920, points:  92, orders:  9 },
+        { name: 'Wei Zhang',   cn: '张伟', spend:  760, points:  76, orders:  8 },
+        { name: 'Kai Lu',      cn: '陆凯', spend:  640, points:  64, orders:  7 },
+      ];
+      // Mirror the server-side mask logic so the author sees what a
+      // customer would see at the chosen reveal_mode.
+      const maskName = (full) => {
+        const reveal = b.reveal_mode || 'first_char';
+        const s = String(full || '').trim();
+        if (!s) return reveal === 'masked' ? '会员' : 'Member';
+        if (reveal === 'full') return s;
+        if (reveal === 'first_char') {
+          const chars = Array.from(s);
+          if (chars.length <= 1) return chars[0] + '*';
+          return chars[0] + '*'.repeat(Math.min(3, chars.length - 1));
+        }
+        return '**';
+      };
+      const valueOf = (row) =>
+        metric === 'points_balance' ? row.points :
+        metric === 'orders_count'   ? row.orders :
+        row.spend;
+      const fmtValue = (v) => {
+        if (metric === 'lifetime_spend') return '¥' + Math.round(v).toLocaleString();
+        if (metric === 'points_balance') return v + (state.lang === 'cn' ? ' 分' : ' pts');
+        return v + (state.lang === 'cn' ? ' 单' : ' orders');
+      };
+
+      const rows = samplePool.slice(0, topN).map((r, i) => {
+        const display = state.lang === 'cn' ? r.cn : r.name;
+        const masked = maskName(display);
+        const rankCell = i < 3
+          ? `<span class="lb-medal">${MEDALS[i]}</span>`
+          : `<span class="lb-rank">${i + 1}</span>`;
+        const valueCell = showValue
+          ? `<span class="lb-value" style="color:${accent}">${fmtValue(valueOf(r))}</span>`
+          : '';
+        return `<div class="lb-row">
+          ${rankCell}
+          <span class="lb-name">${escapeHtml(masked)}</span>
+          ${valueCell}
+        </div>`;
+      }).join('');
+
+      const periodLabel =
+        period === 'week'  ? (state.lang === 'cn' ? '本周'   : 'This week') :
+        period === 'month' ? (state.lang === 'cn' ? '本月'   : 'This month') :
+        period === 'year'  ? (state.lang === 'cn' ? '今年'   : 'This year') :
+                             (state.lang === 'cn' ? '累计' : 'All time');
+
+      d.innerHTML = `
+        <div class="lb-head">
+          <div>
+            ${(lk.en || lk.cn) ? `<div class="lb-kicker">${biLabel(lk.en, lk.cn)}</div>` : ''}
+            <div class="lb-ttl">${biLabel(lt.en, lt.cn) || (state.lang === 'cn' ? '本月铁粉' : 'Top customers')}</div>
+            ${sub ? `<div class="lb-sub">${escapeHtml(sub)}</div>` : ''}
+          </div>
+          <div class="lb-period">${escapeHtml(periodLabel)}</div>
+        </div>
+        <div class="lb-list">${rows}</div>
+        ${footer ? `<div class="lb-footer">${escapeHtml(footer)}</div>` : ''}
+        <div class="lb-note">${state.lang === 'cn'
+          ? '⚑ 预览使用示例数据。运行时拉取真实排行 (10 分钟缓存)。'
+          : '⚑ Preview uses sample data. Runtime pulls real rankings (10-min cache).'}</div>`;
+      return d;
+    }
   }
   return d;
 }
@@ -7412,6 +7599,7 @@ function renderInspector() {
     case 'affiliate_block':  buildAffiliateForm(body, b); break;
     case 'wecom_contact':    buildWecomContactForm(body, b); break;
     case 'favorites_block':  buildFavoritesForm(body, b); break;
+    case 'leaderboard':      buildLeaderboardForm(body, b); break;
   }
   const dz = document.createElement('div');
   dz.className = 'danger-zone';
@@ -9077,6 +9265,87 @@ function buildFavoritesForm(m, b) {
   m.appendChild(field(T('Card corner radius', '卡片圆角'), '',
     sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
         v => updateBlock(b.id, { corner_radius: v }))));
+}
+
+function buildLeaderboardForm(m, b) {
+  // Heads-up: rankings come from real customer data, masked server-side.
+  // The preview on the canvas is a sample so the author can see the shape
+  // without exposing live names while still drafting.
+  const note = document.createElement('div');
+  note.className = 'helper';
+  note.style.cssText = 'margin: -4px 0 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
+  note.innerHTML = B(
+    'Pulls real top customers at runtime — names are masked server-side per the privacy setting below. The canvas preview uses sample data so live rankings don\'t leak while you\'re drafting.',
+    '运行时拉取真实排行 — 名字按下方隐私设置在服务端打码。预览使用示例数据,避免在编辑时泄露真实排行。'
+  );
+  m.appendChild(note);
+
+  m.appendChild(field(T('Kicker', '小标题'), T('Tiny uppercase label above the title.', '标题上方的小号大写标签。'),
+    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
+  m.appendChild(field(T('Title', '标题'), '',
+    txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
+  m.appendChild(field(T('Subhead', '副标题'), T('Optional — one short line under the title.', '可选 — 标题下方的一句短文案。'),
+    txtPair(b.subhead_en, b.subhead_cn, ({ en, cn }) => updateBlockSilent(b.id, { subhead_en: en, subhead_cn: cn }))));
+
+  m.appendChild(field(T('Rank by', '排序依据'),
+    T('Spend — total ¥ across paid orders. Points — current Roots Club points balance. Orders — count of paid orders.', '消费 — 已支付订单的累计金额。积分 — 当前 Roots 会员积分余额。订单数 — 已支付订单数量。'),
+    sel(b.metric || 'lifetime_spend', [
+      { value: 'lifetime_spend', label: T('Spend (¥)',       '消费金额 (¥)') },
+      { value: 'points_balance', label: T('Points',           '积分余额') },
+      { value: 'orders_count',   label: T('Order count',      '订单数量') },
+    ], v => updateBlock(b.id, { metric: v }))));
+
+  m.appendChild(field(T('Window', '时间范围'),
+    T('Window the ranking covers. Spend / orders look at recent activity; points balance is point-in-time (window ignored).', '排行覆盖的时间范围。消费 / 订单看近期活动;积分余额为即时值(忽略此项)。'),
+    sel(b.period || 'month', [
+      { value: 'week',  label: T('This week',  '本周') },
+      { value: 'month', label: T('This month', '本月') },
+      { value: 'year',  label: T('This year',  '今年') },
+      { value: 'all',   label: T('All time',   '累计') },
+    ], v => updateBlock(b.id, { period: v }))));
+
+  m.appendChild(field(T('How many to show', '显示数量'),
+    T('3–10 rows. Lower numbers feel tighter; higher gives more customers a chance to see themselves.', '3–10 行。数量少更紧凑,数量多让更多顾客看到自己。'),
+    num(b.top_n, v => updateBlock(b.id, { top_n: Math.max(3, Math.min(10, v || 5)) }), { min: 3, max: 10 })));
+
+  m.appendChild(field(T('Name privacy', '名字隐私'),
+    T('First L. — recommended; shows the first character with the rest masked (CJK-friendly). Full — real nicknames. Hidden — fully masked to ** **.', '首字母 — 推荐;显示首字母,其余打码(支持中文)。完整 — 显示真实昵称。隐藏 — 完全打码为 ** **。'),
+    sel(b.reveal_mode || 'first_char', [
+      { value: 'first_char', label: T('First L. (recommended)', '首字母(推荐)') },
+      { value: 'full',       label: T('Full nickname',          '完整昵称') },
+      { value: 'masked',     label: T('Hidden (** **)',         '完全隐藏 (** **)') },
+    ], v => updateBlock(b.id, { reveal_mode: v }))));
+
+  // Show value toggle — checkbox row, same pattern voting_block uses.
+  const showRow = document.createElement('div');
+  showRow.className = 'field';
+  showRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+  const showBox = document.createElement('input');
+  showBox.type = 'checkbox';
+  showBox.checked = b.show_value !== false;
+  showBox.addEventListener('change', () => updateBlock(b.id, { show_value: showBox.checked }));
+  const showLbl = document.createElement('label');
+  showLbl.style.cssText = 'cursor:pointer;font-size:13px;font-weight:500;';
+  showLbl.textContent = T('Show the value (¥ / pts / orders) next to each name', '在名字旁显示数值 (¥ / 积分 / 订单数)');
+  showLbl.addEventListener('click', () => { showBox.checked = !showBox.checked; showBox.dispatchEvent(new Event('change')); });
+  showRow.appendChild(showBox); showRow.appendChild(showLbl);
+  m.appendChild(showRow);
+
+  m.appendChild(field(T('Footer line', '底部文案'),
+    T('Optional — e.g. "Top 3 get a coupon each month". Purely cosmetic, no auto-reward wired in v1.', '可选 — 例如「每月前三名得优惠券」。仅为展示,v1 未自动发放奖励。'),
+    txtPair(b.footer_en, b.footer_cn, ({ en, cn }) => updateBlockSilent(b.id, { footer_en: en, footer_cn: cn }))));
+
+  m.appendChild(field(T('Hide when fewer than', '少于此数时隐藏'),
+    T('Hide the block entirely if the leaderboard has fewer than this many qualifiers — avoids a sad short list early on.', '排行榜上榜人数少于此数时,完全隐藏本模块 — 避免初期出现冷清的短列表。'),
+    num(b.hide_when_under, v => updateBlock(b.id, { hide_when_under: Math.max(0, Math.min(10, v || 0)) }), { min: 0, max: 10 })));
+
+  m.appendChild(field(T('Background colour', '背景颜色'), '',
+    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  m.appendChild(field(T('Text colour', '文字颜色'), '',
+    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  m.appendChild(field(T('Accent colour (rank value)', '强调色(数值)'),
+    T('Tint used for the ¥ / pts / orders number next to each name.', '名字旁的数值文字颜色。'),
+    sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 }
 
 function buildCountdownForm(m, b) {
