@@ -272,7 +272,7 @@ router.delete('/api/products/variants/group/:id', requireAuth, requirePermission
 const FIELDS = [
   'name_en', 'name_cn', 'sku', 'category', 'recipe_id', 'status',
   'sell_price', 'weight', 'barcode',
-  'description_en', 'description_cn', 'free_of',
+  'description_en', 'description_cn', 'description_format', 'free_of',
   'image_data', 'label_data', 'notes',
   'external_id', 'sort_order', 'stock_qty', 'tags',
   'variant_group_id', 'variant_label',
@@ -310,6 +310,12 @@ function pickBody(body) {
     else if (k === 'is_restock_only')    out[k] = body[k] ? 1 : 0;
     else if (k === 'is_published')       out[k] = body[k] ? 1 : 0;
     else if (k === 'use_block_design')   out[k] = body[k] ? 1 : 0;
+    else if (k === 'description_format') {
+      // Only two valid values; default anything else to 'plain'. Mini-app's
+      // <rich-text> renders HTML when this is 'rich'; otherwise the front-end
+      // splits on \n and "## " headings (the legacy "plain" path).
+      out[k] = body[k] === 'rich' ? 'rich' : 'plain';
+    }
     else if (k === 'ship_modes') {
       // Accept either a csv string ("air,land") or an array (['air','land']).
       // Normalize to a stable csv with at least one mode; default to 'air,land'.

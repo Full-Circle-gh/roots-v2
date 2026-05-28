@@ -530,6 +530,16 @@ select.ied-input { padding: 2px 6px; }
 .ka-rte-wrap.ka-rte-fs { position:fixed; inset:0; z-index:9999; margin:0; padding:16px 20px 20px; background:var(--bg, #fff); overflow-y:auto; }
 .ka-rte-wrap.ka-rte-fs .ka-rte { max-height: calc(100vh - 220px); min-height: 50vh; }
 body.ka-rte-fs-lock { overflow: hidden; }
+/* Read-only rendering inside the description modal — same block styling as
+   the editor so what the operator pastes from the mini-app reads cleanly. */
+.ka-rte-readonly h1, .ka-rte-readonly h2 { font-size:17px; margin:8px 0 4px; font-weight:700; }
+.ka-rte-readonly h3 { font-size:15px; margin:6px 0; font-weight:700; }
+.ka-rte-readonly ul, .ka-rte-readonly ol { padding-left:22px; margin:6px 0; }
+.ka-rte-readonly blockquote { margin:6px 0; padding:2px 0 2px 12px; border-left:3px solid var(--border); color:var(--muted); }
+.ka-rte-readonly hr { border:none; border-top:1px solid var(--border); margin:10px 0; }
+.ka-rte-readonly a { color: var(--lime-text); }
+.ka-rte-readonly img { max-width:100%; height:auto; }
+.ka-rte-readonly p { margin:6px 0; }
 
 /* ── Tables ── (zebra striping, breathing room, smoother hover) */
 .data-table { width:100%; border-collapse:collapse; }
@@ -9882,17 +9892,26 @@ async function iedFreeOfChange(el) {
 
 function _renderDescCard(ctx) {
   const { p } = ctx;
-  // Two textareas stacked — EN on top, CN below. Edit anywhere, blur saves the
-  // changed one without re-rendering the page (keeps focus consistent if the
-  // operator tabs between them). The .ied-textarea class shares the inline-edit
-  // visual; it just doesn't swap elements like a click-to-edit field would.
+  // Rich-text editor matching the mini-app backend (retail-admin.html). Two
+  // contenteditable boxes share one toolbar — kaRte* tracks the active box
+  // via selectionchange so commands apply to whichever EN/CN the cursor's in.
+  // Blur saves the changed box (single-field PUT + description_format='rich')
+  // without re-rendering the page, so the operator's caret + scroll survive.
+  // A legacy plain row (description_format != 'rich') gets promoted to HTML
+  // for display via kaRtePlainToHtml; the next save writes it back as rich.
   //
   // The pill in the card title is the per-product renderer toggle: ON →
   // mini-app uses the designer block editor (description_blocks); OFF
-  // (default) → mini-app uses these classic textareas. Persisted as
-  // `use_block_design` on products. Saving propagates on next mini-app
-  // product page open.
+  // (default) → mini-app uses the description HTML edited here.
   const blocksOn = p.use_block_design ? 1 : 0;
+  // Treat the row as rich if the format says so OR the saved text already
+  // contains HTML tags — defensive against legacy rows where the mini-app
+  // wrote HTML but format wasn't migrated, so the operator never sees literal
+  // <br> / <p> tags re-escaped back into the editor.
+  const enRich = p.description_format === 'rich' || kaRteLooksLikeHtml(p.description_en);
+  const cnRich = p.description_format === 'rich' || kaRteLooksLikeHtml(p.description_cn);
+  const enHtml = enRich ? (p.description_en || '') : kaRtePlainToHtml(p.description_en || '');
+  const cnHtml = cnRich ? (p.description_cn || '') : kaRtePlainToHtml(p.description_cn || '');
   return `<div class="card-title" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
       <span>📝 Description · 描述</span>
       <button type="button" onclick="iedToggleBlockDesign(${p.id}, this)" data-on="${blocksOn}"
@@ -9901,16 +9920,65 @@ function _renderDescCard(ctx) {
         ${_descToggleInner(blocksOn)}
       </button>
     </div>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <label style="display:block">
-        <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">EN</span>
-        <textarea rows="5" class="ied-textarea" data-pid="${p.id}" data-field="description_en" data-original="${esc(p.description_en||'')}" onblur="iedFieldBlur(this)" placeholder="English description…" style="width:100%;margin-top:4px;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font:inherit;font-size:13px;color:var(--dk);resize:vertical;outline:none;box-sizing:border-box;background:#fff">${esc(p.description_en||'')}</textarea>
-      </label>
-      <label style="display:block">
-        <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">CN · 中文</span>
-        <textarea rows="5" class="ied-textarea" data-pid="${p.id}" data-field="description_cn" data-original="${esc(p.description_cn||'')}" onblur="iedFieldBlur(this)" placeholder="中文描述…" style="width:100%;margin-top:4px;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font:inherit;font-size:13px;color:var(--dk);resize:vertical;outline:none;box-sizing:border-box;background:#fff">${esc(p.description_cn||'')}</textarea>
-      </label>
+    <div class="ka-rte-wrap" id="kaRteWrap_${p.id}">
+      ${kaRteToolbarHTML()}
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <label style="display:block">
+          <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">EN</span>
+          <div class="ka-rte" contenteditable="true" data-pid="${p.id}" data-field="description_en"
+               data-original="${esc(enHtml)}" data-placeholder="English description…"
+               onblur="kaRteBlur(this)" style="margin-top:4px">${enHtml}</div>
+        </label>
+        <label style="display:block">
+          <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">CN · 中文</span>
+          <div class="ka-rte" contenteditable="true" data-pid="${p.id}" data-field="description_cn"
+               data-original="${esc(cnHtml)}" data-placeholder="中文描述…"
+               onblur="kaRteBlur(this)" style="margin-top:4px">${cnHtml}</div>
+        </label>
+      </div>
     </div>`;
+}
+
+// Shared toolbar HTML — emitted once per card so EN+CN editors share controls.
+// Lean compared to the mini-app's (no image/table — those need media-upload
+// auth the kitchen app doesn't have; operators wanting media should edit on
+// the mini-app backend, which writes the same field).
+function kaRteToolbarHTML() {
+  return `<div class="ka-rte-toolbar" onmousedown="kaRteSaveSel()">
+    <select class="ka-rte-sel" title="Paragraph format · 段落格式" onmousedown="kaRteSaveSel()" onchange="kaRteBlock(this.value); this.selectedIndex=0;">
+      <option value="">¶ Paragraph</option>
+      <option value="h2">H2 — Section</option>
+      <option value="h3">H3 — Subsection</option>
+      <option value="p">Body text</option>
+      <option value="blockquote">Quote</option>
+      <option value="pre">Code</option>
+    </select>
+    <span class="ka-rte-sep"></span>
+    <button type="button" title="Bold · 加粗"           onmousedown="return false" onclick="kaRte('bold')"><b>B</b></button>
+    <button type="button" title="Italic · 斜体"         onmousedown="return false" onclick="kaRte('italic')"><i>I</i></button>
+    <button type="button" title="Underline · 下划线"    onmousedown="return false" onclick="kaRte('underline')"><span style="text-decoration:underline">U</span></button>
+    <button type="button" title="Strikethrough · 删除线" onmousedown="return false" onclick="kaRte('strikeThrough')"><span style="text-decoration:line-through">S</span></button>
+    <span class="ka-rte-sep"></span>
+    <label class="ka-rte-color" title="Text colour · 文字颜色"><span>A</span><i></i><input type="color" value="#1a2314" onmousedown="kaRteSaveSel()" oninput="kaRteColor(this.value); this.parentNode.querySelector('i').style.background=this.value;"></label>
+    <label class="ka-rte-color ka-rte-hl" title="Highlight · 高亮"><span>A</span><i></i><input type="color" value="#ffe680" onmousedown="kaRteSaveSel()" oninput="kaRteHilite(this.value); this.parentNode.querySelector('i').style.background=this.value;"></label>
+    <span class="ka-rte-sep"></span>
+    <button type="button" title="Align left · 左对齐"   onmousedown="return false" onclick="kaRte('justifyLeft')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h8M2 12h11"/></svg></button>
+    <button type="button" title="Centre · 居中"         onmousedown="return false" onclick="kaRte('justifyCenter')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M4 8h8M3 12h10"/></svg></button>
+    <button type="button" title="Align right · 右对齐"  onmousedown="return false" onclick="kaRte('justifyRight')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M6 8h8M4 12h10"/></svg></button>
+    <span class="ka-rte-sep"></span>
+    <button type="button" title="Bulleted list · 项目符号" onmousedown="return false" onclick="kaRte('insertUnorderedList')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 4h8M6 8h8M6 12h8"/><circle cx="3" cy="4" r="1" fill="currentColor" stroke="none"/><circle cx="3" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="3" cy="12" r="1" fill="currentColor" stroke="none"/></svg></button>
+    <button type="button" title="Numbered list · 编号列表" onmousedown="return false" onclick="kaRte('insertOrderedList')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8M6 8h8M6 12h8"/><text x="1.5" y="5" font-size="4" font-weight="700" fill="currentColor" stroke="none">1</text><text x="1.5" y="9" font-size="4" font-weight="700" fill="currentColor" stroke="none">2</text><text x="1.5" y="13" font-size="4" font-weight="700" fill="currentColor" stroke="none">3</text></svg></button>
+    <button type="button" title="Decrease indent · 减少缩进" onmousedown="return false" onclick="kaRte('outdent')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h7M7 12h7M2 8h7M6 6L3 8l3 2"/></svg></button>
+    <button type="button" title="Increase indent · 增加缩进" onmousedown="return false" onclick="kaRte('indent')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h7M2 12h7M7 8h7M3 6l3 2-3 2"/></svg></button>
+    <span class="ka-rte-sep"></span>
+    <button type="button" title="Link · 链接"           onmousedown="return false" onclick="kaRteLink()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9.5a2.5 2.5 0 010-3.5l2-2a2.5 2.5 0 013.5 3.5l-1 1"/><path d="M9.5 6.5a2.5 2.5 0 010 3.5l-2 2a2.5 2.5 0 01-3.5-3.5l1-1"/></svg></button>
+    <button type="button" title="Horizontal rule · 分隔线" onmousedown="return false" onclick="kaRte('insertHorizontalRule')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 8h12"/></svg></button>
+    <button type="button" class="ka-rte-clr" title="Clear formatting · 清除格式" onmousedown="return false" onclick="kaRteClear()">T<sub>x</sub></button>
+    <span class="ka-rte-sep"></span>
+    <button type="button" title="Undo · 撤销"           onmousedown="return false" onclick="kaRte('undo')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7H10a3 3 0 010 6H6M5 7l2.5-2.5M5 7l2.5 2.5"/></svg></button>
+    <button type="button" title="Redo · 重做"           onmousedown="return false" onclick="kaRte('redo')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 7H6a3 3 0 000 6h4M11 7L8.5 4.5M11 7L8.5 9.5"/></svg></button>
+    <button type="button" title="Fullscreen · 全屏"     onmousedown="return false" onclick="kaRteFullscreen(this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg></button>
+  </div>`;
 }
 
 // Toggle the per-product `use_block_design` flag. When ON, the mini-app
@@ -10215,6 +10283,119 @@ async function iedFieldBlur(el) {
   el.style.borderColor = '#f59e0b';
   try {
     await iedSaveField(pid, field, val || null);
+    el.dataset.original = val;
+    el.style.borderColor = '#22c55e';
+    setTimeout(() => { el.style.borderColor = ''; }, 800);
+  } catch (e) {
+    el.style.borderColor = '#dc2626';
+    toast('Save failed · 保存失败: ' + e.message, 'error');
+  } finally {
+    delete el.dataset.saving;
+  }
+}
+
+// ── Rich-text description editor (kaRte*) ─────────────────────────────────
+// One shared toolbar drives whichever EN/CN contenteditable (.ka-rte) the
+// cursor is in. Native controls (the Format <select>, colour pickers) steal
+// focus and would collapse the selection, so we track the live range from
+// `selectionchange` and restore it before each execCommand. Saves on blur
+// via a two-field PUT (description_en/cn + description_format='rich').
+// Mirrors the mini-app backend's pdRte*; namespaced ka* so the two files
+// stay independent.
+let _kaRteActive = null, _kaRteRange = null;
+document.addEventListener('selectionchange', () => {
+  const s = document.getSelection();
+  if (!s || !s.rangeCount) return;
+  let n = s.anchorNode;
+  if (n && n.nodeType === 3) n = n.parentElement;
+  const ed = n && n.closest && n.closest('.ka-rte');
+  if (ed) { _kaRteActive = ed; _kaRteRange = s.getRangeAt(0).cloneRange(); }
+});
+function kaRteSaveSel() {
+  const s = document.getSelection();
+  if (s && s.rangeCount) {
+    let n = s.anchorNode; if (n && n.nodeType === 3) n = n.parentElement;
+    const ed = n && n.closest && n.closest('.ka-rte');
+    if (ed) { _kaRteActive = ed; _kaRteRange = s.getRangeAt(0).cloneRange(); }
+  }
+}
+function kaRteRestore() {
+  // Fall back to the first .ka-rte on the page if nothing's been focused yet
+  // (e.g. operator clicks Bold before placing a caret) — at least the command
+  // has somewhere to land instead of silently dropping.
+  if (!_kaRteActive || !document.body.contains(_kaRteActive)) {
+    _kaRteActive = document.querySelector('.ka-rte');
+  }
+  if (!_kaRteActive) return false;
+  _kaRteActive.focus();
+  if (_kaRteRange) {
+    try { const s = document.getSelection(); s.removeAllRanges(); s.addRange(_kaRteRange); } catch (e) {}
+  }
+  return true;
+}
+function kaRte(cmd, val) {
+  if (!kaRteRestore()) return;
+  // styleWithCSS makes colour/decoration come out as <span style> (which the
+  // mini-app <rich-text> renders) instead of legacy <font>/<u> tags it drops.
+  try { document.execCommand('styleWithCSS', false, true); } catch (e) {}
+  try { document.execCommand(cmd, false, (val == null ? null : val)); } catch (e) {}
+  kaRteSaveSel();
+}
+function kaRteBlock(tag) { if (tag) kaRte('formatBlock', tag); }
+function kaRteColor(c)   { kaRte('foreColor', c); }
+function kaRteHilite(c)  { try { kaRte('hiliteColor', c); } catch (e) { kaRte('backColor', c); } }
+function kaRteClear()    { kaRte('removeFormat'); kaRte('formatBlock', 'p'); }
+function kaRteLink() {
+  const url = prompt('Link URL · 链接地址:');
+  if (url) kaRte('createLink', url);
+}
+function kaRteFullscreen(btn) {
+  const wrap = btn && btn.closest ? btn.closest('.ka-rte-wrap') : null;
+  if (!wrap) return;
+  const on = wrap.classList.toggle('ka-rte-fs');
+  document.body.classList.toggle('ka-rte-fs-lock', on);
+}
+// Legacy plain → HTML so old "## Heading\n\nbody" rows display reasonably the
+// first time they're opened. The next save promotes the row to description_format='rich'.
+function kaRtePlainToHtml(t) {
+  return esc(String(t || '')).replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
+}
+// Cheap heuristic to spot a row whose stored text already IS HTML but whose
+// format flag never got migrated to 'rich' (e.g. paste-in, import, or older
+// mini-app save before the flag existed). Without this we'd kaRtePlainToHtml
+// the content and the operator would see literal <br>/<p> tags in the editor.
+function kaRteLooksLikeHtml(t) {
+  return /<(br|p|div|span|h[1-6]|ul|ol|li|strong|em|b|i|u|a|img|hr|blockquote|table|tr|td|th)\b/i.test(String(t || ''));
+}
+// A visually-empty rich box (just <br>/&nbsp;) → save as '' rather than junk markup,
+// matching the mini-app's pdRteClean so blank descriptions don't round-trip as `<br>`.
+function kaRteClean(html) {
+  const d = document.createElement('div');
+  d.innerHTML = html || '';
+  return (d.innerText || '').trim() ? (html || '').trim() : '';
+}
+// Blur save: PUT the changed box + description_format='rich' in one call so a
+// legacy plain row gets promoted on first edit. Compares against data-original
+// (set at render time) to skip no-op saves and avoid stomping the format on
+// rows the operator merely focused.
+async function kaRteBlur(el) {
+  const pid    = parseInt(el.dataset.pid, 10);
+  const field  = el.dataset.field;
+  const orig   = el.dataset.original || '';
+  const val    = kaRteClean(el.innerHTML);
+  if (val === orig) return;
+  el.dataset.saving = '1';
+  try {
+    const payload = { description_format: 'rich' };
+    payload[field] = val || null;
+    const r = await fetch('/api/products/' + pid, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'save failed');
+    const _ci = (_products || []).findIndex(p => Number(p.id) === Number(pid));
+    if (_ci !== -1) _products[_ci] = { ..._products[_ci], ...payload };
     el.dataset.original = val;
     el.style.borderColor = '#22c55e';
     setTimeout(() => { el.style.borderColor = ''; }, 800);
@@ -10794,11 +10975,26 @@ async function showProductDescription(id) {
     } catch {}
   }
   if (!p) return;
+  // Rich-format rows are saved as HTML by the inline editor / mini-app backend.
+  // Render them as HTML and extract plain text for the Copy button via a hidden
+  // probe DIV so the clipboard payload doesn't paste literal <br> / <p> tags.
+  // Legacy plain rows still show with white-space:pre-wrap so newlines survive.
+  const toText = (html) => {
+    const d = document.createElement('div'); d.innerHTML = html || '';
+    // <br> + block boundaries → newlines so "Copy" produces a readable paste.
+    d.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+    d.querySelectorAll('p,div,li,h1,h2,h3,h4,h5,h6,blockquote,hr,tr').forEach(b => b.append('\n'));
+    return (d.innerText || d.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+  };
+  // Same rich-vs-plain detection as the inline editor — a row with literal
+  // HTML tags is rendered as HTML even if the format flag wasn't migrated.
   const en = p.description_en || '';
   const cn = p.description_cn || '';
+  const enRich = p.description_format === 'rich' || kaRteLooksLikeHtml(en);
+  const cnRich = p.description_format === 'rich' || kaRteLooksLikeHtml(cn);
   const tabs = [];
-  if (en) tabs.push({ id:'en', label:'English 英文', text: en });
-  if (cn) tabs.push({ id:'cn', label:'中文 Chinese', text: cn });
+  if (en) tabs.push({ id:'en', label:'English 英文', html: enRich ? en : kaRtePlainToHtml(en), text: enRich ? toText(en) : en });
+  if (cn) tabs.push({ id:'cn', label:'中文 Chinese', html: cnRich ? cn : kaRtePlainToHtml(cn), text: cnRich ? toText(cn) : cn });
   if (!tabs.length) return;
 
   const overlay = mkOverlay('prodDescOverlay');
@@ -10814,7 +11010,7 @@ async function showProductDescription(id) {
         style="background:none;border:none;padding:8px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted)">${t.label}</button>`).join('')}
     </div>
     ${tabs.map(t => `<div id="pdBody_${t.id}" data-pd-tab="${t.id}" data-pd-text="${esc(t.text)}" style="display:none">
-      <div style="font-size:14px;color:#3d3d33;line-height:1.65;white-space:pre-wrap;max-height:50vh;overflow-y:auto;padding:4px 2px">${esc(t.text)}</div>
+      <div class="ka-rte-readonly" style="font-size:14px;color:#3d3d33;line-height:1.65;max-height:50vh;overflow-y:auto;padding:4px 2px">${t.html}</div>
     </div>`).join('')}
     <div style="display:flex;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);flex-wrap:wrap">
       <button class="btn btn-primary" onclick="pdCopyActive()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><rect x="6" y="4" width="12" height="18" rx="2"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><line x1="9" y1="10" x2="15" y2="10"/><line x1="9" y1="14" x2="15" y2="14"/><line x1="9" y1="18" x2="13" y2="18"/></svg>Copy 复制</button>
