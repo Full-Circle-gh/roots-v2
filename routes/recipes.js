@@ -5,7 +5,16 @@ const router = express.Router();
 
 // GET all recipes (favorites first, then alphabetical)
 router.get('/api/recipes', requireAuth, requirePermission('recipes'), (req, res) => {
-  const { search } = req.query;
+  const { search, count_only } = req.query;
+  // count_only=1 returns just {count: N} so the dashboard KPI tile doesn't
+  // have to download the full recipe list (with method/ingredients JSON) on
+  // every page load.
+  if (count_only === '1' || count_only === 'true') {
+    let cq = 'SELECT COUNT(*) AS n FROM recipes WHERE is_active = 1';
+    const cp = [];
+    if (search) { cq += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)'; const s = `%${search}%`; cp.push(s,s,s); }
+    return res.json({ success: true, count: db.prepare(cq).get(...cp).n });
+  }
   let query = 'SELECT * FROM recipes WHERE is_active = 1';
   const params = [];
   if (search) { query += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)'; const s = `%${search}%`; params.push(s,s,s); }

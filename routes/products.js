@@ -42,11 +42,21 @@ const PRODUCT_LIST_COLS = `
 
 // GET all products (with linked recipe name for the table view)
 router.get('/api/products', requireAuth, requirePermission('products'), (req, res) => {
-  const { search, category, status, deleted_only } = req.query;
+  const { search, category, status, deleted_only, count_only } = req.query;
   // Filter mode:
   //  - default            → active products (is_active=1)
   //  - ?deleted_only=1    → trash view (is_active=0) for the restore UI
   const onlyDeleted = deleted_only === '1' || deleted_only === 'true';
+  // count_only=1 returns just {count: N} — the dashboard KPI tile uses this
+  // so it doesn't have to wait on the full (slim-but-still-paginated) list.
+  if (count_only === '1' || count_only === 'true') {
+    let cq = `SELECT COUNT(*) AS n FROM products p WHERE COALESCE(p.is_active, 1) = ${onlyDeleted ? 0 : 1}`;
+    const cp = [];
+    if (search) { cq += ' AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)'; const s = `%${search}%`; cp.push(s,s,s); }
+    if (category) { cq += ' AND p.category = ?'; cp.push(category); }
+    if (status)   { cq += ' AND p.status = ?';   cp.push(status); }
+    return res.json({ success: true, count: db.prepare(cq).get(...cp).n });
+  }
   let q = `SELECT ${PRODUCT_LIST_COLS} FROM products p
            LEFT JOIN recipes r ON r.id = p.recipe_id
            WHERE COALESCE(p.is_active, 1) = ${onlyDeleted ? 0 : 1}`;

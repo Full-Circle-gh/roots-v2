@@ -4023,11 +4023,14 @@ async function navigate(module) {
 // ─────────────────────────────────────────────────────────────────────────────
 async function renderDashboard() {
   // Fetch counts + summaries in parallel; tolerate any individual failure (perm-gated).
+  // Ingredients / recipes / products use ?count_only=1 — the KPI tiles only
+  // need a row count, and shipping the full lists (multi-MB ingredients + full
+  // recipe JSON) added ~20s to dashboard load over slow links.
   const safe = (p) => p.then(r => r.json()).catch(() => ({ data: null }));
   const [iRes, rRes, pRes, salesSum, salesWeek, wasteSum, alertsCnt, recentAlerts, allAlerts, expiring, addonsRes] = await Promise.all([
-    safe(fetch('/api/ingredients')),
-    safe(fetch('/api/recipes')),
-    safe(fetch('/api/products')),
+    safe(fetch('/api/ingredients?count_only=1')),
+    safe(fetch('/api/recipes?count_only=1')),
+    safe(fetch('/api/products?count_only=1')),
     safe(fetch('/api/sales/summary?period=this_month')),
     safe(fetch('/api/sales/summary?period=last_7')),
     safe(fetch('/api/waste/summary?period=7d')),
@@ -4038,9 +4041,9 @@ async function renderDashboard() {
     safe(fetch('/api/sales/addons-summary?period=this_month&limit=8')),
   ]);
   const addons = addonsRes.addons || [];
-  _ingredients = iRes.data || [];
-  _recipes = rRes.data || [];
-  const products  = pRes.data || [];
+  const ingredientsCount = iRes.count || 0;
+  const recipesCount     = rRes.count || 0;
+  const productsCount    = pRes.count || 0;
   const sales     = salesSum.data || null;
   const week      = salesWeek.data || null;
   const waste     = wasteSum.data || null;
@@ -4067,9 +4070,9 @@ async function renderDashboard() {
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
-      ${kpiCard({ icon: 'leaf',       value: _ingredients.length,                           label: 'Ingredients · 食材', onClick: () => navigate('ingredients') })}
-      ${kpiCard({ icon: 'book',       value: _recipes.length,                               label: 'Recipes · 食谱',     onClick: () => navigate('recipes') })}
-      ${kpiCard({ icon: 'bag',        value: products.length,                               label: 'Products · 产品',    onClick: () => navigate('products') })}
+      ${kpiCard({ icon: 'leaf',       value: ingredientsCount,                              label: 'Ingredients · 食材', onClick: () => navigate('ingredients') })}
+      ${kpiCard({ icon: 'book',       value: recipesCount,                                  label: 'Recipes · 食谱',     onClick: () => navigate('recipes') })}
+      ${kpiCard({ icon: 'bag',        value: productsCount,                                 label: 'Products · 产品',    onClick: () => navigate('products') })}
       ${kpiCard({ icon: 'coin',       value: sales ? '¥'+fmt(sales.totalRev) : '—',         label: 'Revenue · 本月营收', onClick: () => navigate('sales'), tone: 'accent', hint: 'Month to date · 本月累计' })}
     </div>
 

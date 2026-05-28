@@ -5,7 +5,17 @@ const router = express.Router();
 
 // GET all ingredients
 router.get('/api/ingredients', requireAuth, requirePermission('ingredients'), (req, res) => {
-  const { search, category } = req.query;
+  const { search, category, count_only } = req.query;
+  // count_only=1 skips shipping the (multi-MB) full list when the caller only
+  // needs the row count — e.g. the dashboard KPI tile. Honours the same
+  // filters so a future filtered-count caller works too.
+  if (count_only === '1' || count_only === 'true') {
+    let cq = 'SELECT COUNT(*) AS n FROM ingredients WHERE is_active = 1';
+    const cp = [];
+    if (search) { cq += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)'; const s = `%${search}%`; cp.push(s,s,s); }
+    if (category) { cq += ' AND category = ?'; cp.push(category); }
+    return res.json({ success: true, count: db.prepare(cq).get(...cp).n });
+  }
   let query = 'SELECT * FROM ingredients WHERE is_active = 1';
   const params = [];
   if (search) { query += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)'; const s = `%${search}%`; params.push(s,s,s); }
