@@ -198,7 +198,12 @@
   gap: 16rpx;
 }
 .cust-actions .btn {
-  padding: 28rpx 0;
+  /* WeChat <button> defaults to ~568rpx wide instead of stretching to the
+     flex column's cross-axis, so without an explicit width the bar is
+     narrower than the container and the letter-spaced "REQUEST INVOICE"
+     text looks like it's being cropped against the borders. */
+  width: 100%;
+  padding: 28rpx 20rpx;
   font-size: calc(28rpx * var(--font-scale));
   letter-spacing: 0.12em;
   text-align: center;
