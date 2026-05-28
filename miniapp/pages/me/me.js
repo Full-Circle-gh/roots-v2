@@ -130,13 +130,16 @@ Page({
     copy: COPY_EN,
     // Brand footer — wordmark / tagline / credit line. Hydrated from
     // app.globalData.config.brand.me_footer (set by the operator in the Mini
-    // App Backend → Settings → Mini-app footer). Defaults match the legacy
-    // Roots footer so first paint is unchanged when no config has been saved.
+    // App Backend → Settings → Mini-app footer). Defaults reflect the SaaS
+    // platform (Full Circle · Clarity with code) so a brand-new tenant whose
+    // operator hasn't customised the footer yet sees Full Circle, not Roots.
+    // Roots' production DB is seeded with its own row in database.js so its
+    // customers continue to see the Roots wordmark + tagline unchanged.
     footer: {
       wordmark_image: '',
-      wordmark_text:  '',
-      tagline:        'Food made from food. · 食物源于食物。',
-      credit:         'v1.0 · Built by your kitchen',
+      wordmark_text:  'Full Circle',
+      tagline:        'Clarity with code',
+      credit:         'Powered by Full Circle',
     },
   },
 
@@ -169,15 +172,19 @@ Page({
     const lang = this.data.lang;
     const tEN = (cfg.tagline_en || '').trim();
     const tCN = (cfg.tagline_cn || '').trim();
+    // SaaS-default tagline is Full Circle's "Clarity with code". Roots and
+    // other tenants override per-language via the backend footer card.
     const tagline = (tEN && tCN) ? (tEN + ' · ' + tCN)
-                                  : (tEN || tCN || 'Food made from food. · 食物源于食物。');
+                                  : (tEN || tCN || 'Clarity with code');
     const credit = lang === 'cn'
-      ? (cfg.credit_cn || 'v1.0 · 由您的厨房用心制作')
-      : (cfg.credit_en || 'v1.0 · Built by your kitchen');
+      ? (cfg.credit_cn || '由 Full Circle 提供技术支持')
+      : (cfg.credit_en || 'Powered by Full Circle');
+    // wordmark_text falls back to 'Full Circle' only when no image is set —
+    // otherwise wx:if (image) wins anyway and the text wouldn't render.
     this.setData({
       footer: {
         wordmark_image: cfg.wordmark_image || '',
-        wordmark_text:  cfg.wordmark_text  || '',
+        wordmark_text:  cfg.wordmark_text  || (cfg.wordmark_image ? '' : 'Full Circle'),
         tagline,
         credit,
       },

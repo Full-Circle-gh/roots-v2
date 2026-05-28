@@ -223,13 +223,13 @@
   </view>
 
   <view class="app-footer">
-    <!-- Wordmark: prefer an operator-uploaded image; fall back to a typed
-         brand text; else the legacy bundled image (so Roots looks unchanged
-         before any tenant config is set). Edited per-tenant from the Mini
-         App Backend → Settings → Mini-app footer. -->
+    <!-- Wordmark: prefer an operator-uploaded image; otherwise render the
+         brand text ('Full Circle' by default, or whatever the operator typed).
+         Edited per-tenant from the Mini App Backend → Settings → Mini-app
+         footer. Roots' production row is seeded with their wordmark image so
+         their customers see the existing Roots mark, not 'Full Circle'. -->
     <image wx:if="{{footer.wordmark_image}}" class="footer-mark" src="{{footer.wordmark_image}}" mode="aspectFit"></image>
-    <view  wx:elif="{{footer.wordmark_text}}" class="footer-mark-text">{{footer.wordmark_text}}</view>
-    <image wx:else class="footer-mark" src="/assets/brand/roots-wordmark.png" mode="aspectFit"></image>
+    <view  wx:else class="footer-mark-text">{{footer.wordmark_text}}</view>
     <view class="footer-sub">{{footer.tagline}}</view>
     <view class="footer-version">{{footer.credit}}</view>
   </view>

@@ -1432,6 +1432,28 @@ try {
   }
 } catch (e) { console.error('[migration seed_home_layout_v1]', e); }
 
+// Seed Roots' Mini-app footer (Me page) so that flipping the SaaS-wide
+// defaults to Full Circle ('Clarity with code', 'Powered by Full Circle')
+// doesn't accidentally rebrand Roots' live customer footer. New tenants
+// have no row → they fall through to the Full Circle defaults in me.js
+// until their operator saves the Mini App Backend → Mini-app footer card.
+// INSERT OR IGNORE preserves any existing operator-saved row.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_brand_me_footer_roots_v1');
+  if (!ran) {
+    const rootsFooter = {
+      wordmark_image: '/assets/brand/roots-wordmark.png',
+      wordmark_text:  null,
+      tagline_en:     'Food made from food.',
+      tagline_cn:     '食物源于食物。',
+      credit_en:      'v1.0 · Built by your kitchen',
+      credit_cn:      'v1.0 · 由您的厨房用心制作',
+    };
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES ('brand.me_footer', ?)").run(JSON.stringify(rootsFooter));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_brand_me_footer_roots_v1');
+  }
+} catch (e) { console.error('[migration seed_brand_me_footer_roots_v1]', e); }
+
 // Seed a default ABOUT layout — the "Who we are" story page reached from
 // the Me tab and from the Home tail. Two editorial blocks: the brand
 // story up top, the promise below. Office can edit in /cms → About page.
