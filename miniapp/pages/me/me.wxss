@@ -171,11 +171,10 @@
   font-size: calc(30rpx * var(--font-scale));
   line-height: 1.2;
 }
-.row-cn {
-  font-family: var(--f-yuan);
-  font-size: calc(22rpx * var(--font-scale));
-  color: var(--olive);
-}
+/* Menu rows are monolingual — the language switcher already chose a
+   side, so the secondary gloss was duplicating it. Keep the class
+   around in case markup still references it. */
+.row-cn { display: none; }
 .row-meta {
   font-family: var(--f-aleo);
   font-size: calc(22rpx * var(--font-scale));
