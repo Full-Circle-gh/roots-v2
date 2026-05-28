@@ -2927,17 +2927,41 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
 
   const rows = tdb().prepare(sql).all(...params);
 
-  // Attach a tiny preview of items so the order list can render thumbs
-  // without N+1 follow-up requests.
-  for (const r of rows) {
-    r.items_preview = tdb().prepare(
-      `SELECT oi.product_id, oi.name_en, oi.name_cn, oi.qty,
-              COALESCE(NULLIF(oi.image_url, ''), p.image_url, p.image_data) AS image_url
-         FROM retail_order_items oi
-    LEFT JOIN products p ON p.id = oi.product_id
-        WHERE oi.order_id = ? ORDER BY oi.id ASC LIMIT 3`
-    ).all(r.id);
-    r.item_count = tdb().prepare('SELECT COUNT(*) AS n FROM retail_order_items WHERE order_id = ?').get(r.id).n;
+  // Attach a tiny preview of items + item_count so the list can render
+  // thumbs without N+1 follow-ups. Batched into two queries regardless of
+  // page size — the previous loop fired 2×N round-trips, which made the
+  // Pending bucket noticeably slow once a customer had ~20+ orders open.
+  for (const r of rows) { r.items_preview = []; r.item_count = 0; }
+  if (rows.length) {
+    const ids = rows.map(r => r.id);
+    const ph = ids.map(() => '?').join(',');
+    const byId = new Map(rows.map(r => [r.id, r]));
+    const previews = tdb().prepare(
+      `SELECT order_id, product_id, name_en, name_cn, qty, image_url FROM (
+         SELECT oi.order_id, oi.product_id, oi.name_en, oi.name_cn, oi.qty,
+                COALESCE(NULLIF(oi.image_url, ''), p.image_url, p.image_data) AS image_url,
+                ROW_NUMBER() OVER (PARTITION BY oi.order_id ORDER BY oi.id ASC) AS rn
+           FROM retail_order_items oi
+      LEFT JOIN products p ON p.id = oi.product_id
+          WHERE oi.order_id IN (${ph})
+       ) WHERE rn <= 3
+         ORDER BY order_id, rn`
+    ).all(...ids);
+    for (const p of previews) {
+      const r = byId.get(p.order_id);
+      if (r) r.items_preview.push({
+        product_id: p.product_id, name_en: p.name_en, name_cn: p.name_cn,
+        qty: p.qty, image_url: p.image_url,
+      });
+    }
+    const counts = tdb().prepare(
+      `SELECT order_id, COUNT(*) AS n FROM retail_order_items
+        WHERE order_id IN (${ph}) GROUP BY order_id`
+    ).all(...ids);
+    for (const c of counts) {
+      const r = byId.get(c.order_id);
+      if (r) r.item_count = c.n;
+    }
   }
   res.json({ success: true, data: rows, meta: { limit, offset } });
 });
@@ -8244,13 +8268,15 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
 });
 
 // ─── Top-up packages (customer-facing) ──────────────────────────────────
+// Returns the redeem rate alongside packages so the top-up page can show
+// the live "1 point = ¥X" line that matches admin's configured rate.
 router.get('/api/retail/topup-packages', requireRetailAuth, (req, res) => {
   const rows = tdb().prepare(
     `SELECT id, amount, bonus_points, title_en, title_cn, description_en, description_cn
        FROM retail_topup_packages WHERE is_active = 1
       ORDER BY sort_order ASC, amount ASC`
   ).all();
-  res.json({ success: true, data: rows });
+  res.json({ success: true, data: rows, points_redeem_rate: pointsRedeemRate() });
 });
 
 // POST /api/retail/topup/create
