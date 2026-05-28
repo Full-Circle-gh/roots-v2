@@ -9794,8 +9794,7 @@ function _renderRecipeDietCard(ctx) {
         </label>`).join('')}
     </div>
   </div>`;
-  return `<div class="card-title" style="margin-bottom:10px">🍴 Recipe & Diet · 食谱与饮食</div>
-    <div style="display:flex;flex-direction:column;gap:12px">
+  return `<div style="display:flex;flex-direction:column;gap:12px">
       ${recipeRow}
       ${allergenRow}
       ${freeOfRow}
@@ -9855,17 +9854,12 @@ function _renderDescCard(ctx) {
   // `use_block_design` on products. Saving propagates on next mini-app
   // product page open.
   const blocksOn = p.use_block_design ? 1 : 0;
-  const pillBg   = blocksOn ? 'linear-gradient(135deg,#CCD900,#F2CA6C)' : '#f1f1ef';
-  const pillFg   = blocksOn ? '#1a1a17' : 'var(--muted)';
-  const pillTxt  = blocksOn
-    ? '🎨 Product editor design · ON'
-    : '📄 Classic description · ON';
   return `<div class="card-title" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
       <span>📝 Description · 描述</span>
       <button type="button" onclick="iedToggleBlockDesign(${p.id}, this)" data-on="${blocksOn}"
-              title="Toggle mini-app renderer · 切换商品页样式"
-              style="border:none;border-radius:999px;padding:5px 12px;font:inherit;font-size:11px;font-weight:700;letter-spacing:.04em;cursor:pointer;background:${pillBg};color:${pillFg};white-space:nowrap">
-        ${pillTxt}
+              title="Toggle mini-app product page design · 切换商品页样式"
+              style="display:inline-flex;align-items:center;gap:8px;border:none;background:transparent;font:inherit;cursor:pointer;padding:4px 6px;border-radius:8px">
+        ${_descToggleInner(blocksOn)}
       </button>
     </div>
     <div style="display:flex;flex-direction:column;gap:10px">
@@ -9885,25 +9879,29 @@ function _renderDescCard(ctx) {
 // OFF, it renders the classic EN/CN textareas above. We update the pill
 // in place (no full re-render) so the operator's textarea focus + scroll
 // position survive the click — same pattern as iedFieldBlur.
+function _descToggleInner(on) {
+  return `<span style="font-size:11px;font-weight:700;letter-spacing:.02em;color:var(--dk);white-space:nowrap">🎨 Product editor design</span>
+    <span aria-hidden="true" style="position:relative;display:inline-block;width:34px;height:20px;border-radius:999px;background:${on ? 'linear-gradient(135deg,#CCD900,#F2CA6C)' : '#d8d8d3'};transition:background .15s;flex:0 0 auto">
+      <span style="position:absolute;top:2px;left:${on ? '16px' : '2px'};width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:left .15s"></span>
+    </span>
+    <span style="font-size:11px;font-weight:800;letter-spacing:.06em;color:${on ? '#1a1a17' : 'var(--muted)'};min-width:24px;text-align:left">${on ? 'ON' : 'OFF'}</span>`;
+}
+
 async function iedToggleBlockDesign(pid, btn) {
   if (btn.dataset.saving === '1') return;
   const next = btn.dataset.on === '1' ? 0 : 1;
   btn.dataset.saving = '1';
-  const prevTxt = btn.textContent;
+  const prevHTML = btn.innerHTML;
   btn.style.opacity = '.6';
   try {
     await iedSaveField(pid, 'use_block_design', next);
     btn.dataset.on = String(next);
-    btn.textContent = next
-      ? '🎨 Product editor design · ON'
-      : '📄 Classic description · ON';
-    btn.style.background = next ? 'linear-gradient(135deg,#CCD900,#F2CA6C)' : '#f1f1ef';
-    btn.style.color = next ? '#1a1a17' : 'var(--muted)';
+    btn.innerHTML = _descToggleInner(next);
     toast(next
       ? 'Mini-app will use block design · 已切换到商品页设计'
       : 'Mini-app will use classic description · 已切换到经典描述', 'ok');
   } catch (e) {
-    btn.textContent = prevTxt;
+    btn.innerHTML = prevHTML;
     toast('Save failed · 保存失败: ' + e.message, 'error');
   } finally {
     btn.style.opacity = '';
@@ -10324,20 +10322,20 @@ function _kbuRenderInner() {
     ? `<button class="btn btn-secondary btn-sm" style="color:#dc2626" onclick="_kbuClear()">✕ Clear bundle · 清除套装</button>`
     : '';
   return `
-    <div style="font-size:12px;color:var(--muted);margin:0 0 12px;line-height:1.5">
-      Group this product with others as a "buy together" set shown on its mini-app page. Each item keeps its own price & stock — no separate inventory · 在小程序商品页将本产品与其他商品组成"一起买"套装,各自保留价格与库存。
+    <div style="font-size:11px;color:var(--muted);margin:0 0 10px;line-height:1.4">
+      "Buy together" set on the mini-app page · 小程序"一起买"套装
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px">
       <label><span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Title EN</span>
         ${inp('title_en', _kbu.title_en, 'Buy together')}</label>
-      <label><span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Title CN · 标题(中文)</span>
+      <label><span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Title CN · 中文</span>
         ${inp('title_cn', _kbu.title_cn, '一起买')}</label>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${chips}</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-      <label><span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Bundle price ¥ (optional · 套装价 可选)</span>
-        ${inp('price', _kbu.price, 'blank = item total · 留空 = 各项合计', 'number')}</label>
-      <label><span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Auto voucher (optional · 自动优惠券 可选)</span>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px">
+      <label><span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Price ¥ (optional)</span>
+        ${inp('price', _kbu.price, 'blank = total', 'number')}</label>
+      <label><span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Voucher (optional)</span>
         ${inp('voucher', _kbu.voucher, 'code · 券码')}</label>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -10563,12 +10561,15 @@ async function viewProduct(id) {
     <div id="prodBento" class="prod-bento">
       <div class="card" id="prodStockCard" style="padding:14px 18px;color:var(--muted);font-size:13px">📦 Loading stock by store · 加载库存…</div>
       <div class="card" id="prodSizesCard" style="padding:14px 18px">${_renderSizesCardInner(ctx)}</div>
-      <div class="card" id="prodRecipeDietCard" style="padding:14px 18px">${_renderRecipeDietCard(ctx)}</div>
-      <div class="card span-2" id="prodDescCard" style="padding:14px 18px">${_renderDescCard(ctx)}</div>
-      <div class="card" id="prodNotesCard" style="padding:14px 18px">${_renderNotesCard(ctx)}</div>
-      <details class="card span-3" id="prodBundleCollapse" style="padding:14px 18px"${_kbuHasBundle(ctx.p) ? ' open' : ''}>
+      <details class="card" id="prodBundleCollapse" style="padding:14px 18px"${_kbuHasBundle(ctx.p) ? ' open' : ''}>
         <summary><div class="card-title">🎁 ${_kbuSummary(ctx.p)}</div></summary>
         <div class="card-body" id="prodBundleBody">${_renderBundleCard(ctx)}</div>
+      </details>
+      <div class="card span-2" id="prodDescCard" style="padding:14px 18px">${_renderDescCard(ctx)}</div>
+      <div class="card" id="prodNotesCard" style="padding:14px 18px">${_renderNotesCard(ctx)}</div>
+      <details class="card span-3" id="prodRecipeDietCollapse" style="padding:14px 18px">
+        <summary><div class="card-title">🍴 Recipe & Diet · 食谱与饮食</div></summary>
+        <div class="card-body" id="prodRecipeDietCard">${_renderRecipeDietCard(ctx)}</div>
       </details>
       <details class="card span-3" id="prodSalesCollapse" style="padding:14px 18px">
         <summary><div class="card-title">📊 Sales Performance · 销售业绩</div></summary>
