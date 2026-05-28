@@ -292,9 +292,13 @@
   width: 100%;
   background: var(--oat);
   border-radius: 32rpx 32rpx 0 0;
-  /* Bottom pad clears the home indicator so the action buttons aren't
-     cropped against the safe-area bar on notch/pill phones. */
-  padding: 24rpx 36rpx calc(48rpx + env(safe-area-inset-bottom));
+  /* Bottom pad clears the home indicator so action buttons aren't
+     cropped against the safe-area bar. Fixed reservation (not
+     env(safe-area-inset-bottom) inside calc) because WeChat WXSS
+     silently resolves env() to 0 in padding contexts — see app.wxss
+     --tabbar-clear comment. 120rpx = ~48rpx visual + ~68rpx safe-area
+     + a kiss of buffer; harmless on phones without a home indicator. */
+  padding: 24rpx 36rpx 120rpx;
   max-height: 88vh;
   overflow-y: auto;
 }
