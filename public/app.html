@@ -9639,7 +9639,6 @@ function _renderProdTopBar(ctx) {
     <button class="btn btn-secondary" onclick="renderProducts()">← Back 返回</button>
     <span style="flex:1"></span>
     <button class="btn btn-secondary" onclick="printProductLabel(${p.id})">🏷 Print Label 打印标签</button>
-    <button class="btn btn-secondary" onclick="showProductForm(${p.id})" title="Nutrition, allergens, recipe link, label image · 营养、过敏、食谱、标签"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><circle cx="12" cy="12" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>More fields 更多</button>
     <button class="btn btn-danger" onclick="deleteProduct(${p.id},'${safeName}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1.5 14a2 2 0 0 1-2 1.8H8.5a2 2 0 0 1-2-1.8L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete 删除</button>
   </div>`;
 }
@@ -9742,59 +9741,402 @@ function _renderProdHero(ctx) {
 // ── Bento cards ── each helper returns the inner HTML of one grid tile.
 // viewProduct() assembles them into the .prod-bento grid; switchVariant()
 // re-renders them in place when the user picks a sibling.
+// Free-of checkbox config — id matches the comma-separated tokens stored in
+// products.free_of. Labels are bilingual so the operator sees both.
+const PROD_FREE_OF_OPTS = [
+  ['gluten', '🌾 Gluten · 无麸质'],
+  ['nuts',   '🥜 Nuts · 无坚果'],
+  ['soy',    '🌱 Soy · 无大豆'],
+  ['dairy',  '🥛 Dairy · 无乳制品'],
+  ['egg',    '🥚 Egg · 无蛋'],
+  ['5spice', '🫙 5 Spice · 无五香'],
+];
+
 function _renderRecipeDietCard(ctx) {
   const { p, allergens, freeOfList, allergenEmoji } = ctx;
-  // The whole card is one logical group: recipe link first (cost driver),
-  // then dietary chips derived from that recipe. Empty states are friendly
-  // so the operator can act from this one card.
-  const recipeRow = p.recipe_id
-    ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:${(allergens.length||freeOfList.length)?'10px':'0'}">
-        <span style="font-size:12px;color:var(--muted)">Linked recipe</span>
-        ${_user?.role === 'admin'
-          ? `<button class="btn btn-secondary btn-sm" onclick="viewRecipe(${p.recipe_id})">📖 View · 查看</button>`
-          : `<span style="font-size:11px;color:var(--muted)">linked</span>`}
-      </div>`
-    : `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:${(allergens.length||freeOfList.length)?'10px':'0'}">
-        <span style="font-size:12px;color:var(--muted)">No recipe linked · 未关联</span>
-        <button class="btn btn-secondary btn-sm" onclick="showProductForm(${p.id})">Link · 关联</button>
-      </div>`;
+  // Recipe picker — native select over the _recipes cache (loaded in
+  // viewProduct before this renders). Changing the recipe saves via PUT and
+  // triggers a full re-render so allergens recompute.
+  const recipeOpts = (_recipes || []).map(r => {
+    const sel = String(r.id) === String(p.recipe_id || '') ? ' selected' : '';
+    const lbl = r.name_en + (r.name_cn ? ' · ' + r.name_cn : '');
+    return `<option value="${r.id}"${sel}>${esc(lbl)}</option>`;
+  }).join('');
+  const recipeRow = `<label style="display:block">
+    <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Recipe · 食谱</span>
+    <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+      <select data-pid="${p.id}" data-field="recipe_id" onchange="iedSelectChange(this)" style="flex:1;padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;font:inherit;font-size:13px;background:#fff;outline:none">
+        <option value="">— None · 无 —</option>
+        ${recipeOpts}
+      </select>
+      ${p.recipe_id && _user?.role === 'admin'
+        ? `<button class="btn btn-secondary btn-sm" onclick="viewRecipe(${p.recipe_id})" title="Open recipe · 查看食谱">📖</button>`
+        : ''}
+    </div>
+  </label>`;
+  // Allergens — read-only chips (derived from the linked recipe's ingredients).
   const allergenRow = allergens.length
-    ? `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:${freeOfList.length?'6px':'0'}">
-        <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#9d174d;font-weight:800">⚠ Contains</span>
+    ? `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+        <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#9d174d;font-weight:800">⚠ Contains · 含有</span>
         ${allergens.map(a=>`<span style="background:#fce7f3;color:#9d174d;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">${allergenEmoji[a]||''} ${esc(a)}</span>`).join('')}
       </div>`
     : '';
-  const freeOfRow = freeOfList.length
-    ? `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
-        <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#3d7a1e;font-weight:800">✓ Free of</span>
-        ${freeOfList.map(f=>`<span style="background:rgba(204,217,0,0.14);border:1px solid rgba(204,217,0,0.4);color:#4a7a2a;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">${esc(f)}</span>`).join('')}
-      </div>`
-    : '';
+  // Free-of — checkboxes, persisted as a comma-separated string. Each toggle
+  // collects every checkbox in the row and PUTs the new free_of string.
+  const checked = new Set(freeOfList.map(s => s.toLowerCase()));
+  const freeOfRow = `<div>
+    <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#3d7a1e;font-weight:800;margin-bottom:4px">✓ Free of · 不含</div>
+    <div data-pid="${p.id}" data-freeof-group="1" style="display:flex;flex-wrap:wrap;gap:6px">
+      ${PROD_FREE_OF_OPTS.map(([id, lbl]) =>
+        `<label style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid ${checked.has(id)?'rgba(204,217,0,0.6)':'var(--border)'};border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;background:${checked.has(id)?'rgba(204,217,0,0.14)':'transparent'};color:${checked.has(id)?'#4a7a2a':'var(--muted)'}">
+          <input type="checkbox" data-freeof-id="${id}" ${checked.has(id)?'checked':''} onchange="iedFreeOfChange(this)" style="width:13px;height:13px;cursor:pointer">
+          ${lbl}
+        </label>`).join('')}
+    </div>
+  </div>`;
   return `<div class="card-title" style="margin-bottom:10px">🍴 Recipe & Diet · 食谱与饮食</div>
-    ${recipeRow}
-    ${allergenRow}
-    ${freeOfRow}`;
+    <div style="display:flex;flex-direction:column;gap:12px">
+      ${recipeRow}
+      ${allergenRow}
+      ${freeOfRow}
+    </div>`;
+}
+
+// Recipe cache — populated by viewProduct() so the picker has data on first
+// render. Skip if already loaded; bail silently on failure (the select still
+// works, just without options).
+async function _ensureRecipesLoaded() {
+  if (_recipes && _recipes.length) return;
+  try {
+    const r = await fetch('/api/recipes');
+    const d = await r.json();
+    _recipes = d.data || [];
+  } catch (e) {}
+}
+
+// Generic <select> change → save the new value + re-render (for cases like
+// recipe_id where the change re-computes derived UI like allergens).
+async function iedSelectChange(el) {
+  const pid   = parseInt(el.dataset.pid, 10);
+  const field = el.dataset.field;
+  const val   = el.value || null;
+  try {
+    await iedSaveField(pid, field, val);
+    await viewProduct(pid);
+    toast('✅ Saved · 已保存', 'success');
+  } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'error'); }
+}
+
+// Free-of checkboxes — collect every checked sibling and persist the joined
+// comma-separated string. Re-render so the chip row + outline styles update.
+async function iedFreeOfChange(el) {
+  const group = el.closest('[data-freeof-group]');
+  if (!group) return;
+  const pid = parseInt(group.dataset.pid, 10);
+  const checked = [...group.querySelectorAll('input[data-freeof-id]')]
+    .filter(c => c.checked)
+    .map(c => c.dataset.freeofId);
+  try {
+    await iedSaveField(pid, 'free_of', checked.length ? checked.join(', ') : null);
+    await viewProduct(pid);
+  } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'error'); }
 }
 
 function _renderDescCard(ctx) {
-  const { p, descCombined } = ctx;
-  // Spans 2 columns in the bento. Click → existing description viewer/editor
-  // overlay. (Phase B will pull this inline.)
+  const { p } = ctx;
+  // Two textareas stacked — EN on top, CN below. Edit anywhere, blur saves the
+  // changed one without re-rendering the page (keeps focus consistent if the
+  // operator tabs between them). The .ied-textarea class shares the inline-edit
+  // visual; it just doesn't swap elements like a click-to-edit field would.
   return `<div class="card-title" style="margin-bottom:10px">📝 Description · 描述</div>
-    ${descCombined
-      ? `<button class="btn btn-secondary" style="width:100%;padding:10px;text-align:left;display:flex;align-items:center;gap:10px;justify-content:space-between" onclick="showProductDescription(${p.id})">
-          <span style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;color:var(--dk)">
-            <span style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)">${esc((p.description_en||p.description_cn||'').slice(0, 80))}${(p.description_en||p.description_cn||'').length > 80 ? '…' : ''}</span>
-          </span>
-          <span style="color:var(--muted);font-size:11px;flex-shrink:0">${(p.description_en||'').length+(p.description_cn||'').length} chars →</span>
-        </button>`
-      : `<button class="btn btn-secondary" style="width:100%;padding:14px;text-align:center;color:var(--muted)" onclick="showProductDescription(${p.id})">+ Add description · 添加描述</button>`}`;
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <label style="display:block">
+        <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">EN</span>
+        <textarea rows="5" class="ied-textarea" data-pid="${p.id}" data-field="description_en" data-original="${esc(p.description_en||'')}" onblur="iedFieldBlur(this)" placeholder="English description…" style="width:100%;margin-top:4px;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font:inherit;font-size:13px;color:var(--dk);resize:vertical;outline:none;box-sizing:border-box;background:#fff">${esc(p.description_en||'')}</textarea>
+      </label>
+      <label style="display:block">
+        <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">CN · 中文</span>
+        <textarea rows="5" class="ied-textarea" data-pid="${p.id}" data-field="description_cn" data-original="${esc(p.description_cn||'')}" onblur="iedFieldBlur(this)" placeholder="中文描述…" style="width:100%;margin-top:4px;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font:inherit;font-size:13px;color:var(--dk);resize:vertical;outline:none;box-sizing:border-box;background:#fff">${esc(p.description_cn||'')}</textarea>
+      </label>
+    </div>`;
 }
 
 function _renderNotesCard(ctx) {
   const { p } = ctx;
   return `<div class="card-title" style="margin-bottom:8px">📌 Notes · 备注</div>
     <p class="ied" data-pid="${p.id}" data-field="notes" data-type="textarea" data-raw="${esc(p.notes||'')}" onclick="iedClick(this)" style="font-size:13px;color:var(--muted);white-space:pre-wrap;margin:0;min-height:1.4em;cursor:text">${p.notes ? esc(p.notes) : '<span style="color:var(--muted);font-style:italic">+ Click to add notes · 点击添加备注</span>'}</p>`;
+}
+
+// Less-used fields card body — identifiers, storefront flags, shipping modes,
+// mini-app marketing (keywords/tagline). Nutrition + label image fill in
+// later via Pass 4. Each panel is a self-contained mini-group so the layout
+// stays scannable when the operator opens this rarely-touched collapse.
+function _renderLessUsedCard(ctx) {
+  const { p } = ctx;
+  const panelHead = (t) => `<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:800;margin-bottom:8px">${t}</div>`;
+  // Inline text field — visible value with click-to-edit; placeholder when empty.
+  const iedText = (field, val, ph) => `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:4px 0">
+    <span style="font-size:11px;color:var(--muted)">${ph}</span>
+    <span class="ied" data-pid="${p.id}" data-field="${field}" data-type="text" data-raw="${esc(val||'')}" onclick="iedClick(this)" style="font-size:13px;color:var(--dk);${field==='sku'||field==='barcode'?'font-family:monospace;':''}text-align:right;min-width:40px">${val ? esc(val) : `<span style="color:var(--muted);font-style:italic">+ add</span>`}</span>
+  </div>`;
+  // Inline checkbox row — single boolean column on the product (0/1).
+  const cbBool = (field, label, sub) => `<label style="display:flex;align-items:center;gap:10px;padding:5px 0;cursor:pointer">
+    <input type="checkbox" data-pid="${p.id}" data-field="${field}" ${p[field]===1?'checked':''} onchange="iedBoolChange(this)" style="width:14px;height:14px;cursor:pointer">
+    <div style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0">
+      <span style="font-size:13px;color:var(--dk);font-weight:600">${label}</span>
+      ${sub?`<span style="font-size:11px;color:var(--muted);line-height:1.3">${sub}</span>`:''}
+    </div>
+  </label>`;
+  // ship_modes is a comma-separated string ("air,land") not a boolean column.
+  const shipModes = String(p.ship_modes || 'air,land').toLowerCase();
+  const ship = (id, label) => `<label style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid ${shipModes.includes(id)?'rgba(204,217,0,0.6)':'var(--border)'};border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:${shipModes.includes(id)?'rgba(204,217,0,0.10)':'transparent'};color:${shipModes.includes(id)?'#4a7a2a':'var(--muted)'}">
+    <input type="checkbox" data-ship-id="${id}" ${shipModes.includes(id)?'checked':''} onchange="iedShipChange(this)" style="width:13px;height:13px;cursor:pointer"> ${label}
+  </label>`;
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px">
+    <div>
+      ${panelHead('Identifiers · 标识')}
+      ${iedText('sku', p.sku, 'SKU · 货号')}
+      ${iedText('barcode', p.barcode, 'Barcode · 条码')}
+    </div>
+    <div>
+      ${panelHead('Storefront flags · 店面标记')}
+      ${cbBool('is_published', 'Published · 上架', 'Visible in the mini-app store')}
+      ${cbBool('is_market', 'Market product · 市场产品', 'Sold at the farmer’s market')}
+      ${cbBool('is_restock_only', 'Restock-only · 仅补货', 'Internal stock control; not sold to customers')}
+    </div>
+    <div>
+      ${panelHead('Shipping modes · 配送方式')}
+      <div data-pid="${p.id}" data-ship-group="1" style="display:flex;flex-wrap:wrap;gap:8px">
+        ${ship('air', '✈ Air · 空运')}
+        ${ship('land', '🚚 Land · 陆运')}
+      </div>
+    </div>
+    <div>
+      ${panelHead('Mini-app marketing · 小程序文案')}
+      ${iedText('tagline_en', p.tagline_en, 'Tagline EN')}
+      ${iedText('tagline_cn', p.tagline_cn, 'Tagline CN')}
+      ${iedText('keywords_en', p.keywords_en, 'Keywords EN')}
+      ${iedText('keywords_cn', p.keywords_cn, 'Keywords CN')}
+    </div>
+    <div id="prodNutritionPanel" data-pid="${p.id}">
+      ${panelHead('Nutrition · 营养成分')}
+      ${_renderNutritionEditor(p)}
+    </div>
+    <div id="prodLabelPanel">
+      ${panelHead('Label image · 标签图片')}
+      ${_renderLabelEditor(p)}
+    </div>
+  </div>`;
+}
+
+// Inline nutrition editor — two basis text inputs (per-serving description)
+// and a list of {label_en, label_cn, value} rows. Any change blurs into
+// _saveNutritionPanel which reads the whole panel state and PUTs it as one
+// nutrition object. Same JSON shape the modal uses, so existing readers
+// (labels, mini-app) keep working.
+function _renderNutritionEditor(p) {
+  let n = { basis_en: '', basis_cn: '', rows: [] };
+  if (p.nutrition) {
+    try {
+      const parsed = typeof p.nutrition === 'string' ? JSON.parse(p.nutrition) : p.nutrition;
+      if (parsed && typeof parsed === 'object') {
+        n.basis_en = parsed.basis_en || '';
+        n.basis_cn = parsed.basis_cn || '';
+        n.rows = Array.isArray(parsed.rows) ? parsed.rows : [];
+      }
+    } catch (e) {}
+  }
+  const inp = (cls, val, ph) => `<input type="text" data-nutr="${cls}" value="${esc(val||'')}" placeholder="${ph}" onblur="_saveNutritionPanel(${p.id})" style="padding:6px 8px;border:1px solid var(--border);border-radius:5px;font:inherit;font-size:12px;background:#fff;outline:none;box-sizing:border-box;width:100%">`;
+  const rowsHtml = n.rows.map((r, i) => `<div class="nutr-row" style="display:grid;grid-template-columns:1fr 1fr 90px 24px;gap:4px;align-items:center">
+    ${inp('label_en', r.label_en, 'Label EN')}
+    ${inp('label_cn', r.label_cn, '中文标签')}
+    ${inp('value', r.value, 'e.g. 8 g')}
+    <button type="button" onclick="_removeNutritionRow(this, ${p.id})" title="Remove row · 删除" style="border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:14px;line-height:1">✕</button>
+  </div>`).join('');
+  return `<div style="display:flex;flex-direction:column;gap:6px" data-nutr-rows>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+      ${inp('basis_en', n.basis_en, 'Per serving (EN)')}
+      ${inp('basis_cn', n.basis_cn, '每份说明 (CN)')}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 90px 24px;gap:4px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700;padding-top:4px">
+      <span>Label EN</span><span>中文</span><span>Value</span><span></span>
+    </div>
+    ${rowsHtml || `<div style="color:var(--muted);font-size:11px;font-style:italic;padding:4px 0">No rows yet · 暂无</div>`}
+    <button type="button" onclick="_addNutritionRow(${p.id})" class="btn btn-secondary btn-sm" style="margin-top:4px;align-self:flex-start;font-size:11px;padding:4px 10px">+ Add row · 添加</button>
+  </div>`;
+}
+
+// Read every input inside the nutrition panel, build the JSON object, save.
+async function _saveNutritionPanel(pid) {
+  const panel = document.getElementById('prodNutritionPanel');
+  if (!panel) return;
+  const get = c => panel.querySelector(`input[data-nutr="${c}"]`)?.value || '';
+  const basis_en = get('basis_en').trim();
+  const basis_cn = get('basis_cn').trim();
+  const rows = [...panel.querySelectorAll('.nutr-row')].map(row => ({
+    label_en: row.querySelector('input[data-nutr="label_en"]').value.trim(),
+    label_cn: row.querySelector('input[data-nutr="label_cn"]').value.trim(),
+    value:    row.querySelector('input[data-nutr="value"]').value.trim(),
+  })).filter(r => r.label_en || r.label_cn || r.value);
+  const empty = !basis_en && !basis_cn && rows.length === 0;
+  const payload = empty ? null : { basis_en, basis_cn, rows };
+  try { await iedSaveField(pid, 'nutrition', payload); }
+  catch (e) { toast('Save failed · 保存失败: ' + e.message, 'error'); }
+}
+
+// Append an empty row in place; save defers until the operator types into it
+// (avoids creating a junk-empty row on the server just from clicking Add).
+function _addNutritionRow(pid) {
+  const panel = document.getElementById('prodNutritionPanel');
+  if (!panel) return;
+  const rowsHost = panel.querySelector('[data-nutr-rows]');
+  if (!rowsHost) return;
+  // Find the position to insert (before the "+ Add row" button)
+  const addBtn = rowsHost.querySelector('button');
+  // Remove the "No rows yet" placeholder if present
+  const emptyHint = [...rowsHost.querySelectorAll('div')].find(d => d.textContent.includes('No rows yet'));
+  if (emptyHint) emptyHint.remove();
+  const row = document.createElement('div');
+  row.className = 'nutr-row';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 90px 24px;gap:4px;align-items:center';
+  const idx = rowsHost.querySelectorAll('.nutr-row').length;
+  row.innerHTML = `
+    <input type="text" data-nutr="label_en" placeholder="Label EN" onblur="_saveNutritionPanel(${pid})" style="padding:6px 8px;border:1px solid var(--border);border-radius:5px;font:inherit;font-size:12px;background:#fff;outline:none;box-sizing:border-box;width:100%">
+    <input type="text" data-nutr="label_cn" placeholder="中文标签" onblur="_saveNutritionPanel(${pid})" style="padding:6px 8px;border:1px solid var(--border);border-radius:5px;font:inherit;font-size:12px;background:#fff;outline:none;box-sizing:border-box;width:100%">
+    <input type="text" data-nutr="value" placeholder="e.g. 8 g" onblur="_saveNutritionPanel(${pid})" style="padding:6px 8px;border:1px solid var(--border);border-radius:5px;font:inherit;font-size:12px;background:#fff;outline:none;box-sizing:border-box;width:100%">
+    <button type="button" onclick="_removeNutritionRow(this, ${pid})" title="Remove · 删除" style="border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:14px;line-height:1">✕</button>`;
+  rowsHost.insertBefore(row, addBtn);
+  row.querySelector('input').focus();
+}
+
+// btn is the × button itself; walk up to find its row and detach. Pid drives
+// the re-save so the persisted nutrition object loses that row.
+async function _removeNutritionRow(btn, pid) {
+  const row = btn && btn.closest ? btn.closest('.nutr-row') : null;
+  if (!row) return;
+  row.remove();
+  await _saveNutritionPanel(pid);
+}
+
+// Inline label image — display the current image (zoom on click), upload via
+// the shared file-picker helper, clear with the × button. Same pipeline as
+// the hero photo (resize + JPEG-encode via _handleImageUpload).
+function _renderLabelEditor(p) {
+  const safeName = (p.name_en||'').replace(/['"\\]/g,'');
+  if (p.label_data) {
+    return `<div style="display:flex;align-items:flex-start;gap:10px">
+      <div style="width:96px;height:96px;border:1px solid var(--border);border-radius:8px;background:#fff;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:zoom-in;flex-shrink:0" onclick="zoomImage(${JSON.stringify(p.label_data).replace(/"/g,'&quot;')}, '${safeName} — Label')">
+        <img src="${esc(p.label_data)}" style="width:100%;height:100%;object-fit:contain;padding:4px">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0;flex:1">
+        <button class="btn btn-secondary btn-sm" onclick="_prodLabelUpload(${p.id})" style="font-size:11px">↻ Replace · 替换</button>
+        <button class="btn btn-secondary btn-sm" onclick="_prodLabelClear(${p.id})" style="font-size:11px;color:var(--danger,#dc2626)">✕ Remove · 移除</button>
+      </div>
+    </div>`;
+  }
+  return `<button class="btn btn-secondary" style="width:100%;padding:18px;border-style:dashed;color:var(--muted)" onclick="_prodLabelUpload(${p.id})">🏷 + Add label image · 添加标签图片</button>`;
+}
+
+async function _prodLabelUpload(productId) {
+  let input = document.getElementById('prodLabelFileGlobal');
+  if (!input) {
+    input = document.createElement('input');
+    input.type = 'file'; input.id = 'prodLabelFileGlobal';
+    input.accept = 'image/*'; input.style.display = 'none';
+    document.body.appendChild(input);
+  }
+  input.value = '';
+  input.onchange = async function() {
+    const file = this.files && this.files[0];
+    if (!file) return;
+    const data = await _handleImageUpload(file, PROD_IMG_OPTS);
+    if (!data) return;
+    try {
+      await iedSaveField(productId, 'label_data', data);
+      toast('✅ Label uploaded · 标签已上传', 'success');
+      await viewProduct(productId);
+    } catch (e) { toast('Upload failed · 上传失败: ' + e.message, 'error'); }
+  };
+  input.click();
+}
+
+async function _prodLabelClear(productId) {
+  if (!confirm('Remove label image? · 移除标签图片?')) return;
+  try {
+    await iedSaveField(productId, 'label_data', null);
+    toast('✅ Label removed · 已移除', 'success');
+    await viewProduct(productId);
+  } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'error'); }
+}
+
+// Generic boolean checkbox → 0/1 PUT. Used by the Less-used storefront flags.
+// Revert visually on save failure so the operator sees the actual state.
+async function iedBoolChange(el) {
+  const pid   = parseInt(el.dataset.pid, 10);
+  const field = el.dataset.field;
+  const val   = el.checked ? 1 : 0;
+  try { await iedSaveField(pid, field, val); }
+  catch (e) { el.checked = !el.checked; toast('Save failed · 保存失败: ' + e.message, 'error'); }
+}
+
+// Shipping-mode checkboxes → comma-separated string. Falls back to "air,land"
+// if the operator unchecks both (preserves the historical default so the
+// product doesn't silently become un-shippable).
+async function iedShipChange(el) {
+  const group = el.closest('[data-ship-group]');
+  if (!group) return;
+  const pid = parseInt(group.dataset.pid, 10);
+  const modes = [...group.querySelectorAll('input[data-ship-id]')]
+    .filter(c => c.checked)
+    .map(c => c.dataset.shipId);
+  const val = modes.length ? modes.join(',') : 'air,land';
+  try {
+    await iedSaveField(pid, 'ship_modes', val);
+    // Re-render so the chip outlines/colours catch up with the new state.
+    await viewProduct(pid);
+  } catch (e) { el.checked = !el.checked; toast('Save failed · 保存失败: ' + e.message, 'error'); }
+}
+
+// ── Inline edit save (shared by .ied click-to-edit and .ied-textarea blur) ──
+// One-field PUT to /api/products/:id. Updates the in-memory _products cache so
+// the products list & a Back navigation stay consistent without a refetch.
+// Returns the parsed response or throws on failure.
+async function iedSaveField(pid, field, value) {
+  const payload = {}; payload[field] = value;
+  const r = await fetch('/api/products/' + pid, {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload),
+  });
+  const j = await r.json();
+  if (!j.success) throw new Error(j.error || 'save failed');
+  const _ci = (_products || []).findIndex(p => Number(p.id) === Number(pid));
+  if (_ci !== -1) _products[_ci] = { ..._products[_ci], ...payload };
+  return j;
+}
+
+// Always-on textarea / input — blur saves if the value changed, no page
+// re-render (keeps the operator's flow uninterrupted, especially when tabbing
+// between EN and CN description boxes). The data-original attr is set at
+// render time so we know what "unchanged" means.
+async function iedFieldBlur(el) {
+  const pid   = parseInt(el.dataset.pid, 10);
+  const field = el.dataset.field;
+  const orig  = el.dataset.original || '';
+  const val   = (el.value || '').trim();
+  if (val === orig.trim()) return;
+  el.dataset.saving = '1';
+  el.style.borderColor = '#f59e0b';
+  try {
+    await iedSaveField(pid, field, val || null);
+    el.dataset.original = val;
+    el.style.borderColor = '#22c55e';
+    setTimeout(() => { el.style.borderColor = ''; }, 800);
+  } catch (e) {
+    el.style.borderColor = '#dc2626';
+    toast('Save failed · 保存失败: ' + e.message, 'error');
+  } finally {
+    delete el.dataset.saving;
+  }
 }
 
 // ── Inline edit (.ied) on the product detail page ─────────────────────────
@@ -9854,20 +10196,11 @@ async function iedClick(el) {
       input.replaceWith(original);
       return;
     }
-    const payload = {};
-    payload[field] = (type === 'number') ? (newTrim === '' ? null : parseFloat(newTrim)) : newTrim;
+    const newValue = (type === 'number') ? (newTrim === '' ? null : parseFloat(newTrim)) : newTrim;
     try {
-      const r = await fetch('/api/products/' + pid, {
-        method: 'PUT', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(payload),
-      });
-      const j = await r.json();
-      if (!j.success) throw new Error(j.error || 'save failed');
-      // Refresh the page from the server's truth so derived bits (status pill
-      // colour, formatted price, etc.) recompute. _products is also patched so
-      // a quick Back-and-forth doesn't show stale data.
-      const _ci = (_products || []).findIndex(p => Number(p.id) === Number(pid));
-      if (_ci !== -1) _products[_ci] = { ..._products[_ci], ...payload };
+      await iedSaveField(pid, field, newValue);
+      // Re-render the whole page so derived bits (status pill colour, formatted
+      // price, etc.) recompute from the server's truth.
       await viewProduct(pid);
       toast('✅ Saved · 已保存', 'success');
     } catch (e) {
@@ -9895,12 +10228,13 @@ async function iedClick(el) {
 async function switchVariant(id) {
   const ctx = await _loadProductCtx(id);
   if (!ctx) return;
-  const topBar  = document.getElementById('prodTopBar');
-  const hero    = document.getElementById('prodHero');
-  const sizes   = document.getElementById('prodSizesCard');
-  const recipe  = document.getElementById('prodRecipeDietCard');
-  const desc    = document.getElementById('prodDescCard');
-  const notes   = document.getElementById('prodNotesCard');
+  const topBar   = document.getElementById('prodTopBar');
+  const hero     = document.getElementById('prodHero');
+  const sizes    = document.getElementById('prodSizesCard');
+  const recipe   = document.getElementById('prodRecipeDietCard');
+  const desc     = document.getElementById('prodDescCard');
+  const notes    = document.getElementById('prodNotesCard');
+  const advBody  = document.getElementById('prodAdvancedBody');
   // If any of the bento cells are missing fall back to the full re-render.
   if (!topBar || !hero || !sizes || !recipe || !desc || !notes) return viewProduct(id);
   // Capture scroll BEFORE the innerHTML swaps. Replacing the chip the user
@@ -9914,6 +10248,7 @@ async function switchVariant(id) {
   recipe.innerHTML = _renderRecipeDietCard(ctx);
   desc.innerHTML   = _renderDescCard(ctx);
   notes.innerHTML  = _renderNotesCard(ctx);
+  if (advBody) advBody.innerHTML = _renderLessUsedCard(ctx);
   requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
   // Sales: only re-fetch if the operator had already opened the collapse on
   // the previous variant (so a fresh sibling click doesn't fire the heavy
@@ -9977,7 +10312,9 @@ function _renderSizesCardInner(ctx) {
 }
 
 async function viewProduct(id) {
-  const ctx = await _loadProductCtx(id);
+  // Run the product fetch and the recipe-cache warm-up in parallel so the
+  // inline recipe picker is populated on first paint without doubling the wait.
+  const [ctx] = await Promise.all([_loadProductCtx(id), _ensureRecipesLoaded()]);
   if (!ctx) return;
   // Bento grid: hero pinned at top, then three cards on row 1 (Stock, Sizes,
   // Recipe & Diet), Description (2-col) + Notes on row 2, then collapsed
@@ -9998,7 +10335,7 @@ async function viewProduct(id) {
       </details>
       <details class="card span-3" id="prodAdvancedCollapse" style="padding:14px 18px">
         <summary><div class="card-title">⚙ Less-used fields · 高级字段</div></summary>
-        <div class="card-body"><div style="color:var(--muted);font-size:13px;font-style:italic">SKU · barcode · nutrition · allergens override · free-of override · label image — coming inline next. For now use <button class="btn btn-secondary btn-sm" onclick="showProductForm(${ctx.p.id})" style="margin-left:6px">More fields 更多</button></div></div>
+        <div class="card-body" id="prodAdvancedBody">${_renderLessUsedCard(ctx)}</div>
       </details>
     </div>
   `;
@@ -11202,17 +11539,23 @@ const _STOCK_REASONS = [
   { id:'other',       label:'Other · 其他' },
 ];
 
-async function showStockAdjustModal(productId, mode) {
-  let product;
+async function showStockAdjustModal(productId, storeId, mode) {
+  let product, storeRow;
   try {
-    const r = await fetch('/api/products/' + productId);
-    const d = await r.json();
-    if (!d.success) throw new Error(d.error || 'load failed');
-    product = d.data;
+    const [pRes, sRes] = await Promise.all([
+      fetch('/api/products/' + productId).then(r => r.json()),
+      fetch('/api/products/' + productId + '/store-stocks').then(r => r.json()),
+    ]);
+    if (!pRes.success) throw new Error(pRes.error || 'load failed');
+    if (!sRes.success) throw new Error(sRes.error || 'store-stocks load failed');
+    product = pRes.data;
+    storeRow = (sRes.data || []).find(r => r.store_id === storeId);
+    if (!storeRow) throw new Error('store not found · 找不到该门店');
   } catch (e) { return toast('Failed to load · 加载失败: ' + e.message, 'error'); }
 
-  const currentStock = parseInt(product.stock_qty || 0, 10) || 0;
-  _stockAdjustState = { productId, mode: mode || 'add', currentStock };
+  const currentStock = parseInt(storeRow.physical_qty || 0, 10) || 0;
+  const storeLabel = storeRow.store_name_cn || storeRow.store_name_en || storeRow.store_code || ('#' + storeId);
+  _stockAdjustState = { productId, storeId, mode: mode || 'add', currentStock };
 
   const overlay = mkOverlay('stockAdjustOverlay');
   const box = overlay.querySelector('.overlay-box');
@@ -11224,6 +11567,7 @@ async function showStockAdjustModal(productId, mode) {
     </div>
     <p style="font-size:12px;color:var(--muted);margin:0 0 14px">
       <strong>${esc(product.name_en || '')}</strong>${product.name_cn ? ` · ${esc(product.name_cn)}` : ''}
+      <br>Restocking · 补货到: <strong style="color:var(--dk)">🏪 ${esc(storeLabel)}</strong>
       <br>Current stock · 当前库存: <strong>${currentStock}</strong>
     </p>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:14px" id="stockModeRow">
