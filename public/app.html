@@ -10479,11 +10479,17 @@ function _renderSizesCardInner(ctx) {
             ${v.sku ? `<span style="opacity:.6;font-family:monospace;font-size:10px">${esc(v.sku)}</span>` : ''}
             <span style="opacity:.7;font-size:11px">¥${parseFloat(v.sell_price||0).toFixed(2)}</span>
           </div>`
-        : `<button onclick="switchVariant(${v.id})" style="display:inline-flex;align-items:center;gap:8px;background:var(--card-bg);border:1.5px solid var(--border);border-radius:10px;padding:7px 12px;cursor:pointer;font-family:inherit;font-size:12px;transition:border-color .15s" onmouseover="this.style.borderColor='var(--lime)'" onmouseout="this.style.borderColor='var(--border)'" title="Open · 打开">
-            <span style="font-weight:700">${esc(v.variant_label || '—')}</span>
-            ${v.sku ? `<span style="color:var(--muted);font-family:monospace;font-size:10px">${esc(v.sku)}</span>` : ''}
-            <span style="color:var(--muted)">¥${parseFloat(v.sell_price||0).toFixed(2)}</span>
-          </button>`;
+        : (() => {
+            const delName = ((p.name_en || p.name_cn || '') + ' · ' + (v.variant_label || '')).replace(/'/g, '');
+            return `<div style="display:inline-flex;align-items:center;background:var(--card-bg);border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:12px;transition:border-color .15s" onmouseover="this.style.borderColor='var(--lime)'" onmouseout="this.style.borderColor='var(--border)'">
+            <span onclick="switchVariant(${v.id})" style="display:inline-flex;align-items:center;gap:8px;padding:7px 10px 7px 12px;cursor:pointer" title="Open · 打开">
+              <span style="font-weight:700">${esc(v.variant_label || '—')}</span>
+              ${v.sku ? `<span style="color:var(--muted);font-family:monospace;font-size:10px">${esc(v.sku)}</span>` : ''}
+              <span style="color:var(--muted)">¥${parseFloat(v.sell_price||0).toFixed(2)}</span>
+            </span>
+            <button onclick="event.stopPropagation();deleteVariant(${p.id},${v.id},'${esc(delName)}')" title="Delete this size · 删除此规格" aria-label="Delete this size" style="background:none;border:none;border-left:1px solid var(--border);cursor:pointer;color:#dc2626;opacity:.45;padding:6px 9px;font-size:13px;line-height:1;border-radius:0 8px 8px 0;align-self:stretch" onmouseover="this.style.opacity=1;this.style.background='rgba(220,38,38,.08)'" onmouseout="this.style.opacity=.45;this.style.background='none'">🗑</button>
+          </div>`;
+          })();
       return `<div style="display:flex;flex-wrap:wrap;gap:8px">${all.map(chip).join('')}</div>`;
     })() : ''}`;
 }
@@ -13974,6 +13980,22 @@ async function deleteProduct(id, name) {
   const d = await r.json();
   if (d.success) { toast('✅ Deleted 已删除','success'); _products = (_products || []).filter(p => Number(p.id) !== Number(id)); await renderProducts(); }
   else toast('Error · 错误: '+d.error,'error');
+}
+
+// Delete a sibling size variant from the Sizes card of the product detail.
+// Same DELETE endpoint as deleteProduct but stays on the parent's detail
+// page (switchVariant re-renders the bento with the shorter sibling list).
+async function deleteVariant(parentId, variantId, name) {
+  if (!confirm('Delete size "'+name+'"? · 删除规格 "'+name+'"?')) return;
+  const r = await fetch('/api/products/'+variantId, {method:'DELETE'});
+  const d = await r.json();
+  if (d.success) {
+    toast('✅ Size deleted · 已删除规格','success');
+    _products = (_products || []).filter(p => Number(p.id) !== Number(variantId));
+    await switchVariant(parentId);
+  } else {
+    toast('Error · 错误: '+d.error,'error');
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
