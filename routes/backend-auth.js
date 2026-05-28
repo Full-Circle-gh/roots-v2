@@ -25,6 +25,13 @@ db.exec(`
     name        TEXT NOT NULL,
     brand_name  TEXT,
     status      TEXT NOT NULL DEFAULT 'active',   -- active | suspended | cancelled
+    -- Who owns this tenant's product catalog + stock?
+    --   'self'     = managed here, in the mini-app backend (standalone tenants
+    --                with no upstream system behind them).
+    --   'upstream' = owned by an external system (e.g. Roots' kitchen app); the
+    --                mini-app backend only merchandises the channel, never edits
+    --                master data or stock.
+    product_catalog_mode TEXT NOT NULL DEFAULT 'self',
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
   );
   CREATE TABLE IF NOT EXISTS tenant_users (
@@ -41,6 +48,11 @@ db.exec(`
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_users_login ON tenant_users(tenant_id, username);
 `);
+
+// Existing DBs predating product_catalog_mode get the column via ALTER. New
+// tenants default to 'self'; Roots is flipped to 'upstream' by the migration
+// below (after seedBackend, so the row is guaranteed to exist).
+try { db.exec("ALTER TABLE tenants ADD COLUMN product_catalog_mode TEXT NOT NULL DEFAULT 'self'"); } catch (e) { /* already added */ }
 
 // ── Seed Roots as tenant #1 + an owner operator (mirrors auth.js seedUsers) ──
 function seedBackend() {
@@ -60,6 +72,19 @@ function seedBackend() {
   }
 }
 seedBackend();
+
+// One-time: Roots (the integrated tenant, #1) is upstream-sourced — its product
+// catalog and stock live in the kitchen app, not in the mini-app backend. Run
+// once via the shared _migrations guard so a later manual change to Roots'
+// mode isn't clobbered on every boot. New standalone tenants stay 'self'.
+try {
+  db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+  const done = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('tenant_catalog_mode_roots_upstream_v1');
+  if (!done) {
+    db.prepare("UPDATE tenants SET product_catalog_mode = 'upstream' WHERE id = 1").run();
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('tenant_catalog_mode_roots_upstream_v1');
+  }
+} catch (e) { console.error('[backend-auth] catalog-mode migration', e); }
 
 // Boot-time nag if the seeded operator still holds the public default password.
 try {
@@ -95,7 +120,8 @@ router.post('/api/backend/login', loginLimiter, express.json(), (req, res) => {
   res.json({
     success: true,
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role,
-            tenant: { id: tenant.id, name: tenant.name, brand: tenant.brand_name } },
+            tenant: { id: tenant.id, name: tenant.name, brand: tenant.brand_name,
+                      catalogMode: tenant.product_catalog_mode || 'self' } },
   });
 });
 
@@ -111,7 +137,7 @@ router.get('/api/backend/me', (req, res) => {
   const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
   res.json({
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role, lastLogin: u.last_login,
-            tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status } : null },
+            tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status, catalogMode: tenant.product_catalog_mode || 'self' } : null },
   });
 });
 

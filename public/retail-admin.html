@@ -831,6 +831,11 @@
   }
   .pa-card:hover .pa-dup { display: flex; }
   .pa-dup:hover { border-color: var(--brass, #B08D4A); color: var(--text-1); }
+  /* Upstream catalog mode (e.g. Roots): products + stock are owned by the
+     kitchen app, so the mini-app backend never creates/duplicates products.
+     Hide the catalog-write controls; clicking a card opens the page designer. */
+  body.catalog-upstream #pa-add-btn,
+  body.catalog-upstream .pa-dup { display: none !important; }
   .pa-dup-row {
     flex: none; width: 28px; height: 28px; padding: 0;
     border: 1px solid var(--line); border-radius: 6px;
@@ -893,7 +898,7 @@
                       border: 1px solid rgba(18, 22, 26, .15); }
   .pa-pill-draft    { background: rgba(176, 141, 74, .15); color: #B08D4A;
                       border: 1px solid rgba(176, 141, 74, .30); }
-  .pa-pill-variants { background: rgba(18, 22, 26, .60); color: #E8E5DC; }          /* Dark chip — "N sizes" on a collapsed variant family */
+  .pa-pill-variants { background: rgba(18, 22, 26, .60); color: #E8E5DC; }          /* Dark chip — "N variants" on a collapsed variant family */
   .pa-pill-oos      { background: rgba(182, 86, 86, .92); color: #fff; }            /* Red chip — a live size is out of stock */
 
   /* Empty state */
@@ -5757,6 +5762,14 @@
           <input type="number" id="pts-expiry-months" placeholder="12" min="0" style="width: 140px;">
           <div class="muted" style="font-size: 11px; margin-top: 4px;">0 = never expire. Applies to new earns only.</div>
         </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Points cover shipping · 积分可抵运费</label>
+          <label style="display:inline-flex; align-items:center; gap:8px; padding-top: 4px;">
+            <input type="checkbox" id="pts-cover-shipping">
+            <span class="muted" style="font-size: 12px;">Allow points to pay the shipping line · 允许积分支付运费</span>
+          </label>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">Off = customer always pays shipping in cash. · 关闭时,运费始终以现金支付。</div>
+        </div>
         <button class="btn btn-primary" onclick="savePointsSettings()">Save points settings · 保存积分设置</button>
       </div>
     </div>
@@ -7986,6 +7999,10 @@ document.addEventListener('input', e => {
 });
 
 // ── Bootstrap ──
+// Per-tenant catalog ownership, surfaced by /api/backend/me. 'upstream' (Roots)
+// = catalog + stock live in the kitchen app, so this backend only merchandises
+// the channel; 'self' = this backend manages its own products + stock.
+let CATALOG_MODE = 'self';
 (async () => {
   try {
     // Mini App Backend is its own auth realm — authenticate against the
@@ -7994,6 +8011,10 @@ document.addEventListener('input', e => {
     const me = await fetch('/api/backend/me', { credentials: 'same-origin' }).then(r => r.json());
     if (!me?.user) { location.href = '/backend/login'; return; }
     const u = me.user;
+    // Resolve catalog ownership before any product UI renders, so upstream
+    // tenants never see the catalog-write controls / stock modal.
+    CATALOG_MODE = (u.tenant && u.tenant.catalogMode) || 'self';
+    document.body.classList.toggle('catalog-upstream', CATALOG_MODE === 'upstream');
     // Operator name links to the backend account page (change password / sign
     // out). Every authenticated operator has full backend access — the backend
     // realm has no per-module permission gate.
@@ -12960,10 +12981,11 @@ async function loadTopup() {
   try {
     const cfg = await api('/api/retail-admin/config');
     const pts = cfg?.data?.points || {};
-    if ($('#pts-earn-rate'))     $('#pts-earn-rate').value     = pts.earnRate     ?? 100;
-    if ($('#pts-redeem-rate'))   $('#pts-redeem-rate').value   = pts.redeemRate   ?? 100;
-    if ($('#pts-expiry-months')) $('#pts-expiry-months').value = pts.expiryMonths ?? 12;
-    if ($('#pts-ratemsg'))       $('#pts-ratemsg').textContent = '¥' + (pts.earnRate ?? 100);
+    if ($('#pts-earn-rate'))      $('#pts-earn-rate').value     = pts.earnRate     ?? 100;
+    if ($('#pts-redeem-rate'))    $('#pts-redeem-rate').value   = pts.redeemRate   ?? 100;
+    if ($('#pts-expiry-months'))  $('#pts-expiry-months').value = pts.expiryMonths ?? 12;
+    if ($('#pts-cover-shipping')) $('#pts-cover-shipping').checked = !!pts.coverShipping;
+    if ($('#pts-ratemsg'))        $('#pts-ratemsg').textContent = '¥' + (pts.earnRate ?? 100);
   } catch {}
   await Promise.all([loadTopupPackages(), loadTopupTransactions()]);
 }
@@ -13022,9 +13044,10 @@ async function deleteTopupPackage(id, amt) {
 
 async function savePointsSettings() {
   const body = {
-    'points.earnRate':     Math.max(1, parseInt($('#pts-earn-rate').value, 10) || 100),
-    'points.redeemRate':   Math.max(1, parseInt($('#pts-redeem-rate').value, 10) || 100),
-    'points.expiryMonths': Math.max(0, parseInt($('#pts-expiry-months').value, 10) || 0),
+    'points.earnRate':      Math.max(1, parseInt($('#pts-earn-rate').value, 10) || 100),
+    'points.redeemRate':    Math.max(1, parseInt($('#pts-redeem-rate').value, 10) || 100),
+    'points.expiryMonths':  Math.max(0, parseInt($('#pts-expiry-months').value, 10) || 0),
+    'points.coverShipping': !!$('#pts-cover-shipping')?.checked,
   };
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
@@ -15022,7 +15045,12 @@ function _paUnits(rows) {
     if (!gid) { units.push({ group: false, p }); return; }
     if (seen.has(gid)) return;
     seen.add(gid);
-    const members = byGid.get(gid);
+    // Order siblings by the operator's chosen order (variant_sort, set by
+    // drag-to-reorder in the editor) so the card's size chips match the shop.
+    const members = byGid.get(gid).slice().sort((a, b) =>
+      ((a.variant_sort ?? 0) - (b.variant_sort ?? 0)) ||
+      String(a.variant_label || '').localeCompare(String(b.variant_label || '')) ||
+      (a.id - b.id));
     if (members.length < 2) { units.push({ group: false, p: members[0] }); return; }
     // Open the group owner (id === gid) so the editor's variant rows list all
     // siblings; fall back to the first member if the owner was filtered out.
@@ -15159,7 +15187,7 @@ function paRender() {
       ? u.members.map(_paVariantTag).join(' · ')
       : [p.sku, p.size].filter(Boolean).map(escapeHtml).join(' · ');
     const variantPill = u.group
-      ? `<span class="pa-pill pa-pill-variants" title="${cuT('Sizes of one product · 同一产品的多个规格', 'Sizes of one product · 同一产品的多个规格')}">${u.members.length} ${cuT('sizes', '规格')}</span>`
+      ? `<span class="pa-pill pa-pill-variants" title="${cuT('Variants of one product · 同一产品的多个规格', 'Variants of one product · 同一产品的多个规格')}">${u.members.length} ${cuT('variants', '规格')}</span>`
       : '';
     // A live (published) size with no stock — flag it so a sold-out size is
     // visible from the grid without opening the product.
@@ -15202,7 +15230,16 @@ function paRender() {
 // Clicking a product card opens the commercial details form (name, price,
 // stock, photo, description…). The page-design tool is launched from a button
 // inside that form, in its own window.
-function paOpenEdit(id) { pdOpen(id); }
+function paOpenEdit(id) {
+  // Upstream-catalog tenants (Roots) don't edit product master data or stock
+  // here — clicking a product jumps straight to the mini-app page designer in
+  // a new tab, skipping the in-page commercial-details/stock form entirely.
+  if (CATALOG_MODE === 'upstream') {
+    window.open('/product-editor?id=' + encodeURIComponent(id), '_blank', 'noopener');
+    return;
+  }
+  pdOpen(id);
+}
 
 // ── Product details (commercial) editor — the Mini App Backend's own product
 // page. Edits the basic store fields + stock via /api/retail-admin/products.
@@ -15424,8 +15461,11 @@ async function vaPersist() {
   const members = VA_MEMBERS.map(v => ({ id: v.id, label: v.label || '' }));
   const j = await api('/api/retail-admin/products/' + VA_ID + '/variants', { method: 'PUT', body: { members } });
   const gid = j.group_id, ids = new Set(members.map(m => m.id));
+  // The PUT writes variant_sort = array index; mirror that into the in-memory
+  // rows so the grid's collapsed card re-sorts its size chips without a reload.
+  const order = new Map(members.map((m, i) => [m.id, i]));
   (PA_PRODUCTS || []).forEach(p => {
-    if (ids.has(p.id)) { p.variant_group_id = gid; p.variant_label = (members.find(m => m.id === p.id) || {}).label || null; }
+    if (ids.has(p.id)) { p.variant_group_id = gid; p.variant_label = (members.find(m => m.id === p.id) || {}).label || null; p.variant_sort = order.get(p.id); }
     else if (p.variant_group_id === VA_ID) { p.variant_group_id = null; p.variant_label = null; }
   });
   return gid;
