@@ -25,10 +25,7 @@
     try {
       var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
       if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
-      // Drive UI scale via a CSS variable that body picks up with
-      // transform: scale + a viewport/scale size box. Avoid `zoom` here —
-      // it overflowed the 3-pane layout off the right edge at >100%.
-      document.documentElement.style.setProperty('--ui-scale', String(s));
+      document.documentElement.style.zoom = String(s);
     } catch (e) {}
   })();
 </script>
@@ -121,16 +118,6 @@
     color: var(--text-1);
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
-    /* UI scale: size body to viewport / scale, then transform-scale it back
-       up so it visually fills the viewport. Unlike `zoom` (which scales the
-       layout box and overflowed at >100%), transform doesn't affect layout
-       — the grid inside lays out in the smaller CSS coord system and is
-       guaranteed to fit. At scale = 1 these collapse to 100vw/100vh +
-       scale(1), so default behavior is unchanged. */
-    width:  calc(100vw / var(--ui-scale, 1));
-    height: calc(100vh / var(--ui-scale, 1));
-    transform: scale(var(--ui-scale, 1));
-    transform-origin: top left;
   }
 
   /* ── BUTTONS ── */
@@ -375,10 +362,7 @@
   .lang-toggle button.active { background: var(--brass); color: var(--accent-ink); }
 
   #pe-body {
-    /* 100% of body (which is now scaled to fit the physical viewport — see
-       the html/body rule above) — NOT 100vh, which would still be the full
-       unscaled viewport and overflow body at zoom > 1. */
-    height: calc(100% - 56px);
+    height: calc(100vh - 56px);
     display: grid;
     grid-template-columns: 288px 1fr 380px;
     /* Definite row so the panes (and the phone inside the canvas) fill the body
@@ -2734,9 +2718,7 @@ function cuGetUiScale() {
   return v;
 }
 function cuApplyUiScale(v) {
-  // CSS picks this up via body { transform: scale; width/height: 100v*/scale }.
-  // No `zoom` here — it pushed the 3-pane layout off the right edge at >100%.
-  document.documentElement.style.setProperty('--ui-scale', String(v));
+  document.documentElement.style.zoom = String(v);
   const lbl = document.querySelector('#ui-scale-toggle .ui-scale-val');
   if (lbl) lbl.textContent = Math.round(v * 100) + '%';
 }
