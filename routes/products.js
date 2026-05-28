@@ -15,7 +15,7 @@ const PRODUCT_COLS = `
   p.ship_modes, p.needs_ice_pack,
   p.nutrition,
   p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,
-  p.description_blocks,
+  p.description_blocks, p.bundle,
   p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,
   r.name_en AS recipe_name
 `;
@@ -153,6 +153,13 @@ router.get('/api/products/:id', requireAuth, requirePermission('products'), (req
      WHERE p.id = ?`
   ).get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found · 未找到' });
+  // Buy-together bundle is stored as JSON text; parse so the editor receives
+  // an object it can pre-fill ({title_en,title_cn,ids,price,voucher}).
+  if (typeof row.bundle === 'string' && row.bundle.trim()) {
+    try { row.bundle = JSON.parse(row.bundle); } catch { row.bundle = null; }
+  } else {
+    row.bundle = null;
+  }
   // Derive recipe-driven info if linked. Each ingredient.allergens is a
   // free-text comma string ("nuts, soy") — split, dedupe, sort.
   let derived = { allergens: [], ingredient_count: 0 };
@@ -280,6 +287,8 @@ const FIELDS = [
   'ship_modes',
   // Nutrition panel — JSON: { basis_en, basis_cn, rows:[{label_en,label_cn,value}] }
   'nutrition',
+  // "Buy together" bundle JSON: { title_en, title_cn, ids:[productId,…], price, voucher }
+  'bundle',
   // Mini-app card chrome (bilingual)
   'keywords_en', 'keywords_cn', 'tagline_en', 'tagline_cn',
   // Block-based product page body (JSON array of `{id, type, ...data}`)
@@ -322,6 +331,27 @@ function pickBody(body) {
         catch { out[k] = null; }
       } else if (typeof v === 'object') {
         out[k] = (v.basis_en || v.basis_cn || (v.rows || []).length) ? JSON.stringify(v) : null;
+      } else { out[k] = null; }
+    }
+    else if (k === 'bundle') {
+      // Accept object, JSON string, or null. Normalize to a JSON string the
+      // mini-app + editor can both read; drop if no product ids are listed.
+      const v = body[k];
+      let obj = null;
+      if (v == null || v === '') obj = null;
+      else if (typeof v === 'string') { try { obj = JSON.parse(v); } catch { obj = null; } }
+      else if (typeof v === 'object') obj = v;
+      if (obj && Array.isArray(obj.ids)) {
+        const ids = [...new Set(obj.ids.map(n => parseInt(n, 10)).filter(Number.isFinite))];
+        if (ids.length) {
+          out[k] = JSON.stringify({
+            title_en: (obj.title_en ? String(obj.title_en) : '').trim() || null,
+            title_cn: (obj.title_cn ? String(obj.title_cn) : '').trim() || null,
+            ids,
+            price: Math.max(0, parseFloat(obj.price) || 0),
+            voucher: (obj.voucher ? String(obj.voucher) : '').trim() || null,
+          });
+        } else { out[k] = null; }
       } else { out[k] = null; }
     }
     else if (k === 'description_blocks') {

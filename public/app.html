@@ -10218,6 +10218,175 @@ async function iedClick(el) {
   if (type === 'select') input.addEventListener('change', () => input.blur());
 }
 
+// ── "Buy together" bundle (kitchen-app editor) ────────────────────────────
+// Group this product with others as a "buy together" set on its mini-app PDP.
+// Items keep their own price + stock — no bundle SKU. Stored as a JSON object
+// on products.bundle (see routes/products.js). Saves on every change via the
+// shared iedSaveField PUT helper.
+let _kbu = { id: null, title_en: '', title_cn: '', ids: [], price: '', voucher: '', picking: false };
+
+function _kbuHasBundle(p) {
+  return !!(p && p.bundle && Array.isArray(p.bundle.ids) && p.bundle.ids.length);
+}
+function _kbuSummary(p) {
+  if (_kbuHasBundle(p)) {
+    const n = p.bundle.ids.length;
+    return `Bundle · 套装 — ${n} item${n === 1 ? '' : 's'}`;
+  }
+  return `Bundle · 套装 <span style="color:var(--muted);font-weight:400;font-size:12px">— group with other products as "buy together"</span>`;
+}
+
+function _renderBundleCard(ctx) {
+  const { p } = ctx;
+  const b = (p.bundle && typeof p.bundle === 'object') ? p.bundle : null;
+  _kbu = {
+    id: p.id,
+    title_en: b ? (b.title_en || '') : '',
+    title_cn: b ? (b.title_cn || '') : '',
+    ids: b && Array.isArray(b.ids) ? [...b.ids] : [],
+    price: b && b.price > 0 ? b.price : '',
+    voucher: b ? (b.voucher || '') : '',
+    picking: false,
+  };
+  return _kbuRenderInner();
+}
+
+function _kbuRenderInner() {
+  const nameOf = id => {
+    const pp = (_products || []).find(x => Number(x.id) === Number(id));
+    if (!pp) return '#' + id;
+    return (pp.name_en || '') + (pp.name_cn ? ' · ' + pp.name_cn : '');
+  };
+  const chip = id => `<span style="display:inline-flex;align-items:center;gap:6px;background:var(--gray);border-radius:99px;padding:4px 10px;font-size:12px">
+      <span title="${esc(nameOf(id))}" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nameOf(id))}</span>
+      <button type="button" onclick="_kbuRemove(${id})" title="Remove · 移除" style="border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0">✕</button>
+    </span>`;
+  const chips = _kbu.ids.length
+    ? _kbu.ids.map(chip).join('')
+    : `<span style="color:var(--muted);font-size:12px;font-style:italic">No products yet — click "+ Add product" below · 尚未添加</span>`;
+  const inp = (key, val, ph, type) => `<input type="${type||'text'}" ${type==='number'?'min="0" step="0.01"':''} value="${esc(val||'')}" placeholder="${esc(ph)}" onblur="_kbuFieldBlur('${key}', this.value)" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font:inherit;font-size:13px;outline:none;box-sizing:border-box;background:#fff">`;
+  const picker = _kbu.picking ? `
+    <div style="margin-top:10px;border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--bg-elev-1,#fafaf6)">
+      <input id="kbu-search" type="text" autocomplete="off" placeholder="Search a product to add · 搜索商品" oninput="_kbuPickerList()" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font:inherit;font-size:13px;outline:none;box-sizing:border-box;background:#fff;margin-bottom:8px">
+      <div id="kbu-picklist" style="max-height:240px;overflow-y:auto"></div>
+    </div>` : '';
+  const clearBtn = _kbu.ids.length
+    ? `<button class="btn btn-secondary btn-sm" style="color:#dc2626" onclick="_kbuClear()">✕ Clear bundle · 清除套装</button>`
+    : '';
+  return `
+    <div style="font-size:12px;color:var(--muted);margin:0 0 12px;line-height:1.5">
+      Group this product with others as a "buy together" set shown on its mini-app page. Each item keeps its own price & stock — no separate inventory · 在小程序商品页将本产品与其他商品组成"一起买"套装,各自保留价格与库存。
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <label><span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Title EN</span>
+        ${inp('title_en', _kbu.title_en, 'Buy together')}</label>
+      <label><span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Title CN · 标题(中文)</span>
+        ${inp('title_cn', _kbu.title_cn, '一起买')}</label>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${chips}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <label><span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Bundle price ¥ (optional · 套装价 可选)</span>
+        ${inp('price', _kbu.price, 'blank = item total · 留空 = 各项合计', 'number')}</label>
+      <label><span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">Auto voucher (optional · 自动优惠券 可选)</span>
+        ${inp('voucher', _kbu.voucher, 'code · 券码')}</label>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="_kbuTogglePicker()">${_kbu.picking ? 'Close picker · 关闭' : '+ Add product · 添加商品'}</button>
+      ${clearBtn}
+    </div>
+    ${picker}
+  `;
+}
+
+function _kbuRedraw() {
+  const body = document.getElementById('prodBundleBody');
+  if (body) body.innerHTML = _kbuRenderInner();
+  if (_kbu.picking) {
+    const s = document.getElementById('kbu-search');
+    if (s) s.focus();
+    _kbuPickerList();
+  }
+}
+
+async function _kbuEnsureProductsLoaded() {
+  if (_products && _products.length) return;
+  try {
+    const r = await fetch('/api/products');
+    const d = await r.json();
+    if (d.success) _products = d.data || [];
+  } catch {}
+}
+
+async function _kbuTogglePicker() {
+  _kbu.picking = !_kbu.picking;
+  if (_kbu.picking) await _kbuEnsureProductsLoaded();
+  _kbuRedraw();
+}
+
+function _kbuPickerList() {
+  const el = document.getElementById('kbu-picklist'); if (!el) return;
+  const q = (document.getElementById('kbu-search')?.value || '').toLowerCase().trim();
+  const have = new Set(_kbu.ids);
+  const matches = (_products || [])
+    .filter(p => Number(p.id) !== Number(_kbu.id) && !have.has(p.id))
+    .filter(p => !q
+      || (p.name_en || '').toLowerCase().includes(q)
+      || (p.name_cn || '').includes(q)
+      || (p.sku || '').toLowerCase().includes(q))
+    .slice(0, 40);
+  el.innerHTML = matches.length
+    ? matches.map(p => `<div onclick="_kbuPick(${p.id})" style="padding:7px 10px;border-radius:5px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;gap:8px;align-items:baseline" onmouseover="this.style.background='var(--gray)'" onmouseout="this.style.background='transparent'">
+        <span>${esc((p.name_en||'')+(p.name_cn?' · '+p.name_cn:''))}</span>
+        ${p.sku?`<span style="color:var(--muted);font-family:monospace;font-size:11px">${esc(p.sku)}</span>`:''}
+      </div>`).join('')
+    : `<div style="color:var(--muted);font-size:12px;padding:6px 4px;font-style:italic">No matches · 无匹配</div>`;
+}
+
+function _kbuPick(id) {
+  id = parseInt(id, 10);
+  if (!_kbu.ids.includes(id)) _kbu.ids.push(id);
+  _kbu.picking = false;
+  _kbuRedraw();
+  _kbuSave();
+}
+
+function _kbuRemove(id) {
+  _kbu.ids = _kbu.ids.filter(x => Number(x) !== Number(id));
+  _kbuRedraw();
+  _kbuSave();
+}
+
+function _kbuFieldBlur(key, val) {
+  if (key === 'price') _kbu.price = (val === '' || val == null) ? '' : Math.max(0, parseFloat(val) || 0);
+  else _kbu[key] = val;
+  _kbuSave();
+}
+
+function _kbuClear() {
+  if (!confirm('Remove the bundle? · 清除套装?')) return;
+  _kbu.ids = []; _kbu.title_en = ''; _kbu.title_cn = ''; _kbu.price = ''; _kbu.voucher = '';
+  _kbuRedraw();
+  _kbuSave();
+}
+
+async function _kbuSave() {
+  const pid = _kbu.id;
+  if (!pid) return;
+  const payload = _kbu.ids.length ? {
+    title_en: (_kbu.title_en || '').trim(),
+    title_cn: (_kbu.title_cn || '').trim(),
+    ids: _kbu.ids.slice(),
+    price: _kbu.price === '' ? 0 : (Number(_kbu.price) || 0),
+    voucher: (_kbu.voucher || '').trim(),
+  } : null;
+  try {
+    await iedSaveField(pid, 'bundle', payload);
+    // Refresh the collapse summary so the chip count stays accurate.
+    const sum = document.querySelector('#prodBundleCollapse summary .card-title');
+    if (sum) sum.innerHTML = '🎁 ' + _kbuSummary({ bundle: payload });
+  } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'error'); }
+}
+
 // Fast variant switch — only swaps the changed sub-sections (top bar, hero,
 // chip styles inside Sizes card, body) without replacing #main. The Sizes
 // card div stays mounted so the chips don't visually shift; their inner
@@ -10231,6 +10400,8 @@ async function switchVariant(id) {
   const topBar   = document.getElementById('prodTopBar');
   const hero     = document.getElementById('prodHero');
   const sizes    = document.getElementById('prodSizesCard');
+  const bundleBody = document.getElementById('prodBundleBody');
+  const bundleCollapse = document.getElementById('prodBundleCollapse');
   const recipe   = document.getElementById('prodRecipeDietCard');
   const desc     = document.getElementById('prodDescCard');
   const notes    = document.getElementById('prodNotesCard');
@@ -10249,6 +10420,12 @@ async function switchVariant(id) {
   desc.innerHTML   = _renderDescCard(ctx);
   notes.innerHTML  = _renderNotesCard(ctx);
   if (advBody) advBody.innerHTML = _renderLessUsedCard(ctx);
+  if (bundleBody) bundleBody.innerHTML = _renderBundleCard(ctx);
+  if (bundleCollapse) {
+    const sum = bundleCollapse.querySelector('summary .card-title');
+    if (sum) sum.innerHTML = '🎁 ' + _kbuSummary(ctx.p);
+    if (_kbuHasBundle(ctx.p)) bundleCollapse.setAttribute('open', '');
+  }
   requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
   // Sales: only re-fetch if the operator had already opened the collapse on
   // the previous variant (so a fresh sibling click doesn't fire the heavy
@@ -10329,6 +10506,10 @@ async function viewProduct(id) {
       <div class="card" id="prodRecipeDietCard" style="padding:14px 18px">${_renderRecipeDietCard(ctx)}</div>
       <div class="card span-2" id="prodDescCard" style="padding:14px 18px">${_renderDescCard(ctx)}</div>
       <div class="card" id="prodNotesCard" style="padding:14px 18px">${_renderNotesCard(ctx)}</div>
+      <details class="card span-3" id="prodBundleCollapse" style="padding:14px 18px"${_kbuHasBundle(ctx.p) ? ' open' : ''}>
+        <summary><div class="card-title">🎁 ${_kbuSummary(ctx.p)}</div></summary>
+        <div class="card-body" id="prodBundleBody">${_renderBundleCard(ctx)}</div>
+      </details>
       <details class="card span-3" id="prodSalesCollapse" style="padding:14px 18px">
         <summary><div class="card-title">📊 Sales Performance · 销售业绩</div></summary>
         <div class="card-body"><div id="prodSalesCard" style="color:var(--muted);font-size:13px">📊 Loading sales performance…</div></div>
@@ -11467,7 +11648,10 @@ async function pfSaveQuickSize(parentId) {
 
   // Clone — every "shared" attribute is inherited; only the per-size knobs
   // are overridden by the modal input. label_data left blank because labels
-  // (the printable sticker) usually differ per size.
+  // (the printable sticker) usually differ per size. Nutrition and mini-app
+  // marketing copy (tagline, keywords) describe the product, not the size, so
+  // they carry over — otherwise the operator has to re-enter them on every new
+  // size and the variants drift out of sync.
   const newProd = {
     name_en:        parent.name_en,
     name_cn:        parent.name_cn,
@@ -11487,6 +11671,11 @@ async function pfSaveQuickSize(parentId) {
     tags:           parent.tags,
     variant_label:  newLabel,
     is_market:      parent.is_market ? 1 : 0,
+    nutrition:      parent.nutrition,
+    tagline_en:     parent.tagline_en,
+    tagline_cn:     parent.tagline_cn,
+    keywords_en:    parent.keywords_en,
+    keywords_cn:    parent.keywords_cn,
   };
 
   let newId;
