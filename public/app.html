@@ -10473,11 +10473,14 @@ function _renderSizesCardInner(ctx) {
         return a.id - b.id;
       });
       const chip = v => v.isCurrent
-        ? `<div style="display:inline-flex;align-items:center;gap:8px;background:var(--lime);color:var(--dk);border-radius:10px;padding:7px 12px;font-weight:700;font-size:12px" title="This product · 当前产品">
-            <span style="font-size:10px;background:rgba(0,0,0,.15);padding:1px 6px;border-radius:99px;letter-spacing:.05em">CURRENT</span>
-            <span>${v.variant_label ? esc(v.variant_label) : '<span style="font-style:italic;font-weight:500">no label</span>'}</span>
-            ${v.sku ? `<span style="opacity:.6;font-family:monospace;font-size:10px">${esc(v.sku)}</span>` : ''}
-            <span style="opacity:.7;font-size:11px">¥${parseFloat(v.sell_price||0).toFixed(2)}</span>
+        ? `<div style="display:inline-flex;align-items:center;background:var(--lime);color:var(--dk);border-radius:10px;font-weight:700;font-size:12px" title="This product · 当前产品">
+            <span style="display:inline-flex;align-items:center;gap:8px;padding:7px 6px 7px 12px">
+              <span style="font-size:10px;background:rgba(0,0,0,.15);padding:1px 6px;border-radius:99px;letter-spacing:.05em">CURRENT</span>
+              <span>${v.variant_label ? esc(v.variant_label) : '<span style="font-style:italic;font-weight:500">no label</span>'}</span>
+              ${v.sku ? `<span style="opacity:.6;font-family:monospace;font-size:10px">${esc(v.sku)}</span>` : ''}
+              <span style="opacity:.7;font-size:11px">¥${parseFloat(v.sell_price||0).toFixed(2)}</span>
+            </span>
+            <button onclick="pfQuickEditSize(${v.id},${p.id})" title="Edit this size · 编辑此规格" aria-label="Edit this size" style="background:none;border:none;border-left:1px solid rgba(0,0,0,.15);cursor:pointer;color:var(--dk);opacity:.55;padding:6px 9px;font-size:12px;line-height:1;border-radius:0 8px 8px 0;align-self:stretch" onmouseover="this.style.opacity=1;this.style.background='rgba(0,0,0,.08)'" onmouseout="this.style.opacity=.55;this.style.background='none'">✏️</button>
           </div>`
         : (() => {
             const delName = ((p.name_en || p.name_cn || '') + ' · ' + (v.variant_label || '')).replace(/'/g, '');
@@ -10487,6 +10490,7 @@ function _renderSizesCardInner(ctx) {
               ${v.sku ? `<span style="color:var(--muted);font-family:monospace;font-size:10px">${esc(v.sku)}</span>` : ''}
               <span style="color:var(--muted)">¥${parseFloat(v.sell_price||0).toFixed(2)}</span>
             </span>
+            <button onclick="event.stopPropagation();pfQuickEditSize(${v.id},${p.id})" title="Edit this size · 编辑此规格" aria-label="Edit this size" style="background:none;border:none;border-left:1px solid var(--border);cursor:pointer;color:var(--text);opacity:.45;padding:6px 9px;font-size:12px;line-height:1;align-self:stretch" onmouseover="this.style.opacity=1;this.style.background='rgba(0,0,0,.05)'" onmouseout="this.style.opacity=.45;this.style.background='none'">✏️</button>
             <button onclick="event.stopPropagation();deleteVariant(${p.id},${v.id},'${esc(delName)}')" title="Delete this size · 删除此规格" aria-label="Delete this size" style="background:none;border:none;border-left:1px solid var(--border);cursor:pointer;color:#dc2626;opacity:.45;padding:6px 9px;font-size:13px;line-height:1;border-radius:0 8px 8px 0;align-self:stretch" onmouseover="this.style.opacity=1;this.style.background='rgba(220,38,38,.08)'" onmouseout="this.style.opacity=.45;this.style.background='none'">🗑</button>
           </div>`;
           })();
@@ -11718,6 +11722,81 @@ async function pfSaveQuickSize(parentId) {
   toast('✅ Size added · 已添加规格', 'success');
   closeOverlay('quickSizeOverlay');
   viewProduct(parent.id);
+}
+
+// Quick-edit overlay for a single variant — opens from the ✏️ button on each
+// chip in the Sizes card so the operator can rename / re-SKU / re-price any
+// sibling (or the current product) without having to switch into it first.
+// currentDisplayedId tells us which product the detail page is showing now,
+// so we re-render the right context after save.
+async function pfQuickEditSize(variantId, currentDisplayedId) {
+  let v;
+  try {
+    const r = await fetch('/api/products/' + variantId);
+    const d = await r.json();
+    if (!d.success) throw new Error(d.error || 'load failed');
+    v = d.data;
+  } catch (e) { return toast('Failed to load · 加载失败: ' + e.message, 'error'); }
+
+  const overlay = mkOverlay('quickEditSizeOverlay');
+  const box = overlay.querySelector('.overlay-box');
+  box.style.maxWidth = '440px';
+  const displayName = esc(v.name_en || v.name_cn || '');
+  box.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <h2 style="font-size:18px;font-weight:900;margin:0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-2px;margin-right:8px;color:var(--text-3)"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4z"/></svg>Edit Size · 编辑规格</h2>
+      <button class="btn-icon" onclick="closeOverlay('quickEditSizeOverlay')">✕</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 14px;line-height:1.5">${displayName}</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="grid-column:span 2">
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Size Label · 规格</label>
+        <input id="qe_label" value="${esc(v.variant_label || '')}" placeholder="e.g. 500ml / Large 大" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">SKU · 编号 *</label>
+        <input id="qe_sku" value="${esc(v.sku || '')}" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:monospace;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Sell Price ¥ · 售价 *</label>
+        <input id="qe_price" type="number" step="0.01" min="0" value="${parseFloat(v.sell_price||0).toFixed(2)}" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">
+      <button class="btn btn-secondary" onclick="closeOverlay('quickEditSizeOverlay')">Cancel 取消</button>
+      <button class="btn btn-primary" style="min-width:140px" onclick="pfSaveQuickEditSize(${v.id},${currentDisplayedId})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Save · 保存</button>
+    </div>
+  `;
+  setTimeout(() => {
+    const f = document.getElementById('qe_label');
+    if (f) { f.focus(); f.select(); }
+  }, 50);
+}
+
+async function pfSaveQuickEditSize(variantId, currentDisplayedId) {
+  const label  = (document.getElementById('qe_label')?.value || '').trim();
+  const sku    = (document.getElementById('qe_sku')?.value || '').trim();
+  const priceS = document.getElementById('qe_price')?.value || '';
+  const price  = parseFloat(priceS);
+  if (!sku) return toast('SKU required · 编号必填', 'error');
+  if (priceS === '' || isNaN(price) || price < 0) return toast('Sell price required · 售价必填', 'error');
+
+  try {
+    const r = await fetch('/api/products/' + variantId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ variant_label: label, sku, sell_price: price }),
+    });
+    const d = await r.json();
+    if (!d.success) throw new Error(d.error || 'save failed');
+  } catch (e) { return toast('Save failed · 保存失败: ' + e.message, 'error'); }
+
+  toast('✅ Size updated · 已更新规格', 'success');
+  closeOverlay('quickEditSizeOverlay');
+  // Refresh the detail page by re-rendering whichever variant is currently
+  // displayed — switchVariant re-fetches the product ctx (which includes
+  // siblings) so the edited chip reflects the new label / SKU / price.
+  await switchVariant(currentDisplayedId);
 }
 
 // Stock adjustment modal — open from the 📦 Stock card on the product
