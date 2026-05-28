@@ -39,24 +39,48 @@ Page({
   },
 
   onLoad() {
-    // First-launch detection — if the user hasn't been through onboarding
-    // yet, bounce them to /pages/onboarding/onboarding. They set the flag
-    // on Skip or Next, so this only fires the very first time.
-    // Deferred to setTimeout(0) so the entry page's first frame completes
-    // before we reLaunch — otherwise WeChat's perf monitor crashes with
-    // "Cannot read property '__subPageFrameEndTime__' of null".
-    let onboarded = '';
-    try { onboarded = wx.getStorageSync('onboarded'); } catch {}
-    if (!onboarded) {
-      setTimeout(() => wx.reLaunch({ url: '/pages/onboarding/onboarding' }), 0);
-      return;
-    }
-    const app = getApp();
-    this.setData({
-      lang: app.globalData.lang || 'en',
-      customer: app.globalData.customer || null,
+    // Onboarding gating — mode + version come from /api/retail/config
+    // (cfg.onboarding.show_to / cfg.onboarding.version, edited in /cms).
+    // Storage flag `onboarded` holds the version string the user last
+    // finished; mismatch = re-show, missing = brand-new user.
+    this._gateOnboarding().then(redirected => {
+      if (redirected) return;
+      const app = getApp();
+      this.setData({
+        lang: app.globalData.lang || 'en',
+        customer: app.globalData.customer || null,
+      });
+      this.refresh();
     });
-    this.refresh();
+  },
+
+  async _gateOnboarding() {
+    let stored = '';
+    try { stored = wx.getStorageSync('onboarded'); } catch {}
+    let mode = 'new';
+    let version = '1';
+    try {
+      const cfg = await config.load();
+      const m = cfg?.onboarding?.show_to;
+      if (m === 'new' || m === 'version' || m === 'always' || m === 'off') mode = m;
+      if (Number.isFinite(cfg?.onboarding?.version)) version = String(cfg.onboarding.version);
+    } catch {
+      // Config fetch failed — fall back to legacy "new users only" defaults
+      // so a flaky network doesn't strand fresh installs without onboarding.
+    }
+    let shouldRedirect;
+    if (mode === 'off')          shouldRedirect = false;
+    else if (mode === 'always')  shouldRedirect = true;
+    else if (mode === 'version') shouldRedirect = stored !== version;
+    else /* 'new' */             shouldRedirect = !stored;
+    if (shouldRedirect) {
+      // Deferred to setTimeout(0) so the entry page's first frame completes
+      // before we reLaunch — otherwise WeChat's perf monitor crashes with
+      // "Cannot read property '__subPageFrameEndTime__' of null".
+      setTimeout(() => wx.reLaunch({ url: '/pages/onboarding/onboarding' }), 0);
+      return true;
+    }
+    return false;
   },
 
   onShow() {

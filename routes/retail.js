@@ -184,6 +184,15 @@ router.get('/api/retail/config', (req, res) => {
     if (!Array.isArray(cfg.roots_club.tiers) || !cfg.roots_club.tiers.length) {
       cfg.roots_club.tiers = DEFAULT_ROOTS_CLUB_TIERS;
     }
+    // Onboarding gating — show_to: 'new' (default, first-launch only),
+    // 'version' (re-shows when admin bumps version), 'always' (every launch),
+    // 'off' (never auto-redirect). version is the running counter the
+    // mini-app stores in `onboarded` so a manual bump invalidates everyone.
+    cfg.onboarding = cfg.onboarding || {};
+    if (!ONBOARDING_MODES.has(cfg.onboarding.show_to)) cfg.onboarding.show_to = 'new';
+    if (!Number.isFinite(cfg.onboarding.version) || cfg.onboarding.version < 1) {
+      cfg.onboarding.version = 1;
+    }
     res.set('Cache-Control', 'public, max-age=60');
     res.json({ success: true, data: cfg });
   } catch (e) {
@@ -7032,6 +7041,10 @@ const ALLOWED_BLOCK_TYPES = new Set([
 // `about` is a hardcoded mini app page (/pages/about/about), not CMS-driven —
 // brand identity, intentionally pinned in code.
 const ALLOWED_PAGES = new Set(['home', 'promotions', 'membership', 'categories', 'onboarding']);
+
+// Onboarding gating modes. See /api/retail/config surfacing above + the
+// /onboarding-settings admin endpoints below.
+const ONBOARDING_MODES = new Set(['new', 'version', 'always', 'off']);
 function pageKey(req, fallback = 'home') {
   const p = String(req.query?.page || req.body?.page || fallback);
   return ALLOWED_PAGES.has(p) ? p : null;
@@ -7230,6 +7243,52 @@ router.post('/api/retail-admin/cms/publish', requireRetailAdmin, express.json(),
   writeLayout(`${page}.layout`, JSON.stringify(draft), req.user.id);
   logActivity(req.user.id, req.user.username, 'publish', `${page}_layout`, null, { blocks: draft.length, page }, req.ip);
   res.json({ success: true, data: { page, live: draft } });
+});
+
+// ── Onboarding gating settings ──────────────────────────────────────────
+// Controls whether the mini app's first-launch onboarding page is shown,
+// and to whom. show_to: 'new' (only first-time visitors — default),
+// 'version' (re-shows on manual version bump), 'always' (every launch),
+// 'off' (never auto-redirect; the Tour link on Me still reaches it).
+// Stored as flat `onboarding.show_to` / `onboarding.version` keys in
+// storefront_config — loadConfig() nests them into cfg.onboarding for
+// the public /api/retail/config response.
+function readOnboardingSettings() {
+  const showRow = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get('onboarding.show_to');
+  const verRow  = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get('onboarding.version');
+  let show_to = 'new';
+  let version = 1;
+  if (showRow) {
+    try { const v = JSON.parse(showRow.value_json); if (ONBOARDING_MODES.has(v)) show_to = v; } catch {}
+  }
+  if (verRow) {
+    try { const v = JSON.parse(verRow.value_json); if (Number.isFinite(v) && v >= 1) version = v; } catch {}
+  }
+  return { show_to, version };
+}
+
+router.get('/api/retail-admin/cms/onboarding-settings', requireRetailAdmin, (req, res) => {
+  res.json({ success: true, data: readOnboardingSettings() });
+});
+
+router.put('/api/retail-admin/cms/onboarding-settings', requireRetailAdmin, express.json(), (req, res) => {
+  const next = req.body?.show_to;
+  if (!ONBOARDING_MODES.has(next)) {
+    return res.status(400).json({ success: false, error: 'invalid_show_to' });
+  }
+  writeLayout('onboarding.show_to', JSON.stringify(next), req.user.id);
+  res.json({ success: true, data: readOnboardingSettings() });
+});
+
+// Manual "Re-show to all returning users now" — bumps the version counter.
+// The mini-app's stored `onboarded=<version>` flag no longer matches, so
+// the next launch redirects everyone whose mode is 'version'.
+router.post('/api/retail-admin/cms/onboarding-settings/bump', requireRetailAdmin, (req, res) => {
+  const cur = readOnboardingSettings();
+  const next = cur.version + 1;
+  writeLayout('onboarding.version', JSON.stringify(next), req.user.id);
+  logActivity(req.user.id, req.user.username, 'bump', 'onboarding_version', null, { from: cur.version, to: next }, req.ip);
+  res.json({ success: true, data: { show_to: cur.show_to, version: next } });
 });
 
 // ── Media library ────────────────────────────────────────────────────────

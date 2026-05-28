@@ -60,6 +60,9 @@ const COPY_EN = {
   menuVoting: 'Your say',
   menuVotingCn: '投票',
   votingMeta: 'Help shape the menu',
+  menuTour: 'Take the tour',
+  menuTourCn: '查看教程',
+  tourMeta: 'See the welcome screen again',
   noAddressMeta: 'Tap to add an address',
 };
 
@@ -113,6 +116,9 @@ const COPY_CN = {
   menuVoting: '投票',
   menuVotingCn: 'YOUR SAY',
   votingMeta: '一起决定下一款产品',
+  menuTour: '查看教程',
+  menuTourCn: 'TAKE THE TOUR',
+  tourMeta: '重新观看欢迎引导',
   noAddressMeta: '点击添加地址',
 };
 
@@ -287,4 +293,12 @@ Page({
   goAbout()      { wx.navigateTo({ url: '/pages/about/about' }); },
   goFaq()        { wx.navigateTo({ url: '/pages/faq/faq' }); },
   goVoting()     { wx.navigateTo({ url: '/pages/voting/voting' }); },
+  // User-initiated re-tour. Clears the onboarded flag so the next Home
+  // load also re-gates correctly under any mode, then re-launches into
+  // the onboarding page. Skip/Next will re-stamp the current version
+  // and send the user back to Home.
+  goTour() {
+    try { wx.removeStorageSync('onboarded'); } catch {}
+    wx.reLaunch({ url: '/pages/onboarding/onboarding' });
+  },
 });

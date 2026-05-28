@@ -201,6 +201,16 @@
       </view>
       <view class="row-arrow">→</view>
     </view>
+    <view class="row" bindtap="goTour">
+      <view class="row-body">
+        <view class="row-title">
+          <text class="f-bear">{{copy.menuTour}}</text>
+          <text class="row-cn muted">  · {{copy.menuTourCn}}</text>
+        </view>
+        <view class="row-meta">{{copy.tourMeta}}</view>
+      </view>
+      <view class="row-arrow">→</view>
+    </view>
     <cs-button variant="row" placement="me"></cs-button>
   </view>
 

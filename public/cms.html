@@ -4696,6 +4696,13 @@ async function renderLinkStatus() {
   if (!el) return;
   // Home doesn't need this — it's the entry point.
   if (state.page === 'home') { el.hidden = true; return; }
+  // Onboarding is reached by auto-redirect (or the Tour link on Me),
+  // not by a Home block — so the link-from-Home check would always
+  // say "unlinked" and confuse the operator. Show gating controls instead.
+  if (state.page === 'onboarding') {
+    await renderOnboardingSettings(el);
+    return;
+  }
   const target = state.page;
   const pageDef = PAGES.find(p => p.id === target) || { name: target, cn: target };
   const home = await getHomeLayout();
@@ -4760,6 +4767,67 @@ async function addLinkFromHomeToCurrentPage() {
   } catch (e) {
     toast('Failed: ' + e.message, 'err');
   }
+}
+
+// Onboarding gating UI — reuses the link-status banner shell. Shows a
+// "Show to" dropdown (new / version / always / off) and a manual
+// "Re-show to all" button that bumps cfg.onboarding.version.
+async function renderOnboardingSettings(el) {
+  let s = { show_to: 'new', version: 1 };
+  try {
+    const r = await api('/api/retail-admin/cms/onboarding-settings');
+    s = r.data;
+  } catch (e) {
+    toast('Failed to load onboarding settings: ' + e.message, 'err');
+  }
+  el.hidden = false;
+  el.className = 'link-status onb';
+  const opts = [
+    ['new',     B('New users only',           '仅新用户')],
+    ['version', B('Everyone until I re-show', '所有用户(到下次重置)')],
+    ['always',  B('Everyone, every launch',   '每个用户每次启动')],
+    ['off',     B('Off',                       '关闭')],
+  ].map(([v, label]) =>
+    `<option value="${v}" ${s.show_to === v ? 'selected' : ''}>${label}</option>`
+  ).join('');
+  el.innerHTML = `
+    <div class="msg">
+      <b>${B('Onboarding', '引导页')}</b> · ${B('show to', '显示给')}
+      <select id="onb-show-to" style="
+        margin-left: 6px;
+        font: inherit; color: var(--text-1);
+        background: var(--bg-input); border: 1px solid var(--line);
+        padding: 3px 8px; border-radius: 4px;">${opts}</select>
+      <span class="target" style="margin-left: 8px;">v${s.version}</span>
+    </div>
+    <button class="action ghost" id="onb-bump-btn" title="${T(
+      'Increment the onboarding version so every returning user sees the page again on their next launch.',
+      '将引导版本号 +1,所有已访问过的用户下次启动时会再次看到引导页。'
+    )}">${B('Re-show to all', '向所有人重新显示')}</button>`;
+  $('#onb-show-to').addEventListener('change', async (ev) => {
+    const v = ev.target.value;
+    try {
+      await api('/api/retail-admin/cms/onboarding-settings', {
+        method: 'PUT', body: { show_to: v },
+      });
+      toast(T('Updated', '已更新'));
+    } catch (e) {
+      toast('Failed: ' + e.message, 'err');
+    }
+  });
+  $('#onb-bump-btn').addEventListener('click', async () => {
+    if (!confirm(T(
+      'Re-show onboarding to ALL returning users on their next launch?\n\n(New users see it anyway. Has no effect when mode is "Off".)',
+      '在所有已访问过的用户下次启动时再次显示引导页?\n\n(新用户本来就会看到。模式为「关闭」时不生效。)'
+    ))) return;
+    try {
+      const r = await api('/api/retail-admin/cms/onboarding-settings/bump', { method: 'POST' });
+      toast(T('Will re-show — now at v' + r.data.version, '将重新显示 — 当前 v' + r.data.version));
+      renderOnboardingSettings(el);
+    } catch (e) {
+      toast('Failed: ' + e.message, 'err');
+    }
+  });
 }
 
 async function loadPage() {
