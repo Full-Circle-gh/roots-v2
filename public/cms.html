@@ -30,6 +30,9 @@
       var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
       if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
       document.documentElement.style.zoom = String(s);
+      // Also expose as a CSS var so layouts that lock to viewport units
+      // (.body uses 100vh - topbar) can compensate at first paint.
+      document.documentElement.style.setProperty('--ui-zoom', String(s));
     } catch (e) {}
   })();
 </script>
@@ -912,7 +915,11 @@
   /* ═══════════════════════════════════════════════════════════════════
      LAYOUT
      ═══════════════════════════════════════════════════════════════════ */
-  .body { display: grid; grid-template-columns: 264px 1fr 340px; height: calc(100vh - 56px); }
+  /* Height compensates for CSS `zoom` set by the Aa toggle: 100vh is the
+     unscaled viewport, but child layout gets rendered at zoom×, so we
+     divide back so the panes still fit visually at 110% / 125%. */
+  .body { display: grid; grid-template-columns: 264px 1fr 340px;
+          height: calc((100vh - 56px * var(--ui-zoom, 1)) / var(--ui-zoom, 1)); }
   .pane {
     background: var(--bg-pane);
     overflow-y: auto;
@@ -9926,6 +9933,11 @@ function cuGetUiScale() {
 }
 function cuApplyUiScale(v) {
   document.documentElement.style.zoom = String(v);
+  // CSS `zoom` scales rendering but not the viewport `vh` unit, so any
+  // child sized by `100vh` overflows by (zoom - 1). Mirror the active zoom
+  // into a CSS var so .body can shrink its layout height accordingly,
+  // keeping the panes' content inside the visible viewport at 110%/125%.
+  document.documentElement.style.setProperty('--ui-zoom', String(v));
   const lbl = document.querySelector('#ui-scale-toggle .ui-scale-val');
   if (lbl) lbl.textContent = Math.round(v * 100) + '%';
 }
