@@ -348,7 +348,11 @@
 }
 .rs-input, .rs-textarea, .rs-qty {
   width: 100%;
-  padding: 16rpx 20rpx;
+  /* WeChat <input>/<textarea> render their text right at the box edge
+     when horizontal padding is tight, so the first character (e.g.
+     "2" in 229.00 or "y" in placeholder) looks clipped against the
+     border. 32rpx side padding leaves a comfortable margin. */
+  padding: 16rpx 32rpx;
   border: 3rpx solid rgba(0,0,0,.15);
   border-radius: 12rpx;
   background: rgba(255,255,255,.4);
