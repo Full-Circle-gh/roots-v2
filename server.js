@@ -202,10 +202,30 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
+// Does the session point to a still-valid backend operator? The gate pages
+// below only redirect INTO the backend when this is true. Crucially, a session
+// whose backendUserId no longer resolves to an active tenant_users row (deleted
+// / deactivated operator, or a DB reseed that left the old session cookie
+// behind) is CLEARED here — otherwise /backend/login would bounce to
+// /retail-admin, whose bootstrap /api/backend/me returns null and bounces
+// straight back, refreshing forever. Validating + clearing breaks that loop so
+// the operator lands on the login form and can re-authenticate.
+function backendSessionValid(req) {
+  if (!req.session?.backendUserId) return false;
+  try {
+    const dbx = require('./database');
+    const u = dbx.prepare('SELECT id FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+    if (u) return true;
+    delete req.session.backendUserId;
+    delete req.session.tenantId;
+  } catch (e) { /* tables not ready — fall through to the login page */ }
+  return false;
+}
+
 // Mini App Backend login — separate branded sign-in for backend operators
 // (tenant_users realm). Self-redirects to /retail-admin if already signed in.
 app.get('/backend/login', (req, res) => {
-  if (req.session?.backendUserId) return res.redirect('/retail-admin');
+  if (backendSessionValid(req)) return res.redirect('/retail-admin');
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'backend-login.html'));
 });
@@ -228,7 +248,7 @@ app.get('/saas-admin', (req, res) => {
 
 // Mini App Backend signup — create a new tenant backend (gated in Phase 2).
 app.get('/backend/signup', (req, res) => {
-  if (req.session?.backendUserId) return res.redirect('/retail-admin');
+  if (backendSessionValid(req)) return res.redirect('/retail-admin');
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'backend-signup.html'));
 });
