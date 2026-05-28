@@ -88,11 +88,31 @@ router.get('/api/staff', requireAuth, (req, res) => {
 });
 
 // ── Suppliers ───────────────────────────────────────────────────────────────
+// List payload deliberately omits the four base64 *_data columns
+// (business_license_data, permits_data, payment_qr_data, channel_qr_data)
+// because the supplier picker / table never renders them — and shipping
+// them was pushing the response close to 1 MB. Anything that needs the
+// real images calls GET /api/suppliers/:id (full row) or the document
+// streaming endpoints.
+const SUPPLIER_LIST_COLS = `
+  s.id, s.name, s.name_cn,
+  s.contact_name, s.contact_phone, s.contact_wechat,
+  s.payment_terms, s.payment_method,
+  s.rating, s.notes,
+  s.is_active, s.created_at, s.updated_at,
+  s.products_supplied, s.price_info,
+  s.channel_type, s.channel_link,
+  (s.business_license_data IS NOT NULL AND s.business_license_data != '') AS has_business_license_data,
+  (s.permits_data          IS NOT NULL AND s.permits_data != '')          AS has_permits_data,
+  (s.payment_qr_data       IS NOT NULL AND s.payment_qr_data != '')       AS has_payment_qr_data,
+  (s.channel_qr_data       IS NOT NULL AND s.channel_qr_data != '')       AS has_channel_qr_data
+`;
+
 router.get('/api/suppliers', requireAuth, (req, res) => {
   // has_* counts power the list-view chips (License / Permit / Payment QR).
   // We don't ship the heavy `data` blobs in list payloads.
   const rows = db.prepare(`
-    SELECT s.*,
+    SELECT ${SUPPLIER_LIST_COLS},
       (SELECT COUNT(*) FROM ingredients i WHERE i.supplier = s.name) AS ingredient_count,
       (SELECT COUNT(*) FROM supplier_documents WHERE supplier_id = s.id AND kind = 'license')    AS has_license,
       (SELECT COUNT(*) FROM supplier_documents WHERE supplier_id = s.id AND kind = 'permit')     AS has_permit,
@@ -102,6 +122,19 @@ router.get('/api/suppliers', requireAuth, (req, res) => {
     WHERE s.is_active = 1
     ORDER BY s.name
   `).all();
+  // Mirror the legacy *_data truthy-check shape so any front-end that does
+  // `if (s.payment_qr_data)` keeps working without code changes — the actual
+  // base64 bytes come from GET /api/suppliers/:id when the user opens the row.
+  for (const r of rows) {
+    r.business_license_data = r.has_business_license_data ? 1 : null;
+    r.permits_data          = r.has_permits_data          ? 1 : null;
+    r.payment_qr_data       = r.has_payment_qr_data       ? 1 : null;
+    r.channel_qr_data       = r.has_channel_qr_data       ? 1 : null;
+    delete r.has_business_license_data;
+    delete r.has_permits_data;
+    delete r.has_payment_qr_data;
+    delete r.has_channel_qr_data;
+  }
   res.json({ success: true, data: rows });
 });
 

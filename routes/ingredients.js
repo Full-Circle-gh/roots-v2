@@ -3,6 +3,26 @@ const db = require('../database');
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
 const router = express.Router();
 
+// Lightweight column set for the LIST endpoint. The Items table doesn't
+// render image_data (a base64 product photo) or supplier_qr_data (a base64
+// WeChat QR), but SELECT * was shipping both for every row — pushing the
+// payload past 1 MB on real catalogues. Here we drop them and expose
+// boolean flags instead; the chip uses `has_supplier_qr` to know whether
+// to render the "💚 WeChat QR" button, and the QR itself is fetched on
+// demand by the existing single-ingredient GET. The detail/edit form
+// already calls GET /api/ingredients/:id so it still receives everything.
+const INGREDIENT_LIST_COLS = `
+  id, name_en, name_cn, sku, category,
+  unit, buy_unit, buy_pack_size, pack_contents_qty, pack_contents_unit,
+  cost_per_unit, buy_price,
+  supplier, supplier_platform, supplier_link,
+  allergens, notes,
+  is_active, created_at, updated_at,
+  accounting_category, item_kind,
+  (image_data IS NOT NULL AND image_data != '')        AS has_image,
+  (supplier_qr_data IS NOT NULL AND supplier_qr_data != '') AS has_supplier_qr
+`;
+
 // GET all ingredients
 router.get('/api/ingredients', requireAuth, requirePermission('ingredients'), (req, res) => {
   const { search, category, count_only } = req.query;
@@ -16,12 +36,24 @@ router.get('/api/ingredients', requireAuth, requirePermission('ingredients'), (r
     if (category) { cq += ' AND category = ?'; cp.push(category); }
     return res.json({ success: true, count: db.prepare(cq).get(...cp).n });
   }
-  let query = 'SELECT * FROM ingredients WHERE is_active = 1';
+  let query = `SELECT ${INGREDIENT_LIST_COLS} FROM ingredients WHERE is_active = 1`;
   const params = [];
   if (search) { query += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)'; const s = `%${search}%`; params.push(s,s,s); }
   if (category) { query += ' AND category = ?'; params.push(category); }
   query += ' ORDER BY name_en';
-  res.json({ success: true, data: db.prepare(query).all(...params) });
+  // SQLite returns booleans as 0/1 — fine for JSON, the front-end already
+  // does `if (i.supplier_qr_data)` truthy checks which work with 1 too.
+  // Re-shape the column name so the chip's existing branch keeps working
+  // unchanged: it tests `i.supplier_qr_data` truthiness, so we mirror the
+  // has_supplier_qr flag into that field on the way out.
+  const rows = db.prepare(query).all(...params);
+  for (const r of rows) {
+    r.supplier_qr_data = r.has_supplier_qr ? 1 : null;
+    r.image_data = r.has_image ? 1 : null;
+    delete r.has_supplier_qr;
+    delete r.has_image;
+  }
+  res.json({ success: true, data: rows });
 });
 
 // GET single ingredient
