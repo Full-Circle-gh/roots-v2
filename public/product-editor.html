@@ -117,7 +117,15 @@
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; }
+  /* Shrink the document to viewport / ui-scale so `zoom` expands it back to
+     exactly the physical viewport. Without this, zoom:1.25 lays the page out
+     at viewport width then scales it 1.25× wider, pushing the right pane off
+     the screen. `vw`/`vh` always report the real viewport, so this works at
+     any zoom; at scale = 1 the calc collapses to 100vw/100vh (no change). */
+  html, body {
+    width:  calc(100vw / var(--ui-scale, 1));
+    height: calc(100vh / var(--ui-scale, 1));
+  }
   body {
     font: 13px var(--f-sans);
     background: var(--bg-app);
@@ -368,21 +376,19 @@
   .lang-toggle button.active { background: var(--brass); color: var(--accent-ink); }
 
   #pe-body {
-    height: calc(100vh - 56px);
+    /* 100% of body (which is now scaled to fit the physical viewport — see
+       the html/body rule above) — NOT 100vh, which would still be the full
+       unscaled viewport and overflow body at zoom > 1. */
+    height: calc(100% - 56px);
     display: grid;
-    /* Fixed tracks are divided by --ui-scale so document `zoom` (the Aa text
-       size) doesn't push the inspector off the right edge — at 125% the CSS
-       widths shrink to 230 / 304, then render at the original 288 / 380
-       physical pixels. Canvas (1fr) absorbs the slack. */
-    grid-template-columns:
-      calc(288px / var(--ui-scale, 1)) 1fr calc(380px / var(--ui-scale, 1));
+    grid-template-columns: 288px 1fr 380px;
     /* Definite row so the panes (and the phone inside the canvas) fill the body
        instead of growing to content. Lets the phone fit at any zoom. */
     grid-template-rows: minmax(0, 1fr);
     overflow: hidden;
   }
   @media (max-width: 1100px) {
-    #pe-body { grid-template-columns: calc(260px / var(--ui-scale, 1)) 1fr; }
+    #pe-body { grid-template-columns: 260px 1fr; }
     .pa-edit-inspector { display: none !important; }
   }
 
