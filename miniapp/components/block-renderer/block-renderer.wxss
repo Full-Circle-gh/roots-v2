@@ -1896,10 +1896,12 @@
 .gr-headline {
   font-family: var(--f-bear);
   font-size: calc(64rpx * var(--font-scale));
-  /* line-height ≥1.15 keeps CN characters from overflowing into the
-     kicker above; ditto for every f-bear headline below. */
-  line-height: 1.15;
-  margin-top: 16rpx;
+  /* Tight leading (1.0) keeps multi-line EN like "Good afternoon, /
+     mimi." from looking airy. padding-top absorbs the few rpx CN
+     glyphs overflow upward so the kicker doesn't get bitten into. */
+  line-height: 1.0;
+  padding-top: 6rpx;
+  margin-top: 10rpx;
 }
 .gr-points {
   margin-top: 14rpx;
