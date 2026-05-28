@@ -264,7 +264,8 @@ const RETAIL_PRODUCT_COLS = `
   p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,
   p.flash_price, p.flash_starts_at, p.flash_ends_at,
   p.flash_stock_limit, p.flash_sold,
-  p.variant_group_id, p.variant_label, p.variant_sort
+  p.variant_group_id, p.variant_label, p.variant_sort,
+  p.updated_at
 `;
 
 // Parse JSON-string columns (nutrition, description_blocks) into objects for
@@ -648,6 +649,17 @@ router.get('/api/retail/products/:id', (req, res) => {
   ).get(id)));
   if (!product) return res.status(404).json({ success: false, error: 'not_found' });
 
+  // Lazy hero image — strip the inline base64 (typically 150–300 KB per row)
+  // and replace it with a URL the mini-app fetches separately. The image
+  // route is `public, immutable, max-age=1y`, and we cache-bust via
+  // ?v=updated_at so editor saves invalidate the cached copy. Mini-app
+  // product.js already prefers `image_url || image_data`, so this is
+  // transparent for products that already had an external image_url set.
+  if (product.image_data && !product.image_url) {
+    product.image_url = `/api/retail/products/${id}/image?v=${encodeURIComponent(product.updated_at || '')}`;
+  }
+  product.image_data = null;
+
   // Photo gallery — extra images beyond the primary. Fetched here (detail
   // only) so the shop-list payload stays small. [0] mirrors image_data.
   const imgRow = tdb().prepare('SELECT images FROM products WHERE id = ?').get(id);
@@ -701,12 +713,18 @@ router.get('/api/retail/products/:id', (req, res) => {
   // app hides the switcher when there's 0–1 member.
   if (product.variant_group_id) {
     const nowMs = Date.now();
+    // Variant siblings: drop inline image_data (each base64 hero adds
+    // 150–300 KB to the JSON; 5 variants = ~1 MB wasted on a single
+    // product detail load). We only need a flag for whether the row has
+    // a stored image so we can emit a lazy URL; the real bytes stream
+    // via /api/retail/products/:id/image, same as the main hero above.
     product.variants = tdb().prepare(
       `SELECT p.id, p.variant_label, p.name_en, p.name_cn, p.sku, p.weight AS size,
               p.sell_price AS price,
               p.flash_price, p.flash_starts_at, p.flash_ends_at,
               p.flash_stock_limit, p.flash_sold,
-              p.image_data, p.image_url,
+              p.image_url, p.updated_at,
+              (p.image_data IS NOT NULL AND p.image_data != '') AS has_image,
               COALESCE(
                 (SELECT SUM(rss.physical_qty) FROM retail_store_stock rss
                    JOIN retail_stores rs ON rs.id = rss.store_id
@@ -716,7 +734,14 @@ router.get('/api/retail/products/:id', (req, res) => {
          FROM products p
         WHERE p.variant_group_id = ? AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
         ORDER BY COALESCE(p.variant_sort, 0), COALESCE(p.variant_label, p.name_en), p.id`
-    ).all(product.variant_group_id).map(v => flashsales.decorateProduct(v, nowMs));
+    ).all(product.variant_group_id).map(v => {
+      if (v.has_image && !v.image_url) {
+        v.image_url = `/api/retail/products/${v.id}/image?v=${encodeURIComponent(v.updated_at || '')}`;
+      }
+      delete v.has_image;
+      delete v.updated_at;
+      return flashsales.decorateProduct(v, nowMs);
+    });
   } else {
     product.variants = [];
   }
