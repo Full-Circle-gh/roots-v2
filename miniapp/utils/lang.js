@@ -22,6 +22,14 @@ function set(lang) {
   try { wx.setStorageSync(STORAGE_KEY, lang); } catch {}
   const app = getApp();
   if (app) app.globalData.lang = lang;
+  // Custom tab bar caches its labels per-language; nudge it so the
+  // bottom bar updates without waiting for the next tab switch.
+  try {
+    const pages = getCurrentPages();
+    const page = pages[pages.length - 1];
+    const tb = page && page.getTabBar && page.getTabBar();
+    if (tb && tb.refresh) tb.refresh();
+  } catch {}
 }
 
 // Pick the right side of a bilingual {en, cn} pair, with fallback to the

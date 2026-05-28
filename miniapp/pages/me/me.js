@@ -11,6 +11,8 @@ const TIER_NAME_CN = { seed: '种子', sprout: '幼苗', root: '根', tree: '大
 
 const COPY_EN = {
   welcomeKicker: 'WELCOME · 欢迎',
+  memberSince: 'MEMBER SINCE',
+  memberLvl: 'LVL',
   welcome: 'Hello, you.',
   bindCta: 'Tap to bind your WeChat profile',
   balance: 'Balance',
@@ -62,6 +64,8 @@ const COPY_EN = {
 
 const COPY_CN = {
   welcomeKicker: '欢迎 · WELCOME',
+  memberSince: '会员自',
+  memberLvl: '等级',
   welcome: '你好。',
   bindCta: '点击绑定微信资料',
   balance: '余额',

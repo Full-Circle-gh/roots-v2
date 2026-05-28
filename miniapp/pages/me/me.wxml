@@ -5,7 +5,7 @@
       <image wx:if="{{avatarPreview}}" class="hero-avatar" src="{{avatarPreview}}" mode="aspectFill"></image>
       <view class="hero-text">
         <view class="kicker f-toni">
-          <text wx:if="{{customer}}">MEMBER SINCE {{memberYear}} · LVL {{tierLevel}}</text>
+          <text wx:if="{{customer}}">{{copy.memberSince}} {{memberYear}} · {{copy.memberLvl}} {{tierLevel}}</text>
           <text wx:else>{{copy.welcomeKicker}}</text>
         </view>
         <view class="title f-bear">
