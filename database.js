@@ -1957,7 +1957,12 @@ try {
   const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_delivery_points_v1');
   if (!ran) {
     const ins = db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES (?, ?)");
-    // 100 RMB spent → 1 point. earnRate is "RMB per point" so floor(subtotal / earnRate).
+    // Earn rule: customers earn `earnPoints` points per `earnSpend` yuan
+    // spent. Default = 1 point per ¥100. Legacy single-sided key earnRate
+    // (= yuan per point) is kept for backward compatibility and is read
+    // as a fallback by pointsEarnedFor() when the new pair is absent.
+    ins.run('points.earnPoints',              JSON.stringify(1));
+    ins.run('points.earnSpend',               JSON.stringify(100));
     ins.run('points.earnRate',                JSON.stringify(100));
     // 100 points = ¥1 when redeeming. redeemRate is "points per ¥1".
     ins.run('points.redeemRate',              JSON.stringify(100));
@@ -1985,6 +1990,25 @@ try {
     console.log('[migration] seed_points_expiry_v1: backfilled points.expiryMonths default');
   }
 } catch (e) { console.error('[migration seed_points_expiry_v1]', e); }
+
+// Backfill the two-sided earn-rule keys (earnPoints + earnSpend) from the
+// legacy single-sided earnRate. Live behavior is preserved: if earnRate=X,
+// the new pair becomes (1 point per ¥X). INSERT OR IGNORE so manually-set
+// values are never overwritten.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_points_earn_pair_v1');
+  if (!ran) {
+    const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'points.earnRate'").get();
+    let legacy = 100;
+    try { legacy = Math.max(1, parseInt(JSON.parse(row?.value_json ?? '100'), 10) || 100); } catch {}
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES (?, ?)")
+      .run('points.earnPoints', JSON.stringify(1));
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES (?, ?)")
+      .run('points.earnSpend', JSON.stringify(legacy));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_points_earn_pair_v1');
+    console.log(`[migration] seed_points_earn_pair_v1: backfilled earnPoints=1 earnSpend=${legacy}`);
+  }
+} catch (e) { console.error('[migration seed_points_earn_pair_v1]', e); }
 
 // ─────────────────────────────────────────────────────────────────────────
 // DUAL-LOCATION RETAIL INVENTORY (Phase 1)

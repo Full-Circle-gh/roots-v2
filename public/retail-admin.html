@@ -5748,9 +5748,15 @@
       <h3 style="font-size: 13px; margin-bottom: 12px;">Points settings · 积分规则</h3>
       <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
         <div class="field" style="margin: 0;">
-          <label class="stacked">¥ per 1 earned point</label>
-          <input type="number" id="pts-earn-rate" placeholder="100" style="width: 140px;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">Lower = customers earn faster. · 数值越小,顾客积累积分越快。</div>
+          <label class="stacked">Earn rule · 积分获取规则</label>
+          <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding-top: 2px;">
+            <span>Earn</span>
+            <input type="number" id="pts-earn-points" placeholder="1" min="1" style="width: 70px;">
+            <span>point(s) per ¥</span>
+            <input type="number" id="pts-earn-spend" placeholder="100" min="1" style="width: 90px;">
+            <span>spent</span>
+          </div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">e.g. 1 point per ¥100 = 1% loyalty rate. · 例:每消费 ¥100 得 1 积分。</div>
         </div>
         <div class="field" style="margin: 0;">
           <label class="stacked">Points per ¥1 redeemed · 兑换 ¥1 所需积分</label>
@@ -13100,11 +13106,16 @@ async function loadTopup() {
   try {
     const cfg = await api('/api/retail-admin/config');
     const pts = cfg?.data?.points || {};
-    if ($('#pts-earn-rate'))      $('#pts-earn-rate').value     = pts.earnRate     ?? 100;
+    // Earn rule is two-sided: "Earn N pt per ¥M". Fall back to the legacy
+    // single-key earnRate (= yuan per point) if the pair isn't seeded yet.
+    const earnPoints = pts.earnPoints ?? 1;
+    const earnSpend  = pts.earnSpend  ?? pts.earnRate ?? 100;
+    if ($('#pts-earn-points'))    $('#pts-earn-points').value   = earnPoints;
+    if ($('#pts-earn-spend'))     $('#pts-earn-spend').value    = earnSpend;
     if ($('#pts-redeem-rate'))    $('#pts-redeem-rate').value   = pts.redeemRate   ?? 100;
     if ($('#pts-expiry-months'))  $('#pts-expiry-months').value = pts.expiryMonths ?? 12;
     if ($('#pts-cover-shipping')) $('#pts-cover-shipping').checked = !!pts.coverShipping;
-    if ($('#pts-ratemsg'))        $('#pts-ratemsg').textContent = '¥' + (pts.earnRate ?? 100);
+    if ($('#pts-ratemsg'))        $('#pts-ratemsg').textContent = '¥' + earnSpend;
   } catch {}
   await Promise.all([loadTopupPackages(), loadTopupTransactions()]);
 }
@@ -13162,15 +13173,22 @@ async function deleteTopupPackage(id, amt) {
 }
 
 async function savePointsSettings() {
+  const earnPoints = Math.max(1, parseInt($('#pts-earn-points').value, 10) || 1);
+  const earnSpend  = Math.max(1, parseInt($('#pts-earn-spend').value, 10) || 100);
   const body = {
-    'points.earnRate':      Math.max(1, parseInt($('#pts-earn-rate').value, 10) || 100),
+    'points.earnPoints':    earnPoints,
+    'points.earnSpend':     earnSpend,
+    // Keep the legacy single-sided key in sync so any old reader still works.
+    // earnRate = "¥ per point" = earnSpend / earnPoints (rounded up so we
+    // never under-charge ourselves on legacy fallback paths).
+    'points.earnRate':      Math.max(1, Math.ceil(earnSpend / earnPoints)),
     'points.redeemRate':    Math.max(1, parseInt($('#pts-redeem-rate').value, 10) || 100),
     'points.expiryMonths':  Math.max(0, parseInt($('#pts-expiry-months').value, 10) || 0),
     'points.coverShipping': !!$('#pts-cover-shipping')?.checked,
   };
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
-    if ($('#pts-ratemsg')) $('#pts-ratemsg').textContent = '¥' + body['points.earnRate'];
+    if ($('#pts-ratemsg')) $('#pts-ratemsg').textContent = '¥' + body['points.earnSpend'];
     toast('Saved · 已保存');
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
 }

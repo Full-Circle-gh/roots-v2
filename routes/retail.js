@@ -7896,11 +7896,18 @@ router.post('/api/retail/cart/price', requireRetailAuth, express.json(), (req, r
   res.json({ success: true, data: { subtotal: priced.subtotal, total_qty: priced.totalQty, lines: priced.lines || [] } });
 });
 
-// 100 RMB → 1 point (default). Configurable.
+// Earn rule: admin configures "earn N points per ¥M spent" via the two
+// config keys points.earnPoints and points.earnSpend (default 1 per ¥100).
+// Legacy single-sided points.earnRate (= yuan per point) is still read as
+// a fallback so old databases keep working until the backfill migration
+// stamps the new pair.
 function pointsEarnedFor(subtotal) {
-  const rate = Number(cfgValue('points.earnRate', 100));
-  if (!(rate > 0)) return 0;
-  return Math.floor(Number(subtotal || 0) / rate);
+  const pts   = Number(cfgValue('points.earnPoints', 1));
+  const spend = Number(cfgValue('points.earnSpend', null));
+  // Fall back to the legacy key on databases that haven't been migrated yet.
+  const denom = spend > 0 ? spend : Number(cfgValue('points.earnRate', 100));
+  if (!(pts > 0) || !(denom > 0)) return 0;
+  return Math.floor((Number(subtotal || 0) * pts) / denom);
 }
 
 // SQLite ISO datetime N months from now, or NULL if expiry disabled. Used
