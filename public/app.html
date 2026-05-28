@@ -492,6 +492,45 @@ textarea.ied-input { width: 100%; resize: vertical; min-height: 64px; padding: 6
 select.ied-input { padding: 2px 6px; }
 .ied-save-flash { background: rgba(109,179,63,0.18) !important; transition: background .8s ease; }
 
+/* ── Rich-text description editor (kitchen app) ───────────────────────────
+   Mirrors the mini-app backend (retail-admin.html) so descriptions edited on
+   either side stay as HTML w/ description_format='rich'. One shared toolbar
+   per card drives whichever contenteditable (.ka-rte) box has focus; we
+   track the live range from selectionchange and restore it before each
+   execCommand so the colour pickers / paragraph select don't collapse it.
+   styleWithCSS is forced ON in kaRte() so colours come out as <span style>
+   instead of legacy <font> tags the mini-app's <rich-text> would drop. */
+.ka-rte-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:2px; margin-bottom:8px; padding:5px 6px; border:1px solid var(--border); border-radius:8px; background:#fff; position:sticky; top:0; z-index:2; }
+.ka-rte-toolbar button { min-width:30px; height:30px; padding:0 8px; border:1px solid transparent; background:transparent; color:var(--dk); border-radius:6px; cursor:pointer; font:inherit; font-size:13px; line-height:1; display:inline-flex; align-items:center; justify-content:center; }
+.ka-rte-toolbar button:hover { background:var(--gray); border-color:var(--border); }
+.ka-rte-toolbar button:active { transform: translateY(1px); }
+.ka-rte-toolbar button svg { width:16px; height:16px; display:block; }
+.ka-rte-toolbar .ka-rte-clr { font-size:13px; font-weight:600; }
+.ka-rte-toolbar .ka-rte-clr sub { font-size:9px; }
+.ka-rte-sep { width:1px; align-self:stretch; margin:3px 4px; background:var(--border); }
+.ka-rte-sel { height:30px; border:1px solid var(--border); background:#fff; color:var(--dk); border-radius:6px; font:inherit; font-size:12px; padding:0 26px 0 8px; cursor:pointer; }
+.ka-rte-sel:hover { border-color:var(--lime); }
+.ka-rte-color { position:relative; display:inline-flex; flex-direction:column; align-items:center; justify-content:center; width:30px; height:30px; border:1px solid transparent; border-radius:6px; cursor:pointer; }
+.ka-rte-color:hover { background:var(--gray); border-color:var(--border); }
+.ka-rte-color > span { font-size:13px; font-weight:700; line-height:1; pointer-events:none; }
+.ka-rte-color > i { display:block; width:16px; height:3px; border-radius:2px; margin-top:1px; background:#e23b3b; pointer-events:none; }
+.ka-rte-color.ka-rte-hl > i { background:#ffe680; }
+.ka-rte-color input[type=color] { position:absolute; inset:0; width:100%; height:100%; opacity:0; border:none; padding:0; margin:0; cursor:pointer; }
+.ka-rte { min-height:120px; max-height:50vh; overflow:auto; resize:vertical; border:1.5px solid var(--border); border-radius:6px; padding:10px 12px; font:inherit; font-size:13px; line-height:1.55; color:var(--dk); background:#fff; outline:none; }
+.ka-rte:focus { border-color: var(--lime); box-shadow: 0 0 0 3px rgba(204,217,0,0.20); }
+.ka-rte[data-saving="1"] { border-color:#f59e0b; }
+.ka-rte h1, .ka-rte h2 { font-size:17px; margin:8px 0 4px; font-weight:700; }
+.ka-rte h3 { font-size:15px; margin:6px 0; font-weight:700; }
+.ka-rte ul, .ka-rte ol { padding-left:22px; margin:6px 0; }
+.ka-rte blockquote { margin:6px 0; padding:2px 0 2px 12px; border-left:3px solid var(--border); color:var(--muted); }
+.ka-rte hr { border:none; border-top:1px solid var(--border); margin:10px 0; }
+.ka-rte a { color: var(--lime-text); }
+.ka-rte img { max-width:100%; height:auto; }
+.ka-rte:empty::before { content: attr(data-placeholder); color: var(--muted); font-style: italic; pointer-events: none; }
+.ka-rte-wrap.ka-rte-fs { position:fixed; inset:0; z-index:9999; margin:0; padding:16px 20px 20px; background:var(--bg, #fff); overflow-y:auto; }
+.ka-rte-wrap.ka-rte-fs .ka-rte { max-height: calc(100vh - 220px); min-height: 50vh; }
+body.ka-rte-fs-lock { overflow: hidden; }
+
 /* ── Tables ── (zebra striping, breathing room, smoother hover) */
 .data-table { width:100%; border-collapse:collapse; }
 .data-table th { font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
@@ -11812,6 +11851,10 @@ async function pfQuickEditSize(variantId, currentDisplayedId) {
         <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Sell Price ¥ · 售价 *</label>
         <input id="qe_price" type="number" step="0.01" min="0" value="${parseFloat(v.sell_price||0).toFixed(2)}" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
       </div>
+      <div style="grid-column:span 2">
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Weight · 重量</label>
+        <input id="qe_weight" value="${esc(v.weight || '')}" placeholder="e.g. 500ml" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+      </div>
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">
       <button class="btn btn-secondary" onclick="closeOverlay('quickEditSizeOverlay')">Cancel 取消</button>
@@ -11829,6 +11872,7 @@ async function pfSaveQuickEditSize(variantId, currentDisplayedId) {
   const sku    = (document.getElementById('qe_sku')?.value || '').trim();
   const priceS = document.getElementById('qe_price')?.value || '';
   const price  = parseFloat(priceS);
+  const weight = (document.getElementById('qe_weight')?.value || '').trim();
   if (!sku) return toast('SKU required · 编号必填', 'error');
   if (priceS === '' || isNaN(price) || price < 0) return toast('Sell price required · 售价必填', 'error');
 
@@ -11836,7 +11880,7 @@ async function pfSaveQuickEditSize(variantId, currentDisplayedId) {
     const r = await fetch('/api/products/' + variantId, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ variant_label: label, sku, sell_price: price }),
+      body: JSON.stringify({ variant_label: label, sku, sell_price: price, weight }),
     });
     const d = await r.json();
     if (!d.success) throw new Error(d.error || 'save failed');
