@@ -4485,15 +4485,8 @@
               <option value="2">Female · 女</option>
             </select>
           </div>
-          <div class="field"><label class="stacked">Birthday · 生日</label><input type="date" id="cu-edit-birthday"></div>
-          <div class="field" style="margin-bottom: 0;"><label class="stacked">Tier · 等级</label>
-            <select id="cu-edit-tier">
-              <option value="seed">Seed · 种子</option>
-              <option value="sprout">Sprout · 嫩芽</option>
-              <option value="root">Root · 根系</option>
-              <option value="tree">Tree · 大树</option>
-            </select>
-          </div>
+          <div class="field" style="margin-bottom: 0;"><label class="stacked">Birthday · 生日</label><input type="date" id="cu-edit-birthday"></div>
+          <!-- Tier · 等级 is auto-derived from lifetime spend (thresholds in routes/retail.js → TIER_THRESHOLDS). The detail header already shows the current pill — no manual override here. -->
         </div>
         <div class="pu-editor-foot">
           <button class="btn" onclick="cuCloseEdit()">Cancel · 取消</button>
@@ -14554,7 +14547,7 @@ function cuOpenEdit() {
   $('#cu-edit-email').value    = c.email || '';
   $('#cu-edit-gender').value   = c.gender == null ? '' : String(c.gender);
   $('#cu-edit-birthday').value = c.birthday || '';
-  $('#cu-edit-tier').value     = c.tier_key || 'seed';
+  // Tier is auto-derived from lifetime_spend — no input here.
   $('#cu-edit-bg').classList.add('show');
 }
 function cuCloseEdit() { $('#cu-edit-bg').classList.remove('show'); }
@@ -14608,7 +14601,6 @@ async function cuSaveEdit() {
     email:    $('#cu-edit-email').value.trim(),
     gender:   $('#cu-edit-gender').value,
     birthday: $('#cu-edit-birthday').value,
-    tier_key: $('#cu-edit-tier').value,
   };
   try {
     await cuWriteRequest({

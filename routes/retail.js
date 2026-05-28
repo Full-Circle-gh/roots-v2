@@ -1474,6 +1474,37 @@ router.post('/api/retail/notifications/:id/read', requireRetailAuth, (req, res) 
   res.json({ success: true });
 });
 
+// Roots Club tier ladder. Mirror of TIERS in miniapp/pages/membership/membership.js
+// — keep these in sync. tier_key is auto-derived from lifetime_spend on every
+// award/reverse, and self-healed on every authenticated request as a safety net
+// (so historical mis-tiered customers fix themselves the next time they open
+// the app). No manual override path — admin tier dropdown was removed.
+const TIER_THRESHOLDS = [
+  { key: 'seed',   min: 0 },
+  { key: 'sprout', min: 500 },
+  { key: 'root',   min: 2000 },
+  { key: 'tree',   min: 5000 },
+];
+function tierFromSpend(spend) {
+  const s = Math.max(0, Number(spend) || 0);
+  let tier = TIER_THRESHOLDS[0].key;
+  for (const t of TIER_THRESHOLDS) {
+    if (s >= t.min) tier = t.key;
+  }
+  return tier;
+}
+// Idempotent — only writes when the stored tier differs from the derived one.
+// Returns the derived tier (post-reconcile), so callers can use it directly.
+function reconcileTier(customerId, spend, storedTier) {
+  const want = tierFromSpend(spend);
+  if (want !== storedTier) {
+    try {
+      tdb().prepare('UPDATE retail_customers SET tier_key = ? WHERE id = ?').run(want, customerId);
+    } catch (e) { console.warn('[reconcileTier]', e.message); }
+  }
+  return want;
+}
+
 // ─── requireRetailAuth middleware ────────────────────────────────────────
 function requireRetailAuth(req, res, next) {
   const h = req.headers.authorization || '';
@@ -1492,6 +1523,12 @@ function requireRetailAuth(req, res, next) {
     tdb().prepare('UPDATE retail_auth_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE token = ?').run(token);
   } catch {}
   req.customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(row.cid);
+  // Self-heal tier_key against lifetime_spend in case a past order skipped it
+  // (or it was edited externally). Idempotent — UPDATE only fires on mismatch.
+  if (req.customer) {
+    const want = reconcileTier(req.customer.id, req.customer.lifetime_spend, req.customer.tier_key);
+    if (want !== req.customer.tier_key) req.customer.tier_key = want;
+  }
   next();
 }
 
@@ -3948,13 +3985,9 @@ router.patch('/api/retail-admin/customers/:id', requireRetailAdmin, express.json
     }
     updates.push('birthday = ?'); params.push(v); changed.birthday = v;
   }
-  if (b.tier_key !== undefined) {
-    const v = String(b.tier_key || '').toLowerCase();
-    if (!['seed', 'sprout', 'root', 'tree'].includes(v)) {
-      return res.status(400).json({ success: false, error: 'bad_tier' });
-    }
-    updates.push('tier_key = ?'); params.push(v); changed.tier_key = v;
-  }
+  // tier_key is intentionally not editable here — it's auto-derived from
+  // lifetime_spend (see tierFromSpend / reconcileTier). Any tier_key in the
+  // payload is silently ignored so older admin builds don't error.
 
   if (!updates.length) return res.json({ success: true, changed: {} });
 
@@ -8049,7 +8082,12 @@ function awardOrderPoints(orderId) {
     tdb().prepare(
       'UPDATE retail_customers SET lifetime_spend = COALESCE(lifetime_spend, 0) + ?, points_balance = points_balance + ? WHERE id = ?'
     ).run(spend, pts, o.customer_id);
-    const after = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(o.customer_id).points_balance;
+    const fresh = tdb().prepare('SELECT lifetime_spend, points_balance, tier_key FROM retail_customers WHERE id = ?').get(o.customer_id);
+    // Auto-promote tier_key off the new lifetime_spend in the same transaction
+    // so leaderboards / admin lists / next reads all agree without waiting on
+    // the requireRetailAuth self-heal.
+    reconcileTier(o.customer_id, fresh.lifetime_spend, fresh.tier_key);
+    const after = fresh.points_balance;
     const note  = pts > 0
       ? `Order ${orderId} earned ${pts} pts`
       : `Order ${orderId} (subtotal ¥${spend.toFixed(2)}, below earn threshold)`;
@@ -8084,7 +8122,12 @@ function reverseOrderPoints(orderId) {
     tdb().prepare(
       'UPDATE retail_customers SET lifetime_spend = MAX(0, COALESCE(lifetime_spend, 0) - ?), points_balance = points_balance - ? WHERE id = ?'
     ).run(spend, earn.delta, earn.customer_id);
-    const after = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(earn.customer_id).points_balance;
+    const fresh = tdb().prepare('SELECT lifetime_spend, points_balance, tier_key FROM retail_customers WHERE id = ?').get(earn.customer_id);
+    // Refunds reduce lifetime_spend, so the tier may need to demote in the
+    // same transaction. Sticky-upward semantics would skip this — current
+    // policy is recompute always.
+    reconcileTier(earn.customer_id, fresh.lifetime_spend, fresh.tier_key);
+    const after = fresh.points_balance;
     tdb().prepare(
       `INSERT INTO retail_points_transactions
          (customer_id, delta, balance_after, source, order_id, note)
