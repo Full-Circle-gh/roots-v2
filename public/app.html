@@ -4455,6 +4455,15 @@ async function renderIngredients() {
   const res = await fetch('/api/ingredients');
   const data = await res.json();
   _ingredients = data.data || [];
+  // If the user navigated away while we were awaiting the fetch — or this
+  // is a stale auto-refresh tick re-registered by an earlier in-flight
+  // call — bail before painting main, otherwise we'd overwrite whatever
+  // page they're now on with the Items view (the reported "products page
+  // flickers / kicks me back to Items" bug).
+  if (window._currentModule && window._currentModule !== 'ingredients') {
+    if (_autoRefreshFn === renderIngredients) unregisterAutoRefresh();
+    return;
+  }
   // Anti-flicker: if neither data nor the active filter changed since the
   // last render AND the page is already painted, skip the rebuild entirely.
   // Auto-refresh polls every 30s — most polls hit this fast path.
@@ -11605,6 +11614,13 @@ async function renderPurchases() {
   const listRes = await fetch('/api/purchases' + (params.toString() ? '?' + params.toString() : '')).then(r => r.json()).catch(() => ({}));
   _purchases = listRes.data || [];
 
+  // Bail if the user navigated away during the fetch — same race that
+  // was repainting main with Items on top of other pages (see notes in
+  // renderIngredients).
+  if (window._currentModule && window._currentModule !== 'purchases') {
+    if (_autoRefreshFn === renderPurchases) unregisterAutoRefresh();
+    return;
+  }
   // Anti-flicker: skip the full rebuild when nothing visible has changed.
   const fpPO = (_poMonth||'') + '||' + (_poStatusFilter||'') + '||' + _fpList(_purchases);
   if (_renderShouldSkip('purchases', fpPO, 'poBody')) return;
