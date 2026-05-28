@@ -783,8 +783,8 @@
   font-family: var(--f-bear);
   font-weight: 500;
   font-size: calc(40rpx * var(--font-scale));
-  line-height: 1.05;
-  margin-top: 4rpx;
+  line-height: 1.15;
+  margin-top: 8rpx;
 }
 .fs-clock {
   display: flex;
@@ -941,8 +941,8 @@
 .fh-title {
   font-family: var(--f-bear); font-weight: 500;
   font-size: calc(44rpx * var(--font-scale));
-  line-height: 1.1;
-  margin-top: 8rpx;
+  line-height: 1.15;
+  margin-top: 10rpx;
 }
 .fh-ends {
   font-family: var(--f-toni); font-weight: 700;
@@ -1249,7 +1249,7 @@
   font-weight: 500;
   font-size: calc(34rpx * var(--font-scale));
   line-height: 1.15;
-  margin-top: 6rpx;
+  margin-top: 10rpx;
 }
 .st-row {
   margin-top: 18rpx;
@@ -1332,7 +1332,7 @@
 .voting-blk .vb-title {
   font-family: var(--f-bear); font-weight: 500;
   font-size: calc(34rpx * var(--font-scale));
-  line-height: 1.1; margin-top: 6rpx;
+  line-height: 1.15; margin-top: 10rpx;
 }
 .voting-blk .vb-q {
   font-family: var(--f-bear); font-weight: 500;
@@ -1539,7 +1539,8 @@
   font-family: var(--f-bear);
   font-weight: 500;
   font-size: calc(40rpx * var(--font-scale));
-  line-height: 1;
+  line-height: 1.15;
+  margin-top: 8rpx;
   letter-spacing: -0.01em;
   margin-top: 6rpx;
 }
@@ -1895,8 +1896,10 @@
 .gr-headline {
   font-family: var(--f-bear);
   font-size: calc(64rpx * var(--font-scale));
-  line-height: 0.95;
-  margin-top: 12rpx;
+  /* line-height ≥1.15 keeps CN characters from overflowing into the
+     kicker above; ditto for every f-bear headline below. */
+  line-height: 1.15;
+  margin-top: 16rpx;
 }
 .gr-points {
   margin-top: 14rpx;
@@ -1914,8 +1917,8 @@
 }
 
 /* Greeting — view variants */
-.gr-headline-sm { font-size: calc(38rpx * var(--font-scale)); line-height: 1.1; margin-top: 6rpx; }
-.gr-headline-lg { font-size: calc(88rpx * var(--font-scale)); line-height: 0.94; }
+.gr-headline-sm { font-size: calc(38rpx * var(--font-scale)); line-height: 1.15; margin-top: 10rpx; }
+.gr-headline-lg { font-size: calc(88rpx * var(--font-scale)); line-height: 1.08; }
 
 /* Banner = full-bleed colour band: drop the side inset so the field
    stretches edge-to-edge. Inner copy keeps its own horizontal padding. */
@@ -1994,8 +1997,8 @@
 .kit-title {
   font-family: var(--f-bear);
   font-size: calc(40rpx * var(--font-scale));
-  line-height: 1.05;
-  margin-top: 6rpx;
+  line-height: 1.15;
+  margin-top: 10rpx;
 }
 .kit-status {
   display: flex;
@@ -2068,8 +2071,8 @@
 .rcp-headline {
   font-family: var(--f-bear);
   font-size: calc(56rpx * var(--font-scale));
-  line-height: 1.02;
-  margin-top: 12rpx;
+  line-height: 1.15;
+  margin-top: 16rpx;
 }
 .rcp-meta {
   margin-top: 8rpx;
@@ -2160,7 +2163,7 @@
   color: var(--olive);
 }
 .bun-pills-scroll {
-  margin: 14rpx -10rpx 0;
+  margin: 20rpx -10rpx 0;
   white-space: nowrap;
 }
 .bun-pills {
@@ -2194,14 +2197,14 @@
 .bun-title {
   font-family: var(--f-bear);
   font-size: calc(48rpx * var(--font-scale));
-  line-height: 1.0;
-  margin-top: 8rpx;
+  line-height: 1.15;
+  margin-top: 12rpx;
 }
 .bun-sub {
   font-family: var(--f-aleo);
   font-size: calc(24rpx * var(--font-scale));
   color: var(--olive);
-  margin-top: 6rpx;
+  margin-top: 10rpx;
 }
 .bun-empty {
   margin-top: 16rpx;
@@ -2314,10 +2317,10 @@
   color: var(--olive);
 }
 .wc-title {
-  margin-top: 8rpx;
+  margin-top: 12rpx;
   font-family: var(--f-bear);
   font-size: calc(44rpx * var(--font-scale));
-  line-height: 1.05;
+  line-height: 1.15;
 }
 .wc-sub {
   margin-top: 10rpx;
@@ -2439,8 +2442,8 @@
 .fav-title {
   font-family: var(--f-bear);
   font-size: calc(52rpx * var(--font-scale));
-  line-height: 0.95;
-  margin-top: 8rpx;
+  line-height: 1.15;
+  margin-top: 12rpx;
 }
 .fav-see-all {
   font-family: var(--f-toni);
