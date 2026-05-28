@@ -15308,19 +15308,7 @@ const PA_PAGE_PRESETS = [
 ];
 
 document.querySelector('[data-tab="products"]').addEventListener('click', () => {
-  if (!PA_LOADED) {
-    PA_LOADED = true;
-    paLoad();
-    // Restore the operator's preferred editor size (split vs editor-only).
-    // The class is applied to the .pa-split container; pdToggleFullscreen also
-    // syncs the ⤢/⤡ button label so users see the right affordance.
-    try {
-      const wantFull = localStorage.getItem('pd-editor-full') === '1';
-      const split = document.getElementById('pa-split');
-      if (split && wantFull) split.classList.add('pa-split-editonly');
-      pdSyncFullscreenBtn(!!wantFull);
-    } catch (e) {}
-  }
+  if (!PA_LOADED) { PA_LOADED = true; paLoad(); }
 });
 
 document.getElementById('pa-search').addEventListener('input', _paDebouncedRender);
@@ -15709,7 +15697,6 @@ function pdToggleFullscreen() {
   if (!split) return;
   const on = split.classList.toggle('pa-split-editonly');
   pdSyncFullscreenBtn(on);
-  try { localStorage.setItem('pd-editor-full', on ? '1' : '0'); } catch (e) {}
 }
 // Currently-selected product id (the one loaded in the docked editor). Used to
 // paint the row highlight and to power Discard / post-save reload.
