@@ -2947,11 +2947,20 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
        ) WHERE rn <= 3
          ORDER BY order_id, rn`
     ).all(...ids);
+    // Rewrite inline data: URIs to the public image endpoint — mirrors the
+    // shop-list fix. Inline base64 thumbs for ~50 orders × 3 items each can
+    // balloon this payload past a few MB and the mini-app's 12s timeout
+    // fires, leaving the page on its empty state.
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
     for (const p of previews) {
       const r = byId.get(p.order_id);
-      if (r) r.items_preview.push({
+      if (!r) continue;
+      const img = (typeof p.image_url === 'string' && /^data:/i.test(p.image_url))
+        ? `${baseUrl}/api/retail/products/${p.product_id}/image`
+        : p.image_url;
+      r.items_preview.push({
         product_id: p.product_id, name_en: p.name_en, name_cn: p.name_cn,
-        qty: p.qty, image_url: p.image_url,
+        qty: p.qty, image_url: img,
       });
     }
     const counts = tdb().prepare(
