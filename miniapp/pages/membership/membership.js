@@ -1,12 +1,16 @@
 // Membership — Roots Club tier page. Shows the customer's current tier,
 // progress to the next tier (lifetime_spend / next_threshold), perks per
-// tier. Tier definitions are local for now (per design handoff §07);
-// later they could come from storefront_config.
+// tier. Tier definitions live in storefront_config (`roots_club.tiers`),
+// editable from /retail-admin → Top-up & points → Membership tiers. We
+// keep a local fallback so the page still renders if /api/retail/config
+// is unreachable on first paint.
 
 const api    = require('../../utils/api');
 const config = require('../../utils/config');
 
-const TIERS = [
+// Fallback ladder — mirrors DEFAULT_ROOTS_CLUB_TIERS in routes/retail.js. On a
+// healthy install the config blob overrides this on every onShow().
+const FALLBACK_TIERS = [
   {
     key: 'seed',  name_en: 'Seed',    name_cn: '种子',
     color: 'corn',   threshold: 0,
@@ -33,10 +37,30 @@ const TIERS = [
   },
 ];
 
+// Normalise whatever the config blob gave us — coerce numbers, drop malformed
+// rows, sort by threshold so the rendering math is stable. Editor already
+// validates key uniqueness + lowest=0, but we never trust the wire.
+function normalizeTiers(list) {
+  const arr = Array.isArray(list) ? list : [];
+  const cleaned = arr
+    .map(t => ({
+      key:       String(t?.key || '').trim(),
+      name_en:   String(t?.name_en || '').trim(),
+      name_cn:   String(t?.name_cn || '').trim(),
+      color:     String(t?.color || 'corn'),
+      threshold: Math.max(0, Number(t?.threshold) || 0),
+      perks_en:  Array.isArray(t?.perks_en) ? t.perks_en.filter(s => typeof s === 'string') : [],
+      perks_cn:  Array.isArray(t?.perks_cn) ? t.perks_cn.filter(s => typeof s === 'string') : [],
+    }))
+    .filter(t => t.key);
+  cleaned.sort((a, b) => a.threshold - b.threshold);
+  return cleaned.length ? cleaned : FALLBACK_TIERS;
+}
+
 Page({
   data: {
     customer: null,
-    currentTier: TIERS[0],
+    currentTier: FALLBACK_TIERS[0],
     nextTier: null,
     spend: 0,
     spendDisplay: '¥0',
@@ -93,25 +117,40 @@ Page({
     if (!app.globalData.token) {
       try { await app.silentLogin(); } catch {}
     }
+    // Load config + customer in parallel — both are needed before render, and
+    // the customer endpoint already self-heals tier_key against the ladder.
     let customer = null;
+    let cfg = null;
     try {
-      customer = await api.get('/api/retail/customer');
-    } catch (e) {
-      console.warn('[membership] customer load failed:', e.message);
-    }
+      [cfg, customer] = await Promise.all([
+        config.load().catch(() => null),
+        api.get('/api/retail/customer').catch((e) => {
+          console.warn('[membership] customer load failed:', e.message);
+          return null;
+        }),
+      ]);
+    } catch {}
+
+    const TIERS = normalizeTiers(cfg?.roots_club?.tiers);
+    const topTier = TIERS[TIERS.length - 1];
 
     const L = this.data.lang;
     const spend = Number(customer?.lifetime_spend) || 0;
-    const currentKey = customer?.tier_key || 'seed';
-    const currentIdx = Math.max(0, TIERS.findIndex(t => t.key === currentKey));
+    const currentKey = customer?.tier_key || TIERS[0].key;
+    let currentIdx = TIERS.findIndex(t => t.key === currentKey);
+    if (currentIdx < 0) currentIdx = 0;
     const currentTier = TIERS[currentIdx];
     const nextTier = TIERS[currentIdx + 1] || null;
 
     let progressPct = 100;
-    let progressLabel = (L === 'cn' ? '最高等级 · 大树' : 'Top tier · Tree');
+    let progressLabel = (L === 'cn'
+      ? '最高等级 · ' + (topTier?.name_cn || topTier?.name_en || '')
+      : 'Top tier · ' + (topTier?.name_en || topTier?.name_cn || ''));
     if (nextTier) {
       const span = nextTier.threshold - currentTier.threshold;
-      progressPct = Math.max(0, Math.min(100, ((spend - currentTier.threshold) / span) * 100));
+      progressPct = span > 0
+        ? Math.max(0, Math.min(100, ((spend - currentTier.threshold) / span) * 100))
+        : 100;
       const left = nextTier.threshold - spend;
       progressLabel = (L === 'cn' ? '还差 ¥' : '¥') + Math.max(0, Math.floor(left)) + (L === 'cn' ? ' 升到' : ' to ') + (L === 'cn' ? nextTier.name_cn : nextTier.name_en);
     }
@@ -127,7 +166,6 @@ Page({
 
     let leaderboardEnabled = false;
     try {
-      const cfg = await config.load();
       leaderboardEnabled = !!(cfg && cfg.leaderboard && cfg.leaderboard.config && cfg.leaderboard.config.enabled);
     } catch {}
 

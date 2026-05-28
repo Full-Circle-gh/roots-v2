@@ -177,6 +177,13 @@ router.get('/api/retail/config', (req, res) => {
     if (!Array.isArray(cfg.reviews.tags) || !cfg.reviews.tags.length) {
       cfg.reviews.tags = DEFAULT_REVIEW_TAGS;
     }
+    // Same surface-with-defaults treatment for the Roots Club tier ladder.
+    // Mini-app reads cfg.roots_club.tiers; we fall back to DEFAULT_ROOTS_CLUB_TIERS
+    // so the Membership page always renders even before the admin saves.
+    cfg.roots_club = cfg.roots_club || {};
+    if (!Array.isArray(cfg.roots_club.tiers) || !cfg.roots_club.tiers.length) {
+      cfg.roots_club.tiers = DEFAULT_ROOTS_CLUB_TIERS;
+    }
     res.set('Cache-Control', 'public, max-age=60');
     res.json({ success: true, data: cfg });
   } catch (e) {
@@ -1474,22 +1481,72 @@ router.post('/api/retail/notifications/:id/read', requireRetailAuth, (req, res) 
   res.json({ success: true });
 });
 
-// Roots Club tier ladder. Mirror of TIERS in miniapp/pages/membership/membership.js
-// — keep these in sync. tier_key is auto-derived from lifetime_spend on every
-// award/reverse, and self-healed on every authenticated request as a safety net
-// (so historical mis-tiered customers fix themselves the next time they open
-// the app). No manual override path — admin tier dropdown was removed.
-const TIER_THRESHOLDS = [
-  { key: 'seed',   min: 0 },
-  { key: 'sprout', min: 500 },
-  { key: 'root',   min: 2000 },
-  { key: 'tree',   min: 5000 },
+// Roots Club tier ladder. Editable in /retail-admin → Points/Loyalty; persisted
+// in storefront_config under `roots_club.tiers`. The mini-app reads the same
+// blob off /api/retail/config, so backend + frontend never drift. These defaults
+// seed the editor on a fresh install and are the fallback if the config row is
+// missing or malformed. tier_key is auto-derived from lifetime_spend on every
+// award/reverse + self-healed in requireRetailAuth (no manual override).
+const DEFAULT_ROOTS_CLUB_TIERS = [
+  {
+    key: 'seed',   name_en: 'Seed',    name_cn: '种子',
+    color: 'corn',   threshold: 0,
+    perks_en: ['5% off your first order', 'Member newsletter'],
+    perks_cn: ['首单 5% 折扣', '会员通讯'],
+  },
+  {
+    key: 'sprout', name_en: 'Sprout',  name_cn: '幼苗',
+    color: 'pea',    threshold: 500,
+    perks_en: ['10% off all orders', 'Early access to drops', 'Free shipping ¥299+'],
+    perks_cn: ['全场 10% 折扣', '新品优先购', '满 ¥299 包邮'],
+  },
+  {
+    key: 'root',   name_en: 'Root',    name_cn: '根',
+    color: 'forest', threshold: 2000,
+    perks_en: ['15% off all orders', 'Early access to drops', 'Free shipping ¥199+', 'Birthday gift'],
+    perks_cn: ['全场 15% 折扣', '新品优先购', '满 ¥199 包邮', '生日礼物'],
+  },
+  {
+    key: 'tree',   name_en: 'Tree',    name_cn: '大树',
+    color: 'ink',    threshold: 5000,
+    perks_en: ['20% off all orders', 'Early access to drops', 'Free shipping (no minimum)', 'Birthday gift', 'Exclusive tasting events'],
+    perks_cn: ['全场 20% 折扣', '新品优先购', '免邮 (无门槛)', '生日礼物', '专属品鉴活动'],
+  },
 ];
+// Cheap in-memory cache so we don't hit storefront_config + reparse on every
+// authenticated request. Invalidated by storefront_config.updated_at — any
+// admin save bumps the timestamp via the same UPSERT path.
+let _tierLadderCache = null;
+let _tierLadderVer = -1;
+function loadTierLadder() {
+  let ver = 0;
+  try {
+    const t = tdb().prepare("SELECT COALESCE(strftime('%s', updated_at), '0') AS t FROM storefront_config WHERE key = 'roots_club.tiers'").get();
+    ver = Number(t?.t || 0);
+  } catch {}
+  if (_tierLadderCache && ver === _tierLadderVer) return _tierLadderCache;
+  let ladder = null;
+  try {
+    const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'roots_club.tiers'").get();
+    if (row && row.value_json) {
+      const parsed = JSON.parse(row.value_json);
+      if (Array.isArray(parsed) && parsed.length && parsed.every(t => t && typeof t.key === 'string' && Number.isFinite(Number(t.threshold)))) {
+        ladder = parsed;
+      }
+    }
+  } catch {}
+  _tierLadderCache = (ladder && ladder.length) ? ladder : DEFAULT_ROOTS_CLUB_TIERS;
+  _tierLadderVer = ver;
+  return _tierLadderCache;
+}
 function tierFromSpend(spend) {
   const s = Math.max(0, Number(spend) || 0);
-  let tier = TIER_THRESHOLDS[0].key;
-  for (const t of TIER_THRESHOLDS) {
-    if (s >= t.min) tier = t.key;
+  // Walk the ladder in ascending-threshold order so out-of-order config rows
+  // (operator edits) still derive correctly. Lowest tier is the baseline.
+  const sorted = loadTierLadder().slice().sort((a, b) => (Number(a.threshold) || 0) - (Number(b.threshold) || 0));
+  let tier = sorted[0]?.key || 'seed';
+  for (const t of sorted) {
+    if (s >= (Number(t.threshold) || 0)) tier = t.key;
   }
   return tier;
 }

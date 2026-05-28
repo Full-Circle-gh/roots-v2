@@ -5777,6 +5777,31 @@
     </div>
 
     <div class="card" style="margin-bottom: var(--s4);">
+      <h3 style="font-size: 13px; margin-bottom: 6px;">Membership tiers · 会员等级</h3>
+      <div class="muted" style="font-size: 12px; margin-bottom: 12px; line-height: 1.5;">
+        The Roots Club ladder shown on the mini-app Membership page. Threshold = minimum lifetime spend (¥) to reach the tier; the lowest threshold should be 0. Perks are one bullet per line. Tiers are sorted by threshold automatically. · 小程序“会员”页展示的等级体系。门槛 = 累计消费(¥)下限,最低需为 0;权益每行一条。保存后按门槛自动排序。
+      </div>
+      <table id="rctier-table" style="width: 100%; border-collapse: collapse; font-size: 12px;">
+        <thead>
+          <tr style="text-align: left;">
+            <th style="padding: 6px 8px; width: 90px;">Key · 标识</th>
+            <th style="padding: 6px 8px;">Name EN</th>
+            <th style="padding: 6px 8px;">Name CN · 中文名</th>
+            <th style="padding: 6px 8px; width: 110px;">Threshold ¥ · 门槛</th>
+            <th style="padding: 6px 8px;">Perks EN (one per line)</th>
+            <th style="padding: 6px 8px;">Perks CN · 权益(每行一条)</th>
+            <th style="padding: 6px 8px; width: 60px;"></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div style="display: flex; gap: 8px; margin-top: 12px;">
+        <button class="btn" onclick="addRctierRow()">+ Add tier · 添加等级</button>
+        <button class="btn btn-primary" onclick="saveRctiers()" style="margin-left: auto;">Save tiers · 保存等级</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: var(--s4);">
       <h3 style="font-size: 13px; margin-bottom: 12px;">New top-up package · 新建充值套餐</h3>
       <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
         <div class="field" style="margin: 0;">
@@ -13100,7 +13125,7 @@ async function loadTopup() {
     if ($('#pts-cover-shipping')) $('#pts-cover-shipping').checked = !!pts.coverShipping;
     if ($('#pts-ratemsg'))        $('#pts-ratemsg').textContent = '¥' + earnSpend;
   } catch {}
-  await Promise.all([loadTopupPackages(), loadTopupTransactions()]);
+  await Promise.all([loadTopupPackages(), loadTopupTransactions(), loadRctiers()]);
 }
 
 async function loadTopupPackages() {
@@ -13177,6 +13202,106 @@ async function savePointsSettings() {
     await api('/api/retail-admin/config', { method: 'PUT', body });
     if ($('#pts-ratemsg')) $('#pts-ratemsg').textContent = '¥' + body['points.earnSpend'];
     toast('Saved · 已保存');
+  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
+}
+
+// ── Membership tiers editor (Roots Club ladder) ─────────────────────────────
+// Same edit-buffer pattern as the Review tags editor. RCTIER_STATE is the
+// staged copy operators mutate; saveRctiers() writes the lot in one PUT to
+// /api/retail-admin/config under `roots_club.tiers`. Backend + mini-app both
+// read this same blob; defaults seed the editor on first load.
+const RCTIER_DEFAULTS = [
+  { key: 'seed',   name_en: 'Seed',   name_cn: '种子', threshold: 0,    perks_en: ['5% off your first order', 'Member newsletter'],                                              perks_cn: ['首单 5% 折扣', '会员通讯'] },
+  { key: 'sprout', name_en: 'Sprout', name_cn: '幼苗', threshold: 500,  perks_en: ['10% off all orders', 'Early access to drops', 'Free shipping ¥299+'],                         perks_cn: ['全场 10% 折扣', '新品优先购', '满 ¥299 包邮'] },
+  { key: 'root',   name_en: 'Root',   name_cn: '根',   threshold: 2000, perks_en: ['15% off all orders', 'Early access to drops', 'Free shipping ¥199+', 'Birthday gift'],         perks_cn: ['全场 15% 折扣', '新品优先购', '满 ¥199 包邮', '生日礼物'] },
+  { key: 'tree',   name_en: 'Tree',   name_cn: '大树', threshold: 5000, perks_en: ['20% off all orders', 'Early access to drops', 'Free shipping (no minimum)', 'Birthday gift', 'Exclusive tasting events'], perks_cn: ['全场 20% 折扣', '新品优先购', '免邮 (无门槛)', '生日礼物', '专属品鉴活动'] },
+];
+let RCTIER_STATE = [];
+async function loadRctiers() {
+  try {
+    const r = await api('/api/retail-admin/config');
+    const list = r?.data?.roots_club?.tiers;
+    RCTIER_STATE = (Array.isArray(list) && list.length)
+      ? list.map(t => ({
+          key: String(t.key || '').trim(),
+          name_en: String(t.name_en || '').trim(),
+          name_cn: String(t.name_cn || '').trim(),
+          threshold: Math.max(0, Number(t.threshold) || 0),
+          perks_en: Array.isArray(t.perks_en) ? t.perks_en.slice() : [],
+          perks_cn: Array.isArray(t.perks_cn) ? t.perks_cn.slice() : [],
+        }))
+      : RCTIER_DEFAULTS.map(t => ({ ...t, perks_en: t.perks_en.slice(), perks_cn: t.perks_cn.slice() }));
+  } catch {
+    RCTIER_STATE = RCTIER_DEFAULTS.map(t => ({ ...t, perks_en: t.perks_en.slice(), perks_cn: t.perks_cn.slice() }));
+  }
+  renderRctiersTable();
+}
+function renderRctiersTable() {
+  const tbody = document.querySelector('#rctier-table tbody');
+  if (!tbody) return;
+  if (!RCTIER_STATE.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="muted" style="padding: 8px;">No tiers — click "+ Add tier" to create one.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = RCTIER_STATE.map((t, i) => `
+    <tr>
+      <td style="padding: 4px 8px;"><input type="text" value="${escapeAttr(t.key)}" oninput="updateRctier(${i},'key',this.value)" style="width: 100%;" placeholder="seed"></td>
+      <td style="padding: 4px 8px;"><input type="text" value="${escapeAttr(t.name_en)}" oninput="updateRctier(${i},'name_en',this.value)" style="width: 100%;"></td>
+      <td style="padding: 4px 8px;"><input type="text" value="${escapeAttr(t.name_cn)}" oninput="updateRctier(${i},'name_cn',this.value)" style="width: 100%;"></td>
+      <td style="padding: 4px 8px;"><input type="number" value="${t.threshold}" min="0" step="1" oninput="updateRctier(${i},'threshold',this.value)" style="width: 100%;"></td>
+      <td style="padding: 4px 8px;"><textarea rows="3" oninput="updateRctier(${i},'perks_en',this.value)" style="width: 100%; resize: vertical; font: inherit;">${escapeHtml((t.perks_en || []).join('\n'))}</textarea></td>
+      <td style="padding: 4px 8px;"><textarea rows="3" oninput="updateRctier(${i},'perks_cn',this.value)" style="width: 100%; resize: vertical; font: inherit;">${escapeHtml((t.perks_cn || []).join('\n'))}</textarea></td>
+      <td style="padding: 4px 8px;"><button class="btn" onclick="removeRctier(${i})">×</button></td>
+    </tr>
+  `).join('');
+}
+function updateRctier(i, field, value) {
+  if (!RCTIER_STATE[i]) return;
+  if (field === 'threshold') {
+    RCTIER_STATE[i].threshold = Math.max(0, parseInt(value, 10) || 0);
+  } else if (field === 'perks_en' || field === 'perks_cn') {
+    RCTIER_STATE[i][field] = String(value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  } else if (field === 'key') {
+    RCTIER_STATE[i].key = String(value || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  } else {
+    RCTIER_STATE[i][field] = String(value || '');
+  }
+}
+function addRctierRow() {
+  // New row defaults to the next ¥1000 jump above the current top tier so the
+  // ladder stays monotonic without the operator doing the math.
+  const top = RCTIER_STATE.reduce((m, t) => Math.max(m, Number(t.threshold) || 0), 0);
+  RCTIER_STATE.push({
+    key: '', name_en: '', name_cn: '', threshold: top + 1000,
+    perks_en: [], perks_cn: [],
+  });
+  renderRctiersTable();
+}
+function removeRctier(i) {
+  const t = RCTIER_STATE[i];
+  if (!t) return;
+  if (!confirm(`Remove tier "${t.name_en || t.key || '(unnamed)'}"? · 删除等级?`)) return;
+  RCTIER_STATE.splice(i, 1);
+  renderRctiersTable();
+}
+async function saveRctiers() {
+  // Validate: every row needs a unique key, at least one row, and the lowest
+  // threshold must be 0 (otherwise low-spend customers have no tier).
+  const keys = new Set();
+  for (const t of RCTIER_STATE) {
+    if (!t.key) return toast('Every tier needs a key (e.g. seed) · 每个等级需要一个标识', 'err');
+    if (keys.has(t.key)) return toast(`Duplicate tier key "${t.key}" · 等级标识重复`, 'err');
+    keys.add(t.key);
+  }
+  if (!RCTIER_STATE.length) return toast('At least one tier is required · 至少需要一个等级', 'err');
+  const lowest = RCTIER_STATE.reduce((m, t) => Math.min(m, Number(t.threshold) || 0), Infinity);
+  if (lowest !== 0) return toast('The lowest tier threshold must be 0 · 最低等级门槛必须为 0', 'err');
+  // Sort by threshold ascending so storage matches what customers see.
+  const sorted = RCTIER_STATE.slice().sort((a, b) => (Number(a.threshold) || 0) - (Number(b.threshold) || 0));
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body: { 'roots_club.tiers': sorted } });
+    toast('Tiers saved · 已保存');
+    await loadRctiers();   // re-read so the table reflects the canonical sorted form
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
 }
 
