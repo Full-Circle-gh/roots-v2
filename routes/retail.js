@@ -291,6 +291,15 @@ function sanitizeBundle(input) {
   const voucher = (v.voucher ? String(v.voucher) : '').trim();
   return JSON.stringify({ title_en: title_en || null, title_cn: title_cn || null, ids, price: price || 0, voucher: voucher || null });
 }
+// Product "badge" — the single NEW/POP/SALE/HOT chip the shop card shows. It
+// lives in the products.tags column (the only consumer is pickBadge() in the
+// mini-app shop page). The editor offers a fixed dropdown, so we allow-list the
+// keyword and store it lowercase; anything unrecognised clears the badge.
+const PRODUCT_BADGES = ['new', 'pop', 'sale', 'hot'];
+function sanitizeProductBadge(v) {
+  const t = String(v == null ? '' : v).trim().toLowerCase();
+  return PRODUCT_BADGES.includes(t) ? t : null;
+}
 function resolveBundle(jsonStr) {
   if (typeof jsonStr !== 'string' || !jsonStr.trim()) return null;
   let b; try { b = JSON.parse(jsonStr); } catch { return null; }
@@ -4989,6 +4998,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     sets.push('image_data = ?'); params.push(arr.length ? arr[0] : null);
   }
   if ('bundle' in body) { sets.push('bundle = ?'); params.push(sanitizeBundle(body.bundle)); }
+  if ('tags' in body) { sets.push('tags = ?'); params.push(sanitizeProductBadge(body.tags)); }
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
 
   sets.push('updated_at = CURRENT_TIMESTAMP');
@@ -5008,7 +5018,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
-            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle,
+            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM products WHERE id = ?`
   ).get(id);
@@ -5052,8 +5062,8 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
     info = tdb().prepare(
       `INSERT INTO products
          (name_en, name_cn, sku, category, weight, sell_price, compare_at_price, stock_qty, ship_modes,
-          description_en, description_cn, description_format, image_data, images, is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+          description_en, description_cn, description_format, image_data, images, tags, is_published, is_active, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       name_en || name_cn, name_cn || null,
       (b.sku || '').trim() || null, (b.category || '').trim() || null, (b.weight || '').trim() || null,
@@ -5062,7 +5072,8 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
       Math.max(0, parseInt(b.stock_qty, 10) || 0),
       ship.length ? ship.join(',') : 'air,land',
       descEn, descCn, descFormat,
-      primaryImg, gallery.length ? JSON.stringify(gallery) : null, b.is_published ? 1 : 0
+      primaryImg, gallery.length ? JSON.stringify(gallery) : null, sanitizeProductBadge(b.tags),
+      b.is_published ? 1 : 0
     );
   } catch (e) {
     if (String(e.message || '').includes('UNIQUE')) return res.status(409).json({ success: false, error: 'sku_taken' });
@@ -5073,7 +5084,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
-            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
+            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, tags,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM products WHERE id = ?`
   ).get(id);
@@ -5367,7 +5378,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     is_published, sort_order, updated_at,
                     description_en, description_cn, description_format,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
-                    nutrition, bundle,
+                    nutrition, bundle, tags,
                     variant_group_id, variant_label,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
                     (image_data IS NOT NULL AND image_data != '') AS has_image_data,

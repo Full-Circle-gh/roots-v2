@@ -4751,6 +4751,15 @@
             <section class="pd-card">
               <div class="pd-card-h">Organization · 分类</div>
               <div class="field"><label class="stacked">Category · 分类</label><input type="text" id="pd-category" list="pd-cat-list" placeholder="e.g. Drinks · 例如 饮品"><datalist id="pd-cat-list"></datalist></div>
+              <div class="field"><label class="stacked">Badge · 标签 <span class="muted" style="font-weight:400;">(shop card chip)</span></label>
+                <select id="pd-badge">
+                  <option value="">None · 无</option>
+                  <option value="new">NEW · 新品</option>
+                  <option value="pop">POP · 热门</option>
+                  <option value="sale">SALE · 特价</option>
+                  <option value="hot">HOT · 推荐</option>
+                </select>
+              </div>
               <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
               <div class="field">
                 <label class="stacked">Shipping · 配送方式</label>
@@ -7187,7 +7196,7 @@
                     <span class="chip lit">HOT</span>
                   </div>
                   <div class="helper" style="margin-left: 24px; margin-top: -4px;">
-                    Badge chips are derived from each product's <code>tags</code> field on the Products page.
+                    Set a product's badge with the <b>Badge</b> dropdown in its editor (Products page).
                   </div>
 
                   <label class="ckbox"><input type="checkbox" id="cfg-shop-showPriceFilter"> <span>Show price ¥min – ¥max</span></label>
@@ -15206,6 +15215,17 @@ let _pdDragFrom = null;
 function pdCats() {
   return [...new Set((PA_PRODUCTS || []).map(p => (p.category || '').trim()).filter(Boolean))].sort();
 }
+// Map a product's free-text tags column to the one badge the dropdown shows.
+// Mirrors pickBadge() in the mini-app shop page so the editor reflects exactly
+// what customers see (priority: NEW > POP > SALE > HOT).
+function pdBadgeOf(tags) {
+  const t = String(tags || '').toLowerCase();
+  if (/\bnew\b/.test(t))          return 'new';
+  if (/\bpop|popular\b/.test(t))  return 'pop';
+  if (/\bsale\b/.test(t))         return 'sale';
+  if (/\bhot\b/.test(t))          return 'hot';
+  return '';
+}
 function pdOpen(id) {
   const p = id != null ? (PA_PRODUCTS || []).find(x => x.id === id) : null;
   const set = (el, v) => { const n = document.getElementById(el); if (n) n.value = (v == null ? '' : v); };
@@ -15215,6 +15235,7 @@ function pdOpen(id) {
   set('pd-price', p ? p.sell_price : ''); set('pd-stock', p ? (p.stock_qty != null ? p.stock_qty : 0) : '');
   set('pd-compare', p && p.compare_at_price ? p.compare_at_price : '');
   set('pd-sku', p && p.sku); set('pd-category', p && p.category); set('pd-weight', p && p.size);
+  set('pd-badge', p ? pdBadgeOf(p.tags) : '');
   // Description is always the Classic (rich-text) editor now. A legacy plain
   // row is promoted to HTML so old text still shows formatted; on next save it
   // is stored as rich.
@@ -15711,6 +15732,7 @@ async function pdSave() {
   const body = {
     name_en: g('pd-name-en'), name_cn: g('pd-name-cn'),
     sku: g('pd-sku'), category: g('pd-category'), weight: g('pd-weight'),
+    tags: g('pd-badge'),
     sell_price: parseFloat(g('pd-price')) || 0,
     compare_at_price: parseFloat(g('pd-compare')) || 0,
     stock_qty: parseInt(g('pd-stock'), 10) || 0,
