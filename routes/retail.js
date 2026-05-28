@@ -2780,11 +2780,11 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     return res.status(500).json({ success: false, error: 'order_create_failed' });
   }
 
-  const order = loadOrderForCustomer(orderId, req.customer.id);
+  const order = loadOrderForCustomer(orderId, req.customer.id, `${req.protocol}://${req.get('host')}`);
   res.json({ success: true, data: order });
 });
 
-function loadOrderForCustomer(orderId, customerId) {
+function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
   const o = tdb().prepare(
     `SELECT id, order_no, status, payment_method,
             recipient_name, recipient_phone, address_full, address_json,
@@ -2829,6 +2829,13 @@ function loadOrderForCustomer(orderId, customerId) {
   ).all(orderId).map(it => {
     if (it.options_json) { try { it.options = JSON.parse(it.options_json); } catch {} }
     delete it.options_json;
+    // Same fix as the orders-list endpoint: a data: URI here is the raw
+    // base64 photo from products.image_data and can be hundreds of KB per
+    // item, blowing past the mini-app's 12s response timeout on orders
+    // with several items. Hand back a short URL the client fetches lazily.
+    if (baseUrl && typeof it.image_url === 'string' && /^data:/i.test(it.image_url)) {
+      it.image_url = `${baseUrl}/api/retail/products/${it.product_id}/image`;
+    }
     return it;
   });
   o.timeline = orderTimeline(o);
@@ -3047,7 +3054,7 @@ router.get('/api/retail/orders/stats', requireRetailAuth, (req, res) => {
 
 router.get('/api/retail/orders/:id', requireRetailAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const order = loadOrderForCustomer(id, req.customer.id);
+  const order = loadOrderForCustomer(id, req.customer.id, `${req.protocol}://${req.get('host')}`);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
   res.json({ success: true, data: order });
 });
