@@ -454,6 +454,31 @@ textarea:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible 
 .card-title { font-size:15px; font-weight:700; color:var(--dk); letter-spacing:-.005em; }
 :root[data-theme="dark"] .card:hover { border-color:rgba(204,217,0,.18); }
 
+/* ── Product detail bento grid ──
+   3-col on wide screens, 2 on mid, 1 on tablet. Cards declare width via
+   .span-2 / .span-3. The grid container nullifies per-card margin so .gap
+   handles spacing consistently across responsive breakpoints. */
+.prod-bento { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; align-items: start; }
+.prod-bento > .card, .prod-bento > details.card { margin-bottom: 0; }
+.prod-bento .span-2 { grid-column: span 2; }
+.prod-bento .span-3 { grid-column: 1 / -1; }
+@media (max-width: 1100px) {
+  .prod-bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .prod-bento .span-2 { grid-column: span 2; }
+}
+@media (max-width: 720px) {
+  .prod-bento { grid-template-columns: 1fr; }
+  .prod-bento .span-2, .prod-bento .span-3 { grid-column: auto; }
+}
+/* Collapsible cards (Sales, Less-used) — use native <details> + <summary>.
+   Closed state shows just the title; open shows the full card body. */
+details.card > summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; padding: 4px 0; user-select: none; }
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary::after { content: '▾'; font-size: 12px; color: var(--muted); transition: transform .15s ease; }
+details.card[open] > summary::after { transform: rotate(180deg); }
+details.card > summary .card-title { margin: 0; }
+details.card > .card-body { margin-top: 14px; }
+
 /* ── Inline edit (.ied) ──
    Read-only text on the product detail page that becomes an input on click.
    Hover hints at editability without cluttering the layout; focus styling
@@ -9680,75 +9705,96 @@ function _renderProdHero(ctx) {
   };
   const statusOpts = Object.keys(PRODUCT_STATUS_CN).map(k => [k, k + ' · ' + PRODUCT_STATUS_CN[k]]);
   const mutedPh = `style="color:var(--muted);font-style:italic;font-weight:400"`;
-  return `<div class="card" style="padding:0;overflow:hidden;margin-bottom:18px">
-    <div style="display:grid;grid-template-columns:minmax(0,360px) 1fr;align-items:stretch">
+  // Compact hero — image trimmed to 220px, tighter padding. Identity-only:
+  // status, category, name, price, weight. SKU + barcode + label moved to the
+  // "Less-used fields" collapse since the operator confirmed they're rare.
+  return `<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:minmax(0,220px) 1fr;align-items:stretch">
       <div style="aspect-ratio:1/1;background:var(--gray);display:flex;align-items:center;justify-content:center;cursor:${heroCursor}" ${heroAction}>
         ${p.image_data
           ? `<img src="${esc(p.image_data)}" alt="${esc(p.name_en||'')}" style="width:100%;height:100%;object-fit:cover;display:block">`
-          : `<div style="text-align:center;color:var(--muted);pointer-events:none"><div style="font-size:64px;line-height:1">${p.category?getCategoryEmoji(p.category):'🛍'}</div><div style="font-size:11px;margin-top:8px;letter-spacing:.1em;text-transform:uppercase;font-weight:700">📷 Click to add photo · 点击添加图片</div></div>`}
+          : `<div style="text-align:center;color:var(--muted);pointer-events:none"><div style="font-size:48px;line-height:1">${p.category?getCategoryEmoji(p.category):'🛍'}</div><div style="font-size:10px;margin-top:6px;letter-spacing:.1em;text-transform:uppercase;font-weight:700">📷 Add photo · 添加图片</div></div>`}
       </div>
-      <div style="padding:28px 28px;display:flex;flex-direction:column;gap:14px;min-width:0">
+      <div style="padding:18px 22px;display:flex;flex-direction:column;gap:10px;min-width:0">
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
           <span ${iedAttrs('status','select',p.status||'Active',statusOpts)} style="display:inline-block">${productStatusPill(p.status||'Active', statusLabel(p.status||'Active', PRODUCT_STATUS_CN))}</span>
           <span style="color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.05em">·</span>
           <span ${iedAttrs('category','text',p.category||'')} style="color:var(--muted);font-size:12px;font-weight:600">${p.category ? esc(p.category) : `<span ${mutedPh}>+ category 分类</span>`}</span>
-          <span style="color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.05em">·</span>
-          <span ${iedAttrs('sku','text',p.sku||'')} style="color:var(--muted);font-size:12px;font-family:monospace">${p.sku ? esc(p.sku) : `<span ${mutedPh}>+ SKU 货号</span>`}</span>
         </div>
         <div>
-          <h1 ${iedAttrs('name_en','text',p.name_en||'')} style="font-size:30px;line-height:1.1;margin:0;color:var(--dk);font-weight:800;letter-spacing:-.01em;word-break:break-word">${p.name_en ? esc(p.name_en) : `<span ${mutedPh}>Name · 名称</span>`}</h1>
-          <div ${iedAttrs('name_cn','text',p.name_cn||'')} style="font-size:16px;color:var(--muted);margin-top:4px;font-weight:500">${p.name_cn ? esc(p.name_cn) : `<span ${mutedPh}>+ Chinese name 中文名</span>`}</div>
+          <h1 ${iedAttrs('name_en','text',p.name_en||'')} style="font-size:24px;line-height:1.15;margin:0;color:var(--dk);font-weight:800;letter-spacing:-.01em;word-break:break-word">${p.name_en ? esc(p.name_en) : `<span ${mutedPh}>Name · 名称</span>`}</h1>
+          <div ${iedAttrs('name_cn','text',p.name_cn||'')} style="font-size:14px;color:var(--muted);margin-top:3px;font-weight:500">${p.name_cn ? esc(p.name_cn) : `<span ${mutedPh}>+ Chinese name 中文名</span>`}</div>
         </div>
-        <div style="margin-top:auto">
-          <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:2px">Sell Price 售价</div>
-          <div ${iedAttrs('sell_price','number',p.sell_price||'')} style="font-family:'Bebas Neue',sans-serif;font-size:42px;color:#6db33f;line-height:1">${p.sell_price ? '¥'+parseFloat(p.sell_price).toFixed(2) : `<span style="color:var(--muted);font-size:20px">— set price 设置价格 —</span>`}</div>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:18px;font-size:13px;padding-top:12px;border-top:1px solid var(--border);align-items:center">
-          ${p.label_data?`<div style="display:flex;align-items:center;gap:8px;cursor:zoom-in" onclick="zoomImage(${JSON.stringify(p.label_data).replace(/"/g,'&quot;')}, '${safeName} — Label')" title="Click to enlarge · 点击放大">
-            <div style="width:48px;height:48px;border:1px solid var(--border);border-radius:6px;background:#fff;overflow:hidden;display:flex;align-items:center;justify-content:center"><img src="${esc(p.label_data)}" style="width:100%;height:100%;object-fit:contain;padding:3px"></div>
-            <div style="display:flex;flex-direction:column"><span style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700">🏷 Label 标签</span><span style="font-size:11px;color:var(--lime-text);font-weight:700">Click to zoom →</span></div>
-          </div>`:''}
-          <div><span style="color:var(--muted)">Weight 重量 </span><strong ${iedAttrs('weight','text',p.weight||'')}>${p.weight ? esc(p.weight) : `<span ${mutedPh}>+ add</span>`}</strong></div>
-          <div><span style="color:var(--muted)">Barcode 条码 </span><strong ${iedAttrs('barcode','text',p.barcode||'')} style="font-family:monospace">${p.barcode ? esc(p.barcode) : `<span ${mutedPh}>+ add</span>`}</strong></div>
+        <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:14px;margin-top:auto">
+          <div>
+            <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:1px">Sell Price 售价</div>
+            <div ${iedAttrs('sell_price','number',p.sell_price||'')} style="font-family:'Bebas Neue',sans-serif;font-size:34px;color:#6db33f;line-height:1">${p.sell_price ? '¥'+parseFloat(p.sell_price).toFixed(2) : `<span style="color:var(--muted);font-size:16px">— set price 设置价格 —</span>`}</div>
+          </div>
+          <div style="font-size:12px;color:var(--muted)">
+            Weight 重量 <strong ${iedAttrs('weight','text',p.weight||'')} style="color:var(--dk)">${p.weight ? esc(p.weight) : `<span ${mutedPh}>+ add</span>`}</strong>
+          </div>
         </div>
       </div>
     </div>
   </div>`;
 }
 
-function _renderProdDetailBody(ctx) {
-  const { p, costInfo, allergens, freeOfList, allergenEmoji, descCombined } = ctx;
-  return `
-    <!-- Stock · 库存 — per-store breakdown so the user knows WHICH store
-         they're restocking. Each store row has its own +/-/Set buttons
-         that open the modal pre-filled with that store. Filled in
-         asynchronously by loadProdStoreStocks() so the rest of the page
-         renders immediately. -->
-    <div id="prodStockCard" class="card" style="padding:14px 18px;margin-bottom:18px;color:var(--muted);font-size:13px">
-      📦 Loading stock by store · 加载库存…
-    </div>
-    ${(!costInfo && !p.recipe_id) ? `<div class="card" style="text-align:center;padding:18px;margin-bottom:18px;color:var(--muted);font-size:13px">No recipe linked · 未关联食谱 — link one to compute cost &amp; margin · <button class="btn btn-secondary btn-sm" style="margin-left:6px" onclick="showProductForm(${p.id})">Link a Recipe 关联食谱</button></div>` : ''}
-    ${(allergens.length||freeOfList.length) ? `<div class="card" style="padding:14px 18px;margin-bottom:18px;display:flex;flex-direction:column;gap:8px">
-      ${allergens.length?`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
-        <span style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9d174d;font-weight:800;min-width:90px">⚠ Contains</span>
-        <div style="display:flex;flex-wrap:wrap;gap:5px">${allergens.map(a=>`<span style="background:#fce7f3;color:#9d174d;padding:4px 12px;border-radius:99px;font-size:12px;font-weight:700">${allergenEmoji[a]||''} ${esc(a)}</span>`).join('')}</div>
-      </div>`:''}
-      ${freeOfList.length?`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
-        <span style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#3d7a1e;font-weight:800;min-width:90px">✓ Free of</span>
-        <div style="display:flex;flex-wrap:wrap;gap:5px">${freeOfList.map(f=>`<span style="background:rgba(204,217,0,0.14);border:1px solid rgba(204,217,0,0.4);color:#4a7a2a;padding:4px 12px;border-radius:99px;font-size:12px;font-weight:700">${esc(f)}</span>`).join('')}</div>
-      </div>`:''}
-    </div>` : ''}
-    <div id="prodSalesCard" class="card" style="padding:18px 20px;margin-bottom:18px;color:var(--muted);font-size:13px">📊 Loading sales performance…</div>
-    ${descCombined ? `<div style="margin-bottom:18px">
-      <button class="btn btn-secondary" style="width:100%;padding:12px;text-align:left;display:flex;align-items:center;gap:10px"
-        onclick="showProductDescription(${p.id})">
-        📝 <span>View description 查看描述</span>
-        <span style="margin-left:auto;color:var(--muted);font-size:12px">${(p.description_en||'').length+(p.description_cn||'').length} chars</span>
-        <span style="color:var(--muted)">→</span>
-      </button>
-    </div>` : ''}
-    ${(p.recipe_id && _user?.role === 'admin') ? `<div style="margin-bottom:18px"><button class="btn btn-secondary" style="width:100%;padding:14px;font-size:14px" onclick="viewRecipe(${p.recipe_id})">📖 View Linked Recipe 查看食谱 →</button></div>` : ''}
-    <div class="card"><div class="card-title" style="margin-bottom:8px">Notes 备注</div><p class="ied" data-pid="${p.id}" data-field="notes" data-type="textarea" data-raw="${esc(p.notes||'')}" onclick="iedClick(this)" style="font-size:13px;color:var(--muted);white-space:pre-wrap;margin:0;min-height:1.4em;cursor:text">${p.notes ? esc(p.notes) : '<span style="color:var(--muted);font-style:italic">+ Click to add notes · 点击添加备注</span>'}</p></div>`;
+// ── Bento cards ── each helper returns the inner HTML of one grid tile.
+// viewProduct() assembles them into the .prod-bento grid; switchVariant()
+// re-renders them in place when the user picks a sibling.
+function _renderRecipeDietCard(ctx) {
+  const { p, allergens, freeOfList, allergenEmoji } = ctx;
+  // The whole card is one logical group: recipe link first (cost driver),
+  // then dietary chips derived from that recipe. Empty states are friendly
+  // so the operator can act from this one card.
+  const recipeRow = p.recipe_id
+    ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:${(allergens.length||freeOfList.length)?'10px':'0'}">
+        <span style="font-size:12px;color:var(--muted)">Linked recipe</span>
+        ${_user?.role === 'admin'
+          ? `<button class="btn btn-secondary btn-sm" onclick="viewRecipe(${p.recipe_id})">📖 View · 查看</button>`
+          : `<span style="font-size:11px;color:var(--muted)">linked</span>`}
+      </div>`
+    : `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:${(allergens.length||freeOfList.length)?'10px':'0'}">
+        <span style="font-size:12px;color:var(--muted)">No recipe linked · 未关联</span>
+        <button class="btn btn-secondary btn-sm" onclick="showProductForm(${p.id})">Link · 关联</button>
+      </div>`;
+  const allergenRow = allergens.length
+    ? `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:${freeOfList.length?'6px':'0'}">
+        <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#9d174d;font-weight:800">⚠ Contains</span>
+        ${allergens.map(a=>`<span style="background:#fce7f3;color:#9d174d;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">${allergenEmoji[a]||''} ${esc(a)}</span>`).join('')}
+      </div>`
+    : '';
+  const freeOfRow = freeOfList.length
+    ? `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+        <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#3d7a1e;font-weight:800">✓ Free of</span>
+        ${freeOfList.map(f=>`<span style="background:rgba(204,217,0,0.14);border:1px solid rgba(204,217,0,0.4);color:#4a7a2a;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">${esc(f)}</span>`).join('')}
+      </div>`
+    : '';
+  return `<div class="card-title" style="margin-bottom:10px">🍴 Recipe & Diet · 食谱与饮食</div>
+    ${recipeRow}
+    ${allergenRow}
+    ${freeOfRow}`;
+}
+
+function _renderDescCard(ctx) {
+  const { p, descCombined } = ctx;
+  // Spans 2 columns in the bento. Click → existing description viewer/editor
+  // overlay. (Phase B will pull this inline.)
+  return `<div class="card-title" style="margin-bottom:10px">📝 Description · 描述</div>
+    ${descCombined
+      ? `<button class="btn btn-secondary" style="width:100%;padding:10px;text-align:left;display:flex;align-items:center;gap:10px;justify-content:space-between" onclick="showProductDescription(${p.id})">
+          <span style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;color:var(--dk)">
+            <span style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)">${esc((p.description_en||p.description_cn||'').slice(0, 80))}${(p.description_en||p.description_cn||'').length > 80 ? '…' : ''}</span>
+          </span>
+          <span style="color:var(--muted);font-size:11px;flex-shrink:0">${(p.description_en||'').length+(p.description_cn||'').length} chars →</span>
+        </button>`
+      : `<button class="btn btn-secondary" style="width:100%;padding:14px;text-align:center;color:var(--muted)" onclick="showProductDescription(${p.id})">+ Add description · 添加描述</button>`}`;
+}
+
+function _renderNotesCard(ctx) {
+  const { p } = ctx;
+  return `<div class="card-title" style="margin-bottom:8px">📌 Notes · 备注</div>
+    <p class="ied" data-pid="${p.id}" data-field="notes" data-type="textarea" data-raw="${esc(p.notes||'')}" onclick="iedClick(this)" style="font-size:13px;color:var(--muted);white-space:pre-wrap;margin:0;min-height:1.4em;cursor:text">${p.notes ? esc(p.notes) : '<span style="color:var(--muted);font-style:italic">+ Click to add notes · 点击添加备注</span>'}</p>`;
 }
 
 // ── Inline edit (.ied) on the product detail page ─────────────────────────
@@ -9849,14 +9895,14 @@ async function iedClick(el) {
 async function switchVariant(id) {
   const ctx = await _loadProductCtx(id);
   if (!ctx) return;
-  const topBar = document.getElementById('prodTopBar');
-  const hero   = document.getElementById('prodHero');
-  const sizes  = document.getElementById('prodSizesCard');
-  const body   = document.getElementById('prodDetailBody');
-  // If any of the structural divs are missing (e.g. user landed straight on
-  // this product without the new layout having mounted), fall back to the
-  // full re-render path.
-  if (!topBar || !hero || !sizes || !body) return viewProduct(id);
+  const topBar  = document.getElementById('prodTopBar');
+  const hero    = document.getElementById('prodHero');
+  const sizes   = document.getElementById('prodSizesCard');
+  const recipe  = document.getElementById('prodRecipeDietCard');
+  const desc    = document.getElementById('prodDescCard');
+  const notes   = document.getElementById('prodNotesCard');
+  // If any of the bento cells are missing fall back to the full re-render.
+  if (!topBar || !hero || !sizes || !recipe || !desc || !notes) return viewProduct(id);
   // Capture scroll BEFORE the innerHTML swaps. Replacing the chip the user
   // clicked removes the focused button from the DOM, which can make the
   // browser snap the document back to the top; we restore the previous
@@ -9865,9 +9911,20 @@ async function switchVariant(id) {
   topBar.innerHTML = _renderProdTopBar(ctx);
   hero.innerHTML   = _renderProdHero(ctx);
   sizes.innerHTML  = _renderSizesCardInner(ctx);
-  body.innerHTML   = _renderProdDetailBody(ctx);
+  recipe.innerHTML = _renderRecipeDietCard(ctx);
+  desc.innerHTML   = _renderDescCard(ctx);
+  notes.innerHTML  = _renderNotesCard(ctx);
   requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
-  loadProductSalesSummary(ctx.p.id, ctx.p.sell_price);
+  // Sales: only re-fetch if the operator had already opened the collapse on
+  // the previous variant (so a fresh sibling click doesn't fire the heavy
+  // sales endpoint when they never looked at it).
+  const sales = document.getElementById('prodSalesCollapse');
+  if (sales && sales.open) {
+    sales.dataset.loaded = '1';
+    loadProductSalesSummary(ctx.p.id, ctx.p.sell_price);
+  } else if (sales) {
+    delete sales.dataset.loaded;
+  }
   loadProdStoreStocks(ctx.p.id);
 }
 
@@ -9922,17 +9979,38 @@ function _renderSizesCardInner(ctx) {
 async function viewProduct(id) {
   const ctx = await _loadProductCtx(id);
   if (!ctx) return;
-  // Render into 4 sub-divs so switchVariant() can swap just the changed
-  // bits without reshuffling the page. The Sizes card div in particular
-  // stays mounted at the same Y position across sibling clicks.
+  // Bento grid: hero pinned at top, then three cards on row 1 (Stock, Sizes,
+  // Recipe & Diet), Description (2-col) + Notes on row 2, then collapsed
+  // Sales and Less-used rows. Stock + Sales fill async; Sales lazy-loads on
+  // first open so 261 product views don't fan out 261 sales fetches.
   document.getElementById('main').innerHTML = `
     <div id="prodTopBar">${_renderProdTopBar(ctx)}</div>
     <div id="prodHero">${_renderProdHero(ctx)}</div>
-    <div class="card" id="prodSizesCard" style="padding:14px 18px;margin-bottom:18px">${_renderSizesCardInner(ctx)}</div>
-    <div id="prodDetailBody">${_renderProdDetailBody(ctx)}</div>
+    <div id="prodBento" class="prod-bento">
+      <div class="card" id="prodStockCard" style="padding:14px 18px;color:var(--muted);font-size:13px">📦 Loading stock by store · 加载库存…</div>
+      <div class="card" id="prodSizesCard" style="padding:14px 18px">${_renderSizesCardInner(ctx)}</div>
+      <div class="card" id="prodRecipeDietCard" style="padding:14px 18px">${_renderRecipeDietCard(ctx)}</div>
+      <div class="card span-2" id="prodDescCard" style="padding:14px 18px">${_renderDescCard(ctx)}</div>
+      <div class="card" id="prodNotesCard" style="padding:14px 18px">${_renderNotesCard(ctx)}</div>
+      <details class="card span-3" id="prodSalesCollapse" style="padding:14px 18px">
+        <summary><div class="card-title">📊 Sales Performance · 销售业绩</div></summary>
+        <div class="card-body"><div id="prodSalesCard" style="color:var(--muted);font-size:13px">📊 Loading sales performance…</div></div>
+      </details>
+      <details class="card span-3" id="prodAdvancedCollapse" style="padding:14px 18px">
+        <summary><div class="card-title">⚙ Less-used fields · 高级字段</div></summary>
+        <div class="card-body"><div style="color:var(--muted);font-size:13px;font-style:italic">SKU · barcode · nutrition · allergens override · free-of override · label image — coming inline next. For now use <button class="btn btn-secondary btn-sm" onclick="showProductForm(${ctx.p.id})" style="margin-left:6px">More fields 更多</button></div></div>
+      </details>
+    </div>
   `;
-  loadProductSalesSummary(ctx.p.id, ctx.p.sell_price);
   loadProdStoreStocks(ctx.p.id);
+  // Sales lazy-load: defer the fetch until the operator opens the collapse.
+  const sales = document.getElementById('prodSalesCollapse');
+  if (sales) sales.addEventListener('toggle', () => {
+    if (sales.open && !sales.dataset.loaded) {
+      sales.dataset.loaded = '1';
+      loadProductSalesSummary(ctx.p.id, ctx.p.sell_price);
+    }
+  });
 }
 
 
