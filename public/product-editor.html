@@ -20,10 +20,13 @@
     } catch (e) {
       document.documentElement.setAttribute('data-theme', 'dark');
     }
-    // UI scale (text size) — the suite-wide preference (roots-admin-ui-scale)
-    // is honoured on other backend pages, but the product editor is locked to
-    // 100% because its 3-pane layout (rail + canvas + inspector) ships off
-    // the right edge at >100% zoom. The Aa button is hidden here to match.
+    // UI scale (text size) — shared suite-wide preference (roots-admin-ui-scale,
+    // set from the backend topbar). Apply pre-paint so the editor matches.
+    try {
+      var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
+      if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
+      document.documentElement.style.zoom = String(s);
+    } catch (e) {}
   })();
 </script>
 <style>
@@ -197,11 +200,6 @@
     background: var(--bg-pane);
     border-bottom: 1px solid var(--line);
   }
-  /* The Aa text-size button is hidden on the product editor: the 3-pane
-     layout doesn't accommodate >100% zoom (right pane spills off-screen),
-     so this page stays at 100% and the suite-wide preference is ignored
-     here. See the pre-paint script + cuApplyUiScale. */
-  #ui-scale-toggle { display: none; }
   .pe-back {
     width: 34px; height: 34px; padding: 0;
     display: inline-flex; align-items: center; justify-content: center;
@@ -2724,9 +2722,7 @@ function cuGetUiScale() {
   return v;
 }
 function cuApplyUiScale(v) {
-  // Product editor is locked to 100% — see the pre-paint script for why.
-  // Keep the label in sync (even though the button is hidden here) in case
-  // any other code surfaces the value.
+  document.documentElement.style.zoom = String(v);
   const lbl = document.querySelector('#ui-scale-toggle .ui-scale-val');
   if (lbl) lbl.textContent = Math.round(v * 100) + '%';
 }
