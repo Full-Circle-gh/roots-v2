@@ -2,8 +2,9 @@
 // Hits /api/retail/customer (profile + addresses) and /api/retail/orders/stats
 // (status counts) in parallel.
 
-const api  = require('../../utils/api');
-const lang = require('../../utils/lang');
+const api    = require('../../utils/api');
+const lang   = require('../../utils/lang');
+const config = require('../../utils/config');
 
 const TIER_LEVEL = { seed: 1, sprout: 2, root: 3, tree: 4 };
 const TIER_NAME_EN = { seed: 'Seed', sprout: 'Sprout', root: 'Root', tree: 'Tree' };
@@ -161,14 +162,18 @@ Page({
     this.setData({ copy: this.data.lang === 'cn' ? COPY_CN : COPY_EN });
   },
 
-  // Resolve the brand-footer fields from app.globalData.config (loaded once
-  // at app launch from /api/retail/config). Tagline combines EN + CN with
-  // " · " when both are filled — matches the legacy hard-coded line. Credit
-  // is language-conditional. When nothing is configured, defaults preserve
-  // the pre-tenant-config look so Roots reads unchanged.
-  applyFooter() {
-    const app = getApp();
-    const cfg = (app.globalData.config && app.globalData.config.brand && app.globalData.config.brand.me_footer) || {};
+  // Resolve the brand-footer fields from /api/retail/config. We await
+  // config.load() (60s in-memory cache so it's a no-op on warm starts)
+  // because app.globalData.config is fire-and-forget at launch — reading
+  // it directly races with the network and would show the Full Circle
+  // fallbacks on Roots' first me-page open instead of Roots' own footer.
+  // Called from onShow + switchLang.
+  async applyFooter() {
+    let cfg = {};
+    try {
+      const full = await config.load(false);
+      cfg = (full && full.brand && full.brand.me_footer) || {};
+    } catch {}
     const lang = this.data.lang;
     const tEN = (cfg.tagline_en || '').trim();
     const tCN = (cfg.tagline_cn || '').trim();

@@ -1454,6 +1454,44 @@ try {
   }
 } catch (e) { console.error('[migration seed_brand_me_footer_roots_v1]', e); }
 
+// v2 — self-heal pass. The v1 migration above uses INSERT OR IGNORE, which
+// is a no-op when a brand.me_footer row already exists. If the operator
+// clicked Save on an empty footer-settings card between the feature shipping
+// and the v1 seed landing, that row exists but is all-nulls → v1 skipped →
+// Roots' customers see the Full Circle SaaS fallbacks instead of their own
+// branding. This pass replaces an all-empty row with the canonical Roots
+// values; rows that have ANY real content (operator authored their own)
+// are preserved untouched.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_brand_me_footer_roots_v2');
+  if (!ran) {
+    const existing = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'brand.me_footer'").get();
+    let needsHeal = false;
+    if (existing) {
+      try {
+        const v = JSON.parse(existing.value_json || '{}');
+        needsHeal = !v.wordmark_image && !v.wordmark_text && !v.tagline_en && !v.tagline_cn && !v.credit_en && !v.credit_cn;
+      } catch { needsHeal = true; }
+    }
+    if (needsHeal) {
+      const rootsFooter = {
+        wordmark_image: '/assets/brand/roots-wordmark.png',
+        wordmark_text:  null,
+        tagline_en:     'Food made from food.',
+        tagline_cn:     '食物源于食物。',
+        credit_en:      'v1.0 · Built by your kitchen',
+        credit_cn:      'v1.0 · 由您的厨房用心制作',
+      };
+      db.prepare(
+        "INSERT INTO storefront_config (key, value_json) VALUES ('brand.me_footer', ?) " +
+        "ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP"
+      ).run(JSON.stringify(rootsFooter));
+      console.log('[migration seed_brand_me_footer_roots_v2] healed empty Roots footer row');
+    }
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_brand_me_footer_roots_v2');
+  }
+} catch (e) { console.error('[migration seed_brand_me_footer_roots_v2]', e); }
+
 // Seed a default ABOUT layout — the "Who we are" story page reached from
 // the Me tab and from the Home tail. Two editorial blocks: the brand
 // story up top, the promise below. Office can edit in /cms → About page.
