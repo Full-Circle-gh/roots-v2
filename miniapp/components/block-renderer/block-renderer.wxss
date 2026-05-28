@@ -783,8 +783,9 @@
   font-family: var(--f-bear);
   font-weight: 500;
   font-size: calc(40rpx * var(--font-scale));
-  line-height: 1.15;
-  margin-top: 8rpx;
+  line-height: 1.0;
+  padding-top: 4rpx;
+  margin-top: 4rpx;
 }
 .fs-clock {
   display: flex;
@@ -941,8 +942,9 @@
 .fh-title {
   font-family: var(--f-bear); font-weight: 500;
   font-size: calc(44rpx * var(--font-scale));
-  line-height: 1.15;
-  margin-top: 10rpx;
+  line-height: 1.0;
+  padding-top: 4rpx;
+  margin-top: 6rpx;
 }
 .fh-ends {
   font-family: var(--f-toni); font-weight: 700;
@@ -1539,8 +1541,9 @@
   font-family: var(--f-bear);
   font-weight: 500;
   font-size: calc(40rpx * var(--font-scale));
-  line-height: 1.15;
-  margin-top: 8rpx;
+  line-height: 1.0;
+  padding-top: 4rpx;
+  margin-top: 6rpx;
   letter-spacing: -0.01em;
   margin-top: 6rpx;
 }
@@ -1919,8 +1922,8 @@
 }
 
 /* Greeting — view variants */
-.gr-headline-sm { font-size: calc(38rpx * var(--font-scale)); line-height: 1.15; margin-top: 10rpx; }
-.gr-headline-lg { font-size: calc(88rpx * var(--font-scale)); line-height: 1.08; }
+.gr-headline-sm { font-size: calc(38rpx * var(--font-scale)); line-height: 1.05; padding-top: 4rpx; margin-top: 8rpx; }
+.gr-headline-lg { font-size: calc(88rpx * var(--font-scale)); line-height: 1.0; padding-top: 8rpx; }
 
 /* Banner = full-bleed colour band: drop the side inset so the field
    stretches edge-to-edge. Inner copy keeps its own horizontal padding. */
@@ -1999,8 +2002,9 @@
 .kit-title {
   font-family: var(--f-bear);
   font-size: calc(40rpx * var(--font-scale));
-  line-height: 1.15;
-  margin-top: 10rpx;
+  line-height: 1.0;
+  padding-top: 4rpx;
+  margin-top: 6rpx;
 }
 .kit-status {
   display: flex;
@@ -2073,8 +2077,9 @@
 .rcp-headline {
   font-family: var(--f-bear);
   font-size: calc(56rpx * var(--font-scale));
-  line-height: 1.15;
-  margin-top: 16rpx;
+  line-height: 1.0;
+  padding-top: 6rpx;
+  margin-top: 10rpx;
 }
 .rcp-meta {
   margin-top: 8rpx;
@@ -2199,8 +2204,9 @@
 .bun-title {
   font-family: var(--f-bear);
   font-size: calc(48rpx * var(--font-scale));
-  line-height: 1.15;
-  margin-top: 12rpx;
+  line-height: 1.0;
+  padding-top: 5rpx;
+  margin-top: 8rpx;
 }
 .bun-sub {
   font-family: var(--f-aleo);
@@ -2319,10 +2325,11 @@
   color: var(--olive);
 }
 .wc-title {
-  margin-top: 12rpx;
+  margin-top: 8rpx;
+  padding-top: 4rpx;
   font-family: var(--f-bear);
   font-size: calc(44rpx * var(--font-scale));
-  line-height: 1.15;
+  line-height: 1.0;
 }
 .wc-sub {
   margin-top: 10rpx;
@@ -2444,8 +2451,9 @@
 .fav-title {
   font-family: var(--f-bear);
   font-size: calc(52rpx * var(--font-scale));
-  line-height: 1.15;
-  margin-top: 12rpx;
+  line-height: 1.0;
+  padding-top: 6rpx;
+  margin-top: 8rpx;
 }
 .fav-see-all {
   font-family: var(--f-toni);
