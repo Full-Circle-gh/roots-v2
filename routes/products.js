@@ -156,12 +156,22 @@ router.get('/api/products/:id', requireAuth, requirePermission('products'), (req
   // Derive recipe-driven info if linked. Each ingredient.allergens is a
   // free-text comma string ("nuts, soy") — split, dedupe, sort.
   let derived = { allergens: [], ingredient_count: 0 };
+  // Inline the linked recipe so the detail page doesn't need a second
+  // round-trip to /api/recipes/:id. Only the fields _loadProductCtx
+  // actually consumes (name_en, servings, ingredients-with-master_cost,
+  // costData) — recipe steps and the recipe's own base64 image_data are
+  // omitted to keep the payload small.
+  let recipe = null;
   if (row.recipe_id) {
     const ings = db.prepare(`
-      SELECT ing.name_en, ing.name_cn, ing.allergens
+      SELECT ing.name_en, ing.name_cn, ing.allergens,
+             ri.ingredient_id, ri.sku, ri.qty, ri.unit,
+             ing.cost_per_unit AS master_cost
         FROM recipe_ingredients ri
-        JOIN ingredients ing ON ing.id = ri.ingredient_id
-       WHERE ri.recipe_id = ? AND COALESCE(ing.is_active, 1) = 1
+        LEFT JOIN ingredients ing ON ing.id = ri.ingredient_id
+       WHERE ri.recipe_id = ?
+         AND (ing.id IS NULL OR COALESCE(ing.is_active, 1) = 1)
+       ORDER BY ri.sort_order
     `).all(row.recipe_id);
     derived.ingredient_count = ings.length;
     const set = new Set();
@@ -173,21 +183,43 @@ router.get('/api/products/:id', requireAuth, requirePermission('products'), (req
       }
     }
     derived.allergens = [...set].sort();
+    // Recipe header + cost block — small payload, no steps, no image.
+    const recRow = db.prepare(
+      'SELECT id, name_en, name_cn, servings, batch_size, serving_size FROM recipes WHERE id = ? AND is_active = 1'
+    ).get(row.recipe_id);
+    if (recRow) {
+      const costData = db.prepare('SELECT * FROM recipe_cost_data WHERE recipe_id = ?').get(row.recipe_id) || null;
+      recipe = { ...recRow, ingredients: ings, costData };
+    }
   }
   // Sibling variants — the other products that share this row's
   // variant_group_id. The form uses these to render the "Other variants"
   // chips. Empty array if the product is standalone.
+  //
+  // Lazy-load the sibling thumbnails: select a has_image flag instead of
+  // pulling the full base64 image_data for every sibling. A product with
+  // five size variants was otherwise shipping six heavy images on every
+  // detail open. The chip image is rendered via <img src=...> so a URL
+  // works in its place; the existing /api/products/:id/image route streams
+  // the bytes when the browser actually requests them.
   let siblings = [];
   if (row.variant_group_id) {
     siblings = db.prepare(`
       SELECT id, name_en, name_cn, sku, sell_price, stock_qty,
-             variant_label, image_data, status
+             variant_label, status, updated_at,
+             (image_data IS NOT NULL AND image_data != '') AS has_image
         FROM products
        WHERE variant_group_id = ? AND id != ? AND COALESCE(is_active, 1) = 1
        ORDER BY variant_label, name_en
     `).all(row.variant_group_id, row.id);
+    for (const s of siblings) {
+      s.image_data = s.has_image
+        ? `/api/products/${s.id}/image?v=${encodeURIComponent(s.updated_at || '')}`
+        : null;
+      delete s.has_image;
+    }
   }
-  res.json({ success: true, data: { ...row, derived, siblings } });
+  res.json({ success: true, data: { ...row, derived, siblings, recipe } });
 });
 
 // POST /api/products/variants/group — create a new variant group from a

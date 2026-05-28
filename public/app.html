@@ -9534,6 +9534,11 @@ async function printProductLabel(id) {
 // of viewProduct so switchVariant can reuse the math without re-running the
 // renderer-level logic. Returns a `ctx` blob each render helper accepts.
 async function _loadProductCtx(id) {
+  // One request, not two: the server now inlines the linked recipe under
+  // `data.recipe` (when there is one), so we no longer round-trip a
+  // separate /api/recipes/:id call from here. That used to double the
+  // click→paint wait on slow links. If an older server hasn't shipped
+  // the inline `recipe` field yet, fall back to the explicit fetch.
   const r = await fetch('/api/products/'+id);
   const d = await r.json();
   if (!d.success) return null;
@@ -9542,10 +9547,13 @@ async function _loadProductCtx(id) {
   let allergens = [];
   if (p.recipe_id) {
     try {
-      const recRes = await fetch('/api/recipes/'+p.recipe_id);
-      const recData = await recRes.json();
-      if (recData.success) {
-        const rec = recData.data;
+      let rec = p.recipe || null;
+      if (!rec) {
+        const recRes = await fetch('/api/recipes/'+p.recipe_id);
+        const recData = await recRes.json();
+        if (recData.success) rec = recData.data;
+      }
+      if (rec) {
         let ingTotal = 0;
         (rec.ingredients||[]).forEach(i => { if(i.master_cost&&i.qty) ingTotal += i.qty*i.master_cost; });
         const cd = rec.costData||{};
