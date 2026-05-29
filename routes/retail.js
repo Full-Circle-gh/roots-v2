@@ -89,6 +89,29 @@ const upload = multer({
   },
 });
 
+// Sniff the real image type from the first bytes instead of trusting the
+// client-declared MIME. Returns a canonical mime ('image/jpeg' etc.) or null
+// for anything unrecognized. SVG is deliberately NOT recognized: it's an XML
+// document that can carry <script>, so we never store/serve it as an image.
+function sniffImageMime(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 4) return null;
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'image/jpeg';
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'image/png';
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return 'image/gif'; // GIF8(7|9)a
+  if (buf[0] === 0x42 && buf[1] === 0x4D) return 'image/bmp';
+  if (buf.length >= 12 &&
+      buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&  // RIFF
+      buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50)  // WEBP
+    return 'image/webp';
+  return null;
+}
+// Content-types the media route is allowed to serve inline. Anything else
+// (notably SVG, HTML) is forced to download as an opaque blob so a browser
+// can't execute it. PDF is here so issued fapiao render inline for staff.
+const MEDIA_INLINE_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'application/pdf',
+]);
+
 // ─── Storefront config ──────────────────────────────────────────────────
 // Keys whose prefix is in this set are FILTERED OUT of the public
 // /api/retail/config response — they hold third-party API secrets
@@ -1994,8 +2017,18 @@ router.post('/api/retail-admin/broadcasts/:id/recall', requireRetailAdmin, (req,
   const row = tdb().prepare('SELECT * FROM retail_broadcasts WHERE id = ?').get(id);
   if (!row) return res.status(404).json({ success: false, error: 'not_found' });
   if (row.status === 'scheduled') {
-    tdb().prepare("UPDATE retail_broadcasts SET status = 'cancelled' WHERE id = ?").run(id);
-    return res.json({ success: true, data: { status: 'cancelled' } });
+    // Conditional cancel: only flips a row that is STILL scheduled. If the 60s
+    // scheduler grabbed it between our SELECT and here, changes===0 and we fall
+    // through to report the now-current status instead of racing the fanout.
+    const cancel = tdb().prepare("UPDATE retail_broadcasts SET status = 'cancelled' WHERE id = ? AND status = 'scheduled'").run(id);
+    if (cancel.changes === 1) return res.json({ success: true, data: { status: 'cancelled' } });
+    const cur = tdb().prepare('SELECT status FROM retail_broadcasts WHERE id = ?').get(id)?.status;
+    if (cur === 'sent') {
+      const del = tdb().prepare('DELETE FROM retail_notifications WHERE broadcast_id = ?').run(id);
+      tdb().prepare("UPDATE retail_broadcasts SET status = 'recalled' WHERE id = ?").run(id);
+      return res.json({ success: true, data: { status: 'recalled', removed: del.changes } });
+    }
+    return res.json({ success: true, data: { status: cur } });
   }
   if (row.status === 'sent') {
     const del = tdb().prepare('DELETE FROM retail_notifications WHERE broadcast_id = ?').run(id);
@@ -4299,6 +4332,17 @@ router.patch('/api/retail-admin/vouchers/:id', requireRetailAdmin, express.json(
   if ('is_public' in updates) updates.is_public = updates.is_public ? 1 : 0;
   if ('auto_grant_signup' in updates) updates.auto_grant_signup = updates.auto_grant_signup ? 1 : 0;
   if ('expires_at' in updates && !updates.expires_at) updates.expires_at = null;
+  // Coerce + bound numeric fields, mirroring POST, so a malformed PATCH can't
+  // store a non-numeric or negative discount that breaks computeVoucherDiscount.
+  if ('value' in updates)        updates.value        = Math.max(0, Number(updates.value) || 0);
+  if ('min_subtotal' in updates) updates.min_subtotal = Math.max(0, Number(updates.min_subtotal) || 0);
+  if ('max_uses' in updates) {
+    updates.max_uses = (updates.max_uses != null && updates.max_uses !== '')
+      ? Math.max(0, parseInt(updates.max_uses, 10) || 0) : null;
+  }
+  if ('per_customer_limit' in updates) {
+    updates.per_customer_limit = Math.max(0, parseInt(updates.per_customer_limit, 10) || 0);
+  }
   const sets = Object.keys(updates).map(k => `${k} = ?`).join(', ');
   tdb().prepare(`UPDATE retail_vouchers SET ${sets} WHERE id = ?`).run(...Object.values(updates), id);
   res.json({ success: true });
@@ -4686,52 +4730,83 @@ router.post('/api/retail-admin/customers/:id/points-adjust', requireRetailAdmin,
   const id     = parseInt(req.params.id, 10);
   const delta  = parseInt(req.body?.delta, 10);
   const reason = String(req.body?.reason || '').trim().slice(0, 200);
-  if (!id || !Number.isFinite(delta) || delta === 0) return res.status(400).json({ success: false, error: 'bad_delta' });
+  const MAX_POINTS_ADJUST = 10000000;  // sanity cap: ±10M points per adjustment
+  if (!id || !Number.isFinite(delta) || delta === 0 || Math.abs(delta) > MAX_POINTS_ADJUST) {
+    return res.status(400).json({ success: false, error: 'bad_delta' });
+  }
   if (!reason) return res.status(400).json({ success: false, error: 'reason_required' });
 
-  const c = tdb().prepare('SELECT id, points_balance FROM retail_customers WHERE id = ?').get(id);
+  const c = tdb().prepare('SELECT id FROM retail_customers WHERE id = ?').get(id);
   if (!c) return res.status(404).json({ success: false, error: 'not_found' });
-  const after = (c.points_balance || 0) + delta;
-  if (after < 0) return res.status(409).json({ success: false, error: 'would_go_negative', current: c.points_balance });
 
-  const tx = tdb().transaction(() => {
-    tdb().prepare('UPDATE retail_customers SET points_balance = ? WHERE id = ?').run(after, id);
-    tdb().prepare(
-      `INSERT INTO retail_points_transactions (customer_id, delta, balance_after, source, note)
-       VALUES (?, ?, ?, 'admin_adjust', ?)`
-    ).run(id, delta, after, `[${req.user.username}] ${reason}`);
-  });
-  tx();
-  logActivity(req.user.id, req.user.username, 'points_adjust', 'retail_customer', id, { delta, reason, balance_after: after }, req.ip);
-  res.json({ success: true, balance_after: after });
+  // Atomic, race-safe adjust: the balance is incremented and floor-checked in
+  // a SINGLE conditional UPDATE (not read-then-write), so two concurrent
+  // adjustments can't both pass a stale "would_go_negative" check or clobber
+  // each other's write.
+  let balanceAfter;
+  try {
+    const tx = tdb().transaction(() => {
+      const upd = tdb().prepare(
+        'UPDATE retail_customers SET points_balance = COALESCE(points_balance, 0) + ? WHERE id = ? AND COALESCE(points_balance, 0) + ? >= 0'
+      ).run(delta, id, delta);
+      if (upd.changes !== 1) { const e = new Error('would_go_negative'); e.code = 'WOULD_GO_NEGATIVE'; throw e; }
+      balanceAfter = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(id).points_balance;
+      tdb().prepare(
+        `INSERT INTO retail_points_transactions (customer_id, delta, balance_after, source, note)
+         VALUES (?, ?, ?, 'admin_adjust', ?)`
+      ).run(id, delta, balanceAfter, `[${req.user.username}] ${reason}`);
+    });
+    tx();
+  } catch (e) {
+    if (e.code === 'WOULD_GO_NEGATIVE') return res.status(409).json({ success: false, error: 'would_go_negative' });
+    throw e;
+  }
+  logActivity(req.user.id, req.user.username, 'points_adjust', 'retail_customer', id, { delta, reason, balance_after: balanceAfter }, req.ip);
+  res.json({ success: true, balance_after: balanceAfter });
 });
 
 // Manual wallet adjustment — writes a `payment_method='admin_adjust'` row
 // to retail_topup_transactions (amount may be negative for clawback) and
 // updates the cached balance atomically.
 router.post('/api/retail-admin/customers/:id/wallet-adjust', requireRetailAdmin, express.json(), (req, res) => {
-  const id     = parseInt(req.params.id, 10);
-  const delta  = Number(req.body?.delta);
-  const reason = String(req.body?.reason || '').trim().slice(0, 200);
-  if (!id || !Number.isFinite(delta) || delta === 0) return res.status(400).json({ success: false, error: 'bad_delta' });
+  const id       = parseInt(req.params.id, 10);
+  const deltaRaw = Number(req.body?.delta);
+  const reason   = String(req.body?.reason || '').trim().slice(0, 200);
+  const MAX_WALLET_ADJUST = 1000000;  // sanity cap: ±¥1,000,000 per adjustment
+  if (!id || !Number.isFinite(deltaRaw) || deltaRaw === 0 || Math.abs(deltaRaw) > MAX_WALLET_ADJUST) {
+    return res.status(400).json({ success: false, error: 'bad_delta' });
+  }
   if (!reason) return res.status(400).json({ success: false, error: 'reason_required' });
+  const delta = Math.round(deltaRaw * 100) / 100;  // store to cent precision
+  if (delta === 0) return res.status(400).json({ success: false, error: 'bad_delta' });
 
-  const c = tdb().prepare('SELECT id, balance FROM retail_customers WHERE id = ?').get(id);
+  const c = tdb().prepare('SELECT id FROM retail_customers WHERE id = ?').get(id);
   if (!c) return res.status(404).json({ success: false, error: 'not_found' });
-  const after = Math.round(((c.balance || 0) + delta) * 100) / 100;
-  if (after < 0) return res.status(409).json({ success: false, error: 'would_go_negative', current: c.balance });
 
-  const tx = tdb().transaction(() => {
-    tdb().prepare('UPDATE retail_customers SET balance = ? WHERE id = ?').run(after, id);
-    tdb().prepare(
-      `INSERT INTO retail_topup_transactions
-         (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
-       VALUES (?, ?, 0, 'admin_adjust', 'success', CURRENT_TIMESTAMP, ?, ?)`
-    ).run(id, delta, `adminadj:${req.user.id}:${Date.now()}`, JSON.stringify({ reason, by: req.user.username }));
-  });
-  tx();
-  logActivity(req.user.id, req.user.username, 'wallet_adjust', 'retail_customer', id, { delta, reason, balance_after: after }, req.ip);
-  res.json({ success: true, balance_after: after });
+  // Atomic, race-safe adjust: balance is incremented, rounded to cents, and
+  // floor-checked in ONE conditional UPDATE, so concurrent adjustments can't
+  // both pass a stale negative check or lose a write.
+  let balanceAfter;
+  try {
+    const tx = tdb().transaction(() => {
+      const upd = tdb().prepare(
+        'UPDATE retail_customers SET balance = ROUND(COALESCE(balance, 0) + ?, 2) WHERE id = ? AND ROUND(COALESCE(balance, 0) + ?, 2) >= 0'
+      ).run(delta, id, delta);
+      if (upd.changes !== 1) { const e = new Error('would_go_negative'); e.code = 'WOULD_GO_NEGATIVE'; throw e; }
+      balanceAfter = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(id).balance;
+      tdb().prepare(
+        `INSERT INTO retail_topup_transactions
+           (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
+         VALUES (?, ?, 0, 'admin_adjust', 'success', CURRENT_TIMESTAMP, ?, ?)`
+      ).run(id, delta, `adminadj:${req.user.id}:${Date.now()}`, JSON.stringify({ reason, by: req.user.username }));
+    });
+    tx();
+  } catch (e) {
+    if (e.code === 'WOULD_GO_NEGATIVE') return res.status(409).json({ success: false, error: 'would_go_negative' });
+    throw e;
+  }
+  logActivity(req.user.id, req.user.username, 'wallet_adjust', 'retail_customer', id, { delta, reason, balance_after: balanceAfter }, req.ip);
+  res.json({ success: true, balance_after: balanceAfter });
 });
 
 // Address admin — create / edit / delete a customer's saved addresses.
@@ -5241,16 +5316,24 @@ router.post('/api/retail/review-photos', requireRetailAuth, express.json({ limit
   }
   const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/.exec(data);
   if (!m) return res.status(400).json({ success: false, error: 'bad_data_uri' });
-  const mime = m[1];
   const sizeBytes = Math.floor(m[2].length * 3 / 4);
   if (sizeBytes > 5 * 1024 * 1024) {
     return res.status(400).json({ success: false, error: 'too_large' });
   }
+  // Verify the bytes are a real raster image (rejects SVG / spoofed mime) and
+  // pin the stored mime + data URI to the sniffed type, not the client label.
+  let mime, normData;
+  try {
+    const buf = Buffer.from(m[2], 'base64');
+    mime = sniffImageMime(buf);
+    if (!mime) return res.status(400).json({ success: false, error: 'bad_data_uri' });
+    normData = `data:${mime};base64,${m[2]}`;
+  } catch { return res.status(400).json({ success: false, error: 'bad_data_uri' }); }
   try {
     const info = tdb().prepare(
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
        VALUES (?, ?, ?, ?, NULL)`
-    ).run('review-photo', mime, sizeBytes, data);
+    ).run('review-photo', mime, sizeBytes, normData);
     res.json({ success: true, data: { url: `/api/retail/media/${info.lastInsertRowid}` } });
   } catch (e) {
     console.error('[retail/review-photo] insert failed:', e.message);
@@ -5384,8 +5467,10 @@ router.patch('/api/retail-admin/reviews/:id', requireRetailAdmin, express.json()
   const exists = tdb().prepare('SELECT id FROM retail_reviews WHERE id = ?').get(id);
   if (!exists) return res.status(404).json({ success: false, error: 'not_found' });
   if ('is_visible' in (req.body || {})) {
+    const visible = req.body.is_visible ? 1 : 0;
     tdb().prepare('UPDATE retail_reviews SET is_visible = ? WHERE id = ?')
-      .run(req.body.is_visible ? 1 : 0, id);
+      .run(visible, id);
+    logActivity(req.user.id, req.user.username, visible ? 'show' : 'hide', 'retail_review', id, { is_visible: visible }, req.ip);
   }
   res.json({ success: true });
 });
@@ -5597,16 +5682,24 @@ router.post('/api/retail/customer/avatar', requireRetailAuth, express.json({ lim
   }
   const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/.exec(data);
   if (!m) return res.status(400).json({ success: false, error: 'bad_data_uri' });
-  const mime = m[1];
   const sizeBytes = Math.floor(m[2].length * 3 / 4);
   if (sizeBytes > 5 * 1024 * 1024) {
     return res.status(400).json({ success: false, error: 'too_large' });
   }
+  // Verify the bytes are a real raster image (rejects SVG / spoofed mime) and
+  // pin the stored mime + data URI to the sniffed type, not the client label.
+  let mime, normData;
+  try {
+    const buf = Buffer.from(m[2], 'base64');
+    mime = sniffImageMime(buf);
+    if (!mime) return res.status(400).json({ success: false, error: 'bad_data_uri' });
+    normData = `data:${mime};base64,${m[2]}`;
+  } catch { return res.status(400).json({ success: false, error: 'bad_data_uri' }); }
   try {
     const info = tdb().prepare(
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
        VALUES (?, ?, ?, ?, NULL)`
-    ).run('avatar', mime, sizeBytes, data);
+    ).run('avatar', mime, sizeBytes, normData);
     res.json({ success: true, data: { url: `/api/retail/media/${info.lastInsertRowid}` } });
   } catch (e) {
     console.error('[retail/avatar] insert failed:', e.message);
@@ -5987,7 +6080,7 @@ router.get('/api/retail-admin/flash-sales', requireRetailAdmin, (req, res) => {
 
 router.put('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare('SELECT id, name_en, flash_starts_at, flash_ends_at FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1').get(id);
+  const existing = tdb().prepare('SELECT id, name_en, flash_price, flash_starts_at, flash_ends_at FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
 
   const body = req.body || {};
@@ -6010,12 +6103,14 @@ router.put('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, expr
     return res.status(400).json({ success: false, error: 'flash_stock_limit_invalid' });
   }
 
-  // Reset flash_sold whenever the window or price changes so a new event
+  // Reset flash_sold whenever the window OR price changes so a new event
   // doesn't inherit the previous event's count. The admin can also reset
   // manually by re-saving the same values.
   const windowChanged =
     String(existing.flash_starts_at || '') !== String(starts || '') ||
     String(existing.flash_ends_at   || '') !== String(ends   || '');
+  const priceChanged = Number(existing.flash_price) !== price;
+  const resetNeeded = windowChanged || priceChanged;
 
   tdb().prepare(
     `UPDATE products
@@ -6026,10 +6121,10 @@ router.put('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, expr
             flash_sold        = CASE WHEN ? = 1 THEN 0 ELSE flash_sold END,
             updated_at        = CURRENT_TIMESTAMP
       WHERE id = ?`
-  ).run(price, starts, ends, limit, windowChanged ? 1 : 0, id);
+  ).run(price, starts, ends, limit, resetNeeded ? 1 : 0, id);
 
   logActivity(req.user.id, req.user.username, 'update', 'product_flash_sale', id,
-    { name: existing.name_en, price, starts, ends, limit, reset: windowChanged }, req.ip);
+    { name: existing.name_en, price, starts, ends, limit, reset: resetNeeded }, req.ip);
 
   const fresh = tdb().prepare(
     `SELECT id, name_en, flash_price, flash_starts_at, flash_ends_at,
@@ -6100,9 +6195,14 @@ router.patch('/api/retail-admin/categories/:id', requireRetailAdmin, express.jso
   if (!name) return res.status(400).json({ success: false, error: 'name_required' });
   if (name === existing.name) return res.json({ success: true, data: existing });
   try {
-    tdb().prepare("UPDATE categories SET name = ? WHERE id = ?").run(name, id);
-    // Propagate the rename to products that referenced the old name.
-    tdb().prepare("UPDATE products SET category = ? WHERE category = ?").run(name, existing.name);
+    // Atomic: the category rename and the product back-propagation must both
+    // land or neither — otherwise a mid-flight failure leaves products pointing
+    // at a category name that no longer exists.
+    tdb().transaction(() => {
+      tdb().prepare("UPDATE categories SET name = ? WHERE id = ?").run(name, id);
+      // Propagate the rename to products that referenced the old name.
+      tdb().prepare("UPDATE products SET category = ? WHERE category = ?").run(name, existing.name);
+    })();
     logActivity(req.user.id, req.user.username, 'update', 'category', id,
                 { kind: 'product', from: existing.name, to: name }, req.ip);
     res.json({ success: true, data: { id, name } });
@@ -6496,6 +6596,16 @@ router.post('/api/retail-admin/invoice-file', requireRetailAdmin, express.json({
   if (!m) return res.status(400).json({ success: false, error: 'not_a_pdf' });
   const sizeBytes = Math.floor(m[2].length * 3 / 4);
   if (sizeBytes > 10 * 1024 * 1024) return res.status(400).json({ success: false, error: 'too_large' });
+  // Don't trust the data-URL's self-declared MIME — verify the real bytes start
+  // with the PDF magic (%PDF-). Decode only the small header, not the whole blob.
+  try {
+    const head = Buffer.from(m[2].slice(0, 16), 'base64');
+    if (head.subarray(0, 5).toString('latin1') !== '%PDF-') {
+      return res.status(400).json({ success: false, error: 'not_a_pdf' });
+    }
+  } catch {
+    return res.status(400).json({ success: false, error: 'not_a_pdf' });
+  }
   try {
     const info = tdb().prepare(
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
@@ -7379,11 +7489,30 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     status === 'refunded' ||
     (status === 'cancelled' && o.status !== 'pending_payment');
   if (isPaidRefundEvent && !WECHAT_PAY_DEV_MODE) {
+    const already = tdb().prepare('SELECT refund_status FROM retail_orders WHERE id = ?').get(id)?.refund_status;
+    // An order that already went through the explicit refund workflow
+    // (approved / paying / paid) must NOT be force-refunded at full total via
+    // this status shortcut — that would ignore a smaller approved amount and/or
+    // double-refund. Route the operator to the auditable payout flow instead.
+    if (['approved', 'paying', 'paid'].includes(already)) {
+      return res.status(409).json({
+        success: false, error: 'use_refund_payout', refund_status: already,
+        message: 'This order already has an approved or paid refund — use the refund payout action.',
+      });
+    }
     const pay = tdb().prepare(
       "SELECT out_trade_no, amount FROM retail_payments WHERE order_id = ? AND status IN ('success','refunded') ORDER BY id DESC LIMIT 1"
     ).get(id);
-    const already = tdb().prepare('SELECT refund_status FROM retail_orders WHERE id = ?').get(id)?.refund_status;
-    if (pay?.out_trade_no && already !== 'paid') {
+    if (pay?.out_trade_no) {
+      // Atomically claim the refund (→ 'paying') so a double-click or a second
+      // operator can't each fire a real WeChat refund. Only the request that
+      // wins this transition proceeds; on failure we revert to the prior state.
+      const claim = tdb().prepare(
+        "UPDATE retail_orders SET refund_status = 'paying' WHERE id = ? AND COALESCE(refund_status, '') NOT IN ('approved', 'paying', 'paid')"
+      ).run(id);
+      if (claim.changes !== 1) {
+        return res.status(409).json({ success: false, error: 'refund_already_processing' });
+      }
       const fullTotal   = +(tdb().prepare('SELECT total FROM retail_orders WHERE id = ?').get(id)?.total || 0);
       const totalCents  = Math.round(Number(pay.amount != null ? pay.amount : fullTotal) * 100);
       const refundCents = Math.round(fullTotal * 100);
@@ -7391,11 +7520,13 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       try {
         const r = await wechatPayRefund({ outTradeNo: pay.out_trade_no, outRefundNo, refundCents, totalCents, reason: reason || ((status === 'cancelled' ? 'Cancelled order ' : 'Refund order ') + id) });
         if (r.status === 'ABNORMAL') {
+          tdb().prepare("UPDATE retail_orders SET refund_status = ? WHERE id = ? AND refund_status = 'paying'").run(already ?? null, id);
           return res.status(502).json({ success: false, error: 'wechat_refund_abnormal', message: 'WeChat returned ABNORMAL (often insufficient merchant balance) — check the merchant platform.' });
         }
         wechatRefundRef = r.refund_id + (r.status ? ' (' + r.status + ')' : '');
       } catch (e) {
         console.error('[wechat-refund]', e);
+        tdb().prepare("UPDATE retail_orders SET refund_status = ? WHERE id = ? AND refund_status = 'paying'").run(already ?? null, id);
         return res.status(502).json({ success: false, error: e.code || 'wechat_refund_failed', message: e.message });
       }
     }
@@ -7406,9 +7537,13 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   if (def.col) { sets.push(`${def.col} = CURRENT_TIMESTAMP`); }
   if (status === 'cancelled' && reason) { sets.push('cancelled_reason = ?'); params.push(reason); }
   if (staff_note != null) { sets.push('staff_note = ?'); params.push(staff_note); }
-  // Mark a pending refund request as approved when status flips to 'refunded'.
+  // The status shortcut completes the refund in one shot (money moved above,
+  // paid amount + 'paid' event recorded below), so mark it 'paid' — NOT
+  // 'approved', which would leave it re-payable via /refund/payout (double
+  // refund). The 'approved'/'paying'/'paid' guard above already blocked orders
+  // mid-workflow, so reaching here means this is the terminal refund.
   if (status === 'refunded') {
-    sets.push("refund_status = 'approved'");
+    sets.push("refund_status = 'paid'");
   }
   params.push(id);
   tdb().prepare(`UPDATE retail_orders SET ${sets.join(', ')} WHERE id = ?`).run(...params);
@@ -7529,10 +7664,11 @@ router.get('/api/retail-admin/refunds', requireRetailAdmin, (req, res) => {
     requested: ['pending'],   // alias for the externally-shipped name
     reviewing: ['reviewing'],
     approved:  ['approved'],
+    paying:    ['paying'],   // transient: claimed for payout, money in flight
     paid:      ['paid'],
     rejected:  ['rejected'],
     withdrawn: ['withdrawn'],
-    all:       ['pending', 'reviewing', 'approved', 'paid', 'rejected', 'withdrawn'],
+    all:       ['pending', 'reviewing', 'approved', 'paying', 'paid', 'rejected', 'withdrawn'],
   };
   const states = stateSets[filter] || stateSets.open;
   const placeholders = states.map(() => '?').join(',');
@@ -7702,30 +7838,52 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
     : Number(o.refund_amount_approved) || 0;
   if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount' });
 
-  // WeChat method → actually push the money back to the customer via the v3
-  // refund API (real refund, original payment route). Other methods stay as
-  // manual bookkeeping records. In DEV mode (no creds) this falls back to a
-  // plain record too. A failed WeChat refund aborts here WITHOUT marking the
-  // order refunded, so the operator sees it didn't go through.
-  let payoutRef = reference;
+  // For a real WeChat refund we need the original transaction. Check it exists
+  // BEFORE claiming the order so a missing txn never leaves it stuck in the
+  // transient 'paying' state.
+  let pay = null;
   if (method === 'wechat' && !WECHAT_PAY_DEV_MODE) {
-    const pay = tdb().prepare(
+    pay = tdb().prepare(
       "SELECT out_trade_no, amount FROM retail_payments WHERE order_id = ? AND status IN ('success','refunded') ORDER BY id DESC LIMIT 1"
     ).get(id);
     if (!pay?.out_trade_no) {
       return res.status(409).json({ success: false, error: 'no_wechat_transaction', message: 'No WeChat transaction on this order to refund against.' });
     }
+  }
+
+  // Atomically claim the approved → paying transition. THIS is the guard that
+  // makes payout safe under a double-click or two operators acting at once:
+  // only the request that flips 'approved' → 'paying' proceeds past here, so a
+  // second real refund can never be issued. On any failure below we revert the
+  // claim back to 'approved' so the payout can be retried.
+  const claim = tdb().prepare(
+    "UPDATE retail_orders SET refund_status = 'paying', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND refund_status = 'approved'"
+  ).run(id);
+  if (claim.changes !== 1) {
+    const cur = tdb().prepare('SELECT refund_status FROM retail_orders WHERE id = ?').get(id)?.refund_status;
+    return res.status(409).json({ success: false, error: 'not_payable', refund_status: cur });
+  }
+
+  // WeChat method → actually push the money back to the customer via the v3
+  // refund API (real refund, original payment route). Other methods stay as
+  // manual bookkeeping records. In DEV mode (no creds) this falls back to a
+  // plain record too. A failed WeChat refund reverts the claim, so the order
+  // returns to 'approved' and the operator sees it didn't go through.
+  let payoutRef = reference;
+  if (method === 'wechat' && !WECHAT_PAY_DEV_MODE) {
     const totalCents  = Math.round(Number(pay.amount != null ? pay.amount : o.total) * 100);
     const refundCents = Math.round(amount * 100);
     const outRefundNo = ('RF' + pay.out_trade_no + Date.now().toString().slice(-6)).slice(0, 63);
     try {
       const r = await wechatPayRefund({ outTradeNo: pay.out_trade_no, outRefundNo, refundCents, totalCents, reason: note || ('Refund order ' + id) });
       if (r.status === 'ABNORMAL') {
+        tdb().prepare("UPDATE retail_orders SET refund_status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND refund_status = 'paying'").run(id);
         return res.status(502).json({ success: false, error: 'wechat_refund_abnormal', message: 'WeChat returned ABNORMAL (often insufficient merchant balance) — check the merchant platform.' });
       }
       payoutRef = r.refund_id + (r.status ? ' (' + r.status + ')' : '');
     } catch (e) {
       console.error('[wechat-refund]', e);
+      tdb().prepare("UPDATE retail_orders SET refund_status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND refund_status = 'paying'").run(id);
       return res.status(502).json({ success: false, error: e.code || 'wechat_refund_failed', message: e.message });
     }
   }
@@ -7740,7 +7898,7 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
             refund_payer_id = ?,
             refund_review_note = COALESCE(NULLIF(?, ''), refund_review_note),
             updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?`
+      WHERE id = ? AND refund_status = 'paying'`
   ).run(amount, method, payoutRef || null, req.user.id, note, id);
 
   // Mirror onto retail_payments so reconciliation reports see it.
@@ -7870,8 +8028,25 @@ function pageKey(req, fallback = 'home') {
   return ALLOWED_PAGES.has(p) ? p : null;
 }
 
+// Upper bound on blocks per layout — well above any real page, but stops a
+// pathological draft from bloating storefront_config / the /config response.
+const MAX_BLOCKS = 60;
+// Block layouts are stored verbatim and served to the mini app via /config,
+// where several props (image_url, link, rich text) get rendered. A
+// javascript:/vbscript:/data:text/html value in any prop is therefore a
+// stored-XSS vector, so reject blocks that carry one anywhere in their tree.
+const DANGEROUS_URL_RE = /(?:^|[\s"'`(])\s*(?:javascript|vbscript)\s*:|data\s*:\s*text\/html/i;
+function blockHasDangerousString(val, depth = 0) {
+  if (depth > 8) return true; // pathologically deep → treat as hostile
+  if (typeof val === 'string') return DANGEROUS_URL_RE.test(val);
+  if (Array.isArray(val)) return val.some(v => blockHasDangerousString(v, depth + 1));
+  if (val && typeof val === 'object') return Object.values(val).some(v => blockHasDangerousString(v, depth + 1));
+  return false;
+}
+
 function validateBlocks(blocks) {
   if (!Array.isArray(blocks)) return { error: 'blocks_not_array' };
+  if (blocks.length > MAX_BLOCKS) return { error: 'too_many_blocks', details: { max: MAX_BLOCKS } };
   const ids = new Set();
   for (const b of blocks) {
     if (!b || typeof b !== 'object') return { error: 'block_not_object' };
@@ -7880,6 +8055,9 @@ function validateBlocks(blocks) {
     ids.add(b.id);
     if (!ALLOWED_BLOCK_TYPES.has(b.type)) {
       return { error: 'block_type_invalid', details: { id: b.id, type: b.type } };
+    }
+    if (blockHasDangerousString(b)) {
+      return { error: 'block_unsafe_value', details: { id: b.id } };
     }
   }
   return {};
@@ -8162,7 +8340,17 @@ router.get('/api/retail/media/:id', (req, res) => {
   // data is "data:image/jpeg;base64,..." — strip prefix and stream bytes
   const m = /^data:[^;]+;base64,(.+)$/.exec(row.data);
   if (!m) return res.status(500).end();
-  res.set('Content-Type', row.mime_type);
+  // Never let the browser MIME-sniff our blob into something executable, and
+  // only serve known-safe types inline. Anything else (legacy SVG, mislabeled
+  // upload) is handed back as an opaque download so it can't run as a page.
+  res.set('X-Content-Type-Options', 'nosniff');
+  if (MEDIA_INLINE_MIME.has(row.mime_type)) {
+    res.set('Content-Type', row.mime_type);
+    res.set('Content-Disposition', 'inline');
+  } else {
+    res.set('Content-Type', 'application/octet-stream');
+    res.set('Content-Disposition', 'attachment');
+  }
   res.set('Cache-Control', 'public, max-age=2592000, immutable');  // 30d
   res.end(Buffer.from(m[1], 'base64'));
 });
@@ -8186,13 +8374,16 @@ router.post('/api/retail-admin/cms/media', requireRetailAdmin, (req, res, next) 
       return res.status(400).json({ success: false, error: code });
     }
     if (!req.file) return res.status(400).json({ success: false, error: 'no_file' });
-    const dataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    // Sniff real bytes — reject SVG / non-raster, pin mime to the sniffed type.
+    const sniffed = sniffImageMime(req.file.buffer);
+    if (!sniffed) return res.status(400).json({ success: false, error: 'not_an_image' });
+    const dataUri = `data:${sniffed};base64,${req.file.buffer.toString('base64')}`;
     const info = tdb().prepare(
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
        VALUES (?, ?, ?, ?, ?)`
     ).run(
       req.file.originalname || null,
-      req.file.mimetype,
+      sniffed,
       req.file.size,
       dataUri,
       req.user.id
@@ -8203,7 +8394,7 @@ router.post('/api/retail-admin/cms/media', requireRetailAdmin, (req, res, next) 
         id: info.lastInsertRowid,
         url: `/api/retail/media/${info.lastInsertRowid}`,
         filename: req.file.originalname,
-        mime_type: req.file.mimetype,
+        mime_type: sniffed,
         size_bytes: req.file.size,
       },
     });
@@ -8431,16 +8622,21 @@ router.post('/api/retail-admin/media/upload', requireRetailAdmin, (req, res) => 
       return res.status(400).json({ success: false, error: code });
     }
     if (!req.file) return res.status(400).json({ success: false, error: 'no_file' });
+    // Don't trust the multipart-declared mime — sniff the real bytes. Rejects
+    // SVG (XSS vector) and anything that isn't a recognized raster image, and
+    // pins the stored/served mime to the sniffed value.
+    const sniffed = sniffImageMime(req.file.buffer);
+    if (!sniffed) return res.status(400).json({ success: false, error: 'not_an_image' });
     const altText = (req.body?.alt_text || '').toString().slice(0, 500) || null;
     let tags = [];
     try { tags = normalizeTagList(JSON.parse(req.body?.tags || '[]')); } catch {}
-    const dataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    const dataUri = `data:${sniffed};base64,${req.file.buffer.toString('base64')}`;
     const info = tdb().prepare(
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, alt_text, tags, uploaded_by)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(
       req.file.originalname || null,
-      req.file.mimetype,
+      sniffed,
       req.file.size,
       dataUri,
       altText,
@@ -9321,17 +9517,6 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
         } : null,
         missing_items: analysis.missing_items,
       };
-      // Diagnostic — remove once the chip render is confirmed working.
-      console.log('[quote/routing]', JSON.stringify({
-        customer: req.customer?.id,
-        gate: analysis.gate,
-        nearest_code: analysis.nearest?.store?.code,
-        nearest_km: analysis.nearest?.distance_km,
-        fallback_code: analysis.fallback?.store?.code,
-        fallback_km: analysis.fallback?.distance_km,
-        extra_km: analysis.fallback?.extra_km,
-        extra_min: analysis.fallback?.extra_min_estimate,
-      }));
     }
   } catch (e) {
     console.error('[checkout/quote routing]', e);
@@ -10389,7 +10574,11 @@ router.put('/api/retail-admin/polls/:id', requireRetailAdmin, express.json(), (r
     }
   });
   try { tx(); }
-  catch (e) { return res.status(400).json({ success: false, error: e.message }); }
+  catch (e) {
+    // Don't leak raw SQLite text to the client — log it, return a stable code.
+    console.error('[poll update]', id, e);
+    return res.status(500).json({ success: false, error: 'update_failed' });
+  }
 
   logActivity(req.user.id, req.user.username, 'update', 'retail_poll', id, { updates: Object.keys(updates), replaced_options: !!(incomingOptions && b.replace_options) }, req.ip);
   const fresh = tdb().prepare('SELECT * FROM retail_polls WHERE id = ?').get(id);

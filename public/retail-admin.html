@@ -8091,8 +8091,8 @@ async function api(path, opts = {}) {
   }
   const r = await fetch(path, { credentials: 'same-origin', ...opts, headers });
   if (r.status === 401) { location.href = '/backend/login'; throw new Error('401'); }
-  const j = await r.json();
-  if (!j.success) throw new Error(j.error || 'request_failed');
+  const j = await r.json().catch(() => ({ success: false, error: 'bad_response', status: r.status }));
+  if (!j.success) throw new Error(j.error || ('request_failed (' + r.status + ')'));
   return j;
 }
 function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -9268,7 +9268,7 @@ async function loadOrders(opts = {}) {
         <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no">${o.order_no}</span></td>
         <td>
           <div class="ord-cust">${escapeHtml(o.nickname || o.recipient_name || '—')}</div>
-          <div class="muted" style="font-size: 11px; margin-top: 2px">${o.recipient_phone || ''}</div>
+          <div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(o.recipient_phone || '')}</div>
         </td>
         <td class="oc-store">
           ${o.store_code ? `<div>${escapeHtml(o.store_name_en || o.store_code)}</div>
@@ -11153,7 +11153,7 @@ async function saveSnippets() {
       }
     }
   } catch (e) {
-    $('#snip-status').innerHTML = '<span class="err">Failed: ' + escapeHtml(e.message) + '</span>';
+    $('#snip-status').innerHTML = '<span class="err">Failed · 失败: ' + escapeHtml(e.message) + '</span>';
   }
 }
 
@@ -11342,7 +11342,7 @@ async function saveConfig() {
     status.innerHTML = '<span class="ok">Saved ✓</span>';
     toast('Settings saved · 设置已保存');
   } catch (e) {
-    status.innerHTML = '<span class="err">Failed: ' + e.message + '</span>';
+    status.innerHTML = '<span class="err">Failed · 失败: ' + e.message + '</span>';
   }
 }
 
@@ -11478,7 +11478,7 @@ async function saveCategoryOrder() {
     status.innerHTML = '<span class="ok">Order saved ✓</span>';
     setTimeout(() => { status.innerHTML = ''; }, 1500);
   } catch (e) {
-    status.innerHTML = '<span class="err">Save failed: ' + escapeHtml(e.message) + '</span>';
+    status.innerHTML = '<span class="err">Save failed · 保存失败: ' + escapeHtml(e.message) + '</span>';
     // Reload to recover from a partial state
     loadCategories();
   }
@@ -11499,7 +11499,7 @@ async function renameCategory(id, input) {
     setTimeout(() => { status.innerHTML = ''; }, 1500);
   } catch (e) {
     input.value = oldName;
-    status.innerHTML = '<span class="err">Rename failed: ' + escapeHtml(e.message) + '</span>';
+    status.innerHTML = '<span class="err">Rename failed · 重命名失败: ' + escapeHtml(e.message) + '</span>';
   }
 }
 
@@ -11517,16 +11517,16 @@ async function addCategory() {
     status.innerHTML = '<span class="ok">Added ✓</span>';
     setTimeout(() => { status.innerHTML = ''; }, 1500);
   } catch (e) {
-    status.innerHTML = '<span class="err">Add failed: ' + escapeHtml(e.message) + '</span>';
+    status.innerHTML = '<span class="err">Add failed · 添加失败: ' + escapeHtml(e.message) + '</span>';
   }
 }
 
 async function deleteCategory(id, name, usage) {
   if (usage > 0) {
-    alert(`"${name}" is used by ${usage} product${usage === 1 ? '' : 's'}. Recategorize or unpublish those products first.`);
+    alert(`"${name}" is used by ${usage} product${usage === 1 ? '' : 's'}. Recategorize or unpublish those products first. · "${name}" 已被 ${usage} 个商品使用。请先将这些商品重新分类或下架。`);
     return;
   }
-  if (!confirm(`Delete category "${name}"?`)) return;
+  if (!confirm(`Delete category "${name}"? · 删除分类 "${name}"？`)) return;
   const status = $('#cats-status');
   status.innerHTML = 'Deleting…';
   try {
@@ -11536,7 +11536,7 @@ async function deleteCategory(id, name, usage) {
     status.innerHTML = '<span class="ok">Deleted ✓</span>';
     setTimeout(() => { status.innerHTML = ''; }, 1500);
   } catch (e) {
-    status.innerHTML = '<span class="err">Delete failed: ' + escapeHtml(e.message) + '</span>';
+    status.innerHTML = '<span class="err">Delete failed · 删除失败: ' + escapeHtml(e.message) + '</span>';
   }
 }
 
@@ -11598,7 +11598,7 @@ async function loadBroadcasts() {
   try {
     const { data } = await api('/api/retail-admin/broadcasts');
     if (!data.length) {
-      wrap.innerHTML = '<div class="muted" style="font-size: 12px;">No broadcasts yet.</div>';
+      wrap.innerHTML = '<div class="muted" style="font-size: 12px;">No broadcasts yet. · 暂无群发消息。</div>';
       return;
     }
     wrap.innerHTML = data.map(b => {
@@ -11656,7 +11656,7 @@ async function sendBroadcast() {
   }
   const audCount = ($('#bc-aud-count').textContent || '').replace(/[^0-9]/g, '');
   const verb = mode === 'later' ? 'Schedule' : 'Send';
-  if (!confirm(`${verb} this broadcast to ${audCount || 'all active'} customer${audCount === '1' ? '' : 's'}?`)) return;
+  if (!confirm(`${verb} this broadcast to ${audCount || 'all active'} customer${audCount === '1' ? '' : 's'}? · 向 ${audCount || '所有活跃'} 位客户${verb === 'Schedule' ? '排期' : '发送'}此群发消息？`)) return;
 
   const payload = { title_en, title_cn, body_en, body_cn, deeplink };
   if (scheduledRaw) {
@@ -11683,13 +11683,15 @@ async function sendBroadcast() {
   }
 }
 async function recallBroadcast(id, currentStatus) {
-  const verb = currentStatus === 'scheduled' ? 'Cancel this scheduled broadcast' : 'Recall this broadcast (remove from every customer\'s inbox)';
+  const verb = currentStatus === 'scheduled'
+    ? 'Cancel this scheduled broadcast · 取消此已排期的群发消息'
+    : 'Recall this broadcast (remove from every customer\'s inbox) · 撤回此群发消息（从每位客户的收件箱中移除）';
   if (!confirm(verb + '?')) return;
   try {
     await api('/api/retail-admin/broadcasts/' + id + '/recall', { method: 'POST' });
     loadBroadcasts();
   } catch (e) {
-    alert('Failed: ' + e.message);
+    alert('Failed · 失败: ' + e.message);
   }
 }
 // Lazy-load when the operator first opens the tab.
@@ -12627,7 +12629,7 @@ async function deleteZoneFromDrawer() {
   if (!_zoneEditId) return;
   const z = _zones.find(x => x.id === _zoneEditId);
   if (!z) return;
-  if (!confirm(`Delete delivery zone "${zoneLabel(z)}"?`)) return;
+  if (!confirm(`Delete delivery zone "${zoneLabel(z)}"? · 删除配送区 "${zoneLabel(z)}"？`)) return;
   try {
     await api(`/api/retail-admin/delivery-zones/${_zoneEditId}`, { method: 'DELETE' });
     toast('Zone deleted · 配送区已删除');
@@ -12843,7 +12845,7 @@ async function updateZone(id, field, val) {
 }
 
 async function deleteZone(id, label) {
-  if (!confirm(`Delete delivery zone "${label}"?`)) return;
+  if (!confirm(`Delete delivery zone "${label}"? · 删除配送区 "${label}"？`)) return;
   try {
     await api(`/api/retail-admin/delivery-zones/${id}`, { method: 'DELETE' });
     toast('Zone deleted · 配送区已删除');
@@ -12990,8 +12992,8 @@ async function deleteFolder(id) {
   const f = _mlFolders.find(x => x.id === id);
   if (!f) return;
   const msg = f.count
-    ? `Delete folder "${f.name}"? Its ${f.count} item${f.count===1?'':'s'} will move to Unsorted (images are kept).`
-    : `Delete empty folder "${f.name}"?`;
+    ? `Delete folder "${f.name}"? Its ${f.count} item${f.count===1?'':'s'} will move to Unsorted (images are kept). · 删除文件夹 "${f.name}"？其中 ${f.count} 个项目将移至未分类（图片保留）。`
+    : `Delete empty folder "${f.name}"? · 删除空文件夹 "${f.name}"？`;
   if (!confirm(msg)) return;
   try {
     await api(`/api/retail-admin/media/folders/${id}`, { method: 'DELETE' });
@@ -13251,7 +13253,7 @@ async function deleteMediaFromDrawer() {
   if (!_mlEditId) return;
   const m = _mlRows.find(r => r.id === _mlEditId);
   const used = _mlUsage[_mlEditId] || 0;
-  const warn = used ? `This media is referenced in ${used} place${used===1?'':'s'}. Delete anyway?` : `Delete "${m?.filename || '#'+_mlEditId}"?`;
+  const warn = used ? `This media is referenced in ${used} place${used===1?'':'s'}. Delete anyway? · 此媒体被 ${used} 处引用。仍要删除吗？` : `Delete "${m?.filename || '#'+_mlEditId}"? · 删除 "${m?.filename || '#'+_mlEditId}"？`;
   if (!confirm(warn)) return;
   try {
     await api(`/api/retail-admin/media/bulk-delete`, { method: 'POST', body: { ids: [_mlEditId] } });
@@ -13574,7 +13576,7 @@ async function loadTopupPackages() {
   const rows = r?.data || [];
   const tbody = $('#tp-table tbody');
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="muted">No top-up packages yet — add one above.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">No top-up packages yet — add one above. · 暂无充值套餐 — 请在上方添加。</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map(p => `
@@ -13613,7 +13615,7 @@ async function updateTopup(id, field, val) {
 }
 
 async function deleteTopupPackage(id, amt) {
-  if (!confirm(`Delete ¥${amt} top-up package?`)) return;
+  if (!confirm(`Delete ¥${amt} top-up package? · 删除 ¥${amt} 充值套餐？`)) return;
   try {
     await api(`/api/retail-admin/topup-packages/${id}`, { method: 'DELETE' });
     toast('Package deleted · 套餐已删除');
@@ -13682,7 +13684,7 @@ function renderRctiersTable() {
   const tbody = document.querySelector('#rctier-table tbody');
   if (!tbody) return;
   if (!RCTIER_STATE.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted" style="padding: 8px;">No tiers — click "+ Add tier" to create one.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="muted" style="padding: 8px;">No tiers — click "+ Add tier" to create one. · 暂无会员等级 — 点击"+ Add tier"创建。</td></tr>';
     return;
   }
   tbody.innerHTML = RCTIER_STATE.map((t, i) => `
@@ -13761,13 +13763,13 @@ async function loadTopupTransactions() {
   const rows = r?.data || [];
   const tbody = $('#tp-tx-table tbody');
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">No top-up transactions yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">No top-up transactions yet. · 暂无充值记录。</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map(t => `
     <tr>
       <td class="muted">${(t.created_at || '').replace('T',' ').slice(0,16)}</td>
-      <td>${t.nickname || '(no name)'} <span class="muted">${t.phone || ''}</span></td>
+      <td>${escapeHtml(t.nickname || '(no name)')} <span class="muted">${escapeHtml(t.phone || '')}</span></td>
       <td class="numeric">${fmt(t.amount)}</td>
       <td class="numeric">${t.bonus_points || 0}</td>
       <td>${paymentBrandHTML(t.payment_method)}</td>
@@ -13829,7 +13831,7 @@ function syncReviewTagLabels() {
 function renderReviewTagsTable() {
   const tbody = $('#rtags-table tbody');
   if (!REVIEW_TAGS_STATE.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="muted">No tags yet — click "+ Add tag" to create one.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">No tags yet — click "+ Add tag" to create one. · 暂无标签 — 点击"+ Add tag"创建。</td></tr>';
     return;
   }
   tbody.innerHTML = REVIEW_TAGS_STATE.map((t, i) => {
@@ -13866,7 +13868,7 @@ function addReviewTag() {
 function removeReviewTag(i) {
   const t = REVIEW_TAGS_STATE[i];
   if (!t) return;
-  if (t.id && !confirm(`Remove "${t.id}"? Reviews already tagged with this id will lose that chip.`)) return;
+  if (t.id && !confirm(`Remove "${t.id}"? Reviews already tagged with this id will lose that chip. · 移除 "${t.id}"？已使用此标签的评价将失去该标记。`)) return;
   REVIEW_TAGS_STATE.splice(i, 1);
   renderReviewTagsTable();
 }
@@ -13951,7 +13953,7 @@ function renderFaqCatsTable() {
   const tbody = $('#faq-cats-table tbody');
   if (!tbody) return;
   if (!FAQ_CATS.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="muted">No categories yet — click "+ Add category" to create one.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">No categories yet — click "+ Add category" to create one. · 暂无分类 — 点击"+ Add category"创建。</td></tr>';
     return;
   }
   tbody.innerHTML = FAQ_CATS.map((c, i) => {
@@ -13989,7 +13991,7 @@ function removeFaqCat(i) {
   const c = FAQ_CATS[i];
   if (!c) return;
   const used = FAQ_QS.filter(q => q.cat === c.id).length;
-  if (used && !confirm(`Remove "${c.id || '(empty)'}"? ${used} question(s) still reference it and will be left uncategorised.`)) return;
+  if (used && !confirm(`Remove "${c.id || '(empty)'}"? ${used} question(s) still reference it and will be left uncategorised. · 移除 "${c.id || '(empty)'}"？仍有 ${used} 个问题引用它，将变为未分类。`)) return;
   FAQ_CATS.splice(i, 1);
   renderFaqCatsTable();
   renderFaqQs();
@@ -14065,7 +14067,7 @@ function addFaqQuestion() {
 function removeFaqQ(i) {
   const q = FAQ_QS[i];
   if (!q) return;
-  if ((q.q_en || q.q_cn) && !confirm(`Remove "${q.q_en || q.q_cn}"?`)) return;
+  if ((q.q_en || q.q_cn) && !confirm(`Remove "${q.q_en || q.q_cn}"? · 移除 "${q.q_en || q.q_cn}"？`)) return;
   FAQ_QS.splice(i, 1);
   renderFaqQs();
 }
@@ -14125,7 +14127,7 @@ async function saveFaq() {
     status.innerHTML = '<span class="ok">Saved ✓</span>';
     toast('FAQ saved · 常见问题已保存');
   } catch (e) {
-    status.innerHTML = '<span class="err">Failed: ' + escapeHtml(e.message) + '</span>';
+    status.innerHTML = '<span class="err">Failed · 失败: ' + escapeHtml(e.message) + '</span>';
   }
 }
 
@@ -14525,7 +14527,7 @@ async function fsSave() {
 }
 
 async function fsClearSale(productId, name) {
-  if (!confirm(`Clear the flash sale on "${name}"?\n\nThe product will revert to its regular price immediately. This can't be undone.`)) return;
+  if (!confirm(`Clear the flash sale on "${name}"?\n\nThe product will revert to its regular price immediately. This can't be undone. · 清除 "${name}" 的秒杀？\n\n商品将立即恢复原价，此操作无法撤销。`)) return;
   try {
     await api(`/api/retail-admin/products/${productId}/flash-sale`, { method: 'DELETE' });
     toast('Flash sale cleared · 秒杀已清除');
@@ -14552,7 +14554,7 @@ async function fsLoadList() {
   try {
     const { data } = await api('/api/retail-admin/flash-sales');
     if (!data.length) {
-      tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="icon">${ICONS.empty}</div><h3>No flash sales yet</h3><p class="muted">Set one up above to start a 秒杀 event.</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="icon">${ICONS.empty}</div><h3>No flash sales yet</h3><p class="muted">Set one up above to start a flash-sale event. · 请在上方设置以开启秒杀活动。</p></div></td></tr>`;
       return;
     }
     tbody.innerHTML = data.map(p => {
@@ -14662,7 +14664,7 @@ async function cuLoad() {
   CU_TOTAL = j.total || 0;
   const rows = j.data || [];
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">No customers found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">No customers found. · 未找到客户。</td></tr>';
   } else {
     tbody.innerHTML = rows.map(r => `
       <tr class="cu-row" data-recency="${cuRecency(r.last_login_at)}" style="cursor: pointer;" onclick="cuOpenDetail(${r.id})">
@@ -14859,7 +14861,7 @@ function cuRenderDetail() {
           <td class="numeric">${t.qty}</td>
           <td class="numeric">¥${Number(t.spend || 0).toFixed(2)}</td>
         </tr>`).join('')
-    : '<tr><td colspan="3" class="muted">No completed orders yet.</td></tr>';
+    : '<tr><td colspan="3" class="muted">No completed orders yet. · 暂无已完成订单。</td></tr>';
 
   const recentOrdersRows = d.recent_orders.length
     ? d.recent_orders.map(o => `
@@ -17804,6 +17806,16 @@ cuApplyUiScale(cuGetUiScale());
     'English only': '仅英文',
     '中文 only': '仅中文',
     'Loading…': '加载中…',
+    'Adding…': '添加中…',
+    'Added ✓': '已添加 ✓',
+    'Deleting…': '删除中…',
+    'Deleted ✓': '已删除 ✓',
+    'Saving…': '保存中…',
+    'Saved': '已保存',
+    'Saved ✓': '已保存 ✓',
+    'Sending…': '发送中…',
+    'Saving order…': '保存排序中…',
+    'Order saved ✓': '排序已保存 ✓',
   };
 
   // Only treat "X · Y" as a bilingual label when the right side contains
@@ -18147,7 +18159,7 @@ async function lbLoad() {
     lbApplyConfigToForm(body.data);
   } catch (e) {
     console.warn('[lb] config load failed', e);
-    showToast('Failed to load leaderboard config: ' + e.message);
+    toast('Failed to load leaderboard config: ' + e.message);
   }
   await lbLoadPreview();
   lbRenderPreview();
@@ -18280,13 +18292,13 @@ async function saveLeaderboardConfig() {
     if (!data.success) throw new Error(data.error || 'save_failed');
     lbApplyConfigToForm(data.data);
     if (status) status.textContent = 'Saved ' + new Date().toLocaleTimeString();
-    showToast('Leaderboard saved');
+    toast('Leaderboard saved');
     await lbLoadPreview();
     lbRenderPreview();
   } catch (e) {
     console.warn('[lb] save failed', e);
     if (status) status.textContent = 'Save failed · 保存失败: ' + e.message;
-    showToast('Save failed · 保存失败: ' + e.message);
+    toast('Save failed · 保存失败: ' + e.message);
   }
 }
 
