@@ -381,7 +381,7 @@
   border-bottom: 2rpx solid rgba(0,0,0,.08);
 }
 .row-compact { padding: 32rpx; gap: 0; }
-.row-img { width: 200rpx; height: 240rpx; background: var(--oat); overflow: hidden; flex-shrink: 0; position: relative; }
+.row-img { width: 176rpx; height: 212rpx; background: var(--oat); overflow: hidden; flex-shrink: 0; position: relative; }
 .row-img .img-full { width: 100%; height: 100%; }
 .row-body { flex: 1; min-width: 0; }
 .row-name { font-size: calc(30rpx * var(--font-scale)); line-height: 1.35; color: var(--ink); }
@@ -417,12 +417,11 @@
   font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.1em;
 }
 .row-right { text-align: right; min-width: 88rpx; }
-.row-price { font-size: calc(40rpx * var(--font-scale)); color: var(--ink); letter-spacing: 0.04em; line-height: 1; }
+.row-price { font-size: calc(32rpx * var(--font-scale)); color: var(--ink); letter-spacing: 0.04em; line-height: 1; }
 .row-price.is-flash { color: #E96174; font-weight: 700; }
-.row-price-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 4rpx; }
-/* "from"/"起" qualifier on variant cards. Sits above the price as a small
-   caption so the number column stays compact and the title doesn't get
-   squeezed into 3 lines by a "from ¥89" string that wouldn't fit. */
+/* Inline baseline so "FROM ¥42" rows align with plain "¥89" rows above —
+   no jitter when scanning prices down the column. */
+.row-price-stack { display: flex; flex-direction: row; align-items: baseline; justify-content: flex-end; gap: 8rpx; }
 .row-price-prefix {
   font-size: calc(18rpx * var(--font-scale));
   color: var(--olive);
