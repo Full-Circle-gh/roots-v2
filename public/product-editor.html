@@ -1336,7 +1336,10 @@ async function peBoot() {
   // Show a product picker instead of dead-ending.
   if (!id) { peShowPicker(); return; }
   try {
-    const res = await fetch('/api/retail-admin/products', { credentials: 'same-origin' });
+    // cache: 'no-store' — the LIST endpoint has no Cache-Control header, so
+    // some browsers return the pre-save copy on refresh and the editor looks
+    // like it lost the user's changes. Always force-revalidate on boot.
+    const res = await fetch('/api/retail-admin/products', { credentials: 'same-origin', cache: 'no-store' });
     if (res.status === 401 || res.status === 403) { location.href = '/'; return; }
     const j = await res.json();
     if (!j.success) throw new Error(j.error || 'load_failed');
@@ -1355,7 +1358,7 @@ async function peShowPicker() {
   el.classList.remove('hide');
   el.innerHTML = '<div class="pe-picker">Loading… · 加载中…</div>';
   try {
-    const res = await fetch('/api/retail-admin/products', { credentials: 'same-origin' });
+    const res = await fetch('/api/retail-admin/products', { credentials: 'same-origin', cache: 'no-store' });
     if (res.status === 401 || res.status === 403) { location.href = '/'; return; }
     const j = await res.json();
     if (!j.success) throw new Error(j.error || 'load_failed');

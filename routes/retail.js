@@ -5602,6 +5602,11 @@ router.delete('/api/retail-admin/categories/:id', requireRetailAdmin, (req, res)
 // Products tab can show a "has designer sections?" state in the list and
 // open the editor pre-populated.
 router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
+  // The editor reads this list to populate the inspector with the saved
+  // values. Browsers happily cache it (no Cache-Control was set) and on
+  // refresh the editor would re-paint with the PRE-SAVE copy, looking like
+  // the save didn't persist. Force every refresh to hit the DB.
+  res.set('Cache-Control', 'no-store, must-revalidate');
   const { q, published } = req.query;
   // The grid only needs a thumbnail and a "has designer sections" flag — not
   // the full base64 image_data or the description_blocks JSON. Shipping those
