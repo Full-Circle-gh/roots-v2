@@ -96,21 +96,41 @@ done
 AFTER=$LAST
 ST=$(st)
 
-# Readiness probe. No -f (we WANT 4xx/5xx to still count as "serving" — the
-# process is up and answering); curl prints "000" via -w on connection failure
-# or timeout. Retry a few times in case the port isn't bound the instant we ask.
-CODE=000
-for _ in 1 2 3; do
-  CODE=$(curl -s -o /dev/null -m 3 -w '%{http_code}' http://127.0.0.1:4000/ 2>/dev/null)
-  [ -z "$CODE" ] && CODE=000
-  [ "$CODE" != "000" ] && break
-  sleep 1
+# Readiness probe. A process that merely accepts a socket isn't enough — its
+# real routes must answer without throwing. We probe a handful of public,
+# GET-only, side-effect-free paths:
+#   /                       — base (302 redirect; "is the process answering?")
+#   /api/retail/categories  — a trivial tenant-DB read
+#   /api/retail/config      — config load + DB (its own catch 500s if broken)
+#   /api/retail/products    — the storefront grid query, the critical read path
+# Unscoped localhost requests resolve to the shared Roots DB (tdb() -> mainDb),
+# so all four answer 200/302 on a healthy box. A path is BROKEN only if it
+# returns "000" (connection refused/timeout — the process isn't answering) or a
+# 5xx (the handler threw — exactly the breakage a bad deploy adds that a bare
+# "/" probe would sail past). 4xx still counts as "up and answering" (auth,
+# validation, a deliberately-removed route) and never trips a rollback, so a
+# stray client-error can't false-roll-back a healthy ship. No -f: we read the
+# code ourselves to tell 5xx apart from 2xx/3xx/4xx. Retry on 000 in case the
+# port isn't bound the instant we ask.
+PROBES="/ /api/retail/categories /api/retail/config /api/retail/products"
+PROBE_OUT=""
+PROBE_BAD=0
+for pth in $PROBES; do
+  CODE=000
+  for _ in 1 2 3; do
+    CODE=$(curl -s -o /dev/null -m 3 -w '%{http_code}' "http://127.0.0.1:4000$pth" 2>/dev/null)
+    [ -z "$CODE" ] && CODE=000
+    [ "$CODE" != "000" ] && break
+    sleep 1
+  done
+  PROBE_OUT="$PROBE_OUT $pth=$CODE"
+  case "$CODE" in 000|5??) PROBE_BAD=1 ;; esac
 done
 
-echo "restart_time $BEFORE -> $AFTER | status = $ST | settled = $STABLE | http = $CODE"
+echo "restart_time $BEFORE -> $AFTER | status = $ST | settled = $STABLE | probes:$PROBE_OUT"
 
-if [ "$ST" != "online" ] || [ "$STABLE" != "1" ] || [ "$CODE" = "000" ]; then
-  echo "!!! UNHEALTHY (status=$ST settled=$STABLE http=$CODE) -> ROLLING BACK"
+if [ "$ST" != "online" ] || [ "$STABLE" != "1" ] || [ "$PROBE_BAD" = "1" ]; then
+  echo "!!! UNHEALTHY (status=$ST settled=$STABLE probes:$PROBE_OUT) -> ROLLING BACK"
   for f in "${FILES[@]}"; do [ -f "$BK/$f" ] && cp "$BK/$f" "$APP/$f"; done
   pm2 restart roots-v2 --update-env >/dev/null; sleep 3
   echo "rolled back. status now = $(st)"
