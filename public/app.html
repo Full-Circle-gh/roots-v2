@@ -9886,7 +9886,12 @@ async function iedFreeOfChange(el) {
     .map(c => c.dataset.freeofId);
   try {
     await iedSaveField(pid, 'free_of', checked.length ? checked.join(', ') : null);
-    await viewProduct(pid);
+    // Re-render only the Recipe & Diet card body so the surrounding <details>
+    // stays open. A full viewProduct() rebuild would recreate the <details>
+    // element without `open` and snap the section shut on every checkbox click.
+    const ctx = await _loadProductCtx(pid);
+    const card = document.getElementById('prodRecipeDietCard');
+    if (ctx && card) card.innerHTML = _renderRecipeDietCard(ctx);
   } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'error'); }
 }
 
