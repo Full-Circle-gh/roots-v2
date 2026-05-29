@@ -217,7 +217,7 @@ Page({
       ]);
       const statsData = (stats && stats.data) || stats || {};
       const next = { loading: false };
-      next.notifUnread = (notif && notif.data && notif.data.count) || 0;
+      next.notifUnread = (notif && notif.count) || 0;
       if (cust) {
         next.customer = cust;
         next.balanceDisplay = Number(cust.balance || 0).toFixed(2);
