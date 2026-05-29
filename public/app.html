@@ -527,6 +527,11 @@ select.ied-input { padding: 2px 6px; }
 .ka-rte a { color: var(--lime-text); }
 .ka-rte img { max-width:100%; height:auto; }
 .ka-rte:empty::before { content: attr(data-placeholder); color: var(--muted); font-style: italic; pointer-events: none; }
+.ka-rte-code { display:none; width:100%; min-height:120px; max-height:50vh; resize:vertical; box-sizing:border-box; border:1.5px solid var(--border); border-radius:6px; padding:10px 12px; background:#1e2117; color:#e6e8df; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.5; outline:none; white-space:pre; tab-size:2; }
+.ka-rte-code:focus { border-color: var(--lime); box-shadow: 0 0 0 3px rgba(204,217,0,0.20); }
+.ka-rte-wrap.ka-rte-code-mode .ka-rte { display:none !important; }
+.ka-rte-wrap.ka-rte-code-mode .ka-rte-code { display:block; }
+.ka-rte-toolbar button.active { background:var(--lime); border-color:var(--lime); color:#1a1a17; }
 .ka-rte-wrap.ka-rte-fs { position:fixed; inset:0; z-index:9999; margin:0; padding:16px 20px 20px; background:var(--bg, #fff); overflow-y:auto; }
 .ka-rte-wrap.ka-rte-fs .ka-rte { max-height: calc(100vh - 220px); min-height: 50vh; }
 body.ka-rte-fs-lock { overflow: hidden; }
@@ -10061,6 +10066,7 @@ function kaRteToolbarHTML() {
     <span class="ka-rte-sep"></span>
     <button type="button" title="Undo · 撤销"           onmousedown="return false" onclick="kaRte('undo')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7H10a3 3 0 010 6H6M5 7l2.5-2.5M5 7l2.5 2.5"/></svg></button>
     <button type="button" title="Redo · 重做"           onmousedown="return false" onclick="kaRte('redo')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 7H6a3 3 0 000 6h4M11 7L8.5 4.5M11 7L8.5 9.5"/></svg></button>
+    <button type="button" title="Code view · 源代码" onmousedown="return false" onclick="kaRteToggleCode(this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5L2.5 8 6 11M10 5l3.5 3-3.5 3"/></svg></button>
     <button type="button" title="Fullscreen · 全屏"     onmousedown="return false" onclick="kaRteFullscreen(this)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg></button>
   </div>`;
 }
@@ -10456,6 +10462,43 @@ function kaRteFullscreen(btn) {
   const on = wrap.classList.toggle('ka-rte-fs');
   document.body.classList.toggle('ka-rte-fs-lock', on);
 }
+// Code view: swap both EN/CN contenteditable boxes for raw-HTML <textarea>s so
+// the operator can hand-edit markup. A textarea is lazily created as a sibling
+// of each .ka-rte the first time, then reused. Toggling back writes the edited
+// HTML into the editor and runs the normal kaRteBlur save path (which compares
+// against data-original and PUTs description_format='rich' if it changed).
+function kaRteToggleCode(btn) {
+  const wrap = btn && btn.closest ? btn.closest('.ka-rte-wrap') : null;
+  if (!wrap) return;
+  const editors = Array.from(wrap.querySelectorAll('.ka-rte'));
+  const toCode = !wrap.classList.contains('ka-rte-code-mode');
+  if (toCode) {
+    editors.forEach(ed => {
+      let ta = ed.parentNode.querySelector('.ka-rte-code');
+      if (!ta) {
+        ta = document.createElement('textarea');
+        ta.className = 'ka-rte-code';
+        ta.spellcheck = false;
+        ed.parentNode.appendChild(ta);
+      }
+      ta.value = ed.innerHTML;
+      ta.style.minHeight = Math.max(ed.offsetHeight || 0, 120) + 'px';
+    });
+    wrap.classList.add('ka-rte-code-mode');
+    btn.classList.add('active');
+  } else {
+    editors.forEach(ed => {
+      const ta = ed.parentNode.querySelector('.ka-rte-code');
+      if (!ta) return;
+      if (ta.value !== ed.innerHTML) {
+        ed.innerHTML = ta.value;
+        kaRteBlur(ed);
+      }
+    });
+    wrap.classList.remove('ka-rte-code-mode');
+    btn.classList.remove('active');
+  }
+}
 // Legacy plain → HTML so old "## Heading\n\nbody" rows display reasonably the
 // first time they're opened. The next save promotes the row to description_format='rich'.
 function kaRtePlainToHtml(t) {
@@ -10836,23 +10879,22 @@ function _renderSizesCardInner(ctx) {
     </div>
     ${((p.siblings||[]).length || p.variant_label) ? (() => {
       const all = [
-        { id: p.id, variant_label: p.variant_label, sku: p.sku, sell_price: p.sell_price, isCurrent: true },
-        ...(p.siblings || []).map(s => ({ id: s.id, variant_label: s.variant_label, sku: s.sku, sell_price: s.sell_price, isCurrent: false })),
+        { id: p.id, variant_label: p.variant_label, sku: p.sku, sell_price: p.sell_price, variant_sort: p.variant_sort, isCurrent: true },
+        ...(p.siblings || []).map(s => ({ id: s.id, variant_label: s.variant_label, sku: s.sku, sell_price: s.sell_price, variant_sort: s.variant_sort, isCurrent: false })),
       ];
-      all.sort((a, b) => {
-        const la = (a.variant_label || '').toLowerCase();
-        const lb = (b.variant_label || '').toLowerCase();
-        const na = parseFloat(la); const nb = parseFloat(lb);
-        const aIsNum = !isNaN(na), bIsNum = !isNaN(nb);
-        if (aIsNum && bIsNum && na !== nb) return na - nb;
-        if (aIsNum && !bIsNum) return -1;
-        if (!aIsNum && bIsNum) return 1;
-        const cmp = la.localeCompare(lb);
-        if (cmp !== 0) return cmp;
-        return a.id - b.id;
-      });
-      const chip = v => v.isCurrent
-        ? `<div style="display:inline-flex;align-items:center;background:var(--lime);color:var(--dk);border-radius:10px;font-weight:700;font-size:12px" title="This product · 当前产品">
+      // Operator-chosen display order (variant_sort) — the same order the
+      // customer sees in the mini-app picker; drag a chip to change it. Ties
+      // fall back to label then id so an unsorted group still reads sensibly.
+      all.sort((a, b) =>
+        ((a.variant_sort ?? 0) - (b.variant_sort ?? 0)) ||
+        String(a.variant_label || '').localeCompare(String(b.variant_label || '')) ||
+        (a.id - b.id));
+      PF_VARIANTS = all; PF_PROD_CTX = ctx;
+      const canReorder = all.length > 1;
+      const chip = (v, idx) => {
+        const dnd = canReorder ? `draggable="true" data-vid="${v.id}" ondragstart="pfVarDragStart(event,${idx})" ondragover="pfVarDragOver(event,${idx})" ondragleave="pfVarDragLeave(event)" ondrop="pfVarDrop(event,${idx})" ondragend="pfVarDragEnd(event)"` : '';
+        return v.isCurrent
+        ? `<div ${dnd} style="display:inline-flex;align-items:center;background:var(--lime);color:var(--dk);border-radius:10px;font-weight:700;font-size:12px${canReorder ? ';cursor:grab' : ''}" title="This product · 当前产品">
             <span style="display:inline-flex;align-items:center;gap:8px;padding:7px 6px 7px 12px">
               <span style="font-size:10px;background:rgba(0,0,0,.15);padding:1px 6px;border-radius:99px;letter-spacing:.05em">CURRENT</span>
               <span>${v.variant_label ? esc(v.variant_label) : '<span style="font-style:italic;font-weight:500">no label</span>'}</span>
@@ -10863,7 +10905,7 @@ function _renderSizesCardInner(ctx) {
           </div>`
         : (() => {
             const delName = ((p.name_en || p.name_cn || '') + ' · ' + (v.variant_label || '')).replace(/'/g, '');
-            return `<div style="display:inline-flex;align-items:center;background:var(--card-bg);border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:12px;transition:border-color .15s" onmouseover="this.style.borderColor='var(--lime)'" onmouseout="this.style.borderColor='var(--border)'">
+            return `<div ${dnd} style="display:inline-flex;align-items:center;background:var(--card-bg);border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:12px;transition:border-color .15s${canReorder ? ';cursor:grab' : ''}" onmouseover="this.style.borderColor='var(--lime)'" onmouseout="this.style.borderColor='var(--border)'">
             <span onclick="switchVariant(${v.id})" style="display:inline-flex;align-items:center;gap:8px;padding:7px 10px 7px 12px;cursor:pointer" title="Open · 打开">
               <span style="font-weight:700">${esc(v.variant_label || '—')}</span>
               ${v.sku ? `<span style="color:var(--muted);font-family:monospace;font-size:10px">${esc(v.sku)}</span>` : ''}
@@ -10873,8 +10915,65 @@ function _renderSizesCardInner(ctx) {
             <button onclick="event.stopPropagation();deleteVariant(${p.id},${v.id},'${esc(delName)}')" title="Delete this variant · 删除此规格" aria-label="Delete this variant" style="background:none;border:none;border-left:1px solid var(--border);cursor:pointer;color:#dc2626;opacity:.45;padding:6px 9px;font-size:13px;line-height:1;border-radius:0 8px 8px 0;align-self:stretch" onmouseover="this.style.opacity=1;this.style.background='rgba(220,38,38,.08)'" onmouseout="this.style.opacity=.45;this.style.background='none'">🗑</button>
           </div>`;
           })();
-      return `<div style="display:flex;flex-wrap:wrap;gap:8px">${all.map(chip).join('')}</div>`;
+      };
+      return `<div id="pfVariantChips" style="display:flex;flex-wrap:wrap;gap:8px">${all.map((v, idx) => chip(v, idx)).join('')}</div>
+        ${canReorder ? `<div style="color:var(--muted);font-size:11px;margin-top:8px">↕ Drag a variant to set the order customers see · 拖动规格调整顾客看到的顺序</div>` : ''}`;
     })() : ''}`;
+}
+
+// ── Variant drag-to-reorder (product page Variants card) ──────────────────
+// PF_VARIANTS mirrors the chips currently shown, in display order. A drop
+// splices the array, repaints the card, and persists variant_sort so the
+// customer-facing mini-app picker matches. Lower variant_sort = shown first.
+let PF_VARIANTS = [];
+let PF_PROD_CTX = null;
+let PF_VAR_DRAG = null;
+function pfVarClearDnd() {
+  document.querySelectorAll('#pfVariantChips [data-vid]').forEach(el => { el.style.outline = ''; el.style.opacity = ''; });
+}
+function pfVarDragStart(e, i) {
+  PF_VAR_DRAG = i;
+  e.dataTransfer.effectAllowed = 'move';
+  try { e.dataTransfer.setData('text/plain', String(i)); } catch (_) {}
+  if (e.currentTarget) e.currentTarget.style.opacity = '.4';
+}
+function pfVarDragOver(e, i) {
+  if (PF_VAR_DRAG == null || PF_VAR_DRAG === i) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.style.outline = '2px dashed var(--lime)';
+  e.currentTarget.style.outlineOffset = '2px';
+}
+function pfVarDragLeave(e) { e.currentTarget.style.outline = ''; }
+function pfVarDragEnd() { PF_VAR_DRAG = null; pfVarClearDnd(); }
+function pfVarDrop(e, i) {
+  e.preventDefault();
+  const from = PF_VAR_DRAG; PF_VAR_DRAG = null;
+  pfVarClearDnd();
+  if (from == null || from === i) return;
+  const [moved] = PF_VARIANTS.splice(from, 1);
+  PF_VARIANTS.splice(i, 0, moved);
+  pfApplyVariantOrder();
+}
+// Stamp the new order onto in-memory rows (so the card + the grid's variant
+// chips re-sort without a reload), repaint the Variants card, then persist.
+async function pfApplyVariantOrder() {
+  const ids = PF_VARIANTS.map(v => Number(v.id));
+  const rank = new Map(ids.map((id, idx) => [id, idx]));
+  const stamp = obj => { if (obj && rank.has(Number(obj.id))) obj.variant_sort = rank.get(Number(obj.id)); };
+  (_products || []).forEach(stamp);
+  if (PF_PROD_CTX) { stamp(PF_PROD_CTX.p); (PF_PROD_CTX.p.siblings || []).forEach(stamp); }
+  const card = document.getElementById('prodSizesCard');
+  if (card && PF_PROD_CTX) card.innerHTML = _renderSizesCardInner(PF_PROD_CTX);
+  try {
+    const r = await fetch('/api/products/variants/reorder', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    const d = await r.json();
+    if (!d.success) throw new Error(d.error || 'reorder failed');
+    toast('✅ Order saved · 顺序已保存', 'success');
+  } catch (e) { toast('Could not save order · 无法保存顺序: ' + e.message, 'error'); }
 }
 
 async function viewProduct(id) {
