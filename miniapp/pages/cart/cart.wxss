@@ -60,7 +60,7 @@
 }
 .row:first-child { border-top: 3rpx solid var(--ink); margin-top: 24rpx; }
 .thumb { width: 128rpx; height: 152rpx; background: var(--oat); border: 2rpx solid var(--ink); }
-.thumb-empty { background: #ddd; }
+.thumb-empty { background: var(--oat); padding: 24rpx; box-sizing: border-box; opacity: 0.55; }
 .info { flex: 1; min-width: 0; }
 .name { font-size: calc(34rpx * var(--font-scale)); line-height: 1.05; }
 .meta { font-size: calc(20rpx * var(--font-scale)); color: var(--olive); margin-top: 4rpx; }

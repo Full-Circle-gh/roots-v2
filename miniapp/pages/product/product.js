@@ -169,6 +169,10 @@ Page({
       this.setData({ lang: app.globalData.lang });
       this.recomputeDisplay();
     }
+    // On a not-found page there's no product to tick / ping for — skip the
+    // background timers so we don't keep hammering /viewing for a dead id
+    // (which felt like the app was stuck on a frozen page).
+    if (this.data.notFound) return;
     this.startFlashTick();
     this.startViewingPing();
     // User may have removed this product from favorites on another tab;
