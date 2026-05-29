@@ -15524,10 +15524,13 @@ function paRender() {
       ? `<span class="pa-pill pa-pill-variants" title="${cuT('Variants of one product · 同一产品的多个规格', 'Variants of one product · 同一产品的多个规格')}">${u.members.length} ${cuT('variants', '规格')}</span>`
       : '';
     // A live (published) size with no stock — flag it so a sold-out size is
-    // visible from the grid without opening the product.
+    // visible from the grid without opening the product. Use effective_stock
+    // (per-store sum, same as the shop) so a product stocked per-store doesn't
+    // show a false "OUT" off the stale legacy stock_qty column.
+    const effStock = x => Number(x.effective_stock ?? x.stock_qty);
     const oosCount = u.group
-      ? u.members.filter(m => m.is_published === 1 && Number(m.stock_qty) <= 0).length
-      : ((p.is_published === 1 && Number(p.stock_qty) <= 0) ? 1 : 0);
+      ? u.members.filter(m => m.is_published === 1 && effStock(m) <= 0).length
+      : ((p.is_published === 1 && effStock(p) <= 0) ? 1 : 0);
     const oosPill = oosCount
       ? `<span class="pa-pill pa-pill-oos" title="${cuT('A live size is out of stock · 有上架规格缺货', 'A live size is out of stock · 有上架规格缺货')}">${u.group ? oosCount + ' ' + cuT('out', '缺货') : cuT('Out of stock', '缺货')}</span>`
       : '';

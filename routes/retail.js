@@ -5649,6 +5649,18 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   // editor fetches the real image + blocks on demand.
   let sql = `SELECT id, name_en, name_cn, sku, category, weight AS size,
                     sell_price, compare_at_price, stock_qty, ship_modes, image_url,
+                    -- Effective stock = what the customer shop actually sees
+                    -- (sum of per-store physical_qty, falling back to the legacy
+                    -- stock_qty only when a product has no per-store rows). The
+                    -- grid's "OUT" badge reads THIS, not raw stock_qty, so a
+                    -- product stocked per-store doesn't show a false sold-out.
+                    COALESCE(
+                      (SELECT SUM(rss.physical_qty)
+                         FROM retail_store_stock rss
+                         JOIN retail_stores      rs ON rs.id = rss.store_id
+                        WHERE rss.product_id = products.id AND rs.is_active = 1),
+                      stock_qty
+                    ) AS effective_stock,
                     is_published, sort_order, updated_at,
                     description_en, description_cn, description_format,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
