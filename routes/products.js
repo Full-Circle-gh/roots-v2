@@ -10,7 +10,7 @@ const PRODUCT_COLS = `
   p.image_data, p.label_data,
   p.notes, p.created_at, p.updated_at,
   p.external_id, p.sort_order, p.stock_qty, p.tags,
-  p.variant_group_id, p.variant_label,
+  p.variant_group_id, p.variant_label, p.variant_sort,
   p.is_market, p.is_restock_only, p.is_published,
   p.ship_modes, p.needs_ice_pack,
   p.nutrition,
@@ -33,7 +33,7 @@ const PRODUCT_LIST_COLS = `
   p.sell_price, p.weight, p.barcode,
   p.notes, p.created_at, p.updated_at,
   p.external_id, p.sort_order, p.stock_qty, p.tags,
-  p.variant_group_id, p.variant_label,
+  p.variant_group_id, p.variant_label, p.variant_sort,
   p.is_market, p.is_restock_only, p.is_published,
   p.ship_modes, p.needs_ice_pack,
   (p.image_data IS NOT NULL AND p.image_data != '') AS has_image,
@@ -213,11 +213,11 @@ router.get('/api/products/:id', requireAuth, requirePermission('products'), (req
   if (row.variant_group_id) {
     siblings = db.prepare(`
       SELECT id, name_en, name_cn, sku, sell_price, stock_qty,
-             variant_label, status, updated_at,
+             variant_label, variant_sort, status, updated_at,
              (image_data IS NOT NULL AND image_data != '') AS has_image
         FROM products
        WHERE variant_group_id = ? AND id != ? AND COALESCE(is_active, 1) = 1
-       ORDER BY variant_label, name_en
+       ORDER BY COALESCE(variant_sort, 0), variant_label, name_en
     `).all(row.variant_group_id, row.id);
     for (const s of siblings) {
       s.image_data = s.has_image
@@ -244,12 +244,20 @@ router.post('/api/products/variants/group', requireAuth, requirePermission('prod
   // Group id = first product's id. Stable & predictable.
   const groupId = cleanIds[0];
   const labelMap = labels && typeof labels === 'object' ? labels : {};
+  // Variants of one family share a category. The anchor (first id) is the
+  // product the group is built from, so members that have no category of their
+  // own inherit the anchor's — otherwise a product grouped in as a variant
+  // shows up uncategorised even though its siblings sit under, e.g., "Nut
+  // Butters". We only fill blanks so a deliberately-different category is kept.
+  const anchorCat = (db.prepare('SELECT category FROM products WHERE id = ?').get(groupId) || {}).category || null;
   try {
     const tx = db.transaction(() => {
       const upd = db.prepare('UPDATE products SET variant_group_id = ?, variant_label = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+      const setCat = db.prepare("UPDATE products SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (category IS NULL OR TRIM(category) = '')");
       for (const id of cleanIds) {
         const lbl = (labelMap[id] || '').toString().trim() || null;
         upd.run(groupId, lbl, id);
+        if (anchorCat && id !== groupId) setCat.run(anchorCat, id);
       }
     });
     tx();
@@ -266,6 +274,22 @@ router.delete('/api/products/variants/group/:id', requireAuth, requirePermission
   const r = db.prepare('UPDATE products SET variant_group_id = NULL, variant_label = NULL, updated_at = CURRENT_TIMESTAMP WHERE variant_group_id = ?').run(groupId);
   logActivity(req.user.id, req.user.username, 'disband_variant_group', 'product', groupId, { affected: r.changes }, req.ip);
   res.json({ success: true, affected: r.changes });
+});
+
+// POST /api/products/variants/reorder — set the display order of variants
+// within a group. Body { ids:[...] } in the desired order → variant_sort =
+// array index (lower = shown first). This is the same column the mini-app
+// picker reads, so reordering here is what the customer sees.
+router.post('/api/products/variants/reorder', requireAuth, requirePermission('products'), (req, res) => {
+  const raw = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const ids = raw.map(x => parseInt(x, 10)).filter(n => Number.isFinite(n) && n > 0);
+  if (ids.length < 2) return res.status(400).json({ error: 'Need at least 2 ids · 至少需要 2 个' });
+  try {
+    const upd = db.prepare('UPDATE products SET variant_sort = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+    db.transaction(() => ids.forEach((id, i) => upd.run(i, id)))();
+    logActivity(req.user.id, req.user.username, 'reorder_variants', 'product', ids[0], { ids }, req.ip);
+    res.json({ success: true, count: ids.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Body keys the form sends; whitelisted to keep the SQL boring.
