@@ -849,6 +849,10 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
 // their next heartbeat. Assumes a single app instance (this PM2 fork is one).
 const VIEWING = new Map();   // product_id → Map<viewerKey, lastSeenMs>
 const VIEW_TTL_MS = 45 * 1000;
+// Hard cap on tracked viewers per product. Bounds memory and stops a client
+// spamming distinct viewer_ids from inflating the "N viewing now" badge — past
+// the cap we only refresh existing keys, never add new ones.
+const MAX_VIEWERS_PER_PRODUCT = 500;
 
 function pruneAllViewers(now) {
   for (const [pid, viewers] of VIEWING) {
@@ -872,7 +876,8 @@ router.post('/api/retail/products/:id/viewing', express.json(), (req, res) => {
   let viewers = VIEWING.get(id);
   if (!viewers) { viewers = new Map(); VIEWING.set(id, viewers); }
   if (b.leaving) viewers.delete(vid);
-  else viewers.set(vid, now);
+  // Refresh known viewers always; only admit a NEW key while under the cap.
+  else if (viewers.has(vid) || viewers.size < MAX_VIEWERS_PER_PRODUCT) viewers.set(vid, now);
   for (const [k, ts] of viewers) if (now - ts > VIEW_TTL_MS) viewers.delete(k);
   if (viewers.size === 0) VIEWING.delete(id);
 
@@ -1515,9 +1520,19 @@ router.post('/api/retail/payment/wechat/callback', express.json(), (req, res) =>
     // txn.trade_state === 'SUCCESS' means paid
     if (txn.trade_state === 'SUCCESS' && txn.out_trade_no) {
       const pay = tdb().prepare(
-        'SELECT order_id FROM retail_payments WHERE out_trade_no = ? AND status = ?'
+        'SELECT order_id, amount FROM retail_payments WHERE out_trade_no = ? AND status = ?'
       ).get(txn.out_trade_no, 'pending');
       if (pay) {
+        // Parity with the Alipay callback: confirm the paid amount matches what
+        // we charged before settling. WeChat Pay v3 reports amount.total in
+        // CENTS; our stored amount is yuan. Mismatch/missing → non-200 so
+        // WeChat retries (a genuine notify always carries the right amount).
+        const paidCents   = Number(txn.amount && txn.amount.total);
+        const expectCents = Math.round(Number(pay.amount) * 100);
+        if (!Number.isFinite(paidCents) || paidCents !== expectCents) {
+          console.warn('[wechat-pay/callback] amount mismatch', txn.out_trade_no, paidCents, expectCents);
+          return res.status(400).json({ code: 'INVALID', message: 'amount_mismatch' });
+        }
         tdb().prepare(
           "UPDATE retail_payments SET status = 'success', transaction_id = ?, raw_callback_json = ?, completed_at = CURRENT_TIMESTAMP WHERE out_trade_no = ?"
         ).run(txn.transaction_id || null, plain, txn.out_trade_no);
@@ -1597,8 +1612,10 @@ router.post('/api/retail/payment/alipay/callback', express.urlencoded({ extended
       ).get(p.out_trade_no, 'pending');
       if (pay) {
         // Confirm the paid amount matches what we charged before settling.
+        // Reject when total_amount is absent too — a notify without a verifiable
+        // amount must not be allowed to settle the order on trust.
         const expect = Number(pay.amount).toFixed(2);
-        if (p.total_amount && p.total_amount !== expect) {
+        if (!p.total_amount || String(p.total_amount) !== expect) {
           console.warn('[alipay/callback] amount mismatch', p.out_trade_no, p.total_amount, expect);
           return res.send('fail');
         }
@@ -2208,7 +2225,29 @@ function publicCustomer(c) {
 // is present we resolve the customer so logged-in sessions get attributed.
 // This route never throws to the client: analytics must never break the app,
 // so every failure is swallowed and we always answer 200.
+// Lightweight per-IP rate limit for the unauthenticated /track insert so a
+// script can't flood retail_visits. Fixed 60s window; over-limit pings are
+// silently dropped (tracking is best-effort + invisible to the client, so we
+// still reply 200). In-memory + per-process — fine for the single PM2 fork; an
+// abuser behind the LB lands on one process anyway.
+const _TRACK_WINDOW_MS = 60 * 1000;
+const _TRACK_MAX_PER_WINDOW = 120;
+const _trackHits = new Map();   // ip → { n, resetAt }
+const _trackSweep = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, r] of _trackHits) if (r.resetAt <= now) _trackHits.delete(ip);
+}, 5 * 60 * 1000);
+if (_trackSweep.unref) _trackSweep.unref();
+function trackRateOk(ip) {
+  const now = Date.now();
+  let r = _trackHits.get(ip);
+  if (!r || r.resetAt <= now) { r = { n: 0, resetAt: now + _TRACK_WINDOW_MS }; _trackHits.set(ip, r); }
+  r.n++;
+  return r.n <= _TRACK_MAX_PER_WINDOW;
+}
+
 router.post('/api/retail/track', express.json(), (req, res) => {
+  if (!trackRateOk(req.ip || 'unknown')) return res.json({ success: true });
   try {
     const b = req.body || {};
     const clip = (s, n) => (s == null || s === '' ? null : String(s).slice(0, n));
@@ -2890,6 +2929,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   const invoiceType   = needsInvoice ? (body.invoice_type === 'company' ? 'company' : 'personal') : null;
   const invoiceEmail  = needsInvoice ? (body.invoice_email || null) : null;
   const voucherCode   = body.voucher_code || null;
+  // Client-supplied idempotency key — the mini-app sends a stable per-checkout
+  // token so a double-tap / network retry returns the SAME order instead of
+  // creating a duplicate (which, for points payment, would double-spend).
+  const idempotencyKey = body.idempotency_key ? String(body.idempotency_key).slice(0, 80) : null;
   // Future: voucher resolution + points redemption. For now: voucher_amount
   // and points_amount stay at 0 — record the code so admin can reconcile
   // manually if a hand-issued coupon was used in this launch window.
@@ -2914,6 +2957,20 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     'SELECT * FROM retail_customer_addresses WHERE id = ? AND customer_id = ?'
   ).get(addressId, req.customer.id);
   if (!address) return res.status(400).json({ success: false, error: 'address_not_found' });
+
+  // ── Idempotency replay (fast path) ────────────────────────────────────
+  // If this checkout token already produced an order, return it verbatim
+  // instead of charging/deducting again. The UNIQUE index below is the
+  // race backstop for two truly-simultaneous submits that both miss here.
+  if (idempotencyKey) {
+    const dup = tdb().prepare(
+      'SELECT id FROM retail_orders WHERE customer_id = ? AND idempotency_key = ?'
+    ).get(req.customer.id, idempotencyKey);
+    if (dup) {
+      const existing = loadOrderForCustomer(dup.id, req.customer.id, `${req.protocol}://${req.get('host')}`);
+      return res.json({ success: true, data: existing, idempotent_replay: true });
+    }
+  }
 
   // ── Resolve + price each item server-side ────────────────────────────
   const orderNowMs = Date.now();
@@ -3220,27 +3277,38 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // Customer sends voucher_code; server re-validates + computes discount.
   let voucher = null, voucherDiscount = 0;
   if (voucherCode) {
-    voucher = tdb().prepare(
+    const candidate = tdb().prepare(
       'SELECT * FROM retail_vouchers WHERE UPPER(code) = ? AND is_active = 1'
     ).get(String(voucherCode).trim().toUpperCase());
-    if (voucher) {
-      const result = computeVoucherDiscount(voucher, subtotal, shippingFee);
+    // Eligibility is decided BEFORE applying any effect so a rejected voucher
+    // can never leak free_shipping (shippingFee) or a discount. Gates:
+    //   1. exists + active (computeVoucherDiscount also checks expiry/pool/min)
+    //   2. ownership — a private/granted code requires an unused personal grant
+    //      for THIS customer; only is_public codes are open to anyone holding
+    //      the code. Without this, any leaked private code is redeemable.
+    //   3. per-customer redemption cap
+    let ok = !!candidate;
+    if (ok && !candidate.is_public) {
+      const grant = tdb().prepare(
+        `SELECT 1 FROM retail_customer_vouchers
+          WHERE customer_id = ? AND voucher_id = ? AND used_at IS NULL LIMIT 1`
+      ).get(req.customer.id, candidate.id);
+      if (!grant) ok = false;
+    }
+    if (ok && candidate.per_customer_limit && candidate.per_customer_limit > 0) {
+      const used = tdb().prepare(
+        `SELECT COUNT(*) AS n FROM retail_orders
+          WHERE customer_id = ? AND voucher_code = ?
+            AND status NOT IN ('cancelled')`
+      ).get(req.customer.id, candidate.code).n;
+      if (used >= candidate.per_customer_limit) ok = false;
+    }
+    if (ok) {
+      const result = computeVoucherDiscount(candidate, subtotal, shippingFee);
       if (result.applied) {
+        voucher = candidate;
         voucherDiscount = Number(result.discount) || 0;
         if (result.free_shipping) shippingFee = 0;
-        // Per-customer limit re-check on server side
-        if (voucher.per_customer_limit && voucher.per_customer_limit > 0) {
-          const used = tdb().prepare(
-            `SELECT COUNT(*) AS n FROM retail_orders
-              WHERE customer_id = ? AND voucher_code = ?
-                AND status NOT IN ('cancelled')`
-          ).get(req.customer.id, voucher.code).n;
-          if (used >= voucher.per_customer_limit) {
-            voucher = null; voucherDiscount = 0;
-          }
-        }
-      } else {
-        voucher = null;
       }
     }
   }
@@ -3307,8 +3375,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // Reservations replace the old "decrement stock_qty on order create"
   // model. Stock at the routed store is soft-held until payment commits
   // (or expiry releases it). See lib/inventory.js for the math.
-  const orderNo = nextOrderNo();
   const tx = tdb().transaction(() => {
+    // Compute the daily order-no INSIDE the (immediate) tx so the count-and-
+    // increment is serialized with the INSERT. Computed outside, two
+    // concurrent checkouts could read the same daily max and collide on the
+    // UNIQUE order_no — one would fail with a spurious order_create_failed.
+    const orderNo = nextOrderNo();
     const info = tdb().prepare(
       `INSERT INTO retail_orders (
          order_no, customer_id, status, payment_method,
@@ -3320,8 +3392,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
          customer_note, needs_cutlery, needs_invoice, invoice_title, invoice_tax_id,
          invoice_type, invoice_email,
          store_id, routing_reason, channel,
-         fallback_choice, awaiting_restock_pids
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         fallback_choice, awaiting_restock_pids, idempotency_key
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       orderNo, req.customer.id, 'pending_payment', paymentMethod,
       address.recipient_name, address.phone,
@@ -3337,14 +3409,29 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       customerNote, needsCutlery, needsInvoice, invoiceTitle, invoiceTaxId,
       invoiceType, invoiceEmail,
       fulfillingStore.id, routingReason, 'wechat',
-      fallbackChoice, awaitingRestockPids ? JSON.stringify(awaitingRestockPids) : null
+      fallbackChoice, awaitingRestockPids ? JSON.stringify(awaitingRestockPids) : null,
+      idempotencyKey
     );
     const orderId = info.lastInsertRowid;
 
     // Decrement voucher max_uses pool. Bumps used_count atomically inside
     // the same transaction so two simultaneous orders can't exceed it.
     if (voucher) {
-      tdb().prepare('UPDATE retail_vouchers SET used_count = used_count + 1 WHERE id = ?').run(voucher.id);
+      // Conditional bump: only succeeds while the global pool isn't exhausted
+      // (max_uses NULL = unlimited). If 0 rows changed, a concurrent order
+      // drained the last use between our eligibility read and here — abort the
+      // whole tx so we never overrun the cap or settle the discounted total
+      // against an exhausted voucher.
+      const vBump = tdb().prepare(
+        `UPDATE retail_vouchers
+            SET used_count = used_count + 1
+          WHERE id = ? AND (max_uses IS NULL OR used_count < max_uses)`
+      ).run(voucher.id);
+      if (vBump.changes !== 1) {
+        const err = new Error('voucher_exhausted');
+        err.code = 'voucher_exhausted';
+        throw err;
+      }
       // If this customer had a personal grant for this voucher, mark the
       // grant used so it disappears from their wallet/checkout list.
       tdb().prepare(
@@ -3450,7 +3537,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   });
 
   let orderId;
-  try { orderId = tx(); }
+  // .immediate() → BEGIN IMMEDIATE so the write lock is taken at tx start,
+  // making nextOrderNo()'s read-then-insert atomic even across processes.
+  try { orderId = tx.immediate(); }
   catch (e) {
     if (e.code === 'insufficient_stock' || e.code === 'product_not_stocked_here') {
       return res.status(409).json({
@@ -3465,6 +3554,21 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     }
     if (e.code === 'insufficient_points') {
       return res.status(409).json({ success: false, error: 'insufficient_points' });
+    }
+    if (e.code === 'voucher_exhausted') {
+      return res.status(409).json({ success: false, error: 'voucher_exhausted' });
+    }
+    // Idempotency race backstop: a truly-simultaneous second submit lost the
+    // UNIQUE(customer_id, idempotency_key) race. Its whole tx rolled back (no
+    // double charge / points spend) — hand back the order the winner created.
+    if (idempotencyKey && /UNIQUE constraint failed:.*idempotency_key/i.test(e.message || '')) {
+      const dup = tdb().prepare(
+        'SELECT id FROM retail_orders WHERE customer_id = ? AND idempotency_key = ?'
+      ).get(req.customer.id, idempotencyKey);
+      if (dup) {
+        const existing = loadOrderForCustomer(dup.id, req.customer.id, `${req.protocol}://${req.get('host')}`);
+        return res.json({ success: true, data: existing, idempotent_replay: true });
+      }
     }
     console.error('[retail/orders POST]', e);
     return res.status(500).json({ success: false, error: 'order_create_failed' });
@@ -3926,6 +4030,16 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
     'SELECT * FROM retail_vouchers WHERE UPPER(code) = ? AND is_active = 1'
   ).get(code);
   if (!v) return res.status(404).json({ success: false, error: 'not_found' });
+  // Ownership gate — a private/granted code is only valid for a customer who
+  // holds an unused personal grant for it. Return the same not_found as a
+  // nonexistent code so private codes can't be enumerated/probed.
+  if (!v.is_public) {
+    const grant = tdb().prepare(
+      `SELECT 1 FROM retail_customer_vouchers
+        WHERE customer_id = ? AND voucher_id = ? AND used_at IS NULL LIMIT 1`
+    ).get(req.customer.id, v.id);
+    if (!grant) return res.status(404).json({ success: false, error: 'not_found' });
+  }
   // Per-customer limit check
   if (v.per_customer_limit && v.per_customer_limit > 0) {
     const used = tdb().prepare(
@@ -5283,6 +5397,7 @@ function getReviewTags() {
 // Paginated review list per product. Public.
 router.get('/api/retail/products/:id/reviews', (req, res) => {
   const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
   const limit  = Math.min(parseInt(req.query.limit  || '20', 10) || 20, 50);
   const offset = Math.max(parseInt(req.query.offset || '0',  10) || 0, 0);
   const rows = tdb().prepare(

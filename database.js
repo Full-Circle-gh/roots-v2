@@ -1343,6 +1343,30 @@ db.exec(`CREATE TABLE IF NOT EXISTS retail_refund_events (
 )`);
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_refund_events_order ON retail_refund_events(order_id)'); } catch {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_refund_events_created ON retail_refund_events(created_at)'); } catch {}
+
+// ── Order idempotency (mini-app double-submit guard) ────────────────────────
+// The mini-app sends a stable idempotency_key per checkout; the partial UNIQUE
+// index turns a double-tap / retry into a collision (caught + replayed by the
+// route) instead of a second order — which, for points payment, would
+// double-spend. NULL keys (legacy rows + clients that don't send one) are
+// exempt: SQLite treats NULLs as distinct and the partial WHERE keeps the
+// index to real keys only.
+addColumn('retail_orders', 'idempotency_key', 'TEXT');
+try {
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_orders_idem
+             ON retail_orders(customer_id, idempotency_key)
+           WHERE idempotency_key IS NOT NULL`);
+} catch (e) { console.error('[migration retail_orders idempotency_key index]', e); }
+
+// Defense-in-depth UNIQUE on payment out_trade_no. There is exactly one
+// retail_payments row per order and its out_trade_no derives from the UNIQUE
+// order_no, so values are already unique at all times; the constraint just
+// makes a duplicate provider notify / re-insert physically impossible. Partial
+// (non-null) + try/catch so any legacy duplicate can't crash boot.
+try {
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_payments_out_trade_no
+             ON retail_payments(out_trade_no) WHERE out_trade_no IS NOT NULL`);
+} catch (e) { console.error('[migration retail_payments out_trade_no unique]', e); }
 addColumn('retail_vouchers', 'is_public',         'INTEGER DEFAULT 0');  // 1 = browseable, no code needed
 addColumn('retail_vouchers', 'title_en',          'TEXT');               // customer-facing label for public coupons
 addColumn('retail_vouchers', 'title_cn',          'TEXT');
