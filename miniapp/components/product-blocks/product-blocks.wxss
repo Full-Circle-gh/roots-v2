@@ -418,12 +418,12 @@
 }
 .pb-storage-card {
   border: 2rpx solid var(--ink);
-  padding: 32rpx 28rpx 28rpx;
+  padding: 36rpx 30rpx 34rpx;
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
-  min-height: 256rpx;
+  gap: 18rpx;
+  min-height: 280rpx;
 }
 .pb-storage-card.alt {
   background: var(--ink);
@@ -445,13 +445,14 @@
 .pb-storage-num {
   font-family: var(--f-gothic);
   font-size: 96rpx;
-  line-height: 0.85;
+  line-height: 0.95;
   margin-top: auto;
 }
 .pb-storage-unit {
   font-family: var(--f-toni);
   font-size: 22rpx;
   letter-spacing: 0.16em;
+  line-height: 1.5;
   text-transform: uppercase;
 }
 .pb-storage-note {
