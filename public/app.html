@@ -15426,7 +15426,7 @@ async function renderAdmin(tab) {
         <br>订单付款后自动在门店打印小票并语音播报。先在飞鹅 App 绑定打印机,再到 feieyun.com 开通开发者获取 USERKEY。
       </div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:12px;background:#fef9c3;border-radius:6px;padding:8px 10px">
-        ⚠ The <strong>USERKEY</strong> is from your feieyun.com developer console — <em>not</em> the 密钥/KEY printed on the device label (that one only binds the printer in the app). The <strong>SN</strong> is the 编号 on the device label.
+        ⚠ The <strong>USERKEY</strong> is from your feieyun.com developer console — <em>not</em> the 密钥/KEY printed on the device label (that one only binds the printer in the app). One account holds all your printers; each store's <strong>SN</strong> (编号) is set per-store below.
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
         <div>
@@ -15437,37 +15437,25 @@ async function renderAdmin(tab) {
           <label style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px">USERKEY · UKEY</label>
           <input type="password" id="feie-ukey" style="width:100%;font-family:monospace;font-size:12px;padding:8px 10px;border:1px solid var(--border);border-radius:6px" placeholder="paste USERKEY from dev console">
         </div>
-        <div style="grid-column:1/-1">
-          <label style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px">Printer SN · 编号</label>
-          <input type="text" id="feie-sn" style="width:100%;font-family:monospace;font-size:12px;padding:8px 10px;border:1px solid var(--border);border-radius:6px" placeholder="SN from device label, e.g. 550540977">
-        </div>
       </div>
-      <div style="border-top:1px solid var(--border);margin:4px 0 14px"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
         <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px">
           <input type="checkbox" id="feie-auto" style="width:18px;height:18px">
-          <label for="feie-auto" style="font-size:13px;color:var(--text)">Auto-print every paid order · 付款后自动打印</label>
-        </div>
-        <div>
-          <label style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px">Template · 模板</label>
-          <select id="feie-template" style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px">
-            <option value="receipt">Customer receipt · 顾客小票</option>
-            <option value="packing">Packing slip · 配货单</option>
-            <option value="compact">Compact · 精简</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px">Copies · 份数</label>
-          <input type="number" id="feie-copies" min="1" max="5" value="1" style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px">
+          <label for="feie-auto" style="font-size:13px;color:var(--text)">Auto-print every paid order at its store · 付款后在对应门店自动打印</label>
         </div>
         <div style="grid-column:1/-1">
           <label style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px">Receipt header · 小票抬头</label>
           <input type="text" id="feie-shop" maxlength="40" style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px" placeholder="shop name shown at top of receipt">
         </div>
       </div>
+      <div style="border-top:1px solid var(--border);margin:4px 0 14px"></div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Printers by store · 各门店打印机</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Each store prints its own orders. Leave a store's SN blank if it has no printer. · 每个门店打印自己的订单,没有打印机的门店留空。</div>
+      <div id="feie-stores" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px">
+        <div style="font-size:13px;color:var(--muted)">Loading stores…</div>
+      </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="_savePrinter()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Save</button>
-        <button class="btn btn-secondary" onclick="_testPrinter()">🖨 Save &amp; test print</button>
+        <button class="btn btn-primary" onclick="_savePrinter()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Save all</button>
       </div>
     </div>`;
 
@@ -15556,10 +15544,8 @@ async function loadShippingIntegrations() {
     const f = j.data?.feie || {};
     const fUser = document.getElementById('feie-user');
     const fUkey = document.getElementById('feie-ukey');
-    const fSn   = document.getElementById('feie-sn');
     if (fUser) fUser.value = f.user || '';
     if (fUkey) fUkey.placeholder = f.ukey_masked ? `${f.ukey_masked} · leave blank to keep` : 'paste USERKEY from dev console';
-    if (fSn)   fSn.value = f.sn || '';
     const fChip = document.getElementById('feie-chip');
     if (fChip) fChip.innerHTML = f.enabled
       ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
@@ -15567,32 +15553,82 @@ async function loadShippingIntegrations() {
   } catch (e) { console.warn('[integrations] load failed', e); }
 }
 
-// Printer template + behaviour prefs (separate from the credentials above).
+// Printer behaviour prefs + one row per store (SN + template + copies).
+const _FEIE_TEMPLATES = [
+  { id: 'receipt', label: 'Customer receipt · 顾客小票' },
+  { id: 'packing', label: 'Packing slip · 配货单' },
+  { id: 'compact', label: 'Compact · 精简' },
+];
+function _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
 async function loadPrinterPrefs() {
   try {
     const r = await fetch('/api/retail-admin/printer');
     if (!r.ok) return;
     const p = (await r.json()).data || {};
     const auto = document.getElementById('feie-auto');
-    const tpl  = document.getElementById('feie-template');
-    const cp   = document.getElementById('feie-copies');
     const shop = document.getElementById('feie-shop');
     if (auto) auto.checked = p.auto_print !== false;
-    if (tpl)  tpl.value = p.template || 'receipt';
-    if (cp)   cp.value = p.copies || 1;
     if (shop) shop.value = p.shop_name || '';
+
+    const box = document.getElementById('feie-stores');
+    if (box) {
+      const stores = p.stores || [];
+      if (!stores.length) {
+        box.innerHTML = '<div style="font-size:13px;color:var(--muted)">No active stores. Add stores under Admin → Markets first. · 暂无门店,请先在「市场」添加门店。</div>';
+      } else {
+        box.innerHTML = stores.map(s => {
+          const name = _esc(s.name_cn || s.name_en || s.code || ('Store ' + s.id));
+          const opts = _FEIE_TEMPLATES.map(t => `<option value="${t.id}" ${s.template===t.id?'selected':''}>${t.label}</option>`).join('');
+          return `
+          <div data-store="${s.id}" style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--gray)">
+            <div style="font-weight:600;font-size:13px;margin-bottom:8px">🏪 ${name}</div>
+            <div style="display:grid;grid-template-columns:2fr 1.4fr 0.8fr;gap:10px;align-items:end">
+              <div>
+                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:3px">Printer SN · 编号</label>
+                <input type="text" class="feie-store-sn" value="${_esc(s.sn)}" style="width:100%;font-family:monospace;font-size:12px;padding:7px 9px;border:1px solid var(--border);border-radius:6px;background:#fff" placeholder="e.g. 550540977">
+              </div>
+              <div>
+                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:3px">Template · 模板</label>
+                <select class="feie-store-tpl" style="width:100%;font-size:12px;padding:7px 9px;border:1px solid var(--border);border-radius:6px;background:#fff">${opts}</select>
+              </div>
+              <div>
+                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:3px">Copies · 份数</label>
+                <input type="number" class="feie-store-copies" min="1" max="5" value="${Number(s.copies)||1}" style="width:100%;font-size:12px;padding:7px 9px;border:1px solid var(--border);border-radius:6px;background:#fff">
+              </div>
+            </div>
+            <div style="margin-top:8px">
+              <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px" onclick="_testPrinter(${s.id})">🖨 Save &amp; test this store</button>
+            </div>
+          </div>`;
+        }).join('');
+      }
+    }
   } catch (e) { console.warn('[printer] load failed', e); }
 }
 
-// Save credentials AND template prefs in one tap, then refresh the chip.
+// Collect the per-store rows into a by_store map for the PUT body.
+function _collectPrinterByStore() {
+  const by_store = {};
+  document.querySelectorAll('#feie-stores [data-store]').forEach(row => {
+    const id = row.getAttribute('data-store');
+    by_store[id] = {
+      sn:       row.querySelector('.feie-store-sn')?.value.trim() || '',
+      template: row.querySelector('.feie-store-tpl')?.value || 'receipt',
+      copies:   parseInt(row.querySelector('.feie-store-copies')?.value, 10) || 1,
+    };
+  });
+  return by_store;
+}
+
+// Save credentials AND per-store prefs in one tap, then refresh.
 async function _savePrinter() {
   await _saveIntegration('feie');
   try {
     const body = {
       auto_print: document.getElementById('feie-auto')?.checked,
-      template:   document.getElementById('feie-template')?.value,
-      copies:     parseInt(document.getElementById('feie-copies')?.value, 10) || 1,
       shop_name:  document.getElementById('feie-shop')?.value || '',
+      by_store:   _collectPrinterByStore(),
     };
     const r = await fetch('/api/retail-admin/printer', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -15603,15 +15639,15 @@ async function _savePrinter() {
   } catch (e) { toast('Failed: ' + e.message, 'error'); }
 }
 
-async function _testPrinter() {
+// Save everything, then send a test slip to ONE store's printer.
+async function _testPrinter(storeId) {
   await _savePrinter();
   try {
-    const tpl = document.getElementById('feie-template')?.value;
     const r = await fetch('/api/retail-admin/printer/test', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ template: tpl }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store_id: storeId }),
     });
     const j = await r.json();
-    if (j.ok) toast('🖨 Test sent — check the printer · 已发送', 'success');
+    if (j.ok) toast('🖨 Test sent — check that store\'s printer · 已发送', 'success');
     else      toast('Print failed: ' + (j.error || 'unknown'), 'error');
   } catch (e) { toast('Test failed: ' + e.message, 'error'); }
 }
@@ -15640,7 +15676,6 @@ async function _saveIntegration(svc) {
     payload.feie = {
       user: v('feie-user').trim() || null,
       ukey: v('feie-ukey') || undefined,
-      sn:   v('feie-sn').trim() || null,
     };
   }
   try {

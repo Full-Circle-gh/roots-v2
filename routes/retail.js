@@ -6313,7 +6313,7 @@ const INTEGRATION_KEYS = {
   feie: {
     user: { env: 'FEIE_USER', secret: false },  // Feieyun account login
     ukey: { env: 'FEIE_UKEY', secret: true  },  // USERKEY from dev console
-    sn:   { env: 'FEIE_SN',   secret: false },  // printer SN from device label
+    // Printer SNs are per-store — see storefront_config `printer.by_store`.
   },
 };
 
@@ -6392,10 +6392,14 @@ router.post('/api/retail-admin/integrations/jd/test', requireRetailAdmin, async 
   return res.json({ ok: false, error: r.error });
 });
 
-// ─── Feie cloud printer ──────────────────────────────────────────────────
-// Operator settings live in storefront_config under `printer.*` (private —
-// never exposed to the mini app). The credentials themselves ride the
-// integrations.* path above (FEIE_USER / FEIE_UKEY / FEIE_SN).
+// ─── Feie cloud printer (per-store routing) ──────────────────────────────
+// Account creds (FEIE_USER / FEIE_UKEY) ride the integrations.* path above.
+// Each store has its OWN printer; the SN + template + copies per store live
+// in storefront_config `printer.by_store` (private — never exposed to the
+// mini app), keyed by store id:
+//   printer.by_store = { "<storeId>": { sn, template, copies } }
+// A paid order prints only at the store that fulfils it (order.store_id),
+// so the right slip lands at the right counter automatically.
 
 // Hoisted: markOrderPaid (defined far earlier) calls these on every paid
 // transition, so they must be reachable from there at runtime.
@@ -6405,31 +6409,60 @@ function loadPrinterPrefs() {
     if (!r) return d;
     try { return JSON.parse(r.value_json); } catch { return d; }
   };
+  const by_store = get('printer.by_store', {});
   return {
     auto_print: get('printer.auto_print', true),
-    template:   get('printer.template', 'receipt'),
-    copies:     get('printer.copies', 1),
     shop_name:  get('printer.shop_name', 'Roots'),
+    by_store:   (by_store && typeof by_store === 'object') ? by_store : {},
   };
 }
 
-// Render + print one order. All DB reads are synchronous (so the tenant DB
-// stays bound); the returned promise covers only the network POST.
-function printOrderById(orderId, prefs) {
+// Pick the printer config for an order's fulfilling store. If the order has
+// no store_id (rare) but exactly one printer is configured, fall back to it
+// so single-store installs still print. Returns null when nothing matches.
+function printerForStore(storeId, prefs) {
+  const map = prefs.by_store || {};
+  if (storeId != null && map[String(storeId)]) return map[String(storeId)];
+  const ids = Object.keys(map).filter(k => map[k] && map[k].sn);
+  if (storeId == null && ids.length === 1) return map[ids[0]];
+  return null;
+}
+
+// Render + print one order to its store's printer. All DB reads are
+// synchronous (tenant DB stays bound); the returned promise covers only the
+// network POST. `pcfg` overrides the resolved store printer (used by tests).
+function printOrderById(orderId, prefs, pcfg) {
   if (!_feie.feieEnabled()) return Promise.resolve({ ok: false, msg: 'not_configured' });
   const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
   if (!order) return Promise.resolve({ ok: false, msg: 'order_not_found' });
-  const items = tdb().prepare('SELECT * FROM retail_order_items WHERE order_id = ? ORDER BY id').all(orderId);
   const p = prefs || loadPrinterPrefs();
-  const content = _feie.renderOrder(p.template, order, items, p.shop_name);
-  return _feie.printContent(content, { copies: p.copies });
+  const printer = pcfg || printerForStore(order.store_id, p);
+  if (!printer || !printer.sn) return Promise.resolve({ ok: false, msg: 'no_printer_for_store' });
+  const items = tdb().prepare('SELECT * FROM retail_order_items WHERE order_id = ? ORDER BY id').all(orderId);
+  const tpl = _feie.TEMPLATE_IDS.includes(printer.template) ? printer.template : 'receipt';
+  const content = _feie.renderOrder(tpl, order, items, p.shop_name);
+  return _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 });
 }
 
 router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
+  const prefs = loadPrinterPrefs();
+  // Join active stores with their saved printer config so the UI can render
+  // one row per store.
+  const stores = tdb().prepare(
+    'SELECT id, code, name_en, name_cn FROM retail_stores WHERE is_active = 1 ORDER BY sort_order, id'
+  ).all().map(s => {
+    const cfg = prefs.by_store[String(s.id)] || {};
+    return {
+      id: s.id, code: s.code, name_en: s.name_en, name_cn: s.name_cn,
+      sn: cfg.sn || '', template: cfg.template || 'receipt', copies: cfg.copies || 1,
+    };
+  });
   res.json({ success: true, data: {
-    ...loadPrinterPrefs(),
-    enabled: _feie.feieEnabled(),
-    templates: _feie.TEMPLATE_IDS,
+    auto_print: prefs.auto_print,
+    shop_name:  prefs.shop_name,
+    enabled:    _feie.feieEnabled(),
+    templates:  _feie.TEMPLATE_IDS,
+    stores,
   }});
 });
 
@@ -6443,16 +6476,22 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), (req
   );
   const tx = tdb().transaction(() => {
     if (b.auto_print !== undefined) upsert.run('printer.auto_print', JSON.stringify(!!b.auto_print), req.user.id);
-    if (b.template !== undefined) {
-      const t = _feie.TEMPLATE_IDS.includes(b.template) ? b.template : 'receipt';
-      upsert.run('printer.template', JSON.stringify(t), req.user.id);
-    }
-    if (b.copies !== undefined) {
-      const n = Math.max(1, Math.min(5, parseInt(b.copies, 10) || 1));
-      upsert.run('printer.copies', JSON.stringify(n), req.user.id);
-    }
     if (b.shop_name !== undefined) {
       upsert.run('printer.shop_name', JSON.stringify(String(b.shop_name || '').slice(0, 40)), req.user.id);
+    }
+    if (b.by_store !== undefined && b.by_store && typeof b.by_store === 'object') {
+      const clean = {};
+      for (const [sid, cfg] of Object.entries(b.by_store)) {
+        if (!/^\d+$/.test(sid) || !cfg || typeof cfg !== 'object') continue;
+        const sn = String(cfg.sn || '').trim();
+        if (!sn) continue;  // a row with no SN means "no printer at this store"
+        clean[sid] = {
+          sn,
+          template: _feie.TEMPLATE_IDS.includes(cfg.template) ? cfg.template : 'receipt',
+          copies: Math.max(1, Math.min(5, parseInt(cfg.copies, 10) || 1)),
+        };
+      }
+      upsert.run('printer.by_store', JSON.stringify(clean), req.user.id);
     }
   });
   tx();
@@ -6460,17 +6499,22 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), (req
   res.json({ success: true, data: loadPrinterPrefs() });
 });
 
-// Test print — uses the latest real order if one exists, else a sample.
+// Test print to ONE store's printer. Body: { store_id }. Prints the latest
+// real order for that store if there is one, otherwise a sample slip.
 router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, res) => {
   if (!_feie.feieEnabled()) return res.json({ ok: false, error: 'not_configured' });
   const prefs = loadPrinterPrefs();
-  if (req.body && req.body.template && _feie.TEMPLATE_IDS.includes(req.body.template)) {
-    prefs.template = req.body.template;   // preview a specific template
-  }
-  const last = tdb().prepare("SELECT id FROM retail_orders WHERE status != 'pending_payment' ORDER BY id DESC LIMIT 1").get();
+  const storeId = parseInt(req.body?.store_id, 10);
+  const printer = prefs.by_store[String(storeId)];
+  if (!printer || !printer.sn) return res.json({ ok: false, error: 'no_printer_for_store' });
+  const tpl = _feie.TEMPLATE_IDS.includes(printer.template) ? printer.template : 'receipt';
+
+  const last = tdb().prepare(
+    "SELECT id FROM retail_orders WHERE store_id = ? AND status != 'pending_payment' ORDER BY id DESC LIMIT 1"
+  ).get(storeId);
   let r;
   if (last) {
-    r = await printOrderById(last.id, prefs);
+    r = await printOrderById(last.id, prefs, printer);
   } else {
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const sample = {
@@ -6480,8 +6524,8 @@ router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, re
       address_full: 'Test address 测试地址 1号',
     };
     const items = [{ name_cn: '测试商品', name_en: 'Test item', qty: 1, unit_price: 18, line_total: 18 }];
-    const content = _feie.renderOrder(prefs.template, sample, items, prefs.shop_name);
-    r = await _feie.printContent(content, { copies: 1 });
+    const content = _feie.renderOrder(tpl, sample, items, prefs.shop_name);
+    r = await _feie.printContent(content, { sn: printer.sn, copies: 1 });
   }
   if (r.ok) return res.json({ ok: true });
   res.json({ ok: false, error: r.msg || 'print_failed' });
