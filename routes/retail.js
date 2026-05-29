@@ -1151,6 +1151,18 @@ function wechatRefundNotifyUrl() {
     : `${PAY_NOTIFY_ORIGIN}/api/retail/payment/wechat/refund-callback/${tid}`;
 }
 
+// Per-tenant kd100 creds for subscribe (Platform readiness ⑨). The callback
+// URL carries the tenant in its PATH (mirrors wechatNotifyUrl) so kd100's
+// async push routes back to the right tenant's books and validates against
+// THAT tenant's salt. Roots keeps its env-configured callback URL unchanged;
+// for tenants the URL is system-built (they never configure it themselves).
+function kd100Creds() {
+  const kc = integ().kd100;
+  const tid = currentTenantId();
+  if (tid === ROOTS_TENANT_ID) return kc;
+  return { ...kc, callback: tracking.kd100TenantCallbackUrl(tid) };
+}
+
 // Brand label for customer-visible payment strings (WeChat description, Alipay
 // subject). Roots → "Roots" (unchanged); a tenant → its own brand_name, so a
 // shopper's payment screen never reads another company's name. (⑦ de-Roots.)
@@ -7011,7 +7023,9 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
       }
     }
   }
-  out.kd100.enabled = tracking.kd100Enabled(ci.kd100);
+  // kd100 callback URL is system-built per tenant (⑨), so a tenant is "enabled"
+  // on customer+key alone — kd100Creds() injects the path-scoped callback.
+  out.kd100.enabled = tracking.kd100Enabled(kd100Creds());
   out.jd.enabled    = jd.jdEnabled(ci.jd);
   out.feie.enabled  = _feie.feieEnabled(ci.feie);
   res.json({ success: true, data: out });
@@ -7237,7 +7251,7 @@ router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, re
 // than success, but a network round-trip with a parseable JSON body is
 // proof the auth credentials reach kd100.
 router.post('/api/retail-admin/integrations/kd100/test', requireRetailAdmin, async (req, res) => {
-  const kc = integ().kd100;
+  const kc = kd100Creds();
   if (!tracking.kd100Enabled(kc)) return res.json({ ok: false, error: 'not_configured' });
   const r = await tracking.subscribeWithKd100({
     orderId: 0, carrierCode: 'jd', trackingNumber: '__TEST__INVALID__', recipientPhone: null,
@@ -7331,7 +7345,7 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
   // Fire-and-forget kd100 subscription against the shipment row. Resolve the
   // tenant's kd100 creds synchronously (before the async fire) so the deferred
   // subscribe runs under this tenant's own account.
-  const kc = integ().kd100;
+  const kc = kd100Creds();
   if (tracking.kd100Enabled(kc) && tracking.KD100_CARRIER_MAP[carrier]) {
     tracking.subscribeWithKd100({
       orderId: id, carrierCode: carrier, trackingNumber: number,
@@ -7515,10 +7529,14 @@ function escapeHtml(s) {
 // subscribed waybill. Body is form-urlencoded `param=<json>`. We verify
 // the salt was one we issued before trusting the payload, look up the
 // order by tracking_number, and merge the events.
-router.post(
-  '/api/retail/tracking/kd100/callback',
-  express.urlencoded({ extended: false, limit: '256kb' }),
-  (req, res) => {
+// Per-tenant routing (Platform readiness ⑨): kd100 POSTs with no header/
+// session, so the tenant is carried in the URL PATH (/callback/:tid). We
+// settle inside that tenant's data scope (tdb() → the tenant's DB) and verify
+// the salt against THAT tenant's secret. Roots keeps the legacy unsuffixed
+// path (env creds, mainDb) — byte-for-byte unchanged (getTenantDb(1)===mainDb,
+// getTenantCreds(1)===env bundle, so the salt + DB are identical to before).
+function handleKd100Callback(req, res, tid) {
+  tenantAls.run(getTenantDb(tid), () => {
     try {
       const parsed = tracking.parseKd100Callback(req.body?.param);
       if (!parsed || !parsed.number) {
@@ -7532,8 +7550,10 @@ router.post(
         console.warn('[kd100.callback] no order matches tracking_number=', parsed.number);
         return res.json({ result: true, returnCode: '200', message: 'no-op (no matching order)' });
       }
-      // Verify salt — kd100 echoes the salt we set on subscribe.
-      const expectedSalt = tracking.kd100Salt(order.id, parsed.number);
+      // Verify salt — kd100 echoes the salt we set on subscribe, derived from
+      // THIS tenant's secret (Roots → env secret, identical to before).
+      const creds = getTenantCreds(tid).integrations.kd100;
+      const expectedSalt = tracking.kd100Salt(order.id, parsed.number, creds);
       let body;
       try { body = JSON.parse(req.body.param); } catch { body = {}; }
       const gotSalt = body?.salt || body?.parameters?.salt || null;
@@ -7561,7 +7581,7 @@ router.post(
                 updated_at                 = CURRENT_TIMESTAMP
           WHERE id = ?`
       ).run(parsed.state_code, JSON.stringify(parsed.events), scenarioCode, scenarioJson, order.id);
-      console.log(`[kd100.callback] order=${order.id} number=${parsed.number} state=${parsed.state_code} scenario=${scenarioCode || '-'} events=${parsed.events.length}`);
+      console.log(`[kd100.callback] tenant=${tid} order=${order.id} number=${parsed.number} state=${parsed.state_code} scenario=${scenarioCode || '-'} events=${parsed.events.length}`);
 
       // Fire a push notification when the scenario changes to one the
       // customer should know about. Suppresses repeats so a duplicate
@@ -7587,6 +7607,22 @@ router.post(
       console.error('[kd100.callback] threw:', e);
       return res.status(500).json({ result: false, returnCode: '500', message: e.message });
     }
+  });
+}
+// Roots keeps the legacy unsuffixed path (env creds, mainDb). Tenants POST to
+// /callback/:tid — the id is validated against the active tenants table.
+router.post(
+  '/api/retail/tracking/kd100/callback',
+  express.urlencoded({ extended: false, limit: '256kb' }),
+  (req, res) => handleKd100Callback(req, res, ROOTS_TENANT_ID)
+);
+router.post(
+  '/api/retail/tracking/kd100/callback/:tid',
+  express.urlencoded({ extended: false, limit: '256kb' }),
+  (req, res) => {
+    const tid = resolveCallbackTid(req.params.tid);
+    if (!tid) return res.status(404).json({ result: false, returnCode: '404', message: 'unknown_tenant' });
+    handleKd100Callback(req, res, tid);
   }
 );
 
@@ -7601,7 +7637,7 @@ router.post('/api/retail-admin/orders/bulk-tracking', requireRetailAdmin, expres
 
   const results = [];
   const subscribeQueue = [];   // { orderId, carrier, number, phone } — fired after the response.
-  const kc = integ().kd100;    // this tenant's own kd100 account (captured in-scope)
+  const kc = kd100Creds();    // this tenant's own kd100 account (captured in-scope)
 
   for (const e of entries) {
     const orderNo = String(e.order_no || '').trim();
@@ -7688,7 +7724,7 @@ router.post('/api/retail-admin/orders/:id/tracking/resubscribe', requireRetailAd
   const shipmentIdReq = req.query.shipment_id ? parseInt(req.query.shipment_id, 10) : null;
   const o = tdb().prepare('SELECT id, recipient_phone FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
-  const kc = integ().kd100;
+  const kc = kd100Creds();
   if (!tracking.kd100Enabled(kc)) return res.status(409).json({ success: false, error: 'kd100_not_configured' });
   const shipments = ensureShipments(id);
   const s = shipmentIdReq
