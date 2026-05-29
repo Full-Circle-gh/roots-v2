@@ -9700,17 +9700,34 @@ function _renderProdTopBar(ctx) {
 function _pdSetStatus(state) {
   const pill = document.getElementById('pd-save-status');
   if (!pill) return;
+  // 'saving' wins over 'dirty' — once a request is in flight, don't let a
+  // late input event downgrade the pill back to Unsaved.
+  if (state === 'dirty' && pill.dataset.state === 'saving') return;
   const m = {
+    dirty:  { txt: 'Unsaved · 未保存',        bg: '#fef3c7', fg: '#92400e', dot: '#f59e0b' },
     saving: { txt: 'Saving… · 保存中',       bg: '#fef3c7', fg: '#92400e', dot: '#f59e0b' },
     saved:  { txt: 'Saved · 已保存',          bg: '#ecfdf5', fg: '#065f46', dot: '#22c55e' },
     error:  { txt: 'Save failed · 保存失败',  bg: '#fee2e2', fg: '#991b1b', dot: '#dc2626' },
   };
   const s = m[state] || m.saved;
   const stamp = state === 'saved' ? ' ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+  pill.dataset.state = state;
   pill.style.background = s.bg;
   pill.style.color = s.fg;
   pill.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:${s.dot};display:inline-block"></span>${s.txt}${stamp}`;
 }
+
+// Mark the pill dirty the moment the user types into any editable field on
+// the product detail page — most inputs only save on blur, so without this
+// the pill misleads by claiming "Saved" while you're mid-edit.
+document.addEventListener('input', (e) => {
+  if (!document.getElementById('pd-save-status')) return;
+  const t = e.target;
+  if (!t) return;
+  const tag = (t.tagName || '').toLowerCase();
+  const editable = tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable;
+  if (editable) _pdSetStatus('dirty');
+}, true);
 
 // Wrap fetch once so any write to a product-shaped endpoint updates the pill.
 // No-op when the product detail page isn't on screen (pill element absent).
