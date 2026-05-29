@@ -7136,12 +7136,17 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     return res.status(409).json({ success: false, error: 'invalid_transition', from: o.status, to: status });
   }
 
-  // Quick "Refund" action → real WeChat refund (same as the explicit payout
-  // flow), so money goes back no matter which refund button is used. Done
-  // BEFORE any DB write: if WeChat rejects, we abort and the order keeps its
-  // current status rather than being marked refunded with no money moved.
-  let legacyRefundRef = null;
-  if (status === 'refunded' && !WECHAT_PAY_DEV_MODE) {
+  // Refund the customer for real when a paid order is REFUNDED or CANCELLED,
+  // so money goes back no matter which control the operator uses (refund
+  // button, status chip, or "Cancel" on a paid order). Done BEFORE any DB
+  // write: if WeChat rejects we abort, so an order is never marked
+  // refunded/cancelled while the money is still held. A cancel from
+  // pending_payment took no money, so it's skipped.
+  let wechatRefundRef = null;
+  const isPaidRefundEvent =
+    status === 'refunded' ||
+    (status === 'cancelled' && o.status !== 'pending_payment');
+  if (isPaidRefundEvent && !WECHAT_PAY_DEV_MODE) {
     const pay = tdb().prepare(
       "SELECT out_trade_no, amount FROM retail_payments WHERE order_id = ? AND status IN ('success','refunded') ORDER BY id DESC LIMIT 1"
     ).get(id);
@@ -7152,13 +7157,13 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       const refundCents = Math.round(fullTotal * 100);
       const outRefundNo = ('RF' + pay.out_trade_no + Date.now().toString().slice(-6)).slice(0, 63);
       try {
-        const r = await wechatPayRefund({ outTradeNo: pay.out_trade_no, outRefundNo, refundCents, totalCents, reason: reason || ('Refund order ' + id) });
+        const r = await wechatPayRefund({ outTradeNo: pay.out_trade_no, outRefundNo, refundCents, totalCents, reason: reason || ((status === 'cancelled' ? 'Cancelled order ' : 'Refund order ') + id) });
         if (r.status === 'ABNORMAL') {
           return res.status(502).json({ success: false, error: 'wechat_refund_abnormal', message: 'WeChat returned ABNORMAL (often insufficient merchant balance) — check the merchant platform.' });
         }
-        legacyRefundRef = r.refund_id + (r.status ? ' (' + r.status + ')' : '');
+        wechatRefundRef = r.refund_id + (r.status ? ' (' + r.status + ')' : '');
       } catch (e) {
-        console.error('[wechat-refund legacy-path]', e);
+        console.error('[wechat-refund]', e);
         return res.status(502).json({ success: false, error: e.code || 'wechat_refund_failed', message: e.message });
       }
     }
@@ -7199,6 +7204,29 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       try { inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, note: reason || null }); }
       catch (e) { console.error('[inventory.reverse (cancel)]', e); }
     }
+    // Cancelling a paid order issues a full refund — record the payout +
+    // reverse points/redeem so the cancelled order reflects the money returned.
+    if (wechatRefundRef) {
+      try {
+        const fullTotal = +(tdb().prepare('SELECT total FROM retail_orders WHERE id = ?').get(id)?.total || 0);
+        tdb().prepare(
+          `UPDATE retail_orders
+              SET refund_status = 'paid',
+                  refund_amount_approved = COALESCE(refund_amount_approved, ?),
+                  refund_amount_paid     = COALESCE(refund_amount_paid,     ?),
+                  refund_approved_at     = COALESCE(refund_approved_at, CURRENT_TIMESTAMP),
+                  refund_paid_at         = COALESCE(refund_paid_at,     CURRENT_TIMESTAMP),
+                  refund_payout_method   = 'wechat',
+                  refund_payout_ref      = ?,
+                  refund_payer_id        = COALESCE(refund_payer_id, ?)
+            WHERE id = ?`
+        ).run(fullTotal, fullTotal, wechatRefundRef, req.user.id, id);
+        tdb().prepare("UPDATE retail_payments SET refunded_amount = amount, status = 'refunded' WHERE order_id = ? AND status = 'success'").run(id);
+        logRefundEvent({ orderId: id, event: 'paid', amount: fullTotal, note: 'auto-refund on cancel', userId: req.user.id, meta: { method: 'wechat', reference: wechatRefundRef } });
+        try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints cancel]', e); }
+        try { reverseOrderRedeem(id); } catch (e) { console.error('[reverseOrderRedeem cancel]', e); }
+      } catch (e) { console.error('[cancel refund bookkeeping]', e); }
+    }
   }
   if (status === 'refunded') {
     // Fast-forward all the way through approve + paid in one shot — legacy
@@ -7228,10 +7256,10 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       ).run(id);
     } catch (e) { console.error('[retail_payments refund-mirror]', e); }
     // Stamp the real WeChat refund reference when the quick-refund path
-    // actually moved money (legacyRefundRef set above).
-    if (legacyRefundRef) {
-      try { tdb().prepare("UPDATE retail_orders SET refund_payout_method = 'wechat', refund_payout_ref = ? WHERE id = ?").run(legacyRefundRef, id); }
-      catch (e) { console.error('[legacy refund ref]', e); }
+    // actually moved money (wechatRefundRef set above).
+    if (wechatRefundRef) {
+      try { tdb().prepare("UPDATE retail_orders SET refund_payout_method = 'wechat', refund_payout_ref = ? WHERE id = ?").run(wechatRefundRef, id); }
+      catch (e) { console.error('[refund ref]', e); }
     }
   }
 
