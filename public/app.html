@@ -10100,63 +10100,80 @@ function _renderNotesCard(ctx) {
     <p class="ied" data-pid="${p.id}" data-field="notes" data-type="textarea" data-raw="${esc(p.notes||'')}" onclick="iedClick(this)" style="font-size:13px;color:var(--muted);white-space:pre-wrap;margin:0;min-height:1.4em;cursor:text">${p.notes ? esc(p.notes) : '<span style="color:var(--muted);font-style:italic">+ Click to add notes · 点击添加备注</span>'}</p>`;
 }
 
-// Less-used fields card body — identifiers, storefront flags, shipping modes,
-// mini-app marketing (keywords/tagline). Nutrition + label image fill in
-// later via Pass 4. Each panel is a self-contained mini-group so the layout
-// stays scannable when the operator opens this rarely-touched collapse.
-function _renderLessUsedCard(ctx) {
-  const { p } = ctx;
-  const panelHead = (t) => `<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:800;margin-bottom:8px">${t}</div>`;
-  // Inline text field — visible value with click-to-edit; placeholder when empty.
-  const iedText = (field, val, ph) => `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:4px 0">
+// Shared panel helpers reused by the top "Essentials" card and the Less-used
+// collapse below — keep both layouts visually identical and one source of truth.
+function _prodPanelHead(t) {
+  return `<div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:800;margin-bottom:8px">${t}</div>`;
+}
+function _prodIedText(p, field, val, ph) {
+  return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:4px 0">
     <span style="font-size:11px;color:var(--muted)">${ph}</span>
     <span class="ied" data-pid="${p.id}" data-field="${field}" data-type="text" data-raw="${esc(val||'')}" onclick="iedClick(this)" style="font-size:13px;color:var(--dk);${field==='sku'||field==='barcode'?'font-family:monospace;':''}text-align:right;min-width:40px">${val ? esc(val) : `<span style="color:var(--muted);font-style:italic">+ add</span>`}</span>
   </div>`;
-  // Inline checkbox row — single boolean column on the product (0/1).
-  const cbBool = (field, label, sub) => `<label style="display:flex;align-items:center;gap:10px;padding:5px 0;cursor:pointer">
+}
+function _prodCbBool(p, field, label, sub) {
+  return `<label style="display:flex;align-items:center;gap:10px;padding:5px 0;cursor:pointer">
     <input type="checkbox" data-pid="${p.id}" data-field="${field}" ${p[field]===1?'checked':''} onchange="iedBoolChange(this)" style="width:14px;height:14px;cursor:pointer">
     <div style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0">
       <span style="font-size:13px;color:var(--dk);font-weight:600">${label}</span>
       ${sub?`<span style="font-size:11px;color:var(--muted);line-height:1.3">${sub}</span>`:''}
     </div>
   </label>`;
-  // ship_modes is a comma-separated string ("air,land") not a boolean column.
+}
+function _prodShipChip(p, id, label) {
   const shipModes = String(p.ship_modes || 'air,land').toLowerCase();
-  const ship = (id, label) => `<label style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid ${shipModes.includes(id)?'rgba(204,217,0,0.6)':'var(--border)'};border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:${shipModes.includes(id)?'rgba(204,217,0,0.10)':'transparent'};color:${shipModes.includes(id)?'#4a7a2a':'var(--muted)'}">
-    <input type="checkbox" data-ship-id="${id}" ${shipModes.includes(id)?'checked':''} onchange="iedShipChange(this)" style="width:13px;height:13px;cursor:pointer"> ${label}
+  const on = shipModes.includes(id);
+  return `<label style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid ${on?'rgba(204,217,0,0.6)':'var(--border)'};border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:${on?'rgba(204,217,0,0.10)':'transparent'};color:${on?'#4a7a2a':'var(--muted)'}">
+    <input type="checkbox" data-ship-id="${id}" ${on?'checked':''} onchange="iedShipChange(this)" style="width:13px;height:13px;cursor:pointer"> ${label}
   </label>`;
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px">
+}
+
+// Essentials card — SKU/barcode, Published toggle, Air/Land. Promoted out of
+// the Less-used collapse to the top of the page (right under the hero) because
+// the operator uses these every time they touch a product.
+function _renderProdEssentialsCard(ctx) {
+  const { p } = ctx;
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px">
     <div>
-      ${panelHead('Identifiers · 标识')}
-      ${iedText('sku', p.sku, 'SKU · 货号')}
-      ${iedText('barcode', p.barcode, 'Barcode · 条码')}
+      ${_prodPanelHead('Identifiers · 标识')}
+      ${_prodIedText(p, 'sku', p.sku, 'SKU · 货号')}
+      ${_prodIedText(p, 'barcode', p.barcode, 'Barcode · 条码')}
     </div>
     <div>
-      ${panelHead('Storefront flags · 店面标记')}
-      ${cbBool('is_published', 'Published · 上架', 'Visible in the mini-app store')}
-      ${cbBool('is_market', 'Market product · 市场产品', 'Sold at the farmer’s market')}
-      ${cbBool('is_restock_only', 'Restock-only · 仅补货', 'Internal stock control; not sold to customers')}
+      ${_prodPanelHead('Storefront flags · 店面标记')}
+      ${_prodCbBool(p, 'is_published', 'Published · 上架', 'Visible in the mini-app store')}
+      ${_prodCbBool(p, 'is_market', 'Market product · 市场产品', 'Sold at the farmer’s market')}
+      ${_prodCbBool(p, 'is_restock_only', 'Restock-only · 仅补货', 'Internal stock control; not sold to customers')}
     </div>
     <div>
-      ${panelHead('Shipping modes · 配送方式')}
+      ${_prodPanelHead('Shipping modes · 配送方式')}
       <div data-pid="${p.id}" data-ship-group="1" style="display:flex;flex-wrap:wrap;gap:8px">
-        ${ship('air', '✈ Air · 空运')}
-        ${ship('land', '🚚 Land · 陆运')}
+        ${_prodShipChip(p, 'air', '✈ Air · 空运')}
+        ${_prodShipChip(p, 'land', '🚚 Land · 陆运')}
       </div>
     </div>
+  </div>`;
+}
+
+// Less-used fields card body — mini-app marketing (keywords/tagline),
+// nutrition, label image. Identifiers / Storefront flags / Shipping modes
+// were promoted to the Essentials card at top — see _renderProdEssentialsCard.
+function _renderLessUsedCard(ctx) {
+  const { p } = ctx;
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px">
     <div>
-      ${panelHead('Mini-app marketing · 小程序文案')}
-      ${iedText('tagline_en', p.tagline_en, 'Tagline EN')}
-      ${iedText('tagline_cn', p.tagline_cn, 'Tagline CN')}
-      ${iedText('keywords_en', p.keywords_en, 'Keywords EN')}
-      ${iedText('keywords_cn', p.keywords_cn, 'Keywords CN')}
+      ${_prodPanelHead('Mini-app marketing · 小程序文案')}
+      ${_prodIedText(p, 'tagline_en', p.tagline_en, 'Tagline EN')}
+      ${_prodIedText(p, 'tagline_cn', p.tagline_cn, 'Tagline CN')}
+      ${_prodIedText(p, 'keywords_en', p.keywords_en, 'Keywords EN')}
+      ${_prodIedText(p, 'keywords_cn', p.keywords_cn, 'Keywords CN')}
     </div>
     <div id="prodNutritionPanel" data-pid="${p.id}">
-      ${panelHead('Nutrition · 营养成分')}
+      ${_prodPanelHead('Nutrition · 营养成分')}
       ${_renderNutritionEditor(p)}
     </div>
     <div id="prodLabelPanel">
-      ${panelHead('Label image · 标签图片')}
+      ${_prodPanelHead('Label image · 标签图片')}
       ${_renderLabelEditor(p)}
     </div>
   </div>`;
@@ -10858,6 +10875,7 @@ async function viewProduct(id) {
   document.getElementById('main').innerHTML = `
     <div id="prodTopBar">${_renderProdTopBar(ctx)}</div>
     <div id="prodHero">${_renderProdHero(ctx)}</div>
+    <div class="card" id="prodEssentialsCard" style="padding:14px 18px;margin-bottom:16px">${_renderProdEssentialsCard(ctx)}</div>
     <div id="prodBento" class="prod-bento">
       <div class="card" id="prodStockCard" style="padding:14px 18px;color:var(--muted);font-size:13px">📦 Loading stock by store · 加载库存…</div>
       <div class="card" id="prodSizesCard" style="padding:14px 18px">${_renderSizesCardInner(ctx)}</div>
