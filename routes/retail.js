@@ -21,7 +21,8 @@ const geocode = require('../lib/geocode');
 const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
-const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb } = require('../lib/tenant-db');
+const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId } = require('../lib/tenant-db');
+const { getTenantCreds } = require('../lib/tenant-creds');
 // Web Push — optional; wrapped so a missing module never breaks order flow.
 let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
@@ -948,8 +949,13 @@ if (WECHAT_DEV_MODE) {
 }
 
 async function exchangeCodeForOpenid(code) {
-  if (WECHAT_DEV_MODE) return { openid: `dev:${code}`, unionid: null };
-  const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${WECHAT_APP_ID}&secret=${WECHAT_APP_SECRET}&js_code=${encodeURIComponent(code)}&grant_type=authorization_code`;
+  // Per-tenant login: resolve THIS request's tenant creds. Roots / unscoped
+  // requests get the env bundle (identical to the old global consts); a tenant
+  // whose mini-app sent its x-wx-appid gets its own AppID + secret. A tenant
+  // with no stored creds is in devMode and never borrows Roots' AppID.
+  const { appId, appSecret, devMode } = getTenantCreds(currentTenantId()).wechat;
+  if (devMode) return { openid: `dev:${code}`, unionid: null };
+  const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${appId}&secret=${appSecret}&js_code=${encodeURIComponent(code)}&grant_type=authorization_code`;
   const resp = await fetch(url);
   const j = await resp.json();
   if (!j.openid) {
@@ -1662,26 +1668,30 @@ router.post('/api/retail/notifications/subscribe', requireRetailAuth, express.js
 // problem when the AppID is shared with another vendor (out1n) whose backend
 // also fetches tokens. force_refresh=false lets WeChat reuse a cached token
 // across calls, further reducing churn.
-let _wxAccessToken = '';
-let _wxAccessTokenExpires = 0;
+// Per-AppID token cache. Each tenant runs its own mini-program (own AppID), so
+// the access_token is scoped to the AppID, not the process. Keyed by AppID so
+// two tenants (or Roots + a tenant) never clobber each other's token. Roots'
+// AppID resolves from env exactly as before — same stable_token semantics.
+const _wxTokenCache = new Map();   // appId -> { token, expiresAt }
 async function getWeChatAccessToken() {
-  if (!WECHAT_APP_ID || !WECHAT_APP_SECRET) return null;
-  if (_wxAccessToken && Date.now() < _wxAccessTokenExpires - 60_000) return _wxAccessToken;
+  const { appId, appSecret } = getTenantCreds(currentTenantId()).wechat;
+  if (!appId || !appSecret) return null;
+  const hit = _wxTokenCache.get(appId);
+  if (hit && Date.now() < hit.expiresAt - 60_000) return hit.token;
   const resp = await fetch('https://api.weixin.qq.com/cgi-bin/stable_token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       grant_type: 'client_credential',
-      appid:      WECHAT_APP_ID,
-      secret:     WECHAT_APP_SECRET,
+      appid:      appId,
+      secret:     appSecret,
       force_refresh: false,
     }),
   });
   const j = await resp.json();
   if (!j.access_token) throw new Error('access_token_fetch_failed: ' + (j.errmsg || j.errcode));
-  _wxAccessToken = j.access_token;
-  _wxAccessTokenExpires = Date.now() + (Number(j.expires_in) || 7200) * 1000;
-  return _wxAccessToken;
+  _wxTokenCache.set(appId, { token: j.access_token, expiresAt: Date.now() + (Number(j.expires_in) || 7200) * 1000 });
+  return j.access_token;
 }
 
 // Push a subscribeMessage to a customer if they have an unused consent for
@@ -1701,7 +1711,7 @@ async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/
   // either way (one-shot from the customer's perspective).
   tdb().prepare("UPDATE retail_subscriptions SET used = 1, used_at = CURRENT_TIMESTAMP WHERE id = ?").run(sub.id);
 
-  if (WECHAT_DEV_MODE || cust.openid.startsWith('dev:')) {
+  if (getTenantCreds(currentTenantId()).wechat.devMode || cust.openid.startsWith('dev:')) {
     console.log(`[subscribe-message] DEV — would send template=${templateId} to=${cust.openid}, data=${JSON.stringify(data)}`);
     return { sent: false, dev: true };
   }
@@ -8248,7 +8258,7 @@ router.post('/api/retail-admin/cms/preview-token', requireRetailAdmin, (req, res
 // Falls back to 501 in DEV mode (no merchant cert / app secret); the /cms
 // modal then just shows the DevTools custom-compile path instead.
 router.get('/api/retail-admin/cms/preview-qr', requireRetailAdmin, async (req, res) => {
-  if (WECHAT_DEV_MODE) {
+  if (getTenantCreds(currentTenantId()).wechat.devMode) {
     return res.status(501).json({ success: false, error: 'wechat_creds_not_configured' });
   }
   const page = (req.query.page || 'home').toString().slice(0, 32);
