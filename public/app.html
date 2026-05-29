@@ -8913,6 +8913,18 @@ function _storeOpenForm(s) {
       <div class="form-group"><label>Sort priority 排序优先级 <span style="font-weight:400;color:var(--muted);font-size:11px">(lower = preferred)</span></label><input id="sf_sort" type="number" value="${s?.sort_order ?? 0}"></div>
       <div class="form-group form-col-2"><label>Meituan account id (optional)</label><input id="sf_meituan" value="${esc(s?.meituan_account_id || '')}" placeholder="美团商户号"></div>
 
+      <!-- Store pickup: when on, this store is offered as a collection point at
+           mini-app checkout (customer chooses Pickup, picks this store). The
+           global pickup hours live in the mini-app backend storefront settings. -->
+      <div class="form-group form-col-2">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600">
+          <input id="sf_pickup" type="checkbox" ${s?.pickup_enabled ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer">
+          <span>🏬 Offer store pickup 提供到店自提
+            <span style="font-weight:400;color:var(--muted);font-size:11px">— customers can collect orders here at checkout</span>
+          </span>
+        </label>
+      </div>
+
       <!-- Manual lat/lng override. Two narrow inputs side-by-side. Useful when
            the Tencent Maps quota is blocked or the auto-geocode picked the
            wrong building. Leaving these blank keeps auto-geocode in charge. -->
@@ -8955,6 +8967,7 @@ async function _storeSaveForm(id) {
     phone:    document.getElementById('sf_phone').value.trim(),
     sort_order: +document.getElementById('sf_sort').value || 0,
     meituan_account_id: document.getElementById('sf_meituan').value.trim() || null,
+    pickup_enabled: document.getElementById('sf_pickup').checked,
   };
   // Manual lat/lng. Only sent if both filled — otherwise the backend
   // background-geocodes from the address.

@@ -257,6 +257,27 @@ router.get('/api/retail/districts', (req, res) => {
   res.json({ success: true, data: list });
 });
 
+// Store-pickup point list for checkout. Returns only stores flagged
+// pickup_enabled AND is_active, plus the single global pickup window the
+// storefront uses to build selectable time slots. The checkout Pickup tab
+// shows nothing (and falls back to delivery-only) when this is empty.
+router.get('/api/retail/pickup-stores', (req, res) => {
+  try {
+    const stores = tdb().prepare(
+      `SELECT id, code, name_en, name_cn, address, city, district, lat, lng, phone
+         FROM retail_stores
+        WHERE is_active = 1 AND pickup_enabled = 1
+        ORDER BY sort_order ASC, id ASC`
+    ).all();
+    const window = cfgValue('pickup.window', { open: '10:00', close: '20:00' });
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json({ success: true, data: { stores, window } });
+  } catch (e) {
+    console.error('[retail/pickup-stores]', e);
+    res.status(500).json({ success: false, error: 'pickup_stores_load_failed' });
+  }
+});
+
 // ─── Products ───────────────────────────────────────────────────────────
 // Only published rows show. Customer-facing endpoint pulls from the SAME
 // master product fields as the rest of the system — sell_price is the
@@ -1149,6 +1170,18 @@ function wechatRefundNotifyUrl() {
   const tid = currentTenantId();
   return tid === ROOTS_TENANT_ID ? WECHAT_PAY_REFUND_NOTIFY_URL
     : `${PAY_NOTIFY_ORIGIN}/api/retail/payment/wechat/refund-callback/${tid}`;
+}
+
+// Per-tenant kd100 creds for subscribe (Platform readiness ⑨). The callback
+// URL carries the tenant in its PATH (mirrors wechatNotifyUrl) so kd100's
+// async push routes back to the right tenant's books and validates against
+// THAT tenant's salt. Roots keeps its env-configured callback URL unchanged;
+// for tenants the URL is system-built (they never configure it themselves).
+function kd100Creds() {
+  const kc = integ().kd100;
+  const tid = currentTenantId();
+  if (tid === ROOTS_TENANT_ID) return kc;
+  return { ...kc, callback: tracking.kd100TenantCallbackUrl(tid) };
 }
 
 // Brand label for customer-visible payment strings (WeChat description, Alipay
@@ -2654,6 +2687,47 @@ function cfgValue(key, fallback) {
   try { return JSON.parse(row.value_json); } catch { return fallback; }
 }
 
+// "HH:MM" → minutes since midnight, or null if malformed.
+function hhmmToMinutes(s) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '').trim());
+  if (!m) return null;
+  const h = +m[1], min = +m[2];
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+// Validate a customer-chosen pickup time against the single global pickup
+// window (storefront_config 'pickup.window' = { open:'HH:MM', close:'HH:MM' }).
+// Server is the timezone authority (UTC+8 host). Returns { scheduled_for, label }
+// on success or { error } so the checkout handler can 400 cleanly. The chosen
+// time must be in the future and its time-of-day must fall inside the window.
+function resolvePickupTime(raw, now = new Date()) {
+  if (!raw) return { error: 'pickup_time_required' };
+  const when = new Date(raw);
+  if (isNaN(when.getTime())) return { error: 'invalid_pickup_time' };
+  if (when.getTime() < now.getTime() - 60_000) return { error: 'pickup_time_past' };
+  // Guard against garbage far-future dates (> 30 days out).
+  if (when.getTime() > now.getTime() + 30 * 86_400_000) return { error: 'pickup_time_too_far' };
+
+  const win = cfgValue('pickup.window', { open: '10:00', close: '20:00' });
+  const open  = hhmmToMinutes(win.open);
+  const close = hhmmToMinutes(win.close);
+  if (open != null && close != null && close > open) {
+    const mins = when.getHours() * 60 + when.getMinutes();
+    if (mins < open || mins > close) return { error: 'pickup_time_outside_hours' };
+  }
+
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const hh = String(when.getHours()).padStart(2, '0');
+  const mm = String(when.getMinutes()).padStart(2, '0');
+  const sameDay = when.toDateString() === now.toDateString();
+  const dayLabel = sameDay ? 'Today' : `${days[when.getDay()]} ${when.getDate()}/${when.getMonth() + 1}`;
+  return {
+    scheduled_for: when.toISOString(),
+    label: `Pickup ${dayLabel} ${hh}:${mm}`,
+  };
+}
+
 // ─── Shipping mode + split-shipment helpers ───────────────────────────
 // "Outside Guangzhou" detection. Province/city strings can vary —
 // 广州 / 广州市 / Guangzhou / GZ. Normalize then match.
@@ -3059,21 +3133,55 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // authoritative.
   const deliverySlotId = body.delivery_slot_id || null;
 
+  // Fulfillment fork: 'pickup' (collect from a chosen store, no address/
+  // shipping/zone) vs the default 'delivery'. Pickup inputs are validated in
+  // the branch below; the delivery-only requirements (address, slot, mode)
+  // are skipped for pickup.
+  const isPickup        = body.fulfillment_type === 'pickup';
+  const pickupStoreId   = isPickup && body.pickup_store_id ? parseInt(body.pickup_store_id, 10) : null;
+  const pickupName      = isPickup ? String(body.pickup_name  || '').trim() : null;
+  const pickupPhone     = isPickup ? String(body.pickup_phone || '').trim() : null;
+
   if (!items.length)       return res.status(400).json({ success: false, error: 'no_items' });
-  if (!addressId)          return res.status(400).json({ success: false, error: 'address_required' });
   if (!paymentMethod)      return res.status(400).json({ success: false, error: 'payment_method_required' });
   if (!['wechat','alipay','points'].includes(paymentMethod)) {
     return res.status(400).json({ success: false, error: 'invalid_payment_method' });
   }
-  if (!['standard','max','sameday'].includes(deliveryMode)) {
-    return res.status(400).json({ success: false, error: 'invalid_delivery_method' });
-  }
-  if (!deliverySlotId) return res.status(400).json({ success: false, error: 'delivery_slot_required' });
 
-  const address = tdb().prepare(
-    'SELECT * FROM retail_customer_addresses WHERE id = ? AND customer_id = ?'
-  ).get(addressId, req.customer.id);
-  if (!address) return res.status(400).json({ success: false, error: 'address_not_found' });
+  // `address` is the source of truth for recipient + region downstream. For
+  // delivery it's the customer's saved address row; for pickup we synthesize
+  // one from the chosen store + the pickup contact so the INSERT, totals, and
+  // order-load code paths stay identical.
+  let address, pickupStore = null, pickupScheduledFor = null, pickupSlotLabel = null;
+  if (isPickup) {
+    if (!pickupStoreId)            return res.status(400).json({ success: false, error: 'pickup_store_required' });
+    if (!pickupName || !pickupPhone) return res.status(400).json({ success: false, error: 'pickup_contact_required' });
+    pickupStore = tdb().prepare(
+      'SELECT * FROM retail_stores WHERE id = ? AND is_active = 1 AND pickup_enabled = 1'
+    ).get(pickupStoreId);
+    if (!pickupStore) return res.status(400).json({ success: false, error: 'pickup_store_unavailable' });
+    const pk = resolvePickupTime(body.pickup_time, new Date());
+    if (pk.error) return res.status(400).json({ success: false, error: pk.error });
+    pickupScheduledFor = pk.scheduled_for;
+    pickupSlotLabel    = pk.label;
+    // province left null so address_full reads "<city> <district> <store addr>"
+    // without doubling the city; city/district drive store-region display.
+    address = {
+      recipient_name: pickupName, phone: pickupPhone,
+      province: null, city: pickupStore.city || null, district: pickupStore.district || null,
+      address: pickupStore.address || null, detail: null, postal_code: null,
+    };
+  } else {
+    if (!addressId)      return res.status(400).json({ success: false, error: 'address_required' });
+    if (!['standard','max','sameday'].includes(deliveryMode)) {
+      return res.status(400).json({ success: false, error: 'invalid_delivery_method' });
+    }
+    if (!deliverySlotId) return res.status(400).json({ success: false, error: 'delivery_slot_required' });
+    address = tdb().prepare(
+      'SELECT * FROM retail_customer_addresses WHERE id = ? AND customer_id = ?'
+    ).get(addressId, req.customer.id);
+    if (!address) return res.status(400).json({ success: false, error: 'address_not_found' });
+  }
 
   // ── Idempotency replay (fast path) ────────────────────────────────────
   // If this checkout token already produced an order, return it verbatim
@@ -3161,7 +3269,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   //                           when all missing items are restocked.
   // Empty / null = no shortage expected. Server re-runs the analysis and
   // refuses if the choice doesn't match the situation (anti-tampering).
-  const fallbackChoice = body.fallback_choice || (body.accept_fallback ? 'full_from_fallback' : null);
+  // Pickup never runs the address-based shortage/fallback flow — the customer
+  // chose the store, so stock is simply checked + reserved there at reserve
+  // time. Force the fallback machinery off for pickup.
+  const fallbackChoice = isPickup ? null : (body.fallback_choice || (body.accept_fallback ? 'full_from_fallback' : null));
   const VALID_CHOICES = new Set(['cancel_missing','replace_missing','full_from_fallback','wait_for_restock']);
   if (fallbackChoice && !VALID_CHOICES.has(fallbackChoice)) {
     return res.status(400).json({ success: false, error: 'invalid_fallback_choice' });
@@ -3276,10 +3387,18 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // momentary shortage at the nearest store doesn't refuse the order or
   // bounce the customer into a needs-fallback modal — the kitchen will
   // restock before the scheduled fulfilment date.
-  const stockGate = inventory.requiresStockGate({ address, deliverySlotId });
+  // Pickup always gates stock at the chosen store — the customer expects it
+  // ready to collect, so we hard-reserve now rather than relax like a
+  // scheduled-for-later delivery.
+  const stockGate = isPickup ? true : inventory.requiresStockGate({ address, deliverySlotId });
 
   let fulfillingStore, routingReason;
-  if (isWaitFlow) {
+  if (isPickup) {
+    // Customer picked the store explicitly — no routing. Stock availability
+    // is enforced by reserveForOrder below (throws insufficient_stock).
+    fulfillingStore = pickupStore;
+    routingReason   = 'customer_pickup';
+  } else if (isWaitFlow) {
     // Wait flow always uses the nearest store regardless of stock; we
     // know stock is short there and that's the whole point.
     const a = inventory.analyzeShortage({
@@ -3345,9 +3464,13 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // Zone-driven fee model. If no zone matches the address, we currently
   // refuse the order — the office must configure the district/city in
   // /retail-admin → Delivery before this customer can check out.
-  const zone = matchDeliveryZone(address);
-  let shippingFee = 0, packingFee = 0, deliveryZoneId = null, resolvedMode = deliveryMode;
-  if (zone) {
+  // Pickup is free and zone-less — the customer collects from the store, so
+  // no shipping/packing fee and no zone match.
+  const zone = isPickup ? null : matchDeliveryZone(address);
+  let shippingFee = 0, packingFee = 0, deliveryZoneId = null, resolvedMode = isPickup ? 'pickup' : deliveryMode;
+  if (isPickup) {
+    // fees stay 0; delivery_mode='pickup' marks the order in admin
+  } else if (zone) {
     const fees = computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty);
     if (fees.error) return res.status(400).json({ success: false, error: fees.error });
     shippingFee    = fees.deliveryFee;
@@ -3363,28 +3486,36 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     else                            shippingFee = subtotal >= freeShipThreshold ? 0 : standardShipping;
   }
 
-  // Resolve & validate the delivery slot AFTER zone lookup so we can enforce
-  // the slot's same-day surcharge, expiry, and zone-allowed rules.
-  const slotResolved = resolveDeliverySlot(zone, deliverySlotId, new Date());
-  if (slotResolved.error) {
-    return res.status(400).json({ success: false, error: slotResolved.error });
-  }
-  let scheduledFor         = slotResolved.scheduled_for;          // ISO string or null
-  let sameDaySurcharge     = Number(slotResolved.surcharge) || 0; // 0 unless same-day + zone-charged
-  let slotLabel            = body.delivery_slot_label
-                              || slotResolved.slot?.label_en
-                              || (deliverySlotId === 'right_away' ? 'Right away' : null);
-  // Wait-for-restock overrides any time-bound slot with a flexible label
-  // and clears scheduled_for + the same-day surcharge. The kitchen
-  // shouldn't see "Today 18:00–20:00" on an awaiting_restock order — that
-  // window can't be honored if restock lands after 18:00. Customer has
-  // already confirmed the trade-off via a modal in the mini-app
-  // (fbWaitForRestock) before this POST fires. Same-day surcharge is
-  // refunded by clearing it here since we can't promise same-day.
-  if (isWaitFlow) {
-    scheduledFor      = null;
-    sameDaySurcharge  = 0;
-    slotLabel         = 'Ships when restocked';
+  // Pickup carries the customer-chosen pickup window in the same scheduled_for
+  // + delivery_slot_label columns; no zone slot resolution and no surcharge.
+  let scheduledFor, sameDaySurcharge = 0, slotLabel;
+  if (isPickup) {
+    scheduledFor = pickupScheduledFor;
+    slotLabel    = pickupSlotLabel;
+  } else {
+    // Resolve & validate the delivery slot AFTER zone lookup so we can enforce
+    // the slot's same-day surcharge, expiry, and zone-allowed rules.
+    const slotResolved = resolveDeliverySlot(zone, deliverySlotId, new Date());
+    if (slotResolved.error) {
+      return res.status(400).json({ success: false, error: slotResolved.error });
+    }
+    scheduledFor     = slotResolved.scheduled_for;          // ISO string or null
+    sameDaySurcharge = Number(slotResolved.surcharge) || 0; // 0 unless same-day + zone-charged
+    slotLabel        = body.delivery_slot_label
+                        || slotResolved.slot?.label_en
+                        || (deliverySlotId === 'right_away' ? 'Right away' : null);
+    // Wait-for-restock overrides any time-bound slot with a flexible label
+    // and clears scheduled_for + the same-day surcharge. The kitchen
+    // shouldn't see "Today 18:00–20:00" on an awaiting_restock order — that
+    // window can't be honored if restock lands after 18:00. Customer has
+    // already confirmed the trade-off via a modal in the mini-app
+    // (fbWaitForRestock) before this POST fires. Same-day surcharge is
+    // refunded by clearing it here since we can't promise same-day.
+    if (isWaitFlow) {
+      scheduledFor      = null;
+      sameDaySurcharge  = 0;
+      slotLabel         = 'Ships when restocked';
+    }
   }
   // Same-day surcharge is added to the shipping line so totals reconcile
   // without a new fee column on retail_orders.
@@ -3509,16 +3640,25 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
          customer_note, needs_cutlery, needs_invoice, invoice_title, invoice_tax_id,
          invoice_type, invoice_email,
          store_id, routing_reason, channel,
-         fallback_choice, awaiting_restock_pids, idempotency_key
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         fallback_choice, awaiting_restock_pids, idempotency_key,
+         fulfillment_type
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       orderNo, req.customer.id, 'pending_payment', paymentMethod,
       address.recipient_name, address.phone,
       [address.province, address.city, address.district, address.address, address.detail].filter(Boolean).join(' '),
-      JSON.stringify({
-        province: address.province, city: address.city, district: address.district,
-        address: address.address, detail: address.detail, postal_code: address.postal_code,
-      }),
+      JSON.stringify(isPickup
+        ? {
+            pickup: true,
+            store_id: pickupStore.id, store_code: pickupStore.code,
+            store_name_en: pickupStore.name_en, store_name_cn: pickupStore.name_cn,
+            store_phone: pickupStore.phone,
+            city: address.city, district: address.district, address: address.address,
+          }
+        : {
+            province: address.province, city: address.city, district: address.district,
+            address: address.address, detail: address.detail, postal_code: address.postal_code,
+          }),
       subtotal, shippingFee, packingFee, resolvedMode, deliveryZoneId,
       scheduledFor, slotLabel, sameDaySurcharge,
       voucher ? voucher.code : null, voucherDiscount,
@@ -3527,7 +3667,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       invoiceType, invoiceEmail,
       fulfillingStore.id, routingReason, 'wechat',
       fallbackChoice, awaitingRestockPids ? JSON.stringify(awaitingRestockPids) : null,
-      idempotencyKey
+      idempotencyKey,
+      isPickup ? 'pickup' : 'delivery'
     );
     const orderId = info.lastInsertRowid;
 
@@ -3578,8 +3719,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     }
     // Auto-plan shipments based on dest city + per-item ship_modes. For
     // in-GZ orders this is a single 'local' shipment; for outside-GZ it
-    // splits into air + land when items have mixed allowed modes.
-    ensureShipments(orderId);
+    // splits into air + land when items have mixed allowed modes. Pickup
+    // orders ship nothing (collected at the store), so no shipment is planned.
+    if (!isPickup) ensureShipments(orderId);
 
     // Increment flash_sold atomically for items that were priced at flash
     // rate. The WHERE clause caps the counter at flash_stock_limit (when
@@ -3710,7 +3852,8 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
             refund_amount_requested, refund_amount_approved, refund_amount_paid,
             refund_lines_json, refund_payout_method, refund_payout_ref,
             refund_reviewed_at, refund_approved_at, refund_paid_at,
-            store_id, routing_reason, channel,
+            store_id, routing_reason, channel, fulfillment_type,
+            scheduled_for, delivery_slot_label,
             tracking_carrier, tracking_number, tracking_status,
             tracking_events_json, tracking_synced_at,
             tracking_scenario, tracking_scenario_data_json,
@@ -6675,7 +6818,8 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.refund_status, o.refund_amount_requested,
                     o.refund_requested_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
-                    o.store_id, o.routing_reason, o.channel,
+                    o.store_id, o.routing_reason, o.channel, o.fulfillment_type,
+                    o.scheduled_for, o.delivery_slot_label,
                     o.tracking_carrier, o.tracking_number, o.tracking_status,
                     o.tracking_kd100_subscribed,
                     s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
@@ -6732,8 +6876,9 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
   delete o.address_json;
 
   // Lazy-fill shipments for orders predating the split-shipment feature.
-  // This is idempotent — if rows already exist, nothing changes.
-  const shipmentRows = ensureShipments(id);
+  // This is idempotent — if rows already exist, nothing changes. Pickup
+  // orders ship nothing (collected at the store), so never plan a shipment.
+  const shipmentRows = o.fulfillment_type === 'pickup' ? [] : ensureShipments(id);
 
   // oi.image_url was never captured at order time (always null on insert),
   // so fall through to the live product photo — same approach as the
@@ -6835,25 +6980,32 @@ router.put('/api/retail-admin/orders/:id/invoice', requireRetailAdmin, express.j
 // servable URL (GET /api/retail/media/:id streams it with the stored mime).
 router.post('/api/retail-admin/invoice-file', requireRetailAdmin, express.json({ limit: '12mb' }), (req, res) => {
   const { data } = req.body || {};
-  const m = /^data:(application\/pdf);base64,([A-Za-z0-9+/=]+)$/.exec(typeof data === 'string' ? data : '');
-  if (!m) return res.status(400).json({ success: false, error: 'not_a_pdf' });
+  const m = /^data:(application\/pdf|image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(typeof data === 'string' ? data : '');
+  if (!m) return res.status(400).json({ success: false, error: 'unsupported_type' });
+  const declaredMime = m[1];
   const sizeBytes = Math.floor(m[2].length * 3 / 4);
   if (sizeBytes > 10 * 1024 * 1024) return res.status(400).json({ success: false, error: 'too_large' });
   // Don't trust the data-URL's self-declared MIME — verify the real bytes start
-  // with the PDF magic (%PDF-). Decode only the small header, not the whole blob.
+  // with the matching magic number. Decode only the small header, not the whole blob.
+  let mime, ext;
   try {
-    const head = Buffer.from(m[2].slice(0, 16), 'base64');
-    if (head.subarray(0, 5).toString('latin1') !== '%PDF-') {
-      return res.status(400).json({ success: false, error: 'not_a_pdf' });
-    }
+    const head = Buffer.from(m[2].slice(0, 24), 'base64');
+    const latin = head.subarray(0, 12).toString('latin1');
+    if (head.subarray(0, 5).toString('latin1') === '%PDF-') { mime = 'application/pdf'; ext = 'pdf'; }
+    else if (head[0] === 0xFF && head[1] === 0xD8 && head[2] === 0xFF) { mime = 'image/jpeg'; ext = 'jpg'; }
+    else if (latin.startsWith('\x89PNG\r\n\x1a\n')) { mime = 'image/png'; ext = 'png'; }
+    else if (latin.startsWith('GIF87a') || latin.startsWith('GIF89a')) { mime = 'image/gif'; ext = 'gif'; }
+    else if (latin.startsWith('RIFF') && latin.slice(8, 12) === 'WEBP') { mime = 'image/webp'; ext = 'webp'; }
+    else return res.status(400).json({ success: false, error: 'unsupported_type' });
   } catch {
-    return res.status(400).json({ success: false, error: 'not_a_pdf' });
+    return res.status(400).json({ success: false, error: 'unsupported_type' });
   }
+  if (mime !== declaredMime) return res.status(400).json({ success: false, error: 'type_mismatch' });
   try {
     const info = tdb().prepare(
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
        VALUES (?, ?, ?, ?, NULL)`
-    ).run('fapiao.pdf', 'application/pdf', sizeBytes, data);
+    ).run('fapiao.' + ext, mime, sizeBytes, data);
     res.json({ success: true, data: { url: `/api/retail/media/${info.lastInsertRowid}` } });
   } catch (e) {
     console.error('[retail-admin/invoice-file] insert failed:', e.message);
@@ -7011,7 +7163,9 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
       }
     }
   }
-  out.kd100.enabled = tracking.kd100Enabled(ci.kd100);
+  // kd100 callback URL is system-built per tenant (⑨), so a tenant is "enabled"
+  // on customer+key alone — kd100Creds() injects the path-scoped callback.
+  out.kd100.enabled = tracking.kd100Enabled(kd100Creds());
   out.jd.enabled    = jd.jdEnabled(ci.jd);
   out.feie.enabled  = _feie.feieEnabled(ci.feie);
   res.json({ success: true, data: out });
@@ -7237,7 +7391,7 @@ router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, re
 // than success, but a network round-trip with a parseable JSON body is
 // proof the auth credentials reach kd100.
 router.post('/api/retail-admin/integrations/kd100/test', requireRetailAdmin, async (req, res) => {
-  const kc = integ().kd100;
+  const kc = kd100Creds();
   if (!tracking.kd100Enabled(kc)) return res.json({ ok: false, error: 'not_configured' });
   const r = await tracking.subscribeWithKd100({
     orderId: 0, carrierCode: 'jd', trackingNumber: '__TEST__INVALID__', recipientPhone: null,
@@ -7331,7 +7485,7 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
   // Fire-and-forget kd100 subscription against the shipment row. Resolve the
   // tenant's kd100 creds synchronously (before the async fire) so the deferred
   // subscribe runs under this tenant's own account.
-  const kc = integ().kd100;
+  const kc = kd100Creds();
   if (tracking.kd100Enabled(kc) && tracking.KD100_CARRIER_MAP[carrier]) {
     tracking.subscribeWithKd100({
       orderId: id, carrierCode: carrier, trackingNumber: number,
@@ -7515,10 +7669,14 @@ function escapeHtml(s) {
 // subscribed waybill. Body is form-urlencoded `param=<json>`. We verify
 // the salt was one we issued before trusting the payload, look up the
 // order by tracking_number, and merge the events.
-router.post(
-  '/api/retail/tracking/kd100/callback',
-  express.urlencoded({ extended: false, limit: '256kb' }),
-  (req, res) => {
+// Per-tenant routing (Platform readiness ⑨): kd100 POSTs with no header/
+// session, so the tenant is carried in the URL PATH (/callback/:tid). We
+// settle inside that tenant's data scope (tdb() → the tenant's DB) and verify
+// the salt against THAT tenant's secret. Roots keeps the legacy unsuffixed
+// path (env creds, mainDb) — byte-for-byte unchanged (getTenantDb(1)===mainDb,
+// getTenantCreds(1)===env bundle, so the salt + DB are identical to before).
+function handleKd100Callback(req, res, tid) {
+  tenantAls.run(getTenantDb(tid), () => {
     try {
       const parsed = tracking.parseKd100Callback(req.body?.param);
       if (!parsed || !parsed.number) {
@@ -7532,8 +7690,10 @@ router.post(
         console.warn('[kd100.callback] no order matches tracking_number=', parsed.number);
         return res.json({ result: true, returnCode: '200', message: 'no-op (no matching order)' });
       }
-      // Verify salt — kd100 echoes the salt we set on subscribe.
-      const expectedSalt = tracking.kd100Salt(order.id, parsed.number);
+      // Verify salt — kd100 echoes the salt we set on subscribe, derived from
+      // THIS tenant's secret (Roots → env secret, identical to before).
+      const creds = getTenantCreds(tid).integrations.kd100;
+      const expectedSalt = tracking.kd100Salt(order.id, parsed.number, creds);
       let body;
       try { body = JSON.parse(req.body.param); } catch { body = {}; }
       const gotSalt = body?.salt || body?.parameters?.salt || null;
@@ -7561,7 +7721,7 @@ router.post(
                 updated_at                 = CURRENT_TIMESTAMP
           WHERE id = ?`
       ).run(parsed.state_code, JSON.stringify(parsed.events), scenarioCode, scenarioJson, order.id);
-      console.log(`[kd100.callback] order=${order.id} number=${parsed.number} state=${parsed.state_code} scenario=${scenarioCode || '-'} events=${parsed.events.length}`);
+      console.log(`[kd100.callback] tenant=${tid} order=${order.id} number=${parsed.number} state=${parsed.state_code} scenario=${scenarioCode || '-'} events=${parsed.events.length}`);
 
       // Fire a push notification when the scenario changes to one the
       // customer should know about. Suppresses repeats so a duplicate
@@ -7587,6 +7747,22 @@ router.post(
       console.error('[kd100.callback] threw:', e);
       return res.status(500).json({ result: false, returnCode: '500', message: e.message });
     }
+  });
+}
+// Roots keeps the legacy unsuffixed path (env creds, mainDb). Tenants POST to
+// /callback/:tid — the id is validated against the active tenants table.
+router.post(
+  '/api/retail/tracking/kd100/callback',
+  express.urlencoded({ extended: false, limit: '256kb' }),
+  (req, res) => handleKd100Callback(req, res, ROOTS_TENANT_ID)
+);
+router.post(
+  '/api/retail/tracking/kd100/callback/:tid',
+  express.urlencoded({ extended: false, limit: '256kb' }),
+  (req, res) => {
+    const tid = resolveCallbackTid(req.params.tid);
+    if (!tid) return res.status(404).json({ result: false, returnCode: '404', message: 'unknown_tenant' });
+    handleKd100Callback(req, res, tid);
   }
 );
 
@@ -7601,7 +7777,7 @@ router.post('/api/retail-admin/orders/bulk-tracking', requireRetailAdmin, expres
 
   const results = [];
   const subscribeQueue = [];   // { orderId, carrier, number, phone } — fired after the response.
-  const kc = integ().kd100;    // this tenant's own kd100 account (captured in-scope)
+  const kc = kd100Creds();    // this tenant's own kd100 account (captured in-scope)
 
   for (const e of entries) {
     const orderNo = String(e.order_no || '').trim();
@@ -7688,7 +7864,7 @@ router.post('/api/retail-admin/orders/:id/tracking/resubscribe', requireRetailAd
   const shipmentIdReq = req.query.shipment_id ? parseInt(req.query.shipment_id, 10) : null;
   const o = tdb().prepare('SELECT id, recipient_phone FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
-  const kc = integ().kd100;
+  const kc = kd100Creds();
   if (!tracking.kd100Enabled(kc)) return res.status(409).json({ success: false, error: 'kd100_not_configured' });
   const shipments = ensureShipments(id);
   const s = shipmentIdReq

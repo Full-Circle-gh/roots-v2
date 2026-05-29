@@ -113,6 +113,51 @@
   text-decoration: underline;
 }
 
+/* Delivery ⇄ Pickup toggle — two equal pills, sharp-edged to match the
+   2rpx-border ink aesthetic used by the region picker / inputs. */
+.fulfill-toggle {
+  display: flex;
+  border: 2rpx solid var(--ink);
+  margin: 4rpx 0 18rpx;
+}
+.ft-opt {
+  flex: 1;
+  text-align: center;
+  padding: 16rpx 0;
+  font-size: calc(26rpx * var(--font-scale));
+  color: var(--ink);
+  background: transparent;
+}
+.ft-opt + .ft-opt { border-left: 2rpx solid var(--ink); }
+.ft-opt.on { background: var(--ink); color: #FFFCF7; }
+
+/* Pickup store list reuses .addr-row; just spacing around the block. */
+.pickup-stores { margin-top: 4rpx; }
+
+/* Pickup time row — two side-by-side picker buttons (date | time). */
+.pickup-hours-hint {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  color: var(--olive);
+  margin-bottom: 12rpx;
+}
+.pickup-time-row { display: flex; gap: 16rpx; }
+.pickup-time-row picker { flex: 1; }
+.pickup-pick {
+  background: #FFFCF7;
+  border: 2rpx solid var(--ink);
+  padding: 0 22rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  font-size: calc(26rpx * var(--font-scale));
+  color: var(--ink);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pickup-pick.placeholder { color: rgba(26, 26, 23, 0.42); }
+
 /* Soft hint under "Deliver to" — clarifies that the shown name/phone/addr
    came from the customer's WeChat profile and is editable in their book. */
 .addr-hint {

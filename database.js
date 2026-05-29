@@ -2216,8 +2216,14 @@ db.exec(`
 // fulfilled it (store_id), why that store was chosen (routing_reason),
 // and which sales channel placed it (channel). Idempotent ALTERs.
 addColumn('retail_orders', 'store_id',        'INTEGER');
-addColumn('retail_orders', 'routing_reason',  'TEXT');   // 'nearest' | 'fallback_no_stock' | 'manual' | 'only_store'
+addColumn('retail_orders', 'routing_reason',  'TEXT');   // 'nearest' | 'fallback_no_stock' | 'manual' | 'only_store' | 'customer_pickup'
 addColumn('retail_orders', 'channel',         "TEXT DEFAULT 'wechat'");
+
+// Store pickup: a store is offered as a pickup point at checkout only when
+// this flag is on (admin toggles it per store in the mini-app backend).
+// Independent of is_active routing — a store can fulfill deliveries without
+// accepting walk-in pickup, and vice versa.
+addColumn('retail_stores', 'pickup_enabled', 'INTEGER DEFAULT 0');
 
 // Staff "seen" timestamp — stamped the first time ANY operator opens the
 // order detail (shared across devices). NULL = unread; powers the bold + dot
@@ -2367,6 +2373,11 @@ db.exec(`
 //                              = 'wait_for_restock')
 addColumn('retail_orders', 'fallback_choice',         'TEXT');
 addColumn('retail_orders', 'awaiting_restock_pids',   'TEXT');
+// Fulfillment path: 'delivery' (default — ship to customer address) or
+// 'pickup' (customer collects from a chosen store, no address/shipping fee).
+// For pickup orders store_id holds the customer-chosen store, scheduled_for +
+// delivery_slot_label hold the chosen pickup time window.
+addColumn('retail_orders', 'fulfillment_type', "TEXT DEFAULT 'delivery'");
 // Fapiao (发票) — invoice_title + invoice_tax_id were in the original schema;
 // these add the e-general invoice extras the mini-app fapiao form collects.
 addColumn('retail_orders', 'invoice_type',  'TEXT');   // 'personal' | 'company'

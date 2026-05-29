@@ -3954,7 +3954,7 @@
         <button class="db-btn" onclick="loadInvoices()" title="Refresh · 刷新">↻</button>
       </div>
     </div>
-    <p style="color:var(--text-3); font-size:12px; margin:0 0 var(--s4)">Send info to your accountant with “Copy for accounting”, then paste the link / attach the PDF + Mark issued. · 用“复制开票信息”发给会计,开好后粘贴链接/上传 PDF 并标记已开。</p>
+    <p style="color:var(--text-3); font-size:12px; margin:0 0 var(--s4)">Send info to your accountant with “Copy for accounting”, then paste the link / attach the PDF or photo + Mark issued. · 用“复制开票信息”发给会计,开好后粘贴链接/上传 PDF 或图片 并标记已开。</p>
     <div id="invoices-list"></div>
   </section>
 
@@ -7594,6 +7594,31 @@
             </div>
           </div>
 
+          <!-- STORE PICKUP HOURS -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Store pickup hours · 到店自提时间</h3>
+              <div class="muted">The daily window customers can choose to collect an order at checkout when they pick <b>Store pickup</b>. Times outside this window are blocked. Pickup itself is turned on per store (Kitchen app → Inventory → edit a store → "Offer store pickup"). · 顾客在结算选择"到店自提"时可选的每日取货时间窗,窗口之外不可选。自提开关在每个门店单独设置(厨房端 → 库存 → 编辑门店 → "提供到店自提")。</div>
+            </div>
+            <div class="illus-row">
+              <div class="ctrl" style="flex: 1;">
+                <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+                  <div class="field" style="margin: 0;">
+                    <label class="stacked">Opens · 开始</label>
+                    <input type="time" id="cfg-pickup-open">
+                  </div>
+                  <div class="field" style="margin: 0;">
+                    <label class="stacked">Closes · 结束</label>
+                    <input type="time" id="cfg-pickup-close">
+                  </div>
+                </div>
+                <div class="helper" style="margin-top: 10px;">
+                  One global window for all pickup-enabled stores. Leave the default (10:00–20:00) if unsure.
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- STANDARD SHIPPING FEE -->
           <div class="group-card">
             <div class="group-card-head">
@@ -9457,6 +9482,11 @@ async function _pollUnseenOrders() {
 // delivered it goes muted.
 function renderShipByCell(o) {
   const actionable = (o.status === 'paid' || o.status === 'preparing');
+  if (o.fulfillment_type === 'pickup') {
+    const label = humanizeSlotLabel(o.delivery_slot_label) || 'ASAP';
+    return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-1)'}; line-height: 1.3;">🏬 ${escapeHtml(label)}</div>
+            <div class="muted" style="font-size: 10px; margin-top: 2px;">pickup · 自提</div>`;
+  }
   const isAsap     = !o.scheduled_for;
   if (isAsap) {
     return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-3)'};">ASAP</div>
@@ -9530,6 +9560,17 @@ function routingNote(reason) {
 // mode, surcharge note).
 function renderShipByTile(o) {
   const actionable = (o.status === 'paid' || o.status === 'preparing');
+  // Pickup orders have no "ship by" deadline — show the customer-chosen pickup
+  // window instead so staff know when to have it ready at the counter.
+  if (o.fulfillment_type === 'pickup') {
+    const label = humanizeSlotLabel(o.delivery_slot_label)
+      || (o.scheduled_for ? humanizeSlotLabel(o.scheduled_for) : 'During pickup hours');
+    return `<div>
+      <div class="kicker">Pickup time · 取货时间</div>
+      <div class="val"><b style="color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">${escapeHtml(label)}</b></div>
+      <div class="sub">Have ready at counter · 备好待取</div>
+    </div>`;
+  }
   const isAsap = !o.scheduled_for;
   const mode = deliveryModeNote(o.delivery_mode);
   if (isAsap) {
@@ -9567,6 +9608,9 @@ function renderShipByTile(o) {
 }
 
 function renderTrackingCell(o) {
+  if (o.fulfillment_type === 'pickup') {
+    return '<span class="muted" style="font-size:11px;">🏬 pickup</span>';
+  }
   if (!o.tracking_number) {
     // Shipped without tracking = office still needs to enter the waybill.
     if (o.status === 'dispatched') return '<span class="err" style="font-size:11px;">⚠ missing</span>';
@@ -10094,11 +10138,17 @@ function renderOpenOrder(o) {
         ${ODV.totalPlacement === 'banner' ? renderOrderTotalBanner(o) : ''}
 
         <div class="order-detail">
+          ${o.fulfillment_type === 'pickup' ? `
+          <div>
+            <div class="kicker">🏬 Pickup · 到店自提 ${copyChip([o.recipient_name, o.recipient_phone, (o.address?.store_name_cn || o.store_name_cn || ''), (o.address?.address || '')].filter(Boolean).join('\n'), 'Pickup')}</div>
+            <div class="val"><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
+            <div class="sub">Collects at <b>${escapeHtml(o.address?.store_name_en || o.store_name_en || o.store_code || 'store')}</b>${o.address?.address ? ' · ' + escapeHtml(o.address.address) : ''}</div>
+          </div>` : `
           <div>
             <div class="kicker">Ship to ${copyChip([o.recipient_name, o.recipient_phone, o.address_full].filter(Boolean).join('\n'), 'Ship-to')}</div>
             <div class="val"><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
             <div class="sub">${escapeHtml(o.address_full || '')}</div>
-          </div>
+          </div>`}
           <div>
             <div class="kicker">Customer</div>
             <div class="val"><b>${escapeHtml(o.nickname || '—')}</b></div>
@@ -11312,6 +11362,8 @@ async function loadConfig() {
     $('#cfg-fees-standardShipping').value      = c.fees?.standardShipping ?? 12;
     $('#cfg-fees-sameDayDelivery').value       = c.fees?.sameDayDelivery ?? 18;
     $('#cfg-fees-minOrder').value              = c.fees?.minOrder ?? 0;
+    $('#cfg-pickup-open').value                = c.pickup?.window?.open  || '10:00';
+    $('#cfg-pickup-close').value               = c.pickup?.window?.close || '20:00';
     // Shop layout & filters
     const shopLayout = c.shop?.layout === 'grid' ? 'grid-2col' : (c.shop?.layout || 'list');
     $('#cfg-shop-layout').value             = shopLayout;
@@ -11383,6 +11435,10 @@ async function saveConfig() {
     'fees.standardShipping':       Number($('#cfg-fees-standardShipping').value) || 0,
     'fees.sameDayDelivery':        Number($('#cfg-fees-sameDayDelivery').value) || 0,
     'fees.minOrder':               Number($('#cfg-fees-minOrder').value) || 0,
+    'pickup.window':               {
+      open:  $('#cfg-pickup-open').value  || '10:00',
+      close: $('#cfg-pickup-close').value || '20:00',
+    },
     'shop.layout':                 $('#cfg-shop-layout').value,
     'shop.defaultSort':            $('#cfg-shop-defaultSort').value,
     'shop.showSort':               $('#cfg-shop-showSort').checked,
@@ -13435,8 +13491,8 @@ function renderInvoiceBlock(o) {
     : `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
         <input id="inv-url-${o.id}" placeholder="Fapiao link 发票链接 (or attach PDF)" style="${inS} flex: 1; min-width: 180px;">
         <input id="inv-no-${o.id}" placeholder="发票号码 (optional)" style="${inS} width: 140px;">
-        <input id="inv-pdf-${o.id}" type="file" accept="application/pdf" style="display: none;" onchange="uploadInvoicePdf(${o.id}, this)">
-        <button type="button" class="db-btn" onclick="document.getElementById('inv-pdf-${o.id}').click()">📎 PDF</button>
+        <input id="inv-pdf-${o.id}" type="file" accept="application/pdf,image/*" style="display: none;" onchange="uploadInvoicePdf(${o.id}, this)">
+        <button type="button" class="db-btn" onclick="document.getElementById('inv-pdf-${o.id}').click()">📎 PDF / 图片</button>
         <button type="button" class="db-btn primary" onclick="markInvoiceIssued(${o.id})">Mark issued · 标记已开</button>
       </div>`;
   return `<div class="full" style="background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px;">
@@ -13515,9 +13571,11 @@ async function loadInvoices() {
 async function uploadInvoicePdf(id, input) {
   const file = input.files && input.files[0];
   if (!file) return;
-  if (file.type !== 'application/pdf') { toast('PDF only · 仅限 PDF', 'err'); input.value = ''; return; }
-  if (file.size > 10 * 1024 * 1024) { toast('PDF too large (max 10MB) · 文件过大', 'err'); input.value = ''; return; }
-  toast('Uploading PDF… · 上传中…');
+  const isPdf = file.type === 'application/pdf';
+  const isImage = file.type.startsWith('image/');
+  if (!isPdf && !isImage) { toast('PDF or image only · 仅限 PDF 或图片', 'err'); input.value = ''; return; }
+  if (file.size > 10 * 1024 * 1024) { toast('File too large (max 10MB) · 文件过大', 'err'); input.value = ''; return; }
+  toast('Uploading… · 上传中…');
   const reader = new FileReader();
   reader.onload = async () => {
     try {
@@ -13525,7 +13583,7 @@ async function uploadInvoicePdf(id, input) {
       const url = res && res.data && res.data.url;
       const el = document.getElementById('inv-url-' + id);
       if (el && url) el.value = url;
-      toast('PDF attached — tap Mark issued · 已附加,点击标记已开');
+      toast('Attached — tap Mark issued · 已附加,点击标记已开');
     } catch (e) { toast('Upload failed · 上传失败: ' + e.message, 'err'); }
   };
   reader.readAsDataURL(file);

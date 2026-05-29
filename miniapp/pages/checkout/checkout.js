@@ -31,6 +31,20 @@ Page({
     myVouchers: [],          // granted to this customer
     showCodeInput: false,    // collapses the type-a-code row until tapped
     deliveryMethod: 'standard',  // 'standard' | 'max' — 'sameday' kept as legacy fallback
+    // Fulfillment — 'delivery' (default) or 'pickup' (collect at a store).
+    // The Delivery/Pickup toggle only renders when at least one store opted
+    // in (pickupStores non-empty); otherwise checkout stays delivery-only.
+    fulfillment: 'delivery',
+    pickupStores: [],            // [{id, code, name_en, name_cn, address, city, district, phone}]
+    pickupWindow: { open: '10:00', close: '20:00' },
+    pickupStoreId: null,
+    pickupName: '',
+    pickupPhone: '',
+    pickupDate: '',              // 'YYYY-MM-DD'
+    pickupTime: '',              // 'HH:MM'
+    pickupDateLabel: '',         // pretty label for the picked date
+    pickupMinDate: '',
+    pickupMaxDate: '',
     paymentMethod: 'wechat',     // 'wechat' | 'alipay'  (points is no longer a method; see usePoints toggle below)
     pointsBalance: 0,            // customer's available points (drives Points option visibility)
     pointsValue: '0.00',         // ¥ value of the balance (display only)
@@ -140,6 +154,16 @@ Page({
       orderSummary: 'YOUR ORDER',
       // Bear Serif section titles (match design's "Deliver to" / "How fast" / "Pay with")
       shipToTitle: 'Deliver to',
+      pickupAtTitle: 'Pick up at',
+      deliveryTab: 'Delivery',
+      pickupTab: 'Pickup',
+      pickupStoreLabel: 'Choose a store',
+      pickupTimeTitle: 'Pickup time',
+      pickupDatePh: 'Pick a date',
+      pickupTimePh: 'Pick a time',
+      pickupHoursHint: 'Pickup hours',
+      pickupContactName: 'Who is collecting',
+      pickupContactPhone: 'Contact phone',
       howFastTitle: 'How fast',
       payWithTitle: 'Pay with',
       addOnsTitle: 'Add-ons',
@@ -240,6 +264,7 @@ Page({
     await this.loadAddressesAndQuote();
     this.loadPublicCoupons();
     this.loadPointsBalance();
+    this.loadPickupStores();
 
     // If the user tapped "Use Now" on a coupon from /pages/coupons, the
     // code was stashed in storage on the way over. Apply it now.
@@ -291,6 +316,7 @@ Page({
       await this.loadAddressesAndQuote();
       this.loadPublicCoupons();
       this.loadPointsBalance();
+      this.loadPickupStores();
     } else {
       this.reloadSavedAddresses();
     }
@@ -516,6 +542,144 @@ Page({
     } catch (e) { /* not signed in / no profile — silently skip Points option */ }
   },
 
+  // Load the stores that opted into pickup + the global pickup window. When
+  // none exist, the Delivery/Pickup toggle stays hidden and checkout runs
+  // delivery-only. Prefills the contact fields from the customer's default
+  // address so most customers don't retype their name/phone.
+  async loadPickupStores() {
+    try {
+      const r = await api.get('/api/retail/pickup-stores');
+      const data = r?.data || r || {};
+      const stores = Array.isArray(data.stores) ? data.stores : [];
+      const win = data.window || { open: '10:00', close: '20:00' };
+      const patch = { pickupStores: stores, pickupWindow: win };
+      // Date bounds: today → +30 days (matches the server's far-future guard).
+      const pad = n => String(n).padStart(2, '0');
+      const now = new Date();
+      const fmt = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      patch.pickupMinDate = fmt(now);
+      patch.pickupMaxDate = fmt(new Date(now.getTime() + 30 * 86400000));
+      // Prefill contact from the current address (WeChat-bound profile).
+      const a = this.data.address || {};
+      if (!this.data.pickupName)  patch.pickupName  = a.recipient_name || '';
+      if (!this.data.pickupPhone) patch.pickupPhone = a.phone || '';
+      // Default the store to the only one when there's a single pickup store.
+      if (stores.length === 1 && !this.data.pickupStoreId) patch.pickupStoreId = stores[0].id;
+      this.setData(patch);
+      this.applyDefaultPickupSlot();
+    } catch (e) {
+      console.warn('[checkout] loadPickupStores failed:', e && e.message);
+    }
+  },
+
+  // Pick a sensible default pickup date+time: the next 30-min increment that
+  // falls inside the window today, else the window's open time tomorrow.
+  applyDefaultPickupSlot() {
+    if (this.data.pickupDate && this.data.pickupTime) return;
+    const win = this.data.pickupWindow || { open: '10:00', close: '20:00' };
+    const pad = n => String(n).padStart(2, '0');
+    const now = new Date();
+    const fmtDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const [oh, om] = String(win.open  || '10:00').split(':').map(Number);
+    const [ch, cm] = String(win.close || '20:00').split(':').map(Number);
+    const openMins = oh * 60 + om, closeMins = ch * 60 + cm;
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    let date = fmtDate(now);
+    let startMins = Math.max(openMins, Math.ceil((nowMins + 15) / 30) * 30);
+    if (startMins > closeMins) {            // too late today → tomorrow at open
+      date = fmtDate(new Date(now.getTime() + 86400000));
+      startMins = openMins;
+    }
+    const time = `${pad(Math.floor(startMins / 60))}:${pad(startMins % 60)}`;
+    this.setData({
+      pickupDate: date,
+      pickupTime: time,
+      pickupDateLabel: this.fmtPickupDateLabel(date),
+    });
+  },
+
+  fmtPickupDateLabel(ymd) {
+    if (!ymd) return '';
+    const [y, m, d] = ymd.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const isToday = dt.getTime() === today.getTime();
+    if (this.data.lang === 'cn') return isToday ? '今天' : `${m}月${d}日`;
+    if (isToday) return 'Today';
+    return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  },
+
+  // Delivery ⇄ Pickup toggle. Re-derives totals through refreshQuote, which
+  // short-circuits to the local pickup math when fulfillment === 'pickup'.
+  setFulfillment(e) {
+    const mode = e.currentTarget.dataset.mode;
+    if (mode === this.data.fulfillment) return;
+    this.setData({ fulfillment: mode });
+    if (mode === 'pickup') this.applyDefaultPickupSlot();
+    this.refreshQuote();
+  },
+
+  selectPickupStore(e) {
+    this.setData({ pickupStoreId: Number(e.currentTarget.dataset.id) });
+  },
+  onPickupName(e)  { this.setData({ pickupName: e.detail.value }); },
+  onPickupPhone(e) { this.setData({ pickupPhone: e.detail.value }); },
+  onPickupDateChange(e) {
+    const date = e.detail.value;
+    this.setData({ pickupDate: date, pickupDateLabel: this.fmtPickupDateLabel(date) });
+  },
+  onPickupTimeChange(e) {
+    this.setData({ pickupTime: e.detail.value });
+  },
+
+  // Local total math for pickup — no zone, no delivery/packing fee. Mirrors
+  // the server (fees forced to 0 for pickup). Points stay a preview here;
+  // the /orders POST clamps them authoritatively.
+  recomputePickupTotals() {
+    const state = cart.get();
+    const subtotal = cart.subtotal();
+    const L = this.data.lang;
+    let flashSavings = 0;
+    const items = state.items.map(it => {
+      const onFlash = !!it.is_flash && it.regular_price != null && Number(it.regular_price) > Number(it.unit_price);
+      const lineSave = onFlash ? (Number(it.regular_price) - Number(it.unit_price)) * it.qty : 0;
+      if (lineSave > 0) flashSavings += lineSave;
+      return {
+        ...it,
+        display_name: lang.pick(it.name_en, it.name_cn, L),
+        line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
+        on_flash: onFlash,
+        was_total: onFlash ? '¥' + (Number(it.regular_price) * it.qty).toFixed(2) : '',
+        save_text: onFlash ? (L === 'cn' ? '省 ¥' : 'save ¥') + lineSave.toFixed(2) : '',
+      };
+    });
+    const itemCount = state.items.reduce((s, it) => s + (it.qty || 0), 0);
+    const voucherDiscount = Number(this.data.voucherDiscount) || 0;
+    const grossTotal = Math.max(0, subtotal - voucherDiscount);
+    const rate = Number(this.data.pointsRedeemRate) || 100;
+    let pointsToUse = 0, pointsDiscount = 0;
+    if (this.data.usePoints && this.data.pointsBalance > 0) {
+      pointsToUse = Math.min(this.data.pointsBalance, Math.ceil(grossTotal * rate));
+      pointsDiscount = pointsToUse / rate;
+    }
+    const pointsAffordable = grossTotal > 0 && pointsDiscount >= grossTotal;
+    const total = Math.max(0, grossTotal - pointsDiscount);
+    const savedTotal = flashSavings + voucherDiscount + pointsDiscount;
+    this.setData({
+      items, itemCount,
+      subtotal: subtotal.toFixed(2),
+      zone: null, zoneError: '',
+      deliveryFee: '0.00', packingFee: '0.00', freeShipping: false,
+      needsFallback: false, fallbackGate: 'none',
+      pointsToUse,
+      pointsDiscount: pointsDiscount.toFixed(2),
+      pointsAffordable,
+      savedTotal: savedTotal > 0 ? savedTotal.toFixed(2) : '',
+      total: total.toFixed(2),
+      quoting: false,
+    });
+  },
+
   openPicker() {
     this.setData({ pickerOpen: true });
   },
@@ -540,6 +704,16 @@ Page({
         title: '送到何处？',
         orderSummary: '您的订单',
         shipToTitle: '送货地址',
+        pickupAtTitle: '到店自提',
+        deliveryTab: '配送',
+        pickupTab: '自提',
+        pickupStoreLabel: '选择门店',
+        pickupTimeTitle: '取货时间',
+        pickupDatePh: '选择日期',
+        pickupTimePh: '选择时间',
+        pickupHoursHint: '自提时间',
+        pickupContactName: '取货人',
+        pickupContactPhone: '联系电话',
         howFastTitle: '配送方式',
         payWithTitle: '支付方式',
         addOnsTitle: '附加',
@@ -581,6 +755,13 @@ Page({
   // quote in the background and patches the fee fields when it lands. The
   // server is the source of truth for the zone-driven delivery + packing fees.
   refreshQuote() {
+    // Pickup has no zone/fee quote — compute totals locally and bail. Every
+    // trigger that calls refreshQuote (voucher apply, points toggle, payment
+    // change) routes here while in pickup mode.
+    if (this.data.fulfillment === 'pickup') {
+      this.recomputePickupTotals();
+      return;
+    }
     const state = cart.get();
     const subtotal = cart.subtotal();
     const L = this.data.lang;
@@ -1258,6 +1439,29 @@ Page({
         return;
       }
     }
+    // Bind-on-action also gates pickup — checkout needs a WeChat identity.
+    if (!this.data.isBound) {
+      this.bindWechat();
+      return;
+    }
+    // Pickup branch — no address/zone/slot/fallback machinery. Validate the
+    // store + contact + time, then submit straight away.
+    if (this.data.fulfillment === 'pickup') {
+      const cn = this.data.lang === 'cn';
+      if (!this.data.pickupStoreId) {
+        wx.showToast({ title: cn ? '请选择自提门店' : 'Please choose a pickup store', icon: 'none' });
+        return;
+      }
+      if (!(this.data.pickupName || '').trim() || !(this.data.pickupPhone || '').trim()) {
+        wx.showToast({ title: cn ? '请填写取货人和电话' : 'Enter the collector name and phone', icon: 'none' });
+        return;
+      }
+      if (!this.data.pickupDate || !this.data.pickupTime) {
+        wx.showToast({ title: cn ? '请选择取货时间' : 'Please pick a pickup time', icon: 'none' });
+        return;
+      }
+      return this.submitOrder({});
+    }
     // Replaces the native <button disabled> guard now that the place-order
     // tap target is a <view>. Tapping while in a disabled state silently
     // no-ops (with a toast when the customer would benefit from knowing
@@ -1337,10 +1541,12 @@ Page({
       this._placingWatchdog = null;
     }, 20000);
 
+    const isPickup = this.data.fulfillment === 'pickup';
     try {
-      // 1. Save address if it's new (id is null)
+      // 1. Save address if it's new (id is null) — delivery only. Pickup
+      // carries the store + contact instead of a delivery address.
       let addressId = a.id;
-      if (!addressId) {
+      if (!isPickup && !addressId) {
         const saved = await api.post('/api/retail/addresses', {
           recipient_name: a.recipient_name,
           phone: a.phone,
@@ -1353,7 +1559,7 @@ Page({
         });
         addressId = saved?.id || saved?.data?.id;
       }
-      if (!addressId) throw new Error(this.data.lang === 'cn' ? '地址保存失败' : 'Could not save address');
+      if (!isPickup && !addressId) throw new Error(this.data.lang === 'cn' ? '地址保存失败' : 'Could not save address');
 
       // 2. Create order
       const state = cart.get();
@@ -1376,13 +1582,10 @@ Page({
         if (!/^\S+@\S+\.\S+$/.test((this.data.invoiceEmail || '').trim())) throw new Error(cn ? '请填写有效的发票邮箱' : 'Enter a valid email for the e-invoice');
       }
       const usingPoints = !!this.data.usePoints;
-      const orderPayload = {
+      // Fields shared by both fulfillment paths.
+      const common = {
         items: orderItems,
-        address_id: addressId,
         payment_method: this.data.paymentMethod,
-        delivery_mode: this.data.deliveryMethod,
-        delivery_slot_id: this.data.deliverySlotId,
-        delivery_slot_label: this.data.deliverySlotLabel,
         voucher_code: this.data.voucherCode || null,
         customer_note: this.data.note || null,
         needs_cutlery: this.data.needsCutlery,
@@ -1392,8 +1595,26 @@ Page({
         invoice_tax_id: this.data.needsInvoice && this.data.invoiceType === 'company' ? (this.data.invoiceTaxId || '').trim() : null,
         invoice_email:  this.data.needsInvoice ? (this.data.invoiceEmail || '').trim() : null,
         points_to_use:  usingPoints ? (this.data.pointsBalance || 0) : 0,
-        ...(extra || {}),
       };
+      const orderPayload = isPickup
+        ? {
+            ...common,
+            fulfillment_type: 'pickup',
+            pickup_store_id: this.data.pickupStoreId,
+            pickup_name:  (this.data.pickupName  || '').trim(),
+            pickup_phone: (this.data.pickupPhone || '').trim(),
+            // Local-naive datetime — server reads getHours() in its own (UTC+8)
+            // clock, which matches the customer's, so no Z/offset is sent.
+            pickup_time: `${this.data.pickupDate}T${this.data.pickupTime}:00`,
+          }
+        : {
+            ...common,
+            address_id: addressId,
+            delivery_mode: this.data.deliveryMethod,
+            delivery_slot_id: this.data.deliverySlotId,
+            delivery_slot_label: this.data.deliverySlotLabel,
+            ...(extra || {}),
+          };
       let order;
       try {
         console.log('[checkout] POST /api/retail/orders →', {
