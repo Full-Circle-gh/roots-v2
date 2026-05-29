@@ -10358,23 +10358,68 @@ async function clearTracking(orderId, shipmentId, ev) {
   } catch {}
 }
 
-async function rejectRefund(id) {
-  // `prompt` returns null on Cancel, '' on empty OK. Coercing with `|| ''`
-  // earlier conflated the two and the `=== null` guard could never fire
-  // (dead branch). Keep the null/string distinction so Cancel actually
-  // aborts and an empty staff note still saves an "rejected without
-  // reason" record on the audit log.
-  const note = prompt('Tell the customer why (optional — shown to them) · 告知顾客原因(可选,顾客可见)');
-  if (note === null) return;
-  try {
-    await adminWrite({
-      url: `/api/retail-admin/orders/${id}/refund/reject`, method: 'POST',
-      body: { note }, errLabelEn: 'Reject failed', errLabelCn: '拒绝失败',
-    });
-    toast('Refund rejected · 退款已拒绝');
-    openOrder(id);
-    loadOrders();
-  } catch {}
+// Shared note-only refund modal — used by Reject and Start-review, which both
+// just collect one optional customer-visible note and POST it. Replaces the old
+// window.prompt() so these match the Approve/Payout modals (ESC + backdrop
+// dismiss, bilingual, inline busy state via adminWrite's btn). Submitting with
+// an empty textarea is intentional and allowed (an empty note still records the
+// transition on the audit log); Cancel/Close simply aborts.
+function openRefundNoteDialog(opts) {
+  const bg = document.createElement('div');
+  bg.className = 'pu-editor-bg';
+  bg.style.display = 'flex';
+  bg.innerHTML = `
+    <div class="pu-editor" style="width: 480px; max-width: 92vw;">
+      <div class="pu-editor-head">
+        <div>
+          <h3 style="margin: 0; font-size: 14px;">${opts.titleEn} · ${opts.titleCn}</h3>
+          <div class="muted" style="font-size: 11px; margin-top: 2px;">${opts.subEn} · ${opts.subCn}</div>
+        </div>
+        <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">Close · 关闭</button>
+      </div>
+      <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display: block;">
+        <div class="field" style="margin-bottom: 14px;">
+          <label class="stacked">${opts.labelEn} · ${opts.labelCn}</label>
+          <textarea id="rfn-note" rows="3" style="width: 100%;" data-ph-en="${opts.phEn}" data-ph-cn="${opts.phCn}" placeholder="${opts.phEn}"></textarea>
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+          <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">Cancel · 取消</button>
+          <button class="btn btn-primary" id="rfn-submit">${opts.submitEn} · ${opts.submitCn}</button>
+        </div>
+      </div>
+    </div>`;
+  mountFloatingPuModal(bg);
+  // Focus the note so staff can type immediately, like prompt() did.
+  const ta = bg.querySelector('#rfn-note');
+  if (ta) setTimeout(() => ta.focus(), 30);
+  bg.querySelector('#rfn-submit').addEventListener('click', async (ev) => {
+    const note = bg.querySelector('#rfn-note').value || '';
+    try {
+      await adminWrite({
+        btn: ev.currentTarget, url: opts.url, method: 'POST',
+        body: { note }, errLabelEn: opts.errLabelEn, errLabelCn: opts.errLabelCn,
+      });
+      toast(`${opts.okEn} · ${opts.okCn}`);
+      bg.remove();
+      openOrder(opts.orderId);
+      loadOrders();
+    } catch {}
+  });
+}
+
+function rejectRefund(id) {
+  openRefundNoteDialog({
+    orderId: id,
+    titleEn: 'Reject refund', titleCn: '拒绝退款',
+    subEn: 'The customer sees this reason. Leave blank to reject without a note.',
+    subCn: '顾客会看到此原因,留空则不附原因。',
+    labelEn: 'Reason (shown to customer)', labelCn: '原因(顾客可见)',
+    phEn: 'Optional', phCn: '可选',
+    submitEn: 'Reject', submitCn: '拒绝',
+    url: `/api/retail-admin/orders/${id}/refund/reject`,
+    okEn: 'Refund rejected', okCn: '退款已拒绝',
+    errLabelEn: 'Reject failed', errLabelCn: '拒绝失败',
+  });
 }
 
 // ─── Refund processing — multi-step workflow inside the order drawer ──
@@ -10479,21 +10524,19 @@ function renderRefundPanel(o) {
     </div>`;
 }
 
-async function refundReview(id) {
-  // Note may be empty (prompt return '') and that's fine — the customer
-  // just gets a generic "we're looking into it" toast. Cancel returns
-  // null and we abort.
-  const note = prompt("Optional note for the customer (we're looking into it…) · 给顾客的可选备注(我们正在处理…)");
-  if (note === null) return;
-  try {
-    await adminWrite({
-      url: `/api/retail-admin/orders/${id}/refund/review`, method: 'POST',
-      body: { note: note || '' }, errLabelEn: 'Mark-review failed', errLabelCn: '开始处理失败',
-    });
-    toast('Marked as reviewing · 已开始处理');
-    openOrder(id);
-    loadOrders();
-  } catch {}
+function refundReview(id) {
+  openRefundNoteDialog({
+    orderId: id,
+    titleEn: 'Start review', titleCn: '开始处理',
+    subEn: "Tell the customer you're looking into it. Optional — leave blank for a generic update.",
+    subCn: '告知顾客正在处理,可留空(留空则发送通用更新)。',
+    labelEn: 'Note for customer', labelCn: '给顾客的备注',
+    phEn: "We're looking into it…", phCn: '我们正在处理…',
+    submitEn: 'Mark reviewing', submitCn: '开始处理',
+    url: `/api/retail-admin/orders/${id}/refund/review`,
+    okEn: 'Marked as reviewing', okCn: '已开始处理',
+    errLabelEn: 'Mark-review failed', errLabelCn: '开始处理失败',
+  });
 }
 
 // Wire ESC + backdrop-click for any transient `.pu-editor-bg` that we
