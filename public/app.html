@@ -12115,9 +12115,13 @@ async function pfQuickEditSize(variantId, currentDisplayedId) {
     </div>
     <p style="font-size:12px;color:var(--muted);margin:0 0 14px;line-height:1.5">${displayName}</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div style="grid-column:span 2">
-        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Variant Name · 规格</label>
-        <input id="qe_label" value="${esc(v.variant_label || '')}" placeholder="e.g. 500ml / Large 大" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Variant Name (EN) · 规格</label>
+        <input id="qe_label_en" value="${esc(((v.variant_label || '').split(' · ')[0] || '').trim())}" placeholder="e.g. Small / 500ml" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Variant Name (CN) · 中文</label>
+        <input id="qe_label_cn" value="${esc(((v.variant_label || '').split(' · ')[1] || '').trim())}" placeholder="例如 小 / 大" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
       </div>
       <div>
         <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">SKU · 编号 *</label>
@@ -12138,13 +12142,17 @@ async function pfQuickEditSize(variantId, currentDisplayedId) {
     </div>
   `;
   setTimeout(() => {
-    const f = document.getElementById('qe_label');
+    const f = document.getElementById('qe_label_en');
     if (f) { f.focus(); f.select(); }
   }, 50);
 }
 
 async function pfSaveQuickEditSize(variantId, currentDisplayedId) {
-  const label  = (document.getElementById('qe_label')?.value || '').trim();
+  const labelEn = (document.getElementById('qe_label_en')?.value || '').trim();
+  const labelCn = (document.getElementById('qe_label_cn')?.value || '').trim();
+  // Bilingual variant label is stored as one " · "-joined string so existing
+  // chip/list renderers keep working without a schema change.
+  const label  = labelEn && labelCn ? `${labelEn} · ${labelCn}` : (labelEn || labelCn);
   const sku    = (document.getElementById('qe_sku')?.value || '').trim();
   const priceS = document.getElementById('qe_price')?.value || '';
   const price  = parseFloat(priceS);
