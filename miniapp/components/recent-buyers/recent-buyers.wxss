@@ -6,13 +6,15 @@
   left: 22rpx;
   bottom: calc(var(--tabbar-clear) + 24rpx);
   z-index: 90;
-  max-width: 600rpx;
+  max-width: 640rpx;
   display: flex;
   align-items: center;
   gap: 14rpx;
-  padding: 16rpx 20rpx;
+  padding: 16rpx 22rpx;
   background: rgba(26, 26, 23, 0.92);
-  border-radius: 999rpx;
+  /* Pill when single-line; softens to a rounded rect when text wraps to 2
+     lines so the corners don't look weirdly stretched on tall content. */
+  border-radius: 28rpx;
   box-shadow: 0 10rpx 28rpx rgba(0, 0, 0, 0.22);
   transform: translateX(-130%);
   opacity: 0;
@@ -38,9 +40,15 @@
   color: #fff;
   font-size: calc(22rpx * var(--font-scale));
   letter-spacing: 0.02em;
-  white-space: nowrap;
+  line-height: 1.35;
+  /* Allow long entries ("M*** bought All Natural Peanut Butter · 50 min ago")
+     to wrap to a second line instead of getting cut off mid-word. Anything
+     past 2 lines still gets ellipsised — keeps the toast bounded. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-word;
 }
 
 .rb-x {
