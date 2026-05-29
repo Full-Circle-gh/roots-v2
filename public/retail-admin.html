@@ -9828,11 +9828,19 @@ function renderShipmentCard(o, s) {
     land:  '🚚 Land shipment · 陆运',
     local: '🏠 Local delivery · 同城配送',
   };
+  // Line count vs. unit count: warehouse cross-checks the physical pick
+  // against total units, so surface units whenever a multi-qty line makes
+  // them diverge from the line count (e.g. "4 lines · 6 units").
+  const lines = s.items.length;
+  const units = (s.items || []).reduce((n, it) => n + (Number(it.qty) || 0), 0);
+  const countLabel = units !== lines
+    ? `${lines} line${lines === 1 ? '' : 's'} · ${units} units`
+    : `${lines} item${lines === 1 ? '' : 's'}`;
   return `
     <div class="shipment-card mode-${mode}">
       <div class="shipment-head">
         <span class="mode-pill mode-${mode}">${labelMap[mode] || s.label}</span>
-        <span class="count">${s.items.length} item${s.items.length === 1 ? '' : 's'}</span>
+        <span class="count">${countLabel}</span>
       </div>
       ${renderItemsTable(s.items, true)}
       ${['dispatched', 'delivered'].includes(o.status) ? renderShipmentTrackingCard(o, s) : ''}

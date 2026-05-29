@@ -16,9 +16,13 @@
     </view>
     <view class="receipt">
       <view wx:for="{{items}}" wx:key="key" class="order-line">
-        <view class="line-name">
-          <text>{{item.display_name}}</text>
-          <text class="line-meta"> ×{{item.qty}}</text>
+        <view class="line-lead">
+          <image wx:if="{{item.image}}" class="line-thumb" src="{{item.image}}" mode="aspectFill"/>
+          <view wx:else class="line-thumb line-thumb--empty"></view>
+          <view class="line-name">
+            <text>{{item.display_name}}</text>
+            <text class="line-meta"> ×{{item.qty}}</text>
+          </view>
         </view>
         <view class="line-total f-bear">
           <view class="lt-now"><text wx:if="{{item.on_flash}}" class="line-was">{{item.was_total}}</text>{{item.line_total}}</view>
