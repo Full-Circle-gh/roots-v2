@@ -3094,9 +3094,7 @@ function renderSidebar() {
   if (_user.role === 'admin') {
     html += `<div class="nav-divider"></div>
       <div class="nav-item" id="nav-admin" onclick="navigate('admin')">
-        <span class="nav-icon">${navIconSvg('settings')}</span><span>Admin 管理</span></div>
-      <div class="nav-item" id="nav-saas-admin" onclick="window.open('/saas-admin','_blank')" title="Platform owner console — tenants, plans, branding · 平台管理（新标签页）">
-        <span class="nav-icon">${navIconSvg('shield')}</span><span>SaaS Admin · 平台</span></div>`;
+        <span class="nav-icon">${navIconSvg('settings')}</span><span>Admin 管理</span></div>`;
   }
   // Customize entry point lives outside the nav list — see #sidebarCustomizeBtn
   // (top-right corner of the sidebar). When edit mode is on we render a
