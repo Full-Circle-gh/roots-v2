@@ -1019,6 +1019,7 @@ const WECHAT_PAY_API_V3_KEY    = process.env.WECHAT_PAY_API_V3_KEY || '';
 const WECHAT_PAY_PRIVATE_KEY   = (process.env.WECHAT_PAY_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 const WECHAT_PAY_SERIAL_NO     = process.env.WECHAT_PAY_SERIAL_NO || '';
 const WECHAT_PAY_NOTIFY_URL    = process.env.WECHAT_PAY_NOTIFY_URL || 'https://rootskitchenchina.com/api/retail/payment/wechat/callback';
+const WECHAT_PAY_REFUND_NOTIFY_URL = process.env.WECHAT_PAY_REFUND_NOTIFY_URL || 'https://rootskitchenchina.com/api/retail/payment/wechat/refund-callback';
 const WECHAT_PAY_DEV_MODE = !WECHAT_PAY_MCH_ID || !WECHAT_PAY_PRIVATE_KEY || !WECHAT_APP_ID;
 
 if (WECHAT_PAY_DEV_MODE) {
@@ -1094,6 +1095,39 @@ async function wechatPayCreate(order, openid) {
     throw err;
   }
   return j.prepay_id;
+}
+
+// Real WeChat Pay v3 refund. Sends money back to the payer's original method.
+// Docs: POST /v3/refund/domestic/refunds. Returns the refund result object
+// { refund_id, status: 'SUCCESS'|'PROCESSING'|'CLOSED'|'ABNORMAL', ... }.
+// amount.total MUST equal the original transaction total (in cents).
+async function wechatPayRefund({ outTradeNo, outRefundNo, refundCents, totalCents, reason }) {
+  const urlPath = '/v3/refund/domestic/refunds';
+  const body = {
+    out_trade_no:  outTradeNo,
+    out_refund_no: outRefundNo,
+    notify_url:    WECHAT_PAY_REFUND_NOTIFY_URL,
+    amount:        { refund: refundCents, total: totalCents, currency: 'CNY' },
+  };
+  if (reason) body.reason = String(reason).slice(0, 80);
+  const auth = signMerchantRequest('POST', urlPath, body);
+  const resp = await fetch('https://api.mch.weixin.qq.com' + urlPath, {
+    method: 'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Accept':        'application/json',
+      'Authorization': auth,
+      'User-Agent':    'Roots/1.0',
+    },
+    body: JSON.stringify(body),
+  });
+  const j = await resp.json();
+  if (!j.refund_id) {
+    const err = new Error('wechat_refund_failed: ' + (j.message || j.code || JSON.stringify(j)));
+    err.code = 'wechat_refund_failed';
+    throw err;
+  }
+  return j;
 }
 
 function markOrderPaid(orderId) {
@@ -1288,6 +1322,35 @@ router.post('/api/retail/payment/wechat/callback', express.json(), (req, res) =>
   } catch (e) {
     console.error('[wechat-pay/callback]', e);
     // Returning non-200 makes WeChat retry the callback (with backoff)
+    res.status(500).json({ code: 'FAIL', message: 'internal_error' });
+  }
+});
+// WeChat Pay refund-result async notify. Same AES-256-GCM envelope as the
+// payment callback. We already mark the refund 'paid' synchronously when the
+// refund API accepts it, so this is confirmatory — log the final state and
+// flag anything that didn't settle as SUCCESS so an operator can investigate.
+router.post('/api/retail/payment/wechat/refund-callback', express.json(), (req, res) => {
+  try {
+    if (WECHAT_PAY_DEV_MODE) return res.json({ code: 'SUCCESS', message: 'OK' });
+    const r = req.body?.resource;
+    if (!r?.ciphertext) return res.status(400).json({ code: 'INVALID', message: 'missing resource' });
+    const buf = Buffer.from(r.ciphertext, 'base64');
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      Buffer.from(WECHAT_PAY_API_V3_KEY, 'utf8'),
+      Buffer.from(r.nonce, 'utf8')
+    );
+    decipher.setAuthTag(buf.slice(-16));
+    decipher.setAAD(Buffer.from(r.associated_data || '', 'utf8'));
+    const info = JSON.parse(Buffer.concat([decipher.update(buf.slice(0, -16)), decipher.final()]).toString('utf8'));
+    if (info.refund_status === 'SUCCESS') {
+      console.log('[wechat-refund/callback] SUCCESS', info.out_trade_no, info.refund_id);
+    } else {
+      console.warn('[wechat-refund/callback] non-success', info.out_trade_no, info.refund_status);
+    }
+    res.json({ code: 'SUCCESS', message: 'OK' });
+  } catch (e) {
+    console.error('[wechat-refund/callback]', e);
     res.status(500).json({ code: 'FAIL', message: 'internal_error' });
   }
 });
@@ -7324,7 +7387,7 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
 
 // Step 3: PAYOUT — money has actually moved back. Records method + ref.
 // body: { method, reference?, amount?, note? }
-router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare(
     'SELECT id, total, refund_status, refund_amount_approved FROM retail_orders WHERE id = ?'
@@ -7345,6 +7408,34 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
     : Number(o.refund_amount_approved) || 0;
   if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount' });
 
+  // WeChat method → actually push the money back to the customer via the v3
+  // refund API (real refund, original payment route). Other methods stay as
+  // manual bookkeeping records. In DEV mode (no creds) this falls back to a
+  // plain record too. A failed WeChat refund aborts here WITHOUT marking the
+  // order refunded, so the operator sees it didn't go through.
+  let payoutRef = reference;
+  if (method === 'wechat' && !WECHAT_PAY_DEV_MODE) {
+    const pay = tdb().prepare(
+      "SELECT out_trade_no, amount FROM retail_payments WHERE order_id = ? AND status IN ('success','refunded') ORDER BY id DESC LIMIT 1"
+    ).get(id);
+    if (!pay?.out_trade_no) {
+      return res.status(409).json({ success: false, error: 'no_wechat_transaction', message: 'No WeChat transaction on this order to refund against.' });
+    }
+    const totalCents  = Math.round(Number(pay.amount != null ? pay.amount : o.total) * 100);
+    const refundCents = Math.round(amount * 100);
+    const outRefundNo = ('RF' + pay.out_trade_no + Date.now().toString().slice(-6)).slice(0, 63);
+    try {
+      const r = await wechatPayRefund({ outTradeNo: pay.out_trade_no, outRefundNo, refundCents, totalCents, reason: note || ('Refund order ' + id) });
+      if (r.status === 'ABNORMAL') {
+        return res.status(502).json({ success: false, error: 'wechat_refund_abnormal', message: 'WeChat returned ABNORMAL (often insufficient merchant balance) — check the merchant platform.' });
+      }
+      payoutRef = r.refund_id + (r.status ? ' (' + r.status + ')' : '');
+    } catch (e) {
+      console.error('[wechat-refund]', e);
+      return res.status(502).json({ success: false, error: e.code || 'wechat_refund_failed', message: e.message });
+    }
+  }
+
   tdb().prepare(
     `UPDATE retail_orders
         SET refund_status = 'paid',
@@ -7356,7 +7447,7 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
             refund_review_note = COALESCE(NULLIF(?, ''), refund_review_note),
             updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`
-  ).run(amount, method, reference || null, req.user.id, note, id);
+  ).run(amount, method, payoutRef || null, req.user.id, note, id);
 
   // Mirror onto retail_payments so reconciliation reports see it.
   try {
