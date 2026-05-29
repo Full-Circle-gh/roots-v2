@@ -141,6 +141,7 @@ app.get(/^\/(?:MP_verify_[A-Za-z0-9]+|[A-Za-z0-9]{6,32})\.txt$/, (req, res) => {
 // Roots (tenant #1), kitchen users, and the billing/account/signup surfaces
 // are unaffected (those are already tenant-scoped or shared by design).
 const tenantDb = require('./lib/tenant-db');
+require('./lib/tenant-creds');   // establish encrypted tenant_secrets table at boot (Platform readiness ①)
 app.use((req, res, next) => {
   if (tenantDb.DATA_ISOLATION_READY) return next();
   const tid = req.session?.tenantId;
