@@ -2634,6 +2634,18 @@
   .manifest .mf-packs { margin-left: auto; display: inline-flex; align-items: center; }
   .manifest .mf-packs .pack-badge { margin-right: 0; margin-left: 4px; }
 
+  /* Per-item thumbnail (order detail) + multi-unit qty emphasis. Shared
+     across all three item layouts (manifest / table / cards). The thumbnail
+     gives the operator a visual cue of what was ordered; .qty-multi bolds the
+     ×N chip whenever more than one unit was ordered so it can't be missed. */
+  .oi-thumb {
+    flex-shrink: 0; width: 40px; height: 40px; border-radius: var(--r-sm);
+    object-fit: cover; background: var(--bg-elev-2);
+    border: 1px solid var(--line-soft); display: inline-block; vertical-align: middle;
+  }
+  .oi-thumb.is-empty { background: var(--bg-app); }
+  .item-qty.qty-multi { font-weight: 700; color: var(--text-1); }
+
   /* ─── Order detail · per-operator View tweaks ───────────────────────────
      The Full Circle Order Detail "Tweaks" panel made operator-selectable:
      total placement (banner / inline / footer), items layout (manifest /
@@ -9670,6 +9682,22 @@ function renderPackBadges(it) {
   return parts.join('');
 }
 
+// Small product thumbnail for an order line item. Falls back to a neutral
+// placeholder tile (so rows stay aligned) when the product has no photo or
+// the image fails to load.
+function itemThumb(it) {
+  if (it.image_url) {
+    return `<img class="oi-thumb" src="${escapeHtml(it.image_url)}" alt="" loading="lazy" onerror="this.classList.add('is-empty');this.removeAttribute('src');">`;
+  }
+  return `<span class="oi-thumb is-empty" aria-hidden="true"></span>`;
+}
+
+// ×N quantity chip — bolded (.qty-multi) whenever more than one unit was
+// ordered so the operator can't miss a multi-unit line.
+function itemQtyHtml(it) {
+  return `<span class="item-qty${Number(it.qty) > 1 ? ' qty-multi' : ''}">×${it.qty}</span>`;
+}
+
 // One line of the packing manifest. `opts.index` (1-based) renders the
 // 01 / 02 … brass line number; `opts.showPack` toggles the pack badges.
 function renderItemRow(it, opts = {}) {
@@ -9686,6 +9714,7 @@ function renderItemRow(it, opts = {}) {
   return `
     <div class="mf-row">
       <span class="mf-num">${num}</span>
+      ${itemThumb(it)}
       <div class="mf-body">
         <div class="mf-top">
           ${nameCell}
@@ -9693,7 +9722,7 @@ function renderItemRow(it, opts = {}) {
         </div>
         <div class="mf-meta">
           ${zh}
-          <span class="mf-spec">${sku} · <span class="mf-qty">×${it.qty} @ ¥${fmt(it.unit_price)}</span></span>
+          <span class="mf-spec">${sku} · <span class="mf-qty">${itemQtyHtml(it)} @ ¥${fmt(it.unit_price)}</span></span>
           ${showPack ? `<span class="mf-packs">${renderPackBadges(it)}</span>` : ''}
         </div>
       </div>
@@ -9750,8 +9779,11 @@ function renderItemsAsGrid(items, showPack = true) {
     const zh = (it.name_cn || it.size)
       ? `<div class="oi-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
     return `<div class="oi-row">
-      <div style="min-width:0">${nameCell}${zh}<div class="oi-sku">${it.sku ? escapeHtml(it.sku) : 'no SKU'}</div></div>
-      <span class="oi-c">×${it.qty}</span>
+      <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
+        ${itemThumb(it)}
+        <div style="min-width:0">${nameCell}${zh}<div class="oi-sku">${it.sku ? escapeHtml(it.sku) : 'no SKU'}</div></div>
+      </div>
+      <span class="oi-c">${itemQtyHtml(it)}</span>
       <span class="oi-r">¥${fmt(it.unit_price)}</span>
       <span class="oi-total">¥${fmt(it.line_total)}</span>
       <span class="oi-packs">${showPack ? renderPackBadges(it) : ''}</span>
@@ -9771,13 +9803,16 @@ function renderItemsAsCards(items, showPack = true) {
       ? `<div class="oic-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
     return `<div class="oic">
       <div class="oic-top">
-        <div style="min-width:0">${nameCell}${zh}</div>
+        <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
+          ${itemThumb(it)}
+          <div style="min-width:0">${nameCell}${zh}</div>
+        </div>
         <span class="oic-total">¥${fmt(it.line_total)}</span>
       </div>
       <div class="oic-bot">
         <span class="oic-meta">${it.sku ? escapeHtml(it.sku) : 'no SKU'}</span>
         <span style="color:var(--text-4)">·</span>
-        <span class="oic-meta">×${it.qty} @ ¥${fmt(it.unit_price)}</span>
+        <span class="oic-meta">${itemQtyHtml(it)} @ ¥${fmt(it.unit_price)}</span>
         ${showPack ? `<span class="oic-packs">${renderPackBadges(it)}</span>` : ''}
       </div>
     </div>`;
