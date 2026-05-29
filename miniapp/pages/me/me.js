@@ -57,6 +57,9 @@ const COPY_EN = {
   menuFaq: 'Help & FAQ',
   menuFaqCn: '帮助中心',
   faqMeta: 'Answers to common questions',
+  menuBug: 'Found a bug?',
+  menuBugCn: '报告问题',
+  bugMeta: 'Tell us what broke',
   menuVoting: 'Your say',
   menuVotingCn: '投票',
   votingMeta: 'Help shape the menu',
@@ -113,6 +116,9 @@ const COPY_CN = {
   menuFaq: '帮助中心',
   menuFaqCn: 'HELP & FAQ',
   faqMeta: '常见问题解答',
+  menuBug: '报告问题',
+  menuBugCn: 'FOUND A BUG?',
+  bugMeta: '告诉我们哪里出错了',
   menuVoting: '投票',
   menuVotingCn: 'YOUR SAY',
   votingMeta: '一起决定下一款产品',
@@ -292,6 +298,7 @@ Page({
   goProfile()    { wx.navigateTo({ url: '/pages/profile/profile' }); },
   goAbout()      { wx.navigateTo({ url: '/pages/about/about' }); },
   goFaq()        { wx.navigateTo({ url: '/pages/faq/faq' }); },
+  goBugReport()  { wx.navigateTo({ url: '/pages/feedback/feedback' }); },
   goVoting()     { wx.navigateTo({ url: '/pages/voting/voting' }); },
   // User-initiated re-tour. Clears the onboarded flag so the next Home
   // load also re-gates correctly under any mode, then re-launches into

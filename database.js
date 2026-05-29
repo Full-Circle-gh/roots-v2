@@ -1295,6 +1295,24 @@ try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_reviews_customer ON retail_
 // the wording without a migration.
 addColumn('retail_reviews', 'tags_json', 'TEXT');
 
+// Customer-reported bugs / feedback submitted from the mini app "Found a bug?"
+// form. Lands read-only in the Mini App Backend → Feedback tab — completely
+// separate from the staff `feedback` table (which is the kitchen-app Sprout
+// inbox). Photos are uploaded to retail_media first; we store their servable
+// /api/retail/media/:id URLs as a JSON array (same shape as retail_reviews).
+db.exec(`CREATE TABLE IF NOT EXISTS retail_feedback (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id   INTEGER NOT NULL,
+  customer_name TEXT,
+  message       TEXT NOT NULL,
+  photos_json   TEXT,                    -- JSON array of /api/retail/media/:id URLs
+  page_context  TEXT,                    -- which mini-app page the report came from
+  app_version   TEXT,                    -- mini-app version string (best-effort)
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE CASCADE
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_feedback_created ON retail_feedback(created_at)'); } catch {}
+
 // Customer-initiated refund requests with multi-step processing workflow.
 // States on retail_orders.refund_status:
 //   null | pending | reviewing | approved | paid | rejected | withdrawn
@@ -2216,8 +2234,14 @@ db.exec(`
 // fulfilled it (store_id), why that store was chosen (routing_reason),
 // and which sales channel placed it (channel). Idempotent ALTERs.
 addColumn('retail_orders', 'store_id',        'INTEGER');
-addColumn('retail_orders', 'routing_reason',  'TEXT');   // 'nearest' | 'fallback_no_stock' | 'manual' | 'only_store'
+addColumn('retail_orders', 'routing_reason',  'TEXT');   // 'nearest' | 'fallback_no_stock' | 'manual' | 'only_store' | 'customer_pickup'
 addColumn('retail_orders', 'channel',         "TEXT DEFAULT 'wechat'");
+
+// Store pickup: a store is offered as a pickup point at checkout only when
+// this flag is on (admin toggles it per store in the mini-app backend).
+// Independent of is_active routing — a store can fulfill deliveries without
+// accepting walk-in pickup, and vice versa.
+addColumn('retail_stores', 'pickup_enabled', 'INTEGER DEFAULT 0');
 
 // Staff "seen" timestamp — stamped the first time ANY operator opens the
 // order detail (shared across devices). NULL = unread; powers the bold + dot
@@ -2367,6 +2391,11 @@ db.exec(`
 //                              = 'wait_for_restock')
 addColumn('retail_orders', 'fallback_choice',         'TEXT');
 addColumn('retail_orders', 'awaiting_restock_pids',   'TEXT');
+// Fulfillment path: 'delivery' (default — ship to customer address) or
+// 'pickup' (customer collects from a chosen store, no address/shipping fee).
+// For pickup orders store_id holds the customer-chosen store, scheduled_for +
+// delivery_slot_label hold the chosen pickup time window.
+addColumn('retail_orders', 'fulfillment_type', "TEXT DEFAULT 'delivery'");
 // Fapiao (发票) — invoice_title + invoice_tax_id were in the original schema;
 // these add the e-general invoice extras the mini-app fapiao form collects.
 addColumn('retail_orders', 'invoice_type',  'TEXT');   // 'personal' | 'company'

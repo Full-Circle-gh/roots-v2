@@ -202,6 +202,16 @@
       </view>
       <view class="row-arrow">→</view>
     </view>
+    <view class="row" bindtap="goBugReport">
+      <view class="row-body">
+        <view class="row-title">
+          <text class="f-bear">{{copy.menuBug}}</text>
+          <text class="row-cn muted">  · {{copy.menuBugCn}}</text>
+        </view>
+        <view class="row-meta">{{copy.bugMeta}}</view>
+      </view>
+      <view class="row-arrow">→</view>
+    </view>
     <view class="row" bindtap="goTour">
       <view class="row-body">
         <view class="row-title">

@@ -257,6 +257,27 @@ router.get('/api/retail/districts', (req, res) => {
   res.json({ success: true, data: list });
 });
 
+// Store-pickup point list for checkout. Returns only stores flagged
+// pickup_enabled AND is_active, plus the single global pickup window the
+// storefront uses to build selectable time slots. The checkout Pickup tab
+// shows nothing (and falls back to delivery-only) when this is empty.
+router.get('/api/retail/pickup-stores', (req, res) => {
+  try {
+    const stores = tdb().prepare(
+      `SELECT id, code, name_en, name_cn, address, city, district, lat, lng, phone
+         FROM retail_stores
+        WHERE is_active = 1 AND pickup_enabled = 1
+        ORDER BY sort_order ASC, id ASC`
+    ).all();
+    const window = cfgValue('pickup.window', { open: '10:00', close: '20:00' });
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json({ success: true, data: { stores, window } });
+  } catch (e) {
+    console.error('[retail/pickup-stores]', e);
+    res.status(500).json({ success: false, error: 'pickup_stores_load_failed' });
+  }
+});
+
 // ─── Products ───────────────────────────────────────────────────────────
 // Only published rows show. Customer-facing endpoint pulls from the SAME
 // master product fields as the rest of the system — sell_price is the
@@ -1552,7 +1573,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
 // Alipay-QR confirmation, or as a sanity check after wx.requestPayment.
 router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req, res) => {
   const orderId = parseInt(req.params.orderId, 10);
-  const sel = 'SELECT id, order_no, status, paid_at, total, payment_method FROM retail_orders WHERE id = ? AND customer_id = ?';
+  const sel = 'SELECT id, order_no, status, paid_at, total, payment_method, fulfillment_type, scheduled_for, delivery_slot_label, address_json FROM retail_orders WHERE id = ? AND customer_id = ?';
   let order = tdb().prepare(sel).get(orderId, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
 
@@ -1574,6 +1595,16 @@ router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req,
       }
     } catch (e) { console.warn('[alipay/poll-query]', e.message); }
   }
+  // Surface pickup store details for the success screen ("collect at <store>").
+  if (order.fulfillment_type === 'pickup' && order.address_json) {
+    try {
+      const a = JSON.parse(order.address_json);
+      order.pickup_store_name_en = a.store_name_en || '';
+      order.pickup_store_name_cn = a.store_name_cn || '';
+      order.pickup_store_address = a.address || '';
+    } catch (_) { /* ignore malformed json */ }
+  }
+  delete order.address_json;
   res.json({ success: true, data: order });
 });
 
@@ -2728,6 +2759,47 @@ function cfgValue(key, fallback) {
   try { return JSON.parse(row.value_json); } catch { return fallback; }
 }
 
+// "HH:MM" → minutes since midnight, or null if malformed.
+function hhmmToMinutes(s) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '').trim());
+  if (!m) return null;
+  const h = +m[1], min = +m[2];
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+// Validate a customer-chosen pickup time against the single global pickup
+// window (storefront_config 'pickup.window' = { open:'HH:MM', close:'HH:MM' }).
+// Server is the timezone authority (UTC+8 host). Returns { scheduled_for, label }
+// on success or { error } so the checkout handler can 400 cleanly. The chosen
+// time must be in the future and its time-of-day must fall inside the window.
+function resolvePickupTime(raw, now = new Date()) {
+  if (!raw) return { error: 'pickup_time_required' };
+  const when = new Date(raw);
+  if (isNaN(when.getTime())) return { error: 'invalid_pickup_time' };
+  if (when.getTime() < now.getTime() - 60_000) return { error: 'pickup_time_past' };
+  // Guard against garbage far-future dates (> 30 days out).
+  if (when.getTime() > now.getTime() + 30 * 86_400_000) return { error: 'pickup_time_too_far' };
+
+  const win = cfgValue('pickup.window', { open: '10:00', close: '20:00' });
+  const open  = hhmmToMinutes(win.open);
+  const close = hhmmToMinutes(win.close);
+  if (open != null && close != null && close > open) {
+    const mins = when.getHours() * 60 + when.getMinutes();
+    if (mins < open || mins > close) return { error: 'pickup_time_outside_hours' };
+  }
+
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const hh = String(when.getHours()).padStart(2, '0');
+  const mm = String(when.getMinutes()).padStart(2, '0');
+  const sameDay = when.toDateString() === now.toDateString();
+  const dayLabel = sameDay ? 'Today' : `${days[when.getDay()]} ${when.getDate()}/${when.getMonth() + 1}`;
+  return {
+    scheduled_for: when.toISOString(),
+    label: `Pickup ${dayLabel} ${hh}:${mm}`,
+  };
+}
+
 // ─── Shipping mode + split-shipment helpers ───────────────────────────
 // "Outside Guangzhou" detection. Province/city strings can vary —
 // 广州 / 广州市 / Guangzhou / GZ. Normalize then match.
@@ -3133,21 +3205,55 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // authoritative.
   const deliverySlotId = body.delivery_slot_id || null;
 
+  // Fulfillment fork: 'pickup' (collect from a chosen store, no address/
+  // shipping/zone) vs the default 'delivery'. Pickup inputs are validated in
+  // the branch below; the delivery-only requirements (address, slot, mode)
+  // are skipped for pickup.
+  const isPickup        = body.fulfillment_type === 'pickup';
+  const pickupStoreId   = isPickup && body.pickup_store_id ? parseInt(body.pickup_store_id, 10) : null;
+  const pickupName      = isPickup ? String(body.pickup_name  || '').trim() : null;
+  const pickupPhone     = isPickup ? String(body.pickup_phone || '').trim() : null;
+
   if (!items.length)       return res.status(400).json({ success: false, error: 'no_items' });
-  if (!addressId)          return res.status(400).json({ success: false, error: 'address_required' });
   if (!paymentMethod)      return res.status(400).json({ success: false, error: 'payment_method_required' });
   if (!['wechat','alipay','points'].includes(paymentMethod)) {
     return res.status(400).json({ success: false, error: 'invalid_payment_method' });
   }
-  if (!['standard','max','sameday'].includes(deliveryMode)) {
-    return res.status(400).json({ success: false, error: 'invalid_delivery_method' });
-  }
-  if (!deliverySlotId) return res.status(400).json({ success: false, error: 'delivery_slot_required' });
 
-  const address = tdb().prepare(
-    'SELECT * FROM retail_customer_addresses WHERE id = ? AND customer_id = ?'
-  ).get(addressId, req.customer.id);
-  if (!address) return res.status(400).json({ success: false, error: 'address_not_found' });
+  // `address` is the source of truth for recipient + region downstream. For
+  // delivery it's the customer's saved address row; for pickup we synthesize
+  // one from the chosen store + the pickup contact so the INSERT, totals, and
+  // order-load code paths stay identical.
+  let address, pickupStore = null, pickupScheduledFor = null, pickupSlotLabel = null;
+  if (isPickup) {
+    if (!pickupStoreId)            return res.status(400).json({ success: false, error: 'pickup_store_required' });
+    if (!pickupName || !pickupPhone) return res.status(400).json({ success: false, error: 'pickup_contact_required' });
+    pickupStore = tdb().prepare(
+      'SELECT * FROM retail_stores WHERE id = ? AND is_active = 1 AND pickup_enabled = 1'
+    ).get(pickupStoreId);
+    if (!pickupStore) return res.status(400).json({ success: false, error: 'pickup_store_unavailable' });
+    const pk = resolvePickupTime(body.pickup_time, new Date());
+    if (pk.error) return res.status(400).json({ success: false, error: pk.error });
+    pickupScheduledFor = pk.scheduled_for;
+    pickupSlotLabel    = pk.label;
+    // province left null so address_full reads "<city> <district> <store addr>"
+    // without doubling the city; city/district drive store-region display.
+    address = {
+      recipient_name: pickupName, phone: pickupPhone,
+      province: null, city: pickupStore.city || null, district: pickupStore.district || null,
+      address: pickupStore.address || null, detail: null, postal_code: null,
+    };
+  } else {
+    if (!addressId)      return res.status(400).json({ success: false, error: 'address_required' });
+    if (!['standard','max','sameday'].includes(deliveryMode)) {
+      return res.status(400).json({ success: false, error: 'invalid_delivery_method' });
+    }
+    if (!deliverySlotId) return res.status(400).json({ success: false, error: 'delivery_slot_required' });
+    address = tdb().prepare(
+      'SELECT * FROM retail_customer_addresses WHERE id = ? AND customer_id = ?'
+    ).get(addressId, req.customer.id);
+    if (!address) return res.status(400).json({ success: false, error: 'address_not_found' });
+  }
 
   // ── Idempotency replay (fast path) ────────────────────────────────────
   // If this checkout token already produced an order, return it verbatim
@@ -3235,7 +3341,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   //                           when all missing items are restocked.
   // Empty / null = no shortage expected. Server re-runs the analysis and
   // refuses if the choice doesn't match the situation (anti-tampering).
-  const fallbackChoice = body.fallback_choice || (body.accept_fallback ? 'full_from_fallback' : null);
+  // Pickup never runs the address-based shortage/fallback flow — the customer
+  // chose the store, so stock is simply checked + reserved there at reserve
+  // time. Force the fallback machinery off for pickup.
+  const fallbackChoice = isPickup ? null : (body.fallback_choice || (body.accept_fallback ? 'full_from_fallback' : null));
   const VALID_CHOICES = new Set(['cancel_missing','replace_missing','full_from_fallback','wait_for_restock']);
   if (fallbackChoice && !VALID_CHOICES.has(fallbackChoice)) {
     return res.status(400).json({ success: false, error: 'invalid_fallback_choice' });
@@ -3350,10 +3459,18 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // momentary shortage at the nearest store doesn't refuse the order or
   // bounce the customer into a needs-fallback modal — the kitchen will
   // restock before the scheduled fulfilment date.
-  const stockGate = inventory.requiresStockGate({ address, deliverySlotId });
+  // Pickup always gates stock at the chosen store — the customer expects it
+  // ready to collect, so we hard-reserve now rather than relax like a
+  // scheduled-for-later delivery.
+  const stockGate = isPickup ? true : inventory.requiresStockGate({ address, deliverySlotId });
 
   let fulfillingStore, routingReason;
-  if (isWaitFlow) {
+  if (isPickup) {
+    // Customer picked the store explicitly — no routing. Stock availability
+    // is enforced by reserveForOrder below (throws insufficient_stock).
+    fulfillingStore = pickupStore;
+    routingReason   = 'customer_pickup';
+  } else if (isWaitFlow) {
     // Wait flow always uses the nearest store regardless of stock; we
     // know stock is short there and that's the whole point.
     const a = inventory.analyzeShortage({
@@ -3419,9 +3536,13 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // Zone-driven fee model. If no zone matches the address, we currently
   // refuse the order — the office must configure the district/city in
   // /retail-admin → Delivery before this customer can check out.
-  const zone = matchDeliveryZone(address);
-  let shippingFee = 0, packingFee = 0, deliveryZoneId = null, resolvedMode = deliveryMode;
-  if (zone) {
+  // Pickup is free and zone-less — the customer collects from the store, so
+  // no shipping/packing fee and no zone match.
+  const zone = isPickup ? null : matchDeliveryZone(address);
+  let shippingFee = 0, packingFee = 0, deliveryZoneId = null, resolvedMode = isPickup ? 'pickup' : deliveryMode;
+  if (isPickup) {
+    // fees stay 0; delivery_mode='pickup' marks the order in admin
+  } else if (zone) {
     const fees = computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty);
     if (fees.error) return res.status(400).json({ success: false, error: fees.error });
     shippingFee    = fees.deliveryFee;
@@ -3437,28 +3558,36 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     else                            shippingFee = subtotal >= freeShipThreshold ? 0 : standardShipping;
   }
 
-  // Resolve & validate the delivery slot AFTER zone lookup so we can enforce
-  // the slot's same-day surcharge, expiry, and zone-allowed rules.
-  const slotResolved = resolveDeliverySlot(zone, deliverySlotId, new Date());
-  if (slotResolved.error) {
-    return res.status(400).json({ success: false, error: slotResolved.error });
-  }
-  let scheduledFor         = slotResolved.scheduled_for;          // ISO string or null
-  let sameDaySurcharge     = Number(slotResolved.surcharge) || 0; // 0 unless same-day + zone-charged
-  let slotLabel            = body.delivery_slot_label
-                              || slotResolved.slot?.label_en
-                              || (deliverySlotId === 'right_away' ? 'Right away' : null);
-  // Wait-for-restock overrides any time-bound slot with a flexible label
-  // and clears scheduled_for + the same-day surcharge. The kitchen
-  // shouldn't see "Today 18:00–20:00" on an awaiting_restock order — that
-  // window can't be honored if restock lands after 18:00. Customer has
-  // already confirmed the trade-off via a modal in the mini-app
-  // (fbWaitForRestock) before this POST fires. Same-day surcharge is
-  // refunded by clearing it here since we can't promise same-day.
-  if (isWaitFlow) {
-    scheduledFor      = null;
-    sameDaySurcharge  = 0;
-    slotLabel         = 'Ships when restocked';
+  // Pickup carries the customer-chosen pickup window in the same scheduled_for
+  // + delivery_slot_label columns; no zone slot resolution and no surcharge.
+  let scheduledFor, sameDaySurcharge = 0, slotLabel;
+  if (isPickup) {
+    scheduledFor = pickupScheduledFor;
+    slotLabel    = pickupSlotLabel;
+  } else {
+    // Resolve & validate the delivery slot AFTER zone lookup so we can enforce
+    // the slot's same-day surcharge, expiry, and zone-allowed rules.
+    const slotResolved = resolveDeliverySlot(zone, deliverySlotId, new Date());
+    if (slotResolved.error) {
+      return res.status(400).json({ success: false, error: slotResolved.error });
+    }
+    scheduledFor     = slotResolved.scheduled_for;          // ISO string or null
+    sameDaySurcharge = Number(slotResolved.surcharge) || 0; // 0 unless same-day + zone-charged
+    slotLabel        = body.delivery_slot_label
+                        || slotResolved.slot?.label_en
+                        || (deliverySlotId === 'right_away' ? 'Right away' : null);
+    // Wait-for-restock overrides any time-bound slot with a flexible label
+    // and clears scheduled_for + the same-day surcharge. The kitchen
+    // shouldn't see "Today 18:00–20:00" on an awaiting_restock order — that
+    // window can't be honored if restock lands after 18:00. Customer has
+    // already confirmed the trade-off via a modal in the mini-app
+    // (fbWaitForRestock) before this POST fires. Same-day surcharge is
+    // refunded by clearing it here since we can't promise same-day.
+    if (isWaitFlow) {
+      scheduledFor      = null;
+      sameDaySurcharge  = 0;
+      slotLabel         = 'Ships when restocked';
+    }
   }
   // Same-day surcharge is added to the shipping line so totals reconcile
   // without a new fee column on retail_orders.
@@ -3583,16 +3712,25 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
          customer_note, needs_cutlery, needs_invoice, invoice_title, invoice_tax_id,
          invoice_type, invoice_email,
          store_id, routing_reason, channel,
-         fallback_choice, awaiting_restock_pids, idempotency_key
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         fallback_choice, awaiting_restock_pids, idempotency_key,
+         fulfillment_type
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       orderNo, req.customer.id, 'pending_payment', paymentMethod,
       address.recipient_name, address.phone,
       [address.province, address.city, address.district, address.address, address.detail].filter(Boolean).join(' '),
-      JSON.stringify({
-        province: address.province, city: address.city, district: address.district,
-        address: address.address, detail: address.detail, postal_code: address.postal_code,
-      }),
+      JSON.stringify(isPickup
+        ? {
+            pickup: true,
+            store_id: pickupStore.id, store_code: pickupStore.code,
+            store_name_en: pickupStore.name_en, store_name_cn: pickupStore.name_cn,
+            store_phone: pickupStore.phone,
+            city: address.city, district: address.district, address: address.address,
+          }
+        : {
+            province: address.province, city: address.city, district: address.district,
+            address: address.address, detail: address.detail, postal_code: address.postal_code,
+          }),
       subtotal, shippingFee, packingFee, resolvedMode, deliveryZoneId,
       scheduledFor, slotLabel, sameDaySurcharge,
       voucher ? voucher.code : null, voucherDiscount,
@@ -3601,7 +3739,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       invoiceType, invoiceEmail,
       fulfillingStore.id, routingReason, 'wechat',
       fallbackChoice, awaitingRestockPids ? JSON.stringify(awaitingRestockPids) : null,
-      idempotencyKey
+      idempotencyKey,
+      isPickup ? 'pickup' : 'delivery'
     );
     const orderId = info.lastInsertRowid;
 
@@ -3652,8 +3791,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     }
     // Auto-plan shipments based on dest city + per-item ship_modes. For
     // in-GZ orders this is a single 'local' shipment; for outside-GZ it
-    // splits into air + land when items have mixed allowed modes.
-    ensureShipments(orderId);
+    // splits into air + land when items have mixed allowed modes. Pickup
+    // orders ship nothing (collected at the store), so no shipment is planned.
+    if (!isPickup) ensureShipments(orderId);
 
     // Increment flash_sold atomically for items that were priced at flash
     // rate. The WHERE clause caps the counter at flash_stock_limit (when
@@ -3784,7 +3924,8 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
             refund_amount_requested, refund_amount_approved, refund_amount_paid,
             refund_lines_json, refund_payout_method, refund_payout_ref,
             refund_reviewed_at, refund_approved_at, refund_paid_at,
-            store_id, routing_reason, channel,
+            store_id, routing_reason, channel, fulfillment_type,
+            scheduled_for, delivery_slot_label,
             tracking_carrier, tracking_number, tracking_status,
             tracking_events_json, tracking_synced_at,
             tracking_scenario, tracking_scenario_data_json,
@@ -3841,6 +3982,20 @@ function orderTimeline(o) {
     return [
       { key: 'placed',    label: 'Placed',    cn: '已下单',   at: o.placed_at },
       { key: 'cancelled', label: 'Cancelled', cn: '已取消', at: o.cancelled_at },
+    ];
+  }
+  // Pickup orders never dispatch a courier — the same status columns are
+  // reused but mean "ready at counter" (dispatched_at) and "collected"
+  // (delivered_at). Relabel so the customer reads a collection journey
+  // instead of a delivery one.
+  if (o.fulfillment_type === 'pickup') {
+    return [
+      { key: 'placed',    label: 'Placed',          cn: '已下单', at: o.placed_at },
+      { key: 'paid',      label: 'Paid',            cn: '已支付', at: o.paid_at },
+      { key: 'pending',   label: 'Pending',         cn: '待确认', at: o.preparing_at },
+      { key: 'preparing', label: 'Preparing',       cn: '准备中', at: o.preparing_at },
+      { key: 'ready',     label: 'Ready to collect', cn: '可取货', at: o.dispatched_at },
+      { key: 'collected', label: 'Collected',       cn: '已取货', at: o.delivered_at },
     ];
   }
   return [
@@ -3909,6 +4064,7 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
   let sql = `SELECT id, order_no, status, payment_method, total,
                     voucher_code, voucher_amount,
                     store_id, routing_reason, channel,
+                    fulfillment_type, scheduled_for, delivery_slot_label,
                     tracking_carrier, tracking_number, tracking_status,
                     placed_at, paid_at, dispatched_at, delivered_at
                FROM retail_orders WHERE customer_id = ?`;
@@ -5647,6 +5803,35 @@ router.post('/api/retail/review-photos', requireRetailAuth, express.json({ limit
   }
 });
 
+// Customer submits a bug report / feedback from the mini app "Found a bug?"
+// form. One-way: it lands read-only in the Mini App Backend → Feedback tab
+// (separate from the staff `feedback` table). Photos arrive as already-uploaded
+// /api/retail/media/:id URLs (same uploader as reviews: base64 → retail_media).
+router.post('/api/retail/feedback', requireRetailAuth, express.json({ limit: '1mb' }), (req, res) => {
+  const message = (req.body?.message || '').toString().trim().slice(0, 4000);
+  if (!message) return res.status(400).json({ success: false, error: 'message_required' });
+  const pageContext = (req.body?.page_context || '').toString().slice(0, 200) || null;
+  const appVersion  = (req.body?.app_version  || '').toString().slice(0, 60)  || null;
+  // Keep only our own media URLs — drop anything that isn't a /api/retail/media/:id
+  // path so a client can't stash arbitrary links in the inbox.
+  const photos = Array.isArray(req.body?.photos)
+    ? req.body.photos
+        .filter(u => typeof u === 'string' && /^\/api\/retail\/media\/\d+$/.test(u))
+        .slice(0, 6)
+    : [];
+  const name = req.customer?.nickname || ('#' + req.customer.id);
+  try {
+    const info = tdb().prepare(
+      `INSERT INTO retail_feedback (customer_id, customer_name, message, photos_json, page_context, app_version)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(req.customer.id, name, message, photos.length ? JSON.stringify(photos) : null, pageContext, appVersion);
+    res.json({ success: true, data: { id: info.lastInsertRowid } });
+  } catch (e) {
+    console.error('[retail/feedback] insert failed:', e.message);
+    res.status(500).json({ success: false, error: 'db_insert_failed' });
+  }
+});
+
 // Customer submits a review. Must own a 'delivered' order containing this
 // product (anti-spam — only buyers can review). One review per
 // (customer, product, order) — UNIQUE constraint catches dupes.
@@ -5705,6 +5890,28 @@ router.post('/api/retail/products/:id/reviews', requireRetailAuth, express.json(
 // Paginated list across all products for staff moderation. Filters by
 // visibility, rating, product. Joins customer + product so the table can
 // show context without the client making N follow-up requests.
+// Customer bug reports / feedback from the mini app "Found a bug?" form.
+// Read-only inbox — newest first. Separate from the staff `feedback` table.
+router.get('/api/retail-admin/feedback', requireRetailAdmin, (req, res) => {
+  const limit  = Math.min(parseInt(req.query.limit  || '100', 10) || 100, 300);
+  const offset = Math.max(parseInt(req.query.offset || '0',   10) || 0, 0);
+  const rows = tdb().prepare(
+    `SELECT f.id, f.customer_id, f.customer_name, f.message,
+            f.photos_json, f.page_context, f.app_version, f.created_at,
+            c.nickname AS nickname, c.avatar_url AS customer_avatar
+       FROM retail_feedback f
+  LEFT JOIN retail_customers c ON c.id = f.customer_id
+   ORDER BY f.created_at DESC
+      LIMIT ? OFFSET ?`
+  ).all(limit, offset).map(f => ({
+    ...f,
+    photos: parseJsonArray(f.photos_json),
+    photos_json: undefined,
+  }));
+  const total = tdb().prepare('SELECT COUNT(*) AS n FROM retail_feedback').get().n;
+  res.json({ success: true, data: rows, meta: { total, limit, offset } });
+});
+
 router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
   const limit  = Math.min(parseInt(req.query.limit  || '50', 10) || 50, 200);
   const offset = Math.max(parseInt(req.query.offset || '0',  10) || 0, 0);
@@ -6749,7 +6956,8 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.refund_status, o.refund_amount_requested,
                     o.refund_requested_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
-                    o.store_id, o.routing_reason, o.channel,
+                    o.store_id, o.routing_reason, o.channel, o.fulfillment_type,
+                    o.scheduled_for, o.delivery_slot_label,
                     o.tracking_carrier, o.tracking_number, o.tracking_status,
                     o.tracking_kd100_subscribed,
                     s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
@@ -6806,8 +7014,9 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
   delete o.address_json;
 
   // Lazy-fill shipments for orders predating the split-shipment feature.
-  // This is idempotent — if rows already exist, nothing changes.
-  const shipmentRows = ensureShipments(id);
+  // This is idempotent — if rows already exist, nothing changes. Pickup
+  // orders ship nothing (collected at the store), so never plan a shipment.
+  const shipmentRows = o.fulfillment_type === 'pickup' ? [] : ensureShipments(id);
 
   // oi.image_url was never captured at order time (always null on insert),
   // so fall through to the live product photo — same approach as the
@@ -6909,25 +7118,32 @@ router.put('/api/retail-admin/orders/:id/invoice', requireRetailAdmin, express.j
 // servable URL (GET /api/retail/media/:id streams it with the stored mime).
 router.post('/api/retail-admin/invoice-file', requireRetailAdmin, express.json({ limit: '12mb' }), (req, res) => {
   const { data } = req.body || {};
-  const m = /^data:(application\/pdf);base64,([A-Za-z0-9+/=]+)$/.exec(typeof data === 'string' ? data : '');
-  if (!m) return res.status(400).json({ success: false, error: 'not_a_pdf' });
+  const m = /^data:(application\/pdf|image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(typeof data === 'string' ? data : '');
+  if (!m) return res.status(400).json({ success: false, error: 'unsupported_type' });
+  const declaredMime = m[1];
   const sizeBytes = Math.floor(m[2].length * 3 / 4);
   if (sizeBytes > 10 * 1024 * 1024) return res.status(400).json({ success: false, error: 'too_large' });
   // Don't trust the data-URL's self-declared MIME — verify the real bytes start
-  // with the PDF magic (%PDF-). Decode only the small header, not the whole blob.
+  // with the matching magic number. Decode only the small header, not the whole blob.
+  let mime, ext;
   try {
-    const head = Buffer.from(m[2].slice(0, 16), 'base64');
-    if (head.subarray(0, 5).toString('latin1') !== '%PDF-') {
-      return res.status(400).json({ success: false, error: 'not_a_pdf' });
-    }
+    const head = Buffer.from(m[2].slice(0, 24), 'base64');
+    const latin = head.subarray(0, 12).toString('latin1');
+    if (head.subarray(0, 5).toString('latin1') === '%PDF-') { mime = 'application/pdf'; ext = 'pdf'; }
+    else if (head[0] === 0xFF && head[1] === 0xD8 && head[2] === 0xFF) { mime = 'image/jpeg'; ext = 'jpg'; }
+    else if (latin.startsWith('\x89PNG\r\n\x1a\n')) { mime = 'image/png'; ext = 'png'; }
+    else if (latin.startsWith('GIF87a') || latin.startsWith('GIF89a')) { mime = 'image/gif'; ext = 'gif'; }
+    else if (latin.startsWith('RIFF') && latin.slice(8, 12) === 'WEBP') { mime = 'image/webp'; ext = 'webp'; }
+    else return res.status(400).json({ success: false, error: 'unsupported_type' });
   } catch {
-    return res.status(400).json({ success: false, error: 'not_a_pdf' });
+    return res.status(400).json({ success: false, error: 'unsupported_type' });
   }
+  if (mime !== declaredMime) return res.status(400).json({ success: false, error: 'type_mismatch' });
   try {
     const info = tdb().prepare(
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
        VALUES (?, ?, ?, ?, NULL)`
-    ).run('fapiao.pdf', 'application/pdf', sizeBytes, data);
+    ).run('fapiao.' + ext, mime, sizeBytes, data);
     res.json({ success: true, data: { url: `/api/retail/media/${info.lastInsertRowid}` } });
   } catch (e) {
     console.error('[retail-admin/invoice-file] insert failed:', e.message);

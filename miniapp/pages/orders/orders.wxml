@@ -29,7 +29,10 @@
           data-id="{{item.id}}" bindtap="openOrder">
       <view class="card-top">
         <view class="order-no">{{item.order_no}}</view>
-        <view class="status-pill status-{{item.status}}">{{item.status_label}}</view>
+        <view class="card-top-right">
+          <view wx:if="{{item.is_pickup}}" class="pickup-tag f-toni">{{item.pickup_label}}</view>
+          <view class="status-pill status-{{item.status}}">{{item.status_label}}</view>
+        </view>
       </view>
       <view class="card-mid">
         <view class="thumbs">

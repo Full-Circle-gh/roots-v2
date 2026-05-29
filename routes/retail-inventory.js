@@ -61,8 +61,8 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
 
   const info = db.prepare(`
     INSERT INTO retail_stores (code, name_en, name_cn, address, city, district, lat, lng, phone,
-                               meituan_account_id, is_active, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               meituan_account_id, is_active, pickup_enabled, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     b.code.trim(),
     b.name_en || null, b.name_cn || null,
@@ -72,6 +72,7 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
     b.phone || null,
     b.meituan_account_id || null,
     b.is_active === false ? 0 : 1,
+    b.pickup_enabled ? 1 : 0,
     Number.isFinite(b.sort_order) ? b.sort_order : 0,
   );
   // Background geocode the new store unless the admin provided coords.
@@ -84,14 +85,14 @@ router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(),
   const id = parseInt(req.params.id, 10);
   const existing = inventory.getStore(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
-  const allowed = ['name_en','name_cn','address','city','district','lat','lng','phone','meituan_account_id','is_active','sort_order'];
+  const allowed = ['name_en','name_cn','address','city','district','lat','lng','phone','meituan_account_id','is_active','pickup_enabled','sort_order'];
   const sets = [];
   const vals = [];
   for (const k of allowed) {
     if (k in req.body) {
       sets.push(`${k} = ?`);
       let v = req.body[k];
-      if (k === 'is_active') v = v ? 1 : 0;
+      if (k === 'is_active' || k === 'pickup_enabled') v = v ? 1 : 0;
       if (k === 'sort_order') v = Number.isFinite(v) ? v : 0;
       vals.push(v);
     }

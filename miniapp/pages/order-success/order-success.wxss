@@ -29,6 +29,18 @@
   line-height: 1.4;
 }
 
+.pickup-banner {
+  background: rgba(123, 189, 59, 0.14);
+  border: 2rpx solid rgba(123, 189, 59, 0.35);
+  border-radius: 16rpx;
+  padding: 24rpx 28rpx;
+  margin-bottom: 32rpx;
+  font-size: calc(28rpx * var(--font-scale));
+  color: #3a6817;
+  line-height: 1.4;
+  text-align: center;
+}
+
 .card {
   background: #FFFCF7;
   border: 3rpx solid var(--ink);

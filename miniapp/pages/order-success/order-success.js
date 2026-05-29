@@ -11,6 +11,8 @@ Page({
     orderNo: '',
     total: '',
     status: 'paid',
+    isPickup: false,
+    pickupLine: '',   // "Collect at <store> · <time>" — pickup orders only
     lang: 'en',
     copy: {
       headline: 'Order placed.',
@@ -48,11 +50,29 @@ Page({
     try {
       const o = await api.get('/api/retail/payment/status/' + id);
       const data = o?.data || o;
-      this.setData({
+      const isPickup = data.fulfillment_type === 'pickup';
+      const patch = {
         orderNo: data.order_no || '',
         total: '¥' + Number(data.total || 0).toFixed(2),
         status: data.status,
-      });
+        isPickup,
+      };
+      if (isPickup) {
+        const cn = app.globalData.lang === 'cn';
+        const store = cn
+          ? (data.pickup_store_name_cn || data.pickup_store_name_en || '')
+          : (data.pickup_store_name_en || data.pickup_store_name_cn || '');
+        const time = data.delivery_slot_label
+          || (data.scheduled_for ? String(data.scheduled_for).slice(0, 16) : '');
+        const at = cn ? '取货时间' : 'at';
+        patch.pickupLine = cn
+          ? `🏬 到 ${store} 自提` + (time ? ` · ${at} ${time}` : '')
+          : `🏬 Collect at ${store}` + (time ? ` · ${at} ${time}` : '');
+        patch.copy = Object.assign({}, this.data.copy, {
+          sub: cn ? '感谢，备好后我们会通知您。' : "Thanks! We'll let you know when it's ready.",
+        });
+      }
+      this.setData(patch);
     } catch (e) {
       console.warn('[order-success] load failed:', e.message);
     }

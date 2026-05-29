@@ -136,8 +136,21 @@
       </view>
     </view>
 
-    <!-- Address -->
-    <view class="section">
+    <!-- Pickup location — collect at store (pickup orders have no shipping address) -->
+    <view wx:if="{{isPickup}}" class="section">
+      <view class="section-label f-toni">{{copy.collectAtLabel}}</view>
+      <view class="addr-name"><text class="f-bear">🏬 {{pickupStoreName}}</text></view>
+      <view wx:if="{{pickupAddress}}" class="addr-full muted">{{pickupAddress}}</view>
+      <view wx:if="{{pickupPhone}}" class="addr-full muted">{{pickupPhone}}</view>
+      <view wx:if="{{pickupTime}}" class="addr-pickup-time">
+        <text class="f-toni" style="opacity:0.6;">{{copy.pickupTimeLabel}} · </text>
+        <text class="f-bear">{{pickupTime}}</text>
+      </view>
+      <view class="addr-name" style="margin-top:8rpx;"><text class="f-bear">{{order.recipient_name}}</text> · {{order.recipient_phone}}</view>
+    </view>
+
+    <!-- Shipping address -->
+    <view wx:else class="section">
       <view class="section-label f-toni">{{copy.shipToLabel}}</view>
       <view class="addr-name"><text class="f-bear">{{order.recipient_name}}</text> · {{order.recipient_phone}}</view>
       <view class="addr-full muted">{{address}}</view>

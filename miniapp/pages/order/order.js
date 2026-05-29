@@ -46,6 +46,11 @@ Page({
     statusLabel: '',
     address: '',
     paymentLabel: '',
+    isPickup: false,
+    pickupStoreName: '',
+    pickupAddress: '',
+    pickupPhone: '',
+    pickupTime: '',
     lang: 'en',
     loading: true,
     notFound: false,
@@ -53,6 +58,8 @@ Page({
       title: 'Order',
       statusLabel: 'STATUS',
       shipToLabel: 'SHIP TO',
+      collectAtLabel: 'COLLECT AT',
+      pickupTimeLabel: 'PICKUP TIME',
       payLabel: 'PAYMENT',
       itemsLabel: 'ITEMS',
       timelineLabel: 'TIMELINE',
@@ -143,6 +150,8 @@ Page({
         title: '订单',
         statusLabel: '状态',
         shipToLabel: '收货地址',
+        collectAtLabel: '自提门店',
+        pickupTimeLabel: '取货时间',
         payLabel: '支付',
         itemsLabel: '商品',
         timelineLabel: '订单进度',
@@ -291,6 +300,22 @@ Page({
         };
       }
 
+      // Pickup orders collect at a store instead of shipping to an address.
+      // Build a "Collect at <store>" location string from the store fields
+      // carried in address_json (parsed server-side into data.address), and
+      // surface the chosen pickup time. order.wxml uses isPickup to swap the
+      // delivery address/tracking blocks for pickup equivalents.
+      const isPickup = data.fulfillment_type === 'pickup';
+      const pa = data.address || {};
+      const pickupStoreName = isPickup
+        ? (lang.pick(pa.store_name_en, pa.store_name_cn, L) || pa.store_name_en || pa.store_name_cn || '')
+        : '';
+      const pickupAddress = isPickup ? (pa.address || data.address_full || '') : '';
+      const pickupPhone = isPickup ? (pa.store_phone || '') : '';
+      const pickupTime = isPickup
+        ? (data.delivery_slot_label || (data.scheduled_for ? String(data.scheduled_for).slice(0, 16) : ''))
+        : '';
+
       this.setData({
         order: data,
         items,
@@ -299,6 +324,11 @@ Page({
         trackingEvents,
         trackingEventsVisible,
         refundView,
+        isPickup,
+        pickupStoreName,
+        pickupAddress,
+        pickupPhone,
+        pickupTime,
         subtotal: '¥' + Number(data.subtotal || 0).toFixed(2),
         shipping: Number(data.shipping_fee || 0) > 0
           ? '¥' + Number(data.shipping_fee || 0).toFixed(2)
