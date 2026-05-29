@@ -1504,8 +1504,22 @@ Page({
         return;
       }
 
-      // Alipay flow (TODO when alipay creds in place)
-      wx.showToast({ title: 'Payment flow TBD', icon: 'none' });
+      // Alipay flow: the server returned a precreate QR (PNG data URL). Hand
+      // off to the dedicated page, which renders it, lets the customer save +
+      // scan it from Alipay, and polls /payment/status until the async notify
+      // (or trade.query fallback) flips the order to paid. Stash payData so
+      // the page skips a second precreate round-trip. Cart is cleared by that
+      // page once paid — don't clear here (customer may still back out).
+      if (this.data.paymentMethod === 'alipay' && payData?.qr_png) {
+        try { wx.setStorageSync('alipayPay:' + orderId, payData); } catch {}
+        this.setData({ placing: false });
+        wx.redirectTo({ url: '/pages/alipay-pay/alipay-pay?id=' + orderId });
+        return;
+      }
+
+      // Unknown rail / missing pay params — fail loudly rather than silently.
+      console.error('[checkout] no payment handler for', this.data.paymentMethod, payData);
+      wx.showToast({ title: this.data.lang === 'cn' ? '支付方式暂不可用' : 'Payment unavailable', icon: 'none' });
       this.setData({ placing: false });
     } catch (e) {
       console.error('[checkout] place order failed:', e);

@@ -400,8 +400,15 @@ Page({
           success: () => { this.refresh(); },
           fail:    () => wx.showToast({ title: this.data.lang === 'cn' ? '支付未完成' : 'Payment incomplete', icon: 'none' }),
         });
+      } else if (this.data.order.payment_method === 'alipay' && payData?.qr_png) {
+        // Hand off to the Alipay QR page (renders + polls until paid). Stash
+        // payData so it skips a second precreate. navigateTo (not redirect) so
+        // the customer can back out to this order if they don't pay.
+        try { wx.setStorageSync('alipayPay:' + this.data.id, payData); } catch {}
+        wx.navigateTo({ url: '/pages/alipay-pay/alipay-pay?id=' + this.data.id });
       } else {
-        wx.showToast({ title: 'Payment flow TBD', icon: 'none' });
+        console.error('[order] no payment handler for', this.data.order.payment_method, payData);
+        wx.showToast({ title: this.data.lang === 'cn' ? '支付方式暂不可用' : 'Payment unavailable', icon: 'none' });
       }
     } catch (e) {
       wx.showToast({ title: e.message, icon: 'none' });

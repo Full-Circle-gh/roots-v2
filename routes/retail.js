@@ -26,6 +26,7 @@ const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb } = require('../lib/tenant-
 let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
 const _feie = require('../lib/feie');   // Feie cloud-printer client (order auto-print)
+const qrpng = require('../lib/qrpng');  // zero-dep QR→PNG (renders the Alipay qr_code)
 const router = express.Router();
 
 // Mini App Backend access gate. Two ways in during the single-tenant → SaaS
@@ -1036,6 +1037,45 @@ if (WECHAT_PAY_DEV_MODE) {
 const WX_OUT_TRADE_PREFIX = 'FC';
 const wxOutTradeNo = (orderNo) => WX_OUT_TRADE_PREFIX + orderNo;
 
+// ── Alipay (支付宝) config ───────────────────────────────────────────────
+// Alipay uses the classic OpenAPI gateway (gateway.do) with RSA2 signing
+// (SHA256withRSA) — a different scheme from WeChat Pay v3, so it gets its own
+// signer/verifier below rather than reusing signMerchantRequest(). We run in
+// "public key" mode (not the cert-chain mode): one Alipay public key verifies
+// the async-notify signature.
+//   ALIPAY_APP_ID       the Alipay open-platform app id
+//   ALIPAY_PRIVATE_KEY  our app's RSA private key (PKCS#8). Stored in .env as a
+//                       single line with literal \n escapes, OR as bare base64.
+//   ALIPAY_PUBLIC_KEY   Alipay's public key (from the merchant console) — used
+//                       to verify the async-notify signature. Bare base64 or PEM.
+//   ALIPAY_NOTIFY_URL   public callback URL Alipay POSTs the trade result to.
+//   ALIPAY_GATEWAY      override the gateway (defaults to production).
+const ALIPAY_APP_ID      = process.env.ALIPAY_APP_ID || '';
+const ALIPAY_GATEWAY     = process.env.ALIPAY_GATEWAY || 'https://openapi.alipay.com/gateway.do';
+const ALIPAY_NOTIFY_URL  = process.env.ALIPAY_NOTIFY_URL || 'https://rootskitchenchina.com/api/retail/payment/alipay/callback';
+const ALIPAY_PRIVATE_KEY = normalizePem(process.env.ALIPAY_PRIVATE_KEY || '', 'PRIVATE KEY');
+const ALIPAY_PUBLIC_KEY  = normalizePem(process.env.ALIPAY_PUBLIC_KEY  || '', 'PUBLIC KEY');
+const ALIPAY_DEV_MODE    = !ALIPAY_APP_ID || !ALIPAY_PRIVATE_KEY;
+// Same FC prefix as WeChat so our orders can never collide with the live OUT1N
+// app on a shared Alipay merchant ledger; the async notify echoes it back.
+const alipayOutTradeNo = (orderNo) => WX_OUT_TRADE_PREFIX + orderNo;
+
+if (ALIPAY_DEV_MODE) {
+  console.error('[security] ⚠️  ALIPAY is not configured — /api/retail/payment/create returns alipay_not_configured for Alipay orders.');
+  console.error('[security]    Fix: set ALIPAY_APP_ID + ALIPAY_PRIVATE_KEY + ALIPAY_PUBLIC_KEY in .env, then pm2 restart roots-v2.');
+}
+
+// Accept a key as either a ready PEM (with BEGIN/END lines) or as bare base64
+// (how the Alipay console hands them out), and return a valid PEM. Also turns
+// literal "\n" escapes from a single-line .env value into real newlines.
+function normalizePem(raw, label) {
+  let s = (raw || '').replace(/\\n/g, '\n').trim();
+  if (!s) return '';
+  if (s.includes('BEGIN')) return s;
+  const body = (s.replace(/\s+/g, '').match(/.{1,64}/g) || []).join('\n');
+  return `-----BEGIN ${label}-----\n${body}\n-----END ${label}-----\n`;
+}
+
 // Build the wx.requestPayment params from a prepay_id. Signature is over
 // the 5-line message: appid, timestamp, nonce, package, signed with the
 // merchant private key (RSA-SHA256 → base64). See WeChat Pay v3 docs.
@@ -1128,6 +1168,100 @@ async function wechatPayRefund({ outTradeNo, outRefundNo, refundCents, totalCent
     throw err;
   }
   return j;
+}
+
+// ─── Alipay API helpers ───────────────────────────────────────────────────
+// Alipay's timestamp must be Beijing time (GMT+8), formatted "YYYY-MM-DD HH:mm:ss".
+function alipayTimestamp() {
+  return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+}
+
+// The RSA2 sign base-string for BOTH outbound requests and inbound notify
+// verification: drop `sign` + `sign_type` + empty values, sort keys ascending,
+// join as k=v pairs with & using the RAW (un-encoded) values.
+function alipaySignString(params) {
+  return Object.keys(params)
+    .filter(k => k !== 'sign' && k !== 'sign_type' && params[k] !== '' && params[k] != null)
+    .sort()
+    .map(k => `${k}=${params[k]}`)
+    .join('&');
+}
+
+// Call an Alipay OpenAPI method and return the inner business-response object
+// (e.g. alipay_trade_precreate_response). Throws with err.code='alipay_failed'
+// on a non-10000 result.
+async function alipayApiCall(method, bizContent, { notifyUrl } = {}) {
+  const params = {
+    app_id:      ALIPAY_APP_ID,
+    method,
+    format:      'JSON',
+    charset:     'utf-8',
+    sign_type:   'RSA2',
+    timestamp:   alipayTimestamp(),
+    version:     '1.0',
+    biz_content: JSON.stringify(bizContent),
+  };
+  if (notifyUrl) params.notify_url = notifyUrl;
+  params.sign = crypto.createSign('RSA-SHA256')
+                      .update(alipaySignString(params), 'utf8')
+                      .sign(ALIPAY_PRIVATE_KEY, 'base64');
+
+  const resp = await fetch(ALIPAY_GATEWAY, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
+    body:    new URLSearchParams(params).toString(),
+  });
+  const j   = await resp.json();
+  const biz = j[method.replace(/\./g, '_') + '_response'];
+  if (!biz) {
+    const err = new Error('alipay_bad_response: ' + JSON.stringify(j).slice(0, 200));
+    err.code = 'alipay_failed';
+    throw err;
+  }
+  if (biz.code && biz.code !== '10000') {
+    const err = new Error(`alipay_${method}_failed: ${biz.code}/${biz.sub_code || ''} ${biz.sub_msg || biz.msg || ''}`);
+    err.code = 'alipay_failed';
+    err.aliCode = biz.code;
+    err.aliSubCode = biz.sub_code;
+    throw err;
+  }
+  return biz;
+}
+
+// alipay.trade.precreate → returns the qr_code string the customer scans in the
+// Alipay app. The FC-prefixed out_trade_no ties the async notify back to us.
+async function alipayPrecreate(order) {
+  const biz = await alipayApiCall('alipay.trade.precreate', {
+    out_trade_no: alipayOutTradeNo(order.order_no),
+    total_amount: Number(order.total).toFixed(2),
+    subject:      'Roots order ' + order.order_no,
+  }, { notifyUrl: ALIPAY_NOTIFY_URL });
+  return biz.qr_code;
+}
+
+// alipay.trade.query → current trade_status for an out_trade_no. Used as a
+// poll-time fallback so a blocked/missed async notify still settles the order.
+async function alipayTradeQuery(outTradeNo) {
+  try {
+    const biz = await alipayApiCall('alipay.trade.query', { out_trade_no: outTradeNo });
+    return biz.trade_status || null;   // WAIT_BUYER_PAY | TRADE_SUCCESS | TRADE_FINISHED | TRADE_CLOSED
+  } catch (e) {
+    if (e.aliSubCode === 'ACQ.TRADE_NOT_EXIST') return null; // nobody has paid yet
+    throw e;
+  }
+}
+
+// Verify an Alipay async-notify signature against Alipay's public key (RSA2).
+function alipayVerifyNotify(params) {
+  if (!ALIPAY_PUBLIC_KEY || !params || !params.sign) return false;
+  try {
+    return crypto.createVerify('RSA-SHA256')
+                 .update(alipaySignString(params), 'utf8')
+                 .verify(ALIPAY_PUBLIC_KEY, params.sign, 'base64');
+  } catch (e) {
+    console.error('[alipay/verify]', e.message);
+    return false;
+  }
 }
 
 function markOrderPaid(orderId) {
@@ -1250,17 +1384,66 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
     }
   }
 
-  // Alipay flow — TODO. Needs alipay.trade.precreate with alipay-sdk.
-  return res.status(501).json({ success: false, error: 'alipay_not_implemented' });
+  // ── Alipay (支付宝) — precreate a QR the customer scans in the Alipay app ─
+  // WeChat blocks jumping to / scanning Alipay in-app, so there's no one-tap
+  // flow here: we hand back the qr_code string, the mini-app renders it, and
+  // the customer saves it and scans from their Alipay album. Settlement is
+  // driven by the async notify (/alipay/callback) with a query fallback in the
+  // status poll — both funnel into markOrderPaid(), same as WeChat.
+  if (order.payment_method === 'alipay') {
+    if (ALIPAY_DEV_MODE) {
+      return res.status(501).json({ success: false, error: 'alipay_not_configured' });
+    }
+    try {
+      const qrCode = await alipayPrecreate(order);
+      if (!qrCode) return res.status(502).json({ success: false, error: 'alipay_no_qr' });
+      // Render the qr_code string to a PNG here so the mini-app only has to
+      // show an <image> — no QR encoder needs to ship inside the WeChat bundle.
+      let qrPng = null;
+      try { qrPng = qrpng.qrPngDataUrl(qrCode, { scale: 10, quiet: 4 }); }
+      catch (e) { console.error('[alipay/qr-render]', e.message); }
+      tdb().prepare(
+        "UPDATE retail_payments SET out_trade_no = ?, qr_image_url = ? WHERE order_id = ? AND status = 'pending'"
+      ).run(alipayOutTradeNo(order.order_no), qrCode, orderId);
+      return res.json({
+        success: true,
+        data: { method: 'alipay', qr_code: qrCode, qr_png: qrPng, order_no: order.order_no, total: order.total },
+      });
+    } catch (e) {
+      console.error('[alipay/create]', e);
+      return res.status(502).json({ success: false, error: e.code || 'alipay_failed' });
+    }
+  }
+
+  return res.status(400).json({ success: false, error: 'unsupported_payment_method' });
 });
 
 // Polling endpoint — mini-app calls this every ~2s while waiting on
 // Alipay-QR confirmation, or as a sanity check after wx.requestPayment.
-router.get('/api/retail/payment/status/:orderId', requireRetailAuth, (req, res) => {
-  const order = tdb().prepare(
-    'SELECT id, order_no, status, paid_at, total FROM retail_orders WHERE id = ? AND customer_id = ?'
-  ).get(parseInt(req.params.orderId, 10), req.customer.id);
+router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req, res) => {
+  const orderId = parseInt(req.params.orderId, 10);
+  const sel = 'SELECT id, order_no, status, paid_at, total, payment_method FROM retail_orders WHERE id = ? AND customer_id = ?';
+  let order = tdb().prepare(sel).get(orderId, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+
+  // Alipay fallback: if the async notify hasn't landed yet, actively query
+  // Alipay on each poll so a blocked/missed callback still settles the order.
+  // markOrderPaid() is idempotent + guarded by status, so this is safe to
+  // re-run; it also fires the auto-print / points / push side effects once.
+  if (order.status === 'pending_payment' && order.payment_method === 'alipay' && !ALIPAY_DEV_MODE) {
+    try {
+      const pay = tdb().prepare(
+        "SELECT out_trade_no FROM retail_payments WHERE order_id = ? AND status = 'pending'"
+      ).get(orderId);
+      if (pay?.out_trade_no) {
+        const st = await alipayTradeQuery(pay.out_trade_no);
+        if (st === 'TRADE_SUCCESS' || st === 'TRADE_FINISHED') {
+          markOrderPaid(orderId);
+          order = tdb().prepare(sel).get(orderId, req.customer.id);
+        }
+      }
+    } catch (e) { console.warn('[alipay/poll-query]', e.message); }
+  }
   res.json({ success: true, data: order });
 });
 
@@ -1368,10 +1551,45 @@ router.post('/api/retail/payment/wechat/refund-callback', express.json(), (req, 
     res.status(500).json({ code: 'FAIL', message: 'internal_error' });
   }
 });
+// Alipay async notify. Alipay POSTs application/x-www-form-urlencoded with the
+// trade result + an RSA2 signature. We verify the signature with Alipay's
+// public key, confirm app_id + amount, then mark the order paid — which also
+// auto-prints the bill, awards points and commits stock, the same path WeChat
+// takes. Alipay retries unless we reply with the literal text "success".
 router.post('/api/retail/payment/alipay/callback', express.urlencoded({ extended: true }), (req, res) => {
-  // TODO: verify signature, look up order_id from out_trade_no, mark paid
-  console.log('[retail/payment/alipay/callback] body:', JSON.stringify(req.body).slice(0, 200));
-  res.send('success');
+  try {
+    if (ALIPAY_DEV_MODE) { console.log('[alipay/callback] DEV MODE — ignored'); return res.send('success'); }
+    const p = req.body || {};
+    if (!alipayVerifyNotify(p)) {
+      console.warn('[alipay/callback] bad signature', p.out_trade_no);
+      return res.send('fail');
+    }
+    if (p.app_id !== ALIPAY_APP_ID) {
+      console.warn('[alipay/callback] app_id mismatch', p.app_id);
+      return res.send('fail');
+    }
+    if (p.trade_status === 'TRADE_SUCCESS' || p.trade_status === 'TRADE_FINISHED') {
+      const pay = tdb().prepare(
+        'SELECT order_id, amount FROM retail_payments WHERE out_trade_no = ? AND status = ?'
+      ).get(p.out_trade_no, 'pending');
+      if (pay) {
+        // Confirm the paid amount matches what we charged before settling.
+        const expect = Number(pay.amount).toFixed(2);
+        if (p.total_amount && p.total_amount !== expect) {
+          console.warn('[alipay/callback] amount mismatch', p.out_trade_no, p.total_amount, expect);
+          return res.send('fail');
+        }
+        tdb().prepare(
+          "UPDATE retail_payments SET status = 'success', transaction_id = ?, raw_callback_json = ?, completed_at = CURRENT_TIMESTAMP WHERE out_trade_no = ?"
+        ).run(p.trade_no || null, JSON.stringify(p), p.out_trade_no);
+        markOrderPaid(pay.order_id);
+      }
+    }
+    res.send('success');
+  } catch (e) {
+    console.error('[alipay/callback]', e);
+    res.send('fail');
+  }
 });
 
 // ─── Subscribe-message (push notifications) ──────────────────────────────

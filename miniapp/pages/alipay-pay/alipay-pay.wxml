@@ -1,0 +1,53 @@
+<view class="page">
+  <view class="head">
+    <view class="title f-bear">{{t.title}}</view>
+  </view>
+
+  <!-- loading -->
+  <view wx:if="{{loading}}" class="state f-aleo">
+    <view class="spinner"></view>
+  </view>
+
+  <!-- error -->
+  <view wx:elif="{{error}}" class="state">
+    <view class="err f-aleo">{{error}}</view>
+    <button class="btn secondary f-toni" bindtap="retry">{{t.retry}}</button>
+  </view>
+
+  <!-- qr + flow -->
+  <block wx:else>
+    <view class="card">
+      <view class="row">
+        <view class="lbl f-toni">{{t.amount}}</view>
+        <view class="val f-bear total">{{total}}</view>
+      </view>
+      <view wx:if="{{orderNo}}" class="row">
+        <view class="lbl f-toni">{{t.order}}</view>
+        <view class="val">{{orderNo}}</view>
+      </view>
+    </view>
+
+    <view class="qr-wrap">
+      <image wx:if="{{qrPng}}" class="qr" src="{{qrPng}}" mode="widthFix" show-menu-by-longpress></image>
+      <view wx:if="{{paid}}" class="paid-overlay">
+        <view class="paid-check">✓</view>
+      </view>
+    </view>
+
+    <button wx:if="{{!paid}}" class="btn primary f-toni" bindtap="saveQr">{{t.save}}</button>
+
+    <view class="steps">
+      <view wx:for="{{t.steps}}" wx:key="*this" class="step f-aleo">
+        <view class="num f-bear">{{index + 1}}</view>
+        <view class="step-txt">{{item}}</view>
+      </view>
+    </view>
+
+    <view wx:if="{{!paid}}" class="waiting f-aleo">
+      <view class="dot"></view>
+      <text>{{t.waiting}}</text>
+    </view>
+  </block>
+
+  <popup-manager page="alipay-pay"></popup-manager>
+</view>

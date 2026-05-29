@@ -6,6 +6,7 @@
     "pages/me/me",
     "pages/product/product",
     "pages/checkout/checkout",
+    "pages/alipay-pay/alipay-pay",
     "pages/order-success/order-success",
     "pages/order/order",
     "pages/orders/orders",
