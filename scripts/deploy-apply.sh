@@ -67,14 +67,50 @@ BEFORE=$(rt)
 echo "=== 3/4 install (restart_time before = $BEFORE) ==="
 for f in "${FILES[@]}"; do mkdir -p "$APP/$(dirname "$f")"; cp "$STAGE/$f" "$APP/$f"; echo "  -> $f"; done
 
-echo "=== 4/4 restart roots-v2 ==="
+echo "=== 4/4 restart roots-v2 + verify health ==="
 pm2 restart roots-v2 --update-env >/dev/null
-sleep 4
-AFTER=$(rt); ST=$(st)
-echo "restart_time $BEFORE -> $AFTER | status = $ST"
 
-if [ "$ST" != "online" ] || [ "$AFTER" -gt "$((BEFORE+1))" ]; then
-  echo "!!! UNHEALTHY (not online or crash-looping) -> ROLLING BACK"
+# Health verdict. This REPLACES the old brittle "restart_time must be exactly
+# BEFORE+1" check, which false-rolled-back a perfectly healthy deploy on
+# 2026-05-29 when a transient pushed the count 648->650 instead of 649 (a good
+# commit lost, then re-shipped identical with a clean 652->653). A single extra
+# restart inside the wait window — cron blip, overlapping deploy — is NOT a
+# crash. So instead of counting restarts, we confirm GENUINE stability + real
+# serving, and roll back ONLY if the app is not online, not serving, or still
+# crash-restarting at the end of the window:
+#   * SETTLED — restart_time STOPS climbing across a quiet window. A real crash
+#               loop never settles (pm2 keeps respawning every min_uptime); a
+#               one-off transient settles within a round or two.
+#   * ONLINE  — pm2 reports status "online".
+#   * SERVING — the app answers HTTP on :4000 (it 302s on /). ANY HTTP status
+#               counts as serving; "000" = connection refused/timeout = dead.
+sleep 5
+LAST=$(rt)
+STABLE=0
+for _ in 1 2 3; do
+  sleep 5
+  CUR=$(rt)
+  if [ "$CUR" = "$LAST" ]; then STABLE=1; break; fi
+  LAST=$CUR
+done
+AFTER=$LAST
+ST=$(st)
+
+# Readiness probe. No -f (we WANT 4xx/5xx to still count as "serving" — the
+# process is up and answering); curl prints "000" via -w on connection failure
+# or timeout. Retry a few times in case the port isn't bound the instant we ask.
+CODE=000
+for _ in 1 2 3; do
+  CODE=$(curl -s -o /dev/null -m 3 -w '%{http_code}' http://127.0.0.1:4000/ 2>/dev/null)
+  [ -z "$CODE" ] && CODE=000
+  [ "$CODE" != "000" ] && break
+  sleep 1
+done
+
+echo "restart_time $BEFORE -> $AFTER | status = $ST | settled = $STABLE | http = $CODE"
+
+if [ "$ST" != "online" ] || [ "$STABLE" != "1" ] || [ "$CODE" = "000" ]; then
+  echo "!!! UNHEALTHY (status=$ST settled=$STABLE http=$CODE) -> ROLLING BACK"
   for f in "${FILES[@]}"; do [ -f "$BK/$f" ] && cp "$BK/$f" "$APP/$f"; done
   pm2 restart roots-v2 --update-env >/dev/null; sleep 3
   echo "rolled back. status now = $(st)"
