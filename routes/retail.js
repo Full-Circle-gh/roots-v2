@@ -1343,6 +1343,20 @@ router.post('/api/retail/payment/wechat/refund-callback', express.json(), (req, 
     decipher.setAuthTag(buf.slice(-16));
     decipher.setAAD(Buffer.from(r.associated_data || '', 'utf8'));
     const info = JSON.parse(Buffer.concat([decipher.update(buf.slice(0, -16)), decipher.final()]).toString('utf8'));
+    // Finalize the stored payout reference. The synchronous refund response
+    // is usually PROCESSING; this callback fires when WeChat settles it, so we
+    // flip the label (e.g. "...(PROCESSING)" → "...(SUCCESS)") instead of
+    // leaving it stale. Mapped via the original transaction's out_trade_no.
+    if (info.out_trade_no && info.refund_id) {
+      try {
+        const pay = tdb().prepare('SELECT order_id FROM retail_payments WHERE out_trade_no = ?').get(info.out_trade_no);
+        if (pay?.order_id) {
+          tdb().prepare(
+            'UPDATE retail_orders SET refund_payout_ref = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+          ).run(info.refund_id + ' (' + (info.refund_status || 'SUCCESS') + ')', pay.order_id);
+        }
+      } catch (e) { console.error('[wechat-refund/callback db]', e); }
+    }
     if (info.refund_status === 'SUCCESS') {
       console.log('[wechat-refund/callback] SUCCESS', info.out_trade_no, info.refund_id);
     } else {
