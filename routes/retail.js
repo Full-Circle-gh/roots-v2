@@ -22,7 +22,7 @@ const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
 const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId } = require('../lib/tenant-db');
-const { getTenantCreds } = require('../lib/tenant-creds');
+const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
 // Web Push — optional; wrapped so a missing module never breaks order flow.
 let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
@@ -1124,6 +1124,16 @@ function payContext() {
   return { appId: c.wechat.appId, ...c.pay };  // {appId,mchId,apiV3Key,privateKey,serialNo,devMode}
 }
 
+// The active tenant's third-party integration creds (Platform readiness ⑤).
+// Roots/unscoped → env-backed bundle (unchanged); other tenants → their own
+// encrypted creds with NO env fallback. Shape:
+//   { kd100:{customer,key,secret,callback}, jd:{appKey,appSecret,accessToken,
+//     customerCode,env}, feie:{user,ukey} }
+// Mirrors payContext() for the courier/printer rail — handlers pass the
+// relevant slice into the kd100 / jd / feie lib fns so a tenant operates on
+// its OWN accounts and can never clobber Roots' live env.
+function integ() { return getTenantCreds(currentTenantId()).integrations; }
+
 // Public origin for tenant async-notify URLs — the same server/domain as Roots
 // (single-server SaaS), just a tenant-scoped path. Derived from Roots' notify
 // URL so there's no new config to set; WeChat Pay v3 accepts any HTTPS URL.
@@ -1416,7 +1426,7 @@ function markOrderPaid(orderId) {
     // awaiting so a slow/offline printer never delays the order.
     try {
       const pp = loadPrinterPrefs();
-      if (pp.auto_print && _feie.feieEnabled()) {
+      if (pp.auto_print && _feie.feieEnabled(integ().feie)) {
         printOrderById(orderId, pp)
           .then(r => { if (!r.ok) console.warn('[feie print]', orderId, r.msg); })
           .catch(e => console.warn('[feie print]', e.message));
@@ -6725,16 +6735,27 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
   // This is idempotent — if rows already exist, nothing changes.
   const shipmentRows = ensureShipments(id);
 
+  // oi.image_url was never captured at order time (always null on insert),
+  // so fall through to the live product photo — same approach as the
+  // customer-facing detail endpoint — so the backend can show a thumbnail
+  // beside each line item. A data: URI here is the raw base64 photo; swap it
+  // for the public streamed-image URL so the drawer payload stays small.
   o.items = tdb().prepare(
-    `SELECT id, product_id, name_en, name_cn, sku, size, image_url,
-            qty, unit_price, line_total, options_json,
-            ship_modes, needs_ice_pack, shipment_id
-       FROM retail_order_items WHERE order_id = ? ORDER BY id ASC`
+    `SELECT oi.id, oi.product_id, oi.name_en, oi.name_cn, oi.sku, oi.size,
+            COALESCE(NULLIF(oi.image_url, ''), p.image_url, p.image_data) AS image_url,
+            oi.qty, oi.unit_price, oi.line_total, oi.options_json,
+            oi.ship_modes, oi.needs_ice_pack, oi.shipment_id
+       FROM retail_order_items oi
+  LEFT JOIN products p ON p.id = oi.product_id
+      WHERE oi.order_id = ? ORDER BY oi.id ASC`
   ).all(id).map(it => {
     if (it.options_json) { try { it.options = JSON.parse(it.options_json); } catch {} }
     delete it.options_json;
     // Normalize csv for the front-end (always an array).
     it.ship_modes_arr = parseShipModes(it.ship_modes);
+    if (typeof it.image_url === 'string' && /^data:/i.test(it.image_url)) {
+      it.image_url = `/api/retail/products/${it.product_id}/image`;
+    }
     return it;
   });
   o.payments = tdb().prepare(
@@ -6928,29 +6949,40 @@ router.post('/api/retail-admin/orders/:id/shipment-suggestion/apply',
   res.json({ success: true });
 });
 
-// ─── Integrations admin (kd100 + JD LOP credentials) ──────────────────
-// Secrets persist in storefront_config under `integrations.<svc>.<key>`
-// and ALSO mirror to process.env on save so the rest of the codebase
-// (lib/tracking.js, lib/jd.js) keeps reading from env without knowing
-// they came from the DB. Boot-time hydration in database.js syncs DB
-// values into env on startup so a restart picks them up.
+// ─── Integrations admin (kd100 + JD LOP + Feie credentials) ────────────
+// Per-tenant (Platform readiness ⑤). Storage splits by tenant:
+//
+//   • Roots (tenant #1 / unscoped) — UNCHANGED legacy path. Secrets persist
+//     in storefront_config under `integrations.<svc>.<field>` AND mirror to
+//     process.env on save, so the Roots-global codepaths (sweeper, kd100
+//     webhook) keep reading from env. Boot-time hydration in database.js
+//     re-syncs DB→env on restart.
+//
+//   • Any other tenant — secrets persist ENCRYPTED in tenant_secrets via
+//     lib/tenant-creds (setTenantSecrets). NO storefront_config row, NO
+//     process.env mutation — that shared env is Roots'. Reads come back
+//     through getTenantCreds(tenantId).integrations, never env.
+//
+// Each field carries: `env` (Roots' process.env var), `secret` (mask on GET),
+// `cred` (tenant_secrets KEY constant), `bkey` (field name inside the
+// getTenantCreds().integrations.<svc> bundle, used for masked reads).
 const INTEGRATION_KEYS = {
   kd100: {
-    customer: { env: 'KD100_CUSTOMER', secret: false },
-    key:      { env: 'KD100_KEY',      secret: true  },
-    callback: { env: 'KD100_CALLBACK', secret: false },
-    secret:   { env: 'KD100_SECRET',   secret: true  },
+    customer: { env: 'KD100_CUSTOMER', secret: false, cred: CRED_KEYS.KD100_CUSTOMER, bkey: 'customer' },
+    key:      { env: 'KD100_KEY',      secret: true,  cred: CRED_KEYS.KD100_KEY,      bkey: 'key'      },
+    callback: { env: 'KD100_CALLBACK', secret: false, cred: CRED_KEYS.KD100_CALLBACK, bkey: 'callback' },
+    secret:   { env: 'KD100_SECRET',   secret: true,  cred: CRED_KEYS.KD100_SECRET,   bkey: 'secret'   },
   },
   jd: {
-    app_key:       { env: 'JD_APP_KEY',       secret: false },
-    app_secret:    { env: 'JD_APP_SECRET',    secret: true  },
-    access_token:  { env: 'JD_ACCESS_TOKEN',  secret: true  },
-    customer_code: { env: 'JD_CUSTOMER_CODE', secret: false },
-    env:           { env: 'JD_API_ENV',       secret: false },
+    app_key:       { env: 'JD_APP_KEY',       secret: false, cred: CRED_KEYS.JD_APP_KEY,       bkey: 'appKey'       },
+    app_secret:    { env: 'JD_APP_SECRET',    secret: true,  cred: CRED_KEYS.JD_APP_SECRET,    bkey: 'appSecret'    },
+    access_token:  { env: 'JD_ACCESS_TOKEN',  secret: true,  cred: CRED_KEYS.JD_ACCESS_TOKEN,  bkey: 'accessToken'  },
+    customer_code: { env: 'JD_CUSTOMER_CODE', secret: false, cred: CRED_KEYS.JD_CUSTOMER_CODE, bkey: 'customerCode' },
+    env:           { env: 'JD_API_ENV',       secret: false, cred: CRED_KEYS.JD_ENV,           bkey: 'env'          },
   },
   feie: {
-    user: { env: 'FEIE_USER', secret: false },  // Feieyun account login
-    ukey: { env: 'FEIE_UKEY', secret: true  },  // USERKEY from dev console
+    user: { env: 'FEIE_USER', secret: false, cred: CRED_KEYS.FEIE_USER, bkey: 'user' },  // Feieyun account login
+    ukey: { env: 'FEIE_UKEY', secret: true,  cred: CRED_KEYS.FEIE_UKEY, bkey: 'ukey' },  // USERKEY from dev console
     // Printer SNs are per-store — see storefront_config `printer.by_store`.
   },
 };
@@ -6962,11 +6994,16 @@ function maskSecret(s) {
 }
 
 router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
+  // Each tenant sees its OWN creds. For Roots this resolves to the env
+  // bundle (== the old process.env reads); for any other tenant it comes
+  // from its encrypted tenant_secrets — never Roots' env.
+  const ci = getTenantCreds(currentTenantId()).integrations;
   const out = {};
   for (const [svc, fields] of Object.entries(INTEGRATION_KEYS)) {
     out[svc] = {};
+    const svcVals = ci[svc] || {};
     for (const [field, meta] of Object.entries(fields)) {
-      const val = process.env[meta.env] || '';
+      const val = svcVals[meta.bkey] || '';
       if (meta.secret) {
         out[svc][field + '_masked'] = maskSecret(val);
       } else {
@@ -6974,33 +7011,47 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
       }
     }
   }
-  out.kd100.enabled = tracking.kd100Enabled();
-  out.jd.enabled    = !!(process.env.JD_APP_KEY && process.env.JD_APP_SECRET && process.env.JD_ACCESS_TOKEN);
-  out.feie.enabled  = _feie.feieEnabled();
+  out.kd100.enabled = tracking.kd100Enabled(ci.kd100);
+  out.jd.enabled    = jd.jdEnabled(ci.jd);
+  out.feie.enabled  = _feie.feieEnabled(ci.feie);
   res.json({ success: true, data: out });
 });
 
 router.put('/api/retail-admin/integrations', requireRetailAdmin, express.json(), (req, res) => {
   const body = req.body || {};
+  const tid = currentTenantId();
+  const isRoots = tid === ROOTS_TENANT_ID;
   const changedKeys = [];
-  const upsert = tdb().prepare(
-    `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
-       VALUES (?, ?, CURRENT_TIMESTAMP, ?)
-     ON CONFLICT(key) DO UPDATE SET
-       value_json = excluded.value_json,
-       updated_at = CURRENT_TIMESTAMP,
-       updated_by = excluded.updated_by`
-  );
-  const tx = tdb().transaction(() => {
-    for (const [svc, fields] of Object.entries(INTEGRATION_KEYS)) {
-      const incoming = body[svc];
-      if (!incoming || typeof incoming !== 'object') continue;
-      for (const [field, meta] of Object.entries(fields)) {
-        // `undefined` means "keep current value". `null` or empty
-        // string means "clear it". Any other value updates.
-        if (!Object.prototype.hasOwnProperty.call(incoming, field)) continue;
-        const val = incoming[field];
-        if (val === undefined) continue;
+
+  // Collect the fields the request actually wants to change. `undefined`
+  // means "keep current". `null`/'' means "clear". Anything else updates.
+  // We build one list and dispatch by tenant so Roots and non-Roots share
+  // the same field-walk but write to different stores.
+  const edits = [];   // { svc, field, meta, val }
+  for (const [svc, fields] of Object.entries(INTEGRATION_KEYS)) {
+    const incoming = body[svc];
+    if (!incoming || typeof incoming !== 'object') continue;
+    for (const [field, meta] of Object.entries(fields)) {
+      if (!Object.prototype.hasOwnProperty.call(incoming, field)) continue;
+      const val = incoming[field];
+      if (val === undefined) continue;
+      edits.push({ svc, field, meta, val });
+      changedKeys.push(`integrations.${svc}.${field}`);
+    }
+  }
+
+  if (isRoots) {
+    // ── Roots legacy path (UNCHANGED): storefront_config + process.env mirror.
+    const upsert = tdb().prepare(
+      `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+         VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         value_json = excluded.value_json,
+         updated_at = CURRENT_TIMESTAMP,
+         updated_by = excluded.updated_by`
+    );
+    const tx = tdb().transaction(() => {
+      for (const { svc, field, meta, val } of edits) {
         const cfgKey = `integrations.${svc}.${field}`;
         if (val === null || val === '') {
           tdb().prepare('DELETE FROM storefront_config WHERE key = ?').run(cfgKey);
@@ -7009,13 +7060,22 @@ router.put('/api/retail-admin/integrations', requireRetailAdmin, express.json(),
           upsert.run(cfgKey, JSON.stringify(String(val)), req.user.id);
           process.env[meta.env] = String(val);
         }
-        changedKeys.push(cfgKey);
       }
+    });
+    tx();
+  } else {
+    // ── Per-tenant path: encrypted tenant_secrets only. No storefront_config
+    // row, no process.env touch (that env belongs to Roots). setTenantSecrets
+    // treats '' as a clear, so null/'' both delete the row.
+    const map = {};
+    for (const { meta, val } of edits) {
+      map[meta.cred] = (val === null) ? '' : String(val);
     }
-  });
-  tx();
+    setTenantSecrets(tid, map);
+  }
+
   logActivity(req.user.id, req.user.username, 'integrations_update', 'storefront_config', null,
-    { keys: changedKeys.map(k => k.replace(/^integrations\./, '')) }, req.ip);
+    { tenant_id: tid, keys: changedKeys.map(k => k.replace(/^integrations\./, '')) }, req.ip);
   res.json({ success: true, changed: changedKeys.length });
 });
 
@@ -7024,8 +7084,9 @@ router.put('/api/retail-admin/integrations', requireRetailAdmin, express.json(),
 // the credentials reach JD before the office wires a real waybill.
 const jd = require('../lib/jd');
 router.post('/api/retail-admin/integrations/jd/test', requireRetailAdmin, async (req, res) => {
-  if (!jd.jdEnabled()) return res.json({ ok: false, error: 'not_configured' });
-  const r = await jd.pingJd();
+  const jc = integ().jd;
+  if (!jd.jdEnabled(jc)) return res.json({ ok: false, error: 'not_configured' });
+  const r = await jd.pingJd(jc);
   if (r.ok) return res.json({ ok: true, server_time: r.data?.serverTime || null });
   return res.json({ ok: false, error: r.error });
 });
@@ -7070,7 +7131,8 @@ function printerForStore(storeId, prefs) {
 // synchronous (tenant DB stays bound); the returned promise covers only the
 // network POST. `pcfg` overrides the resolved store printer (used by tests).
 function printOrderById(orderId, prefs, pcfg) {
-  if (!_feie.feieEnabled()) return Promise.resolve({ ok: false, msg: 'not_configured' });
+  const fc = integ().feie;   // the fulfilling tenant's own Feieyun account
+  if (!_feie.feieEnabled(fc)) return Promise.resolve({ ok: false, msg: 'not_configured' });
   const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
   if (!order) return Promise.resolve({ ok: false, msg: 'order_not_found' });
   const p = prefs || loadPrinterPrefs();
@@ -7079,7 +7141,7 @@ function printOrderById(orderId, prefs, pcfg) {
   const items = tdb().prepare('SELECT * FROM retail_order_items WHERE order_id = ? ORDER BY id').all(orderId);
   const tpl = _feie.TEMPLATE_IDS.includes(printer.template) ? printer.template : 'receipt';
   const content = _feie.renderOrder(tpl, order, items, p.shop_name);
-  return _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 });
+  return _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, fc);
 }
 
 router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
@@ -7098,7 +7160,7 @@ router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: {
     auto_print: prefs.auto_print,
     shop_name:  prefs.shop_name,
-    enabled:    _feie.feieEnabled(),
+    enabled:    _feie.feieEnabled(integ().feie),
     templates:  _feie.TEMPLATE_IDS,
     stores,
   }});
@@ -7140,7 +7202,7 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), (req
 // Test print to ONE store's printer. Body: { store_id }. Prints the latest
 // real order for that store if there is one, otherwise a sample slip.
 router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, res) => {
-  if (!_feie.feieEnabled()) return res.json({ ok: false, error: 'not_configured' });
+  if (!_feie.feieEnabled(integ().feie)) return res.json({ ok: false, error: 'not_configured' });
   const prefs = loadPrinterPrefs();
   const storeId = parseInt(req.body?.store_id, 10);
   const printer = prefs.by_store[String(storeId)];
@@ -7163,7 +7225,7 @@ router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, re
     };
     const items = [{ name_cn: '测试商品', name_en: 'Test item', qty: 1, unit_price: 18, line_total: 18 }];
     const content = _feie.renderOrder(tpl, sample, items, prefs.shop_name);
-    r = await _feie.printContent(content, { sn: printer.sn, copies: 1 });
+    r = await _feie.printContent(content, { sn: printer.sn, copies: 1 }, integ().feie);
   }
   if (r.ok) return res.json({ ok: true });
   res.json({ ok: false, error: r.msg || 'print_failed' });
@@ -7175,10 +7237,11 @@ router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, re
 // than success, but a network round-trip with a parseable JSON body is
 // proof the auth credentials reach kd100.
 router.post('/api/retail-admin/integrations/kd100/test', requireRetailAdmin, async (req, res) => {
-  if (!tracking.kd100Enabled()) return res.json({ ok: false, error: 'not_configured' });
+  const kc = integ().kd100;
+  if (!tracking.kd100Enabled(kc)) return res.json({ ok: false, error: 'not_configured' });
   const r = await tracking.subscribeWithKd100({
     orderId: 0, carrierCode: 'jd', trackingNumber: '__TEST__INVALID__', recipientPhone: null,
-  });
+  }, kc);
   // Either success (kd100 happily accepted the dummy) or a meaningful
   // error string from kd100 = auth reached them. Network/HTTP errors
   // surface as kd100_request_failed.
@@ -7265,12 +7328,15 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
   logActivity(req.user.id, req.user.username, 'tracking_set', 'retail_order', id,
     { carrier, number, shipment_id: shipment.id, mode: shipment.mode }, req.ip);
 
-  // Fire-and-forget kd100 subscription against the shipment row.
-  if (tracking.kd100Enabled() && tracking.KD100_CARRIER_MAP[carrier]) {
+  // Fire-and-forget kd100 subscription against the shipment row. Resolve the
+  // tenant's kd100 creds synchronously (before the async fire) so the deferred
+  // subscribe runs under this tenant's own account.
+  const kc = integ().kd100;
+  if (tracking.kd100Enabled(kc) && tracking.KD100_CARRIER_MAP[carrier]) {
     tracking.subscribeWithKd100({
       orderId: id, carrierCode: carrier, trackingNumber: number,
       recipientPhone: o.recipient_phone,
-    }).then(r => {
+    }, kc).then(r => {
       if (r.ok) {
         tdb().prepare("UPDATE retail_shipments SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(shipment.id);
         if (shipment.id === shipments[0].id) {
@@ -7293,7 +7359,7 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
       id,
       shipment_id: shipment.id,
       tracking: buildShipmentTrackingView(fresh),
-      kd100_enabled: tracking.kd100Enabled(),
+      kd100_enabled: tracking.kd100Enabled(kc),
       kd100_supported: !!tracking.KD100_CARRIER_MAP[carrier],
     },
   });
@@ -7535,6 +7601,7 @@ router.post('/api/retail-admin/orders/bulk-tracking', requireRetailAdmin, expres
 
   const results = [];
   const subscribeQueue = [];   // { orderId, carrier, number, phone } — fired after the response.
+  const kc = integ().kd100;    // this tenant's own kd100 account (captured in-scope)
 
   for (const e of entries) {
     const orderNo = String(e.order_no || '').trim();
@@ -7590,7 +7657,7 @@ router.post('/api/retail-admin/orders/bulk-tracking', requireRetailAdmin, expres
       try { notifyOrderStatusChange(o.id, 'dispatched'); } catch (e) { /* best-effort */ }
     }
 
-    if (tracking.kd100Enabled() && tracking.KD100_CARRIER_MAP[carrier]) {
+    if (tracking.kd100Enabled(kc) && tracking.KD100_CARRIER_MAP[carrier]) {
       subscribeQueue.push({ orderId: o.id, carrier, number, phone: o.recipient_phone });
     }
 
@@ -7603,7 +7670,7 @@ router.post('/api/retail-admin/orders/bulk-tracking', requireRetailAdmin, expres
   for (const q of subscribeQueue) {
     tracking.subscribeWithKd100({
       orderId: q.orderId, carrierCode: q.carrier, trackingNumber: q.number, recipientPhone: q.phone,
-    }).then(r => {
+    }, kc).then(r => {
       if (r.ok) {
         tdb().prepare("UPDATE retail_orders SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(q.orderId);
       } else {
@@ -7621,7 +7688,8 @@ router.post('/api/retail-admin/orders/:id/tracking/resubscribe', requireRetailAd
   const shipmentIdReq = req.query.shipment_id ? parseInt(req.query.shipment_id, 10) : null;
   const o = tdb().prepare('SELECT id, recipient_phone FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
-  if (!tracking.kd100Enabled()) return res.status(409).json({ success: false, error: 'kd100_not_configured' });
+  const kc = integ().kd100;
+  if (!tracking.kd100Enabled(kc)) return res.status(409).json({ success: false, error: 'kd100_not_configured' });
   const shipments = ensureShipments(id);
   const s = shipmentIdReq
     ? shipments.find(x => x.id === shipmentIdReq)
@@ -7630,7 +7698,7 @@ router.post('/api/retail-admin/orders/:id/tracking/resubscribe', requireRetailAd
   const r = await tracking.subscribeWithKd100({
     orderId: id, carrierCode: s.tracking_carrier, trackingNumber: s.tracking_number,
     recipientPhone: o.recipient_phone,
-  });
+  }, kc);
   if (r.ok) {
     tdb().prepare("UPDATE retail_shipments SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(s.id);
     if (s.id === shipments[0].id) {

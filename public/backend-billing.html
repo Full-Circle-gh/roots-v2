@@ -24,7 +24,8 @@
     background-image: radial-gradient(120% 60% at 50% 0%, rgba(107,142,111,.06) 0%, transparent 55%);
   }
   .wrap { width: 100%; max-width: 720px; }
-  .back { display: inline-block; color: var(--faint); text-decoration: none; font-size: 12.5px; margin-bottom: 18px; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+  .back { display: inline-block; color: var(--faint); text-decoration: none; font-size: 12.5px; }
   .back:hover { color: var(--muted); }
   .brand { display: flex; align-items: center; gap: 10px; }
   .brand .mark { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line-2); display: flex; align-items: center; justify-content: center; }
@@ -85,7 +86,10 @@
 </head>
 <body>
   <div class="wrap">
-    <a class="back" href="/retail-admin">← Back to backend · 返回后台</a>
+    <div class="topbar">
+      <a class="back" href="/retail-admin">← Back to backend · 返回后台</a>
+      <a class="back" href="#" id="signoutLink">Sign out · 退出登录 →</a>
+    </div>
     <div class="brand">
       <div class="mark" aria-hidden="true">
         <svg width="20" height="20" viewBox="0 0 24 24">
@@ -129,6 +133,12 @@
 <script>
 (function () {
   const $ = s => document.querySelector(s);
+  const signoutLink = document.getElementById('signoutLink');
+  if (signoutLink) signoutLink.addEventListener('click', async (e) => {
+    e.preventDefault();
+    try { await fetch('/api/backend/logout', { method: 'POST', credentials: 'same-origin' }); } catch (_) {}
+    location.href = '/backend/login';
+  });
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const money = (cents, cur) => (cur === 'CNY' || !cur ? '¥' : cur + ' ') + (Number(cents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const fmtDate = s => { if (!s) return '—'; const d = new Date(String(s).replace(' ', 'T') + 'Z'); return isNaN(d) ? esc(s) : d.toISOString().slice(0, 10); };
