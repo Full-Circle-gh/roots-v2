@@ -678,6 +678,7 @@
 .vp-opt.sold-out { opacity: 0.5; }
 .vp-opt-main { display: flex; align-items: baseline; gap: 16rpx; flex-wrap: wrap; min-width: 0; }
 .vp-opt-label { font-size: calc(32rpx * var(--font-scale)); color: var(--ink); }
+.vp-opt-weight { font-size: calc(22rpx * var(--font-scale)); color: var(--ink-soft, #8a8575); letter-spacing: 0.02em; }
 .vp-opt-low { font-size: calc(20rpx * var(--font-scale)); color: #E96174; font-weight: 700; letter-spacing: 0.04em; }
 .vp-opt-oos {
   font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.1em;

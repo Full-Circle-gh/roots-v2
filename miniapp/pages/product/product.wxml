@@ -274,6 +274,7 @@
                 data-id="{{opt.id}}" bindtap="vpChoose">
             <view class="vp-opt-main">
               <text class="vp-opt-label f-bear">{{opt.label}}</text>
+              <text wx:if="{{opt.weight}}" class="vp-opt-weight f-toni">{{opt.weight}}</text>
               <text wx:if="{{opt.low}}" class="vp-opt-low f-toni">{{opt.low}}</text>
               <text wx:if="{{opt.soldOut}}" class="vp-opt-oos f-toni">{{oosLabel}}</text>
             </view>

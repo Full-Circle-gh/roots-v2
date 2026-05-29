@@ -714,6 +714,7 @@ Page({
       return {
         id: m.id,
         label: lang.pickLabel(m.variant_label, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
+        weight: (m.size || '').toString().trim(),
         price: eff > 0 ? money(eff) : '',
         priceWas: isFlash && regular > 0 ? money(regular) : '',
         isFlash,
