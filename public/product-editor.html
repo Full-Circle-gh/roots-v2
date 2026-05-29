@@ -1381,11 +1381,37 @@ function peRenderPicker() {
   peRenderPickerList();
   const s = document.getElementById('pe-picker-search'); if (s) s.focus();
 }
+// Collapse variant rows so a product family with N sizes/flavors appears as a
+// single entry in the switcher/picker. Variants share a variant_group_id and
+// usually carry the same EN/CN name — listing each one was confusing (the
+// user saw "All Natural Peanut Butter" twice with no way to tell them apart).
+// We keep the first row per group (lowest id, stable) and tag it with the
+// variant count so the operator knows the family has sub-rows.
+function _peDedupVariants(list) {
+  const seen = new Map();
+  const out = [];
+  list.forEach(p => {
+    const key = p.variant_group_id ? 'g' + p.variant_group_id : 'p' + p.id;
+    const prev = seen.get(key);
+    if (!prev) {
+      const clone = Object.assign({}, p, { _variantCount: 1 });
+      seen.set(key, clone);
+      out.push(clone);
+    } else {
+      prev._variantCount += 1;
+      // Prefer the lowest-id row as the canonical entry so the choice is stable.
+      if (p.id < prev.id) {
+        Object.assign(prev, p, { _variantCount: prev._variantCount });
+      }
+    }
+  });
+  return out;
+}
 function peRenderPickerList() {
   const list = document.getElementById('pe-picker-list');
   if (!list) return;
   const q = (document.getElementById('pe-picker-search')?.value || '').trim().toLowerCase();
-  let rows = PA_ALL_PRODUCTS.slice().sort((a, b) => (a.name_en || '').localeCompare(b.name_en || ''));
+  let rows = _peDedupVariants(PA_ALL_PRODUCTS).sort((a, b) => (a.name_en || '').localeCompare(b.name_en || ''));
   if (q) rows = rows.filter(p =>
     ((p.name_en || '') + ' ' + (p.name_cn || '') + ' ' + (p.sku || '')).toLowerCase().includes(q));
   if (!rows.length) {
@@ -1448,8 +1474,18 @@ function _peSwitcherOutside(e) {
 let _peSwitcherActive = -1;   // keyboard-highlighted row in the filtered list
 function _peSwitcherFiltered() {
   const q = (document.getElementById('pe-switcher-search')?.value || '').trim().toLowerCase();
-  const rows = PA_ALL_PRODUCTS.slice().sort((a, b) =>
-    (a.name_en || '').localeCompare(b.name_en || ''));
+  // Dedup variant rows — see _peDedupVariants. Keep the currently-edited
+  // product as the canonical entry if it belongs to a group so the "current"
+  // highlight lands on the right row.
+  let rows = _peDedupVariants(PA_ALL_PRODUCTS);
+  if (PA_CURRENT && PA_CURRENT.variant_group_id) {
+    const i = rows.findIndex(p => p.variant_group_id === PA_CURRENT.variant_group_id);
+    if (i >= 0) {
+      const cnt = rows[i]._variantCount;
+      rows[i] = Object.assign({}, PA_CURRENT, { _variantCount: cnt });
+    }
+  }
+  rows.sort((a, b) => (a.name_en || '').localeCompare(b.name_en || ''));
   if (!q) return rows;
   return rows.filter(p => (
     (p.name_en || '') + ' ' + (p.name_cn || '') + ' ' + (p.sku || '')
@@ -1467,8 +1503,11 @@ function peRenderSwitcherList() {
   list.innerHTML = rows.map((p, i) => {
     const cur = PA_CURRENT && p.id === PA_CURRENT.id;
     const pub = p.is_published === 1;
+    const vcount = p._variantCount > 1
+      ? ' <small>· ' + p._variantCount + cuT(' variants', ' 个规格') + '</small>'
+      : '';
     const name = escapeHtml(p.name_en || '—') +
-      (p.name_cn ? ' <small>' + escapeHtml(p.name_cn) + '</small>' : '');
+      (p.name_cn ? ' <small>' + escapeHtml(p.name_cn) + '</small>' : '') + vcount;
     const badge = pub
       ? '<span class="pe-switcher-item-badge pub">' + cuT('Live', '已上架') + '</span>'
       : '<span class="pe-switcher-item-badge">' + cuT('Draft', '草稿') + '</span>';
