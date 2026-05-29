@@ -7044,6 +7044,59 @@
             </div>
           </div>
 
+          <!-- Notification strip color -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Notification strip · 通知条颜色</h3>
+              <div class="muted">The slim strip across the top of the greeting card on Home that surfaces unread updates ("📣 N new updates · Tap to view"). Pick a brand-aligned preset or paste a custom hex. · 首页问候卡顶部的小通知条颜色。</div>
+            </div>
+            <select id="cfg-theme-notifColor" class="picker-source">
+              <option value="#C43A6A">Berry · 莓果红</option>
+              <option value="#3A5A30">Forest · 森林绿</option>
+              <option value="#E87A3A">Carrot · 胡萝卜橙</option>
+              <option value="#F0A050">Papaya · 木瓜橙</option>
+              <option value="#CCD900">Lime · 青柠</option>
+              <option value="#1a1a17">Ink · 墨黑</option>
+            </select>
+            <div class="opt-grid" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));">
+              <div class="opt" data-target="cfg-theme-notifColor" data-value="#C43A6A">
+                <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #C43A6A; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
+                <div class="opt-label">Berry</div>
+                <div class="opt-sub">Default</div>
+              </div>
+              <div class="opt" data-target="cfg-theme-notifColor" data-value="#3A5A30">
+                <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #3A5A30; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
+                <div class="opt-label">Forest</div>
+                <div class="opt-sub">Deep green</div>
+              </div>
+              <div class="opt" data-target="cfg-theme-notifColor" data-value="#E87A3A">
+                <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #E87A3A; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
+                <div class="opt-label">Carrot</div>
+                <div class="opt-sub">Warm orange</div>
+              </div>
+              <div class="opt" data-target="cfg-theme-notifColor" data-value="#F0A050">
+                <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #F0A050; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
+                <div class="opt-label">Papaya</div>
+                <div class="opt-sub">Soft peach</div>
+              </div>
+              <div class="opt" data-target="cfg-theme-notifColor" data-value="#CCD900">
+                <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #CCD900; color: #1a1a17; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
+                <div class="opt-label">Lime</div>
+                <div class="opt-sub">Brand accent</div>
+              </div>
+              <div class="opt" data-target="cfg-theme-notifColor" data-value="#1a1a17">
+                <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #1a1a17; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
+                <div class="opt-label">Ink</div>
+                <div class="opt-sub">High contrast</div>
+              </div>
+            </div>
+            <div style="margin-top: 14px; display: flex; align-items: center; gap: 10px;">
+              <label class="muted" style="font-size: 12px;">Custom hex · 自定义</label>
+              <input id="cfg-theme-notifColorCustom" type="text" maxlength="7" placeholder="#C43A6A" style="width: 110px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; font-family: var(--f-mono); font-size: 13px;" oninput="onNotifHexInput(this.value)">
+              <span id="cfg-theme-notifColorSwatch" style="display: inline-block; width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line); background: #C43A6A;"></span>
+            </div>
+          </div>
+
           <!-- Language -->
           <div class="group-card">
             <div class="group-card-head">
@@ -8149,10 +8202,26 @@ function applyVisualPreviews() {
   // owns the bottom-bar theme + icon design + colour overrides.)
 }
 
+// Live update for the notif-strip custom hex field: drives the swatch
+// chip next to it, plus clears the preset select when the user has typed
+// their own colour so the save handler picks the custom value.
+function onNotifHexInput(raw) {
+  const v = String(raw || '').trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+    $('#cfg-theme-notifColorSwatch').style.background = v;
+    // Sync preset highlight off if custom value doesn't match any preset.
+    const sel = $('#cfg-theme-notifColor');
+    const presets = Array.from(sel.options).map(o => o.value.toUpperCase());
+    if (!presets.includes(v.toUpperCase())) {
+      document.querySelectorAll('.opt[data-target="cfg-theme-notifColor"]').forEach(t => t.classList.remove('active'));
+    }
+  }
+}
+
 // ── Sub-panel visual picker (Accent / Language / IP / Shop layout) ──
 const PICKER_TARGETS = [
   'cfg-theme-accent', 'cfg-theme-language', 'cfg-theme-ipIntensity',
-  'cfg-shop-layout'
+  'cfg-theme-notifColor', 'cfg-shop-layout'
 ];
 document.addEventListener('click', e => {
   const opt = e.target.closest('.opt[data-target]');
@@ -8227,6 +8296,12 @@ function applyFeePreviews() {
 document.addEventListener('change', e => {
   const id = e.target.id;
   if (id === 'cfg-theme-accent') applyVisualPreviews();
+  if (id === 'cfg-theme-notifColor') {
+    // Picking a preset wins over a previously-typed custom hex — clear it
+    // and refresh the swatch so the chosen colour is unambiguous.
+    $('#cfg-theme-notifColorCustom').value = '';
+    $('#cfg-theme-notifColorSwatch').style.background = e.target.value;
+  }
   if (PICKER_TARGETS.includes(id)) syncAllPickers();
   if (id?.startsWith('cfg-shop-')) { applyShopFiltersPreview(); applySortPreview(); }
   if (id?.startsWith('cfg-fees-')) applyFeePreviews();
@@ -11128,6 +11203,22 @@ async function loadConfig() {
     $('#cfg-theme-accent').value         = c.theme?.accent || 'lime-leaf';
     $('#cfg-theme-language').value       = c.theme?.language || 'bilingual';
     $('#cfg-theme-ipIntensity').value    = c.theme?.ipIntensity || 'soft';
+    // Notification strip color — saved as a hex string. If it matches a
+    // preset, the select picks it up; if it's custom, the custom hex
+    // field shows it instead. Either way the swatch reflects the chosen
+    // value live.
+    {
+      const nc = (c.theme?.notif_color || '#C43A6A').toUpperCase();
+      const sel = $('#cfg-theme-notifColor');
+      const presets = Array.from(sel.options).map(o => o.value.toUpperCase());
+      if (presets.includes(nc)) {
+        sel.value = nc;
+        $('#cfg-theme-notifColorCustom').value = '';
+      } else {
+        $('#cfg-theme-notifColorCustom').value = nc;
+      }
+      $('#cfg-theme-notifColorSwatch').style.background = nc;
+    }
     $('#cfg-fees-freeShippingThreshold').value = c.fees?.freeShippingThreshold ?? 399;
     $('#cfg-fees-standardShipping').value      = c.fees?.standardShipping ?? 12;
     $('#cfg-fees-sameDayDelivery').value       = c.fees?.sameDayDelivery ?? 18;
@@ -11193,6 +11284,12 @@ async function saveConfig() {
     'theme.accent':                $('#cfg-theme-accent').value,
     'theme.language':              $('#cfg-theme-language').value,
     'theme.ipIntensity':           $('#cfg-theme-ipIntensity').value,
+    'theme.notif_color':           (function () {
+      // Custom hex wins if set + valid; otherwise the preset dropdown value.
+      const custom = ($('#cfg-theme-notifColorCustom').value || '').trim();
+      if (/^#[0-9a-fA-F]{6}$/.test(custom)) return custom.toUpperCase();
+      return $('#cfg-theme-notifColor').value;
+    })(),
     'fees.freeShippingThreshold':  Number($('#cfg-fees-freeShippingThreshold').value) || 0,
     'fees.standardShipping':       Number($('#cfg-fees-standardShipping').value) || 0,
     'fees.sameDayDelivery':        Number($('#cfg-fees-sameDayDelivery').value) || 0,

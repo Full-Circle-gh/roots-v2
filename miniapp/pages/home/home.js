@@ -27,6 +27,17 @@ Page({
     // greeting block (top-right). Hydrated in refresh() from
     // /api/retail/notifications/unread-count when the customer is authed.
     notifUnread: 0,
+    // Title of the newest unread row; surfaced in the strip when count===1
+    // (cheaper UX than "1 new update — go look").
+    notifLatestEn: '',
+    notifLatestCn: '',
+    // Any unread row is category='broadcast' → strip icon flips to 📣.
+    notifHasBroadcast: false,
+    // Newest unread arrived within the last 6h → strip icon pulses.
+    notifIsFresh: false,
+    // Operator-configurable strip background colour (theme.notif_color).
+    // Empty string lets the WXSS default win.
+    notifColor: '',
     lang: 'en',
     loading: true,
     // User-configured page background, set in /cms → Theme picker. Empty
@@ -122,8 +133,33 @@ Page({
     if (!app?.globalData?.token) return;
     try {
       const res = await api.get('/api/retail/notifications/unread-count');
-      this.setData({ notifUnread: (res && res.count) || 0 });
+      this.setData(this._buildNotifPatch(res));
     } catch {}
+  },
+
+  // Translate the unread-count endpoint's payload into the data shape the
+  // greeting-strip props expect. Centralised so refresh() and onShow's
+  // side-fetch derive the same fields the same way. "Fresh" = newest
+  // unread row arrived within the last 6 hours; drives the icon pulse.
+  _buildNotifPatch(res) {
+    if (!res || typeof res !== 'object') {
+      return { notifUnread: 0, notifLatestEn: '', notifLatestCn: '', notifHasBroadcast: false, notifIsFresh: false };
+    }
+    let fresh = false;
+    if (res.latest_created_at) {
+      // Server stores 'YYYY-MM-DD HH:MM:SS' (UTC) or ISO. Normalise to UTC.
+      const raw = String(res.latest_created_at);
+      const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z';
+      const t = new Date(iso).getTime();
+      if (Number.isFinite(t)) fresh = (Date.now() - t) < 6 * 60 * 60 * 1000;
+    }
+    return {
+      notifUnread:       res.count || 0,
+      notifLatestEn:     res.latest_title_en || '',
+      notifLatestCn:     res.latest_title_cn || '',
+      notifHasBroadcast: !!res.has_broadcast,
+      notifIsFresh:      fresh,
+    };
   },
 
   async onPullDownRefresh() {
@@ -155,6 +191,7 @@ Page({
         hasToken ? api.get('/api/retail/notifications/unread-count').catch(() => null) : Promise.resolve(null),
       ]);
       const layout = cfg?.home?.layout || [];
+      const notifPatch = this._buildNotifPatch(notif);
       this.setData({
         layout,
         products: Array.isArray(prods) ? prods : (prods?.data || []),
@@ -163,7 +200,11 @@ Page({
         affiliate: aff || null,
         polls: Array.isArray(polls) ? polls : (polls?.data || []),
         favorites: Array.isArray(favs) ? favs : (favs?.data || []),
-        notifUnread: (notif && notif.count) || 0,
+        ...notifPatch,
+        // Strip background is operator-configurable in retail-admin →
+        // Settings → Brand & theme → Notification strip. Empty string
+        // means "use the WXSS default".
+        notifColor: (cfg && cfg.theme && cfg.theme.notif_color) || '',
         themeBg: theme.getPageBg(app),
         loading: false,
       });

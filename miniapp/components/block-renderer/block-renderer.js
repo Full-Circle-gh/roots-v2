@@ -52,6 +52,21 @@ Component({
     // value comes from /api/retail/notifications/unread-count; the host
     // page (home.js) fetches it and threads it through.
     notifUnread: { type: Number, value: 0 },
+    // Title of the most-recent unread notification — when notifUnread === 1
+    // we surface it directly in the strip ("📣 NEW BREAD COLLECTION · Tap")
+    // instead of the generic "1 new update". Falls back to generic when
+    // the title is empty.
+    notifLatestEn: { type: String, value: '' },
+    notifLatestCn: { type: String, value: '' },
+    // Any unread row is a broadcast → strip icon flips to 📣. Otherwise 🔔.
+    notifHasBroadcast: { type: Boolean, value: false },
+    // Newest unread row arrived in the last 6 hours → pulse the icon to
+    // draw the eye without being annoying. home.js computes this from the
+    // server-returned latest_created_at.
+    notifIsFresh: { type: Boolean, value: false },
+    // Operator-configurable strip background colour (theme.notif_color in
+    // storefront_config). Empty string = let the WXSS default win.
+    notifColor: { type: String, value: '' },
   },
 
   data: {
@@ -110,6 +125,25 @@ Component({
   observers: {
     'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites': function () {
       this.recompute();
+    },
+    // Recompute the human-readable strip text whenever the count, the
+    // latest-row titles, or the language changes. When N=1 with a title
+    // we show the title itself; otherwise the generic count.
+    'notifUnread, notifLatestEn, notifLatestCn, lang': function (unread, en, cn, lang) {
+      const cnMode = lang === 'cn';
+      let text = '';
+      if (unread > 0) {
+        if (unread === 1) {
+          const t = cnMode ? (cn || en) : (en || cn);
+          if (t) text = t + (cnMode ? ' · 点击查看' : ' · Tap to view');
+        }
+        if (!text) {
+          text = cnMode
+            ? unread + ' 条新消息 · 点击查看'
+            : unread + (unread === 1 ? ' new update · Tap to view' : ' new updates · Tap to view');
+        }
+      }
+      this.setData({ notifPreviewText: text });
     },
   },
 

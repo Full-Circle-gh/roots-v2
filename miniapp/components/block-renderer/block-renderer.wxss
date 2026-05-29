@@ -1921,42 +1921,63 @@
   text-transform: uppercase;
 }
 
-/* Notif strip — slim full-width row pinned to the top of the greeting
-   card. Only renders when notifUnread > 0. Berry background with explicit
-   bilingual copy ("updates" / "消息") so it's unmistakably a notification
-   cue, not a points pill. catchtap routes to /pages/notifications without
-   firing the greeting CTA tap underneath. */
+/* Notif strip — flush full-bleed row at the top of the greeting card. Sits
+   against the card's inner edges using negative margins that exactly cancel
+   each variant's padding (and the 3rpx border on the default/card variant).
+   Default background = berry; replaced by an inline style when the operator
+   sets theme.notif_color in the Mini App Backend. */
 .gr-notif-strip {
   display: flex;
   align-items: center;
-  gap: 10rpx;
-  margin: -10rpx -16rpx 18rpx;
-  padding: 14rpx 22rpx;
+  gap: 12rpx;
+  /* Default (card) variant: card padding 32rpx 36rpx 28rpx + 3rpx border —
+     pull the strip up and out to overlap the border so it reads as the
+     card's top edge, not a sticker placed inside it. */
+  margin: -35rpx -39rpx 24rpx;
+  padding: 16rpx 36rpx;
   background: var(--berry);
   color: #fff;
-  border-radius: 6rpx;
 }
 .gr-notif-icon {
-  font-size: calc(24rpx * var(--font-scale));
+  font-size: calc(28rpx * var(--font-scale));
   line-height: 1;
+  flex-shrink: 0;
+}
+.gr-notif-icon.fresh {
+  /* Subtle 2s breathing pulse for newly-arrived unreads (within last 6h).
+     Draws the eye without being obnoxious. */
+  animation: gr-notif-pulse 2s ease-in-out infinite;
+}
+@keyframes gr-notif-pulse {
+  0%,100% { transform: scale(1);    opacity: 1;   }
+  50%     { transform: scale(1.22); opacity: 0.85;}
 }
 .gr-notif-text {
   flex: 1;
+  min-width: 0;
   font-family: var(--f-toni);
   font-size: calc(22rpx * var(--font-scale));
   letter-spacing: 0.04em;
   line-height: 1.2;
+  /* One-line ellipsis so a long broadcast title (when N=1 we surface it
+     directly) collapses to "Title that is too lon…" instead of wrapping
+     and pushing the arrow off the strip. */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .gr-notif-arrow {
   font-family: var(--f-bear);
   font-size: calc(26rpx * var(--font-scale));
   line-height: 1;
+  flex-shrink: 0;
 }
-/* Banner variant has no inner border / horizontal inset to bleed against
-   — pull the strip to the edges so it spans the full coloured field too. */
-.greet-blk-banner .gr-notif-strip { margin: 0 -44rpx 22rpx; border-radius: 0; padding-left: 44rpx; padding-right: 44rpx; }
-/* Split variant has the same full-bleed treatment. */
-.greet-blk-split  .gr-notif-strip { margin: 0 -44rpx 18rpx; border-radius: 0; padding-left: 44rpx; padding-right: 44rpx; }
+/* Banner = borderless, padded 44rpx all round → no border to overlap. */
+.greet-blk-banner .gr-notif-strip { margin: -44rpx -44rpx 28rpx; padding: 18rpx 44rpx; }
+/* Split = borderless, padded 28rpx 44rpx. */
+.greet-blk-split  .gr-notif-strip { margin: -28rpx -44rpx 22rpx; padding: 16rpx 44rpx; }
+/* Inline = padded 22rpx 28rpx, with the same 3rpx border as default. */
+.greet-blk-inline .gr-notif-strip { margin: -25rpx -31rpx 16rpx; padding: 12rpx 28rpx; }
 
 /* Greeting — view variants */
 .gr-headline-sm { font-size: calc(38rpx * var(--font-scale)); line-height: 1.05; padding-top: 4rpx; margin-top: 8rpx; }

@@ -600,13 +600,17 @@
 </view>
 
 <view wx:elif="{{type === 'greeting' && greeting}}" class="greet-blk greet-blk-{{greeting.view}}" style="background:{{bg}};color:{{fg}}" bindtap="onGreetingCtaTap">
-  <!-- Unread notifications strip — slim full-width row at the top of the
-       greeting card, only renders when notifUnread > 0. Explicit copy
-       ("updates" / "消息") so it can't be mistaken for points; catchtap
-       so it doesn't bubble to the greeting CTA. -->
-  <view wx:if="{{notifUnread > 0}}" class="gr-notif-strip" catchtap="onNotifTap">
-    <text class="gr-notif-icon">📣</text>
-    <text class="gr-notif-text">{{notifUnread > 99 ? '99+' : notifUnread}} {{lang === 'cn' ? '条新消息 · 点击查看' : (notifUnread === 1 ? 'new update · Tap to view' : 'new updates · Tap to view')}}</text>
+  <!-- Unread notifications strip — flush full-bleed row at the top of the
+       greeting card, only renders when notifUnread > 0. Background colour
+       comes from theme.notif_color (operator-configurable, defaults to
+       berry via WXSS). Icon swaps between 📣 (any broadcast unread) and
+       🔔 (orders/refunds only); icon pulses when the newest unread row
+       arrived in the last 6h. When count === 1 we show the row title
+       itself (computed in observer); otherwise the generic count.
+       catchtap so it doesn't bubble to the greeting CTA. -->
+  <view wx:if="{{notifUnread > 0}}" class="gr-notif-strip" catchtap="onNotifTap" style="{{notifColor ? 'background:' + notifColor : ''}}">
+    <text class="gr-notif-icon {{notifIsFresh ? 'fresh' : ''}}">{{notifHasBroadcast ? '📣' : '🔔'}}</text>
+    <text class="gr-notif-text">{{notifPreviewText}}</text>
     <text class="gr-notif-arrow">→</text>
   </view>
   <!-- Split: greeting + CTA on left, big points wallet on right -->

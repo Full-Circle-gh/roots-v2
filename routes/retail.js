@@ -1511,11 +1511,37 @@ router.get('/api/retail/notifications', requireRetailAuth, (req, res) => {
 });
 
 // GET /api/retail/notifications/unread-count — lightweight badge poll.
+// Returns enough to render the greeting-strip preview without a second
+// fetch: total count, the latest unread row's title (for the "N=1 preview"
+// design), whether any unread row is a broadcast (icon swap), and the
+// latest unread timestamp (drives the "fresh" pulse animation).
 router.get('/api/retail/notifications/unread-count', requireRetailAuth, (req, res) => {
   const n = tdb().prepare(
     'SELECT COUNT(*) AS n FROM retail_notifications WHERE customer_id = ? AND read_at IS NULL'
   ).get(req.customer.id).n;
-  res.json({ success: true, data: { count: n || 0 } });
+  let latest_title_en = '', latest_title_cn = '', has_broadcast = 0, latest_created_at = null;
+  if (n > 0) {
+    const latest = tdb().prepare(
+      `SELECT title_en, title_cn, created_at FROM retail_notifications
+        WHERE customer_id = ? AND read_at IS NULL
+        ORDER BY id DESC LIMIT 1`
+    ).get(req.customer.id);
+    if (latest) {
+      latest_title_en = latest.title_en || '';
+      latest_title_cn = latest.title_cn || '';
+      latest_created_at = latest.created_at || null;
+    }
+    has_broadcast = tdb().prepare(
+      `SELECT 1 FROM retail_notifications
+        WHERE customer_id = ? AND read_at IS NULL AND category = 'broadcast' LIMIT 1`
+    ).get(req.customer.id) ? 1 : 0;
+  }
+  res.json({ success: true, data: {
+    count: n || 0,
+    latest_title_en, latest_title_cn,
+    has_broadcast: !!has_broadcast,
+    latest_created_at,
+  } });
 });
 
 // POST /api/retail/notifications/read-all — mark every unread one read.
