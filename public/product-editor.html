@@ -1336,17 +1336,27 @@ async function peBoot() {
   // Show a product picker instead of dead-ending.
   if (!id) { peShowPicker(); return; }
   try {
-    // cache: 'no-store' — the LIST endpoint has no Cache-Control header, so
-    // some browsers return the pre-save copy on refresh and the editor looks
-    // like it lost the user's changes. Always force-revalidate on boot.
-    const res = await fetch('/api/retail-admin/products', { credentials: 'same-origin', cache: 'no-store' });
-    if (res.status === 401 || res.status === 403) { location.href = '/'; return; }
-    const j = await res.json();
-    if (!j.success) throw new Error(j.error || 'load_failed');
-    PA_ALL_PRODUCTS = j.data || [];
-    const p = PA_ALL_PRODUCTS.find(x => x.id === id);
-    if (!p) { peFatal('Product #' + id + ' not found · 未找到产品'); return; }
-    peMount(p);
+    // Hydrate from TWO sources:
+    //  • the FULL single product (/products/:id) — the only endpoint that
+    //    ships description_blocks. The LIST omits them (has_blocks flag only),
+    //    so booting the editor off the list left _paBlocks=[] and the next
+    //    save wiped the saved designer sections. This is THE fix for
+    //    "designer doesn't save / refresh wipes changes".
+    //  • the LIST (/products) — needed only to populate the product switcher.
+    // cache: 'no-store' so a refresh always reflects the just-saved copy.
+    const [fullRes, listRes] = await Promise.all([
+      fetch('/api/retail-admin/products/' + id, { credentials: 'same-origin', cache: 'no-store' }),
+      fetch('/api/retail-admin/products',       { credentials: 'same-origin', cache: 'no-store' }),
+    ]);
+    if (fullRes.status === 401 || fullRes.status === 403) { location.href = '/'; return; }
+    const jFull = await fullRes.json();
+    if (!jFull.success) {
+      if (fullRes.status === 404) { peFatal('Product #' + id + ' not found · 未找到产品'); return; }
+      throw new Error(jFull.error || 'load_failed');
+    }
+    const jList = await listRes.json();
+    PA_ALL_PRODUCTS = (jList && jList.success && jList.data) ? jList.data : [];
+    peMount(jFull.data);
   } catch (e) {
     peFatal('Failed to load · 加载失败: ' + escapeHtml(e.message));
   }
@@ -1519,7 +1529,7 @@ function peRenderSwitcherList() {
       '<span class="pe-switcher-item-name">' + name + '</span>' + badge + '</button>';
   }).join('');
 }
-function peSwitchProduct(id) {
+async function peSwitchProduct(id) {
   id = Number(id);
   if (PA_CURRENT && id === PA_CURRENT.id) { peCloseSwitcher(); return; }
   const p = PA_ALL_PRODUCTS.find(x => x.id === id);
@@ -1530,7 +1540,21 @@ function peSwitchProduct(id) {
     return;
   }
   peCloseSwitcher();
-  peMount(p);
+  // Fetch the FULL product — the cached list row has no description_blocks, so
+  // mounting it directly would blank the designer and the next save would wipe
+  // the saved sections.
+  try {
+    const r = await fetch('/api/retail-admin/products/' + id, { credentials: 'same-origin', cache: 'no-store' });
+    if (r.status === 401 || r.status === 403) { location.href = '/'; return; }
+    const j = await r.json();
+    if (j && j.success && j.data) {
+      try { history.replaceState(null, '', '?id=' + id); } catch (e) {}
+      peMount(j.data);
+      return;
+    }
+  } catch (e) {}
+  // Fall back to a full reload (peBoot does the full fetch) if the fetch failed.
+  location.href = '/product-editor?id=' + id;
 }
 // Arrow-key navigation inside the switcher search box.
 function peSwitcherKeydown(e) {

@@ -5279,6 +5279,39 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   res.json({ success: true, data: row });
 });
 
+// GET /api/retail-admin/products/:id — FULL single product, including the
+// heavy description_blocks JSON the LIST endpoint deliberately omits. The
+// product-page editor MUST hydrate from this (not the list): the list only
+// ships a has_blocks flag, so booting the editor off the list left
+// _paBlocks=[] and the next save wiped the saved designer sections. Same row
+// shape as the PATCH response so peMount can consume either.
+router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
+  const id = parseInt(req.params.id, 10);
+  const row = tdb().prepare(
+    `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
+            description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
+            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
+            variant_group_id, variant_label, variant_sort,
+            colophon_character, colophon_tagline_en, colophon_tagline_cn
+       FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1`
+  ).get(id);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  if (typeof row.description_blocks === 'string' && row.description_blocks) {
+    try { row.description_blocks = JSON.parse(row.description_blocks); } catch { row.description_blocks = null; }
+  } else { row.description_blocks = null; }
+  if (typeof row.bundle === 'string' && row.bundle.trim()) {
+    try { row.bundle = JSON.parse(row.bundle); } catch { row.bundle = null; }
+  } else { row.bundle = null; }
+  if (typeof row.nutrition === 'string' && row.nutrition.trim()) {
+    try {
+      const n = JSON.parse(row.nutrition);
+      row.nutrition = (n && (n.basis_en || n.basis_cn || (n.rows || []).length)) ? n : null;
+    } catch { row.nutrition = null; }
+  } else { row.nutrition = null; }
+  res.json({ success: true, data: row });
+});
+
 // Create a product straight from the Mini App Backend product page. Standalone
 // path (no kitchen needed): name + the basic commercial fields, is_active=1.
 router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (req, res) => {
