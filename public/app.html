@@ -10685,11 +10685,26 @@ function _renderBundleCard(ctx) {
   return _kbuRenderInner();
 }
 
+// Variant/size hint so two rows of the same product (e.g. "Hummus Asli" in
+// two sizes) are tellable apart in the picker + chips. Prefer the variant
+// label (the operator-set "size"); fall back to weight. Returns '' when the
+// product has neither (a plain non-variant product needs no hint).
+function _kbuVariantText(p) {
+  const lbl = (p && p.variant_label || '').trim();
+  const wt  = (p && p.weight || '').trim();
+  if (lbl && wt && lbl !== wt) return lbl + ' · ' + wt;
+  return lbl || wt || '';
+}
+function _kbuVariantBadge(p) {
+  const t = _kbuVariantText(p);
+  return t ? ` <span style="background:rgba(204,217,0,.18);color:#6d7a2a;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:700;white-space:nowrap">🎨 ${esc(t)}</span>` : '';
+}
 function _kbuRenderInner() {
   const nameOf = id => {
     const pp = (_products || []).find(x => Number(x.id) === Number(id));
     if (!pp) return '#' + id;
-    return (pp.name_en || '') + (pp.name_cn ? ' · ' + pp.name_cn : '');
+    const t = _kbuVariantText(pp);
+    return (pp.name_en || '') + (pp.name_cn ? ' · ' + pp.name_cn : '') + (t ? ' (' + t + ')' : '');
   };
   const chip = id => `<span style="display:inline-flex;align-items:center;gap:6px;background:var(--gray);border-radius:99px;padding:4px 10px;font-size:12px">
       <span title="${esc(nameOf(id))}" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nameOf(id))}</span>
@@ -10766,11 +10781,13 @@ function _kbuPickerList() {
     .filter(p => !q
       || (p.name_en || '').toLowerCase().includes(q)
       || (p.name_cn || '').includes(q)
-      || (p.sku || '').toLowerCase().includes(q))
+      || (p.sku || '').toLowerCase().includes(q)
+      || (p.variant_label || '').toLowerCase().includes(q)
+      || (p.weight || '').toLowerCase().includes(q))
     .slice(0, 40);
   el.innerHTML = matches.length
     ? matches.map(p => `<div onclick="_kbuPick(${p.id})" style="padding:7px 10px;border-radius:5px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;gap:8px;align-items:baseline" onmouseover="this.style.background='var(--gray)'" onmouseout="this.style.background='transparent'">
-        <span>${esc((p.name_en||'')+(p.name_cn?' · '+p.name_cn:''))}</span>
+        <span>${esc((p.name_en||'')+(p.name_cn?' · '+p.name_cn:''))}${_kbuVariantBadge(p)}</span>
         ${p.sku?`<span style="color:var(--muted);font-family:monospace;font-size:11px">${esc(p.sku)}</span>`:''}
       </div>`).join('')
     : `<div style="color:var(--muted);font-size:12px;padding:6px 4px;font-style:italic">No matches · 无匹配</div>`;
