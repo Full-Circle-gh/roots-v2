@@ -1013,7 +1013,10 @@ router.post('/api/retail/auth', express.json(), async (req, res) => {
 // by /api/retail/auth). The pay-specific creds are unique to this block.
 const WECHAT_PAY_MCH_ID        = process.env.WECHAT_PAY_MCH_ID || '';
 const WECHAT_PAY_API_V3_KEY    = process.env.WECHAT_PAY_API_V3_KEY || '';
-const WECHAT_PAY_PRIVATE_KEY   = process.env.WECHAT_PAY_PRIVATE_KEY || '';
+// Stored in .env as a single line with literal \n escapes; normalize back to
+// real newlines so crypto.sign() gets a valid PEM. Harmless if the value
+// already has real newlines (dotenv multiline) — the replace just no-ops.
+const WECHAT_PAY_PRIVATE_KEY   = (process.env.WECHAT_PAY_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 const WECHAT_PAY_SERIAL_NO     = process.env.WECHAT_PAY_SERIAL_NO || '';
 const WECHAT_PAY_NOTIFY_URL    = process.env.WECHAT_PAY_NOTIFY_URL || 'https://rootskitchenchina.com/api/retail/payment/wechat/callback';
 const WECHAT_PAY_DEV_MODE = !WECHAT_PAY_MCH_ID || !WECHAT_PAY_PRIVATE_KEY || !WECHAT_APP_ID;
@@ -1023,6 +1026,14 @@ if (WECHAT_PAY_DEV_MODE) {
   console.error('[security]    A caller who reaches these endpoints can mark orders paid and credit wallet balances for free.');
   console.error('[security]    Fix: set WECHAT_PAY_MCH_ID + WECHAT_PAY_PRIVATE_KEY + WECHAT_PAY_API_V3_KEY + WECHAT_PAY_SERIAL_NO in .env, then pm2 restart roots-v2.');
 }
+
+// Prefix the WeChat out_trade_no so roots-v2's orders can never collide with
+// the live OUT1N app's orders on the SHARED merchant ledger (both backends
+// use one mch_id). The internal order_no stays unprefixed for display/search;
+// only the value sent to WeChat + stored in retail_payments.out_trade_no
+// carries this prefix, and the callback echoes it straight back.
+const WX_OUT_TRADE_PREFIX = 'FC';
+const wxOutTradeNo = (orderNo) => WX_OUT_TRADE_PREFIX + orderNo;
 
 // Build the wx.requestPayment params from a prepay_id. Signature is over
 // the 5-line message: appid, timestamp, nonce, package, signed with the
@@ -1060,7 +1071,7 @@ async function wechatPayCreate(order, openid) {
     appid:        WECHAT_APP_ID,
     mchid:        WECHAT_PAY_MCH_ID,
     description:  'Roots order ' + order.order_no,
-    out_trade_no: order.order_no,
+    out_trade_no: wxOutTradeNo(order.order_no),
     notify_url:   WECHAT_PAY_NOTIFY_URL,
     amount:       { total: Math.round(Number(order.total) * 100), currency: 'CNY' },
     payer:        { openid },
@@ -1197,7 +1208,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
       // Save the out_trade_no link for the async callback to find this order
       tdb().prepare(
         "UPDATE retail_payments SET out_trade_no = ? WHERE order_id = ? AND status = 'pending'"
-      ).run(order.order_no, orderId);
+      ).run(wxOutTradeNo(order.order_no), orderId);
       return res.json({ success: true, data: { method: 'wechat', ...params } });
     } catch (e) {
       console.error('[wechat-pay/create]', e);
