@@ -5488,7 +5488,10 @@
       .bc-row { display: flex; gap: var(--s3); margin-bottom: var(--s3); }
       .bc-row > * { flex: 1; min-width: 0; }
       .bc-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-      .bc-input, .bc-textarea, .bc-select { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font: inherit; background: var(--bg-app); color: var(--text); }
+      /* background-color (not the shorthand) so the global `select`
+         chevron image + no-repeat + right-aligned position survive. */
+      .bc-input, .bc-textarea, .bc-select { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font: inherit; background-color: var(--bg-app); color: var(--text); }
+      .bc-select { padding-right: 32px; }
       .bc-textarea { min-height: 70px; resize: vertical; }
       .bc-actions { display: flex; gap: var(--s3); align-items: center; margin-top: var(--s4); }
       .bc-audience { background: var(--bg-app); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: var(--muted); border: 1px dashed var(--line); }
