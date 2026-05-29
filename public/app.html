@@ -9686,11 +9686,67 @@ function _renderProdTopBar(ctx) {
   const { p, safeName } = ctx;
   return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap">
     <button class="btn btn-secondary" onclick="renderProducts()">← Back 返回</button>
+    <span id="pd-save-status" data-pid="${p.id}" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 10px;border-radius:999px;background:#ecfdf5;color:#065f46"><span style="width:7px;height:7px;border-radius:50%;background:#22c55e;display:inline-block"></span>Saved · 已保存</span>
     <span style="flex:1"></span>
     <button class="btn btn-secondary" onclick="printProductLabel(${p.id})">🏷 Print Label 打印标签</button>
     <button class="btn btn-danger" onclick="deleteProduct(${p.id},'${safeName}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1.5 14a2 2 0 0 1-2 1.8H8.5a2 2 0 0 1-2-1.8L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete 删除</button>
   </div>`;
 }
+
+// Save-status pill for the product detail page. The pill lives in the top
+// bar (`#pd-save-status`); a one-time fetch wrapper below flips it whenever a
+// write hits an endpoint that affects this product, so every inline-edit /
+// stock button / variant tweak shows the same Saving → Saved feedback.
+function _pdSetStatus(state) {
+  const pill = document.getElementById('pd-save-status');
+  if (!pill) return;
+  const m = {
+    saving: { txt: 'Saving… · 保存中',       bg: '#fef3c7', fg: '#92400e', dot: '#f59e0b' },
+    saved:  { txt: 'Saved · 已保存',          bg: '#ecfdf5', fg: '#065f46', dot: '#22c55e' },
+    error:  { txt: 'Save failed · 保存失败',  bg: '#fee2e2', fg: '#991b1b', dot: '#dc2626' },
+  };
+  const s = m[state] || m.saved;
+  const stamp = state === 'saved' ? ' ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+  pill.style.background = s.bg;
+  pill.style.color = s.fg;
+  pill.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:${s.dot};display:inline-block"></span>${s.txt}${stamp}`;
+}
+
+// Wrap fetch once so any write to a product-shaped endpoint updates the pill.
+// No-op when the product detail page isn't on screen (pill element absent).
+(function _pdInstallSaveTracker(){
+  if (window._pdFetchWrapped) return;
+  window._pdFetchWrapped = true;
+  const _origFetch = window.fetch.bind(window);
+  let _inflight = 0;
+  window.fetch = function(input, init) {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+    const isWrite = method !== 'GET' && method !== 'HEAD';
+    const touchesProduct = isWrite && /\/api\/(products|inventory|stock|recipes\/.+\/cost)/.test(url);
+    const hasPill = !!document.getElementById('pd-save-status');
+    if (!touchesProduct || !hasPill) return _origFetch(input, init);
+    _inflight++;
+    _pdSetStatus('saving');
+    const p = _origFetch(input, init);
+    p.then(r => {
+      let ok = r && r.ok;
+      // /api endpoints return {success:false} with HTTP 200, so peek the body.
+      if (ok && r.clone) {
+        return r.clone().json().then(j => {
+          _inflight--;
+          if (_inflight === 0) _pdSetStatus(j && j.success === false ? 'error' : 'saved');
+        }).catch(() => { _inflight--; if (_inflight === 0) _pdSetStatus('saved'); });
+      }
+      _inflight--;
+      if (_inflight === 0) _pdSetStatus(ok ? 'saved' : 'error');
+    }, () => {
+      _inflight--;
+      if (_inflight === 0) _pdSetStatus('error');
+    });
+    return p;
+  };
+})();
 
 // Inline photo-upload from the product detail hero. Opens the file picker,
 // processes the chosen file with the same resize/encode pipeline as the
