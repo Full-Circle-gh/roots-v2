@@ -35,7 +35,7 @@
         <view class="line-total-stack">
           <view wx:if="{{item.is_flash}}" class="line-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
           <view wx:if="{{item.regular_total}}" class="line-was f-aleo">¥{{item.regular_total}}</view>
-          <view class="line-total f-gothic {{item.is_flash ? 'is-flash' : ''}}">¥{{item.line_total}}</view>
+          <view class="line-total f-bear {{item.is_flash ? 'is-flash' : ''}}">¥{{item.line_total}}</view>
         </view>
       </view>
     </view>
@@ -43,7 +43,7 @@
     <view class="checkout">
       <view wx:if="{{savedTotal}}" class="saved-row">
         <view class="saved-label f-toni">{{lang === 'cn' ? '已省' : 'YOU SAVED'}}</view>
-        <view class="saved-amount f-gothic">−¥{{savedTotal}}</view>
+        <view class="saved-amount f-bear">−¥{{savedTotal}}</view>
       </view>
       <view class="total-row">
         <view class="f-bear total-label">Total</view>

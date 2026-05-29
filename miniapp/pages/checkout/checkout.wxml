@@ -20,14 +20,14 @@
           <text>{{item.display_name}}</text>
           <text class="line-meta"> ×{{item.qty}}</text>
         </view>
-        <view class="line-total f-gothic">
+        <view class="line-total f-bear">
           <view class="lt-now"><text wx:if="{{item.on_flash}}" class="line-was">{{item.was_total}}</text>{{item.line_total}}</view>
           <text wx:if="{{item.on_flash}}" class="line-save">{{item.save_text}}</text>
         </view>
       </view>
       <view wx:if="{{voucherCode}}" class="order-line voucher-line">
         <view class="line-name">{{voucherCode}}</view>
-        <view class="line-total f-gothic">{{voucherFreeShip ? (lang === 'cn' ? '免运费' : 'Free ship') : '−¥' + voucherDiscount}}</view>
+        <view class="line-total f-bear">{{voucherFreeShip ? (lang === 'cn' ? '免运费' : 'Free ship') : '−¥' + voucherDiscount}}</view>
       </view>
     </view>
   </view>
@@ -416,31 +416,31 @@
   <view class="section breakdown">
     <view class="bd-row">
       <view class="bd-label">{{lang === 'cn' ? '小计' : 'Subtotal'}}</view>
-      <view class="bd-val f-gothic">¥{{subtotal}}</view>
+      <view class="bd-val f-bear">¥{{subtotal}}</view>
     </view>
     <view wx:if="{{!zoneError}}" class="bd-row">
       <view class="bd-label">{{lang === 'cn' ? '配送费' : 'Delivery'}}</view>
-      <view class="bd-val f-gothic">{{(freeShipping && !voucherDiscount) || voucherFreeShip ? copy.free : '¥' + deliveryFee}}</view>
+      <view class="bd-val f-bear">{{(freeShipping && !voucherDiscount) || voucherFreeShip ? copy.free : '¥' + deliveryFee}}</view>
     </view>
     <view wx:if="{{packingFee && packingFee !== '0.00'}}" class="bd-row">
       <view class="bd-label">{{lang === 'cn' ? '包装费' : 'Packing fee'}}</view>
-      <view class="bd-val f-gothic">¥{{packingFee}}</view>
+      <view class="bd-val f-bear">¥{{packingFee}}</view>
     </view>
     <view wx:if="{{voucherDiscount}}" class="bd-row">
       <view class="bd-label">{{lang === 'cn' ? '优惠券' : 'Coupon'}}</view>
-      <view class="bd-val f-gothic">−¥{{voucherDiscount}}</view>
+      <view class="bd-val f-bear">−¥{{voucherDiscount}}</view>
     </view>
     <view wx:if="{{paymentMethod === 'points' && pointsToUse > 0}}" class="bd-row">
       <view class="bd-label">{{lang === 'cn' ? '积分抵扣 · ' : 'Points · '}}{{pointsToUse}}{{lang === 'cn' ? ' 积分' : ' pts'}}</view>
-      <view class="bd-val f-gothic">−¥{{pointsDiscount}}</view>
+      <view class="bd-val f-bear">−¥{{pointsDiscount}}</view>
     </view>
     <view wx:if="{{savedTotal}}" class="bd-row bd-saved">
       <view class="bd-label">{{lang === 'cn' ? '已省' : 'You saved'}}</view>
-      <view class="bd-val f-gothic">−¥{{savedTotal}}</view>
+      <view class="bd-val f-bear">−¥{{savedTotal}}</view>
     </view>
     <view wx:if="{{pointsEarnedPreview > 0}}" class="bd-row bd-points">
       <view class="bd-label">{{lang === 'cn' ? '本单获得积分' : "You'll earn"}}</view>
-      <view class="bd-val f-gothic">+{{pointsEarnedPreview}} {{lang === 'cn' ? '积分' : 'pts'}}</view>
+      <view class="bd-val f-bear">+{{pointsEarnedPreview}} {{lang === 'cn' ? '积分' : 'pts'}}</view>
     </view>
   </view>
 

@@ -371,18 +371,21 @@ Page({
       const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
       const isFlash = !members && !!p.is_on_flash && eff < regular;
 
-      let price, priceWas = '', outOfStock, soldUnits, subline;
+      let price, priceWas = '', pricePrefix = '', outOfStock, soldUnits, subline;
       if (members) {
-        // Collapsed variant card: price reads "from ¥<lowest>" (or a plain
-        // price when every size costs the same). Sold-out only when ALL
-        // sizes are out. Sold count sums across the group. The per-size
-        // weight subline is dropped — sizes differ, the picker shows them.
+        // Collapsed variant card. `price` is just the lowest amount (e.g.
+        // "¥89") so it stays in League Gothic at the cards' big price size;
+        // the "from"/"起" qualifier rides above as a smaller caption
+        // (.row-price-prefix etc.) so the number column doesn't blow out
+        // and wrap into the title — every layout looks like "from / ¥89"
+        // stacked, not "from ¥89" mashed on one line. Sold-out only when
+        // ALL sizes are out; sold count sums across the group; per-size
+        // weight subline is dropped (sizes differ, picker shows them).
         const prices = members.map(_effPrice).filter(v => v > 0);
         const minP = prices.length ? Math.min(...prices) : 0;
         const allSame = prices.length > 0 && prices.every(v => v === minP);
-        price = minP > 0
-          ? (allSame ? money(minP) : (L === 'cn' ? money(minP) + ' 起' : 'from ' + money(minP)))
-          : '—';
+        price = minP > 0 ? money(minP) : '—';
+        pricePrefix = (minP > 0 && !allSame) ? (L === 'cn' ? '起' : 'from') : '';
         outOfStock = members.every(m => m.stock != null && Number(m.stock) <= 0);
         soldUnits = members.reduce((s, m) => s + (Number(m.units_sold) || 0), 0);
         subline = '';
@@ -410,6 +413,7 @@ Page({
         image: absUrl(p.image_url) || absUrl(p.image_data) || '',
         price,
         priceWas,
+        pricePrefix,
         isFlash,
         hasVariants: !!members,
         variantHint: members

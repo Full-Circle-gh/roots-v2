@@ -116,7 +116,7 @@
             {{lang === 'cn' ? '写评价 →' : 'Leave a review →'}}
           </view>
         </view>
-        <view class="item-total f-gothic">{{item.line_total_display}}</view>
+        <view class="item-total f-bear">{{item.line_total_display}}</view>
       </view>
     </view>
 
@@ -124,11 +124,11 @@
     <view class="section">
       <view class="money-row">
         <view>{{copy.subtotalLabel}}</view>
-        <view class="f-gothic">{{subtotal}}</view>
+        <view class="f-bear">{{subtotal}}</view>
       </view>
       <view class="money-row">
         <view>{{copy.shippingLabel}}</view>
-        <view class="f-gothic">{{shipping}}</view>
+        <view class="f-bear">{{shipping}}</view>
       </view>
       <view class="money-row total">
         <view class="f-bear">{{copy.totalLabel}}</view>

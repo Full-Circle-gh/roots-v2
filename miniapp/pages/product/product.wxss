@@ -229,16 +229,18 @@
   color: var(--olive);
 }
 
-/* Tagline — Aleo italic. Optional inline [[ink-mark]] span renders the
-   bracketed word(s) on a lime slab (v1 ink-mark spec). The office types
-   the markers in the Tagline field, e.g. "Bright, punchy, [[alive]]." */
+/* Tagline — Toni Grotesk bold display caps (matches the product editor
+   preview's .pa-prev-tagline so what the office sees IS what the customer
+   sees). Optional inline [[ink-mark]] span renders the bracketed word(s)
+   on a lime slab (v1 ink-mark spec). The office types the markers in the
+   Tagline field, e.g. "Bright, punchy, [[alive]]." The f-toni class on
+   the view itself applies the uppercase + letter-spacing — don't repeat
+   them here. */
 .tagline {
-  margin-top: 28rpx;
-  font-family: var(--f-aleo);
-  font-style: italic;
-  font-size: calc(32rpx * var(--font-scale));
-  font-weight: 400;
-  line-height: 1.35;
+  margin-top: 20rpx;
+  font-size: calc(26rpx * var(--font-scale));
+  font-weight: 700;
+  line-height: 1.25;
   color: var(--ink);
 }
 .ink-mark {

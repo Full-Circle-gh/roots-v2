@@ -162,7 +162,8 @@
               <view class="row-right">
                 <view class="row-price-stack">
                   <view wx:if="{{item.isFlash}}" class="row-was f-aleo">{{item.priceWas}}</view>
-                  <view class="row-price f-gothic {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</view>
+                  <view wx:if="{{item.pricePrefix}}" class="row-price-prefix f-toni">{{item.pricePrefix}}</view>
+                  <view class="row-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</view>
                 </view>
                 <view wx:if="{{!item.outOfStock}}"
                       class="row-plus f-bear"
@@ -215,7 +216,8 @@
             <view class="gal-foot">
               <view class="gal-price-stack">
                 <text wx:if="{{item.isFlash}}" class="gal-was f-aleo">{{item.priceWas}}</text>
-                <text class="gal-price f-gothic {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+                <text wx:if="{{item.pricePrefix}}" class="gal-price-prefix f-toni">{{item.pricePrefix}}</text>
+                <text class="gal-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
               </view>
               <view wx:if="{{!item.outOfStock}}" class="gal-plus f-bear"
                     id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart">+</view>
@@ -262,7 +264,8 @@
             <view class="card-foot">
               <view class="price-stack">
                 <text wx:if="{{item.isFlash}}" class="price-was f-aleo">{{item.priceWas}}</text>
-                <text class="price f-gothic {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+                <text wx:if="{{item.pricePrefix}}" class="price-prefix f-toni">{{item.pricePrefix}}</text>
+                <text class="price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
               </view>
               <view wx:if="{{!item.outOfStock}}" class="card-plus f-bear"
                     id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart">+</view>
@@ -297,7 +300,7 @@
           </view>
           <view class="vp-opt-price-stack">
             <text wx:if="{{opt.isFlash}}" class="vp-opt-was f-aleo">{{opt.priceWas}}</text>
-            <text class="vp-opt-price f-gothic {{opt.isFlash ? 'is-flash' : ''}}">{{opt.price}}</text>
+            <text class="vp-opt-price f-bear {{opt.isFlash ? 'is-flash' : ''}}">{{opt.price}}</text>
           </view>
         </view>
       </view>

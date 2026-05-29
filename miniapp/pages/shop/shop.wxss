@@ -261,6 +261,8 @@
 .card .price.is-flash { color: #E96174; font-weight: 700; }
 .card .price-stack { display: flex; align-items: baseline; gap: 8rpx; margin-top: 4rpx; }
 .card .price-stack .price { margin-top: 0; }
+.card .price-prefix { font-size: calc(18rpx * var(--font-scale)); color: var(--olive); }
+.grid-3 .card .price-prefix { font-size: calc(14rpx * var(--font-scale)); }
 .card .price-was {
   font-size: calc(20rpx * var(--font-scale));
   color: rgba(0, 0, 0, 0.4);
@@ -316,6 +318,7 @@
 .gal-price { font-size: calc(48rpx * var(--font-scale)); letter-spacing: 0.04em; color: var(--ink); }
 .gal-price.is-flash { color: #E96174; font-weight: 700; }
 .gal-price-stack { display: flex; align-items: baseline; gap: 12rpx; }
+.gal-price-prefix { font-size: calc(22rpx * var(--font-scale)); color: var(--olive); }
 .gal-was {
   font-size: calc(28rpx * var(--font-scale));
   color: rgba(0, 0, 0, 0.4);
@@ -417,6 +420,14 @@
 .row-price { font-size: calc(40rpx * var(--font-scale)); color: var(--ink); letter-spacing: 0.04em; line-height: 1; }
 .row-price.is-flash { color: #E96174; font-weight: 700; }
 .row-price-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 4rpx; }
+/* "from"/"起" qualifier on variant cards. Sits above the price as a small
+   caption so the number column stays compact and the title doesn't get
+   squeezed into 3 lines by a "from ¥89" string that wouldn't fit. */
+.row-price-prefix {
+  font-size: calc(18rpx * var(--font-scale));
+  color: var(--olive);
+  line-height: 1;
+}
 .row-was {
   font-size: calc(22rpx * var(--font-scale));
   color: rgba(0, 0, 0, 0.4);

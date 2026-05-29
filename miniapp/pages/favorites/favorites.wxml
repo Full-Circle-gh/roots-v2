@@ -57,13 +57,13 @@
         <view class="heart-pip" data-id="{{item.id}}" catchtap="onUnfavorite">
           <view class="heart-glyph">♥</view>
         </view>
-        <view wx:if="{{item.priceDrop}}" class="tag-drop f-gothic">−¥{{item.priceDrop}}</view>
+        <view wx:if="{{item.priceDrop}}" class="tag-drop f-bear">−¥{{item.priceDrop}}</view>
         <view wx:if="{{item.soldOut}}" class="tag-out f-gothic">{{copy.soldOut}}</view>
       </view>
       <view class="card-name f-bear">{{item.name}}</view>
       <view wx:if="{{item.subLine}}" class="card-sub f-yuan">{{item.subLine}}</view>
       <view class="card-foot">
-        <text class="card-price f-gothic">{{item.priceDisplay}}</text>
+        <text class="card-price f-bear">{{item.priceDisplay}}</text>
         <view wx:if="{{!item.soldOut}}" class="quick-add" data-id="{{item.id}}" catchtap="onQuickAdd">
           <text class="quick-add-glyph f-bear">+</text>
         </view>
@@ -82,12 +82,12 @@
         <view wx:if="{{item.subLine}}" class="row-sub f-yuan">{{item.subLine}}</view>
         <view class="row-tags">
           <text class="row-saved f-toni">{{item.savedDisplay}}</text>
-          <text wx:if="{{item.priceDrop}}" class="row-drop f-gothic">−¥{{item.priceDrop}}</text>
+          <text wx:if="{{item.priceDrop}}" class="row-drop f-bear">−¥{{item.priceDrop}}</text>
           <text wx:if="{{item.soldOut}}" class="row-out f-gothic">{{copy.soldOut}}</text>
         </view>
       </view>
       <view class="row-right">
-        <text class="row-price f-gothic">{{item.priceDisplay}}</text>
+        <text class="row-price f-bear">{{item.priceDisplay}}</text>
         <view wx:if="{{!item.soldOut}}" class="quick-add" data-id="{{item.id}}" catchtap="onQuickAdd">
           <text class="quick-add-glyph f-bear">+</text>
         </view>
