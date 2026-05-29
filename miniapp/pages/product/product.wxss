@@ -470,9 +470,9 @@
 
 /* ─── Nutrition · v1 nut-card ────────────────────────────────────────
    Bordered card; title in Bear Serif top-left, italic Aleo basis line
-   top-right. Parent rows (Energy / Fat / Carbohydrate) render bold with
-   forest value; child rows (Saturated / Unsaturated / Sugars) indent
-   with em-dash prefix, smaller, muted. Tabular numeric values right. */
+   top-right. Parent rows (Energy / Fat / Carbohydrate) render with a bold
+   label; child rows (Saturated / Unsaturated / Sugars) indent with em-dash
+   prefix, smaller, muted. All top-level values are ink. Tabular nums right. */
 .nutrition {
   margin-top: 48rpx;
   margin-left: -44rpx;
@@ -527,7 +527,6 @@
   color: var(--ink);
 }
 .nrow.bold .nrow-l { font-weight: 700; }
-.nrow.bold .nrow-r { color: var(--forest); }
 .nrow.child {
   padding: 10rpx 0 10rpx 44rpx;
   border-bottom: 2rpx dashed rgba(26, 26, 23, 0.12);
