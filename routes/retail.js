@@ -1110,48 +1110,108 @@ function normalizePem(raw, label) {
   return `-----BEGIN ${label}-----\n${body}\n-----END ${label}-----\n`;
 }
 
+// ── Per-tenant payment resolution (Platform readiness ③) ───────────────────
+// Every pay/refund/callback path resolves THIS request's WeChat Pay creds
+// instead of the module-level env consts. Roots / unscoped → the env bundle
+// (byte-for-byte the old values); a tenant → its OWN merchant, or devMode when
+// unconfigured — a tenant NEVER borrows Roots' merchant (that would be the
+// cross-tenant money leak this whole layer exists to prevent). The forward
+// paths (create / refund / topup) run inside the request's tenant ALS scope,
+// so currentTenantId() is the right tenant; the async callbacks instead carry
+// the tenant id in the URL path (a WeChat→server POST has no session/header).
+function payContext() {
+  const c = getTenantCreds(currentTenantId());
+  return { appId: c.wechat.appId, ...c.pay };  // {appId,mchId,apiV3Key,privateKey,serialNo,devMode}
+}
+
+// Public origin for tenant async-notify URLs — the same server/domain as Roots
+// (single-server SaaS), just a tenant-scoped path. Derived from Roots' notify
+// URL so there's no new config to set; WeChat Pay v3 accepts any HTTPS URL.
+const PAY_NOTIFY_ORIGIN = (() => {
+  try { return new URL(WECHAT_PAY_NOTIFY_URL).origin; } catch { return 'https://rootskitchenchina.com'; }
+})();
+function wechatNotifyUrl() {
+  const tid = currentTenantId();
+  return tid === ROOTS_TENANT_ID ? WECHAT_PAY_NOTIFY_URL
+    : `${PAY_NOTIFY_ORIGIN}/api/retail/payment/wechat/callback/${tid}`;
+}
+function wechatRefundNotifyUrl() {
+  const tid = currentTenantId();
+  return tid === ROOTS_TENANT_ID ? WECHAT_PAY_REFUND_NOTIFY_URL
+    : `${PAY_NOTIFY_ORIGIN}/api/retail/payment/wechat/refund-callback/${tid}`;
+}
+
+// Brand label for customer-visible payment strings (WeChat description, Alipay
+// subject). Roots → "Roots" (unchanged); a tenant → its own brand_name, so a
+// shopper's payment screen never reads another company's name. (⑦ de-Roots.)
+function tenantBrandLabel() {
+  const tid = currentTenantId();
+  if (tid === ROOTS_TENANT_ID) return 'Roots';
+  try {
+    const t = db.prepare('SELECT brand_name, name FROM tenants WHERE id = ?').get(tid);
+    return (t && (t.brand_name || t.name)) || 'Store';
+  } catch { return 'Store'; }
+}
+function payDescription(orderNo) { return `${tenantBrandLabel()} order ${orderNo}`; }
+
+// Validate a callback :tid path param → an active tenant id (or Roots), else
+// null so an unknown id 404s instead of silently settling on the wrong books.
+function resolveCallbackTid(raw) {
+  const id = parseInt(raw, 10);
+  if (!id) return null;
+  if (id === ROOTS_TENANT_ID) return ROOTS_TENANT_ID;
+  try {
+    const t = db.prepare("SELECT id FROM tenants WHERE id = ? AND status = 'active'").get(id);
+    return t ? id : null;
+  } catch { return null; }
+}
+
 // Build the wx.requestPayment params from a prepay_id. Signature is over
 // the 5-line message: appid, timestamp, nonce, package, signed with the
 // merchant private key (RSA-SHA256 → base64). See WeChat Pay v3 docs.
-function buildWxRequestPaymentParams(prepayId) {
+// `p` is the resolved payContext() for this request (appId + privateKey).
+function buildWxRequestPaymentParams(prepayId, p) {
   const timeStamp = String(Math.floor(Date.now() / 1000));
   const nonceStr  = crypto.randomBytes(16).toString('hex');
   const pkg       = 'prepay_id=' + prepayId;
-  const message   = [WECHAT_APP_ID, timeStamp, nonceStr, pkg, ''].join('\n');
+  const message   = [p.appId, timeStamp, nonceStr, pkg, ''].join('\n');
   const paySign   = crypto.createSign('RSA-SHA256')
                           .update(message)
-                          .sign(WECHAT_PAY_PRIVATE_KEY, 'base64');
+                          .sign(p.privateKey, 'base64');
   return { timeStamp, nonceStr, package: pkg, signType: 'RSA', paySign };
 }
 
 // Sign an outbound HTTP request to api.mch.weixin.qq.com per the v3 spec.
 // Header: Authorization: WECHATPAY2-SHA256-RSA2048 mchid="...",nonce_str="...",
 //         timestamp=...,serial_no="...",signature="..."
-function signMerchantRequest(method, urlPath, body) {
+// `p` is the resolved payContext() (mchId + serialNo + privateKey) for the
+// tenant whose merchant this request is signing against.
+function signMerchantRequest(method, urlPath, body, p) {
   const timestamp = String(Math.floor(Date.now() / 1000));
   const nonceStr  = crypto.randomBytes(16).toString('hex');
   const bodyStr   = body ? JSON.stringify(body) : '';
   const message   = [method.toUpperCase(), urlPath, timestamp, nonceStr, bodyStr].join('\n') + '\n';
   const signature = crypto.createSign('RSA-SHA256')
                           .update(message)
-                          .sign(WECHAT_PAY_PRIVATE_KEY, 'base64');
+                          .sign(p.privateKey, 'base64');
   return 'WECHATPAY2-SHA256-RSA2048 ' +
-    `mchid="${WECHAT_PAY_MCH_ID}",nonce_str="${nonceStr}",timestamp="${timestamp}",serial_no="${WECHAT_PAY_SERIAL_NO}",signature="${signature}"`;
+    `mchid="${p.mchId}",nonce_str="${nonceStr}",timestamp="${timestamp}",serial_no="${p.serialNo}",signature="${signature}"`;
 }
 
-// Real WeChat Pay JSAPI prepare. Returns { prepay_id }.
-async function wechatPayCreate(order, openid) {
+// Real WeChat Pay JSAPI prepare. Returns { prepay_id }. `p` is the resolved
+// payContext() for this request's tenant (own merchant, own AppID).
+async function wechatPayCreate(order, openid, p) {
   const url = 'https://api.mch.weixin.qq.com/v3/pay/transactions/jsapi';
   const body = {
-    appid:        WECHAT_APP_ID,
-    mchid:        WECHAT_PAY_MCH_ID,
-    description:  'Roots order ' + order.order_no,
+    appid:        p.appId,
+    mchid:        p.mchId,
+    description:  payDescription(order.order_no),
     out_trade_no: wxOutTradeNo(order.order_no),
-    notify_url:   WECHAT_PAY_NOTIFY_URL,
+    notify_url:   wechatNotifyUrl(),
     amount:       { total: Math.round(Number(order.total) * 100), currency: 'CNY' },
     payer:        { openid },
   };
-  const auth = signMerchantRequest('POST', '/v3/pay/transactions/jsapi', body);
+  const auth = signMerchantRequest('POST', '/v3/pay/transactions/jsapi', body, p);
   const resp = await fetch(url, {
     method: 'POST',
     headers: {
@@ -1176,15 +1236,16 @@ async function wechatPayCreate(order, openid) {
 // { refund_id, status: 'SUCCESS'|'PROCESSING'|'CLOSED'|'ABNORMAL', ... }.
 // amount.total MUST equal the original transaction total (in cents).
 async function wechatPayRefund({ outTradeNo, outRefundNo, refundCents, totalCents, reason }) {
+  const p = payContext();   // tenant whose merchant issued the original charge
   const urlPath = '/v3/refund/domestic/refunds';
   const body = {
     out_trade_no:  outTradeNo,
     out_refund_no: outRefundNo,
-    notify_url:    WECHAT_PAY_REFUND_NOTIFY_URL,
+    notify_url:    wechatRefundNotifyUrl(),
     amount:        { refund: refundCents, total: totalCents, currency: 'CNY' },
   };
   if (reason) body.reason = String(reason).slice(0, 80);
-  const auth = signMerchantRequest('POST', urlPath, body);
+  const auth = signMerchantRequest('POST', urlPath, body, p);
   const resp = await fetch('https://api.mch.weixin.qq.com' + urlPath, {
     method: 'POST',
     headers: {
@@ -1268,7 +1329,7 @@ async function alipayPrecreate(order) {
   const biz = await alipayApiCall('alipay.trade.precreate', {
     out_trade_no: alipayOutTradeNo(order.order_no),
     total_amount: Number(order.total).toFixed(2),
-    subject:      'Roots order ' + order.order_no,
+    subject:      payDescription(order.order_no),
   }, { notifyUrl: ALIPAY_NOTIFY_URL });
   return biz.qr_code;
 }
@@ -1371,8 +1432,11 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
     'SELECT id, order_no, status, payment_method, total, customer_id FROM retail_orders WHERE id = ? AND customer_id = ?'
   ).get(orderId, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'order_not_found' });
+  // THIS request's WeChat Pay creds (Roots → env bundle = unchanged; a tenant →
+  // its own merchant, or devMode when unconfigured). Resolved once here.
+  const payCtx = payContext();
   if (order.status !== 'pending_payment') {
-    return res.json({ success: true, data: { status: order.status, dev: WECHAT_PAY_DEV_MODE } });
+    return res.json({ success: true, data: { status: order.status, dev: payCtx.devMode } });
   }
 
   // Points-paid orders settle at order-create (points already deducted
@@ -1388,7 +1452,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
     });
   }
 
-  if (WECHAT_PAY_DEV_MODE) {
+  if (payCtx.devMode) {
     // No real merchant — fake the payment and let the customer see "paid".
     markOrderPaid(orderId);
     return res.json({
@@ -1405,8 +1469,8 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
       if (!cust?.openid || cust.openid.startsWith('dev:')) {
         return res.status(409).json({ success: false, error: 'no_real_openid' });
       }
-      const prepayId = await wechatPayCreate(order, cust.openid);
-      const params   = buildWxRequestPaymentParams(prepayId);
+      const prepayId = await wechatPayCreate(order, cust.openid, payCtx);
+      const params   = buildWxRequestPaymentParams(prepayId, payCtx);
       // Save the out_trade_no link for the async callback to find this order
       tdb().prepare(
         "UPDATE retail_payments SET out_trade_no = ? WHERE order_id = ? AND status = 'pending'"
@@ -1425,7 +1489,12 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
   // driven by the async notify (/alipay/callback) with a query fallback in the
   // status poll — both funnel into markOrderPaid(), same as WeChat.
   if (order.payment_method === 'alipay') {
-    if (ALIPAY_DEV_MODE) {
+    // Alipay is Roots-only for now: it reads Roots' global env creds, so a
+    // tenant's Alipay charge would settle to ROOTS' merchant — a money leak.
+    // Non-Roots tenants get alipay_not_configured until per-tenant Alipay is
+    // built (Platform readiness ③ decision 2026-05-29). WeChat Pay is the
+    // mini-app's primary rail and is fully per-tenant above.
+    if (currentTenantId() !== ROOTS_TENANT_ID || ALIPAY_DEV_MODE) {
       return res.status(501).json({ success: false, error: 'alipay_not_configured' });
     }
     try {
@@ -1464,7 +1533,7 @@ router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req,
   // Alipay on each poll so a blocked/missed callback still settles the order.
   // markOrderPaid() is idempotent + guarded by status, so this is safe to
   // re-run; it also fires the auto-print / points / push side effects once.
-  if (order.status === 'pending_payment' && order.payment_method === 'alipay' && !ALIPAY_DEV_MODE) {
+  if (order.status === 'pending_payment' && order.payment_method === 'alipay' && !ALIPAY_DEV_MODE && currentTenantId() === ROOTS_TENANT_ID) {
     try {
       const pay = tdb().prepare(
         "SELECT out_trade_no FROM retail_payments WHERE order_id = ? AND status = 'pending'"
@@ -1484,26 +1553,29 @@ router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req,
 // WeChat Pay async notify. Body looks like:
 //   { id, create_time, resource_type, event_type, summary,
 //     resource: { algorithm, ciphertext, associated_data, nonce, original_type } }
-// The resource field is AES-256-GCM encrypted with WECHAT_PAY_API_V3_KEY.
+// The resource field is AES-256-GCM encrypted with the MERCHANT's APIv3 key.
+//
+// Per-tenant routing: WeChat POSTs here with no session/header, so the tenant
+// is carried in the URL path (/callback/:tid); Roots keeps the legacy
+// unsuffixed path. We resolve THAT tenant's APIv3 key to decrypt and settle
+// inside its data scope (tdb() → the tenant's DB). tid=Roots → mainDb, which
+// is byte-for-byte the old unscoped behaviour.
 //
 // Verification flow (PROD only — DEV mode auto-paid in /create):
-//   1. Validate request signature with WeChat Pay's public cert
+//   1. Validate request signature with WeChat Pay's public cert (still TODO)
 //   2. Decrypt resource → original transaction payload
 //   3. Look up retail_payments by out_trade_no, mark order paid
 //   4. Return { code: 'SUCCESS', message: 'OK' }
 //
 // Failure to verify → return non-200 to make WeChat retry.
-router.post('/api/retail/payment/wechat/callback', express.json(), (req, res) => {
+function handleWechatPayCallback(req, res, tid) {
   try {
     const body = req.body || {};
+    const creds = getTenantCreds(tid).pay;
     // ── TODO (when WECHAT_PAY_PUBLIC_CERT is in .env): verify the request
     // signature using headers Wechatpay-Signature / Wechatpay-Serial /
-    // Wechatpay-Timestamp / Wechatpay-Nonce, then decrypt body.resource.
-    // For now we trust the request only when DEV mode is off AND the
-    // request is on the loopback interface (callbacks only come from
-    // WeChat via the public domain in production; this stops fakes
-    // landing through some other path).
-    if (WECHAT_PAY_DEV_MODE) {
+    // Wechatpay-Timestamp / Wechatpay-Nonce before decrypting body.resource.
+    if (creds.devMode) {
       console.log('[wechat-pay/callback] DEV MODE — ignored (would have decrypted + marked paid)');
       return res.json({ code: 'SUCCESS', message: 'OK' });
     }
@@ -1516,55 +1588,71 @@ router.post('/api/retail/payment/wechat/callback', express.json(), (req, res) =>
     const data      = cipherBuf.slice(0, -16);
     const decipher  = crypto.createDecipheriv(
       'aes-256-gcm',
-      Buffer.from(WECHAT_PAY_API_V3_KEY, 'utf8'),
+      Buffer.from(creds.apiV3Key, 'utf8'),
       Buffer.from(body.resource.nonce, 'utf8')
     );
     decipher.setAuthTag(authTag);
     decipher.setAAD(Buffer.from(body.resource.associated_data || '', 'utf8'));
     const plain = Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
     const txn = JSON.parse(plain);
-    // txn.trade_state === 'SUCCESS' means paid
+    // txn.trade_state === 'SUCCESS' means paid. Settle inside the tenant's data
+    // scope so tdb()/markOrderPaid() hit the right DB.
+    let amountMismatch = false;
     if (txn.trade_state === 'SUCCESS' && txn.out_trade_no) {
-      const pay = tdb().prepare(
-        'SELECT order_id, amount FROM retail_payments WHERE out_trade_no = ? AND status = ?'
-      ).get(txn.out_trade_no, 'pending');
-      if (pay) {
-        // Parity with the Alipay callback: confirm the paid amount matches what
-        // we charged before settling. WeChat Pay v3 reports amount.total in
-        // CENTS; our stored amount is yuan. Mismatch/missing → non-200 so
-        // WeChat retries (a genuine notify always carries the right amount).
-        const paidCents   = Number(txn.amount && txn.amount.total);
-        const expectCents = Math.round(Number(pay.amount) * 100);
-        if (!Number.isFinite(paidCents) || paidCents !== expectCents) {
-          console.warn('[wechat-pay/callback] amount mismatch', txn.out_trade_no, paidCents, expectCents);
-          return res.status(400).json({ code: 'INVALID', message: 'amount_mismatch' });
+      tenantAls.run(getTenantDb(tid), () => {
+        const pay = tdb().prepare(
+          'SELECT order_id, amount FROM retail_payments WHERE out_trade_no = ? AND status = ?'
+        ).get(txn.out_trade_no, 'pending');
+        if (pay) {
+          // Parity with the Alipay callback: confirm the paid amount matches what
+          // we charged before settling. WeChat Pay v3 reports amount.total in
+          // CENTS; our stored amount is yuan. Mismatch/missing → non-200 so
+          // WeChat retries (a genuine notify always carries the right amount).
+          const paidCents   = Number(txn.amount && txn.amount.total);
+          const expectCents = Math.round(Number(pay.amount) * 100);
+          if (!Number.isFinite(paidCents) || paidCents !== expectCents) {
+            console.warn('[wechat-pay/callback] amount mismatch', txn.out_trade_no, paidCents, expectCents);
+            amountMismatch = true;
+            return;
+          }
+          tdb().prepare(
+            "UPDATE retail_payments SET status = 'success', transaction_id = ?, raw_callback_json = ?, completed_at = CURRENT_TIMESTAMP WHERE out_trade_no = ?"
+          ).run(txn.transaction_id || null, plain, txn.out_trade_no);
+          markOrderPaid(pay.order_id);
         }
-        tdb().prepare(
-          "UPDATE retail_payments SET status = 'success', transaction_id = ?, raw_callback_json = ?, completed_at = CURRENT_TIMESTAMP WHERE out_trade_no = ?"
-        ).run(txn.transaction_id || null, plain, txn.out_trade_no);
-        markOrderPaid(pay.order_id);
-      }
+      });
     }
+    if (amountMismatch) return res.status(400).json({ code: 'INVALID', message: 'amount_mismatch' });
     res.json({ code: 'SUCCESS', message: 'OK' });
   } catch (e) {
     console.error('[wechat-pay/callback]', e);
     // Returning non-200 makes WeChat retry the callback (with backoff)
     res.status(500).json({ code: 'FAIL', message: 'internal_error' });
   }
+}
+// Roots keeps the legacy unsuffixed path (env creds, mainDb). Tenants POST to
+// /callback/:tid — the id is validated against the tenants table.
+router.post('/api/retail/payment/wechat/callback', express.json(), (req, res) => handleWechatPayCallback(req, res, ROOTS_TENANT_ID));
+router.post('/api/retail/payment/wechat/callback/:tid', express.json(), (req, res) => {
+  const tid = resolveCallbackTid(req.params.tid);
+  if (!tid) return res.status(404).json({ code: 'INVALID', message: 'unknown_tenant' });
+  handleWechatPayCallback(req, res, tid);
 });
 // WeChat Pay refund-result async notify. Same AES-256-GCM envelope as the
-// payment callback. We already mark the refund 'paid' synchronously when the
-// refund API accepts it, so this is confirmatory — log the final state and
-// flag anything that didn't settle as SUCCESS so an operator can investigate.
-router.post('/api/retail/payment/wechat/refund-callback', express.json(), (req, res) => {
+// payment callback, decrypted with the same tenant's APIv3 key (tid in the
+// path; Roots = legacy unsuffixed). We already mark the refund 'paid'
+// synchronously when the refund API accepts it, so this is confirmatory — log
+// the final state and flag anything that didn't settle as SUCCESS.
+function handleWechatRefundCallback(req, res, tid) {
   try {
-    if (WECHAT_PAY_DEV_MODE) return res.json({ code: 'SUCCESS', message: 'OK' });
+    const creds = getTenantCreds(tid).pay;
+    if (creds.devMode) return res.json({ code: 'SUCCESS', message: 'OK' });
     const r = req.body?.resource;
     if (!r?.ciphertext) return res.status(400).json({ code: 'INVALID', message: 'missing resource' });
     const buf = Buffer.from(r.ciphertext, 'base64');
     const decipher = crypto.createDecipheriv(
       'aes-256-gcm',
-      Buffer.from(WECHAT_PAY_API_V3_KEY, 'utf8'),
+      Buffer.from(creds.apiV3Key, 'utf8'),
       Buffer.from(r.nonce, 'utf8')
     );
     decipher.setAuthTag(buf.slice(-16));
@@ -1573,16 +1661,19 @@ router.post('/api/retail/payment/wechat/refund-callback', express.json(), (req, 
     // Finalize the stored payout reference. The synchronous refund response
     // is usually PROCESSING; this callback fires when WeChat settles it, so we
     // flip the label (e.g. "...(PROCESSING)" → "...(SUCCESS)") instead of
-    // leaving it stale. Mapped via the original transaction's out_trade_no.
+    // leaving it stale. Mapped via the original transaction's out_trade_no, in
+    // the tenant's data scope so tdb() hits the right DB.
     if (info.out_trade_no && info.refund_id) {
-      try {
-        const pay = tdb().prepare('SELECT order_id FROM retail_payments WHERE out_trade_no = ?').get(info.out_trade_no);
-        if (pay?.order_id) {
-          tdb().prepare(
-            'UPDATE retail_orders SET refund_payout_ref = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-          ).run(info.refund_id + ' (' + (info.refund_status || 'SUCCESS') + ')', pay.order_id);
-        }
-      } catch (e) { console.error('[wechat-refund/callback db]', e); }
+      tenantAls.run(getTenantDb(tid), () => {
+        try {
+          const pay = tdb().prepare('SELECT order_id FROM retail_payments WHERE out_trade_no = ?').get(info.out_trade_no);
+          if (pay?.order_id) {
+            tdb().prepare(
+              'UPDATE retail_orders SET refund_payout_ref = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+            ).run(info.refund_id + ' (' + (info.refund_status || 'SUCCESS') + ')', pay.order_id);
+          }
+        } catch (e) { console.error('[wechat-refund/callback db]', e); }
+      });
     }
     if (info.refund_status === 'SUCCESS') {
       console.log('[wechat-refund/callback] SUCCESS', info.out_trade_no, info.refund_id);
@@ -1594,6 +1685,12 @@ router.post('/api/retail/payment/wechat/refund-callback', express.json(), (req, 
     console.error('[wechat-refund/callback]', e);
     res.status(500).json({ code: 'FAIL', message: 'internal_error' });
   }
+}
+router.post('/api/retail/payment/wechat/refund-callback', express.json(), (req, res) => handleWechatRefundCallback(req, res, ROOTS_TENANT_ID));
+router.post('/api/retail/payment/wechat/refund-callback/:tid', express.json(), (req, res) => {
+  const tid = resolveCallbackTid(req.params.tid);
+  if (!tid) return res.status(404).json({ code: 'INVALID', message: 'unknown_tenant' });
+  handleWechatRefundCallback(req, res, tid);
 });
 // Alipay async notify. Alipay POSTs application/x-www-form-urlencoded with the
 // trade result + an RSA2 signature. We verify the signature with Alipay's
@@ -6953,7 +7050,7 @@ function loadPrinterPrefs() {
   const by_store = get('printer.by_store', {});
   return {
     auto_print: get('printer.auto_print', true),
-    shop_name:  get('printer.shop_name', 'Roots'),
+    shop_name:  get('printer.shop_name', tenantBrandLabel()),
     by_store:   (by_store && typeof by_store === 'object') ? by_store : {},
   };
 }
@@ -7613,7 +7710,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   const isPaidRefundEvent =
     status === 'refunded' ||
     (status === 'cancelled' && o.status !== 'pending_payment');
-  if (isPaidRefundEvent && !WECHAT_PAY_DEV_MODE) {
+  if (isPaidRefundEvent && !payContext().devMode) {
     const already = tdb().prepare('SELECT refund_status FROM retail_orders WHERE id = ?').get(id)?.refund_status;
     // An order that already went through the explicit refund workflow
     // (approved / paying / paid) must NOT be force-refunded at full total via
@@ -7967,7 +8064,7 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
   // BEFORE claiming the order so a missing txn never leaves it stuck in the
   // transient 'paying' state.
   let pay = null;
-  if (method === 'wechat' && !WECHAT_PAY_DEV_MODE) {
+  if (method === 'wechat' && !payContext().devMode) {
     pay = tdb().prepare(
       "SELECT out_trade_no, amount FROM retail_payments WHERE order_id = ? AND status IN ('success','refunded') ORDER BY id DESC LIMIT 1"
     ).get(id);
@@ -7995,7 +8092,7 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
   // plain record too. A failed WeChat refund reverts the claim, so the order
   // returns to 'approved' and the operator sees it didn't go through.
   let payoutRef = reference;
-  if (method === 'wechat' && !WECHAT_PAY_DEV_MODE) {
+  if (method === 'wechat' && !payContext().devMode) {
     const totalCents  = Math.round(Number(pay.amount != null ? pay.amount : o.total) * 100);
     const refundCents = Math.round(amount * 100);
     const outRefundNo = ('RF' + pay.out_trade_no + Date.now().toString().slice(-6)).slice(0, 63);
@@ -9716,7 +9813,7 @@ router.post('/api/retail/topup/create', requireRetailAuth, express.json(), (req,
   ).run(req.customer.id, pkg.id, pkg.amount, pkg.bonus_points, paymentMethod, outTradeNo);
   const topupId = info.lastInsertRowid;
 
-  if (WECHAT_PAY_DEV_MODE) {
+  if (payContext().devMode) {
     finalizeTopup(topupId);
     return res.json({
       success: true,
