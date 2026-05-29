@@ -10493,13 +10493,15 @@ async function kaRteBlur(el) {
 // advanced fields (nutrition, allergens override, recipe link, label image).
 async function iedClick(el) {
   if (el.dataset._editing === '1') return;
-  el.dataset._editing = '1';
   const pid    = parseInt(el.dataset.pid, 10);
   const field  = el.dataset.field;
   const type   = el.dataset.type || 'text';
   const raw    = (el.dataset.raw != null) ? el.dataset.raw : el.textContent.trim();
   const placeholder = el.dataset.placeholder || '';
+  // Clone BEFORE flipping the editing flag — otherwise the cancel-path restore
+  // puts back a node that still claims to be editing, and the next click bails.
   const original = el.cloneNode(true);
+  el.dataset._editing = '1';
   let input;
   if (type === 'select') {
     input = document.createElement('select');
