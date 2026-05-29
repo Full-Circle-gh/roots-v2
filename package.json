@@ -3,7 +3,9 @@
   "version": "2.0.0",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "lint": "eslint routes lib middleware scripts server.js database.js public",
+    "lint:fix": "eslint --fix routes lib middleware scripts server.js database.js public"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
@@ -16,5 +18,9 @@
     "multer": "^1.4.5-lts.1",
     "uuid": "^9.0.0",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "eslint": "^10.4.0",
+    "globals": "^17.6.0"
   }
 }

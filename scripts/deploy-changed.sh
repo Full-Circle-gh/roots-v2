@@ -60,6 +60,29 @@ if [ ${#FILES[@]} -eq 0 ]; then
   exit 0
 fi
 
+# ── Lint gate: bug-catcher on the .js we're about to ship ────────────────
+# Static analysis catches logic mistakes `node --check` can't — undefined
+# references (ReferenceError in prod), unreachable/dead code, duplicate object
+# keys, bad typeof, assignment-in-a-condition, etc. Runs LOCALLY, before
+# anything leaves the machine, so a logic bug never reaches the server gate.
+# eslint.config.js keeps only true-bug rules as errors (which abort here);
+# style/unused-var smells are non-blocking warnings. Gracefully skipped where
+# eslint isn't installed (a fresh worktree or CI box that ran no npm install).
+JS_FILES=()
+for f in "${FILES[@]}"; do case "$f" in *.js) JS_FILES+=("$f") ;; esac; done
+if [ ${#JS_FILES[@]} -gt 0 ]; then
+  if [ -x node_modules/.bin/eslint ] && [ -f eslint.config.js ]; then
+    echo "[deploy] linting ${#JS_FILES[@]} changed .js file(s)…"
+    if ! node_modules/.bin/eslint "${JS_FILES[@]}"; then
+      echo "[deploy] FAILED: eslint found errors above — fix them, or add [skip deploy] to bypass. Not shipping."
+      exit 1
+    fi
+    echo "[deploy] lint OK"
+  else
+    echo "[deploy] (skip lint — eslint not installed here)"
+  fi
+fi
+
 echo "[deploy] shipping ${#FILES[@]} file(s) to $SERVER:"
 printf '  %s\n' "${FILES[@]}"
 
