@@ -5716,6 +5716,35 @@ router.post('/api/retail/review-photos', requireRetailAuth, express.json({ limit
   }
 });
 
+// Customer submits a bug report / feedback from the mini app "Found a bug?"
+// form. One-way: it lands read-only in the Mini App Backend → Feedback tab
+// (separate from the staff `feedback` table). Photos arrive as already-uploaded
+// /api/retail/media/:id URLs (same uploader as reviews: base64 → retail_media).
+router.post('/api/retail/feedback', requireRetailAuth, express.json({ limit: '1mb' }), (req, res) => {
+  const message = (req.body?.message || '').toString().trim().slice(0, 4000);
+  if (!message) return res.status(400).json({ success: false, error: 'message_required' });
+  const pageContext = (req.body?.page_context || '').toString().slice(0, 200) || null;
+  const appVersion  = (req.body?.app_version  || '').toString().slice(0, 60)  || null;
+  // Keep only our own media URLs — drop anything that isn't a /api/retail/media/:id
+  // path so a client can't stash arbitrary links in the inbox.
+  const photos = Array.isArray(req.body?.photos)
+    ? req.body.photos
+        .filter(u => typeof u === 'string' && /^\/api\/retail\/media\/\d+$/.test(u))
+        .slice(0, 6)
+    : [];
+  const name = req.customer?.nickname || ('#' + req.customer.id);
+  try {
+    const info = tdb().prepare(
+      `INSERT INTO retail_feedback (customer_id, customer_name, message, photos_json, page_context, app_version)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(req.customer.id, name, message, photos.length ? JSON.stringify(photos) : null, pageContext, appVersion);
+    res.json({ success: true, data: { id: info.lastInsertRowid } });
+  } catch (e) {
+    console.error('[retail/feedback] insert failed:', e.message);
+    res.status(500).json({ success: false, error: 'db_insert_failed' });
+  }
+});
+
 // Customer submits a review. Must own a 'delivered' order containing this
 // product (anti-spam — only buyers can review). One review per
 // (customer, product, order) — UNIQUE constraint catches dupes.
@@ -5774,6 +5803,28 @@ router.post('/api/retail/products/:id/reviews', requireRetailAuth, express.json(
 // Paginated list across all products for staff moderation. Filters by
 // visibility, rating, product. Joins customer + product so the table can
 // show context without the client making N follow-up requests.
+// Customer bug reports / feedback from the mini app "Found a bug?" form.
+// Read-only inbox — newest first. Separate from the staff `feedback` table.
+router.get('/api/retail-admin/feedback', requireRetailAdmin, (req, res) => {
+  const limit  = Math.min(parseInt(req.query.limit  || '100', 10) || 100, 300);
+  const offset = Math.max(parseInt(req.query.offset || '0',   10) || 0, 0);
+  const rows = tdb().prepare(
+    `SELECT f.id, f.customer_id, f.customer_name, f.message,
+            f.photos_json, f.page_context, f.app_version, f.created_at,
+            c.nickname AS nickname, c.avatar_url AS customer_avatar
+       FROM retail_feedback f
+  LEFT JOIN retail_customers c ON c.id = f.customer_id
+   ORDER BY f.created_at DESC
+      LIMIT ? OFFSET ?`
+  ).all(limit, offset).map(f => ({
+    ...f,
+    photos: parseJsonArray(f.photos_json),
+    photos_json: undefined,
+  }));
+  const total = tdb().prepare('SELECT COUNT(*) AS n FROM retail_feedback').get().n;
+  res.json({ success: true, data: rows, meta: { total, limit, offset } });
+});
+
 router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
   const limit  = Math.min(parseInt(req.query.limit  || '50', 10) || 50, 200);
   const offset = Math.max(parseInt(req.query.offset || '0',  10) || 0, 0);

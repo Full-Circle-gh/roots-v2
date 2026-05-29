@@ -1,0 +1,105 @@
+.page {
+  background: var(--oat);
+  min-height: 100vh;
+  padding: 0 0 220rpx;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────── */
+.header { padding: 48rpx 44rpx 0; }
+.kicker { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.25em; color: var(--olive); }
+.kicker-cn { font-family: var(--f-yuan); letter-spacing: 0; }
+.title { font-size: calc(70rpx * var(--font-scale)); font-weight: 500; line-height: 0.92; margin-top: 12rpx; color: var(--ink); }
+
+.intro {
+  margin: 24rpx 44rpx 0;
+  font-size: calc(24rpx * var(--font-scale));
+  line-height: 1.45;
+  color: var(--olive);
+}
+
+/* ── Sections ─────────────────────────────────────────────────────────── */
+.section { margin: 40rpx 44rpx 0; }
+.section-head { display: flex; justify-content: space-between; align-items: baseline; }
+.section-label { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.22em; color: var(--olive); }
+.label-cn { font-family: var(--f-yuan); letter-spacing: 0; }
+.char-count { font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.1em; color: var(--olive); }
+
+/* ── Message + photos ─────────────────────────────────────────────────── */
+.msg-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  padding: 18rpx 22rpx;
+  margin-top: 16rpx;
+  font-size: calc(24rpx * var(--font-scale));
+  color: var(--ink);
+  height: 220rpx;
+  line-height: 1.4;
+  border-radius: 0;
+}
+
+.photo-row {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 20rpx;
+  flex-wrap: wrap;
+}
+.photo-tile {
+  width: 104rpx;
+  height: 104rpx;
+  background: var(--oat);
+  border: 3rpx solid var(--ink);
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+}
+.photo-img { width: 100%; height: 100%; }
+.photo-x {
+  position: absolute;
+  top: -8rpx;
+  right: -8rpx;
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #fff;
+  font-family: var(--f-bear);
+  font-size: calc(22rpx * var(--font-scale));
+  line-height: 32rpx;
+  text-align: center;
+}
+.photo-add {
+  width: 104rpx;
+  height: 104rpx;
+  border: 3rpx dashed var(--ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  color: var(--olive);
+  flex-shrink: 0;
+}
+.photo-plus { font-family: var(--f-aleo); font-size: calc(36rpx * var(--font-scale)); line-height: 1; }
+.photo-add-label { font-size: calc(16rpx * var(--font-scale)); letter-spacing: 0.12em; }
+
+/* ── Sticky submit bar ────────────────────────────────────────────────── */
+.submit-bar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: var(--oat);
+  border-top: 3rpx solid var(--ink);
+  padding: 20rpx 44rpx calc(40rpx + env(safe-area-inset-bottom));
+}
+.submit-btn {
+  background: var(--ink);
+  color: var(--lime);
+  padding: 26rpx 0;
+  text-align: center;
+  font-size: calc(32rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+}
+.submit-btn .arrow { margin-left: 8rpx; }
+.submit-btn.disabled { opacity: 0.45; }
+.submit-btn:active:not(.disabled) { transform: scale(0.99); }

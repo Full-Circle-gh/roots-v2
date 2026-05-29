@@ -1295,6 +1295,24 @@ try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_reviews_customer ON retail_
 // the wording without a migration.
 addColumn('retail_reviews', 'tags_json', 'TEXT');
 
+// Customer-reported bugs / feedback submitted from the mini app "Found a bug?"
+// form. Lands read-only in the Mini App Backend → Feedback tab — completely
+// separate from the staff `feedback` table (which is the kitchen-app Sprout
+// inbox). Photos are uploaded to retail_media first; we store their servable
+// /api/retail/media/:id URLs as a JSON array (same shape as retail_reviews).
+db.exec(`CREATE TABLE IF NOT EXISTS retail_feedback (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id   INTEGER NOT NULL,
+  customer_name TEXT,
+  message       TEXT NOT NULL,
+  photos_json   TEXT,                    -- JSON array of /api/retail/media/:id URLs
+  page_context  TEXT,                    -- which mini-app page the report came from
+  app_version   TEXT,                    -- mini-app version string (best-effort)
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE CASCADE
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_feedback_created ON retail_feedback(created_at)'); } catch {}
+
 // Customer-initiated refund requests with multi-step processing workflow.
 // States on retail_orders.refund_status:
 //   null | pending | reviewing | approved | paid | rejected | withdrawn

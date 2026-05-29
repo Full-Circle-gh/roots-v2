@@ -29,6 +29,7 @@
     "pages/faq/faq",
     "pages/voting/voting",
     "pages/favorites/favorites",
+    "pages/feedback/feedback",
     "pages/track-webview/track-webview"
   ],
   "window": {

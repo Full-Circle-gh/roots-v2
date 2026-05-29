@@ -1,0 +1,37 @@
+<view class="page">
+  <!-- Header -->
+  <view class="header">
+    <view class="kicker f-toni">{{copy.kicker}}<text wx:if="{{lang === 'cn'}}" class="kicker-cn"> · 反馈</text></view>
+    <view class="title f-bear">{{copy.title}}</view>
+  </view>
+
+  <view class="intro f-aleo">{{copy.intro}}</view>
+
+  <!-- What happened -->
+  <view class="section">
+    <view class="section-head">
+      <view class="section-label f-toni">{{copy.label}}<text wx:if="{{lang === 'cn'}}" class="label-cn"> · 描述</text></view>
+      <view class="char-count f-toni">{{message.length}} / 1000</view>
+    </view>
+    <textarea class="msg-input f-aleo" placeholder="{{copy.placeholder}}" maxlength="1000" value="{{message}}" bindinput="onMessage"/>
+
+    <!-- Screenshot upload row -->
+    <view class="photo-row">
+      <view wx:for="{{photos}}" wx:key="*this" class="photo-tile">
+        <image src="{{item}}" mode="aspectFill" class="photo-img"/>
+        <view class="photo-x" catchtap="removePhoto" data-i="{{index}}">×</view>
+      </view>
+      <view wx:if="{{photos.length < 6}}" class="photo-add" bindtap="addPhoto">
+        <view class="photo-plus">+</view>
+        <view class="photo-add-label f-toni">{{copy.photoLabel}}</view>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- Sticky submit -->
+<view class="submit-bar">
+  <view class="submit-btn f-gothic {{(!message || saving) ? 'disabled' : ''}}" bindtap="submit">
+    {{saving ? copy.saving : copy.submit}} <text wx:if="{{!saving}}" class="arrow">→</text>
+  </view>
+</view>

@@ -3764,6 +3764,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
         Reviews · 评价
       </button>
+      <button data-tab="feedback">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8a2 2 0 0 1 2 2v12l-4-3H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M12 6v3"/><circle cx="12" cy="11.5" r="0.4" fill="currentColor"/></svg>
+        Feedback · 反馈
+      </button>
       <button data-tab="media">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         Media · 媒体库
@@ -6164,6 +6168,29 @@
     <!-- Photo lightbox — opens when a review thumbnail is clicked. -->
     <div id="rv-lightbox" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,.82); z-index: 9999; align-items: center; justify-content: center; cursor: zoom-out;" onclick="closeReviewLightbox()">
       <img id="rv-lightbox-img" style="max-width: 92vw; max-height: 92vh; box-shadow: 0 24px 60px rgba(0,0,0,.6);"/>
+    </div>
+  </section>
+
+  <!-- ─── FEEDBACK ─── -->
+  <section id="tab-feedback">
+    <h2>Customer feedback · 顾客反馈</h2>
+    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4);">
+      Bug reports and feedback customers send from the mini app’s “Found a bug?” form. Read-only — newest first.
+      Each entry shows who reported it, which page they were on, any screenshots, and when. · 顾客在小程序“报告问题”表单提交的反馈,只读,最新在前。
+    </div>
+
+    <div id="fb-summary" class="muted" style="font-size: 12px; margin-bottom: var(--s4);"></div>
+
+    <div class="table-wrap">
+      <table id="feedback-table">
+        <thead><tr>
+          <th style="width: 160px;">Customer · 顾客</th>
+          <th>Report · 反馈</th>
+          <th style="width: 150px;">Page · 页面</th>
+          <th style="width: 130px;">Date · 日期</th>
+        </tr></thead>
+        <tbody><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
+      </table>
     </div>
   </section>
 
@@ -14378,6 +14405,59 @@ document.querySelector('[data-tab="reviews"]').addEventListener('click', () => {
     REVIEWS_LOADED = true;
     // Tags first so the reviews table can render with the right labels.
     loadReviewTags().then(loadReviews);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// FEEDBACK TAB — read-only inbox of customer bug reports from the mini app
+// ═══════════════════════════════════════════════════════════════════
+let FEEDBACK_LOADED = false;
+
+async function loadFeedback() {
+  const tbody = $('#feedback-table tbody');
+  tbody.innerHTML = '<tr><td colspan="4" class="muted">Loading…</td></tr>';
+  try {
+    const { data, meta } = await api('/api/retail-admin/feedback?limit=200');
+    const n = meta?.total ?? data.length;
+    $('#fb-summary').textContent = `${n} report${n === 1 ? '' : 's'} · 共 ${n} 条`;
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><div class="icon">' + ICONS.empty + '</div><h3>No feedback yet · 暂无反馈</h3><p class="muted">Customer bug reports from the mini app show up here. · 顾客在小程序提交的反馈会显示在这里。</p></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(renderFeedbackRow).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="4" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function renderFeedbackRow(f) {
+  const customer = f.customer_name || f.nickname || ('#' + f.customer_id);
+  const photosHtml = (f.photos || []).map(url => (
+    `<img src="${escapeAttr(url)}" onclick="openReviewLightbox(${JSON.stringify(url).replace(/"/g, '&quot;')})" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 4px; cursor: zoom-in; vertical-align: middle;">`
+  )).join('');
+  const ctx = f.page_context
+    ? `<span class="pill neutral" style="font-size: 10px;">${escapeHtml(f.page_context)}</span>`
+    : '<span class="muted" style="font-size: 11px;">—</span>';
+  const ver = f.app_version ? `<div class="muted" style="font-size: 10px; margin-top: 4px;">v${escapeHtml(f.app_version)}</div>` : '';
+  return `
+    <tr data-id="${f.id}">
+      <td>
+        <div>${escapeHtml(customer)}</div>
+        <div class="muted" style="font-size: 10px;">#${f.customer_id}</div>
+      </td>
+      <td>
+        <div style="font-size: 12px; line-height: 1.4; max-width: 520px; white-space: pre-wrap; word-break: break-word;">${escapeHtml(f.message || '')}</div>
+        ${photosHtml ? `<div style="margin-top: 8px;">${photosHtml}</div>` : ''}
+      </td>
+      <td>${ctx}${ver}</td>
+      <td class="muted" style="font-size: 11px; white-space: nowrap;">${f.created_at ? f.created_at.slice(0, 16) : ''}</td>
+    </tr>`;
+}
+
+document.querySelector('[data-tab="feedback"]').addEventListener('click', () => {
+  if (!FEEDBACK_LOADED) {
+    FEEDBACK_LOADED = true;
+    loadFeedback();
   }
 });
 
