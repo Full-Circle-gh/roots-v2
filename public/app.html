@@ -535,6 +535,18 @@ select.ied-input { padding: 2px 6px; }
 .ka-rte-wrap.ka-rte-fs { position:fixed; inset:0; z-index:9999; margin:0; padding:16px 20px 20px; background:var(--bg, #fff); overflow-y:auto; }
 .ka-rte-wrap.ka-rte-fs .ka-rte { max-height: calc(100vh - 220px); min-height: 50vh; }
 body.ka-rte-fs-lock { overflow: hidden; }
+/* Twin EN | CN layout — one fixed outer frame, two panes scroll independently.
+   The operator sees both languages at once instead of scrolling the whole card
+   down to reach 中文. Toolbar above stays shared (kaRteToolbarHTML, focus-aware). */
+.ka-rte-twin { display:grid; grid-template-columns:1fr 1fr; gap:10px; height: clamp(360px, 60vh, 720px); }
+.ka-rte-twin > label { display:flex; flex-direction:column; min-height:0; margin:0; }
+.ka-rte-twin .ka-rte { flex:1 1 auto; max-height:none; min-height:0; resize:none; margin-top:4px; }
+.ka-rte-twin .ka-rte-code { flex:1 1 auto; max-height:none; min-height:0; resize:none; margin-top:4px; }
+@media (max-width: 760px) {
+  .ka-rte-twin { grid-template-columns:1fr; height:auto; }
+  .ka-rte-twin .ka-rte { max-height:50vh; }
+}
+.ka-rte-wrap.ka-rte-fs .ka-rte-twin { height: calc(100vh - 200px); }
 /* Read-only rendering inside the description modal — same block styling as
    the editor so what the operator pastes from the mini-app reads cleanly. */
 .ka-rte-readonly h1, .ka-rte-readonly h2 { font-size:17px; margin:8px 0 4px; font-weight:700; }
@@ -10011,18 +10023,18 @@ function _renderDescCard(ctx) {
     </div>
     <div class="ka-rte-wrap" id="kaRteWrap_${p.id}">
       ${kaRteToolbarHTML()}
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <label style="display:block">
+      <div class="ka-rte-twin">
+        <label>
           <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">EN</span>
           <div class="ka-rte" contenteditable="true" data-pid="${p.id}" data-field="description_en"
                data-original="${esc(enHtml)}" data-placeholder="English description…"
-               onblur="kaRteBlur(this)" style="margin-top:4px">${enHtml}</div>
+               onblur="kaRteBlur(this)">${enHtml}</div>
         </label>
-        <label style="display:block">
+        <label>
           <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700">CN · 中文</span>
           <div class="ka-rte" contenteditable="true" data-pid="${p.id}" data-field="description_cn"
                data-original="${esc(cnHtml)}" data-placeholder="中文描述…"
-               onblur="kaRteBlur(this)" style="margin-top:4px">${cnHtml}</div>
+               onblur="kaRteBlur(this)">${cnHtml}</div>
         </label>
       </div>
     </div>`;
