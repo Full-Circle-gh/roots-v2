@@ -1,13 +1,15 @@
 /* Roots design tokens — matches /cms preview and customer-facing brand */
 
 /* Bear Serif's digits are thin/geometric and don't match its chunky letters.
-   The first @font-face below maps digits + currency to Lilita One; the second
-   covers the remaining glyphs from BearSerif.otf. Both files are also loaded
-   globally via wx.loadFontFace (utils/fonts.js) for cross-page availability. */
+   The first @font-face below maps digits, currency + ampersand to Lilita One;
+   the second covers the remaining glyphs from BearSerif.otf. Both files are also
+   loaded globally via wx.loadFontFace (utils/fonts.js) for cross-page availability.
+   The & is included because BearSerif's ampersand is thin and clashes with its
+   chunky caps in labels like "SALADS & BOWLS". */
 @font-face {
   font-family: 'Bear Serif';
   src: url('https://rootskitchenchina.com/assets/fonts/LilitaOne.ttf') format('truetype');
-  unicode-range: U+0024, U+0025, U+0030-0039, U+00A5;
+  unicode-range: U+0024-0026, U+0030-0039, U+00A5;
   font-display: swap;
 }
 @font-face {
