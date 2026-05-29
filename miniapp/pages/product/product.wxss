@@ -745,8 +745,12 @@
   color: rgba(255, 255, 255, 0.7);
   justify-content: center;
 }
+/* No price on the right (variant products, price lives in the size picker):
+   center the lone label instead of leaving it pinned to the left edge. */
+.add-btn.no-price { justify-content: center; }
+.add-btn.no-price .add-label { margin-left: 0; }
 .add-label {
-  font-size: calc(28rpx * var(--font-scale));
+  font-size: calc(32rpx * var(--font-scale));
   margin-left: 28rpx;
 }
 /* Compare-at + live price grouped on the right of the add button. Stacked

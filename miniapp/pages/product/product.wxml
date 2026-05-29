@@ -249,7 +249,7 @@
         <view class="qty-val f-gothic">{{qty}}</view>
         <view class="qty-btn" bindtap="incQty">+</view>
       </view>
-      <button class="add-btn f-toni {{soldOut ? 'sold-out' : ''}}" bindtap="addToCart" disabled="{{soldOut}}">
+      <button class="add-btn f-toni {{soldOut ? 'sold-out' : ''}} {{(!soldOut && hasVariants) ? 'no-price' : ''}}" bindtap="addToCart" disabled="{{soldOut}}">
         <text class="add-label">{{addBtnLabel}}</text>
         <view wx:if="{{!soldOut && !hasVariants}}" class="add-prices">
           <text class="add-price f-bear">{{price}}</text>
