@@ -713,7 +713,7 @@ Page({
       const soldOut = stock != null && stock <= 0;
       return {
         id: m.id,
-        label: m.variant_label || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
+        label: lang.pickLabel(m.variant_label, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
         price: eff > 0 ? money(eff) : '',
         priceWas: isFlash && regular > 0 ? money(regular) : '',
         isFlash,

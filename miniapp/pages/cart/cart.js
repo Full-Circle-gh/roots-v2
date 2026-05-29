@@ -67,6 +67,7 @@ Page({
       return {
         ...it,
         display_name: lang.pick(it.name_en, it.name_cn, L),
+        display_size: lang.pickLabel(it.size, L),
         line_total: (it.unit_price * it.qty).toFixed(2),
         regular_total: onFlash ? (it.regular_price * it.qty).toFixed(2) : '',
       };

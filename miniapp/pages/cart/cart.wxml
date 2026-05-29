@@ -24,7 +24,7 @@
         <view wx:else class="thumb thumb-empty"></view>
         <view class="info">
           <view class="name f-bear">{{item.display_name}}</view>
-          <view class="meta">{{item.size}}</view>
+          <view class="meta">{{item.display_size}}</view>
           <view class="qty">
             <view class="qty-btn" data-key="{{item.key}}" bindtap="decQty">−</view>
             <view class="qty-val f-gothic">{{item.qty}}</view>

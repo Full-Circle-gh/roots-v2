@@ -52,4 +52,20 @@ function splitMixed(s, lang) {
   return lang === 'cn' ? (cn || en) : (en || cn);
 }
 
-module.exports = { detect, set, pick, splitMixed };
+// Pick the language side of a bilingual variant label. The backend stores
+// these as "EN · CN" (e.g. "Small · 小") using the " · " separator. Show only
+// the side matching the mini-app language; fall back to the other side when
+// empty, or to splitMixed() for older labels that lack the separator.
+function pickLabel(raw, lang) {
+  const str = String(raw || '').trim();
+  if (!str) return '';
+  const sep = str.indexOf(' · ');
+  if (sep !== -1) {
+    const en = str.slice(0, sep).trim();
+    const cn = str.slice(sep + 3).trim();
+    return lang === 'cn' ? (cn || en) : (en || cn);
+  }
+  return splitMixed(str, lang);
+}
+
+module.exports = { detect, set, pick, splitMixed, pickLabel };
