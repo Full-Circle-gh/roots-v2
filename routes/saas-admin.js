@@ -9,6 +9,8 @@ const express = require('express');
 const db = require('../database');
 const { provisionTenant } = require('../lib/provision-tenant');
 const onboarding = require('../lib/onboarding-steps');
+const credBox = require('../lib/secret-box');
+const { getTenantCreds, setTenantSecrets, invalidate: invalidateCreds, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
 const router = express.Router();
 
 // Per-tenant accent colour for white-label branding (#3). Idempotent.
@@ -120,6 +122,109 @@ router.patch('/api/saas-admin/tenants/:id/brand', requireSaasAdmin, express.json
   params.push(req.params.id);
   db.prepare(`UPDATE tenants SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   res.json({ success: true });
+});
+
+// ── WeChat + WeChat Pay credentials (Platform readiness ②③⑩ — operator entry) ──
+// The keystone Model-B (managed) onboarding capability: the platform operator
+// pastes a tenant's OWN WeChat app + merchant secrets here. Public AppID lands
+// in the tenants row (validated + globally unique, same as the brand route);
+// the secret material (AppSecret, APIv3 key, merchant private key, serial, and
+// WeChat's platform public key) lands in the tenant's encrypted tenant_secrets.
+// WITHOUT this a freshly-provisioned tenant has no creds → getTenantCreds()
+// reports devMode for BOTH login and pay, and the tenant can never go live
+// (devMode pay auto-marks orders 'paid' WITHOUT charging — money-losing).
+//
+// Roots / any internal tenant is .env-managed: getTenantCreds() reads
+// process.env and IGNORES tenant_secrets for them, so the PUT is hard-blocked
+// (writing would be a silent no-op AND a cross-tenant footgun). GET stays
+// read-only. The genuinely-secret fields are never returned — only a masked
+// tail or a boolean "is it set".
+function maskSecret(s) {
+  if (!s || typeof s !== 'string') return '';
+  return s.length <= 4 ? '••••' : '••••' + s.slice(-4);
+}
+const SAAS_PAY_FIELDS = {
+  // field            tenant_secrets KEY                  mask on GET?  long (PEM/cert → boolean only)?
+  mch_id:           { cred: CRED_KEYS.PAY_MCH_ID,           secret: false, long: false },
+  api_v3_key:       { cred: CRED_KEYS.PAY_API_V3_KEY,       secret: true,  long: false },
+  serial_no:        { cred: CRED_KEYS.PAY_SERIAL_NO,        secret: false, long: false },
+  private_key:      { cred: CRED_KEYS.PAY_PRIVATE_KEY,      secret: true,  long: true  },
+  platform_pub_key: { cred: CRED_KEYS.PAY_PLATFORM_PUB_KEY, secret: false, long: true  },
+};
+
+router.get('/api/saas-admin/tenants/:id/credentials', requireSaasAdmin, (req, res) => {
+  const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
+  const c = getTenantCreds(t.id);
+  const longSet = (v) => !!(v && String(v).trim());   // PEM/cert: presence only
+  res.json({
+    success: true,
+    data: {
+      source: c.source,                       // 'env' (Roots/internal) | 'db' (tenant)
+      editable: c.source !== 'env',
+      secretBoxConfigured: credBox.isConfigured(),
+      wechat: {
+        app_id: c.wxAppId || '',
+        app_secret_masked: maskSecret(c.wechat.appSecret),
+        devMode: c.wechat.devMode,
+      },
+      pay: {
+        mch_id: c.pay.mchId || '',
+        api_v3_key_masked: maskSecret(c.pay.apiV3Key),
+        serial_no: c.pay.serialNo || '',
+        private_key_set: longSet(c.pay.privateKey),
+        platform_pub_key_set: longSet(c.pay.platformPubKey),
+        devMode: c.pay.devMode,
+      },
+    },
+  });
+});
+
+router.put('/api/saas-admin/tenants/:id/credentials', requireSaasAdmin, express.json(), (req, res) => {
+  const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
+  if (isInternal(t.id)) return res.status(400).json({ error: 'Internal tenant credentials are managed via environment (.env) · 内部租户凭证通过环境变量管理' });
+  if (!credBox.isConfigured()) return res.status(503).json({ error: 'TENANT_SECRET_KEY is not set on the server — cannot store secrets · 服务器未配置 TENANT_SECRET_KEY，无法保存密钥' });
+
+  const body = req.body || {};
+  const wx = body.wechat || {};
+  const pay = body.pay || {};
+  const changed = [];
+
+  // Public AppID → tenants row (validated + globally unique). undefined = keep;
+  // '' / null = clear. A row change must flush the creds cache afterward.
+  let appIdTouched = false;
+  if (Object.prototype.hasOwnProperty.call(wx, 'app_id') && wx.app_id !== undefined) {
+    const appid = (wx.app_id === null) ? '' : String(wx.app_id).trim();
+    if (appid && !/^wx[0-9a-zA-Z]{16}$/.test(appid)) {
+      return res.status(400).json({ error: 'AppID looks invalid (expected wx + 16 chars) · AppID 格式不正确' });
+    }
+    if (appid) {
+      const clash = db.prepare('SELECT id FROM tenants WHERE wx_appid = ? AND id != ?').get(appid, t.id);
+      if (clash) return res.status(409).json({ error: 'That AppID is already assigned to another tenant · 该 AppID 已分配给其他租户' });
+    }
+    db.prepare('UPDATE tenants SET wx_appid = ? WHERE id = ?').run(appid || null, t.id);
+    appIdTouched = true;
+    changed.push('wechat.app_id');
+  }
+
+  // Secret material → encrypted tenant_secrets in one transaction.
+  const map = {};
+  if (Object.prototype.hasOwnProperty.call(wx, 'app_secret') && wx.app_secret !== undefined) {
+    map[CRED_KEYS.WX_APP_SECRET] = (wx.app_secret === null) ? '' : String(wx.app_secret);
+    changed.push('wechat.app_secret');
+  }
+  for (const [field, meta] of Object.entries(SAAS_PAY_FIELDS)) {
+    if (!Object.prototype.hasOwnProperty.call(pay, field)) continue;
+    const val = pay[field];
+    if (val === undefined) continue;
+    map[meta.cred] = (val === null) ? '' : String(val);
+    changed.push(`pay.${field}`);
+  }
+  if (Object.keys(map).length) setTenantSecrets(t.id, map);   // encrypts + invalidates the cache
+  else if (appIdTouched) invalidateCreds(t.id);                // appId-only edit still needs a flush
+
+  res.json({ success: true, changed: changed.length });
 });
 
 // ── Mark an invoice paid (records an offline/manual payment) ───────────────

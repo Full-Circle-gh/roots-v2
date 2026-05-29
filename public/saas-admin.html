@@ -62,6 +62,10 @@
   input[type=text], input[type=password] { width: 100%; background: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; color: var(--paper); font-family: var(--f-sans); font-size: 14px; padding: 10px 12px; outline: none; }
   input:focus { border-color: var(--tea); box-shadow: 0 0 0 3px rgba(107,142,111,.22); }
   input[type=color] { width: 44px; height: 36px; padding: 0; border: 1px solid var(--line-2); border-radius: 8px; background: var(--ink); cursor: pointer; vertical-align: middle; }
+  textarea { width: 100%; background: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; color: var(--paper); font-family: var(--f-mono); font-size: 12px; line-height: 1.5; padding: 10px 12px; outline: none; resize: vertical; min-height: 62px; }
+  textarea:focus { border-color: var(--tea); box-shadow: 0 0 0 3px rgba(107,142,111,.22); }
+  .cred-stat { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .cred-note { font-size: 11px; color: var(--faint); margin-top: 4px; }
   .row2 { display: flex; gap: 12px; align-items: center; }
   .msg { display: none; font-size: 12.5px; padding: 9px 12px; border-radius: 8px; margin-bottom: 12px; }
   .msg.show { display: block; }
@@ -183,6 +187,7 @@
           '<button class="btn btn-sm" data-act="detail" data-id="'+t.id+'">Details</button>' +
           '<button class="btn btn-sm" data-act="onboard" data-id="'+t.id+'">Onboarding</button>' +
           '<button class="btn btn-sm" data-act="brand" data-id="'+t.id+'">Brand</button>' +
+          (t.isInternal ? '' : '<button class="btn btn-sm" data-act="creds" data-id="'+t.id+'">Credentials</button>') +
           susBtn +
         '</div></td></tr>';
     }).join('');
@@ -197,6 +202,7 @@
     } else if (act==='reactivate') {
       api('/api/saas-admin/tenants/'+id+'/reactivate',{method:'POST'}).then(j=>{ toast(j.success?'Reactivated':j.error||'Failed'); load(); });
     } else if (act==='brand') { brandModal(t); }
+    else if (act==='creds') { credsModal(t); }
     else if (act==='detail') { detailModal(id); }
     else if (act==='onboard') { onboardModal(id); }
   }
@@ -315,6 +321,65 @@
         body:JSON.stringify({ brand_name:$('#b-name').value.trim(), brand_accent:$('#b-accent').value, wx_appid:$('#b-appid').value.trim() })})
         .then(j=>{ if(j.success){ toast('Saved'); closeModal(); load(); } else mMsg(j.error||'Failed','err'); });
     });
+  }
+
+  // ── Credentials (WeChat login + WeChat Pay, per-tenant, encrypted) ──
+  function credsModal(t) {
+    openModal('Credentials · 凭证 — '+(t.brand||t.name));
+    $('#mBody').innerHTML = '<div class="empty">Loading… · 加载中…</div>';
+    api('/api/saas-admin/tenants/'+t.id+'/credentials').then(j => {
+      if (!j || !j.success || !j.data) { $('#mBody').innerHTML = '<div class="empty">Not found</div>'; return; }
+      const d = j.data;
+      const loginReady = !d.wechat.devMode;
+      const payReady = !d.pay.devMode;
+      const pill = (ok, on, off) => '<span class="pill '+(ok?'active':'suspended')+'">'+(ok?on:off)+'</span>';
+      let html =
+        '<div class="cred-stat">' +
+          pill(loginReady, 'Login live · 登录已配置', 'Login dev mode · 登录测试态') +
+          pill(payReady, 'Pay live · 支付已配置', 'Pay dev mode · 支付测试态') +
+        '</div>';
+      if (!d.editable) {
+        html += '<div class="cred-note">Managed via server environment (.env) — Roots tenant. Not editable here. · 由服务器环境变量管理,不可在此编辑。</div>';
+        $('#mBody').innerHTML = html;
+        return;
+      }
+      if (!d.secretBoxConfigured) {
+        html += '<div class="cred-note" style="color:var(--danger)">Secret store not configured on server (TENANT_SECRET_KEY missing). Cannot save credentials. · 服务器未配置密钥存储,无法保存凭证。</div>';
+        $('#mBody').innerHTML = html;
+        return;
+      }
+      const w = d.wechat, p = d.pay;
+      html +=
+        '<div class="det-sec"><h4>WeChat Mini Program · 微信小程序</h4>' +
+          '<div class="field"><label>AppID</label><input type="text" id="c-appid" value="'+esc(w.app_id||'')+'" placeholder="wx…………" autocapitalize="off" spellcheck="false"></div>' +
+          '<div class="field"><label>App Secret · 密钥</label><input type="password" id="c-appsecret" value="" placeholder="'+(w.app_secret_masked?esc(w.app_secret_masked)+' — paste to replace · 粘贴以替换':'paste to set · 粘贴以设置')+'" autocomplete="off" autocapitalize="off" spellcheck="false"><div class="cred-note">Blank = keep current. · 留空保持不变。</div></div>' +
+        '</div>' +
+        '<div class="det-sec"><h4>WeChat Pay (direct merchant) · 微信支付(直连商户)</h4>' +
+          '<div class="field"><label>Merchant ID · 商户号 (mchid)</label><input type="text" id="c-mchid" value="'+esc(p.mch_id||'')+'" autocapitalize="off" spellcheck="false"></div>' +
+          '<div class="field"><label>APIv3 Key · APIv3 密钥</label><input type="password" id="c-apiv3" value="" placeholder="'+(p.api_v3_key_masked?esc(p.api_v3_key_masked)+' — paste to replace':'paste to set · 粘贴以设置')+'" autocomplete="off" autocapitalize="off" spellcheck="false"><div class="cred-note">Blank = keep current. · 留空保持不变。</div></div>' +
+          '<div class="field"><label>Certificate Serial No · 证书序列号</label><input type="text" id="c-serial" value="'+esc(p.serial_no||'')+'" autocapitalize="off" spellcheck="false"></div>' +
+          '<div class="field"><label>Merchant Private Key · 商户私钥 (apiclient_key.pem)</label><textarea id="c-privkey" placeholder="'+(p.private_key_set?'•••• already set — paste full PEM to replace · 已设置,粘贴完整 PEM 以替换':'-----BEGIN PRIVATE KEY-----')+'" autocomplete="off" spellcheck="false"></textarea><div class="cred-note">Blank = keep current. · 留空保持不变。</div></div>' +
+          '<div class="field"><label>Platform Public Key · 平台公钥 (optional · 可选)</label><textarea id="c-pubkey" placeholder="'+(p.platform_pub_key_set?'•••• already set — paste to replace':'-----BEGIN PUBLIC KEY----- (enables callback signature verification · 启用回调签名验签)')+'" autocomplete="off" spellcheck="false"></textarea><div class="cred-note">Blank = keep current. Without it, callbacks rely on payload auth-tag only. · 留空保持不变;未设置时回调仅依赖载荷验签。</div></div>' +
+        '</div>' +
+        '<div id="c-msg" class="cred-note"></div>' +
+        '<button class="btn btn-brass" id="c-save" style="width:100%;padding:11px">Save credentials · 保存凭证</button>';
+      $('#mBody').innerHTML = html;
+      $('#c-save').addEventListener('click', () => {
+        const appid = $('#c-appid').value.trim();
+        if (appid && !/^wx[0-9a-zA-Z]{16}$/.test(appid)) { mMsg('AppID must look like wx + 16 chars · AppID 格式应为 wx + 16 位','err'); return; }
+        const body = { wechat:{ app_id: appid }, pay:{ mch_id:$('#c-mchid').value.trim(), serial_no:$('#c-serial').value.trim() } };
+        const appsecret = $('#c-appsecret').value.trim();
+        if (appsecret) body.wechat.app_secret = appsecret;
+        const apiv3 = $('#c-apiv3').value.trim();
+        if (apiv3) body.pay.api_v3_key = apiv3;
+        const priv = $('#c-privkey').value.trim();
+        if (priv) body.pay.private_key = priv;
+        const pub = $('#c-pubkey').value.trim();
+        if (pub) body.pay.platform_pub_key = pub;
+        api('/api/saas-admin/tenants/'+t.id+'/credentials',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+          .then(j=>{ if(j.success){ toast('Credentials saved · 已保存'); credsModal(t); load(); } else mMsg(j.error||'Failed','err'); });
+      });
+    }).catch(()=>{ $('#mBody').innerHTML = '<div class="empty">Error · 出错</div>'; });
   }
 
   // ── Detail (subscription + invoices + operators) ──
