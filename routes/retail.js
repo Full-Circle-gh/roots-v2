@@ -7124,7 +7124,7 @@ const STATUS_TRANSITIONS = {
   refunded:   { col: null,            prev: ['paid', 'preparing', 'dispatched', 'delivered'] },
 };
 
-router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.json(), (req, res) => {
+router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { status, reason, staff_note } = req.body || {};
   const def = STATUS_TRANSITIONS[status];
@@ -7134,6 +7134,34 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (!def.prev.includes(o.status)) {
     return res.status(409).json({ success: false, error: 'invalid_transition', from: o.status, to: status });
+  }
+
+  // Quick "Refund" action → real WeChat refund (same as the explicit payout
+  // flow), so money goes back no matter which refund button is used. Done
+  // BEFORE any DB write: if WeChat rejects, we abort and the order keeps its
+  // current status rather than being marked refunded with no money moved.
+  let legacyRefundRef = null;
+  if (status === 'refunded' && !WECHAT_PAY_DEV_MODE) {
+    const pay = tdb().prepare(
+      "SELECT out_trade_no, amount FROM retail_payments WHERE order_id = ? AND status IN ('success','refunded') ORDER BY id DESC LIMIT 1"
+    ).get(id);
+    const already = tdb().prepare('SELECT refund_status FROM retail_orders WHERE id = ?').get(id)?.refund_status;
+    if (pay?.out_trade_no && already !== 'paid') {
+      const fullTotal   = +(tdb().prepare('SELECT total FROM retail_orders WHERE id = ?').get(id)?.total || 0);
+      const totalCents  = Math.round(Number(pay.amount != null ? pay.amount : fullTotal) * 100);
+      const refundCents = Math.round(fullTotal * 100);
+      const outRefundNo = ('RF' + pay.out_trade_no + Date.now().toString().slice(-6)).slice(0, 63);
+      try {
+        const r = await wechatPayRefund({ outTradeNo: pay.out_trade_no, outRefundNo, refundCents, totalCents, reason: reason || ('Refund order ' + id) });
+        if (r.status === 'ABNORMAL') {
+          return res.status(502).json({ success: false, error: 'wechat_refund_abnormal', message: 'WeChat returned ABNORMAL (often insufficient merchant balance) — check the merchant platform.' });
+        }
+        legacyRefundRef = r.refund_id + (r.status ? ' (' + r.status + ')' : '');
+      } catch (e) {
+        console.error('[wechat-refund legacy-path]', e);
+        return res.status(502).json({ success: false, error: e.code || 'wechat_refund_failed', message: e.message });
+      }
+    }
   }
 
   const sets = ['status = ?', 'updated_at = CURRENT_TIMESTAMP'];
@@ -7199,6 +7227,12 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
         `UPDATE retail_payments SET refunded_amount = amount, status = 'refunded' WHERE order_id = ? AND status = 'success'`
       ).run(id);
     } catch (e) { console.error('[retail_payments refund-mirror]', e); }
+    // Stamp the real WeChat refund reference when the quick-refund path
+    // actually moved money (legacyRefundRef set above).
+    if (legacyRefundRef) {
+      try { tdb().prepare("UPDATE retail_orders SET refund_payout_method = 'wechat', refund_payout_ref = ? WHERE id = ?").run(legacyRefundRef, id); }
+      catch (e) { console.error('[legacy refund ref]', e); }
+    }
   }
 
   // Fire a subscribe-message notification (no-op in DEV, real send in PROD).
