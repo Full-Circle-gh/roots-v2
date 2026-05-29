@@ -192,7 +192,9 @@ function _resolveBlock(b, L) {
     const card = (c) => {
       if (!c) return null;
       const head = _pick(c.head_en, c.head_cn, L);
-      const num  = (c.num || '').toString();
+      // num is now bilingual (num_en/num_cn); fall back to the legacy single
+      // `num` field for blocks saved before the split.
+      const num  = (_pick(c.num_en, c.num_cn, L) || c.num || '').toString();
       const unit = _pick(c.unit_en, c.unit_cn, L);
       if (!head && !num && !unit) return null;
       return { icon: c.icon || '', head, num, unit, alt: !!c.alt };

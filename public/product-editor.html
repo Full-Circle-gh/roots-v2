@@ -1178,8 +1178,8 @@ const PA_BLOCK_TYPES = [
     label_cn: '❄ 储存条件 — 双卡片 + 备注',
     name_en: 'Storage Box', name_cn: '储存条件',
     make: () => ({
-      left:  { icon: '🌡', head_en: 'Unopened',      head_cn: '未开封', num: 'Cool & dry',  unit_en: 'Store away from heat and moisture',          unit_cn: '远离高温和潮湿',           alt: false },
-      right: { icon: '❄', head_en: 'After opening', head_cn: '开封后', num: 'Refrigerate', unit_en: 'Stir well, seal tightly, refrigerate for best texture', unit_cn: '搅拌均匀，密封冷藏以保持最佳口感', alt: true  },
+      left:  { icon: '🌡', head_en: 'Unopened',      head_cn: '未开封', num_en: 'Cool & dry',  num_cn: '阴凉干燥', unit_en: 'Store away from heat and moisture',          unit_cn: '远离高温和潮湿',           alt: false },
+      right: { icon: '❄', head_en: 'After opening', head_cn: '开封后', num_en: 'Refrigerate', num_cn: '冷藏',     unit_en: 'Stir well, seal tightly, refrigerate for best texture', unit_cn: '搅拌均匀，密封冷藏以保持最佳口感', alt: true  },
       note_en: 'Natural oil separation may occur — this is normal. Stir before each use.',
       note_cn: '天然油脂分离属正常现象,每次使用前请搅拌。',
     }),
@@ -1271,8 +1271,8 @@ const PA_PAGE_PRESETS = [
         { icon: '', label_en: '', label_cn: '', sub_en: '', sub_cn: '' }
       )) },
       { type: 'storage_box',
-        left:  { icon: '🌡', head_en: 'Unopened',      head_cn: '未开封', num: 'Cool & dry',  unit_en: 'Store away from heat and moisture',                    unit_cn: '远离高温和潮湿',           alt: false },
-        right: { icon: '❄', head_en: 'After opening', head_cn: '开封后', num: 'Refrigerate', unit_en: 'Stir well, seal tightly, refrigerate for best texture', unit_cn: '搅拌均匀,密封冷藏以保持最佳口感', alt: true  },
+        left:  { icon: '🌡', head_en: 'Unopened',      head_cn: '未开封', num_en: 'Cool & dry',  num_cn: '阴凉干燥', unit_en: 'Store away from heat and moisture',                    unit_cn: '远离高温和潮湿',           alt: false },
+        right: { icon: '❄', head_en: 'After opening', head_cn: '开封后', num_en: 'Refrigerate', num_cn: '冷藏',     unit_en: 'Stir well, seal tightly, refrigerate for best texture', unit_cn: '搅拌均匀,密封冷藏以保持最佳口感', alt: true  },
         note_en: 'Natural oil separation may occur — this is normal. Stir before each use.',
         note_cn: '天然油脂分离属正常现象,每次使用前请搅拌。' },
       { type: 'allergen_card', contains_en: '', contains_cn: '', may_contain_en: '', may_contain_cn: '' },
@@ -1314,8 +1314,8 @@ const PA_PAGE_PRESETS = [
         { icon: '', label_en: '', label_cn: '', sub_en: '', sub_cn: '' }
       )) },
       { type: 'storage_box',
-        left:  { icon: '🌡', head_en: 'Unopened',      head_cn: '未开封', num: 'Cool & dry',  unit_en: 'Store away from heat and moisture',                    unit_cn: '远离高温和潮湿',           alt: false },
-        right: { icon: '❄', head_en: 'After opening', head_cn: '开封后', num: 'Refrigerate', unit_en: 'Stir well, seal tightly, refrigerate for best texture', unit_cn: '搅拌均匀,密封冷藏以保持最佳口感', alt: true  },
+        left:  { icon: '🌡', head_en: 'Unopened',      head_cn: '未开封', num_en: 'Cool & dry',  num_cn: '阴凉干燥', unit_en: 'Store away from heat and moisture',                    unit_cn: '远离高温和潮湿',           alt: false },
+        right: { icon: '❄', head_en: 'After opening', head_cn: '开封后', num_en: 'Refrigerate', num_cn: '冷藏',     unit_en: 'Stir well, seal tightly, refrigerate for best texture', unit_cn: '搅拌均匀,密封冷藏以保持最佳口感', alt: true  },
         note_en: 'Natural oil separation may occur — this is normal. Stir before each use.',
         note_cn: '天然油脂分离属正常现象,每次使用前请搅拌。' },
       { type: 'allergen_card', contains_en: '', contains_cn: '', may_contain_en: '', may_contain_cn: '' },
@@ -2086,7 +2086,7 @@ function paBlocksCollect() {
                                      return (b.items || []).some(it => it.name_en || it.name_cn);
     if (b.type === 'how_to_use')     return (b.tiles || []).some(t => t.label_en || t.label_cn || t.icon);
     if (b.type === 'storage_box')    {
-      const hasCard = c => c && (c.head_en || c.head_cn || c.num || c.unit_en || c.unit_cn);
+      const hasCard = c => c && (c.head_en || c.head_cn || c.num_en || c.num_cn || c.num || c.unit_en || c.unit_cn);
       return hasCard(b.left) || hasCard(b.right) || b.note_en || b.note_cn;
     }
     if (b.type === 'notes_callout')  return !!(b.text_en || b.text_cn);
@@ -2335,12 +2335,13 @@ function _paBlockEditorBody(b) {
       <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
         <div class="pa-edit-section-title" style="margin-bottom:8px">${which === 'left' ? 'Left card · 左卡' : 'Right card · 右卡'}</div>
         <div class="pa-edit-grid-2">
-          <div class="field"><label class="stacked">Head EN · 标题(英文)</label><input data-sub="${which}" data-bkey="head_en" type="text" value="${escapeAttr(c.head_en || '')}" placeholder="Refrigerated"></div>
-          <div class="field"><label class="stacked">Head CN · 标题(中文)</label><input data-sub="${which}" data-bkey="head_cn" type="text" value="${escapeAttr(c.head_cn || '')}" placeholder="冷藏"></div>
-          <div class="field"><label class="stacked">Number · 数值</label><input data-sub="${which}" data-bkey="num" type="text" value="${escapeAttr(c.num || '')}" placeholder="0–4°"></div>
+          <div class="field"><label class="stacked">Head EN · 标题(英文)</label><input data-sub="${which}" data-bkey="head_en" type="text" value="${escapeAttr(c.head_en || '')}" placeholder="Unopened"></div>
+          <div class="field"><label class="stacked">Head CN · 标题(中文)</label><input data-sub="${which}" data-bkey="head_cn" type="text" value="${escapeAttr(c.head_cn || '')}" placeholder="未开封"></div>
+          <div class="field"><label class="stacked">Big word EN · 大字(英文)</label><input data-sub="${which}" data-bkey="num_en" type="text" value="${escapeAttr(c.num_en || c.num || '')}" placeholder="Cool & dry"></div>
+          <div class="field"><label class="stacked">Big word CN · 大字(中文)</label><input data-sub="${which}" data-bkey="num_cn" type="text" value="${escapeAttr(c.num_cn || '')}" placeholder="阴凉干燥"></div>
+          <div class="field"><label class="stacked">Unit EN · 单位(英文)</label><input data-sub="${which}" data-bkey="unit_en" type="text" value="${escapeAttr(c.unit_en || '')}" placeholder="Store away from heat"></div>
+          <div class="field"><label class="stacked">Unit CN · 单位(中文)</label><input data-sub="${which}" data-bkey="unit_cn" type="text" value="${escapeAttr(c.unit_cn || '')}" placeholder="远离高温和潮湿"></div>
           <div class="field"><label class="stacked">Icon · 图标</label><input data-sub="${which}" data-bkey="icon" type="text" value="${escapeAttr(c.icon || '')}" placeholder="❄" style="text-align:center;font-size:18px"></div>
-          <div class="field"><label class="stacked">Unit EN · 单位(英文)</label><input data-sub="${which}" data-bkey="unit_en" type="text" value="${escapeAttr(c.unit_en || '')}" placeholder="Celsius"></div>
-          <div class="field"><label class="stacked">Unit CN · 单位(中文)</label><input data-sub="${which}" data-bkey="unit_cn" type="text" value="${escapeAttr(c.unit_cn || '')}" placeholder="摄氏度"></div>
         </div>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-1);margin-top:10px;cursor:pointer">
           <input data-sub="${which}" data-bkey="alt" type="checkbox" ${c.alt ? 'checked' : ''}>
@@ -2529,7 +2530,7 @@ function _paPreviewBlockHtml(b) {
   if (b.type === 'storage_box') {
     const cardHtml = (c) => {
       if (!c) return '';
-      const head = pickT(c.head_en, c.head_cn), unit = pickT(c.unit_en, c.unit_cn), num = (c.num || '').toString();
+      const head = pickT(c.head_en, c.head_cn), unit = pickT(c.unit_en, c.unit_cn), num = (pickT(c.num_en, c.num_cn) || c.num || '').toString();
       if (!head && !num && !unit) return '';
       return `<div class="pa-prev-storage-card ${c.alt ? 'alt' : ''}">${c.icon ? `<span class="pa-prev-storage-ic">${esc(c.icon)}</span>` : ''}${head ? `<div class="pa-prev-storage-head">${esc(head)}</div>` : ''}${num ? `<div class="pa-prev-storage-num">${esc(num)}</div>` : ''}${unit ? `<div class="pa-prev-storage-unit">${esc(unit)}</div>` : ''}</div>`;
     };
