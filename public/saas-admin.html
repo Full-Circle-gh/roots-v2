@@ -327,18 +327,26 @@
       $('#mTitle').textContent = (j.tenant.brand||j.tenant.name) + ' · 详情';
       const subLine = s ? (s.is_internal ? 'internal · perpetual' : esc(s.status)+' · '+(plan?esc(plan.name):'no plan')+(s.current_period_end?' · until '+fdate(s.current_period_end):'')) : 'no subscription';
       const invRows = (j.invoices||[]).length ? j.invoices.map(iv =>
-        '<tr><td class="mono">'+esc(iv.invoice_no||('#'+iv.id))+'</td><td class="mono">'+fdate(iv.period_start)+'–'+fdate(iv.period_end)+'</td><td class="mono">'+money(iv.amount_cents,iv.currency)+'</td>'+
+        '<tr><td class="mono">'+esc(iv.invoice_no||('#'+iv.id))+'</td><td class="mono">'+(iv.kind==='setup'?'<span class="zh">Setup fee · 开通费</span>':fdate(iv.period_start)+'–'+fdate(iv.period_end))+'</td><td class="mono">'+money(iv.amount_cents,iv.currency)+'</td>'+
         '<td><span class="pill '+esc(iv.status)+'">'+esc(iv.status)+'</span></td>'+
         '<td>'+(iv.status!=='paid'?'<button class="btn btn-sm" data-mp="'+iv.id+'">Mark paid</button>':'<span class="zh">'+fdate(iv.paid_at)+'</span>')+'</td></tr>'
       ).join('') : '<tr><td colspan="5" class="empty">No invoices · 暂无发票</td></tr>';
+      const canBillSetup = !(s && s.is_internal) && Number(j.tenant.setupFeeCents||0) > 0 && !j.hasOpenSetup;
+      const setupBtn = canBillSetup
+        ? '<button class="btn btn-sm" id="bill-setup" style="float:right">+ Bill setup fee '+money(j.tenant.setupFeeCents)+' · 开通费</button>'
+        : '';
       const opRows = (j.operators||[]).map(o => '<tr><td>'+esc(o.display_name||o.username)+' <span class="zh mono">@'+esc(o.username)+'</span></td><td class="zh">'+esc(o.role)+'</td><td class="zh mono">'+(o.last_login?fdate(o.last_login):'never')+'</td></tr>').join('');
       $('#mBody').innerHTML =
         '<div class="zh" style="margin-bottom:4px">Subscription · 订阅</div><div style="margin-bottom:8px">'+subLine+'</div>' +
-        '<div class="det-sec"><h4>Invoices · 发票</h4><div class="card"><table><tbody>'+invRows+'</tbody></table></div></div>' +
+        '<div class="det-sec"><h4>Invoices · 发票'+setupBtn+'</h4><div class="card"><table><tbody>'+invRows+'</tbody></table></div></div>' +
         '<div class="det-sec"><h4>Operators · 操作员</h4><div class="card"><table><tbody>'+opRows+'</tbody></table></div></div>';
       document.querySelectorAll('[data-mp]').forEach(b => b.addEventListener('click', () => {
         api('/api/saas-admin/invoices/'+b.getAttribute('data-mp')+'/mark-paid',{method:'POST'}).then(j=>{ toast(j.success?'Marked paid':j.error||'Failed'); detailModal(id); load(); });
       }));
+      const billBtn = $('#bill-setup');
+      if (billBtn) billBtn.addEventListener('click', () => {
+        api('/api/saas-admin/tenants/'+id+'/setup-invoice',{method:'POST'}).then(j=>{ toast(j.success?'Setup fee invoiced · 已开具':j.error||'Failed'); detailModal(id); load(); });
+      });
     });
   }
 

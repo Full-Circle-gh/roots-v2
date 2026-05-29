@@ -72,6 +72,10 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_billing_invoices_tenant ON billing_invoices(tenant_id, created_at);
 `);
+// One-time charges (e.g. Model-B onboarding setup fee) vs recurring subscription
+// invoices. NULL/'subscription' = the normal periodic invoice; 'setup' = a
+// one-off charge with no billing period (must not advance the subscription).
+try { db.exec('ALTER TABLE billing_invoices ADD COLUMN kind TEXT'); } catch (e) { /* already added */ }
 
 // ── Seed the plan catalogue (prices are placeholders — edit freely) ──────
 function seedPlans() {
