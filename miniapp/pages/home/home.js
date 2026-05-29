@@ -108,6 +108,22 @@ Page({
     if (Object.keys(patch).length) this.setData(patch);
     const tb = this.getTabBar && this.getTabBar();
     if (tb && tb.setSelected) tb.setSelected('pages/home/home');
+    // Re-sync the unread-notifications badge whenever Home becomes visible
+    // again. Without this the greeting-block strip would stale-render the
+    // count from onLoad — e.g. user opens Notifications, reads items,
+    // returns to Home, strip still says "3 new updates".
+    this._refreshNotifUnread();
+  },
+
+  // Lightweight side-fetch — runs on every onShow without touching the
+  // rest of the home payload. Silently 0s on any error (anonymous, network).
+  async _refreshNotifUnread() {
+    const app = getApp();
+    if (!app?.globalData?.token) return;
+    try {
+      const res = await api.get('/api/retail/notifications/unread-count');
+      this.setData({ notifUnread: (res && res.count) || 0 });
+    } catch {}
   },
 
   async onPullDownRefresh() {
@@ -277,7 +293,16 @@ Page({
     if (t === 'affiliate')  return wx.navigateTo({ url: '/pages/affiliate/affiliate' });
     if (t === 'topup')      return wx.navigateTo({ url: '/pages/topup/topup' });
     if (t === 'favorites')  return wx.navigateTo({ url: '/pages/favorites/favorites' });
-    if (t === 'notifications') return wx.navigateTo({ url: '/pages/notifications/notifications' });
+    if (t === 'notifications') {
+      // Tapping the strip is the dismissal action — zero the badge locally
+      // and mark every unread notification read on the backend (best-effort)
+      // so coming back to Home doesn't re-show the same count.
+      if (this.data.notifUnread > 0) {
+        this.setData({ notifUnread: 0 });
+        api.post('/api/retail/notifications/read-all').catch(() => {});
+      }
+      return wx.navigateTo({ url: '/pages/notifications/notifications' });
+    }
     // Generic CMS-driven pages — same renderer as home, just different layout
     if (t === 'promotions' || t === 'categories') {
       return wx.navigateTo({ url: '/pages/layout/layout?page=' + t });
