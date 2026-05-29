@@ -404,8 +404,15 @@ router.post('/api/products', requireAuth, requirePermission('products'), (req, r
 // to null on every save. stock_qty is managed by /api/products/:id/stock-adjust;
 // sort_order / external_id come from import; tags come from… nobody. All
 // preserved.
+// Description fields shared across variants by default: editing the product
+// body on one variant auto-propagates to its siblings (same variant_group_id),
+// so the operator doesn't have to re-paste the description into Big/Small/etc.
+// Per-variant override is still possible: just edit that one variant alone
+// — propagation only fires for fields actually included in the request.
+const SHARED_DESC_FIELDS = ['description_en', 'description_cn', 'description_format', 'description_blocks', 'use_block_design'];
+
 router.put('/api/products/:id', requireAuth, requirePermission('products'), (req, res) => {
-  const existing = db.prepare('SELECT id FROM products WHERE id = ?').get(req.params.id);
+  const existing = db.prepare('SELECT id, variant_group_id FROM products WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found · 未找到' });
 
   const present = FIELDS.filter(f => f in req.body);
@@ -416,6 +423,14 @@ router.put('/api/products/:id', requireAuth, requirePermission('products'), (req
     const setClause = present.map(f => `${f}=?`).join(',') + ',updated_at=CURRENT_TIMESTAMP';
     db.prepare(`UPDATE products SET ${setClause} WHERE id=?`)
       .run(...present.map(f => p[f]), req.params.id);
+
+    const descPresent = present.filter(f => SHARED_DESC_FIELDS.includes(f));
+    if (descPresent.length && existing.variant_group_id) {
+      const sibSet = descPresent.map(f => `${f}=?`).join(',') + ',updated_at=CURRENT_TIMESTAMP';
+      db.prepare(`UPDATE products SET ${sibSet} WHERE variant_group_id=? AND id<>?`)
+        .run(...descPresent.map(f => p[f]), existing.variant_group_id, req.params.id);
+    }
+
     logActivity(req.user.id, req.user.username, 'update', 'product', req.params.id, { fields: present }, req.ip);
     res.json({ success: true });
   } catch (e) {
