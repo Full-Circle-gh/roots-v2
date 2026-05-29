@@ -3725,6 +3725,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
         Top-up &amp; points · 充值与积分
       </button>
+      <button data-tab="broadcasts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l15-7v16L3 13v-2z"/><path d="M11 19a2 2 0 0 1-4 0v-4"/><path d="M18 8a4 4 0 0 1 0 8"/></svg>
+        Broadcasts · 广播
+      </button>
     </div>
   </div>
 
@@ -5474,6 +5478,119 @@
       </button>
     </div>
   </aside>
+
+  <!-- ─── BROADCASTS ─── -->
+  <section id="tab-broadcasts">
+    <style>
+      .bc-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--s5); align-items: start; }
+      @media (max-width: 1100px) { .bc-grid { grid-template-columns: 1fr; } }
+      .bc-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 10px; padding: var(--s4); }
+      .bc-row { display: flex; gap: var(--s3); margin-bottom: var(--s3); }
+      .bc-row > * { flex: 1; min-width: 0; }
+      .bc-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+      .bc-input, .bc-textarea, .bc-select { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font: inherit; background: var(--bg-app); color: var(--text); }
+      .bc-textarea { min-height: 70px; resize: vertical; }
+      .bc-actions { display: flex; gap: var(--s3); align-items: center; margin-top: var(--s4); }
+      .bc-audience { background: var(--bg-app); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: var(--muted); border: 1px dashed var(--line); }
+      .bc-audience b { color: var(--text); font-size: 14px; }
+      .bc-list { display: flex; flex-direction: column; gap: 10px; }
+      .bc-item { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+      .bc-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+      .bc-item-title { font-weight: 600; font-size: 14px; }
+      .bc-item-body { color: var(--muted); font-size: 12px; line-height: 1.5; margin-bottom: 6px; }
+      .bc-item-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--muted); align-items: center; }
+      .bc-item-meta .sep { opacity: 0.4; }
+      .bc-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em; }
+      .bc-pill.sent      { background: rgba(80, 160, 80, 0.15); color: #2e7d32; }
+      .bc-pill.scheduled { background: rgba(70, 120, 200, 0.15); color: #1a56a8; }
+      .bc-pill.recalled  { background: rgba(180, 60, 60, 0.12); color: #b03030; }
+      .bc-pill.cancelled { background: rgba(120, 120, 120, 0.15); color: #555; }
+    </style>
+    <h2>Broadcasts · 广播</h2>
+    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
+      Send a notification to every active mini-app customer at once. Schedule it for later or send right away.
+      Tapping the notification can deep-link to any internal mini-app page.
+      Recall pulls the broadcast back out of every customer's inbox.
+    </div>
+
+    <div class="bc-grid">
+      <!-- Composer -->
+      <div class="bc-card">
+        <h3 style="margin: 0 0 var(--s4); font-size: 15px;">New broadcast · 新广播</h3>
+        <div class="bc-row">
+          <div>
+            <label class="bc-label">Title (EN)</label>
+            <input id="bc-title-en" class="bc-input" type="text" maxlength="80" placeholder="e.g. New seasonal box">
+          </div>
+          <div>
+            <label class="bc-label">标题 (中文)</label>
+            <input id="bc-title-cn" class="bc-input" type="text" maxlength="80" placeholder="例如:新一季礼盒">
+          </div>
+        </div>
+        <div class="bc-row">
+          <div>
+            <label class="bc-label">Body (EN, optional)</label>
+            <textarea id="bc-body-en" class="bc-textarea" maxlength="400" placeholder="One short paragraph"></textarea>
+          </div>
+          <div>
+            <label class="bc-label">正文 (中文,选填)</label>
+            <textarea id="bc-body-cn" class="bc-textarea" maxlength="400" placeholder="一段简短的说明"></textarea>
+          </div>
+        </div>
+        <div class="bc-row">
+          <div style="flex: 2;">
+            <label class="bc-label">Deep-link <span class="muted">(must start with <code>/pages/</code> — leave blank for none)</span></label>
+            <select id="bc-deeplink-preset" class="bc-select" onchange="bcDeeplinkPreset()">
+              <option value="">— No deep-link —</option>
+              <option value="/pages/shop/shop">Shop tab · 商城</option>
+              <option value="/pages/cart/cart">Cart · 购物车</option>
+              <option value="/pages/orders/orders">My orders · 我的订单</option>
+              <option value="/pages/coupons/coupons">Coupons · 优惠券</option>
+              <option value="/pages/membership/membership">Membership · 会员</option>
+              <option value="/pages/affiliate/affiliate">Refer a friend · 推广</option>
+              <option value="/pages/voting/voting">Your say · 投票</option>
+              <option value="/pages/topup/topup">Top up · 充值</option>
+              <option value="__custom__">Custom path…</option>
+            </select>
+            <input id="bc-deeplink" class="bc-input" type="text" placeholder="/pages/product/product?id=123" style="margin-top: 6px; display: none;">
+          </div>
+        </div>
+        <div class="bc-row">
+          <div>
+            <label class="bc-label">When · 发送时间</label>
+            <select id="bc-schedule-mode" class="bc-select" onchange="bcScheduleMode()">
+              <option value="now">Send now · 立即发送</option>
+              <option value="later">Schedule for later · 定时发送</option>
+            </select>
+            <input id="bc-schedule-at" class="bc-input" type="datetime-local" style="margin-top: 6px; display: none;">
+          </div>
+          <div>
+            <label class="bc-label">Audience · 接收人</label>
+            <div class="bc-audience" id="bc-audience">
+              All active customers · <b id="bc-aud-count">—</b>
+              <div style="margin-top: 2px; opacity: 0.8;">Blocked customers are skipped.</div>
+            </div>
+          </div>
+        </div>
+        <div class="bc-actions">
+          <button class="btn btn-primary" onclick="sendBroadcast()" id="bc-send-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M3 11l15-7v16L3 13v-2z"/><path d="M11 19a2 2 0 0 1-4 0v-4"/></svg>
+            <span id="bc-send-label">Send broadcast</span>
+          </button>
+          <button class="btn" onclick="bcResetComposer()">Reset</button>
+          <span id="bc-send-status" style="font-size: 12px; color: var(--muted);"></span>
+        </div>
+      </div>
+
+      <!-- Past + scheduled list -->
+      <div>
+        <h3 style="margin: 0 0 var(--s4); font-size: 15px;">Past &amp; scheduled · 历史与定时</h3>
+        <div class="bc-list" id="bc-list">
+          <div class="muted" style="font-size: 12px;">Loading…</div>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- ─── DELIVERY ZONES ─── -->
   <section id="tab-delivery">
@@ -11322,6 +11439,164 @@ async function deleteCategory(id, name, usage) {
     status.innerHTML = '<span class="err">Delete failed: ' + escapeHtml(e.message) + '</span>';
   }
 }
+
+// ════════════════════════════════════════════════════════════════
+// BROADCASTS — operator-composed announcements that fan out to every
+// active (non-blocked) customer's notification inbox.
+// ════════════════════════════════════════════════════════════════
+function bcDeeplinkPreset() {
+  const sel = $('#bc-deeplink-preset');
+  const input = $('#bc-deeplink');
+  if (sel.value === '__custom__') {
+    input.style.display = '';
+    input.value = '';
+    input.focus();
+  } else {
+    input.style.display = 'none';
+    input.value = sel.value || '';
+  }
+}
+function bcScheduleMode() {
+  const sel = $('#bc-schedule-mode');
+  const at  = $('#bc-schedule-at');
+  const lbl = $('#bc-send-label');
+  if (sel.value === 'later') {
+    at.style.display = '';
+    if (!at.value) {
+      // Default to 1 hour from now in local time, datetime-local format.
+      const d = new Date(Date.now() + 60 * 60 * 1000);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      at.value = d.toISOString().slice(0, 16);
+    }
+    lbl.textContent = 'Schedule broadcast';
+  } else {
+    at.style.display = 'none';
+    lbl.textContent = 'Send broadcast';
+  }
+}
+function bcResetComposer() {
+  ['bc-title-en','bc-title-cn','bc-body-en','bc-body-cn','bc-deeplink','bc-schedule-at'].forEach(k => { const el = $('#' + k); if (el) el.value = ''; });
+  $('#bc-deeplink-preset').value = '';
+  $('#bc-deeplink').style.display = 'none';
+  $('#bc-schedule-mode').value = 'now';
+  $('#bc-schedule-at').style.display = 'none';
+  $('#bc-send-label').textContent = 'Send broadcast';
+  $('#bc-send-status').textContent = '';
+}
+async function loadBroadcastAudienceCount() {
+  try {
+    const { data } = await api('/api/retail-admin/broadcasts/audience-count');
+    $('#bc-aud-count').textContent = (data && data.count != null ? data.count : '0') + ' customers';
+  } catch (e) {
+    $('#bc-aud-count').textContent = '?';
+  }
+}
+async function loadBroadcasts() {
+  const wrap = $('#bc-list');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="muted" style="font-size: 12px;">Loading…</div>';
+  try {
+    const { data } = await api('/api/retail-admin/broadcasts');
+    if (!data.length) {
+      wrap.innerHTML = '<div class="muted" style="font-size: 12px;">No broadcasts yet.</div>';
+      return;
+    }
+    wrap.innerHTML = data.map(b => {
+      const titleBits = [];
+      if (b.title_en) titleBits.push(escapeHtml(b.title_en));
+      if (b.title_cn) titleBits.push(escapeHtml(b.title_cn));
+      const title = titleBits.join(' · ') || '<span class="muted">(no title)</span>';
+      const bodyBits = [];
+      if (b.body_en) bodyBits.push(escapeHtml(b.body_en));
+      if (b.body_cn) bodyBits.push(escapeHtml(b.body_cn));
+      const body = bodyBits.join(' · ');
+      const status = b.status || 'sent';
+      const pill = `<span class="bc-pill ${status}">${status.toUpperCase()}</span>`;
+      const meta = [];
+      if (status === 'scheduled' && b.scheduled_for) meta.push('Scheduled for ' + escapeHtml(b.scheduled_for));
+      if (b.sent_at) meta.push('Sent ' + escapeHtml(b.sent_at));
+      if (b.recipient_count) meta.push(b.recipient_count + ' recipient' + (b.recipient_count === 1 ? '' : 's'));
+      if (b.deeplink) meta.push('→ <code>' + escapeHtml(b.deeplink) + '</code>');
+      const canRecall = status === 'sent' || status === 'scheduled';
+      const recallLabel = status === 'scheduled' ? 'Cancel' : 'Recall';
+      const recallBtn = canRecall
+        ? `<button class="btn btn-sm" onclick="recallBroadcast(${b.id}, '${status}')">${recallLabel}</button>`
+        : '';
+      return `
+        <div class="bc-item" data-id="${b.id}">
+          <div class="bc-item-head">
+            <div class="bc-item-title">${title}</div>
+            ${pill}
+            <div style="margin-left: auto;">${recallBtn}</div>
+          </div>
+          ${body ? `<div class="bc-item-body">${body}</div>` : ''}
+          <div class="bc-item-meta">${meta.join('<span class="sep">·</span>')}</div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    wrap.innerHTML = `<div class="err" style="font-size: 12px;">Failed: ${escapeHtml(e.message)}</div>`;
+  }
+}
+async function sendBroadcast() {
+  const title_en = $('#bc-title-en').value.trim();
+  const title_cn = $('#bc-title-cn').value.trim();
+  const body_en  = $('#bc-body-en').value.trim();
+  const body_cn  = $('#bc-body-cn').value.trim();
+  const deeplink = $('#bc-deeplink').value.trim();
+  const mode     = $('#bc-schedule-mode').value;
+  const scheduledRaw = mode === 'later' ? $('#bc-schedule-at').value : '';
+
+  if (!title_en && !title_cn) {
+    $('#bc-send-status').innerHTML = '<span class="err">Add at least one title.</span>';
+    return;
+  }
+  if (deeplink && !deeplink.startsWith('/pages/')) {
+    $('#bc-send-status').innerHTML = '<span class="err">Deep-link must start with /pages/</span>';
+    return;
+  }
+  const audCount = ($('#bc-aud-count').textContent || '').replace(/[^0-9]/g, '');
+  const verb = mode === 'later' ? 'Schedule' : 'Send';
+  if (!confirm(`${verb} this broadcast to ${audCount || 'all active'} customer${audCount === '1' ? '' : 's'}?`)) return;
+
+  const payload = { title_en, title_cn, body_en, body_cn, deeplink };
+  if (scheduledRaw) {
+    // datetime-local has no timezone; treat as local time and convert.
+    payload.scheduled_for = new Date(scheduledRaw).toISOString();
+  }
+  const btn = $('#bc-send-btn');
+  const status = $('#bc-send-status');
+  btn.disabled = true;
+  status.textContent = 'Sending…';
+  try {
+    const { data } = await api('/api/retail-admin/broadcasts', { method: 'POST', body: payload });
+    if (data.status === 'sent') {
+      status.innerHTML = `<span style="color: #2e7d32;">Sent to ${data.recipient_count} customer${data.recipient_count === 1 ? '' : 's'}.</span>`;
+    } else if (data.status === 'scheduled') {
+      status.innerHTML = '<span style="color: #1a56a8;">Scheduled.</span>';
+    }
+    bcResetComposer();
+    loadBroadcasts();
+  } catch (e) {
+    status.innerHTML = `<span class="err">Failed: ${escapeHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+async function recallBroadcast(id, currentStatus) {
+  const verb = currentStatus === 'scheduled' ? 'Cancel this scheduled broadcast' : 'Recall this broadcast (remove from every customer\'s inbox)';
+  if (!confirm(verb + '?')) return;
+  try {
+    await api('/api/retail-admin/broadcasts/' + id + '/recall', { method: 'POST' });
+    loadBroadcasts();
+  } catch (e) {
+    alert('Failed: ' + e.message);
+  }
+}
+// Lazy-load when the operator first opens the tab.
+document.querySelector('[data-tab="broadcasts"]').addEventListener('click', () => {
+  loadBroadcasts();
+  loadBroadcastAudienceCount();
+});
 
 // ════════════════════════════════════════════════════════════════
 // POP-UPS — list + editor + save back to storefront_config

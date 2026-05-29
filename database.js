@@ -1393,6 +1393,29 @@ db.exec(`CREATE TABLE IF NOT EXISTS retail_media_folders (
 )`);
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_media_folder_id ON retail_media(folder_id)'); } catch {}
 
+// Broadcasts — operator-composed announcements that fan out to every active
+// (non-blocked) customer's notification feed. Each row here is the authored
+// message; the per-customer copies live in retail_notifications with
+// broadcast_id pointing back. Recall = DELETE those rows + flip status.
+// scheduled_for IS NULL → send immediately; otherwise the scheduler picks
+// it up when CURRENT_TIMESTAMP >= scheduled_for.
+db.exec(`CREATE TABLE IF NOT EXISTS retail_broadcasts (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  title_en        TEXT, title_cn TEXT,
+  body_en         TEXT, body_cn TEXT,
+  deeplink        TEXT,                          -- mini-app route, e.g. /pages/shop/shop
+  audience        TEXT NOT NULL DEFAULT 'all_active',
+  scheduled_for   DATETIME,                      -- NULL = send immediately
+  sent_at         DATETIME,                      -- NULL until fanout completes
+  recipient_count INTEGER DEFAULT 0,
+  status          TEXT NOT NULL DEFAULT 'scheduled', -- scheduled|sent|recalled|cancelled
+  created_by      INTEGER,                       -- users.id
+  created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_broadcasts_status ON retail_broadcasts(status, scheduled_for)'); } catch {}
+addColumn('retail_notifications', 'broadcast_id', 'INTEGER');
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_notif_broadcast ON retail_notifications(broadcast_id)'); } catch {}
+
 // Seed a default ONBOARDING layout — first-launch customers in the mini
 // app see this. The office can edit it later in /cms → Onboarding page.
 try {

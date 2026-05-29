@@ -91,7 +91,7 @@ const upload = multer({
 // Keys whose prefix is in this set are FILTERED OUT of the public
 // /api/retail/config response — they hold third-party API secrets
 // (kd100 key, JD app_secret, etc.) and must never reach the mini app.
-const PRIVATE_CONFIG_PREFIXES = ['integrations.'];
+const PRIVATE_CONFIG_PREFIXES = ['integrations.', 'printer.'];
 
 function loadConfig() {
   const rows = tdb().prepare('SELECT key, value_json FROM storefront_config').all();
@@ -1484,7 +1484,7 @@ router.get('/api/retail/notifications', requireRetailAuth, (req, res) => {
   const limit  = Math.min(parseInt(req.query.limit || '30', 10) || 30, 50);
   const before = req.query.before ? parseInt(req.query.before, 10) : null;
   let sql = `SELECT id, category, type, title_en, title_cn, body_en, body_cn,
-                    ref_type, ref_id, read_at, created_at
+                    ref_type, ref_id, broadcast_id, read_at, created_at
                FROM retail_notifications WHERE customer_id = ?`;
   const params = [req.customer.id];
   if (before) { sql += ' AND id < ?'; params.push(before); }
@@ -1520,6 +1520,170 @@ router.post('/api/retail/notifications/:id/read', requireRetailAuth, (req, res) 
   ).run(id, req.customer.id);
   res.json({ success: true });
 });
+
+// ─── Broadcasts ───────────────────────────────────────────────────────────
+// Operator-composed announcements. fanOutBroadcast() inserts one
+// retail_notifications row per active (non-blocked) customer with
+// category='broadcast' and broadcast_id pointing back to the authoring row;
+// the existing customer notification endpoints surface them automatically.
+// Deeplink is carried via the existing ref_type='deeplink' / ref_id=<path>.
+function fanOutBroadcast(brd) {
+  const db_ = tdb();
+  const customers = db_.prepare(
+    'SELECT id FROM retail_customers WHERE COALESCE(is_blocked, 0) = 0'
+  ).all();
+  const insert = db_.prepare(
+    `INSERT INTO retail_notifications
+       (customer_id, category, type, title_en, title_cn, body_en, body_cn,
+        ref_type, ref_id, broadcast_id)
+     VALUES (?, 'broadcast', 'announcement', ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const refType = brd.deeplink ? 'deeplink' : null;
+  const refId   = brd.deeplink || null;
+  const txn = db_.transaction((rows) => {
+    for (const c of rows) {
+      insert.run(
+        c.id,
+        brd.title_en || '', brd.title_cn || '',
+        brd.body_en || null, brd.body_cn || null,
+        refType, refId,
+        brd.id
+      );
+    }
+  });
+  txn(customers);
+  db_.prepare(
+    `UPDATE retail_broadcasts
+        SET status = 'sent', sent_at = CURRENT_TIMESTAMP, recipient_count = ?
+      WHERE id = ?`
+  ).run(customers.length, brd.id);
+  return customers.length;
+}
+
+// Lightweight string sanity-check for deeplinks. We only allow internal
+// mini-app paths (must start with "/pages/") to keep operators from pasting
+// http(s) URLs that the mini-app router can't open.
+function normalizeDeeplink(raw) {
+  const s = (raw == null ? '' : String(raw)).trim();
+  if (!s) return '';
+  if (!s.startsWith('/pages/')) {
+    const err = new Error('deeplink_must_start_with_/pages/');
+    err.statusCode = 400;
+    throw err;
+  }
+  return s;
+}
+
+// GET /api/retail-admin/broadcasts — list, newest first.
+router.get('/api/retail-admin/broadcasts', requireRetailAdmin, (req, res) => {
+  const rows = tdb().prepare(
+    `SELECT id, title_en, title_cn, body_en, body_cn, deeplink, audience,
+            scheduled_for, sent_at, recipient_count, status, created_by, created_at
+       FROM retail_broadcasts
+      ORDER BY id DESC
+      LIMIT 200`
+  ).all();
+  res.json({ success: true, data: rows });
+});
+
+// GET /api/retail-admin/broadcasts/audience-count — preview "Will send to N".
+router.get('/api/retail-admin/broadcasts/audience-count', requireRetailAdmin, (req, res) => {
+  const n = tdb().prepare(
+    'SELECT COUNT(*) AS n FROM retail_customers WHERE COALESCE(is_blocked, 0) = 0'
+  ).get().n;
+  res.json({ success: true, data: { count: n || 0 } });
+});
+
+// POST /api/retail-admin/broadcasts — create + send-now OR schedule.
+router.post('/api/retail-admin/broadcasts', requireRetailAdmin, express.json(), (req, res) => {
+  const b = req.body || {};
+  const title_en = (b.title_en || '').trim();
+  const title_cn = (b.title_cn || '').trim();
+  const body_en  = (b.body_en  || '').trim();
+  const body_cn  = (b.body_cn  || '').trim();
+  if (!title_en && !title_cn) {
+    return res.status(400).json({ success: false, error: 'title_required' });
+  }
+  let deeplink;
+  try { deeplink = normalizeDeeplink(b.deeplink); }
+  catch (e) { return res.status(e.statusCode || 400).json({ success: false, error: e.message }); }
+  // scheduled_for: accept ISO string (e.g. "2026-06-01T18:00:00"); if present
+  // and in the future, queue; otherwise send immediately.
+  const scheduledRaw = (b.scheduled_for || '').trim();
+  let scheduledFor = null;
+  let sendNow = true;
+  if (scheduledRaw) {
+    const t = Date.parse(scheduledRaw);
+    if (!Number.isFinite(t)) {
+      return res.status(400).json({ success: false, error: 'bad_scheduled_for' });
+    }
+    if (t > Date.now() + 30 * 1000) {  // >30s in the future = schedule
+      scheduledFor = new Date(t).toISOString().slice(0, 19).replace('T', ' ');
+      sendNow = false;
+    }
+  }
+  const initialStatus = sendNow ? 'sent' : 'scheduled';
+  const info = tdb().prepare(
+    `INSERT INTO retail_broadcasts
+       (title_en, title_cn, body_en, body_cn, deeplink, audience,
+        scheduled_for, status, created_by)
+     VALUES (?, ?, ?, ?, ?, 'all_active', ?, ?, ?)`
+  ).run(
+    title_en, title_cn, body_en, body_cn, deeplink || null,
+    scheduledFor, initialStatus, req.user.id
+  );
+  const id = info.lastInsertRowid;
+  let recipient_count = 0;
+  if (sendNow) {
+    const row = tdb().prepare('SELECT * FROM retail_broadcasts WHERE id = ?').get(id);
+    recipient_count = fanOutBroadcast(row);
+  }
+  res.json({ success: true, data: { id, status: initialStatus, recipient_count } });
+});
+
+// POST /api/retail-admin/broadcasts/:id/recall — cancel-if-scheduled or
+// delete-fanout-if-sent. Idempotent: recalling an already-recalled row 200s.
+router.post('/api/retail-admin/broadcasts/:id/recall', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const row = tdb().prepare('SELECT * FROM retail_broadcasts WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  if (row.status === 'scheduled') {
+    tdb().prepare("UPDATE retail_broadcasts SET status = 'cancelled' WHERE id = ?").run(id);
+    return res.json({ success: true, data: { status: 'cancelled' } });
+  }
+  if (row.status === 'sent') {
+    const del = tdb().prepare('DELETE FROM retail_notifications WHERE broadcast_id = ?').run(id);
+    tdb().prepare("UPDATE retail_broadcasts SET status = 'recalled' WHERE id = ?").run(id);
+    return res.json({ success: true, data: { status: 'recalled', removed: del.changes } });
+  }
+  // already recalled/cancelled — no-op
+  res.json({ success: true, data: { status: row.status } });
+});
+
+// Scheduler — every 60s, walk every tenant's DB and fire any 'scheduled'
+// broadcasts whose scheduled_for has arrived. Best-effort: never throws.
+function tickBroadcastScheduler() {
+  let tenants;
+  try { tenants = db.prepare("SELECT id FROM tenants WHERE status = 'active'").all(); }
+  catch { return; }   // tenants table not migrated yet
+  for (const t of tenants) {
+    try {
+      const tdb_ = getTenantDb(t.id);
+      tenantAls.run(tdb_, () => {
+        const due = tdb_.prepare(
+          `SELECT * FROM retail_broadcasts
+            WHERE status = 'scheduled' AND scheduled_for <= CURRENT_TIMESTAMP`
+        ).all();
+        for (const brd of due) {
+          try { fanOutBroadcast(brd); }
+          catch (e) { console.warn('[broadcast scheduler] fanout', brd.id, e.message); }
+        }
+      });
+    } catch (e) { console.warn('[broadcast scheduler]', t.id, e.message); }
+  }
+}
+const _bcSweep = setInterval(tickBroadcastScheduler, 60 * 1000);
+if (_bcSweep.unref) _bcSweep.unref();
 
 // Roots Club tier ladder. Editable in /retail-admin → Points/Loyalty; persisted
 // in storefront_config under `roots_club.tiers`. The mini-app reads the same
@@ -6106,6 +6270,11 @@ const INTEGRATION_KEYS = {
     customer_code: { env: 'JD_CUSTOMER_CODE', secret: false },
     env:           { env: 'JD_API_ENV',       secret: false },
   },
+  feie: {
+    user: { env: 'FEIE_USER', secret: false },  // Feieyun account login
+    ukey: { env: 'FEIE_UKEY', secret: true  },  // USERKEY from dev console
+    sn:   { env: 'FEIE_SN',   secret: false },  // printer SN from device label
+  },
 };
 
 function maskSecret(s) {
@@ -6129,6 +6298,7 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
   }
   out.kd100.enabled = tracking.kd100Enabled();
   out.jd.enabled    = !!(process.env.JD_APP_KEY && process.env.JD_APP_SECRET && process.env.JD_ACCESS_TOKEN);
+  out.feie.enabled  = require('../lib/feie').feieEnabled();
   res.json({ success: true, data: out });
 });
 

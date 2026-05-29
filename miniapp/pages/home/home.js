@@ -23,6 +23,10 @@ Page({
     polls: [],
     customer: null,   // { nickname, points_balance, ... } — feeds greeting block
     favorites: [],    // customer's saved products — feeds favorites_block
+    // Unread notification count — surfaced as a small badge inside the
+    // greeting block (top-right). Hydrated in refresh() from
+    // /api/retail/notifications/unread-count when the customer is authed.
+    notifUnread: 0,
     lang: 'en',
     loading: true,
     // User-configured page background, set in /cms → Theme picker. Empty
@@ -118,7 +122,7 @@ Page({
     const app = getApp();
     const hasToken = !!(app?.globalData?.token);
     try {
-      const [cfg, prods, cats, flash, aff, polls, favs] = await Promise.all([
+      const [cfg, prods, cats, flash, aff, polls, favs, notif] = await Promise.all([
         config.load(force),
         api.get('/api/retail/products?limit=100').catch(() => []),
         api.get('/api/retail/categories').catch(() => []),
@@ -130,6 +134,9 @@ Page({
         // Favorites feed favorites_block. Authed-only — anonymous users
         // hit the block's empty state (or it auto-hides).
         hasToken ? api.get('/api/retail/favorites').catch(() => []) : Promise.resolve([]),
+        // Unread notification count — feeds the greeting block badge.
+        // Anonymous users have nothing to count.
+        hasToken ? api.get('/api/retail/notifications/unread-count').catch(() => null) : Promise.resolve(null),
       ]);
       const layout = cfg?.home?.layout || [];
       this.setData({
@@ -140,6 +147,7 @@ Page({
         affiliate: aff || null,
         polls: Array.isArray(polls) ? polls : (polls?.data || []),
         favorites: Array.isArray(favs) ? favs : (favs?.data || []),
+        notifUnread: (notif && notif.count) || 0,
         themeBg: theme.getPageBg(app),
         loading: false,
       });
@@ -269,6 +277,7 @@ Page({
     if (t === 'affiliate')  return wx.navigateTo({ url: '/pages/affiliate/affiliate' });
     if (t === 'topup')      return wx.navigateTo({ url: '/pages/topup/topup' });
     if (t === 'favorites')  return wx.navigateTo({ url: '/pages/favorites/favorites' });
+    if (t === 'notifications') return wx.navigateTo({ url: '/pages/notifications/notifications' });
     // Generic CMS-driven pages — same renderer as home, just different layout
     if (t === 'promotions' || t === 'categories') {
       return wx.navigateTo({ url: '/pages/layout/layout?page=' + t });

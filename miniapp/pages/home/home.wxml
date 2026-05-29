@@ -30,6 +30,7 @@
     polls="{{polls}}"
     customer="{{customer}}"
     favorites="{{favorites}}"
+    notif-unread="{{notifUnread}}"
     bind:cta="onCta"
     bind:category="onCategory"
     bind:product="onProduct"

@@ -18,9 +18,10 @@
   font-size: 19rpx; letter-spacing: 2rpx;
   padding: 3rpx 12rpx; border: 2rpx solid #1a1a17; color: #1a1a17; white-space: nowrap;
 }
-.cat-order   { background: #CCD900; }   /* lime */
-.cat-refund  { background: #E8E0CF; }   /* warm paper */
-.cat-invoice { background: #FFFCF7; }
+.cat-order     { background: #CCD900; }   /* lime */
+.cat-refund    { background: #E8E0CF; }   /* warm paper */
+.cat-invoice   { background: #FFFCF7; }
+.cat-broadcast { background: #C43A6A; color: #fff; border-color: #C43A6A; }  /* berry — operator announcement */
 .n-time { font-size: 22rpx; }
 .n-title { font-size: 30rpx; color: #1a1a17; margin-top: 10rpx; }
 .n-body { font-size: 24rpx; margin-top: 6rpx; line-height: 1.5; }

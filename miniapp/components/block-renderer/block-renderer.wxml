@@ -600,6 +600,12 @@
 </view>
 
 <view wx:elif="{{type === 'greeting' && greeting}}" class="greet-blk greet-blk-{{greeting.view}}" style="background:{{bg}};color:{{fg}}" bindtap="onGreetingCtaTap">
+  <!-- Unread notification badge — pinned top-right across all greeting view
+       variants. catchtap so it doesn't bubble to the greeting CTA. -->
+  <view wx:if="{{notifUnread > 0}}" class="gr-notif" catchtap="onNotifTap">
+    <text class="gr-notif-bell">🔔</text>
+    <text class="gr-notif-count">{{notifUnread > 99 ? '99+' : notifUnread}}</text>
+  </view>
   <!-- Split: greeting + CTA on left, big points wallet on right -->
   <view wx:if="{{greeting.view === 'split'}}" class="gr-split-row">
     <view class="gr-split-left">

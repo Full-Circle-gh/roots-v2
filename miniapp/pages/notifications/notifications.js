@@ -19,9 +19,10 @@ function relTime(iso, cn) {
 }
 
 const CAT = {
-  order:   { en: 'ORDER',   cn: '订单' },
-  refund:  { en: 'REFUND',  cn: '退款' },
-  invoice: { en: 'INVOICE', cn: '发票' },
+  order:     { en: 'ORDER',        cn: '订单' },
+  refund:    { en: 'REFUND',       cn: '退款' },
+  invoice:   { en: 'INVOICE',      cn: '发票' },
+  broadcast: { en: '📣 ANNOUNCEMENT', cn: '📣 公告' },
 };
 
 Page({
@@ -95,6 +96,18 @@ Page({
       wx.navigateTo({ url: '/pages/order/order?id=' + refid });
     } else if (reftype === 'invoice') {
       wx.navigateTo({ url: '/pages/invoices/invoices' });
+    } else if (reftype === 'deeplink' && refid) {
+      // Broadcast deep-link: an internal mini-app path the operator chose.
+      // Backend already validates it starts with /pages/. Tab-bar pages must
+      // use switchTab; everything else is navigateTo.
+      const path = String(refid);
+      const TAB_PAGES = ['/pages/home/home', '/pages/shop/shop', '/pages/cart/cart', '/pages/me/me'];
+      const root = path.split('?')[0];
+      if (TAB_PAGES.includes(root)) {
+        wx.switchTab({ url: root });
+      } else {
+        wx.navigateTo({ url: path });
+      }
     }
   },
 

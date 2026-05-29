@@ -1921,6 +1921,33 @@
   text-transform: uppercase;
 }
 
+/* Notif badge — pinned top-right of the greeting card, only renders when
+   notifUnread > 0. Berry pill with bell + count; catchtap routes to the
+   Notifications page without firing the greeting CTA tap underneath. */
+.gr-notif {
+  position: absolute;
+  top: 18rpx;
+  right: 22rpx;
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: var(--berry);
+  color: #fff;
+  z-index: 2;
+}
+.gr-notif-bell {
+  font-size: calc(20rpx * var(--font-scale));
+  line-height: 1;
+}
+.gr-notif-count {
+  font-family: var(--f-aleo);
+  font-size: calc(20rpx * var(--font-scale));
+  font-weight: 700;
+  line-height: 1;
+}
+
 /* Greeting — view variants */
 .gr-headline-sm { font-size: calc(38rpx * var(--font-scale)); line-height: 1.05; padding-top: 4rpx; margin-top: 8rpx; }
 .gr-headline-lg { font-size: calc(88rpx * var(--font-scale)); line-height: 1.0; padding-top: 8rpx; }

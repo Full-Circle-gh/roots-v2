@@ -47,6 +47,11 @@ Component({
     customer:   { type: Object,  value: null },   // { nickname, points_balance, ... } for greeting + kitchen blocks
     kitchen:    { type: Object,  value: null },   // { address, hours_en, hours_cn, open_hour, close_hour, eta_minutes }
     favorites:  { type: Array,   value: [] },     // customer's saved products for favorites_block
+    // Unread notification count — surfaced as a small badge on the greeting
+    // block so customers see "you have N new" without leaving Home. The
+    // value comes from /api/retail/notifications/unread-count; the host
+    // page (home.js) fetches it and threads it through.
+    notifUnread: { type: Number, value: 0 },
   },
 
   data: {
@@ -1139,6 +1144,12 @@ Component({
     onGreetingCtaTap() {
       const target = this.data.greeting?.ctaTarget;
       if (target) this.triggerEvent('cta', { target });
+    },
+    // Tap on the inline notif badge inside the greeting block — routes to
+    // the Notifications page. catchtap on the badge stops the outer
+    // greeting CTA tap from firing.
+    onNotifTap() {
+      this.triggerEvent('cta', { target: 'notifications' });
     },
     onKitchenCtaTap() {
       const target = this.data.kitchenCard?.ctaTarget;
