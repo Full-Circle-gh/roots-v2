@@ -25,6 +25,7 @@ const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb } = require('../lib/tenant-
 // Web Push — optional; wrapped so a missing module never breaks order flow.
 let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
+const _feie = require('../lib/feie');   // Feie cloud-printer client (order auto-print)
 const router = express.Router();
 
 // Mini App Backend access gate. Two ways in during the single-tenant → SaaS
@@ -1134,6 +1135,19 @@ function markOrderPaid(orderId) {
         }
       }
     } catch (e) { console.warn('[markOrderPaid push]', e.message); }
+
+    // Auto-print to the store's Feie cloud printer. Best-effort: all DB
+    // reads happen synchronously inside printOrderById (tenant context is
+    // still bound here); the network POST to Feieyun is fired without
+    // awaiting so a slow/offline printer never delays the order.
+    try {
+      const pp = loadPrinterPrefs();
+      if (pp.auto_print && _feie.feieEnabled()) {
+        printOrderById(orderId, pp)
+          .then(r => { if (!r.ok) console.warn('[feie print]', orderId, r.msg); })
+          .catch(e => console.warn('[feie print]', e.message));
+      }
+    } catch (e) { console.warn('[feie print setup]', e.message); }
   }
 }
 
@@ -6298,7 +6312,7 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
   }
   out.kd100.enabled = tracking.kd100Enabled();
   out.jd.enabled    = !!(process.env.JD_APP_KEY && process.env.JD_APP_SECRET && process.env.JD_ACCESS_TOKEN);
-  out.feie.enabled  = require('../lib/feie').feieEnabled();
+  out.feie.enabled  = _feie.feieEnabled();
   res.json({ success: true, data: out });
 });
 
@@ -6350,6 +6364,101 @@ router.post('/api/retail-admin/integrations/jd/test', requireRetailAdmin, async 
   const r = await jd.pingJd();
   if (r.ok) return res.json({ ok: true, server_time: r.data?.serverTime || null });
   return res.json({ ok: false, error: r.error });
+});
+
+// ─── Feie cloud printer ──────────────────────────────────────────────────
+// Operator settings live in storefront_config under `printer.*` (private —
+// never exposed to the mini app). The credentials themselves ride the
+// integrations.* path above (FEIE_USER / FEIE_UKEY / FEIE_SN).
+
+// Hoisted: markOrderPaid (defined far earlier) calls these on every paid
+// transition, so they must be reachable from there at runtime.
+function loadPrinterPrefs() {
+  const get = (k, d) => {
+    const r = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(k);
+    if (!r) return d;
+    try { return JSON.parse(r.value_json); } catch { return d; }
+  };
+  return {
+    auto_print: get('printer.auto_print', true),
+    template:   get('printer.template', 'receipt'),
+    copies:     get('printer.copies', 1),
+    shop_name:  get('printer.shop_name', 'Roots'),
+  };
+}
+
+// Render + print one order. All DB reads are synchronous (so the tenant DB
+// stays bound); the returned promise covers only the network POST.
+function printOrderById(orderId, prefs) {
+  if (!_feie.feieEnabled()) return Promise.resolve({ ok: false, msg: 'not_configured' });
+  const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
+  if (!order) return Promise.resolve({ ok: false, msg: 'order_not_found' });
+  const items = tdb().prepare('SELECT * FROM retail_order_items WHERE order_id = ? ORDER BY id').all(orderId);
+  const p = prefs || loadPrinterPrefs();
+  const content = _feie.renderOrder(p.template, order, items, p.shop_name);
+  return _feie.printContent(content, { copies: p.copies });
+}
+
+router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
+  res.json({ success: true, data: {
+    ...loadPrinterPrefs(),
+    enabled: _feie.feieEnabled(),
+    templates: _feie.TEMPLATE_IDS,
+  }});
+});
+
+router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), (req, res) => {
+  const b = req.body || {};
+  const upsert = tdb().prepare(
+    `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+       VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+     ON CONFLICT(key) DO UPDATE SET
+       value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
+  );
+  const tx = tdb().transaction(() => {
+    if (b.auto_print !== undefined) upsert.run('printer.auto_print', JSON.stringify(!!b.auto_print), req.user.id);
+    if (b.template !== undefined) {
+      const t = _feie.TEMPLATE_IDS.includes(b.template) ? b.template : 'receipt';
+      upsert.run('printer.template', JSON.stringify(t), req.user.id);
+    }
+    if (b.copies !== undefined) {
+      const n = Math.max(1, Math.min(5, parseInt(b.copies, 10) || 1));
+      upsert.run('printer.copies', JSON.stringify(n), req.user.id);
+    }
+    if (b.shop_name !== undefined) {
+      upsert.run('printer.shop_name', JSON.stringify(String(b.shop_name || '').slice(0, 40)), req.user.id);
+    }
+  });
+  tx();
+  logActivity(req.user.id, req.user.username, 'printer_settings_update', 'storefront_config', null, {}, req.ip);
+  res.json({ success: true, data: loadPrinterPrefs() });
+});
+
+// Test print — uses the latest real order if one exists, else a sample.
+router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, res) => {
+  if (!_feie.feieEnabled()) return res.json({ ok: false, error: 'not_configured' });
+  const prefs = loadPrinterPrefs();
+  if (req.body && req.body.template && _feie.TEMPLATE_IDS.includes(req.body.template)) {
+    prefs.template = req.body.template;   // preview a specific template
+  }
+  const last = tdb().prepare("SELECT id FROM retail_orders WHERE status != 'pending_payment' ORDER BY id DESC LIMIT 1").get();
+  let r;
+  if (last) {
+    r = await printOrderById(last.id, prefs);
+  } else {
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const sample = {
+      order_no: 'TEST-0001', placed_at: now, paid_at: now,
+      recipient_name: 'Test 测试', recipient_phone: '13800000000',
+      subtotal: 18, shipping_fee: 0, total: 18, payment_method: 'wechat',
+      address_full: 'Test address 测试地址 1号',
+    };
+    const items = [{ name_cn: '测试商品', name_en: 'Test item', qty: 1, unit_price: 18, line_total: 18 }];
+    const content = _feie.renderOrder(prefs.template, sample, items, prefs.shop_name);
+    r = await _feie.printContent(content, { copies: 1 });
+  }
+  if (r.ok) return res.json({ ok: true });
+  res.json({ ok: false, error: r.msg || 'print_failed' });
 });
 
 // Sanity-check kd100 connectivity. Reads the freshly-saved credentials

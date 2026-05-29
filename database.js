@@ -2597,6 +2597,9 @@ try {
     'integrations.jd.access_token':  'JD_ACCESS_TOKEN',
     'integrations.jd.customer_code': 'JD_CUSTOMER_CODE',
     'integrations.jd.env':           'JD_API_ENV',
+    'integrations.feie.user':        'FEIE_USER',
+    'integrations.feie.ukey':        'FEIE_UKEY',
+    'integrations.feie.sn':          'FEIE_SN',
   };
   let hydrated = 0;
   for (const [cfgKey, envKey] of Object.entries(envMap)) {
