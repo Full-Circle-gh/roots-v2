@@ -1071,6 +1071,11 @@ if (WECHAT_PAY_DEV_MODE) {
 const WX_OUT_TRADE_PREFIX = 'FC';
 const wxOutTradeNo = (orderNo) => WX_OUT_TRADE_PREFIX + orderNo;
 
+// User-Agent on outbound WeChat Pay v3 API calls. WeChat only requires a
+// non-empty UA; it's server-to-server (no customer ever sees it), so we send a
+// neutral PLATFORM identifier rather than any one tenant's brand (⑦ de-Roots).
+const WX_PAY_USER_AGENT = 'WeChatPay-Node/1.0';
+
 // ── Alipay (支付宝) config ───────────────────────────────────────────────
 // Alipay uses the classic OpenAPI gateway (gateway.do) with RSA2 signing
 // (SHA256withRSA) — a different scheme from WeChat Pay v3, so it gets its own
@@ -1240,7 +1245,7 @@ async function wechatPayCreate(order, openid, p) {
       'Content-Type':  'application/json',
       'Accept':        'application/json',
       'Authorization': auth,
-      'User-Agent':    'Roots/1.0',
+      'User-Agent':    WX_PAY_USER_AGENT,
     },
     body: JSON.stringify(body),
   });
@@ -1274,7 +1279,7 @@ async function wechatPayRefund({ outTradeNo, outRefundNo, refundCents, totalCent
       'Content-Type':  'application/json',
       'Accept':        'application/json',
       'Authorization': auth,
-      'User-Agent':    'Roots/1.0',
+      'User-Agent':    WX_PAY_USER_AGENT,
     },
     body: JSON.stringify(body),
   });
@@ -7569,7 +7574,7 @@ ${events.length ? `
   ${trackUrl ? `<a class="cta primary" href="${escapeHtml(trackUrl)}">${lang === 'cn' ? '在 ' + escapeHtml(cName) + ' 官网打开' : 'Open on ' + escapeHtml(cName)}</a>` : ''}
   <a class="cta" href="javascript:navigator.clipboard?.writeText('${escapeHtml(o.tracking_number)}').then(()=>alert('${lang === 'cn' ? '运单号已复制' : 'Tracking number copied'}'))">${lang === 'cn' ? '复制运单号' : 'Copy tracking number'}</a>
 </div>
-<div class="footer">${lang === 'cn' ? '该页面由 Roots 提供 · 数据来源 ' + escapeHtml(cName) : 'Provided by Roots · Data via ' + escapeHtml(cName)}</div>
+<div class="footer">${(() => { const brand = escapeHtml(tenantBrandLabel()); return lang === 'cn' ? '该页面由 ' + brand + ' 提供 · 数据来源 ' + escapeHtml(cName) : 'Provided by ' + brand + ' · Data via ' + escapeHtml(cName); })()}</div>
 </body></html>`;
   res.send(html);
 });
