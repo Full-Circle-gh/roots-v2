@@ -175,6 +175,23 @@
    side, so the secondary gloss was duplicating it. Keep the class
    around in case markup still references it. */
 .row-cn { display: none; }
+.row-badge {
+  display: inline-block;
+  min-width: 28rpx;
+  height: 28rpx;
+  padding: 0 10rpx;
+  margin-left: 14rpx;
+  border-radius: 999rpx;
+  background: var(--berry);
+  color: #fff;
+  font-family: var(--f-aleo);
+  font-size: calc(18rpx * var(--font-scale));
+  font-weight: 700;
+  line-height: 28rpx;
+  text-align: center;
+  vertical-align: middle;
+  transform: translateY(-2rpx);
+}
 .row-meta {
   font-family: var(--f-aleo);
   font-size: calc(22rpx * var(--font-scale));

@@ -86,6 +86,7 @@
       <view class="row-body">
         <view class="row-title">
           <text class="f-bear">{{copy.menuNotif}}</text>
+          <text wx:if="{{notifUnread > 0}}" class="row-badge">{{notifUnread > 99 ? '99+' : notifUnread}}</text>
           <text class="row-cn muted">  · {{copy.menuNotifCn}}</text>
         </view>
         <view wx:if="{{notifUnread > 0}}" class="row-meta">{{notifUnread}} {{copy.notifMeta}}</view>
