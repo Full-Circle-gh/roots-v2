@@ -5,6 +5,8 @@
     <view class="sub f-aleo">{{copy.sub}}</view>
   </view>
 
+  <view wx:if="{{isPickup && pickupLine}}" class="pickup-banner f-aleo">{{pickupLine}}</view>
+
   <view wx:if="{{orderNo}}" class="card">
     <view class="row">
       <view class="lbl f-toni">{{copy.orderLabel}}</view>

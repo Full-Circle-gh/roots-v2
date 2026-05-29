@@ -43,6 +43,22 @@
   color: var(--ink);
 }
 
+.card-top-right {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+.pickup-tag {
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: rgba(123, 189, 59, 0.14);
+  color: #3a6817;
+  border: 2rpx solid rgba(123, 189, 59, 0.35);
+}
+
 /* Status pills — muted brand colors */
 .status-pill {
   padding: 6rpx 16rpx;

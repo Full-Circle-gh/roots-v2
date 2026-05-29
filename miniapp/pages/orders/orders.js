@@ -94,6 +94,8 @@ Page({
       const orders = arr.map(o => ({
         ...o,
         status_label: labels[o.status] || o.status,
+        is_pickup: o.fulfillment_type === 'pickup',
+        pickup_label: this.data.lang === 'cn' ? '🏬 自提' : '🏬 Pickup',
         total_display: '¥' + Number(o.total || 0).toFixed(2),
         placed_short: (o.placed_at || '').slice(0, 16),
         item_thumbs: (o.items_preview || []).slice(0, 3).map(it => ({

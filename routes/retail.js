@@ -1568,7 +1568,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
 // Alipay-QR confirmation, or as a sanity check after wx.requestPayment.
 router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req, res) => {
   const orderId = parseInt(req.params.orderId, 10);
-  const sel = 'SELECT id, order_no, status, paid_at, total, payment_method FROM retail_orders WHERE id = ? AND customer_id = ?';
+  const sel = 'SELECT id, order_no, status, paid_at, total, payment_method, fulfillment_type, scheduled_for, delivery_slot_label, address_json FROM retail_orders WHERE id = ? AND customer_id = ?';
   let order = tdb().prepare(sel).get(orderId, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
 
@@ -1590,6 +1590,16 @@ router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req,
       }
     } catch (e) { console.warn('[alipay/poll-query]', e.message); }
   }
+  // Surface pickup store details for the success screen ("collect at <store>").
+  if (order.fulfillment_type === 'pickup' && order.address_json) {
+    try {
+      const a = JSON.parse(order.address_json);
+      order.pickup_store_name_en = a.store_name_en || '';
+      order.pickup_store_name_cn = a.store_name_cn || '';
+      order.pickup_store_address = a.address || '';
+    } catch (_) { /* ignore malformed json */ }
+  }
+  delete order.address_json;
   res.json({ success: true, data: order });
 });
 
@@ -3912,6 +3922,20 @@ function orderTimeline(o) {
       { key: 'cancelled', label: 'Cancelled', cn: '已取消', at: o.cancelled_at },
     ];
   }
+  // Pickup orders never dispatch a courier — the same status columns are
+  // reused but mean "ready at counter" (dispatched_at) and "collected"
+  // (delivered_at). Relabel so the customer reads a collection journey
+  // instead of a delivery one.
+  if (o.fulfillment_type === 'pickup') {
+    return [
+      { key: 'placed',    label: 'Placed',          cn: '已下单', at: o.placed_at },
+      { key: 'paid',      label: 'Paid',            cn: '已支付', at: o.paid_at },
+      { key: 'pending',   label: 'Pending',         cn: '待确认', at: o.preparing_at },
+      { key: 'preparing', label: 'Preparing',       cn: '准备中', at: o.preparing_at },
+      { key: 'ready',     label: 'Ready to collect', cn: '可取货', at: o.dispatched_at },
+      { key: 'collected', label: 'Collected',       cn: '已取货', at: o.delivered_at },
+    ];
+  }
   return [
     { key: 'placed',     label: 'Placed',          cn: '已下单',     at: o.placed_at },
     { key: 'paid',       label: 'Paid',            cn: '已支付',     at: o.paid_at },
@@ -3978,6 +4002,7 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
   let sql = `SELECT id, order_no, status, payment_method, total,
                     voucher_code, voucher_amount,
                     store_id, routing_reason, channel,
+                    fulfillment_type, scheduled_for, delivery_slot_label,
                     tracking_carrier, tracking_number, tracking_status,
                     placed_at, paid_at, dispatched_at, delivered_at
                FROM retail_orders WHERE customer_id = ?`;
