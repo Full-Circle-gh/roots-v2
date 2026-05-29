@@ -2943,9 +2943,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // token so a double-tap / network retry returns the SAME order instead of
   // creating a duplicate (which, for points payment, would double-spend).
   const idempotencyKey = body.idempotency_key ? String(body.idempotency_key).slice(0, 80) : null;
-  // Future: voucher resolution + points redemption. For now: voucher_amount
-  // and points_amount stay at 0 — record the code so admin can reconcile
-  // manually if a hand-issued coupon was used in this launch window.
+  // Voucher resolution + points redemption happen further down, after pricing:
+  // vouchers at the "Resolve voucher" block (ownership/eligibility checked
+  // before any discount/free-shipping effect is applied), points just after.
 
   // Delivery slot — customer picked from /quote's `scheduling.slots` array
   // (or 'right_away'). Server re-resolves it to keep the surcharge & ETA
