@@ -1061,7 +1061,7 @@ function signMerchantRequest(method, urlPath, body) {
                           .update(message)
                           .sign(WECHAT_PAY_PRIVATE_KEY, 'base64');
   return 'WECHATPAY2-SHA256-RSA2048 ' +
-    `mchid="${WECHAT_PAY_MCH_ID}",nonce_str="${nonceStr}",timestamp=${timestamp},serial_no="${WECHAT_PAY_SERIAL_NO}",signature="${signature}"`;
+    `mchid="${WECHAT_PAY_MCH_ID}",nonce_str="${nonceStr}",timestamp="${timestamp}",serial_no="${WECHAT_PAY_SERIAL_NO}",signature="${signature}"`;
 }
 
 // Real WeChat Pay JSAPI prepare. Returns { prepay_id }.
