@@ -71,6 +71,27 @@
   .toast.show { opacity: 1; }
   .det-sec { margin-top: 16px; }
   .det-sec h4 { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  /* onboarding checklist */
+  select { width: 100%; background: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; color: var(--paper); font-family: var(--f-sans); font-size: 13px; padding: 8px 10px; outline: none; cursor: pointer; }
+  select:focus { border-color: var(--tea); box-shadow: 0 0 0 3px rgba(107,142,111,.22); }
+  .ob-config { background: var(--elev); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+  .ob-cfg-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  .ob-cfg-row > div { flex: 1; min-width: 110px; }
+  .ob-cfg-row label { margin-bottom: 5px; }
+  .ob-prog { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .ob-prog-bar { flex: 1; height: 7px; background: rgba(232,229,220,.1); border-radius: 999px; overflow: hidden; }
+  .ob-prog-bar span { display: block; height: 100%; background: var(--tea); transition: width .25s; }
+  .ob-step { border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; margin-bottom: 8px; background: var(--pane); }
+  .ob-step-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; margin-bottom: 9px; }
+  .ob-step-label { font-size: 13px; font-weight: 500; }
+  .ob-step-label .zh { font-weight: 400; margin-top: 1px; }
+  .ob-note { color: var(--brass-hi); font-size: 11px; margin-top: 4px; }
+  .ob-owner { flex: none; font-family: var(--f-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; padding: 3px 7px; border-radius: 999px; height: fit-content; white-space: nowrap; }
+  .ob-owner-tenant { background: rgba(176,141,74,.15); color: #d8b676; border: 1px solid rgba(176,141,74,.34); }
+  .ob-owner-us { background: rgba(107,142,111,.16); color: #a7c6ab; border: 1px solid rgba(107,142,111,.4); }
+  .ob-step-ctl { display: flex; gap: 8px; }
+  .ob-status { flex: none; width: 132px; }
+  .ob-val { flex: 1; min-width: 0; }
 </style>
 </head>
 <body>
@@ -160,6 +181,7 @@
         '<td class="mono">'+(t.openInvoices||0)+'</td>' +
         '<td><div class="acts">' +
           '<button class="btn btn-sm" data-act="detail" data-id="'+t.id+'">Details</button>' +
+          '<button class="btn btn-sm" data-act="onboard" data-id="'+t.id+'">Onboarding</button>' +
           '<button class="btn btn-sm" data-act="brand" data-id="'+t.id+'">Brand</button>' +
           susBtn +
         '</div></td></tr>';
@@ -176,6 +198,88 @@
       api('/api/saas-admin/tenants/'+id+'/reactivate',{method:'POST'}).then(j=>{ toast(j.success?'Reactivated':j.error||'Failed'); load(); });
     } else if (act==='brand') { brandModal(t); }
     else if (act==='detail') { detailModal(id); }
+    else if (act==='onboard') { onboardModal(id); }
+  }
+
+  // ── Onboarding checklist ──
+  const OB_STATUS = { pending:'Not started · 未开始', provided:'Provided · 已提供', verified:'Verified · 已核验', done:'Done · 完成', na:'N/A · 不适用' };
+  const OB_OWNER = { tenant:'Tenant · 租户', us:'Us · 我方' };
+  const CATS = { '':'— Pick · 选择', food:'Food · 食品', retail:'Retail · 零售', other:'Other · 其他' };
+
+  function onboardModal(id) {
+    openModal('Onboarding · 入驻清单');
+    $('#mBody').innerHTML = '<div class="empty">Loading… · 加载中…</div>';
+    api('/api/saas-admin/tenants/'+id+'/onboarding').then(j => {
+      if (!j || !j.success) { $('#mBody').innerHTML = '<div class="empty">Not found</div>'; return; }
+      renderOnboard(id, j);
+    }).catch(()=>{});
+  }
+
+  function obProgLine(done, total) {
+    return done+'/'+total+' · '+(total-done > 0 ? (total-done)+' before go-live · 待完成' : 'ready to launch · 可上线');
+  }
+
+  function refreshProg() {
+    let total=0, done=0;
+    document.querySelectorAll('.ob-status').forEach(s => { if (s.value==='na') return; total++; if (s.value==='done'||s.value==='verified') done++; });
+    const pct = total ? Math.round(done/total*100) : 0;
+    const bar = document.querySelector('.ob-prog-bar span'); if (bar) bar.style.width = pct+'%';
+    const lbl = document.querySelector('.ob-prog .zh'); if (lbl) lbl.textContent = obProgLine(done, total);
+  }
+
+  function renderOnboard(id, j) {
+    $('#mTitle').textContent = (j.tenant.brand||j.tenant.name) + ' · 入驻清单';
+    const pr = j.progress, pct = pr.total ? Math.round(pr.done/pr.total*100) : 0;
+    const feeYuan = (Number(j.setupFeeCents||0)/100);
+    let html =
+      '<div class="ob-config"><div class="ob-cfg-row">' +
+        '<div><label>Model · 模式</label><select id="ob-model">' +
+          '<option value="self"'+(j.model==='self'?' selected':'')+'>A · Self-serve 自助</option>' +
+          '<option value="managed"'+(j.model==='managed'?' selected':'')+'>B · Managed 代管</option>' +
+        '</select></div>' +
+        '<div><label>Category · 类目</label><select id="ob-cat">' +
+          Object.keys(CATS).map(c => '<option value="'+c+'"'+(j.category===c?' selected':'')+'>'+esc(CATS[c])+'</option>').join('') +
+        '</select></div>' +
+        '<div style="flex:0 0 96px;min-width:96px"><label>Setup fee ¥ · 费用</label><input type="text" id="ob-fee" value="'+esc(feeYuan)+'"></div>' +
+        '<button class="btn btn-sm" id="ob-cfg-save">Save · 保存</button>' +
+      '</div></div>' +
+      '<div class="ob-prog"><div class="ob-prog-bar"><span style="width:'+pct+'%"></span></div>' +
+        '<span class="zh mono" style="white-space:nowrap">'+obProgLine(pr.done, pr.total)+'</span></div>';
+    j.phases.forEach(p => {
+      html += '<div class="det-sec"><h4>'+esc(p.en)+' · '+esc(p.cn)+'</h4>';
+      p.steps.forEach(s => {
+        const ownerCls = s.owner==='us' ? 'ob-owner-us' : 'ob-owner-tenant';
+        html += '<div class="ob-step">' +
+          '<div class="ob-step-top">' +
+            '<div class="ob-step-label">'+esc(s.en)+'<div class="zh">'+esc(s.cn)+'</div>'+(s.note?'<div class="ob-note">'+esc(s.note)+'</div>':'')+'</div>' +
+            '<span class="ob-owner '+ownerCls+'">'+esc(OB_OWNER[s.owner]||s.owner)+'</span>' +
+          '</div>' +
+          '<div class="ob-step-ctl">' +
+            '<select class="ob-status" data-k="'+esc(s.key)+'">' +
+              Object.keys(OB_STATUS).map(k => '<option value="'+k+'"'+(s.status===k?' selected':'')+'>'+esc(OB_STATUS[k])+'</option>').join('') +
+            '</select>' +
+            '<input type="text" class="ob-val" data-k="'+esc(s.key)+'" value="'+esc(s.value||'')+'" placeholder="ref / notes · 备注">' +
+          '</div></div>';
+      });
+      html += '</div>';
+    });
+    $('#mBody').innerHTML = html;
+
+    $('#ob-cfg-save').addEventListener('click', () => {
+      const feeC = Math.round((parseFloat($('#ob-fee').value)||0)*100);
+      api('/api/saas-admin/tenants/'+id+'/onboarding/config',{method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ model:$('#ob-model').value, category:$('#ob-cat').value, setup_fee_cents:feeC })})
+        .then(r=>{ if(r.success){ toast('Saved'); onboardModal(id); } else mMsg(r.error||'Failed','err'); });
+    });
+
+    function saveStep(k) {
+      const sel = document.querySelector('.ob-status[data-k="'+k+'"]');
+      const val = document.querySelector('.ob-val[data-k="'+k+'"]');
+      api('/api/saas-admin/tenants/'+id+'/onboarding/step',{method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ step_key:k, status:sel.value, value:val.value })}).then(()=>{}).catch(()=>{});
+    }
+    document.querySelectorAll('.ob-status').forEach(el => el.addEventListener('change', () => { saveStep(el.getAttribute('data-k')); refreshProg(); }));
+    document.querySelectorAll('.ob-val').forEach(el => el.addEventListener('change', () => saveStep(el.getAttribute('data-k'))));
   }
 
   // ── New tenant ──

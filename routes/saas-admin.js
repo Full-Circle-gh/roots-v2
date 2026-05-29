@@ -8,6 +8,7 @@
 const express = require('express');
 const db = require('../database');
 const { provisionTenant } = require('../lib/provision-tenant');
+const onboarding = require('../lib/onboarding-steps');
 const router = express.Router();
 
 // Per-tenant accent colour for white-label branding (#3). Idempotent.
@@ -15,6 +16,21 @@ try { db.exec('ALTER TABLE tenants ADD COLUMN brand_accent TEXT'); } catch (e) {
 // Per-tenant WeChat mini-program AppID — maps a shopper's request to this tenant
 // (see middleware/public-tenant.js). Idempotent.
 try { db.exec('ALTER TABLE tenants ADD COLUMN wx_appid TEXT'); } catch (e) { /* already added */ }
+// Onboarding: model (A='self' | B='managed'), business category (drives which
+// qualification steps apply), and a one-time setup fee (recorded for now).
+try { db.exec('ALTER TABLE tenants ADD COLUMN onboarding_model TEXT'); } catch (e) { /* already added */ }
+try { db.exec('ALTER TABLE tenants ADD COLUMN business_category TEXT'); } catch (e) { /* already added */ }
+try { db.exec('ALTER TABLE tenants ADD COLUMN setup_fee_cents INTEGER'); } catch (e) { /* already added */ }
+// Per-tenant onboarding checklist progress (step template: lib/onboarding-steps).
+db.exec(`CREATE TABLE IF NOT EXISTS tenant_onboarding (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id  INTEGER NOT NULL,
+  step_key   TEXT NOT NULL,
+  status     TEXT NOT NULL DEFAULT 'pending',  -- pending|provided|verified|done|na
+  value      TEXT,                             -- non-secret ref / notes
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_id, step_key)
+)`);
 
 function requireSaasAdmin(req, res, next) {
   if (!req.session?.userId) return res.status(401).json({ error: 'Admin login required · 需要管理员登录' });
@@ -122,6 +138,61 @@ router.post('/api/saas-admin/invoices/:id/mark-paid', requireSaasAdmin, (req, re
     }
   });
   tx();
+  res.json({ success: true });
+});
+
+// ── Onboarding checklist: resolved roadmap + saved progress ───────────────
+router.get('/api/saas-admin/tenants/:id/onboarding', requireSaasAdmin, (req, res) => {
+  const t = db.prepare('SELECT id, name, brand_name, onboarding_model, business_category, setup_fee_cents FROM tenants WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
+  const rows = db.prepare('SELECT step_key, status, value FROM tenant_onboarding WHERE tenant_id = ?').all(t.id);
+  const state = {};
+  for (const r of rows) state[r.step_key] = { status: r.status, value: r.value };
+  const model = t.onboarding_model === 'managed' ? 'managed' : 'self';
+  const phases = onboarding.resolveChecklist(model, t.business_category, state);
+  res.json({
+    success: true,
+    tenant: { id: t.id, name: t.name, brand: t.brand_name },
+    model, category: t.business_category || '', setupFeeCents: t.setup_fee_cents || 0,
+    progress: onboarding.progress(phases), phases,
+  });
+});
+
+// ── Update onboarding config (model / category / one-time setup fee) ──────
+router.patch('/api/saas-admin/tenants/:id/onboarding/config', requireSaasAdmin, express.json(), (req, res) => {
+  const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
+  const b = req.body || {};
+  const sets = [], params = [];
+  if (Object.prototype.hasOwnProperty.call(b, 'model')) {
+    sets.push('onboarding_model = ?'); params.push(b.model === 'managed' ? 'managed' : 'self');
+  }
+  if (Object.prototype.hasOwnProperty.call(b, 'category')) {
+    sets.push('business_category = ?'); params.push(b.category ? String(b.category).trim() : null);
+  }
+  if (Object.prototype.hasOwnProperty.call(b, 'setup_fee_cents')) {
+    sets.push('setup_fee_cents = ?'); params.push(Math.max(0, Math.round(Number(b.setup_fee_cents) || 0)));
+  }
+  if (!sets.length) return res.json({ success: true });
+  params.push(t.id);
+  db.prepare(`UPDATE tenants SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  res.json({ success: true });
+});
+
+// ── Update a single checklist step (status + recorded non-secret note) ────
+router.patch('/api/saas-admin/tenants/:id/onboarding/step', requireSaasAdmin, express.json(), (req, res) => {
+  const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
+  const b = req.body || {};
+  const stepKey = String(b.step_key || '').trim();
+  if (!stepKey) return res.status(400).json({ error: 'step_key required' });
+  const status = onboarding.STATUSES.includes(b.status) ? b.status : 'pending';
+  const value = b.value != null ? String(b.value).slice(0, 2000) : null;
+  db.prepare(`INSERT INTO tenant_onboarding (tenant_id, step_key, status, value, updated_at)
+              VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+              ON CONFLICT(tenant_id, step_key)
+              DO UPDATE SET status = excluded.status, value = excluded.value, updated_at = CURRENT_TIMESTAMP`)
+    .run(t.id, stepKey, status, value);
   res.json({ success: true });
 });
 
