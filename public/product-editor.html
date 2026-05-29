@@ -721,6 +721,33 @@
     color: var(--accent); flex-shrink: 0;
   }
   .pa-inspector-icon svg { width: 14px; height: 14px; }
+  /* ── Emoji picker for tile / card Icon fields ── */
+  .pe-emoji-field { display: flex; align-items: stretch; gap: 6px; }
+  .pe-emoji-field input { flex: 1 1 auto; min-width: 0; }
+  .pe-emoji-btn {
+    flex: 0 0 auto; width: 38px;
+    border: 1px solid var(--line-soft); background: var(--bg-pane);
+    border-radius: var(--r-sm); cursor: pointer; font-size: 16px;
+    color: var(--text-2); line-height: 1;
+  }
+  .pe-emoji-btn:hover { background: rgba(107, 142, 111, .1); border-color: var(--accent); }
+  .pe-emoji-pop {
+    position: fixed; z-index: 9999;
+    width: 252px; max-height: 248px; overflow-y: auto;
+    background: var(--bg-card, #fff); border: 1px solid var(--line-soft);
+    border-radius: var(--r-md); box-shadow: 0 8px 28px rgba(0,0,0,.18);
+    padding: 8px;
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+  }
+  .pe-emoji-pop button {
+    border: 0; background: transparent; cursor: pointer;
+    font-size: 18px; line-height: 1; padding: 5px 0; border-radius: 6px;
+  }
+  .pe-emoji-pop button:hover { background: rgba(107, 142, 111, .16); }
+  .pe-emoji-pop .pe-emoji-clear {
+    grid-column: 1 / -1; font-size: 12px; color: var(--text-3);
+    padding: 6px 0; border-top: 1px solid var(--line-soft); margin-top: 4px;
+  }
   .pa-inspector-title {
     font-size: 13px; font-weight: 600; color: var(--text-1);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -1844,6 +1871,57 @@ function paLivePreview() {
   paRefreshTabLabels();
 }
 
+// ── Inline emoji picker for tile / card Icon fields ──
+// A curated set covering food, prep, storage and usage contexts — the glyphs
+// most product "How to use" / "Storage" sections actually reach for.
+const PE_EMOJI = [
+  '🥖','🍞','🥐','🥯','🧈','🥚','🍳','🧀','🥓','🥞','🧇','🥗',
+  '🍚','🍜','🍝','🥣','🥘','🍲','🫕','🌶','🧄','🧅','🥕','🍅',
+  '🍋','🍯','🧂','🥄','🍴','🔪','🫙','🍶','☕','🫖','🧊','❄',
+  '🔥','🌡','♨','💧','☀','🌙','⏱','⏲','📦','🛒','✨','✅',
+];
+let _peEmojiPop = null;
+function peEmojiClosePop() {
+  if (_peEmojiPop) { _peEmojiPop.remove(); _peEmojiPop = null; }
+  document.removeEventListener('mousedown', _peEmojiOutside, true);
+  document.removeEventListener('keydown', _peEmojiEsc, true);
+}
+function _peEmojiOutside(e) {
+  if (_peEmojiPop && !_peEmojiPop.contains(e.target) && !e.target.classList.contains('pe-emoji-btn')) peEmojiClosePop();
+}
+function _peEmojiEsc(e) { if (e.key === 'Escape') peEmojiClosePop(); }
+function peEmojiOpen(btn) {
+  // Toggle off if this button's popover is already open.
+  if (_peEmojiPop && _peEmojiPop._owner === btn) { peEmojiClosePop(); return; }
+  peEmojiClosePop();
+  const input = btn.parentElement.querySelector('input[data-bkey="icon"]');
+  if (!input) return;
+  const pop = document.createElement('div');
+  pop.className = 'pe-emoji-pop';
+  pop._owner = btn;
+  pop.innerHTML = PE_EMOJI.map(e => `<button type="button">${e}</button>`).join('')
+    + '<button type="button" class="pe-emoji-clear">Clear · 清除</button>';
+  pop.addEventListener('click', (ev) => {
+    const t = ev.target.closest('button'); if (!t) return;
+    input.value = t.classList.contains('pe-emoji-clear') ? '' : t.textContent;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    peEmojiClosePop();
+    input.focus();
+  });
+  document.body.appendChild(pop);
+  // Anchor below the button, then nudge back on-screen if it would overflow.
+  const r = btn.getBoundingClientRect();
+  let left = r.right - pop.offsetWidth;
+  let top  = r.bottom + 6;
+  if (left < 8) left = 8;
+  if (top + pop.offsetHeight > window.innerHeight - 8) top = r.top - pop.offsetHeight - 6;
+  pop.style.left = Math.max(8, left) + 'px';
+  pop.style.top  = Math.max(8, top) + 'px';
+  _peEmojiPop = pop;
+  document.addEventListener('mousedown', _peEmojiOutside, true);
+  document.addEventListener('keydown', _peEmojiEsc, true);
+}
+
 // Build the PATCH body from the live form + block state. Shared by save and
 // the dirty guard so both see exactly the same shape.
 function peCollectBody() {
@@ -2318,7 +2396,7 @@ function _paBlockEditorBody(b) {
             <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','tiles',${i})" ${tiles.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
-          <div class="field" style="max-width:128px;margin-bottom:10px"><label class="stacked">Icon · 图标</label><input data-rowidx="${i}" data-bkey="icon" type="text" value="${escapeAttr(tl.icon || '')}" placeholder="🥖" style="text-align:center;font-size:18px"></div>
+          <div class="field" style="max-width:180px;margin-bottom:10px"><label class="stacked">Icon · 图标</label><div class="pe-emoji-field"><input data-rowidx="${i}" data-bkey="icon" type="text" value="${escapeAttr(tl.icon || '')}" placeholder="🥖" style="text-align:center;font-size:18px"><button type="button" class="pe-emoji-btn" title="Pick emoji · 选择表情" onclick="peEmojiOpen(this)">😀</button></div></div>
           <div class="pa-edit-grid-2">
             <div class="field"><label class="stacked">Label EN · 标签(英文)</label><input data-rowidx="${i}" data-bkey="label_en" type="text" value="${escapeAttr(tl.label_en || '')}" placeholder="Toast"></div>
             <div class="field"><label class="stacked">Label CN · 标签(中文)</label><input data-rowidx="${i}" data-bkey="label_cn" type="text" value="${escapeAttr(tl.label_cn || '')}" placeholder="吐司"></div>
@@ -2341,7 +2419,7 @@ function _paBlockEditorBody(b) {
           <div class="field"><label class="stacked">Big word CN · 大字(中文)</label><input data-sub="${which}" data-bkey="num_cn" type="text" value="${escapeAttr(c.num_cn || '')}" placeholder="阴凉干燥"></div>
           <div class="field"><label class="stacked">Unit EN · 单位(英文)</label><input data-sub="${which}" data-bkey="unit_en" type="text" value="${escapeAttr(c.unit_en || '')}" placeholder="Store away from heat"></div>
           <div class="field"><label class="stacked">Unit CN · 单位(中文)</label><input data-sub="${which}" data-bkey="unit_cn" type="text" value="${escapeAttr(c.unit_cn || '')}" placeholder="远离高温和潮湿"></div>
-          <div class="field"><label class="stacked">Icon · 图标</label><input data-sub="${which}" data-bkey="icon" type="text" value="${escapeAttr(c.icon || '')}" placeholder="❄" style="text-align:center;font-size:18px"></div>
+          <div class="field"><label class="stacked">Icon · 图标</label><div class="pe-emoji-field"><input data-sub="${which}" data-bkey="icon" type="text" value="${escapeAttr(c.icon || '')}" placeholder="❄" style="text-align:center;font-size:18px"><button type="button" class="pe-emoji-btn" title="Pick emoji · 选择表情" onclick="peEmojiOpen(this)">😀</button></div></div>
         </div>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-1);margin-top:10px;cursor:pointer">
           <input data-sub="${which}" data-bkey="alt" type="checkbox" ${c.alt ? 'checked' : ''}>
