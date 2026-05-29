@@ -1590,16 +1590,68 @@ router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req,
 //   4. Return { code: 'SUCCESS', message: 'OK' }
 //
 // Failure to verify → return non-200 to make WeChat retry.
+
+// Capture the RAW request bytes for WeChat Pay callbacks. The v3 notify
+// signature is computed over the exact body WeChat sent; re-serialising the
+// parsed JSON would not reproduce it byte-for-byte, so we stash the buffer in
+// a non-throwing express.json verify hook (parsing behaviour is otherwise
+// unchanged — Roots' existing callbacks keep working identically).
+const wxPayJson = express.json({
+  limit: '256kb',
+  verify: (req, _res, buf) => { req.rawBody = buf; },
+});
+
+// WeChat Pay v3 inbound-notify signature verification (Platform readiness ⑩).
+// Defense-in-depth ON TOP OF the APIv3-key AES-256-GCM auth tag that already
+// authenticates the decrypted payload (a forged body fails decipher.final()).
+// The signed message is `timestamp\nnonce\nrawBody\n`; WeChat signs it with its
+// PLATFORM key (RSA-SHA256) and sends it base64 in the Wechatpay-Signature
+// header. We verify with the merchant's platform PUBLIC key.
+//
+// Returns:
+//   'unconfigured' — no platform key for this tenant → caller keeps the
+//                    GCM-only behaviour (so Roots + every current tenant are
+//                    unaffected until an operator supplies the key). FAIL-OPEN.
+//   'ok'           — signature + timestamp valid.
+//   'fail'         — missing headers, stale timestamp (>5 min replay window),
+//                    or a bad signature → caller 401s and WeChat retries.
+const WXPAY_NOTIFY_MAX_SKEW_MS = 5 * 60 * 1000;
+function verifyWxPayNotify(req, platformPubKeyRaw) {
+  const key = normalizePem(platformPubKeyRaw || '', 'PUBLIC KEY');
+  if (!key) return 'unconfigured';
+  const ts    = req.get('Wechatpay-Timestamp');
+  const nonce = req.get('Wechatpay-Nonce');
+  const sig   = req.get('Wechatpay-Signature');
+  if (!ts || !nonce || !sig) return 'fail';
+  const skew = Math.abs(Date.now() - Number(ts) * 1000);
+  if (!Number.isFinite(skew) || skew > WXPAY_NOTIFY_MAX_SKEW_MS) return 'fail';
+  const raw = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body || {});
+  const message = `${ts}\n${nonce}\n${raw}\n`;
+  try {
+    const ok = crypto.createVerify('RSA-SHA256').update(message, 'utf8').verify(key, sig, 'base64');
+    return ok ? 'ok' : 'fail';
+  } catch (e) {
+    console.error('[wechat-pay/verify]', e.message);
+    return 'fail';
+  }
+}
 function handleWechatPayCallback(req, res, tid) {
   try {
     const body = req.body || {};
     const creds = getTenantCreds(tid).pay;
-    // ── TODO (when WECHAT_PAY_PUBLIC_CERT is in .env): verify the request
-    // signature using headers Wechatpay-Signature / Wechatpay-Serial /
-    // Wechatpay-Timestamp / Wechatpay-Nonce before decrypting body.resource.
     if (creds.devMode) {
       console.log('[wechat-pay/callback] DEV MODE — ignored (would have decrypted + marked paid)');
       return res.json({ code: 'SUCCESS', message: 'OK' });
+    }
+    // Verify WeChat's request signature when this tenant has a platform public
+    // key on file (⑩). Fail-open ('unconfigured') leaves the APIv3-key GCM tag
+    // as the sole gate — so Roots + every current tenant are unaffected until
+    // they paste their key. 'fail' (bad sig / replayed-stale / missing headers)
+    // → 401 so WeChat retries with a fresh signature.
+    const sigState = verifyWxPayNotify(req, creds.platformPubKey);
+    if (sigState === 'fail') {
+      console.warn(`[wechat-pay/callback] signature verify FAILED tenant=${tid}`);
+      return res.status(401).json({ code: 'SIGN_ERROR', message: 'signature verification failed' });
     }
     if (!body.resource?.ciphertext) {
       return res.status(400).json({ code: 'INVALID', message: 'missing resource' });
@@ -1654,8 +1706,8 @@ function handleWechatPayCallback(req, res, tid) {
 }
 // Roots keeps the legacy unsuffixed path (env creds, mainDb). Tenants POST to
 // /callback/:tid — the id is validated against the tenants table.
-router.post('/api/retail/payment/wechat/callback', express.json(), (req, res) => handleWechatPayCallback(req, res, ROOTS_TENANT_ID));
-router.post('/api/retail/payment/wechat/callback/:tid', express.json(), (req, res) => {
+router.post('/api/retail/payment/wechat/callback', wxPayJson, (req, res) => handleWechatPayCallback(req, res, ROOTS_TENANT_ID));
+router.post('/api/retail/payment/wechat/callback/:tid', wxPayJson, (req, res) => {
   const tid = resolveCallbackTid(req.params.tid);
   if (!tid) return res.status(404).json({ code: 'INVALID', message: 'unknown_tenant' });
   handleWechatPayCallback(req, res, tid);
@@ -1669,6 +1721,11 @@ function handleWechatRefundCallback(req, res, tid) {
   try {
     const creds = getTenantCreds(tid).pay;
     if (creds.devMode) return res.json({ code: 'SUCCESS', message: 'OK' });
+    const sigState = verifyWxPayNotify(req, creds.platformPubKey);
+    if (sigState === 'fail') {
+      console.warn(`[wechat-refund/callback] signature verify FAILED tenant=${tid}`);
+      return res.status(401).json({ code: 'SIGN_ERROR', message: 'signature verification failed' });
+    }
     const r = req.body?.resource;
     if (!r?.ciphertext) return res.status(400).json({ code: 'INVALID', message: 'missing resource' });
     const buf = Buffer.from(r.ciphertext, 'base64');
@@ -1708,8 +1765,8 @@ function handleWechatRefundCallback(req, res, tid) {
     res.status(500).json({ code: 'FAIL', message: 'internal_error' });
   }
 }
-router.post('/api/retail/payment/wechat/refund-callback', express.json(), (req, res) => handleWechatRefundCallback(req, res, ROOTS_TENANT_ID));
-router.post('/api/retail/payment/wechat/refund-callback/:tid', express.json(), (req, res) => {
+router.post('/api/retail/payment/wechat/refund-callback', wxPayJson, (req, res) => handleWechatRefundCallback(req, res, ROOTS_TENANT_ID));
+router.post('/api/retail/payment/wechat/refund-callback/:tid', wxPayJson, (req, res) => {
   const tid = resolveCallbackTid(req.params.tid);
   if (!tid) return res.status(404).json({ code: 'INVALID', message: 'unknown_tenant' });
   handleWechatRefundCallback(req, res, tid);

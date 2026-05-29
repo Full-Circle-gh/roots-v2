@@ -429,4 +429,18 @@ app.listen(PORT, () => {
       getTenantCreds: tenantCreds.getTenantCreds,
     });
   } catch (e) { console.warn('[kd100.sweeper] start failed:', e.message); }
+  // Secrets-at-rest health (Platform readiness ⑩). A non-Roots tenant's creds
+  // are AES-256-GCM encrypted under TENANT_SECRET_KEY; if that key is missing
+  // on a box that already has tenants, none of their secrets can be decrypted
+  // and they silently fall back to devMode. Surface it loudly at boot so a
+  // misconfigured prod is caught before a tenant tries to operate.
+  try {
+    const box = require('./lib/secret-box');
+    const n = require('./database').prepare('SELECT COUNT(*) AS c FROM tenants WHERE id <> 1').get().c;
+    if (box.isConfigured()) {
+      console.log(`[security] tenant secret-box configured (key fp ${box.keyFingerprint()}).`);
+    } else if (n > 0) {
+      console.error(`[security] ⚠️  TENANT_SECRET_KEY is NOT set but ${n} non-Roots tenant(s) exist — their stored credentials cannot be decrypted (they will run in devMode). Set TENANT_SECRET_KEY in .env and restart.`);
+    }
+  } catch (e) { console.warn('[security] secret-box health check skipped:', e.message); }
 });
