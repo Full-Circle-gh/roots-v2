@@ -268,7 +268,11 @@
     gap: var(--s4);
     flex-shrink: 0;
     position: relative;
-    z-index: 10;
+    /* Above the phone notch. The notch (.phone::before, z-index:10) lives in
+       a non-positioned ancestor, so it hoists into the ROOT stacking context
+       at z-index 10 — tying with the topbar and winning on DOM order, which
+       painted it over the open page dropdown. Clear of 10 fixes it. */
+    z-index: 30;
   }
   .brand {
     display: flex; align-items: center; gap: var(--s3);
@@ -2485,39 +2489,6 @@
   .b-countdown.urgent .clock .cell:nth-child(2) { animation-delay: .12s; }
   .b-countdown.urgent .clock .cell:nth-child(3) { animation-delay: .24s; }
   .b-countdown.urgent .clock .cell:nth-child(4) { animation-delay: .36s; }
-  .b-stickers {
-    padding: 22px;
-    display: flex; flex-wrap: wrap; gap: 10px;
-    justify-content: center; align-items: center;
-    min-height: 80px;
-  }
-  .b-stickers .sticker {
-    display: inline-block;
-    padding: 6px 14px;
-    border-radius: 999px;
-    color: var(--b-ink);
-    font: 700 12px var(--bf-toni);
-    letter-spacing: .06em;
-    text-transform: uppercase;
-    box-shadow: 2px 2px 0 rgba(0, 0, 0, .85);
-    white-space: nowrap;
-  }
-  .b-dots {
-    display: flex; justify-content: center; align-items: center;
-    gap: 10px;
-    padding: 16px;
-  }
-  .b-dots .dot {
-    width: 8px; height: 8px;
-    border-radius: 999px;
-    background: transparent;
-    border: 1.5px solid rgba(0, 0, 0, .35);
-    transition: all .15s ease;
-  }
-  .b-dots .dot.active {
-    width: 24px;
-    border-color: transparent;
-  }
   .b-countdown {
     padding: 20px 22px 22px;
     text-align: center;
@@ -3898,8 +3869,6 @@ const ICONS = {
   featured_item:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
   product_grid:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/></svg>',
   spacer:           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><polyline points="8 7 3 12 8 17"/><polyline points="16 7 21 12 16 17"/></svg>',
-  sticker_collage:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="9" height="6" rx="3" transform="rotate(-8 6.5 10)"/><rect x="13" y="11" width="9" height="6" rx="3" transform="rotate(6 17.5 14)"/><rect x="7" y="14" width="9" height="6" rx="3" transform="rotate(-3 11.5 17)"/></svg>',
-  progress_dots:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></svg>',
   countdown_timer:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><polyline points="12 9 12 13 14.5 14.5"/><line x1="9" y1="2" x2="15" y2="2"/></svg>',
   flash_sale_strip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
   coupon_block:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v4a2 2 0 0 1 2 2 2 2 0 0 1-2 2v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4a2 2 0 0 1-2-2 2 2 0 0 1 2-2z"/><line x1="9" y1="9" x2="15" y2="15"/><circle cx="9" cy="9" r="0.5" fill="currentColor"/><circle cx="15" cy="15" r="0.5" fill="currentColor"/></svg>',
@@ -3945,8 +3914,6 @@ const BLOCK_META = {
   featured_item:    { name: 'Featured item',    name_cn: '精选单品',   desc: 'Single highlighted product',                desc_cn: '单个重点商品' },
   product_grid:     { name: 'Product grid',     name_cn: '商品网格',   desc: 'N-up grid from a category',                 desc_cn: '按分类的多列网格' },
   spacer:           { name: 'Spacer',           name_cn: '间距',       desc: 'Vertical breathing room',                   desc_cn: '垂直留白' },
-  sticker_collage:  { name: 'Sticker collage',  name_cn: '贴纸拼贴',   desc: 'Rotated brand stickers (onboarding-style)', desc_cn: '旋转品牌贴纸(引导风格)' },
-  progress_dots:    { name: 'Progress dots',    name_cn: '进度圆点',   desc: 'N-step dot indicator (slide markers)',      desc_cn: 'N 步圆点指示(滑动标记)' },
   countdown_timer:  { name: 'Countdown timer',  name_cn: '倒计时',     desc: 'Generic countdown to any date/time',        desc_cn: '到任意日期/时间的通用倒计时' },
   flash_sale_strip: { name: 'Flash sale',       name_cn: '限时秒杀',   desc: 'Live 秒杀 · strip / hero / banner views',   desc_cn: '秒杀:条幅 / 主图 / 横幅视图' },
   coupon_block:     { name: 'Coupon',           name_cn: '优惠券',     desc: '¥ off / % off promo with claim CTA',        desc_cn: '满减 / 折扣促销,带领取按钮' },
@@ -3985,7 +3952,7 @@ const PAGES = [
   { id: 'promotions', name: 'Promotions',   cn: '优惠',   desc: 'Curated deals & specials — link here from CTAs anywhere',          desc_cn: '精选优惠与特惠 — 可从任意按钮链接至此' },
   { id: 'categories', name: 'Shop landing', cn: '商品',   desc: 'Intro / banners shown on the Shop tab above the category browser', desc_cn: '「商品」标签页分类浏览上方的介绍 / 横幅' },
   { id: 'membership', name: 'Membership',   cn: '会员',   desc: 'Roots Club tier perks, benefits, hero',                            desc_cn: '萌芽会员等级权益、福利、主图' },
-  { id: 'onboarding', name: 'Onboarding',   cn: '欢迎',   desc: 'First-launch welcome — uses sticker collage + progress dots',      desc_cn: '首次启动欢迎页 — 使用贴纸拼贴 + 进度圆点' },
+  { id: 'onboarding', name: 'Onboarding',   cn: '欢迎',   desc: 'First-launch welcome — shown before the customer reaches Home',     desc_cn: '首次启动欢迎页 — 在顾客进入首页前显示' },
 ];
 
 const TAB_LABELS = {
@@ -5844,15 +5811,6 @@ function makeBlock(type) {
       divider_style: 'none',     // none | line | dashes | dots
       divider_color: 'olive-moss',
     };
-    case 'sticker_collage':  return { id, type, stickers: [
-      { label_en: 'RAW',       label_cn: '生鲜',    color: 'papaya-glow',  rotate: -6 },
-      { label_en: 'ALIVE',     label_cn: '活力',    color: 'berry-punch',  rotate: 4 },
-      { label_en: 'NO ADDITIVES', label_cn: '无添加', color: 'carrot-blaze', rotate: -3 },
-      { label_en: '100% PLANT', label_cn: '纯植物',   color: 'skyberry',    rotate: 5 },
-      { label_en: 'LOW SUGAR',  label_cn: '低糖',     color: 'golden-corn', rotate: -4 },
-      { label_en: 'PROBIOTIC',  label_cn: '益生菌',   color: 'lotus',       rotate: 3 },
-    ]};
-    case 'progress_dots':    return { id, type, count: 3, active_index: 0, color: 'ink' };
     case 'countdown_timer': {
       const ends = new Date(Date.now() + 24 * 60 * 60 * 1000);
       ends.setSeconds(0, 0);
@@ -6710,27 +6668,6 @@ function renderBlockBody(b) {
         d.style.setProperty('--divider-color', dc);
         d.innerHTML = '<div class="divider-line"></div>';
       }
-      return d;
-    }
-    case 'sticker_collage': {
-      d.className = 'b-stickers';
-      const stickers = (b.stickers || []).map(s => {
-        const bg = brandColorVar(s.color) || 'var(--b-citrus)';
-        return `<span class="sticker" style="background:${bg};transform:rotate(${s.rotate || 0}deg)">${biLabel(s.label_en, s.label_cn)}</span>`;
-      }).join('');
-      d.innerHTML = stickers || '<div class="empty" style="color:rgba(0,0,0,.3);font-size:12px;text-align:center;padding:16px">No stickers yet — add some on the right.</div>';
-      return d;
-    }
-    case 'progress_dots': {
-      d.className = 'b-dots';
-      const count = Math.max(1, Math.min(10, b.count || 3));
-      const active = Math.max(0, Math.min(count - 1, b.active_index ?? 0));
-      const c = brandColorVar(b.color) || 'var(--b-ink)';
-      let html = '';
-      for (let i = 0; i < count; i++) {
-        html += `<span class="dot${i === active ? ' active' : ''}" style="${i === active ? 'background:' + c : 'border-color:' + c}"></span>`;
-      }
-      d.innerHTML = html;
       return d;
     }
     case 'flash_sale_strip': {
@@ -7753,8 +7690,6 @@ function renderInspector() {
     case 'featured_item':    buildFeaturedForm(body, b); break;
     case 'product_grid':     buildGridForm(body, b); break;
     case 'spacer':           buildSpacerForm(body, b); break;
-    case 'sticker_collage':  buildStickerCollageForm(body, b); break;
-    case 'progress_dots':    buildProgressDotsForm(body, b); break;
     case 'countdown_timer':  buildCountdownForm(body, b); break;
     case 'flash_sale_strip': buildFlashStripForm(body, b); break;
     case 'coupon_block':     buildCouponForm(body, b); break;
@@ -8439,98 +8374,6 @@ const TOD_EMOJI_OPTIONS = [
   { value: 'off', label: 'Off · 不显示' },
   { value: 'on',  label: 'On · 🌅 ☀️ 🌙 🌟' },
 ];
-
-function buildStickerCollageForm(m, b) {
-  const stickers = b.stickers || [];
-  const wrap = document.createElement('div'); wrap.className = 'field';
-  const lbl = document.createElement('label');
-  lbl.textContent = T(`Stickers (${stickers.length})`, `贴纸(${stickers.length})`);
-  wrap.appendChild(lbl);
-
-  const list = document.createElement('div'); list.className = 'cta-list';
-  stickers.forEach((s, idx) => list.appendChild(buildStickerRow(b, s, idx)));
-  if (!stickers.length) {
-    const empty = document.createElement('div');
-    empty.className = 'helper';
-    empty.textContent = T('No stickers. Add the first one below.', '暂无贴纸。在下方添加第一个。');
-    list.appendChild(empty);
-  }
-  wrap.appendChild(list);
-
-  const addBtn = document.createElement('button');
-  addBtn.className = 'btn btn-ghost';
-  addBtn.style.marginTop = '8px';
-  addBtn.style.width = '100%';
-  addBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> ${T('Add sticker', '添加贴纸')}`;
-  addBtn.addEventListener('click', () => {
-    const next = [...stickers, { label_en: 'NEW', label_cn: '新', color: 'citrus-zest', rotate: 0 }];
-    updateBlock(b.id, { stickers: next });
-  });
-  wrap.appendChild(addBtn);
-
-  m.appendChild(wrap);
-}
-
-function buildStickerRow(b, sticker, idx) {
-  const wrap = document.createElement('div');
-  wrap.className = 'cta-row';
-
-  // Bilingual label
-  const labelPair = txtPair(sticker.label_en, sticker.label_cn, ({ en, cn }) => {
-    const stickers = (b.stickers || []).slice();
-    stickers[idx] = { ...stickers[idx], label_en: en, label_cn: cn };
-    updateBlockSilent(b.id, { stickers });
-  }, { en: 'Label EN', cn: '中文' });
-  wrap.appendChild(labelPair);
-
-  const colorSel = document.createElement('select');
-  BRAND_COLOR_OPTIONS.forEach(o => {
-    const opt = document.createElement('option');
-    opt.value = o.value; opt.textContent = splitT(o.label);
-    if (o.value === sticker.color) opt.selected = true;
-    colorSel.appendChild(opt);
-  });
-  colorSel.addEventListener('change', e => {
-    const stickers = (b.stickers || []).slice();
-    stickers[idx] = { ...stickers[idx], color: e.target.value };
-    updateBlockSilent(b.id, { stickers });
-  });
-
-  const rotInput = document.createElement('input');
-  rotInput.type = 'number'; rotInput.placeholder = 'Rotate°';
-  rotInput.value = sticker.rotate ?? 0;
-  rotInput.min = -45; rotInput.max = 45;
-  rotInput.addEventListener('input', e => {
-    const stickers = (b.stickers || []).slice();
-    stickers[idx] = { ...stickers[idx], rotate: Number(e.target.value) || 0 };
-    updateBlockSilent(b.id, { stickers });
-  });
-
-  const removeBtn = document.createElement('button');
-  removeBtn.className = 'cta-remove';
-  removeBtn.title = 'Remove sticker';
-  removeBtn.innerHTML = ICONS.x;
-  removeBtn.addEventListener('click', () => {
-    const stickers = (b.stickers || []).slice();
-    stickers.splice(idx, 1);
-    updateBlock(b.id, { stickers });
-  });
-
-  const row2 = document.createElement('div');
-  row2.className = 'cta-row-bottom';
-  row2.appendChild(colorSel);
-  row2.appendChild(rotInput);
-  row2.appendChild(removeBtn);
-  wrap.appendChild(row2);
-  return wrap;
-}
-
-function buildProgressDotsForm(m, b) {
-  m.appendChild(field(T('Number of dots', '圆点数量'), '', num(b.count, v => updateBlock(b.id, { count: Math.max(1, Math.min(10, v)) }), { min: 1, max: 10 })));
-  m.appendChild(field(T('Active dot (0-indexed)', '当前圆点(从 0 起)'), T('Which dot is filled — represents the current step', '哪个圆点为实心 — 代表当前步骤'), num(b.active_index ?? 0, v => updateBlock(b.id, { active_index: Math.max(0, Math.min((b.count || 3) - 1, v)) }), { min: 0, max: 9 })));
-  m.appendChild(field(T('Active colour', '当前颜色'), '',
-    sel(b.color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { color: v }))));
-}
 
 function buildFlashStripForm(m, b) {
   const liveCount = (state.flashSales || []).filter(p => p.flash?.state === 'active').length;
