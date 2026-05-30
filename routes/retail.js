@@ -10026,9 +10026,18 @@ function computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty) {
   if (!zone) {
     return { error: 'no_zone_match', deliveryFee: 0, packingFee: 0, freeShipping: false };
   }
-  const defaultFreeThreshold = Number(cfgValue('delivery.defaultFreeThreshold', 399));
-  const freeThreshold = zone.free_threshold != null ? Number(zone.free_threshold) : defaultFreeThreshold;
-  const freeEligible  = freeThreshold > 0 && subtotal >= freeThreshold;
+  // Free-shipping threshold: a zone's own "Free-over" wins; when blank it falls
+  // back to the global fees.freeShippingThreshold (the Settings → Checkout & fees
+  // input). Per-zone explicit values keep their existing semantics (0 = none);
+  // the global fallback honors the documented "0 = always free shipping".
+  let freeEligible;
+  if (zone.free_threshold != null) {
+    const freeThreshold = Number(zone.free_threshold);
+    freeEligible = freeThreshold > 0 && subtotal >= freeThreshold;
+  } else {
+    const globalFree = Number(cfgValue('fees.freeShippingThreshold', 399));
+    freeEligible = globalFree <= 0 || subtotal >= globalFree;
+  }
 
   let deliveryFee = 0;
   if (zone.zone_type === 'gz_district' && deliveryMode === 'max') {

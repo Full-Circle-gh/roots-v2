@@ -40,6 +40,17 @@ function layout(page) {
   return _cache?.[page]?.layout || [];
 }
 
+// Synchronous read of a dotted path from the cached config (e.g.
+// 'fees.freeShippingThreshold'). Returns `fallback` when config isn't loaded
+// yet or the key is missing. Callers that need a fresh value should await
+// load() first; this is for render passes that rely on the launch-time cache.
+function get(path, fallback) {
+  if (!_cache) return fallback;
+  let node = _cache;
+  for (const p of String(path).split('.')) node = node?.[p];
+  return node == null ? fallback : node;
+}
+
 function copy(key, lang) {
   // copy keys are dotted paths like 'copy.cart.empty'. The cached config has
   // them already nested: cfg.copy.cart.empty = { en: '...', cn: '...' }
@@ -51,4 +62,4 @@ function copy(key, lang) {
   return (lang === 'cn' ? node.cn : node.en) || node.en || node.cn || '';
 }
 
-module.exports = { load, layout, copy };
+module.exports = { load, layout, copy, get };

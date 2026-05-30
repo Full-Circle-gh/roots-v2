@@ -31,6 +31,10 @@ Page({
     const app = getApp();
     this.setData({ lang: app.globalData.lang });
     this.recompute();
+    // The free-shipping bar reads fees.freeShippingThreshold from the cached
+    // config; if it isn't warm yet, fetch + re-render so the bar isn't stuck
+    // on the 399 fallback.
+    config.load().then(() => this.recompute()).catch(() => {});
     // Cart unit_prices are frozen at add-time; re-price against the server so
     // flash sales that started/ended since show the CURRENT price + savings.
     this.repriceFromServer();
@@ -47,18 +51,15 @@ Page({
     const L = this.data.lang;
     const state = cart.get();
     const subtotal = cart.subtotal();
-    const threshold = config.copy ? 399 : 399;  // placeholder
-    let configFees = 399, std = 12;
-    try {
-      const c = require('../../utils/config');
-      const cached = c.load(false).catch(() => null);
-      // Synchronous-ish: rely on whatever's cached without awaiting
-    } catch {}
-    const t = 399;  // TODO: read from config.fees.freeShippingThreshold
+    // Global free-shipping threshold from Settings → Checkout & fees. This is a
+    // pre-address hint only — the actual free-over can differ per delivery zone
+    // once the customer picks an address at checkout. 0 = always free.
+    const t = Number(config.get('fees.freeShippingThreshold', 399)) || 0;
+    const alwaysFree = t <= 0;
     // Round UP to the next whole ¥ so the displayed gap never *understates*
     // what's needed (¥146.39999… → ¥147). Subtotal can be fractional from
     // discounts, but the cart bar reads cleaner as a round number.
-    const remainingRaw = Math.max(0, t - subtotal);
+    const remainingRaw = alwaysFree ? 0 : Math.max(0, t - subtotal);
     const remaining = Math.ceil(remainingRaw);
     let flashSavings = 0;
     const itemRows = state.items.map(it => {
@@ -79,7 +80,7 @@ Page({
       threshold: t,
       remaining,
       unlocked: remainingRaw <= 0,
-      pct: Math.min(100, (subtotal / t) * 100),
+      pct: alwaysFree ? 100 : Math.min(100, (subtotal / t) * 100),
       copy: {
         kicker:    this.tx('copy.cart.kicker',       L === 'cn' ? '购物车'                   : 'YOUR BASKET · 购物车'),
         title:     this.tx('copy.cart.title',        L === 'cn' ? '即将拥有。'                : 'Almost yours.'),
