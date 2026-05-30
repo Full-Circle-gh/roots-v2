@@ -1,5 +1,5 @@
 <view class="pb-wrap">
-  <view wx:for="{{resolved}}" wx:key="_k" class="pb pb-{{item.type}}">
+  <view wx:for="{{resolved}}" wx:key="_k" wx:for-index="bi" class="pb pb-{{item.type}}">
 
     <!-- 01 · SPEC STRIP -->
     <block wx:if="{{item.type === 'spec_strip'}}">
@@ -174,6 +174,56 @@
       <view class="pb-image pb-image-{{item.ratio}}">
         <image class="pb-image-img" src="{{item.url}}" mode="{{item.fill ? 'aspectFill' : 'widthFix'}}" lazy-load/>
         <view wx:if="{{item.caption}}" class="pb-image-cap">{{item.caption}}</view>
+      </view>
+    </block>
+
+    <!-- +4 · RECIPE STEPS -->
+    <block wx:elif="{{item.type === 'recipe_steps'}}">
+      <view class="pb-recipe">
+        <view class="pb-section-head">
+          <text class="pb-section-h3">{{item.head}}</text>
+          <text class="pb-section-tag">{{item.tag}}</text>
+        </view>
+        <view wx:for="{{item.steps}}" wx:for-item="s" wx:key="n" class="pb-recipe-step">
+          <text class="pb-recipe-n">{{s.n}}</text>
+          <view class="pb-recipe-body">
+            <view class="pb-recipe-text">{{s.text}}</view>
+            <text wx:if="{{s.time}}" class="pb-recipe-time">{{s.time}}</text>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <!-- +5 · GOES WELL WITH -->
+    <block wx:elif="{{item.type === 'pairings'}}">
+      <view class="pb-pair">
+        <view class="pb-section-head">
+          <text class="pb-section-h3">{{item.head}}</text>
+        </view>
+        <scroll-view class="pb-pair-row" scroll-x>
+          <view wx:for="{{item.items}}" wx:for-item="p" wx:key="id"
+                class="pb-pair-tile" data-id="{{p.id}}" bindtap="onPairTap">
+            <image class="pb-pair-img" src="{{p.img}}" mode="aspectFill" lazy-load/>
+            <text class="pb-pair-name">{{p.name}}</text>
+          </view>
+        </scroll-view>
+      </view>
+    </block>
+
+    <!-- +6 · FAQ ACCORDION -->
+    <block wx:elif="{{item.type === 'faq'}}">
+      <view class="pb-faq">
+        <view class="pb-section-head">
+          <text class="pb-section-h3">{{item.head}}</text>
+        </view>
+        <view wx:for="{{item.items}}" wx:for-item="q" wx:key="q"
+              class="pb-faq-item {{q.open ? 'open' : ''}}">
+          <view class="pb-faq-q" data-bi="{{bi}}" data-qi="{{index}}" bindtap="onFaqToggle">
+            <text class="pb-faq-q-txt">{{q.q}}</text>
+            <text class="pb-faq-mark">{{q.open ? '–' : '+'}}</text>
+          </view>
+          <view wx:if="{{q.open}}" class="pb-faq-a">{{q.a}}</view>
+        </view>
       </view>
     </block>
 

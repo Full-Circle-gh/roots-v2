@@ -975,6 +975,28 @@
   .pa-prev-image-tall .pa-prev-image-img { aspect-ratio: 4 / 5; object-fit: cover; }
   .pa-prev-image-natural .pa-prev-image-img { height: auto; }
   .pa-prev-image-cap { padding: 8px 22px 14px; font-family: 'Aleo', serif; font-style: italic; font-size: 12px; line-height: 1.5; color: rgba(26, 26, 23, 0.6); }
+  /* +4 · RECIPE STEPS */
+  .pa-prev-recipe { padding: 22px 22px 26px; }
+  .pa-prev-recipe-step { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid rgba(26, 26, 23, 0.12); }
+  .pa-prev-recipe-step:first-of-type { border-top: none; }
+  .pa-prev-recipe-n { font-family: 'Bear Serif', serif; font-size: 22px; line-height: 1; color: #6A6E2D; flex: none; min-width: 30px; }
+  .pa-prev-recipe-body { flex: 1; min-width: 0; }
+  .pa-prev-recipe-text { font-family: 'Aleo', serif; font-size: 13.5px; line-height: 1.5; color: #1a1a17; }
+  .pa-prev-recipe-time { display: inline-block; margin-top: 6px; font-family: 'Toni Grotesk', sans-serif; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(26, 26, 23, 0.55); background: #E9ECC9; padding: 2px 8px; border-radius: 999px; }
+  /* +5 · GOES WELL WITH */
+  .pa-prev-pair { padding: 22px 22px 26px; }
+  .pa-prev-pair-row { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 2px; }
+  .pa-prev-pair-tile { flex: none; width: 96px; }
+  .pa-prev-pair-img { width: 96px; height: 96px; border-radius: 12px; overflow: hidden; background: rgba(26, 26, 23, 0.06); }
+  .pa-prev-pair-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pa-prev-pair-name { margin-top: 7px; font-family: 'Toni Grotesk', sans-serif; font-size: 11px; line-height: 1.3; color: #1a1a17; }
+  /* +6 · FAQ ACCORDION */
+  .pa-prev-faq { padding: 22px 22px 26px; }
+  .pa-prev-faq-item { border-top: 1px solid rgba(26, 26, 23, 0.12); }
+  .pa-prev-faq-item:first-of-type { border-top: none; }
+  .pa-prev-faq-q { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 0; font-family: 'Toni Grotesk', sans-serif; font-size: 13px; font-weight: 600; color: #1a1a17; }
+  .pa-prev-faq-mark { font-family: 'Bear Serif', serif; font-size: 18px; line-height: 1; color: #6A6E2D; flex: none; }
+  .pa-prev-faq-a { padding: 0 0 14px; font-family: 'Aleo', serif; font-size: 13px; line-height: 1.55; color: rgba(26, 26, 23, 0.72); }
   .pa-prev-colophon { padding: 22px 22px 18px; background: #F2E7DF; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; position: relative; border-top: 1px solid #1a1a17; }
   .pa-prev-colophon-img { width: 72px; height: 72px; object-fit: contain; mix-blend-mode: multiply; }
   .pa-prev-colophon-tagline { font-family: 'Bear Serif', serif; font-size: 16px; line-height: 1; letter-spacing: -0.005em; color: #1a1a17; }
@@ -1304,6 +1326,33 @@ const PA_BLOCK_TYPES = [
     label_cn: '🖼 图片横幅 — 通栏照片 + 可选说明',
     name_en: 'Image Band', name_cn: '图片横幅',
     make: () => ({ url: '', caption_en: '', caption_cn: '', ratio: 'wide' }),
+  },
+  {
+    type: 'recipe_steps', glyph: '👩‍🍳',
+    label_en: '👩‍🍳 Recipe Steps — numbered method + optional timing',
+    label_cn: '👩‍🍳 做法步骤 — 编号步骤 + 可选时间',
+    name_en: 'Recipe Steps', name_cn: '做法步骤',
+    make: () => ({ title_en: '', title_cn: '', steps: [
+      { text_en: '', text_cn: '', time_en: '', time_cn: '' },
+      { text_en: '', text_cn: '', time_en: '', time_cn: '' },
+      { text_en: '', text_cn: '', time_en: '', time_cn: '' },
+    ] }),
+  },
+  {
+    type: 'pairings', glyph: '🤝',
+    label_en: '🤝 Goes Well With — cross-sell product tiles',
+    label_cn: '🤝 搭配推荐 — 关联商品卡片',
+    name_en: 'Goes Well With', name_cn: '搭配推荐',
+    make: () => ({ title_en: '', title_cn: '', items: [] }),
+  },
+  {
+    type: 'faq', glyph: '❓',
+    label_en: '❓ FAQ Accordion — question / answer pairs',
+    label_cn: '❓ 常见问题 — 问答折叠',
+    name_en: 'FAQ Accordion', name_cn: '常见问题',
+    make: () => ({ title_en: '', title_cn: '', items: [
+      { q_en: '', q_cn: '', a_en: '', a_cn: '' },
+    ] }),
   },
   {
     // Nutrition facts panel. Unlike the others, this block does NOT live in
@@ -2281,8 +2330,9 @@ function paBlocksSyncFromDOM() {
       b.cells[+cIdx] = { ...(b.cells[+cIdx] || {}), [k]: val };
     } else if (rIdx != null) {
       const arrKey = (b.type === 'why' || b.type === 'nutrition_facts') ? 'rows'
-                   : (b.type === 'ingredients_chips' || b.type === 'ingredients_line') ? 'items'
+                   : (b.type === 'ingredients_chips' || b.type === 'ingredients_line' || b.type === 'faq') ? 'items'
                    : b.type === 'how_to_use' ? 'tiles'
+                   : b.type === 'recipe_steps' ? 'steps'
                    : null;
       if (arrKey) {
         if (!Array.isArray(b[arrKey])) b[arrKey] = [];
@@ -2333,6 +2383,9 @@ function paBlocksCollect() {
     if (b.type === 'notes_callout')  return !!(b.text_en || b.text_cn);
     if (b.type === 'pull_quote')     return !!(b.text_en || b.text_cn || b.who_en || b.who_cn);
     if (b.type === 'image_band')     return !!(b.url || '').trim();
+    if (b.type === 'recipe_steps')   return (b.steps || []).some(s => s.text_en || s.text_cn);
+    if (b.type === 'pairings')       return (b.items || []).some(it => it.id);
+    if (b.type === 'faq')            return (b.items || []).some(it => (it.q_en || it.q_cn) && (it.a_en || it.a_cn));
     return true;
   });
   return out.length ? out : null;
@@ -2377,6 +2430,9 @@ const PE_ICONS = {
   pull_quote:        _SVG('<path d="M9 7H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v1a2 2 0 0 1-2 2H4v2h1a4 4 0 0 0 4-4V7zm10 0h-4a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v1a2 2 0 0 1-2 2h-1v2h1a4 4 0 0 0 4-4V7z"/>', { fill: 'currentColor' }),
   nutrition_facts:   _SVG('<rect x="5" y="3" width="14" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/>'),
   image_band:        _SVG('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>'),
+  recipe_steps:      _SVG('<path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6z"/><line x1="6" y1="17" x2="18" y2="17"/>'),
+  pairings:          _SVG('<rect x="2" y="7" width="9" height="13" rx="2"/><rect x="13" y="7" width="9" height="13" rx="2"/><path d="M11 13.5h2"/>'),
+  faq:               _SVG('<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>'),
 };
 PE_ICONS.stat_callout = PE_ICONS.big_stat;
 // Fallback = a generic "box" so an unknown type still renders an SVG, never an emoji.
@@ -2401,6 +2457,9 @@ function _paBlockSubLabel(b) {
   if (b.type === 'notes_callout') return head(b.text_en || b.text_cn);
   if (b.type === 'pull_quote') return head(b.text_en || b.text_cn);
   if (b.type === 'image_band') return head(b.caption_en || b.caption_cn) || ((b.url || '').trim() ? (cuLang && cuLang() === 'cn' ? '已设置图片' : 'Image set') : '');
+  if (b.type === 'recipe_steps') { const s = (b.steps || []).map(x => trim(x.text_en || x.text_cn)).filter(Boolean); return [trim(b.title_en || b.title_cn), s.length ? (s.length + (cuLang && cuLang() === 'cn' ? ' 步' : ' steps')) : ''].filter(Boolean).join(' · ').slice(0, 40); }
+  if (b.type === 'pairings') { const items = (b.items || []).map(x => trim(x.name_en || x.name_cn)).filter(Boolean); return items.slice(0, 3).join(' · ').slice(0, 40); }
+  if (b.type === 'faq') { const q = (b.items || [])[0] || {}; return head(b.title_en || b.title_cn || q.q_en || q.q_cn); }
   if (b.type === 'nutrition_facts') {
     const basis = trim(b.basis_en || b.basis_cn);
     const rows = (b.rows || []).map(r => trim(r.label_en || r.label_cn)).filter(Boolean);
@@ -2698,7 +2757,105 @@ function _paBlockEditorBody(b) {
         <div class="field"><label class="stacked">Caption CN · 说明(中文,可选)</label><input data-bkey="caption_cn" type="text" value="${v('caption_cn')}" placeholder="温热的酸面包上,上桌前抹开"></div>
       </div>`;
   }
+  if (b.type === 'recipe_steps') {
+    const steps = Array.isArray(b.steps) ? b.steps : [];
+    return `
+      <div class="helper" style="margin:-4px 0 14px">Numbered method that turns the product into a simple recipe. Each step can carry an optional timing chip (e.g. "2 min"). · 编号做法,把产品变成简单食谱。每步可选时间标签(如"2 分钟")。</div>
+      <div class="pa-edit-grid-2" style="margin-bottom:14px">
+        <div class="field"><label class="stacked">Title EN (optional) · 标题(英文,可选)</label><input data-bkey="title_en" type="text" value="${v('title_en')}" placeholder="5-minute dip"></div>
+        <div class="field"><label class="stacked">Title CN · 标题(中文,可选)</label><input data-bkey="title_cn" type="text" value="${v('title_cn')}" placeholder="5 分钟蘸酱"></div>
+      </div>
+      ${steps.map((s, i) => `
+        <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span class="pa-edit-section-title">Step · 第 ${i + 1} 步</span>
+            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','steps',${i})" ${steps.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
+          </div>
+          <div class="field" style="margin-bottom:8px"><label class="stacked">Step EN · 步骤(英文)</label><textarea data-rowidx="${i}" data-bkey="text_en" rows="2" placeholder="Spread a generous layer on warm toast.">${escapeHtml(s.text_en || '')}</textarea></div>
+          <div class="field" style="margin-bottom:8px"><label class="stacked">Step CN · 步骤(中文)</label><textarea data-rowidx="${i}" data-bkey="text_cn" rows="2" placeholder="在温热的吐司上厚厚抹一层。">${escapeHtml(s.text_cn || '')}</textarea></div>
+          <div class="pa-edit-grid-2">
+            <div class="field"><label class="stacked">Time EN (optional) · 时间(英文,可选)</label><input data-rowidx="${i}" data-bkey="time_en" type="text" value="${escapeAttr(s.time_en || '')}" placeholder="2 min"></div>
+            <div class="field"><label class="stacked">Time CN · 时间(中文,可选)</label><input data-rowidx="${i}" data-bkey="time_cn" type="text" value="${escapeAttr(s.time_cn || '')}" placeholder="2 分钟"></div>
+          </div>
+        </div>`).join('')}
+      <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','steps',{text_en:'',text_cn:'',time_en:'',time_cn:''})">+ Add step · 添加步骤</button>`;
+  }
+  if (b.type === 'pairings') {
+    const items = Array.isArray(b.items) ? b.items : [];
+    const chosen = new Set(items.map(it => it.id));
+    const opts = _peDedupVariants(PA_ALL_PRODUCTS)
+      .filter(p => !chosen.has(p.id) && !(PA_CURRENT && p.id === PA_CURRENT.id))
+      .sort((a, b2) => (a.name_en || '').localeCompare(b2.name_en || ''))
+      .map(p => `<option value="${p.id}">${escapeHtml(p.name_en || ('#' + p.id))}${p.name_cn ? ' · ' + escapeHtml(p.name_cn) : ''}</option>`)
+      .join('');
+    return `
+      <div class="helper" style="margin:-4px 0 14px">Cross-sell tiles — products that go well with this one. Each tile pulls its photo + name live from the catalog and links straight to that product page. · 搭配推荐卡片 — 与本品相配的商品。每张卡片实时取用商品图片和名称,并直接跳转到对应商品页。</div>
+      <div class="pa-edit-grid-2" style="margin-bottom:14px">
+        <div class="field"><label class="stacked">Title EN (optional) · 标题(英文,可选)</label><input data-bkey="title_en" type="text" value="${v('title_en')}" placeholder="Goes well with"></div>
+        <div class="field"><label class="stacked">Title CN · 标题(中文,可选)</label><input data-bkey="title_cn" type="text" value="${v('title_cn')}" placeholder="搭配推荐"></div>
+      </div>
+      ${items.length ? items.map((it, i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:8px">
+          <img src="/api/retail/products/${it.id}/image" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;background:var(--line-soft);flex:none" onerror="this.style.visibility='hidden'">
+          <div style="flex:1;min-width:0;font-size:13px;color:var(--text-1)"><span style="font-weight:600">${escapeHtml(it.name_en || ('#' + it.id))}</span>${it.name_cn ? ' <small style="color:var(--text-2)">' + escapeHtml(it.name_cn) + '</small>' : ''}</div>
+          <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px;flex:none" onclick="paPairRemove('${b.id}',${i})">Remove · 移除</button>
+        </div>`).join('') : `<div class="helper" style="margin-bottom:10px">No products added yet. · 暂无关联商品。</div>`}
+      <div class="field" style="margin-top:6px">
+        <label class="stacked">Add a product · 添加商品</label>
+        <select onchange="paPairAdd('${b.id}', this.value); this.value=''">
+          <option value="">— ${cuT('Choose a product…', '选择商品…')} —</option>
+          ${opts}
+        </select>
+      </div>`;
+  }
+  if (b.type === 'faq') {
+    const items = Array.isArray(b.items) ? b.items : [];
+    return `
+      <div class="helper" style="margin:-4px 0 14px">Question / answer pairs shown as a tap-to-expand accordion on the product page. Keep questions short; answers can be 1–3 sentences. · 问答对,在商品页以点击展开的折叠面板呈现。问题简短,答案 1-3 句。</div>
+      <div class="pa-edit-grid-2" style="margin-bottom:14px">
+        <div class="field"><label class="stacked">Title EN (optional) · 标题(英文,可选)</label><input data-bkey="title_en" type="text" value="${v('title_en')}" placeholder="Questions"></div>
+        <div class="field"><label class="stacked">Title CN · 标题(中文,可选)</label><input data-bkey="title_cn" type="text" value="${v('title_cn')}" placeholder="常见问题"></div>
+      </div>
+      ${items.map((it, i) => `
+        <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
+            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','items',${i})" ${items.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
+          </div>
+          <div class="pa-edit-grid-2">
+            <div class="field"><label class="stacked">Question EN · 问题(英文)</label><input data-rowidx="${i}" data-bkey="q_en" type="text" value="${escapeAttr(it.q_en || '')}" placeholder="Is it spicy?"></div>
+            <div class="field"><label class="stacked">Question CN · 问题(中文)</label><input data-rowidx="${i}" data-bkey="q_cn" type="text" value="${escapeAttr(it.q_cn || '')}" placeholder="辣吗?"></div>
+          </div>
+          <div class="field" style="margin-top:8px"><label class="stacked">Answer EN · 回答(英文)</label><textarea data-rowidx="${i}" data-bkey="a_en" rows="2" placeholder="Mild — a gentle warmth, never overpowering.">${escapeHtml(it.a_en || '')}</textarea></div>
+          <div class="field" style="margin-top:8px"><label class="stacked">Answer CN · 回答(中文)</label><textarea data-rowidx="${i}" data-bkey="a_cn" rows="2" placeholder="微辣 — 温和的辣度,不抢味。">${escapeHtml(it.a_cn || '')}</textarea></div>
+        </div>`).join('')}
+      <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','items',{q_en:'',q_cn:'',a_en:'',a_cn:''})">+ Add question · 添加问题</button>`;
+  }
   return `<div class="helper" style="padding:8px 0">Unknown block type · 未知板块类型: <code>${escapeHtml(b.type || '')}</code></div>`;
+}
+// Add a chosen product to a pairings block. We snapshot id + bilingual name so
+// the section list / preview have a label even before the live image loads;
+// the mini-app re-derives the photo from /api/retail/products/:id/image at
+// render time, so the tile always reflects the current catalog.
+function paPairAdd(blockId, productId) {
+  const id = Number(productId);
+  if (!id) return;
+  paBlocksSyncFromDOM();
+  const b = (window._paBlocks || []).find(x => x.id === blockId); if (!b) return;
+  if (!Array.isArray(b.items)) b.items = [];
+  if (b.items.some(it => it.id === id)) return;
+  const p = PA_ALL_PRODUCTS.find(x => x.id === id) || {};
+  b.items.push({ id, name_en: p.name_en || '', name_cn: p.name_cn || '' });
+  paRenderAll();
+  paLivePreview();
+}
+function paPairRemove(blockId, idx) {
+  paBlocksSyncFromDOM();
+  const b = (window._paBlocks || []).find(x => x.id === blockId); if (!b) return;
+  if (!Array.isArray(b.items)) return;
+  b.items.splice(idx, 1);
+  paRenderAll();
+  paLivePreview();
 }
 // Upload a lifestyle photo for an image_band block. Reuses the shared media
 // endpoint (stores in retail_media, returns a stable /api/retail/media/:id
@@ -2908,6 +3065,33 @@ function _paPreviewBlockHtml(b) {
           <span class="pa-prev-nrow-r">${esc(r.value)}</span>
         </div>`).join('')}
       </div>
+    </div>`;
+  }
+  if (b.type === 'recipe_steps') {
+    const title = pickT(b.title_en, b.title_cn);
+    const steps = (b.steps || []).map(s => ({ text: pickT(s.text_en, s.text_cn), time: pickT(s.time_en, s.time_cn) })).filter(s => s.text);
+    if (!steps.length) return '';
+    return `<div class="pa-prev-block pa-prev-recipe">
+      <div class="pa-prev-section-head"><span class="pa-prev-section-h3">${title ? esc(title) : T('Method', '做法')}</span><span class="pa-prev-section-tag">${steps.length}${T(' steps', ' 步')}</span></div>
+      ${steps.map((s, i) => `<div class="pa-prev-recipe-step"><span class="pa-prev-recipe-n">${String(i + 1).padStart(2, '0')}</span><div class="pa-prev-recipe-body"><div class="pa-prev-recipe-text">${esc(s.text)}</div>${s.time ? `<span class="pa-prev-recipe-time">${esc(s.time)}</span>` : ''}</div></div>`).join('')}
+    </div>`;
+  }
+  if (b.type === 'pairings') {
+    const title = pickT(b.title_en, b.title_cn);
+    const items = (b.items || []).filter(it => it.id);
+    if (!items.length) return '';
+    return `<div class="pa-prev-block pa-prev-pair">
+      <div class="pa-prev-section-head"><span class="pa-prev-section-h3">${title ? esc(title) : T('Goes well with', '搭配推荐')}</span></div>
+      <div class="pa-prev-pair-row">${items.map(it => `<div class="pa-prev-pair-tile"><div class="pa-prev-pair-img"><img src="/api/retail/products/${it.id}/image" alt="" onerror="this.style.visibility='hidden'"></div><div class="pa-prev-pair-name">${esc(pickT(it.name_en, it.name_cn) || ('#' + it.id))}</div></div>`).join('')}</div>
+    </div>`;
+  }
+  if (b.type === 'faq') {
+    const title = pickT(b.title_en, b.title_cn);
+    const items = (b.items || []).map(it => ({ q: pickT(it.q_en, it.q_cn), a: pickT(it.a_en, it.a_cn) })).filter(it => it.q && it.a);
+    if (!items.length) return '';
+    return `<div class="pa-prev-block pa-prev-faq">
+      <div class="pa-prev-section-head"><span class="pa-prev-section-h3">${title ? esc(title) : T('Questions', '常见问题')}</span></div>
+      ${items.map((it, i) => `<div class="pa-prev-faq-item ${i === 0 ? 'open' : ''}"><div class="pa-prev-faq-q"><span>${esc(it.q)}</span><span class="pa-prev-faq-mark">${i === 0 ? '–' : '+'}</span></div>${i === 0 ? `<div class="pa-prev-faq-a">${esc(it.a)}</div>` : ''}</div>`).join('')}
     </div>`;
   }
   return '';

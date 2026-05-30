@@ -256,6 +256,52 @@ function _resolveBlock(b, L) {
     return { type: t, url, caption, ratio, fill: ratio !== 'natural' };
   }
 
+  if (t === 'recipe_steps') {
+    const steps = (Array.isArray(b.steps) ? b.steps : [])
+      .map(s => ({ text: _pick(s.text_en, s.text_cn, L), time: _pick(s.time_en, s.time_cn, L) }))
+      .filter(s => s.text);
+    if (!steps.length) return { type: '_skip' };
+    const title = _pick(b.title_en, b.title_cn, L) || (L === 'cn' ? '做法' : 'Method');
+    return {
+      type: t,
+      head: title,
+      tag: steps.length + (L === 'cn' ? ' 步' : ' steps'),
+      steps: steps.map((s, i) => ({ n: String(i + 1).padStart(2, '0'), text: s.text, time: s.time })),
+    };
+  }
+
+  if (t === 'pairings') {
+    // Tiles derive their photo live from the public product-image endpoint, so
+    // the cross-sell always reflects the current catalog. Name is a snapshot.
+    const items = (Array.isArray(b.items) ? b.items : [])
+      .filter(it => it && it.id)
+      .map(it => ({
+        id: it.id,
+        name: _pick(it.name_en, it.name_cn, L) || '',
+        img: api.BASE + '/api/retail/products/' + it.id + '/image',
+      }));
+    if (!items.length) return { type: '_skip' };
+    return {
+      type: t,
+      head: _pick(b.title_en, b.title_cn, L) || (L === 'cn' ? '搭配推荐' : 'Goes well with'),
+      items,
+    };
+  }
+
+  if (t === 'faq') {
+    const items = (Array.isArray(b.items) ? b.items : [])
+      .map(it => ({ q: _pick(it.q_en, it.q_cn, L), a: _pick(it.a_en, it.a_cn, L) }))
+      .filter(it => it.q && it.a)
+      // First question opens by default; the rest start collapsed.
+      .map((it, i) => ({ q: it.q, a: it.a, open: i === 0 }));
+    if (!items.length) return { type: '_skip' };
+    return {
+      type: t,
+      head: _pick(b.title_en, b.title_cn, L) || (L === 'cn' ? '常见问题' : 'Questions'),
+      items,
+    };
+  }
+
   return { type: '_skip' };
 }
 
@@ -275,6 +321,19 @@ Component({
         .map((b, i) => ({ ...(_resolveBlock(b, L) || {}), _k: b.id || ('b' + i) }))
         .filter(b => b.type !== '_skip');
       this.setData({ resolved });
+    },
+    // FAQ accordion — toggle one item's open state. data-bi = block index in
+    // resolved, data-qi = question index within that block.
+    onFaqToggle(e) {
+      const { bi, qi } = e.currentTarget.dataset;
+      const open = !this.data.resolved[bi].items[qi].open;
+      this.setData({ [`resolved[${bi}].items[${qi}].open`]: open });
+    },
+    // Pairings — tap a cross-sell tile to open that product's page.
+    onPairTap(e) {
+      const id = e.currentTarget.dataset.id;
+      if (!id) return;
+      wx.navigateTo({ url: '/pages/product/product?id=' + id });
     },
   },
   lifetimes: {

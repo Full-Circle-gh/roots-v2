@@ -583,3 +583,120 @@
   line-height: 1.5;
   color: var(--ink-60);
 }
+
+/* ───────── +4 · RECIPE STEPS ─────────
+   Numbered method. League Gothic olive numeral rail + Aleo body, with an
+   optional lime-tint timing chip. Hairline divider between steps. */
+.pb-recipe {
+  padding: 60rpx 44rpx 60rpx;
+}
+.pb-recipe-step {
+  display: grid;
+  grid-template-columns: 72rpx 1fr;
+  gap: 28rpx;
+  padding: 28rpx 0;
+  border-top: 2rpx solid var(--ink-12);
+}
+.pb-recipe-step:first-of-type { border-top: 2rpx solid var(--ink); }
+.pb-recipe-n {
+  font-family: var(--f-gothic);
+  font-size: 56rpx;
+  line-height: 0.9;
+  color: var(--olive);
+}
+.pb-recipe-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14rpx;
+}
+.pb-recipe-text {
+  font-family: var(--f-aleo);
+  font-size: 28rpx;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.pb-recipe-time {
+  font-family: var(--f-toni);
+  font-size: 19rpx;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--olive);
+  background: #E9ECC9;
+  padding: 6rpx 18rpx;
+  border-radius: 999rpx;
+  line-height: 1;
+}
+
+/* ───────── +5 · GOES WELL WITH ─────────
+   Horizontal scroll of cross-sell tiles. Photo pulls live from the public
+   product-image endpoint; tap navigates to that product page. */
+.pb-pair {
+  padding: 60rpx 0 60rpx 44rpx;
+}
+.pb-pair .pb-section-head { padding-right: 44rpx; }
+.pb-pair-row {
+  white-space: nowrap;
+}
+.pb-pair-tile {
+  display: inline-block;
+  width: 200rpx;
+  margin-right: 20rpx;
+  vertical-align: top;
+  white-space: normal;
+}
+.pb-pair-tile:last-child { margin-right: 44rpx; }
+.pb-pair-img {
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: 20rpx;
+  background: var(--ink-12);
+  display: block;
+}
+.pb-pair-name {
+  display: block;
+  margin-top: 14rpx;
+  font-family: var(--f-toni);
+  font-size: 23rpx;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+/* ───────── +6 · FAQ ACCORDION ─────────
+   Tap-to-expand question/answer rows. Toni question + Bear Serif olive
+   +/– mark; Aleo answer reveals below. Hairline divider between items. */
+.pb-faq {
+  padding: 60rpx 44rpx 60rpx;
+}
+.pb-faq-item {
+  border-top: 2rpx solid var(--ink-12);
+}
+.pb-faq-item:first-of-type { border-top: 2rpx solid var(--ink); }
+.pb-faq-q {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24rpx;
+  padding: 30rpx 0;
+}
+.pb-faq-q-txt {
+  font-family: var(--f-toni);
+  font-size: 27rpx;
+  line-height: 1.35;
+  color: var(--ink);
+  flex: 1;
+}
+.pb-faq-mark {
+  font-family: var(--f-bear);
+  font-size: 44rpx;
+  line-height: 1;
+  color: var(--olive);
+  flex: none;
+}
+.pb-faq-a {
+  padding: 0 0 30rpx;
+  font-family: var(--f-aleo);
+  font-size: 27rpx;
+  line-height: 1.55;
+  color: var(--ink-60);
+}
