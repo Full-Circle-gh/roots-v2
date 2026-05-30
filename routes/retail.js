@@ -2856,6 +2856,20 @@ function normalizeChinaAddress(a) {
     if (prov) out.province = prov;
   }
 
+  // EN-mode picker quirk: province-typed delivery zones (match_city = '江苏省')
+  // are listed in the EN city wheel, so the customer's pick lands in the CITY
+  // slot with province blank. Lift it into province so the address saves (the
+  // POST requires a province) and the zone matcher's province pass resolves.
+  // Only fires when the city literally ends in 省/自治区 — municipalities
+  // ('北京'/'上海') have no such suffix and are handled by the backfill above.
+  if (!out.province && out.city && /(省|自治区)$/u.test(out.city)) {
+    const cityStem = out.city.replace(/省$|自治区$|特别行政区$/u, '');
+    const provMatch = CN_PROVINCES.find(
+      p => p === out.city || p.replace(/省$|自治区$|特别行政区$|市$/u, '') === cityStem
+    );
+    if (provMatch) out.province = provMatch;
+  }
+
   // Add 省 suffix to bare province names (except direct-administered cities).
   if (out.province) {
     const stem = out.province.replace(/省$|自治区$|特别行政区$|市$/, '');
@@ -2870,7 +2884,7 @@ function normalizeChinaAddress(a) {
   // with a real administrative suffix — 市 / 自治州 / 地区 / 盟. Cities like
   // 广州 / 福州 / 苏州 end in 州 but aren't really "州" administratively, so
   // they still need 市 appended.
-  if (out.city && !/(市|自治州|地区|盟)$/.test(out.city)) {
+  if (out.city && !/(市|自治州|地区|盟|省|自治区)$/.test(out.city)) {
     out.city = out.city + '市';
   }
   // Add 区/县 awareness — keep district as typed (too many shapes to enumerate),
