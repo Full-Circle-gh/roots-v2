@@ -37,6 +37,7 @@ Page({
     fulfillment: 'delivery',
     pickupStores: [],            // [{id, code, name_en, name_cn, address, city, district, phone}]
     pickupWindow: { open: '10:00', close: '20:00' },
+    pickupPackingFee: 0,         // flat per-order packing fee for pickup (¥)
     pickupStoreId: null,
     pickupName: '',
     pickupPhone: '',
@@ -621,7 +622,11 @@ Page({
       const data = r?.data || r || {};
       const stores = Array.isArray(data.stores) ? data.stores : [];
       const win = data.window || { open: '10:00', close: '20:00' };
-      const patch = { pickupStores: stores, pickupWindow: win };
+      const patch = {
+        pickupStores: stores,
+        pickupWindow: win,
+        pickupPackingFee: Number(data.packing_fee) || 0,
+      };
       // Date bounds: today → +30 days (matches the server's far-future guard).
       const pad = n => String(n).padStart(2, '0');
       const now = new Date();
@@ -737,7 +742,8 @@ Page({
     });
     const itemCount = state.items.reduce((s, it) => s + (it.qty || 0), 0);
     const voucherDiscount = Number(this.data.voucherDiscount) || 0;
-    const grossTotal = Math.max(0, subtotal - voucherDiscount);
+    const packingFee = Number(this.data.pickupPackingFee) || 0;
+    const grossTotal = Math.max(0, subtotal + packingFee - voucherDiscount);
     const rate = Number(this.data.pointsRedeemRate) || 100;
     let pointsToUse = 0, pointsDiscount = 0;
     if (this.data.usePoints && this.data.pointsBalance > 0) {
@@ -751,7 +757,7 @@ Page({
       items, itemCount,
       subtotal: subtotal.toFixed(2),
       zone: null, zoneError: '',
-      deliveryFee: '0.00', packingFee: '0.00', freeShipping: false,
+      deliveryFee: '0.00', packingFee: packingFee.toFixed(2), freeShipping: false,
       needsFallback: false, fallbackGate: 'none',
       pointsToUse,
       pointsDiscount: pointsDiscount.toFixed(2),

@@ -322,8 +322,9 @@ router.get('/api/retail/pickup-stores', (req, res) => {
         ORDER BY sort_order ASC, id ASC`
     ).all();
     const window = cfgValue('pickup.window', { open: '10:00', close: '20:00' });
+    const packingFee = Number(cfgValue('fees.pickupPackingFee', 0)) || 0;
     res.set('Cache-Control', 'public, max-age=60');
-    res.json({ success: true, data: { stores, window } });
+    res.json({ success: true, data: { stores, window, packing_fee: packingFee } });
   } catch (e) {
     console.error('[retail/pickup-stores]', e);
     res.status(500).json({ success: false, error: 'pickup_stores_load_failed' });
@@ -3817,7 +3818,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   const zone = isPickup ? null : matchDeliveryZone(address);
   let shippingFee = 0, packingFee = 0, deliveryZoneId = null, resolvedMode = isPickup ? 'pickup' : deliveryMode;
   if (isPickup) {
-    // fees stay 0; delivery_mode='pickup' marks the order in admin
+    // No zone/shipping, but a flat per-order packing fee still applies so the
+    // store is paid for boxing the items. delivery_mode='pickup' marks it in admin.
+    packingFee = Number(cfgValue('fees.pickupPackingFee', 0)) || 0;
   } else if (zone) {
     const fees = computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty);
     if (fees.error) return res.status(400).json({ success: false, error: fees.error });

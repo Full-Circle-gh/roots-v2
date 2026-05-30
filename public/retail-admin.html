@@ -7667,6 +7667,25 @@
             </div>
           </div>
 
+          <!-- STORE PICKUP PACKING FEE -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Store pickup packing fee · 自提包装费</h3>
+              <div class="muted">A flat fee added to every <b>Store pickup</b> order so the store is paid for boxing the items. Charged once per order regardless of item count. Set to <b>0</b> for no pickup packing fee. · 每笔"到店自提"订单收取的固定包装费,按单收取一次,与件数无关。设为 <b>0</b> 则不收。</div>
+            </div>
+            <div class="illus-row">
+              <div class="ctrl" style="flex: 1;">
+                <div class="field" style="margin: 0;">
+                  <label class="stacked">Packing fee · 包装费</label>
+                  <span class="yen-input"><input type="number" id="cfg-fees-pickupPackingFee"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px;">
+                  Shows as a "Packing fee" line on the pickup checkout breakdown. Delivery orders keep their own per-zone packing fee (set under Delivery zones).
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- STANDARD SHIPPING FEE -->
           <div class="group-card">
             <div class="group-card-head">
@@ -11711,6 +11730,7 @@ async function loadConfig() {
     $('#cfg-fees-standardShipping').value      = c.fees?.standardShipping ?? 12;
     $('#cfg-fees-sameDayDelivery').value       = c.fees?.sameDayDelivery ?? 18;
     $('#cfg-fees-minOrder').value              = c.fees?.minOrder ?? 0;
+    $('#cfg-fees-pickupPackingFee').value      = c.fees?.pickupPackingFee ?? 0;
     $('#cfg-pickup-open').value                = c.pickup?.window?.open  || '10:00';
     $('#cfg-pickup-close').value               = c.pickup?.window?.close || '20:00';
     // Shop layout & filters
@@ -11828,6 +11848,7 @@ async function saveConfig() {
     'fees.standardShipping':       Number($('#cfg-fees-standardShipping').value) || 0,
     'fees.sameDayDelivery':        Number($('#cfg-fees-sameDayDelivery').value) || 0,
     'fees.minOrder':               Number($('#cfg-fees-minOrder').value) || 0,
+    'fees.pickupPackingFee':       Number($('#cfg-fees-pickupPackingFee').value) || 0,
     'pickup.window':               {
       open:  $('#cfg-pickup-open').value  || '10:00',
       close: $('#cfg-pickup-close').value || '20:00',
