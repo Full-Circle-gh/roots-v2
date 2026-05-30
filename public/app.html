@@ -8670,7 +8670,7 @@ function _renderProdStock(prods) {
   }
   const { stores, byProductId } = _prodInvGrid;
   if (!stores.length) {
-    return `<div class="empty"><div class="empty-icon">🏪</div><p>No stores configured. · 尚未配置门店。</p><p style="color:var(--muted);margin-top:8px">Open <a href="javascript:navigate('inventory')" style="color:var(--lime);font-weight:600">Inventory → Stores</a> to add one. · 打开"库存 → 门店"添加。</p></div>`;
+    return `<div class="empty"><div class="empty-icon">🏪</div><p>No stores configured. · 尚未配置门店。</p><p style="color:var(--muted);margin-top:8px">Add your first store to start tracking per-store stock and offer store pickup. · 添加首个门店以管理库存并开启到店自提。</p><button class="btn btn-primary" style="margin-top:14px" onclick="_storeAdd()">+ Add store · 添加门店</button></div>`;
   }
 
   // Start auto-refresh on first paint; the tick self-clears when the user leaves.
