@@ -21,7 +21,7 @@ const geocode = require('../lib/geocode');
 const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
-const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId } = require('../lib/tenant-db');
+const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
 const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
 // Web Push — optional; wrapped so a missing module never breaks order flow.
 let _push = null;
@@ -29,6 +29,35 @@ try { _push = require('./push'); } catch (e) { console.warn('[retail] push modul
 const _feie = require('../lib/feie');   // Feie cloud-printer client (order auto-print)
 const qrpng = require('../lib/qrpng');  // zero-dep QR→PNG (renders the Alipay qr_code)
 const router = express.Router();
+
+// ── Public storefront per-tenant routing (Platform readiness ⑥) ───────────
+// The customer mini-app sends its WeChat AppID in `x-wx-appid` on every call
+// (see miniapp/utils/api.js). Map it to that tenant and run the rest of the
+// request inside the tenant's DB context, so `tdb()` reaches the right data
+// and `getTenantCreds(currentTenantId())` reaches the right login/Pay creds.
+//
+// Scope is ONLY the customer storefront (`/api/retail/`), NEVER the backend
+// operator realm (`/api/retail-admin/`, which resolves its tenant via the
+// session guard in requireRetailAdmin). Roots' own app sends Roots' AppID →
+// tid 1 → getTenantDb(1) === mainDb, so Roots is byte-for-byte unchanged; a
+// missing/unknown AppID, or a WeChat server-to-server callback (no header), →
+// unscoped (Roots) as well. Gated by the same master switch as the backend
+// data cut-over (⑧) so non-isolated environments stay single-tenant.
+router.use((req, res, next) => {
+  if (!DATA_ISOLATION_READY) return next();
+  if (!req.path.startsWith('/api/retail/')) return next();
+  const appid = req.get('x-wx-appid');
+  if (!appid) return next();
+  let row;
+  try {
+    row = db.prepare("SELECT id FROM tenants WHERE wx_appid = ? AND status = 'active'").get(appid);
+  } catch (_) { return next(); }   // control-plane table not ready → unscoped (Roots)
+  const tid = row && row.id;
+  if (!tid || tid === ROOTS_TENANT_ID) return next();
+  req.tenantId = tid;
+  req.tenantDb = getTenantDb(tid);
+  return tenantAls.run(req.tenantDb, () => next());
+});
 
 // Mini App Backend access gate. Two ways in during the single-tenant → SaaS
 // transition:

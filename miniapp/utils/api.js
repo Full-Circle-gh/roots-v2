@@ -7,11 +7,23 @@
 
 const BASE = 'https://rootskitchenchina.com';
 
+// This mini-app is published once per tenant, each under its OWN WeChat AppID.
+// Sending that AppID on every call lets the multi-tenant backend route the
+// request to the right tenant's storefront data + login/Pay credentials
+// (Platform readiness ⑥). Roots' own build sends Roots' AppID, which the
+// server maps back to the Roots tenant — i.e. behaviour is unchanged for Roots.
+// getAccountInfoSync is synchronous + stable for the app's lifetime, so read
+// it once and cache. Guarded so a non-WeChat runtime (devtools edge cases)
+// never throws here.
+let _wxAppId = '';
+try { _wxAppId = (wx.getAccountInfoSync().miniProgram.appId) || ''; } catch (e) { _wxAppId = ''; }
+
 function request(path, opts = {}, _retried = false) {
   const app = getApp();
   const token = app?.globalData?.token || '';
   const headers = { 'Content-Type': 'application/json', ...(opts.header || {}) };
   if (token) headers.Authorization = 'Bearer ' + token;
+  if (_wxAppId) headers['x-wx-appid'] = _wxAppId;
 
   return new Promise((resolve, reject) => {
     wx.request({
