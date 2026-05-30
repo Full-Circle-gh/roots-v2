@@ -9843,11 +9843,14 @@ function computeDeliverySlots(zone, now) {
   }
 
   // ── Today's options ─────────────────────────────────────────────────
-  // Gate on same_day_allowed only — NOT kitchenOpenNow. Pre-opening hours
-  // (e.g. ordering at 7am with kitchen opening at 10am) must still offer
-  // today's future slots; emitTimeSlots(filterElapsed=true) naturally
-  // returns [] post-close, so the fallback to tomorrow still kicks in.
-  if (cfg.same_day_allowed === 1) {
+  // Gate on same_day_allowed AND a zero lead — NOT kitchenOpenNow. Pre-
+  // opening hours (e.g. ordering at 7am with kitchen opening at 10am) must
+  // still offer today's future slots; emitTimeSlots(filterElapsed=true)
+  // naturally returns [] post-close, so the fallback to tomorrow still
+  // kicks in. A zone with min_lead_days >= 1 (e.g. outside-GZ city zones)
+  // can never be fulfilled today — its earliest day comes from the
+  // schedule-for-later calendar below, never a same-day/today chip.
+  if (cfg.same_day_allowed === 1 && cfg.min_lead_days === 0) {
     if (isDayOnly) {
       // Day-only zones don't have per-slot times, so we need an explicit
       // "is today still fulfillable" check — kitchen must not be past
@@ -9882,7 +9885,7 @@ function computeDeliverySlots(zone, now) {
   // window without dropping into the calendar. Day-only zones don't get
   // a tomorrow-chip fallback — the Express option already routes to the
   // earliest available day from the schedule window.
-  if (!isDayOnly && todaySlots.length === 0) {
+  if (!isDayOnly && todaySlots.length === 0 && cfg.min_lead_days <= 1) {
     const emitted = emitTimeSlots(tomorrowDate, tomorrowIso, 'Tomorrow', '明天', /*filterElapsed=*/false);
     if (emitted.length) {
       todaySlots.push(...emitted);
