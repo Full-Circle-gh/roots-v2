@@ -77,6 +77,38 @@ function cityOptions(zones, lang) {
     });
 }
 
+// Province → city tree for the EN-mode cascade picker. Mirrors WeChat's native
+// 省→市→区 region wheel (which is Chinese-only) but with English labels, so an
+// English customer drills province → city instead of scrolling one flat A→Z
+// list of ~340 cities. Only `city` rows participate (Guangzhou districts are
+// reached via city=广州市 + the district step, same as before). Districts are
+// loaded lazily per city via loadDistricts().
+//
+// Returns parallel arrays `provCn` / `provLabel` (sorted by the shown label)
+// plus `citiesByProv` keyed on the canonical Chinese province name; each city
+// is { label, name_cn, name_en, province_cn, province_en }.
+function provinceTree(zones, lang) {
+  const cn = lang === 'cn';
+  const provCn = [];
+  const provLabel = {};   // provinceCn -> shown label
+  const citiesByProv = {};
+  (zones || []).forEach((z) => {
+    if (z.zone_type !== 'city') return;
+    const pcn = z.province_cn || z.match_city || '';
+    if (!pcn) return;
+    const pen = z.province_en || pcn;
+    if (!citiesByProv[pcn]) { citiesByProv[pcn] = []; provCn.push(pcn); provLabel[pcn] = cn ? pcn : pen; }
+    const name_cn = z.match_city || z.name_cn || z.name_en || '';
+    const name_en = z.name_en || z.name_cn || '';
+    citiesByProv[pcn].push({
+      label: cn ? name_cn : name_en, name_cn, name_en,
+      province_cn: pcn, province_en: pen,
+    });
+  });
+  provCn.sort((a, b) => String(provLabel[a]).localeCompare(String(provLabel[b])));
+  return { provCn, provLabel: provCn.map((c) => provLabel[c]), citiesByProv };
+}
+
 // Districts for one city — bilingual, from /api/retail/districts. Cached per
 // city so re-opening the picker (or switching back) doesn't refetch. Returns
 // [] for a city with no districts (the picker then shows city-level only).
@@ -90,4 +122,4 @@ async function loadDistricts(cityCn) {
   return list;
 }
 
-module.exports = { loadZones, buildAreaOptions, matchOption, cityOptions, loadDistricts };
+module.exports = { loadZones, buildAreaOptions, matchOption, cityOptions, provinceTree, loadDistricts };

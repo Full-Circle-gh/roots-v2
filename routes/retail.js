@@ -9917,6 +9917,9 @@ function computeDeliverySlots(zone, now) {
     min_lead_days:        cfg.min_lead_days,
     max_lead_days:        cfg.max_lead_days,
     kitchen_open_now:     kitchenOpenNow,
+    // When closed, distinguishes "before today's opening" (reopens today) from
+    // "after close" (reopens tomorrow) so the UI doesn't always say "tomorrow".
+    kitchen_reopens_today: !kitchenOpenNow && tzNow.getHours() < startHour,
     kitchen_hours:        { start: startHour, end: endHour },
     slot_duration_minutes: slotMins,
     holiday_mode:         holidayMode,
@@ -10671,6 +10674,8 @@ function regionPickerRows() {
     zone_type: 'gz_district',
     name_en: d.name_en,
     name_cn: d.name_cn,
+    province_cn: '广东省',
+    province_en: 'Guangdong',
     match_city: '广州市',
     match_district: d.name_cn,
   }));
@@ -10681,6 +10686,11 @@ function regionPickerRows() {
       zone_type: 'city',
       name_en: c.name_en,
       name_cn: c.name_cn,
+      // Carried so the EN-mode address picker can group cities under their
+      // province (a 省→市→区 cascade, like WeChat's native region wheel)
+      // instead of one flat A→Z scroll of ~340 cities.
+      province_cn: c.province_cn,
+      province_en: c.province_en || c.province_cn,
       match_city: c.name_cn,
       match_district: null,
     }))

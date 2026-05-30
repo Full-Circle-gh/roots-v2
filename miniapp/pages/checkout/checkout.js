@@ -123,16 +123,21 @@ Page({
     // Delivery-area selector. Splits by language:
     //  • CN → WeChat's native region picker (province/city/district, always
     //    current/complete, Chinese labels).
-    //  • EN → a bilingual city → district cascade from utils/zones (city list)
-    //    + /api/retail/districts. Both write canonical Chinese province/city/
-    //    district onto `address`, which is what the zone matcher needs.
+    //  • EN → a bilingual 省→市→区 cascade (multiSelector) built from
+    //    utils/zones.provinceTree + /api/retail/districts, mirroring the native
+    //    wheel. Both write canonical Chinese province/city/district onto
+    //    `address`, which is what the zone matcher needs.
     areaLabel: '',        // localized summary shown on the trigger ("Guangzhou · Tianhe")
     regionValue: [],      // CN native picker position [省, 市, 区]
-    cityOptions: [],      // EN: [{ label, name_cn, name_en }]
-    cityIndex: 0,
-    cityLabel: '',        // EN: selected city label (before district)
-    districtOptions: [],  // EN: [{ label, name_cn, name_en }] for the picked city
-    districtIndex: 0,
+    cityOptions: [],      // EN: [{ label, name_cn, name_en }] — for syncAreaLabel city→EN lookup
+    cityLabel: '',        // EN: selected city label (label-build helper)
+    // EN cascade picker (multiSelector): three label columns + index, plus the
+    // canonical tree + the district column's source rows (for the confirm read).
+    areaTree: { provCn: [], provLabel: [], citiesByProv: {} },
+    areaArray: [[], [], []],   // [provinceLabels, cityLabels, districtLabels]
+    areaIndex: [0, 0, 0],      // [provinceIdx, cityIdx, districtIdx]
+    areaDistData: [],          // district rows backing column 3: [{label,name_cn,name_en}]
+    areaDistCity: '',          // the city name_cn areaDistData belongs to (race guard)
     note: '',
     needsCutlery: false,
     needsInvoice: false,
@@ -330,6 +335,7 @@ Page({
     try {
       const list = await zones.loadZones();
       this.setData({ cityOptions: zones.cityOptions(list, this.data.lang) });
+      if (this.data.lang !== 'cn') this.buildAreaPicker(list);
       this.syncAreaLabel();
     } catch (e) {
       console.warn('[checkout] loadAreaOptions failed:', e && e.message);
@@ -374,41 +380,103 @@ Page({
     this.refreshQuote();
   },
 
-  // EN — city step. Writes the city, clears any prior district, then loads that
-  // city's districts for the second wheel. Province is left blank; the server
-  // backfills it from the city.
-  async onCityChange(e) {
-    const idx = Number(e.detail.value);
-    const c = (this.data.cityOptions || [])[idx];
-    if (!c) return;
+  // EN — initialize the 省→市→区 cascade columns from the served-zone tree.
+  // Defaults to province 0 / city 0 and warms that city's district column.
+  buildAreaPicker(list) {
+    const tree = zones.provinceTree(list, this.data.lang);
+    if (!tree.provCn.length) return;
+    const cities = tree.citiesByProv[tree.provCn[0]] || [];
     this.setData({
-      cityIndex: idx,
-      cityLabel: c.label,
-      areaLabel: c.label,
-      'address.province': '',
-      'address.city': c.name_cn,
-      'address.district': '',
-      districtOptions: [],
-      districtIndex: 0,
+      areaTree: tree,
+      areaArray: [tree.provLabel.slice(), cities.map(c => c.label), [this._distNoneLabel()]],
+      areaIndex: [0, 0, 0],
+      areaDistData: [this._distNone()],
+      areaDistCity: '',
     });
-    try {
-      const dists = await zones.loadDistricts(c.name_cn);
-      this.setData({
-        districtOptions: dists.map(d => ({ label: d.name_en, name_cn: d.name_cn, name_en: d.name_en })),
-      });
-    } catch (e2) { console.warn('[checkout] loadDistricts failed:', e2 && e2.message); }
-    this.refreshQuote();
+    this._loadDistCol(cities[0]);
   },
 
-  // EN — district step.
-  onDistrictChange(e) {
-    const idx = Number(e.detail.value);
-    const d = (this.data.districtOptions || [])[idx];
-    if (!d) return;
+  _distNoneLabel() { return this.data.lang === 'cn' ? '全城' : 'City-wide'; },
+  _distNone() { return { label: this._distNoneLabel(), name_cn: '', name_en: 'City-wide' }; },
+
+  // Load a city's districts into column 3 (with a leading "City-wide" sentinel
+  // for districtless / whole-city picks). Cached per city in utils/zones.
+  async _loadDistCol(city) {
+    const cn = this.data.lang === 'cn';
+    let rows = [this._distNone()];
+    if (city) {
+      try {
+        const raw = await zones.loadDistricts(city.name_cn);
+        rows = rows.concat((raw || []).map(d => ({
+          label: cn ? d.name_cn : d.name_en, name_cn: d.name_cn, name_en: d.name_en,
+        })));
+      } catch (e) { console.warn('[checkout] loadDistricts failed:', e && e.message); }
+    }
+    const arr = (this.data.areaArray || [[], [], []]).slice();
+    arr[2] = rows.map(r => r.label);
+    this.setData({ areaArray: arr, areaDistData: rows, areaDistCity: city ? city.name_cn : '' });
+  },
+
+  // EN — a wheel column moved. Province change repopulates the city column +
+  // reloads districts for its first city; city change reloads districts.
+  async onAreaColumn(e) {
+    const { column, value } = e.detail;
+    const tree = this.data.areaTree;
+    const idx = (this.data.areaIndex || [0, 0, 0]).slice();
+    if (column === 0) {
+      idx[0] = value; idx[1] = 0; idx[2] = 0;
+      const cities = tree.citiesByProv[tree.provCn[value]] || [];
+      const arr = this.data.areaArray.slice();
+      arr[1] = cities.map(c => c.label);
+      arr[2] = [this._distNoneLabel()];
+      this.setData({ areaArray: arr, areaIndex: idx });
+      await this._loadDistCol(cities[0]);
+    } else if (column === 1) {
+      idx[1] = value; idx[2] = 0;
+      this.setData({ areaIndex: idx });
+      const cities = tree.citiesByProv[tree.provCn[idx[0]]] || [];
+      await this._loadDistCol(cities[value]);
+    } else {
+      idx[2] = value;
+      this.setData({ areaIndex: idx });
+    }
+  },
+
+  // EN — cascade confirmed. We know the province here, so set it directly
+  // (better than leaving it blank for the server to backfill). District 0 is
+  // the "City-wide" sentinel → blank district (city-wide delivery).
+  async onAreaConfirm(e) {
+    const v = e.detail.value || [];
+    const pi = v[0] || 0, ci = v[1] || 0, di = v[2] || 0;
+    const tree = this.data.areaTree;
+    const provCn = tree.provCn[pi];
+    const cities = tree.citiesByProv[provCn] || [];
+    const c = cities[ci] || cities[0];
+    if (!c) return;
+    let dists = this.data.areaDistData;
+    if (this.data.areaDistCity !== c.name_cn) {     // fast-confirm race guard
+      const cn = this.data.lang === 'cn';
+      let rows = [this._distNone()];
+      try {
+        const raw = await zones.loadDistricts(c.name_cn);
+        rows = rows.concat((raw || []).map(d => ({
+          label: cn ? d.name_cn : d.name_en, name_cn: d.name_cn, name_en: d.name_en,
+        })));
+      } catch (_) {}
+      dists = rows;
+    }
+    const d = dists[di] || dists[0];
+    const districtCn = (d && d.name_cn) || '';
+    const provLabel = tree.provLabel[pi];
+    const parts = (provLabel === c.label ? [c.label] : [provLabel, c.label])
+      .concat(districtCn ? [d.label] : []);
     this.setData({
-      districtIndex: idx,
-      areaLabel: this.data.cityLabel + ' · ' + d.label,
-      'address.district': d.name_cn,
+      areaIndex: [pi, ci, di],
+      cityLabel: c.label,
+      areaLabel: parts.join(' · '),
+      'address.province': provCn,
+      'address.city': c.name_cn,
+      'address.district': districtCn,
     });
     this.refreshQuote();
   },
@@ -1327,9 +1395,7 @@ Page({
       areaLabel: '',
       regionValue: [],
       cityLabel: '',
-      cityIndex: 0,
-      districtOptions: [],
-      districtIndex: 0,
+      areaIndex: [0, 0, 0],
     }, () => this.scrollToAddrForm());
     this.refreshQuote();
   },

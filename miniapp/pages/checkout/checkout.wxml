@@ -122,19 +122,10 @@
         </block>
         <block wx:else>
           <view class="field">
-            <picker mode="selector" range="{{cityOptions}}" range-key="label" value="{{cityIndex}}" bindchange="onCityChange">
-              <view class="region-pick {{cityLabel ? '' : 'placeholder'}}">
-                <text wx:if="{{cityLabel}}">{{cityLabel}}</text>
+            <picker mode="multiSelector" range="{{areaArray}}" value="{{areaIndex}}" bindcolumnchange="onAreaColumn" bindchange="onAreaConfirm">
+              <view class="region-pick {{areaLabel ? '' : 'placeholder'}}">
+                <text wx:if="{{areaLabel}}">{{areaLabel}}</text>
                 <text wx:else>{{copy.regionPlaceholder}}</text>
-                <text class="region-chevron">›</text>
-              </view>
-            </picker>
-          </view>
-          <view wx:if="{{districtOptions.length}}" class="field">
-            <picker mode="selector" range="{{districtOptions}}" range-key="label" value="{{districtIndex}}" bindchange="onDistrictChange">
-              <view class="region-pick {{address.district ? '' : 'placeholder'}}">
-                <text wx:if="{{address.district}}">{{districtOptions[districtIndex].label}}</text>
-                <text wx:else>Choose district</text>
                 <text class="region-chevron">›</text>
               </view>
             </picker>
@@ -157,9 +148,11 @@
                 class="addr-row" data-id="{{item.id}}" bindtap="selectPickupStore">
             <view class="dot {{pickupStoreId === item.id ? 'on' : ''}}"></view>
             <view class="addr-body">
-              <view class="addr-text"><text class="f-bear">{{lang === 'cn' ? (item.name_cn || item.name_en) : (item.name_en || item.name_cn)}}</text></view>
+              <view class="addr-text store-name-row">
+                <text class="f-bear store-name">{{lang === 'cn' ? (item.name_cn || item.name_en) : (item.name_en || item.name_cn)}}</text>
+                <text wx:if="{{item.lat && item.lng}}" class="store-map-link" catchtap="openStoreMap" data-id="{{item.id}}">📍 {{copy.viewOnMap}}</text>
+              </view>
               <view class="addr-text addr-full">{{item.city}}{{item.district ? ' · ' + item.district : ''}}{{item.address ? ' · ' + item.address : ''}}</view>
-              <view wx:if="{{item.lat && item.lng}}" class="store-map-link" catchtap="openStoreMap" data-id="{{item.id}}">📍 {{copy.viewOnMap}}</view>
             </view>
           </view>
         </view>
@@ -232,7 +225,7 @@
           <view class="opt-label f-bear">{{lang === 'cn' ? '立即配送' : 'Right away'}}</view>
           <view wx:if="{{scheduling.right_away_available}}" class="opt-sub muted">{{lang === 'cn' ? '尽快出餐' : 'ASAP after the kitchen confirms'}}</view>
           <view wx:elif="{{scheduling.holiday_mode}}" class="opt-sub muted">{{lang === 'cn' ? '假期模式中 — 请选择未来日期' : 'Holiday mode — please pick a future date'}}</view>
-          <view wx:elif="{{!scheduling.kitchen_open_now}}" class="opt-sub muted">{{lang === 'cn' ? '厨房已关闭 — 上午' : 'Closed — reopens '}}{{scheduling.kitchen_hours.start}}{{lang === 'cn' ? '点重开' : 'am tomorrow'}}</view>
+          <view wx:elif="{{!scheduling.kitchen_open_now}}" class="opt-sub muted">{{lang === 'cn' ? (scheduling.kitchen_reopens_today ? '厨房已关闭 — 今天上午' : '厨房已关闭 — 明天上午') : 'Closed — reopens '}}{{scheduling.kitchen_hours.start}}{{lang === 'cn' ? '点重开' : (scheduling.kitchen_reopens_today ? 'am today' : 'am tomorrow')}}</view>
           <view wx:else class="opt-sub muted">{{lang === 'cn' ? '本配送区不支持立即配送' : 'Not available for this area'}}</view>
         </view>
       </view>

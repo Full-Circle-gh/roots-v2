@@ -93,8 +93,10 @@
 .addr-change { flex-shrink: 0; }
 .addr-name { font-weight: 500; }
 .addr-phone { color: var(--ink); }
-.addr-full { color: var(--ink); opacity: 0.8; font-size: calc(24rpx * var(--font-scale)); margin-top: 2rpx; }
-.store-map-link { display: inline-block; margin-top: 8rpx; color: var(--forest); font-size: calc(24rpx * var(--font-scale)); font-weight: 500; }
+.addr-full { color: var(--ink); opacity: 0.8; font-size: calc(24rpx * var(--font-scale)); margin-top: 10rpx; line-height: 1.6; }
+.store-name-row { display: flex; align-items: baseline; gap: 20rpx; }
+.store-name { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-map-link { flex-shrink: 0; color: var(--forest); font-size: calc(24rpx * var(--font-scale)); font-weight: 500; }
 .addr-default {
   font-size: calc(16rpx * var(--font-scale));
   letter-spacing: 0.16em;
@@ -168,7 +170,8 @@
   font-size: calc(18rpx * var(--font-scale));
   letter-spacing: 0.14em;
   color: var(--olive);
-  margin-bottom: 10rpx;
+  margin-bottom: 16rpx;
+  line-height: 1.45;
   text-transform: uppercase;
 }
 
