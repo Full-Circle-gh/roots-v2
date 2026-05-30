@@ -2,6 +2,7 @@
 // onboarding.layout (sticker collage, hero, progress dots).
 
 const config = require('../../utils/config');
+const api    = require('../../utils/api');
 
 // Hardcoded fallback — used when the CMS hasn't overridden the label
 // or when /api/retail/config fails to resolve.
@@ -16,6 +17,7 @@ Page({
   data: {
     layout: [], lang: 'en', loading: true, version: '1',
     nextLabel: DEFAULT_NEXT.en,
+    leaderboards: {},
   },
 
   async onLoad() {
@@ -29,15 +31,46 @@ Page({
       const cfg = await config.load();
       const ver = Number.isFinite(cfg?.onboarding?.version)
         ? String(cfg.onboarding.version) : '1';
+      const layout = cfg?.onboarding?.layout || [];
       this.setData({
-        layout: cfg?.onboarding?.layout || [],
+        layout,
         version: ver,
         nextLabel: pickLabel(cfg?.onboarding?.next_label, lang, DEFAULT_NEXT),
         loading: false,
       });
+      this._fetchLeaderboardsFor(layout);
     } catch (e) {
       this.setData({ loading: false });
     }
+  },
+
+  // Lazily fetch the public storefront leaderboard for any leaderboard block
+  // placed on the onboarding layout — keyed by metric|period|top_n|reveal_mode,
+  // same pattern as home/layout pages. Setting data.leaderboards triggers the
+  // block-renderer observer so the strip fills in place.
+  async _fetchLeaderboardsFor(layout) {
+    const keys = new Set();
+    (layout || []).forEach(b => {
+      if (b.type !== 'leaderboard') return;
+      const metric = b.metric || 'lifetime_spend';
+      const period = b.period || 'month';
+      const topN   = Math.max(3, Math.min(10, b.top_n || 5));
+      const reveal = b.reveal_mode || 'first_char';
+      keys.add(`${metric}|${period}|${topN}|${reveal}`);
+    });
+    if (!keys.size) return;
+    const next = { ...(this.data.leaderboards || {}) };
+    await Promise.all([...keys].map(async key => {
+      if (next[key]) return;
+      const [metric, period, top_n, reveal_mode] = key.split('|');
+      try {
+        const res = await api.get(`/api/retail/storefront/leaderboard?metric=${encodeURIComponent(metric)}&period=${encodeURIComponent(period)}&top_n=${encodeURIComponent(top_n)}&reveal_mode=${encodeURIComponent(reveal_mode)}`);
+        next[key] = (res && Array.isArray(res.entries)) ? res.entries : [];
+      } catch {
+        next[key] = [];
+      }
+    }));
+    this.setData({ leaderboards: next });
   },
 
   goHome() {

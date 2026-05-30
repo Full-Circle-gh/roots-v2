@@ -3,7 +3,8 @@
     wx:for="{{layout}}"
     wx:key="id"
     block="{{item}}"
-    lang="{{lang}}"/>
+    lang="{{lang}}"
+    leaderboards="{{leaderboards}}"/>
 
   <view class="footer">
     <view class="next f-toni" hover-class="btn-hover" bindtap="goHome">{{nextLabel}}</view>
