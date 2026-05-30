@@ -331,21 +331,34 @@ router.get('/api/retail/pickup-stores', (req, res) => {
   }
 });
 
-// GET /api/retail/free-shipping-threshold
+// GET /api/retail/free-shipping-threshold?address_id=
 // The cart tab's "¥XX more for free shipping" bar runs before an address is
 // picked, so on its own it can only show the global default. This resolves the
-// threshold for the authed customer's DEFAULT saved address zone instead, so
-// the bar matches what checkout will actually charge (e.g. a Tianhe address
-// whose zone Free-over is ¥199, not the global ¥399). Falls back to the global
-// when there's no saved address or the zone leaves Free-over blank.
+// threshold for the customer's chosen address zone (address_id = whatever they
+// last selected at checkout; otherwise their default saved address), so the bar
+// matches what checkout will actually charge (e.g. a Tianhe address whose zone
+// Free-over is ¥199, not the global ¥399). Falls back to the global when there's
+// no saved address or the zone leaves Free-over blank.
 router.get('/api/retail/free-shipping-threshold', requireRetailAuth, (req, res) => {
   try {
     const globalFree = Number(cfgValue('fees.freeShippingThreshold', 399)) || 0;
     let threshold = globalFree, source = 'global';
-    const addr = tdb().prepare(
-      `SELECT * FROM retail_customer_addresses
-        WHERE customer_id = ? ORDER BY is_default DESC, id ASC LIMIT 1`
-    ).get(req.customer.id);
+    // Prefer an explicit address_id (the one the customer last selected at
+    // checkout); ownership-scoped so a foreign id can't be probed. Falls back
+    // to the default/first saved address when omitted or not found.
+    const wantId = parseInt(req.query.address_id, 10);
+    let addr = null;
+    if (wantId) {
+      addr = tdb().prepare(
+        'SELECT * FROM retail_customer_addresses WHERE id = ? AND customer_id = ?'
+      ).get(wantId, req.customer.id);
+    }
+    if (!addr) {
+      addr = tdb().prepare(
+        `SELECT * FROM retail_customer_addresses
+          WHERE customer_id = ? ORDER BY is_default DESC, id ASC LIMIT 1`
+      ).get(req.customer.id);
+    }
     if (addr) {
       const zone = matchDeliveryZone(normalizeChinaAddress(addr));
       if (zone && zone.free_threshold != null) {

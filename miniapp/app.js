@@ -19,6 +19,10 @@ App({
     customer: null,
     lang: 'en',
     configVersion: 0,
+    // The address the customer last selected at checkout (or the default they
+    // landed on). Lets the cart's free-shipping bar resolve the right zone
+    // threshold for the address actually in play, not just the saved default.
+    activeAddressId: null,
     // CMS draft-preview mode. Populated when the mini-app is opened from
     // a /cms preview QR (scene = `dp=1&t=...&p=...`) or via DevTools
     // custom-compile with `?preview_draft=1&preview_token=...&page=...`

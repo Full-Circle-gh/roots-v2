@@ -100,7 +100,12 @@ Page({
   // so the cart bar matches checkout (e.g. ¥199 in Tianhe vs the global ¥399).
   // Best-effort: on any failure the bar keeps the global default.
   loadZoneThreshold() {
-    api.get('/api/retail/free-shipping-threshold')
+    let path = '/api/retail/free-shipping-threshold';
+    try {
+      const id = getApp().globalData.activeAddressId;
+      if (id) path += '?address_id=' + encodeURIComponent(id);
+    } catch {}
+    api.get(path)
       .then((d) => {
         const t = Number(d && d.threshold);
         if (Number.isFinite(t)) {

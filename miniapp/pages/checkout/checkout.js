@@ -516,6 +516,7 @@ Page({
         };
         // Clear the cross-page flag so onShow doesn't keep re-applying it.
         if (justPicked) patch._addressJustPicked = null;
+        try { getApp().globalData.activeAddressId = next.id; } catch {}
         this.setData(patch);
         this.syncAreaLabel();
         // If the actual selected address changed, re-run /quote so the
@@ -547,6 +548,7 @@ Page({
         showNewForm: list.length === 0,
       });
       if (def) {
+        try { getApp().globalData.activeAddressId = def.id; } catch {}
         this.setData({
           address: {
             id: def.id,
