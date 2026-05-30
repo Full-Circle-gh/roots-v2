@@ -164,6 +164,7 @@ Page({
       pickupHoursHint: 'Pickup hours',
       pickupContactName: 'Who is collecting',
       pickupContactPhone: 'Contact phone',
+      viewOnMap: 'View on map',
       howFastTitle: 'How fast',
       payWithTitle: 'Pay with',
       addOnsTitle: 'Add-ons',
@@ -622,6 +623,19 @@ Page({
   selectPickupStore(e) {
     this.setData({ pickupStoreId: Number(e.currentTarget.dataset.id) });
   },
+  openStoreMap(e) {
+    const id = Number(e.currentTarget.dataset.id);
+    const store = (this.data.pickupStores || []).find(s => s.id === id);
+    if (!store || store.lat == null || store.lng == null) return;
+    const cn = this.data.lang === 'cn';
+    wx.openLocation({
+      latitude: Number(store.lat),
+      longitude: Number(store.lng),
+      name: cn ? (store.name_cn || store.name_en) : (store.name_en || store.name_cn),
+      address: [store.city, store.district, store.address].filter(Boolean).join(' · '),
+      scale: 16
+    });
+  },
   onPickupName(e)  { this.setData({ pickupName: e.detail.value }); },
   onPickupPhone(e) { this.setData({ pickupPhone: e.detail.value }); },
   onPickupDateChange(e) {
@@ -714,6 +728,7 @@ Page({
         pickupHoursHint: '自提时间',
         pickupContactName: '取货人',
         pickupContactPhone: '联系电话',
+        viewOnMap: '查看地图',
         howFastTitle: '配送方式',
         payWithTitle: '支付方式',
         addOnsTitle: '附加',

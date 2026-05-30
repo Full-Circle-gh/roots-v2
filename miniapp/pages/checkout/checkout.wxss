@@ -88,9 +88,13 @@
 
 /* Address block */
 .addr-text { font-size: calc(26rpx * var(--font-scale)); line-height: 1.5; }
+.addr-line { display: flex; align-items: baseline; justify-content: space-between; gap: 16rpx; }
+.addr-line__main { min-width: 0; flex: 1; }
+.addr-change { flex-shrink: 0; }
 .addr-name { font-weight: 500; }
 .addr-phone { color: var(--ink); }
 .addr-full { color: var(--ink); opacity: 0.8; font-size: calc(24rpx * var(--font-scale)); margin-top: 2rpx; }
+.store-map-link { display: inline-block; margin-top: 8rpx; color: var(--forest); font-size: calc(24rpx * var(--font-scale)); font-weight: 500; }
 .addr-default {
   font-size: calc(16rpx * var(--font-scale));
   letter-spacing: 0.16em;

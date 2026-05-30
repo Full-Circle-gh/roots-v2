@@ -40,9 +40,6 @@
   <view class="section" id="addr-section">
     <view class="section-head">
       <view class="section-title f-bear">{{fulfillment === 'pickup' ? copy.pickupAtTitle : copy.shipToTitle}}</view>
-      <view wx:if="{{isBound && fulfillment !== 'pickup' && address.id && !pickerOpen && !showNewForm}}" class="head-action f-toni" bindtap="openPicker">
-        {{lang === 'cn' ? '更换' : 'CHANGE'}}
-      </view>
     </view>
 
     <!-- Delivery ⇄ Pickup toggle — only when at least one store offers pickup. -->
@@ -75,9 +72,12 @@
 
       <!-- Collapsed (default): just show the selected address as plain text. -->
       <block wx:if="{{address.id && !pickerOpen && !showNewForm}}">
-        <view class="addr-text">
-          <text class="f-bear addr-name">{{address.recipient_name}}</text>
-          <text class="addr-phone"> · {{address.phone}}</text>
+        <view class="addr-text addr-line">
+          <view class="addr-line__main">
+            <text class="f-bear addr-name">{{address.recipient_name}}</text>
+            <text class="addr-phone"> · {{address.phone}}</text>
+          </view>
+          <view class="head-action f-toni addr-change" bindtap="openPicker">{{lang === 'cn' ? '更换' : 'CHANGE'}}</view>
         </view>
         <view class="addr-text addr-full">
           {{address.city}}{{address.district ? ' · ' + address.district : ''}}{{address.address ? ' · ' + address.address : ''}}{{address.detail ? ' · ' + address.detail : ''}}
@@ -159,6 +159,7 @@
             <view class="addr-body">
               <view class="addr-text"><text class="f-bear">{{lang === 'cn' ? (item.name_cn || item.name_en) : (item.name_en || item.name_cn)}}</text></view>
               <view class="addr-text addr-full">{{item.city}}{{item.district ? ' · ' + item.district : ''}}{{item.address ? ' · ' + item.address : ''}}</view>
+              <view wx:if="{{item.lat && item.lng}}" class="store-map-link" catchtap="openStoreMap" data-id="{{item.id}}">📍 {{copy.viewOnMap}}</view>
             </view>
           </view>
         </view>
