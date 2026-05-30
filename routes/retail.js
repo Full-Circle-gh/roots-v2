@@ -5493,6 +5493,32 @@ router.post('/api/retail-admin/customers/:id/force-logout', requireRetailAdmin, 
   res.json({ success: true, revoked: r.changes });
 });
 
+// TESTING ONLY — "Reset to a new user". Lets staff (really: us, while QA-ing
+// the onboarding flow) become a brand-new customer on their own phone without
+// a second WeChat account. We DON'T delete the row (several child tables are
+// ON DELETE RESTRICT, and we want the old data preserved): instead we archive
+// the openid by prefixing it, so the next silent login can't match it and
+// falls through to the INSERT path in POST /api/retail/auth → a fresh customer
+// is created with the real openid again. Tokens are revoked too so the cached
+// session on the device dies and re-login fires immediately.
+router.post('/api/retail-admin/customers/:id/reset-test', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const c  = tdb().prepare('SELECT id, openid FROM retail_customers WHERE id = ?').get(id);
+  if (!c) return res.status(404).json({ success: false, error: 'not_found' });
+  if (String(c.openid || '').startsWith('_reset_')) {
+    return res.status(409).json({ success: false, error: 'already_reset' });
+  }
+  const archived = `_reset_${Date.now()}_${c.openid}`.slice(0, 256);
+  const tx = tdb().transaction(() => {
+    tdb().prepare('UPDATE retail_customers SET openid = ? WHERE id = ?').run(archived, id);
+    const r = tdb().prepare('DELETE FROM retail_auth_tokens WHERE customer_id = ?').run(id);
+    return r.changes;
+  });
+  const revoked = tx();
+  logActivity(req.user.id, req.user.username, 'reset_test_customer', 'retail_customer', id, { archived_openid: archived, revoked }, req.ip);
+  res.json({ success: true, revoked });
+});
+
 // Manual points adjustment — writes an `admin_adjust` ledger row and
 // updates the cached balance atomically. Reason is required so the audit
 // trail is meaningful.

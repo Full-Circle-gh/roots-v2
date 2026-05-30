@@ -15570,6 +15570,7 @@ function cuRenderDetail() {
     <button class="btn" onclick="cuOpenEdit()">Edit profile · 编辑资料</button>
     <button class="${blockCls}" id="cu-block-btn" onclick="cuToggleBlock()">${blockLabel}</button>
     <button class="btn btn-brass" onclick="cuForceLogout()">Sign out all devices · 退出所有设备</button>
+    <button class="btn" onclick="cuResetTest()" title="Testing: become a brand-new customer on next app open">Reset to new user (test) · 重置为新用户(测试)</button>
     ${renderCustomerViewPopover()}
   `;
 
@@ -15965,6 +15966,22 @@ async function cuForceLogout() {
     });
     const n = j.revoked || 0;
     toast(`Signed out all devices · ${n} session${n === 1 ? '' : 's'} revoked · 已退出所有设备(${n} 个会话)`);
+    cuOpenDetail(CU_CURRENT.customer.id);
+  } catch {}
+}
+
+// TESTING — archives this customer's openid + revokes sessions so the next
+// app open on the same phone creates a brand-new customer (fresh onboarding).
+// The old row/data is kept (just unreachable by login), not deleted.
+async function cuResetTest() {
+  if (!CU_CURRENT?.customer) return;
+  if (!confirm('TESTING: turn this customer into a brand-new user on next app open? Their openid is archived and sessions revoked — reopening the mini app on that phone creates a fresh account (no orders, points or addresses). The old data is kept but no longer reachable by login. · 测试:下次打开小程序时将此顾客变为全新用户?将归档其 openid 并撤销会话——在该手机上重新打开小程序会创建全新账户(无订单、积分或地址)。原数据保留但登录无法再访问。')) return;
+  try {
+    await cuWriteRequest({
+      url: '/api/retail-admin/customers/' + CU_CURRENT.customer.id + '/reset-test', method: 'POST',
+      errLabelEn: 'Reset failed', errLabelCn: '重置失败',
+    });
+    toast('Reset · reopen the mini app for a fresh user · 已重置,重新打开小程序即为新用户');
     cuOpenDetail(CU_CURRENT.customer.id);
   } catch {}
 }
