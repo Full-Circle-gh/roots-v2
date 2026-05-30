@@ -674,18 +674,19 @@ const SOCIAL_PROOF_PAID =
 // a single JSON blob under storefront_config['social_proof']; missing keys fall
 // back to the DEFAULTS below (which match the original hardcoded constants, so
 // behaviour is identical until an operator changes a value).
-// `boost` adds a fake floor to the real count (real + boost = displayed);
-// `manual` (recent-buyers only) is a list of operator-authored fake purchases
-// that get merged with the real feed; `fallback_minutes` (last-ordered only)
-// is the "fake X minutes ago" shown when no real recent order exists. All
-// fakes are opt-in and default to off — leaving them at 0 / [] keeps the
-// original "real data only" behaviour.
+// Fake-data overrides per widget. `boost_min`/`boost_max` define a range; each
+// product picks a stable value inside it via productHash(id), so no two
+// products show identical fake counts. Old single-value `boost` (and
+// `fallback_minutes` for last_ordered) is still honoured as a back-compat
+// default — operators who saved a flat number before keep the same behaviour
+// until they widen the range. All fakes are opt-in and default to 0 / [] —
+// leaving them alone preserves the original "real data only" behaviour.
 const SOCIAL_PROOF_DEFAULTS = Object.freeze({
-  bought_count:  { enabled: true, min_today: 2, min_week: 2, min_month: 1, min_all: 2, boost: 0 },
+  bought_count:  { enabled: true, min_today: 2, min_week: 2, min_month: 1, min_all: 2, boost_min: 0, boost_max: 0 },
   recent_buyers: { enabled: true, window_days: 7, manual: [] },
-  viewing_now:   { enabled: true, ttl_sec: 45, boost: 0 },
-  last_ordered:  { enabled: true, max_hours: 24, fallback_minutes: 0 },
-  sold_badge:    { enabled: true, min_units: 3, boost: 0 },
+  viewing_now:   { enabled: true, ttl_sec: 45, boost_min: 0, boost_max: 0 },
+  last_ordered:  { enabled: true, max_hours: 24, fallback_min_minutes: 0, fallback_max_minutes: 0 },
+  sold_badge:    { enabled: true, min_units: 3, boost_min: 0, boost_max: 0 },
 });
 function getSocialConfig() {
   let cfg = SOCIAL_PROOF_DEFAULTS;
@@ -707,6 +708,40 @@ function getSocialConfig() {
   return cfg;
 }
 
+// Stable hash for picking per-product fake values. FNV-1a over the stringified
+// id — same product always lands on the same number inside a given range, so a
+// returning customer sees consistent counts. Returns an unsigned 32-bit int.
+function productHash(id) {
+  let h = 2166136261;
+  const s = String(id);
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+// Pick a number in [min, max] using a deterministic seed. min === max → flat.
+function pickInRange(seed, min, max) {
+  const lo = Math.max(0, Math.floor(min));
+  const hi = Math.max(lo, Math.floor(max));
+  if (hi === lo) return lo;
+  return lo + (seed % (hi - lo + 1));
+}
+// Pull a range out of a widget config, falling back to the old single-value
+// fields so configs saved before the range rollout still work.
+function readBoostRange(cfg) {
+  const legacy = Number(cfg.boost) || 0;
+  const min = Number(cfg.boost_min ?? legacy) || 0;
+  const max = Number(cfg.boost_max ?? legacy) || 0;
+  return { min: Math.max(0, min), max: Math.max(min, max) };
+}
+function readFallbackRange(cfg) {
+  const legacy = Number(cfg.fallback_minutes) || 0;
+  const min = Number(cfg.fallback_min_minutes ?? legacy) || 0;
+  const max = Number(cfg.fallback_max_minutes ?? legacy) || 0;
+  return { min: Math.max(0, min), max: Math.max(min, max) };
+}
+
 // Catalogue "X SOLD" badge. Attaches all-time paid units per product to the
 // list response so shop + home cards can flaunt popularity. Gated to a minimum
 // so low-sellers stay neutral (no badge) rather than advertising a weak count.
@@ -719,7 +754,7 @@ function attachSoldCounts(rows) {
   // every card without needing a republish.
   if (!sb.enabled) { for (const r of rows) r.units_sold = 0; return; }
   const minUnits = Math.max(1, Number(sb.min_units) || 1);
-  const boost    = Math.max(0, Number(sb.boost) || 0);
+  const boostR   = readBoostRange(sb);
   try {
     const ids = rows.map(r => r.id);
     const placeholders = ids.map(() => '?').join(',');
@@ -733,9 +768,11 @@ function attachSoldCounts(rows) {
     `).all(...ids);
     const map = new Map(counts.map(c => [c.pid, Math.round(Number(c.units) || 0)]));
     for (const r of rows) {
-      // Real + boost. Gate by min_units against the COMBINED number so a
-      // non-zero boost makes the badge show even on zero-real products,
-      // which is the whole point of the fake floor.
+      // Real + per-product boost from the configured range. Stable hash =
+      // same product reads the same number across requests, but two products
+      // won't show identical fake counts. Gate by min_units against the
+      // COMBINED number so a non-zero boost can lift zero-real products.
+      const boost = pickInRange(productHash(r.id), boostR.min, boostR.max);
       const display = (map.get(r.id) || 0) + boost;
       r.units_sold = display >= minUnits ? display : 0;
     }
@@ -764,9 +801,17 @@ function socialProofForProduct(id) {
     month: Math.max(1, Number(bc.min_month) || 1),
     all:   Math.max(1, Number(bc.min_all)   || 1),
   };
-  const bcBoost = Math.max(0, Number(bc.boost) || 0);
+  // Per-product boost from configured range — same product always shows the
+  // same fake count, but two products won't collide on the same number.
+  const seed = productHash(id);
+  const bcRange = readBoostRange(bc);
+  const bcBoost = pickInRange(seed, bcRange.min, bcRange.max);
   const maxAgeMs = Math.max(1, Number(lo.max_hours) || 1) * 3600 * 1000;
-  const loFallbackMs = Math.max(0, Number(lo.fallback_minutes) || 0) * 60 * 1000;
+  // Last-ordered fallback also picks a per-product time inside the range, so
+  // every product doesn't read "ordered exactly 15 min ago".
+  const loRange = readFallbackRange(lo);
+  const loFallbackMin = pickInRange(seed, loRange.min, loRange.max);
+  const loFallbackMs = loFallbackMin * 60 * 1000;
 
   let value = null;
   try {
@@ -1016,16 +1061,25 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
 
   // Merge manual fakes. Each entry: { name, product_en, product_cn, minutes_ago }.
   // Names are pre-masked by the operator (they type "李**") so we don't run them
-  // through maskBuyerName. Times are computed as offsets from now so each request
-  // returns a fresh "X minutes ago" without rewriting stored data.
+  // through maskBuyerName. We add a per-entry stable jitter (±4 min) to the
+  // configured minutes_ago so two entries the operator set to "5 min ago" don't
+  // both render at literally "5 min ago" — that's the dead giveaway. Jitter is
+  // seeded by the entry's name+product so a given fake row is consistent
+  // across requests (won't flicker), but unique relative to its siblings.
   const fakes = manualEntries
     .filter(m => m && (m.product_en || m.product_cn) && m.name)
-    .map(m => ({
-      name:       String(m.name).slice(0, 40),
-      product_en: String(m.product_en || m.product_cn || '').slice(0, 80),
-      product_cn: String(m.product_cn || m.product_en || '').slice(0, 80),
-      ts: now - Math.max(0, Math.min(60 * 24 * 60, Number(m.minutes_ago) || 0)) * 60 * 1000,
-    }));
+    .map(m => {
+      const base    = Math.max(0, Math.min(60 * 24 * 60, Number(m.minutes_ago) || 0));
+      const seed    = productHash(String(m.name) + '|' + String(m.product_en || m.product_cn || ''));
+      const jitter  = (seed % 9) - 4;                     // -4 .. +4 minutes
+      const minutes = Math.max(1, base + jitter);
+      return {
+        name:       String(m.name).slice(0, 40),
+        product_en: String(m.product_en || m.product_cn || '').slice(0, 80),
+        product_cn: String(m.product_cn || m.product_en || '').slice(0, 80),
+        ts: now - minutes * 60 * 1000,
+      };
+    });
 
   // Newest first, capped at 20 so the ticker stays snappy.
   const out = [...real, ...fakes]
@@ -1094,9 +1148,19 @@ router.post('/api/retail/products/:id/viewing', express.json(), (req, res) => {
   for (const [k, ts] of viewers) if (now - ts > ttlMs) viewers.delete(k);
   if (viewers.size === 0) VIEWING.delete(id);
 
-  // Real + boost. A non-zero boost makes every product page show the badge
-  // (mini-app's ≥2 gate still applies — set boost to 2+ to force it on).
-  const boost = Math.max(0, Number(vn.boost) || 0);
+  // Per-product boost from the configured range — different products land on
+  // different fake counts via productHash(id). On top of that, a slow time
+  // jitter (±20% every ~10s) makes the number drift live-style instead of
+  // staying glued to a single value across heartbeats. Range collapsed to a
+  // single value (min === max) still gets the jitter so it doesn't look static.
+  const bRange = readBoostRange(vn);
+  let boost = pickInRange(productHash(id), bRange.min, bRange.max);
+  if (boost > 0) {
+    const timeBucket = Math.floor(now / 10000);            // 10s buckets
+    const driftSeed  = (productHash(id) ^ timeBucket) >>> 0;
+    const driftPct   = ((driftSeed % 41) - 20) / 100;      // -20% .. +20%
+    boost = Math.max(0, Math.round(boost * (1 + driftPct)));
+  }
   res.set('Cache-Control', 'no-store');
   res.json({ success: true, data: { count: viewers.size + boost } });
 });
