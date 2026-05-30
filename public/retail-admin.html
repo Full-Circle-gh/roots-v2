@@ -6987,6 +6987,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0v5l2 3H4l2-3V8z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
           Push notifications
         </button>
+        <button data-sub="social">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Social proof
+        </button>
         <button data-sub="cs">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
           Customer service
@@ -7837,6 +7841,145 @@
                   • any → cancelled or refunded
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ────── SOCIAL PROOF ────── -->
+        <!-- Five live engagement widgets on the mini-app. Each card has an
+             enable toggle + tuning fields; values write to storefront_config
+             under the `social_proof` key and are read by routes/retail.js
+             (getSocialConfig). Defaults match the original hardcoded constants
+             so flipping a switch is the only thing that changes behaviour. -->
+        <div class="sub-panel" id="sub-social">
+          <h2>Social proof · 社交证明</h2>
+          <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
+            Five live engagement widgets that surface real customer activity in the mini app. Toggle any of them off to hide the widget instantly across all customers (no WeChat republish needed). Tuning numbers control how aggressive each one is. · 五个实时社交证明组件,可即时开启/关闭和调整阈值。
+          </div>
+
+          <!-- 1. Bought-count -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>"N people bought this" — product page · "X 人买了这个" — 商品页</h3>
+              <div class="muted">Distinct buyers across widening windows (today → week → month → all-time). Shows the narrowest window that clears its minimum. Empty data → line hides (we never fake counts). · 显示满足阈值的最短时间窗口的真实买家人数;数据不足时自动隐藏。</div>
+            </div>
+            <label class="ckbox" style="margin-bottom: 12px;">
+              <input type="checkbox" id="cfg-social-bc-enabled">
+              <span>Show this widget · 显示此组件</span>
+            </label>
+            <div class="row" style="gap: 16px; flex-wrap: wrap;">
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Min today · 今日最低</label>
+                <input type="number" min="1" id="cfg-social-bc-min_today" style="width: 90px;">
+              </div>
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Min this week · 本周最低</label>
+                <input type="number" min="1" id="cfg-social-bc-min_week" style="width: 90px;">
+              </div>
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Min this month · 本月最低</label>
+                <input type="number" min="1" id="cfg-social-bc-min_month" style="width: 90px;">
+              </div>
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Min all-time · 全部最低</label>
+                <input type="number" min="1" id="cfg-social-bc-min_all" style="width: 90px;">
+              </div>
+            </div>
+            <div class="helper" style="margin-top: 10px; line-height: 1.5;">
+              Lower = shows on more products (even with few buyers). Higher = only popular products qualify. Defaults: 2 / 2 / 1 / 2. · 数值越低组件越常出现;越高越严格。
+            </div>
+          </div>
+
+          <!-- 2. Recent-buyers ticker -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Recent-buyers ticker — home · 最近购买滚动条 — 首页</h3>
+              <div class="muted">Cycles real recent purchases as a dismissible toast ("李** bought X · 5 min ago"). Names are masked server-side; only paid orders count. · 在首页循环显示真实的近期购买记录(姓名已脱敏)。</div>
+            </div>
+            <label class="ckbox" style="margin-bottom: 12px;">
+              <input type="checkbox" id="cfg-social-rb-enabled">
+              <span>Show the ticker · 显示滚动条</span>
+            </label>
+            <div class="row" style="gap: 16px; flex-wrap: wrap;">
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Look-back window · 回溯时间</label>
+                <div class="row" style="gap: 8px; align-items: center;">
+                  <input type="number" min="1" max="60" id="cfg-social-rb-window_days" style="width: 90px;">
+                  <span class="muted" style="font-size: 12px;">days · 天</span>
+                </div>
+              </div>
+            </div>
+            <div class="helper" style="margin-top: 10px; line-height: 1.5;">
+              Shorter window = feed reads "live" but may be empty on quiet days. Longer = always populated but older entries. Default: 7 days. · 时间越短越"实时",但安静期可能为空;越长越饱满但内容更旧。
+            </div>
+          </div>
+
+          <!-- 3. Viewing-now -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>"N viewing now" — product page · "X 人正在查看" — 商品页</h3>
+              <div class="muted">Real concurrent-viewer count. In-memory; resets when the app restarts. Mini-app shows the badge only at 2+ viewers. · 实时查看人数(内存中保存,重启后重置);客户端在 2 人以上才显示。</div>
+            </div>
+            <label class="ckbox" style="margin-bottom: 12px;">
+              <input type="checkbox" id="cfg-social-vn-enabled">
+              <span>Track + show viewer counts · 追踪并显示在线人数</span>
+            </label>
+            <div class="row" style="gap: 16px; flex-wrap: wrap;">
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Viewer freshness · 在线时长</label>
+                <div class="row" style="gap: 8px; align-items: center;">
+                  <input type="number" min="5" max="600" id="cfg-social-vn-ttl_sec" style="width: 90px;">
+                  <span class="muted" style="font-size: 12px;">seconds · 秒</span>
+                </div>
+              </div>
+            </div>
+            <div class="helper" style="margin-top: 10px; line-height: 1.5;">
+              A viewer counts as "present" while their last heartbeat is within this window. The app pings every 25s, so 45s is a tight default that hides stragglers fast. Raise it for a calmer count. · 默认 45 秒;数值越大读数越"稳定",越小越实时。
+            </div>
+          </div>
+
+          <!-- 4. Last-ordered -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>"Last ordered X ago" — product page · "上次订购于 X 前" — 商品页</h3>
+              <div class="muted">Freshness nudge based on the most recent paid order for this product. Hidden when the bought-count widget is already showing "today/this week" (so the lines don't repeat). · 基于最近一次付款的新鲜度提示;与"N 人购买"重复时自动隐藏。</div>
+            </div>
+            <label class="ckbox" style="margin-bottom: 12px;">
+              <input type="checkbox" id="cfg-social-lo-enabled">
+              <span>Show "last ordered" · 显示"上次订购"</span>
+            </label>
+            <div class="row" style="gap: 16px; flex-wrap: wrap;">
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Hide if older than · 超时则隐藏</label>
+                <div class="row" style="gap: 8px; align-items: center;">
+                  <input type="number" min="1" max="720" id="cfg-social-lo-max_hours" style="width: 90px;">
+                  <span class="muted" style="font-size: 12px;">hours · 小时</span>
+                </div>
+              </div>
+            </div>
+            <div class="helper" style="margin-top: 10px; line-height: 1.5;">
+              Older "last orders" feel stale, not social. 24h is the default — anything older is dropped server-side. · 默认 24 小时;更久的记录不再显示。
+            </div>
+          </div>
+
+          <!-- 5. Sold badge -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>"X SOLD" badge — shop &amp; home cards · "已售 X 件"标签</h3>
+              <div class="muted">All-time paid units per product, shown as a corner cap on shop cards and home blocks. Low-sellers stay neutral (no badge) so we don't advertise a weak number. · 显示在商品卡片上的全期销量标签;低于阈值则不显示。</div>
+            </div>
+            <label class="ckbox" style="margin-bottom: 12px;">
+              <input type="checkbox" id="cfg-social-sb-enabled">
+              <span>Show "X SOLD" badges · 显示已售标签</span>
+            </label>
+            <div class="row" style="gap: 16px; flex-wrap: wrap;">
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Minimum units to show · 最低显示销量</label>
+                <input type="number" min="1" id="cfg-social-sb-min_units" style="width: 110px;">
+              </div>
+            </div>
+            <div class="helper" style="margin-top: 10px; line-height: 1.5;">
+              Raise to show the badge only on top sellers. Drop to 1 to show it wherever anything has sold. Default: 3. · 数值越高仅热销品显示;改为 1 可在所有有销量的商品上显示。
             </div>
           </div>
         </div>
@@ -11435,6 +11578,27 @@ async function loadConfig() {
     $('#cfg-footer-tagline-cn').value    = mef.tagline_cn    || '';
     $('#cfg-footer-credit-en').value     = mef.credit_en     || '';
     $('#cfg-footer-credit-cn').value     = mef.credit_cn     || '';
+    // Social-proof widgets — five sub-objects under social_proof. Defaults
+    // mirror the server-side fallbacks in routes/retail.js getSocialConfig().
+    const sp = c.social_proof || {};
+    const sp_bc = sp.bought_count  || {};
+    const sp_rb = sp.recent_buyers || {};
+    const sp_vn = sp.viewing_now   || {};
+    const sp_lo = sp.last_ordered  || {};
+    const sp_sb = sp.sold_badge    || {};
+    $('#cfg-social-bc-enabled').checked   = sp_bc.enabled !== false;
+    $('#cfg-social-bc-min_today').value   = sp_bc.min_today ?? 2;
+    $('#cfg-social-bc-min_week').value    = sp_bc.min_week  ?? 2;
+    $('#cfg-social-bc-min_month').value   = sp_bc.min_month ?? 1;
+    $('#cfg-social-bc-min_all').value     = sp_bc.min_all   ?? 2;
+    $('#cfg-social-rb-enabled').checked   = sp_rb.enabled !== false;
+    $('#cfg-social-rb-window_days').value = sp_rb.window_days ?? 7;
+    $('#cfg-social-vn-enabled').checked   = sp_vn.enabled !== false;
+    $('#cfg-social-vn-ttl_sec').value     = sp_vn.ttl_sec ?? 45;
+    $('#cfg-social-lo-enabled').checked   = sp_lo.enabled !== false;
+    $('#cfg-social-lo-max_hours').value   = sp_lo.max_hours ?? 24;
+    $('#cfg-social-sb-enabled').checked   = sp_sb.enabled !== false;
+    $('#cfg-social-sb-min_units').value   = sp_sb.min_units ?? 3;
     applyVisualPreviews();
     syncAllPickers();
     applyShopFiltersPreview();
@@ -11504,6 +11668,33 @@ async function saveConfig() {
       tagline_cn:     ($('#cfg-footer-tagline-cn').value    || '').trim() || null,
       credit_en:      ($('#cfg-footer-credit-en').value     || '').trim() || null,
       credit_cn:      ($('#cfg-footer-credit-cn').value     || '').trim() || null,
+    },
+    // Social proof — single nested blob so storefront_config holds one row,
+    // matching the shape getSocialConfig() in routes/retail.js expects.
+    'social_proof': {
+      bought_count: {
+        enabled:   $('#cfg-social-bc-enabled').checked,
+        min_today: Math.max(1, Number($('#cfg-social-bc-min_today').value) || 2),
+        min_week:  Math.max(1, Number($('#cfg-social-bc-min_week').value)  || 2),
+        min_month: Math.max(1, Number($('#cfg-social-bc-min_month').value) || 1),
+        min_all:   Math.max(1, Number($('#cfg-social-bc-min_all').value)   || 2),
+      },
+      recent_buyers: {
+        enabled:     $('#cfg-social-rb-enabled').checked,
+        window_days: Math.max(1, Math.min(60, Number($('#cfg-social-rb-window_days').value) || 7)),
+      },
+      viewing_now: {
+        enabled: $('#cfg-social-vn-enabled').checked,
+        ttl_sec: Math.max(5, Math.min(600, Number($('#cfg-social-vn-ttl_sec').value) || 45)),
+      },
+      last_ordered: {
+        enabled:   $('#cfg-social-lo-enabled').checked,
+        max_hours: Math.max(1, Math.min(720, Number($('#cfg-social-lo-max_hours').value) || 24)),
+      },
+      sold_badge: {
+        enabled:   $('#cfg-social-sb-enabled').checked,
+        min_units: Math.max(1, Number($('#cfg-social-sb-min_units').value) || 3),
+      },
     },
   };
   try {

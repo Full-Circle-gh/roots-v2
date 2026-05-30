@@ -662,21 +662,57 @@ router.get('/api/retail/products/top', (req, res) => {
 // hit on every product open.
 const SOCIAL_PROOF_TTL_MS = 90 * 1000;
 const SOCIAL_PROOF_CACHE  = new Map();   // product_id → { t, value }
-const SOCIAL_PROOF_MIN    = { today: 2, week: 2, month: 1, all: 2 };
 const SOCIAL_PROOF_WINDOWS = [
   ['today', 'c_today'], ['week', 'c_week'], ['month', 'c_month'], ['all', 'c_all'],
 ];
 const SOCIAL_PROOF_PAID =
   "o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
 
+// ── Tenant-tunable social-proof config ─────────────────────────────────────
+// Each of the 5 social-proof widgets has an on/off toggle + tuning knobs the
+// mini-app backend can edit (retail-admin → Settings → Social proof). Stored as
+// a single JSON blob under storefront_config['social_proof']; missing keys fall
+// back to the DEFAULTS below (which match the original hardcoded constants, so
+// behaviour is identical until an operator changes a value).
+const SOCIAL_PROOF_DEFAULTS = Object.freeze({
+  bought_count:  { enabled: true, min_today: 2, min_week: 2, min_month: 1, min_all: 2 },
+  recent_buyers: { enabled: true, window_days: 7 },
+  viewing_now:   { enabled: true, ttl_sec: 45 },
+  last_ordered:  { enabled: true, max_hours: 24 },
+  sold_badge:    { enabled: true, min_units: 3 },
+});
+function getSocialConfig() {
+  let cfg = SOCIAL_PROOF_DEFAULTS;
+  try {
+    const row = tdb().prepare(
+      "SELECT value_json FROM storefront_config WHERE key = 'social_proof'"
+    ).get();
+    if (row && row.value_json) {
+      const p = JSON.parse(row.value_json) || {};
+      cfg = {
+        bought_count:  { ...SOCIAL_PROOF_DEFAULTS.bought_count,  ...(p.bought_count  || {}) },
+        recent_buyers: { ...SOCIAL_PROOF_DEFAULTS.recent_buyers, ...(p.recent_buyers || {}) },
+        viewing_now:   { ...SOCIAL_PROOF_DEFAULTS.viewing_now,   ...(p.viewing_now   || {}) },
+        last_ordered:  { ...SOCIAL_PROOF_DEFAULTS.last_ordered,  ...(p.last_ordered  || {}) },
+        sold_badge:    { ...SOCIAL_PROOF_DEFAULTS.sold_badge,    ...(p.sold_badge    || {}) },
+      };
+    }
+  } catch (e) { console.error('[social-cfg]', e.message); }
+  return cfg;
+}
+
 // Catalogue "X SOLD" badge. Attaches all-time paid units per product to the
 // list response so shop + home cards can flaunt popularity. Gated to a minimum
-// so low-sellers stay neutral (no badge) rather than advertising a weak count —
-// raise SOLD_BADGE_MIN to show the badge on fewer (more popular) products, or
-// lower to 1 to show it wherever anything has sold. Mutates rows in place.
-const SOLD_BADGE_MIN = 3;
+// so low-sellers stay neutral (no badge) rather than advertising a weak count.
+// Threshold + on/off live in storefront_config['social_proof'].sold_badge
+// (see getSocialConfig); the constant below is just the fallback default.
 function attachSoldCounts(rows) {
   if (!rows || !rows.length) return;
+  const sb = getSocialConfig().sold_badge;
+  // Feature disabled → zero out so the mini-app hides the "X SOLD" cap on
+  // every card without needing a republish.
+  if (!sb.enabled) { for (const r of rows) r.units_sold = 0; return; }
+  const minUnits = Math.max(1, Number(sb.min_units) || 1);
   try {
     const ids = rows.map(r => r.id);
     const placeholders = ids.map(() => '?').join(',');
@@ -691,7 +727,7 @@ function attachSoldCounts(rows) {
     const map = new Map(counts.map(c => [c.pid, Math.round(Number(c.units) || 0)]));
     for (const r of rows) {
       const u = map.get(r.id) || 0;
-      r.units_sold = u >= SOLD_BADGE_MIN ? u : 0;
+      r.units_sold = u >= minUnits ? u : 0;
     }
   } catch (e) {
     console.error('[sold-counts]', e.message);
@@ -702,6 +738,23 @@ function socialProofForProduct(id) {
   const now = Date.now();
   const cached = SOCIAL_PROOF_CACHE.get(id);
   if (cached && (now - cached.t) < SOCIAL_PROOF_TTL_MS) return cached.value;
+
+  const cfg = getSocialConfig();
+  const bc  = cfg.bought_count;
+  const lo  = cfg.last_ordered;
+  // Both halves of the payload are off → skip the query entirely. The
+  // mini-app already hides the product-page nudge when this is null.
+  if (!bc.enabled && !lo.enabled) {
+    SOCIAL_PROOF_CACHE.set(id, { t: now, value: null });
+    return null;
+  }
+  const mins = {
+    today: Math.max(1, Number(bc.min_today) || 1),
+    week:  Math.max(1, Number(bc.min_week)  || 1),
+    month: Math.max(1, Number(bc.min_month) || 1),
+    all:   Math.max(1, Number(bc.min_all)   || 1),
+  };
+  const maxAgeMs = Math.max(1, Number(lo.max_hours) || 1) * 3600 * 1000;
 
   let value = null;
   try {
@@ -722,13 +775,19 @@ function socialProofForProduct(id) {
     `).get(id);
     if (row && (Number(row.c_all) > 0 || row.last_order)) {
       let count = 0, window = null;
-      for (const [w, col] of SOCIAL_PROOF_WINDOWS) {
-        const n = Number(row[col]) || 0;
-        if (n >= SOCIAL_PROOF_MIN[w]) { count = n; window = w; break; }
+      if (bc.enabled) {
+        for (const [w, col] of SOCIAL_PROOF_WINDOWS) {
+          const n = Number(row[col]) || 0;
+          if (n >= mins[w]) { count = n; window = w; break; }
+        }
       }
-      const last_order_ms = row.last_order
-        ? (Date.parse(String(row.last_order).replace(' ', 'T') + 'Z') || null)
-        : null;
+      let last_order_ms = null;
+      if (lo.enabled && row.last_order) {
+        const parsed = Date.parse(String(row.last_order).replace(' ', 'T') + 'Z') || null;
+        // Cap by max_hours: anything older than the cutoff is dropped so the
+        // mini-app's "last ordered X ago" line stays hidden automatically.
+        if (parsed && (now - parsed) <= maxAgeMs) last_order_ms = parsed;
+      }
       value = { count, window, last_order_ms };
     }
   } catch (e) {
@@ -871,13 +930,24 @@ function maskBuyerName(raw) {
 }
 
 const RECENT_BUYERS_TTL_MS = 60 * 1000;
-let RECENT_BUYERS_CACHE = { t: 0, value: [] };
+// Cache keyed by window_days so tuning the slider invalidates only the slice
+// that changed; default to one bucket per process.
+const RECENT_BUYERS_CACHE = new Map();   // window_days → { t, value }
 
 router.get('/api/retail/social/recent-buyers', (req, res) => {
-  const now = Date.now();
-  if (now - RECENT_BUYERS_CACHE.t < RECENT_BUYERS_TTL_MS) {
+  const cfg = getSocialConfig().recent_buyers;
+  // Feature off → return an empty feed immediately so the mini-app ticker
+  // collapses to nothing without a republish.
+  if (!cfg.enabled) {
     res.set('Cache-Control', 'public, max-age=30');
-    return res.json({ success: true, data: RECENT_BUYERS_CACHE.value });
+    return res.json({ success: true, data: [] });
+  }
+  const windowDays = Math.max(1, Math.min(60, Number(cfg.window_days) || 7));
+  const now = Date.now();
+  const cached = RECENT_BUYERS_CACHE.get(windowDays);
+  if (cached && (now - cached.t < RECENT_BUYERS_TTL_MS)) {
+    res.set('Cache-Control', 'public, max-age=30');
+    return res.json({ success: true, data: cached.value });
   }
 
   let out = [];
@@ -892,7 +962,7 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE ${SOCIAL_PROOF_PAID}
-         AND o.placed_at >= datetime('now', '-7 days')
+         AND o.placed_at >= datetime('now', '-${windowDays} days')
        ORDER BY o.placed_at DESC
        LIMIT 20
     `).all();
@@ -909,7 +979,7 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
     console.error('[recent-buyers]', e.message);
   }
 
-  RECENT_BUYERS_CACHE = { t: now, value: out };
+  RECENT_BUYERS_CACHE.set(windowDays, { t: now, value: out });
   res.set('Cache-Control', 'public, max-age=30');
   res.json({ success: true, data: out });
 });
@@ -929,8 +999,16 @@ const VIEW_TTL_MS = 45 * 1000;
 const MAX_VIEWERS_PER_PRODUCT = 500;
 
 function pruneAllViewers(now) {
+  // Read the live TTL so an admin who widens "viewing now" past the 45s
+  // default doesn't have entries swept out from under the next heartbeat.
+  // Falls back to VIEW_TTL_MS (the safety baseline) if the config call throws.
+  let ttlMs = VIEW_TTL_MS;
+  try {
+    const v = getSocialConfig().viewing_now;
+    ttlMs = Math.max(5, Math.min(600, Number(v.ttl_sec) || 45)) * 1000;
+  } catch { /* keep default */ }
   for (const [pid, viewers] of VIEWING) {
-    for (const [k, ts] of viewers) if (now - ts > VIEW_TTL_MS) viewers.delete(k);
+    for (const [k, ts] of viewers) if (now - ts > ttlMs) viewers.delete(k);
     if (viewers.size === 0) VIEWING.delete(pid);
   }
 }
@@ -940,6 +1018,14 @@ if (_viewSweep.unref) _viewSweep.unref();
 router.post('/api/retail/products/:id/viewing', express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
+  const vn = getSocialConfig().viewing_now;
+  // Feature off → don't track and don't reveal counts. count:0 forces the
+  // mini-app's "N viewing" gate (≥2) to hide the badge automatically.
+  if (!vn.enabled) {
+    res.set('Cache-Control', 'no-store');
+    return res.json({ success: true, data: { count: 0 } });
+  }
+  const ttlMs = Math.max(5, Math.min(600, Number(vn.ttl_sec) || 45)) * 1000;
   const now = Date.now();
   const b = req.body || {};
   // Stable per-client key (the mini-app's per-launch session id); fall back to
@@ -952,7 +1038,7 @@ router.post('/api/retail/products/:id/viewing', express.json(), (req, res) => {
   if (b.leaving) viewers.delete(vid);
   // Refresh known viewers always; only admit a NEW key while under the cap.
   else if (viewers.has(vid) || viewers.size < MAX_VIEWERS_PER_PRODUCT) viewers.set(vid, now);
-  for (const [k, ts] of viewers) if (now - ts > VIEW_TTL_MS) viewers.delete(k);
+  for (const [k, ts] of viewers) if (now - ts > ttlMs) viewers.delete(k);
   if (viewers.size === 0) VIEWING.delete(id);
 
   res.set('Cache-Control', 'no-store');
@@ -8649,8 +8735,6 @@ const ALLOWED_BLOCK_TYPES = new Set([
   'countdown_timer', 'flash_sale_strip',
   // Promo + trust blocks — completes the original 10-block spec
   'coupon_block', 'points_widget', 'review_card', 'store_info',
-  // Onboarding-flavor blocks — useful elsewhere too
-  'sticker_collage', 'progress_dots',
   // Voting teaser — links to /pages/voting/voting (polls managed in retail-admin → Voting)
   'voting_block',
   // Affiliate / refer-a-friend card with live invite code + share
@@ -8668,7 +8752,8 @@ const ALLOWED_BLOCK_TYPES = new Set([
   'video_banner',
   // ── Deprecated types kept on the whitelist so existing drafts/layouts
   // still validate. The CMS palette hides them; clients ignore them.
-  'wechat_oa',        // replaced 2026-05-19 by wecom_contact
+  'wechat_oa',                        // replaced 2026-05-19 by wecom_contact
+  'sticker_collage', 'progress_dots', // decorative gimmicks, removed 2026-05-30
 ]);
 
 // CMS-editable pages. Each has its own `<page>.layout` (live) and
