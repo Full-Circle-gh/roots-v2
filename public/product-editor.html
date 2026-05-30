@@ -823,7 +823,7 @@
 
   /* ─── Live phone preview ── */
   .pa-prev-frame {
-    width: 340px;
+    width: 395px;
     background: #2a2a30;
     border-radius: 38px;
     padding: 10px;
@@ -858,107 +858,115 @@
     color: rgba(0, 0, 0, 0.35); font-size: 24px;
   }
   .pa-prev-body { padding: 22px 22px 60px; }
+  /* Product header — mirrors product.wxss .product-head: full-bleed band
+     ending in a 1px (2rpx) ink rule that divides it from the first block. */
+  .pa-prev-head { margin: 28px -22px 0; padding: 0 22px 18px; border-bottom: 1px solid #1a1a17; }
   .pa-prev-name {
-    font-family: 'Bear Serif', 'DF Yuan', serif; font-weight: 500;
-    font-size: 30px; line-height: 1.05; color: #1a1a17;
+    font-family: 'Bear Serif', 'DF Yuan', serif; font-weight: 400;
+    font-size: 44px; line-height: 0.92; letter-spacing: -0.015em; color: #1a1a17;
   }
   .pa-prev-subtitle {
-    margin-top: 6px; font-family: 'DF Yuan', 'PingFang SC', sans-serif;
-    font-size: 12px; color: #6A6E2D;
+    margin-top: 8px; font-family: 'DF Yuan', 'PingFang SC', sans-serif;
+    font-size: 18px; font-weight: 700; letter-spacing: 0.02em; color: #6A6E2D;
   }
   .pa-prev-tagline {
     margin-top: 10px; font-family: 'Toni Grotesk', sans-serif;
-    font-size: 13px; font-weight: 700; line-height: 1.25; color: #1a1a17;
+    font-size: 13px; font-weight: 700; line-height: 1.25;
+    letter-spacing: 0.04em; text-transform: uppercase; color: #1a1a17;
   }
-  .pa-prev-block { margin-top: 22px; }
-  .pa-prev-block:first-of-type { margin-top: 8px; }
-  .pa-prev-hero-lead {
-    font-family: 'Toni Grotesk', sans-serif; font-size: 10px; font-weight: 700;
-    letter-spacing: 0.14em; text-transform: uppercase; color: #6A6E2D; margin-bottom: 8px;
-  }
-  .pa-prev-hero-body {
-    font-family: 'Aleo', serif; font-size: 14px; line-height: 1.55;
-    color: #1a1a17; white-space: pre-line;
-  }
-  .pa-prev-hero-hl {
-    color: #365329; font-weight: 700;
-    background: linear-gradient(transparent 60%, rgba(107, 142, 111, 0.55) 60%); padding: 0 2px;
-  }
-  .pa-prev-stat {
-    margin-left: -22px; margin-right: -22px; padding: 26px 22px;
-    background: #CCD900; color: #1a1a17; text-align: center;
-  }
-  .pa-prev-stat-num { font-family: 'Bear Serif', serif; font-size: 56px; line-height: 1; font-weight: 500; letter-spacing: -0.01em; }
-  .pa-prev-stat-claim { margin-top: 8px; font-family: 'Toni Grotesk', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
-  .pa-prev-stat-sub { margin-top: 8px; font-family: 'Aleo', serif; font-style: italic; font-size: 12px; line-height: 1.45; }
+  /* ── v1 preview blocks · ported 1:1 from product-blocks.wxss (rpx÷2 @375px canvas) ── */
+  /* Full-bleed blocks divided by a 1px ink rule (2rpx). No inter-block gap.
+     margin pulls past the body's 22px side padding (44rpx). */
+  .pa-prev-block { margin: 0 -22px; padding: 0; border-bottom: 1px solid #1a1a17; }
+  .pa-prev-block:last-child { border-bottom: 0; }
   .pa-prev-empty {
-    margin-top: 32px; padding: 20px; text-align: center;
+    margin: 16px 0; padding: 20px; text-align: center;
     font-family: 'Aleo', serif; font-size: 12px; color: rgba(0, 0, 0, 0.45);
     border: 1.5px dashed rgba(0, 0, 0, 0.18); border-radius: 8px; line-height: 1.5;
   }
-  /* v1 preview blocks */
-  .pa-prev-block { padding: 0; border-bottom: 1px solid #1a1a17; }
-  .pa-prev-block:last-child { border-bottom: 0; }
-  .pa-prev-section-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 14px; }
-  .pa-prev-section-h3 { font-family: 'Bear Serif', serif; font-size: 24px; line-height: 0.95; letter-spacing: -0.005em; color: #1a1a17; }
-  .pa-prev-section-tag { font-family: 'Toni Grotesk', sans-serif; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
-  .pa-prev-spec { display: grid; grid-template-columns: repeat(3, 1fr); }
-  .pa-prev-spec-cell { padding: 14px 14px 16px; border-right: 1px solid rgba(26, 26, 23, 0.12); display: flex; flex-direction: column; gap: 6px; }
+  /* Shared section heading (blocks 4/6/7/8) */
+  .pa-prev-section-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 18px; }
+  .pa-prev-section-h3 { font-family: 'Bear Serif', serif; font-weight: 400; font-size: 26px; line-height: 0.95; letter-spacing: -0.005em; color: #1a1a17; }
+  .pa-prev-section-tag { font-family: 'Toni Grotesk', sans-serif; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); padding-bottom: 4px; }
+  /* 01 · SPEC STRIP */
+  .pa-prev-spec { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+  .pa-prev-spec-cell { padding: 14px 14px 16px; display: flex; flex-direction: column; gap: 6px; border-right: 1px solid rgba(26, 26, 23, 0.12); }
   .pa-prev-spec-cell:last-child { border-right: 0; }
   .pa-prev-spec-k { font-family: 'Toni Grotesk', sans-serif; font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
-  .pa-prev-spec-v { font-family: 'Bear Serif', serif; font-size: 14px; line-height: 1.1; }
-  .pa-prev-block.pa-prev-hero { padding: 30px 22px 28px; aspect-ratio: auto; background: transparent; display: block; color: #1a1a17; font-size: inherit; }
-  .pa-prev-why { padding: 4px 22px 18px; }
-  .pa-prev-why-head { display: flex; justify-content: space-between; align-items: baseline; padding: 18px 0 12px; }
+  .pa-prev-spec-v { font-family: 'Bear Serif', serif; font-size: 15px; line-height: 1.1; color: #1a1a17; }
+  /* 02 · HERO INTRO */
+  .pa-prev-block.pa-prev-hero { padding: 32px 22px 30px; aspect-ratio: auto; background: transparent; display: block; color: #1a1a17; font-size: inherit; }
+  .pa-prev-hero-lead { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-family: 'Toni Grotesk', sans-serif; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: #365329; }
+  .pa-prev-hero-lead::before { content: ""; display: inline-block; width: 18px; height: 1px; background: #365329; flex: 0 0 auto; }
+  .pa-prev-hero-body { font-family: 'Aleo', serif; font-size: 15px; line-height: 1.55; color: #1a1a17; white-space: pre-line; }
+  .pa-prev-hero-hl { font-family: 'Bear Serif', serif; font-style: normal; font-size: 17px; line-height: 1; letter-spacing: -0.005em; background: #CCD900; padding: 0.06em 0.18em; color: #1a1a17; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  /* 03 · WHY PEOPLE CHOOSE IT */
+  .pa-prev-why { padding: 6px 22px 22px; }
+  .pa-prev-why-head { display: flex; justify-content: space-between; align-items: baseline; padding: 20px 0 14px; }
   .pa-prev-why-l { font-family: 'Bear Serif', serif; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: #6A6E2D; }
   .pa-prev-why-r { font-family: 'Toni Grotesk', sans-serif; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
-  .pa-prev-why-row { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: baseline; padding: 12px 0; border-top: 1px solid rgba(26, 26, 23, 0.12); }
+  .pa-prev-why-row { display: grid; grid-template-columns: 36px 1fr; gap: 14px; align-items: baseline; padding: 14px 0; border-top: 1px solid rgba(26, 26, 23, 0.12); }
   .pa-prev-why-row.first { border-top: 1px solid #1a1a17; }
-  .pa-prev-why-n { font-family: 'League Gothic', sans-serif; font-size: 28px; line-height: 0.85; color: #1a1a17; }
-  .pa-prev-why-claim { font-family: 'Toni Grotesk', sans-serif; font-size: 13px; line-height: 1.35; }
-  .pa-prev-ing { padding: 22px 22px 22px; }
-  .pa-prev-ing-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .pa-prev-chip { display: inline-flex; align-items: baseline; gap: 5px; padding: 7px 11px 6px; border: 1px solid #1a1a17; border-radius: 999px; background: transparent; font-family: 'Toni Grotesk', sans-serif; font-size: 11px; line-height: 1; color: #1a1a17; }
-  .pa-prev-chip.lead { background: #1a1a17; color: #F2E7DF; font-family: 'Bear Serif', serif; font-size: 14px; padding: 9px 13px 8px; }
-  .pa-prev-chip-pct { font-family: 'League Gothic', sans-serif; font-size: 12px; color: #E96174; }
+  .pa-prev-why-n { font-family: 'League Gothic', sans-serif; font-size: 34px; line-height: 0.85; color: #1a1a17; }
+  .pa-prev-why-claim { font-family: 'Toni Grotesk', sans-serif; font-size: 14.5px; line-height: 1.35; font-weight: 400; color: #1a1a17; }
+  /* 04a · INGREDIENTS · CHIP CLOUD + 04b · EDITORIAL LINE */
+  .pa-prev-ing { padding: 30px 22px 30px; }
+  .pa-prev-ing-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+  .pa-prev-chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 9px 13px 8px; border: 1px solid #1a1a17; border-radius: 999px; background: transparent; font-family: 'Toni Grotesk', sans-serif; font-size: 13px; line-height: 1; color: #1a1a17; }
+  .pa-prev-chip.lead { background: #1a1a17; color: #F2E7DF; font-family: 'Bear Serif', serif; font-size: 18px; padding: 11px 16px 10px; }
+  .pa-prev-chip-pct { font-family: 'League Gothic', sans-serif; font-size: 14px; letter-spacing: 0.02em; color: #E96174; }
   .pa-prev-chip.lead .pa-prev-chip-pct { color: #CCD900; }
-  .pa-prev-ing-line { font-family: 'Bear Serif', serif; font-size: 18px; line-height: 1.25; letter-spacing: -0.005em; color: #1a1a17; }
-  .pa-prev-ing-line-pct { font-family: 'League Gothic', sans-serif; color: #E96174; font-size: 0.85em; }
-  .pa-prev-ing-line-sep { display: inline-block; width: 6px; height: 6px; background: #CCD900; border-radius: 50%; margin: 0 0.35em 0.12em; vertical-align: middle; }
-  .pa-prev-allergen { margin: 22px 22px; padding: 14px 14px 12px; border: 1px solid #1a1a17; background: #FAF1E8; border-radius: 0; box-shadow: none; }
-  .pa-prev-allergen-top { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid #1a1a17; }
-  .pa-prev-allergen-ttl { display: inline-flex; align-items: center; gap: 6px; font-family: 'Bear Serif', serif; font-size: 15px; }
-  .pa-prev-allergen-warn { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; background: #E96174; color: #F2E7DF; border-radius: 3px; font-family: 'Toni Grotesk', sans-serif; font-size: 11px; font-weight: 700; }
-  .pa-prev-allergen-meta { font-family: 'Toni Grotesk', sans-serif; font-size: 8.5px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
-  .pa-prev-allergen-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; }
+  .pa-prev-ing-line { font-family: 'Bear Serif', serif; font-weight: 400; font-size: 22px; line-height: 1.25; letter-spacing: -0.005em; color: #1a1a17; }
+  .pa-prev-ing-line-pct { font-family: 'League Gothic', sans-serif; color: #E96174; font-size: 0.85em; margin-left: 0.05em; }
+  .pa-prev-ing-line-sep { display: inline-block; width: 8px; height: 8px; background: #CCD900; border-radius: 50%; margin: 0 0.35em 0.12em; vertical-align: middle; }
+  /* 05 · ALLERGEN CARD */
+  .pa-prev-allergen { padding: 30px 22px 30px; }
+  .pa-prev-allergen-card { border: 1px solid #1a1a17; background: #FAF1E8; padding: 18px 16px 16px; }
+  .pa-prev-allergen-top { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #1a1a17; }
+  .pa-prev-allergen-ttl { display: flex; align-items: center; gap: 8px; font-family: 'Bear Serif', serif; font-size: 18px; line-height: 1; color: #1a1a17; }
+  .pa-prev-allergen-warn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: #E96174; color: #F2E7DF; border-radius: 4px; font-family: 'Toni Grotesk', sans-serif; font-size: 13px; font-weight: 700; }
+  .pa-prev-allergen-meta { font-family: 'Toni Grotesk', sans-serif; font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
+  .pa-prev-allergen-row { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; }
   .pa-prev-allergen-row + .pa-prev-allergen-row { border-top: 1px dashed rgba(26, 26, 23, 0.3); }
-  .pa-prev-allergen-lbl { font-family: 'Toni Grotesk', sans-serif; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); flex: 0 0 76px; line-height: 1.4; }
-  .pa-prev-allergen-chips { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
-  .pa-prev-allergen-chip { display: inline-block; padding: 4px 9px 3px; border-radius: 999px; font-family: 'Toni Grotesk', sans-serif; font-size: 10px; line-height: 1; }
+  .pa-prev-allergen-lbl { font-family: 'Toni Grotesk', sans-serif; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); flex: 0 0 88px; line-height: 1.4; }
+  .pa-prev-allergen-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+  .pa-prev-allergen-chip { display: inline-block; padding: 5px 10px 4px; border-radius: 999px; font-family: 'Toni Grotesk', sans-serif; font-size: 11.5px; line-height: 1; }
   .pa-prev-allergen-chip.strong { background: #E96174; color: #fff; font-weight: 700; }
   .pa-prev-allergen-chip.soft { background: #F2CA6C; color: #1a1a17; }
-  .pa-prev-allergen-empty { font-family: 'Aleo', serif; font-style: italic; font-size: 11px; color: rgba(26, 26, 23, 0.6); }
-  .pa-prev-how { padding: 22px 22px 22px; }
-  .pa-prev-how-grid { display: grid; gap: 1px; background: rgba(26, 26, 23, 0.12); border: 1px solid rgba(26, 26, 23, 0.12); }
-  .pa-prev-how-tile { background: #F2E7DF; padding: 14px 6px 12px; text-align: center; display: flex; flex-direction: column; gap: 5px; align-items: center; min-height: 64px; justify-content: center; }
-  .pa-prev-how-ic { font-size: 20px; line-height: 1; }
-  .pa-prev-how-lbl { font-family: 'Toni Grotesk', sans-serif; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #1a1a17; }
-  .pa-prev-how-sub { font-family: 'Aleo', serif; font-style: italic; font-size: 10px; color: rgba(26, 26, 23, 0.6); }
-  .pa-prev-storage { padding: 22px 22px 22px; }
-  .pa-prev-storage-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
-  .pa-prev-storage-card { border: 1px solid #1a1a17; padding: 16px 14px 15px; position: relative; display: flex; flex-direction: column; gap: 8px; min-height: 128px; }
+  .pa-prev-allergen-empty { font-family: 'Aleo', serif; font-style: italic; font-size: 13px; color: rgba(26, 26, 23, 0.6); }
+  /* 06 · HOW TO USE GRID */
+  .pa-prev-how { padding: 30px 22px 30px; }
+  .pa-prev-how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: rgba(26, 26, 23, 0.12); border: 1px solid rgba(26, 26, 23, 0.12); }
+  .pa-prev-how-tile { background: #F2E7DF; padding: 18px 6px 16px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; min-height: 76px; justify-content: center; }
+  .pa-prev-how-ic { font-size: 24px; line-height: 1; }
+  .pa-prev-how-lbl { font-family: 'Toni Grotesk', sans-serif; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #1a1a17; }
+  .pa-prev-how-sub { font-family: 'Aleo', serif; font-style: italic; font-size: 11px; color: rgba(26, 26, 23, 0.6); margin-top: -4px; }
+  /* 07 · STORAGE BOX */
+  .pa-prev-storage { padding: 30px 22px 30px; }
+  .pa-prev-storage-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pa-prev-storage-card { border: 1px solid #1a1a17; padding: 18px 15px 17px; position: relative; display: flex; flex-direction: column; gap: 9px; min-height: 140px; }
   .pa-prev-storage-card.alt { background: #1a1a17; color: #F2E7DF; }
-  .pa-prev-storage-ic { position: absolute; top: 11px; right: 11px; font-size: 16px; line-height: 1; }
-  .pa-prev-storage-head { font-family: 'Toni Grotesk', sans-serif; font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; }
-  .pa-prev-storage-num { font-family: 'League Gothic', sans-serif; font-size: 44px; line-height: 0.95; margin-top: auto; }
-  .pa-prev-storage-unit { font-family: 'Toni Grotesk', sans-serif; font-size: 10px; letter-spacing: 0.16em; line-height: 1.5; text-transform: uppercase; }
-  .pa-prev-storage-note { margin-top: 11px; font-family: 'Aleo', serif; font-style: italic; font-size: 11px; color: rgba(26, 26, 23, 0.6); text-align: right; }
-  .pa-prev-notes { padding: 16px 22px 18px; }
-  .pa-prev-notes-p { font-family: 'Aleo', serif; font-style: italic; font-size: 11px; line-height: 1.55; color: rgba(26, 26, 23, 0.6); position: relative; padding-left: 14px; }
+  .pa-prev-storage-ic { position: absolute; top: 12px; right: 12px; font-size: 18px; line-height: 1; }
+  .pa-prev-storage-head { font-family: 'Toni Grotesk', sans-serif; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; }
+  .pa-prev-storage-num { font-family: 'League Gothic', sans-serif; font-size: 48px; line-height: 0.95; margin-top: auto; }
+  .pa-prev-storage-unit { font-family: 'Toni Grotesk', sans-serif; font-size: 11px; letter-spacing: 0.16em; line-height: 1.5; text-transform: uppercase; }
+  .pa-prev-storage-note { margin-top: 12px; font-family: 'Aleo', serif; font-style: italic; font-size: 12px; color: rgba(26, 26, 23, 0.6); text-align: right; }
+  /* 09 · NOTES CALLOUT */
+  .pa-prev-notes { padding: 24px 22px 28px; }
+  .pa-prev-notes-p { font-family: 'Aleo', serif; font-style: italic; font-size: 12.5px; line-height: 1.55; color: rgba(26, 26, 23, 0.6); position: relative; padding-left: 14px; }
   .pa-prev-notes-p::before { content: "✱"; position: absolute; left: 0; top: 0; color: #6A6E2D; font-style: normal; }
-  .pa-prev-pullquote { padding: 18px 22px 20px; background: #E8D9CB; }
-  .pa-prev-pullquote-p { font-family: 'Aleo', serif; font-style: italic; font-size: 13px; line-height: 1.5; }
-  .pa-prev-pullquote-who { margin-top: 8px; font-family: 'Toni Grotesk', sans-serif; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
+  /* +1 · BIG STAT CALLOUT */
+  .pa-prev-stat { padding: 38px 22px 40px; color: #1a1a17; text-align: center; position: relative; overflow: hidden; }
+  .pa-prev-stat-num { font-family: 'Bear Serif', serif; font-weight: 400; font-size: 110px; line-height: 0.85; letter-spacing: -0.02em; color: #1a1a17; }
+  .pa-prev-stat-claim { font-family: 'Toni Grotesk', sans-serif; font-size: 11px; letter-spacing: 0.32em; text-transform: uppercase; margin-top: 10px; color: #1a1a17; }
+  .pa-prev-stat-sub { font-family: 'Aleo', serif; font-style: italic; font-size: 14px; margin-top: 6px; color: #1a1a17; }
+  .pa-prev-stat::before, .pa-prev-stat::after { content: "·"; position: absolute; font-family: 'Bear Serif', serif; font-size: 60px; line-height: 1; top: 50%; transform: translateY(-50%); color: #1a1a17; }
+  .pa-prev-stat::before { left: 14px; }
+  .pa-prev-stat::after { right: 14px; }
+  /* +2 · PULL QUOTE / ORIGIN NOTE */
+  .pa-prev-pullquote { padding: 24px 22px 26px; background: #E8D9CB; }
+  .pa-prev-pullquote-p { font-family: 'Aleo', serif; font-style: italic; font-size: 15px; line-height: 1.5; color: #1a1a17; }
+  .pa-prev-pullquote-who { margin-top: 10px; font-family: 'Toni Grotesk', sans-serif; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
   .pa-prev-colophon { padding: 22px 22px 18px; background: #F2E7DF; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; position: relative; border-top: 1px solid #1a1a17; }
   .pa-prev-colophon-img { width: 72px; height: 72px; object-fit: contain; mix-blend-mode: multiply; }
   .pa-prev-colophon-tagline { font-family: 'Bear Serif', serif; font-size: 16px; line-height: 1; letter-spacing: -0.005em; color: #1a1a17; }
@@ -2713,7 +2721,7 @@ function _paPreviewBlockHtml(b) {
     if (!items.length) return '';
     return `<div class="pa-prev-block pa-prev-ing">
       <div class="pa-prev-section-head"><span class="pa-prev-section-h3">${T('Ingredients', '配料表')}</span><span class="pa-prev-section-tag">${items.length} ${T('items · chip cloud', '项 · 云标签')}</span></div>
-      <div class="pa-prev-ing-chips">${items.map(it => `<span class="pa-prev-chip ${it.lead ? 'lead' : ''}">${esc(it.name)}${it.pct != null && !isNaN(it.pct) && it.pct >= 10 ? `<span class="pa-prev-chip-pct">${it.pct}%</span>` : ''}</span>`).join('')}</div>
+      <div class="pa-prev-ing-chips">${items.map(it => `<span class="pa-prev-chip ${it.lead ? 'lead' : ''}">${esc(it.name)}${it.pct != null && !isNaN(it.pct) && it.pct > 0 ? `<span class="pa-prev-chip-pct">${it.pct}%</span>` : ''}</span>`).join('')}</div>
     </div>`;
   }
   if (b.type === 'ingredients_line') {
@@ -2721,7 +2729,7 @@ function _paPreviewBlockHtml(b) {
     if (!items.length) return '';
     const run = items.map((it, i) => {
       const sep = i > 0 ? '<span class="pa-prev-ing-line-sep"></span>' : '';
-      const pct = it.pct != null && !isNaN(it.pct) ? `<span class="pa-prev-ing-line-pct"> ${it.pct}%</span>` : '';
+      const pct = it.pct != null && !isNaN(it.pct) && it.pct > 0 ? `<span class="pa-prev-ing-line-pct"> ${it.pct}%</span>` : '';
       return `${sep}${esc(it.name)}${pct}`;
     }).join(' ');
     return `<div class="pa-prev-block pa-prev-ing"><div class="pa-prev-section-head"><span class="pa-prev-section-h3">${T('Ingredients', '配料表')}</span><span class="pa-prev-section-tag">${T('editorial run', '编辑式排版')}</span></div><div class="pa-prev-ing-line">${run}</div></div>`;
@@ -2729,12 +2737,13 @@ function _paPreviewBlockHtml(b) {
   if (b.type === 'allergen_card') {
     const contains = _paSplitChips(pickT(b.contains_en, b.contains_cn));
     const mayContain = _paSplitChips(pickT(b.may_contain_en, b.may_contain_cn));
+    if (!contains.length && !mayContain.length) return '';
     const chips = (arr, cls) => arr.map(c => `<span class="pa-prev-allergen-chip ${cls}">${esc(c)}</span>`).join('');
-    return `<div class="pa-prev-block pa-prev-allergen">
+    return `<div class="pa-prev-block pa-prev-allergen"><div class="pa-prev-allergen-card">
       <div class="pa-prev-allergen-top"><span class="pa-prev-allergen-ttl"><span class="pa-prev-allergen-warn">!</span> ${T('Allergens', '过敏原')}</span><span class="pa-prev-allergen-meta">GB-7718</span></div>
       <div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">${T('Contains', '含有')}</span><span class="pa-prev-allergen-chips">${contains.length ? chips(contains, 'strong') : `<span class="pa-prev-allergen-empty">${T('None declared', '未声明')}</span>`}</span></div>
-      ${mayContain.length ? `<div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">${T('May contain<br>traces of', '可能含有<br>微量')}</span><span class="pa-prev-allergen-chips">${chips(mayContain, 'soft')}</span></div>` : ''}
-    </div>`;
+      ${mayContain.length ? `<div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">${T('May contain traces of', '可能含有微量')}</span><span class="pa-prev-allergen-chips">${chips(mayContain, 'soft')}</span></div>` : ''}
+    </div></div>`;
   }
   if (b.type === 'how_to_use') {
     const tiles = (b.tiles || []).map(t => ({ icon: t.icon || '', lbl: pickT(t.label_en, t.label_cn), sub: pickT(t.sub_en, t.sub_cn) })).filter(t => t.lbl || t.icon);
@@ -2866,9 +2875,11 @@ function paRenderPreview() {
   screen.innerHTML = `
     <div class="pa-prev-hero" style="${heroStyle}">${img ? '' : '🛍'}</div>
     <div class="pa-prev-body">
-      <div class="pa-prev-name">${escapeHtml(title)}</div>
-      ${(otherLang || keywords) ? `<div class="pa-prev-subtitle">${otherLang ? escapeHtml(otherLang) : ''}${otherLang && keywords ? ' · ' : ''}${keywords ? escapeHtml(keywords) : ''}</div>` : ''}
-      ${tagline ? `<div class="pa-prev-tagline">${escapeHtml(tagline)}</div>` : ''}
+      <div class="pa-prev-head">
+        <div class="pa-prev-name">${escapeHtml(title)}</div>
+        ${(otherLang || keywords) ? `<div class="pa-prev-subtitle">${otherLang ? escapeHtml(otherLang) : ''}${otherLang && keywords ? ' · ' : ''}${keywords ? escapeHtml(keywords) : ''}</div>` : ''}
+        ${tagline ? `<div class="pa-prev-tagline">${escapeHtml(tagline)}</div>` : ''}
+      </div>
       ${blocksHtml || (!keywords && !tagline ? `<div class="pa-prev-empty">${_paPreviewLang === 'cn' ? '还没有板块,点上方“添加板块”开始排版。' : 'No designer sections yet. Add one to compose the page.'}</div>` : '')}
       <div class="pa-prev-colophon">
         <img class="pa-prev-colophon-img" src="/assets/brand/ip-${colResChar}.jpg" alt="">
