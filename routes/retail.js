@@ -9624,12 +9624,15 @@ function matchDeliveryZone(address) {
   if (!address) return null;
   const wantDistrict = normalizeAreaName(address.district);
   const wantCity     = normalizeAreaName(address.city);
+  const wantProvince = normalizeAreaName(address.province);
   // Free-text fallback: WeChat-imported addresses often dump the entire
   // string (province + city + district + street) into the `address`
   // field and leave the structured city/district slots blank. Also scan
   // the concatenated blob so "广州市 ... 天河区 ..." still matches the
-  // Tianhe row even when address.district is empty.
-  const blob = [address.address, address.detail, address.city, address.district]
+  // Tianhe row even when address.district is empty. Province is included so
+  // a province-named zone (match_city = '江苏省') still resolves when the
+  // WeChat region picker fills structured 省/市/区 but not the street text.
+  const blob = [address.province, address.address, address.detail, address.city, address.district]
                  .filter(Boolean).join(' ');
   // Strip the suffix-stripped form of a configured name (天河区 → 天河) so
   // both forms substring-match.
@@ -9653,8 +9656,17 @@ function matchDeliveryZone(address) {
   const rows = tdb().prepare(
     `SELECT * FROM retail_delivery_zones WHERE zone_type = 'city' AND is_active = 1`
   ).all();
+  // 1) Exact city match wins — most specific (e.g. a 太原市 zone beats a
+  //    broader 山西省 zone for a Taiyuan address).
   for (const r of rows) {
     if (wantCity && normalizeAreaName(r.match_city) === wantCity) return r;
+  }
+  // 2) Province-level zone: the address's 省 equals a province-named row.
+  for (const r of rows) {
+    if (wantProvince && normalizeAreaName(r.match_city) === wantProvince) return r;
+  }
+  // 3) Free-text fallback for WeChat-imported / blank-structured addresses.
+  for (const r of rows) {
     const full = r.match_city || '';
     if (full && blob.includes(full)) return r;
     const stripped = stripSuffix(full);
@@ -9982,7 +9994,7 @@ function resolveDeliverySlot(zone, slotId, now) {
 // deliveryMode is the customer's requested option:
 //   • 'standard' — base_fee (free if subtotal hits threshold)
 //   • 'max'      — flat max_fee (Guangzhou only). free_threshold does NOT apply.
-// Packing fee only applies to 'city' zones.
+// Packing fee applies to any zone that configures one (per-item × qty, capped).
 function computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty) {
   if (!zone) {
     return { error: 'no_zone_match', deliveryFee: 0, packingFee: 0, freeShipping: false };
@@ -10000,7 +10012,7 @@ function computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty) {
   }
 
   let packingFee = 0;
-  if (zone.zone_type === 'city' && zone.packing_fee_per_item > 0 && totalQty > 0) {
+  if (zone.packing_fee_per_item > 0 && totalQty > 0) {
     packingFee = Number(zone.packing_fee_per_item) * totalQty;
     if (zone.packing_fee_cap != null && packingFee > Number(zone.packing_fee_cap)) {
       packingFee = Number(zone.packing_fee_cap);
