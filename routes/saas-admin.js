@@ -9,6 +9,7 @@ const express = require('express');
 const db = require('../database');
 const { provisionTenant } = require('../lib/provision-tenant');
 const onboarding = require('../lib/onboarding-steps');
+const featureCatalog = require('../lib/features');
 const credBox = require('../lib/secret-box');
 const { getTenantCreds, setTenantSecrets, invalidate: invalidateCreds, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
 const router = express.Router();
@@ -122,6 +123,38 @@ router.patch('/api/saas-admin/tenants/:id/brand', requireSaasAdmin, express.json
   params.push(req.params.id);
   db.prepare(`UPDATE tenants SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   res.json({ success: true });
+});
+
+// ── Feature ENTITLEMENTS (the platform ceiling) ───────────────────────────
+// Decides which feature toggles even appear on a tenant's own Settings →
+// Features tab. tenants.features_json holds { <key>: false } for anything the
+// platform has withheld; a null/absent entry means "available". Lowering a key
+// here makes that feature vanish from the tenant's backend on their next load
+// (combined client-side with their own on/off preference — see retail-admin.html).
+router.get('/api/saas-admin/tenants/:id/features', requireSaasAdmin, (req, res) => {
+  const t = db.prepare('SELECT id, features_json FROM tenants WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
+  const entitled = featureCatalog.entitlements(t.features_json);
+  res.json({
+    success: true,
+    features: featureCatalog.FEATURES.map(f => ({
+      key: f.key, en: f.en, cn: f.cn, entitled: entitled[f.key] !== false,
+    })),
+  });
+});
+
+router.patch('/api/saas-admin/tenants/:id/features', requireSaasAdmin, express.json(), (req, res) => {
+  const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
+  const body = req.body || {};
+  // Build a clean { <knownKey>: bool } map — ignore unknown keys so a stale
+  // client can't write junk. Anything not present defaults to entitled (true).
+  const map = {};
+  for (const f of featureCatalog.FEATURES) {
+    map[f.key] = body[f.key] === false ? false : true;
+  }
+  db.prepare('UPDATE tenants SET features_json = ? WHERE id = ?').run(JSON.stringify(map), t.id);
+  res.json({ success: true, entitlements: map });
 });
 
 // ── WeChat + WeChat Pay credentials (Platform readiness ②③⑩ — operator entry) ──

@@ -187,6 +187,7 @@
           '<button class="btn btn-sm" data-act="detail" data-id="'+t.id+'">Details</button>' +
           '<button class="btn btn-sm" data-act="onboard" data-id="'+t.id+'">Onboarding</button>' +
           '<button class="btn btn-sm" data-act="brand" data-id="'+t.id+'">Brand</button>' +
+          '<button class="btn btn-sm" data-act="features" data-id="'+t.id+'">Features</button>' +
           (t.isInternal ? '' : '<button class="btn btn-sm" data-act="creds" data-id="'+t.id+'">Credentials</button>') +
           susBtn +
         '</div></td></tr>';
@@ -202,6 +203,7 @@
     } else if (act==='reactivate') {
       api('/api/saas-admin/tenants/'+id+'/reactivate',{method:'POST'}).then(j=>{ toast(j.success?'Reactivated':j.error||'Failed'); load(); });
     } else if (act==='brand') { brandModal(t); }
+    else if (act==='features') { featuresModal(t); }
     else if (act==='creds') { credsModal(t); }
     else if (act==='detail') { detailModal(id); }
     else if (act==='onboard') { onboardModal(id); }
@@ -320,6 +322,33 @@
       api('/api/saas-admin/tenants/'+t.id+'/brand',{method:'PATCH',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ brand_name:$('#b-name').value.trim(), brand_accent:$('#b-accent').value, wx_appid:$('#b-appid').value.trim() })})
         .then(j=>{ if(j.success){ toast('Saved'); closeModal(); load(); } else mMsg(j.error||'Failed','err'); });
+    });
+  }
+
+  // ── Feature entitlements (the platform ceiling) ──
+  // Unchecking a feature here removes it from the tenant's own Settings → Features
+  // tab and hides it across their backend. Catalog + current state come from the
+  // server so this list always matches lib/features.js.
+  function featuresModal(t) {
+    openModal('Features · 功能 — '+(t.brand||t.name));
+    $('#mBody').innerHTML = '<div class="empty">Loading… · 加载中…</div>';
+    api('/api/saas-admin/tenants/'+t.id+'/features').then(j => {
+      if (!j || !j.success || !Array.isArray(j.features)) { $('#mBody').innerHTML = '<div class="empty">Not found</div>'; return; }
+      $('#mBody').innerHTML =
+        '<div class="zh" style="margin-bottom:12px;line-height:1.5">Allow this tenant to use these features. Unchecking one removes it from their backend; they still choose whether to switch each allowed feature on. · 允许该租户使用以下功能;取消勾选将从其后台移除该功能,租户仍可自行开关已允许的功能。</div>' +
+        j.features.map(f =>
+          '<label class="field" style="display:flex;align-items:center;gap:10px;cursor:pointer">' +
+            '<input type="checkbox" data-fkey="'+esc(f.key)+'"'+(f.entitled?' checked':'')+'>' +
+            '<span>'+esc(f.en)+' · '+esc(f.cn)+'</span>' +
+          '</label>'
+        ).join('') +
+        '<button class="btn btn-brass" id="f-save" style="width:100%;padding:11px;margin-top:8px">Save · 保存</button>';
+      $('#f-save').addEventListener('click', () => {
+        const body = {};
+        document.querySelectorAll('#mBody input[data-fkey]').forEach(inp => { body[inp.getAttribute('data-fkey')] = inp.checked; });
+        api('/api/saas-admin/tenants/'+t.id+'/features',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+          .then(j=>{ if(j.success){ toast('Saved'); closeModal(); } else mMsg(j.error||'Failed','err'); });
+      });
     });
   }
 
