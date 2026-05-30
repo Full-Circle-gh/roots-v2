@@ -801,9 +801,15 @@
     font-size: 10px; font-weight: 600; letter-spacing: .1em;
     text-transform: uppercase; color: var(--text-3);
   }
-  .pa-edit-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+  /* minmax(0,…) lets the columns shrink below their inputs' intrinsic width,
+     and width:100% makes inputs fill the column — so EN/CN pairs sit side by
+     side in the narrow 288px inspector without cropping. */
+  .pa-edit-grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s3); }
   @media (max-width: 620px) { .pa-edit-grid-2 { grid-template-columns: 1fr; } }
-  .pa-edit-grid-2 .field { margin-bottom: 0; }
+  .pa-edit-grid-2 .field { margin-bottom: 0; min-width: 0; }
+  .pa-edit-grid-2 .field input,
+  .pa-edit-grid-2 .field select,
+  .pa-edit-grid-2 .field textarea { width: 100%; }
   .pa-blocks-empty {
     text-align: center; padding: var(--s7) var(--s4);
     color: var(--text-3); font-size: 13px; line-height: 1.6;
@@ -2618,11 +2624,11 @@ function _paBlockEditorBody(b) {
             <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','rows',${i})" ${rows.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 0.8fr;gap:10px">
+          <div class="pa-edit-grid-2">
             <div class="field"><label class="stacked">Label EN · 标签(英文)</label><input data-rowidx="${i}" data-bkey="label_en" type="text" value="${escapeAttr(r.label_en || '')}" placeholder="Energy"></div>
             <div class="field"><label class="stacked">Label CN · 标签(中文)</label><input data-rowidx="${i}" data-bkey="label_cn" type="text" value="${escapeAttr(r.label_cn || '')}" placeholder="能量"></div>
-            <div class="field"><label class="stacked">Value · 数值</label><input data-rowidx="${i}" data-bkey="value" type="text" value="${escapeAttr(r.value || '')}" placeholder="2100 kJ"></div>
           </div>
+          <div class="field" style="margin-top:8px"><label class="stacked">Value · 数值</label><input data-rowidx="${i}" data-bkey="value" type="text" value="${escapeAttr(r.value || '')}" placeholder="2100 kJ"></div>
         </div>`).join('')}
       <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','rows',{label_en:'',label_cn:'',value:''})">+ Add row · 添加一行</button>`;
   }
