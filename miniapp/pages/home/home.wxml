@@ -26,6 +26,7 @@
     categories="{{categories}}"
     flash-sales="{{flashSales}}"
     top-products="{{topProducts}}"
+    leaderboards="{{leaderboards}}"
     affiliate="{{affiliate}}"
     polls="{{polls}}"
     customer="{{customer}}"

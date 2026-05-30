@@ -19,6 +19,7 @@
     categories="{{categories}}"
     flash-sales="{{flashSales}}"
     top-products="{{topProducts}}"
+    leaderboards="{{leaderboards}}"
     polls="{{polls}}"
     customer="{{customer}}"
     bind:cta="onCta"

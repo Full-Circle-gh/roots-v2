@@ -19,6 +19,7 @@ Page({
     categories: [],
     flashSales: [],
     topProducts: {},
+    leaderboards: {},
     polls: [],
     customer: null,
     lang: 'en',
@@ -72,6 +73,7 @@ Page({
         loading: false,
       });
       this._fetchTopProductsFor(layout);
+      this._fetchLeaderboardsFor(layout);
     } catch (e) {
       console.warn('[layout:' + this.data.page + '] refresh failed:', e.message);
       this.setData({ loading: false });
@@ -100,6 +102,34 @@ Page({
       }
     }));
     this.setData({ topProducts: next });
+  },
+
+  // Same lazy pattern for leaderboard blocks — fetch each distinct
+  // metric|period|top_n|reveal_mode tuple once from the public storefront
+  // endpoint and merge into data.leaderboards.
+  async _fetchLeaderboardsFor(layout) {
+    const keys = new Set();
+    (layout || []).forEach(b => {
+      if (b.type !== 'leaderboard') return;
+      const metric = b.metric || 'lifetime_spend';
+      const period = b.period || 'month';
+      const topN   = Math.max(3, Math.min(10, b.top_n || 5));
+      const reveal = b.reveal_mode || 'first_char';
+      keys.add(`${metric}|${period}|${topN}|${reveal}`);
+    });
+    if (!keys.size) return;
+    const next = { ...(this.data.leaderboards || {}) };
+    await Promise.all([...keys].map(async key => {
+      if (next[key]) return;
+      const [metric, period, top_n, reveal_mode] = key.split('|');
+      try {
+        const res = await api.get(`/api/retail/storefront/leaderboard?metric=${encodeURIComponent(metric)}&period=${encodeURIComponent(period)}&top_n=${encodeURIComponent(top_n)}&reveal_mode=${encodeURIComponent(reveal_mode)}`);
+        next[key] = (res && Array.isArray(res.entries)) ? res.entries : [];
+      } catch {
+        next[key] = [];
+      }
+    }));
+    this.setData({ leaderboards: next });
   },
 
   async onVote(e) {
@@ -145,6 +175,7 @@ Page({
     if (t === 'faq')         return wx.navigateTo({ url: '/pages/faq/faq' });
     if (t === 'affiliate')   return wx.navigateTo({ url: '/pages/affiliate/affiliate' });
     if (t === 'topup')       return wx.navigateTo({ url: '/pages/topup/topup' });
+    if (t === 'leaderboard') return wx.navigateTo({ url: '/pages/leaderboard/leaderboard' });
     if (ALLOWED.has(t))      return wx.navigateTo({ url: '/pages/layout/layout?page=' + t });
     if (t.startsWith('product:'))  return wx.navigateTo({ url: '/pages/product/product?id=' + t.split(':')[1] });
     if (t.startsWith('category:')) return wx.switchTab({ url: '/pages/shop/shop' });

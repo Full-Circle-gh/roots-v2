@@ -67,6 +67,11 @@ Component({
     // Operator-configurable strip background colour (theme.notif_color in
     // storefront_config). Empty string = let the WXSS default win.
     notifColor: { type: String, value: '' },
+    // Pre-fetched leaderboard rows keyed by `${metric}|${period}|${top_n}|${reveal_mode}`.
+    // The host page (home.js) walks the layout for leaderboard blocks, fetches
+    // /api/retail/storefront/leaderboard once per distinct tuple, and threads
+    // the results in here — same lazy pattern as topProducts.
+    leaderboards: { type: Object, value: {} },
   },
 
   data: {
@@ -120,10 +125,14 @@ Component({
     // favorites — customer's saved products for the home block
     favoritesCard: null,
     favoritesHidden: false,
+    // leaderboard — Roots Club ranking strip for the home page
+    leaderboardCard: null,
+    leaderboardHidden: false,
+    leaderboardAccent: '',
   },
 
   observers: {
-    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites': function () {
+    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards': function () {
       this.recompute();
     },
     // Recompute the human-readable strip text whenever the count, the
@@ -1072,6 +1081,65 @@ Component({
           out.countdownUrgent = urgent;
           break;
         }
+        case 'leaderboard': {
+          // Roots Club ranking strip. Rows are pre-fetched + pre-masked by the
+          // host page (home.js) via /api/retail/storefront/leaderboard, keyed
+          // by metric|period|top_n|reveal_mode — we just format + lay out here.
+          out.bg = color(b.bg_color || 'oat-milk');
+          out.fg = color(b.fg_color || 'ink');
+          out.leaderboardAccent = color(b.accent_color || 'forest-kale');
+          const metric = b.metric || 'lifetime_spend';
+          const period = b.period || 'month';
+          const topN   = Math.max(3, Math.min(10, b.top_n || 5));
+          const reveal = b.reveal_mode || 'first_char';
+          const key = `${metric}|${period}|${topN}|${reveal}`;
+          const board = this.properties.leaderboards || {};
+          const entries = Array.isArray(board[key]) ? board[key] : [];
+          // Hide while data hasn't arrived (entries empty during load), when the
+          // board is genuinely empty, or when there are fewer qualifiers than
+          // the operator's hide_when_under floor — keeps Home from showing a
+          // sad 1-row board in the early days.
+          const hideUnder = Number(b.hide_when_under) || 0;
+          if (!entries.length || (hideUnder && entries.length < hideUnder)) {
+            out.leaderboardCard = null;
+            out.leaderboardHidden = true;
+            break;
+          }
+          const showValue = b.show_value !== false;
+          const medals = ['🥇', '🥈', '🥉'];
+          const fmtValue = (v) => {
+            const n = Number(v) || 0;
+            if (metric === 'lifetime_spend') return '¥' + Math.round(n).toLocaleString();
+            if (metric === 'points_balance') return n.toLocaleString() + (L === 'cn' ? ' 分' : ' pts');
+            return n.toLocaleString() + (L === 'cn' ? ' 单' : ' orders');
+          };
+          const periodLabel =
+            period === 'week'  ? (L === 'cn' ? '本周' : 'This week') :
+            period === 'month' ? (L === 'cn' ? '本月' : 'This month') :
+            period === 'year'  ? (L === 'cn' ? '今年' : 'This year') :
+                                 (L === 'cn' ? '累计' : 'All time');
+          const rows = entries.slice(0, topN).map((e, i) => {
+            const rank = Number(e.rank) || (i + 1);
+            return {
+              rank,
+              medal: i < 3 ? medals[i] : '',
+              rankText: i < 3 ? '' : String(rank),
+              name: e.name || (L === 'cn' ? '会员' : 'Member'),
+              value: showValue ? fmtValue(e.value) : '',
+            };
+          });
+          out.leaderboardHidden = false;
+          out.leaderboardCard = {
+            kicker:  lang.pick(b.kicker_en, b.kicker_cn, L),
+            title:   lang.pick(b.title_en, b.title_cn, L) || (L === 'cn' ? '本月铁粉' : 'Top customers'),
+            subhead: lang.pick(b.subhead_en, b.subhead_cn, L),
+            footer:  lang.pick(b.footer_en, b.footer_cn, L),
+            periodLabel,
+            rows,
+            ctaLabel: L === 'cn' ? '查看完整排行' : 'View full leaderboard',
+          };
+          break;
+        }
       }
       this.setData(out);
     },
@@ -1174,6 +1242,10 @@ Component({
     onFavoritesTap() {
       // "See all" link on the favorites block — route to /pages/favorites.
       this.triggerEvent('cta', { target: 'favorites' });
+    },
+    onLeaderboardTap() {
+      // Tapping the leaderboard strip opens the full Roots Club ranking page.
+      this.triggerEvent('cta', { target: 'leaderboard' });
     },
     onGreetingCtaTap() {
       const target = this.data.greeting?.ctaTarget;

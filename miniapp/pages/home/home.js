@@ -19,6 +19,9 @@ Page({
     // tuples referenced by product_grid blocks with source_type='top_selling'
     // get fetched — usually 0–2 per page.
     topProducts: {},
+    // Leaderboard rows keyed by `${metric}|${period}|${top_n}|${reveal_mode}`.
+    // Only tuples referenced by `leaderboard` blocks get fetched — usually 0–1.
+    leaderboards: {},
     affiliate: null,
     polls: [],
     customer: null,   // { nickname, points_balance, ... } — feeds greeting block
@@ -212,6 +215,8 @@ Page({
       // Setting topProducts after data lands triggers the block-renderer
       // observer and the products appear in place.
       this._fetchTopProductsFor(layout);
+      // Same lazy pattern for leaderboard blocks.
+      this._fetchLeaderboardsFor(layout);
     } catch (e) {
       console.warn('[home] refresh failed:', e.message);
       this.setData({ loading: false });
@@ -241,6 +246,36 @@ Page({
       }
     }));
     this.setData({ topProducts: next });
+  },
+
+  // Walk the layout for leaderboard blocks, build the unique set of
+  // (metric|period|top_n|reveal_mode) tuples, fetch each once from the public
+  // storefront endpoint (no auth — anonymous Home viewers see it too), and
+  // merge into data.leaderboards. Setting it triggers the block-renderer
+  // observer so the ranking strip fills in place.
+  async _fetchLeaderboardsFor(layout) {
+    const keys = new Set();
+    (layout || []).forEach(b => {
+      if (b.type !== 'leaderboard') return;
+      const metric = b.metric || 'lifetime_spend';
+      const period = b.period || 'month';
+      const topN   = Math.max(3, Math.min(10, b.top_n || 5));
+      const reveal = b.reveal_mode || 'first_char';
+      keys.add(`${metric}|${period}|${topN}|${reveal}`);
+    });
+    if (!keys.size) return;
+    const next = { ...(this.data.leaderboards || {}) };
+    await Promise.all([...keys].map(async key => {
+      if (next[key]) return;  // already loaded this render cycle
+      const [metric, period, top_n, reveal_mode] = key.split('|');
+      try {
+        const res = await api.get(`/api/retail/storefront/leaderboard?metric=${encodeURIComponent(metric)}&period=${encodeURIComponent(period)}&top_n=${encodeURIComponent(top_n)}&reveal_mode=${encodeURIComponent(reveal_mode)}`);
+        next[key] = (res && Array.isArray(res.entries)) ? res.entries : [];
+      } catch {
+        next[key] = [];
+      }
+    }));
+    this.setData({ leaderboards: next });
   },
 
   // Inline vote cast from a voting_block. Posts the vote and refreshes
@@ -334,6 +369,7 @@ Page({
     if (t === 'affiliate')  return wx.navigateTo({ url: '/pages/affiliate/affiliate' });
     if (t === 'topup')      return wx.navigateTo({ url: '/pages/topup/topup' });
     if (t === 'favorites')  return wx.navigateTo({ url: '/pages/favorites/favorites' });
+    if (t === 'leaderboard') return wx.navigateTo({ url: '/pages/leaderboard/leaderboard' });
     if (t === 'notifications') {
       // Tapping the strip is the dismissal action — zero the badge locally
       // and mark every unread notification read on the backend (best-effort)
