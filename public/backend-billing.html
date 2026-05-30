@@ -124,7 +124,6 @@
         <button class="modal-x" id="payClose" aria-label="Close">×</button>
       </div>
       <div id="payBody"></div>
-      <div class="modal-note">Online payment (WeChat / Alipay / card) is coming soon. For now, pay by the method above — we'll mark the invoice paid on receipt. · 在线支付(微信 / 支付宝 / 银行卡)即将开放。目前请使用以上方式付款,到账后我们将标记为已付。</div>
     </div>
   </div>
 
@@ -197,6 +196,24 @@
       b.addEventListener('click', () => onChoosePlan(b.getAttribute('data-code'), b.getAttribute('data-name'))));
   }
 
+  // ── Payment polling (WeChat QR) ─────────────────────────────────────────────
+  let _pollTimer = null;
+  function stopPoll() { if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; } }
+  function startPaymentPoll(invoiceId) {
+    stopPoll();
+    _pollTimer = setInterval(async () => {
+      try {
+        const s = await fetch('/api/backend/billing/invoices/' + invoiceId + '/payment-status', { credentials: 'same-origin' }).then(r => r.json());
+        if (s && s.status === 'paid') {
+          stopPoll();
+          document.getElementById('payModal').classList.remove('show');
+          toast('Payment received · 已收到付款 ✓');
+          loadAll();
+        }
+      } catch (_) {}
+    }, 3000);
+  }
+
   async function onChoosePlan(code, name) {
     if (!confirm('Select the ' + name + ' plan? An invoice will be created for you to pay. · 选择「' + name + '」套餐?系统将生成一张待支付发票。')) return;
     try {
@@ -205,9 +222,12 @@
         body: JSON.stringify({ plan_code: code }),
       }).then(r => r.json());
       if (!j.success) { toast(j.error || 'Could not select plan · 无法选择套餐'); return; }
+      // Pick best available provider: wechat_native if configured, else manual.
+      const provs = j.providers || [];
+      const provider = ['wechat_native', 'manual'].find(id => provs.some(p => p.id === id && p.configured)) || 'manual';
       const c = await fetch('/api/backend/billing/checkout', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-        body: JSON.stringify({ invoice_id: j.invoice.id, provider: 'manual' }),
+        body: JSON.stringify({ invoice_id: j.invoice.id, provider }),
       }).then(r => r.json());
       if (c.success && c.checkout) showCheckout(name, c.checkout);
       else toast(c.error || 'Checkout unavailable · 暂无法结算');
@@ -216,11 +236,27 @@
   }
 
   function showCheckout(planName, ck) {
+    stopPoll();
     document.getElementById('payTitle').textContent = planName + ' · 待支付';
-    document.getElementById('payBody').innerHTML =
-      '<p style="margin:0 0 8px;font-size:13px;line-height:1.55">' + esc(ck.instructions_en || '') + '</p>' +
-      '<p style="margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.6">' + esc(ck.instructions_cn || '') + '</p>' +
-      (ck.reference ? '<div style="font-family:var(--f-mono);font-size:12px;color:var(--faint)">Ref · 单号: ' + esc(ck.reference) + '</div>' : '');
+    if (ck.kind === 'wechat_native') {
+      document.getElementById('payBody').innerHTML =
+        '<div style="text-align:center;padding:8px 0 16px">' +
+          (ck.qr_data_url
+            ? '<img src="' + ck.qr_data_url + '" style="width:200px;height:200px;border-radius:8px;display:inline-block" alt="WeChat Pay QR" />'
+            : '<div style="width:200px;height:200px;background:var(--elev);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:var(--faint);font-size:12px;margin:0 auto">QR unavailable · 二维码不可用</div>'
+          ) +
+          '<div style="margin-top:12px;font-size:16px;font-weight:600">' + esc(ck.amount_display || '') + '</div>' +
+          '<div style="margin-top:6px;font-size:12.5px;color:var(--muted)">Scan with WeChat to pay · 微信扫码支付</div>' +
+          '<div style="margin-top:8px;font-size:11px;color:var(--faint)">Waiting for payment… · 等待支付…</div>' +
+        '</div>';
+      startPaymentPoll(ck.invoice_id);
+    } else {
+      document.getElementById('payBody').innerHTML =
+        '<p style="margin:0 0 8px;font-size:13px;line-height:1.55">' + esc(ck.instructions_en || '') + '</p>' +
+        '<p style="margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.6">' + esc(ck.instructions_cn || '') + '</p>' +
+        (ck.reference ? '<div style="font-family:var(--f-mono);font-size:12px;color:var(--faint)">Ref · 单号: ' + esc(ck.reference) + '</div>' : '') +
+        '<p style="margin:12px 0 0;font-size:11px;color:var(--faint);line-height:1.5">We\'ll mark the invoice paid once the transfer is received. · 到账后我们将标记为已付。</p>';
+    }
     document.getElementById('payModal').classList.add('show');
   }
 
@@ -252,9 +288,10 @@
     }).catch(() => toast('Failed to load billing · 加载账单失败'));
   }
 
-  // Modal close wiring
-  document.getElementById('payClose').addEventListener('click', () => document.getElementById('payModal').classList.remove('show'));
-  document.getElementById('payModal').addEventListener('click', (e) => { if (e.target.id === 'payModal') document.getElementById('payModal').classList.remove('show'); });
+  // Modal close wiring (also stops the payment poll)
+  function closePayModal() { stopPoll(); document.getElementById('payModal').classList.remove('show'); }
+  document.getElementById('payClose').addEventListener('click', closePayModal);
+  document.getElementById('payModal').addEventListener('click', (e) => { if (e.target.id === 'payModal') closePayModal(); });
 
   // Gate + initial load
   fetch('/api/backend/me', { credentials: 'same-origin' }).then(r => r.json()).then(j => {

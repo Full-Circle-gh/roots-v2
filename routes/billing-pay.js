@@ -15,6 +15,7 @@
 const express = require('express');
 const db = require('../database');
 const providers = require('../lib/billing-providers');
+const { decryptWxBillingCallback, parseSubOutTradeNo } = providers;
 const lifecycle = require('../lib/billing-lifecycle');
 const router = express.Router();
 
@@ -52,6 +53,23 @@ function genInvoiceNo(tenantId) {
   return 'INV-' + ym + '-' + tenantId + '-' + rand;
 }
 function getSub(tenantId) { return db.prepare('SELECT * FROM billing_subscriptions WHERE tenant_id = ?').get(tenantId) || null; }
+
+// Shared: mark an invoice paid and activate the corresponding subscription.
+// Called by manual mark-paid (SaaS admin) and by the WeChat Pay callback.
+function activateInvoice(invoice, providerName) {
+  db.transaction(() => {
+    db.prepare(`UPDATE billing_invoices SET status = 'paid', paid_at = CURRENT_TIMESTAMP, provider = COALESCE(provider, ?) WHERE id = ?`)
+      .run(providerName || 'manual', invoice.id);
+    const sub = invoice.subscription_id
+      ? db.prepare('SELECT * FROM billing_subscriptions WHERE id = ?').get(invoice.subscription_id)
+      : db.prepare('SELECT * FROM billing_subscriptions WHERE tenant_id = ?').get(invoice.tenant_id);
+    if (sub && !sub.is_internal) {
+      db.prepare(`UPDATE billing_subscriptions SET status = 'active', current_period_start = ?, current_period_end = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .run(invoice.period_start, invoice.period_end, sub.id);
+      db.prepare("UPDATE tenants SET status = 'active' WHERE id = ?").run(invoice.tenant_id);
+    }
+  })();
+}
 
 // ── GET providers ────────────────────────────────────────────────────────
 router.get('/api/backend/billing/providers', requireBackend, (req, res) => {
@@ -108,7 +126,11 @@ router.post('/api/backend/billing/checkout', requireBackend, express.json(), asy
   const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId);
   try {
     const checkout = await providers.createCheckout(provider, invoice, tenant);
-    db.prepare('UPDATE billing_invoices SET provider = ? WHERE id = ?').run(provider, invoice.id);
+    if (checkout.out_trade_no) {
+      db.prepare('UPDATE billing_invoices SET provider = ?, provider_ref = ? WHERE id = ?').run(provider, checkout.out_trade_no, invoice.id);
+    } else {
+      db.prepare('UPDATE billing_invoices SET provider = ? WHERE id = ?').run(provider, invoice.id);
+    }
     res.json({ success: true, checkout });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -120,23 +142,46 @@ router.post('/api/backend/billing/invoices/:id/mark-paid', requireSaasAdmin, exp
   const invoice = db.prepare('SELECT * FROM billing_invoices WHERE id = ?').get(req.params.id);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found · 未找到发票' });
   if (invoice.status === 'paid') return res.json({ success: true, alreadyPaid: true });
-
-  const tx = db.transaction(() => {
-    db.prepare(`UPDATE billing_invoices SET status = 'paid', paid_at = CURRENT_TIMESTAMP, provider = COALESCE(provider, 'manual') WHERE id = ?`).run(invoice.id);
-    // Activate the subscription for the invoice's billing period.
-    const sub = invoice.subscription_id
-      ? db.prepare('SELECT * FROM billing_subscriptions WHERE id = ?').get(invoice.subscription_id)
-      : db.prepare('SELECT * FROM billing_subscriptions WHERE tenant_id = ?').get(invoice.tenant_id);
-    if (sub && !sub.is_internal) {
-      db.prepare(`UPDATE billing_subscriptions
-                     SET status = 'active', current_period_start = ?, current_period_end = ?, updated_at = CURRENT_TIMESTAMP
-                   WHERE id = ?`).run(invoice.period_start, invoice.period_end, sub.id);
-      // Restore access: payment lifts any suspension the lifecycle job applied.
-      db.prepare("UPDATE tenants SET status = 'active' WHERE id = ?").run(invoice.tenant_id);
-    }
-  });
-  tx();
+  activateInvoice(invoice, 'manual');
   res.json({ success: true });
+});
+
+// ── GET payment-status — polled from the checkout QR screen ─────────────────
+router.get('/api/backend/billing/invoices/:id/payment-status', requireBackend, (req, res) => {
+  const tenantId = req.session.tenantId;
+  const row = db.prepare('SELECT status, paid_at FROM billing_invoices WHERE id = ? AND tenant_id = ?')
+                .get(req.params.id, tenantId);
+  if (!row) return res.status(404).json({ error: 'Invoice not found · 未找到发票' });
+  res.json({ success: true, status: row.status, paid_at: row.paid_at });
+});
+
+// ── POST WeChat Pay callback (no auth — WeChat's servers call this) ───────────
+// The AES-256-GCM auth tag is the primary security gate: any tampered payload
+// causes .final() to throw, so we never process unauthenticated data.
+// WeChat retries for up to 15 min unless we return { code:'SUCCESS' }.
+router.post('/api/backend/billing/payment/wechat/callback', express.json(), (req, res) => {
+  try {
+    const { resource } = req.body || {};
+    if (!resource) return res.status(400).json({ code: 'FAIL', message: 'Missing resource' });
+    let payload;
+    try {
+      payload = decryptWxBillingCallback(resource);
+    } catch (e) {
+      console.error('[billing/wechat/cb] decrypt failed', e.message);
+      return res.status(400).json({ code: 'FAIL', message: 'Decryption failed' });
+    }
+    // Non-success states (NOTPAY, USERPAYING, CLOSED…) — ack and ignore.
+    if (payload.trade_state !== 'SUCCESS') return res.json({ code: 'SUCCESS', message: 'OK' });
+    const invoiceId = parseSubOutTradeNo(payload.out_trade_no);
+    if (!invoiceId) return res.status(400).json({ code: 'FAIL', message: 'Unrecognised out_trade_no' });
+    const invoice = db.prepare('SELECT * FROM billing_invoices WHERE id = ?').get(invoiceId);
+    if (!invoice) return res.status(404).json({ code: 'FAIL', message: 'Invoice not found' });
+    if (invoice.status !== 'paid') activateInvoice(invoice, 'wechat_native');
+    res.json({ code: 'SUCCESS', message: 'OK' });
+  } catch (e) {
+    console.error('[billing/wechat/cb]', e);
+    res.status(500).json({ code: 'FAIL', message: 'Internal error' });
+  }
 });
 
 // ── POST run-lifecycle — manual trigger for the daily pass (testing) ──────
