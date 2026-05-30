@@ -3810,6 +3810,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // /retail-admin → Delivery before this customer can check out.
   // Pickup is free and zone-less — the customer collects from the store, so
   // no shipping/packing fee and no zone match.
+  // Re-normalize the saved row before matching so rows saved before the
+  // EN-mode province backfill shipped (blank province) still resolve their
+  // province-level zone. Idempotent for already-normalized addresses.
+  if (!isPickup) address = normalizeChinaAddress(address);
   const zone = isPickup ? null : matchDeliveryZone(address);
   let shippingFee = 0, packingFee = 0, deliveryZoneId = null, resolvedMode = isPickup ? 'pickup' : deliveryMode;
   if (isPickup) {
@@ -10355,6 +10359,12 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
   const priced = priceCart(items, req.customer.id);
   if (priced.error) return res.status(400).json({ success: false, error: priced.error });
 
+  // Backfill province from city (and lift a province-named "city" the EN wheel
+  // produced) before matching — the same normalization the save path applies.
+  // Without it, an inline/unsaved EN-mode address arrives with province blank,
+  // so the matcher's province pass can't resolve province-level zones (e.g.
+  // a 巴彦淖尔市 pick under 内蒙古自治区 would be refused).
+  address = normalizeChinaAddress(address);
   const zone = matchDeliveryZone(address);
   const fees = computeDeliveryAndPacking(zone, priced.subtotal, deliveryMode, priced.totalQty);
   if (fees.error) {
