@@ -830,3 +830,21 @@
   <view wx:if="{{leaderboardCard.footer}}" class="lb-footer">{{leaderboardCard.footer}}</view>
   <view class="lb-cta" style="color:{{leaderboardAccent}}">{{leaderboardCard.ctaLabel}} ›</view>
 </view>
+
+<!-- Video banner: autoplaying muted loop, no controls -->
+<view wx:elif="{{type === 'video_banner' && videoUrl}}" class="video-blk" style="height:{{videoHeight * 2}}rpx" bindtap="onVideoTap">
+  <video class="video-el"
+         src="{{videoUrl}}"
+         poster="{{videoPoster}}"
+         autoplay="{{true}}"
+         loop="{{true}}"
+         muted="{{true}}"
+         controls="{{false}}"
+         show-center-play-btn="{{false}}"
+         show-play-btn="{{false}}"
+         show-fullscreen-btn="{{false}}"
+         show-progress="{{false}}"
+         enable-progress-gesture="{{false}}"
+         object-fit="cover"
+         vslide-gesture="{{false}}"/>
+</view>

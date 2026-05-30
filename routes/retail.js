@@ -119,6 +119,18 @@ const upload = multer({
   },
 });
 
+// Separate, larger-ceiling uploader for the CMS video_banner block. Clips are
+// meant to be short autoplay loops, not long-form video — so the cap stays
+// modest (they're stored as a base64 blob in retail_media, same as images).
+const uploadVideo = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },  // 20MB — short autoplay clips only
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype?.startsWith('video/')) return cb(new Error('not_a_video'));
+    cb(null, true);
+  },
+});
+
 // Sniff the real image type from the first bytes instead of trusting the
 // client-declared MIME. Returns a canonical mime ('image/jpeg' etc.) or null
 // for anything unrecognized. SVG is deliberately NOT recognized: it's an XML
@@ -135,11 +147,22 @@ function sniffImageMime(buf) {
     return 'image/webp';
   return null;
 }
+// Sniff the real container from the first bytes. Only MP4/MOV (ISO-BMFF) is
+// accepted: it's the one format the WeChat <video> component plays reliably.
+// WebM/MKV is deliberately rejected — the mini app can't decode it, so a clip
+// uploaded in that format would just show a black box on customers' phones.
+function sniffVideoMime(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 12) return null;
+  // ISO Base Media File Format: bytes 4..7 spell 'ftyp'.
+  if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return 'video/mp4';
+  return null;
+}
 // Content-types the media route is allowed to serve inline. Anything else
 // (notably SVG, HTML) is forced to download as an opaque blob so a browser
 // can't execute it. PDF is here so issued fapiao render inline for staff.
 const MEDIA_INLINE_MIME = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'application/pdf',
+  'video/mp4',
 ]);
 
 // ─── Storefront config ──────────────────────────────────────────────────
@@ -8985,7 +9008,26 @@ router.get('/api/retail/media/:id', (req, res) => {
     res.set('Content-Disposition', 'attachment');
   }
   res.set('Cache-Control', 'public, max-age=2592000, immutable');  // 30d
-  res.end(Buffer.from(m[1], 'base64'));
+  const buf = Buffer.from(m[1], 'base64');
+  res.set('Accept-Ranges', 'bytes');
+  // Honour HTTP Range — the WeChat <video> component issues range requests and
+  // expects a 206 it can stream/seek against. Images never send Range, so they
+  // keep the plain full-body path below.
+  const range = req.headers.range;
+  if (range && /^bytes=\d*-\d*$/.test(range)) {
+    const [rawStart, rawEnd] = range.replace('bytes=', '').split('-');
+    const start = rawStart ? parseInt(rawStart, 10) : 0;
+    const end   = rawEnd   ? parseInt(rawEnd, 10)   : buf.length - 1;
+    if (start <= end && start < buf.length) {
+      const slice = buf.slice(start, end + 1);
+      res.status(206);
+      res.set('Content-Range', `bytes ${start}-${end}/${buf.length}`);
+      res.set('Content-Length', String(slice.length));
+      return res.end(slice);
+    }
+  }
+  res.set('Content-Length', String(buf.length));
+  res.end(buf);
 });
 
 // List for the picker UI. Lightweight — no `data` column so the response
@@ -9010,6 +9052,45 @@ router.post('/api/retail-admin/cms/media', requireRetailAdmin, (req, res, next) 
     // Sniff real bytes — reject SVG / non-raster, pin mime to the sniffed type.
     const sniffed = sniffImageMime(req.file.buffer);
     if (!sniffed) return res.status(400).json({ success: false, error: 'not_an_image' });
+    const dataUri = `data:${sniffed};base64,${req.file.buffer.toString('base64')}`;
+    const info = tdb().prepare(
+      `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(
+      req.file.originalname || null,
+      sniffed,
+      req.file.size,
+      dataUri,
+      req.user.id
+    );
+    res.json({
+      success: true,
+      data: {
+        id: info.lastInsertRowid,
+        url: `/api/retail/media/${info.lastInsertRowid}`,
+        filename: req.file.originalname,
+        mime_type: sniffed,
+        size_bytes: req.file.size,
+      },
+    });
+  });
+});
+
+// Video upload for the CMS video_banner block. Same retail_media blob store as
+// images, but routed through the larger-cap `uploadVideo` and pinned to MP4
+// (the only container the WeChat <video> component plays). Served back via the
+// shared /api/retail/media/:id route, which now answers Range requests.
+router.post('/api/retail-admin/cms/media/video', requireRetailAdmin, (req, res) => {
+  uploadVideo.single('file')(req, res, err => {
+    if (err) {
+      const code = err.message === 'not_a_video' ? 'not_a_video'
+                 : err.code === 'LIMIT_FILE_SIZE' ? 'too_large'
+                 : 'upload_failed';
+      return res.status(400).json({ success: false, error: code });
+    }
+    if (!req.file) return res.status(400).json({ success: false, error: 'no_file' });
+    const sniffed = sniffVideoMime(req.file.buffer);
+    if (!sniffed) return res.status(400).json({ success: false, error: 'not_a_video' });
     const dataUri = `data:${sniffed};base64,${req.file.buffer.toString('base64')}`;
     const info = tdb().prepare(
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)

@@ -2695,6 +2695,18 @@
 .grid-block.density-spacious .grid { gap: 28rpx; }
 
 /* ── Leaderboard block — Roots Club ranking strip on Home ───────────────── */
+/* Video banner — autoplaying muted loop clip */
+.video-blk {
+  width: 100%;
+  overflow: hidden;
+  background: #000;
+}
+.video-el {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .lb-blk {
   margin: 16rpx 24rpx;
   padding: 32rpx 36rpx 28rpx;

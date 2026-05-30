@@ -2022,6 +2022,20 @@
     text-align: center; padding: 24px; gap: 10px;
   }
   .b-hero .placeholder svg { width: 32px; height: 32px; opacity: .5; }
+  /* Video banner — autoplaying muted loop, cover-fit into the band */
+  .b-video {
+    position: relative; width: 100%; overflow: hidden;
+    background: linear-gradient(135deg, #c4c4c4, #a8a8a8);
+  }
+  .b-video video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+  .b-video .placeholder {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; min-height: 200px;
+    color: rgba(0, 0, 0, .35);
+    font: 500 12px var(--f-sans); letter-spacing: .04em;
+    text-align: center; padding: 24px; gap: 10px;
+  }
+  .b-video .placeholder svg { width: 32px; height: 32px; opacity: .5; }
   /* Split view — image left, copy panel right (50/50) */
   .b-hero-split {
     display: grid; grid-template-columns: 1fr 1fr; min-height: 240px;
@@ -3892,6 +3906,7 @@ const ICONS = {
   wecom_contact:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>',
   favorites_block:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
   leaderboard:      '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="3" y="14" width="4" height="6" rx="1"/><rect x="10" y="9" width="4" height="11" rx="1"/><rect x="17" y="16" width="4" height="4" rx="1"/></svg>',
+  video_banner:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><polygon points="10 9 15 12 10 15 10 9" fill="currentColor" stroke="none"/></svg>',
   duplicate:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   arrow_up:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>',
   arrow_down:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
@@ -3938,6 +3953,7 @@ const BLOCK_META = {
   wecom_contact:    { name: 'Add us on WeCom',  name_cn: '添加企业微信', desc: '企业微信 · contact button + 联系我 QR',     desc_cn: '企业微信 · 联系按钮 + 联系我二维码' },
   favorites_block:  { name: 'Favorites',        name_cn: '收藏',       desc: 'Your saved — pulls from each customer\'s wishlist', desc_cn: '顾客收藏 — 来自各自的心愿单' },
   leaderboard:      { name: 'Leaderboard',      name_cn: '排行榜',     desc: 'Top members ranked by spend / points / orders',     desc_cn: '会员排行 · 按消费 / 积分 / 订单数' },
+  video_banner:     { name: 'Video banner',     name_cn: '视频横幅',   desc: 'Autoplaying muted clip — loops, no controls',       desc_cn: '自动播放静音短片 · 循环 · 无控件' },
 };
 
 const state = {
@@ -6183,6 +6199,19 @@ function makeBlock(type) {
         accent_color: 'forest-kale',
       };
     }
+    case 'video_banner': return {
+      id, type,
+      // MP4 clip uploaded via the video picker (or a pasted CDN URL).
+      video_url: '',
+      // Optional still shown while the clip loads / before autoplay kicks in.
+      poster_url: '',
+      // Block height in px (mini app doubles to rpx). The clip is cover-fit
+      // into this band, same as a hero image.
+      height_px: 420,
+      // Whole block is tappable when set — same targets as hero CTAs
+      // (shop, cart, promotions, product:N, category:N, …). Blank = decorative.
+      link_target: '',
+    };
   }
   return null;
 }
@@ -6453,6 +6482,18 @@ function renderBlockBody(b) {
         d.innerHTML += `<div class="cta-stack">${ctas.map(c =>
           `<div class="cta-btn ${escapeAttr(c.style || 'primary')}">${biLabel(c.label_en, c.label_cn)}</div>`
         ).join('')}</div>`;
+      }
+      return d;
+    }
+    case 'video_banner': {
+      d.className = 'b-video';
+      d.style.height = (b.height_px || 420) * 0.6 + 'px';
+      if (b.video_url) {
+        // Autoplay muted loop in the canvas too, so the author sees exactly
+        // what customers get. playsinline keeps it from going fullscreen.
+        d.innerHTML = `<video src="${escapeAttr(b.video_url)}"${b.poster_url ? ` poster="${escapeAttr(b.poster_url)}"` : ''} autoplay muted loop playsinline></video>`;
+      } else {
+        d.innerHTML = `<div class="placeholder">${ICONS.video_banner}<div>Upload a clip or paste a video URL</div></div>`;
       }
       return d;
     }
@@ -7709,6 +7750,7 @@ function renderInspector() {
     case 'wecom_contact':    buildWecomContactForm(body, b); break;
     case 'favorites_block':  buildFavoritesForm(body, b); break;
     case 'leaderboard':      buildLeaderboardForm(body, b); break;
+    case 'video_banner':     buildVideoForm(body, b); break;
   }
   const dz = document.createElement('div');
   dz.className = 'danger-zone';
@@ -8026,6 +8068,33 @@ function buildHeroForm(m, b) {
   m.appendChild(field(T('Entrance animation', '入场动画'), T('How the banner enters on first paint.', '横幅首次渲染时的入场方式。'),
     sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS,
         v => updateBlock(b.id, { entrance_anim: v }))));
+}
+
+function buildVideoForm(m, b) {
+  const note = document.createElement('div');
+  note.className = 'helper';
+  note.style.cssText = 'margin: -4px 0 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
+  note.innerHTML = B(
+    'The clip autoplays muted on a loop with no controls — it starts the moment it scrolls into view. Use a short MP4 (≤20MB). Tip: keep it under ~10s so it loops smoothly.',
+    '短片在滚动到可见时自动播放,静音、循环、无控件。请用较短的 MP4(≤20MB)。建议时长 10 秒内,循环更顺滑。'
+  );
+  m.appendChild(note);
+
+  m.appendChild(field(T('Video clip', '视频短片'),
+    T('Upload an MP4 or paste a hosted video URL.', '上传 MP4 或粘贴视频链接。'),
+    videoPicker(b.video_url, url => updateBlock(b.id, { video_url: url }))));
+
+  m.appendChild(field(T('Poster (optional)', '封面图(可选)'),
+    T('A still shown while the clip loads. Falls back to the first frame if left blank.', '加载时显示的静态图。留空则使用视频首帧。'),
+    imgPicker(b.poster_url, ({ url }) => updateBlock(b.id, { poster_url: url }))));
+
+  m.appendChild(field(T('Height (px)', '高度(像素)'),
+    T('How tall the banner stands. The clip is cropped to fill — no stretch.', '横幅高度。视频会裁剪填满 — 不拉伸。'),
+    num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+
+  m.appendChild(field(T('Tap target (optional)', '点击跳转(可选)'),
+    T('Where tapping the banner goes — e.g. shop, promotions, product:12, category:5. Blank = not tappable.', '点击横幅后跳转的位置 — 例如 shop、promotions、product:12、category:5。留空则不可点击。'),
+    txt(b.link_target, v => updateBlock(b.id, { link_target: v }), 'shop, promotions, product:12 …')));
 }
 
 function buildCtaRow(b, cta, idx) {
@@ -9721,6 +9790,91 @@ async function uploadImage(file) {
     }
     toast(T('Uploaded', '已上传'), 'ok');
     setStatusText({ en: 'Image uploaded', cn: '图片已上传' }, 'clean');
+    return j.data.url;
+  } catch (e) {
+    toast('Upload failed: ' + e.message, 'err'); return null;
+  }
+}
+
+// Video equivalent of imgPicker — upload an MP4 or paste a URL. The preview
+// autoplays muted/looped so the author sees the live behaviour. No library
+// button: clips aren't browsable in the media grid (that's image-only).
+function videoPicker(currentUrl, onSet) {
+  const container = document.createElement('div');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'img-picker';
+
+  const preview = document.createElement('div');
+  preview.className = 'preview';
+  const paint = (url) => {
+    if (url) {
+      preview.innerHTML = `<video src="${escapeAttr(url)}" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block;background:#000"></video>`;
+    } else {
+      preview.innerHTML = ICONS.video_banner;
+    }
+  };
+  paint(currentUrl);
+  wrap.appendChild(preview);
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file'; fileInput.accept = 'video/mp4,video/*'; fileInput.style.display = 'none';
+  fileInput.addEventListener('change', async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = await uploadVideo(file);
+    if (url) { onSet(url); paint(url); urlInput.value = url; }
+  });
+
+  const uploadBtn = document.createElement('button');
+  uploadBtn.className = 'btn';
+  uploadBtn.innerHTML = ICONS.upload + ' Upload';
+  uploadBtn.addEventListener('click', () => fileInput.click());
+  actions.appendChild(uploadBtn);
+
+  if (currentUrl) {
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'btn btn-danger';
+    clearBtn.innerHTML = ICONS.x + ' Clear';
+    clearBtn.addEventListener('click', () => { onSet(''); paint(''); urlInput.value = ''; });
+    actions.appendChild(clearBtn);
+  }
+
+  wrap.appendChild(actions);
+  wrap.appendChild(fileInput);
+  container.appendChild(wrap);
+
+  const urlBox = document.createElement('div');
+  urlBox.style.marginTop = '8px';
+  const urlInput = document.createElement('input');
+  urlInput.type = 'text'; urlInput.className = 'url-input';
+  urlInput.placeholder = 'or paste an MP4 URL (CDN, etc.)';
+  urlInput.value = currentUrl || '';
+  urlInput.addEventListener('change', e => { onSet(e.target.value); paint(e.target.value); });
+  urlBox.appendChild(urlInput);
+  container.appendChild(urlBox);
+
+  return container;
+}
+
+async function uploadVideo(file) {
+  const fd = new FormData(); fd.append('file', file);
+  setStatusText({ en: 'Uploading…', cn: '上传中…' }, 'saving');
+  try {
+    const r = await fetch('/api/retail-admin/cms/media/video', { method: 'POST', credentials: 'same-origin', body: fd });
+    if (r.status === 401) { location.href = '/login'; return null; }
+    const j = await r.json();
+    if (!j.success) {
+      const msg = j.error === 'too_large' ? 'Video too large (20MB max)'
+                : j.error === 'not_a_video' ? "That file isn't an MP4 video"
+                : 'Upload failed: ' + j.error;
+      toast(msg, 'err'); setStatusText(msg, 'err'); return null;
+    }
+    toast(T('Uploaded', '已上传'), 'ok');
+    setStatusText({ en: 'Video uploaded', cn: '视频已上传' }, 'clean');
     return j.data.url;
   } catch (e) {
     toast('Upload failed: ' + e.message, 'err'); return null;

@@ -129,6 +129,11 @@ Component({
     leaderboardCard: null,
     leaderboardHidden: false,
     leaderboardAccent: '',
+    // video_banner — autoplaying muted loop clip
+    videoUrl: '',
+    videoPoster: '',
+    videoHeight: 420,
+    videoLink: '',
   },
 
   observers: {
@@ -1140,6 +1145,16 @@ Component({
           };
           break;
         }
+        case 'video_banner': {
+          // Autoplaying muted loop. The clip + optional poster come straight
+          // from the CMS; playback flags are fixed (no controls) so it just
+          // starts when it scrolls into view.
+          out.videoUrl    = absUrl(b.video_url);
+          out.videoPoster = absUrl(b.poster_url);
+          out.videoHeight = b.height_px || 420;
+          out.videoLink   = b.link_target || '';
+          break;
+        }
       }
       this.setData(out);
     },
@@ -1246,6 +1261,10 @@ Component({
     onLeaderboardTap() {
       // Tapping the leaderboard strip opens the full Roots Club ranking page.
       this.triggerEvent('cta', { target: 'leaderboard' });
+    },
+    onVideoTap() {
+      const target = this.data.videoLink;
+      if (target) this.triggerEvent('cta', { target });
     },
     onGreetingCtaTap() {
       const target = this.data.greeting?.ctaTarget;
