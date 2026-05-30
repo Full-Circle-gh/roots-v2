@@ -26,6 +26,9 @@
       var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
       if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
       document.documentElement.style.zoom = String(s);
+      // Expose the zoom so viewport-locked heights (#pe-body's 100vh) can
+      // divide it back out — otherwise the body overflows and crops at 110/125%.
+      document.documentElement.style.setProperty('--ui-zoom', String(s));
     } catch (e) {}
   })();
 </script>
@@ -362,7 +365,10 @@
   .lang-toggle button.active { background: var(--brass); color: var(--accent-ink); }
 
   #pe-body {
-    height: calc(100vh - 56px);
+    /* Divide the Aa zoom back out of the viewport height: the whole document is
+       scaled by --ui-zoom, so 100vh/zoom is the unscaled space that maps to the
+       real viewport. Without this the body overflows and crops at 110%/125%. */
+    height: calc(100vh / var(--ui-zoom, 1) - 56px);
     display: grid;
     /* Rail and inspector are equal-width (288px) bookends; the canvas flexes
        between them so the phone gets breathing room and absorbs extra width on
@@ -3005,6 +3011,8 @@ function cuGetUiScale() {
 }
 function cuApplyUiScale(v) {
   document.documentElement.style.zoom = String(v);
+  // Keep --ui-zoom in sync so #pe-body's height divides the zoom back out.
+  document.documentElement.style.setProperty('--ui-zoom', String(v));
   const lbl = document.querySelector('#ui-scale-toggle .ui-scale-val');
   if (lbl) lbl.textContent = Math.round(v * 100) + '%';
 }
