@@ -674,12 +674,18 @@ const SOCIAL_PROOF_PAID =
 // a single JSON blob under storefront_config['social_proof']; missing keys fall
 // back to the DEFAULTS below (which match the original hardcoded constants, so
 // behaviour is identical until an operator changes a value).
+// `boost` adds a fake floor to the real count (real + boost = displayed);
+// `manual` (recent-buyers only) is a list of operator-authored fake purchases
+// that get merged with the real feed; `fallback_minutes` (last-ordered only)
+// is the "fake X minutes ago" shown when no real recent order exists. All
+// fakes are opt-in and default to off — leaving them at 0 / [] keeps the
+// original "real data only" behaviour.
 const SOCIAL_PROOF_DEFAULTS = Object.freeze({
-  bought_count:  { enabled: true, min_today: 2, min_week: 2, min_month: 1, min_all: 2 },
-  recent_buyers: { enabled: true, window_days: 7 },
-  viewing_now:   { enabled: true, ttl_sec: 45 },
-  last_ordered:  { enabled: true, max_hours: 24 },
-  sold_badge:    { enabled: true, min_units: 3 },
+  bought_count:  { enabled: true, min_today: 2, min_week: 2, min_month: 1, min_all: 2, boost: 0 },
+  recent_buyers: { enabled: true, window_days: 7, manual: [] },
+  viewing_now:   { enabled: true, ttl_sec: 45, boost: 0 },
+  last_ordered:  { enabled: true, max_hours: 24, fallback_minutes: 0 },
+  sold_badge:    { enabled: true, min_units: 3, boost: 0 },
 });
 function getSocialConfig() {
   let cfg = SOCIAL_PROOF_DEFAULTS;
@@ -713,6 +719,7 @@ function attachSoldCounts(rows) {
   // every card without needing a republish.
   if (!sb.enabled) { for (const r of rows) r.units_sold = 0; return; }
   const minUnits = Math.max(1, Number(sb.min_units) || 1);
+  const boost    = Math.max(0, Number(sb.boost) || 0);
   try {
     const ids = rows.map(r => r.id);
     const placeholders = ids.map(() => '?').join(',');
@@ -726,8 +733,11 @@ function attachSoldCounts(rows) {
     `).all(...ids);
     const map = new Map(counts.map(c => [c.pid, Math.round(Number(c.units) || 0)]));
     for (const r of rows) {
-      const u = map.get(r.id) || 0;
-      r.units_sold = u >= minUnits ? u : 0;
+      // Real + boost. Gate by min_units against the COMBINED number so a
+      // non-zero boost makes the badge show even on zero-real products,
+      // which is the whole point of the fake floor.
+      const display = (map.get(r.id) || 0) + boost;
+      r.units_sold = display >= minUnits ? display : 0;
     }
   } catch (e) {
     console.error('[sold-counts]', e.message);
@@ -754,7 +764,9 @@ function socialProofForProduct(id) {
     month: Math.max(1, Number(bc.min_month) || 1),
     all:   Math.max(1, Number(bc.min_all)   || 1),
   };
+  const bcBoost = Math.max(0, Number(bc.boost) || 0);
   const maxAgeMs = Math.max(1, Number(lo.max_hours) || 1) * 3600 * 1000;
+  const loFallbackMs = Math.max(0, Number(lo.fallback_minutes) || 0) * 60 * 1000;
 
   let value = null;
   try {
@@ -773,21 +785,36 @@ function socialProofForProduct(id) {
        WHERE oi.product_id = ?
          AND ${SOCIAL_PROOF_PAID}
     `).get(id);
-    if (row && (Number(row.c_all) > 0 || row.last_order)) {
-      let count = 0, window = null;
-      if (bc.enabled) {
-        for (const [w, col] of SOCIAL_PROOF_WINDOWS) {
-          const n = Number(row[col]) || 0;
-          if (n >= mins[w]) { count = n; window = w; break; }
-        }
+    // We still want to evaluate even when the row is empty (boost / fallback
+    // can produce a non-empty payload on a zero-real product).
+    const safeRow = row || { c_today: 0, c_week: 0, c_month: 0, c_all: 0, last_order: null };
+    let count = 0, window = null;
+    if (bc.enabled) {
+      for (const [w, col] of SOCIAL_PROOF_WINDOWS) {
+        // Real + boost, then gate by the min for that window. Boost applies
+        // to every window equally, so a high boost lands in "today".
+        const effective = (Number(safeRow[col]) || 0) + bcBoost;
+        if (effective >= mins[w]) { count = effective; window = w; break; }
       }
-      let last_order_ms = null;
-      if (lo.enabled && row.last_order) {
-        const parsed = Date.parse(String(row.last_order).replace(' ', 'T') + 'Z') || null;
+    }
+    let last_order_ms = null;
+    if (lo.enabled) {
+      if (safeRow.last_order) {
+        const parsed = Date.parse(String(safeRow.last_order).replace(' ', 'T') + 'Z') || null;
         // Cap by max_hours: anything older than the cutoff is dropped so the
         // mini-app's "last ordered X ago" line stays hidden automatically.
         if (parsed && (now - parsed) <= maxAgeMs) last_order_ms = parsed;
       }
+      // Fallback fake freshness: if real is missing or older than the
+      // configured fallback window, show a synthetic "ordered N min ago".
+      // Real wins when it's fresher, so as orders come in the line stays
+      // truthful instead of stalling on the fake value.
+      if (loFallbackMs > 0) {
+        const fake = now - loFallbackMs;
+        if (last_order_ms == null || last_order_ms < fake) last_order_ms = fake;
+      }
+    }
+    if (count > 0 || window || last_order_ms != null) {
       value = { count, window, last_order_ms };
     }
   } catch (e) {
@@ -943,14 +970,22 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
     return res.json({ success: true, data: [] });
   }
   const windowDays = Math.max(1, Math.min(60, Number(cfg.window_days) || 7));
+  const manualEntries = Array.isArray(cfg.manual) ? cfg.manual : [];
   const now = Date.now();
-  const cached = RECENT_BUYERS_CACHE.get(windowDays);
+  // Cache key must include the manual list signature so editing fake entries
+  // shows up on next reload instead of being shadowed by the cached real-only
+  // payload. Cheap fingerprint = count + last-modified-style hash of fields.
+  const manualFp = manualEntries.length
+    ? manualEntries.length + ':' + manualEntries.map(m => (m.name || '') + '|' + (m.minutes_ago || 0)).join(',')
+    : '0';
+  const cacheKey = windowDays + '@' + manualFp;
+  const cached = RECENT_BUYERS_CACHE.get(cacheKey);
   if (cached && (now - cached.t < RECENT_BUYERS_TTL_MS)) {
     res.set('Cache-Control', 'public, max-age=30');
     return res.json({ success: true, data: cached.value });
   }
 
-  let out = [];
+  let real = [];
   try {
     const rows = tdb().prepare(`
       SELECT o.id, o.placed_at,
@@ -966,7 +1001,7 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
        ORDER BY o.placed_at DESC
        LIMIT 20
     `).all();
-    out = rows
+    real = rows
       .filter(r => r.p_en || r.p_cn)
       .map(r => ({
         name:       maskBuyerName(r.buyer),
@@ -979,7 +1014,25 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
     console.error('[recent-buyers]', e.message);
   }
 
-  RECENT_BUYERS_CACHE.set(windowDays, { t: now, value: out });
+  // Merge manual fakes. Each entry: { name, product_en, product_cn, minutes_ago }.
+  // Names are pre-masked by the operator (they type "李**") so we don't run them
+  // through maskBuyerName. Times are computed as offsets from now so each request
+  // returns a fresh "X minutes ago" without rewriting stored data.
+  const fakes = manualEntries
+    .filter(m => m && (m.product_en || m.product_cn) && m.name)
+    .map(m => ({
+      name:       String(m.name).slice(0, 40),
+      product_en: String(m.product_en || m.product_cn || '').slice(0, 80),
+      product_cn: String(m.product_cn || m.product_en || '').slice(0, 80),
+      ts: now - Math.max(0, Math.min(60 * 24 * 60, Number(m.minutes_ago) || 0)) * 60 * 1000,
+    }));
+
+  // Newest first, capped at 20 so the ticker stays snappy.
+  const out = [...real, ...fakes]
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, 20);
+
+  RECENT_BUYERS_CACHE.set(cacheKey, { t: now, value: out });
   res.set('Cache-Control', 'public, max-age=30');
   res.json({ success: true, data: out });
 });
@@ -1041,8 +1094,11 @@ router.post('/api/retail/products/:id/viewing', express.json(), (req, res) => {
   for (const [k, ts] of viewers) if (now - ts > ttlMs) viewers.delete(k);
   if (viewers.size === 0) VIEWING.delete(id);
 
+  // Real + boost. A non-zero boost makes every product page show the badge
+  // (mini-app's ≥2 gate still applies — set boost to 2+ to force it on).
+  const boost = Math.max(0, Number(vn.boost) || 0);
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { count: viewers.size } });
+  res.json({ success: true, data: { count: viewers.size + boost } });
 });
 
 // Active + upcoming flash sales — feeds the flash_sale_strip CMS block and
@@ -8750,6 +8806,9 @@ const ALLOWED_BLOCK_TYPES = new Set([
   'leaderboard',
   // Autoplaying muted clip — in-page banner or full-screen onboarding splash
   'video_banner',
+  // Live order tracker — customer's latest in-flight order; hides when none.
+  // Data fetched client-side from /api/retail/orders.
+  'order_tracker',
   // ── Deprecated types kept on the whitelist so existing drafts/layouts
   // still validate. The CMS palette hides them; clients ignore them.
   'wechat_oa',                        // replaced 2026-05-19 by wecom_contact

@@ -7888,6 +7888,16 @@
             <div class="helper" style="margin-top: 10px; line-height: 1.5;">
               Lower = shows on more products (even with few buyers). Higher = only popular products qualify. Defaults: 2 / 2 / 1 / 2. · 数值越低组件越常出现;越高越严格。
             </div>
+            <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
+            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Fake boost · 虚拟加成</label>
+                <input type="number" min="0" id="cfg-social-bc-boost" style="width: 110px;">
+              </div>
+              <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
+                Added to the real buyer count for every product. <b>Displayed = real + boost</b>. Set to 0 to show real data only; set to 100 to make every product read "100+". · 加到真实人数上;设为 0 = 仅真实数据,设为 100 = 每件商品至少显示 100+。
+              </div>
+            </div>
           </div>
 
           <!-- 2. Recent-buyers ticker -->
@@ -7912,6 +7922,13 @@
             <div class="helper" style="margin-top: 10px; line-height: 1.5;">
               Shorter window = feed reads "live" but may be empty on quiet days. Longer = always populated but older entries. Default: 7 days. · 时间越短越"实时",但安静期可能为空;越长越饱满但内容更旧。
             </div>
+            <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
+            <div style="margin-bottom: 8px;">
+              <b style="font-size: 13px;">Manual fake entries · 手动虚拟条目</b>
+              <div class="muted" style="margin-top: 4px;">Mixed into the real feed and sorted by time. Names should be pre-masked (type "李**" or "M***"). Use to keep the ticker lively on quiet days. · 与真实订单合并并按时间排序;姓名请预先脱敏。</div>
+            </div>
+            <div id="cfg-social-rb-manual-list" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;"></div>
+            <button type="button" class="btn btn-sm" onclick="addManualBuyer()">+ Add fake entry · 添加虚拟条目</button>
           </div>
 
           <!-- 3. Viewing-now -->
@@ -7935,6 +7952,16 @@
             </div>
             <div class="helper" style="margin-top: 10px; line-height: 1.5;">
               A viewer counts as "present" while their last heartbeat is within this window. The app pings every 25s, so 45s is a tight default that hides stragglers fast. Raise it for a calmer count. · 默认 45 秒;数值越大读数越"稳定",越小越实时。
+            </div>
+            <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
+            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Fake boost · 虚拟加成</label>
+                <input type="number" min="0" id="cfg-social-vn-boost" style="width: 110px;">
+              </div>
+              <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
+                Added to the real viewer count. Set to ≥2 to make every product page show "N viewing now" even when nobody's actually looking. Set to 0 for real data only. · 加到真实在线人数上;设为 ≥2 时即使无真人也会显示。
+              </div>
             </div>
           </div>
 
@@ -7960,6 +7987,19 @@
             <div class="helper" style="margin-top: 10px; line-height: 1.5;">
               Older "last orders" feel stale, not social. 24h is the default — anything older is dropped server-side. · 默认 24 小时;更久的记录不再显示。
             </div>
+            <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
+            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Fake "ordered X min ago" · 虚拟"X 分钟前订购"</label>
+                <div class="row" style="gap: 8px; align-items: center;">
+                  <input type="number" min="0" max="1440" id="cfg-social-lo-fallback_minutes" style="width: 110px;">
+                  <span class="muted" style="font-size: 12px;">minutes · 分钟</span>
+                </div>
+              </div>
+              <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
+                When set, products with no recent real order display "ordered N min ago" using this value. Real wins when fresher, so the line stays truthful as orders come in. Set to 0 to disable. · 当无近期真实订单时显示虚拟时间;真实订单更新后自动覆盖。
+              </div>
+            </div>
           </div>
 
           <!-- 5. Sold badge -->
@@ -7980,6 +8020,16 @@
             </div>
             <div class="helper" style="margin-top: 10px; line-height: 1.5;">
               Raise to show the badge only on top sellers. Drop to 1 to show it wherever anything has sold. Default: 3. · 数值越高仅热销品显示;改为 1 可在所有有销量的商品上显示。
+            </div>
+            <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
+            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Fake boost · 虚拟加成</label>
+                <input type="number" min="0" id="cfg-social-sb-boost" style="width: 110px;">
+              </div>
+              <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
+                Added to every product's sold count. Boost ≥ "minimum to show" forces the badge to appear even on zero-real-sales products. · 加到全期销量上;加成 ≥ 最低显示销量时即使零销量也会显示。
+              </div>
             </div>
           </div>
         </div>
@@ -11591,14 +11641,25 @@ async function loadConfig() {
     $('#cfg-social-bc-min_week').value    = sp_bc.min_week  ?? 2;
     $('#cfg-social-bc-min_month').value   = sp_bc.min_month ?? 1;
     $('#cfg-social-bc-min_all').value     = sp_bc.min_all   ?? 2;
+    $('#cfg-social-bc-boost').value       = sp_bc.boost     ?? 0;
     $('#cfg-social-rb-enabled').checked   = sp_rb.enabled !== false;
     $('#cfg-social-rb-window_days').value = sp_rb.window_days ?? 7;
+    _manualBuyers = Array.isArray(sp_rb.manual) ? sp_rb.manual.map(m => ({
+      name:         String(m && m.name || ''),
+      product_en:   String(m && m.product_en || ''),
+      product_cn:   String(m && m.product_cn || ''),
+      minutes_ago:  Number(m && m.minutes_ago) || 0,
+    })) : [];
+    renderManualBuyers();
     $('#cfg-social-vn-enabled').checked   = sp_vn.enabled !== false;
     $('#cfg-social-vn-ttl_sec').value     = sp_vn.ttl_sec ?? 45;
+    $('#cfg-social-vn-boost').value       = sp_vn.boost   ?? 0;
     $('#cfg-social-lo-enabled').checked   = sp_lo.enabled !== false;
     $('#cfg-social-lo-max_hours').value   = sp_lo.max_hours ?? 24;
+    $('#cfg-social-lo-fallback_minutes').value = sp_lo.fallback_minutes ?? 0;
     $('#cfg-social-sb-enabled').checked   = sp_sb.enabled !== false;
     $('#cfg-social-sb-min_units').value   = sp_sb.min_units ?? 3;
+    $('#cfg-social-sb-boost').value       = sp_sb.boost     ?? 0;
     applyVisualPreviews();
     syncAllPickers();
     applyShopFiltersPreview();
@@ -11678,22 +11739,35 @@ async function saveConfig() {
         min_week:  Math.max(1, Number($('#cfg-social-bc-min_week').value)  || 2),
         min_month: Math.max(1, Number($('#cfg-social-bc-min_month').value) || 1),
         min_all:   Math.max(1, Number($('#cfg-social-bc-min_all').value)   || 2),
+        boost:     Math.max(0, Number($('#cfg-social-bc-boost').value)     || 0),
       },
       recent_buyers: {
         enabled:     $('#cfg-social-rb-enabled').checked,
         window_days: Math.max(1, Math.min(60, Number($('#cfg-social-rb-window_days').value) || 7)),
+        // Drop empty rows so we don't ship blanks to the mini-app feed.
+        manual: _manualBuyers
+          .map(m => ({
+            name:        String(m.name || '').trim().slice(0, 40),
+            product_en:  String(m.product_en || '').trim().slice(0, 80),
+            product_cn:  String(m.product_cn || '').trim().slice(0, 80),
+            minutes_ago: Math.max(0, Math.min(60 * 24 * 60, Number(m.minutes_ago) || 0)),
+          }))
+          .filter(m => m.name && (m.product_en || m.product_cn)),
       },
       viewing_now: {
         enabled: $('#cfg-social-vn-enabled').checked,
         ttl_sec: Math.max(5, Math.min(600, Number($('#cfg-social-vn-ttl_sec').value) || 45)),
+        boost:   Math.max(0, Number($('#cfg-social-vn-boost').value) || 0),
       },
       last_ordered: {
-        enabled:   $('#cfg-social-lo-enabled').checked,
-        max_hours: Math.max(1, Math.min(720, Number($('#cfg-social-lo-max_hours').value) || 24)),
+        enabled:          $('#cfg-social-lo-enabled').checked,
+        max_hours:        Math.max(1, Math.min(720, Number($('#cfg-social-lo-max_hours').value) || 24)),
+        fallback_minutes: Math.max(0, Math.min(1440, Number($('#cfg-social-lo-fallback_minutes').value) || 0)),
       },
       sold_badge: {
         enabled:   $('#cfg-social-sb-enabled').checked,
         min_units: Math.max(1, Number($('#cfg-social-sb-min_units').value) || 3),
+        boost:     Math.max(0, Number($('#cfg-social-sb-boost').value) || 0),
       },
     },
   };
@@ -11716,6 +11790,72 @@ async function saveConfig() {
 // manage a side-channel base64 buffer between picker → save.
 // ════════════════════════════════════════════════════════════════
 let _footerWordmarkData = null;  // base64 data URL held between upload + save
+
+// ════════════════════════════════════════════════════════════════
+// SOCIAL PROOF — manual fake-buyers list (recent-buyers ticker card)
+// ════════════════════════════════════════════════════════════════
+// Operator-authored rows that get merged into the real /api/retail/social/
+// recent-buyers feed. Held in memory between load + save, rendered as a
+// simple repeating row UI. Names should be pre-masked by the operator
+// (e.g. "李**") — the server doesn't run them through maskBuyerName.
+let _manualBuyers = [];
+
+function renderManualBuyers() {
+  const mount = document.getElementById('cfg-social-rb-manual-list');
+  if (!mount) return;
+  if (!_manualBuyers.length) {
+    mount.innerHTML = '<div class="muted" style="font-size: 12px; padding: 6px 0;">No fake entries yet. · 暂无虚拟条目。</div>';
+    return;
+  }
+  mount.innerHTML = _manualBuyers.map((m, i) => `
+    <div class="row" style="gap: 6px; flex-wrap: wrap; align-items: center;
+         padding: 8px; background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: 6px;">
+      <input type="text" data-mb-i="${i}" data-mb-f="name"
+             value="${escapeAttr(m.name || '')}"
+             placeholder="李** · masked name"
+             style="flex: 1 1 110px; min-width: 90px; font-size: 12px;">
+      <input type="text" data-mb-i="${i}" data-mb-f="product_en"
+             value="${escapeAttr(m.product_en || '')}"
+             placeholder="Product EN"
+             style="flex: 2 1 160px; min-width: 120px; font-size: 12px;">
+      <input type="text" data-mb-i="${i}" data-mb-f="product_cn"
+             value="${escapeAttr(m.product_cn || '')}"
+             placeholder="产品名(中文)"
+             style="flex: 2 1 160px; min-width: 120px; font-size: 12px;">
+      <div class="row" style="gap: 4px; align-items: center;">
+        <input type="number" data-mb-i="${i}" data-mb-f="minutes_ago" min="0" max="86400"
+               value="${Number(m.minutes_ago) || 0}"
+               style="width: 80px; font-size: 12px;">
+        <span class="muted" style="font-size: 11px;">min ago</span>
+      </div>
+      <button type="button" class="cat-del" title="Remove · 删除"
+              onclick="removeManualBuyer(${i})">×</button>
+    </div>
+  `).join('');
+}
+
+function addManualBuyer() {
+  _manualBuyers.push({ name: '', product_en: '', product_cn: '', minutes_ago: 5 });
+  renderManualBuyers();
+}
+
+function removeManualBuyer(i) {
+  _manualBuyers.splice(i, 1);
+  renderManualBuyers();
+}
+
+// Inline edits flow back into the state array via delegated change/input.
+// Using `input` (not just `change`) so the value is captured even if the
+// operator hits Save before blurring a field.
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (!t || !t.dataset || t.dataset.mbI == null) return;
+  const i = Number(t.dataset.mbI);
+  const f = t.dataset.mbF;
+  if (!Number.isFinite(i) || !_manualBuyers[i] || !f) return;
+  _manualBuyers[i][f] = (f === 'minutes_ago') ? (Number(t.value) || 0) : t.value;
+});
+
 
 function setFooterPreview(dataUrl) {
   const el = document.getElementById('cfg-footer-wordmark-preview');
