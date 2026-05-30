@@ -35,6 +35,10 @@ Page({
     // config; if it isn't warm yet, fetch + re-render so the bar isn't stuck
     // on the 399 fallback.
     config.load().then(() => this.recompute()).catch(() => {});
+    // Prefer the customer's default-address zone threshold so the bar matches
+    // checkout (e.g. ¥199 in Tianhe, not the global ¥399). Falls through to the
+    // global on failure (not logged in, no saved address).
+    this.loadZoneThreshold();
     // Cart unit_prices are frozen at add-time; re-price against the server so
     // flash sales that started/ended since show the CURRENT price + savings.
     this.repriceFromServer();
@@ -51,10 +55,12 @@ Page({
     const L = this.data.lang;
     const state = cart.get();
     const subtotal = cart.subtotal();
-    // Global free-shipping threshold from Settings → Checkout & fees. This is a
-    // pre-address hint only — the actual free-over can differ per delivery zone
-    // once the customer picks an address at checkout. 0 = always free.
-    const t = Number(config.get('fees.freeShippingThreshold', 399)) || 0;
+    // Free-shipping threshold. Prefer the customer's default-address zone value
+    // (fetched by loadZoneThreshold) so the bar matches checkout; fall back to
+    // the global default from Settings → Checkout & fees. 0 = always free.
+    const t = this._zoneThreshold != null
+      ? this._zoneThreshold
+      : (Number(config.get('fees.freeShippingThreshold', 399)) || 0);
     const alwaysFree = t <= 0;
     // Round UP to the next whole ¥ so the displayed gap never *understates*
     // what's needed (¥146.39999… → ¥147). Subtotal can be fractional from
@@ -88,6 +94,21 @@ Page({
         checkout:  this.tx('copy.cart.checkout_btn', L === 'cn' ? '结账'                     : 'CHECK OUT'),
       },
     });
+  },
+
+  // Resolve the free-shipping threshold for the customer's default-address zone
+  // so the cart bar matches checkout (e.g. ¥199 in Tianhe vs the global ¥399).
+  // Best-effort: on any failure the bar keeps the global default.
+  loadZoneThreshold() {
+    api.get('/api/retail/free-shipping-threshold')
+      .then((d) => {
+        const t = Number(d && d.threshold);
+        if (Number.isFinite(t)) {
+          this._zoneThreshold = t;
+          this.recompute();
+        }
+      })
+      .catch(() => {});
   },
 
   // Pull current effective prices for the cart from the server (no address /
