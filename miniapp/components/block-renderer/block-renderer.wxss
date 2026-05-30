@@ -2262,8 +2262,10 @@
 .bun-title {
   font-family: var(--f-bear);
   font-size: calc(48rpx * var(--font-scale));
-  line-height: 1.0;
-  padding-top: 5rpx;
+  /* f-bear glyphs + CJK fill the full em box; line-height 1 clips the top
+     of 囤 etc. */
+  line-height: 1.12;
+  padding-top: 8rpx;
   margin-top: 8rpx;
 }
 .bun-sub {
@@ -2691,3 +2693,88 @@
 .grid-block.density-compact  .grid { gap: 6rpx; }
 .grid-block.density-normal   .grid { gap: 12rpx; }
 .grid-block.density-spacious .grid { gap: 28rpx; }
+
+/* ── Leaderboard block — Roots Club ranking strip on Home ───────────────── */
+.lb-blk {
+  margin: 16rpx 24rpx;
+  padding: 32rpx 36rpx 28rpx;
+  border-radius: 28rpx;
+}
+.lb-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+.lb-head-main { min-width: 0; flex: 1; }
+.lb-kicker {
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+  text-transform: uppercase;
+  margin-bottom: 6rpx;
+}
+.lb-ttl {
+  font-size: 38rpx;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.lb-sub {
+  font-size: 24rpx;
+  opacity: .7;
+  margin-top: 6rpx;
+}
+.lb-period {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+  text-transform: uppercase;
+  opacity: .55;
+  padding-top: 6rpx;
+}
+.lb-list { display: flex; flex-direction: column; }
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  padding: 16rpx 0;
+  border-bottom: 2rpx solid rgba(26, 26, 23, .08);
+}
+.lb-row:last-child { border-bottom: none; }
+.lb-medal { font-size: 32rpx; line-height: 1; width: 44rpx; text-align: center; }
+.lb-rank {
+  width: 44rpx;
+  text-align: center;
+  font-size: 26rpx;
+  font-weight: 700;
+  opacity: .55;
+}
+.lb-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 28rpx;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.lb-value {
+  flex-shrink: 0;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+.lb-footer {
+  margin-top: 18rpx;
+  font-size: 22rpx;
+  opacity: .65;
+  line-height: 1.4;
+}
+.lb-cta {
+  margin-top: 18rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+  text-transform: uppercase;
+}

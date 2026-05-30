@@ -22,13 +22,16 @@
 }
 .title {
   font-size: calc(72rpx * var(--font-scale));
-  line-height: 0.95;
+  /* f-bear glyphs + CJK fill the full em box; line-height < 1 clips the top
+     of 能 etc. and crams the two lines together. */
+  line-height: 1.14;
   margin-top: 8rpx;
+  padding-top: 6rpx;
   color: var(--ink);
 }
 .title-hl {
   background: var(--lime);
-  padding: 0 12rpx;
+  padding: 2rpx 12rpx;
 }
 
 /* Search */

@@ -20,14 +20,17 @@
 }
 .head .title {
   font-size: calc(64rpx * var(--font-scale));
-  line-height: 0.92;
+  /* f-bear has tall glyphs and CJK fills the full em box; line-height < 1
+     clips the tops of 种/收 etc. and crams the two lines together. */
+  line-height: 1.12;
   letter-spacing: -0.01em;
   margin-top: 12rpx;
+  padding-top: 6rpx;
   color: var(--ink);
 }
 .head .title .hl {
   background: var(--lime);
-  padding: 0 12rpx;
+  padding: 2rpx 12rpx;
 }
 .head .sub {
   font-size: calc(22rpx * var(--font-scale));

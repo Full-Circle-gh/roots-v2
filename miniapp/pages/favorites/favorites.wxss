@@ -19,8 +19,11 @@
 }
 .title {
   font-size: calc(64rpx * var(--font-scale));
-  line-height: 0.92;
+  /* f-bear glyphs + CJK fill the full em box; line-height < 1 clips the top
+     of 我 etc. Give the line room. */
+  line-height: 1.12;
   margin-top: 12rpx;
+  padding-top: 6rpx;
 }
 .count-pill {
   background: var(--ink);

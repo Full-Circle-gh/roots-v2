@@ -14,8 +14,11 @@
 .title {
   font-size: calc(96rpx * var(--font-scale));
   font-weight: 500;
-  line-height: 1;
+  /* f-bear glyphs + CJK fill the full em box; line-height 1 clips the top
+     of 一 etc. Give the line room. */
+  line-height: 1.12;
   margin-top: 16rpx;
+  padding-top: 6rpx;
 }
 .subhead {
   margin-top: 20rpx;
