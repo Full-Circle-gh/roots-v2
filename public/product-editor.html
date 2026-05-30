@@ -364,11 +364,10 @@
   #pe-body {
     height: calc(100vh - 56px);
     display: grid;
-    /* Rail fixed, canvas flexes (gives the phone visual breathing room and
-       absorbs extra width on big monitors), inspector capped at 600px — wide
-       enough for 3-col rows like nutrition (Label EN · Label CN · Value)
-       without sprawling sparse on a 1920+ display. */
-    grid-template-columns: 288px 1fr 600px;
+    /* Rail and inspector are equal-width (288px) bookends; the canvas flexes
+       between them so the phone gets breathing room and absorbs extra width on
+       big monitors. */
+    grid-template-columns: 288px 1fr 288px;
     /* Definite row so the panes (and the phone inside the canvas) fill the body
        instead of growing to content. Lets the phone fit at any zoom. */
     grid-template-rows: minmax(0, 1fr);
