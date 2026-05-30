@@ -8664,6 +8664,8 @@ const ALLOWED_BLOCK_TYPES = new Set([
   'wecom_contact',
   // Top members ranked by spend / points / orders — masked names, cached
   'leaderboard',
+  // Autoplaying muted clip — in-page banner or full-screen onboarding splash
+  'video_banner',
   // ── Deprecated types kept on the whitelist so existing drafts/layouts
   // still validate. The CMS palette hides them; clients ignore them.
   'wechat_oa',        // replaced 2026-05-19 by wecom_contact
