@@ -473,39 +473,6 @@
   }
   .b-grid .rank-card-1 .img { box-shadow: inset 0 -2px 0 #FFC72C; }
   .b-spacer {}
-  .b-stickers {
-    padding: 22px;
-    display: flex; flex-wrap: wrap; gap: 10px;
-    justify-content: center; align-items: center;
-    min-height: 80px;
-  }
-  .b-stickers .sticker {
-    display: inline-block;
-    padding: 6px 14px;
-    border-radius: 999px;
-    color: var(--ink);
-    font: 700 12px var(--bf-toni);
-    letter-spacing: .06em;
-    text-transform: uppercase;
-    box-shadow: 2px 2px 0 rgba(0, 0, 0, .85);
-    white-space: nowrap;
-  }
-  .b-dots {
-    display: flex; justify-content: center; align-items: center;
-    gap: 10px;
-    padding: 16px;
-  }
-  .b-dots .dot {
-    width: 8px; height: 8px;
-    border-radius: 999px;
-    background: transparent;
-    border: 1.5px solid rgba(0, 0, 0, .35);
-    transition: all .15s ease;
-  }
-  .b-dots .dot.active {
-    width: 24px;
-    border-color: transparent;
-  }
   .b-countdown {
     padding: 20px 22px 22px;
     text-align: center;
@@ -1417,6 +1384,9 @@ function renderBlock(b) {
         products = (b.product_ids || []).map(id => state.products.find(p => p.id === id)).filter(Boolean);
       } else if (b.source_type === 'top_selling') {
         products = loadTopProducts(b.top_channel || 'combined', b.top_window || '7d', b.limit || 6);
+      } else if (b.source_type === 'new_arrivals') {
+        products = state.products.slice().sort((a, c) =>
+          String(c.created_at || '').localeCompare(String(a.created_at || '')));
       } else {
         const cat = state.categories.find(c => c.id === b.category_id);
         products = state.products.filter(p => !b.category_id || p.category === cat?.name);
@@ -1484,23 +1454,6 @@ function renderBlock(b) {
     }
     case 'spacer': {
       return `<div class="b-spacer" style="height: ${b.height_px || 24}px"></div>`;
-    }
-    case 'sticker_collage': {
-      const stickers = (b.stickers || []).map(s => {
-        const bg = brandColorVar(s.color) || 'var(--citrus)';
-        return `<span class="sticker" style="background:${bg};transform:rotate(${s.rotate || 0}deg)">${biLabel(s.label_en, s.label_cn)}</span>`;
-      }).join('');
-      return `<div class="b-stickers">${stickers}</div>`;
-    }
-    case 'progress_dots': {
-      const count = Math.max(1, Math.min(10, b.count || 3));
-      const active = Math.max(0, Math.min(count - 1, b.active_index ?? 0));
-      const c = brandColorVar(b.color) || 'var(--ink)';
-      let html = '';
-      for (let i = 0; i < count; i++) {
-        html += `<span class="dot${i === active ? ' active' : ''}" style="${i === active ? 'background:' + c : 'border-color:' + c}"></span>`;
-      }
-      return `<div class="b-dots">${html}</div>`;
     }
     case 'flash_sale_strip': {
       const view = b.view || 'strip';

@@ -20,6 +20,8 @@ Page({
     flashSales: [],
     topProducts: {},
     leaderboards: {},
+    newArrivals: {},
+    activeOrder: null,
     polls: [],
     customer: null,
     lang: 'en',
@@ -74,6 +76,8 @@ Page({
       });
       this._fetchTopProductsFor(layout);
       this._fetchLeaderboardsFor(layout);
+      this._fetchNewArrivalsFor(layout);
+      this._fetchActiveOrderFor(layout);
     } catch (e) {
       console.warn('[layout:' + this.data.page + '] refresh failed:', e.message);
       this.setData({ loading: false });
@@ -130,6 +134,48 @@ Page({
       }
     }));
     this.setData({ leaderboards: next });
+  },
+
+  // Newest products per distinct limit — see home.js for rationale.
+  async _fetchNewArrivalsFor(layout) {
+    const limits = new Set();
+    (layout || []).forEach(b => {
+      if (b.type !== 'product_grid' || b.source_type !== 'new_arrivals') return;
+      limits.add(String(b.limit || 6));
+    });
+    if (!limits.size) return;
+    const next = { ...(this.data.newArrivals || {}) };
+    await Promise.all([...limits].map(async limit => {
+      if (next[limit]) return;
+      try {
+        const res = await api.get(`/api/retail/products?sort=newest&limit=${encodeURIComponent(limit)}`);
+        next[limit] = Array.isArray(res) ? res : (res?.data || []);
+      } catch {
+        next[limit] = [];
+      }
+    }));
+    this.setData({ newArrivals: next });
+  },
+
+  // Customer's latest in-flight order for an order_tracker block — see home.js.
+  async _fetchActiveOrderFor(layout) {
+    const wants = (layout || []).some(b => b.type === 'order_tracker');
+    if (!wants) return;
+    const app = getApp();
+    if (!app?.globalData?.token) { this.setData({ activeOrder: null }); return; }
+    try {
+      const res = await api.get('/api/retail/orders?limit=5');
+      const rows = Array.isArray(res) ? res : (res?.data || []);
+      const ACTIVE = new Set(['pending_payment', 'paid', 'preparing', 'dispatched']);
+      this.setData({ activeOrder: rows.find(o => ACTIVE.has(o.status)) || null });
+    } catch {
+      this.setData({ activeOrder: null });
+    }
+  },
+
+  onOrder(e) {
+    const id = e.detail && e.detail.id;
+    if (id) wx.navigateTo({ url: '/pages/order/order?id=' + id });
   },
 
   async onVote(e) {

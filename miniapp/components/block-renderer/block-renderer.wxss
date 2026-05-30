@@ -641,49 +641,80 @@
   text-decoration: line-through;
 }
 
-/* ── Sticker collage ──────────────────────────────────────────────────── */
-.stickers {
-  padding: 44rpx;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20rpx;
-  justify-content: center;
-  align-items: center;
-  min-height: 160rpx;
+/* ── Order tracker ───────────────────────────────────────────────────── */
+.ot-wrap { padding: 0 44rpx; }
+.ot-card {
+  background: #fff;
+  border: 3rpx solid var(--forest, #365329);
+  border-radius: 24rpx;
+  padding: 28rpx 28rpx 24rpx;
+  box-shadow: 6rpx 6rpx 0 rgba(0, 0, 0, 0.08);
 }
-.sticker {
-  display: inline-block;
-  padding: 12rpx 28rpx;
-  border-radius: 999rpx;
-  color: var(--ink);
-  font-family: var(--f-toni);
+.ot-head { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
+.ot-title {
+  font-family: var(--f-bear);
+  font-size: calc(30rpx * var(--font-scale));
+  font-weight: 600;
+}
+.ot-status {
+  font-family: var(--f-gothic);
   font-size: calc(24rpx * var(--font-scale));
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  box-shadow: 4rpx 4rpx 0 rgba(0, 0, 0, 0.85);
+}
+.ot-status.unpaid { color: #E96174; }
+.ot-body { display: flex; align-items: center; gap: 20rpx; margin-top: 22rpx; }
+.ot-thumb {
+  flex: 0 0 96rpx; width: 96rpx; height: 96rpx;
+  border-radius: 14rpx; background: #eee; overflow: hidden;
+}
+.ot-info { flex: 1; min-width: 0; }
+.ot-no {
+  font-family: var(--f-gothic);
+  font-size: calc(26rpx * var(--font-scale));
+  font-weight: 600;
+}
+.ot-sub {
+  font-family: var(--f-aleo);
+  font-size: calc(22rpx * var(--font-scale));
+  color: rgba(0, 0, 0, 0.55);
+  margin-top: 4rpx;
+}
+.ot-cta {
+  flex: 0 0 auto;
+  color: #fff;
+  font-family: var(--f-gothic);
+  font-size: calc(24rpx * var(--font-scale));
+  font-weight: 700;
+  padding: 14rpx 28rpx;
+  border-radius: 999rpx;
   white-space: nowrap;
 }
-
-/* ── Progress dots ────────────────────────────────────────────────────── */
-.dots {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 20rpx;
-  padding: 32rpx;
+.ot-steps {
+  display: flex; justify-content: space-between;
+  margin-top: 28rpx; padding-top: 24rpx;
+  border-top: 2rpx solid rgba(0, 0, 0, 0.08);
 }
-.dots .dot {
-  width: 16rpx;
-  height: 16rpx;
-  border-radius: 999rpx;
-  background: transparent;
-  border: 3rpx solid rgba(0, 0, 0, 0.35);
-  transition: all 0.15s ease;
+.ot-step {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10rpx;
+  position: relative;
 }
-.dots .dot.active {
-  width: 48rpx;
-  border-color: transparent;
+.ot-dot {
+  width: 20rpx; height: 20rpx; border-radius: 999rpx;
+  background: transparent; border: 3rpx solid rgba(0, 0, 0, 0.2);
+  z-index: 1;
+}
+.ot-step::before {
+  content: ''; position: absolute; top: 9rpx; left: -50%; width: 100%;
+  height: 3rpx; background: rgba(0, 0, 0, 0.12);
+}
+.ot-step:first-child::before { display: none; }
+.ot-step.done .ot-step-label { color: var(--ink, #1a1a17); }
+.ot-step-label {
+  font-family: var(--f-aleo);
+  font-size: calc(20rpx * var(--font-scale));
+  color: rgba(0, 0, 0, 0.4);
 }
 
 /* ── Countdown timer (flash-sale / 秒杀) ─────────────────────────────── */

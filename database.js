@@ -1465,19 +1465,9 @@ try {
   if (!ran) {
     const layout = [
       { id: 'on1', type: 'spacer', height_px: 80 },
-      { id: 'on2', type: 'sticker_collage', stickers: [
-        { label_en: 'RAW',          label_cn: '生鲜',     color: 'papaya-glow',  rotate: -6 },
-        { label_en: 'ALIVE',        label_cn: '活力',     color: 'berry-punch',  rotate: 4  },
-        { label_en: 'NO ADDITIVES', label_cn: '无添加',    color: 'carrot-blaze', rotate: -3 },
-        { label_en: '100% PLANT',   label_cn: '纯植物',    color: 'skyberry',     rotate: 5  },
-        { label_en: 'LOW SUGAR',    label_cn: '低糖',     color: 'golden-corn',  rotate: -4 },
-        { label_en: 'PROBIOTIC',    label_cn: '益生菌',    color: 'lotus',        rotate: 3  },
-      ]},
-      { id: 'on3', type: 'spacer', height_px: 40 },
       { id: 'on4', type: 'announcement_bar', text_en: 'Food made from food.', text_cn: '食物源于食物。', bg_color: 'oat-milk', fg_color: 'ink' },
       { id: 'on5', type: 'announcement_bar', text_en: 'From soil to soul.',   text_cn: '从土壤到灵魂。',  bg_color: 'oat-milk', fg_color: 'forest-kale' },
       { id: 'on6', type: 'spacer', height_px: 40 },
-      { id: 'on7', type: 'progress_dots', count: 3, active_index: 0, color: 'ink' },
     ];
     const blob = JSON.stringify(layout);
     db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES ('onboarding.layout', ?)").run(blob);

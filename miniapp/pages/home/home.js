@@ -22,6 +22,12 @@ Page({
     // Leaderboard rows keyed by `${metric}|${period}|${top_n}|${reveal_mode}`.
     // Only tuples referenced by `leaderboard` blocks get fetched — usually 0–1.
     leaderboards: {},
+    // Newest products keyed by limit (e.g. '6'). Only fetched when a
+    // product_grid block sources from 'new_arrivals'.
+    newArrivals: {},
+    // Customer's latest in-flight order (or null) — feeds the order_tracker
+    // block. Only fetched when the layout contains one and the user is authed.
+    activeOrder: null,
     affiliate: null,
     polls: [],
     customer: null,   // { nickname, points_balance, ... } — feeds greeting block
@@ -217,6 +223,9 @@ Page({
       this._fetchTopProductsFor(layout);
       // Same lazy pattern for leaderboard blocks.
       this._fetchLeaderboardsFor(layout);
+      // New-arrivals grids + the order tracker fetch on demand too.
+      this._fetchNewArrivalsFor(layout);
+      this._fetchActiveOrderFor(layout);
     } catch (e) {
       console.warn('[home] refresh failed:', e.message);
       this.setData({ loading: false });
@@ -276,6 +285,55 @@ Page({
       }
     }));
     this.setData({ leaderboards: next });
+  },
+
+  // Walk the layout for product_grid blocks sourcing from 'new_arrivals',
+  // fetch the newest products once per distinct limit (server sorts by
+  // created_at DESC), and merge into data.newArrivals keyed by limit.
+  async _fetchNewArrivalsFor(layout) {
+    const limits = new Set();
+    (layout || []).forEach(b => {
+      if (b.type !== 'product_grid' || b.source_type !== 'new_arrivals') return;
+      limits.add(String(b.limit || 6));
+    });
+    if (!limits.size) return;
+    const next = { ...(this.data.newArrivals || {}) };
+    await Promise.all([...limits].map(async limit => {
+      if (next[limit]) return;
+      try {
+        const res = await api.get(`/api/retail/products?sort=newest&limit=${encodeURIComponent(limit)}`);
+        next[limit] = Array.isArray(res) ? res : (res?.data || []);
+      } catch {
+        next[limit] = [];
+      }
+    }));
+    this.setData({ newArrivals: next });
+  },
+
+  // The order_tracker block shows the customer's latest in-flight order.
+  // Only fetch when the layout has one and the user is authed; pick the
+  // newest order whose status is still active (unpaid / paid / preparing /
+  // dispatched). Terminal orders (delivered / cancelled / refunded) leave
+  // activeOrder null so the block hides.
+  async _fetchActiveOrderFor(layout) {
+    const wants = (layout || []).some(b => b.type === 'order_tracker');
+    if (!wants) return;
+    const app = getApp();
+    if (!app?.globalData?.token) { this.setData({ activeOrder: null }); return; }
+    try {
+      const res = await api.get('/api/retail/orders?limit=5');
+      const rows = Array.isArray(res) ? res : (res?.data || []);
+      const ACTIVE = new Set(['pending_payment', 'paid', 'preparing', 'dispatched']);
+      this.setData({ activeOrder: rows.find(o => ACTIVE.has(o.status)) || null });
+    } catch {
+      this.setData({ activeOrder: null });
+    }
+  },
+
+  // Order-tracker tap → open the order detail page.
+  onOrder(e) {
+    const id = e.detail && e.detail.id;
+    if (id) wx.navigateTo({ url: '/pages/order/order?id=' + id });
   },
 
   // Inline vote cast from a voting_block. Posts the vote and refreshes

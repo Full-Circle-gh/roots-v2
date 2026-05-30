@@ -181,16 +181,29 @@
   <view wx:if="{{dividerStyle !== 'none'}}" class="spacer-divider" style="border-color:{{dividerColor}};background:{{dividerStyle === 'line' ? dividerColor : 'transparent'}}"></view>
 </view>
 
-<view wx:elif="{{type === 'sticker_collage'}}" class="stickers">
-  <view wx:for="{{stickers}}" wx:key="index" class="sticker"
-        style="background:{{item.bg}};transform:rotate({{item.rotate}}deg)">
-    {{item.label}}
+<!-- Order tracker — only renders when the customer has a live order -->
+<view wx:elif="{{type === 'order_tracker'}}" class="ot-wrap">
+  <view wx:if="{{orderTracker}}" class="ot-card" style="border-color:{{orderTracker.accent}}" bindtap="onOrderTrackerTap">
+    <view class="ot-head">
+      <view class="ot-title">{{orderTracker.title}}</view>
+      <view class="ot-status {{orderTracker.isUnpaid ? 'unpaid' : ''}}" style="{{orderTracker.isUnpaid ? '' : 'color:' + orderTracker.accent}}">{{orderTracker.statusLabel}}</view>
+    </view>
+    <view class="ot-body">
+      <image wx:if="{{orderTracker.thumb}}" src="{{orderTracker.thumb}}" mode="aspectFill" class="ot-thumb"/>
+      <view class="ot-info">
+        <view class="ot-no">{{orderTracker.orderNo}}</view>
+        <view wx:if="{{orderTracker.countLabel}}" class="ot-sub">{{orderTracker.countLabel}}<text wx:if="{{orderTracker.total}}"> · {{orderTracker.total}}</text></view>
+        <view wx:if="{{orderTracker.eta}}" class="ot-sub">{{orderTracker.eta}}</view>
+      </view>
+      <view class="ot-cta" style="background:{{orderTracker.accent}}">{{orderTracker.ctaLabel}}</view>
+    </view>
+    <view wx:if="{{!orderTracker.isUnpaid}}" class="ot-steps">
+      <view wx:for="{{orderTracker.steps}}" wx:key="label" class="ot-step {{item.done ? 'done' : ''}} {{item.current ? 'current' : ''}}">
+        <view class="ot-dot" style="{{item.done ? 'background:' + orderTracker.accent + ';border-color:' + orderTracker.accent : ''}}"></view>
+        <view class="ot-step-label">{{item.label}}</view>
+      </view>
+    </view>
   </view>
-</view>
-
-<view wx:elif="{{type === 'progress_dots'}}" class="dots">
-  <view wx:for="{{dots}}" wx:key="index" class="dot {{item.active ? 'active' : ''}}"
-        style="{{item.active ? 'background:' + dotActiveColor : ''}}"></view>
 </view>
 
 <!-- Flash sale: strip view (default — compact header + side clock + cards) -->

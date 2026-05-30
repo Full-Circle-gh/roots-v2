@@ -2726,8 +2726,6 @@ const DC_BLOCK_LABELS = {
   featured_item:    { en: 'Featured product',  cn: '主推商品' },
   product_grid:     { en: 'Product grid',      cn: '商品网格' },
   spacer:           { en: 'Spacer',            cn: '间隔' },
-  sticker_collage:  { en: 'Sticker collage',   cn: '贴纸拼贴' },
-  progress_dots:    { en: 'Progress dots',     cn: '进度小点' },
   countdown_timer:  { en: 'Countdown timer',   cn: '倒计时' },
   flash_sale_strip: { en: 'Flash sale',        cn: '秒杀栏' },
   coupon_block:     { en: 'Coupon',            cn: '优惠券' },
@@ -2741,6 +2739,7 @@ const DC_BLOCK_LABELS = {
   bundle:           { en: 'Bundle',            cn: '组合购' },
   wecom_contact:    { en: 'Add us on WeCom',   cn: '企业微信卡片' },
   favorites_block:  { en: 'Favorites',         cn: '收藏夹' },
+  order_tracker:    { en: 'Order tracker',     cn: '订单追踪' },
 };
 const DC_FIELD_LABELS = {
   bg_color:        { en: 'background colour',         cn: '背景色' },
@@ -2845,7 +2844,7 @@ function runDesignCheck(blocks, pageBgToken, tabBarCfg) {
     }
     // `bs.bg` is ALWAYS an object — never null — so rules below can
     // safely read .hex without guarding. Blocks with no real bg field
-    // (spacer, sticker_collage, progress_dots, category_tabs) get a
+    // (spacer, category_tabs) get a
     // synthetic entry whose hex is the page background, marked
     // inherited_from_page so the adjacency rule can skip them.
     const bgInherited = !dcResolveHex(bgTok);
@@ -2877,8 +2876,8 @@ function runDesignCheck(blocks, pageBgToken, tabBarCfg) {
   }
 
   // R2 — adjacent muddy backgrounds. Skip when EITHER block inherits
-  // the page bg (spacer / category_tabs / progress_dots / sticker_collage
-  // etc.) — those don't create a visible seam, they just show through
+  // the page bg (spacer / category_tabs etc.) — those don't create a
+  // visible seam, they just show through
   // to the page colour.
   for (let i = 0; i < blockSummary.length - 1; i++) {
     const a = blockSummary[i], c = blockSummary[i+1];

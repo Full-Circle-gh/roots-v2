@@ -72,6 +72,14 @@ Component({
     // /api/retail/storefront/leaderboard once per distinct tuple, and threads
     // the results in here — same lazy pattern as topProducts.
     leaderboards: { type: Object, value: {} },
+    // Newest products keyed by limit (e.g. '6'). Host page fetches
+    // /api/retail/products?sort=newest&limit=N for any product_grid block
+    // with source_type='new_arrivals' — same lazy pattern as topProducts.
+    newArrivals: { type: Object, value: {} },
+    // Customer's latest in-flight order (paid/preparing/dispatched or unpaid),
+    // or null. Feeds the order_tracker block; host page fetches it when the
+    // layout contains one and the customer is authed.
+    activeOrder: { type: Object, value: null },
   },
 
   data: {
@@ -103,11 +111,6 @@ Component({
     cols: 2,
     // spacer
     height: 24,
-    // stickers
-    stickers: [],
-    // dots
-    dots: [],
-    dotActiveColor: '#1a1a17',
     // countdown
     countdown: null,
     // flash sale strip
@@ -135,10 +138,12 @@ Component({
     videoHeight: 420,
     videoLink: '',
     videoFullscreen: false,
+    // order_tracker — customer's latest in-flight order, or null to hide
+    orderTracker: null,
   },
 
   observers: {
-    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards': function () {
+    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards, newArrivals, activeOrder': function () {
       this.recompute();
     },
     // Recompute the human-readable strip text whenever the count, the
@@ -309,6 +314,12 @@ Component({
             const key = `${b.top_channel || 'combined'}|${b.top_window || '7d'}|${b.limit || 6}`;
             const top = this.properties.topProducts || {};
             list = Array.isArray(top[key]) ? top[key] : [];
+          } else if (b.source_type === 'new_arrivals') {
+            // Host page pre-fetches the newest products per limit (server sorts
+            // by created_at DESC). Same lazy lookup as top_selling.
+            const na = this.properties.newArrivals || {};
+            const key = String(b.limit || 6);
+            list = Array.isArray(na[key]) ? na[key] : [];
           } else {
             const cat = this.properties.categories.find(c => c.id === b.category_id);
             list = this.properties.products.filter(p => !b.category_id || p.category === cat?.name);
@@ -361,6 +372,46 @@ Component({
           });
           break;
         }
+        case 'order_tracker': {
+          const o = this.properties.activeOrder;
+          // No in-flight order → block renders nothing (wx:if guards it).
+          out.orderTracker = null;
+          if (o && o.id) {
+            const cn = L === 'cn';
+            const STATUS = cn
+              ? { pending_payment: '待支付', paid: '已支付', preparing: '准备中', dispatched: '配送中' }
+              : { pending_payment: 'Awaiting payment', paid: 'Paid', preparing: 'Preparing', dispatched: 'On the way' };
+            // Steps filled per status: unpaid 0 → paid 1 → preparing 2 → on-the-way 3.
+            const STEP = { pending_payment: 0, paid: 1, preparing: 2, dispatched: 3 };
+            const filled = STEP[o.status] ?? 0;
+            const stepLabels = cn
+              ? ['已支付', '准备中', '配送中', '已送达']
+              : ['Paid', 'Prep', 'On way', 'Delivered'];
+            const preview = Array.isArray(o.items_preview) ? o.items_preview : [];
+            const thumb = preview.length ? (absUrl(preview[0].image_url) || preview[0].image_url || '') : '';
+            const count = o.item_count || preview.length || 0;
+            // ETA line — prefer the human delivery slot, else the scheduled date.
+            let eta = o.delivery_slot_label || '';
+            if (!eta && o.scheduled_for) eta = String(o.scheduled_for).slice(0, 16).replace('T', ' ');
+            out.orderTracker = {
+              id: o.id,
+              title: lang.pick(b.title_en, b.title_cn, L) || (cn ? '你的订单' : 'Your order'),
+              orderNo: o.order_no || '',
+              statusLabel: STATUS[o.status] || o.status,
+              isUnpaid: o.status === 'pending_payment',
+              steps: stepLabels.map((label, i) => ({ label, done: i < filled, current: i === filled - 1 })),
+              thumb,
+              countLabel: count > 0 ? (cn ? `${count} 件商品` : `${count} item${count === 1 ? '' : 's'}`) : '',
+              eta,
+              total: Number(o.total) > 0 ? '¥' + Number(o.total).toFixed(2) : '',
+              ctaLabel: o.status === 'pending_payment'
+                ? (cn ? '去支付' : 'Pay now')
+                : (cn ? '查看订单' : 'View order'),
+              accent: color(b.accent_color || 'forest-kale'),
+            };
+          }
+          break;
+        }
         case 'spacer': {
           out.height = b.height_px || 24;
           // 2026-05-20 — optional decorative divider centred in the spacer.
@@ -368,24 +419,6 @@ Component({
           // rule. dividerColor is resolved via the brand-color picker.
           out.dividerStyle = b.divider_style || 'none';
           out.dividerColor = color(b.divider_color || 'olive-moss');
-          break;
-        }
-        case 'sticker_collage': {
-          out.stickers = (b.stickers || []).map(s => ({
-            label:  lang.pick(s.label_en, s.label_cn, L),
-            bg:     color(s.color || 'citrus-zest'),
-            rotate: s.rotate || 0,
-          }));
-          break;
-        }
-        case 'progress_dots': {
-          const count  = Math.max(1, Math.min(10, b.count || 3));
-          const active = Math.max(0, Math.min(count - 1, b.active_index ?? 0));
-          out.dotActiveColor = color(b.color || 'ink');
-          out.dots = [];
-          for (let i = 0; i < count; i++) {
-            out.dots.push({ active: i === active });
-          }
           break;
         }
         case 'flash_sale_strip': {
@@ -1257,6 +1290,10 @@ Component({
     },
     onProductTap(e) {
       this.triggerEvent('product', { id: e.currentTarget.dataset.id });
+    },
+    onOrderTrackerTap() {
+      const ot = this.data.orderTracker;
+      if (ot && ot.id) this.triggerEvent('order', { id: ot.id });
     },
     onFavoritesTap() {
       // "See all" link on the favorites block — route to /pages/favorites.

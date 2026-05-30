@@ -2049,6 +2049,34 @@
     text-align: center; padding: 24px; gap: 10px;
   }
   .b-video .placeholder svg { width: 32px; height: 32px; opacity: .5; }
+  /* Order tracker preview — live in-flight order card */
+  .b-ordertracker { padding: 12px 16px; }
+  .b-ordertracker .ot-card {
+    border: 1px solid var(--border-2); border-radius: 14px;
+    padding: 12px 14px; background: var(--bg-1, #fff);
+  }
+  .b-ordertracker .ot-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .b-ordertracker .ot-title { font: 700 14px var(--f-sans); }
+  .b-ordertracker .ot-status {
+    font: 600 11px var(--f-sans); padding: 3px 9px; border-radius: 999px;
+    color: #fff; background: var(--ot-accent);
+  }
+  .b-ordertracker .ot-body { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .b-ordertracker .ot-thumb { width: 44px; height: 44px; border-radius: 8px; background: #e6e6e0; flex: none; }
+  .b-ordertracker .ot-info { flex: 1; min-width: 0; }
+  .b-ordertracker .ot-count { font: 600 13px var(--f-sans); }
+  .b-ordertracker .ot-eta { font: 500 11px var(--f-sans); opacity: .6; margin-top: 2px; }
+  .b-ordertracker .ot-cta {
+    font: 600 11px var(--f-sans); padding: 6px 12px; border-radius: 999px;
+    color: #fff; background: var(--ot-accent); white-space: nowrap;
+  }
+  .b-ordertracker .ot-steps { display: flex; align-items: flex-start; }
+  .b-ordertracker .ot-step { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .b-ordertracker .ot-dot { width: 12px; height: 12px; border-radius: 50%; background: #d6d6cf; }
+  .b-ordertracker .ot-step.on .ot-dot { background: var(--ot-accent); }
+  .b-ordertracker .ot-slabel { font: 500 9px var(--f-sans); opacity: .6; }
+  .b-ordertracker .ot-step.on .ot-slabel { opacity: .9; }
+  .b-ordertracker .ot-bar { flex: 1; height: 2px; background: #e0e0d9; margin: 5px 2px 0; }
   /* Split view — image left, copy panel right (50/50) */
   .b-hero-split {
     display: grid; grid-template-columns: 1fr 1fr; min-height: 240px;
@@ -3885,6 +3913,7 @@ const ICONS = {
   favorites_block:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
   leaderboard:      '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="3" y="14" width="4" height="6" rx="1"/><rect x="10" y="9" width="4" height="11" rx="1"/><rect x="17" y="16" width="4" height="4" rx="1"/></svg>',
   video_banner:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><polygon points="10 9 15 12 10 15 10 9" fill="currentColor" stroke="none"/></svg>',
+  order_tracker:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="14" height="11" rx="1"/><path d="M15 9h4l3 3v5h-7"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
   duplicate:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   arrow_up:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>',
   arrow_down:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
@@ -3930,6 +3959,7 @@ const BLOCK_META = {
   favorites_block:  { name: 'Favorites',        name_cn: '收藏',       desc: 'Your saved — pulls from each customer\'s wishlist', desc_cn: '顾客收藏 — 来自各自的心愿单' },
   leaderboard:      { name: 'Leaderboard',      name_cn: '排行榜',     desc: 'Top members ranked by spend / points / orders',     desc_cn: '会员排行 · 按消费 / 积分 / 订单数' },
   video_banner:     { name: 'Video banner',     name_cn: '视频横幅',   desc: 'Autoplaying muted clip — loops, no controls',       desc_cn: '自动播放静音短片 · 循环 · 无控件' },
+  order_tracker:    { name: 'Order tracker',    name_cn: '订单追踪',   desc: 'Customer\'s latest order — live status, hides when none', desc_cn: '顾客最新订单 · 实时状态 · 无订单时隐藏' },
 };
 
 const state = {
@@ -6182,6 +6212,12 @@ function makeBlock(type) {
       // (shop, cart, promotions, product:N, category:N, …). Blank = decorative.
       link_target: '',
     };
+    case 'order_tracker': return {
+      id, type,
+      title_en: 'Your order', title_cn: '你的订单',
+      // Brand token for the progress accent + CTA button.
+      accent_color: 'forest-kale',
+    };
   }
   return null;
 }
@@ -6475,6 +6511,37 @@ function renderBlockBody(b) {
         : media;
       return d;
     }
+    case 'order_tracker': {
+      d.className = 'b-ordertracker';
+      const ot = getBi(b, 'title');
+      const accent = brandColorVar(b.accent_color) || 'var(--brand, #365329)';
+      const steps = state.lang === 'cn'
+        ? ['已支付', '准备中', '配送中', '已送达']
+        : ['Paid', 'Prep', 'On way', 'Delivered'];
+      const activeStep = 2; // mock: "On way"
+      const statusLabel = state.lang === 'cn' ? '配送中' : 'On the way';
+      const dots = steps.map((s, i) =>
+        `<div class="ot-step${i <= activeStep ? ' on' : ''}">
+          <div class="ot-dot"></div><div class="ot-slabel">${escapeHtml(s)}</div>
+        </div>`).join('<div class="ot-bar"></div>');
+      d.innerHTML = `<div class="ot-card" style="--ot-accent:${escapeAttr(accent)}">
+        <div class="ot-head">
+          <div class="ot-title">${biLabel(ot.en, ot.cn)}</div>
+          <div class="ot-status">${escapeHtml(statusLabel)}</div>
+        </div>
+        <div class="ot-body">
+          <div class="ot-thumb"></div>
+          <div class="ot-info">
+            <div class="ot-count">${state.lang === 'cn' ? '3 件商品' : '3 items'}</div>
+            <div class="ot-eta">${state.lang === 'cn' ? '预计 18:00 送达' : 'Arriving by 6:00 PM'}</div>
+          </div>
+          <div class="ot-cta">${state.lang === 'cn' ? '查看订单' : 'View order'}</div>
+        </div>
+        <div class="ot-steps">${dots}</div>
+        <div class="empty" style="margin-top:8px;font-size:11px;opacity:.6">${B('Preview — hides on the storefront when the customer has no active order.', '预览 — 顾客无进行中订单时,店面将隐藏此模块。')}</div>
+      </div>`;
+      return d;
+    }
     case 'category_tabs': {
       const view = b.view || 'tiles';
       d.className = 'b-cattabs b-cattabs-' + view;
@@ -6591,6 +6658,9 @@ function renderBlockBody(b) {
         // Lazy-fetched + cached. Returns [] on the first render; rerenders
         // when the fetch resolves.
         products = loadTopProducts(b.top_channel || 'combined', b.top_window || '7d', b.limit || 6);
+      } else if (b.source_type === 'new_arrivals') {
+        products = state.products.slice().sort((a, c) =>
+          String(c.created_at || '').localeCompare(String(a.created_at || '')));
       } else {
         products = state.products.filter(p => !b.category_id || p.category === categoryName(b.category_id));
       }
@@ -7706,6 +7776,7 @@ function renderInspector() {
     case 'favorites_block':  buildFavoritesForm(body, b); break;
     case 'leaderboard':      buildLeaderboardForm(body, b); break;
     case 'video_banner':     buildVideoForm(body, b); break;
+    case 'order_tracker':    buildOrderTrackerForm(body, b); break;
   }
   const dz = document.createElement('div');
   dz.className = 'danger-zone';
@@ -8073,6 +8144,24 @@ function buildVideoForm(m, b) {
     txt(b.link_target, v => updateBlock(b.id, { link_target: v }), 'shop, promotions, product:12 …')));
 }
 
+function buildOrderTrackerForm(m, b) {
+  const note = document.createElement('div');
+  note.className = 'helper';
+  note.style.cssText = 'margin: -4px 0 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
+  note.innerHTML = B(
+    'Shows the signed-in customer\'s latest <b>in-flight order</b> with a live progress bar (paid → prep → on the way → delivered). It <b>hides itself</b> when they have no active order, so it\'s safe to place near the top.',
+    '展示已登录顾客最新的<b>进行中订单</b>及实时进度条(已支付 → 准备中 → 配送中 → 已送达)。顾客无进行中订单时会<b>自动隐藏</b>,可放心置顶。'
+  );
+  m.appendChild(note);
+
+  const t = getBi(b, 'title');
+  m.appendChild(field(T('Title', '标题'), '',
+    txtPair(t.en, t.cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn, title: undefined }))));
+
+  m.appendChild(field(T('Accent colour', '主题色'), T('Progress bar + action button.', '进度条与操作按钮颜色。'),
+    sel(b.accent_color || 'forest-kale', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+}
+
 function buildCtaRow(b, cta, idx) {
   const wrap = document.createElement('div');
   wrap.className = 'cta-row';
@@ -8228,6 +8317,7 @@ function buildGridForm(m, b) {
     { value: 'category',    label: T('By category', '按分类') },
     { value: 'manual',      label: T('Hand-picked products', '手动挑选商品') },
     { value: 'top_selling', label: T('Top sellers — auto from sales data', '热销 — 自动取自销售数据') },
+    { value: 'new_arrivals', label: T('New arrivals — newest products', '新品 — 最新商品') },
   ], v => updateBlock(b.id, { source_type: v }))));
   if (b.source_type === 'category') {
     m.appendChild(field(T('Category', '分类'), '', sel(b.category_id || '', [
@@ -8268,6 +8358,12 @@ function buildGridForm(m, b) {
         }
       })
       .catch(() => { hintWrap.textContent = T('Could not load order count.', '无法加载订单数量。'); });
+  } else if (b.source_type === 'new_arrivals') {
+    const hint = document.createElement('div');
+    hint.className = 'helper';
+    hint.style.cssText = 'margin: -4px 0 12px; padding: 8px 10px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
+    hint.innerHTML = B('Shows your <b>newest products</b> first (by date added). Updates automatically as you add stock.', '按上架时间展示<b>最新商品</b>。新增库存时自动更新。');
+    m.appendChild(hint);
   } else {
     m.appendChild(field(T('Products', '商品'), T('Click to toggle. Search to filter.', '点击切换。搜索筛选。'), productPicker({
       multi: true,

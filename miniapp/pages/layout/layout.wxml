@@ -20,11 +20,14 @@
     flash-sales="{{flashSales}}"
     top-products="{{topProducts}}"
     leaderboards="{{leaderboards}}"
+    new-arrivals="{{newArrivals}}"
+    active-order="{{activeOrder}}"
     polls="{{polls}}"
     customer="{{customer}}"
     bind:cta="onCta"
     bind:category="onCategory"
     bind:product="onProduct"
     bind:vote="onVote"
-    bind:bundle="onBundle"/>
+    bind:bundle="onBundle"
+    bind:order="onOrder"/>
 </view>
