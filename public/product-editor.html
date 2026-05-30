@@ -967,6 +967,14 @@
   .pa-prev-pullquote { padding: 24px 22px 26px; background: #E8D9CB; }
   .pa-prev-pullquote-p { font-family: 'Aleo', serif; font-style: italic; font-size: 15px; line-height: 1.5; color: #1a1a17; }
   .pa-prev-pullquote-who { margin-top: 10px; font-family: 'Toni Grotesk', sans-serif; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
+  /* +3 · IMAGE / LIFESTYLE BAND */
+  .pa-prev-image { padding: 0; }
+  .pa-prev-image-img { display: block; width: 100%; }
+  .pa-prev-image-wide .pa-prev-image-img { aspect-ratio: 16 / 9; object-fit: cover; }
+  .pa-prev-image-square .pa-prev-image-img { aspect-ratio: 1 / 1; object-fit: cover; }
+  .pa-prev-image-tall .pa-prev-image-img { aspect-ratio: 4 / 5; object-fit: cover; }
+  .pa-prev-image-natural .pa-prev-image-img { height: auto; }
+  .pa-prev-image-cap { padding: 8px 22px 14px; font-family: 'Aleo', serif; font-style: italic; font-size: 12px; line-height: 1.5; color: rgba(26, 26, 23, 0.6); }
   .pa-prev-colophon { padding: 22px 22px 18px; background: #F2E7DF; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; position: relative; border-top: 1px solid #1a1a17; }
   .pa-prev-colophon-img { width: 72px; height: 72px; object-fit: contain; mix-blend-mode: multiply; }
   .pa-prev-colophon-tagline { font-family: 'Bear Serif', serif; font-size: 16px; line-height: 1; letter-spacing: -0.005em; color: #1a1a17; }
@@ -1289,6 +1297,13 @@ const PA_BLOCK_TYPES = [
     label_cn: '❝ 引文 — 编辑式产地/来源短语',
     name_en: 'Pull Quote', name_cn: '引文',
     make: () => ({ text_en: '', text_cn: '', who_en: '', who_cn: '' }),
+  },
+  {
+    type: 'image_band', glyph: '🖼',
+    label_en: '🖼 Image Band — full-bleed photo + optional caption',
+    label_cn: '🖼 图片横幅 — 通栏照片 + 可选说明',
+    name_en: 'Image Band', name_cn: '图片横幅',
+    make: () => ({ url: '', caption_en: '', caption_cn: '', ratio: 'wide' }),
   },
   {
     // Nutrition facts panel. Unlike the others, this block does NOT live in
@@ -2317,6 +2332,7 @@ function paBlocksCollect() {
     }
     if (b.type === 'notes_callout')  return !!(b.text_en || b.text_cn);
     if (b.type === 'pull_quote')     return !!(b.text_en || b.text_cn || b.who_en || b.who_cn);
+    if (b.type === 'image_band')     return !!(b.url || '').trim();
     return true;
   });
   return out.length ? out : null;
@@ -2360,6 +2376,7 @@ const PE_ICONS = {
   big_stat:          _SVG('<path d="M12 3l1.9 4.8L18.5 9l-4.6 1.2L12 15l-1.9-4.8L5.5 9l4.6-1.2z"/><path d="M19 14l.7 1.9L21.5 17l-1.8.7L19 19.5l-.7-1.8L16.5 17l1.8-.6z"/>'),
   pull_quote:        _SVG('<path d="M9 7H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v1a2 2 0 0 1-2 2H4v2h1a4 4 0 0 0 4-4V7zm10 0h-4a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v1a2 2 0 0 1-2 2h-1v2h1a4 4 0 0 0 4-4V7z"/>', { fill: 'currentColor' }),
   nutrition_facts:   _SVG('<rect x="5" y="3" width="14" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/>'),
+  image_band:        _SVG('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>'),
 };
 PE_ICONS.stat_callout = PE_ICONS.big_stat;
 // Fallback = a generic "box" so an unknown type still renders an SVG, never an emoji.
@@ -2383,6 +2400,7 @@ function _paBlockSubLabel(b) {
   if (b.type === 'storage_box') return [b.left?.head_en || b.left?.head_cn, b.right?.head_en || b.right?.head_cn].filter(Boolean).join(' · ');
   if (b.type === 'notes_callout') return head(b.text_en || b.text_cn);
   if (b.type === 'pull_quote') return head(b.text_en || b.text_cn);
+  if (b.type === 'image_band') return head(b.caption_en || b.caption_cn) || ((b.url || '').trim() ? (cuLang && cuLang() === 'cn' ? '已设置图片' : 'Image set') : '');
   if (b.type === 'nutrition_facts') {
     const basis = trim(b.basis_en || b.basis_cn);
     const rows = (b.rows || []).map(r => trim(r.label_en || r.label_cn)).filter(Boolean);
@@ -2646,7 +2664,80 @@ function _paBlockEditorBody(b) {
         </div>`).join('')}
       <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','rows',{label_en:'',label_cn:'',value:''})">+ Add row · 添加一行</button>`;
   }
+  if (b.type === 'image_band') {
+    const url = (b.url || '').trim();
+    const ratios = [
+      ['wide',    'Wide 16:9 · 宽幅'],
+      ['square',  'Square 1:1 · 方形'],
+      ['tall',    'Tall 4:5 · 竖幅'],
+      ['natural', 'Natural · 原始比例'],
+    ];
+    return `
+      <div class="helper" style="margin:-4px 0 14px">Full-bleed lifestyle photo to break up the text — texture shot, serving suggestion, on-the-table scene. Caption is optional. · 通栏生活照,用来打断大段文字 — 质感特写、食用建议、餐桌场景。说明文字可选。</div>
+      <div class="field" style="margin-bottom:12px">
+        <label class="stacked">Image · 图片</label>
+        ${url
+          ? `<div style="position:relative;border:1px solid var(--line-soft);border-radius:var(--r-md);overflow:hidden;background:var(--bg-pane)">
+               <img src="${escapeAttr(url)}" alt="" style="display:block;width:100%;max-height:220px;object-fit:cover">
+               <button type="button" class="btn danger" style="position:absolute;top:8px;right:8px;padding:4px 10px;font-size:11px" onclick="paImageBandClear('${b.id}')">Remove · 移除</button>
+             </div>`
+          : `<label class="pa-image-drop" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:28px 16px;border:1px dashed var(--line-strong);border-radius:var(--r-md);background:var(--bg-pane);cursor:pointer;text-align:center">
+               <span style="font-size:24px;line-height:1">🖼</span>
+               <span style="font-size:13px;color:var(--text-1)">Click to upload an image · 点击上传图片</span>
+               <span class="helper">JPG / PNG / WEBP</span>
+               <input type="file" accept="image/*" style="display:none" onchange="paImageBandUpload(this,'${b.id}')">
+             </label>`}
+        <input data-bkey="url" type="hidden" value="${escapeAttr(url)}">
+      </div>
+      <div class="field" style="margin-bottom:12px"><label class="stacked">Aspect ratio · 比例</label>
+        <select data-bkey="ratio">${ratios.map(([val, lbl]) => `<option value="${val}" ${(b.ratio || 'wide') === val ? 'selected' : ''}>${lbl}</option>`).join('')}</select>
+        <div class="helper">Fixed ratios crop to a clean shape; Natural keeps the photo's own proportions. · 固定比例会裁剪成统一形状;原始比例保留照片本身比例。</div>
+      </div>
+      <div class="pa-edit-grid-2">
+        <div class="field"><label class="stacked">Caption EN (optional) · 说明(英文,可选)</label><input data-bkey="caption_en" type="text" value="${v('caption_en')}" placeholder="On warm sourdough, just before serving"></div>
+        <div class="field"><label class="stacked">Caption CN · 说明(中文,可选)</label><input data-bkey="caption_cn" type="text" value="${v('caption_cn')}" placeholder="温热的酸面包上,上桌前抹开"></div>
+      </div>`;
+  }
   return `<div class="helper" style="padding:8px 0">Unknown block type · 未知板块类型: <code>${escapeHtml(b.type || '')}</code></div>`;
+}
+// Upload a lifestyle photo for an image_band block. Reuses the shared media
+// endpoint (stores in retail_media, returns a stable /api/retail/media/:id
+// URL). On success we write the URL into the block and re-render so the
+// thumbnail + live preview update. Mirrors retail-admin's media upload.
+async function paImageBandUpload(input, blockId) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  paBlocksSyncFromDOM();
+  const b = (window._paBlocks || []).find(x => x.id === blockId);
+  if (!b) return;
+  toast(cuT('Uploading…', '上传中…'));
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/retail-admin/media/upload', { method: 'POST', credentials: 'same-origin', body: fd });
+    const j = await res.json();
+    if (!j.success) {
+      const msg = j.error === 'too_large' ? cuT('Image too large.', '图片过大。')
+                : j.error === 'not_an_image' ? cuT('That file is not an image.', '该文件不是图片。')
+                : cuT('Upload failed.', '上传失败。');
+      toast(msg, 'error');
+      return;
+    }
+    b.url = j.data.url;
+    paRenderAll();
+    paLivePreview();
+    toast(cuT('Image added.', '图片已添加。'));
+  } catch (e) {
+    toast(cuT('Upload failed.', '上传失败。'), 'error');
+  }
+}
+function paImageBandClear(blockId) {
+  paBlocksSyncFromDOM();
+  const b = (window._paBlocks || []).find(x => x.id === blockId);
+  if (!b) return;
+  b.url = '';
+  paRenderAll();
+  paLivePreview();
 }
 function paRenderSelectedEditor() {
   const mount = document.getElementById('pa-block-editor-mount'); if (!mount) return;
@@ -2783,6 +2874,13 @@ function _paPreviewBlockHtml(b) {
     const text = pickT(b.text_en, b.text_cn), who = pickT(b.who_en, b.who_cn);
     if (!text && !who) return '';
     return `<div class="pa-prev-block pa-prev-pullquote">${text ? `<div class="pa-prev-pullquote-p">"${esc(text)}"</div>` : ''}${who ? `<div class="pa-prev-pullquote-who">${esc(who)}</div>` : ''}</div>`;
+  }
+  if (b.type === 'image_band') {
+    const url = (b.url || '').trim();
+    if (!url) return '';
+    const caption = pickT(b.caption_en, b.caption_cn);
+    const ratio = ['wide', 'square', 'tall', 'natural'].includes(b.ratio) ? b.ratio : 'wide';
+    return `<div class="pa-prev-block pa-prev-image pa-prev-image-${ratio}"><img class="pa-prev-image-img" src="${escapeAttr(url)}" alt="">${caption ? `<div class="pa-prev-image-cap">${esc(caption)}</div>` : ''}</div>`;
   }
   if (b.type === 'nutrition_facts') {
     const basis = pickT(b.basis_en, b.basis_cn);

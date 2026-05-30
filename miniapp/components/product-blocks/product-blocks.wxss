@@ -559,3 +559,27 @@
   text-transform: uppercase;
   color: var(--ink-60);
 }
+
+/* ───────── +3 · IMAGE / LIFESTYLE BAND ─────────
+   Full-bleed photo to break up the text run. Fixed-ratio variants crop to
+   a clean shape; 'natural' keeps the image's own aspect (image set to
+   widthFix in the WXML). Optional caption sits below in Aleo italic. */
+.pb-image {
+  padding: 0;
+}
+.pb-image-img {
+  display: block;
+  width: 100%;
+}
+.pb-image-wide   .pb-image-img { height: 422rpx; }   /* ~16:9 at 750rpx */
+.pb-image-square .pb-image-img { height: 750rpx; }   /* 1:1 */
+.pb-image-tall   .pb-image-img { height: 938rpx; }   /* ~4:5 */
+.pb-image-natural .pb-image-img { height: auto; }
+.pb-image-cap {
+  padding: 16rpx 44rpx 28rpx;
+  font-family: var(--f-aleo);
+  font-style: italic;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: var(--ink-60);
+}

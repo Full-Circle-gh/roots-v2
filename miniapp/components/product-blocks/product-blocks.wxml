@@ -169,5 +169,13 @@
       </view>
     </block>
 
+    <!-- +3 · IMAGE / LIFESTYLE BAND -->
+    <block wx:elif="{{item.type === 'image_band'}}">
+      <view class="pb-image pb-image-{{item.ratio}}">
+        <image class="pb-image-img" src="{{item.url}}" mode="{{item.fill ? 'aspectFill' : 'widthFix'}}" lazy-load/>
+        <view wx:if="{{item.caption}}" class="pb-image-cap">{{item.caption}}</view>
+      </view>
+    </block>
+
   </view>
 </view>

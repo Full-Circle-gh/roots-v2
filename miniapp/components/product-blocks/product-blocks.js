@@ -16,14 +16,26 @@
 //   notes_callout     Italic asterisk fine-print band
 //   pull_quote        Editorial pullquote on oat-deep tint
 //   stat_callout / big_stat  One hero number on a brand-colour slab
+//   image_band        Full-bleed lifestyle photo + optional caption
 //
 // All bilingual `*_en` / `*_cn` pairs resolve via utils/lang.pick().
 // Anything the office leaves empty is dropped from the render, so the
 // page never shows half-filled blocks.
 
 const lang = require('../../utils/lang');
+const api = require('../../utils/api');
 
 function _pick(en, cn, L) { return lang.pick(en, cn, L); }
+
+// Resolve a stored media path to an absolute URL the mini-app can load.
+// Office-uploaded images come back as relative /api/retail/media/:id; data:
+// and absolute URLs pass through untouched. Mirrors utils/cart.absUrl.
+function _absUrl(u) {
+  if (!u) return '';
+  if (/^(https?:|data:|wxfile:)/i.test(u)) return u;
+  if (u.startsWith('/')) return api.BASE + u;
+  return u;
+}
 
 // Comma / Chinese-comma split → trimmed strings.
 function _splitChips(s) {
@@ -232,6 +244,16 @@ function _resolveBlock(b, L) {
     const who  = _pick(b.who_en,  b.who_cn,  L) || '';
     if (!text && !who) return { type: '_skip' };
     return { type: t, text, who };
+  }
+
+  if (t === 'image_band') {
+    const url = _absUrl(b.url);
+    if (!url) return { type: '_skip' };
+    const caption = _pick(b.caption_en, b.caption_cn, L) || '';
+    // 'natural' keeps the image's own aspect (widthFix); the others crop to a
+    // fixed shape (aspectFill). Unknown values fall back to 'wide'.
+    const ratio = ['wide', 'square', 'tall', 'natural'].includes(b.ratio) ? b.ratio : 'wide';
+    return { type: t, url, caption, ratio, fill: ratio !== 'natural' };
   }
 
   return { type: '_skip' };
