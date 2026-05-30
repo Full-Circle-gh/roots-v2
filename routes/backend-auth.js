@@ -16,6 +16,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const rateLimit = require('express-rate-limit');
 const db = require('../database');
+const features = require('../lib/features');
 const router = express.Router();
 
 // ── Schema (idempotent) ─────────────────────────────────────────────────
@@ -53,6 +54,13 @@ db.exec(`
 // tenants default to 'self'; Roots is flipped to 'upstream' by the migration
 // below (after seedBackend, so the row is guaranteed to exist).
 try { db.exec("ALTER TABLE tenants ADD COLUMN product_catalog_mode TEXT NOT NULL DEFAULT 'self'"); } catch (e) { /* already added */ }
+
+// Per-tenant feature ENTITLEMENT ceiling (dormant by default). A JSON object of
+// { <featureKey>: false } disables a feature for this tenant; null/absent =
+// entitled to everything (see lib/features.js). The platform lowers this in
+// saas-admin only once a feature is gated/paid; until then every tenant keeps
+// full self-serve control via storefront_config `features.*`.
+try { db.exec('ALTER TABLE tenants ADD COLUMN features_json TEXT'); } catch (e) { /* already added */ }
 
 // ── Seed Roots as tenant #1 + an owner operator (mirrors auth.js seedUsers) ──
 function seedBackend() {
@@ -121,7 +129,8 @@ router.post('/api/backend/login', loginLimiter, express.json(), (req, res) => {
     success: true,
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role,
             tenant: { id: tenant.id, name: tenant.name, brand: tenant.brand_name,
-                      catalogMode: tenant.product_catalog_mode || 'self' } },
+                      catalogMode: tenant.product_catalog_mode || 'self',
+                      entitlements: features.entitlements(tenant.features_json) } },
   });
 });
 
@@ -137,7 +146,7 @@ router.get('/api/backend/me', (req, res) => {
   const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
   res.json({
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role, lastLogin: u.last_login,
-            tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status, catalogMode: tenant.product_catalog_mode || 'self' } : null },
+            tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status, catalogMode: tenant.product_catalog_mode || 'self', entitlements: features.entitlements(tenant.features_json) } : null },
   });
 });
 

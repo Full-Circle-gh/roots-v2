@@ -859,6 +859,16 @@
      Hide the catalog-write controls; clicking a card opens the page designer. */
   body.catalog-upstream #pa-add-btn,
   body.catalog-upstream .pa-dup { display: none !important; }
+  /* Per-tenant feature gating. A feature is shown only when its body class is
+     present (set in applyFeatureGates: entitled AND operator-enabled). Anything
+     tagged data-feat="<key>" is hidden when feat-<key> is absent — nav buttons,
+     content tabs and settings sub-panels alike. Defaults keep every feature on,
+     so a section disappears only when an operator (or the platform) turns it off. */
+  body:not(.feat-membership)  [data-feat="membership"],
+  body:not(.feat-affiliate)   [data-feat="affiliate"],
+  body:not(.feat-reviews)     [data-feat="reviews"],
+  body:not(.feat-feedback)    [data-feat="feedback"],
+  body:not(.feat-socialProof) [data-feat="socialProof"] { display: none !important; }
   .pa-dup-row {
     flex: none; width: 28px; height: 28px; padding: 0;
     border: 1px solid var(--line); border-radius: 6px;
@@ -3641,7 +3651,10 @@
   .ml-preview img { max-width: 100%; max-height: 320px; object-fit: contain; display: block; }
 </style>
 </head>
-<body>
+<!-- Features default to ON so nothing flashes hidden before loadConfig() runs;
+     applyFeatureGates() then removes the class for any feature an operator (or
+     the platform) has turned off. -->
+<body class="feat-membership feat-affiliate feat-reviews feat-feedback feat-socialProof">
 
 <div class="topbar">
   <div class="brand">
@@ -3717,7 +3730,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/></svg>
         Pop-ups · 弹窗
       </button>
-      <button data-tab="affiliate">
+      <button data-tab="affiliate" data-feat="affiliate">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-3 3-3-3"/><path d="M19 14V4"/></svg>
         Affiliate · 分销
       </button>
@@ -3725,7 +3738,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         Leaderboard · 排行榜
       </button>
-      <button data-tab="membership">
+      <button data-tab="membership" data-feat="membership">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1 3-6z"/></svg>
         Membership · 会员
       </button>
@@ -3760,11 +3773,11 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         About page · 关于页
       </button>
-      <button data-tab="reviews">
+      <button data-tab="reviews" data-feat="reviews">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
         Reviews · 评价
       </button>
-      <button data-tab="feedback">
+      <button data-tab="feedback" data-feat="feedback">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8a2 2 0 0 1 2 2v12l-4-3H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M12 6v3"/><circle cx="12" cy="11.5" r="0.4" fill="currentColor"/></svg>
         Feedback · 反馈
       </button>
@@ -6007,7 +6020,7 @@
   </section>
 
   <!-- ─── AFFILIATE ─── -->
-  <section id="tab-affiliate">
+  <section id="tab-affiliate" data-feat="affiliate">
     <h2>Affiliate · Refer a friend · 分销与推荐好友</h2>
     <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
       Customers can share their personal code; when a friend signs up and places their first paid order, both
@@ -6087,7 +6100,7 @@
   </section>
 
   <!-- ─── REVIEWS ─── -->
-  <section id="tab-reviews">
+  <section id="tab-reviews" data-feat="reviews">
     <h2>Customer reviews · 顾客评价</h2>
     <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4);">
       Customer reviews collected from the mini app after a delivered order. Hidden reviews are dropped from
@@ -6172,7 +6185,7 @@
   </section>
 
   <!-- ─── FEEDBACK ─── -->
-  <section id="tab-feedback">
+  <section id="tab-feedback" data-feat="feedback">
     <h2>Customer feedback · 顾客反馈</h2>
     <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4);">
       Bug reports and feedback customers send from the mini app’s “Found a bug?” form. Read-only — newest first.
@@ -6430,7 +6443,7 @@
   </section>
 
   <!-- ─── MEMBERSHIP TIERS — Roots Club ladder ─── -->
-  <section id="tab-membership">
+  <section id="tab-membership" data-feat="membership">
     <h2>Membership tiers · 会员等级</h2>
     <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
       The Roots Club ladder shown on the mini-app Membership page. Threshold = minimum lifetime spend (¥) to reach the tier; the lowest threshold should be 0. Perks are one bullet per line. Tiers are sorted by threshold automatically when you save. Each customer's tier auto-promotes from their lifetime spend — no manual override. · 小程序“会员”页展示的等级体系。门槛 = 累计消费(¥)下限,最低需为 0;权益每行一条;保存后按门槛自动排序。每位顾客的等级根据累计消费自动升级。
@@ -6967,6 +6980,10 @@
     <div class="settings-layout">
       <!-- ───────── sidebar nav ───────── -->
       <aside class="settings-nav" id="settings-nav">
+        <button data-sub="features">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          Features
+        </button>
         <button data-sub="theme" class="active">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg>
           Brand &amp; theme
@@ -6987,7 +7004,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0v5l2 3H4l2-3V8z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
           Push notifications
         </button>
-        <button data-sub="social">
+        <button data-sub="social" data-feat="socialProof">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Social proof
         </button>
@@ -7851,7 +7868,7 @@
              under the `social_proof` key and are read by routes/retail.js
              (getSocialConfig). Defaults match the original hardcoded constants
              so flipping a switch is the only thing that changes behaviour. -->
-        <div class="sub-panel" id="sub-social">
+        <div class="sub-panel" id="sub-social" data-feat="socialProof">
           <h2>Social proof · 社交证明</h2>
           <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
             Five live engagement widgets that surface real customer activity in the mini app. Toggle any of them off to hide the widget instantly across all customers (no WeChat republish needed). Tuning numbers control how aggressive each one is. · 五个实时社交证明组件,可即时开启/关闭和调整阈值。
@@ -8297,6 +8314,26 @@
           </div>
         </div>
 
+        <!-- ────── FEATURES ────── -->
+        <!-- Per-tenant feature switches. Rows are rendered by renderFeaturesPanel()
+             from the operator's entitlements, so this panel only ever lists the
+             features this tenant is allowed to use. Saving writes features.<key>
+             booleans to storefront_config and re-applies the gates live. -->
+        <div class="sub-panel" id="sub-features">
+          <h2>Features · 功能</h2>
+          <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
+            Turn optional sections of your backend on or off. Switching a feature off hides its tab and settings here, so your team only sees the tools you actually use. Changes apply instantly. · 开启或关闭后台的可选功能模块;关闭后将隐藏对应的标签页与设置,即时生效。
+          </div>
+          <div id="features-list"></div>
+          <div class="row" style="gap: 12px; margin-top: var(--s4);">
+            <button class="btn btn-primary" onclick="saveFeatures()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Save features · 保存功能
+            </button>
+            <span id="features-status" style="font-size: 12px; align-self: center;"></span>
+          </div>
+        </div>
+
         <!-- ────── shared save bar ────── -->
         <div class="save-bar">
           <button class="btn btn-primary" onclick="saveConfig()">
@@ -8589,6 +8626,21 @@ document.addEventListener('input', e => {
 // = catalog + stock live in the kitchen app, so this backend only merchandises
 // the channel; 'self' = this backend manages its own products + stock.
 let CATALOG_MODE = 'self';
+// Toggleable backend features — keep keys in sync with lib/features.js. `def`
+// is the operator-on default when the tenant has never touched the Features tab.
+const FEATURE_CATALOG = [
+  { key: 'membership',  en: 'Membership & points', cn: '会员与积分', def: true,
+    desc: 'Roots Club tiers and the points shown to shoppers. · 会员等级与向顾客展示的积分。' },
+  { key: 'affiliate',   en: 'Referral program',    cn: '推荐计划',   def: true,
+    desc: 'The affiliate / referral tab and shopper referral links. · 推荐计划标签页与顾客推荐链接。' },
+  { key: 'reviews',     en: 'Product reviews',      cn: '商品评价',   def: true,
+    desc: 'Customer reviews and the review-tag editor. · 顾客评价与评价标签编辑。' },
+  { key: 'feedback',    en: 'Customer feedback',    cn: '用户反馈',   def: true,
+    desc: 'The "Found a bug?" inbox from the mini-app Me page. · 来自小程序“我的”页面的反馈收件箱。' },
+  { key: 'socialProof', en: 'Social proof',         cn: '社交证明',   def: true,
+    desc: 'Bought-counts, recent-buyers ticker and the SOLD badge. · 购买人数、最近购买动态与“已售”标签。' },
+];
+let ENTITLEMENTS = {};
 (async () => {
   try {
     // Mini App Backend is its own auth realm — authenticate against the
@@ -8601,6 +8653,10 @@ let CATALOG_MODE = 'self';
     // tenants never see the catalog-write controls / stock modal.
     CATALOG_MODE = (u.tenant && u.tenant.catalogMode) || 'self';
     document.body.classList.toggle('catalog-upstream', CATALOG_MODE === 'upstream');
+    // Feature entitlements (platform ceiling). { key: false } = not entitled;
+    // a missing key means entitled. loadConfig() combines this with the
+    // operator's own on/off preferences before showing each feature.
+    ENTITLEMENTS = (u.tenant && u.tenant.entitlements) || {};
     // Operator name links to the backend account page (change password / sign
     // out). Every authenticated operator has full backend access — the backend
     // realm has no per-module permission gate.
@@ -11570,9 +11626,68 @@ document.addEventListener('change', e => {
   if (e.target.id === 'cfg-cs-qr-file' && e.target.files?.[0]) uploadCsQr(e.target.files[0]);
 });
 
+// ── Per-tenant features ──
+// effective = entitled (platform ceiling) AND operator-enabled (preference).
+// Preference lives in storefront_config under features.<key>; unset falls back
+// to the catalog default so nothing vanishes on a fresh tenant.
+function featureEnabled(cfg, f) {
+  const entitled = ENTITLEMENTS[f.key] !== false;
+  const pref = cfg?.features?.[f.key];
+  const on = pref === undefined ? f.def : !!pref;
+  return entitled && on;
+}
+// Add/remove the feat-<key> body class so the CSS gates show/hide every tagged
+// nav button, content tab and settings sub-panel at once.
+function applyFeatureGates(cfg) {
+  for (const f of FEATURE_CATALOG) {
+    document.body.classList.toggle('feat-' + f.key, featureEnabled(cfg, f));
+  }
+}
+// Render one toggle row per ENTITLED feature into the Features settings panel.
+// Features the platform hasn't entitled are simply omitted (no dead switches).
+function renderFeaturesPanel(cfg) {
+  const box = $('#features-list');
+  if (!box) return;
+  box.innerHTML = '';
+  for (const f of FEATURE_CATALOG) {
+    if (ENTITLEMENTS[f.key] === false) continue;
+    const pref = cfg?.features?.[f.key];
+    const on = pref === undefined ? f.def : !!pref;
+    const card = document.createElement('div');
+    card.className = 'group-card';
+    card.innerHTML =
+      '<div class="group-card-head">' +
+        '<h3>' + f.en + ' · ' + f.cn + '</h3>' +
+        '<div class="muted">' + f.desc + '</div>' +
+      '</div>' +
+      '<label class="ckbox" style="margin-top:8px;">' +
+        '<input type="checkbox" data-feat-key="' + f.key + '"' + (on ? ' checked' : '') + '>' +
+        '<span>Enabled · 启用</span>' +
+      '</label>';
+    box.appendChild(card);
+  }
+}
+async function saveFeatures() {
+  const status = $('#features-status');
+  if (status) { status.textContent = 'Saving… · 保存中…'; status.style.color = ''; }
+  const body = {};
+  $$('#features-list input[data-feat-key]').forEach(inp => {
+    body['features.' + inp.dataset.featKey] = inp.checked;
+  });
+  try {
+    const { data: c } = await api('/api/retail-admin/config', { method: 'PUT', body });
+    applyFeatureGates(c);
+    if (status) { status.innerHTML = '<span class="ok">Saved ✓ · 已保存</span>'; }
+  } catch (e) {
+    if (status) { status.textContent = 'Save failed · 保存失败'; status.style.color = 'var(--danger)'; }
+  }
+}
+
 async function loadConfig() {
   try {
     const { data: c } = await api('/api/retail-admin/config');
+    applyFeatureGates(c);
+    renderFeaturesPanel(c);
     $('#cfg-theme-accent').value         = c.theme?.accent || 'lime-leaf';
     $('#cfg-theme-language').value       = c.theme?.language || 'bilingual';
     $('#cfg-theme-ipIntensity').value    = c.theme?.ipIntensity || 'soft';
