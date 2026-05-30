@@ -632,15 +632,54 @@
     background: var(--bg-pane);
     border: 1px solid var(--line);
     border-radius: var(--r-md);
-    padding: var(--s3) var(--s4);
+    padding: 0;
     cursor: pointer;
     transition: border-color var(--t-fast), background var(--t-fast);
-    display: flex; flex-direction: column; gap: 6px;
-    text-align: left; min-width: 0;
+    display: flex; flex-direction: column;
+    text-align: left; min-width: 0; overflow: hidden;
   }
-  .pa-preset-card:hover { border-color: var(--accent); background: var(--bg-elev-2); }
+  .pa-preset-card:hover { border-color: var(--accent); }
+  .pa-preset-meta { padding: var(--s3) var(--s4) calc(var(--s3) + 1px); display: flex; flex-direction: column; gap: 3px; }
   .pa-preset-card-label { font-size: 13px; font-weight: 600; color: var(--text-1); line-height: 1.3; }
-  .pa-preset-card-desc { font-size: 11px; color: var(--text-3); line-height: 1.5; }
+  .pa-preset-card-count { font-size: 10px; letter-spacing: .04em; color: var(--text-3); }
+
+  /* Auto-drawn layout wireframe — one mini shape per block (paPresetThumb) */
+  .pa-preset-thumb {
+    position: relative;
+    height: 150px; overflow: hidden;
+    padding: 12px 14px;
+    background: var(--bg-elev-2);
+    border-bottom: 1px solid var(--line-soft);
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  /* fade the clipped bottom so a long stack reads as "more page below" */
+  .pa-preset-thumb::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 28px;
+    background: linear-gradient(to bottom, transparent, var(--bg-elev-2));
+    pointer-events: none;
+  }
+  .pa-preset-card:hover .pa-preset-thumb { background: var(--bg-elev-1); }
+  .pa-preset-card:hover .pa-preset-thumb::after { background: linear-gradient(to bottom, transparent, var(--bg-elev-1)); }
+  .pa-preset-thumb .tr { display: flex; gap: 4px; flex: none; }
+  .pa-preset-thumb .tr i { display: block; background: var(--line); border-radius: 2px; }
+  .pa-preset-thumb .tr.spec i  { flex: 1; height: 9px; }
+  .pa-preset-thumb .tr.lines   { flex-direction: column; gap: 3px; }
+  .pa-preset-thumb .tr.lines i { height: 4px; }
+  .pa-preset-thumb .tr.lines i:nth-child(2) { width: 85%; }
+  .pa-preset-thumb .tr.lines i:nth-child(3) { width: 55%; }
+  .pa-preset-thumb .tr.stat    { height: 20px; background: var(--accent); opacity: .85; border-radius: 3px; }
+  .pa-preset-thumb .tr.why     { flex-direction: column; gap: 3px; }
+  .pa-preset-thumb .tr.why i   { height: 4px; width: 72%; }
+  .pa-preset-thumb .tr.chips   { flex-wrap: wrap; gap: 3px; }
+  .pa-preset-thumb .tr.chips i { height: 9px; border-radius: 5px; }
+  .pa-preset-thumb .tr.iline i { flex: 1; height: 6px; }
+  .pa-preset-thumb .tr.quote   { height: 16px; background: var(--bg-pane); border-left: 3px solid var(--accent); border-radius: 2px; }
+  .pa-preset-thumb .tr.grid    { flex-wrap: wrap; gap: 3px; }
+  .pa-preset-thumb .tr.grid i  { width: calc(33.33% - 3px); height: 14px; border-radius: 3px; }
+  .pa-preset-thumb .tr.storage i { flex: 1; height: 20px; border-radius: 3px; }
+  .pa-preset-thumb .tr.allergen  { height: 15px; border: 1px solid var(--line); border-radius: 3px; }
+  .pa-preset-thumb .tr.notes   { height: 11px; background: var(--accent); opacity: .25; border-radius: 2px; }
+  .pa-preset-thumb .tr.bar     { height: 9px; background: var(--line); border-radius: 2px; }
 
   /* Block rows — match the Mini App Editor's .palette-item exactly */
   .pa-block-row {
@@ -1712,6 +1751,67 @@ function peSmartApply() {
   toast(msg);
 }
 
+// ── Auto-fill — Smart paste, but the source is the kitchen app's product
+// description (EN + CN) instead of a manual paste. This is the DEFAULT: when a
+// product opens with a blank design and the kitchen already carries both
+// languages, compose the sections automatically so the operator never has to
+// hand-copy the kitchen text into Smart paste. It only fires on an empty
+// canvas, so saved or hand-edited sections are never clobbered — once the page
+// has blocks, auto-fill stays out of the way. The result is left UNSAVED so the
+// operator reviews and commits it deliberately.
+let _peAutoFilledFor = null;   // product id we've already auto-filled this session
+function _peStripToText(html) {
+  let s = String(html == null ? '' : html);
+  if (!s.trim()) return '';
+  // Turn block-level boundaries into newlines so paragraphs survive the strip.
+  s = s.replace(/<\s*(br|\/p|\/div|\/li|\/h[1-6])\s*>/gi, '\n').replace(/<[^>]+>/g, '');
+  const ta = document.createElement('textarea'); ta.innerHTML = s;  // decode entities
+  return ta.value.replace(/[  	]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n').split('\n').map(l => l.trim()).join('\n').trim();
+}
+async function peAutoFillFromKitchen(p) {
+  if (!p || _peAutoFilledFor === p.id) return;
+  // A saved design (the product of earlier work) locks auto-fill out.
+  if (Array.isArray(p.description_blocks) && p.description_blocks.length) return;
+  const textEn = _peStripToText(p.description_en);
+  const textCn = _peStripToText(p.description_cn);
+  // Default rule: auto-copy only when BOTH languages exist in the kitchen app.
+  if (!textEn || !textCn) return;
+  _peAutoFilledFor = p.id;
+  toast(cuT('Auto-filling sections from the kitchen description… · 正在根据厨房描述生成板块…', '正在根据厨房描述生成板块…'));
+  try {
+    const r = await fetch('/api/ai/compose-blocks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        text_en: textEn, text_cn: textCn, translate: false,
+        product: { id: p.id, name_en: p.name_en, name_cn: p.name_cn, category: p.category },
+      }),
+    });
+    if (r.status === 401 || r.status === 403) { location.href = '/'; return; }
+    const j = await r.json().catch(() => ({}));
+    // Convenience step, not a required one — fail quietly (AI off, error, etc.).
+    if (!r.ok || !j.success) return;
+    const composed = (j.blocks || []).map(b => ({ ...b, id: paBlocksGenId() }));
+    if (!composed.length) return;
+    // Back off if the operator started composing while the call was in flight —
+    // only a lone synthesised nutrition block (no real design work) is OK.
+    paBlocksSyncFromDOM();
+    const cur = window._paBlocks || [];
+    if (cur.some(b => b.type !== 'nutrition_facts')) return;
+    const hasNutrition = cur.some(b => b.type === 'nutrition_facts');
+    const fresh = composed.filter(b => !(b.type === 'nutrition_facts' && hasNutrition));
+    window._paBlocks = fresh.concat(cur);   // composed sections first, keep nutrition after
+    PA_SELECTED_BLOCK_ID = window._paBlocks[0]?.id || null;
+    paRenderAll();
+    peInspTab('block');
+    toast(cuT(
+      'Auto-filled ' + fresh.length + ' section' + (fresh.length === 1 ? '' : 's') + ' from the kitchen description — review and save ✓',
+      '已根据厨房描述自动生成 ' + fresh.length + ' 个板块 — 请审阅后保存 ✓'));
+  } catch (e) { /* convenience feature — stay silent on failure */ }
+}
+
 function peMount(p) {
   PA_CURRENT = p;
   document.title = (p.name_en || 'Product') + ' · Editor · Roots';
@@ -1783,6 +1883,11 @@ function peMount(p) {
   peInspTab(window._paBlocks.length ? 'block' : 'page');
 
   document.getElementById('pe-loading').classList.add('hide');
+
+  // Default behaviour: if this product has no design yet but the kitchen app
+  // already carries both EN + CN descriptions, compose the sections off that
+  // copy automatically (fire-and-forget — it leaves the page dirty for review).
+  peAutoFillFromKitchen(p);
 }
 
 // Switch the inspector between the selected-block form and page-level
@@ -1833,13 +1938,37 @@ function paClearColophonChar() {
 }
 
 // ── Presets ──
+// Draw a tiny abstract wireframe of a preset's layout straight from its
+// `blocks` array — each block type maps to a representative shape. It's
+// derived data, so the preview always matches what the preset applies.
+const PA_THUMB_SHAPE = {
+  spec_strip:        b => `<div class="tr spec">${'<i></i>'.repeat(Math.min((b.cells || []).length || 3, 4))}</div>`,
+  hero_intro:        () => `<div class="tr lines"><i></i><i></i><i></i></div>`,
+  big_stat:          () => `<div class="tr stat"></div>`,
+  why:               b => `<div class="tr why">${'<i></i>'.repeat(Math.min((b.rows || []).length || 3, 6))}</div>`,
+  ingredients_chips: b => `<div class="tr chips">${[22,30,17,26,20,28,16].slice(0, Math.min((b.items || []).length || 5, 7)).map(w => `<i style="width:${w}px"></i>`).join('')}</div>`,
+  ingredients_line:  b => `<div class="tr iline">${'<i></i>'.repeat(Math.min((b.items || []).length || 5, 7))}</div>`,
+  pull_quote:        () => `<div class="tr quote"></div>`,
+  how_to_use:        b => `<div class="tr grid">${'<i></i>'.repeat(Math.min((b.tiles || []).length || 6, 12))}</div>`,
+  storage_box:       () => `<div class="tr storage"><i></i><i></i></div>`,
+  allergen_card:     () => `<div class="tr allergen"></div>`,
+  notes_callout:     () => `<div class="tr notes"></div>`,
+};
+function paPresetThumb(blocks) {
+  return (blocks || []).map(b =>
+    (PA_THUMB_SHAPE[b.type] || (() => '<div class="tr bar"></div>'))(b)
+  ).join('');
+}
 function paRenderPresets() {
   const row = document.getElementById('pa-presets-row'); if (!row) return;
   if (row.children.length) return;
   row.innerHTML = PA_PAGE_PRESETS.map(p => `
-    <button type="button" class="pa-preset-card" onclick="paApplyPreset('${p.id}')">
-      <span class="pa-preset-card-label">${escapeHtml(p.label_en)}<br>${escapeHtml(p.label_cn)}</span>
-      <span class="pa-preset-card-desc">${escapeHtml(p.desc_en)}<br>${escapeHtml(p.desc_cn)}</span>
+    <button type="button" class="pa-preset-card" onclick="paApplyPreset('${p.id}')" title="${escapeHtml(p.desc_en + ' · ' + p.desc_cn)}">
+      <div class="pa-preset-thumb">${paPresetThumb(p.blocks)}</div>
+      <div class="pa-preset-meta">
+        <span class="pa-preset-card-label">${escapeHtml(p.label_en)}<br>${escapeHtml(p.label_cn)}</span>
+        <span class="pa-preset-card-count">${(p.blocks || []).length} blocks · ${(p.blocks || []).length} 个板块</span>
+      </div>
     </button>
   `).join('');
 }
