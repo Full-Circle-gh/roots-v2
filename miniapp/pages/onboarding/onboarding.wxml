@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page {{splash ? 'page-splash' : ''}}">
   <block-renderer
     wx:for="{{layout}}"
     wx:key="id"
@@ -6,7 +6,7 @@
     lang="{{lang}}"
     leaderboards="{{leaderboards}}"/>
 
-  <view class="footer">
+  <view class="footer {{splash ? 'footer-splash' : ''}}">
     <view class="next f-toni" hover-class="btn-hover" bindtap="goHome">{{nextLabel}}</view>
   </view>
 </view>

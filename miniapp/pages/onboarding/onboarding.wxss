@@ -10,6 +10,23 @@
   bottom: 60rpx;
   left: 44rpx;
   right: 44rpx;
+  z-index: 20;
+}
+/* Splash mode: a full-screen video block sits fixed behind everything, so the
+   page itself needs no scroll padding and no oat backdrop showing through. */
+.page-splash {
+  padding-bottom: 0;
+  background: #000;
+  overflow: hidden;
+  height: 100vh;
+}
+/* Lift the button off the bottom edge (safe-area) and add a soft scrim +
+   shadow so it stays legible over any video frame. */
+.footer-splash {
+  bottom: calc(60rpx + env(safe-area-inset-bottom));
+}
+.footer-splash .next {
+  box-shadow: 0 8rpx 30rpx rgba(0, 0, 0, 0.45);
 }
 /* <view bindtap> instead of <button> — WeChat's native <button> drops
    taps inconsistently on some Android builds. */

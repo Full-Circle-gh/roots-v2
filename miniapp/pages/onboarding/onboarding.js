@@ -18,6 +18,9 @@ Page({
     layout: [], lang: 'en', loading: true, version: '1',
     nextLabel: DEFAULT_NEXT.en,
     leaderboards: {},
+    // True when the layout contains a full-screen video block — switches the
+    // page into splash mode (video covers the screen, button floats on top).
+    splash: false,
   },
 
   async onLoad() {
@@ -32,9 +35,11 @@ Page({
       const ver = Number.isFinite(cfg?.onboarding?.version)
         ? String(cfg.onboarding.version) : '1';
       const layout = cfg?.onboarding?.layout || [];
+      const splash = layout.some(b => b && b.type === 'video_banner' && b.display === 'fullscreen');
       this.setData({
         layout,
         version: ver,
+        splash,
         nextLabel: pickLabel(cfg?.onboarding?.next_label, lang, DEFAULT_NEXT),
         loading: false,
       });

@@ -2028,6 +2028,15 @@
     background: linear-gradient(135deg, #c4c4c4, #a8a8a8);
   }
   .b-video video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+  /* Full-screen splash preview — fills the phone screen + a corner badge */
+  .b-video-fs { background: #000; }
+  .b-video-fs .fs-hint {
+    position: absolute; top: 12px; left: 12px;
+    padding: 4px 9px; border-radius: 999px;
+    background: rgba(0, 0, 0, .55); color: #fff;
+    font: 600 10px var(--f-sans); letter-spacing: .06em;
+    text-transform: uppercase; pointer-events: none;
+  }
   .b-video .placeholder {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     height: 100%; min-height: 200px;
@@ -6201,6 +6210,9 @@ function makeBlock(type) {
     }
     case 'video_banner': return {
       id, type,
+      // 'banner' — fixed-height in-page band. 'fullscreen' — covers the whole
+      // device, for an onboarding splash intro.
+      display: 'banner',
       // MP4 clip uploaded via the video picker (or a pasted CDN URL).
       video_url: '',
       // Optional still shown while the clip loads / before autoplay kicks in.
@@ -6486,15 +6498,23 @@ function renderBlockBody(b) {
       return d;
     }
     case 'video_banner': {
-      d.className = 'b-video';
-      d.style.height = (b.height_px || 420) * 0.6 + 'px';
-      if (b.video_url) {
+      const fullscreen = (b.display || 'banner') === 'fullscreen';
+      d.className = fullscreen ? 'b-video b-video-fs' : 'b-video';
+      if (fullscreen) {
+        // Fill the visible phone screen so the author sees the splash look.
+        const ph = document.querySelector('.phone');
+        d.style.height = (ph ? ph.clientHeight : 640) + 'px';
+      } else {
+        d.style.height = (b.height_px || 420) * 0.6 + 'px';
+      }
+      const media = b.video_url
         // Autoplay muted loop in the canvas too, so the author sees exactly
         // what customers get. playsinline keeps it from going fullscreen.
-        d.innerHTML = `<video src="${escapeAttr(b.video_url)}"${b.poster_url ? ` poster="${escapeAttr(b.poster_url)}"` : ''} autoplay muted loop playsinline></video>`;
-      } else {
-        d.innerHTML = `<div class="placeholder">${ICONS.video_banner}<div>Upload a clip or paste a video URL</div></div>`;
-      }
+        ? `<video src="${escapeAttr(b.video_url)}"${b.poster_url ? ` poster="${escapeAttr(b.poster_url)}"` : ''} autoplay muted loop playsinline></video>`
+        : `<div class="placeholder">${ICONS.video_banner}<div>${fullscreen ? 'Upload a clip — plays full-screen on launch' : 'Upload a clip or paste a video URL'}</div></div>`;
+      d.innerHTML = fullscreen
+        ? media + '<div class="fs-hint">Full screen · plays on launch</div>'
+        : media;
       return d;
     }
     case 'category_tabs': {
@@ -8074,11 +8094,30 @@ function buildVideoForm(m, b) {
   const note = document.createElement('div');
   note.className = 'helper';
   note.style.cssText = 'margin: -4px 0 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
+  const fullscreen = (b.display || 'banner') === 'fullscreen';
   note.innerHTML = B(
-    'The clip autoplays muted on a loop with no controls — it starts the moment it scrolls into view. Use a short MP4 (≤20MB). Tip: keep it under ~10s so it loops smoothly.',
-    '短片在滚动到可见时自动播放,静音、循环、无控件。请用较短的 MP4(≤20MB)。建议时长 10 秒内,循环更顺滑。'
+    'The clip autoplays muted on a loop with no controls — it starts the moment it appears. Use a short MP4 (≤20MB). Tip: keep it under ~10s so it loops smoothly.',
+    '短片出现时自动播放,静音、循环、无控件。请用较短的 MP4(≤20MB)。建议时长 10 秒内,循环更顺滑。'
   );
   m.appendChild(note);
+
+  m.appendChild(field(T('Display', '显示方式'),
+    T('Banner = a fixed-height band inside the page. Full screen = covers the whole phone — use it on the Onboarding page for a launch intro video. The Get Started button floats over it.', '横幅 = 页面内固定高度的条幅。全屏 = 覆盖整个手机屏幕 — 用于「引导页」做开场视频。「开始」按钮会浮在其上。'),
+    sel(b.display || 'banner', [
+      { value: 'banner',     label: T('Banner — in-page band', '横幅 — 页面内条幅') },
+      { value: 'fullscreen', label: T('Full screen — splash / onboarding', '全屏 — 开屏 / 引导') },
+    ], v => updateBlock(b.id, { display: v }))));
+
+  if (fullscreen) {
+    const splashNote = document.createElement('div');
+    splashNote.className = 'helper';
+    splashNote.style.cssText = 'margin: -4px 0 12px; line-height: 1.5;';
+    splashNote.innerHTML = B(
+      'Heads-up: full screen only takes over the screen on the <b>Onboarding</b> page. Put this block on Onboarding and the video fills the phone with your Get Started button on top.',
+      '提示:全屏效果仅在<b>引导页</b>生效。把此模块放在引导页,视频即铺满手机屏幕,「开始」按钮浮于其上。'
+    );
+    m.appendChild(splashNote);
+  }
 
   m.appendChild(field(T('Video clip', '视频短片'),
     T('Upload an MP4 or paste a hosted video URL.', '上传 MP4 或粘贴视频链接。'),
@@ -8088,9 +8127,11 @@ function buildVideoForm(m, b) {
     T('A still shown while the clip loads. Falls back to the first frame if left blank.', '加载时显示的静态图。留空则使用视频首帧。'),
     imgPicker(b.poster_url, ({ url }) => updateBlock(b.id, { poster_url: url }))));
 
-  m.appendChild(field(T('Height (px)', '高度(像素)'),
-    T('How tall the banner stands. The clip is cropped to fill — no stretch.', '横幅高度。视频会裁剪填满 — 不拉伸。'),
-    num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+  if (!fullscreen) {
+    m.appendChild(field(T('Height (px)', '高度(像素)'),
+      T('How tall the banner stands. The clip is cropped to fill — no stretch.', '横幅高度。视频会裁剪填满 — 不拉伸。'),
+      num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+  }
 
   m.appendChild(field(T('Tap target (optional)', '点击跳转(可选)'),
     T('Where tapping the banner goes — e.g. shop, promotions, product:12, category:5. Blank = not tappable.', '点击横幅后跳转的位置 — 例如 shop、promotions、product:12、category:5。留空则不可点击。'),

@@ -2706,6 +2706,16 @@
   height: 100%;
   display: block;
 }
+/* Full-screen splash — covers the whole device (onboarding intro video) */
+.video-blk.video-fs {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  z-index: 1;
+}
 
 .lb-blk {
   margin: 16rpx 24rpx;

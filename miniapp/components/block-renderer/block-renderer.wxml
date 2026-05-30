@@ -832,7 +832,7 @@
 </view>
 
 <!-- Video banner: autoplaying muted loop, no controls -->
-<view wx:elif="{{type === 'video_banner' && videoUrl}}" class="video-blk" style="height:{{videoHeight * 2}}rpx" bindtap="onVideoTap">
+<view wx:elif="{{type === 'video_banner' && videoUrl}}" class="video-blk {{videoFullscreen ? 'video-fs' : ''}}" style="{{videoFullscreen ? '' : 'height:' + (videoHeight * 2) + 'rpx'}}" bindtap="onVideoTap">
   <video class="video-el"
          src="{{videoUrl}}"
          poster="{{videoPoster}}"

@@ -134,6 +134,7 @@ Component({
     videoPoster: '',
     videoHeight: 420,
     videoLink: '',
+    videoFullscreen: false,
   },
 
   observers: {
@@ -1153,6 +1154,9 @@ Component({
           out.videoPoster = absUrl(b.poster_url);
           out.videoHeight = b.height_px || 420;
           out.videoLink   = b.link_target || '';
+          // 'fullscreen' covers the whole device (onboarding splash); 'banner'
+          // is the fixed-height in-page band.
+          out.videoFullscreen = b.display === 'fullscreen';
           break;
         }
       }
