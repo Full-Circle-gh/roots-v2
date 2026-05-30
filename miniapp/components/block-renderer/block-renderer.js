@@ -93,6 +93,7 @@ Component({
     chars: [],
     // hero
     imageUrl: '',
+    heroVideo: '',
     aspectRatio: '',
     placeholderH: 280,
     ctas: [],
@@ -212,6 +213,7 @@ Component({
         case 'hero_banner': {
           out.heroView = b.view || 'full';
           out.imageUrl = absUrl(b.image_url);
+          out.heroVideo = absUrl(b.video_url);
           if (b.image_aspect && b.image_url) out.aspectRatio = String(b.image_aspect);
           out.placeholderH = b.height_px || 280;
           const ctas = Array.isArray(b.ctas) ? b.ctas : (b.cta_label ? [{ label_en: b.cta_label, label_cn: '', target: b.cta_target, style: 'primary' }] : []);

@@ -27,10 +27,14 @@
 
 <!-- Hero: full view (current — image fills, CTAs float) -->
 <view wx:elif="{{type === 'hero_banner' && heroView !== 'split'}}" class="hero hero-full scrim-{{heroScrim}} enter-{{heroEnter}}" style="{{aspectRatio ? 'aspect-ratio:' + aspectRatio + ';height:auto' : 'height:' + (placeholderH * 2) + 'rpx'}}">
-  <image wx:if="{{imageUrl}}" src="{{imageUrl}}" mode="aspectFill" class="hero-img"/>
+  <video wx:if="{{heroVideo}}" class="hero-video" src="{{heroVideo}}" poster="{{imageUrl}}"
+         autoplay="{{true}}" loop="{{true}}" muted="{{true}}" controls="{{false}}"
+         show-center-play-btn="{{false}}" show-play-btn="{{false}}" show-fullscreen-btn="{{false}}"
+         show-progress="{{false}}" enable-progress-gesture="{{false}}" object-fit="cover" vslide-gesture="{{false}}"/>
+  <image wx:elif="{{imageUrl}}" src="{{imageUrl}}" mode="aspectFill" class="hero-img"/>
   <view wx:else class="hero-placeholder">No image</view>
-  <view wx:if="{{imageUrl && ctas.length && heroScrim !== 'none'}}" class="hero-scrim"></view>
-  <view wx:if="{{imageUrl && ctas.length}}" class="cta-stack">
+  <view wx:if="{{(heroVideo || imageUrl) && ctas.length && heroScrim !== 'none'}}" class="hero-scrim"></view>
+  <view wx:if="{{(heroVideo || imageUrl) && ctas.length}}" class="cta-stack">
     <button wx:for="{{ctas}}" wx:key="index" class="cta-btn cta-{{item.style}}"
             data-idx="{{index}}" bindtap="onCtaTap">
       {{item.label}}
@@ -41,7 +45,11 @@
 <!-- Hero: split view (image left, copy panel right) -->
 <view wx:elif="{{type === 'hero_banner' && heroView === 'split'}}" class="hero hero-split">
   <view class="split-img">
-    <image wx:if="{{imageUrl}}" src="{{imageUrl}}" mode="aspectFill" class="hero-img"/>
+    <video wx:if="{{heroVideo}}" class="hero-video" src="{{heroVideo}}" poster="{{imageUrl}}"
+           autoplay="{{true}}" loop="{{true}}" muted="{{true}}" controls="{{false}}"
+           show-center-play-btn="{{false}}" show-play-btn="{{false}}" show-fullscreen-btn="{{false}}"
+           show-progress="{{false}}" enable-progress-gesture="{{false}}" object-fit="cover" vslide-gesture="{{false}}"/>
+    <image wx:elif="{{imageUrl}}" src="{{imageUrl}}" mode="aspectFill" class="hero-img"/>
     <view wx:else class="hero-placeholder">No image</view>
   </view>
   <view class="split-panel" style="background:{{heroPanelBg}};color:{{heroPanelFg}}">

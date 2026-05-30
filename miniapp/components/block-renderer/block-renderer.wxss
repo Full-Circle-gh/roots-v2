@@ -96,6 +96,7 @@
   overflow: hidden;
 }
 .hero .hero-img { width: 100%; height: 100%; display: block; }
+.hero .hero-video { width: 100%; height: 100%; display: block; }
 .hero .hero-placeholder {
   display: flex;
   align-items: center;
@@ -155,7 +156,8 @@
   overflow: hidden;
   background: #ddd;
 }
-.hero-split .split-img .hero-img { width: 100%; height: 100%; }
+.hero-split .split-img .hero-img,
+.hero-split .split-img .hero-video { width: 100%; height: 100%; display: block; }
 .hero-split .split-img .hero-placeholder {
   display: flex; align-items: center; justify-content: center;
   width: 100%; height: 100%;

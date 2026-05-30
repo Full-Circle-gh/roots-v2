@@ -1994,7 +1994,7 @@
     background: linear-gradient(135deg, #c4c4c4, #a8a8a8);
     position: relative; width: 100%; overflow: hidden;
   }
-  .b-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .b-hero img, .b-hero video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .b-hero .cta-stack {
     position: absolute; bottom: 28px; left: 22px; right: 22px;
     display: flex; flex-direction: column; gap: 8px;
@@ -2083,7 +2083,7 @@
     height: auto !important; aspect-ratio: auto !important;
   }
   .b-hero-split .split-img { position: relative; overflow: hidden; background: #ddd; }
-  .b-hero-split .split-img img { width: 100%; height: 100%; object-fit: cover; }
+  .b-hero-split .split-img img, .b-hero-split .split-img video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .b-hero-split .split-img .placeholder { min-height: 0; }
   .b-hero-split .split-panel {
     padding: 20px 18px; display: flex; flex-direction: column; justify-content: center;
@@ -6454,7 +6454,9 @@ function renderBlockBody(b) {
         const panelBg = brandColorVar(b.panel_bg_color) || 'var(--b-oat)';
         const panelFg = brandColorVar(b.panel_fg_color) || 'var(--b-ink)';
         const ctas = getCtas(b);
-        const imgHtml = b.image_url
+        const imgHtml = b.video_url
+          ? `<video src="${escapeAttr(b.video_url)}"${b.image_url ? ` poster="${escapeAttr(b.image_url)}"` : ''} autoplay muted loop playsinline></video>`
+          : b.image_url
           ? `<img src="${escapeAttr(b.image_url)}" alt="">`
           : `<div class="placeholder">${ICONS.image_placeholder}<div>Image</div></div>`;
         d.innerHTML = `
@@ -6478,12 +6480,14 @@ function renderBlockBody(b) {
       } else {
         d.style.height = (b.height_px || 280) * 0.6 + 'px';
       }
-      if (b.image_url) d.innerHTML = `<img src="${escapeAttr(b.image_url)}" alt="">`;
+      if (b.video_url) d.innerHTML = `<video src="${escapeAttr(b.video_url)}"${b.image_url ? ` poster="${escapeAttr(b.image_url)}"` : ''} autoplay muted loop playsinline></video>`;
+      else if (b.image_url) d.innerHTML = `<img src="${escapeAttr(b.image_url)}" alt="">`;
       else d.innerHTML = `<div class="placeholder">${ICONS.image_placeholder}<div>Upload an image or paste a URL</div></div>`;
       const ctas = getCtas(b);
-      if (b.image_url && ctas.length) {
-        // Scrim sits between the image and the CTAs — only when there are CTAs
-        // and we actually have an image. Pure CSS, scoped by .scrim-{strength}.
+      const hasMedia = b.video_url || b.image_url;
+      if (hasMedia && ctas.length) {
+        // Scrim sits between the media and the CTAs — only when there are CTAs
+        // and we actually have an image/video. Pure CSS, scoped by .scrim-{strength}.
         if (scrim !== 'none') d.innerHTML += `<div class="hero-scrim"></div>`;
         d.innerHTML += `<div class="cta-stack">${ctas.map(c =>
           `<div class="cta-btn ${escapeAttr(c.style || 'primary')}">${biLabel(c.label_en, c.label_cn)}</div>`
@@ -8039,6 +8043,12 @@ function buildHeroForm(m, b) {
       ? T('Cropped to a square on the left side of the panel.', '裁剪为正方形,置于面板左侧。')
       : T('Banner height auto-fits the image — no stretch, no crop.', '横幅高度自动适配图片 — 不拉伸、不裁剪。'),
     imgPicker(b.image_url, ({ url, aspect }) => updateBlock(b.id, { image_url: url, image_aspect: aspect }))
+  ));
+
+  m.appendChild(field(
+    T('Video (optional)', '视频(可选)'),
+    T('Plays muted on a loop, filling the banner. When set it replaces the image — the image above is used as the still poster shown while the clip loads, and to set the banner shape. Keep clips short (≤20MB MP4).', '静音循环播放,铺满横幅。设置后将替代图片 — 上方图片用作加载时的封面,并决定横幅比例。短片请保持精简(≤20MB 的 MP4)。'),
+    videoPicker(b.video_url, url => updateBlock(b.id, { video_url: url }))
   ));
 
   if (view === 'split') {

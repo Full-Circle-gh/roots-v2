@@ -275,7 +275,7 @@
     background: linear-gradient(135deg, #c4c4c4, #a8a8a8);
     position: relative; width: 100%; overflow: hidden;
   }
-  .b-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .b-hero img, .b-hero video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .b-hero .cta-stack {
     position: absolute; bottom: 28px; left: 22px; right: 22px;
     display: flex; flex-direction: column; gap: 8px;
@@ -307,7 +307,7 @@
     height: auto !important; aspect-ratio: auto !important;
   }
   .b-hero-split .split-img { position: relative; overflow: hidden; background: #ddd; }
-  .b-hero-split .split-img img { width: 100%; height: 100%; object-fit: cover; }
+  .b-hero-split .split-img img, .b-hero-split .split-img video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .b-hero-split .split-panel {
     padding: 20px 18px; display: flex; flex-direction: column; justify-content: center;
     gap: 8px;
@@ -1287,7 +1287,9 @@ function renderBlock(b) {
         const sub = getBi(b, 'subtitle');
         const panelBg = brandColorVar(b.panel_bg_color) || 'var(--oat)';
         const panelFg = brandColorVar(b.panel_fg_color) || 'var(--ink)';
-        const imgHtml = b.image_url
+        const imgHtml = b.video_url
+          ? `<video src="${escapeAttr(b.video_url)}"${b.image_url ? ` poster="${escapeAttr(b.image_url)}"` : ''} autoplay muted loop playsinline></video>`
+          : b.image_url
           ? `<img src="${escapeAttr(b.image_url)}" alt="">`
           : `<div class="placeholder">No image set</div>`;
         return `<div class="b-hero b-hero-split">
@@ -1308,9 +1310,10 @@ function renderBlock(b) {
         style = `height: ${(b.height_px || 280)}px`;
       }
       let inner = '';
-      if (b.image_url) inner += `<img src="${escapeAttr(b.image_url)}" alt="">`;
+      if (b.video_url) inner += `<video src="${escapeAttr(b.video_url)}"${b.image_url ? ` poster="${escapeAttr(b.image_url)}"` : ''} autoplay muted loop playsinline></video>`;
+      else if (b.image_url) inner += `<img src="${escapeAttr(b.image_url)}" alt="">`;
       else inner += `<div class="placeholder">No image set</div>`;
-      if (b.image_url && ctas.length) {
+      if ((b.video_url || b.image_url) && ctas.length) {
         inner += `<div class="cta-stack">${ctas.map(c =>
           `<div class="cta-btn ${escapeAttr(c.style || 'primary')}"${c.target ? ` data-cta-target="${escapeAttr(c.target)}"` : ''}>${biLabel(c.label_en, c.label_cn)}</div>`
         ).join('')}</div>`;
