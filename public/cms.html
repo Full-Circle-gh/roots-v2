@@ -2862,6 +2862,8 @@
     border-radius: 0 !important;   /* edge-to-edge band stays square, even if corner=bold */
   }
   .block-wrap.bleed > .b-bundle    { padding-left: 16px !important; padding-right: 16px !important; }
+  /* Review always spans full width (bg, no side margin) — keep its content inset. */
+  .block-wrap.bleed > .b-review    { padding-left: 22px !important; padding-right: 22px !important; }
   .block-wrap.bleed > .b-voting    { padding-left: 18px !important; padding-right: 18px !important; }
   .block-wrap.bleed > .b-affiliate { padding-left: 18px !important; padding-right: 18px !important; }
   .block-wrap.bleed > .b-store     { padding-left: 18px !important; padding-right: 18px !important; }
@@ -3135,7 +3137,7 @@
     border-radius: 999px;
   }
   /* ── Review card / carousel ── */
-  .b-review { padding: 0 22px; }
+  .b-review { padding: 20px 22px; }
   .b-review .kicker {
     font: 700 9px var(--bf-toni); letter-spacing: .18em; opacity: .75;
     text-align: center; margin-bottom: 12px;

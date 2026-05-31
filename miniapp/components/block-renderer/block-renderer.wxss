@@ -1216,7 +1216,10 @@
 
 /* ── Review card / carousel ───────────────────────────────────────────── */
 .review-blk {
-  padding: 0 44rpx;
+  /* Always paints a bg (defaults to oat-milk = page colour, so it's normally
+     invisible). Needs vertical padding so a contrasting bg — e.g. white — gives
+     the testimonial breathing room instead of cropping it at the top/bottom. */
+  padding: 40rpx 44rpx;
 }
 .rv-kicker {
   font-family: var(--f-toni);
@@ -2923,6 +2926,9 @@
   border-radius: 0 !important;   /* edge-to-edge band stays square, even if corner=bold */
 }
 .blk-outer.bleed > .bun-blk    { padding-left: 30rpx !important; padding-right: 30rpx !important; }
+/* Review always spans full width (bg, no side margin), so "full width" is a
+   no-op — keep its content inset rather than letting text hit the edges. */
+.blk-outer.bleed > .review-blk { padding-left: 44rpx !important; padding-right: 44rpx !important; }
 .blk-outer.bleed > .voting-blk { padding-left: 32rpx !important; padding-right: 32rpx !important; }
 .blk-outer.bleed > .aff-blk    { padding-left: 32rpx !important; padding-right: 32rpx !important; }
 .blk-outer.bleed > .store-blk  { padding-left: 36rpx !important; padding-right: 36rpx !important; }
