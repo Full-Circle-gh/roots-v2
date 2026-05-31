@@ -386,9 +386,17 @@ Component({
             // Steps filled per status: unpaid 0 → paid 1 → preparing 2 → on-the-way 3.
             const STEP = { pending_payment: 0, paid: 1, preparing: 2, dispatched: 3 };
             const filled = STEP[o.status] ?? 0;
-            const stepLabels = cn
-              ? ['已支付', '准备中', '配送中', '已送达']
-              : ['Paid', 'Prep', 'On way', 'Delivered'];
+            // Each node carries its own candy colour + outline glyph, reusing
+            // the "My orders" bucket vocabulary (coin/box/truck/house). Colour
+            // encodes PROGRESS, not category: only done/current nodes get the
+            // candy fill — `filled` (i < step) drives that AND the green
+            // connector bar leading into the node; `current` adds the pulse.
+            const TRACK = [
+              { labelEn: 'Paid',      labelCn: '已支付', candy: '#F2CA6C', icon: '/assets/icons/tracker/paid.svg' },
+              { labelEn: 'Prep',      labelCn: '准备中', candy: '#CCD900', icon: '/assets/icons/tracker/prep.svg' },
+              { labelEn: 'On way',    labelCn: '配送中', candy: '#F4B8CB', icon: '/assets/icons/tracker/onway.svg' },
+              { labelEn: 'Delivered', labelCn: '已送达', candy: '#E96174', icon: '/assets/icons/tracker/delivered.svg' },
+            ];
             const preview = Array.isArray(o.items_preview) ? o.items_preview : [];
             const thumb = preview.length ? (absUrl(preview[0].image_url) || preview[0].image_url || '') : '';
             const count = o.item_count || preview.length || 0;
@@ -401,7 +409,13 @@ Component({
               orderNo: o.order_no || '',
               statusLabel: STATUS[o.status] || o.status,
               isUnpaid: o.status === 'pending_payment',
-              steps: stepLabels.map((label, i) => ({ label, done: i < filled, current: i === filled - 1 })),
+              steps: TRACK.map((s, i) => ({
+                label:   cn ? s.labelCn : s.labelEn,
+                icon:    s.icon,
+                candy:   s.candy,
+                filled:  i < filled,         // done OR current → candy fill
+                current: i === filled - 1,   // adds the pulsing ring
+              })),
               thumb,
               countLabel: count > 0 ? (cn ? `${count} 件商品` : `${count} item${count === 1 ? '' : 's'}`) : '',
               eta,

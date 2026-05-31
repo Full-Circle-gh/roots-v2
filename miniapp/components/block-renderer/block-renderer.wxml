@@ -194,7 +194,7 @@
   <view wx:if="{{orderTracker}}" class="ot-card" style="border-color:{{orderTracker.accent}}" bindtap="onOrderTrackerTap">
     <view class="ot-head">
       <view class="ot-title">{{orderTracker.title}}</view>
-      <view class="ot-status {{orderTracker.isUnpaid ? 'unpaid' : ''}}" style="{{orderTracker.isUnpaid ? '' : 'color:' + orderTracker.accent}}">{{orderTracker.statusLabel}}</view>
+      <view class="ot-status {{orderTracker.isUnpaid ? 'unpaid' : ''}}" style="{{orderTracker.isUnpaid ? '' : 'background:' + orderTracker.accent}}">{{orderTracker.statusLabel}}</view>
     </view>
     <view class="ot-body">
       <image wx:if="{{orderTracker.thumb}}" src="{{orderTracker.thumb}}" mode="aspectFill" class="ot-thumb"/>
@@ -205,10 +205,13 @@
       </view>
       <view class="ot-cta" style="background:{{orderTracker.accent}}">{{orderTracker.ctaLabel}}</view>
     </view>
-    <view wx:if="{{!orderTracker.isUnpaid}}" class="ot-steps">
-      <view wx:for="{{orderTracker.steps}}" wx:key="label" class="ot-step {{item.done ? 'done' : ''}} {{item.current ? 'current' : ''}}">
-        <view class="ot-dot" style="{{item.done ? 'background:' + orderTracker.accent + ';border-color:' + orderTracker.accent : ''}}"></view>
-        <view class="ot-step-label">{{item.label}}</view>
+    <view wx:if="{{!orderTracker.isUnpaid}}" class="ot-track">
+      <view wx:for="{{orderTracker.steps}}" wx:key="label" class="ot-node {{item.filled ? 'filled' : 'upcoming'}} {{item.current ? 'current' : ''}}">
+        <view wx:if="{{index > 0}}" class="ot-bar {{item.filled ? 'on' : ''}}"></view>
+        <view class="ot-circle" style="{{item.filled ? 'background:' + item.candy : ''}}">
+          <image class="ot-ic" src="{{item.icon}}" mode="aspectFit"/>
+        </view>
+        <view class="ot-node-label">{{item.label}}</view>
       </view>
     </view>
   </view>

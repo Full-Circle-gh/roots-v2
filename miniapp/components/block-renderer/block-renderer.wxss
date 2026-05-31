@@ -659,13 +659,19 @@
   font-weight: 600;
 }
 .ot-status {
-  font-family: var(--f-gothic);
-  font-size: calc(24rpx * var(--font-scale));
+  flex: 0 0 auto;
+  font-family: var(--f-toni);
+  font-size: calc(20rpx * var(--font-scale));
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: var(--oat, #F2E7DF);
+  background: var(--forest, #365329);
+  padding: 8rpx 22rpx;
+  border-radius: 999rpx;
+  white-space: nowrap;
 }
-.ot-status.unpaid { color: #E96174; }
+.ot-status.unpaid { background: #E96174; color: #fff; }
 .ot-body { display: flex; align-items: center; gap: 20rpx; margin-top: 22rpx; }
 .ot-thumb {
   flex: 0 0 96rpx; width: 96rpx; height: 96rpx;
@@ -693,31 +699,53 @@
   border-radius: 999rpx;
   white-space: nowrap;
 }
-.ot-steps {
+/* Icon-node tracker. Colour encodes progress: done/current nodes get a
+   candy fill (set inline from step.candy) + charcoal ring + charcoal glyph;
+   upcoming nodes stay grey. The connector bar leading into a filled node
+   turns brand-green, so the fill runs from the first node up to the current
+   one. The current node also gets a pulsing green ring. */
+.ot-track {
   display: flex; justify-content: space-between;
-  margin-top: 28rpx; padding-top: 24rpx;
+  margin-top: 26rpx; padding-top: 26rpx;
   border-top: 2rpx solid rgba(0, 0, 0, 0.08);
 }
-.ot-step {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10rpx;
-  position: relative;
+.ot-node {
+  flex: 1; position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 14rpx;
 }
-.ot-dot {
-  width: 20rpx; height: 20rpx; border-radius: 999rpx;
-  background: transparent; border: 3rpx solid rgba(0, 0, 0, 0.2);
-  z-index: 1;
+.ot-bar {
+  position: absolute; top: 43rpx; left: -50%; width: 100%; height: 6rpx;
+  background: #D3D1C7; border-radius: 999rpx; z-index: 0;
 }
-.ot-step::before {
-  content: ''; position: absolute; top: 9rpx; left: -50%; width: 100%;
-  height: 3rpx; background: rgba(0, 0, 0, 0.12);
+.ot-bar.on { background: var(--forest, #365329); }
+.ot-circle {
+  position: relative; z-index: 1;
+  width: 92rpx; height: 92rpx; border-radius: 999rpx;
+  background: #D3D1C7; border: 2rpx solid #9A988E;
+  display: flex; align-items: center; justify-content: center;
 }
-.ot-step:first-child::before { display: none; }
-.ot-step.done .ot-step-label { color: var(--ink, #1a1a17); }
-.ot-step-label {
-  font-family: var(--f-aleo);
+.ot-node.filled .ot-circle { border-color: var(--ink, #1a1a17); }
+.ot-ic { width: 46rpx; height: 46rpx; opacity: 0.38; }
+.ot-node.filled .ot-ic { opacity: 1; }
+/* Pulsing tea-green ring on the current node only. */
+.ot-node.current .ot-circle::after {
+  content: ''; position: absolute;
+  top: -10rpx; left: -10rpx; right: -10rpx; bottom: -10rpx;
+  border-radius: 999rpx; border: 4rpx solid var(--forest, #365329);
+  animation: ot-pulse 1.6s ease-out infinite;
+}
+@keyframes ot-pulse {
+  0%   { transform: scale(0.92); opacity: 0.9; }
+  70%  { transform: scale(1.12); opacity: 0; }
+  100% { transform: scale(1.12); opacity: 0; }
+}
+.ot-node-label {
+  font-family: var(--f-toni);
   font-size: calc(20rpx * var(--font-scale));
-  color: rgba(0, 0, 0, 0.4);
+  font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: #9A988E;
 }
+.ot-node.filled .ot-node-label { color: var(--ink, #1a1a17); }
 
 /* ── Countdown timer (flash-sale / 秒杀) ─────────────────────────────── */
 .countdown {
