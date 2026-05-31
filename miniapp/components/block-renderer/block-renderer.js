@@ -347,7 +347,6 @@ Component({
               rank === 2 ? 'rank-2' :
               rank === 3 ? 'rank-3' : 'rank-n';
             const rankLabel = !rank ? '' :
-              rank === 1 ? `🏆 NO. 01` :
               `NO. ${rank < 10 ? '0' + rank : rank}`;
             // Show "X SOLD" on any card with a count: top-selling blocks get
             // their windowed units from the top endpoint; ordinary cards get
