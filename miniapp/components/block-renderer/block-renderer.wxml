@@ -194,7 +194,7 @@
 
 <!-- Order tracker — only renders when the customer has a live order -->
 <view wx:elif="{{type === 'order_tracker'}}" class="ot-wrap">
-  <view wx:if="{{orderTracker}}" class="ot-card" style="{{orderTracker.cardStyle}}" bindtap="onOrderTrackerTap">
+  <view wx:if="{{orderTracker}}" class="ot-card corner-{{orderTrackerCorner}}" style="{{orderTracker.cardStyle}}" bindtap="onOrderTrackerTap">
     <view class="ot-head">
       <view class="ot-title">{{orderTracker.title}}</view>
       <view class="ot-status {{orderTracker.isUnpaid ? 'unpaid' : ''}}" style="{{orderTracker.isUnpaid ? '' : 'background:' + orderTracker.accent}}">{{orderTracker.statusLabel}}</view>

@@ -2512,12 +2512,14 @@
   .b-fav.corner-sharp .card,
   .b-bundle.corner-sharp,
   .b-recipe.corner-sharp,
+  .b-ordertracker.corner-sharp .ot-card,
   .b-countdown.corner-sharp { border-radius: 0; }
   .b-featured.corner-bold .card,
   .b-grid.corner-bold .card,
   .b-fav.corner-bold .card,
   .b-bundle.corner-bold,
   .b-recipe.corner-bold,
+  .b-ordertracker.corner-bold .ot-card,
   .b-countdown.corner-bold { border-radius: 16px; }
   /* `corner-subtle` is the legacy default — no override needed. */
 
@@ -6597,7 +6599,7 @@ function renderBlockBody(b) {
       return d;
     }
     case 'order_tracker': {
-      d.className = 'b-ordertracker';
+      d.className = 'b-ordertracker' + cornerRadiusClass(b);
       const ot = getBi(b, 'title');
       const accent = brandColorVar(b.accent_color) || 'var(--b-forest, #365329)';
       // Card surface + outline. card_bg_color: blank → white. card_border_color:
@@ -8348,6 +8350,10 @@ function buildOrderTrackerForm(m, b) {
     sel(b.card_border_color === undefined ? 'ink' : b.card_border_color,
       [{ value: '', label: T('— none —', '— 无 —') }, ...BRAND_COLOR_OPTIONS],
       v => updateBlock(b.id, { card_border_color: v }))));
+
+  m.appendChild(field(T('Corner radius', '圆角'), T('Sharp = square edges · Subtle = default · Bold = pronounced rounding.', '直角 = 方角 · 微圆角 = 默认 · 大圆角 = 明显圆角。'),
+    sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
+        v => updateBlock(b.id, { corner_radius: v }))));
 }
 
 function buildCtaRow(b, cta, idx) {

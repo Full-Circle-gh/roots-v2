@@ -2679,6 +2679,7 @@
 .bun-blk.corner-sharp,
 .recipe-blk.corner-sharp .recipe-img,
 .recipe-blk.corner-sharp,
+.ot-card.corner-sharp,
 .countdown.corner-sharp { border-radius: 0 !important; }
 .featured.corner-bold .card,
 .grid-block.corner-bold .card,
@@ -2686,6 +2687,7 @@
 .bun-blk.corner-bold,
 .recipe-blk.corner-bold .recipe-img,
 .recipe-blk.corner-bold,
+.ot-card.corner-bold,
 .countdown.corner-bold { border-radius: 28rpx !important; }
 /* corner-subtle = legacy default, no override. */
 

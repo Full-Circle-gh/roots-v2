@@ -401,6 +401,7 @@ Component({
           const o = this.properties.activeOrder;
           // No in-flight order → block renders nothing (wx:if guards it).
           out.orderTracker = null;
+          out.orderTrackerCorner = b.corner_radius || 'subtle';
           if (o && o.id) {
             const cn = L === 'cn';
             const STATUS = cn
