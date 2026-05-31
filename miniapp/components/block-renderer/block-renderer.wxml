@@ -222,6 +222,17 @@
   </view>
 </view>
 
+<!-- Notification bar — standalone unread strip; only renders when notifUnread>0.
+     view variants: bar (slim full-width) / card (rounded inset) / pill
+     (compact centred) / banner (tall, big icon). All colours operator-set. -->
+<view wx:elif="{{type === 'notification_bar'}}" class="nbar nbar-{{nbarView}}">
+  <view wx:if="{{notifUnread > 0}}" class="nbar-row" style="background:{{nbarBg}};color:{{nbarFg}}" catchtap="onNotifTap">
+    <text class="nbar-icon {{notifIsFresh ? 'fresh' : ''}}">{{notifHasBroadcast ? '📣' : '🔔'}}</text>
+    <text class="nbar-text">{{notifPreviewText}}</text>
+    <view class="nbar-btn" style="{{nbarBtnBg ? 'background:' + nbarBtnBg + ';color:' + nbarBtnFg : ''}}">→</view>
+  </view>
+</view>
+
 <!-- Flash sale: strip view (default — compact header + side clock + cards) -->
 <view wx:elif="{{type === 'flash_sale_strip' && !flashHidden && flashStrip && flashView === 'strip'}}" class="flash-strip" style="background:{{bg}};color:{{fg}}">
   <view class="fs-head">
@@ -629,19 +640,8 @@
 </view>
 
 <view wx:elif="{{type === 'greeting' && greeting}}" class="greet-blk greet-blk-{{greeting.view}}" style="background:{{bg}};color:{{fg}}" bindtap="onGreetingCtaTap">
-  <!-- Unread notifications strip — flush full-bleed row at the top of the
-       greeting card, only renders when notifUnread > 0. Background colour
-       comes from theme.notif_color (operator-configurable, defaults to
-       berry via WXSS). Icon swaps between 📣 (any broadcast unread) and
-       🔔 (orders/refunds only); icon pulses when the newest unread row
-       arrived in the last 6h. When count === 1 we show the row title
-       itself (computed in observer); otherwise the generic count.
-       catchtap so it doesn't bubble to the greeting CTA. -->
-  <view wx:if="{{notifUnread > 0}}" class="gr-notif-strip" catchtap="onNotifTap" style="{{notifColor ? 'background:' + notifColor : ''}}">
-    <text class="gr-notif-icon {{notifIsFresh ? 'fresh' : ''}}">{{notifHasBroadcast ? '📣' : '🔔'}}</text>
-    <text class="gr-notif-text">{{notifPreviewText}}</text>
-    <text class="gr-notif-arrow">→</text>
-  </view>
+  <!-- Unread notifications now live in the standalone notification_bar block,
+       not pinned to the greeting card. -->
   <!-- Split: greeting + CTA on left, big points wallet on right -->
   <view wx:if="{{greeting.view === 'split'}}" class="gr-split-row">
     <view class="gr-split-left">

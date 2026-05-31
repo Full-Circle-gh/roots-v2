@@ -8972,6 +8972,9 @@ const ALLOWED_BLOCK_TYPES = new Set([
   // Live order tracker — customer's latest in-flight order; hides when none.
   // Data fetched client-side from /api/retail/orders.
   'order_tracker',
+  // Standalone unread-notifications bar — hides when the customer has no
+  // unread updates. Count comes from /api/retail/notifications/unread-count.
+  'notification_bar',
   // ── Deprecated types kept on the whitelist so existing drafts/layouts
   // still validate. The CMS palette hides them; clients ignore them.
   'wechat_oa',                        // replaced 2026-05-19 by wecom_contact

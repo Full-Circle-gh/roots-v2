@@ -1980,63 +1980,76 @@
   text-transform: uppercase;
 }
 
-/* Notif strip — flush full-bleed row at the top of the greeting card. Sits
-   against the card's inner edges using negative margins that exactly cancel
-   each variant's padding (and the 3rpx border on the default/card variant).
-   Default background = berry; replaced by an inline style when the operator
-   sets theme.notif_color in the Mini App Backend. */
-.gr-notif-strip {
+/* ── Notification bar (standalone block) ─────────────────────────────────
+   Unread-updates strip. Renders only when notifUnread>0. The operator sets
+   background / text / button colours per block (inline styles); the view
+   variant picks the silhouette. .nbar (outer) stays layout-neutral so the
+   block collapses to nothing when there's no unread row. */
+.nbar-row {
   display: flex;
   align-items: center;
   gap: 12rpx;
-  /* Default (card) variant: card padding 32rpx 36rpx 28rpx + 3rpx border —
-     pull the strip up and out to overlap the border so it reads as the
-     card's top edge, not a sticker placed inside it. */
-  margin: -35rpx -39rpx 24rpx;
-  padding: 16rpx 36rpx;
-  background: var(--berry);
-  color: #fff;
+  padding: 18rpx 36rpx;
 }
-.gr-notif-icon {
+.nbar-icon {
   font-size: calc(28rpx * var(--font-scale));
   line-height: 1;
   flex-shrink: 0;
 }
-.gr-notif-icon.fresh {
-  /* Subtle 2s breathing pulse for newly-arrived unreads (within last 6h).
-     Draws the eye without being obnoxious. */
-  animation: gr-notif-pulse 2s ease-in-out infinite;
+.nbar-icon.fresh {
+  /* Subtle 2s breathing pulse for newly-arrived unreads (within last 6h). */
+  animation: nbar-pulse 2s ease-in-out infinite;
 }
-@keyframes gr-notif-pulse {
+@keyframes nbar-pulse {
   0%,100% { transform: scale(1);    opacity: 1;   }
   50%     { transform: scale(1.22); opacity: 0.85;}
 }
-.gr-notif-text {
+.nbar-text {
   flex: 1;
   min-width: 0;
   font-family: var(--f-toni);
   font-size: calc(22rpx * var(--font-scale));
   letter-spacing: 0.04em;
   line-height: 1.2;
-  /* One-line ellipsis so a long broadcast title (when N=1 we surface it
-     directly) collapses to "Title that is too lon…" instead of wrapping
-     and pushing the arrow off the strip. */
+  /* One-line ellipsis so a long broadcast title collapses gracefully. */
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.gr-notif-arrow {
-  font-family: var(--f-bear);
-  font-size: calc(26rpx * var(--font-scale));
-  line-height: 1;
+.nbar-btn {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 999rpx;
+  font-family: var(--f-bear);
+  font-size: calc(24rpx * var(--font-scale));
+  line-height: 1;
+  /* When no button colour is set the chip is transparent and the arrow
+     simply inherits the row's text colour. */
+  background: transparent;
 }
-/* Banner = borderless, padded 44rpx all round → no border to overlap. */
-.greet-blk-banner .gr-notif-strip { margin: -44rpx -44rpx 28rpx; padding: 18rpx 44rpx; }
-/* Split = borderless, padded 28rpx 44rpx. */
-.greet-blk-split  .gr-notif-strip { margin: -28rpx -44rpx 22rpx; padding: 16rpx 44rpx; }
-/* Inline = padded 22rpx 28rpx, with the same 3rpx border as default. */
-.greet-blk-inline .gr-notif-strip { margin: -25rpx -31rpx 16rpx; padding: 12rpx 28rpx; }
+/* view: bar (default) — slim full-width strip, square edges. */
+.nbar-bar .nbar-row { border-radius: 0; }
+/* view: card — rounded inset card with a side gutter. */
+.nbar-card { padding: 0 22rpx; }
+.nbar-card .nbar-row { border-radius: 24rpx; padding: 22rpx 32rpx; }
+/* view: pill — compact, centred, fully-rounded; text not stretched. */
+.nbar-pill { padding: 0 22rpx; display: flex; justify-content: center; }
+.nbar-pill .nbar-row {
+  border-radius: 999rpx;
+  padding: 14rpx 28rpx;
+  display: inline-flex;
+  max-width: 100%;
+}
+.nbar-pill .nbar-text { flex: 0 1 auto; }
+/* view: banner — taller, generous padding, larger icon + text. */
+.nbar-banner .nbar-row { padding: 30rpx 40rpx; gap: 18rpx; }
+.nbar-banner .nbar-icon { font-size: calc(40rpx * var(--font-scale)); }
+.nbar-banner .nbar-text { font-size: calc(26rpx * var(--font-scale)); }
+.nbar-banner .nbar-btn { width: 52rpx; height: 52rpx; font-size: calc(30rpx * var(--font-scale)); }
 
 /* Greeting — view variants */
 .gr-headline-sm { font-size: calc(38rpx * var(--font-scale)); line-height: 1.05; padding-top: 4rpx; margin-top: 8rpx; }

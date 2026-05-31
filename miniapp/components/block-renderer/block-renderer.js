@@ -13,7 +13,7 @@ const FULL_BG_TYPES = [
   'announcement_bar', 'flash_sale_strip', 'coupon_block', 'points_widget',
   'review_card', 'favorites_block', 'voting_block', 'affiliate_block',
   'store_info', 'greeting', 'kitchen_status', 'recipe_story', 'bundle',
-  'wecom_contact', 'countdown_timer', 'leaderboard',
+  'wecom_contact', 'countdown_timer', 'leaderboard', 'notification_bar',
 ];
 
 function absUrl(u) {
@@ -168,7 +168,7 @@ Component({
   },
 
   observers: {
-    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards, newArrivals, activeOrder': function () {
+    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards, newArrivals, activeOrder, notifUnread': function () {
       this.recompute();
     },
     // Recompute the human-readable strip text whenever the count, the
@@ -512,6 +512,32 @@ Component({
                 return s;
               })(),
             };
+          }
+          // No live order → the inner card is skipped, so suppress the block's
+          // own FRAME/fill chrome too; otherwise an empty bordered frame is
+          // left behind above the next block.
+          if (!out.orderTracker) {
+            out.frameOn = false;
+            out.blockFill = false;
+          }
+          break;
+        }
+        case 'notification_bar': {
+          // Standalone unread-notifications bar. Text/icon/count come from the
+          // shared notif-* props (fed to every block by the home page); the
+          // operator controls only the look here. Default surface is ink/black.
+          out.nbarView = b.view || 'bar';
+          out.nbarBg = color(b.bg_color || 'ink');
+          out.nbarFg = color(b.fg_color || 'white');
+          // Action chip (the arrow). Blank → falls back to the text colour so
+          // it always reads; label auto-contrasts against its own fill.
+          out.nbarBtnBg = b.btn_color ? color(b.btn_color) : '';
+          out.nbarBtnFg = b.btn_color ? btnText(b.btn_color) : '';
+          // Nothing unread → inner row is wx:if'd out, so kill the block's own
+          // FRAME/fill chrome too (same empty-frame fix as order_tracker).
+          if (!(this.properties.notifUnread > 0)) {
+            out.frameOn = false;
+            out.blockFill = false;
           }
           break;
         }

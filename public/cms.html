@@ -4035,6 +4035,7 @@ const ICONS = {
   leaderboard:      '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="3" y="14" width="4" height="6" rx="1"/><rect x="10" y="9" width="4" height="11" rx="1"/><rect x="17" y="16" width="4" height="4" rx="1"/></svg>',
   video_banner:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><polygon points="10 9 15 12 10 15 10 9" fill="currentColor" stroke="none"/></svg>',
   order_tracker:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="14" height="11" rx="1"/><path d="M15 9h4l3 3v5h-7"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
+  notification_bar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
   duplicate:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   arrow_up:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>',
   arrow_down:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
@@ -4081,6 +4082,7 @@ const BLOCK_META = {
   leaderboard:      { name: 'Leaderboard',      name_cn: '排行榜',     desc: 'Top members ranked by spend / points / orders',     desc_cn: '会员排行 · 按消费 / 积分 / 订单数' },
   video_banner:     { name: 'Video banner',     name_cn: '视频横幅',   desc: 'Autoplaying muted clip — loops, no controls',       desc_cn: '自动播放静音短片 · 循环 · 无控件' },
   order_tracker:    { name: 'Order tracker',    name_cn: '订单追踪',   desc: 'Customer\'s latest order — live status, hides when none', desc_cn: '顾客最新订单 · 实时状态 · 无订单时隐藏' },
+  notification_bar: { name: 'Notification bar',  name_cn: '通知条',     desc: 'Unread updates strip — hides when none. Bar / card / pill / banner views', desc_cn: '未读消息条 · 无未读时隐藏 · 条幅/卡片/胶囊/横幅视图' },
 };
 
 const state = {
@@ -5118,6 +5120,7 @@ const DC_FIELDS = {
   bundle:           { bg: 'bg_color', fg: 'fg_color' },
   wecom_contact:    { bg: 'bg_color', fg: 'fg_color' },
   favorites_block:  { bg: 'bg_color', fg: 'fg_color' },
+  notification_bar: { bg: 'bg_color', fg: 'fg_color', accent: 'btn_color' },
 };
 
 // Returns the effective background hex for a block, walking up to the
@@ -6342,6 +6345,16 @@ function makeBlock(type) {
       // Brand token for the progress accent + CTA button.
       accent_color: 'forest-kale',
     };
+    case 'notification_bar': return {
+      id, type,
+      // Silhouette: bar (slim full-width) / card / pill / banner.
+      view: 'bar',
+      // Surface defaults to ink/black; letters white; arrow chip inherits
+      // the text colour until a button colour is picked.
+      bg_color: 'ink',
+      fg_color: 'white',
+      btn_color: '',
+    };
   }
   return null;
 }
@@ -6472,7 +6485,7 @@ const FULL_BG_BLOCK_TYPES = [
   'announcement_bar', 'flash_sale_strip', 'coupon_block', 'points_widget',
   'review_card', 'favorites_block', 'voting_block', 'affiliate_block',
   'store_info', 'greeting', 'kitchen_status', 'recipe_story', 'bundle',
-  'wecom_contact', 'countdown_timer', 'leaderboard',
+  'wecom_contact', 'countdown_timer', 'leaderboard', 'notification_bar',
 ];
 
 function buildBlockEl(block, idx) {
@@ -6705,6 +6718,37 @@ function renderBlockBody(b) {
         <div class="ot-steps">${nodes}</div>
         <div class="empty" style="margin-top:8px;font-size:11px;opacity:.6">${B('Preview — hides on the storefront when the customer has no active order.', '预览 — 顾客无进行中订单时,店面将隐藏此模块。')}</div>
       </div>`;
+      return d;
+    }
+    case 'notification_bar': {
+      d.className = 'b-nbar b-nbar-' + (b.view || 'bar');
+      const view = b.view || 'bar';
+      const nbg = brandColorVar(b.bg_color) || 'var(--b-ink)';
+      const nfg = brandColorVar(b.fg_color) || 'var(--b-white)';
+      const nbtnHex = b.btn_color ? dcResolveHex(b.btn_color) : null;
+      const nbtnStyle = nbtnHex ? `background:${nbtnHex};color:${btnTextHex(nbtnHex)}` : 'background:transparent';
+      // Per-view silhouette — mirrors the live WXSS variants.
+      const shape = {
+        bar:    { radius: '0',     pad: '9px 16px',  justify: 'flex-start', inline: false },
+        card:   { radius: '12px',  pad: '11px 16px', justify: 'flex-start', inline: false },
+        pill:   { radius: '999px', pad: '7px 14px',  justify: 'center',     inline: true  },
+        banner: { radius: '0',     pad: '15px 18px', justify: 'flex-start', inline: false },
+      }[view] || { radius: '0', pad: '9px 16px', justify: 'flex-start', inline: false };
+      const txt = state.lang === 'cn' ? '1 条新消息 · 点击查看' : '1 new update · Tap to view';
+      const iconSz = view === 'banner' ? '17px' : '14px';
+      const rowStyle = `display:${shape.inline ? 'inline-flex' : 'flex'};align-items:center;gap:7px;`
+        + `background:${nbg};color:${nfg};border-radius:${shape.radius};padding:${shape.pad};`
+        + `max-width:100%;${shape.inline ? '' : 'width:100%;'}box-sizing:border-box`;
+      const wrapStyle = `display:flex;justify-content:${shape.justify};`
+        + `${view === 'card' || view === 'pill' ? 'padding:0 11px;' : ''}`;
+      d.innerHTML = `<div style="${wrapStyle}">
+          <div style="${rowStyle}">
+            <span style="font-size:${iconSz};line-height:1;flex-shrink:0">📣</span>
+            <span style="flex:${shape.inline ? '0 1 auto' : '1'};min-width:0;font-size:11px;letter-spacing:.03em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${escapeHtml(txt)}</span>
+            <span style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:${view === 'banner' ? '22px' : '17px'};height:${view === 'banner' ? '22px' : '17px'};border-radius:999px;font-size:12px;line-height:1;${nbtnStyle}">→</span>
+          </div>
+        </div>
+        <div class="empty" style="margin-top:8px;font-size:11px;opacity:.6">${B('Preview — hides on the storefront when the customer has no unread updates.', '预览 — 顾客无未读消息时,店面将隐藏此模块。')}</div>`;
       return d;
     }
     case 'category_tabs': {
@@ -7952,6 +7996,7 @@ function renderInspector() {
     case 'leaderboard':      buildLeaderboardForm(body, b); break;
     case 'video_banner':     buildVideoForm(body, b); break;
     case 'order_tracker':    buildOrderTrackerForm(body, b); break;
+    case 'notification_bar': buildNotificationBarForm(body, b); break;
   }
   buildChromeSection(body, b);
   const dz = document.createElement('div');
@@ -8433,6 +8478,33 @@ function buildOrderTrackerForm(m, b) {
     sel(b.card_border_color === undefined ? 'ink' : b.card_border_color,
       [{ value: '', label: T('— none —', '— 无 —') }, ...BRAND_COLOR_OPTIONS],
       v => updateBlock(b.id, { card_border_color: v }))));
+}
+function buildNotificationBarForm(m, b) {
+  const note = document.createElement('div');
+  note.className = 'helper';
+  note.style.cssText = 'margin: -4px 0 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
+  note.innerHTML = B(
+    'Shows the signed-in customer\'s <b>unread updates</b> ("📣 N new updates · Tap to view"). Tapping opens their notifications and marks them read. It <b>hides itself</b> when there\'s nothing unread, so it\'s safe to place at the top. The text + count are automatic — you control the look here.',
+    '展示已登录顾客的<b>未读消息</b>(「📣 N 条新消息 · 点击查看」)。点击后打开通知并标为已读。无未读时会<b>自动隐藏</b>,可放心置顶。文案与数量为自动生成 — 此处仅控制外观。'
+  );
+  m.appendChild(note);
+
+  m.appendChild(field(T('View', '视图'),
+    T('Bar = slim full-width strip. Card = rounded inset. Pill = compact centred. Banner = taller with a big icon.',
+      '条幅 = 细长通栏。卡片 = 圆角内嵌。胶囊 = 紧凑居中。横幅 = 更高 + 大图标。'),
+    sel(b.view || 'bar', [
+      { value: 'bar',    label: T('Bar — slim full-width strip', '条幅 — 细长通栏') },
+      { value: 'card',   label: T('Card — rounded inset', '卡片 — 圆角内嵌') },
+      { value: 'pill',   label: T('Pill — compact, centred', '胶囊 — 紧凑居中') },
+      { value: 'banner', label: T('Banner — tall, big icon', '横幅 — 更高 + 大图标') },
+    ], v => updateBlock(b.id, { view: v }))));
+
+  m.appendChild(field(T('Background', '背景颜色'), T('Fill behind the bar.', '通知条背景填充色。'),
+    sel(b.bg_color || 'ink', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  m.appendChild(field(T('Text colour', '文字颜色'), T('Message + icon colour.', '文字与图标颜色。'),
+    sel(b.fg_color || 'white', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  m.appendChild(field(T('Button colour', '按钮颜色'), T('The round arrow chip. Default blends into the text colour; pick a brand colour to make it pop. Label auto-contrasts.', '圆形箭头按钮。默认与文字同色;选一个品牌色使其更醒目。文字颜色自动对比。'),
+    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v || undefined }))));
 }
 
 function buildCtaRow(b, cta, idx) {
