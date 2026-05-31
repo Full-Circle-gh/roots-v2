@@ -192,6 +192,13 @@ Component({
       const L = this.properties.lang || 'en';
       const out = { type: b.type };
 
+      // Universal per-block chrome: optional brand-colored outline frame
+      // and optional edge-to-edge full-bleed width. Both off by default so
+      // existing blocks render unchanged.
+      out.frameOn = !!b.frame_color;
+      out.frameColor = b.frame_color ? color(b.frame_color) : '';
+      out.fullBleed = b.full_bleed === true;
+
       switch (b.type) {
         case 'announcement_bar': {
           out.label = lang.pick(b.text_en, b.text_cn, L);

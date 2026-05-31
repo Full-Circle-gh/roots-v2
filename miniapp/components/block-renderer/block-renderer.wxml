@@ -1,5 +1,8 @@
 <!-- Switch on block.type and render the appropriate sub-template.
-     All data normalisation happens in JS; the template stays declarative. -->
+     All data normalisation happens in JS; the template stays declarative.
+     Everything is wrapped in .blk-outer so a block can opt into a brand-
+     colored outline frame and/or edge-to-edge full-bleed width. -->
+<view class="blk-outer {{frameOn ? 'framed' : ''}} {{fullBleed ? 'bleed' : ''}}" style="{{frameOn ? 'border-color:' + frameColor : ''}}">
 
 <view wx:if="{{type === 'announcement_bar'}}" class="announce anim-{{anim}} speed-{{speed}} {{announceLink ? 'announce-linked' : ''}}" style="background:{{bg}};color:{{fg}}" bindtap="onAnnounceTap">
   <!-- Marquee: clipped wrapper around a duplicated track for seamless loop -->
@@ -872,3 +875,5 @@
          object-fit="cover"
          vslide-gesture="{{false}}"/>
 </view>
+
+</view><!-- /.blk-outer -->

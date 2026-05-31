@@ -1454,6 +1454,24 @@
   }
   .block-wrap:active { cursor: grabbing; }
   .block-wrap:hover { outline-color: rgba(26, 35, 20, .15); }
+  /* Per-block chrome preview — mirrors the live mini-app .blk-outer rules.
+     Frame: brand-colored outline (border-color set inline). Bleed: drop the
+     per-block side gutter so the block reaches both phone edges. */
+  .block-wrap.framed {
+    margin: 8px 12px;
+    border: 2px solid;
+    border-radius: 14px;
+    padding: 9px 0;
+    overflow: hidden;
+  }
+  .block-wrap.bleed > * {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+  .block-wrap.framed.bleed {
+    margin: 8px 0;
+    border-radius: 0;
+  }
   .block-wrap.selected {
     /* Muted olive — was the full `--accent` (#6B8E6F) which read as
        neon-bright against the cream canvas. The darker shade keeps a
@@ -1897,6 +1915,17 @@
     margin-top: var(--s6);
     padding-top: var(--s4);
     border-top: 1px solid var(--line-soft);
+  }
+
+  /* Universal "Frame & width" section — appended to every block's inspector */
+  .chrome-section {
+    margin-top: var(--s5);
+    padding-top: var(--s4);
+    border-top: 1px solid var(--line-soft);
+  }
+  .chrome-section .chrome-head {
+    font-size: 11px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; opacity: .55; margin-bottom: var(--s3);
   }
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -6385,7 +6414,11 @@ function buildDropZone(beforeIdx, isTail = false) {
 
 function buildBlockEl(block, idx) {
   const wrap = document.createElement('div');
-  wrap.className = 'block-wrap' + (state.selectedId === block.id ? ' selected' : '');
+  wrap.className = 'block-wrap'
+    + (state.selectedId === block.id ? ' selected' : '')
+    + (block.frame_color ? ' framed' : '')
+    + (block.full_bleed === true ? ' bleed' : '');
+  if (block.frame_color) wrap.style.borderColor = brandColorVar(block.frame_color);
   wrap.dataset.id = block.id;
   wrap.dataset.idx = idx;
   wrap.draggable = true;
@@ -7836,6 +7869,7 @@ function renderInspector() {
     case 'video_banner':     buildVideoForm(body, b); break;
     case 'order_tracker':    buildOrderTrackerForm(body, b); break;
   }
+  buildChromeSection(body, b);
   const dz = document.createElement('div');
   dz.className = 'danger-zone';
   const btn = document.createElement('button');
@@ -7844,6 +7878,46 @@ function renderInspector() {
   btn.addEventListener('click', () => deleteBlock(b.id));
   dz.appendChild(btn);
   body.appendChild(dz);
+}
+
+// Universal per-block chrome controls, shown for every block type:
+//   • Frame — an optional brand-colored outline (rounded corners). Picking
+//     "— none —" removes it. Stored as block.frame_color (token or '').
+//   • Full width — stretch the block edge-to-edge, dropping the side gutter.
+//     Stored as block.full_bleed (boolean). Both persist via validateBlocks
+//     (structural validation only) and render in the live mini-app .blk-outer.
+function buildChromeSection(body, b) {
+  const sec = document.createElement('div');
+  sec.className = 'chrome-section';
+
+  const head = document.createElement('div');
+  head.className = 'chrome-head';
+  head.textContent = T('Frame & width', '边框与宽度');
+  sec.appendChild(head);
+
+  // Frame colour (— none — clears it)
+  sec.appendChild(field(T('Frame', '边框'),
+    T('Add a coloured outline around this block.', '为本模块添加彩色边框。'),
+    sel(b.frame_color || '',
+      [{ value: '', label: T('— none —', '— 无 —') }, ...BRAND_COLOR_OPTIONS],
+      v => updateBlock(b.id, { frame_color: v || undefined }))));
+
+  // Full-width toggle
+  const row = document.createElement('div');
+  row.className = 'field';
+  row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = b.full_bleed === true;
+  box.addEventListener('change', () => updateBlock(b.id, { full_bleed: box.checked ? true : undefined }));
+  const lbl = document.createElement('label');
+  lbl.style.cssText = 'cursor:pointer;font-size:13px;font-weight:500;';
+  lbl.textContent = T('Stretch full width (edge to edge)', '拉伸至全宽（贴合屏幕两侧）');
+  lbl.addEventListener('click', () => { box.checked = !box.checked; box.dispatchEvent(new Event('change')); });
+  row.appendChild(box); row.appendChild(lbl);
+  sec.appendChild(row);
+
+  body.appendChild(sec);
 }
 
 function field(label, helper, inner) {
