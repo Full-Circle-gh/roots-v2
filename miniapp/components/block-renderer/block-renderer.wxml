@@ -252,11 +252,11 @@
       <view class="fs-card-meta">
         <view class="fs-card-name">{{item.name}}</view>
         <view class="fs-card-prices">
-          <text class="fs-price-now">{{item.priceNow}}</text>
+          <text class="fs-price-now" style="{{flashAccent ? 'color:' + flashAccent : ''}}">{{item.priceNow}}</text>
           <text wx:if="{{item.priceWas}}" class="fs-price-was">{{item.priceWas}}</text>
         </view>
         <view wx:if="{{item.meterPct !== null}}" class="fs-meter">
-          <view class="fs-meter-bar" style="width:{{item.meterPct}}%"></view>
+          <view class="fs-meter-bar" style="width:{{item.meterPct}}%;{{flashAccent ? 'background:' + flashAccent : ''}}"></view>
         </view>
         <view class="fs-meter-lbl">{{item.meterLabel}}</view>
       </view>
@@ -291,11 +291,11 @@
       <view class="fs-card-meta">
         <view class="fs-card-name">{{item.name}}</view>
         <view class="fs-card-prices">
-          <text class="fs-price-now">{{item.priceNow}}</text>
+          <text class="fs-price-now" style="{{flashAccent ? 'color:' + flashAccent : ''}}">{{item.priceNow}}</text>
           <text wx:if="{{item.priceWas}}" class="fs-price-was">{{item.priceWas}}</text>
         </view>
         <view wx:if="{{item.meterPct !== null}}" class="fs-meter">
-          <view class="fs-meter-bar" style="width:{{item.meterPct}}%"></view>
+          <view class="fs-meter-bar" style="width:{{item.meterPct}}%;{{flashAccent ? 'background:' + flashAccent : ''}}"></view>
         </view>
         <view class="fs-meter-lbl">{{item.meterLabel}}</view>
       </view>
@@ -339,7 +339,7 @@
   <block wx:if="{{reviewView !== 'carousel'}}">
     <view class="rv-item">
       <view class="rv-stars">
-        <text wx:for="{{reviews[0].stars}}" wx:key="*this" class="rv-star {{item.on ? 'on' : 'off'}}">★</text>
+        <text wx:for="{{reviews[0].stars}}" wx:key="*this" class="rv-star {{item.on ? 'on' : 'off'}}" style="{{item.on && starColor ? 'color:' + starColor : ''}}">★</text>
       </view>
       <view wx:if="{{reviews[0].quote}}" class="rv-quote">{{reviews[0].quote}}</view>
       <view class="rv-byline">
@@ -359,7 +359,7 @@
     <swiper-item wx:for="{{reviews}}" wx:key="key">
       <view class="rv-item">
         <view class="rv-stars">
-          <text wx:for="{{item.stars}}" wx:key="*this" wx:for-item="s" class="rv-star {{s.on ? 'on' : 'off'}}">★</text>
+          <text wx:for="{{item.stars}}" wx:key="*this" wx:for-item="s" class="rv-star {{s.on ? 'on' : 'off'}}" style="{{s.on && starColor ? 'color:' + starColor : ''}}">★</text>
         </view>
         <view wx:if="{{item.quote}}" class="rv-quote">{{item.quote}}</view>
         <view class="rv-byline">

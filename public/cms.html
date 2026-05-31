@@ -5106,7 +5106,7 @@ const DC_FIELDS = {
   product_grid:     { bg: 'bg_color', accent: 'accent_color' },
   category_tabs:    { accent: 'divider_color' },
   countdown_timer:  { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
-  flash_sale_strip: { bg: 'bg_color', fg: 'fg_color' },
+  flash_sale_strip: { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   coupon_block:     { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   points_widget:    { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   review_card:      { bg: 'bg_color', fg: 'fg_color' },
@@ -6962,6 +6962,7 @@ function renderBlockBody(b) {
         .map(v => `<span class="ct-num">${String(v).padStart(2, '0')}</span>`)
         .join('<span class="ct-sep">:</span>');
 
+      const flashAccent = b.accent_color ? dcResolveHex(b.accent_color) : '';
       const productCards = products.map(p => {
         const fp = Number(p.flash.price) || 0;
         const rp = Number(p.price) || 0;
@@ -6979,11 +6980,11 @@ function renderBlockBody(b) {
           <div class="meta">
             <div class="name">${escapeHtml(name)}</div>
             <div class="prices">
-              <span class="now">¥${fp.toFixed(2)}</span>
+              <span class="now"${flashAccent ? ` style="color:${flashAccent}"` : ''}>¥${fp.toFixed(2)}</span>
               ${rp > fp ? `<span class="was">¥${rp.toFixed(2)}</span>` : ''}
             </div>
             ${pct != null ? `
-              <div class="meter"><span style="width:${pct}%"></span></div>
+              <div class="meter"><span style="width:${pct}%${flashAccent ? `;background:${flashAccent}` : ''}"></span></div>
               <div class="meter-lbl">${escapeHtml(meterLabel)}</div>` : `<div class="meter-lbl">${escapeHtml(meterLabel)}</div>`}
           </div>
         </div>`;
@@ -7065,9 +7066,10 @@ function renderBlockBody(b) {
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
       const k = getBi(b, 'kicker');
       const reviews = getReviews(b);
+      const starColor = b.star_color ? dcResolveHex(b.star_color) : '';
       const renderOne = (r) => {
         const rating = Math.max(1, Math.min(5, parseInt(r.rating, 10) || 5));
-        const stars = [1,2,3,4,5].map(i => `<span class="${i <= rating ? 'on' : 'off'}">★</span>`).join('');
+        const stars = [1,2,3,4,5].map(i => `<span class="${i <= rating ? 'on' : 'off'}"${i <= rating && starColor ? ` style="color:${starColor}"` : ''}>★</span>`).join('');
         const q = pickLang(r.quote_en, r.quote_cn);
         const subline = pickLang(r.author_subline_en, r.author_subline_cn);
         const initial = (r.author_name || '').trim()[0] || '?';
@@ -8794,6 +8796,8 @@ function buildFlashStripForm(m, b) {
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
   m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  m.appendChild(field(T('Sale accent colour', '促销强调色'), T('Colours the sale price and the sold-progress bar on each card. Default = brand red.', '为每张卡片的促销价和已售进度条着色。默认 = 品牌红。'),
+    sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 
   if (view !== 'banner') {
     m.appendChild(field(T('Max products shown', '最多显示商品数'), view === 'hero'
@@ -9416,6 +9420,8 @@ function buildReviewForm(m, b) {
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
   m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  m.appendChild(field(T('Star colour', '星标颜色'), T('Colour of the filled rating stars. Default = gold.', '已点亮评分星的颜色。默认 = 金色。'),
+    sel(b.star_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { star_color: v }))));
 
   // Reviews list — each entry editable; carousel shows all, card shows only the first.
   const reviews = getReviews(b);

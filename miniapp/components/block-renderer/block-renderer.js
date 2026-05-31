@@ -527,6 +527,9 @@ Component({
         case 'flash_sale_strip': {
           out.bg = color(b.bg_color || 'berry-punch');
           out.fg = color(b.fg_color || 'oat-milk');
+          // Sale accent for the per-card sale price + sold-meter bar. Blank
+          // by default so unset strips keep the brand-red (#E96174) WXSS look.
+          out.flashAccent = b.accent_color ? color(b.accent_color) : '';
           const view = b.view || 'strip';
           out.flashView = view;
           const all = this.properties.flashSales || [];
@@ -639,6 +642,8 @@ Component({
         case 'review_card': {
           out.bg = color(b.bg_color || 'oat-milk');
           out.fg = color(b.fg_color || 'ink');
+          // Star colour for filled stars. Blank → WXSS gold (#F2CA6C) default.
+          out.starColor = b.star_color ? color(b.star_color) : '';
           out.reviewView = b.view || 'card';
           // Migrate legacy single-review blocks transparently.
           let reviews = Array.isArray(b.reviews) && b.reviews.length ? b.reviews : null;
