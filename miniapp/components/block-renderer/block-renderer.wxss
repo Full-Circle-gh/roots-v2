@@ -1059,7 +1059,7 @@
 
 /* ── Coupon block ─────────────────────────────────────────────────────── */
 .coupon-blk {
-  margin: 28rpx 36rpx;
+  margin: 0 36rpx;
   padding: 32rpx 36rpx;
   border-radius: 16rpx;
   display: flex;
@@ -1296,7 +1296,7 @@
 
 /* ── Store info ───────────────────────────────────────────────────────── */
 .store-blk {
-  margin: 28rpx 36rpx;
+  margin: 0 36rpx;
   padding: 36rpx 36rpx 40rpx;
   border-radius: 12rpx;
 }
@@ -1375,7 +1375,7 @@
 
 /* ── Voting block — 4 views (teaser/peek/inline/past_result) ───────────── */
 .voting-blk {
-  margin: 28rpx 36rpx;
+  margin: 0 36rpx;
   padding: 32rpx;
   border-radius: 8rpx;
   position: relative;
@@ -1584,7 +1584,7 @@
 
 /* ─── Affiliate block ─────────────────────────────────────────── */
 .aff-blk {
-  margin: 28rpx 36rpx;
+  margin: 0 36rpx;
   padding: 32rpx 32rpx 28rpx;
   border-radius: 8rpx;
 }
@@ -1943,7 +1943,7 @@
 
 /* ─── Greeting block ──────────────────────────────────────────────────── */
 .greet-blk {
-  margin: 24rpx 44rpx;
+  margin: 0 44rpx;
   padding: 32rpx 36rpx 28rpx;
   border: 0;
   position: relative;
@@ -2290,7 +2290,7 @@
 
 /* ─── Bundle block ────────────────────────────────────────────────────── */
 .bun-blk {
-  margin: 24rpx 44rpx;
+  margin: 0 44rpx;
   padding: 30rpx 30rpx 26rpx;
 }
 .bun-kicker {
@@ -2443,7 +2443,7 @@
 
 /* ─── WeCom (企业微信) contact block ──────────────────────────────────── */
 .wc-blk {
-  margin: 24rpx 44rpx;
+  margin: 0 44rpx;
 }
 .wc-card {
   padding: 36rpx 32rpx 32rpx;
