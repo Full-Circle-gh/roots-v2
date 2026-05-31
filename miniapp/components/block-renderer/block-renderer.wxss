@@ -1286,12 +1286,12 @@
   margin-top: 4rpx;
   letter-spacing: 0.04em;
 }
-/* Carousel — uses <swiper>, which sizes its own height. Give the
-   swiper itself a min-height so short reviews don't collapse. */
+/* Carousel — <swiper> can't auto-size, so its height is set inline from a
+   per-block measurement (reviewSwiperH, see measureReviewSwiper) to fit the
+   tallest review. The 360rpx here is just the floor before measurement. */
 .review-carousel .rv-swiper {
   width: 100%;
   min-height: 360rpx;
-  height: 360rpx;
 }
 
 /* ── Store info ───────────────────────────────────────────────────────── */

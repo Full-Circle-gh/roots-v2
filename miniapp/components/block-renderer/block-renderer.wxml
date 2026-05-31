@@ -355,7 +355,7 @@
     </view>
   </block>
   <!-- Carousel view: swipe through all -->
-  <swiper wx:else class="rv-swiper" indicator-dots="{{true}}" indicator-color="rgba(0,0,0,0.18)" indicator-active-color="rgba(0,0,0,0.7)" autoplay="{{true}}" interval="{{5000}}" circular="{{true}}">
+  <swiper wx:else class="rv-swiper" style="height:{{reviewSwiperH || 360}}rpx" indicator-dots="{{true}}" indicator-color="rgba(0,0,0,0.18)" indicator-active-color="rgba(0,0,0,0.7)" autoplay="{{true}}" interval="{{5000}}" circular="{{true}}">
     <swiper-item wx:for="{{reviews}}" wx:key="key">
       <view class="rv-item">
         <view class="rv-stars">
