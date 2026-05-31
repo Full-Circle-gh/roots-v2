@@ -10259,10 +10259,16 @@ async function iedAutoComposeBlocks(pid, btn) {
     p = pd.data;
   } catch { return; }
   if (!p) return;
-  // Don't clobber an existing design.
+  // Work out what the product already has, so we never clobber it. We may
+  // still backfill the MISSING half: e.g. blocks exist but nutrition doesn't
+  // (the original auto-build dropped nutrition), so re-toggling tops it up.
   let blocks = p.description_blocks;
   if (typeof blocks === 'string') { try { blocks = JSON.parse(blocks); } catch { blocks = null; } }
-  if (Array.isArray(blocks) && blocks.length) {
+  const hasBlocks = Array.isArray(blocks) && blocks.length > 0;
+  let existingNutri = p.nutrition;
+  if (typeof existingNutri === 'string') { try { existingNutri = JSON.parse(existingNutri); } catch { existingNutri = null; } }
+  const hasExistingNutri = !!(existingNutri && (existingNutri.basis_en || existingNutri.basis_cn || (existingNutri.rows || []).length));
+  if (hasBlocks && hasExistingNutri) {
     toast('This product already has a designed page — open the Product Page Editor to edit it · 该商品已有设计页面,可在商品页编辑器中编辑', 'ok');
     return;
   }
@@ -10301,16 +10307,18 @@ async function iedAutoComposeBlocks(pid, btn) {
       toast('No sections built — open the Product Page Editor to design it · 未生成板块,请在商品页编辑器中设计', 'error');
       return;
     }
-    if (composed.length) {
+    // Only write description_blocks when the product had none — re-toggling a
+    // product that already has sections must NOT overwrite the operator's work;
+    // in that case we only backfill the missing nutrition panel below.
+    let savedSections = 0;
+    if (composed.length && !hasBlocks) {
       await iedSaveField(pid, 'description_blocks', composed);
       p.description_blocks = composed;   // keep the cache in sync
+      savedSections = composed.length;
     }
     // Only seed nutrition when the product has none yet — never clobber an
     // existing nutrition panel the operator already filled in by hand.
     let savedNutrition = false;
-    let existingNutri = p.nutrition;
-    if (typeof existingNutri === 'string') { try { existingNutri = JSON.parse(existingNutri); } catch { existingNutri = null; } }
-    const hasExistingNutri = existingNutri && (existingNutri.basis_en || existingNutri.basis_cn || (existingNutri.rows || []).length);
     if (nutriBlock && !hasExistingNutri) {
       const nutrition = {
         basis_en: nutriBlock.basis_en || '',
@@ -10325,9 +10333,17 @@ async function iedAutoComposeBlocks(pid, btn) {
       }
     }
     const parts = [];
-    if (composed.length) parts.push(composed.length + ' section' + (composed.length === 1 ? '' : 's'));
+    if (savedSections) parts.push(savedSections + ' section' + (savedSections === 1 ? '' : 's'));
     if (savedNutrition) parts.push('a nutrition panel · 营养表');
-    toast('Built ' + (parts.join(' + ') || 'the page') + ' — review in the Product Page Editor ✓ · 已生成,可在商品页编辑器中查看 ✓', 'ok');
+    if (!parts.length) {
+      // Nothing new to write: blocks already existed and either there was no
+      // nutrition to add or nutrition was already present.
+      toast(nutriBlock
+        ? 'Nutrition was already set — nothing to add · 营养表已存在,无需添加'
+        : 'No nutrition found in the description to add · 描述中未找到可添加的营养信息', 'ok');
+      return;
+    }
+    toast('Built ' + parts.join(' + ') + ' — review in the Product Page Editor ✓ · 已生成,可在商品页编辑器中查看 ✓', 'ok');
   } catch (e) {
     toast('Couldn\'t auto-build — open the Product Page Editor to design it · 自动生成失败,请在商品页编辑器中设计', 'error');
   }
