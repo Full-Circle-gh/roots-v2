@@ -39,6 +39,7 @@
   <view wx:if="{{(heroVideo || imageUrl) && ctas.length && heroScrim !== 'none'}}" class="hero-scrim"></view>
   <view wx:if="{{(heroVideo || imageUrl) && ctas.length}}" class="cta-stack">
     <button wx:for="{{ctas}}" wx:key="index" class="cta-btn cta-{{item.style}}"
+            style="background:{{item.btnBg}};color:{{item.btnFg}}"
             data-idx="{{index}}" bindtap="onCtaTap">
       {{item.label}}
     </button>
@@ -60,6 +61,7 @@
     <view wx:if="{{heroSubtitle}}" class="subtitle">{{heroSubtitle}}</view>
     <view wx:if="{{ctas.length}}" class="cta-stack">
       <button wx:for="{{ctas}}" wx:key="index" class="cta-btn cta-{{item.style}}"
+              style="background:{{item.btnBg}};color:{{item.btnFg}}"
               data-idx="{{index}}" bindtap="onCtaTap">
         {{item.label}}
       </button>
@@ -316,7 +318,7 @@
       <text class="cp-code-copy">{{coupon.codeLabel}}</text>
     </view>
   </view>
-  <view wx:if="{{coupon.ctaLabel}}" class="cp-cta" bindtap="onCouponCtaTap">{{coupon.ctaLabel}}</view>
+  <view wx:if="{{coupon.ctaLabel}}" class="cp-cta" style="background:{{coupon.btnBg}};color:{{coupon.btnFg}}" bindtap="onCouponCtaTap">{{coupon.ctaLabel}}</view>
 </view>
 
 <view wx:elif="{{type === 'points_widget' && points}}" class="points-blk" style="background:{{bg}};color:{{fg}}">
@@ -328,7 +330,7 @@
     <view wx:if="{{points.title}}" class="pt-title">{{points.title}}</view>
     <view wx:if="{{points.subtitle}}" class="pt-sub">{{points.subtitle}}</view>
   </view>
-  <view wx:if="{{points.ctaLabel}}" class="pt-cta" bindtap="onPointsCtaTap">{{points.ctaLabel}}</view>
+  <view wx:if="{{points.ctaLabel}}" class="pt-cta" style="background:{{points.btnBg}};color:{{points.btnFg}}" bindtap="onPointsCtaTap">{{points.ctaLabel}}</view>
 </view>
 
 <view wx:elif="{{type === 'review_card' && reviews.length}}" class="review-blk review-{{reviewView}}" style="background:{{bg}};color:{{fg}}">
@@ -621,7 +623,7 @@
         <text class="st-icon">📞</text>
         <text class="st-val st-phone">{{s.phone}}</text>
       </view>
-      <view wx:if="{{s.ctaLabel && s.ctaTarget}}" class="st-cta" data-target="{{s.ctaTarget}}" bindtap="onStoreCtaTap">{{s.ctaLabel}}</view>
+      <view wx:if="{{s.ctaLabel && s.ctaTarget}}" class="st-cta" style="background:{{storeBtnBg}};color:{{storeBtnFg}}" data-target="{{s.ctaTarget}}" bindtap="onStoreCtaTap">{{s.ctaLabel}}</view>
     </view>
   </view>
 </view>
@@ -715,7 +717,7 @@
         <view wx:if="{{recipe.linkedProduct.price}}" class="rcp-card-price">{{recipe.linkedProduct.price}} →</view>
       </view>
     </view>
-    <view wx:if="{{recipe.ctaLabel}}" class="rcp-cta" bindtap="onRecipeCtaTap">{{recipe.ctaLabel}} →</view>
+    <view wx:if="{{recipe.ctaLabel}}" class="rcp-cta" style="background:{{recipe.btnBg}};color:{{recipe.btnFg}}" bindtap="onRecipeCtaTap">{{recipe.ctaLabel}} →</view>
   </view>
 </view>
 
@@ -764,7 +766,7 @@
       <view class="bun-price">{{bundle.active.priceLabel}}</view>
       <view wx:if="{{bundle.active.savingsLabel}}" class="bun-savings">{{bundle.active.savingsLabel}}</view>
     </view>
-    <view class="bun-cta" style="background:{{accent}}" bindtap="onBundleAddTap">{{bundle.active.addLabel}}</view>
+    <view class="bun-cta" style="background:{{accent}};color:{{bundleBtnFg}}" bindtap="onBundleAddTap">{{bundle.active.addLabel}}</view>
   </view>
 </view>
 
@@ -786,12 +788,12 @@
        3. neither        → falls back to open-type="contact" (whichever
                            客服 is bound in 小程序管理后台). -->
   <button wx:if="{{wecom.showButton && wecom.qrUrl}}" class="wc-cta"
-          bindtap="onWecomCtaTap" style="background:{{wecom.accent}}">{{wecom.buttonLabel}}</button>
+          bindtap="onWecomCtaTap" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
   <button wx:elif="{{wecom.showButton && wecom.kfUrl}}" class="wc-cta"
-          bindtap="onWecomChatTap" style="background:{{wecom.accent}}">{{wecom.buttonLabel}}</button>
+          bindtap="onWecomChatTap" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
   <button wx:elif="{{wecom.showButton}}" class="wc-cta" open-type="contact"
           session-from="wecom_contact_block" bindcontact="onWecomContactError"
-          style="background:{{wecom.accent}}">{{wecom.buttonLabel}}</button>
+          style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
   <view wx:if="{{wecom.showQr && wecom.qrUrl}}" class="wc-qr-wrap">
     <image src="{{wecom.qrUrl}}" mode="aspectFit" class="wc-qr" show-menu-by-longpress="{{true}}" bindtap="onWecomQrTap"/>
     <view wx:if="{{wecom.agentName}}" class="wc-name">{{wecom.agentName}}</view>
@@ -806,12 +808,12 @@
     <view wx:if="{{wecom.subtitle}}" class="wc-strip-sub">{{wecom.subtitle}}</view>
     <!-- See card-view notes for the three-mode branching rationale. -->
     <button wx:if="{{wecom.showButton && wecom.qrUrl}}" class="wc-cta wc-cta-strip"
-            bindtap="onWecomCtaTap" style="background:{{wecom.accent}}">{{wecom.buttonLabel}}</button>
+            bindtap="onWecomCtaTap" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
     <button wx:elif="{{wecom.showButton && wecom.kfUrl}}" class="wc-cta wc-cta-strip"
-            bindtap="onWecomChatTap" style="background:{{wecom.accent}}">{{wecom.buttonLabel}}</button>
+            bindtap="onWecomChatTap" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
     <button wx:elif="{{wecom.showButton}}" class="wc-cta wc-cta-strip" open-type="contact"
             session-from="wecom_contact_block" bindcontact="onWecomContactError"
-            style="background:{{wecom.accent}}">{{wecom.buttonLabel}}</button>
+            style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
   </view>
   <view wx:if="{{wecom.showQr && wecom.qrUrl}}" class="wc-strip-qr">
     <image src="{{wecom.qrUrl}}" mode="aspectFit" class="wc-qr-sm" show-menu-by-longpress="{{true}}" bindtap="onWecomQrTap"/>
@@ -831,7 +833,7 @@
       <view wx:if="{{index < countdown.cells.length - 1}}" class="cd-sep">:</view>
     </block>
   </view>
-  <view wx:if="{{!countdown.isEnded && countdown.ctaLabel}}" class="cd-cta" bindtap="onCountdownCtaTap">
+  <view wx:if="{{!countdown.isEnded && countdown.ctaLabel}}" class="cd-cta" style="background:{{countdown.btnBg}};color:{{countdown.btnFg}}" bindtap="onCountdownCtaTap">
     {{countdown.ctaLabel}}
   </view>
   <view wx:if="{{countdown.isEnded}}" class="cd-ended">{{countdown.ended}}</view>

@@ -42,6 +42,19 @@ function color(name) {
   return COLOR_MAP[name] || name;
 }
 
+// Pick a readable label colour (ink vs white) for a given button fill, by
+// luminance. Mirrors btnTextHex() in cms.html so the live render and the
+// editor preview always agree on the auto-contrast label.
+function btnText(bg) {
+  let hex = (color(bg) || '').replace('#', '');
+  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  if (hex.length !== 6) return '#1a1a17';
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const bl = parseInt(hex.slice(4, 6), 16);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * bl) > 140 ? '#1a1a17' : '#FFFFFF';
+}
+
 Component({
   properties: {
     block:      { type: Object,  value: {} },
@@ -259,11 +272,20 @@ Component({
           // in the editor but a tall portrait band on the phone.)
           out.fillAspect = (650 / (b.height_px || 280)).toFixed(4);
           const ctas = Array.isArray(b.ctas) ? b.ctas : (b.cta_label ? [{ label_en: b.cta_label, label_cn: '', target: b.cta_target, style: 'primary' }] : []);
-          out.ctas = ctas.map(c => ({
-            label:  lang.pick(c.label_en ?? c.label, c.label_cn, L),
-            target: c.target || '',
-            style:  c.style || 'primary',
-          }));
+          const heroBtnBg = color(b.btn_color || '');
+          out.ctas = ctas.map(c => {
+            const style = c.style || 'primary';
+            // Button colour overrides the solid (primary) fill only; the
+            // secondary outline + bare link styles keep their WXSS look.
+            const override = style === 'primary' && heroBtnBg;
+            return {
+              label:  lang.pick(c.label_en ?? c.label, c.label_cn, L),
+              target: c.target || '',
+              style,
+              btnBg: override ? heroBtnBg : '',
+              btnFg: override ? btnText(heroBtnBg) : '',
+            };
+          });
           // Split-view extras — full view ignores these.
           out.heroHeadline = lang.pick(b.headline_en, b.headline_cn, L);
           out.heroSubtitle = lang.pick(b.subtitle_en, b.subtitle_cn, L);
@@ -587,6 +609,8 @@ Component({
             codeLabel: L === 'cn' ? '复制' : 'COPY',
             ctaLabel: lang.pick(b.cta_label_en, b.cta_label_cn, L),
             ctaTarget: b.cta_target || 'coupons',
+            btnBg: color(b.btn_color || ''),
+            btnFg: b.btn_color ? btnText(b.btn_color) : '',
           };
           break;
         }
@@ -599,6 +623,8 @@ Component({
             subtitle: lang.pick(b.subtitle_en, b.subtitle_cn, L),
             ctaLabel: lang.pick(b.cta_label_en, b.cta_label_cn, L),
             ctaTarget: b.cta_target || 'me',
+            btnBg: color(b.btn_color || ''),
+            btnFg: b.btn_color ? btnText(b.btn_color) : '',
           };
           break;
         }
@@ -637,6 +663,8 @@ Component({
         case 'store_info': {
           out.bg = color(b.bg_color || 'oat-milk');
           out.fg = color(b.fg_color || 'ink');
+          out.storeBtnBg = color(b.btn_color || '');
+          out.storeBtnFg = b.btn_color ? btnText(b.btn_color) : '';
           const openCol   = color(b.open_color   || 'pea-sprout');
           const closedCol = color(b.closed_color || 'berry-punch');
           // Normalize stores: new format has b.stores[]; legacy had top-level
@@ -1019,6 +1047,8 @@ Component({
             linkedProduct: linkedCard,
             ctaLabel:  lang.pick(b.cta_label_en, b.cta_label_cn, L),
             ctaTarget: b.cta_target || (linkedCard ? 'product:' + linkedCard.id : ''),
+            btnBg: color(b.btn_color || ''),
+            btnFg: b.btn_color ? btnText(b.btn_color) : '',
           };
           // 2026-05-20 — corner radius preset on the recipe card.
           out.recipeCorner = b.corner_radius || 'subtle';
@@ -1034,6 +1064,7 @@ Component({
           out.bg = color(b.bg_color || 'corn');
           out.fg = color(b.fg_color || 'ink');
           out.accent = color(b.accent_color || 'ink');
+          out.bundleBtnFg = btnText(b.accent_color || 'ink');
           // 2026-05-20 — corner radius preset + entrance animation.
           out.bundleCorner = b.corner_radius || 'subtle';
           out.bundleEnter  = b.entrance_anim || 'none';
@@ -1146,6 +1177,7 @@ Component({
             showButton: b.show_chat_button !== false,
             showQr:     b.show_qr !== false,
             accent: color(b.accent_color || 'forest-kale'),
+            btnFg: btnText(b.accent_color || 'forest-kale'),
           };
           break;
         }
@@ -1170,6 +1202,8 @@ Component({
             out.countdown = {
               kicker, title,
               ctaLabel, ctaTarget: b.cta_target || '',
+              btnBg: color(b.btn_color || ''),
+              btnFg: b.btn_color ? btnText(b.btn_color) : '',
               cells: [
                 { num: pad(d), lbl: labels[0] },
                 { num: pad(h), lbl: labels[1] },

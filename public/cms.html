@@ -97,7 +97,7 @@
     --b-lime: #CCD900; --b-forest: #365329; --b-olive: #6A6E2D; --b-oat: #F2E7DF;
     --b-ink: #1a1a17; --b-berry: #E96174; --b-carrot: #FF6B0C; --b-papaya: #FFAF60;
     --b-corn: #F2CA6C; --b-sky: #B2CFED; --b-pea: #7BBD3B; --b-lotus: #EEB8E4;
-    --b-pink: #F4B8CB; --b-citrus: #E7E74C;
+    --b-pink: #F4B8CB; --b-citrus: #E7E74C; --b-white: #FFFFFF; --b-almond: #C37F4E;
 
     /* Spacing scale */
     --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s7: 32px; --s8: 48px;
@@ -6604,7 +6604,7 @@ function renderBlockBody(b) {
             ${hl.en || hl.cn ? `<div class="headline">${biLabel(hl.en, hl.cn)}</div>` : ''}
             ${sub.en || sub.cn ? `<div class="subtitle">${biLabel(sub.en, sub.cn)}</div>` : ''}
             ${ctas.length ? `<div class="cta-stack">${ctas.map(c =>
-              `<div class="cta-btn ${escapeAttr(c.style || 'primary')}">${biLabel(c.label_en, c.label_cn)}</div>`
+              `<div class="cta-btn ${escapeAttr(c.style || 'primary')}"${(c.style || 'primary') === 'primary' ? btnPreviewStyle(b.btn_color) : ''}>${biLabel(c.label_en, c.label_cn)}</div>`
             ).join('')}</div>` : ''}
           </div>`;
         return d;
@@ -6632,7 +6632,7 @@ function renderBlockBody(b) {
         // and we actually have an image/video. Pure CSS, scoped by .scrim-{strength}.
         if (scrim !== 'none') d.innerHTML += `<div class="hero-scrim"></div>`;
         d.innerHTML += `<div class="cta-stack">${ctas.map(c =>
-          `<div class="cta-btn ${escapeAttr(c.style || 'primary')}">${biLabel(c.label_en, c.label_cn)}</div>`
+          `<div class="cta-btn ${escapeAttr(c.style || 'primary')}"${(c.style || 'primary') === 'primary' ? btnPreviewStyle(b.btn_color) : ''}>${biLabel(c.label_en, c.label_cn)}</div>`
         ).join('')}</div>`;
       }
       return d;
@@ -7032,7 +7032,7 @@ function renderBlockBody(b) {
           ${sub ? `<div class="cp-sub">${escapeHtml(sub)}</div>` : ''}
           ${b.code ? `<div class="cp-code">CODE · ${escapeHtml(b.code)}</div>` : ''}
         </div>
-        ${cta ? `<div class="cp-cta">${escapeHtml(cta)}</div>` : ''}`;
+        ${cta ? `<div class="cp-cta"${btnPreviewStyle(b.btn_color)}>${escapeHtml(cta)}</div>` : ''}`;
       return d;
     }
     case 'points_widget': {
@@ -7052,7 +7052,7 @@ function renderBlockBody(b) {
           <div class="pt-ttl">${biLabel(t.en, t.cn)}</div>
           ${sub ? `<div class="pt-sub">${escapeHtml(sub)}</div>` : ''}
         </div>
-        ${cta ? `<div class="pt-cta">${escapeHtml(cta)}</div>` : ''}`;
+        ${cta ? `<div class="pt-cta"${btnPreviewStyle(b.btn_color)}>${escapeHtml(cta)}</div>` : ''}`;
       return d;
     }
     case 'review_card': {
@@ -7161,7 +7161,7 @@ function renderBlockBody(b) {
           ${etaLbl ? `<div class="st-eta">${escapeHtml(etaLbl)}</div>` : ''}
           ${addr   ? `<div class="row">${pin}<div class="val">${escapeHtml(addr)}</div></div>`     : ''}
           ${s.phone ? `<div class="row">${phoneIc}<div class="val">${escapeHtml(s.phone)}</div></div>` : ''}
-          ${cta ? `<div class="cta">${escapeHtml(cta)}</div>` : ''}
+          ${cta ? `<div class="cta"${btnPreviewStyle(b.btn_color)}>${escapeHtml(cta)}</div>` : ''}
         </div>`;
       }).join('');
       d.innerHTML = `
@@ -7407,7 +7407,7 @@ function renderBlockBody(b) {
           <div class="kicker">${biLabel(k.en, k.cn)}</div>
           <div class="ttl">${biLabel(t.en, t.cn)}</div>
           <div class="clock">${cells}</div>
-          ${cta ? `<div class="cta">${escapeHtml(cta)}</div>` : ''}`;
+          ${cta ? `<div class="cta"${btnPreviewStyle(b.btn_color)}>${escapeHtml(cta)}</div>` : ''}`;
       }
       return d;
     }
@@ -7578,7 +7578,7 @@ function renderBlockBody(b) {
           ${(byline || readTime) ? `<div class="rcp-meta">${byline ? escapeHtml(byline) : ''}${byline && readTime ? ' · ' : ''}${readTime}</div>` : ''}
           ${paragraphs.map(p => `<div class="rcp-para">${escapeHtml(p)}</div>`).join('')}
           ${linkedHtml}
-          ${cta ? `<div class="rcp-cta">${escapeHtml(cta)} →</div>` : ''}
+          ${cta ? `<div class="rcp-cta"${btnPreviewStyle(b.btn_color)}>${escapeHtml(cta)} →</div>` : ''}
         </div>`;
       return d;
     }
@@ -7587,6 +7587,7 @@ function renderBlockBody(b) {
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-corn)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
       const accent = brandColorVar(b.accent_color) || 'var(--b-ink)';
+      const accentFg = btnTextHex(dcResolveHex(b.accent_color || 'ink'));
       const k = getBi(b, 'kicker');
 
       const variants = getBundleVariants(b);
@@ -7648,7 +7649,7 @@ function renderBlockBody(b) {
                  <div class="bun-price">${priceLbl}</div>
                  ${sav ? `<div class="bun-savings">${sav}</div>` : ''}
                </div>
-               <div class="bun-cta" style="background:${accent}">${escapeHtml(addLbl)}</div>
+               <div class="bun-cta" style="background:${accent};color:${accentFg}">${escapeHtml(addLbl)}</div>
              </div>`}`;
 
       // Wire pill taps to flip the preview's active variant. Stops the
@@ -7669,6 +7670,7 @@ function renderBlockBody(b) {
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
       const accent = brandColorVar(b.accent_color) || 'var(--b-forest)';
+      const accentFg = btnTextHex(dcResolveHex(b.accent_color || 'forest-kale'));
       const k = getBi(b, 'kicker');
       const t = getBi(b, 'title');
       const sub = pickLang(b.subtitle_en, b.subtitle_cn);
@@ -7676,7 +7678,7 @@ function renderBlockBody(b) {
       const btnLabel = pickLang(b.button_label_en, b.button_label_cn) || (state.lang === 'cn' ? '联系客服' : 'Chat with us');
       const showBtn = b.show_chat_button !== false;
       const showQr = b.show_qr !== false;
-      const chatBtn = showBtn ? `<button class="wc-cta" style="background:${accent}">${escapeHtml(btnLabel)}</button>` : '';
+      const chatBtn = showBtn ? `<button class="wc-cta" style="background:${accent};color:${accentFg}">${escapeHtml(btnLabel)}</button>` : '';
       const qrUrl = b.qr_image_url;
       const qrHtml = showQr ? (qrUrl
         ? `<img src="${escapeAttr(qrUrl)}" alt="" class="wc-qr-img">`
@@ -7880,6 +7882,7 @@ function brandColorVar(name) {
     'ink': 'var(--b-ink)', 'pink-guava': 'var(--b-pink)', 'berry-punch': 'var(--b-berry)',
     'carrot-blaze': 'var(--b-carrot)', 'papaya-glow': 'var(--b-papaya)', 'skyberry': 'var(--b-sky)',
     'lotus': 'var(--b-lotus)', 'citrus-zest': 'var(--b-citrus)', 'pea-sprout': 'var(--b-pea)',
+    'white': 'var(--b-white)',
   };
   return map[name];
 }
@@ -8333,6 +8336,9 @@ function buildHeroForm(m, b) {
   btnWrap.appendChild(addBtn);
   m.appendChild(btnWrap);
 
+  m.appendChild(field(T('Primary button colour', '主按钮颜色'), T('Fill of "Primary" buttons. Label colour auto-adjusts for contrast. Secondary + Link styles keep their default look.', '「主要」按钮的填充色。文字颜色自动调整以保证对比度。「次要」与「链接」样式保持默认外观。'),
+    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
+
   // Hide the placeholder-height field when the "Banner height" field above is
   // already shown (full view + fill/stretch), to avoid two inputs for height_px.
   if (!(view === 'full' && heroFit !== 'contain')) {
@@ -8675,6 +8681,28 @@ const BRAND_COLOR_OPTIONS = [
   { value: 'ink',         label: 'Ink · 墨黑' },
 ];
 
+// Action-button fill. Leads with a "Default" sentinel ('') so unset blocks
+// keep their built-in button styling; pick a brand colour to override the
+// fill. The label colour auto-contrasts (white/ink) in the renderer.
+const BTN_COLOR_OPTIONS = [
+  { value: '', label: 'Default · 默认' },
+  ...BRAND_COLOR_OPTIONS,
+];
+// Readable label colour (ink vs white) for a button fill — luminance match
+// of the renderer's btnText() so preview + live agree.
+function btnTextHex(hex) {
+  const rgb = dcHexToRgb(hex);
+  if (!rgb) return '#1a1a17';
+  const [r, g, b] = rgb;
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 140 ? '#1a1a17' : '#ffffff';
+}
+// Inline style string for a previewed action button when btn_color is set;
+// '' (empty) when unset so the preview CSS default wins.
+function btnPreviewStyle(token) {
+  const hex = token ? dcResolveHex(token) : null;
+  return hex ? ` style="background:${hex};color:${btnTextHex(hex)}"` : '';
+}
+
 // Shared option sets for the cross-cutting fields introduced in the
 // 2026-05-20 enhancement pass. Each block's form picks whichever it needs.
 const CORNER_RADIUS_OPTIONS = [
@@ -8806,6 +8834,8 @@ function buildCouponForm(m, b) {
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
   m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  m.appendChild(field(T('Button colour', '按钮颜色'), T('Fill of the action button. Label colour auto-adjusts for contrast.', '操作按钮的填充色。文字颜色自动调整以保证对比度。'),
+    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
   m.appendChild(field(T('Button label', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
   m.appendChild(field(T('Button target', '按钮目标'), T('e.g. coupons · shop · category:5', '例如 coupons · shop · category:5'),
@@ -8823,6 +8853,8 @@ function buildPointsForm(m, b) {
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
   m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  m.appendChild(field(T('Button colour', '按钮颜色'), T('Fill of the action button. Label colour auto-adjusts for contrast.', '操作按钮的填充色。文字颜色自动调整以保证对比度。'),
+    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
   m.appendChild(field(T('Button label', '按钮文字'), '',
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
   m.appendChild(field(T('Button target', '按钮目标'), T('e.g. me · membership', '例如 me · membership'),
@@ -9155,6 +9187,8 @@ function buildRecipeStoryForm(m, b) {
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
   m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  m.appendChild(field(T('Button colour', '按钮颜色'), T('Fill of the CTA button. Label colour auto-adjusts for contrast. Default is ink + lime.', 'CTA 按钮的填充色。文字颜色自动调整以保证对比度。默认为墨黑 + 青柠。'),
+    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
   m.appendChild(field(T('CTA label', '按钮文字'), T('Optional — e.g. "READ MORE". Leave blank to hide.', '可选 — 例如「READ MORE」。留空则隐藏。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
   m.appendChild(field(T('CTA target', '按钮目标'), T('e.g. product:5 · category:8 · promotions', '例如 product:5 · category:8 · promotions'),
@@ -9473,6 +9507,8 @@ function buildStoreInfoForm(m, b) {
     sel(b.open_color || 'pea-sprout', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { open_color: v }))));
   m.appendChild(field(T('Closed dot colour', '打烊状态点颜色'), '',
     sel(b.closed_color || 'berry-punch', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { closed_color: v }))));
+  m.appendChild(field(T('Button colour', '按钮颜色'), T('Fill of each store\'s action button. Label colour auto-adjusts for contrast.', '每个门店操作按钮的填充色。文字颜色自动调整以保证对比度。'),
+    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
 
   // ── Stores repeater ────────────────────────────────────────────────
   const listWrap = document.createElement('div');
@@ -9790,6 +9826,8 @@ function buildCountdownForm(m, b) {
   m.appendChild(field(T('Urgency animation', '紧迫感动画'), T('Pulse the digit cells as the deadline approaches.', '临近截止时让数字格闪动。'),
     sel(b.urgency_anim || 'pulse', URGENCY_ANIM_OPTIONS,
         v => updateBlock(b.id, { urgency_anim: v }))));
+  m.appendChild(field(T('Button colour', '按钮颜色'), T('Fill of the action button. Label colour auto-adjusts for contrast.', '操作按钮的填充色。文字颜色自动调整以保证对比度。'),
+    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
 
   m.appendChild(field(T('Button label', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
