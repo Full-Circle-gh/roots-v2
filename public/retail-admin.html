@@ -10456,8 +10456,8 @@ function renderOpenOrder(o) {
           </div>` : `
           <div>
             <div class="kicker">Ship to ${copyChip([o.recipient_name, o.recipient_phone, o.address_full].filter(Boolean).join('\n'), 'Ship-to')}</div>
-            <div class="val"><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
-            <div class="sub">${escapeHtml(o.address_full || '')}</div>
+            <div class="val" data-no-i18n><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
+            <div class="sub" data-no-i18n>${escapeHtml(o.address_full || '')}</div>
           </div>`}
           <div>
             <div class="kicker">Customer</div>
@@ -18659,10 +18659,11 @@ cuApplyUiScale(cuGetUiScale());
   }
   function tagBlockPair(cnEl) {
     if (cnEl.dataset.langBlock || (cnEl.textContent || '').trim().length < 6) return;
+    if (inSkippedContext(cnEl)) return;
     const prev = cnEl.previousElementSibling, next = cnEl.nextElementSibling;
     let enEl = null;
-    if (prev && prev.tagName === cnEl.tagName && !prev.dataset.langBlock && isENBlock(prev)) enEl = prev;
-    else if (next && next.tagName === cnEl.tagName && !next.dataset.langBlock && isENBlock(next)) enEl = next;
+    if (prev && prev.tagName === cnEl.tagName && !prev.dataset.langBlock && isENBlock(prev) && !inSkippedContext(prev)) enEl = prev;
+    else if (next && next.tagName === cnEl.tagName && !next.dataset.langBlock && isENBlock(next) && !inSkippedContext(next)) enEl = next;
     if (!enEl) return;
     cnEl.dataset.langBlock = 'cn';
     enEl.dataset.langBlock = 'en';
