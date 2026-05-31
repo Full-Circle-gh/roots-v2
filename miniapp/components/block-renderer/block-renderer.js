@@ -264,6 +264,7 @@ Component({
           out.kicker  = lang.pick(b.kicker_en ?? b.kicker, b.kicker_cn, L);
           out.title   = lang.pick(b.title_en ?? b.title, b.title_cn, L);
           out.seeAll  = L === 'cn' ? '查看全部' : 'SEE ALL';
+          out.seeAllTarget = 'shop';
           out.catWord = L === 'cn' ? '分类' : 'CATEGORY';
           out.catView = b.view || 'tiles';
           out.catCols = Math.max(3, Math.min(5, b.columns || 4));
@@ -326,6 +327,9 @@ Component({
           out.kicker = lang.pick(b.kicker_en ?? b.kicker, b.kicker_cn, L);
           out.title  = lang.pick(b.title_en ?? b.title, b.title_cn, L);
           out.seeAll = L === 'cn' ? '查看全部' : 'SEE ALL';
+          // Category-scoped grids deep-link to that category; everything else
+          // (top sellers, new arrivals, manual) opens the Shop tab.
+          out.seeAllTarget = b.category_id ? ('category:' + b.category_id) : 'shop';
           out.cols   = b.columns || 2;
           out.gridView = b.view || 'grid';
           // 2026-05-20 enhancements: card corner radius + grid density +
@@ -1344,6 +1348,11 @@ Component({
     },
     onProductTap(e) {
       this.triggerEvent('product', { id: e.currentTarget.dataset.id });
+    },
+    // "SEE ALL" header link on product_grid / category_tabs — routes via the
+    // shared cta handler (category:<id> when category-scoped, else the shop tab).
+    onSeeAllTap(e) {
+      this.triggerEvent('cta', { target: e.currentTarget.dataset.target || 'shop' });
     },
     onOrderTrackerTap() {
       const ot = this.data.orderTracker;

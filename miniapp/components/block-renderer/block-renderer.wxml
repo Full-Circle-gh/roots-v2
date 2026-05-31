@@ -73,7 +73,7 @@
       <view class="kicker">{{kicker}}</view>
       <view class="ttl">{{title}}</view>
     </view>
-    <view class="more">{{seeAll}}</view>
+    <view class="more" data-target="{{seeAllTarget}}" bindtap="onSeeAllTap">{{seeAll}}</view>
   </view>
   <!-- Tiles view (default) -->
   <view wx:if="{{tiles.length && catView === 'tiles'}}" class="grid">
@@ -127,7 +127,7 @@
       <view class="kicker">{{kicker}}</view>
       <view class="ttl">{{title}}</view>
     </view>
-    <view class="more">{{seeAll}}</view>
+    <view class="more" data-target="{{seeAllTarget}}" bindtap="onSeeAllTap">{{seeAll}}</view>
   </view>
   <!-- Grid view (default) -->
   <view wx:if="{{gridView !== 'scroll' && gridView !== 'list'}}" class="grid cols-{{cols}}">
