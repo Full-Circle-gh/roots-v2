@@ -226,9 +226,9 @@
      view variants: bar (slim full-width) / card (rounded inset) / pill
      (compact centred) / banner (tall, big icon). All colours operator-set. -->
 <view wx:elif="{{type === 'notification_bar'}}" class="nbar nbar-{{nbarView}}">
-  <view wx:if="{{notifUnread > 0}}" class="nbar-row" style="background:{{nbarBg}};color:{{nbarFg}}" catchtap="onNotifTap">
-    <text class="nbar-icon {{notifIsFresh ? 'fresh' : ''}}">{{notifHasBroadcast ? '📣' : '🔔'}}</text>
-    <text class="nbar-text">{{notifPreviewText}}</text>
+  <view wx:if="{{nbarCount > 0}}" class="nbar-row" style="background:{{nbarBg}};color:{{nbarFg}}" catchtap="onNotifTap">
+    <text class="nbar-icon {{nbarFresh ? 'fresh' : ''}}">{{nbarHasBroadcast ? '📣' : '🔔'}}</text>
+    <text class="nbar-text">{{nbarText}}</text>
     <view class="nbar-btn" style="{{nbarBtnBg ? 'background:' + nbarBtnBg + ';color:' + nbarBtnFg : ''}}">→</view>
   </view>
 </view>

@@ -152,22 +152,31 @@ Page({
   // unread row arrived within the last 6 hours; drives the icon pulse.
   _buildNotifPatch(res) {
     if (!res || typeof res !== 'object') {
-      return { notifUnread: 0, notifLatestEn: '', notifLatestCn: '', notifHasBroadcast: false, notifIsFresh: false };
+      return {
+        notifUnread: 0, notifLatestEn: '', notifLatestCn: '', notifHasBroadcast: false, notifIsFresh: false,
+        notifNoOrderUnread: 0, notifNoOrderLatestEn: '', notifNoOrderLatestCn: '', notifNoOrderFresh: false,
+      };
     }
-    let fresh = false;
-    if (res.latest_created_at) {
-      // Server stores 'YYYY-MM-DD HH:MM:SS' (UTC) or ISO. Normalise to UTC.
-      const raw = String(res.latest_created_at);
-      const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z';
+    // Server stores 'YYYY-MM-DD HH:MM:SS' (UTC) or ISO; "fresh" = arrived
+    // within the last 6 hours and drives the icon pulse.
+    const isFresh = (raw) => {
+      if (!raw) return false;
+      const s = String(raw);
+      const iso = s.includes('T') ? s : s.replace(' ', 'T') + 'Z';
       const t = new Date(iso).getTime();
-      if (Number.isFinite(t)) fresh = (Date.now() - t) < 6 * 60 * 60 * 1000;
-    }
+      return Number.isFinite(t) && (Date.now() - t) < 6 * 60 * 60 * 1000;
+    };
     return {
       notifUnread:       res.count || 0,
       notifLatestEn:     res.latest_title_en || '',
       notifLatestCn:     res.latest_title_cn || '',
       notifHasBroadcast: !!res.has_broadcast,
-      notifIsFresh:      fresh,
+      notifIsFresh:      isFresh(res.latest_created_at),
+      // Order/shipping-excluded scope for blocks set to "announcements only".
+      notifNoOrderUnread:   res.no_order_count || 0,
+      notifNoOrderLatestEn: res.no_order_title_en || '',
+      notifNoOrderLatestCn: res.no_order_title_cn || '',
+      notifNoOrderFresh:    isFresh(res.no_order_created_at),
     };
   },
 

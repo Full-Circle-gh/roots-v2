@@ -88,6 +88,14 @@ Component({
     // draw the eye without being annoying. home.js computes this from the
     // server-returned latest_created_at.
     notifIsFresh: { type: Boolean, value: false },
+    // Order/shipping-excluded mirror of the four props above. A
+    // notification_bar block set to "announcements only" reads these so it
+    // surfaces broadcasts/invoice/refund updates but hides order-progress
+    // (paid/shipped/delivered) rows.
+    notifNoOrderUnread:   { type: Number,  value: 0 },
+    notifNoOrderLatestEn: { type: String,  value: '' },
+    notifNoOrderLatestCn: { type: String,  value: '' },
+    notifNoOrderFresh:    { type: Boolean, value: false },
     // Operator-configurable strip background colour (theme.notif_color in
     // storefront_config). Empty string = let the WXSS default win.
     notifColor: { type: String, value: '' },
@@ -168,27 +176,8 @@ Component({
   },
 
   observers: {
-    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards, newArrivals, activeOrder, notifUnread': function () {
+    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards, newArrivals, activeOrder, notifUnread, notifNoOrderUnread, notifIsFresh, notifNoOrderFresh, notifHasBroadcast': function () {
       this.recompute();
-    },
-    // Recompute the human-readable strip text whenever the count, the
-    // latest-row titles, or the language changes. When N=1 with a title
-    // we show the title itself; otherwise the generic count.
-    'notifUnread, notifLatestEn, notifLatestCn, lang': function (unread, en, cn, lang) {
-      const cnMode = lang === 'cn';
-      let text = '';
-      if (unread > 0) {
-        if (unread === 1) {
-          const t = cnMode ? (cn || en) : (en || cn);
-          if (t) text = t + (cnMode ? ' · 点击查看' : ' · Tap to view');
-        }
-        if (!text) {
-          text = cnMode
-            ? unread + ' 条新消息 · 点击查看'
-            : unread + (unread === 1 ? ' new update · Tap to view' : ' new updates · Tap to view');
-        }
-      }
-      this.setData({ notifPreviewText: text });
     },
   },
 
@@ -533,9 +522,37 @@ Component({
           // it always reads; label auto-contrasts against its own fill.
           out.nbarBtnBg = b.btn_color ? color(b.btn_color) : '';
           out.nbarBtnFg = b.btn_color ? btnText(b.btn_color) : '';
-          // Nothing unread → inner row is wx:if'd out, so kill the block's own
-          // FRAME/fill chrome too (same empty-frame fix as order_tracker).
-          if (!(this.properties.notifUnread > 0)) {
+          // Scope toggle: when show_order_status is false the block runs on the
+          // order/shipping-excluded counts so it only surfaces broadcasts,
+          // invoice, and refund updates ("announcements only"). Default = on.
+          const showOrder = b.show_order_status !== false;
+          const cnt   = showOrder ? this.properties.notifUnread     : this.properties.notifNoOrderUnread;
+          const ttlEn = showOrder ? this.properties.notifLatestEn   : this.properties.notifNoOrderLatestEn;
+          const ttlCn = showOrder ? this.properties.notifLatestCn   : this.properties.notifNoOrderLatestCn;
+          const fresh = showOrder ? this.properties.notifIsFresh    : this.properties.notifNoOrderFresh;
+          // has_broadcast is a subset of the non-order scope, so it stays valid
+          // whichever scope is active.
+          out.nbarCount = cnt || 0;
+          out.nbarFresh = !!fresh;
+          out.nbarHasBroadcast = !!this.properties.notifHasBroadcast;
+          const cn = L === 'cn';
+          let nbText = '';
+          if (cnt > 0) {
+            if (cnt === 1) {
+              const t = cn ? (ttlCn || ttlEn) : (ttlEn || ttlCn);
+              if (t) nbText = t + (cn ? ' · 点击查看' : ' · Tap to view');
+            }
+            if (!nbText) {
+              nbText = cn
+                ? cnt + ' 条新消息 · 点击查看'
+                : cnt + (cnt === 1 ? ' new update · Tap to view' : ' new updates · Tap to view');
+            }
+          }
+          out.nbarText = nbText;
+          // Nothing in-scope unread → inner row is wx:if'd out, so kill the
+          // block's own FRAME/fill chrome too (same empty-frame fix as
+          // order_tracker).
+          if (!(cnt > 0)) {
             out.frameOn = false;
             out.blockFill = false;
           }

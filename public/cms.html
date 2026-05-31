@@ -6354,6 +6354,9 @@ function makeBlock(type) {
       bg_color: 'ink',
       fg_color: 'white',
       btn_color: '',
+      // On = show everything incl. order/shipping progress. Off = announcements
+      // only (broadcasts, invoice, refund) — hides paid/shipped/delivered rows.
+      show_order_status: true,
     };
   }
   return null;
@@ -6748,7 +6751,11 @@ function renderBlockBody(b) {
             <span style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:${view === 'banner' ? '22px' : '17px'};height:${view === 'banner' ? '22px' : '17px'};border-radius:999px;font-size:12px;line-height:1;${nbtnStyle}">→</span>
           </div>
         </div>
-        <div class="empty" style="margin-top:8px;font-size:11px;opacity:.6">${B('Preview — hides on the storefront when the customer has no unread updates.', '预览 — 顾客无未读消息时,店面将隐藏此模块。')}</div>`;
+        <div class="empty" style="margin-top:8px;font-size:11px;opacity:.6">${
+          b.show_order_status === false
+            ? B('Preview — announcements only. Order/shipping updates are hidden; hides entirely when there\'s nothing unread.', '预览 — 仅公告。隐藏订单/物流更新;无未读时整体隐藏。')
+            : B('Preview — hides on the storefront when the customer has no unread updates.', '预览 — 顾客无未读消息时,店面将隐藏此模块。')
+        }</div>`;
       return d;
     }
     case 'category_tabs': {
@@ -8498,6 +8505,14 @@ function buildNotificationBarForm(m, b) {
       { value: 'pill',   label: T('Pill — compact, centred', '胶囊 — 紧凑居中') },
       { value: 'banner', label: T('Banner — tall, big icon', '横幅 — 更高 + 大图标') },
     ], v => updateBlock(b.id, { view: v }))));
+
+  m.appendChild(field(T('Order & shipping updates', '订单与物流更新'),
+    T('On = include order-progress updates (paid, shipped, delivered) alongside announcements, invoices, and refunds. Off = announcements only — order/shipping updates are hidden here (customers still see them on their notifications page).',
+      '开启 = 在公告、发票、退款之外,同时显示订单进度更新(已付款、已发货、已送达)。关闭 = 仅公告 — 此处隐藏订单/物流更新(顾客仍可在通知页查看)。'),
+    sel(b.show_order_status === false ? 'off' : 'on', [
+      { value: 'on',  label: T('Show all updates', '显示全部更新') },
+      { value: 'off', label: T('Announcements only', '仅公告') },
+    ], v => updateBlock(b.id, { show_order_status: v === 'on' }))));
 
   m.appendChild(field(T('Background', '背景颜色'), T('Fill behind the bar.', '通知条背景填充色。'),
     sel(b.bg_color || 'ink', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));

@@ -2415,11 +2415,34 @@ router.get('/api/retail/notifications/unread-count', requireRetailAuth, (req, re
         WHERE customer_id = ? AND read_at IS NULL AND category = 'broadcast' LIMIT 1`
     ).get(req.customer.id) ? 1 : 0;
   }
+  // Order/shipping-excluded scope: lets a notification_bar block opt out of
+  // order-progress updates (paid/shipped/delivered) while still surfacing
+  // broadcasts, invoice, and refund updates.
+  const noOrderN = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM retail_notifications
+      WHERE customer_id = ? AND read_at IS NULL AND category != 'order'`
+  ).get(req.customer.id).n;
+  let no_order_title_en = '', no_order_title_cn = '', no_order_created_at = null;
+  if (noOrderN > 0) {
+    const latestNo = tdb().prepare(
+      `SELECT title_en, title_cn, created_at FROM retail_notifications
+        WHERE customer_id = ? AND read_at IS NULL AND category != 'order'
+        ORDER BY id DESC LIMIT 1`
+    ).get(req.customer.id);
+    if (latestNo) {
+      no_order_title_en = latestNo.title_en || '';
+      no_order_title_cn = latestNo.title_cn || '';
+      no_order_created_at = latestNo.created_at || null;
+    }
+  }
   res.json({ success: true, data: {
     count: n || 0,
     latest_title_en, latest_title_cn,
     has_broadcast: !!has_broadcast,
     latest_created_at,
+    no_order_count: noOrderN || 0,
+    no_order_title_en, no_order_title_cn,
+    no_order_created_at,
   } });
 });
 
