@@ -465,7 +465,7 @@
   <block wx:elif="{{voting.view === 'peek'}}">
     <view bindtap="onVotingTap">
       <view class="vb-status-row">
-        <view class="vb-status-pill">●  {{lang === 'cn' ? '投票' : 'OPEN'}}{{voting.livePoll.daysLeft ? ' · ' + voting.livePoll.daysLeft + 'D ' + (lang === 'cn' ? '剩余' : 'LEFT') : ''}}</view>
+        <view class="vb-status-pill" style="color:{{voting.statusColor}}">●  {{lang === 'cn' ? '投票' : 'OPEN'}}{{voting.livePoll.daysLeft ? ' · ' + voting.livePoll.daysLeft + 'D ' + (lang === 'cn' ? '剩余' : 'LEFT') : ''}}</view>
         <view wx:if="{{voting.livePoll.category}}" class="vb-cat">{{voting.livePoll.category}}</view>
       </view>
       <view class="vb-q">{{voting.livePoll.question}}</view>
@@ -491,7 +491,7 @@
   <!-- INLINE: full poll with A/B/C/D options + cast vote button -->
   <block wx:elif="{{voting.view === 'inline'}}">
     <view class="vb-status-row">
-      <view class="vb-status-pill">●  {{lang === 'cn' ? '投票' : 'OPEN'}}{{voting.livePoll.daysLeft ? ' · ' + voting.livePoll.daysLeft + 'D ' + (lang === 'cn' ? '剩余' : 'LEFT') : ''}}</view>
+      <view class="vb-status-pill" style="color:{{voting.statusColor}}">●  {{lang === 'cn' ? '投票' : 'OPEN'}}{{voting.livePoll.daysLeft ? ' · ' + voting.livePoll.daysLeft + 'D ' + (lang === 'cn' ? '剩余' : 'LEFT') : ''}}</view>
       <view wx:if="{{voting.livePoll.category}}" class="vb-cat">{{voting.livePoll.category}}</view>
     </view>
     <view class="vb-q">{{voting.livePoll.question}}</view>

@@ -822,6 +822,9 @@ Component({
           out.bg = color(b.bg_color || 'oat-milk');
           out.fg = color(b.fg_color || 'ink');
           const accent = color(b.accent_color || 'lime-leaf');
+          // "● OPEN" live-status indicator colour. Editable; defaults to berry
+          // so existing blocks keep their look. (CLOSED stays muted olive.)
+          const statusColor = color(b.status_color || 'berry-punch');
           const view = b.view || (b.title_en || b.title_cn ? 'teaser' : 'peek');
           const src  = b.data_source || 'auto_pull';
 
@@ -886,6 +889,7 @@ Component({
             view,
             dataSource: src,
             accent,
+            statusColor,
             ctaLabel:  lang.pick(b.cta_label_en, b.cta_label_cn, L),
             ctaTarget: b.cta_target || 'voting',
             // Static / teaser copy (used by teaser + static fallback)

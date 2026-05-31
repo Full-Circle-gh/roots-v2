@@ -7230,6 +7230,7 @@ function renderBlockBody(b) {
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
       const accent = brandColorVar(b.accent_color) || 'var(--b-lime)';
+      const statusCol = brandColorVar(b.status_color) || '#E96174';   // "● OPEN" indicator
       const view = b.view || 'peek';
       const src  = b.data_source || 'auto_pull';
       const cta  = pickLang(b.cta_label_en, b.cta_label_cn);
@@ -7304,7 +7305,7 @@ function renderBlockBody(b) {
         const daysLeft = votingDaysLeft(livePoll.closes_at);
         const total = (livePoll.options || []).reduce((s, o) => s + (o.votes || 0), 0);
         d.innerHTML = `
-          <div class="vb-status-pill">●  ${state.lang === 'cn' ? '投票' : 'OPEN'}${daysLeft ? ' · ' + daysLeft + 'D LEFT' : ''}</div>
+          <div class="vb-status-pill" style="color:${statusCol}">●  ${state.lang === 'cn' ? '投票' : 'OPEN'}${daysLeft ? ' · ' + daysLeft + 'D LEFT' : ''}</div>
           <div class="vb-body">
             <div class="vb-q">${escapeHtml(state.lang === 'cn' && livePoll.question_cn ? livePoll.question_cn : livePoll.question_en)}</div>
             <div class="vb-meta">${total.toLocaleString()} ${state.lang === 'cn' ? '票' : 'votes'} · ${livePoll.reward_points || 5} ${state.lang === 'cn' ? '积分' : 'pts'}</div>
@@ -7330,7 +7331,7 @@ function renderBlockBody(b) {
             </div>`;
         }).join('');
         d.innerHTML = `
-          <div class="vb-status-pill">●  ${state.lang === 'cn' ? '投票' : 'OPEN'}${daysLeft ? ' · ' + daysLeft + 'D LEFT' : ''}</div>
+          <div class="vb-status-pill" style="color:${statusCol}">●  ${state.lang === 'cn' ? '投票' : 'OPEN'}${daysLeft ? ' · ' + daysLeft + 'D LEFT' : ''}</div>
           <div class="vb-q">${escapeHtml(state.lang === 'cn' && livePoll.question_cn ? livePoll.question_cn : livePoll.question_en)}</div>
           <div class="vb-opts">${optHtml}</div>
           <div class="vb-cta" style="background:#1a1a17;color:${accent}">${state.lang === 'cn' ? '投票 +' + reward + ' 积分' : 'CAST VOTE · +' + reward + ' PTS'} →</div>
@@ -9047,6 +9048,12 @@ function buildVotingForm(m, b) {
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
   m.appendChild(field(T('Accent colour', '强调色'), T('Used for the vote CTA + result fill.', '用于投票按钮 + 结果填充。'),
     sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+  // The "● OPEN" live-status indicator only appears in peek/inline views.
+  if (view === 'peek' || view === 'inline') {
+    m.appendChild(field(T('Status dot colour', '状态点颜色'),
+      T('Colour of the "● OPEN" live indicator (dot + label).', '「● 投票」进行中指示器(圆点 + 文字)的颜色。'),
+      sel(b.status_color || 'berry-punch', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { status_color: v }))));
+  }
 
   // CTA only applies to teaser/peek/past_result (inline has its own vote button).
   if (view !== 'inline') {
