@@ -10149,16 +10149,30 @@ function _iedStripToText(html) {
     .split('\n').map(l => l.trim()).join('\n').trim();
 }
 async function iedAutoComposeBlocks(pid, btn) {
-  const p = (_products || []).find(x => x.id === pid);
+  // The list cache (_products) drops the heavy text fields, so fetch the full
+  // product to read its description + any existing blocks.
+  let p;
+  try {
+    const pr = await fetch('/api/products/' + pid, { credentials: 'same-origin' });
+    const pd = await pr.json().catch(() => ({}));
+    if (!pr.ok || !pd.success) return;
+    p = pd.data;
+  } catch { return; }
   if (!p) return;
   // Don't clobber an existing design.
   let blocks = p.description_blocks;
   if (typeof blocks === 'string') { try { blocks = JSON.parse(blocks); } catch { blocks = null; } }
-  if (Array.isArray(blocks) && blocks.length) return;
+  if (Array.isArray(blocks) && blocks.length) {
+    toast('This product already has a designed page — open the Product Page Editor to edit it · 该商品已有设计页面,可在商品页编辑器中编辑', 'ok');
+    return;
+  }
   const textEn = _iedStripToText(p.description_en);
   const textCn = _iedStripToText(p.description_cn);
   // Match the editor's default rule: only auto-compose when BOTH languages exist.
-  if (!textEn || !textCn) return;
+  if (!textEn || !textCn) {
+    toast('Need both an English and a Chinese description to auto-build — fill both, then toggle again · 需要中英文描述才能自动生成,补全后再切换', 'error');
+    return;
+  }
   toast('Auto-building the product page from your description… · 正在根据描述生成商品页…');
   try {
     const r = await fetch('/api/ai/compose-blocks', {
