@@ -518,7 +518,7 @@
       <view class="vb-voted-text">{{lang === 'cn' ? '已投票 · 谢谢' : 'Vote counted. Thanks!'}}</view>
     </view>
     <view wx:else class="vb-cta {{voting.chosenOptionId ? 'on' : ''}}"
-          style="{{voting.chosenOptionId ? 'background:#1a1a17;color:' + voting.accent : ''}}"
+          style="{{voting.chosenOptionId ? 'background:#1a1a17;color:' + voting.accent : ((voting.promptBg ? 'background:' + voting.promptBg + ';' : '') + (voting.promptText ? 'color:' + voting.promptText : ''))}}"
           bindtap="onVotingCast">
       <block wx:if="{{voting.chosenOptionId}}">{{lang === 'cn' ? '投票 +' + voting.livePoll.rewardPoints + ' 积分' : 'CAST VOTE · +' + voting.livePoll.rewardPoints + ' PTS'}} →</block>
       <block wx:else>{{lang === 'cn' ? '请选择' : 'PICK ONE TO VOTE'}}</block>

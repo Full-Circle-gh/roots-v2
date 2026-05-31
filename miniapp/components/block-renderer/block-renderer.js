@@ -825,6 +825,12 @@ Component({
           // "● OPEN" live-status indicator colour. Editable; defaults to berry
           // so existing blocks keep their look. (CLOSED stays muted olive.)
           const statusColor = color(b.status_color || 'berry-punch');
+          // Inline-view idle "PICK ONE TO VOTE" button colours. Editable;
+          // empty → fall back to the CSS defaults (faint grey fill + olive text)
+          // so existing blocks are unchanged. Once an option is tapped the
+          // button switches to the accent-coloured "CAST VOTE" state.
+          const promptBg   = b.prompt_bg_color   ? color(b.prompt_bg_color)   : '';
+          const promptText = b.prompt_text_color ? color(b.prompt_text_color) : '';
           const view = b.view || (b.title_en || b.title_cn ? 'teaser' : 'peek');
           const src  = b.data_source || 'auto_pull';
 
@@ -890,6 +896,8 @@ Component({
             dataSource: src,
             accent,
             statusColor,
+            promptBg,
+            promptText,
             ctaLabel:  lang.pick(b.cta_label_en, b.cta_label_cn, L),
             ctaTarget: b.cta_target || 'voting',
             // Static / teaser copy (used by teaser + static fallback)

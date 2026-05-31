@@ -7231,6 +7231,10 @@ function renderBlockBody(b) {
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
       const accent = brandColorVar(b.accent_color) || 'var(--b-lime)';
       const statusCol = brandColorVar(b.status_color) || '#E96174';   // "● OPEN" indicator
+      // Inline-view idle "PICK ONE TO VOTE" button colours (editable; default
+      // faint grey fill + olive text — matches the mini-app idle state).
+      const promptBg  = brandColorVar(b.prompt_bg_color)   || 'rgba(0,0,0,.08)';
+      const promptTxt = brandColorVar(b.prompt_text_color) || 'var(--b-olive)';
       const view = b.view || 'peek';
       const src  = b.data_source || 'auto_pull';
       const cta  = pickLang(b.cta_label_en, b.cta_label_cn);
@@ -7334,7 +7338,7 @@ function renderBlockBody(b) {
           <div class="vb-status-pill" style="color:${statusCol}">●  ${state.lang === 'cn' ? '投票' : 'OPEN'}${daysLeft ? ' · ' + daysLeft + 'D LEFT' : ''}</div>
           <div class="vb-q">${escapeHtml(state.lang === 'cn' && livePoll.question_cn ? livePoll.question_cn : livePoll.question_en)}</div>
           <div class="vb-opts">${optHtml}</div>
-          <div class="vb-cta" style="background:#1a1a17;color:${accent}">${state.lang === 'cn' ? '投票 +' + reward + ' 积分' : 'CAST VOTE · +' + reward + ' PTS'} →</div>
+          <div class="vb-cta" style="background:${promptBg};color:${promptTxt}">${state.lang === 'cn' ? '请选择' : 'PICK ONE TO VOTE'}</div>
           <div class="vb-foot">${total.toLocaleString()} ${state.lang === 'cn' ? '票' : 'votes so far'}</div>`;
         return d;
       }
@@ -9053,6 +9057,16 @@ function buildVotingForm(m, b) {
     m.appendChild(field(T('Status dot colour', '状态点颜色'),
       T('Colour of the "● OPEN" live indicator (dot + label).', '「● 投票」进行中指示器(圆点 + 文字)的颜色。'),
       sel(b.status_color || 'berry-punch', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { status_color: v }))));
+  }
+  // The inline view shows a full "PICK ONE TO VOTE" button before the customer
+  // taps an option. Let it be recoloured; empty keeps the default grey + olive.
+  if (view === 'inline') {
+    m.appendChild(field(T('Vote button fill', '投票按钮底色'),
+      T('Background of the idle "PICK ONE TO VOTE" button. Once an option is tapped it switches to the accent colour.', '「请选择」按钮的底色。选择某项后会切换为强调色。'),
+      sel(b.prompt_bg_color || '', [{ value: '', label: T('— default (grey) —', '— 默认(灰)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { prompt_bg_color: v }))));
+    m.appendChild(field(T('Vote button text', '投票按钮文字'),
+      T('Text colour of the idle "PICK ONE TO VOTE" button.', '「请选择」按钮的文字颜色。'),
+      sel(b.prompt_text_color || '', [{ value: '', label: T('— default (olive) —', '— 默认(橄榄)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { prompt_text_color: v }))));
   }
 
   // CTA only applies to teaser/peek/past_result (inline has its own vote button).
