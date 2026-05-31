@@ -232,6 +232,14 @@ Component({
           out.heroFit = b.image_fit || (b.image_aspect ? 'contain' : 'cover');
           out.heroImgMode = out.heroFit === 'contain' ? 'aspectFit'
             : out.heroFit === 'stretch' ? 'scaleToFill' : 'aspectFill';
+          // Fill/stretch use a fixed-proportion box (the image is cropped into
+          // it). The CMS editor sizes that box as (height_px * 0.6)px tall on
+          // its 390px-wide phone; we express the SAME proportion as an
+          // aspect-ratio (390 / (height_px*0.6) = 650/height_px) so the live
+          // banner matches the editor preview exactly on any screen width.
+          // (A plain rpx height diverged: 520px read as a short landscape band
+          // in the editor but a tall portrait band on the phone.)
+          out.fillAspect = (650 / (b.height_px || 280)).toFixed(4);
           const ctas = Array.isArray(b.ctas) ? b.ctas : (b.cta_label ? [{ label_en: b.cta_label, label_cn: '', target: b.cta_target, style: 'primary' }] : []);
           out.ctas = ctas.map(c => ({
             label:  lang.pick(c.label_en ?? c.label, c.label_cn, L),
