@@ -123,7 +123,7 @@
   <view wx:else class="empty">No featured product</view>
 </view>
 
-<view wx:elif="{{type === 'product_grid'}}" class="grid-block grid-view-{{gridView}} corner-{{gridCorner}} density-{{gridDensity}}">
+<view wx:elif="{{type === 'product_grid'}}" class="grid-block grid-view-{{gridView}} corner-{{gridCorner}} density-{{gridDensity}}" style="{{gridBg ? 'background:' + gridBg + ';padding-top:32rpx;padding-bottom:32rpx' : ''}}">
   <view class="head">
     <view>
       <view class="kicker">{{kicker}}</view>
@@ -138,14 +138,14 @@
       <view class="img">
         <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
         <view wx:if="{{item.rank}}" class="rank-badge {{item.rankClass}}">{{item.rankLabel}}</view>
-        <view wx:elif="{{item.isFlash}}" class="grid-flash-badge">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+        <view wx:elif="{{item.isFlash}}" class="grid-flash-badge" style="{{gridSaleColor ? 'background:' + gridSaleColor + ';color:' + gridSaleFg : ''}}">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
       </view>
       <view class="name">{{item.name}}</view>
       <view class="price-row">
         <text wx:if="{{item.priceWas}}" class="price-was">{{item.priceWas}}</text>
-        <text class="price {{item.priceWas ? 'is-flash' : ''}}">{{item.price}}</text>
+        <text class="price {{item.priceWas ? 'is-flash' : ''}}" style="{{item.priceWas && gridSaleColor ? 'color:' + gridSaleColor : ''}}">{{item.price}}</text>
       </view>
-      <view wx:if="{{item.soldCaption}}" class="sold-caption">{{item.soldCaption}}</view>
+      <view wx:if="{{item.soldCaption}}" class="sold-caption" style="{{gridSaleColor ? 'color:' + gridSaleColor : ''}}">{{item.soldCaption}}</view>
     </view>
     <view wx:if="{{!gridProducts.length}}" class="empty">No products yet</view>
   </view>
@@ -156,14 +156,14 @@
       <view class="img">
         <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
         <view wx:if="{{item.rank}}" class="rank-badge {{item.rankClass}}">{{item.rankLabel}}</view>
-        <view wx:elif="{{item.isFlash}}" class="grid-flash-badge">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+        <view wx:elif="{{item.isFlash}}" class="grid-flash-badge" style="{{gridSaleColor ? 'background:' + gridSaleColor + ';color:' + gridSaleFg : ''}}">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
       </view>
       <view class="name">{{item.name}}</view>
       <view class="price-row">
         <text wx:if="{{item.priceWas}}" class="price-was">{{item.priceWas}}</text>
-        <text class="price {{item.priceWas ? 'is-flash' : ''}}">{{item.price}}</text>
+        <text class="price {{item.priceWas ? 'is-flash' : ''}}" style="{{item.priceWas && gridSaleColor ? 'color:' + gridSaleColor : ''}}">{{item.price}}</text>
       </view>
-      <view wx:if="{{item.soldCaption}}" class="sold-caption">{{item.soldCaption}}</view>
+      <view wx:if="{{item.soldCaption}}" class="sold-caption" style="{{gridSaleColor ? 'color:' + gridSaleColor : ''}}">{{item.soldCaption}}</view>
     </view>
     <view wx:if="{{!gridProducts.length}}" class="empty">No products yet</view>
   </scroll-view>
@@ -174,16 +174,16 @@
       <view class="img">
         <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
         <view wx:if="{{item.rank}}" class="rank-badge {{item.rankClass}}">{{item.rankLabel}}</view>
-        <view wx:elif="{{item.isFlash}}" class="grid-flash-badge">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+        <view wx:elif="{{item.isFlash}}" class="grid-flash-badge" style="{{gridSaleColor ? 'background:' + gridSaleColor + ';color:' + gridSaleFg : ''}}">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
       </view>
       <view class="meta">
         <view class="name">{{item.name}}</view>
         <view wx:if="{{item.tagline}}" class="tagline">{{item.tagline}}</view>
         <view class="price-row">
           <text wx:if="{{item.priceWas}}" class="price-was">{{item.priceWas}}</text>
-          <text class="price {{item.priceWas ? 'is-flash' : ''}}">{{item.price}}</text>
+          <text class="price {{item.priceWas ? 'is-flash' : ''}}" style="{{item.priceWas && gridSaleColor ? 'color:' + gridSaleColor : ''}}">{{item.price}}</text>
         </view>
-        <view wx:if="{{item.soldCaption}}" class="sold-caption">{{item.soldCaption}}</view>
+        <view wx:if="{{item.soldCaption}}" class="sold-caption" style="{{gridSaleColor ? 'color:' + gridSaleColor : ''}}">{{item.soldCaption}}</view>
       </view>
     </view>
     <view wx:if="{{!gridProducts.length}}" class="empty">No products yet</view>

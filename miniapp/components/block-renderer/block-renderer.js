@@ -374,6 +374,14 @@ Component({
           out.gridCorner  = b.corner_radius || 'subtle';
           out.gridDensity = b.density       || 'normal';
           out.gridRankMode = b.rank_badge || 'top_3';
+          // Optional surface panel + sale/accent colour. Both blank by
+          // default so unset grids render byte-identically (transparent
+          // panel, brand-red flash price/badge, olive sold caption). When
+          // an accent is picked it tints the flash price, paints the flash
+          // badge (auto-contrast label), and tints the sold caption.
+          out.gridBg = b.bg_color ? color(b.bg_color) : '';
+          out.gridSaleColor = b.accent_color ? color(b.accent_color) : '';
+          out.gridSaleFg = b.accent_color ? btnText(b.accent_color) : '';
           let list = [];
           if (b.source_type === 'manual') {
             list = (b.product_ids || []).map(id => this.properties.products.find(p => p.id === id)).filter(Boolean);

@@ -5103,7 +5103,7 @@ const DC_FIELDS = {
   announcement_bar: { bg: 'bg_color', fg: 'fg_color' },
   hero_banner:      { bg: 'panel_bg_color', fg: 'panel_fg_color' },
   featured_item:    { bg: 'card_bg_color', fg: 'card_fg_color' },
-  product_grid:     { bg: 'bg_color' },
+  product_grid:     { bg: 'bg_color', accent: 'accent_color' },
   category_tabs:    { accent: 'divider_color' },
   countdown_timer:  { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   flash_sale_strip: { bg: 'bg_color', fg: 'fg_color' },
@@ -6816,6 +6816,9 @@ function renderBlockBody(b) {
     case 'product_grid': {
       const view = b.view || 'grid';
       d.className = 'b-grid b-grid-' + view + cornerRadiusClass(b) + ' density-' + (b.density || 'normal');
+      const gridBg = b.bg_color ? dcResolveHex(b.bg_color) : '';
+      const gridSale = b.accent_color ? dcResolveHex(b.accent_color) : '';
+      if (gridBg) { d.style.background = gridBg; d.style.paddingTop = '16px'; d.style.paddingBottom = '16px'; }
       let products = [];
       if (b.source_type === 'manual') {
         products = (b.product_ids || []).map(id => state.products.find(p => p.id === id)).filter(Boolean);
@@ -6857,7 +6860,7 @@ function renderBlockBody(b) {
         const units = Number(p.units_sold) || 0;
         if (units <= 0) return '';
         const txt = state.lang === 'cn' ? `已售 ${units}` : `${units} SOLD`;
-        return `<div class="sold-caption">${escapeHtml(txt)}</div>`;
+        return `<div class="sold-caption"${gridSale ? ` style="color:${gridSale}"` : ''}>${escapeHtml(txt)}</div>`;
       }
       const cards = products.map((p, idx) => {
         const src = thumbUrl(p);
@@ -8651,6 +8654,10 @@ function buildGridForm(m, b) {
       sel(b.rank_badge || 'top_3', RANK_BADGE_OPTIONS,
           v => updateBlock(b.id, { rank_badge: v }))));
   }
+  m.appendChild(field(T('Surface colour', '背景颜色'), T('Paints a panel behind the grid. Default = transparent (page colour shows through).', '在网格后绘制底色面板。默认 = 透明(显示页面底色)。'),
+    sel(b.bg_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  m.appendChild(field(T('Sale / accent colour', '促销 / 强调色'), T('Tints the sale price, flash badge, and "X sold" caption. Default = brand red. Rank medals keep their own colours.', '为促销价、秒杀角标和「已售」文字着色。默认 = 品牌红。排名奖牌保留自身颜色。'),
+    sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 }
 function buildSpacerForm(m, b) {
   m.appendChild(field(T('Height (px)', '高度(像素)'), '', num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 4, max: 200 })));
