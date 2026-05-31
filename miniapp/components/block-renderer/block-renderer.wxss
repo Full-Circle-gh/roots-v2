@@ -1377,7 +1377,6 @@
 .voting-blk {
   margin: 28rpx 36rpx;
   padding: 32rpx;
-  border: 3rpx solid var(--ink);
   border-radius: 8rpx;
   position: relative;
 }
@@ -1587,7 +1586,6 @@
 .aff-blk {
   margin: 28rpx 36rpx;
   padding: 32rpx 32rpx 28rpx;
-  border: 3rpx solid var(--ink);
   border-radius: 8rpx;
 }
 .aff-head { margin-bottom: 22rpx; }
@@ -2281,7 +2279,6 @@
 .bun-blk {
   margin: 24rpx 44rpx;
   padding: 30rpx 30rpx 26rpx;
-  border: 3rpx solid var(--ink);
 }
 .bun-kicker {
   font-family: var(--f-toni);
@@ -2434,7 +2431,6 @@
 /* ─── WeCom (企业微信) contact block ──────────────────────────────────── */
 .wc-blk {
   margin: 24rpx 44rpx;
-  border: 3rpx solid var(--ink);
 }
 .wc-card {
   padding: 36rpx 32rpx 32rpx;
@@ -2908,8 +2904,8 @@
   margin: 16rpx 0;
   border-radius: 0;
 }
-/* Self-framed cards (bundle, poll, referral, store, WeCom) carry their own
-   border/bg + side MARGIN — not the .framed system — so the generic bleed rule
+/* Self-styled cards (bundle, poll, referral, store, WeCom) carry their own
+   bg + side MARGIN — not the .framed system — so the generic bleed rule
    above (which only zeros padding) can't reach their gutter. Drop the side
    margin and square the corners so the panel reads as an edge-to-edge band;
    restore the inner padding (zeroed by the generic rule) so content keeps its

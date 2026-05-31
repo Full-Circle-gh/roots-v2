@@ -2746,7 +2746,7 @@
   }
 
   /* ─── WeCom (企业微信) contact preview ──────────────────────────────── */
-  .b-wc { margin: 12px 20px; border: 1.5px solid var(--b-ink); }
+  .b-wc { margin: 12px 20px; }
   .b-wc-card { padding: 18px 16px 16px; text-align: center; }
   .b-wc .wc-kicker { font: 700 9px var(--bf-toni); letter-spacing: .22em; opacity: .7; }
   .b-wc .wc-title { margin-top: 4px; font: 500 22px var(--bf-bear); line-height: 1.05; }
@@ -2844,10 +2844,9 @@
   .b-bundle {
     margin: 10px 20px;
     padding: 16px 16px 14px;
-    border: 1.5px solid var(--b-ink);
   }
-  /* Self-framed cards (bundle, poll, referral, store, WeCom) own their
-     border/bg + side margin (not the .framed system), so the generic
+  /* Self-styled cards (bundle, poll, referral, store, WeCom) own their
+     bg + side margin (not the .framed system), so the generic
      .block-wrap.bleed rule (zeros padding only) can't reach their gutter.
      Drop the side margin + square the corners under full-bleed, and restore
      the inner padding the generic rule zeroed — mirrors the mini-app. */
@@ -3230,7 +3229,7 @@
   .b-store-multi .st-empty { padding: 14px 0; font-size: 11px; }
   .b-voting {
     margin: 14px 18px; padding: 16px 18px;
-    border: 1.5px solid var(--b-ink); border-radius: 4px;
+    border-radius: 4px;
     position: relative;
   }
   .b-voting.b-voting-teaser {
@@ -3287,7 +3286,6 @@
   .b-affiliate {
     margin: 14px 18px;
     padding: 16px 18px;
-    border: 1.5px solid var(--b-ink);
     border-radius: 4px;
   }
   .b-affiliate .af-head { margin-bottom: 11px; }
