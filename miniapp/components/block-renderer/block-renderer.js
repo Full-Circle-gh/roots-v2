@@ -299,17 +299,24 @@ Component({
             .map(id => this.properties.categories.find(c => c.id === id))
             .filter(Boolean);
           const palette = ['papaya-glow','pea-sprout','berry-punch','golden-corn','skyberry','lotus'];
+          // Per-category colour overrides keyed by category id; unset → auto
+          // palette by position. fg auto-contrasts to the resolved fill.
+          const tileColors = b.tile_colors || {};
           out.tiles = cats.map((c, i) => {
             const splitName = lang.splitMixed(c.name, L);
             const letter = (splitName.trim()[0] || '').toUpperCase();
-            const bg = color(palette[i % 6]);
-            const fg = i % 6 === 1 || i % 6 === 2 ? '#fff' : '#1a1a17';
+            const override = tileColors[c.id];
+            const token = override || palette[i % 6];
+            const bg = color(token);
+            // Overrides auto-contrast by luminance; the auto palette keeps its
+            // hand-tuned text colour (white on pea-sprout/berry-punch).
+            const fg = override ? btnText(token) : (i % 6 === 1 || i % 6 === 2 ? '#fff' : '#1a1a17');
             return {
               id: c.id,
               num: '0' + (i + 1),
               name: splitName,
               letter,
-              color: palette[i % 6],
+              color: token,
               bg, fg,
             };
           });

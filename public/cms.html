@@ -6765,6 +6765,13 @@ function renderBlockBody(b) {
       const bg = brandColorVar(b.bg_color);
       if (bg) d.style.background = bg;
       const cats = (b.category_ids || []).map(id => state.categories.find(c => c.id === id)).filter(Boolean);
+      // Per-circle colour override → inline style; unset falls back to the
+      // cN palette class. Mirrors tile_colors in the live renderer.
+      const tileColors = b.tile_colors || {};
+      const tileStyle = (c) => {
+        const hex = tileColors[c.id] ? dcResolveHex(tileColors[c.id]) : null;
+        return hex ? ` style="background:${hex};color:${btnTextHex(hex)}"` : '';
+      };
       const ck = getBi(b, 'kicker');
       const ct = getBi(b, 'title');
       const head = `<div class="head"><div><div class="kicker">${biLabel(ck.en, ck.cn)}</div><div class="ttl">${biLabel(ct.en, ct.cn)}</div></div><div class="more">${state.lang === 'cn' ? '查看全部' : 'SEE ALL'}</div></div>`;
@@ -6776,7 +6783,7 @@ function renderBlockBody(b) {
           const name = categoryNameForLang(c.name);
           const letter = (name.trim()[0] || '').toUpperCase();
           return `<div class="icon-tile">
-            <div class="icon-circle c${i % 6}">${escapeHtml(letter)}</div>
+            <div class="icon-circle c${i % 6}"${tileStyle(c)}>${escapeHtml(letter)}</div>
             <div class="icon-name">${escapeHtml(name)}</div>
           </div>`;
         }).join('');
@@ -6789,7 +6796,7 @@ function renderBlockBody(b) {
           const name = categoryNameForLang(c.name);
           const letter = (name.trim()[0] || '').toUpperCase();
           return `<div class="scroll-tile">
-            <div class="icon-circle c${i % 6}">${escapeHtml(letter)}</div>
+            <div class="icon-circle c${i % 6}"${tileStyle(c)}>${escapeHtml(letter)}</div>
             <div class="icon-name">${escapeHtml(name)}</div>
           </div>`;
         }).join('');
@@ -6799,7 +6806,7 @@ function renderBlockBody(b) {
 
       // 'tiles' (default)
       const tiles = cats.map((c, i) => `
-        <div class="tile c${i % 6}">
+        <div class="tile c${i % 6}"${tileStyle(c)}>
           <div class="num">0${i + 1} · ${state.lang === 'cn' ? '分类' : 'CATEGORY'}</div>
           <div class="name">${escapeHtml(categoryNameForLang(c.name))}</div>
         </div>`).join('');
@@ -8618,6 +8625,34 @@ function buildCatTabsForm(m, b) {
     chips.appendChild(chip);
   });
   m.appendChild(wrap);
+
+  // Per-circle colour overrides. One swatch picker per selected category (in
+  // display order); 'Auto' falls back to the rotating palette in the renderer.
+  const selectedCats = (b.category_ids || [])
+    .map(id => state.categories.find(c => c.id === id))
+    .filter(Boolean);
+  if (selectedCats.length) {
+    const colorWrap = document.createElement('div');
+    selectedCats.forEach(c => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:8px;';
+      const nm = document.createElement('div');
+      nm.textContent = c.name;
+      nm.style.cssText = 'flex:0 0 38%;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      const cur = (b.tile_colors || {})[c.id] || '';
+      const picker = sel(cur, [{ value: '', label: 'Auto · 自动' }, ...BRAND_COLOR_OPTIONS], v => {
+        const next = { ...(b.tile_colors || {}) };
+        if (v) next[c.id] = v; else delete next[c.id];
+        updateBlock(b.id, { tile_colors: next });
+      });
+      picker.style.flex = '1';
+      row.appendChild(nm);
+      row.appendChild(picker);
+      colorWrap.appendChild(row);
+    });
+    m.appendChild(field(T('Circle colours', '圆形颜色'), T('Pick a colour per category, or leave on Auto to use the rotating palette.', '为每个分类选择颜色,或保持「自动」使用轮换调色板。'), colorWrap));
+  }
+
   // Background colour — `null` = transparent (inherits page bg).
   m.appendChild(field(T('Background', '背景颜色'), T('Optional surface colour behind the block. Transparent by default.', '可选 — 模块背后的底色。默认透明。'),
     sel(b.bg_color || '', [{ value: '', label: T('— transparent —', '— 透明 —') }, ...BRAND_COLOR_OPTIONS],
