@@ -669,11 +669,16 @@ router.get('/api/retail/products/top', (req, res) => {
   if (candidateIds.length) {
     const placeholders = candidateIds.map(() => '?').join(',');
     products = tdb().prepare(
-      `SELECT ${RETAIL_PRODUCT_COLS} FROM products p
+      `SELECT ${RETAIL_PRODUCT_COLS}, p.updated_at FROM products p
         WHERE p.id IN (${placeholders})
           AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`
     ).all(...candidateIds);
   }
+  // Replace the heavy inline base64 primary photo with a tiny streamed-image
+  // URL — same fix as the shop-list endpoint above. Shipping image_data inline
+  // made this payload several MB; on mobile the mini-app's 12s fetch timed out
+  // and the "best sellers" grid silently fell back to its empty state.
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
   const productsById = new Map(products.map(p => [p.id, p]));
   const out = [];
   for (const r of ranked) {
@@ -683,6 +688,10 @@ router.get('/api/retail/products/top', (req, res) => {
     const decorated = flashsales.decorateProduct(hydrateNutrition(p), now);
     decorated.units_sold = Math.round(r.units);
     decorated.revenue    = Math.round(r.revenue * 100) / 100;
+    if (typeof decorated.image_data === 'string' && /^data:/i.test(decorated.image_data)) {
+      decorated.image_data = `${baseUrl}/api/retail/products/${decorated.id}/image?v=${encodeURIComponent(decorated.updated_at || '')}`;
+    }
+    delete decorated.updated_at;
     out.push(decorated);
   }
   const meta = {
