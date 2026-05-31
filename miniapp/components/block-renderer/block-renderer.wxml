@@ -29,12 +29,12 @@
 </view>
 
 <!-- Hero: full view (current — image fills, CTAs float) -->
-<view wx:elif="{{type === 'hero_banner' && heroView !== 'split'}}" class="hero hero-full scrim-{{heroScrim}} enter-{{heroEnter}}" style="{{aspectRatio ? 'aspect-ratio:' + aspectRatio + ';height:auto' : 'height:' + (placeholderH * 2) + 'rpx'}}">
+<view wx:elif="{{type === 'hero_banner' && heroView !== 'split'}}" class="hero hero-full scrim-{{heroScrim}} enter-{{heroEnter}}" style="{{(heroFit === 'contain' && aspectRatio) ? 'aspect-ratio:' + aspectRatio + ';height:auto' : 'height:' + (placeholderH * 2) + 'rpx'}}">
   <video wx:if="{{heroVideo}}" class="hero-video" src="{{heroVideo}}" poster="{{imageUrl}}"
          autoplay="{{true}}" loop="{{true}}" muted="{{true}}" controls="{{false}}"
          show-center-play-btn="{{false}}" show-play-btn="{{false}}" show-fullscreen-btn="{{false}}"
-         show-progress="{{false}}" enable-progress-gesture="{{false}}" object-fit="cover" vslide-gesture="{{false}}"/>
-  <image wx:elif="{{imageUrl}}" src="{{imageUrl}}" mode="aspectFill" class="hero-img"/>
+         show-progress="{{false}}" enable-progress-gesture="{{false}}" object-fit="{{heroFit === 'contain' ? 'contain' : heroFit === 'stretch' ? 'fill' : 'cover'}}" vslide-gesture="{{false}}"/>
+  <image wx:elif="{{imageUrl}}" src="{{imageUrl}}" mode="{{heroImgMode}}" class="hero-img"/>
   <view wx:else class="hero-placeholder">No image</view>
   <view wx:if="{{(heroVideo || imageUrl) && ctas.length && heroScrim !== 'none'}}" class="hero-scrim"></view>
   <view wx:if="{{(heroVideo || imageUrl) && ctas.length}}" class="cta-stack">

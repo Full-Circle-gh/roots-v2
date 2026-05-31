@@ -2024,6 +2024,10 @@
     position: relative; width: 100%; overflow: hidden;
   }
   .b-hero img, .b-hero video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* Image fit — mirrors the live <image mode>: cover (fill+crop, default),
+     contain (whole image), stretch (fill exactly, may distort). */
+  .b-hero.fit-contain img, .b-hero.fit-contain video { object-fit: contain; }
+  .b-hero.fit-stretch img, .b-hero.fit-stretch video { object-fit: fill; }
   .b-hero .cta-stack {
     position: absolute; bottom: 28px; left: 22px; right: 22px;
     display: flex; flex-direction: column; gap: 8px;
@@ -6547,11 +6551,14 @@ function renderBlockBody(b) {
 
       // 'full' (default) — image fills, CTAs floating
       const scrim = b.scrim || 'medium';
-      d.className = 'b-hero b-hero-' + view + ' scrim-' + scrim + entranceAnimClass(b);
-      if (b.image_aspect && b.image_url) {
+      const heroFit = b.image_fit || (b.image_aspect ? 'contain' : 'cover');
+      d.className = 'b-hero b-hero-' + view + ' fit-' + heroFit + ' scrim-' + scrim + entranceAnimClass(b);
+      if (heroFit === 'contain' && b.image_aspect && b.image_url) {
+        // Whole image — banner takes the picture's shape (no crop).
         d.style.aspectRatio = String(b.image_aspect);
         d.style.height = 'auto';
       } else {
+        // Fill / stretch — fixed-height box the image is cropped/stretched into.
         d.style.height = (b.height_px || 280) * 0.6 + 'px';
       }
       if (b.video_url) d.innerHTML = `<video src="${escapeAttr(b.video_url)}"${b.image_url ? ` poster="${escapeAttr(b.image_url)}"` : ''} autoplay muted loop playsinline></video>`;
@@ -8158,6 +8165,7 @@ function buildAnnouncementForm(m, b) {
 }
 function buildHeroForm(m, b) {
   const view = b.view || 'full';
+  const heroFit = b.image_fit || (b.image_aspect ? 'contain' : 'cover');
   m.appendChild(field(T('Layout', '版式'),
     T('Full = image fills, CTAs float over the image. Split = image on the left, headline + button on a coloured panel on the right (good for lighter, copy-driven designs).', '全幅 = 图片铺满,按钮浮于图上。分栏 = 图片在左,标题 + 按钮在右侧色块面板(适合更轻、以文案为主的设计)。'),
     sel(view, [
@@ -8172,6 +8180,28 @@ function buildHeroForm(m, b) {
       : T('Banner height auto-fits the image — no stretch, no crop.', '横幅高度自动适配图片 — 不拉伸、不裁剪。'),
     imgPicker(b.image_url, ({ url, aspect }) => updateBlock(b.id, { image_url: url, image_aspect: aspect }))
   ));
+
+  // Image fit — only meaningful for the full view (split crops to a square).
+  if (view === 'full') {
+    m.appendChild(field(
+      T('Image fit', '图片填充方式'),
+      T('How the image fills the banner. Fill crops the edges to cover the whole banner; Whole image shows everything (banner matches the picture shape); Stretch fills exactly but may distort. Use the Banner height below to control how tall it is when filling.',
+        '图片如何填满横幅。填满 = 裁剪边缘以铺满整个横幅;完整显示 = 显示全部内容(横幅比例随图片);拉伸 = 精确填满但可能变形。填满时可用下方的横幅高度控制高度。'),
+      sel(heroFit, [
+        { value: 'cover',   label: T('Fill banner — crop edges', '填满横幅 — 裁剪边缘') },
+        { value: 'contain', label: T('Whole image — no crop', '完整显示 — 不裁剪') },
+        { value: 'stretch', label: T('Stretch to fill — may distort', '拉伸填满 — 可能变形') },
+      ], v => updateBlock(b.id, { image_fit: v }))));
+
+    // When filling/stretching the banner uses a fixed height (the picture is
+    // cropped into it), so expose the height here too — not just as a
+    // placeholder. Contain keeps auto-height from the image shape.
+    if (heroFit !== 'contain') {
+      m.appendChild(field(T('Banner height (px)', '横幅高度(像素)'),
+        T('How tall the filled banner is. The image is cropped to cover it.', '填满横幅的高度。图片将被裁剪以铺满。'),
+        num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+    }
+  }
 
   m.appendChild(field(
     T('Video (optional)', '视频(可选)'),
@@ -8223,7 +8253,11 @@ function buildHeroForm(m, b) {
   btnWrap.appendChild(addBtn);
   m.appendChild(btnWrap);
 
-  m.appendChild(field(T('Placeholder height (px)', '占位高度(像素)'), T('Only used while no image is set.', '仅在未设置图片时使用。'), num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+  // Hide the placeholder-height field when the "Banner height" field above is
+  // already shown (full view + fill/stretch), to avoid two inputs for height_px.
+  if (!(view === 'full' && heroFit !== 'contain')) {
+    m.appendChild(field(T('Placeholder height (px)', '占位高度(像素)'), T('Only used while no image is set.', '仅在未设置图片时使用。'), num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+  }
   if (view === 'full') {
     m.appendChild(field(T('Image scrim', '图片遮罩'), T('Dim the bottom of the image so floating CTAs stay legible on bright photography.', '压暗图片底部,让浮动按钮在明亮照片上仍清晰可读。'),
       sel(b.scrim || 'medium', SCRIM_OPTIONS,

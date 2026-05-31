@@ -223,6 +223,15 @@ Component({
           out.heroVideo = absUrl(b.video_url);
           if (b.image_aspect && b.image_url) out.aspectRatio = String(b.image_aspect);
           out.placeholderH = b.height_px || 280;
+          // Image fit: how the picture fills the banner box.
+          //   cover   — fill the banner, crop overflow (banner uses height_px)
+          //   contain — show the whole image (banner matches the image ratio)
+          //   stretch — stretch to fill exactly (may distort)
+          // Legacy blocks (image_aspect set, no image_fit) default to
+          // 'contain' so they look exactly as before; otherwise 'cover'.
+          out.heroFit = b.image_fit || (b.image_aspect ? 'contain' : 'cover');
+          out.heroImgMode = out.heroFit === 'contain' ? 'aspectFit'
+            : out.heroFit === 'stretch' ? 'scaleToFill' : 'aspectFill';
           const ctas = Array.isArray(b.ctas) ? b.ctas : (b.cta_label ? [{ label_en: b.cta_label, label_cn: '', target: b.cta_target, style: 'primary' }] : []);
           out.ctas = ctas.map(c => ({
             label:  lang.pick(c.label_en ?? c.label, c.label_cn, L),
