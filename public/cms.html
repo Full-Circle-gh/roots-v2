@@ -9576,18 +9576,26 @@ function buildReviewForm(m, b) {
     : T(`Review ${reviews.length > 1 ? '(card view only shows the first)' : ''}`, `评价 ${reviews.length > 1 ? '(卡片模式仅显示第一条)' : ''}`);
   listWrap.appendChild(lbl);
 
+  // Always read the live reviews off state, never the `reviews` snapshot
+  // captured when this form was built. updateBlockSilent re-renders only the
+  // preview (not the inspector), so the closure goes stale after the first
+  // edit — slicing it would clobber any sibling field edited since.
+  function currentReviews() {
+    const blk = state.draft.find(x => x.id === b.id);
+    return blk ? getReviews(blk).slice() : [];
+  }
   function updateReview(idx, patch) {
-    const next = reviews.slice();
+    const next = currentReviews();
     next[idx] = { ...next[idx], ...patch };
     updateBlockSilent(b.id, { reviews: next });
   }
   function removeReview(idx) {
-    const next = reviews.slice();
+    const next = currentReviews();
     next.splice(idx, 1);
     updateBlock(b.id, { reviews: next });
   }
   function addReview() {
-    const next = [...reviews, {
+    const next = [...currentReviews(), {
       rating: 5,
       quote_en: '', quote_cn: '',
       author_name: '',
