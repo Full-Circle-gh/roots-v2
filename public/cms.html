@@ -1464,6 +1464,9 @@
     padding: 9px 0;
     overflow: hidden;
   }
+  /* Corner radius drives the frame's rounding (subtle = legacy 14px default). */
+  .block-wrap.framed.corner-sharp { border-radius: 0; }
+  .block-wrap.framed.corner-bold  { border-radius: 22px; }
   .block-wrap.bleed > * {
     padding-left: 0 !important;
     padding-right: 0 !important;
@@ -6423,7 +6426,8 @@ function buildBlockEl(block, idx) {
   wrap.className = 'block-wrap'
     + (state.selectedId === block.id ? ' selected' : '')
     + (block.frame_color ? ' framed' : '')
-    + (block.full_bleed === true ? ' bleed' : '');
+    + (block.full_bleed === true ? ' bleed' : '')
+    + ' corner-' + (block.corner_radius || 'subtle');
   if (block.frame_color) wrap.style.borderColor = brandColorVar(block.frame_color);
   wrap.dataset.id = block.id;
   wrap.dataset.idx = idx;
@@ -7896,10 +7900,13 @@ function renderInspector() {
 }
 
 // Universal per-block chrome controls, shown for every block type:
-//   • Frame — an optional brand-colored outline (rounded corners). Picking
-//     "— none —" removes it. Stored as block.frame_color (token or '').
+//   • Frame — an optional brand-colored outline. Picking "— none —" removes
+//     it. Stored as block.frame_color (token or '').
+//   • Corner radius — rounds the frame; card-style blocks reuse the same
+//     block.corner_radius for their own card corners. Stored as
+//     block.corner_radius ('sharp' | 'subtle' | 'bold').
 //   • Full width — stretch the block edge-to-edge, dropping the side gutter.
-//     Stored as block.full_bleed (boolean). Both persist via validateBlocks
+//     Stored as block.full_bleed (boolean). All persist via validateBlocks
 //     (structural validation only) and render in the live mini-app .blk-outer.
 function buildChromeSection(body, b) {
   const sec = document.createElement('div');
@@ -7907,7 +7914,7 @@ function buildChromeSection(body, b) {
 
   const head = document.createElement('div');
   head.className = 'chrome-head';
-  head.textContent = T('Frame & width', '边框与宽度');
+  head.textContent = T('Frame, radius & width', '边框、圆角与宽度');
   sec.appendChild(head);
 
   // Frame colour (— none — clears it)
@@ -7916,6 +7923,14 @@ function buildChromeSection(body, b) {
     sel(b.frame_color || '',
       [{ value: '', label: T('— none —', '— 无 —') }, ...BRAND_COLOR_OPTIONS],
       v => updateBlock(b.id, { frame_color: v || undefined }))));
+
+  // Corner radius — rounds the frame, and the card corners on card-style
+  // blocks (featured, grid, favourites, recipe, bundle, countdown, order
+  // tracker) that read the same corner_radius value.
+  sec.appendChild(field(T('Corner radius', '圆角'),
+    T('Sharp = square edges · Subtle = default · Bold = pronounced rounding.', '直角 = 方角 · 微圆角 = 默认 · 大圆角 = 明显圆角。'),
+    sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
+      v => updateBlock(b.id, { corner_radius: v }))));
 
   // Full-width toggle
   const row = document.createElement('div');
@@ -8350,10 +8365,6 @@ function buildOrderTrackerForm(m, b) {
     sel(b.card_border_color === undefined ? 'ink' : b.card_border_color,
       [{ value: '', label: T('— none —', '— 无 —') }, ...BRAND_COLOR_OPTIONS],
       v => updateBlock(b.id, { card_border_color: v }))));
-
-  m.appendChild(field(T('Corner radius', '圆角'), T('Sharp = square edges · Subtle = default · Bold = pronounced rounding.', '直角 = 方角 · 微圆角 = 默认 · 大圆角 = 明显圆角。'),
-    sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
-        v => updateBlock(b.id, { corner_radius: v }))));
 }
 
 function buildCtaRow(b, cta, idx) {
@@ -8480,9 +8491,6 @@ function buildFeaturedForm(m, b) {
   m.appendChild(field(T('Card text', '卡片文字颜色'), T('Text colour on top of the card. Pick something legible against the card background.', '卡片上的文字颜色。选择与卡片背景对比清晰的颜色。'),
     sel(b.card_fg_color || 'oat-milk', BRAND_COLOR_OPTIONS,
         v => updateBlock(b.id, { card_fg_color: v }))));
-  m.appendChild(field(T('Corner radius', '圆角'), T('Sharp = 0 rounding · Subtle = legacy default · Bold = pronounced rounding.', '直角 = 无圆角 · 微圆角 = 默认 · 大圆角 = 明显圆角。'),
-    sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
-        v => updateBlock(b.id, { corner_radius: v }))));
   m.appendChild(field(T('Price display', '价格显示'), T('How the price reads under the product name.', '商品名称下方价格的显示方式。'),
     sel(b.price_mode || 'both', PRICE_MODE_OPTIONS,
         v => updateBlock(b.id, { price_mode: v }))));
@@ -8572,9 +8580,6 @@ function buildGridForm(m, b) {
   }
   m.appendChild(field(T('Limit (max products)', '数量上限(最多商品)'), view === 'scroll' ? T('Cap the rail. Scrolls horizontally if more fit.', '限制滑动条数量。超出则横向滚动。') : '',
     num(b.limit, v => updateBlock(b.id, { limit: v }), { min: 1, max: 24 })));
-  m.appendChild(field(T('Card corner radius', '卡片圆角'), '',
-    sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
-        v => updateBlock(b.id, { corner_radius: v }))));
   m.appendChild(field(T('Density', '密度'), T('How much breathing room between cards.', '卡片之间的留白程度。'),
     sel(b.density || 'normal', DENSITY_OPTIONS,
         v => updateBlock(b.id, { density: v }))));
@@ -9089,9 +9094,6 @@ function buildRecipeStoryForm(m, b) {
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
   m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Card corner radius', '卡片圆角'), '',
-    sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
-        v => updateBlock(b.id, { corner_radius: v }))));
   m.appendChild(field(T('CTA label', '按钮文字'), T('Optional — e.g. "READ MORE". Leave blank to hide.', '可选 — 例如「READ MORE」。留空则隐藏。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
   m.appendChild(field(T('CTA target', '按钮目标'), T('e.g. product:5 · category:8 · promotions', '例如 product:5 · category:8 · promotions'),
@@ -9156,9 +9158,6 @@ function buildBundleForm(m, b) {
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
   m.appendChild(field(T('Button / pill colour', '按钮 / 胶囊颜色'), '',
     sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
-  m.appendChild(field(T('Card corner radius', '卡片圆角'), '',
-    sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
-        v => updateBlock(b.id, { corner_radius: v }))));
   m.appendChild(field(T('Entrance animation', '入场动画'), T('How the bundle enters on first paint.', '套装首次渲染时的入场方式。'),
     sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS,
         v => updateBlock(b.id, { entrance_anim: v }))));
@@ -9614,9 +9613,6 @@ function buildFavoritesForm(m, b) {
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
   m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Card corner radius', '卡片圆角'), '',
-    sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS,
-        v => updateBlock(b.id, { corner_radius: v }))));
 }
 
 function buildLeaderboardForm(m, b) {

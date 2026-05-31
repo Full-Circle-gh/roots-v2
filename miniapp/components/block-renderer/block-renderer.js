@@ -198,6 +198,9 @@ Component({
       out.frameOn = !!b.frame_color;
       out.frameColor = b.frame_color ? color(b.frame_color) : '';
       out.fullBleed = b.full_bleed === true;
+      // Corner radius — rounds the frame; card-style blocks also read
+      // corner_radius for their own card corners (see *Corner vars below).
+      out.blockCorner = b.corner_radius || 'subtle';
 
       switch (b.type) {
         case 'announcement_bar': {

@@ -2873,6 +2873,9 @@
   padding: 18rpx 0;              /* vertical breathing room inside the frame */
   overflow: hidden;             /* clip the block's own bg to rounded corners */
 }
+/* Corner radius drives the frame's rounding (subtle = 28rpx default). */
+.blk-outer.framed.corner-sharp { border-radius: 0; }
+.blk-outer.framed.corner-bold  { border-radius: 40rpx; }
 /* Full-bleed: drop the per-block side gutter so the block (and any bg/image)
    reaches both screen edges. Targets each branch's single root <view>. */
 .blk-outer.bleed > view {
