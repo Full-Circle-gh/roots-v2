@@ -4326,6 +4326,7 @@ async function buildThemePicker() {
     'ink': '#1a1a17', 'pink-guava': '#F4B8CB', 'berry-punch': '#E96174',
     'carrot-blaze': '#FF6B0C', 'papaya-glow': '#FFAF60', 'skyberry': '#B2CFED',
     'lotus': '#EEB8E4', 'citrus-zest': '#E7E74C', 'pea-sprout': '#7BBD3B',
+    'white': '#FFFFFF',
   };
 
   // Fetch current value once at boot. PUT /config also returns the full
@@ -4427,6 +4428,7 @@ function applyThemeBgToPreview(token) {
     'ink': '#1a1a17', 'pink-guava': '#F4B8CB', 'berry-punch': '#E96174',
     'carrot-blaze': '#FF6B0C', 'papaya-glow': '#FFAF60', 'skyberry': '#B2CFED',
     'lotus': '#EEB8E4', 'citrus-zest': '#E7E74C', 'pea-sprout': '#7BBD3B',
+    'white': '#FFFFFF',
   };
   let css = '';
   if (token === 'transparent') css = 'transparent';
@@ -5057,10 +5059,11 @@ const DC_HEX = {
   'ink': '#1a1a17', 'pink-guava': '#F4B8CB', 'berry-punch': '#E96174',
   'carrot-blaze': '#FF6B0C', 'papaya-glow': '#FFAF60', 'skyberry': '#B2CFED',
   'lotus': '#EEB8E4', 'citrus-zest': '#E7E74C', 'pea-sprout': '#7BBD3B',
+  'white': '#FFFFFF',
 };
 // Neutrals don't count toward the "too many accents" tally — they're
 // designed to coexist with any colour in the palette.
-const DC_NEUTRALS = new Set(['oat-milk', 'ink']);
+const DC_NEUTRALS = new Set(['oat-milk', 'ink', 'white']);
 
 // Resolves any colour expression (token, raw hex, 'transparent', null)
 // to a normalised lowercase hex, or null when it's transparent/unknown.
@@ -7302,6 +7305,8 @@ function renderBlockBody(b) {
       const lblCode  = state.lang === 'cn' ? '邀请码' : 'YOUR CODE';
       const lblCopy  = state.lang === 'cn' ? '复制' : 'COPY';
       const lblShare = state.lang === 'cn' ? '分享' : 'SHARE';
+      // Copy-button fill follows accent_color (default ink); SHARE stays green.
+      const affCopyCss = brandColorVar(b.accent_color) || 'var(--b-ink)';
 
       if (view === 'strip') {
         d.innerHTML = `
@@ -7312,7 +7317,7 @@ function renderBlockBody(b) {
               ${previewStats ? `<span class="af-strip-stats">· ${escapeHtml(previewStats)}</span>` : ''}
             </div>
           </div>
-          <div class="af-copy">${lblCopy}</div>
+          <div class="af-copy" style="background:${affCopyCss}">${lblCopy}</div>
           <div class="af-share">${lblShare}</div>`;
         return d;
       }
@@ -7340,7 +7345,7 @@ function renderBlockBody(b) {
           ${previewStats ? `<div class="af-receipt-row af-receipt-row-muted"><span class="af-receipt-lbl">STATS</span><span class="af-receipt-val">${escapeHtml(previewStats)}</span></div>` : ''}
           <div class="af-receipt-sep">- - - - - - - - - - - - - - - - - -</div>
           <div class="af-receipt-actions">
-            <div class="af-copy">${lblCopy}</div>
+            <div class="af-copy" style="background:${affCopyCss}">${lblCopy}</div>
             <div class="af-share">${lblShare} →</div>
           </div>`;
         return d;
@@ -7358,7 +7363,7 @@ function renderBlockBody(b) {
             <div class="af-code-lbl">${lblCode}</div>
             <div class="af-code-val">${previewCode}</div>
           </div>
-          <div class="af-copy">${lblCopy}</div>
+          <div class="af-copy" style="background:${affCopyCss}">${lblCopy}</div>
         </div>
         <div class="af-actions">
           <div class="af-share">${lblShare} →</div>
@@ -8666,6 +8671,7 @@ const BRAND_COLOR_OPTIONS = [
   { value: 'pea-sprout',  label: 'Pea · 豌豆绿' },
   { value: 'pink-guava',  label: 'Pink · 粉红' },
   { value: 'oat-milk',    label: 'Oat · 燕麦白' },
+  { value: 'white',       label: 'White · 白色' },
   { value: 'ink',         label: 'Ink · 墨黑' },
 ];
 
@@ -8951,6 +8957,9 @@ function buildAffiliateForm(m, b) {
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
   m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  m.appendChild(field(T('Copy-button colour', '复制按钮颜色'),
+    T('Fill of the COPY button. The green SHARE button stays WeChat green.', '「复制」按钮的填充色。「分享」按钮保持微信绿。'),
+    sel(b.accent_color || 'ink', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 
   // Stats footer applies to all views; controls whether the "¥X earned · N
   // invited" line shows up once the customer has any activity.

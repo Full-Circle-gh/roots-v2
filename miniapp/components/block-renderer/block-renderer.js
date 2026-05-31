@@ -29,6 +29,7 @@ const COLOR_MAP = {
   'ink': '#1a1a17', 'pink-guava': '#F4B8CB', 'berry-punch': '#E96174',
   'carrot-blaze': '#FF6B0C', 'papaya-glow': '#FFAF60', 'skyberry': '#B2CFED',
   'lotus': '#EEB8E4', 'citrus-zest': '#E7E74C', 'pea-sprout': '#7BBD3B',
+  'white': '#FFFFFF',
 };
 // Resolve a brand-colour token (e.g. 'lime-leaf') to a hex. Pass-through
 // for raw colour strings (#hex / rgb()). Empty / null returns empty so the
