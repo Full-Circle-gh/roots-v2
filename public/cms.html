@@ -1467,6 +1467,9 @@
   /* Corner radius drives the frame's rounding (subtle = legacy 14px default). */
   .block-wrap.framed.corner-sharp { border-radius: 0; }
   .block-wrap.framed.corner-bold  { border-radius: 22px; }
+  /* Self-bg blocks fill the frame edge-to-edge — drop the inner padding so the
+     colored panel meets the border instead of leaking the page color. */
+  .block-wrap.framed.fill { padding: 0; }
   .block-wrap.bleed > * {
     padding-left: 0 !important;
     padding-right: 0 !important;
@@ -6421,12 +6424,22 @@ function buildDropZone(beforeIdx, isTail = false) {
   return d;
 }
 
+// Block types whose preview paints a full-panel background; when framed they
+// must fill the frame edge-to-edge (mirrors FULL_BG_TYPES in the mini-app).
+const FULL_BG_BLOCK_TYPES = [
+  'announcement_bar', 'flash_sale_strip', 'coupon_block', 'points_widget',
+  'review_card', 'favorites_block', 'voting_block', 'affiliate_block',
+  'store_info', 'greeting', 'kitchen_status', 'recipe_story', 'bundle',
+  'wecom_contact', 'countdown_timer', 'leaderboard',
+];
+
 function buildBlockEl(block, idx) {
   const wrap = document.createElement('div');
   wrap.className = 'block-wrap'
     + (state.selectedId === block.id ? ' selected' : '')
     + (block.frame_color ? ' framed' : '')
     + (block.full_bleed === true ? ' bleed' : '')
+    + (FULL_BG_BLOCK_TYPES.indexOf(block.type) !== -1 ? ' fill' : '')
     + ' corner-' + (block.corner_radius || 'subtle');
   if (block.frame_color) wrap.style.borderColor = brandColorVar(block.frame_color);
   wrap.dataset.id = block.id;

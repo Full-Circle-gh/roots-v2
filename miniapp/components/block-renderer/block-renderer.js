@@ -6,6 +6,16 @@
 const lang = require('../../utils/lang');
 const { BASE } = require('../../utils/api');
 
+// Block types whose root view paints a full-panel background. When framed,
+// these must fill the frame edge-to-edge (kill the frame's inner padding) so
+// the page color doesn't leak between the border and the colored panel.
+const FULL_BG_TYPES = [
+  'announcement_bar', 'flash_sale_strip', 'coupon_block', 'points_widget',
+  'review_card', 'favorites_block', 'voting_block', 'affiliate_block',
+  'store_info', 'greeting', 'kitchen_status', 'recipe_story', 'bundle',
+  'wecom_contact', 'countdown_timer', 'leaderboard',
+];
+
 function absUrl(u) {
   if (!u) return '';
   if (/^(https?:|data:|wxfile:)/i.test(u)) return u;
@@ -201,6 +211,10 @@ Component({
       // Corner radius — rounds the frame; card-style blocks also read
       // corner_radius for their own card corners (see *Corner vars below).
       out.blockCorner = b.corner_radius || 'subtle';
+      // Blocks that paint their own full-panel background should fill the
+      // frame edge-to-edge (the frame's vertical padding would otherwise
+      // leak the page color between the border and the colored panel).
+      out.blockFill = FULL_BG_TYPES.indexOf(b.type) !== -1;
 
       switch (b.type) {
         case 'announcement_bar': {

@@ -1146,10 +1146,10 @@
 }
 .cp-cta {
   flex: 0 0 auto;
-  align-self: stretch;
+  align-self: center;
   display: inline-flex;
   align-items: center;
-  padding: 0 24rpx;
+  padding: 18rpx 24rpx;
   font-family: var(--f-toni);
   font-weight: 700;
   font-size: calc(20rpx * var(--font-scale));
@@ -2876,6 +2876,9 @@
 /* Corner radius drives the frame's rounding (subtle = 28rpx default). */
 .blk-outer.framed.corner-sharp { border-radius: 0; }
 .blk-outer.framed.corner-bold  { border-radius: 40rpx; }
+/* Self-bg blocks fill the frame edge-to-edge — drop the inner padding so the
+   colored panel meets the border instead of leaking the page color. */
+.blk-outer.framed.fill { padding: 0; }
 /* Full-bleed: drop the per-block side gutter so the block (and any bg/image)
    reaches both screen edges. Targets each branch's single root <view>. */
 .blk-outer.bleed > view {
