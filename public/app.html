@@ -9829,6 +9829,96 @@ async function _prodHeroUpload(productId) {
   input.click();
 }
 
+const PROD_GALLERY_MAX = 8;
+
+// Thumbnail strip under the hero image. Shows the secondary photos (index ≥ 1)
+// — the primary already fills the big cell above — each with a ★ "make primary"
+// and × "remove" affordance, plus a "+ add" tile while there's room. Hidden
+// entirely when there are no photos at all (the empty big cell is the upload
+// target in that case, so a lone "+ add" tile would be redundant).
+function _renderProdGalleryStrip(p, gallery) {
+  const count = gallery.length;
+  const canAdd = count < PROD_GALLERY_MAX;
+  if (count === 0) return '';
+  const thumb = (src, idx) => `<div style="position:relative;width:46px;height:46px;flex:0 0 auto;border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+      <img src="${esc(src)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;cursor:pointer" onclick="_prodGallerySetPrimary(${p.id},${idx})" title="Make primary · 设为主图">
+      <button onclick="event.stopPropagation();_prodGalleryRemove(${p.id},${idx})" title="Remove · 删除"
+        style="position:absolute;top:1px;right:1px;width:15px;height:15px;line-height:13px;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:11px;cursor:pointer">×</button>
+    </div>`;
+  const addTile = canAdd ? `<div onclick="_prodGalleryAdd(${p.id})" title="Add photos · 添加图片"
+      style="width:46px;height:46px;flex:0 0 auto;border-radius:6px;border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:20px;cursor:pointer">+</div>` : '';
+  // Skip index 0 (the primary, shown above); list the rest as removable thumbs.
+  const thumbs = gallery.slice(1).map((src, i) => thumb(src, i + 1)).join('');
+  return `<div style="display:flex;gap:6px;padding:8px;overflow-x:auto;align-items:center;background:var(--gray);border-top:1px solid var(--border)">
+      ${thumbs}${addTile}
+    </div>`;
+}
+
+// PUT the new gallery and re-render. The server keeps image_data synced to
+// images[0], so the big hero cell updates too.
+async function _prodGallerySave(productId, images) {
+  try {
+    const r = await fetch('/api/products/' + productId, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ images }),
+    });
+    const res = await r.json();
+    if (!res.success) throw new Error(res.error || 'save failed');
+    await viewProduct(productId);
+  } catch (e) {
+    toast('Save failed · 保存失败: ' + e.message, 'error');
+  }
+}
+
+// Add one or more photos to the gallery. Reuses a single hidden multi-file
+// input + the same resize/encode pipeline as the hero upload.
+async function _prodGalleryAdd(productId) {
+  let input = document.getElementById('prodGalleryFileGlobal');
+  if (!input) {
+    input = document.createElement('input');
+    input.type = 'file';
+    input.id = 'prodGalleryFileGlobal';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.style.display = 'none';
+    document.body.appendChild(input);
+  }
+  input.value = '';
+  input.onchange = async function() {
+    const files = [...(this.files || [])];
+    if (!files.length) return;
+    const cur = (window._pdGalleryImages || []).slice();
+    const room = PROD_GALLERY_MAX - cur.length;
+    if (room <= 0) { toast(`Max ${PROD_GALLERY_MAX} photos · 最多 ${PROD_GALLERY_MAX} 张图片`, 'error'); return; }
+    const added = [];
+    for (const f of files.slice(0, room)) {
+      const d = await _handleImageUpload(f, PROD_IMG_OPTS);
+      if (d) added.push(d);
+    }
+    if (!added.length) return;
+    if (files.length > room) toast(`Added ${room}; max ${PROD_GALLERY_MAX} photos · 已添加 ${room} 张`, 'success');
+    await _prodGallerySave(productId, cur.concat(added));
+  };
+  input.click();
+}
+
+// Promote a thumbnail to primary — move it to the front of the array.
+async function _prodGallerySetPrimary(productId, idx) {
+  const cur = (window._pdGalleryImages || []).slice();
+  if (idx <= 0 || idx >= cur.length) return;
+  const [picked] = cur.splice(idx, 1);
+  cur.unshift(picked);
+  await _prodGallerySave(productId, cur);
+}
+
+// Remove one photo from the gallery.
+async function _prodGalleryRemove(productId, idx) {
+  const cur = (window._pdGalleryImages || []).slice();
+  if (idx < 0 || idx >= cur.length) return;
+  cur.splice(idx, 1);
+  await _prodGallerySave(productId, cur);
+}
+
 function _renderProdHero(ctx) {
   const { p, safeName, zoomCall } = ctx;
   // Hero-image cell. When there's an image: zoom on click. When there isn't:
@@ -9836,6 +9926,13 @@ function _renderProdHero(ctx) {
   // PUTs to /api/products/:id with the new image_data.
   const heroCursor = p.image_data ? 'zoom-in' : 'pointer';
   const heroAction = p.image_data ? zoomCall : `onclick="_prodHeroUpload(${p.id})" title="Click to upload photo · 点击上传图片"`;
+  // Gallery (max 8). images[0] mirrors image_data (the primary, shown in the
+  // big cell). Cache it for the add/remove/set-primary handlers, which mutate
+  // the array and PUT it back. Fall back to the single image_data for legacy
+  // products the server hasn't migrated into an array yet.
+  const gallery = (Array.isArray(p.images) ? p.images.filter(Boolean) : (p.image_data ? [p.image_data] : []));
+  window._pdGalleryImages = gallery.slice();
+  const galleryStrip = _renderProdGalleryStrip(p, gallery);
   // Inline-edit (.ied) — every text field below is click-to-edit. Empty fields
   // show a quiet placeholder so the operator can add a value without ever
   // opening a modal. `iedAttrs` keeps the markup readable.
@@ -9865,10 +9962,13 @@ function _renderProdHero(ctx) {
   // "Less-used fields" collapse since the operator confirmed they're rare.
   return `<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
     <div style="display:grid;grid-template-columns:minmax(0,220px) 1fr;align-items:stretch">
-      <div style="aspect-ratio:1/1;background:var(--gray);display:flex;align-items:center;justify-content:center;cursor:${heroCursor}" ${heroAction}>
-        ${p.image_data
-          ? `<img src="${esc(p.image_data)}" alt="${esc(p.name_en||'')}" style="width:100%;height:100%;object-fit:cover;display:block">`
-          : `<div style="text-align:center;color:var(--muted);pointer-events:none"><div style="font-size:48px;line-height:1">${p.category?getCategoryEmoji(p.category):'🛍'}</div><div style="font-size:10px;margin-top:6px;letter-spacing:.1em;text-transform:uppercase;font-weight:700">📷 Add photo · 添加图片</div></div>`}
+      <div style="background:var(--gray);display:flex;flex-direction:column">
+        <div style="aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;cursor:${heroCursor}" ${heroAction}>
+          ${p.image_data
+            ? `<img src="${esc(p.image_data)}" alt="${esc(p.name_en||'')}" style="width:100%;height:100%;object-fit:cover;display:block">`
+            : `<div style="text-align:center;color:var(--muted);pointer-events:none"><div style="font-size:48px;line-height:1">${p.category?getCategoryEmoji(p.category):'🛍'}</div><div style="font-size:10px;margin-top:6px;letter-spacing:.1em;text-transform:uppercase;font-weight:700">📷 Add photo · 添加图片</div></div>`}
+        </div>
+        ${galleryStrip}
       </div>
       <div style="padding:18px 22px;display:flex;flex-direction:column;gap:10px;min-width:0">
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">

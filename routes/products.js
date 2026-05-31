@@ -7,7 +7,7 @@ const PRODUCT_COLS = `
   p.id, p.name_en, p.name_cn, p.sku, p.category, p.recipe_id, p.status,
   p.sell_price, p.weight, p.barcode,
   p.description_en, p.description_cn, p.free_of,
-  p.image_data, p.label_data,
+  p.image_data, p.images, p.label_data,
   p.notes, p.created_at, p.updated_at,
   p.external_id, p.sort_order, p.stock_qty, p.tags,
   p.variant_group_id, p.variant_label, p.variant_sort,
@@ -160,6 +160,12 @@ router.get('/api/products/:id', requireAuth, requirePermission('products'), (req
   } else {
     row.bundle = null;
   }
+  // Photo gallery — stored as a JSON array of image srcs (data-URI or URL).
+  // Element [0] mirrors image_data (the primary). Hand the detail page a real
+  // array; fall back to the single image_data so legacy products still show.
+  try { row.images = row.images ? JSON.parse(row.images) : []; } catch { row.images = []; }
+  if (!Array.isArray(row.images)) row.images = [];
+  if (!row.images.length && row.image_data) row.images = [row.image_data];
   // Derive recipe-driven info if linked. Each ingredient.allergens is a
   // free-text comma string ("nuts, soy") — split, dedupe, sort.
   let derived = { allergens: [], ingredient_count: 0 };
@@ -297,7 +303,7 @@ const FIELDS = [
   'name_en', 'name_cn', 'sku', 'category', 'recipe_id', 'status',
   'sell_price', 'weight', 'barcode',
   'description_en', 'description_cn', 'description_format', 'free_of',
-  'image_data', 'label_data', 'notes',
+  'image_data', 'images', 'label_data', 'notes',
   'external_id', 'sort_order', 'stock_qty', 'tags',
   'variant_group_id', 'variant_label',
   'is_market', 'is_restock_only',
@@ -388,6 +394,14 @@ function pickBody(body) {
         } else { out[k] = null; }
       } else { out[k] = null; }
     }
+    else if (k === 'images') {
+      // Ordered photo gallery — array of image srcs (data-URI or URL), max 8.
+      // Stored as a JSON string; null when empty. image_data is kept in sync
+      // with element [0] by the PUT/POST handlers (shop cards, orders and the
+      // label printer all read image_data, not the gallery).
+      const arr = (Array.isArray(body[k]) ? body[k] : []).filter(s => typeof s === 'string' && s).slice(0, 8);
+      out[k] = arr.length ? JSON.stringify(arr) : null;
+    }
     else if (k === 'description_blocks') {
       // Accept either an already-stringified JSON array or a parsed array;
       // normalize to a canonical JSON string, or null when the array is empty.
@@ -409,6 +423,11 @@ function pickBody(body) {
 router.post('/api/products', requireAuth, requirePermission('products'), (req, res) => {
   const p = pickBody(req.body);
   if (!p.name_en) return res.status(400).json({ error: 'name_en required · 英文名称必填' });
+  // Keep the primary image_data in sync with the gallery's first photo.
+  if ('images' in req.body && !('image_data' in req.body)) {
+    const arr = (Array.isArray(req.body.images) ? req.body.images : []).filter(s => typeof s === 'string' && s);
+    p.image_data = arr.length ? arr[0] : null;
+  }
   try {
     const placeholders = FIELDS.map(() => '?').join(',');
     const result = db.prepare(
@@ -443,6 +462,14 @@ router.put('/api/products/:id', requireAuth, requirePermission('products'), (req
   if (present.length === 0) return res.status(400).json({ error: 'no_fields' });
   const p = pickBody(req.body);
   if ('name_en' in req.body && !p.name_en) return res.status(400).json({ error: 'name_en required · 英文名称必填' });
+  // Gallery edits keep the primary image_data in sync with images[0] — the
+  // shop grid, order items and label printer all read image_data, not the
+  // gallery. An explicit image_data in the same body still wins.
+  if ('images' in req.body && !present.includes('image_data')) {
+    const arr = (Array.isArray(req.body.images) ? req.body.images : []).filter(s => typeof s === 'string' && s);
+    present.push('image_data');
+    p.image_data = arr.length ? arr[0] : null;
+  }
   try {
     const setClause = present.map(f => `${f}=?`).join(',') + ',updated_at=CURRENT_TIMESTAMP';
     db.prepare(`UPDATE products SET ${setClause} WHERE id=?`)
