@@ -2086,8 +2086,8 @@
      candy-fill icon nodes, green connector + pulse on the current step. */
   .b-ordertracker { padding: 0 22px; }
   .b-ordertracker .ot-card {
-    border: 1.5px solid var(--b-ink); border-radius: 6px;
-    padding: 14px 14px 12px; background: #fff;
+    border: var(--ot-card-border, 1.5px solid var(--b-ink)); border-radius: 6px;
+    padding: 14px 14px 12px; background: var(--ot-card-bg, #fff);
   }
   .b-ordertracker .ot-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .b-ordertracker .ot-title { font: 600 15px var(--bf-bear); color: var(--b-ink); }
@@ -6600,6 +6600,12 @@ function renderBlockBody(b) {
       d.className = 'b-ordertracker';
       const ot = getBi(b, 'title');
       const accent = brandColorVar(b.accent_color) || 'var(--b-forest, #365329)';
+      // Card surface + outline. card_bg_color: blank → white. card_border_color:
+      // undefined → ink (the default charcoal frame), '' (— none —) → no border.
+      const otCardBg = brandColorVar(b.card_bg_color) || '#fff';
+      const otCardBorder = (b.card_border_color === '')
+        ? 'none'
+        : `1.5px solid ${brandColorVar(b.card_border_color) || 'var(--b-ink)'}`;
       // Each step mirrors the live mini-app node: its own candy fill colour +
       // outline glyph. Colour encodes PROGRESS — done/current nodes get the
       // candy fill, the connector leading into them turns green, and the
@@ -6622,7 +6628,7 @@ function renderBlockBody(b) {
           <div class="ot-slabel">${escapeHtml(state.lang === 'cn' ? s.cn : s.en)}</div>
         </div>`;
       }).join('');
-      d.innerHTML = `<div class="ot-card" style="--ot-accent:${escapeAttr(accent)}">
+      d.innerHTML = `<div class="ot-card" style="--ot-accent:${escapeAttr(accent)};--ot-card-bg:${escapeAttr(otCardBg)};--ot-card-border:${escapeAttr(otCardBorder)}">
         <div class="ot-head">
           <div class="ot-title">${biLabel(ot.en, ot.cn)}</div>
           <div class="ot-status">${escapeHtml(statusLabel)}</div>
@@ -8332,6 +8338,16 @@ function buildOrderTrackerForm(m, b) {
 
   m.appendChild(field(T('Accent colour', '主题色'), T('Progress bar + action button.', '进度条与操作按钮颜色。'),
     sel(b.accent_color || 'forest-kale', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+
+  m.appendChild(field(T('Card background', '卡片背景'), T('Fill colour behind the card.', '卡片背景填充色。'),
+    sel(b.card_bg_color || '',
+      [{ value: '', label: T('— white —', '— 白色 —') }, ...BRAND_COLOR_OPTIONS],
+      v => updateBlock(b.id, { card_bg_color: v || undefined }))));
+
+  m.appendChild(field(T('Card border', '卡片边框'), T('Outline around the card. Pick — none — to remove it.', '卡片外边框。选「— 无 —」可移除。'),
+    sel(b.card_border_color === undefined ? 'ink' : b.card_border_color,
+      [{ value: '', label: T('— none —', '— 无 —') }, ...BRAND_COLOR_OPTIONS],
+      v => updateBlock(b.id, { card_border_color: v }))));
 }
 
 function buildCtaRow(b, cta, idx) {

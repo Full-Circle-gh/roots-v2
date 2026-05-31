@@ -439,6 +439,17 @@ Component({
                 ? (cn ? '去支付' : 'Pay now')
                 : (cn ? '查看订单' : 'View order'),
               accent: color(b.accent_color || 'forest-kale'),
+              // Card surface + outline overrides. card_bg_color blank → WXSS
+              // white default; card_border_color undefined → WXSS ink default,
+              // '' (— none —) → no border.
+              cardStyle: (() => {
+                let s = '';
+                const cbg = b.card_bg_color ? color(b.card_bg_color) : '';
+                if (cbg) s += `background:${cbg};`;
+                if (b.card_border_color === '') s += 'border:none;';
+                else if (b.card_border_color) s += `border:3rpx solid ${color(b.card_border_color)};`;
+                return s;
+              })(),
             };
           }
           break;
