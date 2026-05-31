@@ -577,7 +577,7 @@ LANGUAGES: Only Chinese copy is provided. Fill the _cn fields from it, then also
 LANGUAGES: Only Chinese copy is provided. Fill the _cn fields and leave every _en field as an empty string (""). Do not invent English — the operator will write it.`;
 }
 
-router.post('/api/ai/compose-blocks', requireAuth, requirePermission('retail'), express.json(), async (req, res) => {
+router.post('/api/ai/compose-blocks', requireAuth, requirePermission('retail', 'products'), express.json(), async (req, res) => {
   const _provider = pickProvider();
   if (!providerKey(_provider)) {
     return res.status(503).json({

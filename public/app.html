@@ -10120,12 +10120,73 @@ async function iedToggleBlockDesign(pid, btn) {
     toast(next
       ? 'Mini-app will use block design · 已切换到商品页设计'
       : 'Mini-app will use classic description · 已切换到经典描述', 'ok');
+    // Turning ON with no design yet → auto-compose the blocks from the
+    // existing EN+CN description via the AI agent, so the operator doesn't
+    // have to open the Product Page Editor to seed them. Convenience only;
+    // failures stay quiet and the toggle still flips.
+    if (next) iedAutoComposeBlocks(pid, btn);
   } catch (e) {
     btn.innerHTML = prevHTML;
     toast('Save failed · 保存失败: ' + e.message, 'error');
   } finally {
     btn.style.opacity = '';
     delete btn.dataset.saving;
+  }
+}
+
+// Auto-seed description_blocks from the EN+CN kitchen description when the
+// operator flips the design toggle ON for a product that has no blocks yet.
+// Mirrors product-editor's peAutoFillFromKitchen (same /api/ai/compose-blocks
+// endpoint) but runs from here so the toggle alone is enough. Convenience: any
+// miss (no AI, one language only, blocks already exist) just stays quiet — the
+// flag is already saved, so the operator can still design by hand in the editor.
+function _iedStripToText(html) {
+  let s = String(html == null ? '' : html);
+  if (!s.trim()) return '';
+  s = s.replace(/<\s*(br|\/p|\/div|\/li|\/h[1-6])\s*>/gi, '\n').replace(/<[^>]+>/g, '');
+  const ta = document.createElement('textarea'); ta.innerHTML = s;
+  return ta.value.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n')
+    .split('\n').map(l => l.trim()).join('\n').trim();
+}
+async function iedAutoComposeBlocks(pid, btn) {
+  const p = (_products || []).find(x => x.id === pid);
+  if (!p) return;
+  // Don't clobber an existing design.
+  let blocks = p.description_blocks;
+  if (typeof blocks === 'string') { try { blocks = JSON.parse(blocks); } catch { blocks = null; } }
+  if (Array.isArray(blocks) && blocks.length) return;
+  const textEn = _iedStripToText(p.description_en);
+  const textCn = _iedStripToText(p.description_cn);
+  // Match the editor's default rule: only auto-compose when BOTH languages exist.
+  if (!textEn || !textCn) return;
+  toast('Auto-building the product page from your description… · 正在根据描述生成商品页…');
+  try {
+    const r = await fetch('/api/ai/compose-blocks', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({
+        text_en: textEn, text_cn: textCn, translate: false,
+        product: { id: p.id, name_en: p.name_en, name_cn: p.name_cn, category: p.category },
+      }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) {
+      toast(j.error || 'Couldn\'t auto-build — open the Product Page Editor to design it · 自动生成失败,请在商品页编辑器中设计', 'error');
+      return;
+    }
+    // Nutrition lives in its own products.nutrition column; drop any synthesised
+    // nutrition_facts block so it isn't duplicated into description_blocks.
+    const composed = (j.blocks || [])
+      .filter(b => b && b.type !== 'nutrition_facts')
+      .map((b, i) => ({ ...b, id: b.id || ('b' + Date.now().toString(36) + i) }));
+    if (!composed.length) {
+      toast('No sections built — open the Product Page Editor to design it · 未生成板块,请在商品页编辑器中设计', 'error');
+      return;
+    }
+    await iedSaveField(pid, 'description_blocks', composed);
+    p.description_blocks = composed;   // keep the cache in sync
+    toast('Built ' + composed.length + ' section' + (composed.length === 1 ? '' : 's') + ' — review in the Product Page Editor ✓ · 已生成 ' + composed.length + ' 个板块,可在商品页编辑器中查看 ✓', 'ok');
+  } catch (e) {
+    toast('Couldn\'t auto-build — open the Product Page Editor to design it · 自动生成失败,请在商品页编辑器中设计', 'error');
   }
 }
 

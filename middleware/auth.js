@@ -17,11 +17,11 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-function requirePermission(module) {
+function requirePermission(...modules) {
   return (req, res, next) => {
     if (req.user?.role === 'admin') return next();
-    if (req.permissions?.[module]) return next();
-    return res.status(403).json({ error: `No access to ${module}` });
+    if (modules.some(m => req.permissions?.[m])) return next();
+    return res.status(403).json({ error: `No access to ${modules.join('/')}` });
   };
 }
 
