@@ -2064,8 +2064,10 @@
 }
 
 /* Split, like Banner, is a full-width greeting band — drop the side inset
-   so the coloured field reaches both edges; copy keeps a 44rpx gutter. */
-.greet-blk-split { margin: 0; padding: 28rpx 44rpx; }
+   so the coloured field reaches both edges; copy keeps a 44rpx gutter.
+   border:0 so it doesn't inherit the base .greet-blk black outline, which
+   (with margin:0) painted a stray black rule across the screen. */
+.greet-blk-split { border: 0; margin: 0; padding: 28rpx 44rpx; }
 .gr-split-row {
   display: flex;
   align-items: stretch;
