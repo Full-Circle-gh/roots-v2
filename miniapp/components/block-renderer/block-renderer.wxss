@@ -1944,7 +1944,7 @@
 .greet-blk {
   margin: 24rpx 44rpx;
   padding: 32rpx 36rpx 28rpx;
-  border: 3rpx solid var(--ink);
+  border: 0;
   position: relative;
 }
 .gr-kicker {
