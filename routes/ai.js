@@ -1891,7 +1891,6 @@ function buildTools() {
 // tool calls. Keep return payloads small (≤80 rows) so we don't blow
 // the model context.
 function periodToWhere(period, dateCol = 'date') {
-  const today = new Date().toISOString().slice(0,10);
   const subtract = days => new Date(Date.now() - days*86400000).toISOString().slice(0,10);
   switch (period) {
     case 'last_7':     return { where: `${dateCol} >= ?`, args: [subtract(7)],  label: 'last 7 days' };
