@@ -10287,18 +10287,47 @@ async function iedAutoComposeBlocks(pid, btn) {
       toast(j.error || 'Couldn\'t auto-build — open the Product Page Editor to design it · 自动生成失败,请在商品页编辑器中设计', 'error');
       return;
     }
-    // Nutrition lives in its own products.nutrition column; drop any synthesised
-    // nutrition_facts block so it isn't duplicated into description_blocks.
-    const composed = (j.blocks || [])
-      .filter(b => b && b.type !== 'nutrition_facts')
+    const all = (j.blocks || []).filter(b => b && b.type);
+    // Nutrition lives in its OWN products.nutrition column, not in
+    // description_blocks (the editor synthesises a nutrition_facts block from
+    // that column on load and splits it back out on save). So pull any composed
+    // nutrition_facts block out of the list and route it to the column instead
+    // — otherwise the nutrition the operator typed never produces a block.
+    const nutriBlock = all.find(b => b.type === 'nutrition_facts');
+    const composed = all
+      .filter(b => b.type !== 'nutrition_facts')
       .map((b, i) => ({ ...b, id: b.id || ('b' + Date.now().toString(36) + i) }));
-    if (!composed.length) {
+    if (!composed.length && !nutriBlock) {
       toast('No sections built — open the Product Page Editor to design it · 未生成板块,请在商品页编辑器中设计', 'error');
       return;
     }
-    await iedSaveField(pid, 'description_blocks', composed);
-    p.description_blocks = composed;   // keep the cache in sync
-    toast('Built ' + composed.length + ' section' + (composed.length === 1 ? '' : 's') + ' — review in the Product Page Editor ✓ · 已生成 ' + composed.length + ' 个板块,可在商品页编辑器中查看 ✓', 'ok');
+    if (composed.length) {
+      await iedSaveField(pid, 'description_blocks', composed);
+      p.description_blocks = composed;   // keep the cache in sync
+    }
+    // Only seed nutrition when the product has none yet — never clobber an
+    // existing nutrition panel the operator already filled in by hand.
+    let savedNutrition = false;
+    let existingNutri = p.nutrition;
+    if (typeof existingNutri === 'string') { try { existingNutri = JSON.parse(existingNutri); } catch { existingNutri = null; } }
+    const hasExistingNutri = existingNutri && (existingNutri.basis_en || existingNutri.basis_cn || (existingNutri.rows || []).length);
+    if (nutriBlock && !hasExistingNutri) {
+      const nutrition = {
+        basis_en: nutriBlock.basis_en || '',
+        basis_cn: nutriBlock.basis_cn || '',
+        rows: Array.isArray(nutriBlock.rows)
+          ? nutriBlock.rows.map(r => ({ label_en: r.label_en || '', label_cn: r.label_cn || '', value: r.value || '' }))
+          : [],
+      };
+      if (nutrition.basis_en || nutrition.basis_cn || nutrition.rows.length) {
+        await iedSaveField(pid, 'nutrition', nutrition);
+        savedNutrition = true;
+      }
+    }
+    const parts = [];
+    if (composed.length) parts.push(composed.length + ' section' + (composed.length === 1 ? '' : 's'));
+    if (savedNutrition) parts.push('a nutrition panel · 营养表');
+    toast('Built ' + (parts.join(' + ') || 'the page') + ' — review in the Product Page Editor ✓ · 已生成,可在商品页编辑器中查看 ✓', 'ok');
   } catch (e) {
     toast('Couldn\'t auto-build — open the Product Page Editor to design it · 自动生成失败,请在商品页编辑器中设计', 'error');
   }
