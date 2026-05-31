@@ -199,7 +199,7 @@
 }
 
 /* ── Category tabs ────────────────────────────────────────────────────── */
-.cattabs { padding: 36rpx 44rpx; }
+.cattabs { padding: 0 44rpx; }
 .cattabs .head {
   display: flex;
   justify-content: space-between;
@@ -307,7 +307,7 @@
    Card surface (`background:{...}` inline) + text colour come from
    `card_bg_color` / `card_fg_color`; the outer block bg comes from
    `bg_color` (transparent by default). */
-.featured { padding: 36rpx 44rpx; }
+.featured { padding: 0 44rpx; }
 .featured .card {
   padding: 36rpx;
   border-radius: 4rpx;
@@ -400,7 +400,7 @@
 }
 
 /* ── Product grid ─────────────────────────────────────────────────────── */
-.grid-block { padding: 36rpx 44rpx; }
+.grid-block { padding: 0 44rpx; }
 .grid-block .head {
   display: flex;
   justify-content: space-between;
@@ -1216,7 +1216,7 @@
 
 /* ── Review card / carousel ───────────────────────────────────────────── */
 .review-blk {
-  padding: 44rpx 44rpx 40rpx;
+  padding: 0 44rpx;
 }
 .rv-kicker {
   font-family: var(--f-toni);
@@ -2043,7 +2043,7 @@
 
 /* Banner = full-bleed colour band: drop the side inset so the field
    stretches edge-to-edge. Inner copy keeps its own horizontal padding. */
-.greet-blk-banner { border: 0; margin-left: 0; margin-right: 0; padding: 44rpx 44rpx 38rpx; }
+.greet-blk-banner { border: 0; margin: 0; padding: 44rpx 44rpx 38rpx; }
 .greet-blk-banner .gr-kicker { opacity: 0.6; }
 
 .greet-blk-inline { padding: 22rpx 28rpx; }
@@ -2065,7 +2065,7 @@
 
 /* Split, like Banner, is a full-width greeting band — drop the side inset
    so the coloured field reaches both edges; copy keeps a 44rpx gutter. */
-.greet-blk-split { margin-left: 0; margin-right: 0; padding: 28rpx 44rpx; }
+.greet-blk-split { margin: 0; padding: 28rpx 44rpx; }
 .gr-split-row {
   display: flex;
   align-items: stretch;
@@ -2551,7 +2551,7 @@
 
 /* ─── Favorites block — "your saved" rail / grid ─────────────────────── */
 .fav-blk {
-  padding: 44rpx 44rpx;
+  padding: 0 44rpx;
 }
 .fav-head {
   display: flex;
