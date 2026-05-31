@@ -2527,6 +2527,21 @@
   .b-recipe.corner-bold,
   .b-ordertracker.corner-bold .ot-card,
   .b-countdown.corner-bold { border-radius: 16px; }
+  /* Self-framed blocks (poll, referral, store, coupon, greeting, WeCom) don't
+     carry the corner class on their own element, so reach them via the
+     .block-wrap corner class. Subtle keeps each block's native radius. */
+  .block-wrap.corner-sharp > .b-voting,
+  .block-wrap.corner-sharp > .b-affiliate,
+  .block-wrap.corner-sharp > .b-store,
+  .block-wrap.corner-sharp > .b-coupon,
+  .block-wrap.corner-sharp > .b-greeting,
+  .block-wrap.corner-sharp > .b-wc { border-radius: 0 !important; }
+  .block-wrap.corner-bold > .b-voting,
+  .block-wrap.corner-bold > .b-affiliate,
+  .block-wrap.corner-bold > .b-store,
+  .block-wrap.corner-bold > .b-coupon,
+  .block-wrap.corner-bold > .b-greeting,
+  .block-wrap.corner-bold > .b-wc { border-radius: 16px !important; }
   /* `corner-subtle` is the legacy default — no override needed. */
 
   /* Entrance animations — opt-in via .enter-{name} on the block wrapper.
@@ -2731,7 +2746,7 @@
   }
 
   /* ─── WeCom (企业微信) contact preview ──────────────────────────────── */
-  .b-wc { border: 1.5px solid var(--b-ink); }
+  .b-wc { margin: 12px 20px; border: 1.5px solid var(--b-ink); }
   .b-wc-card { padding: 18px 16px 16px; text-align: center; }
   .b-wc .wc-kicker { font: 700 9px var(--bf-toni); letter-spacing: .22em; opacity: .7; }
   .b-wc .wc-title { margin-top: 4px; font: 500 22px var(--bf-bear); line-height: 1.05; }
@@ -2827,9 +2842,33 @@
 
   /* ─── Bundle preview ────────────────────────────────────────────────── */
   .b-bundle {
+    margin: 10px 20px;
     padding: 16px 16px 14px;
     border: 1.5px solid var(--b-ink);
   }
+  /* Self-framed cards (bundle, poll, referral, store, WeCom) own their
+     border/bg + side margin (not the .framed system), so the generic
+     .block-wrap.bleed rule (zeros padding only) can't reach their gutter.
+     Drop the side margin + square the corners under full-bleed, and restore
+     the inner padding the generic rule zeroed — mirrors the mini-app. */
+  .block-wrap.bleed > .b-bundle,
+  .block-wrap.bleed > .b-voting,
+  .block-wrap.bleed > .b-affiliate,
+  .block-wrap.bleed > .b-store,
+  .block-wrap.bleed > .b-coupon,
+  .block-wrap.bleed > .b-wc {
+    margin-left: 0;
+    margin-right: 0;
+    border-radius: 0 !important;   /* edge-to-edge band stays square, even if corner=bold */
+  }
+  .block-wrap.bleed > .b-bundle    { padding-left: 16px !important; padding-right: 16px !important; }
+  .block-wrap.bleed > .b-voting    { padding-left: 18px !important; padding-right: 18px !important; }
+  .block-wrap.bleed > .b-affiliate { padding-left: 18px !important; padding-right: 18px !important; }
+  .block-wrap.bleed > .b-store     { padding-left: 18px !important; padding-right: 18px !important; }
+  .block-wrap.bleed > .b-coupon    { padding-left: 18px !important; padding-right: 18px !important; }
+  /* .b-wc padding lives on .b-wc-card (inner) — nothing to restore.
+     .b-greeting already uses a padding-based gutter, so the generic
+     .block-wrap.bleed rule handles it — no override needed. */
   .b-bundle .bun-pills {
     display: flex; gap: 6px; flex-wrap: wrap;
     margin: 8px 0 10px;

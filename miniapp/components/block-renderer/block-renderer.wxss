@@ -2689,6 +2689,21 @@
 .recipe-blk.corner-bold,
 .ot-card.corner-bold,
 .countdown.corner-bold { border-radius: 28rpx !important; }
+/* Self-framed blocks (poll, referral, store, coupon, greeting, WeCom) don't
+   carry the corner class on their own element, so reach them via the
+   .blk-outer corner class. Subtle keeps each block's native radius. */
+.blk-outer.corner-sharp > .voting-blk,
+.blk-outer.corner-sharp > .aff-blk,
+.blk-outer.corner-sharp > .store-blk,
+.blk-outer.corner-sharp > .coupon-blk,
+.blk-outer.corner-sharp > .greet-blk,
+.blk-outer.corner-sharp > .wc-blk { border-radius: 0 !important; }
+.blk-outer.corner-bold > .voting-blk,
+.blk-outer.corner-bold > .aff-blk,
+.blk-outer.corner-bold > .store-blk,
+.blk-outer.corner-bold > .coupon-blk,
+.blk-outer.corner-bold > .greet-blk,
+.blk-outer.corner-bold > .wc-blk { border-radius: 28rpx !important; }
 /* corner-subtle = legacy default, no override. */
 
 /* Entrance animations — keep them subtle. The class is applied on the
@@ -2890,3 +2905,28 @@
   margin: 16rpx 0;
   border-radius: 0;
 }
+/* Self-framed cards (bundle, poll, referral, store, WeCom) carry their own
+   border/bg + side MARGIN — not the .framed system — so the generic bleed rule
+   above (which only zeros padding) can't reach their gutter. Drop the side
+   margin and square the corners so the panel reads as an edge-to-edge band;
+   restore the inner padding (zeroed by the generic rule) so content keeps its
+   breathing room against the border. */
+.blk-outer.bleed > .bun-blk,
+.blk-outer.bleed > .voting-blk,
+.blk-outer.bleed > .aff-blk,
+.blk-outer.bleed > .store-blk,
+.blk-outer.bleed > .coupon-blk,
+.blk-outer.bleed > .greet-blk,
+.blk-outer.bleed > .wc-blk {
+  margin-left: 0;
+  margin-right: 0;
+  border-radius: 0 !important;   /* edge-to-edge band stays square, even if corner=bold */
+}
+.blk-outer.bleed > .bun-blk    { padding-left: 30rpx !important; padding-right: 30rpx !important; }
+.blk-outer.bleed > .voting-blk { padding-left: 32rpx !important; padding-right: 32rpx !important; }
+.blk-outer.bleed > .aff-blk    { padding-left: 32rpx !important; padding-right: 32rpx !important; }
+.blk-outer.bleed > .store-blk  { padding-left: 36rpx !important; padding-right: 36rpx !important; }
+.blk-outer.bleed > .coupon-blk { padding-left: 36rpx !important; padding-right: 36rpx !important; }
+.blk-outer.bleed > .greet-blk  { padding-left: 36rpx !important; padding-right: 36rpx !important; }
+/* .wc-blk keeps its margin-only gutter; its padding lives on the inner
+   .wc-card, so the generic rule never touches it — nothing to restore. */
