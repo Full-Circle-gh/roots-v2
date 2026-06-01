@@ -1248,6 +1248,7 @@
   font-size: calc(30rpx * var(--font-scale));
   line-height: 1.4;
   margin-top: 20rpx;
+  white-space: pre-line;  /* honor the author's manual line breaks (\n) */
 }
 .rv-byline {
   margin-top: 24rpx;

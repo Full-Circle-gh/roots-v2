@@ -1857,12 +1857,20 @@
     min-width: 38px;
     user-select: none;
   }
-  .txt-pair-row input {
+  .txt-pair-row input,
+  .txt-pair-row textarea {
     flex: 1; border: 0 !important; background: transparent !important;
     padding: 8px 10px !important;
     border-radius: 0 !important; box-shadow: none !important;
   }
-  .txt-pair-row input:focus { box-shadow: none !important; border: 0 !important; }
+  .txt-pair-row input:focus,
+  .txt-pair-row textarea:focus { box-shadow: none !important; border: 0 !important; }
+  .txt-pair-row textarea {
+    font: inherit; line-height: 1.4; resize: vertical; min-height: 60px;
+  }
+  /* Multi-line rows: pin the EN/中 tag to the top instead of vertically centering. */
+  .txt-pair-row.is-multiline { align-items: flex-start; }
+  .txt-pair-row.is-multiline .lang-tag { align-items: flex-start; padding-top: 8px; }
 
   /* Multi-button hero CTA editor */
   .cta-list { display: flex; flex-direction: column; gap: 8px; }
@@ -2746,7 +2754,7 @@
   }
 
   /* ─── WeCom (企业微信) contact preview ──────────────────────────────── */
-  .b-wc { margin: 0 20px; }
+  .b-wc { margin: 0 18px; }
   .b-wc-card { padding: 18px 16px 16px; text-align: center; }
   .b-wc .wc-kicker { font: 700 9px var(--bf-toni); letter-spacing: .22em; opacity: .7; }
   .b-wc .wc-title { margin-top: 4px; font: 500 22px var(--bf-bear); line-height: 1.05; }
@@ -2842,7 +2850,7 @@
 
   /* ─── Bundle preview ────────────────────────────────────────────────── */
   .b-bundle {
-    margin: 0 20px;
+    margin: 0 18px;
     padding: 16px 16px 14px;
   }
   /* Self-styled cards (bundle, poll, referral, store, WeCom) own their
@@ -3151,6 +3159,7 @@
   .b-review .quote {
     font: 500 15px var(--bf-bear); line-height: 1.4;
     margin-top: 12px;
+    white-space: pre-line;  /* honor author's manual line breaks (\n) */
   }
   .b-review .byline {
     margin-top: 14px;
@@ -8105,21 +8114,24 @@ function num(value, onInput, opts = {}) {
 // Bilingual paired text input — every user-visible label in the CMS uses
 // this so EN + 中文 can be authored together. Returns a DOM element; the
 // onChange callback fires on every keystroke with both values { en, cn }.
-function txtPair(valueEn, valueCn, onChange, placeholders = {}) {
+function txtPair(valueEn, valueCn, onChange, placeholders = {}, opts = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'txt-pair';
-
-  const rowEn = document.createElement('div'); rowEn.className = 'txt-pair-row';
-  const tagEn = document.createElement('span'); tagEn.className = 'lang-tag'; tagEn.textContent = 'EN';
-  const inEn  = document.createElement('input'); inEn.type = 'text';
-  inEn.value = valueEn || ''; inEn.placeholder = placeholders.en || 'English';
-  rowEn.appendChild(tagEn); rowEn.appendChild(inEn); wrap.appendChild(rowEn);
-
-  const rowCn = document.createElement('div'); rowCn.className = 'txt-pair-row';
-  const tagCn = document.createElement('span'); tagCn.className = 'lang-tag'; tagCn.textContent = '中';
-  const inCn  = document.createElement('input'); inCn.type = 'text';
-  inCn.value = valueCn || ''; inCn.placeholder = placeholders.cn || '中文';
-  rowCn.appendChild(tagCn); rowCn.appendChild(inCn); wrap.appendChild(rowCn);
+  // opts.multiline → <textarea> so the author can press Enter for line breaks
+  // (used for the review quote). Single-line <input> otherwise.
+  const makeRow = (tag, value, ph) => {
+    const row = document.createElement('div');
+    row.className = 'txt-pair-row' + (opts.multiline ? ' is-multiline' : '');
+    const t = document.createElement('span'); t.className = 'lang-tag'; t.textContent = tag;
+    const inp = document.createElement(opts.multiline ? 'textarea' : 'input');
+    if (!opts.multiline) inp.type = 'text';
+    else if (opts.rows) inp.rows = opts.rows;
+    inp.value = value || ''; inp.placeholder = ph;
+    row.appendChild(t); row.appendChild(inp); wrap.appendChild(row);
+    return inp;
+  };
+  const inEn = makeRow('EN', valueEn, placeholders.en || 'English');
+  const inCn = makeRow('中', valueCn, placeholders.cn || '中文');
 
   const fire = () => onChange({ en: inEn.value, cn: inCn.value });
   inEn.addEventListener('input', fire);
@@ -9648,8 +9660,8 @@ function buildReviewForm(m, b) {
     avatarField.style.marginBottom = '8px';
     card.appendChild(avatarField);
 
-    card.appendChild(field(T('Quote', '评价内容'), '',
-      txtPair(r.quote_en, r.quote_cn, ({ en, cn }) => updateReview(idx, { quote_en: en, quote_cn: cn }))));
+    card.appendChild(field(T('Quote', '评价内容'), T('Press Enter for a line break.', '按回车换行。'),
+      txtPair(r.quote_en, r.quote_cn, ({ en, cn }) => updateReview(idx, { quote_en: en, quote_cn: cn }), {}, { multiline: true, rows: 3 })));
     card.appendChild(field(T('Author name', '作者姓名'), '',
       txt(r.author_name, v => updateReview(idx, { author_name: v }), 'Linda')));
     card.appendChild(field(T('Author subline', '作者副行'), T('Optional — e.g. tier or location.', '可选 — 例如会员等级或地点。'),
