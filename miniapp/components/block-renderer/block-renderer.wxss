@@ -2568,7 +2568,7 @@
    that perches over the card's top edge. The visible card is .wc-loop-card. */
 .wc-loop {
   position: relative;
-  padding-top: 116rpx;
+  padding-top: 188rpx;
 }
 .wc-loop-mascot {
   position: absolute;
