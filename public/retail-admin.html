@@ -6177,11 +6177,6 @@
         <tbody><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
       </table>
     </div>
-
-    <!-- Photo lightbox — opens when a review thumbnail is clicked. -->
-    <div id="rv-lightbox" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,.82); z-index: 9999; align-items: center; justify-content: center; cursor: zoom-out;" onclick="closeReviewLightbox()">
-      <img id="rv-lightbox-img" style="max-width: 92vw; max-height: 92vh; box-shadow: 0 24px 60px rgba(0,0,0,.6);"/>
-    </div>
   </section>
 
   <!-- ─── FEEDBACK ─── -->
@@ -8390,6 +8385,11 @@
 </aside>
 
 <div class="toast" id="toast"></div>
+
+<!-- Photo lightbox — top-level so it shows over any tab (reviews, feedback). -->
+<div id="rv-lightbox" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,.82); z-index: 9999; align-items: center; justify-content: center; cursor: zoom-out;" onclick="closeReviewLightbox()">
+  <img id="rv-lightbox-img" style="max-width: 92vw; max-height: 92vh; box-shadow: 0 24px 60px rgba(0,0,0,.6);"/>
+</div>
 
 <script>
 const $  = s => document.querySelector(s);
