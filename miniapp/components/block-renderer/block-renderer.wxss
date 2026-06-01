@@ -2563,6 +2563,199 @@
   flex-shrink: 0;
 }
 
+/* ── "Stay in the loop" warm-pop card ────────────────────────────────── */
+/* .wc-loop is the outer wrapper; its top padding makes room for the mascot
+   that perches over the card's top edge. The visible card is .wc-loop-card. */
+.wc-loop {
+  position: relative;
+  padding-top: 96rpx;
+}
+.wc-loop-mascot {
+  position: absolute;
+  right: 28rpx;
+  top: 0;
+  width: 216rpx;
+  height: 176rpx;
+  z-index: 3;
+  pointer-events: none;
+  transform: rotate(3deg);
+  filter: drop-shadow(0 6rpx 10rpx rgba(0,0,0,0.18));
+}
+.wc-loop-card {
+  position: relative;
+  border: 4rpx solid var(--ink);
+  border-radius: 36rpx;
+  padding: 40rpx 36rpx 36rpx;
+  overflow: hidden;
+  box-shadow: 12rpx 14rpx 0 var(--ink);
+}
+.wc-loop-paper {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(rgba(0,0,0,.03) 1px, transparent 1.5px),
+    radial-gradient(rgba(0,0,0,.022) 1px, transparent 1.5px);
+  background-size: 6rpx 6rpx, 14rpx 14rpx;
+  background-position: 0 0, 2rpx 4rpx;
+}
+/* lift content above the paper texture */
+.wc-loop-badge,
+.wc-loop-title,
+.wc-loop-sub,
+.wc-loop-props,
+.wc-loop-foot { position: relative; z-index: 1; }
+
+.wc-loop-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 8rpx 22rpx;
+  border: 3rpx solid var(--ink);
+  border-radius: 999rpx;
+  font-family: var(--f-toni);
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.wc-loop-title {
+  margin-top: 22rpx;
+  max-width: 62%;
+  font-family: var(--f-bear);
+  font-size: calc(60rpx * var(--font-scale));
+  line-height: 1.0;
+  letter-spacing: -0.01em;
+}
+.wc-loop-sub {
+  margin-top: 14rpx;
+  max-width: 64%;
+  font-family: var(--f-aleo);
+  font-size: calc(24rpx * var(--font-scale));
+  line-height: 1.45;
+  opacity: 0.72;
+}
+.wc-loop-props {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx;
+  margin-top: 28rpx;
+}
+.wc-loop-chip {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 12rpx 22rpx 12rpx 16rpx;
+  border: 3rpx solid var(--ink);
+  border-radius: 999rpx;
+}
+.wc-loop-ico {
+  width: 34rpx;
+  height: 34rpx;
+  flex-shrink: 0;
+}
+.wc-loop-chip-tx {
+  font-family: var(--f-bear);
+  font-size: calc(26rpx * var(--font-scale));
+  line-height: 1;
+  color: var(--ink);
+}
+.wc-loop-foot {
+  display: flex;
+  gap: 24rpx;
+  margin-top: 34rpx;
+  align-items: stretch;
+}
+.wc-loop-foot-l {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.wc-loop-cta {
+  margin: 0;
+  padding: 26rpx 24rpx;
+  background: var(--ink);
+  border: none;
+  border-radius: 26rpx;
+  font-family: var(--f-gothic);
+  font-size: calc(34rpx * var(--font-scale));
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+}
+.wc-loop-cta::after { border: none; }
+.wc-loop-cta-ar { font-family: var(--f-gothic); }
+.wc-loop-proof {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  margin-top: 20rpx;
+}
+.wc-loop-faces { display: flex; }
+.wc-loop-face {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 999rpx;
+  border: 3rpx solid var(--oat);
+  margin-left: -14rpx;
+}
+.wc-loop-face.wc-face-0 { margin-left: 0; background: #FFAF60; }
+.wc-loop-face.wc-face-1 { background: #7BBD3B; }
+.wc-loop-face.wc-face-2 { background: #F4B8CB; }
+.wc-loop-face.wc-face-3 { background: #B2CFED; }
+.wc-loop-proof-tx {
+  font-family: var(--f-aleo);
+  font-size: calc(22rpx * var(--font-scale));
+  opacity: 0.75;
+  line-height: 1.2;
+}
+.wc-loop-proof-n {
+  font-family: var(--f-gothic);
+  font-size: calc(26rpx * var(--font-scale));
+  letter-spacing: 0.03em;
+}
+.wc-loop-qr {
+  width: 216rpx;
+  flex-shrink: 0;
+  text-align: center;
+}
+.wc-loop-qr-frame {
+  border: 3rpx solid var(--ink);
+  border-radius: 20rpx;
+  padding: 12rpx;
+  background: #fff;
+}
+.wc-loop-qr-img {
+  width: 100%;
+  height: 192rpx;
+  display: block;
+  border-radius: 6rpx;
+}
+.wc-loop-qr-name {
+  display: block;
+  margin-top: 10rpx;
+  font-family: var(--f-gothic);
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.03em;
+}
+.wc-loop-qr-hint {
+  display: block;
+  margin-top: 8rpx;
+  font-family: var(--f-toni);
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  line-height: 1.3;
+}
+
 
 /* ─── Favorites block — "your saved" rail / grid ─────────────────────── */
 .fav-blk {

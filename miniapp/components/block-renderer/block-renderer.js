@@ -1253,6 +1253,25 @@ Component({
             showQr:     b.show_qr !== false,
             accent: color(b.accent_color || 'forest-kale'),
             btnFg: btnText(b.accent_color || 'forest-kale'),
+            // ── "Stay in the loop" warm-pop redesign (card view) ──
+            // Four fixed value-prop chips (active language only, to match the
+            // app's global EN/中 toggle). Icons are drawn in WXSS by .lc-ico-*.
+            // The 2nd chip tracks the block accent; the rest are brand pastels.
+            props: [
+              { k: 'promo',   icon: '/assets/icons/loop/promo.svg',   bg: '#FFAF60', label: L === 'cn' ? '优惠活动' : 'Promotions' },
+              { k: 'drops',   icon: '/assets/icons/loop/drops.svg',   bg: color(b.accent_color || 'forest-kale'), label: L === 'cn' ? '新品首发' : 'New drops' },
+              { k: 'offers',  icon: '/assets/icons/loop/offers.svg',  bg: '#F4B8CB', label: L === 'cn' ? '专属福利' : 'Exclusive offers' },
+              { k: 'support', icon: '/assets/icons/loop/support.svg', bg: '#B2CFED', label: L === 'cn' ? '专人客服' : 'Direct support' },
+            ],
+            // Mascot perches over the card's top edge. Optional per block.
+            showMascot: b.show_mascot !== false,
+            mascot: '/assets/brand/mascot-flex-ink.png',
+            // Social proof — opt-in and real-number-only: hidden unless the
+            // operator types an actual member count (e.g. "1,500+").
+            proofCount: (b.proof_count || '').trim(),
+            showProof: b.show_proof !== false && !!(b.proof_count || '').trim(),
+            proofPre:  L === 'cn' ? '已有 ' : 'Joined by ',
+            proofPost: L === 'cn' ? ' 位会员' : ' members',
           };
           break;
         }
@@ -1580,6 +1599,10 @@ Component({
     // block has a configured qrUrl; without one, the button falls back to
     // open-type="contact" for the legacy CSR-chat flow.
     onWecomCtaTap() {
+      // [diag] If this fires, the block has NO kfUrl in the loaded config —
+      // i.e. the CMS draft wasn't published, so the trial build never got
+      // the 微信客服 link and went straight to the QR. Remove after debugging.
+      console.log('[wecom-diag] CTA → QR path (no kfUrl in config)', this.data.wecom);
       this.onWecomQrTap();
     },
     // WeCom 微信客服 chat. Used when the block has a kfUrl configured but
@@ -1590,6 +1613,10 @@ Component({
     onWecomChatTap() {
       const w = this.data.wecom || {};
       const url = w.kfUrl;
+      // [diag] Shows whether the link/corpId actually reached the build.
+      // Remove after debugging.
+      console.log('[wecom-diag] Chat path. kfUrl=', url, 'corpId=', w.corpId,
+        'hasAPI=', typeof wx.openCustomerServiceChat === 'function');
       if (!url) return this.wecomFallbackToQr();
       // Some older WeChat clients don't expose openCustomerServiceChat —
       // go straight to the QR picture so the customer can still add us.

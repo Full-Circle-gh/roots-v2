@@ -2754,7 +2754,7 @@
   }
 
   /* ─── WeCom (企业微信) contact preview ──────────────────────────────── */
-  .b-wc { margin: 0 18px; }
+  .b-wc { margin: 0 18px; border-radius: 4px; }
   .b-wc-card { padding: 18px 16px 16px; text-align: center; }
   .b-wc .wc-kicker { font: 700 9px var(--bf-toni); letter-spacing: .22em; opacity: .7; }
   .b-wc .wc-title { margin-top: 4px; font: 500 22px var(--bf-bear); line-height: 1.05; }
@@ -2797,6 +2797,55 @@
   .b-wc-strip .wc-qr-empty { width: 80px; height: 80px; padding: 4px; }
   .b-wc-strip .wc-qr-empty svg { width: 16px; height: 16px; }
   .b-wc-strip .wc-hint-sm { margin-top: 4px; font: 400 9px var(--bf-aleo); opacity: .6; text-align: center; max-width: 90px; line-height: 1.3; }
+
+  /* ─── "Stay in the loop" warm-pop card preview ──────────────────────── */
+  .b-wc-loop { margin: 0 18px; position: relative; padding-top: 46px; background: transparent !important; }
+  .b-wc-loop .wc-l-mascot {
+    position: absolute; right: 14px; top: 0; width: 104px; height: 88px;
+    object-fit: contain; z-index: 3; pointer-events: none; transform: rotate(3deg);
+    filter: drop-shadow(0 3px 5px rgba(0,0,0,.18));
+  }
+  .b-wc-loop .wc-l-card {
+    position: relative; border: 2px solid var(--b-ink); border-radius: 18px;
+    padding: 18px 16px 16px; overflow: hidden; box-shadow: 6px 7px 0 var(--b-ink);
+  }
+  .b-wc-loop .wc-l-badge {
+    display: inline-flex; align-items: center; padding: 4px 11px;
+    border: 1.5px solid var(--b-ink); border-radius: 999px;
+    font: 700 9px var(--bf-toni); letter-spacing: .22em; text-transform: uppercase; line-height: 1;
+  }
+  .b-wc-loop .wc-l-title { margin-top: 11px; max-width: 62%; font: 500 30px var(--bf-bear); line-height: 1.0; }
+  .b-wc-loop .wc-l-sub { margin-top: 7px; max-width: 64%; font: 400 12px var(--bf-aleo); opacity: .72; line-height: 1.45; }
+  .b-wc-loop .wc-l-props { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+  .b-wc-loop .wc-l-chip {
+    display: flex; align-items: center; gap: 5px; padding: 6px 11px 6px 8px;
+    border: 1.5px solid var(--b-ink); border-radius: 999px;
+  }
+  .b-wc-loop .wc-l-chip svg { width: 17px; height: 17px; display: block; flex-shrink: 0; }
+  .b-wc-loop .wc-l-chip span { font: 500 13px var(--bf-bear); line-height: 1; color: var(--b-ink); }
+  .b-wc-loop .wc-l-foot { display: flex; gap: 12px; margin-top: 17px; align-items: stretch; }
+  .b-wc-loop .wc-l-foot-l { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; }
+  .b-wc-loop .wc-l-cta {
+    background: var(--b-ink); border-radius: 13px; padding: 13px 16px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    font: 400 18px var(--bf-gothic); letter-spacing: .05em; text-transform: uppercase; line-height: 1;
+  }
+  .b-wc-loop .wc-l-proof { display: flex; align-items: center; gap: 7px; margin-top: 10px; }
+  .b-wc-loop .wc-l-faces { display: flex; }
+  .b-wc-loop .wc-l-faces i { width: 20px; height: 20px; border-radius: 999px; border: 2px solid var(--b-oat); margin-left: -7px; }
+  .b-wc-loop .wc-l-faces i:first-child { margin-left: 0; }
+  .b-wc-loop .wc-l-proof-tx { font: 400 11px var(--bf-aleo); opacity: .75; line-height: 1.2; }
+  .b-wc-loop .wc-l-proof-tx b { font-family: var(--bf-gothic); font-weight: 400; font-size: 13px; }
+  .b-wc-loop .wc-l-qr { width: 108px; flex-shrink: 0; text-align: center; }
+  .b-wc-loop .wc-l-qr-frame { border: 1.5px solid var(--b-ink); border-radius: 10px; padding: 6px; background: #fff; }
+  .b-wc-loop .wc-l-qr-frame img { width: 100%; height: 96px; display: block; object-fit: contain; border-radius: 3px; }
+  .b-wc-loop .wc-l-qr-empty {
+    height: 96px; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.04); border: 1px dashed rgba(0,0,0,.25); border-radius: 3px;
+  }
+  .b-wc-loop .wc-l-qr-empty svg { width: 22px; height: 22px; opacity: .5; }
+  .b-wc-loop .wc-l-qr-name { margin-top: 6px; font: 500 11px var(--bf-gothic); }
+  .b-wc-loop .wc-l-qr-hint { margin-top: 5px; font: 700 8px var(--bf-toni); letter-spacing: .12em; text-transform: uppercase; opacity: .7; line-height: 1.3; }
 
   /* ─── Recipe story preview ──────────────────────────────────────────── */
   .b-recipe {
@@ -2852,6 +2901,7 @@
   .b-bundle {
     margin: 0 18px;
     padding: 16px 16px 14px;
+    border-radius: 4px;
   }
   /* Self-styled cards (bundle, poll, referral, store, WeCom) own their
      bg + side margin (not the .framed system), so the generic
@@ -3081,7 +3131,7 @@
   }
   /* ── Coupon block ── (cp- prefix to avoid colliding with the CMS layout .body grid rule) */
   .b-coupon {
-    margin: 0 18px; padding: 18px; border-radius: 8px;
+    margin: 0 18px; padding: 18px; border-radius: 4px;
     display: flex; align-items: center; gap: 16px;
     position: relative; overflow: hidden;
   }
@@ -3204,7 +3254,7 @@
   }
   .b-review-carousel .rv-dots .dot.on { opacity: 1; }
   /* ── Store info ── */
-  .b-store { margin: 0 18px; padding: 18px; border-radius: 6px; }
+  .b-store { margin: 0 18px; padding: 18px; border-radius: 4px; }
   .b-store .kicker { font: 700 9px var(--bf-toni); letter-spacing: .14em; opacity: .8; }
   .b-store .ttl { font: 500 18px var(--bf-bear); margin-top: 2px; line-height: 1.15; }
   .b-store .row { margin-top: 10px; display: flex; gap: 10px; align-items: flex-start; }
@@ -7743,9 +7793,8 @@ function renderBlockBody(b) {
       return d;
     }
     case 'wecom_contact': {
-      d.className = 'b-wc b-wc-' + (b.view === 'strip' ? 'strip' : 'card');
-      d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
-      d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
+      const bgVar = brandColorVar(b.bg_color) || 'var(--b-oat)';
+      const fgVar = brandColorVar(b.fg_color) || 'var(--b-ink)';
       const accent = brandColorVar(b.accent_color) || 'var(--b-forest)';
       const accentFg = btnTextHex(dcResolveHex(b.accent_color || 'forest-kale'));
       const k = getBi(b, 'kicker');
@@ -7755,13 +7804,16 @@ function renderBlockBody(b) {
       const btnLabel = pickLang(b.button_label_en, b.button_label_cn) || (state.lang === 'cn' ? '联系客服' : 'Chat with us');
       const showBtn = b.show_chat_button !== false;
       const showQr = b.show_qr !== false;
-      const chatBtn = showBtn ? `<button class="wc-cta" style="background:${accent};color:${accentFg}">${escapeHtml(btnLabel)}</button>` : '';
       const qrUrl = b.qr_image_url;
-      const qrHtml = showQr ? (qrUrl
-        ? `<img src="${escapeAttr(qrUrl)}" alt="" class="wc-qr-img">`
-        : `<div class="wc-qr-empty">${ICONS.image_placeholder}<div>Upload 联系我 QR</div></div>`) : '';
 
       if (b.view === 'strip') {
+        d.className = 'b-wc b-wc-strip';
+        d.style.background = bgVar;
+        d.style.color = fgVar;
+        const chatBtn = showBtn ? `<button class="wc-cta" style="background:${accent};color:${accentFg}">${escapeHtml(btnLabel)}</button>` : '';
+        const qrHtml = showQr ? (qrUrl
+          ? `<img src="${escapeAttr(qrUrl)}" alt="" class="wc-qr-img">`
+          : `<div class="wc-qr-empty">${ICONS.image_placeholder}<div>Upload 联系我 QR</div></div>`) : '';
         d.innerHTML = `
           <div class="wc-strip-body">
             ${k.en || k.cn ? `<div class="wc-kicker">${biLabel(k.en, k.cn)}</div>` : ''}
@@ -7770,18 +7822,51 @@ function renderBlockBody(b) {
             ${chatBtn}
           </div>
           ${showQr ? `<div class="wc-strip-qr">${qrHtml}<div class="wc-hint-sm">${escapeHtml(hint)}</div></div>` : ''}`;
-      } else {
-        const ctaNote = showBtn
-          ? `<div class="wc-cta-note">${state.lang === 'cn' ? '需在小程序后台绑定企业微信客服' : 'Needs WeCom CSR bound in mini-app backend'}</div>`
-          : '';
-        d.innerHTML = `
-          ${k.en || k.cn ? `<div class="wc-kicker">${biLabel(k.en, k.cn)}</div>` : ''}
-          ${t.en || t.cn ? `<div class="wc-title">${biLabel(t.en, t.cn)}</div>` : ''}
-          ${sub ? `<div class="wc-sub">${escapeHtml(sub)}</div>` : ''}
-          ${chatBtn}
-          ${ctaNote}
-          ${showQr ? `<div class="wc-qr-wrap">${qrHtml}${b.agent_name ? `<div class="wc-name">${escapeHtml(b.agent_name)}</div>` : ''}<div class="wc-hint">${escapeHtml(hint)}</div></div>` : ''}`;
+        return d;
       }
+
+      // ── Card view — "Stay in the loop" warm-pop redesign ──
+      d.className = 'b-wc b-wc-loop';
+      d.style.background = 'transparent';
+      const mascotOn = b.show_mascot !== false;
+      const proofCount = (b.proof_count || '').trim();
+      const proofOn = b.show_proof !== false && !!proofCount;
+      const proofPre  = state.lang === 'cn' ? '已有 ' : 'Joined by ';
+      const proofPost = state.lang === 'cn' ? ' 位会员' : ' members';
+      const ic = {
+        promo:   `<svg viewBox="0 0 24 24" fill="none" stroke="#1a1a17" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"><rect x="3.5" y="9" width="17" height="11.5" rx="1.5"/><path d="M2.5 9h19M12 9v11.5"/><path d="M12 9s-1-4.5-3.6-4.5A2 2 0 0 0 8 8.5M12 9s1-4.5 3.6-4.5A2 2 0 0 1 16 8.5"/></svg>`,
+        drops:   `<svg viewBox="0 0 24 24" fill="none" stroke="#1a1a17" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3c.4 4.4 1.6 5.6 6 6-4.4.4-5.6 1.6-6 6-.4-4.4-1.6-5.6-6-6 4.4-.4 5.6-1.6 6-6Z"/><path d="M18.5 14.5c.2 1.8.7 2.3 2.5 2.5-1.8.2-2.3.7-2.5 2.5-.2-1.8-.7-2.3-2.5-2.5 1.8-.2 2.3-.7 2.5-2.5Z"/></svg>`,
+        offers:  `<svg viewBox="0 0 24 24" fill="none" stroke="#1a1a17" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"><path d="M12 20S3.5 14.5 3.5 8.8A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 8.5 1.8C20.5 14.5 12 20 12 20Z"/></svg>`,
+        support: `<svg viewBox="0 0 24 24" fill="none" stroke="#1a1a17" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"><path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-4 3v-3H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/><path d="M8 10h8M8 13h5"/></svg>`,
+      };
+      const props = [
+        { k: 'promo',   bg: '#FFAF60', label: state.lang === 'cn' ? '优惠活动' : 'Promotions' },
+        { k: 'drops',   bg: accent,    label: state.lang === 'cn' ? '新品首发' : 'New drops' },
+        { k: 'offers',  bg: '#F4B8CB', label: state.lang === 'cn' ? '专属福利' : 'Exclusive offers' },
+        { k: 'support', bg: '#B2CFED', label: state.lang === 'cn' ? '专人客服' : 'Direct support' },
+      ];
+      const chips = props.map(p => `<div class="wc-l-chip" style="background:${p.bg}">${ic[p.k]}<span>${escapeHtml(p.label)}</span></div>`).join('');
+      const cta = showBtn
+        ? `<div class="wc-l-cta" style="color:${accent}"><span>${escapeHtml(btnLabel)}</span><span class="ar">→</span></div>`
+        : '';
+      const proof = proofOn
+        ? `<div class="wc-l-proof"><div class="wc-l-faces"><i style="background:#FFAF60"></i><i style="background:#7BBD3B"></i><i style="background:#F4B8CB"></i><i style="background:#B2CFED"></i></div><div class="wc-l-proof-tx">${escapeHtml(proofPre)}<b>${escapeHtml(proofCount)}</b>${escapeHtml(proofPost)}</div></div>`
+        : '';
+      const qrBlock = showQr
+        ? `<div class="wc-l-qr"><div class="wc-l-qr-frame">${qrUrl ? `<img src="${escapeAttr(qrUrl)}" alt="">` : `<div class="wc-l-qr-empty">${ICONS.image_placeholder}</div>`}</div>${b.agent_name ? `<div class="wc-l-qr-name">${escapeHtml(b.agent_name)}</div>` : ''}<div class="wc-l-qr-hint">${escapeHtml(hint)}</div></div>`
+        : '';
+      d.innerHTML = `
+        ${mascotOn ? `<img class="wc-l-mascot" src="/brand/mascot-flex-ink.png" alt="">` : ''}
+        <div class="wc-l-card" style="background:${bgVar};color:${fgVar}">
+          ${k.en || k.cn ? `<div class="wc-l-badge" style="background:${accent};color:${accentFg}">${biLabel(k.en, k.cn)}</div>` : ''}
+          ${t.en || t.cn ? `<div class="wc-l-title">${biLabel(t.en, t.cn)}</div>` : ''}
+          ${sub ? `<div class="wc-l-sub">${escapeHtml(sub)}</div>` : ''}
+          <div class="wc-l-props">${chips}</div>
+          <div class="wc-l-foot">
+            <div class="wc-l-foot-l">${cta}${proof}</div>
+            ${qrBlock}
+          </div>
+        </div>`;
       return d;
     }
     case 'favorites_block': {
@@ -9858,11 +9943,22 @@ function buildWecomContactForm(m, b) {
   m.appendChild(field(T('Hint text', '提示文字'), T('Short instruction under the QR. Leave both blank to use the default "Long-press QR · tap Add" / "长按二维码 · 识别添加".', '二维码下方的简短说明。两者留空则使用默认「Long-press QR · tap Add」/「长按二维码 · 识别添加」。'),
     txtPair(b.hint_en, b.hint_cn, ({ en, cn }) => updateBlockSilent(b.id, { hint_en: en, hint_cn: cn }))));
 
+  m.appendChild(field(T('Mascot', '吉祥物'),
+    T('Card view only — a Roots character perched on the top edge of the card. Turn off for a plainer look.', '仅卡片版式 — 卡片顶部探出的 Roots 角色。关闭后更简洁。'),
+    sel(b.show_mascot === false ? '0' : '1', [
+      { value: '1', label: T('Show mascot', '显示吉祥物') },
+      { value: '0', label: T('Hide', '隐藏') },
+    ], v => updateBlock(b.id, { show_mascot: v === '1' }))));
+
+  m.appendChild(field(T('Social proof — member count', '社交证明 — 会员数'),
+    T('Card view only. Type a real number (e.g. "1,500+") to show a "Joined by 1,500+ members" line with avatars. Leave blank to hide — don\'t invent a number.', '仅卡片版式。填写真实数字(如「1,500+」),显示带头像的「已有 1,500+ 位会员」一行。留空则隐藏 — 请勿编造数字。'),
+    txt(b.proof_count, v => updateBlockSilent(b.id, { proof_count: (v || '').trim() }), '1,500+')));
+
   m.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
   m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Button colour', '按钮颜色'), T('Background of the chat button.', '客服按钮的背景颜色。'),
+  m.appendChild(field(T('Accent colour', '强调色'), T('The ADD US badge, value chip + CTA accent. A bright colour (lime, papaya…) reads best.', 'ADD US 徽章、价值标签与按钮文字的强调色。明亮的颜色(青柠、木瓜…)效果最佳。'),
     sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 }
 

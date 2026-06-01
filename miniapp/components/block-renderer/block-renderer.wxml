@@ -774,33 +774,70 @@
      WeCom CSR chat (needs WeCom CSR bound in MP backend → 设置 → 客服).
      Long-press the 联系我 QR → adds employee as WeCom contact. Either half
      is optional. Card stacks vertically; strip is compact horizontal. -->
-<view wx:elif="{{type === 'wecom_contact' && wecom && wecom.view === 'card'}}" class="wc-blk wc-card" style="background:{{bg}};color:{{fg}}">
-  <view wx:if="{{wecom.kicker}}" class="wc-kicker">{{wecom.kicker}}</view>
-  <view wx:if="{{wecom.title}}" class="wc-title">{{wecom.title}}</view>
-  <view wx:if="{{wecom.subtitle}}" class="wc-sub">{{wecom.subtitle}}</view>
-  <!-- Three button modes (priority order).
-       Button precedence is WeCom-chat-first so the CTA lands the customer
-       in the company's 微信客服 (NOT the OA's 公众号客服):
-       1. kfUrl set      → tap opens WeCom (企业微信) 微信客服 chat via
-                           wx.openCustomerServiceChat. If the chat can't
-                           open it falls back to previewing the QR (when a
-                           qrUrl is set) so the customer can still add us.
-       2. qrUrl set only → tap previews the 联系我 QR full-screen, so a
-                           long-press triggers WeChat's "识别图中二维码" →
-                           添加朋友 flow. Only sanctioned add-friend path.
-       3. neither        → falls back to open-type="contact" (whichever
-                           客服 is bound in 小程序管理后台). -->
-  <button wx:if="{{wecom.showButton && wecom.kfUrl}}" class="wc-cta"
-          bindtap="onWecomChatTap" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
-  <button wx:elif="{{wecom.showButton && wecom.qrUrl}}" class="wc-cta"
-          bindtap="onWecomCtaTap" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
-  <button wx:elif="{{wecom.showButton}}" class="wc-cta" open-type="contact"
-          session-from="wecom_contact_block" bindcontact="onWecomContactError"
-          style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
-  <view wx:if="{{wecom.showQr && wecom.qrUrl}}" class="wc-qr-wrap">
-    <image src="{{wecom.qrUrl}}" mode="aspectFit" class="wc-qr" show-menu-by-longpress="{{true}}" bindtap="onWecomQrTap"/>
-    <view wx:if="{{wecom.agentName}}" class="wc-name">{{wecom.agentName}}</view>
-    <view class="wc-hint">{{wecom.hint}}</view>
+<!-- Card view — "Stay in the loop" warm-pop redesign. Cream card with an
+     ink keyline, a mascot perched on the top edge, an ADD US badge, four
+     value-prop chips, then a footer that pairs the CTA + social proof on the
+     left with the 联系我 QR on the right. bg/fg/accent stay operator-editable. -->
+<view wx:elif="{{type === 'wecom_contact' && wecom && wecom.view === 'card'}}" class="wc-blk wc-loop">
+  <image wx:if="{{wecom.showMascot}}" class="wc-loop-mascot" src="{{wecom.mascot}}" mode="aspectFit"/>
+  <view class="wc-loop-card" style="background:{{bg}};color:{{fg}}">
+    <view class="wc-loop-paper"></view>
+
+    <view wx:if="{{wecom.kicker}}" class="wc-loop-badge" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.kicker}}</view>
+
+    <view wx:if="{{wecom.title}}" class="wc-loop-title">{{wecom.title}}</view>
+    <view wx:if="{{wecom.subtitle}}" class="wc-loop-sub">{{wecom.subtitle}}</view>
+
+    <view class="wc-loop-props">
+      <view wx:for="{{wecom.props}}" wx:key="k" class="wc-loop-chip" style="background:{{item.bg}}">
+        <image class="wc-loop-ico" src="{{item.icon}}" mode="aspectFit"/>
+        <text class="wc-loop-chip-tx">{{item.label}}</text>
+      </view>
+    </view>
+
+    <view class="wc-loop-foot">
+      <view class="wc-loop-foot-l">
+        <!-- Three button modes (priority order). Button precedence is
+             WeCom-chat-first so the CTA lands the customer in the company's
+             微信客服 (NOT the OA's 公众号客服):
+             1. kfUrl set      → wx.openCustomerServiceChat; falls back to the
+                                 QR preview if the chat can't open.
+             2. qrUrl set only → previews the 联系我 QR full-screen so a
+                                 long-press triggers 识别图中二维码 → 添加朋友.
+             3. neither        → open-type="contact" (bound 客服). -->
+        <button wx:if="{{wecom.showButton && wecom.kfUrl}}" class="wc-loop-cta"
+                bindtap="onWecomChatTap" style="color:{{wecom.accent}}">
+          <text>{{wecom.buttonLabel}}</text><text class="wc-loop-cta-ar">→</text>
+        </button>
+        <button wx:elif="{{wecom.showButton && wecom.qrUrl}}" class="wc-loop-cta"
+                bindtap="onWecomCtaTap" style="color:{{wecom.accent}}">
+          <text>{{wecom.buttonLabel}}</text><text class="wc-loop-cta-ar">→</text>
+        </button>
+        <button wx:elif="{{wecom.showButton}}" class="wc-loop-cta" open-type="contact"
+                session-from="wecom_contact_block" bindcontact="onWecomContactError"
+                style="color:{{wecom.accent}}">
+          <text>{{wecom.buttonLabel}}</text><text class="wc-loop-cta-ar">→</text>
+        </button>
+
+        <view wx:if="{{wecom.showProof}}" class="wc-loop-proof">
+          <view class="wc-loop-faces">
+            <view class="wc-loop-face wc-face-0"></view>
+            <view class="wc-loop-face wc-face-1"></view>
+            <view class="wc-loop-face wc-face-2"></view>
+            <view class="wc-loop-face wc-face-3"></view>
+          </view>
+          <text class="wc-loop-proof-tx">{{wecom.proofPre}}<text class="wc-loop-proof-n">{{wecom.proofCount}}</text>{{wecom.proofPost}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{wecom.showQr && wecom.qrUrl}}" class="wc-loop-qr">
+        <view class="wc-loop-qr-frame">
+          <image src="{{wecom.qrUrl}}" mode="aspectFit" class="wc-loop-qr-img" show-menu-by-longpress="{{true}}" bindtap="onWecomQrTap"/>
+        </view>
+        <text wx:if="{{wecom.agentName}}" class="wc-loop-qr-name">{{wecom.agentName}}</text>
+        <text class="wc-loop-qr-hint">{{wecom.hint}}</text>
+      </view>
+    </view>
   </view>
 </view>
 
