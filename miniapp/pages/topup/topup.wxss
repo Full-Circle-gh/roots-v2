@@ -209,10 +209,16 @@
 .pf-cta {
   width: 100%;
   padding: 28rpx 16rpx;
-  text-align: center;
-  font-size: calc(30rpx * var(--font-scale));
-  letter-spacing: 0.06em;
-  line-height: 1.25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Keep the label + arrow on ONE centred line — at ¥1000+ the trailing → was
+     wrapping to a second line and looking off-centre. nowrap + a slightly
+     tighter size/spacing fits every amount (EN + CN) within the button. */
+  white-space: nowrap;
+  font-size: calc(28rpx * var(--font-scale));
+  letter-spacing: 0.04em;
+  line-height: 1.2;
   border-radius: 0;
 }
 .pf-cta::after { border: none; }
