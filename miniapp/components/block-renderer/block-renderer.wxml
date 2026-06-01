@@ -821,10 +821,10 @@
 
         <view wx:if="{{wecom.showProof}}" class="wc-loop-proof">
           <view class="wc-loop-faces">
-            <view class="wc-loop-face wc-face-0"></view>
-            <view class="wc-loop-face wc-face-1"></view>
-            <view class="wc-loop-face wc-face-2"></view>
-            <view class="wc-loop-face wc-face-3"></view>
+            <view class="wc-loop-face wc-face-0"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
+            <view class="wc-loop-face wc-face-1"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
+            <view class="wc-loop-face wc-face-2"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
+            <view class="wc-loop-face wc-face-3"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
           </view>
           <text class="wc-loop-proof-tx">{{wecom.proofPre}}<text class="wc-loop-proof-n">{{wecom.proofCount}}</text>{{wecom.proofPost}}</text>
         </view>

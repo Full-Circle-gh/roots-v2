@@ -2568,14 +2568,14 @@
    that perches over the card's top edge. The visible card is .wc-loop-card. */
 .wc-loop {
   position: relative;
-  padding-top: 96rpx;
+  padding-top: 116rpx;
 }
 .wc-loop-mascot {
   position: absolute;
-  right: 28rpx;
+  right: 20rpx;
   top: 0;
-  width: 216rpx;
-  height: 176rpx;
+  width: 240rpx;
+  height: 204rpx;
   z-index: 3;
   pointer-events: none;
   transform: rotate(3deg);
@@ -2711,6 +2711,15 @@
   border-radius: 999rpx;
   border: 3rpx solid var(--oat);
   margin-left: -14rpx;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+}
+.wc-loop-face-ic {
+  width: 32rpx;
+  height: 32rpx;
+  display: block;
 }
 .wc-loop-face.wc-face-0 { margin-left: 0; background: #FFAF60; }
 .wc-loop-face.wc-face-1 { background: #7BBD3B; }

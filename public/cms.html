@@ -2799,9 +2799,9 @@
   .b-wc-strip .wc-hint-sm { margin-top: 4px; font: 400 9px var(--bf-aleo); opacity: .6; text-align: center; max-width: 90px; line-height: 1.3; }
 
   /* ─── "Stay in the loop" warm-pop card preview ──────────────────────── */
-  .b-wc-loop { margin: 0 18px; position: relative; padding-top: 46px; background: transparent !important; }
+  .b-wc-loop { margin: 0 18px; position: relative; padding-top: 52px; background: transparent !important; }
   .b-wc-loop .wc-l-mascot {
-    position: absolute; right: 14px; top: 0; width: 104px; height: 88px;
+    position: absolute; right: 10px; top: 0; width: 116px; height: 98px;
     object-fit: contain; z-index: 3; pointer-events: none; transform: rotate(3deg);
     filter: drop-shadow(0 3px 5px rgba(0,0,0,.18));
   }
@@ -2834,8 +2834,9 @@
   }
   .b-wc-loop .wc-l-proof { display: flex; align-items: center; gap: 7px; margin-top: 10px; }
   .b-wc-loop .wc-l-faces { display: flex; }
-  .b-wc-loop .wc-l-faces i { width: 20px; height: 20px; border-radius: 999px; border: 2px solid var(--b-oat); margin-left: -7px; }
+  .b-wc-loop .wc-l-faces i { width: 20px; height: 20px; border-radius: 999px; border: 2px solid var(--b-oat); margin-left: -7px; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
   .b-wc-loop .wc-l-faces i:first-child { margin-left: 0; }
+  .b-wc-loop .wc-l-faces i svg { width: 16px; height: 16px; display: block; }
   .b-wc-loop .wc-l-proof-tx { font: 400 11px var(--bf-aleo); opacity: .75; line-height: 1.2; }
   .b-wc-loop .wc-l-proof-tx b { font-family: var(--bf-gothic); font-weight: 400; font-size: 13px; }
   .b-wc-loop .wc-l-qr { width: 108px; flex-shrink: 0; text-align: center; }
@@ -7854,7 +7855,7 @@ function renderBlockBody(b) {
         ? `<div class="wc-l-cta" style="color:${accent}"><span>${escapeHtml(btnLabel)}</span><span class="ar">→</span></div>`
         : '';
       const proof = proofOn
-        ? `<div class="wc-l-proof"><div class="wc-l-faces"><i style="background:#FFAF60"></i><i style="background:#7BBD3B"></i><i style="background:#F4B8CB"></i><i style="background:#B2CFED"></i></div><div class="wc-l-proof-tx">${escapeHtml(proofPre)}<b>${escapeHtml(proofCount)}</b>${escapeHtml(proofPost)}</div></div>`
+        ? `<div class="wc-l-proof"><div class="wc-l-faces">${['#FFAF60','#7BBD3B','#F4B8CB','#B2CFED'].map(c => `<i style="background:${c}"><svg viewBox="0 0 24 24" fill="#1a1a17"><circle cx="12" cy="9" r="4.3"/><path d="M3.2 22a8.8 8.8 0 0 1 17.6 0Z"/></svg></i>`).join('')}</div><div class="wc-l-proof-tx">${escapeHtml(proofPre)}<b>${escapeHtml(proofCount)}</b>${escapeHtml(proofPost)}</div></div>`
         : '';
       const qrBlock = showQr
         ? `<div class="wc-l-qr"><div class="wc-l-qr-frame">${qrUrl ? `<img src="${escapeAttr(qrUrl)}" alt="">` : `<div class="wc-l-qr-empty">${ICONS.image_placeholder}</div>`}</div>${b.agent_name ? `<div class="wc-l-qr-name">${escapeHtml(b.agent_name)}</div>` : ''}<div class="wc-l-qr-hint">${escapeHtml(hint)}</div></div>`
