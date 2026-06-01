@@ -2809,6 +2809,7 @@
     position: relative; border: 2px solid var(--b-ink); border-radius: 18px;
     padding: 18px 16px 16px; overflow: hidden; box-shadow: 6px 7px 0 var(--b-ink);
   }
+  .b-wc-loop .wc-l-card.wc-l-flat { box-shadow: none; }
   .b-wc-loop .wc-l-badge {
     display: inline-flex; align-items: center; padding: 4px 11px;
     border: 1.5px solid var(--b-ink); border-radius: 999px;
@@ -7829,6 +7830,7 @@ function renderBlockBody(b) {
       d.className = 'b-wc b-wc-loop';
       d.style.background = 'transparent';
       const mascotOn = b.show_mascot !== false;
+      const shadowOn = b.show_shadow !== false;
       const proofCount = (b.proof_count || '').trim();
       const proofOn = b.show_proof !== false && !!proofCount;
       const proofPre  = state.lang === 'cn' ? '已有 ' : 'Joined by ';
@@ -7857,7 +7859,7 @@ function renderBlockBody(b) {
         : '';
       d.innerHTML = `
         ${mascotOn ? `<img class="wc-l-mascot" src="/assets/brand/mascot-flex-ink.png" alt="">` : ''}
-        <div class="wc-l-card" style="background:${bgVar};color:${fgVar}">
+        <div class="wc-l-card${shadowOn ? '' : ' wc-l-flat'}" style="background:${bgVar};color:${fgVar}">
           ${k.en || k.cn ? `<div class="wc-l-badge" style="background:${accent};color:${accentFg}">${biLabel(k.en, k.cn)}</div>` : ''}
           ${t.en || t.cn ? `<div class="wc-l-title">${biLabel(t.en, t.cn)}</div>` : ''}
           ${sub ? `<div class="wc-l-sub">${escapeHtml(sub)}</div>` : ''}
@@ -9949,6 +9951,13 @@ function buildWecomContactForm(m, b) {
       { value: '1', label: T('Show mascot', '显示吉祥物') },
       { value: '0', label: T('Hide', '隐藏') },
     ], v => updateBlock(b.id, { show_mascot: v === '1' }))));
+
+  m.appendChild(field(T('Card shadow', '卡片阴影'),
+    T('Card view only — the hard offset drop-shadow behind the card. Turn off for a flat look.', '仅卡片版式 — 卡片背后的硬质偏移投影。关闭后呈现扁平效果。'),
+    sel(b.show_shadow === false ? '0' : '1', [
+      { value: '1', label: T('Show shadow', '显示阴影') },
+      { value: '0', label: T('No shadow', '无阴影') },
+    ], v => updateBlock(b.id, { show_shadow: v === '1' }))));
 
   m.appendChild(field(T('Social proof — member count', '社交证明 — 会员数'),
     T('Card view only. Type a real number (e.g. "1,500+") to show a "Joined by 1,500+ members" line with avatars. Leave blank to hide — don\'t invent a number.', '仅卡片版式。填写真实数字(如「1,500+」),显示带头像的「已有 1,500+ 位会员」一行。留空则隐藏 — 请勿编造数字。'),

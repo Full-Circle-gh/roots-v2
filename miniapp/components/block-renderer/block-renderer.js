@@ -1266,6 +1266,8 @@ Component({
             // Mascot perches over the card's top edge. Optional per block.
             showMascot: b.show_mascot !== false,
             mascot: '/assets/brand/mascot-flex-ink.png',
+            // Hard offset drop-shadow behind the card. Optional per block.
+            showShadow: b.show_shadow !== false,
             // Social proof — opt-in and real-number-only: hidden unless the
             // operator types an actual member count (e.g. "1,500+").
             proofCount: (b.proof_count || '').trim(),

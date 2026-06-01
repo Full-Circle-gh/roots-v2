@@ -2589,6 +2589,9 @@
   overflow: hidden;
   box-shadow: 12rpx 14rpx 0 var(--ink);
 }
+.wc-loop-card.wc-loop-flat {
+  box-shadow: none;
+}
 .wc-loop-paper {
   position: absolute;
   inset: 0;
