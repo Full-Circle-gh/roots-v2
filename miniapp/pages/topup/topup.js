@@ -181,8 +181,16 @@ Page({
         return;
       }
 
-      // PROD: pending. Until WeChat merchant cert is wired, show pending
-      // and let admin finalise manually.
+      // PROD: real WeChat Pay. Server returned signed JSAPI params → invoke the
+      // native pay sheet, then poll the top-up row until the async callback
+      // credits the wallet.
+      if (res && res.status === 'prepay' && res.paySign) {
+        await this.payWithWechat(res);
+        return;
+      }
+
+      // Legacy stub fallback (merchant cert not yet wired on this tenant):
+      // server returned 'pending' → office finalises manually in admin.
       if (res && res.status === 'pending') {
         wx.showToast({ title: this.data.copy.pendingMsg, icon: 'none', duration: 2400 });
         return;
@@ -197,5 +205,54 @@ Page({
     } finally {
       this.setData({ submitting: false });
     }
+  },
+
+  // Invoke the WeChat native pay sheet with the server-signed params, then wait
+  // for the async callback to settle the top-up. Resolves quietly either way —
+  // the toast + balance refresh communicate the outcome. `submitting` stays
+  // true (set by topUp, cleared in its finally) so the CTA can't be double-fired
+  // while the pay sheet is open.
+  payWithWechat(p) {
+    return new Promise((resolve) => {
+      wx.requestPayment({
+        timeStamp: p.timeStamp,
+        nonceStr:  p.nonceStr,
+        package:   p.package,
+        signType:  p.signType,
+        paySign:   p.paySign,
+        success: async () => {
+          wx.showLoading({ title: '...', mask: true });
+          const ok = await this.pollTopupStatus(p.topup_id);
+          wx.hideLoading();
+          wx.showToast({
+            title:    ok ? this.data.copy.successMsg : this.data.copy.pendingMsg,
+            icon:     ok ? 'success' : 'none',
+            duration: ok ? 1500 : 2400,
+          });
+          this.refresh();
+          resolve();
+        },
+        fail: () => {
+          wx.showToast({ title: this.data.lang === 'cn' ? '支付未完成' : 'Payment incomplete', icon: 'none' });
+          resolve();
+        },
+      });
+    });
+  },
+
+  // Poll /topup/status for ~9s waiting for the WeChat callback to flip the row
+  // to 'success'. Returns true once credited, false if still pending/failed —
+  // the wallet refresh will reflect the balance whenever the callback lands.
+  async pollTopupStatus(topupId) {
+    if (!topupId) return false;
+    for (let i = 0; i < 6; i++) {
+      try {
+        const row = await api.get('/api/retail/topup/status/' + topupId);
+        if (row && row.status === 'success') return true;
+        if (row && row.status === 'failed')  return false;
+      } catch (_) { /* transient — keep polling */ }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    return false;
   },
 });

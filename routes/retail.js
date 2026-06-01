@@ -1403,6 +1403,13 @@ if (WECHAT_PAY_DEV_MODE) {
 const WX_OUT_TRADE_PREFIX = 'FC';
 const wxOutTradeNo = (orderNo) => WX_OUT_TRADE_PREFIX + orderNo;
 
+// Wallet top-ups ride the SAME shared merchant ledger as orders, so they need
+// the FC namespace guard too — plus a 'TU' marker so the async pay callback can
+// tell a top-up (settles retail_topup_transactions → finalizeTopup) from an
+// order (settles retail_payments → markOrderPaid). Order numbers start with 'R'
+// (→ 'FCR…'), so 'FCTU…' can never collide with an order's out_trade_no.
+const WX_TOPUP_OUT_TRADE_PREFIX = WX_OUT_TRADE_PREFIX + 'TU';
+
 // User-Agent on outbound WeChat Pay v3 API calls. WeChat only requires a
 // non-empty UA; it's server-to-server (no customer ever sees it), so we send a
 // neutral PLATFORM identifier rather than any one tenant's brand (⑦ de-Roots).
@@ -1557,17 +1564,19 @@ function signMerchantRequest(method, urlPath, body, p) {
     `mchid="${p.mchId}",nonce_str="${nonceStr}",timestamp="${timestamp}",serial_no="${p.serialNo}",signature="${signature}"`;
 }
 
-// Real WeChat Pay JSAPI prepare. Returns { prepay_id }. `p` is the resolved
-// payContext() for this request's tenant (own merchant, own AppID).
-async function wechatPayCreate(order, openid, p) {
+// Generic WeChat Pay v3 JSAPI prepare. Returns a prepay_id. Shared by order
+// checkout AND wallet top-ups so the signing/transport is identical for both;
+// callers supply the charge specifics. `p` is the resolved payContext() for
+// this request's tenant (own merchant, own AppID).
+async function wechatJsapiPrepare({ outTradeNo, description, amountCents }, openid, p) {
   const url = 'https://api.mch.weixin.qq.com/v3/pay/transactions/jsapi';
   const body = {
     appid:        p.appId,
     mchid:        p.mchId,
-    description:  payDescription(order.order_no),
-    out_trade_no: wxOutTradeNo(order.order_no),
+    description,
+    out_trade_no: outTradeNo,
     notify_url:   wechatNotifyUrl(),
-    amount:       { total: Math.round(Number(order.total) * 100), currency: 'CNY' },
+    amount:       { total: amountCents, currency: 'CNY' },
     payer:        { openid },
   };
   const auth = signMerchantRequest('POST', '/v3/pay/transactions/jsapi', body, p);
@@ -1588,6 +1597,16 @@ async function wechatPayCreate(order, openid, p) {
     throw err;
   }
   return j.prepay_id;
+}
+
+// Real WeChat Pay JSAPI prepare for an ORDER. Returns { prepay_id }. `p` is the
+// resolved payContext() for this request's tenant (own merchant, own AppID).
+async function wechatPayCreate(order, openid, p) {
+  return wechatJsapiPrepare({
+    outTradeNo:  wxOutTradeNo(order.order_no),
+    description: payDescription(order.order_no),
+    amountCents: Math.round(Number(order.total) * 100),
+  }, openid, p);
 }
 
 // Real WeChat Pay v3 refund. Sends money back to the payer's original method.
@@ -2021,6 +2040,31 @@ function handleWechatPayCallback(req, res, tid) {
     let amountMismatch = false;
     if (txn.trade_state === 'SUCCESS' && txn.out_trade_no) {
       tenantAls.run(getTenantDb(tid), () => {
+        // Wallet top-up settlement ('FCTU…'). A top-up lives in its own table,
+        // not retail_payments, so route it here BEFORE the order lookup.
+        // finalizeTopup credits balance + bonus points + writes the ledger row
+        // (idempotent, guarded by status). Same amount-parity check as orders.
+        if (txn.out_trade_no.startsWith(WX_TOPUP_OUT_TRADE_PREFIX)) {
+          const tu = tdb().prepare(
+            "SELECT id, amount FROM retail_topup_transactions WHERE out_trade_no = ? AND status = 'pending'"
+          ).get(txn.out_trade_no);
+          if (tu) {
+            const paidCents   = Number(txn.amount && txn.amount.total);
+            const expectCents = Math.round(Number(tu.amount) * 100);
+            if (!Number.isFinite(paidCents) || paidCents !== expectCents) {
+              console.warn('[wechat-pay/callback] topup amount mismatch', txn.out_trade_no, paidCents, expectCents);
+              amountMismatch = true;
+              return;
+            }
+            // Stamp the WeChat refs while still 'pending' — finalizeTopup only
+            // touches status/paid_at/balance/points, so this must land first.
+            tdb().prepare(
+              'UPDATE retail_topup_transactions SET transaction_id = ?, raw_callback_json = ? WHERE id = ?'
+            ).run(txn.transaction_id || null, plain, tu.id);
+            finalizeTopup(tu.id);
+          }
+          return;
+        }
         const pay = tdb().prepare(
           'SELECT order_id, amount FROM retail_payments WHERE out_trade_no = ? AND status = ?'
         ).get(txn.out_trade_no, 'pending');
@@ -10656,7 +10700,7 @@ router.get('/api/retail/topup-packages', requireRetailAuth, (req, res) => {
 // credits wallet + awards bonus points (mirrors the existing
 // retail/payment/create dev-mode flow). In PROD this would hand off to
 // the WeChat Pay / Alipay merchant SDK and let the async callback finalize.
-router.post('/api/retail/topup/create', requireRetailAuth, express.json(), (req, res) => {
+router.post('/api/retail/topup/create', requireRetailAuth, express.json(), async (req, res) => {
   const packageId    = parseInt(req.body?.package_id, 10);
   const paymentMethod = req.body?.payment_method || 'wechat';
   if (!packageId) return res.status(400).json({ success: false, error: 'package_id_required' });
@@ -10665,7 +10709,9 @@ router.post('/api/retail/topup/create', requireRetailAuth, express.json(), (req,
   const pkg = tdb().prepare('SELECT * FROM retail_topup_packages WHERE id = ? AND is_active = 1').get(packageId);
   if (!pkg) return res.status(404).json({ success: false, error: 'package_not_found' });
 
-  const outTradeNo = `TU${Date.now()}${req.customer.id}`;
+  // FC-namespaced + 'TU'-marked out_trade_no (see WX_TOPUP_OUT_TRADE_PREFIX):
+  // collision-proof on the shared merchant ledger and routable by the callback.
+  const outTradeNo = `${WX_TOPUP_OUT_TRADE_PREFIX}${Date.now()}${req.customer.id}`;
   const info = tdb().prepare(
     `INSERT INTO retail_topup_transactions
        (customer_id, package_id, amount, bonus_points, payment_method, status, out_trade_no)
@@ -10673,7 +10719,11 @@ router.post('/api/retail/topup/create', requireRetailAuth, express.json(), (req,
   ).run(req.customer.id, pkg.id, pkg.amount, pkg.bonus_points, paymentMethod, outTradeNo);
   const topupId = info.lastInsertRowid;
 
-  if (payContext().devMode) {
+  // THIS request's WeChat Pay creds (Roots → env bundle; a tenant → its OWN
+  // merchant, or devMode when unconfigured — never borrows Roots' merchant).
+  const payCtx = payContext();
+
+  if (payCtx.devMode) {
     finalizeTopup(topupId);
     return res.json({
       success: true,
@@ -10681,12 +10731,36 @@ router.post('/api/retail/topup/create', requireRetailAuth, express.json(), (req,
     });
   }
 
-  // PROD: hand off to the merchant SDK. Stub for now — the office can
-  // approve the row manually in admin until the merchant cert lands.
-  res.json({
-    success: true,
-    data: { status: 'pending', topup_id: topupId, out_trade_no: outTradeNo, method: paymentMethod },
-  });
+  // ── PROD: real WeChat Pay v3 JSAPI handoff ────────────────────────────────
+  // Top-ups are WeChat-only (the mini app has no Alipay top-up entry). Build a
+  // prepay_id against THIS tenant's own merchant and return the signed params
+  // for wx.requestPayment(); the async callback (handleWechatPayCallback) then
+  // finalises the wallet credit + bonus points once WeChat confirms the charge.
+  if (paymentMethod === 'wechat') {
+    try {
+      const cust = tdb().prepare('SELECT openid FROM retail_customers WHERE id = ?').get(req.customer.id);
+      if (!cust?.openid || cust.openid.startsWith('dev:')) {
+        return res.status(409).json({ success: false, error: 'no_real_openid' });
+      }
+      const prepayId = await wechatJsapiPrepare({
+        outTradeNo,
+        description: `${tenantBrandLabel()} top-up ¥${pkg.amount}`,
+        amountCents: Math.round(Number(pkg.amount) * 100),
+      }, cust.openid, payCtx);
+      const params = buildWxRequestPaymentParams(prepayId, payCtx);
+      return res.json({
+        success: true,
+        data: { method: 'wechat', status: 'prepay', topup_id: topupId, out_trade_no: outTradeNo, ...params },
+      });
+    } catch (e) {
+      console.error('[topup wechat-pay/create]', e);
+      return res.status(502).json({ success: false, error: e.code || 'wechat_pay_failed' });
+    }
+  }
+
+  // Alipay top-ups aren't wired (no mini-app entry point) — fail loudly rather
+  // than leaving a dangling pending row the customer thinks succeeded.
+  return res.status(400).json({ success: false, error: 'unsupported_payment_method' });
 });
 
 // Marks a top-up successful: credits wallet (amount), awards bonus points,
@@ -10728,6 +10802,20 @@ router.get('/api/retail/points/transactions', requireRetailAuth, (req, res) => {
       ORDER BY id DESC LIMIT ? OFFSET ?`
   ).all(req.customer.id, limit, offset);
   res.json({ success: true, data: rows });
+});
+
+// Mini-app polls this right after wx.requestPayment() resolves, until the
+// async WeChat callback flips the row to 'success' (then it refreshes the
+// wallet). Callback-driven — no active WeChat order-query here, matching the
+// order status poll (which only actively queries for Alipay).
+router.get('/api/retail/topup/status/:id', requireRetailAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'id_required' });
+  const row = tdb().prepare(
+    'SELECT id, amount, bonus_points, status, paid_at FROM retail_topup_transactions WHERE id = ? AND customer_id = ?'
+  ).get(id, req.customer.id);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({ success: true, data: row });
 });
 
 router.get('/api/retail/topup/transactions', requireRetailAuth, (req, res) => {
