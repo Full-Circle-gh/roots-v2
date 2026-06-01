@@ -778,19 +778,22 @@
   <view wx:if="{{wecom.kicker}}" class="wc-kicker">{{wecom.kicker}}</view>
   <view wx:if="{{wecom.title}}" class="wc-title">{{wecom.title}}</view>
   <view wx:if="{{wecom.subtitle}}" class="wc-sub">{{wecom.subtitle}}</view>
-  <!-- Three button modes (priority order):
-       1. qrUrl set      → tap previews the QR full-screen; user long-presses
-                           to trigger WeChat's "识别图中二维码" → 添加朋友
-                           flow. Only sanctioned add-WeChat-friend path.
-       2. kfUrl set      → tap opens WeCom (企业微信) 微信客服 chat via
-                           wx.openCustomerServiceChat. Routes directly to
-                           the company's WeCom CSR, not the OA's CSR.
+  <!-- Three button modes (priority order).
+       Button precedence is WeCom-chat-first so the CTA lands the customer
+       in the company's 微信客服 (NOT the OA's 公众号客服):
+       1. kfUrl set      → tap opens WeCom (企业微信) 微信客服 chat via
+                           wx.openCustomerServiceChat. If the chat can't
+                           open it falls back to previewing the QR (when a
+                           qrUrl is set) so the customer can still add us.
+       2. qrUrl set only → tap previews the 联系我 QR full-screen, so a
+                           long-press triggers WeChat's "识别图中二维码" →
+                           添加朋友 flow. Only sanctioned add-friend path.
        3. neither        → falls back to open-type="contact" (whichever
                            客服 is bound in 小程序管理后台). -->
-  <button wx:if="{{wecom.showButton && wecom.qrUrl}}" class="wc-cta"
-          bindtap="onWecomCtaTap" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
-  <button wx:elif="{{wecom.showButton && wecom.kfUrl}}" class="wc-cta"
+  <button wx:if="{{wecom.showButton && wecom.kfUrl}}" class="wc-cta"
           bindtap="onWecomChatTap" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
+  <button wx:elif="{{wecom.showButton && wecom.qrUrl}}" class="wc-cta"
+          bindtap="onWecomCtaTap" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
   <button wx:elif="{{wecom.showButton}}" class="wc-cta" open-type="contact"
           session-from="wecom_contact_block" bindcontact="onWecomContactError"
           style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
@@ -807,10 +810,10 @@
     <view wx:if="{{wecom.title}}" class="wc-strip-title">{{wecom.title}}</view>
     <view wx:if="{{wecom.subtitle}}" class="wc-strip-sub">{{wecom.subtitle}}</view>
     <!-- See card-view notes for the three-mode branching rationale. -->
-    <button wx:if="{{wecom.showButton && wecom.qrUrl}}" class="wc-cta wc-cta-strip"
-            bindtap="onWecomCtaTap" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
-    <button wx:elif="{{wecom.showButton && wecom.kfUrl}}" class="wc-cta wc-cta-strip"
+    <button wx:if="{{wecom.showButton && wecom.kfUrl}}" class="wc-cta wc-cta-strip"
             bindtap="onWecomChatTap" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
+    <button wx:elif="{{wecom.showButton && wecom.qrUrl}}" class="wc-cta wc-cta-strip"
+            bindtap="onWecomCtaTap" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>
     <button wx:elif="{{wecom.showButton}}" class="wc-cta wc-cta-strip" open-type="contact"
             session-from="wecom_contact_block" bindcontact="onWecomContactError"
             style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.buttonLabel}}</button>

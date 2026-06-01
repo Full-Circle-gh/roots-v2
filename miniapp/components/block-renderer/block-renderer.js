@@ -1590,16 +1590,20 @@ Component({
     onWecomChatTap() {
       const w = this.data.wecom || {};
       const url = w.kfUrl;
-      if (!url) return;
+      if (!url) return this.wecomFallbackToQr();
+      // Some older WeChat clients don't expose openCustomerServiceChat —
+      // go straight to the QR picture so the customer can still add us.
+      if (typeof wx.openCustomerServiceChat !== 'function') {
+        return this.wecomFallbackToQr();
+      }
       const opts = {
         extInfo: { url },
         showMessageCard: false,
         fail: (err) => {
+          // WeCom 微信客服 couldn't open — fall back to the add-us QR if one
+          // is set, otherwise just tell the customer chat is unavailable.
           console.warn('openCustomerServiceChat failed', err);
-          wx.showToast({
-            title: this.properties.lang === 'cn' ? '客服暂不可用' : 'Chat unavailable',
-            icon: 'none',
-          });
+          this.wecomFallbackToQr(true);
         },
       };
       // corpId is required by wx.openCustomerServiceChat for 企业微信
@@ -1607,6 +1611,22 @@ Component({
       // Only pass it when set so the API can pick the right routing.
       if (w.corpId) opts.corpId = w.corpId;
       wx.openCustomerServiceChat(opts);
+    },
+    // Fallback for the WeCom CTA: preview the 联系我 QR so a long-press →
+    // 识别二维码 still lets the customer add the WeCom contact. When no QR
+    // is configured, surface a toast instead of failing silently.
+    wecomFallbackToQr(fromChatFail) {
+      const url = this.data.wecom?.qrUrl;
+      if (url) {
+        wx.previewImage({ urls: [url], current: url });
+        return;
+      }
+      if (fromChatFail) {
+        wx.showToast({
+          title: this.properties.lang === 'cn' ? '客服暂不可用' : 'Chat unavailable',
+          icon: 'none',
+        });
+      }
     },
     onWecomContactError(e) {
       // <button open-type="contact"> emits this when no CSR is bound.
