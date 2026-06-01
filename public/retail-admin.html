@@ -8192,6 +8192,70 @@
               <input type="checkbox" id="cfg-cs-show_order"> Order detail — under status timeline
             </label>
           </div>
+
+          <!-- Floating-bubble appearance -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Floating bubble look · 悬浮按钮样式</h3>
+              <div class="muted">Style the round chat bubble on the Home & Favorites tabs — size, shape, colour, icon and where it sits. · 自定义首页与收藏页的悬浮客服按钮。</div>
+            </div>
+            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-start;">
+              <div style="flex: 1; min-width: 160px;">
+                <label class="muted" style="display:block; margin-bottom:4px;">Size · 大小</label>
+                <select id="cfg-cs-fab_size" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
+                  <option value="sm">Small · 小</option>
+                  <option value="md">Medium · 中</option>
+                  <option value="lg">Large · 大</option>
+                </select>
+              </div>
+              <div style="flex: 1; min-width: 160px;">
+                <label class="muted" style="display:block; margin-bottom:4px;">Shape · 形状</label>
+                <select id="cfg-cs-fab_shape" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
+                  <option value="circle">Circle · 圆形</option>
+                  <option value="rounded">Rounded square · 圆角方形</option>
+                  <option value="pill">Pill + label · 胶囊带文字</option>
+                </select>
+              </div>
+            </div>
+            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-top: 12px;">
+              <div style="flex: 1; min-width: 160px;">
+                <label class="muted" style="display:block; margin-bottom:4px;">Icon · 图标</label>
+                <select id="cfg-cs-fab_icon" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
+                  <option value="dots">Dots ••• · 圆点</option>
+                  <option value="bubble">Chat bubble 💬 · 对话气泡</option>
+                  <option value="question">Question ? · 问号</option>
+                  <option value="headset">Headset 🎧 · 耳麦</option>
+                  <option value="custom">Custom emoji · 自定义表情</option>
+                </select>
+              </div>
+              <div style="flex: 1; min-width: 160px;" id="cs-fab-emoji-wrap">
+                <label class="muted" style="display:block; margin-bottom:4px;">Custom emoji · 自定义</label>
+                <input type="text" id="cfg-cs-fab_icon_emoji" placeholder="🌱" maxlength="4" style="width:100%;text-align:center;font-size:18px;">
+              </div>
+            </div>
+            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-top: 12px;">
+              <div style="min-width: 120px;">
+                <label class="muted" style="display:block; margin-bottom:4px;">Colour · 颜色</label>
+                <div class="row" style="gap: 8px; align-items: center;">
+                  <input type="color" id="cfg-cs-fab_color" value="#365329" style="width:48px;height:38px;padding:0;border:1px solid #d8d2c4;border-radius:8px;background:#fff;cursor:pointer;">
+                  <span class="cs-swatch" data-color="#365329" title="Forest green" style="width:24px;height:24px;border-radius:6px;background:#365329;cursor:pointer;border:1px solid rgba(0,0,0,.1);"></span>
+                  <span class="cs-swatch" data-color="#E8DCCB" title="Oat" style="width:24px;height:24px;border-radius:6px;background:#E8DCCB;cursor:pointer;border:1px solid rgba(0,0,0,.1);"></span>
+                  <span class="cs-swatch" data-color="#C2674A" title="Terracotta" style="width:24px;height:24px;border-radius:6px;background:#C2674A;cursor:pointer;border:1px solid rgba(0,0,0,.1);"></span>
+                </div>
+              </div>
+              <div style="flex: 1; min-width: 130px;">
+                <label class="muted" style="display:block; margin-bottom:4px;">Side · 位置</label>
+                <select id="cfg-cs-fab_side" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
+                  <option value="right">Right · 右</option>
+                  <option value="left">Left · 左</option>
+                </select>
+              </div>
+              <div style="flex: 1; min-width: 130px;">
+                <label class="muted" style="display:block; margin-bottom:4px;">Height off bottom (rpx) · 距底高度</label>
+                <input type="number" id="cfg-cs-fab_bottom" placeholder="220" min="0" max="800" style="width:100%;">
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- ────── LEGAL ────── -->
@@ -11618,6 +11682,21 @@ function applyCsModeUI() {
 }
 document.addEventListener('change', e => {
   if (e.target.id === 'cfg-cs-mode') applyCsModeUI();
+  if (e.target.id === 'cfg-cs-fab_icon') applyCsFabIconUI();
+});
+// Show the custom-emoji input only when icon = custom
+function applyCsFabIconUI() {
+  const v = $('#cfg-cs-fab_icon')?.value || 'dots';
+  const wrap = document.getElementById('cs-fab-emoji-wrap');
+  if (wrap) wrap.style.display = (v === 'custom') ? '' : 'none';
+}
+// Colour preset swatches set the colour input
+document.addEventListener('click', e => {
+  const sw = e.target.closest('.cs-swatch');
+  if (sw && sw.dataset.color) {
+    const inp = $('#cfg-cs-fab_color');
+    if (inp) inp.value = sw.dataset.color;
+  }
 });
 function renderCsQrPreview() {
   const url = $('#cfg-cs-qr_image_url')?.value || '';
@@ -11762,8 +11841,17 @@ async function loadConfig() {
     $('#cfg-cs-show_product').checked  = cs.show_product !== false;  // default ON
     $('#cfg-cs-show_checkout').checked = cs.show_checkout !== false; // default ON
     $('#cfg-cs-show_order').checked    = cs.show_order !== false;    // default ON
+    // Floating-bubble appearance
+    $('#cfg-cs-fab_size').value       = cs.fab_size  || 'md';
+    $('#cfg-cs-fab_shape').value      = cs.fab_shape || 'circle';
+    $('#cfg-cs-fab_color').value      = cs.fab_color || '#365329';
+    $('#cfg-cs-fab_icon').value       = cs.fab_icon  || 'dots';
+    $('#cfg-cs-fab_icon_emoji').value = cs.fab_icon_emoji || '';
+    $('#cfg-cs-fab_side').value       = cs.fab_side  || 'right';
+    $('#cfg-cs-fab_bottom').value     = (cs.fab_bottom != null ? cs.fab_bottom : 220);
     renderCsQrPreview();
     applyCsModeUI();
+    applyCsFabIconUI();
     $('#cfg-legal-privacy-en').value = c.legal?.privacy?.body_en || '';
     $('#cfg-legal-privacy-cn').value = c.legal?.privacy?.body_cn || '';
     $('#cfg-legal-terms-en').value   = c.legal?.terms?.body_en   || '';
@@ -11878,6 +11966,13 @@ async function saveConfig() {
     'customer_service.show_product':  $('#cfg-cs-show_product').checked,
     'customer_service.show_checkout': $('#cfg-cs-show_checkout').checked,
     'customer_service.show_order':    $('#cfg-cs-show_order').checked,
+    'customer_service.fab_size':       $('#cfg-cs-fab_size').value,
+    'customer_service.fab_shape':      $('#cfg-cs-fab_shape').value,
+    'customer_service.fab_color':      $('#cfg-cs-fab_color').value,
+    'customer_service.fab_icon':       $('#cfg-cs-fab_icon').value,
+    'customer_service.fab_icon_emoji': $('#cfg-cs-fab_icon_emoji').value.trim(),
+    'customer_service.fab_side':       $('#cfg-cs-fab_side').value,
+    'customer_service.fab_bottom':     parseInt($('#cfg-cs-fab_bottom').value, 10) || 220,
     'legal.privacy.body_en': $('#cfg-legal-privacy-en').value,
     'legal.privacy.body_cn': $('#cfg-legal-privacy-cn').value,
     'legal.terms.body_en':   $('#cfg-legal-terms-en').value,

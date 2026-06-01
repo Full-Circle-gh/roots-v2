@@ -17,14 +17,17 @@
   <button
     wx:elif="{{variant === 'fab'}}"
     class="cs-fab"
+    style="{{fabStyle}}"
     open-type="{{openType}}"
     bindcontact="onContact"
     bindtap="onTap">
-    <view class="cs-fab-icon">
+    <view wx:if="{{fabIsDots}}" class="cs-fab-icon">
       <view class="cs-fab-dot"></view>
       <view class="cs-fab-dot"></view>
       <view class="cs-fab-dot"></view>
     </view>
+    <text wx:else class="cs-fab-glyph" style="font-size:{{fabGlyphSize}}rpx;">{{fabGlyph}}</text>
+    <text wx:if="{{fabShowLabel}}" class="cs-fab-label">{{displayLabel}}</text>
   </button>
 
   <!-- Inline variant: small pill (checkout header, product page, order page) -->

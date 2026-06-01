@@ -2,6 +2,7 @@
 .cs-row, .cs-fab, .cs-pill {
   background: none; border: none; padding: 0; margin: 0;
   line-height: 1; display: block;
+  box-sizing: border-box;
 }
 .cs-row::after, .cs-fab::after, .cs-pill::after { border: none; }
 
@@ -28,15 +29,22 @@
 }
 
 /* ─── FAB variant — floating bubble ─── */
+/* Dimensions/colour/position come from the inline style (admin config).
+   Keep only the structural bits here. min-width:0 defeats the WeChat
+   <button> default min-width that otherwise stretched it into an oval. */
 .cs-fab {
   position: fixed;
-  right: 28rpx;
   bottom: 220rpx;
+  right: 28rpx;
   width: 96rpx; height: 96rpx;
+  min-width: 0;
+  padding: 0;
   border-radius: 50%;
   background: #365329;
-  box-shadow: 0 6rpx 24rpx rgba(54, 83, 41, .35);
-  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6rpx 24rpx rgba(0, 0, 0, .22);
+  display: flex; align-items: center; justify-content: center; gap: 10rpx;
+  box-sizing: border-box;
+  overflow: hidden;
   z-index: 50;
 }
 .cs-fab-icon {
@@ -45,6 +53,13 @@
 .cs-fab-dot {
   width: 12rpx; height: 12rpx; border-radius: 50%;
   background: #fff;
+}
+.cs-fab-glyph {
+  color: #fff; line-height: 1; font-weight: 700;
+}
+.cs-fab-label {
+  color: #fff; font-size: calc(26rpx * var(--font-scale)); font-weight: 600;
+  white-space: nowrap;
 }
 
 /* ─── Pill variant — inline small button ─── */
