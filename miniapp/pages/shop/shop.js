@@ -478,6 +478,10 @@ Page({
       if (isList) {
         currentScroll = tail[0]?.scrollTop || 0;
         containerTop  = tail[1]?.top       || 0;
+        // Reading line for active-category detection lives ~1/3 down the
+        // list viewport (see onListScroll) so the highlight tracks the
+        // section dominating the upper view, not just the literal top pixel.
+        this._listViewportH = tail[1]?.height || 0;
       } else {
         currentScroll = tail[0]?.scrollTop || 0;
       }
@@ -515,7 +519,20 @@ Page({
   // Bound to the list-main scroll-view's bindscroll. Throttled implicitly
   // since setData inside _updateActive only fires on category transitions.
   onListScroll(e) {
-    this._updateActiveByScrollTop(e.detail.scrollTop, LIST_STICKY_OFFSET_PX);
+    const st = e.detail.scrollTop;
+    // At the very top, keep "ALL" active (the sidebar's default tab).
+    if (st <= 2) {
+      if (this.data.activeCategory !== '') this._setActive('');
+      return;
+    }
+    // Otherwise use a reading line ~1/3 down the list viewport so the
+    // highlighted category matches the section filling the upper view —
+    // short sections (1–2 products) no longer leave the highlight a
+    // category behind what's on screen. Falls back to the fixed offset
+    // until the viewport height has been measured.
+    const h = this._listViewportH || 0;
+    const threshold = h > 0 ? Math.round(h * 0.3) : LIST_STICKY_OFFSET_PX;
+    this._updateActiveByScrollTop(st, threshold);
   },
 
   _setActive(name) {
