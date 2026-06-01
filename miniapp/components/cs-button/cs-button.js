@@ -91,9 +91,12 @@ Component({
         wx.showToast({ title: 'Update WeChat to use chat', icon: 'none' });
         return;
       }
+      // WeChat expects the 微信客服 link inside extInfo.url — NOT as a
+      // top-level `url`. Passing it at the top level silently drops the
+      // link, so the chat never opens. corpId is the enterprise's 企业ID.
       wx.openCustomerServiceChat({
         corpId,
-        url,
+        extInfo: { url },
         showMessageCard: false,
         fail: (e) => {
           console.warn('[cs] openCustomerServiceChat failed', e);
