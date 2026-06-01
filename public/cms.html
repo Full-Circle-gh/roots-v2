@@ -7856,7 +7856,7 @@ function renderBlockBody(b) {
         ? `<div class="wc-l-qr"><div class="wc-l-qr-frame">${qrUrl ? `<img src="${escapeAttr(qrUrl)}" alt="">` : `<div class="wc-l-qr-empty">${ICONS.image_placeholder}</div>`}</div>${b.agent_name ? `<div class="wc-l-qr-name">${escapeHtml(b.agent_name)}</div>` : ''}<div class="wc-l-qr-hint">${escapeHtml(hint)}</div></div>`
         : '';
       d.innerHTML = `
-        ${mascotOn ? `<img class="wc-l-mascot" src="/brand/mascot-flex-ink.png" alt="">` : ''}
+        ${mascotOn ? `<img class="wc-l-mascot" src="/assets/brand/mascot-flex-ink.png" alt="">` : ''}
         <div class="wc-l-card" style="background:${bgVar};color:${fgVar}">
           ${k.en || k.cn ? `<div class="wc-l-badge" style="background:${accent};color:${accentFg}">${biLabel(k.en, k.cn)}</div>` : ''}
           ${t.en || t.cn ? `<div class="wc-l-title">${biLabel(t.en, t.cn)}</div>` : ''}
