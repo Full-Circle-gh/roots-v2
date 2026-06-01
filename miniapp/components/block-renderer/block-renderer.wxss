@@ -2592,6 +2592,9 @@
 .wc-loop-card.wc-loop-flat {
   box-shadow: none;
 }
+.wc-loop-card.wc-loop-noframe {
+  border: none;
+}
 .wc-loop-paper {
   position: absolute;
   inset: 0;
