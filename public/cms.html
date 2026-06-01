@@ -9584,10 +9584,22 @@ function buildReviewForm(m, b) {
     const blk = state.draft.find(x => x.id === b.id);
     return blk ? getReviews(blk).slice() : [];
   }
+  // Point the carousel preview at review `idx` so the phone always shows the
+  // entry being edited. Writes to the LIVE state block (the `b`/`reviews`
+  // closures go stale after an edit) and only re-renders if it actually moved.
+  function showInPreview(idx) {
+    if (view !== 'carousel') return;  // card view always shows the first review
+    const blk = state.draft.find(x => x.id === b.id);
+    if (blk && blk._previewReviewIdx !== idx) {
+      blk._previewReviewIdx = idx;
+      renderPreview();
+    }
+  }
   function updateReview(idx, patch) {
     const next = currentReviews();
     next[idx] = { ...next[idx], ...patch };
-    updateBlockSilent(b.id, { reviews: next });
+    const follow = view === 'carousel' ? { _previewReviewIdx: idx } : {};
+    updateBlockSilent(b.id, { reviews: next, ...follow });
   }
   function removeReview(idx) {
     const next = currentReviews();
@@ -9608,6 +9620,9 @@ function buildReviewForm(m, b) {
   reviews.forEach((r, idx) => {
     const card = document.createElement('div');
     card.style.cssText = 'background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; padding: 10px 12px; margin-top: 8px; position: relative;';
+    // Focusing any field in this card flips the carousel preview to it, so the
+    // phone always mirrors the review you're editing (not just the dot you tapped).
+    card.addEventListener('focusin', () => showInPreview(idx));
     const head = document.createElement('div');
     head.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;';
     head.innerHTML = `<div style="font: 700 10px var(--bf-toni); letter-spacing: .12em; color: var(--text-2)">${B(`REVIEW ${idx + 1}`, `评价 ${idx + 1}`)}</div>`;
