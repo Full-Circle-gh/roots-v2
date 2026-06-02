@@ -11231,11 +11231,40 @@ function zoneEnglishName(z) {
   return _zoneEnMap.get(z.match_district) || _zoneEnMap.get(z.match_city) || null;
 }
 
+// Province a zone belongs to, so the admin table can group rows under a
+// province heading instead of one flat mixed-granularity list. GZ districts →
+// Guangdong; a city → its parent province (catalogue lookup); a province-named
+// 'city' row (江苏省) → itself; HK → its SAR. Built once.
+let _zoneProvMap = null;
+const HK_CN = '香港特别行政区';
+function zoneProvince(z) {
+  if (!_zoneProvMap) {
+    _zoneProvMap = new Map();
+    for (const c of (CHINA_REGIONS.cities || [])) {
+      if (c.name_cn && c.province_cn) {
+        _zoneProvMap.set(c.name_cn, { cn: c.province_cn, en: c.province_en || c.province_cn });
+      }
+      if (c.province_cn) {
+        _zoneProvMap.set(c.province_cn, { cn: c.province_cn, en: c.province_en || c.province_cn });
+      }
+    }
+  }
+  if (z.zone_type === 'gz_district') return { cn: '广东省', en: 'Guangdong' };
+  if (z.match_district && HK_DISTRICTS_EN[z.match_district]) return { cn: HK_CN, en: 'Hong Kong' };
+  if (z.match_city && HK_DISTRICTS_EN[z.match_city]) return { cn: HK_CN, en: 'Hong Kong' };
+  return _zoneProvMap.get(z.match_city) || _zoneProvMap.get(z.match_district) || { cn: '其他', en: 'Other' };
+}
+
 router.get('/api/retail-admin/delivery-zones', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
     `SELECT * FROM retail_delivery_zones ORDER BY zone_type ASC, sort_order ASC, id ASC`
   ).all();
-  for (const r of rows) r.name_en = zoneEnglishName(r);
+  for (const r of rows) {
+    r.name_en = zoneEnglishName(r);
+    const p = zoneProvince(r);
+    r.province_cn = p.cn;
+    r.province_en = p.en;
+  }
   res.json({ success: true, data: rows });
 });
 

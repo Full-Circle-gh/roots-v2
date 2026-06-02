@@ -2196,6 +2196,17 @@
   .dz-sd-yes { color: var(--st-delivered); font-weight: 600; }
   .dz-sd-no  { color: var(--text-4); }
 
+  /* Province grouping header — a sticky-feeling section divider, not a clickable row */
+  .dz-group-row > td {
+    background: var(--bg-elev-1);
+    border-top: 1px solid var(--line);
+    padding: 8px 12px;
+  }
+  .dz-group-cn    { font-weight: 700; color: var(--text-1); }
+  .dz-group-en    { color: var(--text-3); font-size: 12px; margin-left: 6px; }
+  .dz-group-count { color: var(--text-4); font-size: 11px; margin-left: 8px; }
+  .dz-group-count::before { content: '· '; }
+
   /* ── Delivery Zones View tweaks (per-operator) — row density + zone-badge
      style. Defaults (comfortable / pill) reproduce the base look. ── */
   #dz-table.dz-compact th { padding-top: 6px; padding-bottom: 6px; }
@@ -13885,6 +13896,36 @@ function dzvToggle() { const p = document.getElementById('dzv-pop'); if (!p) ret
 function dzvClose() { const p = document.getElementById('dzv-pop'); if (p) p.hidden = true; document.removeEventListener('mousedown', dzvOutside); }
 function dzvOutside(e) { if (!(e.target.closest && e.target.closest('.ovp-wrap'))) dzvClose(); }
 
+// Group zones under their province so the table reads as a hierarchy instead
+// of a flat mixed list (whole-province rows next to single cities). Guangdong
+// (the live area) floats to the top, "Other" sinks to the bottom, the rest are
+// alphabetical by English province name. Order within a group is preserved.
+function groupZonesByProvince(rows) {
+  const map = new Map();
+  const order = [];
+  for (const z of rows) {
+    const key = z.province_cn || 'Other';
+    if (!map.has(key)) { map.set(key, { cn: z.province_cn || '其他', en: z.province_en || 'Other', rows: [] }); order.push(key); }
+    map.get(key).rows.push(z);
+  }
+  const groups = order.map(k => map.get(k));
+  const rank = g => (g.cn === '广东省' ? 0 : (g.cn === '其他' ? 2 : 1));
+  groups.sort((a, b) => (rank(a) - rank(b)) || (a.en || '').localeCompare(b.en || ''));
+  return groups;
+}
+function zoneGroupHeaderHtml(g, colspan) {
+  return `<tr class="dz-group-row"><td colspan="${colspan}">
+    <span class="dz-group-cn">${escapeHtml(g.cn)}</span>
+    ${g.en && g.en !== g.cn ? `<span class="dz-group-en">${escapeHtml(g.en)}</span>` : ''}
+    <span class="dz-group-count">${g.rows.length}</span>
+  </td></tr>`;
+}
+function groupedZoneBodyHtml(rows, colspan, rowFn) {
+  return groupZonesByProvince(rows)
+    .map(g => zoneGroupHeaderHtml(g, colspan) + g.rows.map(rowFn).join(''))
+    .join('');
+}
+
 function renderZoneTable() {
   const head = $('#dz-thead');
   const body = $('#dz-tbody');
@@ -13909,7 +13950,7 @@ function renderZoneTable() {
       body.innerHTML = `<tr><td colspan="6" class="muted">${q ? 'No matches.' : 'No zones yet — click + Add zone above.'}</td></tr>`;
       return;
     }
-    body.innerHTML = rows.map(z => `
+    body.innerHTML = groupedZoneBodyHtml(rows, 6, z => `
       <tr class="dz-row" onclick="openZoneDrawer(${z.id})">
         <td>${zoneCellHtml(z)}</td>
         <td class="numeric">¥${z.base_fee ?? 0}</td>
@@ -13924,7 +13965,7 @@ function renderZoneTable() {
           </button>
           <button class="btn dz-rowact-btn dz-rowact-del" title="Delete · 删除" onclick="deleteZone(${z.id}, '${zoneLabel(z).replace(/'/g,'')}')">×</button>
         </td>
-      </tr>`).join('');
+      </tr>`);
   } else {
     head.innerHTML = `<tr>
       <th>Zone · 配送区 <span class="help-i" data-tip="The delivery area. GZ chip = a Guangzhou district (e.g. 天河区). CITY = anywhere else (e.g. 深圳). · 配送区域。GZ = 广州市辖区;CITY = 其他城市。">?</span></th>
@@ -13939,7 +13980,7 @@ function renderZoneTable() {
       body.innerHTML = `<tr><td colspan="7" class="muted">${q ? 'No matches.' : 'No zones yet.'}</td></tr>`;
       return;
     }
-    body.innerHTML = rows.map(z => `
+    body.innerHTML = groupedZoneBodyHtml(rows, 7, z => `
       <tr class="dz-row" onclick="openZoneDrawer(${z.id})">
         <td>${zoneCellHtml(z)}</td>
         <td>${z.day_only ? 'Day-only · 仅按日' : 'Time-slot · 按时段'}</td>
@@ -13953,7 +13994,7 @@ function renderZoneTable() {
           </button>
           <button class="btn dz-rowact-btn dz-rowact-del" title="Delete · 删除" onclick="deleteZone(${z.id}, '${zoneLabel(z).replace(/'/g,'')}')">×</button>
         </td>
-      </tr>`).join('');
+      </tr>`);
   }
 }
 
