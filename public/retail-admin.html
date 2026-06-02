@@ -5823,17 +5823,174 @@
     <div class="card" style="margin-bottom: var(--s4);">
       <h3 style="font-size: 13px; margin-bottom: 12px;">Global defaults · 全局默认</h3>
       <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Default free-delivery threshold ¥ · 默认包邮门槛 <span class="help-i" data-tip="Cart subtotal that unlocks free delivery when a zone doesn't set its own value. Most zones leave Free over ¥ blank and inherit this number. · 配送区未设「满 ¥ 免运费」时使用此值。大部分配送区留空,继承此默认值。">?</span></label>
-          <input type="number" id="dlv-default-free" placeholder="399" style="width: 160px;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">Used when a zone leaves its own blank. · 配送区未设时使用。</div>
-        </div>
         <div class="field" style="margin: 0; flex: 1; min-width: 240px;">
           <label class="stacked">Kitchen address (customer-facing) · 厨房地址(顾客可见) <span class="help-i" data-tip="Shown on the mini-app checkout when a customer's address doesn't match any zone — so they know where you ship from. Not used for distance calculations. · 当顾客地址不在任何配送区时,在小程序结账页显示给顾客,告知厨房位置。不用于距离计算。">?</span></label>
           <input type="text" id="dlv-kitchen-address" placeholder="广州市天河区 (Roots Kitchen)" style="width: 100%;">
         </div>
         <button class="btn btn-primary" onclick="saveDeliveryDefaults()">Save defaults · 保存默认值</button>
       </div>
+    </div>
+
+    <!-- ────── DELIVERY & PICKUP FEES ────── (single home, consolidated 2026-06-02 —
+         these previously lived in Settings → Checkout & fees. The server reads the
+         same fees.* / pickup.window keys for all pricing, so this is a UI move only;
+         a zone's own Base fee / Free-over / packing still overrides the globals below. -->
+    <h2 style="margin-top: var(--s5);">Delivery &amp; pickup fees · 配送与自提费用</h2>
+    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.6;">
+      The ¥ customers pay across delivery methods and store pickup. A zone's own <b>Base fee</b> / <b>Free-over</b> / packing (set on each zone above) overrides these global values for that area. · 各配送方式与到店自提收取的费用。各配送区自设的基础运费 / 免运门槛 / 包装费会覆盖此处的全局值。
+    </div>
+
+          <!-- FREE SHIPPING THRESHOLD -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Free-shipping threshold · 包邮门槛</h3>
+              <div class="muted">When a customer's subtotal reaches this number AND they pick Standard delivery, shipping is free. The Cart shows a progress bar — "¥XX more for free shipping" — that fills up as they add items. · 当顾客小计达到该金额且选择标准配送时,运费免除。购物车会显示"再凑 ¥XX 包邮"的进度条,随加购上涨。</div>
+            </div>
+            <div class="illus-row">
+              <div class="mini-phone">
+                <div class="mp-notch"></div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 6px; background: var(--accent); border-radius: 1px"></div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 22px; background: var(--bg-elev-2); border-radius: 3px; padding: 4px;">
+                  <div style="font-size: 7px; color: var(--text-1); font-weight: 600; margin-bottom: 3px">¥<span id="pv-free-rem">85</span> more for free shipping</div>
+                  <div style="height: 4px; background: #1a1a1f; border-radius: 2px; overflow: hidden">
+                    <div style="height: 100%; width: 78%; background: var(--accent); border-radius: 2px"></div>
+                  </div>
+                </div>
+                <div class="ms-tile" style="left: 4px; top: 60px; right: 4px; height: 12px"></div>
+                <div class="ms-tile" style="left: 4px; top: 76px; right: 4px; height: 12px"></div>
+                <div style="position: absolute; left: 4px; right: 4px; bottom: 4px; height: 14px; background: var(--accent); border-radius: 3px"></div>
+              </div>
+              <div class="ctrl">
+                <div class="field" style="margin: 0;">
+                  <label class="stacked">Threshold · 门槛</label>
+                  <span class="yen-input"><input type="number" id="cfg-fees-freeShippingThreshold"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px;">
+                  Set high to push average-order-value up; set low (or 0) to be more generous. Set to <b>0</b> for "always free shipping" on standard delivery.<br>
+                  This is the <b>global default</b> — it applies to any address whose delivery zone leaves "Free-over" blank, and powers the Cart's "¥XX more for free shipping" bar. A zone with its own <b>Free-over</b> (edit a zone above) overrides this for that area.<br>
+                  Same-day delivery never qualifies for free shipping — it always charges its own fee.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- STANDARD SHIPPING FEE -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Standard shipping fee · 标准运费</h3>
+              <div class="muted">What customers pay for the default delivery method (1–3 day SF Express). Shown next to the "Standard delivery" radio on the Checkout page. Free when subtotal hits the threshold above. · 顾客选择默认配送(1–3 天顺丰)时支付的运费;显示在结算页"标准配送"旁。小计达到上方门槛即免。</div>
+            </div>
+            <div class="illus-row">
+              <div class="mini-phone">
+                <div class="mp-notch"></div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 6px; background: var(--accent); border-radius: 1px"></div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 22px; background: var(--bg-elev-1); border: 1.5px solid var(--accent); border-radius: 3px; padding: 4px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-1); font-weight: 600">
+                    <span>Standard</span><span>¥<span id="pv-std-fee">12</span></span>
+                  </div>
+                  <div style="font-size: 6px; color: var(--text-3); margin-top: 2px">1–3 day SF Express</div>
+                </div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 56px; background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: 3px; padding: 4px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-3)">
+                    <span>Same-day</span><span>¥18</span>
+                  </div>
+                </div>
+                <div style="position: absolute; left: 4px; right: 4px; bottom: 4px; height: 14px; background: var(--accent); border-radius: 3px"></div>
+              </div>
+              <div class="ctrl">
+                <div class="field" style="margin: 0;">
+                  <label class="stacked">Standard fee · 标准费</label>
+                  <span class="yen-input"><input type="number" id="cfg-fees-standardShipping"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px;">
+                  Charged on every standard-delivery order unless the subtotal hits the free-shipping threshold.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SAME-DAY FEE -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Same-day delivery fee · 当日达运费</h3>
+              <div class="muted">Premium rush option for the GZ delivery radius. Always charges the full amount — does NOT qualify for the free-shipping threshold even if the order is large. · 广州配送范围内的当日达加急;无论订单多大都按全额收取,不享受包邮门槛。</div>
+            </div>
+            <div class="illus-row">
+              <div class="mini-phone">
+                <div class="mp-notch"></div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 6px; background: var(--accent); border-radius: 1px"></div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 22px; background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: 3px; padding: 4px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-3)">
+                    <span>Standard</span><span>¥12</span>
+                  </div>
+                </div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 50px; background: var(--bg-elev-1); border: 1.5px solid var(--accent); border-radius: 3px; padding: 4px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-1); font-weight: 600">
+                    <span>Same-day</span><span>¥<span id="pv-sameday-fee">18</span></span>
+                  </div>
+                  <div style="font-size: 6px; color: var(--text-3); margin-top: 2px">Within GZ, 2hr</div>
+                </div>
+                <div style="position: absolute; left: 4px; right: 4px; bottom: 4px; height: 14px; background: var(--accent); border-radius: 3px"></div>
+              </div>
+              <div class="ctrl">
+                <div class="field" style="margin: 0;">
+                  <label class="stacked">Same-day fee · 当日达费用</label>
+                  <span class="yen-input"><input type="number" id="cfg-fees-sameDayDelivery"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px;">
+                  Charged on every same-day order regardless of cart size. Customers see this fee next to the radio at checkout.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- STORE PICKUP PACKING FEE -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Store pickup packing fee · 自提包装费</h3>
+              <div class="muted">A flat fee added to every <b>Store pickup</b> order so the store is paid for boxing the items. Charged once per order regardless of item count. Set to <b>0</b> for no pickup packing fee. · 每笔"到店自提"订单收取的固定包装费,按单收取一次,与件数无关。设为 <b>0</b> 则不收。</div>
+            </div>
+            <div class="illus-row">
+              <div class="ctrl" style="flex: 1;">
+                <div class="field" style="margin: 0;">
+                  <label class="stacked">Packing fee · 包装费</label>
+                  <span class="yen-input"><input type="number" id="cfg-fees-pickupPackingFee"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px;">
+                  Shows as a "Packing fee" line on the pickup checkout breakdown. Delivery orders keep their own per-zone packing fee (set under Delivery zones).
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- STORE PICKUP HOURS -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Store pickup hours · 到店自提时间</h3>
+              <div class="muted">The daily window customers can choose to collect an order at checkout when they pick <b>Store pickup</b>. Times outside this window are blocked. Pickup itself is turned on per store (Kitchen app → Products → Stock view → ✏️ edit a store → "Offer store pickup"). · 顾客在结算选择"到店自提"时可选的每日取货时间窗,窗口之外不可选。自提开关在每个门店单独设置(厨房端 → 产品 → 库存视图 → ✏️ 编辑门店 → "提供到店自提")。</div>
+            </div>
+            <div class="illus-row">
+              <div class="ctrl" style="flex: 1;">
+                <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+                  <div class="field" style="margin: 0;">
+                    <label class="stacked">Opens · 开始</label>
+                    <input type="time" id="cfg-pickup-open">
+                  </div>
+                  <div class="field" style="margin: 0;">
+                    <label class="stacked">Closes · 结束</label>
+                    <input type="time" id="cfg-pickup-close">
+                  </div>
+                </div>
+                <div class="helper" style="margin-top: 10px;">
+                  One global window for all pickup-enabled stores. Leave the default (10:00–20:00) if unsure.
+                </div>
+              </div>
+            </div>
+          </div>
+
+    <div class="row" style="gap: 12px; margin-bottom: var(--s4);">
+      <button class="btn btn-primary" onclick="saveDeliveryFees()">Save fees · 保存费用</button>
+      <span id="dlv-fees-status" style="font-size: 12px; align-self: center;"></span>
     </div>
 
     <div class="card" style="margin-bottom: var(--s4);">
@@ -7827,153 +7984,9 @@
         <div class="sub-panel" id="sub-checkout">
           <h2>Checkout &amp; fees · 结算与费用</h2>
 
-          <!-- FREE SHIPPING THRESHOLD -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Free-shipping threshold · 包邮门槛</h3>
-              <div class="muted">When a customer's subtotal reaches this number AND they pick Standard delivery, shipping is free. The Cart shows a progress bar — "¥XX more for free shipping" — that fills up as they add items. · 当顾客小计达到该金额且选择标准配送时,运费免除。购物车会显示"再凑 ¥XX 包邮"的进度条,随加购上涨。</div>
-            </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 6px; background: var(--accent); border-radius: 1px"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 22px; background: var(--bg-elev-2); border-radius: 3px; padding: 4px;">
-                  <div style="font-size: 7px; color: var(--text-1); font-weight: 600; margin-bottom: 3px">¥<span id="pv-free-rem">85</span> more for free shipping</div>
-                  <div style="height: 4px; background: #1a1a1f; border-radius: 2px; overflow: hidden">
-                    <div style="height: 100%; width: 78%; background: var(--accent); border-radius: 2px"></div>
-                  </div>
-                </div>
-                <div class="ms-tile" style="left: 4px; top: 60px; right: 4px; height: 12px"></div>
-                <div class="ms-tile" style="left: 4px; top: 76px; right: 4px; height: 12px"></div>
-                <div style="position: absolute; left: 4px; right: 4px; bottom: 4px; height: 14px; background: var(--accent); border-radius: 3px"></div>
-              </div>
-              <div class="ctrl">
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Threshold · 门槛</label>
-                  <span class="yen-input"><input type="number" id="cfg-fees-freeShippingThreshold"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px;">
-                  Set high to push average-order-value up; set low (or 0) to be more generous. Set to <b>0</b> for "always free shipping" on standard delivery.<br>
-                  This is the <b>global default</b> — it applies to any address whose delivery zone leaves "Free-over" blank, and powers the Cart's "¥XX more for free shipping" bar. A zone with its own <b>Free-over</b> (Delivery → edit zone) overrides this for that area.<br>
-                  Same-day delivery never qualifies for free shipping — it always charges its own fee.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- STORE PICKUP HOURS -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Store pickup hours · 到店自提时间</h3>
-              <div class="muted">The daily window customers can choose to collect an order at checkout when they pick <b>Store pickup</b>. Times outside this window are blocked. Pickup itself is turned on per store (Kitchen app → Products → Stock view → ✏️ edit a store → "Offer store pickup"). · 顾客在结算选择"到店自提"时可选的每日取货时间窗,窗口之外不可选。自提开关在每个门店单独设置(厨房端 → 产品 → 库存视图 → ✏️ 编辑门店 → "提供到店自提")。</div>
-            </div>
-            <div class="illus-row">
-              <div class="ctrl" style="flex: 1;">
-                <div style="display: flex; gap: 14px; flex-wrap: wrap;">
-                  <div class="field" style="margin: 0;">
-                    <label class="stacked">Opens · 开始</label>
-                    <input type="time" id="cfg-pickup-open">
-                  </div>
-                  <div class="field" style="margin: 0;">
-                    <label class="stacked">Closes · 结束</label>
-                    <input type="time" id="cfg-pickup-close">
-                  </div>
-                </div>
-                <div class="helper" style="margin-top: 10px;">
-                  One global window for all pickup-enabled stores. Leave the default (10:00–20:00) if unsure.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- STORE PICKUP PACKING FEE -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Store pickup packing fee · 自提包装费</h3>
-              <div class="muted">A flat fee added to every <b>Store pickup</b> order so the store is paid for boxing the items. Charged once per order regardless of item count. Set to <b>0</b> for no pickup packing fee. · 每笔"到店自提"订单收取的固定包装费,按单收取一次,与件数无关。设为 <b>0</b> 则不收。</div>
-            </div>
-            <div class="illus-row">
-              <div class="ctrl" style="flex: 1;">
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Packing fee · 包装费</label>
-                  <span class="yen-input"><input type="number" id="cfg-fees-pickupPackingFee"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px;">
-                  Shows as a "Packing fee" line on the pickup checkout breakdown. Delivery orders keep their own per-zone packing fee (set under Delivery zones).
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- STANDARD SHIPPING FEE -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Standard shipping fee · 标准运费</h3>
-              <div class="muted">What customers pay for the default delivery method (1–3 day SF Express). Shown next to the "Standard delivery" radio on the Checkout page. Free when subtotal hits the threshold above. · 顾客选择默认配送(1–3 天顺丰)时支付的运费;显示在结算页"标准配送"旁。小计达到上方门槛即免。</div>
-            </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 6px; background: var(--accent); border-radius: 1px"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 22px; background: var(--bg-elev-1); border: 1.5px solid var(--accent); border-radius: 3px; padding: 4px;">
-                  <div style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-1); font-weight: 600">
-                    <span>Standard</span><span>¥<span id="pv-std-fee">12</span></span>
-                  </div>
-                  <div style="font-size: 6px; color: var(--text-3); margin-top: 2px">1–3 day SF Express</div>
-                </div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 56px; background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: 3px; padding: 4px;">
-                  <div style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-3)">
-                    <span>Same-day</span><span>¥18</span>
-                  </div>
-                </div>
-                <div style="position: absolute; left: 4px; right: 4px; bottom: 4px; height: 14px; background: var(--accent); border-radius: 3px"></div>
-              </div>
-              <div class="ctrl">
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Standard fee · 标准费</label>
-                  <span class="yen-input"><input type="number" id="cfg-fees-standardShipping"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px;">
-                  Charged on every standard-delivery order unless the subtotal hits the free-shipping threshold.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- SAME-DAY FEE -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Same-day delivery fee · 当日达运费</h3>
-              <div class="muted">Premium rush option for the GZ delivery radius. Always charges the full amount — does NOT qualify for the free-shipping threshold even if the order is large. · 广州配送范围内的当日达加急;无论订单多大都按全额收取,不享受包邮门槛。</div>
-            </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 6px; background: var(--accent); border-radius: 1px"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 22px; background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: 3px; padding: 4px;">
-                  <div style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-3)">
-                    <span>Standard</span><span>¥12</span>
-                  </div>
-                </div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 50px; background: var(--bg-elev-1); border: 1.5px solid var(--accent); border-radius: 3px; padding: 4px;">
-                  <div style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-1); font-weight: 600">
-                    <span>Same-day</span><span>¥<span id="pv-sameday-fee">18</span></span>
-                  </div>
-                  <div style="font-size: 6px; color: var(--text-3); margin-top: 2px">Within GZ, 2hr</div>
-                </div>
-                <div style="position: absolute; left: 4px; right: 4px; bottom: 4px; height: 14px; background: var(--accent); border-radius: 3px"></div>
-              </div>
-              <div class="ctrl">
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Same-day fee · 当日达费用</label>
-                  <span class="yen-input"><input type="number" id="cfg-fees-sameDayDelivery"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px;">
-                  Charged on every same-day order regardless of cart size. Customers see this fee next to the radio at checkout.
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- Shipping fees, the free-shipping threshold, the pickup packing fee, and
+               pickup hours now live in the Delivery tab (single home, consolidated
+               2026-06-02). This panel keeps only the cart-level checkout gate below. -->
 
           <!-- MIN ORDER -->
           <div class="group-card">
@@ -12551,15 +12564,10 @@ async function saveConfig() {
       if (/^#[0-9a-fA-F]{6}$/.test(custom)) return custom.toUpperCase();
       return $('#cfg-theme-notifColor').value;
     })(),
-    'fees.freeShippingThreshold':  Number($('#cfg-fees-freeShippingThreshold').value) || 0,
-    'fees.standardShipping':       Number($('#cfg-fees-standardShipping').value) || 0,
-    'fees.sameDayDelivery':        Number($('#cfg-fees-sameDayDelivery').value) || 0,
+    // Shipping fees, free-shipping threshold, pickup packing fee, and pickup window
+    // moved to the Delivery tab (saveDeliveryFees, 2026-06-02). This panel now owns
+    // only the minimum-order checkout gate.
     'fees.minOrder':               Number($('#cfg-fees-minOrder').value) || 0,
-    'fees.pickupPackingFee':       Number($('#cfg-fees-pickupPackingFee').value) || 0,
-    'pickup.window':               {
-      open:  $('#cfg-pickup-open').value  || '10:00',
-      close: $('#cfg-pickup-close').value || '20:00',
-    },
     'shop.layout':                 $('#cfg-shop-layout').value,
     'shop.defaultSort':            $('#cfg-shop-defaultSort').value,
     'shop.showSort':               $('#cfg-shop-showSort').checked,
@@ -13632,7 +13640,6 @@ async function loadDeliveryZones() {
   try {
     const cfg = await api('/api/retail-admin/config');
     const dlv = cfg?.data?.delivery || {};
-    if ($('#dlv-default-free')) $('#dlv-default-free').value = dlv.defaultFreeThreshold ?? '';
     if ($('#dlv-kitchen-address')) $('#dlv-kitchen-address').value = dlv.kitchenAddress ?? '';
     const hMode = !!dlv.holidayMode;
     const hMsg = dlv.holidayMessage || {};
@@ -14293,13 +14300,37 @@ async function deleteZone(id, label) {
 
 async function saveDeliveryDefaults() {
   const body = {
-    'delivery.defaultFreeThreshold': Number($('#dlv-default-free').value) || 0,
     'delivery.kitchenAddress':       $('#dlv-kitchen-address').value.trim(),
   };
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
     toast('Saved · 已保存');
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
+}
+
+// Delivery & pickup fees — moved here from Settings → Checkout & fees (2026-06-02).
+// Writes the same fees.* / pickup.window keys the server already reads for pricing,
+// so this is purely where the operator edits them, not a change to how prices compute.
+async function saveDeliveryFees() {
+  const body = {
+    'fees.freeShippingThreshold':  Number($('#cfg-fees-freeShippingThreshold').value) || 0,
+    'fees.standardShipping':       Number($('#cfg-fees-standardShipping').value) || 0,
+    'fees.sameDayDelivery':        Number($('#cfg-fees-sameDayDelivery').value) || 0,
+    'fees.pickupPackingFee':       Number($('#cfg-fees-pickupPackingFee').value) || 0,
+    'pickup.window':               {
+      open:  $('#cfg-pickup-open').value  || '10:00',
+      close: $('#cfg-pickup-close').value || '20:00',
+    },
+  };
+  const status = $('#dlv-fees-status');
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body });
+    if (status) { status.textContent = 'Saved · 已保存'; setTimeout(() => { if (status) status.textContent = ''; }, 2500); }
+    toast('Saved · 已保存');
+  } catch (e) {
+    if (status) status.textContent = '';
+    toast('Save failed · 保存失败: '+e.message, 'err');
+  }
 }
 
 // ════════════════════════════════════════════════════════════════

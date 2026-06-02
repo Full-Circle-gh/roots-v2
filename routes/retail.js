@@ -9872,7 +9872,7 @@ router.post('/api/retail-admin/cms/revert-draft', requireRetailAdmin, express.js
 //   • city: match_city for non-Guangzhou cities. base_fee is the flat
 //     delivery; packing_fee_per_item × total_qty (capped) adds on top.
 // Free delivery applies when subtotal ≥ zone.free_threshold (else falls
-// back to delivery.defaultFreeThreshold config).
+// back to the global fees.freeShippingThreshold config).
 // ═══════════════════════════════════════════════════════════════════════
 
 const GZ_CITY_ALIASES = new Set(['广州', '广州市', 'guangzhou', 'gz']);
