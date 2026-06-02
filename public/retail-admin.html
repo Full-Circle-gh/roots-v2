@@ -6117,6 +6117,45 @@
       </div>
     </div>
 
+    <div class="card" style="margin-bottom: var(--s4);">
+      <h3 style="font-size: 13px; margin-bottom: 4px;">
+        Default delivery — rest of China · 默认配送 — 中国其他地区
+        <span class="help-i" data-tip="One flat fee for any mainland address not covered by a zone below. Turn this on and you only need to add zones for the exceptions (cheaper provinces, same-day Guangzhou, Hong Kong). Off = addresses with no matching zone can't check out. · 适用于下方未单独设置区域的任何中国大陆地址的统一运费。开启后,您只需为「例外」添加区域(更便宜的省份、广州当日达、香港)。关闭时,无匹配区域的地址将无法结账。">?</span>
+      </h3>
+      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">A zone below always wins over this default. Guangzhou same-day and Hong Kong are unaffected. · 下方任何区域都优先于此默认值。广州当日达与香港不受影响。</div>
+      <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Status · 状态</label>
+          <label class="fc-switch">
+            <input type="checkbox" id="dlv-default-enabled">
+            <span class="fc-switch-track"></span>
+            <span id="dlv-default-status-label" style="font-size: 12px;">OFF · 关闭</span>
+          </label>
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Flat fee · 统一运费</label>
+          <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-fee" min="0" step="0.01" value="25" style="width: 90px;"></span>
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Free over · 满额免运 <span class="help-i" data-tip="Order subtotal at or above this ships free. Leave blank for never free. · 订单小计达到或超过此金额时免运费。留空表示不免运。">?</span></label>
+          <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-free" min="0" step="0.01" placeholder="329" style="width: 90px;"></span>
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Packing / item · 每件包装费 <span class="help-i" data-tip="Added per item, capped below. 0 = no packing fee. · 按每件商品加收,上限见右侧。0 = 不收包装费。">?</span></label>
+          <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-pack" min="0" step="0.01" value="0" style="width: 80px;"></span>
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Packing cap · 包装费上限</label>
+          <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-pack-cap" min="0" step="0.01" placeholder="—" style="width: 80px;"></span>
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Lead time · 备货天数 <span class="help-i" data-tip="Earliest fulfilment is this many days out. These addresses ship by date (no same-day time slots). · 最早可在此天数后发货。这些地址按日期发货(无当日时段)。">?</span></label>
+          <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="dlv-default-lead" min="0" step="1" value="3" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
+        </div>
+        <button class="btn btn-primary" onclick="saveDefaultZone()" style="align-self: flex-end;">Save · 保存</button>
+      </div>
+    </div>
+
     <!-- Toolbar: sub-tab pills, search, + Add zone -->
     <div class="row dz-toolbar">
       <div class="dz-subtabs" role="tablist">
@@ -13847,6 +13886,27 @@ async function loadDeliveryZones() {
         if (blbl) blbl.textContent = bcb.checked ? 'ON · 开启' : 'OFF · 关闭';
       });
     }
+    // Default zone — rest of China
+    const dz = dlv.defaultZone || {};
+    if ($('#dlv-default-enabled')) {
+      const on = !!dz.enabled;
+      $('#dlv-default-enabled').checked = on;
+      const dlbl = $('#dlv-default-status-label');
+      if (dlbl) dlbl.textContent = on ? 'ON · 开启' : 'OFF · 关闭';
+    }
+    if ($('#dlv-default-fee'))      $('#dlv-default-fee').value      = dz.base_fee != null ? dz.base_fee : 25;
+    if ($('#dlv-default-free'))     $('#dlv-default-free').value     = dz.free_threshold != null ? dz.free_threshold : '';
+    if ($('#dlv-default-pack'))     $('#dlv-default-pack').value     = dz.packing_fee_per_item != null ? dz.packing_fee_per_item : 0;
+    if ($('#dlv-default-pack-cap')) $('#dlv-default-pack-cap').value = dz.packing_fee_cap != null ? dz.packing_fee_cap : '';
+    if ($('#dlv-default-lead'))     $('#dlv-default-lead').value     = dz.min_lead_days != null ? dz.min_lead_days : 3;
+    const dcb = $('#dlv-default-enabled');
+    if (dcb && !dcb._wired) {
+      dcb._wired = true;
+      dcb.addEventListener('change', () => {
+        const dlbl = $('#dlv-default-status-label');
+        if (dlbl) dlbl.textContent = dcb.checked ? 'ON · 开启' : 'OFF · 关闭';
+      });
+    }
   } catch {}
 
   const r = await api('/api/retail-admin/delivery-zones');
@@ -13882,6 +13942,26 @@ async function saveBatchSchedule() {
       enabled, anchor_date: anchor, interval_days: interval, skip_dates: skip,
       message_en: ($('#batch-msg-en').value || '').trim(),
       message_cn: ($('#batch-msg-cn').value || '').trim(),
+    },
+  };
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body });
+    toast('Saved · 已保存');
+  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
+}
+
+async function saveDefaultZone() {
+  const num = (sel, fb) => { const v = parseFloat($(sel).value); return Number.isFinite(v) ? v : fb; };
+  const numOrNull = (sel) => { const raw = ($(sel).value || '').trim(); if (raw === '') return null; const v = parseFloat(raw); return Number.isFinite(v) ? v : null; };
+  const body = {
+    'delivery.defaultZone': {
+      enabled: !!$('#dlv-default-enabled').checked,
+      base_fee: num('#dlv-default-fee', 25),
+      free_threshold: numOrNull('#dlv-default-free'),
+      packing_fee_per_item: num('#dlv-default-pack', 0),
+      packing_fee_cap: numOrNull('#dlv-default-pack-cap'),
+      min_lead_days: Math.max(0, parseInt($('#dlv-default-lead').value, 10) || 0),
+      day_only: 1,
     },
   };
   try {
