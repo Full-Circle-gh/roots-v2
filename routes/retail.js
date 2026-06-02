@@ -2585,6 +2585,29 @@ function countAudience(raw) {
     .get(...params).n || 0;
 }
 
+// CN→EN for a stored city/province string so the region filter can show the
+// operator's active language. Stored values vary (广州 / 广州市 / 广东省), so we
+// key the catalogue both with and without the 市/省 suffix. CHINA_REGIONS is
+// declared later in this module but only read at request time, so it's defined.
+let _bcCityEnMap = null;
+function broadcastCityEn(cityCn) {
+  if (!cityCn) return null;
+  if (!_bcCityEnMap) {
+    _bcCityEnMap = new Map();
+    const add = (cn, en) => {
+      if (!cn || !en) return;
+      _bcCityEnMap.set(cn, en);
+      _bcCityEnMap.set(String(cn).replace(/[市省]$/, ''), en);
+    };
+    for (const c of (CHINA_REGIONS.cities || [])) {
+      add(c.name_cn, c.name_en);
+      add(c.province_cn, c.province_en);
+    }
+  }
+  const s = String(cityCn).trim();
+  return _bcCityEnMap.get(s) || _bcCityEnMap.get(s.replace(/[市省]$/, '')) || null;
+}
+
 function fanOutBroadcast(brd) {
   const db_ = tdb();
   const { where, params } = audienceWhere(brd.audience);
@@ -2663,6 +2686,7 @@ router.get('/api/retail-admin/broadcasts/regions', requireRetailAdmin, (req, res
       GROUP BY city
       ORDER BY n DESC, city ASC`
   ).all();
+  for (const r of rows) r.city_en = broadcastCityEn(r.city);
   res.json({ success: true, data: rows });
 });
 

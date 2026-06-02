@@ -13079,15 +13079,26 @@ function bcAudienceObj() {
   return { activity, tiers, cities };
 }
 function bcAudienceLabel(aud) {
+  const T = (en, cn) => (window.cuT ? cuT(en, cn) : en);
   const ACT = {
-    all: 'All active customers', buyers: 'Has ordered', never: 'Never ordered',
-    active: 'Active (last 30d)', lapsed: 'Lapsed (60d)'
+    all:    T('All active customers', '所有活跃客户'),
+    buyers: T('Has ordered', '曾下单'),
+    never:  T('Never ordered', '从未下单'),
+    active: T('Active (last 30d)', '近30天活跃'),
+    lapsed: T('Lapsed (60d)', '60天未下单'),
   };
-  const TIER = { seed: 'Seed', sprout: 'Sprout', root: 'Root', tree: 'Tree' };
+  const TIER = {
+    seed: T('Seed', '种子'), sprout: T('Sprout', '萌芽'),
+    root: T('Root', '扎根'), tree: T('Tree', '成树'),
+  };
   const bits = [ACT[aud.activity] || ACT.all];
   if (aud.tiers && aud.tiers.length) bits.push(aud.tiers.map(t => TIER[t] || t).join(', '));
   if (aud.cities && aud.cities.length) {
-    bits.push(aud.cities.length <= 2 ? aud.cities.join(', ') : aud.cities.length + ' regions');
+    if (aud.cities.length <= 2) {
+      bits.push(aud.cities.map(c => T(bcCityEn(c) || c, c)).join(', '));
+    } else {
+      bits.push(T(aud.cities.length + ' regions', aud.cities.length + ' 个地区'));
+    }
   }
   return bits.join(' · ');
 }
@@ -13107,18 +13118,29 @@ async function loadBroadcastAudienceCount() {
     $('#bc-aud-count').textContent = '?';
   }
 }
+let _bcRegions = [];
+function bcCityEn(cityCn) {
+  const r = _bcRegions.find(x => x.city === cityCn);
+  return (r && r.city_en) || null;
+}
 async function loadBroadcastRegions() {
   const wrap = $('#bc-regions');
   if (!wrap) return;
   try {
     const { data } = await api('/api/retail-admin/broadcasts/regions');
-    if (!data || !data.length) {
+    _bcRegions = data || [];
+    if (!_bcRegions.length) {
       wrap.innerHTML = '<span class="muted" style="font-size:12px;">No saved addresses yet.</span>';
       return;
     }
-    wrap.innerHTML = data.map(r =>
-      `<label class="bc-chip"><input type="checkbox" class="bc-city" value="${escapeHtml(r.city)}" onchange="bcAudienceChanged()"> ${escapeHtml(r.city)} <span class="muted">${r.n}</span></label>`
-    ).join('');
+    wrap.innerHTML = _bcRegions.map(r => {
+      // When an English city name exists, emit an "EN · 中文" text node so the
+      // page's i18n layer shows the operator's active language (and live-toggles).
+      const label = r.city_en
+        ? `${escapeHtml(r.city_en)} · ${escapeHtml(r.city)}`
+        : escapeHtml(r.city);
+      return `<label class="bc-chip"><input type="checkbox" class="bc-city" value="${escapeHtml(r.city)}" onchange="bcAudienceChanged()"> ${label} <span class="muted">${r.n}</span></label>`;
+    }).join('');
   } catch (e) {
     wrap.innerHTML = '<span class="err" style="font-size:12px;">Failed to load regions.</span>';
   }
@@ -13239,6 +13261,13 @@ document.querySelector('[data-tab="broadcasts"]').addEventListener('click', () =
   loadBroadcasts();
   loadBroadcastRegions();
   loadBroadcastAudienceCount();
+});
+// Keep the audience summary in sync when the operator flips EN/CN. The region
+// chips re-translate themselves via the i18n text-node layer; this covers the
+// computed summary line, which isn't a static "EN · 中文" node.
+if (window.onLangChange) onLangChange(() => {
+  const s = document.getElementById('bc-aud-summary');
+  if (s) s.textContent = bcAudienceLabel(bcAudienceObj());
 });
 
 // ════════════════════════════════════════════════════════════════
