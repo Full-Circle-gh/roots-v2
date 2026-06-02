@@ -101,19 +101,56 @@
     </view>
     <view class="more" data-target="{{seeAllTarget}}" bindtap="onSeeAllTap">{{seeAll}}</view>
   </view>
-  <!-- Tiles view (default). Colour usage depends on the style:
-       riso → category colour fills the tile; editorial → category colour is
-       the left accent rule; stack → category colour fills the number tag. -->
-  <view wx:if="{{tiles.length && catView === 'tiles'}}" class="grid">
-    <view wx:for="{{tiles}}" wx:key="id" class="tile"
-          style="{{catStyle === 'riso' ? 'background:' + item.bg + ';color:' + item.fg : (catStyle === 'editorial' ? 'border-left-color:' + item.bg : '')}}"
+  <!-- A · Index directory — numbered rows, colour dot, bilingual name,
+       category-coloured count pill, chevron. -->
+  <view wx:if="{{tiles.length && catStyle === 'index'}}" class="idx-list">
+    <view wx:for="{{tiles}}" wx:key="id" class="idx-row"
           data-id="{{item.id}}" bindtap="onCategoryTap">
-      <view wx:if="{{catStyle === 'stack'}}" class="tag" style="background:{{item.tagBg}};color:{{item.tagFg}}">{{item.num}}</view>
-      <view class="num">{{catStyle === 'stack' ? catWord : item.num + ' · ' + catWord}}</view>
+      <view class="idx-num">{{item.num}}</view>
+      <view class="idx-dot" style="background:{{item.bg}}"></view>
+      <view class="idx-name">
+        <view class="en">{{item.nameEn}}</view>
+        <view wx:if="{{item.nameCn}}" class="cn">{{item.nameCn}}</view>
+      </view>
+      <view class="idx-count" style="background:{{item.bg}};color:{{item.fg}}">{{item.count}}</view>
+      <view class="idx-chev">›</view>
+    </view>
+  </view>
+  <!-- B · Bento mosaic — image tiles (first a wide hero), scrim caption,
+       "NN · count" badge. Colour-fill fallback when no product photo. -->
+  <view wx:elif="{{tiles.length && catStyle === 'bento'}}" class="bento-grid">
+    <view wx:for="{{tiles}}" wx:key="id" class="bento-tile {{index === 0 ? 'hero' : ''}}"
+          style="{{item.cover ? '' : 'background:' + item.bg + ';color:' + item.fg}}"
+          data-id="{{item.id}}" bindtap="onCategoryTap">
+      <image wx:if="{{item.cover}}" src="{{item.cover}}" mode="aspectFill" class="bento-img"/>
+      <view class="bento-badge" style="background:{{item.bg}};color:{{item.fg}}">{{item.num}} · {{item.count}}</view>
+      <view class="bento-cap {{item.cover ? 'on-img' : ''}}">
+        <view class="en">{{item.nameEn}}</view>
+        <view wx:if="{{item.nameCn}}" class="cn">{{item.nameCn}}</view>
+      </view>
+    </view>
+  </view>
+  <!-- C · Sticker chips — coloured pills, ink keyline + hard shadow, dark
+       count badge. Wraps to a varying-width flow. -->
+  <view wx:elif="{{tiles.length && catStyle === 'sticker'}}" class="chip-wrap">
+    <view wx:for="{{tiles}}" wx:key="id" class="chip-pill"
+          style="background:{{item.bg}};color:{{item.fg}}"
+          data-id="{{item.id}}" bindtap="onCategoryTap">
+      <text class="en">{{item.nameEn}}</text>
+      <text wx:if="{{item.nameCn}}" class="cn">{{item.nameCn}}</text>
+      <text class="chip-count">{{item.count}}</text>
+    </view>
+  </view>
+  <!-- Classic · Tiles view (category colour fills the tile) -->
+  <view wx:elif="{{tiles.length && catView === 'tiles'}}" class="grid">
+    <view wx:for="{{tiles}}" wx:key="id" class="tile"
+          style="background:{{item.bg}};color:{{item.fg}}"
+          data-id="{{item.id}}" bindtap="onCategoryTap">
+      <view class="num">{{item.num}} · {{catWord}}</view>
       <view class="name">{{item.name}}</view>
     </view>
   </view>
-  <!-- Icons view -->
+  <!-- Classic · Icons view -->
   <view wx:elif="{{tiles.length && catView === 'icons'}}" class="icons-grid icons-cols-{{catCols}}">
     <view wx:for="{{tiles}}" wx:key="id" class="icon-tile"
           data-id="{{item.id}}" bindtap="onCategoryTap">
@@ -121,7 +158,7 @@
       <view class="icon-name">{{item.name}}</view>
     </view>
   </view>
-  <!-- Scroll view — single horizontal row, drag left/right -->
+  <!-- Classic · Scroll view — single horizontal row, drag left/right -->
   <scroll-view wx:elif="{{tiles.length && catView === 'scroll'}}" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}" class="scroll-rail">
     <view wx:for="{{tiles}}" wx:key="id" class="scroll-tile"
           data-id="{{item.id}}" bindtap="onCategoryTap">
@@ -833,52 +870,119 @@
   </view>
 </view>
 
-<view wx:elif="{{type === 'bundle' && bundle && bundle.active}}" class="bun-blk corner-{{bundleCorner}} enter-{{bundleEnter}}" style="background:{{bg}};color:{{fg}}">
-  <view wx:if="{{bundle.kicker}}" class="bun-kicker">{{bundle.kicker}}</view>
+<view wx:elif="{{type === 'bundle' && bundle && bundle.active}}" class="bun-blk bun-style-{{bundle.style}} {{bundle.riso ? 'finish-riso' : 'finish-clean'}} corner-{{bundleCorner}} enter-{{bundleEnter}}" style="background:{{bg}};color:{{fg}}">
+  <view class="bun-inner" style="{{bundle.innerCss}}">
 
   <!-- Variant pills — tap to swap which bundle shows below. Hidden when
-       there's only one variant so legacy single-bundle blocks look the same. -->
-  <scroll-view wx:if="{{bundle.showPills}}" class="bun-pills-scroll" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
-    <view class="bun-pills">
-      <block wx:for="{{bundle.variants}}" wx:key="id" wx:for-item="v" wx:for-index="i">
-        <view
-          class="bun-pill {{i === bundle.activeIndex ? 'on' : ''}}"
-          data-idx="{{i}}"
-          bindtap="onBundleVariantTap"
-          style="{{i === bundle.activeIndex ? 'background:' + accent + ';color:' + bg + ';border-color:' + accent + ';' : 'border-color:' + fg + ';'}}">
-          <text wx:if="{{v.recommended}}" class="bun-pill-star">★ </text>{{v.label}}
-        </view>
-      </block>
+       there's only one variant so legacy single-bundle blocks look the same.
+       Defined once; reused by every style via a wxml template. -->
+  <template name="bun-pills">
+    <scroll-view wx:if="{{showPills}}" class="bun-pills-scroll" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+      <view class="bun-pills">
+        <block wx:for="{{variants}}" wx:key="id" wx:for-item="v" wx:for-index="i">
+          <view
+            class="bun-pill {{i === activeIndex ? 'on' : ''}}"
+            data-idx="{{i}}"
+            bindtap="onBundleVariantTap"
+            style="{{i === activeIndex ? 'background:' + toggleOn + ';color:' + toggleOnText + ';border-color:' + toggleOn + ';' : 'border-color:' + text + ';color:' + text + ';'}}">
+            <text wx:if="{{v.recommended}}" class="bun-pill-star" style="color:{{save}}">★ </text>{{v.label}}
+          </view>
+        </block>
+      </view>
+    </scroll-view>
+  </template>
+
+  <!-- ── B · Receipt tally ─────────────────────────────────────────── -->
+  <block wx:if="{{bundle.style === 'receipt'}}">
+    <view class="bun-rhead">
+      <view wx:if="{{bundle.kicker}}" class="bun-kicker">{{bundle.kicker}}</view>
+      <view wx:if="{{bundle.active.title}}" class="bun-title" style="font-size:{{bundle.titleSize}}">{{bundle.active.title}}</view>
     </view>
-  </scroll-view>
-
-  <view wx:if="{{bundle.active.title}}" class="bun-title">{{bundle.active.title}}</view>
-  <view wx:if="{{bundle.active.subtitle}}" class="bun-sub">{{bundle.active.subtitle}}</view>
-
-  <view wx:if="{{bundle.active.empty}}" class="bun-empty">{{bundle.emptyText}}</view>
-
-  <scroll-view wx:else class="bun-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
-    <view class="bun-card-row">
-      <block wx:for="{{bundle.active.cards}}" wx:key="id">
-        <view class="bun-card" data-id="{{item.id}}" bindtap="onProductTap">
-          <view class="bun-card-img">
+    <template is="bun-pills" data="{{bundle}}"/>
+    <view wx:if="{{bundle.active.empty}}" class="bun-empty">{{bundle.emptyText}}</view>
+    <block wx:else>
+      <view class="bun-rows">
+        <view wx:for="{{bundle.active.rows}}" wx:key="id" class="bun-rrow" style="border-top:{{item.borderTop}}" data-id="{{item.id}}" bindtap="onProductTap">
+          <view class="bun-rimg">
             <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
           </view>
-          <view class="bun-card-name">{{item.name}}</view>
-          <view wx:if="{{item.price}}" class="bun-card-price">{{item.price}}</view>
+          <view class="bun-rmid">
+            <view class="bun-rname">{{item.name}}</view>
+            <view wx:if="{{item.cn}}" class="bun-rcn">{{item.cn}}</view>
+          </view>
+          <view class="bun-rprice">{{item.price}}</view>
         </view>
-        <view wx:if="{{index < bundle.active.cardCount - 1}}" class="bun-plus">+</view>
-      </block>
-    </view>
-  </scroll-view>
+      </view>
+      <view class="bun-tally">
+        <view class="bun-trow"><text>{{bundle.itemsTotalLabel}}</text><text class="bun-strike">{{bundle.active.sumLabel}}</text></view>
+        <view class="bun-trow bun-trow-big"><text>{{bundle.bundlePriceLabel}}</text><text class="bun-tprice" style="color:{{bundle.price}};font-size:{{bundle.tallyPriceSize}}">{{bundle.active.priceLabel}}</text></view>
+        <view wx:if="{{bundle.active.savingsLabel}}" class="bun-tchip-row"><text class="bun-tchip" style="background:{{bundle.save}};color:{{bundle.saveText}}">{{bundle.active.savingsLabel}}</text></view>
+        <view class="bun-cta bun-cta-full" style="background:{{bundle.cta}};color:{{bundle.ctaText}}" bindtap="onBundleAddTap">{{bundle.active.addLabel}}</view>
+      </view>
+    </block>
+  </block>
 
-  <view wx:if="{{!bundle.active.empty}}" class="bun-foot">
-    <view class="bun-price-block">
-      <view wx:if="{{bundle.active.savingsLabel}}" class="bun-was">{{bundle.active.sumLabel}}</view>
-      <view class="bun-price">{{bundle.active.priceLabel}}</view>
-      <view wx:if="{{bundle.active.savingsLabel}}" class="bun-savings">{{bundle.active.savingsLabel}}</view>
+  <!-- ── C · Sticker hero ──────────────────────────────────────────── -->
+  <block wx:elif="{{bundle.style === 'sticker'}}">
+    <view class="bun-sticker" style="background:{{bundle.sticker}};color:{{bundle.stickerText}};border:{{bundle.elBorder}};box-shadow:{{bundle.elShadow}};transform:{{bundle.riso ? 'rotate(-3deg)' : 'none'}}">{{bundle.stickerLabel}}</view>
+    <view wx:if="{{bundle.active.title}}" class="bun-title" style="font-size:{{bundle.titleSize}}">{{bundle.active.title}}</view>
+    <template is="bun-pills" data="{{bundle}}"/>
+    <view wx:if="{{bundle.active.empty}}" class="bun-empty">{{bundle.emptyText}}</view>
+    <block wx:else>
+      <view class="bun-tubs">
+        <view wx:for="{{bundle.active.tubs}}" wx:key="id" class="bun-tub" style="{{item.style}}" data-id="{{item.id}}" bindtap="onProductTap">
+          <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+        </view>
+        <view wx:if="{{bundle.active.stampAmt}}" class="bun-stamp" style="background:{{bundle.save}};color:{{bundle.saveText}};border:{{bundle.elBorder}};box-shadow:{{bundle.elShadow}};transform:{{bundle.riso ? 'rotate(8deg)' : 'none'}}">
+          <text class="bun-stamp-k">SAVE</text><text class="bun-stamp-n">{{bundle.active.stampAmt}}</text>
+        </view>
+      </view>
+      <view wx:if="{{bundle.active.moreText}}" class="bun-more" style="color:{{bundle.cta}}">{{bundle.active.moreText}}</view>
+      <view class="bun-foot">
+        <view class="bun-price-block">
+          <view wx:if="{{bundle.active.savingsLabel}}" class="bun-was">{{bundle.active.sumLabel}}</view>
+          <view class="bun-price" style="color:{{bundle.price}};font-size:{{bundle.stickerPriceSize}}">{{bundle.active.priceLabel}}</view>
+        </view>
+        <view class="bun-tap">{{bundle.tapText}}</view>
+      </view>
+      <view class="bun-cta bun-cta-full" style="background:{{bundle.cta}};color:{{bundle.ctaText}}" bindtap="onBundleAddTap">{{bundle.active.addLabel}}</view>
+    </block>
+  </block>
+
+  <!-- ── A · Classic refined ───────────────────────────────────────── -->
+  <block wx:else>
+    <view wx:if="{{bundle.kicker}}" class="bun-kicker">{{bundle.kicker}}</view>
+    <template is="bun-pills" data="{{bundle}}"/>
+    <view wx:if="{{bundle.active.title}}" class="bun-title" style="font-size:{{bundle.titleSize}}">{{bundle.active.title}}</view>
+    <view wx:if="{{bundle.active.subtitle}}" class="bun-sub">{{bundle.active.subtitle}}</view>
+
+    <view wx:if="{{bundle.active.empty}}" class="bun-empty">{{bundle.emptyText}}</view>
+
+    <scroll-view wx:else class="bun-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+      <view class="bun-card-row">
+        <block wx:for="{{bundle.active.cards}}" wx:key="id">
+          <view class="bun-card" data-id="{{item.id}}" bindtap="onProductTap">
+            <view class="bun-card-img" style="{{bundle.riso ? '' : 'border-color:transparent'}}">
+              <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+            </view>
+            <view class="bun-card-name">{{item.name}}</view>
+            <view wx:if="{{item.price}}" class="bun-card-price">{{item.price}}</view>
+          </view>
+          <view wx:if="{{index < bundle.active.cardCount - 1}}" class="bun-plus">+</view>
+        </block>
+      </view>
+    </scroll-view>
+
+    <view wx:if="{{!bundle.active.empty}}" class="bun-foot">
+      <view class="bun-price-block">
+        <view wx:if="{{bundle.active.savingsLabel}}" class="bun-was">{{bundle.active.sumLabel}}</view>
+        <view class="bun-price" style="color:{{bundle.price}};font-size:{{bundle.priceSize}}">{{bundle.active.priceLabel}}</view>
+        <view wx:if="{{bundle.active.savingsLabel}}" class="bun-savings" style="color:{{bundle.save}}">{{bundle.active.savingsLabel}}</view>
+      </view>
+      <view class="bun-cta" style="background:{{bundle.cta}};color:{{bundle.ctaText}}" bindtap="onBundleAddTap">{{bundle.active.addLabel}}</view>
     </view>
-    <view class="bun-cta" style="background:{{accent}};color:{{bundleBtnFg}}" bindtap="onBundleAddTap">{{bundle.active.addLabel}}</view>
+  </block>
+
   </view>
 </view>
 

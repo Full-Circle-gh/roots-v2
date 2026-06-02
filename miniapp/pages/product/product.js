@@ -318,6 +318,7 @@ Page({
       dairy:  { en: 'DAIRY FREE',  cn: '无乳制品' },
       egg:    { en: 'EGG FREE',    cn: '无蛋' },
       '5spice': { en: '5-SPICE FREE', cn: '无五香' },
+      'animal products': { en: 'PLANT-BASED', cn: '纯植物' },
     };
     const badges = freeOf.map(k => badgeMap[k] ? lang.pick(badgeMap[k].en, badgeMap[k].cn, L) : k.toUpperCase()).filter(Boolean);
     // Pre-resolve option labels for the WXML

@@ -243,7 +243,6 @@
 
     <!-- Sticky bottom: qty stepper + add to cart -->
     <view class="sticky-bar">
-      <cs-button variant="inline" placement="product"></cs-button>
       <view class="qty">
         <view class="qty-btn" bindtap="decQty">−</view>
         <view class="qty-val f-gothic">{{qty}}</view>
@@ -287,5 +286,6 @@
       </view>
     </view>
   </block>
+  <cs-button variant="fab" placement="product"></cs-button>
   <popup-manager page="product"></popup-manager>
 </view>

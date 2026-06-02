@@ -2350,43 +2350,62 @@
     font: 500 17px var(--f-serif); line-height: 1;
     position: absolute; bottom: 12px; left: 12px; right: 12px;
   }
-  /* ── Style · Riso pop ── flat brand-colour fill + ink keyline + hard shadow.
-     Tile background/colour come inline from the per-category palette. */
-  .b-cattabs.cat-riso .tile {
-    border: 2px solid var(--cat-keyline);
-    box-shadow: 4px 4px 0 var(--cat-shadow);
+  /* ════ A · Index directory ════ numbered rows on the surface, colour dot,
+     bilingual name, category-coloured count pill, chevron. */
+  .b-cattabs.cat-index .idx-list { display: flex; flex-direction: column; }
+  .b-cattabs.cat-index .idx-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 2px; border-bottom: 1px solid rgba(0,0,0,.08);
   }
-  /* ── Style · Editorial ── oat surface, hairline keyline, big serif name,
-     the category colour as a thick left accent rule. */
-  .b-cattabs.cat-editorial .grid { gap: 8px; }
-  .b-cattabs.cat-editorial .tile {
-    height: auto; min-height: 92px;
-    background: var(--cat-surface); color: var(--cat-text);
-    border: 1px solid var(--cat-keyline);
-    border-left: 5px solid var(--b-ink);
-    display: flex; flex-direction: column; justify-content: flex-end;
-    box-shadow: none;
+  .b-cattabs.cat-index .idx-row:last-child { border-bottom: 0; }
+  .b-cattabs.cat-index .idx-num { font: 600 13px var(--f-sans); color: var(--cat-accent); width: 18px; flex: 0 0 auto; }
+  .b-cattabs.cat-index .idx-dot { width: 12px; height: 12px; border-radius: var(--cat-radius); flex: 0 0 auto; }
+  .b-cattabs.cat-index .idx-name { flex: 1 1 auto; min-width: 0; }
+  .b-cattabs.cat-index .idx-name .en { font: 500 16px var(--f-serif); line-height: 1.05; color: var(--cat-text); }
+  .b-cattabs.cat-index .idx-name .cn { font: 400 10px var(--f-sans); color: var(--cat-accent); margin-top: 1px; }
+  .b-cattabs.cat-index .idx-count {
+    font: 700 11px var(--f-sans); min-width: 26px; text-align: center;
+    padding: 3px 8px; border-radius: 999px; flex: 0 0 auto;
   }
-  .b-cattabs.cat-editorial .tile .num { position: static; color: var(--cat-accent); opacity: 1; margin-bottom: 8px; }
-  .b-cattabs.cat-editorial .tile .name { position: static; font-size: 19px; }
-  /* ── Style · Stack & tag ── oat surface, ink border, rotated sticker number
-     tag in the category colour. Retro grocery feel. */
-  .b-cattabs.cat-stack .grid { gap: 10px; }
-  .b-cattabs.cat-stack .tile {
-    height: auto; min-height: 96px; padding: 18px 12px 12px;
-    background: var(--cat-surface); color: var(--cat-text);
-    border: 2px solid var(--cat-keyline);
-    overflow: visible;
+  .b-cattabs.cat-index .idx-chev { color: var(--cat-accent); font-size: 18px; flex: 0 0 auto; opacity: .6; }
+  /* ════ B · Bento mosaic ════ image tiles, first a wide hero, scrim caption,
+     "NN · count" badge top-left. Colour-fill fallback when no cover image. */
+  .b-cattabs.cat-bento .bento-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .b-cattabs.cat-bento .bento-tile {
+    position: relative; min-height: 110px; padding: 10px; overflow: hidden;
+    background-size: cover; background-position: center;
+    border-radius: var(--cat-radius);
     display: flex; flex-direction: column; justify-content: flex-end;
   }
-  .b-cattabs.cat-stack .tile .tag {
-    position: absolute; top: -9px; left: 10px;
-    font-size: 14px; line-height: 1; letter-spacing: .04em;
-    padding: 3px 8px; transform: rotate(-4deg);
-    border: 1.5px solid var(--cat-keyline);
+  .b-cattabs.cat-bento .bento-tile.hero { grid-column: 1 / -1; min-height: 150px; }
+  .b-cattabs.cat-bento .bento-tile::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0) 60%);
   }
-  .b-cattabs.cat-stack .tile .num { position: static; color: var(--cat-accent); }
-  .b-cattabs.cat-stack .tile .name { position: static; font-size: 18px; margin-top: 3px; }
+  .b-cattabs.cat-bento .bento-badge {
+    position: absolute; top: 8px; left: 8px; z-index: 1;
+    font: 700 9px var(--f-sans); letter-spacing: .08em;
+    padding: 2px 6px; border-radius: 999px;
+  }
+  .b-cattabs.cat-bento .bento-cap { position: relative; z-index: 1; }
+  .b-cattabs.cat-bento .bento-cap .en { font: 500 18px var(--f-serif); line-height: 1; }
+  .b-cattabs.cat-bento .bento-cap .cn { font: 400 10px var(--f-sans); opacity: .9; margin-top: 2px; }
+  /* ════ C · Sticker chips ════ coloured pills, ink keyline + hard shadow,
+     bilingual name, dark count badge. Wrapping varying-width flow. */
+  .b-cattabs.cat-sticker .chip-wrap { display: flex; flex-wrap: wrap; gap: 10px; }
+  .b-cattabs.cat-sticker .chip-pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 10px 7px 14px; border-radius: 999px;
+    border: 2px solid var(--cat-keyline);
+    box-shadow: 3px 3px 0 var(--cat-shadow);
+  }
+  .b-cattabs.cat-sticker .chip-pill .en { font: 500 15px var(--f-serif); line-height: 1; }
+  .b-cattabs.cat-sticker .chip-pill .cn { font: 400 10px var(--f-sans); opacity: .85; }
+  .b-cattabs.cat-sticker .chip-count {
+    font: 700 11px var(--f-sans); min-width: 20px; text-align: center;
+    padding: 2px 7px; border-radius: 999px;
+    background: var(--cat-text); color: var(--cat-surface);
+  }
   /* Icons view — circle thumb + label below, fixed columns */
   .b-cattabs .icons-grid { display: grid; gap: 14px 6px; }
   .b-cattabs .icons-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
@@ -2399,9 +2418,6 @@
     display: flex; align-items: center; justify-content: center;
     font: 700 22px var(--bf-bear); letter-spacing: .02em;
   }
-  .b-cattabs.cat-riso .icon-circle { border: 2px solid var(--cat-keyline); box-shadow: 3px 3px 0 var(--cat-shadow); }
-  .b-cattabs.cat-editorial .icon-circle { border: 1px solid var(--cat-keyline); }
-  .b-cattabs.cat-stack .icon-circle { border: 2px solid var(--cat-keyline); border-radius: 12px; }
   .b-cattabs .icon-name {
     font: 500 11px var(--bf-aleo); color: var(--cat-text);
     text-align: center; line-height: 1.2;
@@ -6591,28 +6607,29 @@ function makeBlock(type) {
       // 'tiles' — 2-col coloured tiles (current). 'icons' — N-col circles with labels
       // (the CN mini-program convention used by Pinduoduo / Meituan).
       view: 'tiles',
-      // Visual style (independent of layout view) — ported from the design
-      // exploration's three category directions:
-      //   'riso'      — Riso pop: flat brand-colour fills + ink keyline + hard
-      //                 offset shadow (bold, the punchy default).
-      //   'editorial' — magazine: oat tile surface, hairline keyline, big serif
-      //                 names, the category colour as a thin accent rule.
-      //   'stack'     — retro grocery "stack & tag": oat tile surface, ink
-      //                 border, a rotated sticker number tag in the category
-      //                 colour.
-      cat_style: 'riso',
-      columns: 4,        // only used by 'icons' view; clamped 3-5
+      // Visual style. 'classic' uses the `view` Layout (tiles/icons/scroll).
+      // The three "Shop the garden" design directions are self-contained
+      // layouts that ignore `view`:
+      //   'index'   — numbered directory list: colour dot, bilingual name,
+      //               category-coloured count pill, chevron.
+      //   'bento'   — image mosaic (first tile a wide hero) with a scrim
+      //               caption + "NN · count" badge; colour-fill fallback.
+      //   'sticker' — coloured pill "stickers" with an ink keyline + hard
+      //               offset shadow and a dark count badge.
+      cat_style: 'classic',
+      columns: 4,        // only used by classic 'icons' view; clamped 3-5
       category_ids: state.categories.slice(0, 4).map(c => c.id),
       kicker_en: 'NO. 02 · BROWSE', kicker_cn: '第二 · 浏览',
       title_en: 'Shop the garden', title_cn: '园丁好物',
       bg_color: null,    // null = transparent (inherits page bg)
       // Per-element colour overrides — '' / null = use the style default.
-      // tile fill itself is per-category via tile_colors (+ rotating palette).
-      fg_color: '',            // heading title + tile name text  (default ink)
-      accent_color: '',        // kicker / number / SEE ALL       (default olive)
-      keyline_color: '',       // tile border / keyline            (default ink)
-      shadow_color: '',        // riso hard offset shadow          (default ink)
-      tile_surface_color: '',  // editorial + stack tile fill      (default oat)
+      // Per-category colour is via tile_colors (+ rotating palette): drives the
+      // dot+pill (index), badge/fallback (bento) or chip fill (sticker).
+      fg_color: '',            // title + Index names; Sticker badge fill (default ink)
+      accent_color: '',        // kicker / SEE ALL / Index numbers+chev (default olive)
+      keyline_color: '',       // Classic tile + Sticker chip border    (default ink)
+      shadow_color: '',        // Sticker hard offset shadow            (default ink)
+      tile_surface_color: '',  // Classic tile fill; Sticker badge text (default oat)
       // Standard cross-block options (parity with other blocks).
       corner_radius: 'sharp',  // sharp | subtle | bold
       entrance_anim: 'none',   // none | fade | slide_up
@@ -7632,8 +7649,13 @@ function renderBlockBody(b) {
     }
     case 'category_tabs': {
       const view = b.view || 'tiles';
-      const catStyle = ['riso', 'editorial', 'stack'].includes(b.cat_style) ? b.cat_style : 'riso';
-      d.className = 'b-cattabs b-cattabs-' + view + ' cat-' + catStyle + cornerRadiusClass(b) + entranceAnimClass(b);
+      // Visual direction. 'classic' keeps the Layout (tiles/icons/scroll);
+      // index/bento/sticker are the three "Shop the garden" directions, each a
+      // self-contained layout that ignores `view`.
+      const catStyle = ['index', 'bento', 'sticker'].includes(b.cat_style) ? b.cat_style : 'classic';
+      d.className = 'b-cattabs'
+        + (catStyle === 'classic' ? ' b-cattabs-' + view : ' cat-' + catStyle)
+        + cornerRadiusClass(b) + entranceAnimClass(b);
       // Optional background — brand palette name → CSS var; null = transparent.
       const bg = brandColorVar(b.bg_color);
       if (bg) d.style.background = bg;
@@ -7648,18 +7670,74 @@ function renderBlockBody(b) {
       setVar('--cat-surface', b.tile_surface_color);
       const cats = (b.category_ids || []).map(id => state.categories.find(c => c.id === id)).filter(Boolean);
       // Per-category colour: override → resolved hex; unset → rotating palette.
-      // Drives the whole tile fill (riso) or just the accent / sticker tag
-      // (editorial / stack). Mirrors tile_colors in the live renderer.
+      // Drives the dot + count pill (index), the badge (bento) or the whole
+      // chip fill (sticker). Mirrors tile_colors in the live renderer.
       const palette = ['papaya-glow', 'pea-sprout', 'berry-punch', 'golden-corn', 'skyberry', 'lotus'];
       const tileColors = b.tile_colors || {};
       const catHex = (c, i) => dcResolveHex(tileColors[c.id] || palette[i % 6]);
+      // Count + cover image are derived from the loaded products (categories
+      // themselves carry neither), so the preview mirrors the live renderer.
+      const catCount = (c) => (state.products || []).filter(p => p.category === c.name).length;
+      const catCover = (c) => { const p = (state.products || []).find(x => x.category === c.name && thumbUrl(x)); return p ? thumbUrl(p) : ''; };
+      const splitBi = (name) => { const s = String(name || ''); const m = s.match(/[一-鿿]/); return m ? { en: s.slice(0, m.index).trim(), cn: s.slice(m.index).trim() } : { en: s, cn: '' }; };
       const ck = getBi(b, 'kicker');
       const ct = getBi(b, 'title');
       const head = `<div class="head"><div><div class="kicker">${biLabel(ck.en, ck.cn)}</div><div class="ttl">${biLabel(ct.en, ct.cn)}</div></div><div class="more">${state.lang === 'cn' ? '查看全部' : 'SEE ALL'}</div></div>`;
       if (!cats.length) { d.innerHTML = head + '<div class="empty">No categories selected. Pick some on the right.</div>'; return d; }
 
-      // Circle fill follows the same per-category colour; in editorial/stack
-      // the circle keeps the colour (it reads as a chip) but gets the keyline.
+      // ── A · Index directory ── numbered rows, colour dot, count pill, chevron.
+      if (catStyle === 'index') {
+        const rows = cats.map((c, i) => {
+          const hex = catHex(c, i);
+          const nm = splitBi(c.name);
+          const num = ('0' + (i + 1)).slice(-2);
+          return `<div class="idx-row">
+            <div class="idx-num">${num}</div>
+            <div class="idx-dot" style="background:${hex}"></div>
+            <div class="idx-name"><div class="en">${escapeHtml(nm.en)}</div>${nm.cn ? `<div class="cn">${escapeHtml(nm.cn)}</div>` : ''}</div>
+            <div class="idx-count" style="background:${hex};color:${btnTextHex(hex)}">${catCount(c)}</div>
+            <div class="idx-chev">›</div>
+          </div>`;
+        }).join('');
+        d.innerHTML = head + `<div class="idx-list">${rows}</div>`;
+        return d;
+      }
+
+      // ── B · Bento mosaic ── image tiles; first one a wide hero. Name + CN
+      // over a scrim, "NN · count" badge top-left. Colour-fill fallback if no img.
+      if (catStyle === 'bento') {
+        const tiles = cats.map((c, i) => {
+          const hex = catHex(c, i);
+          const nm = splitBi(c.name);
+          const num = ('0' + (i + 1)).slice(-2);
+          const cover = catCover(c);
+          const bgStyle = cover ? `background-image:url('${cover}')` : `background:${hex}`;
+          const fg = cover ? '#fff' : btnTextHex(hex);
+          return `<div class="bento-tile${i === 0 ? ' hero' : ''}" style="${bgStyle};color:${fg}">
+            <div class="bento-badge" style="background:${hex};color:${btnTextHex(hex)}">${num} · ${catCount(c)}</div>
+            <div class="bento-cap"><div class="en">${escapeHtml(nm.en)}</div>${nm.cn ? `<div class="cn">${escapeHtml(nm.cn)}</div>` : ''}</div>
+          </div>`;
+        }).join('');
+        d.innerHTML = head + `<div class="bento-grid">${tiles}</div>`;
+        return d;
+      }
+
+      // ── C · Sticker chips ── coloured pills, ink keyline + hard shadow, a dark
+      // count badge. Wrap to a varying-width two-ish column flow.
+      if (catStyle === 'sticker') {
+        const chips = cats.map((c, i) => {
+          const hex = catHex(c, i);
+          const nm = splitBi(c.name);
+          return `<div class="chip-pill" style="background:${hex};color:${btnTextHex(hex)}">
+            <span class="en">${escapeHtml(nm.en)}</span>${nm.cn ? `<span class="cn">${escapeHtml(nm.cn)}</span>` : ''}
+            <span class="chip-count">${catCount(c)}</span>
+          </div>`;
+        }).join('');
+        d.innerHTML = head + `<div class="chip-wrap">${chips}</div>`;
+        return d;
+      }
+
+      // ── Classic ── existing Layout views (icons / scroll / colour tiles). ──
       const circleStyle = (c, i) => { const hex = catHex(c, i); return ` style="background:${hex};color:${btnTextHex(hex)}"`; };
       if (view === 'icons') {
         const cols = Math.max(3, Math.min(5, b.columns || 4));
@@ -7688,30 +7766,13 @@ function renderBlockBody(b) {
         return d;
       }
 
-      // 'tiles' — colour usage depends on the style:
-      //  riso      → category colour fills the whole tile.
-      //  editorial → tile is the surface; category colour is a left accent rule.
-      //  stack     → tile is the surface; category colour fills the number tag.
+      // 'tiles' — category colour fills the whole tile.
       const numWord = state.lang === 'cn' ? '分类' : 'CATEGORY';
       const tiles = cats.map((c, i) => {
         const hex = catHex(c, i);
         const name = escapeHtml(categoryNameForLang(c.name));
         const num = `0${i + 1}`;
-        if (catStyle === 'riso') {
-          return `<div class="tile" style="background:${hex};color:${btnTextHex(hex)}">
-            <div class="num">${num} · ${numWord}</div>
-            <div class="name">${name}</div>
-          </div>`;
-        }
-        if (catStyle === 'stack') {
-          return `<div class="tile">
-            <div class="tag" style="background:${hex};color:${btnTextHex(hex)}">${num}</div>
-            <div class="num">${numWord}</div>
-            <div class="name">${name}</div>
-          </div>`;
-        }
-        // editorial
-        return `<div class="tile" style="border-left-color:${hex}">
+        return `<div class="tile" style="background:${hex};color:${btnTextHex(hex)}">
           <div class="num">${num} · ${numWord}</div>
           <div class="name">${name}</div>
         </div>`;
@@ -10087,26 +10148,31 @@ function buildCtaRow(b, cta, idx) {
 function buildCatTabsForm(m, b) {
   const k = getBi(b, 'kicker');
   const t = getBi(b, 'title');
+  const catStyle = ['index', 'bento', 'sticker'].includes(b.cat_style) ? b.cat_style : 'classic';
   const view = b.view || 'tiles';
-  m.appendChild(field(T('Layout', '版式'), T('Tiles = 2-col coloured rectangles. Icons = N-col circles with labels. Scroll = single row, drag left/right.', '色块 = 双列彩色矩形。图标 = N 列带标签的圆形。横滑 = 单行,左右拖动。'),
-    sel(view, [
-      { value: 'tiles',  label: T('Tiles — 2-col coloured rectangles', '色块 — 双列彩色矩形') },
-      { value: 'icons',  label: T('Icons — N-col circles with labels', '图标 — N 列带标签的圆形') },
-      { value: 'scroll', label: T('Scroll — single row, drag left/right', '横滑 — 单行,左右拖动') },
-    ], v => updateBlock(b.id, { view: v }))));
 
-  // Visual direction — independent of the layout above. Mirrors the design's
-  // three category explorations (Riso pop / Editorial / Stack & tag).
+  // Visual direction. 'Classic' uses the Layout selector below; the three
+  // "Shop the garden" directions (Index / Bento / Sticker) are self-contained
+  // layouts that ignore it.
   m.appendChild(field(T('Style', '样式'),
-    T('Riso = flat colour fill with an ink keyline + hard shadow. Editorial = oat surface, big serif name, the category colour as an accent rule. Stack & tag = oat surface with a rotated sticker number tag.', '印刷波普 = 满色块 + 墨线 + 硬阴影。杂志 = 燕麦底、大号衬线名、分类色作为色条。货架贴标 = 燕麦底 + 旋转贴纸编号。'),
-    sel(b.cat_style || 'riso', CAT_STYLE_OPTIONS, v => updateBlock(b.id, { cat_style: v }))));
+    T('Classic = the Layout below (tiles / icons / scroll). Index directory = numbered list with count pills + chevrons. Bento mosaic = image grid tiles (uses each category’s product photo). Sticker chips = coloured pills with an ink keyline + hard shadow.', '经典 = 使用下方版式(色块 / 图标 / 横滑)。目录 = 编号列表 + 数量胶囊 + 箭头。便当拼贴 = 图片网格(用分类的商品图)。贴纸胶囊 = 带墨线与硬阴影的彩色药丸。'),
+    sel(b.cat_style || 'classic', CAT_STYLE_OPTIONS, v => updateBlock(b.id, { cat_style: v }))));
+
+  if (catStyle === 'classic') {
+    m.appendChild(field(T('Layout', '版式'), T('Tiles = 2-col coloured rectangles. Icons = N-col circles with labels. Scroll = single row, drag left/right.', '色块 = 双列彩色矩形。图标 = N 列带标签的圆形。横滑 = 单行,左右拖动。'),
+      sel(view, [
+        { value: 'tiles',  label: T('Tiles — 2-col coloured rectangles', '色块 — 双列彩色矩形') },
+        { value: 'icons',  label: T('Icons — N-col circles with labels', '图标 — N 列带标签的圆形') },
+        { value: 'scroll', label: T('Scroll — single row, drag left/right', '横滑 — 单行,左右拖动') },
+      ], v => updateBlock(b.id, { view: v }))));
+  }
 
   m.appendChild(field(T('Kicker', '小标题'), '',
     txtPair(k.en, k.cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn, kicker: undefined }))));
   m.appendChild(field(T('Section title', '区块标题'), '',
     txtPair(t.en, t.cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn, title: undefined }))));
 
-  if (view === 'icons') {
+  if (catStyle === 'classic' && view === 'icons') {
     m.appendChild(field(T('Columns', '列数'), T('3, 4, or 5 circles per row.', '每行 3、4 或 5 个圆形。'),
       num(b.columns, v => updateBlock(b.id, { columns: Math.max(3, Math.min(5, v)) }), { min: 3, max: 5 })));
   }
@@ -10151,12 +10217,14 @@ function buildCatTabsForm(m, b) {
       row.appendChild(picker);
       colorWrap.appendChild(row);
     });
-    const catColourLabel = (b.cat_style || 'riso') === 'riso'
-      ? T('Tile colours', '色块颜色')
-      : T('Accent colours', '强调色');
-    const catColourHelp = (b.cat_style || 'riso') === 'riso'
-      ? T('Fills each whole tile. Leave on Auto to use the rotating palette.', '填充每个色块。保持「自动」使用轮换调色板。')
-      : T('The category accent — the rule (Editorial) or sticker tag (Stack). Leave on Auto for the rotating palette.', '分类强调色 — 杂志样式的色条或货架样式的贴纸编号底色。保持「自动」使用轮换调色板。');
+    const catColourLabel = T('Category colours', '分类颜色');
+    const catColourHelp = catStyle === 'sticker'
+      ? T('Fills each sticker chip. Leave on Auto for the rotating palette.', '填充每个贴纸胶囊。保持「自动」使用轮换调色板。')
+      : catStyle === 'index'
+        ? T('The dot + count pill for each row. Leave on Auto for the rotating palette.', '每行的圆点与数量胶囊。保持「自动」使用轮换调色板。')
+        : catStyle === 'bento'
+          ? T('The "NN · count" badge + the colour-fill fallback when a category has no product photo. Leave on Auto for the rotating palette.', '「编号 · 数量」徽标,以及分类无商品图时的色块兜底。保持「自动」使用轮换调色板。')
+          : T('Fills each whole tile. Leave on Auto to use the rotating palette.', '填充每个色块。保持「自动」使用轮换调色板。');
     m.appendChild(field(catColourLabel, catColourHelp, colorWrap));
   }
 
@@ -10165,19 +10233,19 @@ function buildCatTabsForm(m, b) {
     sel(b.bg_color || '', [{ value: '', label: T('— transparent —', '— 透明 —') }, ...BRAND_COLOR_OPTIONS],
         v => updateBlock(b.id, { bg_color: v || null }))));
   m.appendChild(field(T('Tile surface', '色块底色'),
-    T('Tile / circle fill for the Editorial & Stack styles. Default = oat. (Riso fills tiles with the category colour instead.)', '杂志与货架样式的色块 / 圆形底色。默认 = 燕麦白。(印刷波普改用分类色填充色块。)'),
+    T('Classic tiles/circles fill + the Sticker count-badge text colour. Default = oat.', '经典色块 / 圆形底色,以及贴纸样式数量徽标的文字色。默认 = 燕麦白。'),
     sel(b.tile_surface_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { tile_surface_color: v }))));
   m.appendChild(field(T('Text colour', '文字颜色'),
-    T('Section title + category names. Default = ink. (Riso tile names auto-contrast against their fill.)', '区块标题 + 分类名称。默认 = 墨黑。(印刷波普的色块名称会自动对比填充色。)'),
+    T('Section title + category names (Index rows). Default = ink. Also the Sticker count-badge fill. (Names on a colour fill auto-contrast.)', '区块标题 + 分类名称(目录行)。默认 = 墨黑。也是贴纸数量徽标底色。(色块上的名称会自动对比。)'),
     sel(b.fg_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
   m.appendChild(field(T('Accent colour', '强调色'),
-    T('Kicker, the NO. number + SEE ALL link. Default = olive.', '小标题、编号与「查看全部」链接。默认 = 橄榄绿。'),
+    T('Kicker + SEE ALL link, plus the Index row numbers, CN names + chevrons. Default = olive.', '小标题与「查看全部」,以及目录的行号、中文名与箭头。默认 = 橄榄绿。'),
     sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
   m.appendChild(field(T('Keyline colour', '描边颜色'),
-    T('Tile border / keyline (all styles) + the sticker tag outline. Default = ink.', '色块边框 / 描边(所有样式)与贴纸编号外框。默认 = 墨黑。'),
+    T('Border / keyline on Classic tiles + Sticker chips. Default = ink.', '经典色块与贴纸胶囊的边框 / 描边。默认 = 墨黑。'),
     sel(b.keyline_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { keyline_color: v }))));
   m.appendChild(field(T('Shadow colour', '阴影颜色'),
-    T('The hard offset shadow — Riso style only. Default = ink.', '硬位移阴影 — 仅印刷波普样式。默认 = 墨黑。'),
+    T('The hard offset shadow on Sticker chips. Default = ink.', '贴纸胶囊的硬位移阴影。默认 = 墨黑。'),
     sel(b.shadow_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { shadow_color: v }))));
 
   // ── Standard cross-block options ──────────────────────────────────────────
@@ -10410,9 +10478,10 @@ const DIVIDER_STYLE_OPTIONS = [
 ];
 // Category-block visual directions (ported from the design exploration).
 const CAT_STYLE_OPTIONS = [
-  { value: 'riso',      label: 'Riso pop — flat colour fill + ink keyline · 印刷波普(满色块+墨线)' },
-  { value: 'editorial', label: 'Editorial — oat surface, big serif, accent rule · 杂志(燕麦底+衬线+色条)' },
-  { value: 'stack',     label: 'Stack & tag — grocery rows + sticker tag · 货架贴标(网格+贴纸编号)' },
+  { value: 'classic',  label: 'Classic — use the Layout above · 经典(用上方版式)' },
+  { value: 'index',    label: 'Index directory — numbered list + count pills · 目录(编号列表+数量)' },
+  { value: 'bento',    label: 'Bento mosaic — image grid tiles · 便当拼贴(图片网格)' },
+  { value: 'sticker',  label: 'Sticker chips — coloured pill stickers · 贴纸胶囊(彩色药丸)' },
 ];
 const SCRIM_OPTIONS = [
   { value: 'none',   label: 'None · 无遮罩' },

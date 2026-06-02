@@ -30,9 +30,6 @@
           </view>
         </view>
       </view>
-      <view style="margin-top: 24rpx; display: flex; justify-content: center;">
-        <cs-button variant="inline" placement="order"></cs-button>
-      </view>
     </view>
 
     <!-- Shipment tracking — only shown once a waybill is attached -->
@@ -221,6 +218,7 @@
       <button wx:else class="btn ghost f-toni" bindtap="openInvoiceSheet">{{copy.invoiceBtn}}</button>
     </view>
   </block>
+  <cs-button variant="fab" placement="order"></cs-button>
 </view>
 
 <!-- ── Refund request bottom sheet ──────────────────────────────────── -->
@@ -240,7 +238,7 @@
       <view class="rs-input-wrap">
         <input class="rs-input" type="digit" value="{{refundAmount}}" bindinput="onRefundAmountInput" disabled="{{refundMode === 'full'}}"/>
       </view>
-      <view class="rs-hint muted">{{lang === 'cn' ? '订单总额' : 'Order total'}}: ¥{{order.total}}</view>
+      <view class="rs-hint muted">{{lang === 'cn' ? '订单总额' : 'Order total'}}: ¥{{refundOrderTotalDisp}}</view>
     </view>
 
     <view wx:if="{{refundMode === 'lines'}}" class="rs-field">

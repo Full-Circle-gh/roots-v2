@@ -5,9 +5,10 @@
         <view class="kicker f-toni">{{copy.kicker}} · 02/03</view>
         <view class="title f-bear">{{copy.title}}</view>
       </view>
-      <cs-button variant="inline" placement="checkout"></cs-button>
     </view>
   </view>
+
+  <cs-button variant="fab" placement="checkout"></cs-button>
 
   <!-- Order receipt -->
   <view class="section section-first">
@@ -378,7 +379,6 @@
       <view class="pay-swatch" style="background: #1AAD19;"></view>
       <view class="opt-body">
         <view class="opt-label f-bear">{{copy.wechatOpt}}</view>
-        <view class="opt-sub f-yuan">微信支付</view>
       </view>
     </view>
 
@@ -387,7 +387,6 @@
       <view class="pay-swatch" style="background: #1677FF;"></view>
       <view class="opt-body">
         <view class="opt-label f-bear">{{copy.alipayOpt}}</view>
-        <view class="opt-sub f-yuan">支付宝</view>
       </view>
     </view>
 

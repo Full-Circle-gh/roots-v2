@@ -69,6 +69,53 @@ function btnText(bg) {
   return (0.2126 * r + 0.7152 * g + 0.0722 * bl) > 140 ? '#1a1a17' : '#FFFFFF';
 }
 
+// ─── Bundle "feel" system ────────────────────────────────────────────────
+// Mirror of resolveBundleTheme() in cms.html so the editor preview and the
+// live render agree on colours. mood = colour story, finish = riso (ink
+// border + hard offset shadow) vs clean (soft shadow), energy = head scale +
+// border weight + radius. Per-element colour overrides win over the mood.
+const BUNDLE_MOODS = {
+  grocer:  { surface: '#F3ECE0', cardFill: '#FFFCF7', cta: '#365329', save: '#E96174', sticker: '#CCD900', price: '#1a1a17' },
+  harvest: { surface: '#F6EAD6', cardFill: '#FFFCF7', cta: '#8A5A2B', save: '#FF6B0C', sticker: '#F2CA6C', price: '#1a1a17' },
+  berry:   { surface: '#F5E6E6', cardFill: '#FFFCF7', cta: '#B23A52', save: '#E96174', sticker: '#F4B8CB', price: '#1a1a17' },
+};
+const BUNDLE_ENERGY = {
+  refined:  { headScale: 0.92, bw: 3, rad: 28 },
+  balanced: { headScale: 1.0,  bw: 4, rad: 40 },
+  bold:     { headScale: 1.1,  bw: 6, rad: 52 },
+};
+function resolveBundleTheme(b) {
+  const mood = BUNDLE_MOODS[b.mood] || BUNDLE_MOODS.grocer;
+  const energy = BUNDLE_ENERGY[b.energy] || BUNDLE_ENERGY.balanced;
+  const riso = (b.finish || 'riso') !== 'clean';
+  const pick = (field, fallback) => {
+    const h = b[field] ? color(b[field]) : '';
+    return h || fallback;
+  };
+  const surface  = pick('bg_color', mood.surface);
+  const text     = pick('fg_color', '#1a1a17');
+  const cta      = pick('accent_color', mood.cta);
+  const cardFill = pick('card_color', mood.cardFill);
+  const save     = pick('save_color', mood.save);
+  const sticker  = pick('sticker_color', mood.sticker);
+  const price    = pick('price_color', mood.price);
+  const elBorder = riso ? '3rpx solid #1a1a17' : '3rpx solid rgba(26,26,23,.10)';
+  const elShadow = riso ? '4rpx 4rpx 0 #1a1a17' : '0 10rpx 32rpx rgba(26,26,23,.16)';
+  const innerCss = riso
+    ? `border:${energy.bw}rpx solid #1a1a17;border-radius:${energy.rad}rpx;background:transparent;`
+    : `border:none;border-radius:${energy.rad}rpx;background:${cardFill};box-shadow:0 28rpx 72rpx rgba(26,26,23,.13);`;
+  return {
+    style: ['classic', 'receipt', 'sticker'].includes(b.bundle_style) ? b.bundle_style : 'classic',
+    riso, headScale: energy.headScale,
+    surface, text, cardFill, price,
+    cta,      ctaText:     btnText(cta),
+    toggleOn: cta, toggleOnText: btnText(cta),
+    save,     saveText:    btnText(save),
+    sticker,  stickerText: btnText(sticker),
+    elBorder, elShadow, innerCss,
+  };
+}
+
 Component({
   properties: {
     block:      { type: Object,  value: {} },
@@ -307,8 +354,10 @@ Component({
           out.seeAllTarget = b.link_target || 'shop';
           out.catWord = L === 'cn' ? '分类' : 'CATEGORY';
           out.catView = b.view || 'tiles';
-          // Visual direction — riso | editorial | stack. Independent of view.
-          out.catStyle = ['riso', 'editorial', 'stack'].includes(b.cat_style) ? b.cat_style : 'riso';
+          // Visual direction. 'classic' uses the `view` Layout (tiles/icons/
+          // scroll). index/bento/sticker are the three "Shop the garden"
+          // design directions, each a self-contained layout that ignores view.
+          out.catStyle = ['index', 'bento', 'sticker'].includes(b.cat_style) ? b.cat_style : 'classic';
           out.catCols = Math.max(3, Math.min(5, b.columns || 4));
           out.catBg   = color(b.bg_color || '');
           // Standard cross-block options.
@@ -326,11 +375,30 @@ Component({
             .filter(Boolean);
           const palette = ['papaya-glow','pea-sprout','berry-punch','golden-corn','skyberry','lotus'];
           // Per-category colour overrides keyed by category id; unset → auto
-          // palette by position. Drives the whole tile fill (riso) or the
-          // accent rule / sticker tag (editorial / stack).
+          // palette by position. Drives the dot+pill (index), badge/fallback
+          // (bento) or the whole chip fill (sticker).
           const tileColors = b.tile_colors || {};
+          // Categories carry no count or image, so derive both from the loaded
+          // products (count = products in the category; cover = first product
+          // with an image). Mirrors the CMS preview.
+          const allProducts = this.properties.products || [];
+          const catCount = (c) => allProducts.filter(p => p.category === c.name).length;
+          const catCover = (c) => {
+            const p = allProducts.find(x => x.category === c.name && (absUrl(x.image_url) || x.image_data));
+            return p ? (absUrl(p.image_url) || p.image_data) : '';
+          };
+          // Split a combined "Bread 面包" name into both halves (the rows /
+          // captions show EN and CN together, unlike splitMixed which picks one).
+          const splitBoth = (s) => {
+            const str = String(s || '');
+            const m = str.match(/[一-鿿]/);
+            return m
+              ? { en: str.slice(0, m.index).trim(), cn: str.slice(m.index).trim() }
+              : { en: str, cn: '' };
+          };
           out.tiles = cats.map((c, i) => {
             const splitName = lang.splitMixed(c.name, L);
+            const both = splitBoth(c.name);
             const letter = (splitName.trim()[0] || '').toUpperCase();
             const override = tileColors[c.id];
             const token = override || palette[i % 6];
@@ -338,16 +406,20 @@ Component({
             // Overrides auto-contrast by luminance; the auto palette keeps its
             // hand-tuned text colour (white on pea-sprout/berry-punch).
             const catText = override ? btnText(token) : (i % 6 === 1 || i % 6 === 2 ? '#fff' : '#1a1a17');
+            const cover = catCover(c);
             return {
               id: c.id,
               num: '0' + (i + 1),
               name: splitName,
+              nameEn: both.en,
+              nameCn: both.cn,
               letter,
               color: token,
-              // Riso: whole tile + circle take the category colour.
+              count: catCount(c),
+              cover,
+              // index dot / sticker chip / classic tile + bento badge fill.
               bg: catColor, fg: catText,
-              // Editorial / stack: tile uses the surface; the category colour
-              // is the accent (rule) or the sticker tag fill.
+              // sticker / index count badge re-uses the same category colour.
               tagBg: catColor, tagFg: catText,
             };
           });
@@ -1182,10 +1254,13 @@ Component({
           // (or the first if none is marked) loads first and shows a ★.
           // Items go into the cart at their normal prices; voucher and
           // bundle_price are per-variant so promos can vary.
-          out.bg = color(b.bg_color || 'corn');
-          out.fg = color(b.fg_color || 'ink');
-          out.accent = color(b.accent_color || 'ink');
-          out.bundleBtnFg = btnText(b.accent_color || 'ink');
+          // Resolve the feel (mood / finish / energy + colour overrides).
+          const BT = resolveBundleTheme(b);
+          const HS = BT.headScale;
+          out.bg = BT.surface;
+          out.fg = BT.text;
+          out.accent = BT.cta;
+          out.bundleBtnFg = BT.ctaText;
           // 2026-05-20 — corner radius preset + entrance animation.
           out.bundleCorner = b.corner_radius || 'subtle';
           out.bundleEnter  = b.entrance_anim || 'none';
@@ -1219,11 +1294,27 @@ Component({
                 id: p.id,
                 image: absUrl(p.image_url) || p.image_data || '',
                 name:  lang.pick(p.name_en, p.name_cn, L),
+                cn:    p.name_cn || '',
                 price: eff > 0 ? '¥' + eff.toFixed(2) : '',
               };
             });
             const bundlePrice = Number(v.bundle_price) || 0;
             const showSavings = bundlePrice > 0 && bundlePrice < sum;
+            const savAmt = sum - bundlePrice;
+            // Receipt itemised rows — first row gets a solid rule, rest dashed.
+            const rows = cards.map((c, i) => ({
+              ...c,
+              borderTop: i === 0 ? '3rpx solid #1a1a17' : '2rpx dashed rgba(0,0,0,.22)',
+            }));
+            // Sticker overlapping tubs — show up to 3, alternate vertical offset
+            // and (riso only) a small rotation. Positions are absolute in rpx.
+            const tubs = cards.slice(0, 3).map((c, i) => ({
+              ...c,
+              style: `left:${i * 144}rpx;top:${i % 2 === 0 ? 0 : 20}rpx;`
+                + `border:${BT.elBorder};box-shadow:${BT.elShadow};`
+                + `transform:${BT.riso ? `rotate(${i % 2 === 0 ? -3 : 3}deg)` : 'none'};`,
+            }));
+            const moreCount = cards.length - tubs.length;
             return {
               id: v.id || '',
               label: lang.pick(v.label_en, v.label_cn, L) || (L === 'cn' ? '组合' : 'Bundle'),
@@ -1232,11 +1323,16 @@ Component({
               subtitle: lang.pick(v.subtitle_en, v.subtitle_cn, L),
               cards,
               cardCount: cards.length,
+              rows,
+              tubs,
+              moreText: moreCount > 0 ? (L === 'cn' ? `+ ${moreCount} 件` : `+ ${moreCount} MORE`) : '',
               sumLabel:   sum > 0 ? '¥' + sum.toFixed(2) : '',
               priceLabel: bundlePrice > 0 ? '¥' + bundlePrice.toFixed(2) : (sum > 0 ? '¥' + sum.toFixed(2) : ''),
+              showSavings,
               savingsLabel: showSavings
-                ? (L === 'cn' ? `省 ¥${(sum - bundlePrice).toFixed(2)}` : `SAVE ¥${(sum - bundlePrice).toFixed(2)}`)
+                ? (L === 'cn' ? `省 ¥${savAmt.toFixed(2)}` : `SAVE ¥${savAmt.toFixed(2)}`)
                 : '',
+              stampAmt: showSavings ? '¥' + Math.round(savAmt) : '',
               voucherCode: (v.auto_voucher_code || '').toUpperCase(),
               addLabel:  lang.pick(v.cta_label_en, v.cta_label_cn, L)
                 || (L === 'cn' ? `加入购物车 (${cards.length} 件)` : `ADD BUNDLE · ${cards.length} ITEMS`),
@@ -1255,6 +1351,33 @@ Component({
             activeIndex,
             active: variants[activeIndex] || variants[0],
             emptyText: L === 'cn' ? '请在管理后台选择商品' : 'Pick products in the admin',
+            // Resolved feel — colours + flags shared by every variant (the
+            // pill swap only re-points `active`, so theme lives here).
+            style:       BT.style,
+            riso:        BT.riso,
+            innerCss:    BT.innerCss,
+            text:        BT.text,
+            price:       BT.price,
+            cta:         BT.cta,
+            ctaText:     BT.ctaText,
+            toggleOn:    BT.toggleOn,
+            toggleOnText: BT.toggleOnText,
+            save:        BT.save,
+            saveText:    BT.saveText,
+            sticker:     BT.sticker,
+            stickerText: BT.stickerText,
+            elBorder:    BT.elBorder,
+            elShadow:    BT.elShadow,
+            // Head-scale-derived font sizes (rpx) per style.
+            titleSize:   Math.round(48 * HS) + 'rpx',
+            priceSize:   Math.round(44 * HS) + 'rpx',
+            tallyPriceSize: Math.round(52 * HS) + 'rpx',
+            stickerPriceSize: Math.round(56 * HS) + 'rpx',
+            // Static labels.
+            stickerLabel:     'BUNDLE & SAVE · 搭配省',
+            tapText:          L === 'cn' ? '一键直达购物车' : 'Tap once — straight to cart',
+            itemsTotalLabel:  L === 'cn' ? '单买' : 'Items total',
+            bundlePriceLabel: L === 'cn' ? '套装价' : 'Bundle price',
           };
           break;
         }

@@ -117,6 +117,7 @@ Page({
     refundBusy: false,
     refundMode: 'full',       // 'full' | 'amount' | 'lines'
     refundAmount: '',
+    refundOrderTotalDisp: '0.00',
     refundReason: '',
     refundLines: [],          // [{ item_id, name, qty, max_qty, unit, picked, refund_qty, amount }]
     refundLinesTotalDisp: '¥0.00',
@@ -514,6 +515,7 @@ Page({
       refundSheetOpen: true,
       refundMode: 'full',
       refundAmount: total.toFixed(2),
+      refundOrderTotalDisp: total.toFixed(2),
       refundReason: '',
       refundLines: lines,
       refundLinesTotalDisp: '¥0.00',

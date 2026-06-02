@@ -17,9 +17,12 @@
   <button
     wx:elif="{{variant === 'fab'}}"
     class="cs-fab"
-    style="{{fabStyle}}"
+    style="{{fabStyle}}{{dragStyle}}"
     open-type="{{openType}}"
     bindcontact="onContact"
+    bindtouchstart="onFabTouchStart"
+    catchtouchmove="onFabTouchMove"
+    bindtouchend="onFabTouchEnd"
     bindtap="onTap">
     <view wx:if="{{fabIsDots}}" class="cs-fab-icon">
       <view class="cs-fab-dot"></view>

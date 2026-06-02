@@ -17,6 +17,19 @@ function absUrl(u) {
   return u;
 }
 
+function winSize() {
+  try {
+    if (typeof wx.getWindowInfo === 'function') {
+      const w = wx.getWindowInfo();
+      return { W: w.windowWidth, H: w.windowHeight };
+    }
+  } catch (e) { /* fall through */ }
+  const s = wx.getSystemInfoSync();
+  return { W: s.windowWidth, H: s.windowHeight };
+}
+
+const DRAG_MARGIN = 10; // px gap kept from the screen edge when snapped
+
 Component({
   properties: {
     // 'row' (Me tab full-width row), 'fab' (floating bubble), 'inline' (pill)
@@ -34,6 +47,9 @@ Component({
     displayHours: '',
     qrModalOpen: false,
     qrUrl: '',
+    // Drag override for the floating bubble — appended after fabStyle so its
+    // left/top win over the config-driven right/bottom. Empty until dragged.
+    dragStyle: '',
     // Floating-bubble (fab) appearance — driven by admin config
     fabStyle: '',
     fabIsDots: true,
@@ -48,9 +64,24 @@ Component({
     show() { this.recompute(); },
   },
   methods: {
+    // Resolve the storefront config and (re)render. On a cold launch
+    // globalData.config is still in flight when this component attaches, so
+    // recompute would hide the button and only reappear on the next page
+    // show() (navigate away + back). When config isn't ready yet, await the
+    // shared config cache and re-apply once it lands.
     recompute() {
-      const cfg = (getApp().globalData.config || {});
-      const cs = cfg.customer_service || {};
+      const app = getApp();
+      if (app.globalData.config) {
+        this.applyConfig(app.globalData.config);
+        return;
+      }
+      config.load(false).then((full) => {
+        if (full && !app.globalData.config) app.globalData.config = full;
+        this.applyConfig(full || {});
+      }).catch(() => this.applyConfig({}));
+    },
+    applyConfig(cfg) {
+      const cs = (cfg && cfg.customer_service) || {};
       const mode = cs.mode || 'off';
       if (mode === 'off') {
         this.setData({ visible: false });
@@ -77,6 +108,7 @@ Component({
         displayLabel: label,
         displayHours: hours,
         qrUrl: absUrl(cs.qr_image_url || ''),
+        dragStyle: this.restoreDragStyle(),
       }, fab));
     },
     // Build the inline style + icon choices for the floating bubble from
@@ -118,7 +150,69 @@ Component({
         fabShowLabel: showLabel,
       };
     },
+    // ─── Draggable floating bubble ─────────────────────────────────────
+    // Rebuild the saved left/top style for the bubble. Snaps to whichever
+    // side the user last released it on; clamps top to the current screen so
+    // a position saved on a taller device can't land off-screen.
+    restoreDragStyle() {
+      if (this.properties.variant !== 'fab') return '';
+      let pos;
+      try { pos = wx.getStorageSync('cs_fab_pos'); } catch (e) { pos = null; }
+      if (!pos || !pos.side) return '';
+      const { W, H } = winSize();
+      const w = pos.w || 48;
+      const h = pos.h || 48;
+      const left = pos.side === 'left' ? DRAG_MARGIN : (W - w - DRAG_MARGIN);
+      const top = Math.max(DRAG_MARGIN, Math.min(pos.top || 0, H - h - DRAG_MARGIN));
+      return `left:${left}px;top:${top}px;right:auto;bottom:auto;`;
+    },
+    onFabTouchStart(e) {
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      this._drag = { moved: false, sx: t.clientX, sy: t.clientY, offX: 0, offY: 0, w: 0, h: 0 };
+      this.createSelectorQuery().select('.cs-fab').boundingClientRect((rect) => {
+        if (!rect || !this._drag) return;
+        this._drag.offX = this._drag.sx - rect.left;
+        this._drag.offY = this._drag.sy - rect.top;
+        this._drag.w = rect.width;
+        this._drag.h = rect.height;
+      }).exec();
+    },
+    onFabTouchMove(e) {
+      const d = this._drag;
+      if (!d) return;
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      if (Math.abs(t.clientX - d.sx) > 6 || Math.abs(t.clientY - d.sy) > 6) d.moved = true;
+      if (!d.moved) return;
+      const { W, H } = winSize();
+      let left = t.clientX - d.offX;
+      let top = t.clientY - d.offY;
+      left = Math.max(DRAG_MARGIN, Math.min(left, W - d.w - DRAG_MARGIN));
+      top = Math.max(DRAG_MARGIN, Math.min(top, H - d.h - DRAG_MARGIN));
+      this.setData({ dragStyle: `left:${left}px;top:${top}px;right:auto;bottom:auto;` });
+    },
+    onFabTouchEnd(e) {
+      const d = this._drag;
+      this._drag = null;
+      if (!d || !d.moved) return; // treat as a plain tap → let onTap proceed
+      this._suppressTap = true;
+      setTimeout(() => { this._suppressTap = false; }, 60);
+      const { W, H } = winSize();
+      const t = (e.changedTouches && e.changedTouches[0]) || {};
+      const left = (t.clientX || 0) - d.offX;
+      const top = Math.max(DRAG_MARGIN, Math.min((t.clientY || 0) - d.offY, H - d.h - DRAG_MARGIN));
+      const snapLeft = (left + d.w / 2) < W / 2;
+      const x = snapLeft ? DRAG_MARGIN : (W - d.w - DRAG_MARGIN);
+      this.setData({ dragStyle: `left:${x}px;top:${top}px;right:auto;bottom:auto;` });
+      try {
+        wx.setStorageSync('cs_fab_pos', { side: snapLeft ? 'left' : 'right', top, w: d.w, h: d.h });
+      } catch (e2) { /* storage full / unavailable — position just won't persist */ }
+    },
     onTap() {
+      // A drag just ended on this bubble — swallow the synthetic tap so the
+      // chat/QR doesn't open when the user only meant to move it.
+      if (this._suppressTap) { this._suppressTap = false; return; }
       // If mode is 'kf', the button's open-type="contact" handles it natively;
       // bindtap still fires but we just do nothing.
       if (this.data.mode === 'kf') return;

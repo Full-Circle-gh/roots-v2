@@ -16,7 +16,7 @@ Page({
     unlocked: false,
     pct: 0,
     lang: 'en',
-    copy: { title: 'Almost yours.', kicker: 'YOUR BASKET · 购物车', empty: 'Your basket is empty — shop the garden →', checkout: 'CHECK OUT' },
+    copy: { title: 'Almost yours.', kicker: 'YOUR BASKET', empty: 'Your basket is empty — shop the garden →', checkout: 'CHECK OUT' },
   },
 
   onLoad() {
@@ -88,7 +88,7 @@ Page({
       unlocked: remainingRaw <= 0,
       pct: alwaysFree ? 100 : Math.min(100, (subtotal / t) * 100),
       copy: {
-        kicker:    this.tx('copy.cart.kicker',       L === 'cn' ? '购物车'                   : 'YOUR BASKET · 购物车'),
+        kicker:    this.tx('copy.cart.kicker',       L === 'cn' ? '购物车'                   : 'YOUR BASKET'),
         title:     this.tx('copy.cart.title',        L === 'cn' ? '即将拥有。'                : 'Almost yours.'),
         empty:     this.tx('copy.cart.empty',        L === 'cn' ? '购物车空空如也'           : 'Your basket is empty'),
         checkout:  this.tx('copy.cart.checkout_btn', L === 'cn' ? '结账'                     : 'CHECK OUT'),
