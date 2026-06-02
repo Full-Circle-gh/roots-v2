@@ -6212,16 +6212,9 @@
 
     <!-- Settings card -->
     <div class="card" style="margin-bottom: var(--s4);">
-      <h3 style="font-size: 13px; margin-bottom: 12px;">Program settings · 计划设置</h3>
+      <h3 style="font-size: 13px; margin-bottom: 4px;">Program settings · 计划设置</h3>
+      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">Turn the program on/off in <b>Settings → Features</b>; the reward and code prefix below apply while it's on. · 计划开关位于“设置 → 功能”,以下奖励与前缀在启用时生效。</div>
       <div class="row" style="gap: 16px; align-items: flex-end; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Program enabled · 启用计划</label>
-          <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 0;">
-            <input type="checkbox" id="af-enabled" style="width: 18px; height: 18px;">
-            <span>On / off</span>
-          </label>
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">When off, the mini-app page shows a paused notice and the apply endpoint rejects new codes. · 关闭后,小程序页面会显示"已暂停",且接口拒绝新邀请码。</div>
-        </div>
         <div class="field" style="margin: 0;">
           <label class="stacked">Reward per first paid order (¥) · 首单付款奖励(¥)</label>
           <input type="number" id="af-reward" placeholder="30" min="0" step="0.5" style="width: 160px;">
@@ -9322,7 +9315,7 @@ const FEATURE_CATALOG = [
   { key: 'membership',  en: 'Membership & points', cn: '会员与积分', def: true,
     desc: 'Roots Club tiers and the points shown to shoppers. · 会员等级与向顾客展示的积分。' },
   { key: 'affiliate',   en: 'Referral program',    cn: '推荐计划',   def: true,
-    desc: 'The affiliate / referral tab and shopper referral links. · 推荐计划标签页与顾客推荐链接。' },
+    desc: 'On/off for the whole referral program — when off, shoppers can\'t apply codes or earn rewards, and the admin tab is hidden. · 推荐计划总开关:关闭后顾客无法使用邀请码或获得奖励,后台标签页也会隐藏。' },
   { key: 'reviews',     en: 'Product reviews',      cn: '商品评价',   def: true,
     desc: 'Customer reviews and the review-tag editor. · 顾客评价与评价标签编辑。' },
   { key: 'feedback',    en: 'Customer feedback',    cn: '用户反馈',   def: true,
@@ -19164,7 +19157,8 @@ async function afLoadSettings() {
   try {
     const r = await api('/api/retail-admin/affiliate/settings');
     const d = r.data || {};
-    $('#af-enabled').checked = d.enabled !== false;
+    // On/off now lives in Settings → Features (features.affiliate); this tab only
+    // edits the reward + code prefix.
     $('#af-reward').value    = (Number(d.rewardPerOrder) || 0).toString();
     $('#af-prefix').value    = String(d.codePrefix || 'ROOTS-').toUpperCase();
   } catch (e) {
@@ -19174,7 +19168,6 @@ async function afLoadSettings() {
 
 async function afSaveSettings() {
   const body = {
-    enabled:        !!$('#af-enabled').checked,
     rewardPerOrder: Number($('#af-reward').value) || 0,
     codePrefix:     String($('#af-prefix').value || '').trim().toUpperCase(),
   };

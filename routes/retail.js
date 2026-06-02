@@ -5842,8 +5842,13 @@ const REFERRAL_CODE_PREFIX     = 'ROOTS-';
 const REFERRAL_CODE_BODY_LEN   = 6;        // 6 alnum chars → ~36^6 ≈ 2B keyspace
 
 function affiliateSettings() {
+  // Single on/off: the platform feature toggle (admin Settings → Features),
+  // mirrored in storefront_config as `features.affiliate` (default on). The
+  // old standalone `affiliate.enabled` control was retired so customers + admin
+  // never face two competing switches — the feature toggle is now the sole
+  // source of truth for whether the referral program runs.
   return {
-    enabled:        cfgValue('affiliate.enabled', true) ? true : false,
+    enabled:        cfgValue('features.affiliate', true) ? true : false,
     rewardPerOrder: Number(cfgValue('affiliate.rewardPerOrder', AFFILIATE_REWARD_DEFAULT)) || 0,
     codePrefix:     String(cfgValue('affiliate.codePrefix', REFERRAL_CODE_PREFIX)),
   };
@@ -6035,7 +6040,8 @@ router.get('/api/retail-admin/affiliate/settings', requireRetailAdmin, (req, res
 router.patch('/api/retail-admin/affiliate/settings', requireRetailAdmin, express.json(), (req, res) => {
   const b = req.body || {};
   const writes = [];
-  if (typeof b.enabled === 'boolean') writes.push(['affiliate.enabled', b.enabled]);
+  // `enabled` intentionally not accepted here — the referral on/off lives in
+  // Settings → Features (`features.affiliate`), the single source of truth.
   if (b.rewardPerOrder !== undefined) {
     const n = Number(b.rewardPerOrder);
     if (!Number.isFinite(n) || n < 0 || n > 10000) return res.status(400).json({ success: false, error: 'bad_reward' });
