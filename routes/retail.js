@@ -11288,6 +11288,11 @@ router.get('/api/retail-admin/delivery-zones', requireRetailAdmin, (req, res) =>
     const p = zoneProvince(r);
     r.province_cn = p.cn;
     r.province_en = p.en;
+    // A 'city' zone whose match_city IS its own province (江苏省) or is a
+    // municipality (北京市) covers the whole province — not one city. Flag it
+    // so the UI shows 全省/全市 instead of a misleading CITY chip + a redundant
+    // province header.
+    r.is_province_wide = r.zone_type === 'city' && r.province_cn === r.match_city ? 1 : 0;
   }
   res.json({ success: true, data: rows });
 });

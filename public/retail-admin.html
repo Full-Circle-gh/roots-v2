@@ -2192,6 +2192,8 @@
   /* CITY = neutral ink chip (was an off-palette light-blue). GZ stays Tea so
      the two zone types still read apart, on-palette. */
   .dz-type-chip.city { background: var(--bg-elev-1); color: var(--text-2); border-color: var(--line); }
+  /* Province-wide (全省/全市) — earthy tan, distinct from GZ green + CITY ink */
+  .dz-type-chip.prov { background: rgba(176, 137, 104, .14); color: #8a6a44; border-color: rgba(176, 137, 104, .4); }
   .dz-extras { color: var(--text-3); font-size: 11px; }
   .dz-sd-yes { color: var(--st-delivered); font-weight: 600; }
   .dz-sd-no  { color: var(--text-4); }
@@ -13951,7 +13953,14 @@ function zoneGroupHeaderHtml(g, colspan) {
 }
 function groupedZoneBodyHtml(rows, colspan, rowFn) {
   return groupZonesByProvince(rows)
-    .map(g => zoneGroupHeaderHtml(g, colspan) + g.rows.map(rowFn).join(''))
+    .map(g => {
+      // A province covered by a single province-wide row needs no heading —
+      // the row already names the province (全省). Headings only earn their
+      // keep when they group multiple city/district rows under a province.
+      const headerless = g.rows.length === 1 && g.rows[0].is_province_wide;
+      const head = headerless ? '' : zoneGroupHeaderHtml(g, colspan);
+      return head + g.rows.map(rowFn).join('');
+    })
     .join('');
 }
 
@@ -14033,7 +14042,13 @@ function zoneLabel(z) {
 
 function zoneCellHtml(z) {
   const isGz = z.zone_type === 'gz_district';
-  const chip = `<span class="dz-type-chip ${isGz?'gz':'city'}">${isGz?'GZ':'CITY'}</span>`;
+  let cls, label;
+  if (isGz) { cls = 'gz'; label = 'GZ'; }
+  else if (z.is_province_wide) {
+    cls = 'prov';
+    label = /(省|自治区)$/.test(z.match_city || '') ? '全省' : '全市';
+  } else { cls = 'city'; label = 'CITY'; }
+  const chip = `<span class="dz-type-chip ${cls}">${label}</span>`;
   const cn = escapeHtml(zoneLabel(z) || '—');
   const en = escapeHtml(z.name_en || '');
   return `<div class="dz-zone-cell">${chip}<div class="dz-zone-text"><span>${cn}</span>${en ? `<span class="sub">${en}</span>` : ''}</div></div>`;
