@@ -1951,6 +1951,34 @@
     text-transform: uppercase; opacity: .55; margin-bottom: var(--s3);
   }
 
+  /* Collapsible inspector sections — group a block's edit fields (Style &
+     layout / Content / Colours / Behaviour / Frame) so a long form (bundle has
+     ~20 fields) doesn't force a marathon scroll. The head is a full-width
+     button; the body shows only when .open. Open/closed state survives the
+     inspector's per-edit rebuild via the inspectorOpen map (see
+     inspectorSection()) — otherwise every keystroke would snap sections shut. */
+  .insp-sec { border-top: 1px solid var(--line-soft); }
+  .insp-sec:first-child { border-top: 0; }
+  .insp-sec-head {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; gap: 8px; text-align: left;
+    background: transparent; border: 0; cursor: pointer;
+    padding: 14px 0 12px; margin: 0;
+  }
+  .insp-sec-title {
+    font: 700 11px var(--f-sans); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-3); transition: color var(--t-fast) ease;
+  }
+  .insp-sec-head:hover .insp-sec-title { color: var(--text-1); }
+  .insp-sec-chev {
+    width: 14px; height: 14px; color: var(--text-4); flex-shrink: 0;
+    transition: transform var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .insp-sec.open .insp-sec-chev { transform: rotate(180deg); }
+  .insp-sec-head:hover .insp-sec-chev { color: var(--text-2); }
+  .insp-sec-body { display: none; padding-bottom: var(--s2); }
+  .insp-sec.open .insp-sec-body { display: block; }
+
   /* ═══════════════════════════════════════════════════════════════════
      BLOCK PREVIEW STYLES (on the phone)
      ═══════════════════════════════════════════════════════════════════ */
@@ -9354,6 +9382,13 @@ function renderInspector() {
     case 'notification_bar': buildNotificationBarForm(body, b); break;
   }
   buildChromeSection(body, b);
+  // Drop any section left empty by conditional fields (e.g. Colours when a
+  // hero is in Full view) so the operator never sees a header with nothing
+  // under it.
+  body.querySelectorAll('.insp-sec').forEach(s => {
+    const inner = s.querySelector('.insp-sec-body');
+    if (!inner || inner.children.length === 0) s.remove();
+  });
   const dz = document.createElement('div');
   dz.className = 'danger-zone';
   const btn = document.createElement('button');
@@ -9374,13 +9409,9 @@ function renderInspector() {
 //     Stored as block.full_bleed (boolean). All persist via validateBlocks
 //     (structural validation only) and render in the live mini-app .blk-outer.
 function buildChromeSection(body, b) {
-  const sec = document.createElement('div');
-  sec.className = 'chrome-section';
-
-  const head = document.createElement('div');
-  head.className = 'chrome-head';
-  head.textContent = T('Frame, radius & width', '边框、圆角与宽度');
-  sec.appendChild(head);
+  // Universal "Frame, radius & width" controls — a collapsed section at the
+  // bottom of every block's inspector (set once, rarely reopened).
+  const sec = inspectorSection(body, b.type, 'frame', T('Frame, radius & width', '边框、圆角与宽度'));
 
   // Frame colour (— none — clears it)
   sec.appendChild(field(T('Frame', '边框'),
@@ -9411,8 +9442,6 @@ function buildChromeSection(body, b) {
   lbl.addEventListener('click', () => { box.checked = !box.checked; box.dispatchEvent(new Event('change')); });
   row.appendChild(box); row.appendChild(lbl);
   sec.appendChild(row);
-
-  body.appendChild(sec);
 }
 
 function field(label, helper, inner) {
@@ -9422,6 +9451,43 @@ function field(label, helper, inner) {
   wrap.appendChild(inner);
   if (helper) { const h = document.createElement('div'); h.className = 'helper'; h.textContent = helper; wrap.appendChild(h); }
   return wrap;
+}
+
+// Remembers which inspector sections are expanded, keyed by
+// "<blockType>:<sectionKey>". The inspector rebuilds on every edit, so without
+// this every keystroke would re-collapse the sections the operator just opened.
+const inspectorOpen = Object.create(null);
+
+// Create a collapsible section inside the inspector body and return its inner
+// content element — append fields to the returned node, not to `body`. Default
+// open/closed comes from `open`; once the operator toggles it, their choice is
+// remembered for that block type across rebuilds. Empty sections are pruned by
+// renderInspector, so a build fn can safely create a section it might not fill.
+function inspectorSection(body, blockType, key, title, { open = false } = {}) {
+  const mapKey = blockType + ':' + key;
+  const isOpen = (mapKey in inspectorOpen) ? inspectorOpen[mapKey] : open;
+  const sec = document.createElement('div');
+  sec.className = 'insp-sec' + (isOpen ? ' open' : '');
+  const head = document.createElement('button');
+  head.type = 'button';
+  head.className = 'insp-sec-head';
+  const ttl = document.createElement('span');
+  ttl.className = 'insp-sec-title';
+  ttl.textContent = title;
+  head.appendChild(ttl);
+  head.insertAdjacentHTML('beforeend',
+    '<svg class="insp-sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>');
+  const inner = document.createElement('div');
+  inner.className = 'insp-sec-body';
+  head.addEventListener('click', () => {
+    const nowOpen = !sec.classList.contains('open');
+    sec.classList.toggle('open', nowOpen);
+    inspectorOpen[mapKey] = nowOpen;
+  });
+  sec.appendChild(head);
+  sec.appendChild(inner);
+  body.appendChild(sec);
+  return inner;
 }
 function txt(value, onInput, placeholder = '') {
   const el = document.createElement('input');
@@ -9657,24 +9723,25 @@ function buildAnnouncementForm(m, b) {
 function buildHeroForm(m, b) {
   const view = b.view || 'full';
   const heroFit = b.image_fit || (b.image_aspect ? 'contain' : 'cover');
-  m.appendChild(field(T('Layout', '版式'),
+
+  // Grouped sections — Style & layout + Content open by default; Colours and
+  // Behaviour collapsed (set once, rarely reopened). See inspectorSection().
+  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
+
+  // ── Style & layout ──────────────────────────────────────────────────
+  secLayout.appendChild(field(T('Layout', '版式'),
     T('Full = image fills, CTAs float over the image. Split = image on the left, headline + button on a coloured panel on the right (good for lighter, copy-driven designs).', '全幅 = 图片铺满,按钮浮于图上。分栏 = 图片在左,标题 + 按钮在右侧色块面板(适合更轻、以文案为主的设计)。'),
     sel(view, [
       { value: 'full',  label: T('Full — image fills with floating CTAs', '全幅 — 图片铺满,浮动按钮') },
       { value: 'split', label: T('Split — image left, copy panel right', '分栏 — 图片在左,文案面板在右') },
     ], v => updateBlock(b.id, { view: v }))));
 
-  m.appendChild(field(
-    T('Image', '图片'),
-    view === 'split'
-      ? T('Cropped to a square on the left side of the panel.', '裁剪为正方形,置于面板左侧。')
-      : T('Banner height auto-fits the image — no stretch, no crop.', '横幅高度自动适配图片 — 不拉伸、不裁剪。'),
-    imgPicker(b.image_url, ({ url, aspect }) => updateBlock(b.id, { image_url: url, image_aspect: aspect }))
-  ));
-
   // Image fit — only meaningful for the full view (split crops to a square).
   if (view === 'full') {
-    m.appendChild(field(
+    secLayout.appendChild(field(
       T('Image fit', '图片填充方式'),
       T('How the image fills the banner. Fill crops the edges to cover the whole banner; Whole image shows everything (banner matches the picture shape); Stretch fills exactly but may distort. Use the Banner height below to control how tall it is when filling.',
         '图片如何填满横幅。填满 = 裁剪边缘以铺满整个横幅;完整显示 = 显示全部内容(横幅比例随图片);拉伸 = 精确填满但可能变形。填满时可用下方的横幅高度控制高度。'),
@@ -9688,13 +9755,28 @@ function buildHeroForm(m, b) {
     // cropped into it), so expose the height here too — not just as a
     // placeholder. Contain keeps auto-height from the image shape.
     if (heroFit !== 'contain') {
-      m.appendChild(field(T('Banner height (px)', '横幅高度(像素)'),
+      secLayout.appendChild(field(T('Banner height (px)', '横幅高度(像素)'),
         T('How tall the filled banner is. The image is cropped to cover it.', '填满横幅的高度。图片将被裁剪以铺满。'),
         num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
     }
   }
 
-  m.appendChild(field(
+  // Hide the placeholder-height field when the "Banner height" field above is
+  // already shown (full view + fill/stretch), to avoid two inputs for height_px.
+  if (!(view === 'full' && heroFit !== 'contain')) {
+    secLayout.appendChild(field(T('Placeholder height (px)', '占位高度(像素)'), T('Only used while no image is set.', '仅在未设置图片时使用。'), num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+  }
+
+  // ── Content ─────────────────────────────────────────────────────────
+  secContent.appendChild(field(
+    T('Image', '图片'),
+    view === 'split'
+      ? T('Cropped to a square on the left side of the panel.', '裁剪为正方形,置于面板左侧。')
+      : T('Banner height auto-fits the image — no stretch, no crop.', '横幅高度自动适配图片 — 不拉伸、不裁剪。'),
+    imgPicker(b.image_url, ({ url, aspect }) => updateBlock(b.id, { image_url: url, image_aspect: aspect }))
+  ));
+
+  secContent.appendChild(field(
     T('Video (optional)', '视频(可选)'),
     T('Plays muted on a loop, filling the banner. When set it replaces the image — the image above is used as the still poster shown while the clip loads, and to set the banner shape. Keep clips short (≤20MB MP4).', '静音循环播放,铺满横幅。设置后将替代图片 — 上方图片用作加载时的封面,并决定横幅比例。短片请保持精简(≤20MB 的 MP4)。'),
     videoPicker(b.video_url, url => updateBlock(b.id, { video_url: url }))
@@ -9703,17 +9785,13 @@ function buildHeroForm(m, b) {
   if (view === 'split') {
     const hl = getBi(b, 'headline');
     const sub = getBi(b, 'subtitle');
-    m.appendChild(field(T('Headline', '标题'), '',
+    secContent.appendChild(field(T('Headline', '标题'), '',
       txtPair(hl.en, hl.cn, ({ en, cn }) => updateBlockSilent(b.id, { headline_en: en, headline_cn: cn }))));
-    m.appendChild(field(T('Subtitle', '副标题'), T('One short supporting line.', '一行简短的辅助文案。'),
+    secContent.appendChild(field(T('Subtitle', '副标题'), T('One short supporting line.', '一行简短的辅助文案。'),
       txtPair(sub.en, sub.cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
-    m.appendChild(field(T('Panel background', '面板背景颜色'), '',
-      sel(b.panel_bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { panel_bg_color: v }))));
-    m.appendChild(field(T('Panel text colour', '面板文字颜色'), '',
-      sel(b.panel_fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { panel_fg_color: v }))));
   }
 
-  // Buttons section
+  // Buttons
   const ctas = getCtas(b);
   const btnWrap = document.createElement('div');
   btnWrap.className = 'field';
@@ -9742,22 +9820,25 @@ function buildHeroForm(m, b) {
     updateBlock(b.id, { ctas: next, cta_label: undefined, cta_target: undefined });
   });
   btnWrap.appendChild(addBtn);
-  m.appendChild(btnWrap);
+  secContent.appendChild(btnWrap);
 
-  m.appendChild(field(T('Primary button colour', '主按钮颜色'), T('Fill of "Primary" buttons. Label colour auto-adjusts for contrast. Secondary + Link styles keep their default look.', '「主要」按钮的填充色。文字颜色自动调整以保证对比度。「次要」与「链接」样式保持默认外观。'),
+  // ── Colours ─────────────────────────────────────────────────────────
+  if (view === 'split') {
+    secColours.appendChild(field(T('Panel background', '面板背景颜色'), '',
+      sel(b.panel_bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { panel_bg_color: v }))));
+    secColours.appendChild(field(T('Panel text colour', '面板文字颜色'), '',
+      sel(b.panel_fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { panel_fg_color: v }))));
+  }
+  secColours.appendChild(field(T('Primary button colour', '主按钮颜色'), T('Fill of "Primary" buttons. Label colour auto-adjusts for contrast. Secondary + Link styles keep their default look.', '「主要」按钮的填充色。文字颜色自动调整以保证对比度。「次要」与「链接」样式保持默认外观。'),
     sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
 
-  // Hide the placeholder-height field when the "Banner height" field above is
-  // already shown (full view + fill/stretch), to avoid two inputs for height_px.
-  if (!(view === 'full' && heroFit !== 'contain')) {
-    m.appendChild(field(T('Placeholder height (px)', '占位高度(像素)'), T('Only used while no image is set.', '仅在未设置图片时使用。'), num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
-  }
+  // ── Behaviour ───────────────────────────────────────────────────────
   if (view === 'full') {
-    m.appendChild(field(T('Image scrim', '图片遮罩'), T('Dim the bottom of the image so floating CTAs stay legible on bright photography.', '压暗图片底部,让浮动按钮在明亮照片上仍清晰可读。'),
+    secBehaviour.appendChild(field(T('Image scrim', '图片遮罩'), T('Dim the bottom of the image so floating CTAs stay legible on bright photography.', '压暗图片底部,让浮动按钮在明亮照片上仍清晰可读。'),
       sel(b.scrim || 'medium', SCRIM_OPTIONS,
           v => updateBlock(b.id, { scrim: v }))));
   }
-  m.appendChild(field(T('Entrance animation', '入场动画'), T('How the banner enters on first paint.', '横幅首次渲染时的入场方式。'),
+  secBehaviour.appendChild(field(T('Entrance animation', '入场动画'), T('How the banner enters on first paint.', '横幅首次渲染时的入场方式。'),
     sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS,
         v => updateBlock(b.id, { entrance_anim: v }))));
 }
