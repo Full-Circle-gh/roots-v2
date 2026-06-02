@@ -7198,17 +7198,13 @@
     <div class="settings-layout">
       <!-- ───────── sidebar nav ───────── -->
       <aside class="settings-nav" id="settings-nav">
-        <button data-sub="features">
+        <button data-sub="features" class="active">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
           Features
         </button>
-        <button data-sub="theme" class="active">
+        <button data-sub="theme">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg>
           Brand &amp; theme
-        </button>
-        <button data-sub="home">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 12 3l9 9"/><path d="M5 10v10h14V10"/></svg>
-          Home &amp; content pages
         </button>
         <button data-sub="shop">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18l-2 13H5L3 7z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg>
@@ -7238,14 +7234,82 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           FAQ &amp; help centre
         </button>
+        <!-- Home & content pages — launcher only (links to /cms + storefront preview), so it sits last, after the real settings panels. -->
+        <button data-sub="home">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 12 3l9 9"/><path d="M5 10v10h14V10"/></svg>
+          Home &amp; content pages
+        </button>
       </aside>
 
       <!-- ───────── content panels ───────── -->
       <div class="settings-body">
 
+        <!-- ────── FEATURES ────── (first to match the nav; the master on/off list)
+             Per-tenant feature switches. Rows are rendered by renderFeaturesPanel()
+             from the operator's entitlements, so this panel only ever lists the
+             features this tenant is allowed to use. Saving writes features.<key>
+             booleans to storefront_config and re-applies the gates live. -->
+        <div class="sub-panel active" id="sub-features">
+          <h2>Features · 功能</h2>
+          <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
+            Turn optional sections of your backend on or off. Switching a feature off hides its tab and settings here, so your team only sees the tools you actually use. Changes apply instantly. · 开启或关闭后台的可选功能模块;关闭后将隐藏对应的标签页与设置,即时生效。
+          </div>
+          <div id="features-list"></div>
+          <div class="row" style="gap: 12px; margin-top: var(--s4);">
+            <button class="btn btn-primary" onclick="saveFeatures()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Save features · 保存功能
+            </button>
+            <span id="features-status" style="font-size: 12px; align-self: center;"></span>
+          </div>
+        </div>
+
         <!-- ────── THEME ────── -->
-        <div class="sub-panel active" id="sub-theme">
+        <div class="sub-panel" id="sub-theme">
           <h2>Brand &amp; theme · 品牌与主题</h2>
+
+          <!-- Language — the most fundamental presentation choice, so it leads. -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Language · 语言</h3>
+              <div class="muted">Bilingual shows EN + 中 stacked on product cards and page headers, plus a toggle pill so customers can hide one. Single-language hides the toggle entirely and renders only that locale.</div>
+            </div>
+            <select id="cfg-theme-language" class="picker-source">
+              <option value="bilingual">Bilingual · 双语</option>
+              <option value="en">English only · 仅英文</option>
+              <option value="cn">中文 only</option>
+            </select>
+            <div class="opt-grid" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));">
+              <div class="opt" data-target="cfg-theme-language" data-value="bilingual">
+                <div class="opt-screen" style="display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 8px">
+                  <div style="font-size: 11px; color: var(--text-1); font-weight: 600">Almond Cookie</div>
+                  <div style="font-size: 11px; color: var(--text-2)">杏仁曲奇</div>
+                  <div style="margin-top: 6px; display: inline-flex; gap: 2px; align-self: flex-start; background: #1a1a1f; padding: 2px; border-radius: 4px">
+                    <span style="font-size: 8px; padding: 1px 4px; background: var(--accent); color: #16161a; border-radius: 2px">EN</span>
+                    <span style="font-size: 8px; padding: 1px 4px; color: var(--text-3)">中</span>
+                  </div>
+                </div>
+                <div class="opt-label">Bilingual</div>
+                <div class="opt-sub">EN + 中, toggle shown</div>
+              </div>
+              <div class="opt" data-target="cfg-theme-language" data-value="en">
+                <div class="opt-screen" style="display: flex; flex-direction: column; justify-content: center; padding: 8px">
+                  <div style="font-size: 13px; color: var(--text-1); font-weight: 600">Almond Cookie</div>
+                  <div style="font-size: 10px; color: var(--text-3); margin-top: 4px">No toggle</div>
+                </div>
+                <div class="opt-label">English only</div>
+                <div class="opt-sub">Hides 中文</div>
+              </div>
+              <div class="opt" data-target="cfg-theme-language" data-value="cn">
+                <div class="opt-screen" style="display: flex; flex-direction: column; justify-content: center; padding: 8px">
+                  <div style="font-size: 13px; color: var(--text-1); font-weight: 600">杏仁曲奇</div>
+                  <div style="font-size: 10px; color: var(--text-3); margin-top: 4px">不显示切换</div>
+                </div>
+                <div class="opt-label">中文 only</div>
+                <div class="opt-sub">Hides English</div>
+              </div>
+            </div>
+          </div>
 
           <!-- Accent colour -->
           <div class="group-card">
@@ -7378,49 +7442,6 @@
             </div>
           </div>
 
-          <!-- Language -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Language · 语言</h3>
-              <div class="muted">Bilingual shows EN + 中 stacked on product cards and page headers, plus a toggle pill so customers can hide one. Single-language hides the toggle entirely and renders only that locale.</div>
-            </div>
-            <select id="cfg-theme-language" class="picker-source">
-              <option value="bilingual">Bilingual · 双语</option>
-              <option value="en">English only · 仅英文</option>
-              <option value="cn">中文 only</option>
-            </select>
-            <div class="opt-grid" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));">
-              <div class="opt" data-target="cfg-theme-language" data-value="bilingual">
-                <div class="opt-screen" style="display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 8px">
-                  <div style="font-size: 11px; color: var(--text-1); font-weight: 600">Almond Cookie</div>
-                  <div style="font-size: 11px; color: var(--text-2)">杏仁曲奇</div>
-                  <div style="margin-top: 6px; display: inline-flex; gap: 2px; align-self: flex-start; background: #1a1a1f; padding: 2px; border-radius: 4px">
-                    <span style="font-size: 8px; padding: 1px 4px; background: var(--accent); color: #16161a; border-radius: 2px">EN</span>
-                    <span style="font-size: 8px; padding: 1px 4px; color: var(--text-3)">中</span>
-                  </div>
-                </div>
-                <div class="opt-label">Bilingual</div>
-                <div class="opt-sub">EN + 中, toggle shown</div>
-              </div>
-              <div class="opt" data-target="cfg-theme-language" data-value="en">
-                <div class="opt-screen" style="display: flex; flex-direction: column; justify-content: center; padding: 8px">
-                  <div style="font-size: 13px; color: var(--text-1); font-weight: 600">Almond Cookie</div>
-                  <div style="font-size: 10px; color: var(--text-3); margin-top: 4px">No toggle</div>
-                </div>
-                <div class="opt-label">English only</div>
-                <div class="opt-sub">Hides 中文</div>
-              </div>
-              <div class="opt" data-target="cfg-theme-language" data-value="cn">
-                <div class="opt-screen" style="display: flex; flex-direction: column; justify-content: center; padding: 8px">
-                  <div style="font-size: 13px; color: var(--text-1); font-weight: 600">杏仁曲奇</div>
-                  <div style="font-size: 10px; color: var(--text-3); margin-top: 4px">不显示切换</div>
-                </div>
-                <div class="opt-label">中文 only</div>
-                <div class="opt-sub">Hides English</div>
-              </div>
-            </div>
-          </div>
-
           <!-- IP characters -->
           <div class="group-card">
             <div class="group-card-head">
@@ -7515,50 +7536,6 @@
               <div class="field"><label class="stacked">Credit line EN · 落款(英文)</label><input type="text" id="cfg-footer-credit-en" placeholder="Powered by Full Circle"></div>
               <div class="field"><label class="stacked">Credit line CN · 落款(中文)</label><input type="text" id="cfg-footer-credit-cn" placeholder="由 Full Circle 提供技术支持"></div>
             </div>
-          </div>
-        </div>
-
-        <!-- ────── HOME / CMS PAGES ────── -->
-        <div class="sub-panel" id="sub-home">
-          <h2>Home &amp; content pages · 主页与内容页</h2>
-          <div class="visual">
-            <div class="phone">
-              <div class="phone-notch"></div>
-              <div class="pv pv-bar"></div>
-              <div class="pv pv-hero"></div>
-              <div class="pv pv-row" style="top: 92px"></div>
-              <div class="pv-tile" style="position: absolute; left: 8px; top: 108px; width: 32px; height: 32px"></div>
-              <div class="pv-tile" style="position: absolute; left: 46px; top: 108px; width: 32px; height: 32px"></div>
-              <div class="pv-tile" style="position: absolute; left: 84px; top: 108px; width: 32px; height: 32px"></div>
-              <div class="pv pv-tile" style="left: 8px; top: 148px; right: 8px; height: 46px"></div>
-              <div class="pv-tab"><span class="active"></span><span></span><span></span><span></span></div>
-              <div class="pv-highlight" style="left: 4px; top: 30px; right: 4px; bottom: 32px"></div>
-            </div>
-            <div class="caption">
-              <span class="tag">Visual block editor</span>
-              <strong>Compose Home, Promotions, Shop landing, Membership, About, and Onboarding.</strong><br>
-              Drag-and-drop hero banners, announcement bars, product grids, sticker collages, and more. Edit copy in EN + 中, preview on 6 device sizes, then Publish.
-            </div>
-          </div>
-          <div class="card" style="display: flex; gap: var(--s4); align-items: center; background: linear-gradient(135deg, rgba(107,142,111,.06), transparent); border-color: rgba(107,142,111,.18);">
-            <div style="flex: 1;">
-              <h3 style="font-size: 13px; margin-bottom: 4px;">Open the Mini App editor · 打开小程序编辑器</h3>
-              <div class="muted" style="font-size: 12px;">All six editable mini-app pages live in /cms. Changes go live on Publish. · 全部 6 个可编辑的小程序页面在 /cms 管理;点击"发布"后生效。</div>
-            </div>
-            <a href="/cms" class="btn btn-primary">
-              Open editor
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-            </a>
-          </div>
-          <div class="card" style="display: flex; gap: var(--s4); align-items: center;">
-            <div style="flex: 1;">
-              <h3 style="font-size: 13px; margin-bottom: 4px;">Preview without editing · 仅预览(不编辑)</h3>
-              <div class="muted" style="font-size: 12px;">See the live storefront exactly as customers see it — phone frame, language toggle. · 以顾客的视角预览店面 — 手机外框、语言切换。</div>
-            </div>
-            <a href="/storefront" target="_blank" class="btn">
-              Open preview
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-            </a>
           </div>
         </div>
 
@@ -8616,23 +8593,48 @@
           </div>
         </div>
 
-        <!-- ────── FEATURES ────── -->
-        <!-- Per-tenant feature switches. Rows are rendered by renderFeaturesPanel()
-             from the operator's entitlements, so this panel only ever lists the
-             features this tenant is allowed to use. Saving writes features.<key>
-             booleans to storefront_config and re-applies the gates live. -->
-        <div class="sub-panel" id="sub-features">
-          <h2>Features · 功能</h2>
-          <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
-            Turn optional sections of your backend on or off. Switching a feature off hides its tab and settings here, so your team only sees the tools you actually use. Changes apply instantly. · 开启或关闭后台的可选功能模块;关闭后将隐藏对应的标签页与设置,即时生效。
+        <!-- ────── HOME / CMS PAGES ────── (launcher only — no saveable settings,
+             so it sits last in the body, after the real settings panels) -->
+        <div class="sub-panel" id="sub-home">
+          <h2>Home &amp; content pages · 主页与内容页</h2>
+          <div class="visual">
+            <div class="phone">
+              <div class="phone-notch"></div>
+              <div class="pv pv-bar"></div>
+              <div class="pv pv-hero"></div>
+              <div class="pv pv-row" style="top: 92px"></div>
+              <div class="pv-tile" style="position: absolute; left: 8px; top: 108px; width: 32px; height: 32px"></div>
+              <div class="pv-tile" style="position: absolute; left: 46px; top: 108px; width: 32px; height: 32px"></div>
+              <div class="pv-tile" style="position: absolute; left: 84px; top: 108px; width: 32px; height: 32px"></div>
+              <div class="pv pv-tile" style="left: 8px; top: 148px; right: 8px; height: 46px"></div>
+              <div class="pv-tab"><span class="active"></span><span></span><span></span><span></span></div>
+              <div class="pv-highlight" style="left: 4px; top: 30px; right: 4px; bottom: 32px"></div>
+            </div>
+            <div class="caption">
+              <span class="tag">Visual block editor</span>
+              <strong>Compose Home, Promotions, Shop landing, Membership, About, and Onboarding.</strong><br>
+              Drag-and-drop hero banners, announcement bars, product grids, sticker collages, and more. Edit copy in EN + 中, preview on 6 device sizes, then Publish.
+            </div>
           </div>
-          <div id="features-list"></div>
-          <div class="row" style="gap: 12px; margin-top: var(--s4);">
-            <button class="btn btn-primary" onclick="saveFeatures()">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-              Save features · 保存功能
-            </button>
-            <span id="features-status" style="font-size: 12px; align-self: center;"></span>
+          <div class="card" style="display: flex; gap: var(--s4); align-items: center; background: linear-gradient(135deg, rgba(107,142,111,.06), transparent); border-color: rgba(107,142,111,.18);">
+            <div style="flex: 1;">
+              <h3 style="font-size: 13px; margin-bottom: 4px;">Open the Mini App editor · 打开小程序编辑器</h3>
+              <div class="muted" style="font-size: 12px;">All six editable mini-app pages live in /cms. Changes go live on Publish. · 全部 6 个可编辑的小程序页面在 /cms 管理;点击"发布"后生效。</div>
+            </div>
+            <a href="/cms" class="btn btn-primary">
+              Open editor
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </a>
+          </div>
+          <div class="card" style="display: flex; gap: var(--s4); align-items: center;">
+            <div style="flex: 1;">
+              <h3 style="font-size: 13px; margin-bottom: 4px;">Preview without editing · 仅预览(不编辑)</h3>
+              <div class="muted" style="font-size: 12px;">See the live storefront exactly as customers see it — phone frame, language toggle. · 以顾客的视角预览店面 — 手机外框、语言切换。</div>
+            </div>
+            <a href="/storefront" target="_blank" class="btn">
+              Open preview
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
           </div>
         </div>
 
@@ -16376,10 +16378,13 @@ function cuRenderDetail() {
         <tr class="cu-order-row" tabindex="0" onclick="cuGotoOrder(${o.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();cuGotoOrder(${o.id});}">
           <td>${escapeHtml(o.order_no)}</td>
           <td><span class="cu-pill">${escapeHtml(o.status)}</span></td>
+          <td>${o.fulfillment_type === 'pickup'
+                ? '<span class="cu-pill">Pickup · 自提</span>'
+                : '<span class="cu-pill">Delivery · 配送</span>'}</td>
           <td class="numeric">¥${Number(o.total || 0).toFixed(2)}</td>
           <td class="muted">${cuFmtTime(o.created_at)}</td>
         </tr>`).join('')
-    : '<tr><td colspan="4" class="muted">No orders yet · 暂无订单</td></tr>';
+    : '<tr><td colspan="5" class="muted">No orders yet · 暂无订单</td></tr>';
 
   const recentPtsRows = d.recent_points.length
     ? d.recent_points.map(p => `
@@ -16527,7 +16532,7 @@ function cuRenderDetail() {
       <div class="cu-fold-body">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Order # · 订单号</th><th>Status · 状态</th><th class="numeric">Total · 总额</th><th>When · 时间</th></tr></thead>
+            <thead><tr><th>Order # · 订单号</th><th>Status · 状态</th><th>Type · 类型</th><th class="numeric">Total · 总额</th><th>When · 时间</th></tr></thead>
             <tbody>${recentOrdersRows}</tbody>
           </table>
         </div>
