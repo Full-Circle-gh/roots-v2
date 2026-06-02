@@ -2523,11 +2523,74 @@ router.post('/api/retail/notifications/:id/read', requireRetailAuth, (req, res) 
 // category='broadcast' and broadcast_id pointing back to the authoring row;
 // the existing customer notification endpoints surface them automatically.
 // Deeplink is carried via the existing ref_type='deeplink' / ref_id=<path>.
+// ─── Broadcast audience targeting ───────────────────────────────────────────
+// An audience filter is a small JSON object stored on the broadcast row:
+//   { activity, tiers: [...], cities: [...] }
+// "activity" folds has-ordered + recency into one dimension. Blocked customers
+// are always excluded. Legacy rows store the literal 'all_active' string, which
+// parses to the empty (= everyone active) filter.
+const BC_PAID_STATUSES = ['paid', 'preparing', 'dispatched', 'delivered'];
+const BC_TIER_KEYS = ['seed', 'sprout', 'root', 'tree'];
+const BC_ACTIVITIES = ['all', 'buyers', 'never', 'active', 'lapsed'];
+
+function normalizeAudience(raw) {
+  let a = raw;
+  if (typeof a === 'string') { try { a = JSON.parse(a); } catch (_) { a = {}; } }
+  if (!a || typeof a !== 'object') a = {};
+  const activity = BC_ACTIVITIES.includes(a.activity) ? a.activity : 'all';
+  const tiers = Array.isArray(a.tiers) ? a.tiers.filter(t => BC_TIER_KEYS.includes(t)) : [];
+  const cities = Array.isArray(a.cities)
+    ? [...new Set(a.cities.map(c => String(c).trim()).filter(Boolean))].slice(0, 100)
+    : [];
+  return { activity, tiers, cities };
+}
+
+// Build a WHERE clause (+ bound params) against retail_customers aliased "c".
+function audienceWhere(raw) {
+  const a = normalizeAudience(raw);
+  const clauses = ['COALESCE(c.is_blocked, 0) = 0'];
+  const params = [];
+  const paidIn = BC_PAID_STATUSES.map(() => '?').join(',');
+  const paidExists =
+    `SELECT 1 FROM retail_orders o WHERE o.customer_id = c.id AND o.status IN (${paidIn})`;
+  if (a.activity === 'buyers') {
+    clauses.push(`EXISTS (${paidExists})`); params.push(...BC_PAID_STATUSES);
+  } else if (a.activity === 'never') {
+    clauses.push(`NOT EXISTS (${paidExists})`); params.push(...BC_PAID_STATUSES);
+  } else if (a.activity === 'active') {
+    clauses.push(`EXISTS (${paidExists} AND o.placed_at >= datetime('now', '-30 days'))`);
+    params.push(...BC_PAID_STATUSES);
+  } else if (a.activity === 'lapsed') {
+    clauses.push(`EXISTS (${paidExists})`); params.push(...BC_PAID_STATUSES);
+    clauses.push(`NOT EXISTS (${paidExists} AND o.placed_at >= datetime('now', '-60 days'))`);
+    params.push(...BC_PAID_STATUSES);
+  }
+  if (a.tiers.length) {
+    clauses.push(`c.tier_key IN (${a.tiers.map(() => '?').join(',')})`);
+    params.push(...a.tiers);
+  }
+  if (a.cities.length) {
+    clauses.push(
+      `EXISTS (SELECT 1 FROM retail_customer_addresses ad
+                WHERE ad.customer_id = c.id AND ad.city IN (${a.cities.map(() => '?').join(',')}))`
+    );
+    params.push(...a.cities);
+  }
+  return { where: clauses.join(' AND '), params, normalized: a };
+}
+
+function countAudience(raw) {
+  const { where, params } = audienceWhere(raw);
+  return tdb().prepare(`SELECT COUNT(*) AS n FROM retail_customers c WHERE ${where}`)
+    .get(...params).n || 0;
+}
+
 function fanOutBroadcast(brd) {
   const db_ = tdb();
+  const { where, params } = audienceWhere(brd.audience);
   const customers = db_.prepare(
-    'SELECT id FROM retail_customers WHERE COALESCE(is_blocked, 0) = 0'
-  ).all();
+    `SELECT c.id FROM retail_customers c WHERE ${where}`
+  ).all(...params);
   const insert = db_.prepare(
     `INSERT INTO retail_notifications
        (customer_id, category, type, title_en, title_cn, body_en, body_cn,
@@ -2582,12 +2645,25 @@ router.get('/api/retail-admin/broadcasts', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: rows });
 });
 
-// GET /api/retail-admin/broadcasts/audience-count — preview "Will send to N".
+// GET /api/retail-admin/broadcasts/audience-count?aud=<json> — live preview of
+// how many customers the current filter would reach.
 router.get('/api/retail-admin/broadcasts/audience-count', requireRetailAdmin, (req, res) => {
-  const n = tdb().prepare(
-    'SELECT COUNT(*) AS n FROM retail_customers WHERE COALESCE(is_blocked, 0) = 0'
-  ).get().n;
-  res.json({ success: true, data: { count: n || 0 } });
+  let aud = {};
+  if (req.query.aud) { try { aud = JSON.parse(req.query.aud); } catch (_) {} }
+  res.json({ success: true, data: { count: countAudience(aud) } });
+});
+
+// GET /api/retail-admin/broadcasts/regions — cities customers have saved an
+// address in (with customer counts), to populate the region filter.
+router.get('/api/retail-admin/broadcasts/regions', requireRetailAdmin, (req, res) => {
+  const rows = tdb().prepare(
+    `SELECT city, COUNT(DISTINCT customer_id) AS n
+       FROM retail_customer_addresses
+      WHERE city IS NOT NULL AND TRIM(city) <> ''
+      GROUP BY city
+      ORDER BY n DESC, city ASC`
+  ).all();
+  res.json({ success: true, data: rows });
 });
 
 // POST /api/retail-admin/broadcasts — create + send-now OR schedule.
@@ -2619,13 +2695,14 @@ router.post('/api/retail-admin/broadcasts', requireRetailAdmin, express.json(), 
     }
   }
   const initialStatus = sendNow ? 'sent' : 'scheduled';
+  const audience = JSON.stringify(normalizeAudience(b.audience));
   const info = tdb().prepare(
     `INSERT INTO retail_broadcasts
        (title_en, title_cn, body_en, body_cn, deeplink, audience,
         scheduled_for, status, created_by)
-     VALUES (?, ?, ?, ?, ?, 'all_active', ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
-    title_en, title_cn, body_en, body_cn, deeplink || null,
+    title_en, title_cn, body_en, body_cn, deeplink || null, audience,
     scheduledFor, initialStatus, req.user.id
   );
   const id = info.lastInsertRowid;
@@ -11124,10 +11201,41 @@ router.get('/api/retail-admin/china-regions', requireRetailAdmin, (req, res) => 
   });
 });
 
+// Many delivery-zone rows were bulk-inserted (provinces, HK, cities) with a
+// null name_en, so the admin table showed only the Chinese name. Derive the
+// English label from the same reference catalogue used everywhere else, keyed
+// on match_district (GZ/HK districts) then match_city (city or 省). Built once.
+const HK_DISTRICTS_EN = {
+  '香港': 'Hong Kong',
+  '中西区': 'Central and Western', '东区': 'Eastern', '九龙城区': 'Kowloon City',
+  '观塘区': 'Kwun Tong', '南区': 'Southern', '深水埗区': 'Sham Shui Po',
+  '黄大仙区': 'Wong Tai Sin', '湾仔区': 'Wan Chai', '油尖旺区': 'Yau Tsim Mong',
+  '离岛区': 'Islands', '葵青区': 'Kwai Tsing', '北区': 'North', '西贡区': 'Sai Kung',
+  '沙田区': 'Sha Tin', '屯门区': 'Tuen Mun', '大埔区': 'Tai Po', '荃湾区': 'Tsuen Wan',
+  '元朗区': 'Yuen Long',
+};
+let _zoneEnMap = null;
+function zoneEnglishName(z) {
+  if (z.name_en && String(z.name_en).trim()) return z.name_en;
+  if (!_zoneEnMap) {
+    _zoneEnMap = new Map();
+    for (const c of (CHINA_REGIONS.cities || [])) {
+      if (c.name_cn && c.name_en) _zoneEnMap.set(c.name_cn, c.name_en);
+      if (c.province_cn && c.province_en) _zoneEnMap.set(c.province_cn, c.province_en);
+    }
+    for (const d of (CHINA_REGIONS.guangzhou_districts || [])) {
+      if (d.name_cn && d.name_en) _zoneEnMap.set(d.name_cn, d.name_en);
+    }
+    for (const [cn, en] of Object.entries(HK_DISTRICTS_EN)) _zoneEnMap.set(cn, en);
+  }
+  return _zoneEnMap.get(z.match_district) || _zoneEnMap.get(z.match_city) || null;
+}
+
 router.get('/api/retail-admin/delivery-zones', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
     `SELECT * FROM retail_delivery_zones ORDER BY zone_type ASC, sort_order ASC, id ASC`
   ).all();
+  for (const r of rows) r.name_en = zoneEnglishName(r);
   res.json({ success: true, data: rows });
 });
 
