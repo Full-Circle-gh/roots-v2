@@ -1,4 +1,5 @@
 <view class="page">
+  <mascot id="mascot" />
   <view class="hero" bindtap="goProfile">
     <image class="hero-ip" src="/assets/brand/ip-onion.png" mode="aspectFit"></image>
     <view class="hero-inner">
@@ -212,7 +213,7 @@
       </view>
       <view class="row-arrow">→</view>
     </view>
-    <view class="row" bindtap="goTour">
+    <view wx:if="{{tourEnabled}}" class="row" bindtap="goTour">
       <view class="row-body">
         <view class="row-title">
           <text class="f-bear">{{copy.menuTour}}</text>
@@ -222,7 +223,16 @@
       </view>
       <view class="row-arrow">→</view>
     </view>
-    <cs-button variant="row" placement="me"></cs-button>
+    <view class="row row-toggle">
+      <view class="row-body">
+        <view class="row-title">
+          <text class="f-bear">{{copy.menuMascot}}</text>
+          <text class="row-cn muted">  · {{copy.menuMascotCn}}</text>
+        </view>
+        <view class="row-meta">{{copy.mascotMeta}}</view>
+      </view>
+      <switch checked="{{mascotEnabled}}" color="#365329" bindchange="toggleMascot"/>
+    </view>
   </view>
 
   <view class="lang-section">
@@ -254,5 +264,6 @@
     <view class="footer-sub">{{footer.tagline}}</view>
     <view class="footer-version">{{footer.credit}}</view>
   </view>
+  <cs-button variant="fab" placement="me"></cs-button>
   <popup-manager page="me"></popup-manager>
 </view>

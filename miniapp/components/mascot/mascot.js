@@ -40,10 +40,9 @@ Component({
       this._H = sys.windowHeight || 700;
       this._sprite = (this._W * SPRITE_RPX) / 750;
 
-      // User opt-out (default on). Set wx.setStorageSync('mascotEnabled', false)
-      // to hide it everywhere; a Me-page toggle can drive this later.
-      const stored = wx.getStorageSync('mascotEnabled');
-      this._enabled = stored === '' || stored === undefined ? true : !!stored;
+      // User opt-out (default on), driven by the Me-page toggle through the
+      // shared 'mascotEnabled' storage flag.
+      this._enabled = this._readEnabled();
       if (!this._enabled || this._onHiddenPage()) return;
 
       const saved = this._restore();
@@ -67,8 +66,11 @@ Component({
   // and snap back to the creature's global position when the page reappears.
   pageLifetimes: {
     show() {
-      if (!this._alive || !this._enabled) return;
-      if (this._onHiddenPage()) { this.setData({ show: false }); return; }
+      if (!this._alive) return;
+      // Re-sync the opt-out each time the page surfaces, so flipping it off
+      // on the Me page also clears mascots already attached to other tabs.
+      this._enabled = this._readEnabled();
+      if (!this._enabled || this._onHiddenPage()) { clearTimeout(this._t); this.setData({ show: false }); return; }
       const saved = this._restore();
       if (saved) this.setData({ x: saved.x, y: saved.y, facing: saved.facing, moveMs: 500 });
       this.setData({ show: true });
@@ -86,6 +88,26 @@ Component({
         const pages = getCurrentPages();
         return HIDE_ON.includes(pages[pages.length - 1].route);
       } catch { return false; }
+    },
+
+    _readEnabled() {
+      try {
+        const s = wx.getStorageSync('mascotEnabled');
+        return s === '' || s === undefined ? true : !!s;
+      } catch { return true; }
+    },
+
+    // Called by the Me-page toggle for an instant show/hide on the current
+    // page (other pages pick the flag up from storage on their next show).
+    applyEnabled(on) {
+      this._enabled = !!on;
+      try { wx.setStorageSync('mascotEnabled', !!on); } catch {}
+      if (!on) { clearTimeout(this._t); this.setData({ show: false }); return; }
+      if (this._onHiddenPage()) { this.setData({ show: false }); return; }
+      const saved = this._restore();
+      if (saved) this.setData({ x: saved.x, y: saved.y, facing: saved.facing, moveMs: 400 });
+      this.setData({ show: true });
+      this._next(600);
     },
 
     _clampX(x) {
