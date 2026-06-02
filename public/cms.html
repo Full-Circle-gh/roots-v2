@@ -1484,6 +1484,12 @@
        brand-tinted selection without dominating the page. */
     outline-color: #6B8E6F;
     outline-width: 1.5px;
+    /* Sit the ring just outside the box (not the base -2px inset). Self-bg
+       blocks (voting, etc.) fill to the wrap's top/bottom with their own
+       background, which would paint over an inset outline's top/bottom edges
+       — leaving only the corners + sides visible. Offset 0 keeps all four
+       edges clear of the child. */
+    outline-offset: 0;
     box-shadow: 0 0 0 3px rgba(107, 142, 111, .08);
     z-index: 3;
   }
@@ -1626,7 +1632,10 @@
     margin-bottom: 6px;
   }
   .field .helper {
-    font-size: 11px; color: var(--text-4); margin-top: 6px; line-height: 1.5;
+    /* --text-3, not --text-4: helper text is meant to be read. On the light
+       theme --text-4 (#9a978c on #fff ≈ 2.6:1) fails WCAG AA; --text-3
+       (#6a675c ≈ 4.8:1) passes while staying quieter than the field value. */
+    font-size: 11px; color: var(--text-3); margin-top: 6px; line-height: 1.5;
   }
 
   input[type=text], input[type=number], input[type=url], select, textarea {
@@ -2096,8 +2105,9 @@
     text-align: center; padding: 24px; gap: 10px;
   }
   .b-video .placeholder svg { width: 32px; height: 32px; opacity: .5; }
-  /* Order tracker preview — mirrors the live mini-app card: charcoal frame,
-     candy-fill icon nodes, green connector + pulse on the current step. */
+  /* Order tracker preview — mirrors the live mini-app card. Three layouts
+     (classic stepper / truck rail / status banner). Every colour rides on a
+     CSS var so the editor can recolour each element. */
   .b-ordertracker { padding: 0 22px; }
   .b-ordertracker .ot-card {
     border: var(--ot-card-border, 1.5px solid var(--b-ink)); border-radius: 6px;
@@ -2108,16 +2118,24 @@
   .b-ordertracker .ot-status {
     flex: 0 0 auto; font: 700 10px var(--bf-toni); letter-spacing: .06em;
     text-transform: uppercase; padding: 4px 11px; border-radius: 999px;
-    color: var(--b-oat); background: var(--ot-accent); white-space: nowrap;
+    color: var(--ot-cta-text, var(--b-oat)); background: var(--ot-accent); white-space: nowrap;
   }
   .b-ordertracker .ot-body { display: flex; align-items: center; gap: 10px; margin-top: 11px; }
   .b-ordertracker .ot-thumb { width: 48px; height: 48px; border-radius: 7px; background: #eee; flex: none; }
+  /* Stacked item thumbnails (shared across all three layouts). */
+  .b-ordertracker .ot-thumbs { display: flex; flex: none; }
+  .b-ordertracker .ot-th {
+    width: 44px; height: 44px; border-radius: 9px; background: #e3ddcf;
+    border: 2px solid var(--ot-card-bg, #fff); margin-left: -12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.15);
+  }
+  .b-ordertracker .ot-th:first-child { margin-left: 0; }
   .b-ordertracker .ot-info { flex: 1; min-width: 0; }
   .b-ordertracker .ot-count { font: 600 13px var(--bf-gothic); color: var(--b-ink); }
   .b-ordertracker .ot-eta { font: 400 11px var(--bf-aleo); color: rgba(0,0,0,.55); margin-top: 2px; }
   .b-ordertracker .ot-cta {
     flex: 0 0 auto; font: 700 12px var(--bf-gothic); padding: 7px 14px; border-radius: 999px;
-    color: #fff; background: var(--ot-accent); white-space: nowrap;
+    color: var(--ot-cta-text, #fff); background: var(--ot-accent); white-space: nowrap;
   }
   .b-ordertracker .ot-steps {
     display: flex; justify-content: space-between;
@@ -2129,13 +2147,13 @@
   }
   .b-ordertracker .ot-bar {
     position: absolute; top: 22px; left: -50%; width: 100%; height: 3px;
-    background: #D3D1C7; border-radius: 999px; z-index: 0;
+    background: var(--ot-rail, #D3D1C7); border-radius: 999px; z-index: 0;
   }
-  .b-ordertracker .ot-bar.on { background: var(--b-forest); }
+  .b-ordertracker .ot-bar.on { background: var(--ot-accent, var(--b-forest)); }
   .b-ordertracker .ot-circle {
     position: relative; z-index: 1;
     width: 46px; height: 46px; border-radius: 50%;
-    background: #D3D1C7; border: 1px solid #9A988E;
+    background: var(--ot-rail, #D3D1C7); border: 1px solid #9A988E;
     display: flex; align-items: center; justify-content: center;
   }
   .b-ordertracker .ot-circle svg { width: 24px; height: 24px; color: var(--b-ink); opacity: .38; }
@@ -2143,7 +2161,7 @@
   .b-ordertracker .ot-step.on .ot-circle svg { opacity: 1; }
   .b-ordertracker .ot-step.current .ot-circle::after {
     content: ''; position: absolute; top: -5px; left: -5px; right: -5px; bottom: -5px;
-    border-radius: 50%; border: 2px solid var(--b-forest);
+    border-radius: 50%; border: 2px solid var(--ot-accent, var(--b-forest));
     animation: ot-pulse 1.6s ease-out infinite;
   }
   @keyframes ot-pulse {
@@ -2156,6 +2174,81 @@
     color: #9A988E;
   }
   .b-ordertracker .ot-step.on .ot-slabel { color: var(--b-ink); }
+
+  /* ─── B · Track & truck — status-first header + rounded rail with a truck
+     riding the current milestone. ─────────────────────────────────────── */
+  .b-ordertracker .ot-truck .ot-tk-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .b-ordertracker .ot-kicker { font: 700 9px var(--bf-toni); letter-spacing: .22em; text-transform: uppercase; color: var(--b-olive); }
+  .b-ordertracker .ot-bighead { font: 600 22px var(--bf-bear); line-height: 1; margin-top: 5px; color: var(--b-ink); }
+  .b-ordertracker .ot-tk-sub { font: 400 12px var(--bf-aleo); color: var(--b-olive); margin-top: 4px; }
+  .b-ordertracker .ot-tk-sub b { color: var(--b-ink); }
+  .b-ordertracker .ot-rail { position: relative; height: 42px; margin: 22px 4px 4px; }
+  .b-ordertracker .ot-rail-base {
+    position: absolute; top: 50%; left: 0; right: 0; height: 8px; transform: translateY(-50%);
+    border-radius: 9px; background: var(--ot-rail, #D3D1C7);
+  }
+  .b-ordertracker .ot-rail-fill {
+    position: absolute; top: 50%; left: 0; height: 8px; transform: translateY(-50%);
+    border-radius: 9px; background: var(--ot-accent);
+  }
+  .b-ordertracker .ot-rail-dot {
+    position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 999px;
+    transform: translate(-50%, -50%); border: 2px solid var(--ot-card-bg, #fff);
+  }
+  .b-ordertracker .ot-truck-marker {
+    position: absolute; top: 50%; transform: translate(-50%, -50%);
+    width: 40px; height: 40px; border-radius: 999px; background: var(--ot-marker);
+    border: 2px solid var(--b-ink); display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 4px var(--ot-card-bg, #fff); z-index: 2;
+  }
+  .b-ordertracker .ot-truck-marker svg { width: 22px; height: 22px; color: var(--b-ink); }
+  .b-ordertracker .ot-tk-labels { display: flex; justify-content: space-between; margin-top: 10px; }
+  .b-ordertracker .ot-tk-labels .ot-tl { flex: 1; }
+  .b-ordertracker .ot-tk-labels .ot-tl-en { font: 700 11px var(--bf-gothic); letter-spacing: .05em; color: #9A988E; }
+  .b-ordertracker .ot-tk-labels .ot-tl.on .ot-tl-en { color: var(--b-ink); }
+  .b-ordertracker .ot-tk-labels .ot-tl.current .ot-tl-en { color: var(--ot-accent); }
+  .b-ordertracker .ot-tk-cta {
+    margin-top: 16px; text-align: center; border-radius: 12px; padding: 12px 0;
+    font: 700 14px var(--bf-gothic); letter-spacing: .06em;
+    color: var(--ot-cta-text, #fff); background: var(--ot-accent);
+  }
+
+  /* ─── C · Status banner — accent header band + chunky 4-segment progress +
+     3D ticket button. ─────────────────────────────────────────────────── */
+  .b-ordertracker .ot-banner {
+    border-radius: var(--ot-radius, 16px); overflow: hidden;
+    border: var(--ot-bw, 2px) solid var(--b-ink);
+  }
+  .b-ordertracker .ot-bn-head {
+    display: flex; align-items: center; gap: 11px; padding: 13px 15px;
+    background: var(--ot-accent); color: var(--ot-cta-text, #fff);
+  }
+  .b-ordertracker .ot-bn-marker {
+    width: 42px; height: 42px; border-radius: 999px; flex: none;
+    background: var(--ot-marker); display: flex; align-items: center; justify-content: center;
+  }
+  .b-ordertracker .ot-bn-marker svg { width: 23px; height: 23px; color: var(--b-ink); }
+  .b-ordertracker .ot-bn-headtext { flex: 1; min-width: 0; }
+  .b-ordertracker .ot-bn-kicker { font: 700 9px var(--bf-toni); letter-spacing: .22em; text-transform: uppercase; color: var(--ot-bright); }
+  .b-ordertracker .ot-bn-eta { font: 600 19px var(--bf-bear); line-height: 1; margin-top: 3px; }
+  .b-ordertracker .ot-bn-body { background: var(--ot-card-bg, #FFFCF7); padding: 13px 15px 15px; }
+  .b-ordertracker .ot-bn-row { display: flex; align-items: center; gap: 11px; }
+  .b-ordertracker .ot-segs { display: flex; gap: 5px; margin-top: 15px; }
+  .b-ordertracker .ot-seg { flex: 1; text-align: center; }
+  .b-ordertracker .ot-seg-bar { height: 7px; border-radius: 9px; background: var(--ot-rail, #D3D1C7); }
+  .b-ordertracker .ot-seg.done .ot-seg-bar { background: var(--ot-bright); }
+  .b-ordertracker .ot-seg.current .ot-seg-bar { background: var(--ot-marker); border: 1.5px solid var(--b-ink); }
+  .b-ordertracker .ot-seg-lbl { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 7px; }
+  .b-ordertracker .ot-seg-lbl svg { width: 14px; height: 14px; color: #9A988E; }
+  .b-ordertracker .ot-seg.on .ot-seg-lbl svg { color: var(--b-ink); }
+  .b-ordertracker .ot-seg-lbl span { font: 700 10px var(--bf-gothic); letter-spacing: .03em; color: #9A988E; }
+  .b-ordertracker .ot-seg.on .ot-seg-lbl span { color: var(--b-ink); }
+  .b-ordertracker .ot-bn-cta {
+    margin-top: 15px; text-align: center; border-radius: 12px; padding: 11px 0;
+    font: 700 14px var(--bf-gothic); letter-spacing: .06em;
+    color: var(--b-ink); background: var(--ot-bright);
+    border: 1.5px solid var(--b-ink); box-shadow: 0 3px 0 var(--b-ink);
+  }
   /* Split view — image left, copy panel right (50/50) */
   .b-hero-split {
     display: grid; grid-template-columns: 1fr 1fr; min-height: 240px;
@@ -2191,12 +2284,25 @@
     background: transparent; padding: 4px 0; border-radius: 0;
     text-decoration: underline; text-underline-offset: 3px;
   }
-  .b-cattabs { padding: 0 22px; }
+  .b-cattabs {
+    padding: 0 22px;
+    /* Per-element colour defaults — overridden inline (as CSS custom
+       properties) by the inspector's colour pickers. */
+    --cat-text: var(--b-ink);
+    --cat-accent: var(--b-olive);
+    --cat-keyline: var(--b-ink);
+    --cat-shadow: var(--b-ink);
+    --cat-surface: var(--b-oat);
+    --cat-radius: 2px;
+  }
+  .b-cattabs.corner-sharp  { --cat-radius: 0px; }
+  .b-cattabs.corner-subtle { --cat-radius: 6px; }
+  .b-cattabs.corner-bold   { --cat-radius: 14px; }
   .b-cattabs .head {
     display: flex; justify-content: space-between; align-items: baseline;
     margin-bottom: 12px;
   }
-  .b-cattabs .ttl { font: 500 22px var(--f-serif); line-height: 1.05; }
+  .b-cattabs .ttl { font: 500 22px var(--f-serif); line-height: 1.05; color: var(--cat-text); }
   .b-cattabs .ttl .bi-cn,
   .b-grid    .head .ttl .bi-cn {
     display: block; margin-top: 2px;
@@ -2204,25 +2310,55 @@
     color: var(--b-olive);
   }
   .b-grid    .head .ttl { font: 500 22px var(--f-serif); line-height: 1.05; margin-top: 4px; }
-  .b-cattabs .kicker { font: 700 9px var(--f-sans); letter-spacing: .14em; color: var(--b-olive); }
-  .b-cattabs .more { font: 700 9px var(--f-sans); letter-spacing: .1em; color: var(--b-olive); text-decoration: underline; }
+  .b-cattabs .kicker { font: 700 9px var(--f-sans); letter-spacing: .14em; color: var(--cat-accent); }
+  .b-cattabs .more { font: 700 9px var(--f-sans); letter-spacing: .1em; color: var(--cat-accent); text-decoration: underline; }
   .b-cattabs .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .b-cattabs .tile {
     height: 96px; padding: 12px; position: relative; overflow: hidden;
-    background: var(--b-corn); color: var(--b-ink);
-    border-radius: 2px;
+    border-radius: var(--cat-radius);
   }
   .b-cattabs .tile .num { font: 700 9px var(--f-sans); letter-spacing: .1em; opacity: .85; }
   .b-cattabs .tile .name {
     font: 500 17px var(--f-serif); line-height: 1;
     position: absolute; bottom: 12px; left: 12px; right: 12px;
   }
-  .b-cattabs .tile.c0 { background: var(--b-papaya); }
-  .b-cattabs .tile.c1 { background: var(--b-pea); color: #fff; }
-  .b-cattabs .tile.c2 { background: var(--b-berry); color: #fff; }
-  .b-cattabs .tile.c3 { background: var(--b-corn); }
-  .b-cattabs .tile.c4 { background: var(--b-sky); }
-  .b-cattabs .tile.c5 { background: var(--b-lotus); }
+  /* ── Style · Riso pop ── flat brand-colour fill + ink keyline + hard shadow.
+     Tile background/colour come inline from the per-category palette. */
+  .b-cattabs.cat-riso .tile {
+    border: 2px solid var(--cat-keyline);
+    box-shadow: 4px 4px 0 var(--cat-shadow);
+  }
+  /* ── Style · Editorial ── oat surface, hairline keyline, big serif name,
+     the category colour as a thick left accent rule. */
+  .b-cattabs.cat-editorial .grid { gap: 8px; }
+  .b-cattabs.cat-editorial .tile {
+    height: auto; min-height: 92px;
+    background: var(--cat-surface); color: var(--cat-text);
+    border: 1px solid var(--cat-keyline);
+    border-left: 5px solid var(--b-ink);
+    display: flex; flex-direction: column; justify-content: flex-end;
+    box-shadow: none;
+  }
+  .b-cattabs.cat-editorial .tile .num { position: static; color: var(--cat-accent); opacity: 1; margin-bottom: 8px; }
+  .b-cattabs.cat-editorial .tile .name { position: static; font-size: 19px; }
+  /* ── Style · Stack & tag ── oat surface, ink border, rotated sticker number
+     tag in the category colour. Retro grocery feel. */
+  .b-cattabs.cat-stack .grid { gap: 10px; }
+  .b-cattabs.cat-stack .tile {
+    height: auto; min-height: 96px; padding: 18px 12px 12px;
+    background: var(--cat-surface); color: var(--cat-text);
+    border: 2px solid var(--cat-keyline);
+    overflow: visible;
+    display: flex; flex-direction: column; justify-content: flex-end;
+  }
+  .b-cattabs.cat-stack .tile .tag {
+    position: absolute; top: -9px; left: 10px;
+    font-size: 14px; line-height: 1; letter-spacing: .04em;
+    padding: 3px 8px; transform: rotate(-4deg);
+    border: 1.5px solid var(--cat-keyline);
+  }
+  .b-cattabs.cat-stack .tile .num { position: static; color: var(--cat-accent); }
+  .b-cattabs.cat-stack .tile .name { position: static; font-size: 18px; margin-top: 3px; }
   /* Icons view — circle thumb + label below, fixed columns */
   .b-cattabs .icons-grid { display: grid; gap: 14px 6px; }
   .b-cattabs .icons-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
@@ -2231,18 +2367,15 @@
   .b-cattabs .icon-tile { display: flex; flex-direction: column; align-items: center; gap: 6px; }
   .b-cattabs .icon-circle {
     width: 56px; height: 56px; border-radius: 50%;
-    background: var(--b-corn); color: var(--b-ink);
+    background: var(--cat-surface); color: var(--cat-text);
     display: flex; align-items: center; justify-content: center;
     font: 700 22px var(--bf-bear); letter-spacing: .02em;
   }
-  .b-cattabs .icon-circle.c0 { background: var(--b-papaya); }
-  .b-cattabs .icon-circle.c1 { background: var(--b-pea); color: #fff; }
-  .b-cattabs .icon-circle.c2 { background: var(--b-berry); color: #fff; }
-  .b-cattabs .icon-circle.c3 { background: var(--b-corn); }
-  .b-cattabs .icon-circle.c4 { background: var(--b-sky); }
-  .b-cattabs .icon-circle.c5 { background: var(--b-lotus); }
+  .b-cattabs.cat-riso .icon-circle { border: 2px solid var(--cat-keyline); box-shadow: 3px 3px 0 var(--cat-shadow); }
+  .b-cattabs.cat-editorial .icon-circle { border: 1px solid var(--cat-keyline); }
+  .b-cattabs.cat-stack .icon-circle { border: 2px solid var(--cat-keyline); border-radius: 12px; }
   .b-cattabs .icon-name {
-    font: 500 11px var(--bf-aleo); color: var(--b-ink);
+    font: 500 11px var(--bf-aleo); color: var(--cat-text);
     text-align: center; line-height: 1.2;
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
@@ -2527,6 +2660,7 @@
   .b-bundle.corner-sharp,
   .b-recipe.corner-sharp,
   .b-ordertracker.corner-sharp .ot-card,
+  .b-ordertracker.corner-sharp .ot-banner,
   .b-countdown.corner-sharp { border-radius: 0; }
   .b-featured.corner-bold .card,
   .b-grid.corner-bold .card,
@@ -2534,6 +2668,7 @@
   .b-bundle.corner-bold,
   .b-recipe.corner-bold,
   .b-ordertracker.corner-bold .ot-card,
+  .b-ordertracker.corner-bold .ot-banner,
   .b-countdown.corner-bold { border-radius: 16px; }
   /* Self-framed blocks (poll, referral, store, coupon, greeting, WeCom) don't
      carry the corner class on their own element, so reach them via the
@@ -2560,10 +2695,20 @@
   .b-hero.enter-fade,
   .b-featured.enter-fade,
   .b-bundle.enter-fade,
+  .b-flash-classic.enter-fade,
+  .b-flash-editorial.enter-fade,
+  .b-flash-urgency.enter-fade,
+  .b-cattabs.enter-fade,
+  .b-ordertracker.enter-fade,
   .b-voting.enter-fade    { animation: b-fade-in   .4s ease-out both; }
   .b-hero.enter-slide_up,
   .b-featured.enter-slide_up,
   .b-bundle.enter-slide_up,
+  .b-flash-classic.enter-slide_up,
+  .b-flash-editorial.enter-slide_up,
+  .b-flash-urgency.enter-slide_up,
+  .b-cattabs.enter-slide_up,
+  .b-ordertracker.enter-slide_up,
   .b-voting.enter-slide_up { animation: b-slide-up .45s var(--ease-out, cubic-bezier(.2,.7,.2,1)) both; }
 
   /* Hero scrim — dims the bottom 40% of the image so floating CTAs read on
@@ -2988,8 +3133,15 @@
   /* ─── Bundle preview ────────────────────────────────────────────────── */
   .b-bundle {
     margin: 0 18px;
-    padding: 16px 16px 14px;
-    border-radius: 4px;
+    padding: 14px 14px;
+    border-radius: 0;
+  }
+  /* Inner card — finish (border/shadow), radius + fill set inline from theme. */
+  .b-bundle .bun-inner { padding: 18px 16px; margin: 10px 0; box-sizing: border-box; }
+  /* Dashed edge above/below the card (Riso finish only). */
+  .b-bundle .bun-dash {
+    height: 2px;
+    background-image: repeating-linear-gradient(90deg, rgba(106,110,45,.5), rgba(106,110,45,.5) 13px, transparent 13px, transparent 26px);
   }
   /* Self-styled cards (bundle, poll, referral, store, WeCom) own their
      bg + side margin (not the .framed system), so the generic
@@ -3074,7 +3226,40 @@
   .b-bundle .bun-cta {
     margin-left: auto; padding: 10px 14px; color: var(--b-oat);
     font: 700 9px var(--bf-toni); letter-spacing: .14em; text-transform: uppercase;
+    border-radius: 8px; cursor: pointer;
   }
+  .b-bundle .bun-cta-full { margin-left: 0; width: 100%; text-align: center; box-sizing: border-box; }
+  /* ── Receipt style (B) ── */
+  .b-bundle .bun-rhead { display: flex; flex-direction: column; gap: 3px; }
+  .b-bundle .bun-rows { margin-top: 12px; }
+  .b-bundle .bun-rrow { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+  .b-bundle .bun-rimg { width: 34px; height: 34px; border-radius: 7px; overflow: hidden; background: rgba(0,0,0,.08); flex-shrink: 0; }
+  .b-bundle .bun-rimg img { width: 100%; height: 100%; object-fit: cover; }
+  .b-bundle .bun-rmid { flex: 1; min-width: 0; }
+  .b-bundle .bun-rname { font: 500 12px var(--bf-bear); line-height: 1.05; }
+  .b-bundle .bun-rcn { font: 500 9px var(--bf-aleo); opacity: .6; margin-top: 1px; }
+  .b-bundle .bun-rprice { font: 500 13px var(--bf-gothic); letter-spacing: .02em; }
+  .b-bundle .bun-tally { border-top: 1.5px solid var(--b-ink); margin-top: 4px; padding-top: 9px; }
+  .b-bundle .bun-trow { display: flex; justify-content: space-between; align-items: baseline; font: 500 11px var(--bf-aleo); opacity: .8; margin-top: 5px; }
+  .b-bundle .bun-trow:first-child { margin-top: 0; }
+  .b-bundle .bun-trow-big { opacity: 1; }
+  .b-bundle .bun-trow-big > span:first-child { font: 500 14px var(--bf-bear); }
+  .b-bundle .bun-strike { text-decoration: line-through; }
+  .b-bundle .bun-tprice { font-family: var(--bf-bear); line-height: 1; }
+  .b-bundle .bun-tchip-row { margin-top: 7px; }
+  .b-bundle .bun-tchip { display: inline-block; font: 700 9px var(--bf-toni); letter-spacing: .1em; padding: 2px 7px; border-radius: 4px; }
+  .b-bundle .bun-tcta { margin-top: 12px; }
+  /* ── Sticker style (C) ── */
+  .b-bundle .bun-sticker { display: inline-block; padding: 3px 10px; font: 600 12px var(--bf-gothic); letter-spacing: .06em; }
+  .b-bundle .bun-tubs { position: relative; height: 116px; margin-top: 14px; }
+  .b-bundle .bun-tub { position: absolute; width: 90px; height: 90px; border-radius: 12px; overflow: hidden; background: rgba(0,0,0,.08); }
+  .b-bundle .bun-tub img { width: 100%; height: 100%; object-fit: cover; }
+  .b-bundle .bun-stamp { position: absolute; right: 0; top: 6px; width: 66px; height: 66px; border-radius: 999px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .b-bundle .bun-stamp-k { font: 700 7px var(--bf-toni); letter-spacing: .16em; }
+  .b-bundle .bun-stamp-n { font: 500 18px var(--bf-gothic); line-height: 1; }
+  .b-bundle .bun-more { font: 600 11px var(--bf-gothic); letter-spacing: .04em; margin-top: 4px; }
+  .b-bundle .bun-tap { font: 500 10px var(--bf-aleo); opacity: .7; text-align: right; line-height: 1.25; margin-left: auto; }
+  .b-bundle .bun-style-sticker .bun-cta, .b-bundle .bun-style-receipt .bun-cta { margin-top: 12px; }
   .b-flash {
     padding: 16px 18px 18px;
     border-radius: 0;
@@ -3217,6 +3402,108 @@
     margin-top: 22px;
     /* re-use the existing strip card styling for the row below the hero clock */
   }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     FLASH SALE · design directions (Classic / Editorial / Urgency)
+     Coral band, cream zigzag top edge, live countdown, SHOP NOW pill and a
+     product carousel — ported from the Claude-Design "Flash sale" section.
+     Every coloured element rides on a CSS var set in JS so the inspector can
+     recolour each piece independently:
+       --fs-ink (text + ink fills/borders)  --fs-panel (cream panel/zigzag)
+       --fs-tile (Classic countdown tiles)  --fs-accent (badges/CTA/tiles)
+       --fs-fill (sold-progress + labels)   --fs-price (sale price)
+     The Energy tweak drives --fs-head (type scale), --fs-radius, --fs-border;
+     the Urgency tweak toggles .fs-pulse (clock) + .fs-pulse-dot (LIVE dot). */
+  .b-flash-classic, .b-flash-editorial, .b-flash-urgency {
+    padding: 0 !important;
+    position: relative; overflow: hidden;
+    font-family: var(--bf-aleo);
+    border-radius: 0;
+    --fs-head: 1; --fs-radius: 16px; --fs-border: 1.5px;
+    --fs-panel: #FBF1F1; --fs-tile: #C24E61; --fs-accent: var(--b-lime);
+    --fs-fill: var(--b-forest); --fs-price: var(--b-berry); --fs-ink: var(--b-ink);
+  }
+  .b-flash-classic.corner-subtle, .b-flash-editorial.corner-subtle, .b-flash-urgency.corner-subtle { border-radius: 14px; }
+  .b-flash-classic.corner-bold,   .b-flash-editorial.corner-bold,   .b-flash-urgency.corner-bold   { border-radius: 22px; }
+  .b-flash-classic .fsd-cap, .b-flash-editorial .fsd-cap, .b-flash-urgency .fsd-cap {
+    height: 12px; background: var(--fs-panel);
+  }
+  .fsd-zig { position: absolute; top: 0; left: 0; right: 0; display: block; z-index: 3; pointer-events: none; }
+  .fsd-body { padding: 22px 0; color: var(--fs-ink); }
+
+  /* live-pulse — only attached when the Urgency tweak is "Frantic" */
+  @keyframes fsPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+  @keyframes fsDot   { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(1.5); } }
+  @media (prefers-reduced-motion: no-preference) {
+    .b-flash .fs-pulse     { animation: fsPulse 1s ease-in-out infinite; }
+    .b-flash .fs-pulse-dot { animation: fsDot .9s ease-in-out infinite; }
+  }
+
+  /* shared product card (design) — badge variants: corner / stamp / ribbon */
+  .fsd-cards { display: flex; gap: 12px; overflow-x: auto; padding: 0 16px 4px; scrollbar-width: none; }
+  .fsd-cards::-webkit-scrollbar { display: none; }
+  .fsd-card { flex: 0 0 150px; background: #FFFCF7; color: var(--b-ink); border-radius: var(--fs-radius); overflow: hidden; box-sizing: border-box; }
+  .fsd-card .fsd-img { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: #eee; }
+  .fsd-card .fsd-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .fsd-badge-corner { position: absolute; top: 10px; left: 10px; background: var(--fs-ink); color: var(--fs-accent); padding: 3px 8px; border-radius: 7px; font: 400 15px var(--bf-gothic); letter-spacing: .03em; }
+  .fsd-badge-stamp  { position: absolute; top: 8px; right: 8px; background: var(--fs-accent); color: var(--fs-ink); border: var(--fs-border) solid var(--fs-ink); box-shadow: 2px 2px 0 var(--fs-ink); transform: rotate(7deg); padding: 5px 8px; font: 400 16px var(--bf-gothic); letter-spacing: .03em; line-height: 1; }
+  .fsd-badge-ribbon { position: absolute; top: 14px; left: -28px; width: 110px; transform: rotate(-45deg); background: var(--fs-accent); color: var(--fs-ink); text-align: center; font: 400 13px var(--bf-gothic); letter-spacing: .06em; padding: 3px 0; }
+  .fsd-card .fsd-meta { padding: 12px 13px 14px; }
+  .fsd-card .fsd-name { font: 400 15.5px var(--bf-bear); line-height: 1.05; }
+  .fsd-card .fsd-cn { font: 500 10.5px var(--bf-yuan); color: #6A6E2D; margin-top: 2px; }
+  .fsd-card .fsd-prices { display: flex; align-items: baseline; gap: 7px; margin-top: 8px; }
+  .fsd-card .fsd-now { font: 400 22px var(--bf-gothic); color: var(--fs-price); letter-spacing: .02em; }
+  .fsd-card .fsd-was { font: 400 12px var(--bf-aleo); color: #6A6E2D; text-decoration: line-through; }
+  .fsd-card .fsd-meter { margin-top: 9px; height: 4px; border-radius: 9px; background: rgba(0,0,0,.12); position: relative; overflow: hidden; }
+  .fsd-card .fsd-meter > span { position: absolute; inset: 0; background: var(--fs-fill); border-radius: 9px; }
+  .fsd-card .fsd-sold { font: 400 9px var(--bf-toni); letter-spacing: .12em; color: #6A6E2D; margin-top: 5px; }
+
+  /* shared kicker CN accent */
+  .fsd-kicker .cn { font-family: var(--bf-yuan); font-weight: 700; letter-spacing: .12em; }
+
+  /* A · Classic — centred, cream tiles with ":" separators, cream CTA pill */
+  .b-flash-classic .fsd-head { text-align: center; padding: 0 24px; }
+  .b-flash-classic .fsd-kicker { font: 400 12px var(--bf-toni); letter-spacing: .34em; }
+  .b-flash-classic .fsd-title { font: 400 calc(31px * var(--fs-head)) var(--bf-bear); line-height: 1; margin-top: 8px; }
+  .b-flash-classic .fsd-ends { text-align: center; margin-top: 20px; }
+  .b-flash-classic .fsd-ends-lbl { font: 400 10px var(--bf-toni); letter-spacing: .28em; color: rgba(26,26,23,.7); }
+  .b-flash-classic .fsd-clock { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 10px; }
+  .b-flash-classic .fsd-tile { background: var(--fs-tile); border-radius: 14px; width: 66px; padding: 11px 0 8px; text-align: center; }
+  .b-flash-classic .fsd-tile-num { font: 400 calc(34px * var(--fs-head)) var(--bf-bear); line-height: 1; color: #FFFCF7; }
+  .b-flash-classic .fsd-tile-lbl { font: 400 8px var(--bf-toni); letter-spacing: .18em; color: rgba(255,255,255,.7); margin-top: 4px; }
+  .b-flash-classic .fsd-colon { font: 400 24px var(--bf-bear); color: rgba(26,26,23,.5); }
+  .b-flash-classic .fsd-cta-wrap { display: flex; justify-content: center; margin: 22px 0; }
+  .b-flash-classic .fsd-cta { background: var(--fs-panel); color: var(--b-ink); border-radius: 999px; padding: 14px 40px; font: 400 18px var(--bf-gothic); letter-spacing: .1em; }
+
+  /* B · Editorial — left headline, horizontal cream ticker, accent CTA */
+  .b-flash-editorial .fsd-head { padding: 0 20px; }
+  .b-flash-editorial .fsd-kicker { font: 400 11px var(--bf-toni); letter-spacing: .3em; }
+  .b-flash-editorial .fsd-title { font: 400 calc(34px * var(--fs-head)) var(--bf-bear); line-height: .95; margin-top: 6px; max-width: 300px; }
+  .b-flash-editorial .fsd-ticker { display: flex; align-items: stretch; background: var(--fs-panel); border-radius: var(--fs-radius); margin-top: 16px; overflow: hidden; }
+  .b-flash-editorial .fsd-seg { flex: 1; text-align: center; padding: 10px 0 8px; }
+  .b-flash-editorial .fsd-seg-num { font: 400 calc(30px * var(--fs-head)) var(--bf-gothic); line-height: 1; color: var(--b-ink); letter-spacing: .02em; }
+  .b-flash-editorial .fsd-seg-lbl { font: 400 8px var(--bf-toni); letter-spacing: .16em; color: #6A6E2D; margin-top: 2px; }
+  .b-flash-editorial .fsd-seg-div { width: 1px; background: rgba(0,0,0,.12); margin: 10px 0; }
+  .b-flash-editorial .fsd-cta-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+  .b-flash-editorial .fsd-cta { background: var(--fs-accent); color: var(--b-ink); border: var(--fs-border) solid var(--fs-ink); border-radius: 999px; padding: 12px 26px; font: 400 17px var(--bf-gothic); letter-spacing: .08em; box-shadow: 0 3px 0 var(--fs-ink); }
+  .b-flash-editorial .fsd-off { font: 400 12px var(--bf-aleo); color: rgba(26,26,23,.75); line-height: 1.3; }
+  .b-flash-editorial .fsd-off .cn { font: 500 10.5px var(--bf-yuan); }
+  .b-flash-editorial .fsd-cards { margin-top: 20px; }
+
+  /* C · Urgency — LIVE tag, accent tiles popping on the band, ink CTA */
+  .b-flash-urgency .fsd-head { text-align: center; padding: 0 24px; }
+  .b-flash-urgency .fsd-live { display: inline-flex; align-items: center; gap: 7px; background: var(--fs-ink); color: var(--fs-accent); border-radius: 999px; padding: 4px 12px; }
+  .b-flash-urgency .fsd-live-dot { width: 7px; height: 7px; border-radius: 9px; background: var(--fs-accent); display: inline-block; }
+  .b-flash-urgency .fsd-live-lbl { font: 400 10px var(--bf-toni); letter-spacing: .24em; }
+  .b-flash-urgency .fsd-title { font: 400 calc(33px * var(--fs-head)) var(--bf-bear); line-height: .98; margin-top: 12px; }
+  .b-flash-urgency .fsd-sub { font: 700 13px var(--bf-yuan); color: var(--b-ink); margin-top: 6px; opacity: .85; }
+  .b-flash-urgency .fsd-clock { display: flex; justify-content: center; gap: 7px; margin-top: 18px; padding: 0 16px; }
+  .b-flash-urgency .fsd-tile { flex: 1; max-width: 80px; background: var(--fs-accent); border: var(--fs-border) solid var(--fs-ink); border-radius: 12px; padding: 10px 0 7px; text-align: center; box-shadow: 0 4px 0 var(--fs-ink); }
+  .b-flash-urgency .fsd-tile-num { font: 400 calc(32px * var(--fs-head)) var(--bf-bear); line-height: 1; color: var(--b-ink); }
+  .b-flash-urgency .fsd-tile-lbl { font: 400 8px var(--bf-toni); letter-spacing: .16em; color: var(--fs-fill); margin-top: 3px; }
+  .b-flash-urgency .fsd-cta-wrap { display: flex; justify-content: center; margin: 20px 0 22px; }
+  .b-flash-urgency .fsd-cta { background: var(--fs-ink); color: var(--fs-accent); border-radius: 999px; padding: 14px 44px; font: 400 18px var(--bf-gothic); letter-spacing: .1em; }
+
   /* ── Coupon block ── (cp- prefix to avoid colliding with the CMS layout .body grid rule) */
   .b-coupon {
     margin: 0 18px; padding: 18px; border-radius: 4px;
@@ -3843,6 +4130,7 @@
 
   /* League Gothic — numerics: prices, counts, tags */
   .b-featured .price,
+  .b-cattabs .tile .tag,
   .b-grid .card .price, .b-grid .list-row .price { font-family: var(--bf-gothic); letter-spacing: .04em; }
 
   /* DF Yuan explicit — for pure-Chinese content blocks */
@@ -5472,7 +5760,7 @@ const DC_FIELDS = {
   hero_banner:      { bg: 'panel_bg_color', fg: 'panel_fg_color' },
   featured_item:    { bg: 'card_bg_color', fg: 'card_fg_color' },
   product_grid:     { bg: 'bg_color', accent: 'accent_color' },
-  category_tabs:    { accent: 'divider_color' },
+  category_tabs:    { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   countdown_timer:  { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   flash_sale_strip: { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   coupon_block:     { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
@@ -6275,11 +6563,32 @@ function makeBlock(type) {
       // 'tiles' — 2-col coloured tiles (current). 'icons' — N-col circles with labels
       // (the CN mini-program convention used by Pinduoduo / Meituan).
       view: 'tiles',
+      // Visual style (independent of layout view) — ported from the design
+      // exploration's three category directions:
+      //   'riso'      — Riso pop: flat brand-colour fills + ink keyline + hard
+      //                 offset shadow (bold, the punchy default).
+      //   'editorial' — magazine: oat tile surface, hairline keyline, big serif
+      //                 names, the category colour as a thin accent rule.
+      //   'stack'     — retro grocery "stack & tag": oat tile surface, ink
+      //                 border, a rotated sticker number tag in the category
+      //                 colour.
+      cat_style: 'riso',
       columns: 4,        // only used by 'icons' view; clamped 3-5
       category_ids: state.categories.slice(0, 4).map(c => c.id),
       kicker_en: 'NO. 02 · BROWSE', kicker_cn: '第二 · 浏览',
       title_en: 'Shop the garden', title_cn: '园丁好物',
       bg_color: null,    // null = transparent (inherits page bg)
+      // Per-element colour overrides — '' / null = use the style default.
+      // tile fill itself is per-category via tile_colors (+ rotating palette).
+      fg_color: '',            // heading title + tile name text  (default ink)
+      accent_color: '',        // kicker / number / SEE ALL       (default olive)
+      keyline_color: '',       // tile border / keyline            (default ink)
+      shadow_color: '',        // riso hard offset shadow          (default ink)
+      tile_surface_color: '',  // editorial + stack tile fill      (default oat)
+      // Standard cross-block options (parity with other blocks).
+      corner_radius: 'sharp',  // sharp | subtle | bold
+      entrance_anim: 'none',   // none | fade | slide_up
+      link_target: '',         // SEE ALL destination — blank = shop
     };
     case 'featured_item':    return {
       id, type,
@@ -6363,12 +6672,14 @@ function makeBlock(type) {
         // 'strip' — compact header + side clock + horizontal product cards (default)
         // 'hero'  — big centered D:H:M:S cells + CTA + product card(s) below
         // 'banner'— big clock + CTA, no products (anticipation / "starts soon")
+        // 'classic' / 'editorial' / 'urgency' — the Claude-Design "Flash sale"
+        //   section directions: coral band + cream zigzag + countdown + carousel.
         view: 'strip',
         kicker_en: 'FLASH SALE', kicker_cn: '限时秒杀',
         title_en: 'Going fast', title_cn: '手慢无',
         bg_color: 'berry-punch', fg_color: 'oat-milk',
         product_limit: 3,
-        // CTA shown in hero/banner views only. Strip view's cards are
+        // CTA shown in hero/banner + the design views. Strip view's cards are
         // already tappable so it doesn't render this button.
         cta_label_en: 'SHOP NOW', cta_label_cn: '立即抢购',
         cta_target: 'shop',
@@ -6378,6 +6689,22 @@ function makeBlock(type) {
         hide_when_empty: true,
         empty_text_en: 'No live deals right now — check back soon',
         empty_text_cn: '当前无秒杀 · 请稍候',
+        // ── Design-direction controls (classic / editorial / urgency) ──
+        // Energy = type scale + corner/border weight (refined/balanced/bold).
+        // Urgency = live-pulse intensity (mellow/building = still, frantic =
+        // pulsing clock + LIVE dot). The real countdown always binds to the
+        // soonest-ending active sale; Urgency only drives the animation.
+        energy: 'balanced',
+        urgency: 'building',
+        // Per-element colours. Blank = the design's coral-story default; pick a
+        // brand colour to override that piece. ink_color also paints the ink
+        // borders / fills (A badge, C tiles + CTA + LIVE tag).
+        ink_color: '', panel_color: '', tile_color: '',
+        fill_color: '', price_color: '',
+        // Cross-block chrome (same controls other blocks expose). Band is
+        // edge-to-edge, so corners default to sharp.
+        corner_radius: 'sharp',
+        entrance_anim: 'none',
       };
     }
     case 'coupon_block': {
@@ -6622,8 +6949,26 @@ function makeBlock(type) {
         product_ids: v1.product_ids,
         bundle_price: 0,
         auto_voucher_code: '',
-        bg_color: 'golden-corn', fg_color: 'ink',
-        accent_color: 'ink',
+        // Visual style: classic (products joined by +) | receipt (itemised
+        // tally) | sticker (overlapping tubs + save stamp). From the
+        // "Buy together" design handoff (A / B / C directions).
+        bundle_style: 'classic',
+        // ── Feel tweaks (ported from the design's Tweaks panel) ──────────
+        // mood drives the colour story, finish the surface character,
+        // energy the border weight / radius / headline scale. Individual
+        // colour overrides below win over the mood palette when set.
+        mood: 'grocer',       // grocer | harvest | berry
+        finish: 'riso',       // riso (ink keyline + hard shadow) | clean (soft shadow)
+        energy: 'balanced',   // refined | balanced | bold
+        // Colours. bg_color/fg_color/accent_color keep their existing roles
+        // (block surface · text · button & active pill). The rest are
+        // override slots — empty means "use the mood palette".
+        bg_color: '', fg_color: 'ink',
+        accent_color: '',
+        card_color: '',     // inner card fill (Clean finish only)
+        save_color: '',     // savings text + save stamp
+        sticker_color: '',  // "BUNDLE & SAVE" sticker (Sticker style)
+        price_color: '',    // bundle price number
         // Corner radius preset on the bundle card.
         corner_radius: 'subtle',
         // Entrance animation (none | fade | slide_up).
@@ -6729,8 +7074,29 @@ function makeBlock(type) {
     case 'order_tracker': return {
       id, type,
       title_en: 'Your order', title_cn: '你的订单',
-      // Brand token for the progress accent + CTA button.
+      // Layout direction: classic (ringed icon stepper) / truck (rounded rail
+      // with a truck riding the current step) / banner (accent status header +
+      // chunky segmented progress). Mirrors the design's A/B/C explorations.
+      track_style: 'classic',
+      // Brand token for the progress accent + primary CTA button.
       accent_color: 'forest-kale',
+      // Per-stage node colours. '' → the design's candy default for that stage
+      // (Paid amber, Prep lime, On-way pink, Delivered berry).
+      stage_paid_color: '', stage_prep_color: '', stage_onway_color: '', stage_done_color: '',
+      // Truck/banner marker circle + the bright highlight (dots, segments).
+      marker_color: '', bright_color: '',
+      // Empty track / connector base colour. '' → soft grey.
+      rail_color: '',
+      // CTA label colour. '' → auto (cream on accent, ink on bright).
+      cta_text_color: '',
+      // Visual weight — heading scale + banner frame weight/radius.
+      // refined / balanced / bold.
+      energy: 'balanced',
+      // Editor-only preview: which milestone is active (0 Paid … 3 Delivered).
+      // The live storefront uses the customer's real order stage.
+      preview_stage: 2,
+      // Cross-block entrance animation (none / fade / slide_up).
+      entrance_anim: 'none',
     };
     case 'notification_bar': return {
       id, type,
@@ -6830,16 +7196,20 @@ setInterval(() => {
       const root = document.querySelector(`#phone-content [data-id="${b.id}"] .b-flash`);
       if (!root) continue;
       // Strip view uses .clock with .ct-num cells; hero/banner uses
-      // .hero-clock with .hero-num cells. Find whichever is present.
-      const stripClock = root.querySelector('.clock[data-ends-at]');
-      const heroClock  = root.querySelector('.hero-clock[data-ends-at]');
-      const clock = stripClock || heroClock;
+      // .hero-clock with .hero-num cells; the design directions
+      // (classic/editorial/urgency) use .fsd-clock/.fsd-ticker with
+      // .js-fsd-num cells. Find whichever is present.
+      const stripClock  = root.querySelector('.clock[data-ends-at]');
+      const heroClock   = root.querySelector('.hero-clock[data-ends-at]');
+      const designClock = root.querySelector('.fsd-clock[data-ends-at], .fsd-ticker[data-ends-at]');
+      const clock = stripClock || heroClock || designClock;
       if (!clock) continue;
       const ends = clock.dataset.endsAt;
       if (!ends) continue;
       const ms = new Date(ends).getTime() - Date.now();
       if (ms <= 0) { needRerender = true; continue; }
-      const nums = clock.querySelectorAll(stripClock ? '.ct-num' : '.hero-num');
+      const numSel = stripClock ? '.ct-num' : heroClock ? '.hero-num' : '.js-fsd-num';
+      const nums = clock.querySelectorAll(numSel);
       if (nums.length !== 4) continue;
       const p = splitCountdown(ms);
       const vals = [p.d, p.h, p.m, p.s];
@@ -7061,8 +7431,10 @@ function renderBlockBody(b) {
       return d;
     }
     case 'order_tracker': {
-      d.className = 'b-ordertracker' + cornerRadiusClass(b);
+      const style = b.track_style || 'classic';
+      d.className = 'b-ordertracker ot-style-' + style + cornerRadiusClass(b) + entranceAnimClass(b);
       const ot = getBi(b, 'title');
+      const L = state.lang === 'cn';
       const accent = brandColorVar(b.accent_color) || 'var(--b-forest, #365329)';
       // Card surface + outline. card_bg_color: blank → white. card_border_color:
       // undefined → ink (the default charcoal frame), '' (— none —) → no border.
@@ -7070,44 +7442,129 @@ function renderBlockBody(b) {
       const otCardBorder = (b.card_border_color === '')
         ? 'none'
         : `1.5px solid ${brandColorVar(b.card_border_color) || 'var(--b-ink)'}`;
-      // Each step mirrors the live mini-app node: its own candy fill colour +
-      // outline glyph. Colour encodes PROGRESS — done/current nodes get the
-      // candy fill, the connector leading into them turns green, and the
-      // current node pulses. Default mock: order is "on the way".
+      // Secondary palette — marker circle, bright highlight, empty-track base,
+      // CTA label. Each is author-editable; '' falls back to the design value.
+      const marker  = brandColorVar(b.marker_color) || '#F4B8CB';
+      const bright  = brandColorVar(b.bright_color) || '#CCD900';
+      const rail    = brandColorVar(b.rail_color)   || '#D3D1C7';
+      const ctaText = brandColorVar(b.cta_text_color) || '';
+      // Energy — heading scale + banner frame weight/radius.
+      const E = ({ refined: { h: 0.92, bw: 1.5, rad: 12 }, balanced: { h: 1, bw: 2, rad: 16 }, bold: { h: 1.12, bw: 2.5, rad: 20 } })[b.energy || 'balanced'] || { h: 1, bw: 2, rad: 16 };
+      // Per-stage node: own candy fill + outline glyph. Colour encodes PROGRESS.
+      // stage_*_color overrides the design's candy default for that stage.
       const TRACK = [
-        { en: 'Paid',      cn: '已支付', candy: '#F2CA6C', icon: OT_ICONS.paid },
-        { en: 'Prep',      cn: '准备中', candy: '#CCD900', icon: OT_ICONS.prep },
-        { en: 'On way',    cn: '配送中', candy: '#F4B8CB', icon: OT_ICONS.onway },
-        { en: 'Delivered', cn: '已送达', candy: '#E96174', icon: OT_ICONS.delivered },
+        { en: 'Paid',      cn: '已支付', def: '#F2CA6C', col: brandColorVar(b.stage_paid_color),  icon: OT_ICONS.paid },
+        { en: 'Prep',      cn: '准备中', def: '#CCD900', col: brandColorVar(b.stage_prep_color),  icon: OT_ICONS.prep },
+        { en: 'On way',    cn: '配送中', def: '#F4B8CB', col: brandColorVar(b.stage_onway_color), icon: OT_ICONS.onway },
+        { en: 'Delivered', cn: '已送达', def: '#E96174', col: brandColorVar(b.stage_done_color),  icon: OT_ICONS.delivered },
       ];
-      const filled = 3;          // paid → prep → on-the-way done
-      const current = filled - 1; // pulsing node = "On way"
-      const statusLabel = state.lang === 'cn' ? '配送中' : 'On the way';
+      const candyOf = i => TRACK[i].col || TRACK[i].def;
+      // Per-stage messaging — the Stage preview reshapes what the block says.
+      const STATUS = [
+        { pill: 'PAID',       pill_cn: '已付款', head: 'Order placed.', head_cn: '已下单', eta: 'Packing soon',        eta_cn: '即将打包' },
+        { pill: 'PREPARING',  pill_cn: '备货中', head: 'Packing up.',   head_cn: '打包中', eta: 'Leaves soon',         eta_cn: '即将发出' },
+        { pill: 'ON THE WAY', pill_cn: '配送中', head: 'On the way.',   head_cn: '配送中', eta: 'Arriving by 6:00 PM', eta_cn: '预计 18:00 送达' },
+        { pill: 'DELIVERED',  pill_cn: '已送达', head: 'Delivered.',    head_cn: '已送达', eta: 'Left at your door',   eta_cn: '已放在门口' },
+      ];
+      const active = Math.max(0, Math.min(3, b.preview_stage != null ? b.preview_stage : 2));
+      const filled = active + 1;
+      const stat = STATUS[active];
+      const pct = (active / 3) * 100;
+
+      // Shared vars on the wrapper so every layout + colour control inherits.
+      d.style.cssText = `--ot-accent:${accent};--ot-card-bg:${otCardBg};--ot-card-border:${otCardBorder};`
+        + `--ot-marker:${marker};--ot-bright:${bright};--ot-rail:${rail};`
+        + `--ot-bw:${E.bw}px;--ot-radius:${E.rad}px;${ctaText ? '--ot-cta-text:' + ctaText + ';' : ''}`;
+
+      const thumbs = `<div class="ot-thumbs">${[0, 1, 2].map(() => '<div class="ot-th"></div>').join('')}</div>`;
+      const itemsLabel = L ? '3 件商品' : '3 items';
+      const hideNote = `<div class="empty" style="margin-top:8px;font-size:11px;opacity:.6">${B('Preview — hides on the storefront when the customer has no active order. Stage shown is an editor preview; the live block tracks the real order.', '预览 — 顾客无进行中订单时,店面将隐藏此模块。此处阶段为编辑器预览;线上模块跟随真实订单状态。')}</div>`;
+
+      if (style === 'truck') {
+        const dots = [0, 33.3, 66.6, 100].map((x, i) => {
+          if (i === active) return '';
+          return `<div class="ot-rail-dot" style="left:${x}%;background:${i < filled ? 'var(--ot-bright)' : 'var(--ot-rail)'}"></div>`;
+        }).join('');
+        const labels = TRACK.map((s, i) => {
+          const cls = i < active ? 'on' : i === active ? 'on current' : '';
+          const align = i === 0 ? 'left' : i === 3 ? 'right' : 'center';
+          return `<div class="ot-tl ${cls}" style="text-align:${align}"><div class="ot-tl-en">${escapeHtml(L ? s.cn : s.en)}</div></div>`;
+        }).join('');
+        d.innerHTML = `<div class="ot-card ot-truck">
+          <div class="ot-tk-top">
+            <div>
+              <div class="ot-kicker">${L ? '我的订单' : 'YOUR ORDER · 我的订单'}</div>
+              <div class="ot-bighead" style="font-size:${Math.round(22 * E.h)}px">${escapeHtml(L ? stat.head_cn : stat.head)}</div>
+              <div class="ot-tk-sub">${itemsLabel} · <b>${escapeHtml(L ? stat.eta_cn : stat.eta)}</b></div>
+            </div>
+            ${thumbs}
+          </div>
+          <div class="ot-rail">
+            <div class="ot-rail-base"></div>
+            <div class="ot-rail-fill" style="width:${pct}%"></div>
+            ${dots}
+            <div class="ot-truck-marker" style="left:${pct}%">${TRACK[active].icon}</div>
+          </div>
+          <div class="ot-tk-labels">${labels}</div>
+          <div class="ot-tk-cta">${L ? '查看订单 →' : 'VIEW ORDER →'}</div>
+        </div>${hideNote}`;
+        return d;
+      }
+
+      if (style === 'banner') {
+        const segs = TRACK.map((s, i) => {
+          const cls = i < active ? 'on done' : i === active ? 'on current' : '';
+          return `<div class="ot-seg ${cls}"><div class="ot-seg-bar"></div><div class="ot-seg-lbl">${s.icon}<span>${escapeHtml(L ? s.cn : s.en)}</span></div></div>`;
+        }).join('');
+        const bnKicker = L ? stat.pill_cn : (stat.pill + ' · ' + stat.pill_cn);
+        d.innerHTML = `<div class="ot-banner">
+          <div class="ot-bn-head">
+            <div class="ot-bn-marker">${TRACK[active].icon}</div>
+            <div class="ot-bn-headtext">
+              <div class="ot-bn-kicker">${escapeHtml(bnKicker)}</div>
+              <div class="ot-bn-eta" style="font-size:${Math.round(19 * E.h)}px">${escapeHtml(L ? stat.eta_cn : stat.eta)}</div>
+            </div>
+          </div>
+          <div class="ot-bn-body">
+            <div class="ot-bn-row">
+              ${thumbs}
+              <div class="ot-info">
+                <div class="ot-count">${itemsLabel}${L ? '' : ' · 3 件商品'}</div>
+                <div class="ot-eta">${L ? '订单 #R20650' : 'Order #R20650'}</div>
+              </div>
+            </div>
+            <div class="ot-segs">${segs}</div>
+            <div class="ot-bn-cta">${L ? '查看订单 →' : 'VIEW ORDER →'}</div>
+          </div>
+        </div>${hideNote}`;
+        return d;
+      }
+
+      // Classic (A) — ringed icon stepper.
       const nodes = TRACK.map((s, i) => {
         const isFilled = i < filled;
         const bar = i > 0 ? `<div class="ot-bar${isFilled ? ' on' : ''}"></div>` : '';
-        return `<div class="ot-step${isFilled ? ' on' : ''}${i === current ? ' current' : ''}" style="--ot-candy:${s.candy}">
+        return `<div class="ot-step${isFilled ? ' on' : ''}${i === active ? ' current' : ''}" style="--ot-candy:${candyOf(i)}">
           ${bar}
           <div class="ot-circle">${s.icon}</div>
-          <div class="ot-slabel">${escapeHtml(state.lang === 'cn' ? s.cn : s.en)}</div>
+          <div class="ot-slabel">${escapeHtml(L ? s.cn : s.en)}</div>
         </div>`;
       }).join('');
-      d.innerHTML = `<div class="ot-card" style="--ot-accent:${escapeAttr(accent)};--ot-card-bg:${escapeAttr(otCardBg)};--ot-card-border:${escapeAttr(otCardBorder)}">
+      d.innerHTML = `<div class="ot-card">
         <div class="ot-head">
           <div class="ot-title">${biLabel(ot.en, ot.cn)}</div>
-          <div class="ot-status">${escapeHtml(statusLabel)}</div>
+          <div class="ot-status">${escapeHtml(L ? stat.pill_cn : stat.pill)}</div>
         </div>
         <div class="ot-body">
-          <div class="ot-thumb"></div>
+          ${thumbs}
           <div class="ot-info">
-            <div class="ot-count">${state.lang === 'cn' ? '3 件商品' : '3 items'}</div>
-            <div class="ot-eta">${state.lang === 'cn' ? '预计 18:00 送达' : 'Arriving by 6:00 PM'}</div>
+            <div class="ot-count">${itemsLabel}</div>
+            <div class="ot-eta">${escapeHtml(L ? stat.eta_cn : stat.eta)}</div>
           </div>
-          <div class="ot-cta">${state.lang === 'cn' ? '查看订单' : 'View order'}</div>
+          <div class="ot-cta">${L ? '查看订单' : 'View order'}</div>
         </div>
         <div class="ot-steps">${nodes}</div>
-        <div class="empty" style="margin-top:8px;font-size:11px;opacity:.6">${B('Preview — hides on the storefront when the customer has no active order.', '预览 — 顾客无进行中订单时,店面将隐藏此模块。')}</div>
-      </div>`;
+      </div>${hideNote}`;
       return d;
     }
     case 'notification_bar': {
@@ -7147,30 +7604,42 @@ function renderBlockBody(b) {
     }
     case 'category_tabs': {
       const view = b.view || 'tiles';
-      d.className = 'b-cattabs b-cattabs-' + view;
+      const catStyle = ['riso', 'editorial', 'stack'].includes(b.cat_style) ? b.cat_style : 'riso';
+      d.className = 'b-cattabs b-cattabs-' + view + ' cat-' + catStyle + cornerRadiusClass(b) + entranceAnimClass(b);
       // Optional background — brand palette name → CSS var; null = transparent.
       const bg = brandColorVar(b.bg_color);
       if (bg) d.style.background = bg;
+      // Per-element colour overrides. Each is pushed as a CSS custom property
+      // only when set; the stylesheet supplies the style's default via
+      // var(--x, <default>). Mirrors catText/catAccent/… in the live renderer.
+      const setVar = (prop, token) => { const v = brandColorVar(token); if (v) d.style.setProperty(prop, v); };
+      setVar('--cat-text',    b.fg_color);
+      setVar('--cat-accent',  b.accent_color);
+      setVar('--cat-keyline', b.keyline_color);
+      setVar('--cat-shadow',  b.shadow_color);
+      setVar('--cat-surface', b.tile_surface_color);
       const cats = (b.category_ids || []).map(id => state.categories.find(c => c.id === id)).filter(Boolean);
-      // Per-circle colour override → inline style; unset falls back to the
-      // cN palette class. Mirrors tile_colors in the live renderer.
+      // Per-category colour: override → resolved hex; unset → rotating palette.
+      // Drives the whole tile fill (riso) or just the accent / sticker tag
+      // (editorial / stack). Mirrors tile_colors in the live renderer.
+      const palette = ['papaya-glow', 'pea-sprout', 'berry-punch', 'golden-corn', 'skyberry', 'lotus'];
       const tileColors = b.tile_colors || {};
-      const tileStyle = (c) => {
-        const hex = tileColors[c.id] ? dcResolveHex(tileColors[c.id]) : null;
-        return hex ? ` style="background:${hex};color:${btnTextHex(hex)}"` : '';
-      };
+      const catHex = (c, i) => dcResolveHex(tileColors[c.id] || palette[i % 6]);
       const ck = getBi(b, 'kicker');
       const ct = getBi(b, 'title');
       const head = `<div class="head"><div><div class="kicker">${biLabel(ck.en, ck.cn)}</div><div class="ttl">${biLabel(ct.en, ct.cn)}</div></div><div class="more">${state.lang === 'cn' ? '查看全部' : 'SEE ALL'}</div></div>`;
       if (!cats.length) { d.innerHTML = head + '<div class="empty">No categories selected. Pick some on the right.</div>'; return d; }
 
+      // Circle fill follows the same per-category colour; in editorial/stack
+      // the circle keeps the colour (it reads as a chip) but gets the keyline.
+      const circleStyle = (c, i) => { const hex = catHex(c, i); return ` style="background:${hex};color:${btnTextHex(hex)}"`; };
       if (view === 'icons') {
         const cols = Math.max(3, Math.min(5, b.columns || 4));
         const icons = cats.map((c, i) => {
           const name = categoryNameForLang(c.name);
           const letter = (name.trim()[0] || '').toUpperCase();
           return `<div class="icon-tile">
-            <div class="icon-circle c${i % 6}"${tileStyle(c)}>${escapeHtml(letter)}</div>
+            <div class="icon-circle"${circleStyle(c, i)}>${escapeHtml(letter)}</div>
             <div class="icon-name">${escapeHtml(name)}</div>
           </div>`;
         }).join('');
@@ -7183,7 +7652,7 @@ function renderBlockBody(b) {
           const name = categoryNameForLang(c.name);
           const letter = (name.trim()[0] || '').toUpperCase();
           return `<div class="scroll-tile">
-            <div class="icon-circle c${i % 6}"${tileStyle(c)}>${escapeHtml(letter)}</div>
+            <div class="icon-circle"${circleStyle(c, i)}>${escapeHtml(letter)}</div>
             <div class="icon-name">${escapeHtml(name)}</div>
           </div>`;
         }).join('');
@@ -7191,12 +7660,34 @@ function renderBlockBody(b) {
         return d;
       }
 
-      // 'tiles' (default)
-      const tiles = cats.map((c, i) => `
-        <div class="tile c${i % 6}"${tileStyle(c)}>
-          <div class="num">0${i + 1} · ${state.lang === 'cn' ? '分类' : 'CATEGORY'}</div>
-          <div class="name">${escapeHtml(categoryNameForLang(c.name))}</div>
-        </div>`).join('');
+      // 'tiles' — colour usage depends on the style:
+      //  riso      → category colour fills the whole tile.
+      //  editorial → tile is the surface; category colour is a left accent rule.
+      //  stack     → tile is the surface; category colour fills the number tag.
+      const numWord = state.lang === 'cn' ? '分类' : 'CATEGORY';
+      const tiles = cats.map((c, i) => {
+        const hex = catHex(c, i);
+        const name = escapeHtml(categoryNameForLang(c.name));
+        const num = `0${i + 1}`;
+        if (catStyle === 'riso') {
+          return `<div class="tile" style="background:${hex};color:${btnTextHex(hex)}">
+            <div class="num">${num} · ${numWord}</div>
+            <div class="name">${name}</div>
+          </div>`;
+        }
+        if (catStyle === 'stack') {
+          return `<div class="tile">
+            <div class="tag" style="background:${hex};color:${btnTextHex(hex)}">${num}</div>
+            <div class="num">${numWord}</div>
+            <div class="name">${name}</div>
+          </div>`;
+        }
+        // editorial
+        return `<div class="tile" style="border-left-color:${hex}">
+          <div class="num">${num} · ${numWord}</div>
+          <div class="name">${name}</div>
+        </div>`;
+      }).join('');
       d.innerHTML = head + `<div class="grid">${tiles}</div>`;
       return d;
     }
@@ -7355,7 +7846,9 @@ function renderBlockBody(b) {
     }
     case 'flash_sale_strip': {
       const view = b.view || 'strip';
-      d.className = 'b-flash b-flash-' + view;
+      const isFsDesign = view === 'classic' || view === 'editorial' || view === 'urgency';
+      d.className = 'b-flash b-flash-' + view
+        + (isFsDesign ? cornerRadiusClass(b) + entranceAnimClass(b) : '');
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-berry)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-oat)';
       const active = (state.flashSales || []).filter(p => p.flash?.state === 'active');
@@ -7436,6 +7929,138 @@ function renderBlockBody(b) {
       }).join('');
 
       const ctaLabel = pickLang(b.cta_label_en, b.cta_label_cn);
+
+      // ── Design directions: classic / editorial / urgency ──────────────
+      // Coral band + cream zigzag + live countdown + SHOP NOW + carousel.
+      // Bound to the same live flash data as the other views; every colour
+      // rides on a --fs-* var so the inspector can recolour each element,
+      // Energy drives the type scale, Urgency drives the live-pulse.
+      if (isFsDesign) {
+        const fsSet = (prop, token) => { const v = brandColorVar(token); if (v) d.style.setProperty(prop, v); };
+        fsSet('--fs-ink', b.ink_color);
+        fsSet('--fs-panel', b.panel_color);
+        fsSet('--fs-tile', b.tile_color);
+        fsSet('--fs-accent', b.accent_color);
+        fsSet('--fs-fill', b.fill_color);
+        fsSet('--fs-price', b.price_color);
+        const EN = ({ refined: { head: .9, border: 1.5, radius: 12 },
+                      balanced: { head: 1, border: 1.5, radius: 16 },
+                      bold: { head: 1.14, border: 2, radius: 18 } })[b.energy] || { head: 1, border: 1.5, radius: 16 };
+        d.style.setProperty('--fs-head', EN.head);
+        d.style.setProperty('--fs-border', EN.border + 'px');
+        d.style.setProperty('--fs-radius', EN.radius + 'px');
+        const pulse = b.urgency === 'frantic' ? ' fs-pulse' : '';
+        const pulseDot = b.urgency === 'frantic' ? ' fs-pulse-dot' : '';
+
+        // cream zigzag teeth hanging into the band (fill tracks --fs-panel)
+        const teeth = 30, ZW = 120, zh = 6, zw = ZW / teeth;
+        let zd = 'M0 0 ';
+        for (let i = 0; i < teeth; i++) zd += `L${(i * zw + zw / 2).toFixed(2)} ${zh} L${((i + 1) * zw).toFixed(2)} 0 `;
+        zd += 'Z';
+        const zig = `<svg class="fsd-zig" viewBox="0 0 ${ZW} ${zh}" preserveAspectRatio="none" width="100%" height="${zh}"><path d="${zd}" fill="var(--fs-panel)"></path></svg>`;
+        const cap = `<div class="fsd-cap"></div>${zig}`;
+
+        const vals = [split.d, split.h, split.m, split.s].map(v => String(v).padStart(2, '0'));
+        const endsAttr = soonestEnd ? ` data-ends-at="${escapeAttr(new Date(soonestEnd).toISOString())}"` : '';
+        const kHtml = (k.en && k.cn)
+          ? `${escapeHtml(k.en)} <span class="cn">· ${escapeHtml(k.cn)}</span>`
+          : escapeHtml(k.en || k.cn || '');
+        const headline = escapeHtml(pickLang(b.title_en, b.title_cn) || '');
+        const shop = ctaLabel ? `${escapeHtml(ctaLabel)} →` : '';
+
+        // design product card — badge: 'corner' | 'stamp' | 'ribbon'
+        const designCards = (badge) => products.map(p => {
+          const fp = Number(p.flash.price) || 0;
+          const rp = Number(p.price) || 0;
+          const off = rp > 0 ? Math.round(((rp - fp) / rp) * 100) : 0;
+          const img = p.image_url || p.image_data || '';
+          const nm = pickLang(p.name_en, p.name_cn) || '';
+          const sub = state.lang === 'cn' ? (p.name_en || '') : (p.name_cn || '');
+          const sold = p.flash.stock_sold || 0;
+          const capN = p.flash.stock_limit;
+          const pct = (capN != null && capN > 0) ? Math.min(100, Math.round((sold / capN) * 100)) : null;
+          const soldLbl = state.lang === 'cn'
+            ? (capN != null ? `已抢 ${sold} / ${capN}` : `已抢 ${sold}`)
+            : (capN != null ? `${sold} OF ${capN} SOLD` : `${sold} SOLD`);
+          const badgeHtml = off > 0 ? `<div class="fsd-badge-${badge}">−${off}%</div>` : '';
+          return `<div class="fsd-card">
+            <div class="fsd-img">${img ? `<img src="${escapeAttr(img)}" alt="">` : ''}${badgeHtml}</div>
+            <div class="fsd-meta">
+              <div class="fsd-name">${escapeHtml(nm)}</div>
+              ${sub ? `<div class="fsd-cn">${escapeHtml(sub)}</div>` : ''}
+              <div class="fsd-prices">
+                <span class="fsd-now">¥${fp.toFixed(2)}</span>
+                ${rp > fp ? `<span class="fsd-was">¥${rp.toFixed(2)}</span>` : ''}
+              </div>
+              ${pct != null ? `<div class="fsd-meter"><span style="width:${pct}%"></span></div>` : ''}
+              <div class="fsd-sold">${escapeHtml(soldLbl)}</div>
+            </div>
+          </div>`;
+        }).join('');
+
+        if (view === 'classic') {
+          const tiles = vals.map((v, i) => `
+            <div class="fsd-tile"><div class="fsd-tile-num js-fsd-num">${v}</div><div class="fsd-tile-lbl">${cellsLabels[i]}</div></div>${i < 3 ? '<span class="fsd-colon">:</span>' : ''}`).join('');
+          d.innerHTML = `${cap}
+            <div class="fsd-body">
+              <div class="fsd-head">
+                <div class="fsd-kicker">${kHtml}</div>
+                ${headline ? `<div class="fsd-title">${headline}</div>` : ''}
+              </div>
+              <div class="fsd-ends">
+                <div class="fsd-ends-lbl">${endsLbl}</div>
+                <div class="fsd-clock${pulse}"${endsAttr}>${tiles}</div>
+              </div>
+              ${shop ? `<div class="fsd-cta-wrap"><div class="fsd-cta tap">${shop}</div></div>` : ''}
+              <div class="fsd-cards">${designCards('corner')}</div>
+            </div>`;
+          return d;
+        }
+
+        if (view === 'editorial') {
+          const off = (() => products.reduce((mx, p) => {
+            const rp = Number(p.price) || 0, fp = Number(p.flash.price) || 0;
+            return rp > 0 ? Math.max(mx, Math.round(((rp - fp) / rp) * 100)) : mx;
+          }, 0))();
+          const offLine = state.lang === 'cn'
+            ? `最高省 ${off}%<br><span class="cn">限时秒杀</span>`
+            : `Up to ${off}% off<br><span class="cn">最高 ${off}%</span>`;
+          const seg = vals.map((v, i) => `
+            <div class="fsd-seg"><div class="fsd-seg-num js-fsd-num">${v}</div><div class="fsd-seg-lbl">${cellsLabels[i]}</div></div>${i < 3 ? '<div class="fsd-seg-div"></div>' : ''}`).join('');
+          d.innerHTML = `${cap}
+            <div class="fsd-body">
+              <div class="fsd-head">
+                <div class="fsd-kicker">${kHtml}</div>
+                ${headline ? `<div class="fsd-title">${headline}</div>` : ''}
+                <div class="fsd-ticker${pulse}"${endsAttr}>${seg}</div>
+                <div class="fsd-cta-row">
+                  ${shop ? `<div class="fsd-cta tap">${shop}</div>` : ''}
+                  <div class="fsd-off">${offLine}</div>
+                </div>
+              </div>
+              <div class="fsd-cards">${designCards('ribbon')}</div>
+            </div>`;
+          return d;
+        }
+
+        // view === 'urgency'
+        const tiles = vals.map((v, i) => `
+          <div class="fsd-tile"><div class="fsd-tile-num js-fsd-num">${v}</div><div class="fsd-tile-lbl">${cellsLabels[i]}</div></div>`).join('');
+        const liveLbl = state.lang === 'cn' ? '限时秒杀 · 进行中' : 'FLASH SALE · LIVE';
+        const subLine = state.lang === 'cn' ? '' : (t.cn ? `<div class="fsd-sub">${escapeHtml(t.cn)}</div>` : '');
+        d.innerHTML = `${cap}
+          <div class="fsd-body">
+            <div class="fsd-head">
+              <div class="fsd-live"><span class="fsd-live-dot${pulseDot}"></span><span class="fsd-live-lbl">${liveLbl}</span></div>
+              ${headline ? `<div class="fsd-title">${headline}</div>` : ''}
+              ${subLine}
+            </div>
+            <div class="fsd-clock${pulse}"${endsAttr}>${tiles}</div>
+            ${shop ? `<div class="fsd-cta-wrap"><div class="fsd-cta tap">${shop}</div></div>` : ''}
+            <div class="fsd-cards">${designCards('stamp')}</div>
+          </div>`;
+        return d;
+      }
 
       if (view === 'hero' || view === 'banner') {
         const inner = `
@@ -8181,11 +8806,13 @@ function renderBlockBody(b) {
       return d;
     }
     case 'bundle': {
-      d.className = 'b-bundle' + cornerRadiusClass(b) + entranceAnimClass(b);
-      d.style.background = brandColorVar(b.bg_color) || 'var(--b-corn)';
-      d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
-      const accent = brandColorVar(b.accent_color) || 'var(--b-ink)';
-      const accentFg = btnTextHex(dcResolveHex(b.accent_color || 'ink'));
+      // Resolve the feel (mood / finish / energy + colour overrides) into hexes.
+      const BT = resolveBundleTheme(b);
+      const EP = ({ refined: { bw: 1.5, rad: 14 }, balanced: { bw: 2, rad: 20 }, bold: { bw: 3, rad: 26 } })[BT.energy] || { bw: 2, rad: 20 };
+      const HS = BT.headScale;
+      d.className = 'b-bundle bun-style-' + BT.style + (BT.riso ? ' finish-riso' : ' finish-clean') + cornerRadiusClass(b) + entranceAnimClass(b);
+      d.style.background = BT.surface;
+      d.style.color = BT.text;
       const k = getBi(b, 'kicker');
 
       const variants = getBundleVariants(b);
@@ -8200,55 +8827,113 @@ function renderBlockBody(b) {
       const sub = pickLang(v.subtitle_en, v.subtitle_cn);
       const ids = Array.isArray(v.product_ids) ? v.product_ids : [];
       const items = ids.map(id => state.products.find(p => p.id === id)).filter(Boolean).slice(0, 6);
-      let sum = 0;
-      const cards = items.map((p, i) => {
-        const eff = Number(p.effective_price ?? p.sell_price ?? p.price ?? 0);
-        sum += eff;
-        // Use thumbUrl(p) — falls back to image_data when image_url is empty
-        // (catalogue products often have inline base64 thumbs, not URLs).
-        const src = thumbUrl(p);
-        const img = src ? `<img src="${escapeAttr(src)}" alt="">` : '';
-        const plus = i < items.length - 1 ? `<div class="bun-plus">+</div>` : '';
-        return `<div class="bun-card">
-          <div class="bun-card-img">${img}</div>
-          <div class="bun-card-name">${escapeHtml(pickLang(p.name_en, p.name_cn) || '')}</div>
-          <div class="bun-card-price">¥${eff.toFixed(2)}</div>
-        </div>${plus}`;
-      }).join('');
+      const itemData = items.map(p => ({
+        img: thumbUrl(p),
+        name: escapeHtml(pickLang(p.name_en, p.name_cn) || ''),
+        cn: escapeHtml(p.name_cn || ''),
+        price: Number(p.effective_price ?? p.sell_price ?? p.price ?? 0),
+      }));
+      const sum = itemData.reduce((s, it) => s + it.price, 0);
       const bundlePrice = Number(v.bundle_price) || 0;
       const showSav = bundlePrice > 0 && bundlePrice < sum;
       const priceLbl = bundlePrice > 0 ? '¥' + bundlePrice.toFixed(2) : (sum > 0 ? '¥' + sum.toFixed(2) : '');
       const sumLbl = sum > 0 ? '¥' + sum.toFixed(2) : '';
-      const sav = showSav ? (state.lang === 'cn' ? `省 ¥${(sum - bundlePrice).toFixed(2)}` : `SAVE ¥${(sum - bundlePrice).toFixed(2)}`) : '';
+      const savAmt = sum - bundlePrice;
+      const sav = showSav ? (state.lang === 'cn' ? `省 ¥${savAmt.toFixed(2)}` : `SAVE ¥${savAmt.toFixed(2)}`) : '';
       const addLbl = pickLang(v.cta_label_en, v.cta_label_cn)
-        || (state.lang === 'cn' ? `加入购物车 (${items.length} 件)` : `ADD BUNDLE · ${items.length} ITEMS`);
+        || (state.lang === 'cn' ? `加入购物车 (${itemData.length} 件)` : `ADD BUNDLE · ${itemData.length} ITEMS`);
+
+      // Surface character for free-floating elements (tubs, stamp, sticker).
+      const elBorder = BT.riso ? '1.5px solid #1a1a17' : '1.5px solid rgba(26,26,23,.10)';
+      const elShadow = BT.riso ? '2px 2px 0 #1a1a17' : '0 5px 16px rgba(26,26,23,.16)';
+      const jit = BT.riso ? 1 : 0;
+      const rot = deg => `rotate(${(deg * jit).toFixed(2)}deg)`;
+      const cardCss = BT.riso
+        ? `border:${EP.bw}px solid #1a1a17;border-radius:${EP.rad}px;background:transparent;`
+        : `border:none;border-radius:${EP.rad}px;background:${BT.cardFill};box-shadow:0 14px 36px rgba(26,26,23,.13);`;
 
       const pills = variants.length > 1 ? variants.map((vv, i) => {
-        const label = pickLang(vv.label_en, vv.label_cn) || `Bundle ${i + 1}`;
+        const label = escapeHtml(pickLang(vv.label_en, vv.label_cn) || `Bundle ${i + 1}`);
         const isActive = i === previewIdx;
-        const rec = vv.recommended ? '<span class="bun-pill-star">★</span> ' : '';
-        const bg = isActive ? accent : 'transparent';
-        const fg = isActive ? (brandColorVar(b.bg_color) || 'var(--b-corn)') : (brandColorVar(b.fg_color) || 'var(--b-ink)');
-        const brd = isActive ? accent : 'rgba(0,0,0,.2)';
-        return `<div class="bun-pill" data-idx="${i}" style="background:${bg};color:${fg};border-color:${brd};">${rec}${escapeHtml(label)}</div>`;
+        const star = vv.recommended ? `<span class="bun-pill-star" style="color:${BT.save}">★</span> ` : '';
+        const st = isActive
+          ? `background:${BT.toggleOn};color:${BT.toggleOnText};border-color:${BT.toggleOn};`
+          : `background:transparent;color:${BT.text};border-color:${BT.text};`;
+        return `<div class="bun-pill" data-idx="${i}" style="${st}">${star}${label}</div>`;
       }).join('') : '';
+      const pillsHtml = pills ? `<div class="bun-pills">${pills}</div>` : '';
+      const kickerHtml = (k.en || k.cn) ? `<div class="bun-kicker">${biLabel(k.en, k.cn)}</div>` : '';
+      const titleHtml = (t.en || t.cn) ? `<div class="bun-title" style="font-size:${(22 * HS).toFixed(1)}px">${biLabel(t.en, t.cn)}</div>` : '';
+      const ctaHtml = (full) => `<div class="bun-cta${full ? ' bun-cta-full' : ''}" style="background:${BT.cta};color:${BT.ctaText}">${escapeHtml(addLbl)}</div>`;
+      const dash = BT.riso ? '<div class="bun-dash"></div>' : '';
 
-      d.innerHTML = `
-        ${k.en || k.cn ? `<div class="bun-kicker">${biLabel(k.en, k.cn)}</div>` : ''}
-        ${pills ? `<div class="bun-pills">${pills}</div>` : ''}
-        ${t.en || t.cn ? `<div class="bun-title">${biLabel(t.en, t.cn)}</div>` : ''}
-        ${sub ? `<div class="bun-sub">${escapeHtml(sub)}</div>` : ''}
-        ${items.length === 0
-          ? `<div class="bun-empty">Pick products on the right →</div>`
-          : `<div class="bun-cards"><div class="bun-card-row">${cards}</div></div>
-             <div class="bun-foot">
-               <div class="bun-price-block">
-                 ${showSav ? `<div class="bun-was">${sumLbl}</div>` : ''}
-                 <div class="bun-price">${priceLbl}</div>
-                 ${sav ? `<div class="bun-savings">${sav}</div>` : ''}
-               </div>
-               <div class="bun-cta" style="background:${accent};color:${accentFg}">${escapeHtml(addLbl)}</div>
-             </div>`}`;
+      let bodyHtml;
+      if (itemData.length === 0) {
+        bodyHtml = `${kickerHtml}${pillsHtml}${titleHtml}<div class="bun-empty">Pick products on the right →</div>`;
+      } else if (BT.style === 'receipt') {
+        const rows = itemData.map((it, i) => `
+          <div class="bun-rrow" style="border-top:${i === 0 ? '1.5px solid #1a1a17' : '1px dashed rgba(0,0,0,.22)'}">
+            <div class="bun-rimg">${it.img ? `<img src="${escapeAttr(it.img)}" alt="">` : ''}</div>
+            <div class="bun-rmid"><div class="bun-rname">${it.name}</div>${it.cn ? `<div class="bun-rcn">${it.cn}</div>` : ''}</div>
+            <div class="bun-rprice">¥${it.price.toFixed(2)}</div>
+          </div>`).join('');
+        const itemsLbl = state.lang === 'cn' ? '单买' : 'Items total';
+        const bundLbl = state.lang === 'cn' ? '套装价' : 'Bundle price';
+        bodyHtml = `
+          <div class="bun-rhead">${kickerHtml}${titleHtml}</div>
+          ${pillsHtml}
+          <div class="bun-rows">${rows}</div>
+          <div class="bun-tally">
+            <div class="bun-trow"><span>${itemsLbl}</span><span class="bun-strike">${sumLbl}</span></div>
+            <div class="bun-trow bun-trow-big"><span>${bundLbl}</span><span class="bun-tprice" style="color:${BT.price};font-size:${(26 * HS).toFixed(1)}px">${priceLbl}</span></div>
+            ${sav ? `<div class="bun-tchip-row"><span class="bun-tchip" style="background:${BT.save};color:${BT.saveText}">${sav}</span></div>` : ''}
+            <div class="bun-tcta">${ctaHtml(true)}</div>
+          </div>`;
+      } else if (BT.style === 'sticker') {
+        const show = itemData.slice(0, 3);
+        const tubs = show.map((it, i) => `<div class="bun-tub" style="left:${i * 72}px;top:${i % 2 === 0 ? 0 : 10}px;border:${elBorder};box-shadow:${elShadow};transform:${rot(i % 2 === 0 ? -3 : 3)}">${it.img ? `<img src="${escapeAttr(it.img)}" alt="">` : ''}</div>`).join('');
+        const stamp = showSav ? `<div class="bun-stamp" style="background:${BT.save};color:${BT.saveText};border:${elBorder};box-shadow:${elShadow};transform:${rot(8)}"><span class="bun-stamp-k">SAVE</span><span class="bun-stamp-n">¥${savAmt.toFixed(0)}</span></div>` : '';
+        const more = itemData.length > 3 ? `<div class="bun-more" style="color:${BT.cta}">+ ${itemData.length - 3} ${state.lang === 'cn' ? '件' : 'MORE'}</div>` : '';
+        const tapTxt = state.lang === 'cn' ? '一键<br>入购物车' : 'Tap once —<br>straight to cart';
+        bodyHtml = `
+          <div class="bun-sticker" style="background:${BT.sticker};color:${BT.stickerText};border:${elBorder};box-shadow:${elShadow};transform:${rot(-3)}">BUNDLE &amp; SAVE · 搭配省</div>
+          ${titleHtml}
+          ${pillsHtml}
+          <div class="bun-tubs">${tubs}${stamp}</div>
+          ${more}
+          <div class="bun-foot">
+            <div class="bun-price-block">
+              ${showSav ? `<div class="bun-was">${sumLbl}</div>` : ''}
+              <div class="bun-price" style="color:${BT.price};font-size:${(28 * HS).toFixed(1)}px">${priceLbl}</div>
+            </div>
+            <div class="bun-tap">${tapTxt}</div>
+          </div>
+          ${ctaHtml(true)}`;
+      } else { // classic
+        const cards = itemData.map((it, i) => {
+          const img = it.img ? `<img src="${escapeAttr(it.img)}" alt="">` : '';
+          const plus = i < itemData.length - 1 ? `<div class="bun-plus">+</div>` : '';
+          return `<div class="bun-card">
+            <div class="bun-card-img">${img}</div>
+            <div class="bun-card-name">${it.name}</div>
+            <div class="bun-card-price">¥${it.price.toFixed(2)}</div>
+          </div>${plus}`;
+        }).join('');
+        bodyHtml = `
+          ${kickerHtml}${pillsHtml}${titleHtml}
+          ${sub ? `<div class="bun-sub">${escapeHtml(sub)}</div>` : ''}
+          <div class="bun-cards"><div class="bun-card-row">${cards}</div></div>
+          <div class="bun-foot">
+            <div class="bun-price-block">
+              ${showSav ? `<div class="bun-was">${sumLbl}</div>` : ''}
+              <div class="bun-price" style="color:${BT.price};font-size:${(22 * HS).toFixed(1)}px">${priceLbl}</div>
+              ${sav ? `<div class="bun-savings" style="color:${BT.save}">${sav}</div>` : ''}
+            </div>
+            ${ctaHtml(false)}
+          </div>`;
+      }
+
+      d.innerHTML = `${dash}<div class="bun-inner" style="${cardCss}">${bodyHtml}</div>${dash}`;
 
       // Wire pill taps to flip the preview's active variant. Stops the
       // tap from also re-selecting the block in the inspector.
@@ -9139,10 +9824,25 @@ function buildOrderTrackerForm(m, b) {
   m.appendChild(field(T('Title', '标题'), '',
     txtPair(t.en, t.cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn, title: undefined }))));
 
-  m.appendChild(field(T('Accent colour', '主题色'), T('Progress bar + action button.', '进度条与操作按钮颜色。'),
+  // Layout — the design's three directions.
+  m.appendChild(field(T('Style', '样式'),
+    T('Classic — ringed icon stepper with a bilingual label under each node. Track & truck — status-first headline + a rounded rail with a truck riding the current step. Status banner — bold accent header + chunky 4-segment progress + ticket button.',
+      '经典 — 带光环的图标步进器,每个节点下方有中英标签。轨道卡车 — 状态优先标题 + 圆角轨道,卡车停在当前节点。状态横幅 — 醒目强调色头部 + 粗四段进度 + 票券按钮。'),
+    sel(b.track_style || 'classic', [
+      { value: 'classic', label: T('Classic — ringed stepper', '经典 — 光环步进器') },
+      { value: 'truck',   label: T('Track & truck — riding rail', '轨道卡车 — 行进轨道') },
+      { value: 'banner',  label: T('Status banner — segments', '状态横幅 — 分段进度') },
+    ], v => updateBlock(b.id, { track_style: v }))));
+
+  const style = b.track_style || 'classic';
+
+  // ── Core colours ──
+  m.appendChild(field(T('Accent colour', '主题色'),
+    T('Progress fill + primary action button.', '进度填充与主操作按钮颜色。'),
     sel(b.accent_color || 'forest-kale', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 
-  m.appendChild(field(T('Card background', '卡片背景'), T('Fill colour behind the card.', '卡片背景填充色。'),
+  m.appendChild(field(T('Card background', '卡片背景'),
+    style === 'banner' ? T('Fill behind the banner body.', '横幅主体的背景填充色。') : T('Fill colour behind the card.', '卡片背景填充色。'),
     sel(b.card_bg_color || '',
       [{ value: '', label: T('— white —', '— 白色 —') }, ...BRAND_COLOR_OPTIONS],
       v => updateBlock(b.id, { card_bg_color: v || undefined }))));
@@ -9151,6 +9851,66 @@ function buildOrderTrackerForm(m, b) {
     sel(b.card_border_color === undefined ? 'ink' : b.card_border_color,
       [{ value: '', label: T('— none —', '— 无 —') }, ...BRAND_COLOR_OPTIONS],
       v => updateBlock(b.id, { card_border_color: v }))));
+
+  m.appendChild(field(T('Button text colour', '按钮文字色'),
+    T('Label colour on the action button (and status pill). Blank = auto.', '操作按钮(及状态胶囊)的文字颜色。留空 = 自动。'),
+    sel(b.cta_text_color || '', [{ value: '', label: T('— auto —', '— 自动 —') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { cta_text_color: v }))));
+
+  // ── Track + marker colours ──
+  m.appendChild(field(T('Empty track colour', '未完成轨道色'),
+    T('The unfilled progress track / connector.', '未填充的进度轨道 / 连接线。'),
+    sel(b.rail_color || '', [{ value: '', label: T('— default (grey) —', '— 默认(灰)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { rail_color: v }))));
+
+  if (style === 'truck' || style === 'banner') {
+    m.appendChild(field(T('Marker colour', '标记色'),
+      style === 'truck' ? T('The truck pin riding the rail.', '行进在轨道上的卡车标记。') : T('The status icon circle in the header.', '头部状态图标圆圈。'),
+      sel(b.marker_color || '', [{ value: '', label: T('— default (pink) —', '— 默认(粉)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { marker_color: v }))));
+    m.appendChild(field(T('Highlight colour', '高亮色'),
+      style === 'truck' ? T('Completed milestone dots.', '已完成里程碑圆点。') : T('Completed segments + the ticket button.', '已完成分段 + 票券按钮。'),
+      sel(b.bright_color || '', [{ value: '', label: T('— default (lime) —', '— 默认(柠檬黄)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { bright_color: v }))));
+  }
+
+  // ── Per-stage node colours (classic stepper) ──
+  if (style === 'classic') {
+    const stageHdr = document.createElement('div');
+    stageHdr.className = 'helper';
+    stageHdr.style.cssText = 'margin: 8px 0 2px; font-weight: 600;';
+    stageHdr.textContent = T('Stage node colours', '阶段节点颜色');
+    m.appendChild(stageHdr);
+    const stageField = (labEn, labCn, key, defLabel) =>
+      m.appendChild(field(T(labEn, labCn), '',
+        sel(b[key] || '', [{ value: '', label: defLabel }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { [key]: v }))));
+    stageField('Paid node',      '已付款节点', 'stage_paid_color',  T('— amber —', '— 琥珀 —'));
+    stageField('Prep node',      '备货节点',   'stage_prep_color',  T('— lime —',  '— 柠檬黄 —'));
+    stageField('On-way node',    '配送节点',   'stage_onway_color', T('— pink —',  '— 粉 —'));
+    stageField('Delivered node', '送达节点',   'stage_done_color',  T('— berry —', '— 莓红 —'));
+  }
+
+  // ── Tweaks (from the design's Energy + Stage controls) ──
+  m.appendChild(field(T('Weight', '视觉力度'),
+    T('Heading scale + banner frame weight. Refined is lighter; Bold is chunkier.', '标题大小 + 横幅边框力度。精致更轻;醒目更粗。'),
+    sel(b.energy || 'balanced', [
+      { value: 'refined',  label: T('Refined', '精致') },
+      { value: 'balanced', label: T('Balanced', '均衡') },
+      { value: 'bold',     label: T('Bold', '醒目') },
+    ], v => updateBlock(b.id, { energy: v }))));
+
+  m.appendChild(field(T('Preview stage', '预览阶段'),
+    T('Editor preview only — pick a milestone to see how each state looks. The live block follows the customer\'s real order.', '仅编辑器预览 — 选择一个阶段查看各状态外观。线上模块跟随顾客真实订单。'),
+    sel(String(b.preview_stage != null ? b.preview_stage : 2), [
+      { value: '0', label: T('Paid', '已付款') },
+      { value: '1', label: T('Preparing', '备货中') },
+      { value: '2', label: T('On the way', '配送中') },
+      { value: '3', label: T('Delivered', '已送达') },
+    ], v => updateBlock(b.id, { preview_stage: parseInt(v, 10) }))));
+
+  // ── Cross-block chrome — same corner + entrance controls other blocks expose.
+  m.appendChild(field(T('Card corners', '卡片圆角'),
+    T('Corner radius of the whole block card.', '整块卡片的圆角。'),
+    sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS, v => updateBlock(b.id, { corner_radius: v }))));
+  m.appendChild(field(T('Entrance animation', '入场动画'),
+    T('How the block animates in when it scrolls into view.', '模块滚动进入视图时的入场方式。'),
+    sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS, v => updateBlock(b.id, { entrance_anim: v }))));
 }
 function buildNotificationBarForm(m, b) {
   const note = document.createElement('div');
@@ -9254,6 +10014,12 @@ function buildCatTabsForm(m, b) {
       { value: 'scroll', label: T('Scroll — single row, drag left/right', '横滑 — 单行,左右拖动') },
     ], v => updateBlock(b.id, { view: v }))));
 
+  // Visual direction — independent of the layout above. Mirrors the design's
+  // three category explorations (Riso pop / Editorial / Stack & tag).
+  m.appendChild(field(T('Style', '样式'),
+    T('Riso = flat colour fill with an ink keyline + hard shadow. Editorial = oat surface, big serif name, the category colour as an accent rule. Stack & tag = oat surface with a rotated sticker number tag.', '印刷波普 = 满色块 + 墨线 + 硬阴影。杂志 = 燕麦底、大号衬线名、分类色作为色条。货架贴标 = 燕麦底 + 旋转贴纸编号。'),
+    sel(b.cat_style || 'riso', CAT_STYLE_OPTIONS, v => updateBlock(b.id, { cat_style: v }))));
+
   m.appendChild(field(T('Kicker', '小标题'), '',
     txtPair(k.en, k.cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn, kicker: undefined }))));
   m.appendChild(field(T('Section title', '区块标题'), '',
@@ -9304,13 +10070,43 @@ function buildCatTabsForm(m, b) {
       row.appendChild(picker);
       colorWrap.appendChild(row);
     });
-    m.appendChild(field(T('Circle colours', '圆形颜色'), T('Pick a colour per category, or leave on Auto to use the rotating palette.', '为每个分类选择颜色,或保持「自动」使用轮换调色板。'), colorWrap));
+    const catColourLabel = (b.cat_style || 'riso') === 'riso'
+      ? T('Tile colours', '色块颜色')
+      : T('Accent colours', '强调色');
+    const catColourHelp = (b.cat_style || 'riso') === 'riso'
+      ? T('Fills each whole tile. Leave on Auto to use the rotating palette.', '填充每个色块。保持「自动」使用轮换调色板。')
+      : T('The category accent — the rule (Editorial) or sticker tag (Stack). Leave on Auto for the rotating palette.', '分类强调色 — 杂志样式的色条或货架样式的贴纸编号底色。保持「自动」使用轮换调色板。');
+    m.appendChild(field(catColourLabel, catColourHelp, colorWrap));
   }
 
-  // Background colour — `null` = transparent (inherits page bg).
-  m.appendChild(field(T('Background', '背景颜色'), T('Optional surface colour behind the block. Transparent by default.', '可选 — 模块背后的底色。默认透明。'),
+  // ── Block colours — every element overridable. Empty = the style default. ──
+  m.appendChild(field(T('Background', '背景颜色'), T('Surface colour behind the whole block. Transparent by default.', '整个模块背后的底色。默认透明。'),
     sel(b.bg_color || '', [{ value: '', label: T('— transparent —', '— 透明 —') }, ...BRAND_COLOR_OPTIONS],
         v => updateBlock(b.id, { bg_color: v || null }))));
+  m.appendChild(field(T('Tile surface', '色块底色'),
+    T('Tile / circle fill for the Editorial & Stack styles. Default = oat. (Riso fills tiles with the category colour instead.)', '杂志与货架样式的色块 / 圆形底色。默认 = 燕麦白。(印刷波普改用分类色填充色块。)'),
+    sel(b.tile_surface_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { tile_surface_color: v }))));
+  m.appendChild(field(T('Text colour', '文字颜色'),
+    T('Section title + category names. Default = ink. (Riso tile names auto-contrast against their fill.)', '区块标题 + 分类名称。默认 = 墨黑。(印刷波普的色块名称会自动对比填充色。)'),
+    sel(b.fg_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  m.appendChild(field(T('Accent colour', '强调色'),
+    T('Kicker, the NO. number + SEE ALL link. Default = olive.', '小标题、编号与「查看全部」链接。默认 = 橄榄绿。'),
+    sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+  m.appendChild(field(T('Keyline colour', '描边颜色'),
+    T('Tile border / keyline (all styles) + the sticker tag outline. Default = ink.', '色块边框 / 描边(所有样式)与贴纸编号外框。默认 = 墨黑。'),
+    sel(b.keyline_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { keyline_color: v }))));
+  m.appendChild(field(T('Shadow colour', '阴影颜色'),
+    T('The hard offset shadow — Riso style only. Default = ink.', '硬位移阴影 — 仅印刷波普样式。默认 = 墨黑。'),
+    sel(b.shadow_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { shadow_color: v }))));
+
+  // ── Standard cross-block options ──────────────────────────────────────────
+  m.appendChild(field(T('Corner radius', '圆角'), T('Tile / circle corners.', '色块 / 圆形的圆角。'),
+    sel(b.corner_radius || 'sharp', CORNER_RADIUS_OPTIONS, v => updateBlock(b.id, { corner_radius: v }))));
+  m.appendChild(field(T('Entrance animation', '入场动画'), T('How the block enters on first paint.', '模块首次渲染时的入场方式。'),
+    sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS, v => updateBlock(b.id, { entrance_anim: v }))));
+  m.appendChild(field(T('SEE ALL link', '「查看全部」跳转'),
+    T('Where the SEE ALL header link goes — e.g. shop, promotions, category:5. Blank = the Shop tab.', '「查看全部」链接的跳转位置 — 例如 shop、promotions、category:5。留空则跳转「商品」标签页。'),
+    txt(b.link_target, v => updateBlockSilent(b.id, { link_target: v }), 'shop')));
 }
 function buildFeaturedForm(m, b) {
   const view = b.view || 'card';
@@ -9505,11 +10301,37 @@ const ENTRANCE_ANIM_OPTIONS = [
   { value: 'fade',     label: 'Fade · 淡入' },
   { value: 'slide_up', label: 'Slide up · 上移' },
 ];
+// Bundle "Buy together" feel controls (ported from the design Tweaks panel).
+const BUNDLE_STYLE_OPTIONS = [
+  { value: 'classic', label: 'Classic — products joined by + · 经典(商品以 + 串联)' },
+  { value: 'receipt', label: 'Receipt — itemised tally · 收据(逐项清单)' },
+  { value: 'sticker', label: 'Sticker — overlapping tubs + save stamp · 贴纸(叠放 + 省字章)' },
+];
+const BUNDLE_MOOD_OPTIONS = [
+  { value: 'grocer',  label: 'Grocer — forest + lime · 杂货(森绿+青柠)' },
+  { value: 'harvest', label: 'Harvest — almond + corn · 丰收(杏棕+玉米)' },
+  { value: 'berry',   label: 'Berry — plum + guava · 莓果(梅红+番石榴)' },
+];
+const BUNDLE_FINISH_OPTIONS = [
+  { value: 'riso',  label: 'Riso — ink keyline + hard shadow · 印刷(墨线+硬阴影)' },
+  { value: 'clean', label: 'Clean — soft shadow, no border · 简洁(柔阴影,无边框)' },
+];
+const BUNDLE_ENERGY_OPTIONS = [
+  { value: 'refined',  label: 'Refined — tight · 精致(紧凑)' },
+  { value: 'balanced', label: 'Balanced · 均衡' },
+  { value: 'bold',     label: 'Bold — chunky · 醒目(粗厚)' },
+];
 const DIVIDER_STYLE_OPTIONS = [
   { value: 'none',   label: 'None · 留白' },
   { value: 'line',   label: 'Line · 实线' },
   { value: 'dashes', label: 'Dashes · 虚线' },
   { value: 'dots',   label: 'Dots · 圆点' },
+];
+// Category-block visual directions (ported from the design exploration).
+const CAT_STYLE_OPTIONS = [
+  { value: 'riso',      label: 'Riso pop — flat colour fill + ink keyline · 印刷波普(满色块+墨线)' },
+  { value: 'editorial', label: 'Editorial — oat surface, big serif, accent rule · 杂志(燕麦底+衬线+色条)' },
+  { value: 'stack',     label: 'Stack & tag — grocery rows + sticker tag · 货架贴标(网格+贴纸编号)' },
 ];
 const SCRIM_OPTIONS = [
   { value: 'none',   label: 'None · 无遮罩' },
@@ -9562,36 +10384,85 @@ function buildFlashStripForm(m, b) {
   m.appendChild(banner);
 
   const view = b.view || 'strip';
-  m.appendChild(field(T('Layout', '版式'), T('Strip = compact row with small clock and product cards. Hero = big centered countdown above the products. Banner = countdown + CTA only, no products (good for "starts soon" announcements).', '条带 = 紧凑单行,小号时钟配商品卡。主视觉 = 商品上方居中大号倒计时。横幅 = 仅倒计时 + 按钮,无商品(适合「即将开始」通告)。'),
+  const isDesign = view === 'classic' || view === 'editorial' || view === 'urgency';
+  m.appendChild(field(T('Layout', '版式'), T('Strip / Hero / Banner are the compact live views. Classic / Editorial / Urgency are the full "Flash sale" section directions — coral band, cream zigzag edge, big countdown and a product carousel.', '条带 / 主视觉 / 横幅为紧凑实时视图。经典 / 编辑 / 紧迫为完整「限时秒杀」版块方向 — 珊瑚色条幅、奶白锯齿边、大号倒计时与商品轮播。'),
     sel(view, [
-      { value: 'strip',  label: T('Strip — compact row', '条带 — 紧凑单行') },
-      { value: 'hero',   label: T('Hero — big countdown + products', '主视觉 — 大号倒计时 + 商品') },
-      { value: 'banner', label: T('Banner — countdown only, no products', '横幅 — 仅倒计时,无商品') },
+      { value: 'strip',     label: T('Strip — compact row', '条带 — 紧凑单行') },
+      { value: 'hero',      label: T('Hero — big countdown + products', '主视觉 — 大号倒计时 + 商品') },
+      { value: 'banner',    label: T('Banner — countdown only, no products', '横幅 — 仅倒计时,无商品') },
+      { value: 'classic',   label: T('Classic — centred tiles + cream pill', '经典 — 居中色块 + 奶白按钮') },
+      { value: 'editorial', label: T('Editorial — left headline + ticker', '编辑 — 左对齐标题 + 横向计时条') },
+      { value: 'urgency',   label: T('Urgency — LIVE tag + popping tiles', '紧迫 — LIVE 标签 + 立体色块') },
     ], v => updateBlock(b.id, { view: v }))));
+
+  if (isDesign) {
+    m.appendChild(field(T('Energy', '风格强度'), T('Type scale + corner/border weight. Refined = smaller, tighter. Bold = larger headlines, chunkier borders.', '字号大小 + 圆角/描边粗细。精致 = 更小更紧凑。醒目 = 更大标题、更粗描边。'),
+      sel(b.energy || 'balanced', [
+        { value: 'refined',  label: T('Refined — smaller, tighter', '精致 — 更小更紧凑') },
+        { value: 'balanced', label: T('Balanced — the design default', '平衡 — 设计默认') },
+        { value: 'bold',     label: T('Bold — bigger, chunkier', '醒目 — 更大更粗') },
+      ], v => updateBlock(b.id, { energy: v }))));
+    m.appendChild(field(T('Urgency', '紧迫感'), T('Live-pulse intensity. Mellow / Building stay still; Frantic gently pulses the countdown (and the LIVE dot). The real countdown always binds to the soonest-ending sale.', '动效强度。舒缓 / 渐强为静态;紧迫会让倒计时(及 LIVE 圆点)轻微脉动。倒计时始终绑定最快结束的秒杀。'),
+      sel(b.urgency || 'building', [
+        { value: 'mellow',   label: T('Mellow — still', '舒缓 — 静态') },
+        { value: 'building', label: T('Building — still', '渐强 — 静态') },
+        { value: 'frantic',  label: T('Frantic — pulsing clock', '紧迫 — 脉动时钟') },
+      ], v => updateBlock(b.id, { urgency: v }))));
+  }
 
   m.appendChild(field(T('Kicker', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field(T('Title', '标题'), '',
+  m.appendChild(field(T('Title', '标题'), isDesign ? T('The big headline on the band (e.g. "What are you waiting for?").', '条幅上的大号标题(例如「What are you waiting for?」)。') : '',
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
-    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
-    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Sale accent colour', '促销强调色'), T('Colours the sale price and the sold-progress bar on each card. Default = brand red.', '为每张卡片的促销价和已售进度条着色。默认 = 品牌红。'),
-    sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+
+  if (isDesign) {
+    // Per-element colours — every coloured piece is overridable; blank keeps
+    // the design's coral-story default.
+    m.appendChild(field(T('Band colour', '条幅底色'), T('The full-width band background. Default = brand red (coral).', '通栏条幅背景。默认 = 品牌红(珊瑚色)。'),
+      sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+    m.appendChild(field(T('Ink / detail colour', '墨色 / 细节色'), T('Headline + ink details: borders, the Classic discount badge, and the Urgency tiles, LIVE tag & SHOP NOW. Blank = ink black.', '标题与墨色细节:描边、经典折扣角标,以及紧迫版的色块、LIVE 标签和立即抢购按钮。留空 = 墨黑。'),
+      sel(b.ink_color || '', [{ value: '', label: T('— default (ink) —', '— 默认(墨黑)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { ink_color: v }))));
+    m.appendChild(field(T('Accent colour', '强调色'), T('Discount badges, the Editorial/Urgency buttons & tiles, the LIVE dot. Blank = brand lime.', '折扣角标、编辑/紧迫版的按钮与色块、LIVE 圆点。留空 = 品牌青柠。'),
+      sel(b.accent_color || '', [{ value: '', label: T('— default (lime) —', '— 默认(青柠)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { accent_color: v }))));
+    m.appendChild(field(T('Cream panel colour', '奶白面板色'), T('The zigzag top edge + cream surfaces: the Editorial ticker and the Classic SHOP NOW pill. Blank = soft cream.', '锯齿顶边 + 奶白面:编辑版计时条与经典版立即抢购按钮。留空 = 柔奶白。'),
+      sel(b.panel_color || '', [{ value: '', label: T('— default (cream) —', '— 默认(奶白)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { panel_color: v }))));
+    m.appendChild(field(T('Classic tile colour', '经典色块色'), T('Fill of the Classic countdown tiles. Blank = deep maroon. (Editorial uses the cream panel; Urgency uses the accent.)', '经典版倒计时色块的填充色。留空 = 深酒红。(编辑版用奶白面板;紧迫版用强调色。)'),
+      sel(b.tile_color || '', [{ value: '', label: T('— default (maroon) —', '— 默认(酒红)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { tile_color: v }))));
+    m.appendChild(field(T('Progress / label colour', '进度 / 标签色'), T('The "sold" progress fill on each card + the Urgency tile labels. Blank = forest green.', '每张卡片的「已售」进度填充 + 紧迫版色块标签。留空 = 森绿。'),
+      sel(b.fill_color || '', [{ value: '', label: T('— default (forest) —', '— 默认(森绿)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { fill_color: v }))));
+    m.appendChild(field(T('Sale price colour', '促销价颜色'), T('The big sale price on each product card. Blank = brand red.', '每张商品卡上的大号促销价。留空 = 品牌红。'),
+      sel(b.price_color || '', [{ value: '', label: T('— default (berry) —', '— 默认(莓红)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { price_color: v }))));
+  } else {
+    m.appendChild(field(T('Background colour', '背景颜色'), '',
+      sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+    m.appendChild(field(T('Text colour', '文字颜色'), '',
+      sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+    m.appendChild(field(T('Sale accent colour', '促销强调色'), T('Colours the sale price and the sold-progress bar on each card. Default = brand red.', '为每张卡片的促销价和已售进度条着色。默认 = 品牌红。'),
+      sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+  }
 
   if (view !== 'banner') {
     m.appendChild(field(T('Max products shown', '最多显示商品数'), view === 'hero'
         ? T('Hero view focuses on the countdown — keep this small (1–3) so the visual stays bold.', '主视觉模式聚焦倒计时 — 数量保持较小(1–3),让视觉更醒目。')
-        : T('Caps how many flash-sale items render. The strip horizontally scrolls if there are more.', '限制渲染多少件秒杀商品。超出则条带横向滚动。'),
+        : T('Caps how many flash-sale items render. The carousel horizontally scrolls if there are more.', '限制渲染多少件秒杀商品。超出则横向滚动。'),
       num(b.product_limit, v => updateBlock(b.id, { product_limit: Math.max(1, Math.min(8, v)) }), { min: 1, max: 8 })));
   }
 
-  if (view === 'hero' || view === 'banner') {
-    m.appendChild(field(T('Button label', '按钮文字'), T('Shown under the big clock. Leave both blank to hide the button.', '显示在大号时钟下方。两者留空则隐藏按钮。'),
+  if (view === 'hero' || view === 'banner' || isDesign) {
+    m.appendChild(field(T('Button label', '按钮文字'), isDesign
+        ? T('The SHOP NOW pill (an arrow is appended). Leave both blank to hide it.', '立即抢购按钮(会自动加箭头)。两者留空则隐藏。')
+        : T('Shown under the big clock. Leave both blank to hide the button.', '显示在大号时钟下方。两者留空则隐藏按钮。'),
       txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
     m.appendChild(field(T('Button target', '按钮目标'), T('e.g. shop · product:12 · category:5', '例如 shop · product:12 · category:5'),
       txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'shop')));
+  }
+
+  if (isDesign) {
+    // Cross-block chrome — same corner + entrance controls other blocks expose.
+    m.appendChild(field(T('Card corners', '卡片圆角'), T('Rounds the band edges. Sharp = edge-to-edge (the design default).', '为条幅边角加圆角。直角 = 通栏到边(设计默认)。'),
+      sel(b.corner_radius || 'sharp', CORNER_RADIUS_OPTIONS, v => updateBlock(b.id, { corner_radius: v }))));
+    m.appendChild(field(T('Entrance animation', '入场动画'), T('How the block animates in when it scrolls into view.', '模块滚动进入视图时的入场方式。'),
+      sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS, v => updateBlock(b.id, { entrance_anim: v }))));
   }
 
   const hideWrap = document.createElement('div');
@@ -10056,6 +10927,57 @@ function buildRecipeStoryForm(m, b) {
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }))));
 }
 
+// ── Bundle feel system (ported from the "Buy together" design handoff) ───
+// mood = colour story, finish = surface character, energy = scale/weight.
+// Individual colour overrides on the block win over the mood palette.
+// Mirrored verbatim in miniapp/components/block-renderer/block-renderer.js
+// (resolveBundleTheme there) so the editor preview and the live mini app
+// agree — keep the two in sync when either changes.
+const BUNDLE_MOODS = {
+  grocer:  { surface: '#F3ECE0', cardFill: '#FFFCF7', cta: '#365329', save: '#E96174', sticker: '#CCD900', price: '#1a1a17' },
+  harvest: { surface: '#F6EAD6', cardFill: '#FFFCF7', cta: '#8A5A2B', save: '#FF6B0C', sticker: '#F2CA6C', price: '#1a1a17' },
+  berry:   { surface: '#F5E6E6', cardFill: '#FFFCF7', cta: '#B23A52', save: '#E96174', sticker: '#F4B8CB', price: '#1a1a17' },
+};
+const BUNDLE_ENERGY = {
+  refined:  { headScale: 0.92 },
+  balanced: { headScale: 1.0 },
+  bold:     { headScale: 1.1 },
+};
+// Resolve a block's bundle feel into concrete hexes + flags. `toHex` turns a
+// token/hex into a hex string (dcResolveHex in the editor); `contrast` picks
+// readable text on a fill (btnTextHex in the editor).
+function resolveBundleThemeWith(b, toHex, contrast) {
+  const mood = BUNDLE_MOODS[b.mood] || BUNDLE_MOODS.grocer;
+  const energy = BUNDLE_ENERGY[b.energy] || BUNDLE_ENERGY.balanced;
+  const riso = (b.finish || 'riso') !== 'clean';
+  const pick = (field, fallback) => {
+    const h = b[field] ? toHex(b[field]) : null;
+    return h || fallback;
+  };
+  const surface  = pick('bg_color', mood.surface);
+  const text     = pick('fg_color', '#1a1a17');
+  const cta      = pick('accent_color', mood.cta);
+  const cardFill = pick('card_color', mood.cardFill);
+  const save     = pick('save_color', mood.save);
+  const sticker  = pick('sticker_color', mood.sticker);
+  const price    = pick('price_color', mood.price);
+  return {
+    style: ['classic', 'receipt', 'sticker'].includes(b.bundle_style) ? b.bundle_style : 'classic',
+    riso, headScale: energy.headScale,
+    energy: BUNDLE_ENERGY[b.energy] ? b.energy : 'balanced',
+    surface, text, cardFill, price,
+    cta,      ctaText:     contrast(cta),
+    toggleOn: cta, toggleOnText: contrast(cta),
+    save,     saveText:    contrast(save),
+    sticker,  stickerText: contrast(sticker),
+  };
+}
+
+// Editor-side convenience: resolve the bundle feel to hexes for the preview.
+function resolveBundleTheme(b) {
+  return resolveBundleThemeWith(b, dcResolveHex, hex => btnTextHex(hex || '#000000'));
+}
+
 // Migrate legacy single-bundle blocks (saved before the variants[] refactor)
 // to the new array shape so the form + render code can rely on
 // b.variants. New saves write BOTH the variants[] array AND mirror the
@@ -10108,12 +11030,44 @@ function buildBundleForm(m, b) {
     T('Sits above the variant pills — used as a section eyebrow.', '位于变体胶囊上方 — 用作区块小标题。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
 
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
-    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  // ── Style ────────────────────────────────────────────────────────────
+  m.appendChild(field(T('Style', '样式'),
+    T('Classic = products in a row joined by "+". Receipt = itemised list with a tally total. Sticker = overlapping tubs with a big SAVE stamp.', '经典 = 商品成排以「+」串联。收据 = 逐项清单加合计。贴纸 = 叠放商品配大号「省」字章。'),
+    sel(b.bundle_style || 'classic', BUNDLE_STYLE_OPTIONS, v => updateBlock(b.id, { bundle_style: v }))));
+
+  // ── Feel tweaks (mood / finish / energy) ──────────────────────────────
+  m.appendChild(field(T('Colour story (mood)', '配色基调'),
+    T('Sets the default palette for every colour below. Pick one, then override any individual colour underneath.', '为下方所有颜色设定默认配色。先选一个,再按需单独覆盖。'),
+    sel(b.mood || 'grocer', BUNDLE_MOOD_OPTIONS, v => updateBlock(b.id, { mood: v }))));
+  m.appendChild(field(T('Finish (surface)', '表面质感'),
+    T('Riso = ink keyline with a hard offset shadow. Clean = soft drop shadow, no border, card fill shows.', '印刷 = 墨线加硬位移阴影。简洁 = 柔和投影、无边框、显示卡片填充色。'),
+    sel(b.finish || 'riso', BUNDLE_FINISH_OPTIONS, v => updateBlock(b.id, { finish: v }))));
+  m.appendChild(field(T('Energy (scale)', '力度'),
+    T('Border weight, corner radius and headline size — Refined (tight) → Bold (chunky).', '边框粗细、圆角与标题大小 — 精致(紧凑)→ 醒目(粗厚)。'),
+    sel(b.energy || 'balanced', BUNDLE_ENERGY_OPTIONS, v => updateBlock(b.id, { energy: v }))));
+
+  // ── Colours — every element overridable. Empty = use the mood palette. ─
+  m.appendChild(field(T('Surface colour', '背景颜色'),
+    T('Block background behind the card. Default follows the mood.', '卡片后方的区块背景。默认跟随基调。'),
+    sel(b.bg_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  m.appendChild(field(T('Card fill', '卡片填充'),
+    T('Inner card colour — only visible with the Clean finish. Default = cream.', '内层卡片颜色 — 仅在简洁质感下可见。默认 = 奶白。'),
+    sel(b.card_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { card_color: v }))));
   m.appendChild(field(T('Text colour', '文字颜色'), '',
-    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Button / pill colour', '按钮 / 胶囊颜色'), '',
-    sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+    sel(b.fg_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  m.appendChild(field(T('Button / pill colour', '按钮 / 胶囊颜色'),
+    T('Fills the ADD button and the active variant pill. Default follows the mood.', '填充加入按钮与选中的变体胶囊。默认跟随基调。'),
+    sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+  m.appendChild(field(T('Price colour', '价格颜色'),
+    T('The big bundle price number. Default = ink.', '套装大号价格数字。默认 = 墨黑。'),
+    sel(b.price_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { price_color: v }))));
+  m.appendChild(field(T('Savings colour', '优惠颜色'),
+    T('Strikethrough savings text + the SAVE stamp. Default = berry.', '划线优惠文字 + 「省」字章。默认 = 莓红。'),
+    sel(b.save_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { save_color: v }))));
+  m.appendChild(field(T('Sticker colour', '贴纸颜色'),
+    T('The "BUNDLE & SAVE" sticker — Sticker style only. Default = lime.', '「BUNDLE & SAVE」贴纸 — 仅贴纸样式。默认 = 青柠。'),
+    sel(b.sticker_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { sticker_color: v }))));
+
   m.appendChild(field(T('Entrance animation', '入场动画'), T('How the bundle enters on first paint.', '套装首次渲染时的入场方式。'),
     sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS,
         v => updateBlock(b.id, { entrance_anim: v }))));
