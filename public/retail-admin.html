@@ -5718,6 +5718,11 @@
       .bc-actions { display: flex; gap: var(--s3); align-items: center; margin-top: var(--s4); }
       .bc-audience { background: var(--bg-app); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: var(--muted); border: 1px dashed var(--line); }
       .bc-audience b { color: var(--text); font-size: 14px; }
+      .bc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .bc-chips-scroll { max-height: 96px; overflow-y: auto; }
+      .bc-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text); background: var(--bg-app); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+      .bc-chip input { margin: 0; cursor: pointer; }
+      .bc-chip .muted { font-size: 11px; }
       .bc-list { display: flex; flex-direction: column; gap: 10px; }
       .bc-item { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
       .bc-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
@@ -5790,9 +5795,38 @@
             <input id="bc-schedule-at" class="bc-input" type="datetime-local" style="margin-top: 6px; display: none;">
           </div>
           <div>
+            <label class="bc-label">Activity · 客户活跃度</label>
+            <select id="bc-activity" class="bc-select" onchange="bcAudienceChanged()">
+              <option value="all">All active customers · 所有活跃客户</option>
+              <option value="buyers">Has ordered · 曾下单</option>
+              <option value="never">Never ordered · 从未下单</option>
+              <option value="active">Active — ordered in last 30d · 近30天下单</option>
+              <option value="lapsed">Lapsed — no order in 60d · 60天未下单</option>
+            </select>
+          </div>
+        </div>
+        <div class="bc-row">
+          <div>
+            <label class="bc-label">Membership tier · 会员等级 <span class="muted">(blank = all)</span></label>
+            <div class="bc-chips" id="bc-tiers">
+              <label class="bc-chip"><input type="checkbox" class="bc-tier" value="seed" onchange="bcAudienceChanged()"> Seed · 种子</label>
+              <label class="bc-chip"><input type="checkbox" class="bc-tier" value="sprout" onchange="bcAudienceChanged()"> Sprout · 萌芽</label>
+              <label class="bc-chip"><input type="checkbox" class="bc-tier" value="root" onchange="bcAudienceChanged()"> Root · 扎根</label>
+              <label class="bc-chip"><input type="checkbox" class="bc-tier" value="tree" onchange="bcAudienceChanged()"> Tree · 成树</label>
+            </div>
+          </div>
+          <div>
+            <label class="bc-label">Region · 地区 <span class="muted">(blank = all; by saved address)</span></label>
+            <div class="bc-chips bc-chips-scroll" id="bc-regions">
+              <span class="muted" style="font-size:12px;">Loading…</span>
+            </div>
+          </div>
+        </div>
+        <div class="bc-row">
+          <div style="flex: 1;">
             <label class="bc-label">Audience · 接收人</label>
             <div class="bc-audience" id="bc-audience">
-              All active customers · <b id="bc-aud-count">—</b>
+              <span id="bc-aud-summary">All active customers</span> · <b id="bc-aud-count">—</b>
               <div style="margin-top: 2px; opacity: 0.8;">Blocked customers are skipped.</div>
             </div>
           </div>
@@ -6899,12 +6933,15 @@
       .vot-form .field label {
         font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3);
       }
+      /* background-color (not the shorthand) so the global `select`
+         chevron image + no-repeat + right-aligned position survive. */
       .vot-form input[type="text"], .vot-form input[type="number"],
       .vot-form input[type="datetime-local"], .vot-form textarea, .vot-form select {
-        background: var(--bg-elev-1); border: 1px solid var(--line);
+        background-color: var(--bg-elev-1); border: 1px solid var(--line);
         border-radius: 6px; padding: 8px 10px; color: var(--text-1);
         font: inherit; font-size: 13px; width: 100%; box-sizing: border-box;
       }
+      .vot-form select { padding-right: 32px; }
       .vot-form textarea { resize: vertical; min-height: 56px; }
       .vot-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
       @media (max-width: 720px) { .vot-row-2 { grid-template-columns: 1fr; } }
@@ -10313,7 +10350,7 @@ async function loadOrders(opts = {}) {
         </td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
-        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status)}</span>${refundBadge(o)}</div></td>
+        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}</div></td>
         <td>${renderTrackingCell(o)}</td>
         <td>${renderShipByCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
@@ -10650,7 +10687,14 @@ async function ensureOrdersStoreFilter() {
   } catch (e) { /* silent — filter just stays minimal */ }
 }
 
-function humanStatus(s) {
+function humanStatus(s, fulfillmentType) {
+  // Pickup reuses the dispatched/delivered statuses but they mean "ready at the
+  // counter" and "collected by customer" (see retail.js progress tracker), so
+  // relabel them for the operator instead of showing "Dispatched/Delivered".
+  if (fulfillmentType === 'pickup') {
+    if (s === 'dispatched') return 'Ready';
+    if (s === 'delivered')  return 'Picked up';
+  }
   return { pending_payment: 'Pending', paid: 'Paid', preparing: 'Preparing', dispatched: 'Dispatched', delivered: 'Delivered', cancelled: 'Cancelled', refunded: 'Refunded', awaiting_restock: 'Awaiting restock' }[s] || s;
 }
 function formatDate(iso) {
@@ -10687,6 +10731,21 @@ const NEXT_STATUS = {
   // also happens server-side via checkAwaitingRestockForRestock.
   awaiting_restock: [['preparing', 'Restocked → Start preparing · 已补货 → 开始备货'], ['cancelled', 'Cancel + refund · 取消并退款']],
 };
+
+// Pickup orders walk the same status machine but dispatched = "ready at counter"
+// and delivered = "collected by the customer". Relabel the transition buttons so
+// the operator gets a clear collection journey (Ready → Picked up) and a final
+// "complete" step that records the customer actually came to collect.
+const NEXT_STATUS_PICKUP_LABELS = {
+  dispatched: 'Mark ready for pickup · 标记可取货',
+  delivered:  'Mark picked up · 标记已取货',
+};
+function nextStatusFor(o) {
+  const transitions = NEXT_STATUS[o.status] || [];
+  if (o.fulfillment_type !== 'pickup') return transitions;
+  return transitions.map(([next, label]) =>
+    [next, NEXT_STATUS_PICKUP_LABELS[next] || label]);
+}
 
 // Sort modes for the items table inside an open order. Persisted per-order
 // in memory; default = 'sku'.
@@ -11128,7 +11187,7 @@ function renderOrderTotalFooter(o, transitionsHtml) {
 
 function renderOpenOrder(o) {
   const mount = $('#order-detail-mount');
-  const transitions = (NEXT_STATUS[o.status] || []).map(([next, label]) => {
+  const transitions = nextStatusFor(o).map(([next, label]) => {
       const cls = (next === 'cancelled' || next === 'refunded') ? 'btn-danger' : 'btn-primary';
       return `<button class="btn ${cls} btn-sm" onclick="transition(${o.id}, '${next}')">${label}</button>`;
     }).join('');
@@ -11139,7 +11198,7 @@ function renderOpenOrder(o) {
           <div>
             <div class="title-row">
               <b>${escapeHtml(o.order_no)}</b>
-              <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status)}</span>
+              <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>
               ${refundBadge(o)}
             </div>
             <div class="od-eyebrow">Order placed · 下单于 ${formatDate(o.placed_at)}</div>
@@ -11262,7 +11321,7 @@ async function transition(id, status) {
   }
   try {
     await api(`/api/retail-admin/orders/${id}/status`, { method: 'PATCH', body: { status, reason } });
-    toast(`Order → ${humanStatus(status)} · 订单 → ${humanStatus(status)}`);
+    toast(`Order → ${humanStatus(status, _OPEN_ORDER?.fulfillment_type)} · 订单 → ${humanStatus(status, _OPEN_ORDER?.fulfillment_type)}`);
     openOrder(id);
     loadOrders();
   } catch (e) {
@@ -12998,13 +13057,59 @@ function bcResetComposer() {
   $('#bc-schedule-at').style.display = 'none';
   $('#bc-send-label').textContent = 'Send broadcast';
   $('#bc-send-status').textContent = '';
+  if ($('#bc-activity')) $('#bc-activity').value = 'all';
+  document.querySelectorAll('.bc-tier:checked, .bc-city:checked').forEach(el => { el.checked = false; });
+  loadBroadcastAudienceCount();
+}
+function bcAudienceObj() {
+  const activity = ($('#bc-activity') || {}).value || 'all';
+  const tiers  = Array.from(document.querySelectorAll('.bc-tier:checked')).map(el => el.value);
+  const cities = Array.from(document.querySelectorAll('.bc-city:checked')).map(el => el.value);
+  return { activity, tiers, cities };
+}
+function bcAudienceLabel(aud) {
+  const ACT = {
+    all: 'All active customers', buyers: 'Has ordered', never: 'Never ordered',
+    active: 'Active (last 30d)', lapsed: 'Lapsed (60d)'
+  };
+  const TIER = { seed: 'Seed', sprout: 'Sprout', root: 'Root', tree: 'Tree' };
+  const bits = [ACT[aud.activity] || ACT.all];
+  if (aud.tiers && aud.tiers.length) bits.push(aud.tiers.map(t => TIER[t] || t).join(', '));
+  if (aud.cities && aud.cities.length) {
+    bits.push(aud.cities.length <= 2 ? aud.cities.join(', ') : aud.cities.length + ' regions');
+  }
+  return bits.join(' · ');
+}
+let _bcAudTimer = null;
+function bcAudienceChanged() {
+  clearTimeout(_bcAudTimer);
+  _bcAudTimer = setTimeout(loadBroadcastAudienceCount, 250);
 }
 async function loadBroadcastAudienceCount() {
+  const aud = bcAudienceObj();
+  $('#bc-aud-summary').textContent = bcAudienceLabel(aud);
   try {
-    const { data } = await api('/api/retail-admin/broadcasts/audience-count');
+    const q = '?aud=' + encodeURIComponent(JSON.stringify(aud));
+    const { data } = await api('/api/retail-admin/broadcasts/audience-count' + q);
     $('#bc-aud-count').textContent = (data && data.count != null ? data.count : '0') + ' customers';
   } catch (e) {
     $('#bc-aud-count').textContent = '?';
+  }
+}
+async function loadBroadcastRegions() {
+  const wrap = $('#bc-regions');
+  if (!wrap) return;
+  try {
+    const { data } = await api('/api/retail-admin/broadcasts/regions');
+    if (!data || !data.length) {
+      wrap.innerHTML = '<span class="muted" style="font-size:12px;">No saved addresses yet.</span>';
+      return;
+    }
+    wrap.innerHTML = data.map(r =>
+      `<label class="bc-chip"><input type="checkbox" class="bc-city" value="${escapeHtml(r.city)}" onchange="bcAudienceChanged()"> ${escapeHtml(r.city)} <span class="muted">${r.n}</span></label>`
+    ).join('');
+  } catch (e) {
+    wrap.innerHTML = '<span class="err" style="font-size:12px;">Failed to load regions.</span>';
   }
 }
 async function loadBroadcasts() {
@@ -13032,6 +13137,14 @@ async function loadBroadcasts() {
       if (status === 'scheduled' && b.scheduled_for) meta.push('Scheduled for ' + escapeHtml(b.scheduled_for));
       if (b.sent_at) meta.push('Sent ' + escapeHtml(b.sent_at));
       if (b.recipient_count) meta.push(b.recipient_count + ' recipient' + (b.recipient_count === 1 ? '' : 's'));
+      if (b.audience && b.audience.charAt(0) === '{') {
+        try {
+          const aud = JSON.parse(b.audience);
+          if (aud.activity !== 'all' || (aud.tiers && aud.tiers.length) || (aud.cities && aud.cities.length)) {
+            meta.push('To: ' + escapeHtml(bcAudienceLabel(aud)));
+          }
+        } catch (_) {}
+      }
       if (b.deeplink) meta.push('→ <code>' + escapeHtml(b.deeplink) + '</code>');
       const canRecall = status === 'sent' || status === 'scheduled';
       const recallLabel = status === 'scheduled' ? 'Cancel' : 'Recall';
@@ -13074,7 +13187,7 @@ async function sendBroadcast() {
   const verb = mode === 'later' ? 'Schedule' : 'Send';
   if (!confirm(`${verb} this broadcast to ${audCount || 'all active'} customer${audCount === '1' ? '' : 's'}? · 向 ${audCount || '所有活跃'} 位客户${verb === 'Schedule' ? '排期' : '发送'}此群发消息？`)) return;
 
-  const payload = { title_en, title_cn, body_en, body_cn, deeplink };
+  const payload = { title_en, title_cn, body_en, body_cn, deeplink, audience: bcAudienceObj() };
   if (scheduledRaw) {
     // datetime-local has no timezone; treat as local time and convert.
     payload.scheduled_for = new Date(scheduledRaw).toISOString();
@@ -13113,6 +13226,7 @@ async function recallBroadcast(id, currentStatus) {
 // Lazy-load when the operator first opens the tab.
 document.querySelector('[data-tab="broadcasts"]').addEventListener('click', () => {
   loadBroadcasts();
+  loadBroadcastRegions();
   loadBroadcastAudienceCount();
 });
 
