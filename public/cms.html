@@ -9772,18 +9772,24 @@ function buildAnnouncementForm(m, b) {
     { value: 'normal', label: T('Normal', '正常') },
     { value: 'fast',   label: T('Fast', '快') },
   ];
-  m.appendChild(field(T('Text', '正文'), T('Leave one blank to show only the other language.', '留空一种语言则只显示另一种。'),
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
+
+  secContent.appendChild(field(T('Text', '正文'), T('Leave one language blank to show only the other one.', '留空一种语言则只显示另一种。'),
     txtPair(b.text_en, b.text_cn, ({ en, cn }) => updateBlockSilent(b.id, { text_en: en, text_cn: cn }))));
-  m.appendChild(field(T('Background', '背景颜色'),     '', sel(b.bg_color, COLORS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'),    '', sel(b.fg_color, COLORS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Animation', '动画'),
-    T('How the text moves. Per-letter styles look best on short messages (under ~30 chars).', '文字如何运动。逐字样式最适合短消息(约 30 字以内)。'),
-    sel(b.animation || 'static', ANIMATIONS, v => updateBlock(b.id, { animation: v }))));
-  m.appendChild(field(T('Speed', '速度'), '',
-    sel(b.speed || 'normal', SPEEDS, v => updateBlock(b.id, { speed: v }))));
-  m.appendChild(field(T('Link target', '链接目标'),
-    T('Optional — makes the whole bar tappable. e.g. promotions · membership · coupons · product:12. Blank keeps it decorative.', '可选 — 让整条横幅可点击。例如 promotions · membership · coupons · product:12。留空则仅作装饰。'),
+  secContent.appendChild(field(T('Link (optional)', '链接(可选)'),
+    T('Makes the whole bar tappable. e.g. promotions · membership · coupons · product:12. Leave empty for a plain bar.', '让整条横幅可点击。例如 promotions · membership · coupons · product:12。留空则只是普通横幅。'),
     txt(b.link_target, v => updateBlockSilent(b.id, { link_target: v }), 'promotions')));
+
+  secColours.appendChild(field(T('Background', '背景颜色'),  '', sel(b.bg_color, COLORS, v => updateBlock(b.id, { bg_color: v }))));
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '', sel(b.fg_color, COLORS, v => updateBlock(b.id, { fg_color: v }))));
+
+  secBehaviour.appendChild(field(T('Animation', '动画'),
+    T('How the text moves. The letter-by-letter styles look best on short messages (about 30 characters or less).', '文字如何运动。逐字样式最适合短消息(约 30 字以内)。'),
+    sel(b.animation || 'static', ANIMATIONS, v => updateBlock(b.id, { animation: v }))));
+  secBehaviour.appendChild(field(T('Speed', '速度'), '',
+    sel(b.speed || 'normal', SPEEDS, v => updateBlock(b.id, { speed: v }))));
 }
 function buildHeroForm(m, b) {
   const view = b.view || 'full';
@@ -9909,21 +9915,24 @@ function buildHeroForm(m, b) {
 }
 
 function buildVideoForm(m, b) {
+  const fullscreen = (b.display || 'banner') === 'fullscreen';
+  const secLayout  = inspectorSection(m, b.type, 'layout',  T('Style & layout', '样式与版式'), { open: true });
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+
   const note = document.createElement('div');
   note.className = 'helper';
   note.style.cssText = 'margin: -4px 0 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
-  const fullscreen = (b.display || 'banner') === 'fullscreen';
   note.innerHTML = B(
-    'The clip autoplays muted on a loop with no controls — it starts the moment it appears. Use a short MP4 (≤20MB). Tip: keep it under ~10s so it loops smoothly.',
-    '短片出现时自动播放,静音、循环、无控件。请用较短的 MP4(≤20MB)。建议时长 10 秒内,循环更顺滑。'
+    'The video plays automatically, on a loop, with no sound and no buttons — it starts as soon as it appears. Use a short MP4 (under 20MB). Tip: keep it under about 10 seconds so it loops smoothly.',
+    '视频会自动播放,循环、静音、无按钮 — 出现时立即开始。请用较短的 MP4(小于 20MB)。建议时长约 10 秒内,循环更顺滑。'
   );
-  m.appendChild(note);
+  secContent.appendChild(note);
 
-  m.appendChild(field(T('Display', '显示方式'),
-    T('Banner = a fixed-height band inside the page. Full screen = covers the whole phone — use it on the Onboarding page for a launch intro video. The Get Started button floats over it.', '横幅 = 页面内固定高度的条幅。全屏 = 覆盖整个手机屏幕 — 用于「引导页」做开场视频。「开始」按钮会浮在其上。'),
+  secLayout.appendChild(field(T('Display', '显示方式'),
+    T('Banner = a fixed-height strip inside the page. Full screen = covers the whole phone — use it on the Onboarding page for an intro video. The Get Started button sits on top.', '横幅 = 页面内固定高度的条幅。全屏 = 覆盖整个手机屏幕 — 用于「引导页」做开场视频。「开始」按钮显示在其上。'),
     sel(b.display || 'banner', [
-      { value: 'banner',     label: T('Banner — in-page band', '横幅 — 页面内条幅') },
-      { value: 'fullscreen', label: T('Full screen — splash / onboarding', '全屏 — 开屏 / 引导') },
+      { value: 'banner',     label: T('Banner — strip in the page', '横幅 — 页面内条幅') },
+      { value: 'fullscreen', label: T('Full screen — intro page', '全屏 — 开屏 / 引导') },
     ], v => updateBlock(b.id, { display: v }))));
 
   if (fullscreen) {
@@ -9934,25 +9943,23 @@ function buildVideoForm(m, b) {
       'Heads-up: full screen only takes over the screen on the <b>Onboarding</b> page. Put this block on Onboarding and the video fills the phone with your Get Started button on top.',
       '提示:全屏效果仅在<b>引导页</b>生效。把此模块放在引导页,视频即铺满手机屏幕,「开始」按钮浮于其上。'
     );
-    m.appendChild(splashNote);
+    secLayout.appendChild(splashNote);
   }
 
-  m.appendChild(field(T('Video clip', '视频短片'),
-    T('Upload an MP4 or paste a hosted video URL.', '上传 MP4 或粘贴视频链接。'),
-    videoPicker(b.video_url, url => updateBlock(b.id, { video_url: url }))));
-
-  m.appendChild(field(T('Poster (optional)', '封面图(可选)'),
-    T('A still shown while the clip loads. Falls back to the first frame if left blank.', '加载时显示的静态图。留空则使用视频首帧。'),
-    imgPicker(b.poster_url, ({ url }) => updateBlock(b.id, { poster_url: url }))));
-
   if (!fullscreen) {
-    m.appendChild(field(T('Height (px)', '高度(像素)'),
-      T('How tall the banner stands. The clip is cropped to fill — no stretch.', '横幅高度。视频会裁剪填满 — 不拉伸。'),
+    secLayout.appendChild(field(T('Height (px)', '高度(像素)'),
+      T('How tall the banner is. The video is cropped to fill — not stretched.', '横幅的高度。视频会裁剪填满 — 不拉伸。'),
       num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
   }
 
-  m.appendChild(field(T('Tap target (optional)', '点击跳转(可选)'),
-    T('Where tapping the banner goes — e.g. shop, promotions, product:12, category:5. Blank = not tappable.', '点击横幅后跳转的位置 — 例如 shop、promotions、product:12、category:5。留空则不可点击。'),
+  secContent.appendChild(field(T('Video clip', '视频短片'),
+    T('Upload an MP4, or paste a video link.', '上传 MP4,或粘贴视频链接。'),
+    videoPicker(b.video_url, url => updateBlock(b.id, { video_url: url }))));
+  secContent.appendChild(field(T('Poster (optional)', '封面图(可选)'),
+    T('A picture shown while the video loads. If empty, the first frame of the video is used.', '视频加载时显示的图片。留空则使用视频的第一帧。'),
+    imgPicker(b.poster_url, ({ url }) => updateBlock(b.id, { poster_url: url }))));
+  secContent.appendChild(field(T('Tap link (optional)', '点击跳转(可选)'),
+    T('Where tapping the banner goes — e.g. shop, promotions, product:12, category:5. Leave empty so it cannot be tapped.', '点击横幅后跳转的位置 — 例如 shop、promotions、product:12、category:5。留空则不可点击。'),
     txt(b.link_target, v => updateBlock(b.id, { link_target: v }), 'shop, promotions, product:12 …')));
 }
 
@@ -10272,39 +10279,45 @@ function buildCatTabsForm(m, b) {
 }
 function buildFeaturedForm(m, b) {
   const view = b.view || 'card';
-  m.appendChild(field(T('Layout', '版式'), T('Card = image on top, copy below. Banner = wide image with copy floated. Split = image left, copy right.', '卡片 = 图片在上,文案在下。横幅 = 宽图配浮动文案。分栏 = 图片在左,文案在右。'),
+  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
+
+  secLayout.appendChild(field(T('Layout', '版式'), T('Card = picture on top, text below. Banner = wide picture with text over it. Split = picture left, text right.', '卡片 = 图片在上,文字在下。横幅 = 宽图,文字浮在上面。分栏 = 图片在左,文字在右。'),
     sel(view, [
-      { value: 'card',   label: T('Card — image top, copy below', '卡片 — 图片在上,文案在下') },
-      { value: 'banner', label: T('Banner — wide image, copy overlay', '横幅 — 宽图,文案覆盖') },
-      { value: 'split',  label: T('Split — image left, copy right', '分栏 — 图片在左,文案在右') },
+      { value: 'card',   label: T('Card — picture top, text below', '卡片 — 图片在上,文字在下') },
+      { value: 'banner', label: T('Banner — wide picture, text over it', '横幅 — 宽图,文字覆盖') },
+      { value: 'split',  label: T('Split — picture left, text right', '分栏 — 图片在左,文字在右') },
     ], v => updateBlock(b.id, { view: v }))));
-  m.appendChild(field(T('Product', '商品'), T('Search to filter. Click again to deselect.', '搜索筛选。再次点击取消选择。'), productPicker({
+  secLayout.appendChild(field(T('Price display', '价格显示'), T('How the price shows under the product name.', '价格在商品名称下方的显示方式。'),
+    sel(b.price_mode || 'both', PRICE_MODE_OPTIONS,
+        v => updateBlock(b.id, { price_mode: v }))));
+  secLayout.appendChild(field(T('Sale badge', '促销角标'), T('Automatically show a SALE badge when the product is in a flash sale.', '当商品正在限时秒杀时,自动显示 SALE 角标。'),
+    sel(b.sale_badge || 'auto', SALE_BADGE_OPTIONS,
+        v => updateBlock(b.id, { sale_badge: v }))));
+
+  secContent.appendChild(field(T('Product', '商品'), T('Type to search. Click again to unselect.', '输入以搜索。再次点击取消选择。'), productPicker({
     multi: false,
     value: b.product_id,
     onChange: (v) => updateBlockSilent(b.id, { product_id: v }),
   })));
   const k = getBi(b, 'kicker');
-  m.appendChild(field(T('Kicker label', '小标题'), T('Small uppercase line above the product name.', '商品名称上方的小号大写文字。'),
+  secContent.appendChild(field(T('Small heading', '小标题'), T('A small line above the product name.', '商品名称上方的一行小字。'),
     txtPair(k.en, k.cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn, kicker: undefined }))));
+
   // Background colour — `null` (default) = transparent, inherits page bg.
-  m.appendChild(field(T('Block background', '模块背景颜色'), T('Colour behind the whole block (outside the card). Transparent by default.', '整个模块背后的底色(卡片以外)。默认透明。'),
+  secColours.appendChild(field(T('Block background', '模块背景颜色'), T('The colour behind the whole block (outside the card). Transparent by default.', '整个模块背后的颜色(卡片以外)。默认透明。'),
     sel(b.bg_color || '', [{ value: '', label: T('— transparent —', '— 透明 —') }, ...BRAND_COLOR_OPTIONS],
         v => updateBlock(b.id, { bg_color: v || null }))));
-  // Inner card surface — was hardcoded ink/white. Defaults preserve the
-  // legacy look (ink card + oat text) when missing on existing blocks.
-  m.appendChild(field(T('Card background', '卡片背景颜色'), T('Surface of the product card itself. Default: Ink.', '商品卡片本身的底色。默认:墨黑。'),
+  secColours.appendChild(field(T('Card background', '卡片背景颜色'), T('The colour of the product card itself. Default: black.', '商品卡片本身的颜色。默认:墨黑。'),
     sel(b.card_bg_color || 'ink', BRAND_COLOR_OPTIONS,
         v => updateBlock(b.id, { card_bg_color: v }))));
-  m.appendChild(field(T('Card text', '卡片文字颜色'), T('Text colour on top of the card. Pick something legible against the card background.', '卡片上的文字颜色。选择与卡片背景对比清晰的颜色。'),
+  secColours.appendChild(field(T('Card text', '卡片文字颜色'), T('The text colour on the card. Pick something easy to read on the card background.', '卡片上的文字颜色。选择在卡片背景上容易看清的颜色。'),
     sel(b.card_fg_color || 'oat-milk', BRAND_COLOR_OPTIONS,
         v => updateBlock(b.id, { card_fg_color: v }))));
-  m.appendChild(field(T('Price display', '价格显示'), T('How the price reads under the product name.', '商品名称下方价格的显示方式。'),
-    sel(b.price_mode || 'both', PRICE_MODE_OPTIONS,
-        v => updateBlock(b.id, { price_mode: v }))));
-  m.appendChild(field(T('Sale ribbon', '促销标签'), T('Auto-overlay a SALE badge when the product is on a live flash sale.', '商品处于进行中的限时秒杀时,自动叠加 SALE 角标。'),
-    sel(b.sale_badge || 'auto', SALE_BADGE_OPTIONS,
-        v => updateBlock(b.id, { sale_badge: v }))));
-  m.appendChild(field(T('Entrance animation', '入场动画'), T('How the block enters the viewport on first paint.', '模块首次进入视口时的入场方式。'),
+
+  secBehaviour.appendChild(field(T('Entrance animation', '入场动画'), T('How the block appears when the page opens.', '页面打开时,模块出现的方式。'),
     sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS,
         v => updateBlock(b.id, { entrance_anim: v }))));
 }
@@ -10646,45 +10659,53 @@ function buildFlashStripForm(m, b) {
 }
 
 function buildCouponForm(m, b) {
-  m.appendChild(field(T('Kicker', '小标题'), '',
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
+
+  secContent.appendChild(field(T('Small heading', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field(T('Title', '标题'), '',
+  secContent.appendChild(field(T('Title', '标题'), '',
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  m.appendChild(field(T('Subtitle', '副标题'), T('Optional — e.g. minimum spend, expiry date.', '可选 — 例如最低消费、到期日期。'),
+  secContent.appendChild(field(T('Subtitle', '副标题'), T('Optional — e.g. minimum spend or expiry date.', '可选 — 例如最低消费或到期日期。'),
     txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
-  m.appendChild(field(T('Discount label', '折扣标签'), T('The big number on the left — e.g. "¥50", "8折", "20%". Designer-controlled, not bound to a real coupon.', '左侧的大号数字 — 例如「¥50」「8折」「20%」。由设计师控制,不绑定真实优惠券。'),
+  secContent.appendChild(field(T('Discount label', '折扣标签'), T('The big number on the left — e.g. "¥50", "8折", "20%". You type this yourself; it is not linked to a real coupon.', '左侧的大号数字 — 例如「¥50」「8折」「20%」。由你自己填写,不绑定真实优惠券。'),
     txtPair(b.discount_label_en, b.discount_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { discount_label_en: en, discount_label_cn: cn }))));
-  m.appendChild(field(T('Coupon code', '优惠券码'), T('Optional — shown as "CODE: NEWBIE50" with a tap-to-copy hint. Leave blank for public coupons that don\'t need a code.', '可选 — 显示为「CODE: NEWBIE50」并带点击复制提示。无需券码的公开优惠券请留空。'),
+  secContent.appendChild(field(T('Coupon code', '优惠券码'), T('Optional — shows as "CODE: NEWBIE50" that customers can tap to copy. Leave empty if no code is needed.', '可选 — 显示为「CODE: NEWBIE50」,顾客可点击复制。无需券码时请留空。'),
     txt(b.code, v => updateBlockSilent(b.id, { code: (v || '').toUpperCase() }), 'NEWBIE50')));
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
-    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
-    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Button colour', '按钮颜色'), T('Fill of the action button. Label colour auto-adjusts for contrast.', '操作按钮的填充色。文字颜色自动调整以保证对比度。'),
-    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
-  m.appendChild(field(T('Button label', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
+  secContent.appendChild(field(T('Button text', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-  m.appendChild(field(T('Button target', '按钮目标'), T('e.g. coupons · shop · category:5', '例如 coupons · shop · category:5'),
+  secContent.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. coupons · shop · category:5', '按钮跳转到哪里。例如 coupons · shop · category:5'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'coupons')));
+
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
+    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
+    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  secColours.appendChild(field(T('Button colour', '按钮颜色'), T('The colour of the button. The text colour is chosen for you so it stays easy to read.', '按钮的颜色。文字颜色会自动选择,保证清晰易读。'),
+    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
 }
 
 function buildPointsForm(m, b) {
-  m.appendChild(field(T('Kicker', '小标题'), '',
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
+
+  secContent.appendChild(field(T('Small heading', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field(T('Title', '标题'), T('The main earn-rate or perk headline.', '主要的积分获取率或权益标题。'),
+  secContent.appendChild(field(T('Title', '标题'), T('The main line — e.g. how many points customers earn.', '主要的一行 — 例如顾客能赚多少积分。'),
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  m.appendChild(field(T('Subtitle', '副标题'), T('Optional — e.g. how points get redeemed.', '可选 — 例如积分如何兑换。'),
+  secContent.appendChild(field(T('Subtitle', '副标题'), T('Optional — e.g. how points can be used.', '可选 — 例如积分如何使用。'),
     txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
-    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
-    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Button colour', '按钮颜色'), T('Fill of the action button. Label colour auto-adjusts for contrast.', '操作按钮的填充色。文字颜色自动调整以保证对比度。'),
-    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
-  m.appendChild(field(T('Button label', '按钮文字'), '',
+  secContent.appendChild(field(T('Button text', '按钮文字'), '',
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-  m.appendChild(field(T('Button target', '按钮目标'), T('e.g. me · membership', '例如 me · membership'),
+  secContent.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. me · membership', '按钮跳转到哪里。例如 me · membership'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'me')));
+
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
+    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
+    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  secColours.appendChild(field(T('Button colour', '按钮颜色'), T('The colour of the button. The text colour is chosen for you so it stays easy to read.', '按钮的颜色。文字颜色会自动选择,保证清晰易读。'),
+    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
 }
 
 function buildVotingForm(m, b) {
@@ -10962,11 +10983,14 @@ function buildGreetingForm(m, b) {
 }
 
 function buildKitchenStatusForm(m, b) {
-  m.appendChild(field(T('Kicker', '小标题'), '',
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
+
+  secContent.appendChild(field(T('Small heading', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field(T('Title', '标题'), T('Kitchen / store name customers see.', '顾客看到的厨房 / 门店名称。'),
+  secContent.appendChild(field(T('Title', '标题'), T('The store name customers see.', '顾客看到的门店名称。'),
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  m.appendChild(field(T('Hours label', '营业时间标签'), T('Display text only — e.g. "10:00 – 21:00" or "Mon–Sat · 10am – 9pm".', '仅显示文字 — 例如「10:00 – 21:00」或「周一至周六 · 上午 10 点 – 晚 9 点」。'),
+  secContent.appendChild(field(T('Hours label', '营业时间标签'), T('Just the text shown — e.g. "10:00 – 21:00" or "Mon–Sat · 10am – 9pm".', '仅显示的文字 — 例如「10:00 – 21:00」或「周一至周六 · 上午 10 点 – 晚 9 点」。'),
     txtPair(b.hours_en, b.hours_cn, ({ en, cn }) => updateBlockSilent(b.id, { hours_en: en, hours_cn: cn }))));
 
   const hoursRow = document.createElement('div');
@@ -10974,7 +10998,7 @@ function buildKitchenStatusForm(m, b) {
   hoursRow.innerHTML = `<label>${B('Open / close hour (24h)', '开门 / 关门时间(24 小时制)')}</label>`;
   const hoursHelp = document.createElement('div');
   hoursHelp.className = 'helper';
-  hoursHelp.textContent = T('Drives the open/closed dot. Closing past midnight is OK — set close to 1 / 2 / 3.', '驱动营业/打烊状态点。跨午夜打烊也可以 — 关门时间设为 1 / 2 / 3。');
+  hoursHelp.textContent = T('Sets the open/closed dot. Closing after midnight is fine — set the close hour to 1 / 2 / 3.', '决定营业/打烊状态点。跨午夜打烊也可以 — 关门时间设为 1 / 2 / 3。');
   const pair = document.createElement('div');
   pair.style.cssText = 'display:flex;gap:10px;';
   const openIn  = num(b.open_hour,  v => updateBlockSilent(b.id, { open_hour: v }),  { min: 0, max: 23, step: 1 });
@@ -10983,24 +11007,25 @@ function buildKitchenStatusForm(m, b) {
   pair.append(openIn, closeIn);
   hoursRow.appendChild(pair);
   hoursRow.appendChild(hoursHelp);
-  m.appendChild(hoursRow);
+  secContent.appendChild(hoursRow);
 
-  m.appendChild(field(T('ETA (minutes)', '预计时间(分钟)'), T('Shown next to the open dot — e.g. "~25 min delivery". Set 0 to hide.', '显示在营业状态点旁 — 例如「约 25 分钟送达」。设为 0 则隐藏。'),
+  secContent.appendChild(field(T('ETA (minutes)', '预计时间(分钟)'), T('Shown next to the open dot — e.g. "~25 min". Set 0 to hide.', '显示在营业状态点旁 — 例如「约 25 分钟」。设为 0 则隐藏。'),
     num(b.eta_minutes, v => updateBlockSilent(b.id, { eta_minutes: v }), { min: 0, max: 240, step: 5 })));
-  m.appendChild(field(T('Address line', '地址行'), T('Optional — sits under the ETA in small caps.', '可选 — 以小号大写显示在预计时间下方。'),
+  secContent.appendChild(field(T('Address line', '地址行'), T('Optional — shows under the time in small text.', '可选 — 以小号文字显示在时间下方。'),
     txtPair(b.address_en, b.address_cn, ({ en, cn }) => updateBlockSilent(b.id, { address_en: en, address_cn: cn }))));
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
-    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
-    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Open dot colour', '营业状态点颜色'), '',
-    sel(b.open_color || 'pea-sprout', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { open_color: v }))));
-  m.appendChild(field(T('Closed dot colour', '打烊状态点颜色'), '',
-    sel(b.closed_color || 'berry-punch', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { closed_color: v }))));
-  m.appendChild(field(T('CTA label', '按钮文字'), '',
+  secContent.appendChild(field(T('Button text', '按钮文字'), '',
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-  m.appendChild(field(T('CTA target', '按钮目标'), T('e.g. shop · about · product:5', '例如 shop · about · product:5'),
+  secContent.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. shop · about · product:5', '按钮跳转到哪里。例如 shop · about · product:5'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'shop')));
+
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
+    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
+    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  secColours.appendChild(field(T('Open dot colour', '营业状态点颜色'), '',
+    sel(b.open_color || 'pea-sprout', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { open_color: v }))));
+  secColours.appendChild(field(T('Closed dot colour', '打烊状态点颜色'), '',
+    sel(b.closed_color || 'berry-punch', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { closed_color: v }))));
 }
 
 function buildRecipeStoryForm(m, b) {
@@ -11754,35 +11779,38 @@ function buildFavoritesForm(m, b) {
   const note = document.createElement('div');
   note.className = 'helper';
   note.style.cssText = 'margin: -4px 0 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
-  note.innerHTML = B('This block pulls from <b>each customer\'s own saved products</b> at runtime. The preview on the left is a stand-in using your catalogue so you can see the shape.', '此模块在运行时从<b>每位顾客自己收藏的商品</b>中拉取。左侧预览使用你的商品目录作为占位,方便你查看版式。');
-  m.appendChild(note);
+  note.innerHTML = B('This block shows <b>each customer\'s own saved products</b>. The preview on the left just uses your catalogue so you can see how it looks.', '此模块显示<b>每位顾客自己收藏的商品</b>。左侧预览只是用你的商品目录来展示样式。');
 
-  m.appendChild(field(T('Layout', '版式'),
-    T('Scroll — horizontal rail, good for sandwiching between other content. Grid — 2-up grid, gives the block more presence.', '横滑 — 横向滑动条,适合夹在其他内容之间。网格 — 双列网格,让模块更有存在感。'),
+  const secLayout  = inspectorSection(m, b.type, 'layout',  T('Style & layout', '样式与版式'), { open: true });
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
+
+  secContent.appendChild(note);
+
+  secLayout.appendChild(field(T('Layout', '版式'),
+    T('Scroll — a row you swipe sideways, good between other blocks. Grid — two columns, gives the block more space.', '横滑 — 可左右滑动的一行,适合夹在其他模块之间。网格 — 双列,让模块更醒目。'),
     sel(b.view || 'scroll', [
-      { value: 'scroll', label: T('Scroll — horizontal rail', '横滑 — 横向滑动') },
-      { value: 'grid',   label: T('Grid — 2-up', '网格 — 双列') },
+      { value: 'scroll', label: T('Scroll — swipe sideways', '横滑 — 左右滑动') },
+      { value: 'grid',   label: T('Grid — two columns', '网格 — 双列') },
     ], v => updateBlock(b.id, { view: v }))));
-
-  m.appendChild(field(T('Kicker', '小标题'), T('Tiny uppercase label above the title.', '标题上方的小号大写标签。'),
-    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field(T('Title', '标题'), '',
-    txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-
-  m.appendChild(field(T('Limit (max products)', '数量上限(最多商品)'),
-    T('Cap how many saved items appear. The "See all" link routes to the full Favorites page.', '限制显示多少件收藏商品。「查看全部」链接跳转到完整的收藏页。'),
+  secLayout.appendChild(field(T('Limit (max products)', '数量上限(最多商品)'),
+    T('How many saved items to show. The "See all" link opens the full Favorites page.', '显示多少件收藏商品。「查看全部」链接打开完整的收藏页。'),
     num(b.limit, v => updateBlock(b.id, { limit: v }), { min: 1, max: 12 })));
-
-  m.appendChild(field(T('When the customer has nothing saved', '当顾客没有收藏时'),
-    T('Hide — the block disappears completely (recommended; keeps the home page clean for new customers). Show empty state — a small nudge appears pointing at the heart pip.', '隐藏 — 模块完全消失(推荐;为新顾客保持首页整洁)。显示空状态 — 出现一条指向心形标记的小提示。'),
+  secLayout.appendChild(field(T('When the customer has nothing saved', '当顾客没有收藏时'),
+    T('Hide — the block disappears completely (recommended; keeps the home page clean for new customers). Show empty message — a small hint appears pointing at the heart icon.', '隐藏 — 模块完全消失(推荐;为新顾客保持首页整洁)。显示空状态 — 出现一条指向心形图标的小提示。'),
     sel(b.hide_when_empty === false ? 'show' : 'hide', [
       { value: 'hide', label: T('Hide the block', '隐藏本模块') },
-      { value: 'show', label: T('Show an empty-state nudge', '显示空状态提示') },
+      { value: 'show', label: T('Show an empty message', '显示空状态提示') },
     ], v => updateBlock(b.id, { hide_when_empty: v === 'hide' }))));
 
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
+  secContent.appendChild(field(T('Small heading', '小标题'), T('A small line above the title.', '标题上方的一行小字。'),
+    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
+  secContent.appendChild(field(T('Title', '标题'), '',
+    txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
+
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
 }
 
