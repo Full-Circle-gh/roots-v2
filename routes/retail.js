@@ -7247,7 +7247,11 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   }
   if (published === '1') sql += ' AND is_published = 1';
   if (published === '0') sql += ' AND is_published = 0';
-  sql += ' ORDER BY is_published DESC, sort_order ASC, name_en ASC LIMIT 500';
+  // Optional cap (used by the global search palette, which only shows a few
+  // hits and shouldn't pull the whole catalogue per keystroke). Defaults to
+  // the full grid limit of 500.
+  const lim = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 500));
+  sql += ' ORDER BY is_published DESC, sort_order ASC, name_en ASC LIMIT ' + lim;
   const rows = tdb().prepare(sql).all(...params).map(r => {
     // Replace the (omitted) base64 image with a tiny URL the browser lazy-loads
     // and caches; ?v=updated_at busts it when the photo changes. Products with

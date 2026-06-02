@@ -249,6 +249,86 @@
   }
   .topbar-link:hover { background: var(--bg-elev-1); color: var(--text-1); }
 
+  /* ── Command-search trigger (topbar pill) ── */
+  .gsearch-trigger {
+    display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--bg-input);
+  }
+  .gsearch-trigger:hover { border-color: var(--ring); }
+  .gsearch-label { font-weight: 600; letter-spacing: .01em; }
+  .gsearch-kbd {
+    font-size: 10px; font-weight: 700; line-height: 1; color: var(--text-3);
+    border: 1px solid var(--line); border-radius: 5px; padding: 3px 5px;
+    background: var(--bg-pane);
+  }
+  @media (max-width: 720px) { .gsearch-label, .gsearch-kbd { display: none; } }
+
+  /* ── Command-search palette ── */
+  .gsearch-overlay {
+    position: fixed; inset: 0; z-index: 9000;
+    background: var(--bg-overlay); backdrop-filter: blur(2px);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 12vh 16px 16px;
+  }
+  .gsearch-overlay[hidden] { display: none; }
+  .gsearch-box {
+    width: 100%; max-width: 640px; background: var(--bg-pane);
+    border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.45);
+    overflow: hidden; display: flex; flex-direction: column;
+    animation: gsearchPop .12s ease;
+  }
+  @keyframes gsearchPop { from { transform: translateY(-6px); opacity: .6; } to { transform: none; opacity: 1; } }
+  .gsearch-inputrow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 16px; border-bottom: 1px solid var(--line); color: var(--text-3);
+  }
+  #gsearch-input {
+    flex: 1; border: none; background: transparent; outline: none;
+    font-size: 16px; color: var(--text-1); font-family: inherit;
+  }
+  #gsearch-input::placeholder { color: var(--text-3); }
+  .gsearch-esc {
+    font-size: 10px; font-weight: 700; color: var(--text-3);
+    border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px;
+  }
+  .gsearch-results { max-height: 52vh; overflow-y: auto; padding: 6px; }
+  .gsearch-group-head {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-3); padding: 10px 12px 4px;
+  }
+  .gsearch-item {
+    display: flex; align-items: center; gap: 11px; width: 100%;
+    padding: 9px 12px; border-radius: 9px; cursor: pointer;
+    border: none; background: transparent; text-align: left; color: var(--text-1);
+    font-family: inherit; font-size: 13.5px;
+  }
+  .gsearch-item .gs-ico { color: var(--text-3); flex: 0 0 auto; display: inline-flex; }
+  .gsearch-item .gs-body { min-width: 0; flex: 1; }
+  .gsearch-item .gs-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gsearch-item .gs-crumb { font-size: 11px; color: var(--text-3); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gsearch-item .gs-tag {
+    flex: 0 0 auto; font-size: 10px; font-weight: 700; color: var(--text-3);
+    border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px;
+  }
+  .gsearch-item.active, .gsearch-item:hover { background: var(--bg-elev-1); }
+  .gsearch-item.active .gs-ico { color: var(--accent); }
+  .gsearch-empty { padding: 26px 16px; text-align: center; color: var(--text-3); font-size: 13px; }
+  .gsearch-foot {
+    display: flex; gap: 16px; padding: 9px 14px; border-top: 1px solid var(--line);
+    font-size: 11px; color: var(--text-3);
+  }
+  .gsearch-foot kbd {
+    font-family: inherit; font-size: 10px; border: 1px solid var(--line);
+    border-radius: 4px; padding: 1px 5px; margin-right: 3px; color: var(--text-2);
+  }
+  /* Brief highlight pulse on a jumped-to target */
+  @keyframes gsearchFlash {
+    0% { box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--ring); }
+    100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
+  }
+  .gsearch-flash { animation: gsearchFlash 1.4s ease-out; border-radius: 10px; }
+
   /* ═══════════════════════════════════════════════════════════════════
      TABS
      ═══════════════════════════════════════════════════════════════════ */
@@ -3670,6 +3750,11 @@
     <span class="sub">Mini App Backend</span>
   </div>
   <div class="grow"></div>
+  <button class="topbar-link gsearch-trigger" id="gsearch-trigger" type="button" onclick="openCmdSearch()" title="Search anything · 搜索任何设置 (Ctrl K)" aria-label="Search">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <span class="gsearch-label">Search · 搜索</span>
+    <span class="gsearch-kbd">Ctrl K</span>
+  </button>
   <span class="who" id="who"></span>
   <button class="topbar-link" id="ui-scale-toggle" type="button" onclick="cuCycleUiScale()" title="Text size · 字号" style="border:none;background:transparent;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
     <span style="font-weight:700;line-height:1;"><span style="font-size:16px;">A</span><span style="font-size:10px;">A</span></span>
@@ -3825,6 +3910,28 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     Settings · 设置
   </button>
+</div>
+
+<!-- ─── COMMAND SEARCH PALETTE ───
+     A keyword search over every page, settings panel and individual setting
+     in this backend. Built from the live DOM on each open (auto-stays in sync
+     with the chrome), so any tab or settings card a search matches can be
+     jumped to directly. Trigger: topbar Search pill or Ctrl/⌘+K. -->
+<div class="gsearch-overlay" id="gsearch-overlay" role="dialog" aria-modal="true" aria-label="Search" hidden>
+  <div class="gsearch-box" role="combobox" aria-expanded="true" aria-haspopup="listbox">
+    <div class="gsearch-inputrow">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="gsearch-input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Search pages & settings… · 搜索页面与设置…" aria-label="Search pages and settings" aria-controls="gsearch-results">
+      <span class="gsearch-esc">esc</span>
+    </div>
+    <div class="gsearch-results" id="gsearch-results" role="listbox" aria-label="Results"></div>
+    <div class="gsearch-foot">
+      <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+      <span><kbd>↵</kbd> open</span>
+      <span><kbd>esc</kbd> close</span>
+    </div>
+  </div>
 </div>
 
 <main>
@@ -8614,6 +8721,382 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
   // Scroll the settings body to top within the page
   window.scrollTo({ top: document.querySelector('.tabs').offsetTop - 8, behavior: 'smooth' });
 }));
+
+// ═══════════════════════════════════════════════════════════════════════
+// COMMAND SEARCH PALETTE
+// A keyword search over every page, every Settings panel, and the individual
+// setting cards inside them. The index is rebuilt from the live DOM each time
+// the palette opens, so it never drifts from the chrome and automatically
+// respects feature gates (hidden tabs / panels are skipped).
+// ═══════════════════════════════════════════════════════════════════════
+(function () {
+  const overlay  = $('#gsearch-overlay');
+  const input    = $('#gsearch-input');
+  const resultsEl = $('#gsearch-results');
+  if (!overlay || !input || !resultsEl) return;
+
+  // Extra search keywords for things operators describe in their own words but
+  // that aren't spelled out in the on-screen label. Keyed by a substring of the
+  // entry label (lowercased); matched aliases get appended to that entry's
+  // searchable text. Bilingual where it helps discovery.
+  const ALIASES = {
+    'dashboard':   'home overview stats revenue sales summary 概览 首页 数据',
+    'orders':      'fulfil fulfill shipping refund cancel 订单 退款 发货',
+    'invoices':    'receipt billing tax fapiao 发票 收据',
+    'customers':   'members users buyers tags 顾客 会员 用户',
+    'products':    'items catalog inventory stock price sku 产品 商品 库存 价格',
+    'coupons':     'voucher discount promo code 优惠券 折扣 促销',
+    'flash sales': 'sale countdown deal 秒杀 限时',
+    'pop-ups':     'popup banner modal announcement 弹窗',
+    'affiliate':   'referral commission distributor 分销 推广',
+    'leaderboard': 'ranking top spenders 排行榜',
+    'membership':  'tier vip points loyalty 会员 等级 积分',
+    'voting':      'poll survey vote 投票',
+    'top-up':      'wallet balance recharge points 充值 余额 积分',
+    'broadcasts':  'message blast push announcement 群发 广播',
+    'copy':        'text snippets wording strings 文案',
+    'about':       'story brand page 关于',
+    'reviews':     'ratings stars feedback 评价 评分',
+    'feedback':    'bug report complaint 反馈 报告',
+    'media':       'images photos upload library 媒体 图片',
+    'delivery':    'shipping holiday batch fresh zones same-day district cutoff lead time 配送 节假日 现做 区域 当天',
+    'brand':       'logo colour color theme accent font palette dark light wordmark 品牌 主题 颜色 字体 标志',
+    'home':        'pages content sections layout 首页 内容',
+    'shop':        'category grid sort filter 商店 分类',
+    'checkout':    'fee fees tax shipping minimum order payment surcharge 结账 费用 税 最低',
+    'push':        'notification alert message subscribe 推送 通知',
+    'social proof': 'bought count viewers recent buyers ticker 社交 人气 销量',
+    'customer service': 'cs contact whatsapp wechat hours support chat 客服 联系',
+    'legal':       'terms privacy policy refund 条款 隐私 政策',
+    'faq':         'help questions support 常见问题 帮助',
+    'features':    'toggle enable disable modules 功能 开关',
+  };
+
+  // SVG icons keyed by destination so results echo the chrome.
+  const ICON = {
+    page:    '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    setting: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82M4.6 9a1.65 1.65 0 0 0-.33-1.82"/><circle cx="12" cy="12" r="9"/>',
+    section: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+    product:  '<path d="M3 3h18l-2 14H5L3 3z"/><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M8 7h8"/>',
+    order:    '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/>',
+    customer: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>',
+  };
+
+  // Result groups, shown in this order. Static chrome ("nav") first, then live
+  // records pulled from the backend. Empty groups collapse automatically.
+  const GROUP_LABEL = {
+    nav:      'Pages & settings · 页面与设置',
+    product:  'Products · 产品',
+    order:    'Orders · 订单',
+    customer: 'Customers · 顾客',
+  };
+
+  // True when el (or an ancestor) is hidden by a feature gate. Mirrors the CSS
+  // rule `body:not(.feat-X) [data-feat="X"]{display:none}`. We can't use
+  // offset/visibility here because collapsed dropdown popovers are also
+  // display:none yet their tabs are still valid destinations.
+  function gatedOff(el) {
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+      const f = n.getAttribute && n.getAttribute('data-feat');
+      if (f && !document.body.classList.contains('feat-' + f)) return true;
+    }
+    return false;
+  }
+
+  // Read a button's visible label, dropping nested icons / badges.
+  function cleanLabel(el) {
+    const c = el.cloneNode(true);
+    c.querySelectorAll('svg, .tab-badge, .gsearch-kbd').forEach(n => n.remove());
+    return c.textContent.replace(/\s+/g, ' ').trim();
+  }
+
+  // Pull the descriptive blurb attached to a settings/section card so the
+  // card's words become searchable (e.g. "announcement bar" finds Accent).
+  function cardKeywords(card) {
+    if (!card) return '';
+    const bits = [];
+    card.querySelectorAll('.muted, label').forEach(n => {
+      const t = n.textContent.replace(/\s+/g, ' ').trim();
+      if (t && t.length < 200) bits.push(t);
+    });
+    return bits.join(' ');
+  }
+
+  function applyAliases(label) {
+    const low = label.toLowerCase();
+    let extra = '';
+    for (const key in ALIASES) if (low.includes(key)) extra += ' ' + ALIASES[key];
+    return extra;
+  }
+
+  // Walk a section for its heading cards → deep "jump to this card" entries.
+  function indexCards(rootSel, item, items) {
+    const root = document.querySelector(rootSel);
+    if (!root) return;
+    root.querySelectorAll('.group-card-head h3, .group-card > h3, .card > h3').forEach(h3 => {
+      const card = h3.closest('.group-card') || h3.closest('.card') || h3.parentElement;
+      const title = cleanLabel(h3);
+      if (!title) return;
+      items.push({
+        type: 'section',
+        title,
+        crumb: item.crumb ? item.crumb + ' › ' + item.title : item.title,
+        tab: item.tab, sub: item.sub, anchor: card,
+        kw: (title + ' ' + cardKeywords(card)).toLowerCase(),
+      });
+    });
+  }
+
+  function buildIndex() {
+    const items = [];
+    // 1) Top-level tabs (+ deep cards within each tab's section)
+    document.querySelectorAll('.tabs [data-tab]').forEach(btn => {
+      if (gatedOff(btn)) return;
+      const tab = btn.dataset.tab;
+      const title = cleanLabel(btn);
+      const it = { type: 'page', title, crumb: '', tab, sub: null, anchor: null,
+                   kw: (title + applyAliases(title)).toLowerCase() };
+      items.push(it);
+      if (tab !== 'config') indexCards('#tab-' + tab, it, items);
+    });
+    // 2) External editor launchers in the Content group (open in a new tab)
+    document.querySelectorAll('.tabs-popover button[onclick*="window.open"]').forEach(btn => {
+      if (gatedOff(btn)) return;
+      const title = cleanLabel(btn);
+      const m = btn.getAttribute('onclick').match(/window\.open\(['"]([^'"]+)/);
+      items.push({ type: 'page', title, crumb: 'Content', tab: null, sub: null,
+                   anchor: null, openUrl: m ? m[1] : null,
+                   kw: (title + ' editor open external').toLowerCase() });
+    });
+    // 3) Settings panels (+ deep cards within each panel)
+    document.querySelectorAll('#settings-nav button[data-sub]').forEach(btn => {
+      if (gatedOff(btn)) return;
+      const sub = btn.dataset.sub;
+      const title = cleanLabel(btn);
+      const it = { type: 'setting', title, crumb: 'Settings', tab: 'config', sub,
+                   anchor: null, kw: (title + ' settings ' + applyAliases(title)).toLowerCase() };
+      items.push(it);
+      indexCards('#sub-' + sub, it, items);
+    });
+    return items;
+  }
+
+  // Score a query against an item. Returns -1 for no match.
+  function score(item, tokens, raw) {
+    const title = item.title.toLowerCase();
+    const hay = item.kw;
+    let s = 0;
+    if (title === raw) s += 1000;
+    if (title.startsWith(raw)) s += 200;
+    if (title.includes(raw)) s += 80;
+    for (const tk of tokens) {
+      if (title.includes(tk)) s += 30;
+      else if (hay.includes(tk)) s += 10;
+      else return -1; // every token must appear somewhere
+    }
+    // Prefer top-level destinations over deep cards on ties
+    if (item.type === 'page') s += 6;
+    else if (item.type === 'setting') s += 4;
+    return s;
+  }
+
+  let INDEX = [];        // static chrome index, rebuilt on open
+  let matches = [];      // flat list currently shown (nav + live records)
+  let active = 0;
+  let dataItems = [];    // live record matches for the current query
+  let dataSeq = 0;       // guards against out-of-order async responses
+  let debounceT = null;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  // Static chrome matches for a query (capped). Empty query → starter menu.
+  function navMatches(raw) {
+    if (!raw) return INDEX.filter(i => i.type === 'page' || i.type === 'setting').slice(0, 12);
+    const tokens = raw.split(/\s+/);
+    return INDEX
+      .map(i => ({ i, s: score(i, tokens, raw) }))
+      .filter(x => x.s >= 0)
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 8)
+      .map(x => x.i);
+  }
+
+  function itemTag(it) {
+    if (it.openUrl) return 'opens ↗';
+    if (it.type === 'product') return 'edit ↗';
+    if (it.type === 'order' || it.type === 'customer') return 'open';
+    if (it.type === 'section') return 'jump';
+    return '';
+  }
+
+  function itemHtml(it, idx) {
+    const tag = itemTag(it);
+    const crumb = it.crumb ? '<div class="gs-crumb">' + esc(it.crumb) + '</div>' : '';
+    return '<button class="gsearch-item" role="option" data-idx="' + idx + '">'
+      + '<span class="gs-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + (ICON[it.type] || ICON.page) + '</svg></span>'
+      + '<span class="gs-body"><div class="gs-title">' + esc(it.title) + '</div>' + crumb + '</span>'
+      + (tag ? '<span class="gs-tag">' + esc(tag) + '</span>' : '')
+      + '</button>';
+  }
+
+  // Paint the combined result list, inserting a header whenever the group
+  // changes. matches[] stays 1:1 and in-order with the rendered .gsearch-item
+  // buttons (group headers are non-selectable), so data-idx == matches index.
+  function paint() {
+    matches = navMatches(input.value.trim().toLowerCase()).concat(dataItems);
+    active = 0;
+    if (!matches.length) {
+      resultsEl.innerHTML = '<div class="gsearch-empty">No matches · 没有结果</div>';
+      return;
+    }
+    let html = '', lastG = null;
+    matches.forEach((it, idx) => {
+      const g = it.group || 'nav';
+      if (g !== lastG) { html += '<div class="gsearch-group-head">' + esc(GROUP_LABEL[g] || '') + '</div>'; lastG = g; }
+      html += itemHtml(it, idx);
+    });
+    resultsEl.innerHTML = html;
+    const first = resultsEl.querySelector('.gsearch-item');
+    if (first) first.classList.add('active');
+  }
+
+  // Debounced live-record search against the existing list endpoints (same
+  // cookie auth as the page). Records become Products / Orders / Customers
+  // result groups that deep-link straight into their editor or drawer.
+  function scheduleData() {
+    clearTimeout(debounceT);
+    const raw = input.value.trim();
+    if (raw.length < 2) { dataItems = []; return; }
+    debounceT = setTimeout(() => fetchData(raw), 190);
+  }
+
+  async function fetchData(raw) {
+    const mySeq = ++dataSeq;
+    const enc = encodeURIComponent(raw);
+    const grab = url => fetch(url, { credentials: 'same-origin' })
+      .then(r => (r.ok ? r.json() : null)).catch(() => null);
+    const [p, o, c] = await Promise.all([
+      grab('/api/retail-admin/products?q=' + enc + '&limit=8'),
+      grab('/api/retail-admin/orders?q=' + enc + '&limit=8'),
+      grab('/api/retail-admin/customers?q=' + enc + '&pageSize=8'),
+    ]);
+    if (mySeq !== dataSeq) return; // a newer keystroke superseded this fetch
+    const items = [];
+    ((p && p.data) || []).slice(0, 6).forEach(r => {
+      const name = r.name_en || r.name_cn || ('#' + r.id);
+      const bits = [r.sku, r.category].filter(Boolean);
+      items.push({ type: 'product', group: 'product', title: name,
+        crumb: bits.join(' · '), pid: r.id });
+    });
+    ((o && o.data) || []).slice(0, 6).forEach(r => {
+      const who = r.recipient_name || r.nickname || '';
+      const bits = [r.status, who].filter(Boolean);
+      items.push({ type: 'order', group: 'order',
+        title: r.order_no || ('Order #' + r.id),
+        crumb: bits.join(' · '), oid: r.id });
+    });
+    ((c && c.data) || []).slice(0, 6).forEach(r => {
+      const bits = [r.phone, (r.orders_count != null ? r.orders_count + ' orders' : null)].filter(Boolean);
+      items.push({ type: 'customer', group: 'customer',
+        title: r.nickname || r.phone || ('#' + r.id),
+        crumb: bits.join(' · '), cid: r.id });
+    });
+    dataItems = items;
+    paint();
+  }
+
+  function setActive(i) {
+    const els = resultsEl.querySelectorAll('.gsearch-item');
+    if (!els.length) return;
+    active = (i + els.length) % els.length;
+    els.forEach((e, idx) => e.classList.toggle('active', idx === active));
+    els[active].scrollIntoView({ block: 'nearest' });
+  }
+
+  function go(it) {
+    if (!it) return;
+    close();
+    if (it.openUrl) { window.open(it.openUrl, '_blank', 'noopener'); return; }
+    // Live records → open the matching editor / detail drawer.
+    if (it.type === 'product') {
+      window.open('/product-editor?id=' + encodeURIComponent(it.pid), '_blank', 'noopener');
+      return;
+    }
+    if (it.type === 'order') {
+      const t = document.querySelector('.tabs [data-tab="orders"]');
+      if (t) t.click();
+      if (typeof openOrder === 'function') setTimeout(() => openOrder(it.oid), 60);
+      return;
+    }
+    if (it.type === 'customer') {
+      const t = document.querySelector('.tabs [data-tab="customers"]');
+      if (t) t.click();
+      if (typeof cuOpenDetail === 'function') setTimeout(() => cuOpenDetail(it.cid), 60);
+      return;
+    }
+    const tabBtn = it.tab && document.querySelector('.tabs [data-tab="' + it.tab + '"]');
+    if (tabBtn) tabBtn.click();
+    if (it.sub) {
+      const subBtn = document.querySelector('#settings-nav button[data-sub="' + it.sub + '"]');
+      if (subBtn) subBtn.click();
+    }
+    const anchor = it.anchor;
+    if (anchor) {
+      setTimeout(() => {
+        anchor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        anchor.classList.remove('gsearch-flash');
+        void anchor.offsetWidth; // restart animation
+        anchor.classList.add('gsearch-flash');
+        setTimeout(() => anchor.classList.remove('gsearch-flash'), 1600);
+      }, 90);
+    }
+  }
+
+  function open() {
+    INDEX = buildIndex();
+    dataItems = [];
+    dataSeq++;
+    clearTimeout(debounceT);
+    overlay.hidden = false;
+    input.value = '';
+    paint();
+    input.focus();
+  }
+  function close() {
+    overlay.hidden = true;
+    clearTimeout(debounceT);
+    input.blur();
+  }
+
+  // Expose the opener for the topbar pill's inline onclick.
+  window.openCmdSearch = open;
+
+  input.addEventListener('input', () => { paint(); scheduleData(); });
+  resultsEl.addEventListener('click', (e) => {
+    const el = e.target.closest('.gsearch-item');
+    if (el) go(matches[+el.dataset.idx]);
+  });
+  resultsEl.addEventListener('mousemove', (e) => {
+    const el = e.target.closest('.gsearch-item');
+    if (el) setActive(+el.dataset.idx);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(active + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(active - 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); go(matches[active]); }
+    else if (e.key === 'Escape') { e.preventDefault(); close(); }
+  });
+  overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(); });
+  // Global shortcut: Ctrl/⌘+K toggles the palette.
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      overlay.hidden ? open() : close();
+    }
+  });
+})();
 
 // ── Live visual updates: paint accent + tab-bar colour into the mockups ──
 const ACCENT_HEX = {
