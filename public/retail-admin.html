@@ -3859,6 +3859,11 @@
     Products · 产品
   </button>
 
+  <button data-tab="categories">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    Categories · 分类
+  </button>
+
   <!-- Marketing — promos + retention -->
   <div class="tabs-group" data-group="marketing">
     <button type="button" class="tabs-group-trigger">
@@ -5144,6 +5149,44 @@
         </div>
       </div>
     </div>
+  </section>
+
+  <!-- ─── CATEGORIES (2-level tree editor) ─── -->
+  <section id="tab-categories">
+    <style>
+      #cat-editor .cat-top { padding: 14px 16px; }
+      #cat-editor .cat-reorder .btn-icon {
+        border: 1px solid var(--line, #e3e3e0); background: #fff; border-radius: 6px;
+        line-height: 1; font-size: 10px; padding: 2px 5px; cursor: pointer; color: var(--muted, #888);
+      }
+      #cat-editor .cat-reorder .btn-icon:hover:not(:disabled) { background: #f4f4f2; color: var(--ink, #222); }
+      #cat-editor .cat-reorder .btn-icon:disabled { opacity: .3; cursor: default; }
+      #cat-editor .cat-reorder .btn-icon + .btn-icon { margin-top: 2px; }
+      #cat-editor .cat-del { color: #b42318; }
+      #cat-editor .cat-subrow input { padding: 6px 9px; font-size: 13px; }
+      #cat-editor button.btn-icon.cat-del { border: 1px solid #f3d0cc; background: #fff; border-radius: 6px; padding: 4px 8px; }
+      #cat-editor button.btn-icon.cat-del:hover { background: #fdf2f1; }
+    </style>
+    <h2>Categories · 分类</h2>
+    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
+      The shop's 2-level category structure — top categories (the left rail) and their subcategories (section headings).
+      Rename in English &amp; Chinese, add, remove, or reorder. <b>Renaming</b> automatically re-tags every product in that category.
+      The shop only shows categories that have published products.
+    </p>
+    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
+      店面的两级分类结构：主分类（左栏）与子分类（区块标题）。可中英文重命名、增删、排序。<b>重命名</b>会自动迁移该分类下的所有产品。店面仅显示有上架产品的分类。
+    </p>
+
+    <div class="card cat-bar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:sticky;top:8px;z-index:5;">
+      <button class="btn btn-sm" type="button" onclick="catAddTop()">＋ Add top category · 新增主分类</button>
+      <span id="cat-dirty" class="muted" style="font-size:12px;"></span>
+      <div style="margin-left:auto;display:flex;gap:8px;">
+        <button class="btn btn-sm" type="button" onclick="catLoad()" id="cat-revert-btn">Revert · 还原</button>
+        <button class="btn btn-primary btn-sm" type="button" onclick="catSave()" id="cat-save-btn">Save changes · 保存</button>
+      </div>
+    </div>
+
+    <div id="cat-editor" style="margin-top:var(--s4);"></div>
   </section>
 
   <!-- ─── VOUCHERS / COUPONS ─── -->
@@ -8894,6 +8937,150 @@ document.addEventListener('click', (ev) => {
     $$('.tabs-group.open').forEach(g => g.classList.remove('open'));
   }
 });
+// ── Categories editor ────────────────────────────────────────────────────
+// Loads the live 2-level tree, lets the operator rename (EN/CN), add, remove
+// and reorder tops + subs, then saves the whole tree back. Server migrates
+// product rows on rename (matched by stable id). Lazy-loaded on first open.
+let catModel = [];        // working copy: [{ id, name, name_cn, subs:[{id,name,name_cn}] }]
+let catClean = '[]';      // JSON of the last-saved tree, for dirty tracking
+let catLoaded = false;
+
+async function catLoad() {
+  try {
+    const j = await api('/api/retail-admin/category-tree');
+    catModel = Array.isArray(j.data) ? JSON.parse(JSON.stringify(j.data)) : [];
+    catClean = JSON.stringify(catModel);
+    catLoaded = true;
+    catRender();
+    catUpdateDirty();
+  } catch (e) { toast('Failed to load categories · 加载分类失败', 'err'); }
+}
+
+function catIsDirty() { return JSON.stringify(catModel) !== catClean; }
+function catUpdateDirty() {
+  const el = $('#cat-dirty'); if (!el) return;
+  el.textContent = catIsDirty() ? '● Unsaved changes · 未保存' : '';
+  el.style.color = catIsDirty() ? '#b45309' : '';
+}
+// Update a field WITHOUT re-rendering (keeps input focus while typing).
+function catSet(ti, si, field, val) {
+  const node = si < 0 ? catModel[ti] : catModel[ti].subs[si];
+  if (!node) return;
+  node[field] = val;
+  catUpdateDirty();
+}
+function catAddTop() {
+  catModel.push({ id: '', name: '', name_cn: '', subs: [] });
+  catRender(); catUpdateDirty();
+  // focus the new top's EN input
+  const inp = document.querySelector(`#cat-top-${catModel.length - 1} input[data-f="name"]`);
+  if (inp) inp.focus();
+}
+function catRemoveTop(ti) {
+  const t = catModel[ti]; if (!t) return;
+  const n = (t.subs || []).length;
+  const msg = n
+    ? `Remove "${t.name || 'this category'}" and its ${n} subcategor${n === 1 ? 'y' : 'ies'}?\n删除该主分类及其 ${n} 个子分类？\n\nProducts keep their tag until re-assigned. · 产品标签保留，直到重新分配。`
+    : `Remove "${t.name || 'this category'}"? · 删除该主分类？`;
+  if (!confirm(msg)) return;
+  catModel.splice(ti, 1); catRender(); catUpdateDirty();
+}
+function catMoveTop(ti, dir) {
+  const j = ti + dir; if (j < 0 || j >= catModel.length) return;
+  const [m] = catModel.splice(ti, 1); catModel.splice(j, 0, m);
+  catRender(); catUpdateDirty();
+}
+function catAddSub(ti) {
+  catModel[ti].subs = catModel[ti].subs || [];
+  catModel[ti].subs.push({ id: '', name: '', name_cn: '' });
+  catRender(); catUpdateDirty();
+  const subs = catModel[ti].subs;
+  const inp = document.querySelector(`#cat-sub-${ti}-${subs.length - 1} input[data-f="name"]`);
+  if (inp) inp.focus();
+}
+function catRemoveSub(ti, si) {
+  catModel[ti].subs.splice(si, 1); catRender(); catUpdateDirty();
+}
+function catMoveSub(ti, si, dir) {
+  const subs = catModel[ti].subs; const j = si + dir;
+  if (j < 0 || j >= subs.length) return;
+  const [m] = subs.splice(si, 1); subs.splice(j, 0, m);
+  catRender(); catUpdateDirty();
+}
+
+function catRender() {
+  const host = $('#cat-editor'); if (!host) return;
+  if (!catModel.length) {
+    host.innerHTML = `<div class="card" style="text-align:center;color:var(--muted);padding:28px;">No categories yet · 暂无分类<br><br><button class="btn btn-sm" type="button" onclick="catAddTop()">＋ Add top category · 新增主分类</button></div>`;
+    return;
+  }
+  host.innerHTML = catModel.map((t, ti) => {
+    const subs = (t.subs || []).map((s, si) => `
+      <div class="cat-subrow" id="cat-sub-${ti}-${si}" style="display:flex;gap:6px;align-items:center;padding:5px 0;">
+        <div class="cat-reorder" style="display:flex;flex-direction:column;">
+          <button class="btn-icon" type="button" title="Move up" onclick="catMoveSub(${ti},${si},-1)" ${si === 0 ? 'disabled' : ''}>▲</button>
+          <button class="btn-icon" type="button" title="Move down" onclick="catMoveSub(${ti},${si},1)" ${si === subs_len(t) - 1 ? 'disabled' : ''}>▼</button>
+        </div>
+        <input type="text" class="input" data-f="name" value="${escapeAttr(s.name)}" placeholder="Subcategory (EN)" oninput="catSet(${ti},${si},'name',this.value)" style="flex:1;">
+        <input type="text" class="input" data-f="name_cn" value="${escapeAttr(s.name_cn)}" placeholder="子分类 (中文)" oninput="catSet(${ti},${si},'name_cn',this.value)" style="flex:1;">
+        <button class="btn-icon cat-del" type="button" title="Remove subcategory" onclick="catRemoveSub(${ti},${si})">✕</button>
+      </div>`).join('');
+    return `
+    <div class="card cat-top" id="cat-top-${ti}" style="margin-bottom:var(--s4);">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+        <div class="cat-reorder" style="display:flex;flex-direction:column;">
+          <button class="btn-icon" type="button" title="Move up" onclick="catMoveTop(${ti},-1)" ${ti === 0 ? 'disabled' : ''}>▲</button>
+          <button class="btn-icon" type="button" title="Move down" onclick="catMoveTop(${ti},1)" ${ti === catModel.length - 1 ? 'disabled' : ''}>▼</button>
+        </div>
+        <input type="text" class="input" data-f="name" value="${escapeAttr(t.name)}" placeholder="Top category (EN)" oninput="catSet(${ti},-1,'name',this.value)" style="flex:1;font-weight:700;">
+        <input type="text" class="input" data-f="name_cn" value="${escapeAttr(t.name_cn)}" placeholder="主分类 (中文)" oninput="catSet(${ti},-1,'name_cn',this.value)" style="flex:1;font-weight:700;">
+        <button class="btn btn-sm cat-del" type="button" onclick="catRemoveTop(${ti})">Remove · 删除</button>
+      </div>
+      <div style="padding-left:34px;">
+        ${subs || '<div class="muted" style="font-size:12px;padding:4px 0;">No subcategories · 无子分类</div>'}
+        <button class="btn btn-sm" type="button" onclick="catAddSub(${ti})" style="margin-top:8px;">＋ Add subcategory · 新增子分类</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function subs_len(t) { return (t.subs || []).length; }
+
+async function catSave() {
+  // Client-side guards mirror the server: no blank names, no dups.
+  for (const t of catModel) {
+    if (!String(t.name || '').trim()) { toast('Every top category needs an English name · 主分类需填英文名', 'err'); return; }
+    for (const s of (t.subs || [])) {
+      if (!String(s.name || '').trim()) { toast('Every subcategory needs an English name · 子分类需填英文名', 'err'); return; }
+    }
+  }
+  const btn = $('#cat-save-btn'); if (btn) { btn.disabled = true; btn.textContent = 'Saving… · 保存中'; }
+  try {
+    const j = await api('/api/retail-admin/category-tree', { method: 'PUT', body: { tree: catModel } });
+    catModel = Array.isArray(j.data) ? JSON.parse(JSON.stringify(j.data)) : catModel;
+    catClean = JSON.stringify(catModel);
+    catRender(); catUpdateDirty();
+    // Invalidate the product-editor's cached tree so its Shop-section /
+    // Subcategory dropdowns pick up the renamed/added/removed nodes.
+    if (typeof PA_CAT_TREE !== 'undefined') PA_CAT_TREE = [];
+    const moved = j.migrated || 0;
+    toast(moved ? `Saved · ${moved} product${moved === 1 ? '' : 's'} re-tagged · 已保存，迁移 ${moved} 个产品` : 'Saved · 已保存', 'ok');
+  } catch (e) {
+    toast((e && e.message) ? ('Save failed: ' + e.message) : 'Save failed · 保存失败', 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save changes · 保存'; }
+  }
+}
+
+// Lazy-load the tree the first time the Categories tab is opened.
+(function () {
+  const btn = document.querySelector('.tabs [data-tab="categories"]');
+  if (btn) btn.addEventListener('click', () => { if (!catLoaded) catLoad(); });
+})();
+// Warn before leaving with unsaved category edits.
+window.addEventListener('beforeunload', (e) => {
+  if (catLoaded && catIsDirty()) { e.preventDefault(); e.returnValue = ''; }
+});
+
 // Deep-link: /retail-admin?tab=orders opens that tab directly. Used by the
 // new-order push notification so clicking it lands the operator on Orders.
 (function () {

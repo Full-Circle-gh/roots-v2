@@ -1503,6 +1503,20 @@ try {
   }
 } catch (e) { console.error('[migration seed_home_layout_v1]', e); }
 
+// Seed the editable 2-level category tree (storefront_config['category.tree'])
+// from the hard-coded SEED_TREE in lib/category-tree.js. After this, the tree
+// is owned by the DB and edited from the Mini App Backend → Categories tab;
+// SEED_TREE stays only as the seed + runtime fallback. INSERT OR IGNORE never
+// clobbers an operator-edited tree.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_category_tree_v1');
+  if (!ran) {
+    const { SEED_TREE } = require('./lib/category-tree');
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES ('category.tree', ?)").run(JSON.stringify(SEED_TREE));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_category_tree_v1');
+  }
+} catch (e) { console.error('[migration seed_category_tree_v1]', e); }
+
 // Seed Roots' Mini-app footer (Me page) so that flipping the SaaS-wide
 // defaults to Full Circle ('Clarity with code', 'Powered by Full Circle')
 // doesn't accidentally rebrand Roots' live customer footer. New tenants

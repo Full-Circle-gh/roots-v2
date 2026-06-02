@@ -20,7 +20,7 @@ const inventory = require('../lib/inventory');
 const geocode = require('../lib/geocode');
 const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
-const { CATEGORY_TREE, normalizeCategoryPair } = require('../lib/category-tree');
+const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib/category-tree');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
 const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
 const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
@@ -226,11 +226,115 @@ router.get('/api/retail/categories', (req, res) => {
 });
 
 // Public 2-level category tree (7 top categories → subcategories, EN/CN) that
-// drives the shop's left rail + subcategory section headings. Static structure
-// (lib/category-tree.js); the shop only renders tops/subs with products.
+// drives the shop's left rail + subcategory section headings. Operator-editable
+// (Mini App Backend → Categories); read live from storefront_config with the
+// hard-coded SEED_TREE as fallback. The shop only renders tops/subs with products.
 router.get('/api/retail/category-tree', (req, res) => {
-  res.set('Cache-Control', 'public, max-age=300');
-  res.json({ success: true, data: CATEGORY_TREE });
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({ success: true, data: getCategoryTree(tdb()) });
+});
+
+// ── Category tree editor (Mini App Backend → Categories) ──────────────────
+// Operator-facing read of the live tree (no cache header — the editor wants
+// the freshest copy).
+router.get('/api/retail-admin/category-tree', requireRetailAdmin, (req, res) => {
+  res.json({ success: true, data: getCategoryTree(tdb()) });
+});
+
+// Make a URL-ish stable id from a name, unique within `used`.
+function _slugId(name, used) {
+  let base = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 16) || 'c';
+  let id = base, n = 1;
+  while (used.has(id)) id = base + (++n);
+  used.add(id);
+  return id;
+}
+
+// Save the edited tree. Validates shape + uniqueness, assigns ids to new
+// nodes, then MIGRATES product rows for any node renamed in place (matched by
+// stable id) so products never orphan on a rename. Subs keep their parent (the
+// editor offers no cross-parent move), so sub migration is scoped by the new
+// top name. Removing a node leaves its products' stale name untouched (they
+// drop into the shop's "Other" band and reappear if the node is re-added).
+router.put('/api/retail-admin/category-tree', requireRetailAdmin, express.json({ limit: '256kb' }), (req, res) => {
+  const incoming = sanitizeTree(req.body && req.body.tree);
+  if (!incoming || !incoming.length) {
+    return res.status(400).json({ success: false, error: 'empty_tree', message: 'At least one top category is required · 至少需要一个主分类' });
+  }
+  // Uniqueness: top names unique; sub names unique within each top.
+  const seenTop = new Set();
+  for (const t of incoming) {
+    const key = t.name.toLowerCase();
+    if (seenTop.has(key)) return res.status(400).json({ success: false, error: 'dup_top', message: `Duplicate top category "${t.name}" · 主分类名称重复` });
+    seenTop.add(key);
+    const seenSub = new Set();
+    for (const s of (t.subs || [])) {
+      const sk = s.name.toLowerCase();
+      if (seenSub.has(sk)) return res.status(400).json({ success: false, error: 'dup_sub', message: `Duplicate subcategory "${s.name}" under "${t.name}" · 子分类名称重复` });
+      seenSub.add(sk);
+    }
+  }
+
+  const db = tdb();
+  const oldTree = getCategoryTree(db);
+
+  // Old lookups keyed by stable id.
+  const oldTopById = new Map();                 // topId -> oldTopName
+  const oldSubById = new Map();                 // subId -> { parentId, name }
+  for (const t of oldTree) {
+    if (t.id) oldTopById.set(t.id, t.name);
+    for (const s of (t.subs || [])) if (s.id) oldSubById.set(s.id, { parentId: t.id, name: s.name });
+  }
+
+  // Assign ids to new nodes; collect rename migrations.
+  const usedIds = new Set([...oldTopById.keys(), ...oldSubById.keys()]);
+  const topRenames = [];   // { id, oldName, newName }
+  const subRenames = [];   // { id, parentNewName, oldName, newName }
+  for (const t of incoming) {
+    if (!t.id) t.id = _slugId(t.name, usedIds); else usedIds.add(t.id);
+    const oldTopName = oldTopById.get(t.id);
+    if (oldTopName && oldTopName !== t.name) topRenames.push({ id: t.id, oldName: oldTopName, newName: t.name });
+    for (const s of (t.subs || [])) {
+      if (!s.id) s.id = _slugId(s.name, usedIds); else usedIds.add(s.id);
+      const oldSub = oldSubById.get(s.id);
+      if (oldSub && oldSub.parentId === t.id && oldSub.name !== s.name) {
+        subRenames.push({ id: s.id, parentNewName: t.name, oldName: oldSub.name, newName: s.name });
+      }
+    }
+  }
+
+  try {
+    const upsert = db.prepare(
+      `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+         VALUES ('category.tree', ?, CURRENT_TIMESTAMP, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
+    );
+    let migrated = 0;
+    const tx = db.transaction(() => {
+      // Top renames via a per-id sentinel so chained/swapped names can't collide.
+      for (const r of topRenames) {
+        db.prepare("UPDATE products SET top_category = ? WHERE top_category = ?").run(' T' + r.id, r.oldName);
+      }
+      for (const r of topRenames) {
+        const info = db.prepare("UPDATE products SET top_category = ? WHERE top_category = ?").run(r.newName, ' T' + r.id);
+        migrated += info.changes;
+      }
+      // Sub renames scoped by the (now-new) parent top name, same sentinel trick.
+      for (const r of subRenames) {
+        db.prepare("UPDATE products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run(' S' + r.id, r.parentNewName, r.oldName);
+      }
+      for (const r of subRenames) {
+        const info = db.prepare("UPDATE products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run(r.newName, r.parentNewName, ' S' + r.id);
+        migrated += info.changes;
+      }
+      upsert.run(JSON.stringify(incoming), (req.user && req.user.id) || null);
+    });
+    tx();
+    res.json({ success: true, data: incoming, migrated });
+  } catch (e) {
+    res.status(500).json({ success: false, error: 'save_failed', message: e.message });
+  }
 });
 
 router.get('/api/retail/config', (req, res) => {
@@ -6912,14 +7016,14 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   if ('bundle' in body) { sets.push('bundle = ?'); params.push(sanitizeBundle(body.bundle)); }
   if ('tags' in body) { sets.push('tags = ?'); params.push(sanitizeProductBadge(body.tags)); }
   if ('is_batch_made' in body) { sets.push('is_batch_made = ?'); params.push(body.is_batch_made ? 1 : 0); }
-  // Storefront 2-level category. Validated as a pair against CATEGORY_TREE; a
+  // Storefront 2-level category. Validated as a pair against the live tree; a
   // partial edit (only top, or only sub) merges with the current row so the
   // sub is checked under the right top.
   if ('top_category' in body || 'subcategory' in body) {
     const cur = tdb().prepare('SELECT top_category, subcategory FROM products WHERE id = ?').get(id) || {};
     const top = 'top_category' in body ? body.top_category : cur.top_category;
     const sub = 'subcategory'  in body ? body.subcategory  : cur.subcategory;
-    const norm = normalizeCategoryPair(top, sub);
+    const norm = normalizeCategoryPair(top, sub, tdb());
     sets.push('top_category = ?'); params.push(norm.top);
     sets.push('subcategory = ?');  params.push(norm.sub);
   }
@@ -7016,7 +7120,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   const descFormat = b.description_format === 'rich' ? 'rich' : 'plain';
   const descEn = descFormat === 'rich' ? sanitizeRichHtml(b.description_en) : ((b.description_en || '').trim() || null);
   const descCn = descFormat === 'rich' ? sanitizeRichHtml(b.description_cn) : ((b.description_cn || '').trim() || null);
-  const cat2 = normalizeCategoryPair(b.top_category, b.subcategory);
+  const cat2 = normalizeCategoryPair(b.top_category, b.subcategory, tdb());
   let info;
   try {
     info = tdb().prepare(

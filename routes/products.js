@@ -429,8 +429,8 @@ function pickBody(body) {
 router.post('/api/products', requireAuth, requirePermission('products'), (req, res) => {
   const p = pickBody(req.body);
   if (!p.name_en) return res.status(400).json({ error: 'name_en required · 英文名称必填' });
-  // Validate the 2-level category pair against the canonical tree.
-  const cat = normalizeCategoryPair(p.top_category, p.subcategory);
+  // Validate the 2-level category pair against the live tree.
+  const cat = normalizeCategoryPair(p.top_category, p.subcategory, db);
   p.top_category = cat.top; p.subcategory = cat.sub;
   // Keep the primary image_data in sync with the gallery's first photo.
   if ('images' in req.body && !('image_data' in req.body)) {
@@ -486,7 +486,7 @@ router.put('/api/products/:id', requireAuth, requirePermission('products'), (req
     const cur = db.prepare('SELECT top_category, subcategory FROM products WHERE id = ?').get(req.params.id) || {};
     const top = 'top_category' in req.body ? req.body.top_category : cur.top_category;
     const sub = 'subcategory'  in req.body ? req.body.subcategory  : cur.subcategory;
-    const cat = normalizeCategoryPair(top, sub);
+    const cat = normalizeCategoryPair(top, sub, db);
     p.top_category = cat.top; p.subcategory = cat.sub;
     if (!present.includes('top_category')) present.push('top_category');
     if (!present.includes('subcategory'))  present.push('subcategory');
