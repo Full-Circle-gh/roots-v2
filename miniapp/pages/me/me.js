@@ -66,9 +66,6 @@ const COPY_EN = {
   menuTour: 'Take the tour',
   menuTourCn: '查看教程',
   tourMeta: 'See the welcome screen again',
-  menuMascot: 'Mascot',
-  menuMascotCn: '吉祥物',
-  mascotMeta: 'The skater pickle that roams your screens',
   noAddressMeta: 'Tap to add an address',
 };
 
@@ -128,9 +125,6 @@ const COPY_CN = {
   menuTour: '查看教程',
   menuTourCn: 'TAKE THE TOUR',
   tourMeta: '重新观看欢迎引导',
-  menuMascot: '吉祥物',
-  menuMascotCn: 'MASCOT',
-  mascotMeta: '在页面间漫步的滑板酸黄瓜',
   noAddressMeta: '点击添加地址',
 };
 
@@ -153,9 +147,6 @@ Page({
     // manual re-tour entry point. Default true so a config miss still
     // lets users re-watch.
     tourEnabled: true,
-    // Ambient skater-pickle mascot on/off. Mirrors the 'mascotEnabled'
-    // storage flag the <mascot> component reads as its source of truth.
-    mascotEnabled: true,
     // Brand footer — wordmark / tagline / credit line. Hydrated from
     // app.globalData.config.brand.me_footer (set by the operator in the Mini
     // App Backend → Settings → Mini-app footer). Defaults reflect the SaaS
@@ -173,7 +164,7 @@ Page({
 
   onShow() {
     const app = getApp();
-    this.setData({ lang: app.globalData.lang, mascotEnabled: this._readMascotEnabled() });
+    this.setData({ lang: app.globalData.lang });
     this.applyLangCopy();
     this.applyFooter();
     this.refresh();
@@ -288,26 +279,6 @@ Page({
     this.applyLangCopy();
     this.applyFooter();
     this.refresh();
-  },
-
-  // Ambient mascot on/off. Persists to storage (the <mascot> component's
-  // source of truth) and pokes the live instance on this page so it
-  // appears / disappears instantly without a reload.
-  toggleMascot(e) {
-    const on = !!e.detail.value;
-    this.setData({ mascotEnabled: on });
-    try { wx.setStorageSync('mascotEnabled', on); } catch {}
-    const app = getApp();
-    if (app && app.globalData) app.globalData.mascotEnabled = on;
-    const m = this.selectComponent('#mascot');
-    if (m && m.applyEnabled) m.applyEnabled(on);
-  },
-
-  _readMascotEnabled() {
-    try {
-      const s = wx.getStorageSync('mascotEnabled');
-      return s === '' || s === undefined ? true : !!s;
-    } catch { return true; }
   },
 
   goOrders()         { wx.navigateTo({ url: '/pages/orders/orders' }); },
