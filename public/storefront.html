@@ -790,6 +790,97 @@
     background: currentColor; opacity: .25;
   }
   .b-review-carousel .rv-dots .dot.on { opacity: 1; }
+
+  /* ── Review — Editorial / Riso pop / Spotlight (inset-card layouts) ──
+     Mirrors public/cms.html + the mini-app block-renderer pixel-for-pixel. */
+  .b-review-editorial, .b-review-riso, .b-review-spotlight { padding: 20px 18px; }
+  .b-review .rv-card { box-sizing: border-box; position: relative; }
+  .b-review .rv-mono {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--rv-circle, var(--pea)); border: 2px solid var(--ink); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font: 700 19px var(--bf-bear); color: var(--ink);
+  }
+  .b-review .rv-person { display: flex; align-items: center; gap: 11px; }
+  .b-review .rv-person .name { font: 400 17px var(--bf-gothic); letter-spacing: .04em; line-height: 1; }
+  .b-review .rv-person .role { font: 500 11px var(--bf-aleo); opacity: .7; margin-top: 3px; }
+
+  .b-review-editorial .rv-card {
+    background: var(--rv-card, #FFFCF7); border: 1.5px solid var(--rv-border, var(--forest));
+    border-radius: 16px; padding: 22px 20px 18px; text-align: center;
+    box-shadow: 0 12px 26px -18px rgba(54,83,41,.6);
+  }
+  .b-review-editorial .ed-kicker {
+    display: flex; align-items: center; justify-content: center; gap: 9px;
+    font: 700 9px var(--bf-toni); letter-spacing: .28em; color: var(--rv-accent, var(--olive));
+  }
+  .b-review-editorial .ed-kicker .tick { width: 16px; height: 1.5px; background: currentColor; }
+  .b-review-editorial .rv-divider { height: 1px; background: rgba(0,0,0,.12); margin: 16px 0 14px; }
+  .b-review-editorial .rv-person { justify-content: center; text-align: left; }
+
+  .b-review-riso { padding-top: 26px; }
+  .b-review-riso .rv-card {
+    background: var(--rv-card, #FFFCF7); border: 2px solid var(--rv-border, var(--ink));
+    border-radius: 10px; padding: 22px 18px 16px; box-shadow: 4px 5px 0 var(--ink);
+  }
+  .b-review-riso .riso-badge {
+    position: absolute; top: -12px; left: 18px; z-index: 4;
+    background: var(--rv-accent, var(--lime)); border: 1.5px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--ink); transform: rotate(-4deg); padding: 4px 8px;
+    display: flex; gap: 1px; font: 700 11px var(--bf-gothic); color: var(--ink);
+  }
+  .b-review-riso .riso-stamp {
+    position: absolute; top: 14px; right: 12px;
+    border: 2px solid var(--rv-accent, var(--berry)); color: var(--rv-accent, var(--berry));
+    transform: rotate(7deg); padding: 2px 7px; text-align: center; line-height: 1.05;
+    font: 400 11px var(--bf-gothic); letter-spacing: .08em;
+  }
+  .b-review-riso .riso-stamp small { display: block; font: 700 6px var(--bf-toni); letter-spacing: .14em; margin-top: 1px; }
+  .b-review-riso .riso-kicker { font: 700 9px var(--bf-toni); letter-spacing: .24em; color: var(--olive); }
+  .b-review-riso .quote { text-align: left; margin-top: 10px; }
+  .b-review-riso .rv-person { margin-top: 16px; }
+  .b-review-riso .rv-mono {
+    border-radius: 4px; transform: rotate(-3deg); box-shadow: 2px 2px 0 var(--ink);
+    background: #fff; padding: 2px;
+  }
+  .b-review-riso .rv-mono span {
+    display: flex; width: 100%; height: 100%; align-items: center; justify-content: center;
+    background: var(--rv-circle, var(--pea)); font: 700 19px var(--bf-bear);
+  }
+
+  .b-review-spotlight .spot-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 14px; }
+  .b-review-spotlight .spot-kicker { font: 700 9px var(--bf-toni); letter-spacing: .24em; color: var(--olive); }
+  .b-review-spotlight .spot-title { font: 500 22px var(--bf-bear); line-height: .98; margin-top: 4px; }
+  .b-review-spotlight .spot-nav { display: flex; gap: 6px; }
+  .b-review-spotlight .spot-arrow {
+    width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--ink);
+    display: flex; align-items: center; justify-content: center;
+    background: #FFFCF7; font-size: 16px; color: var(--ink);
+  }
+  .b-review-spotlight .spot-arrow.next { background: var(--rv-accent, var(--lime)); }
+  .b-review-spotlight .spot-stage { position: relative; }
+  .b-review-spotlight .spot-peek {
+    position: absolute; top: 10px; right: -8px; bottom: 10px; width: 24px;
+    background: #FFFCF7; border: 1.5px solid var(--ink); border-radius: 12px; opacity: .5;
+  }
+  .b-review-spotlight .rv-card {
+    background: var(--rv-card, var(--forest)); color: var(--rv-cardfg, #FFFCF7);
+    border-radius: 16px; padding: 18px 18px 16px; box-shadow: 0 12px 26px -18px rgba(54,83,41,.6);
+  }
+  .b-review-spotlight .spot-top { display: flex; align-items: center; justify-content: space-between; }
+  .b-review-spotlight .spot-count { font: 400 13px var(--bf-gothic); letter-spacing: .08em; color: var(--rv-accent, var(--lime)); }
+  .b-review-spotlight .quote { text-align: left; margin-top: 12px; }
+  .b-review-spotlight .rv-person { margin-top: 14px; }
+  .b-review-spotlight .rv-person .role { opacity: .82; }
+  .b-review-spotlight .spot-rail { display: flex; gap: 7px; margin-top: 12px; }
+  .b-review-spotlight .spot-thumb {
+    width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--ink);
+    background: var(--rv-circle, var(--pea));
+    display: flex; align-items: center; justify-content: center;
+    font: 700 15px var(--bf-bear); color: var(--ink); opacity: .5; box-sizing: border-box;
+  }
+  .b-review-spotlight .spot-thumb.on { opacity: 1; box-shadow: 0 0 0 2px var(--oat), 0 0 0 3.5px var(--ink); }
+
   .b-store { margin: 14px 18px; padding: 18px; border-radius: 6px; }
   .b-store .kicker { font: 700 9px var(--bf-toni); letter-spacing: .14em; opacity: .8; }
   .b-store .ttl { font: 500 18px var(--bf-bear); margin-top: 2px; line-height: 1.15; }
@@ -1603,6 +1694,73 @@ function renderBlock(b) {
         }];
       }
       reviews = reviews || [];
+      const starColor = b.star_color ? brandColorVar(b.star_color) : '';
+      const starRow = (r, size) => {
+        const rating = Math.max(1, Math.min(5, parseInt(r.rating, 10) || 5));
+        return `<div class="stars"${size ? ` style="font-size:${size}px"` : ''}>` +
+          [1,2,3,4,5].map(i => `<span class="${i <= rating ? 'on' : 'off'}"${i <= rating && starColor ? ` style="color:${starColor}"` : ''}>★</span>`).join('') + '</div>';
+      };
+      const mono = (r, wrap) => {
+        const initial = (r.author_name || '').trim()[0] || '?';
+        if (r.avatar_url) return `<div class="rv-mono" style="overflow:hidden;padding:0"><img src="${escapeAttr(r.avatar_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit"></div>`;
+        return wrap
+          ? `<div class="rv-mono"><span>${escapeHtml(initial.toUpperCase())}</span></div>`
+          : `<div class="rv-mono">${escapeHtml(initial.toUpperCase())}</div>`;
+      };
+      const personText = (r) => {
+        const sub = pickLang(r.author_subline_en, r.author_subline_cn);
+        return `<div><div class="name">${escapeHtml(r.author_name || '')}</div>${sub ? `<div class="role">${escapeHtml(sub)}</div>` : ''}</div>`;
+      };
+      // Inline --rv-* overrides for the inset-card layouts (set only when picked).
+      const rvVars = [
+        ['--rv-card', b.card_color], ['--rv-border', b.border_color],
+        ['--rv-accent', b.accent_color], ['--rv-circle', b.circle_color],
+      ].map(([p, t]) => { const v = brandColorVar(t); return v ? `${p}:${v}` : ''; }).filter(Boolean);
+      if (view === 'spotlight' && brandColorVar(b.fg_color)) rvVars.push(`--rv-cardfg:${brandColorVar(b.fg_color)}`);
+      const styleAttr = `background:${bg};color:${fg};${rvVars.join(';')}`;
+      if ((view === 'editorial' || view === 'riso' || view === 'spotlight') && reviews.length) {
+        if (view === 'editorial') {
+          const r = reviews[0];
+          return `<div class="b-review b-review-editorial" style="${styleAttr}"><div class="rv-card">
+            ${k.en || k.cn ? `<div class="ed-kicker"><span class="tick"></span><span class="klabel">${biLabel(k.en, k.cn)}</span><span class="tick"></span></div>` : ''}
+            <div style="margin-top:${k.en || k.cn ? 14 : 0}px">${starRow(r)}</div>
+            <div class="quote">${escapeHtml(pickLang(r.quote_en, r.quote_cn) || '')}</div>
+            <div class="rv-divider"></div>
+            <div class="rv-person">${mono(r)}${personText(r)}</div>
+          </div></div>`;
+        }
+        if (view === 'riso') {
+          const r = reviews[0];
+          return `<div class="b-review b-review-riso" style="${styleAttr}"><div class="rv-card">
+            <div class="riso-badge">★★★★★</div>
+            <div class="riso-stamp">VERIFIED<small>真实评价</small></div>
+            ${k.en || k.cn ? `<div class="riso-kicker">${biLabel(k.en, k.cn)}</div>` : ''}
+            <div class="quote">${escapeHtml(pickLang(r.quote_en, r.quote_cn) || '')}</div>
+            <div class="rv-person">${mono(r, true)}${personText(r)}</div>
+          </div></div>`;
+        }
+        // spotlight — static at the first review (storefront is a read-only preview)
+        const r = reviews[0];
+        const thumbs = reviews.map((rv, i) => {
+          const ini = (rv.author_name || '').trim()[0] || '?';
+          return `<div class="spot-thumb${i === 0 ? ' on' : ''}">${escapeHtml(ini.toUpperCase())}</div>`;
+        }).join('');
+        return `<div class="b-review b-review-spotlight" style="${styleAttr}">
+          <div class="spot-head">
+            <div>${k.en || k.cn ? `<div class="spot-kicker">${biLabel(k.en, k.cn)}</div>` : ''}<div class="spot-title">${escapeHtml(pickLang('Loved by locals.', '街坊都爱'))}</div></div>
+            <div class="spot-nav"><div class="spot-arrow prev">‹</div><div class="spot-arrow next">›</div></div>
+          </div>
+          <div class="spot-stage">
+            <div class="spot-peek"></div>
+            <div class="rv-card">
+              <div class="spot-top">${starRow(r, 15)}<span class="spot-count">01 / ${String(reviews.length).padStart(2, '0')}</span></div>
+              <div class="quote">${escapeHtml(pickLang(r.quote_en, r.quote_cn) || '')}</div>
+              <div class="rv-person">${mono(r)}${personText(r)}</div>
+            </div>
+          </div>
+          <div class="spot-rail">${thumbs}</div>
+        </div>`;
+      }
       const renderOne = (r) => {
         const rating = Math.max(1, Math.min(5, parseInt(r.rating, 10) || 5));
         const stars = [1,2,3,4,5].map(i => `<span class="${i <= rating ? 'on' : 'off'}">★</span>`).join('');

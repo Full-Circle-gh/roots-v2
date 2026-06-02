@@ -3270,6 +3270,115 @@
     background: currentColor; opacity: .25;
   }
   .b-review-carousel .rv-dots .dot.on { opacity: 1; }
+
+  /* ── Review — Editorial / Riso pop / Spotlight (inset-card layouts) ──
+     These three sit as a bordered card on the page (unlike card/carousel
+     which paint full-bleed). Card fill, border, accent and avatar-circle
+     colours are driven by inline --rv-* custom props (set only when the
+     author overrides them) with brand defaults baked in here. Mirrored
+     pixel-for-pixel in storefront.html + the mini-app block-renderer. */
+  .b-review-editorial, .b-review-riso, .b-review-spotlight { padding: 20px 18px; }
+  .b-review .rv-card { box-sizing: border-box; position: relative; }
+  .b-review .rv-mono {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--rv-circle, var(--b-pea));
+    border: 2px solid var(--b-ink); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font: 700 19px var(--bf-bear); color: var(--b-ink);
+  }
+  .b-review .rv-person { display: flex; align-items: center; gap: 11px; }
+  .b-review .rv-person .name { font: 400 17px var(--bf-gothic); letter-spacing: .04em; line-height: 1; }
+  .b-review .rv-person .role { font: 500 11px var(--bf-aleo); opacity: .7; margin-top: 3px; }
+
+  /* A · Editorial — calm, centered, hairline border */
+  .b-review-editorial .rv-card {
+    background: var(--rv-card, #FFFCF7);
+    border: 1.5px solid var(--rv-border, var(--b-forest));
+    border-radius: var(--rv-radius, 16px);
+    padding: 22px 20px 18px; text-align: center;
+    box-shadow: var(--rv-shadow, 0 12px 26px -18px rgba(54,83,41,.6));
+  }
+  .b-review-editorial .ed-kicker {
+    display: flex; align-items: center; justify-content: center; gap: 9px;
+    font: 700 9px var(--bf-toni); letter-spacing: .28em;
+    color: var(--rv-accent, var(--b-olive));
+  }
+  .b-review-editorial .ed-kicker .tick { width: 16px; height: 1.5px; background: currentColor; }
+  .b-review-editorial .rv-divider { height: 1px; background: rgba(0,0,0,.12); margin: 16px 0 14px; }
+  .b-review-editorial .rv-person { justify-content: center; text-align: left; }
+
+  /* B · Riso pop — ink border, offset shadow, sticker badge + stamp */
+  .b-review-riso { padding-top: 26px; }
+  .b-review-riso .rv-card {
+    background: var(--rv-card, #FFFCF7);
+    border: 2px solid var(--rv-border, var(--b-ink));
+    border-radius: var(--rv-radius, 10px);
+    padding: 22px 18px 16px;
+    box-shadow: var(--rv-shadow, 4px 5px 0 var(--b-ink));
+  }
+  .b-review-riso .riso-badge {
+    position: absolute; top: -12px; left: 18px; z-index: 4;
+    background: var(--rv-accent, var(--b-lime));
+    border: 1.5px solid var(--b-ink); box-shadow: 2px 2px 0 var(--b-ink);
+    transform: rotate(-4deg); padding: 4px 8px;
+    display: flex; gap: 1px; font: 700 11px var(--bf-gothic); color: var(--b-ink);
+  }
+  .b-review-riso .riso-stamp {
+    position: absolute; top: 14px; right: 12px;
+    border: 2px solid var(--rv-accent, var(--b-berry)); color: var(--rv-accent, var(--b-berry));
+    transform: rotate(7deg); padding: 2px 7px; text-align: center; line-height: 1.05;
+    font: 400 11px var(--bf-gothic); letter-spacing: .08em;
+  }
+  .b-review-riso .riso-stamp small { display: block; font: 700 6px var(--bf-toni); letter-spacing: .14em; margin-top: 1px; }
+  .b-review-riso .riso-kicker { font: 700 9px var(--bf-toni); letter-spacing: .24em; color: var(--b-olive); }
+  .b-review-riso .quote { text-align: left; margin-top: 10px; }
+  .b-review-riso .rv-person { margin-top: 16px; }
+  .b-review-riso .rv-mono {
+    border-radius: 4px; transform: rotate(-3deg);
+    box-shadow: 2px 2px 0 var(--b-ink); background: #fff; padding: 2px;
+  }
+  .b-review-riso .rv-mono span {
+    display: flex; width: 100%; height: 100%; align-items: center; justify-content: center;
+    background: var(--rv-circle, var(--b-pea)); font: 700 19px var(--bf-bear);
+  }
+
+  /* C · Spotlight — header band + dark hero card + thumbnail rail */
+  .b-review-spotlight .spot-head {
+    display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 14px;
+  }
+  .b-review-spotlight .spot-kicker { font: 700 9px var(--bf-toni); letter-spacing: .24em; color: var(--b-olive); }
+  .b-review-spotlight .spot-title { font: 500 22px var(--bf-bear); line-height: .98; margin-top: 4px; }
+  .b-review-spotlight .spot-nav { display: flex; gap: 6px; }
+  .b-review-spotlight .spot-arrow {
+    width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--b-ink);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    background: #FFFCF7; font: 400 16px var(--bf-sans); color: var(--b-ink); user-select: none;
+  }
+  .b-review-spotlight .spot-arrow.next { background: var(--rv-accent, var(--b-lime)); }
+  .b-review-spotlight .spot-stage { position: relative; }
+  .b-review-spotlight .spot-peek {
+    position: absolute; top: 10px; right: -8px; bottom: 10px; width: 24px;
+    background: #FFFCF7; border: 1.5px solid var(--b-ink); border-radius: 12px; opacity: .5;
+  }
+  .b-review-spotlight .rv-card {
+    background: var(--rv-card, var(--b-forest)); color: var(--rv-cardfg, #FFFCF7);
+    border-radius: var(--rv-radius, 16px); padding: 18px 18px 16px;
+    box-shadow: var(--rv-shadow, 0 12px 26px -18px rgba(54,83,41,.6));
+  }
+  .b-review-spotlight .spot-top { display: flex; align-items: center; justify-content: space-between; }
+  .b-review-spotlight .spot-count { font: 400 13px var(--bf-gothic); letter-spacing: .08em; color: var(--rv-accent, var(--b-lime)); }
+  .b-review-spotlight .quote { text-align: left; margin-top: 12px; }
+  .b-review-spotlight .rv-person { margin-top: 14px; }
+  .b-review-spotlight .rv-person .role { opacity: .82; }
+  .b-review-spotlight .spot-rail { display: flex; gap: 7px; margin-top: 12px; }
+  .b-review-spotlight .spot-thumb {
+    width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--b-ink);
+    background: var(--rv-circle, var(--b-pea));
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    font: 700 15px var(--bf-bear); color: var(--b-ink); opacity: .5; box-sizing: border-box;
+  }
+  .b-review-spotlight .spot-thumb.on { opacity: 1; box-shadow: 0 0 0 2px var(--b-oat), 0 0 0 3.5px var(--b-ink); }
+
   /* ── Store info ── */
   .b-store { margin: 0 18px; padding: 18px; border-radius: 4px; }
   .b-store .kicker { font: 700 9px var(--bf-toni); letter-spacing: .14em; opacity: .8; }
@@ -5187,7 +5296,7 @@ const DC_FIELDS = {
   flash_sale_strip: { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   coupon_block:     { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   points_widget:    { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
-  review_card:      { bg: 'bg_color', fg: 'fg_color' },
+  review_card:      { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   store_info:       { bg: 'bg_color', fg: 'fg_color' },
   voting_block:     { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   affiliate_block:  { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
@@ -7195,12 +7304,89 @@ function renderBlockBody(b) {
     }
     case 'review_card': {
       const view = b.view || 'card';
+      const isCardLayout = view === 'editorial' || view === 'riso' || view === 'spotlight';
       d.className = 'b-review b-review-' + view;
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
+      // Drive the inset-card layouts' fill/border/accent/circle via --rv-*
+      // custom props; only set when overridden so the CSS brand defaults win.
+      const rvSet = (prop, token) => { const v = brandColorVar(token); if (v) d.style.setProperty(prop, v); };
+      rvSet('--rv-card', b.card_color);
+      rvSet('--rv-border', b.border_color);
+      rvSet('--rv-accent', b.accent_color);
+      rvSet('--rv-circle', b.circle_color);
+      if (view === 'spotlight' && brandColorVar(b.fg_color)) d.style.setProperty('--rv-cardfg', brandColorVar(b.fg_color));
       const k = getBi(b, 'kicker');
       const reviews = getReviews(b);
       const starColor = b.star_color ? dcResolveHex(b.star_color) : '';
+      const starRow = (r, size) => {
+        const rating = Math.max(1, Math.min(5, parseInt(r.rating, 10) || 5));
+        return `<div class="stars"${size ? ` style="font-size:${size}px"` : ''}>` +
+          [1,2,3,4,5].map(i => `<span class="${i <= rating ? 'on' : 'off'}"${i <= rating && starColor ? ` style="color:${starColor}"` : ''}>★</span>`).join('') + '</div>';
+      };
+      const mono = (r, extra) => {
+        const initial = (r.author_name || '').trim()[0] || '?';
+        return r.avatar_url
+          ? `<div class="rv-mono" style="overflow:hidden;padding:0">${extra || ''}<img src="${escapeAttr(r.avatar_url)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit"></div>`
+          : `<div class="rv-mono">${extra ? `<span>${escapeHtml(initial.toUpperCase())}</span>` : escapeHtml(initial.toUpperCase())}</div>`;
+      };
+      if (isCardLayout) {
+        if (!reviews.length) {
+          d.innerHTML = `<div class="empty" style="color:rgba(0,0,0,.3);font:500 12px var(--f-sans);padding:20px 0;text-align:center">Add a review on the right.</div>`;
+          return d;
+        }
+        const personText = (r) => {
+          const sub = pickLang(r.author_subline_en, r.author_subline_cn);
+          return `<div><div class="name">${escapeHtml(r.author_name || '')}</div>${sub ? `<div class="role">${escapeHtml(sub)}</div>` : ''}</div>`;
+        };
+        if (view === 'editorial') {
+          const r = reviews[0];
+          d.innerHTML = `<div class="rv-card">
+            ${k.en || k.cn ? `<div class="ed-kicker"><span class="tick"></span><span class="klabel">${biLabel(k.en, k.cn)}</span><span class="tick"></span></div>` : ''}
+            <div style="margin-top:${k.en || k.cn ? 14 : 0}px">${starRow(r)}</div>
+            <div class="quote">${escapeHtml(pickLang(r.quote_en, r.quote_cn) || '')}</div>
+            <div class="rv-divider"></div>
+            <div class="rv-person">${mono(r)}${personText(r)}</div>
+          </div>`;
+          return d;
+        }
+        if (view === 'riso') {
+          const r = reviews[0];
+          d.innerHTML = `<div class="rv-card">
+            <div class="riso-badge">${[1,2,3,4,5].map(() => '★').join('')}</div>
+            <div class="riso-stamp">VERIFIED<small>真实评价</small></div>
+            ${k.en || k.cn ? `<div class="riso-kicker">${biLabel(k.en, k.cn)}</div>` : ''}
+            <div class="quote">${escapeHtml(pickLang(r.quote_en, r.quote_cn) || '')}</div>
+            <div class="rv-person">${mono(r, true)}${personText(r)}</div>
+          </div>`;
+          return d;
+        }
+        // spotlight — interactive index via _previewReviewIdx
+        const activeIdx = (b._previewReviewIdx != null && reviews[b._previewReviewIdx]) ? b._previewReviewIdx : 0;
+        const r = reviews[activeIdx];
+        const thumbs = reviews.map((rv, i) => {
+          const ini = (rv.author_name || '').trim()[0] || '?';
+          return `<div class="spot-thumb${i === activeIdx ? ' on' : ''}" data-rv-idx="${i}">${escapeHtml(ini.toUpperCase())}</div>`;
+        }).join('');
+        d.innerHTML = `
+          <div class="spot-head">
+            <div>${k.en || k.cn ? `<div class="spot-kicker">${biLabel(k.en, k.cn)}</div>` : ''}<div class="spot-title">${state.lang === 'cn' ? '街坊都爱' : 'Loved by locals.'}</div></div>
+            <div class="spot-nav"><div class="spot-arrow prev" data-rv-step="-1">‹</div><div class="spot-arrow next" data-rv-step="1">›</div></div>
+          </div>
+          <div class="spot-stage">
+            <div class="spot-peek"></div>
+            <div class="rv-card">
+              <div class="spot-top">${starRow(r, 15)}<span class="spot-count">${String(activeIdx + 1).padStart(2, '0')} / ${String(reviews.length).padStart(2, '0')}</span></div>
+              <div class="quote">${escapeHtml(pickLang(r.quote_en, r.quote_cn) || '')}</div>
+              <div class="rv-person">${mono(r)}${personText(r)}</div>
+            </div>
+          </div>
+          <div class="spot-rail">${thumbs}</div>`;
+        const setIdx = (i) => { b._previewReviewIdx = ((i % reviews.length) + reviews.length) % reviews.length; renderPreview(); };
+        d.querySelectorAll('.spot-thumb').forEach(el => el.addEventListener('click', ev => { ev.stopPropagation(); setIdx(parseInt(el.dataset.rvIdx, 10)); }));
+        d.querySelectorAll('.spot-arrow').forEach(el => el.addEventListener('click', ev => { ev.stopPropagation(); setIdx(activeIdx + parseInt(el.dataset.rvStep, 10)); }));
+        return d;
+      }
       const renderOne = (r) => {
         const rating = Math.max(1, Math.min(5, parseInt(r.rating, 10) || 5));
         const stars = [1,2,3,4,5].map(i => `<span class="${i <= rating ? 'on' : 'off'}"${i <= rating && starColor ? ` style="color:${starColor}"` : ''}>★</span>`).join('');
@@ -9669,29 +9855,46 @@ function getReviews(b) {
 function buildReviewForm(m, b) {
   const view = b.view || 'card';
   m.appendChild(field(T('Layout', '版式'),
-    T('Card = single testimonial centered. Carousel = swipe through multiple reviews (add entries below).', '卡片 = 居中单条评价。轮播 = 滑动浏览多条评价(在下方添加条目)。'),
+    T('Card / Carousel paint full-width. Editorial, Riso pop & Spotlight sit as a bordered card on the page.', '卡片 / 轮播 为全宽。编辑风、印刷波普、聚焦 以带边框的卡片形式呈现。'),
     sel(view, [
-      { value: 'card',     label: T('Card — single testimonial', '卡片 — 单条评价') },
-      { value: 'carousel', label: T('Carousel — swipe through several', '轮播 — 滑动浏览多条') },
+      { value: 'card',      label: T('Card — single testimonial', '卡片 — 单条评价') },
+      { value: 'carousel',  label: T('Carousel — swipe through several', '轮播 — 滑动浏览多条') },
+      { value: 'editorial', label: T('Editorial — calm bordered card', '编辑风 — 沉静边框卡片') },
+      { value: 'riso',      label: T('Riso pop — sticker + verified stamp', '印刷波普 — 贴纸 + 认证印章') },
+      { value: 'spotlight', label: T('Spotlight — dark hero + thumbnail rail', '聚焦 — 深色主卡 + 缩略导航') },
     ], v => updateBlock(b.id, { view: v }))));
+
+  const isCardLayout = view === 'editorial' || view === 'riso' || view === 'spotlight';
 
   m.appendChild(field(T('Kicker', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
+  m.appendChild(field(T('Background colour', '背景颜色'), isCardLayout ? T('The page area behind the card.', '卡片后方的页面区域。') : '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
   m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
   m.appendChild(field(T('Star colour', '星标颜色'), T('Colour of the filled rating stars. Default = gold.', '已点亮评分星的颜色。默认 = 金色。'),
     sel(b.star_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { star_color: v }))));
 
+  if (isCardLayout) {
+    m.appendChild(field(T('Card background', '卡片背景'), T('Fill of the testimonial card itself. Default = cream (Spotlight = forest).', '评价卡片本身的填充色。默认 = 奶白(聚焦 = 森绿)。'),
+      sel(b.card_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { card_color: v }))));
+    m.appendChild(field(T('Card border', '卡片边框'), T('Outline around the card. Default = forest (Riso = ink).', '卡片轮廓。默认 = 森绿(印刷波普 = 墨黑)。'),
+      sel(b.border_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { border_color: v }))));
+    m.appendChild(field(T('Accent colour', '强调色'), T('Kicker ticks, sticker badge, arrows & counter. Default = lime.', '小标题刻线、贴纸徽章、箭头与计数。默认 = 青柠。'),
+      sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+    m.appendChild(field(T('Circle / avatar colour', '圆圈 / 头像颜色'), T('Background of the monogram disc next to each name. Default = pea.', '姓名旁字母圆圈的背景色。默认 = 豌豆绿。'),
+      sel(b.circle_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { circle_color: v }))));
+  }
+
   // Reviews list — each entry editable; carousel shows all, card shows only the first.
   const reviews = getReviews(b);
   const listWrap = document.createElement('div');
   listWrap.className = 'field';
+  const isMulti = view === 'carousel' || view === 'spotlight';
   const lbl = document.createElement('label');
-  lbl.textContent = view === 'carousel'
+  lbl.textContent = isMulti
     ? T(`Reviews (${reviews.length})`, `评价(${reviews.length})`)
-    : T(`Review ${reviews.length > 1 ? '(card view only shows the first)' : ''}`, `评价 ${reviews.length > 1 ? '(卡片模式仅显示第一条)' : ''}`);
+    : T(`Review ${reviews.length > 1 ? '(this layout only shows the first)' : ''}`, `评价 ${reviews.length > 1 ? '(此版式仅显示第一条)' : ''}`);
   listWrap.appendChild(lbl);
 
   // Always read the live reviews off state, never the `reviews` snapshot
@@ -9706,7 +9909,7 @@ function buildReviewForm(m, b) {
   // entry being edited. Writes to the LIVE state block (the `b`/`reviews`
   // closures go stale after an edit) and only re-renders if it actually moved.
   function showInPreview(idx) {
-    if (view !== 'carousel') return;  // card view always shows the first review
+    if (!isMulti) return;  // single-review layouts always show the first review
     const blk = state.draft.find(x => x.id === b.id);
     if (blk && blk._previewReviewIdx !== idx) {
       blk._previewReviewIdx = idx;
@@ -9716,7 +9919,7 @@ function buildReviewForm(m, b) {
   function updateReview(idx, patch) {
     const next = currentReviews();
     next[idx] = { ...next[idx], ...patch };
-    const follow = view === 'carousel' ? { _previewReviewIdx: idx } : {};
+    const follow = isMulti ? { _previewReviewIdx: idx } : {};
     updateBlockSilent(b.id, { reviews: next, ...follow });
   }
   function removeReview(idx) {

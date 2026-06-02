@@ -344,29 +344,94 @@
   <view wx:if="{{points.ctaLabel}}" class="pt-cta" style="background:{{points.btnBg}};color:{{points.btnFg}}" bindtap="onPointsCtaTap">{{points.ctaLabel}}</view>
 </view>
 
-<view wx:elif="{{type === 'review_card' && reviews.length}}" class="review-blk review-{{reviewView}}" style="background:{{bg}};color:{{fg}}">
-  <view wx:if="{{reviewKicker}}" class="rv-kicker">{{reviewKicker}}</view>
-  <!-- Card view: first review only -->
-  <block wx:if="{{reviewView !== 'carousel'}}">
-    <view class="rv-item">
-      <view class="rv-stars">
+<view wx:elif="{{type === 'review_card' && reviews.length}}" class="review-blk review-{{reviewView}}" style="background:{{bg}};color:{{fg}};{{rvVars}}">
+  <view wx:if="{{reviewKicker && reviewView !== 'editorial' && reviewView !== 'riso' && reviewView !== 'spotlight'}}" class="rv-kicker">{{reviewKicker}}</view>
+
+  <!-- A · Editorial — calm bordered card, first review only -->
+  <block wx:if="{{reviewView === 'editorial'}}">
+    <view class="rv-card">
+      <view wx:if="{{reviewKicker}}" class="ed-kicker"><view class="ed-tick"/><text class="ed-klabel">{{reviewKicker}}</text><view class="ed-tick"/></view>
+      <view class="rv-stars" style="margin-top:{{reviewKicker ? 24 : 0}}rpx">
         <text wx:for="{{reviews[0].stars}}" wx:key="*this" class="rv-star {{item.on ? 'on' : 'off'}}" style="{{item.on && starColor ? 'color:' + starColor : ''}}">★</text>
       </view>
       <view wx:if="{{reviews[0].quote}}" class="rv-quote">{{reviews[0].quote}}</view>
-      <view class="rv-byline">
-        <view class="rv-avatar">
-          <image wx:if="{{reviews[0].avatar}}" src="{{reviews[0].avatar}}" mode="aspectFill" class="rv-avatar-img"/>
-          <text wx:else class="rv-avatar-fallback">{{reviews[0].avatarInitial}}</text>
+      <view class="rv-divider"/>
+      <view class="rv-person">
+        <view class="rv-mono">
+          <image wx:if="{{reviews[0].avatar}}" src="{{reviews[0].avatar}}" mode="aspectFill" class="rv-mono-img"/>
+          <text wx:else>{{reviews[0].avatarInitial}}</text>
         </view>
-        <view class="rv-byline-text">
+        <view class="rv-person-text">
           <view wx:if="{{reviews[0].authorName}}" class="rv-name">{{reviews[0].authorName}}</view>
-          <view wx:if="{{reviews[0].authorSub}}" class="rv-sub">{{reviews[0].authorSub}}</view>
+          <view wx:if="{{reviews[0].authorSub}}" class="rv-role">{{reviews[0].authorSub}}</view>
         </view>
       </view>
     </view>
   </block>
+
+  <!-- B · Riso pop — ink border, sticker badge + verified stamp, first review -->
+  <block wx:elif="{{reviewView === 'riso'}}">
+    <view class="rv-card">
+      <view class="riso-badge">
+        <text class="riso-badge-star">★</text><text class="riso-badge-star">★</text><text class="riso-badge-star">★</text><text class="riso-badge-star">★</text><text class="riso-badge-star">★</text>
+      </view>
+      <view class="riso-stamp">VERIFIED<text class="riso-stamp-cn">真实评价</text></view>
+      <view wx:if="{{reviewKicker}}" class="riso-kicker">{{reviewKicker}}</view>
+      <view wx:if="{{reviews[0].quote}}" class="rv-quote rv-quote-left">{{reviews[0].quote}}</view>
+      <view class="rv-person">
+        <view class="rv-mono rv-mono-sticker">
+          <image wx:if="{{reviews[0].avatar}}" src="{{reviews[0].avatar}}" mode="aspectFill" class="rv-mono-img"/>
+          <text wx:else class="rv-mono-inner">{{reviews[0].avatarInitial}}</text>
+        </view>
+        <view class="rv-person-text">
+          <view wx:if="{{reviews[0].authorName}}" class="rv-name">{{reviews[0].authorName}}</view>
+          <view wx:if="{{reviews[0].authorSub}}" class="rv-role">{{reviews[0].authorSub}}</view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <!-- C · Spotlight — header band + dark hero card + thumbnail rail -->
+  <block wx:elif="{{reviewView === 'spotlight'}}">
+    <view class="spot-head">
+      <view class="spot-head-text">
+        <view wx:if="{{reviewKicker}}" class="spot-kicker">{{reviewKicker}}</view>
+        <view class="spot-title">{{spotTitle}}</view>
+      </view>
+      <view class="spot-nav">
+        <view class="spot-arrow prev" data-step="-1" bindtap="spotStep">‹</view>
+        <view class="spot-arrow next" data-step="1" bindtap="spotStep">›</view>
+      </view>
+    </view>
+    <view class="spot-stage">
+      <view class="spot-peek"/>
+      <view class="rv-card">
+        <view class="spot-top">
+          <view class="rv-stars rv-stars-left">
+            <text wx:for="{{reviews[spotActive].stars}}" wx:key="*this" class="rv-star {{item.on ? 'on' : 'off'}}" style="{{item.on && starColor ? 'color:' + starColor : ''}}">★</text>
+          </view>
+          <text class="spot-count">{{spotCount}}</text>
+        </view>
+        <view wx:if="{{reviews[spotActive].quote}}" class="rv-quote rv-quote-left">{{reviews[spotActive].quote}}</view>
+        <view class="rv-person">
+          <view class="rv-mono">
+            <image wx:if="{{reviews[spotActive].avatar}}" src="{{reviews[spotActive].avatar}}" mode="aspectFill" class="rv-mono-img"/>
+            <text wx:else>{{reviews[spotActive].avatarInitial}}</text>
+          </view>
+          <view class="rv-person-text">
+            <view wx:if="{{reviews[spotActive].authorName}}" class="rv-name">{{reviews[spotActive].authorName}}</view>
+            <view wx:if="{{reviews[spotActive].authorSub}}" class="rv-role">{{reviews[spotActive].authorSub}}</view>
+          </view>
+        </view>
+      </view>
+    </view>
+    <view class="spot-rail">
+      <view wx:for="{{reviews}}" wx:key="key" class="spot-thumb {{index === spotActive ? 'on' : ''}}" data-idx="{{index}}" bindtap="spotPick">{{item.avatarInitial}}</view>
+    </view>
+  </block>
+
   <!-- Carousel view: swipe through all -->
-  <swiper wx:else class="rv-swiper" style="height:{{reviewSwiperH || 360}}rpx" indicator-dots="{{true}}" indicator-color="rgba(0,0,0,0.18)" indicator-active-color="rgba(0,0,0,0.7)" autoplay="{{true}}" interval="{{5000}}" circular="{{true}}">
+  <swiper wx:elif="{{reviewView === 'carousel'}}" class="rv-swiper" style="height:{{reviewSwiperH || 360}}rpx" indicator-dots="{{true}}" indicator-color="rgba(0,0,0,0.18)" indicator-active-color="rgba(0,0,0,0.7)" autoplay="{{true}}" interval="{{5000}}" circular="{{true}}">
     <swiper-item wx:for="{{reviews}}" wx:key="key">
       <view class="rv-item">
         <view class="rv-stars">
@@ -386,6 +451,26 @@
       </view>
     </swiper-item>
   </swiper>
+
+  <!-- Card view (default): first review only -->
+  <block wx:else>
+    <view class="rv-item">
+      <view class="rv-stars">
+        <text wx:for="{{reviews[0].stars}}" wx:key="*this" class="rv-star {{item.on ? 'on' : 'off'}}" style="{{item.on && starColor ? 'color:' + starColor : ''}}">★</text>
+      </view>
+      <view wx:if="{{reviews[0].quote}}" class="rv-quote">{{reviews[0].quote}}</view>
+      <view class="rv-byline">
+        <view class="rv-avatar">
+          <image wx:if="{{reviews[0].avatar}}" src="{{reviews[0].avatar}}" mode="aspectFill" class="rv-avatar-img"/>
+          <text wx:else class="rv-avatar-fallback">{{reviews[0].avatarInitial}}</text>
+        </view>
+        <view class="rv-byline-text">
+          <view wx:if="{{reviews[0].authorName}}" class="rv-name">{{reviews[0].authorName}}</view>
+          <view wx:if="{{reviews[0].authorSub}}" class="rv-sub">{{reviews[0].authorSub}}</view>
+        </view>
+      </view>
+    </view>
+  </block>
 </view>
 
 <!-- Favorites block — "your saved" rail / grid from customer favorites -->

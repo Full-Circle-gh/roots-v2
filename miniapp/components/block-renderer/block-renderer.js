@@ -42,6 +42,9 @@ function color(name) {
   return COLOR_MAP[name] || name;
 }
 
+// Zero-pad to 2 digits for the spotlight "NN / NN" review counter.
+function pad2(n) { return String(n).padStart(2, '0'); }
+
 // Pick a readable label colour (ink vs white) for a given button fill, by
 // luminance. Mirrors btnTextHex() in cms.html so the live render and the
 // editor preview always agree on the auto-contrast label.
@@ -721,6 +724,21 @@ Component({
               avatarInitial: initial.toUpperCase(),
             };
           });
+          // Inset-card layouts (editorial / riso / spotlight): the fill, border,
+          // accent and avatar-circle colours ride on inline --rv-* custom props,
+          // set only when the author overrides them (brand defaults live in WXSS).
+          const rv = [];
+          const rvCard = color(b.card_color);   if (rvCard)   rv.push('--rv-card:' + rvCard);
+          const rvBord = color(b.border_color); if (rvBord)   rv.push('--rv-border:' + rvBord);
+          const rvAcc  = color(b.accent_color); if (rvAcc)    rv.push('--rv-accent:' + rvAcc);
+          const rvCirc = color(b.circle_color); if (rvCirc)   rv.push('--rv-circle:' + rvCirc);
+          if (out.reviewView === 'spotlight' && b.fg_color) rv.push('--rv-cardfg:' + color(b.fg_color));
+          out.rvVars = rv.join(';');
+          // Spotlight is an interactive single-card carousel — track the active
+          // index + its "NN / NN" counter; reset to the first on each rebuild.
+          out.spotActive = 0;
+          out.spotTitle = L === 'cn' ? '街坊都爱' : 'Loved by locals.';
+          out.spotCount = pad2(1) + ' / ' + pad2(out.reviews.length);
           break;
         }
         case 'store_info': {
@@ -1438,6 +1456,21 @@ Component({
       const idx = e.currentTarget.dataset.idx;
       const cta = this.data.ctas[idx];
       this.triggerEvent('cta', { target: cta.target });
+    },
+    // Spotlight review layout: step the active card by ±1 (wraps) and pick a
+    // card directly from the thumbnail rail. Each updates the "NN / NN" counter.
+    spotStep(e) {
+      const n = (this.data.reviews || []).length;
+      if (!n) return;
+      const step = parseInt(e.currentTarget.dataset.step, 10) || 0;
+      const i = ((this.data.spotActive + step) % n + n) % n;
+      this.setData({ spotActive: i, spotCount: pad2(i + 1) + ' / ' + pad2(n) });
+    },
+    spotPick(e) {
+      const n = (this.data.reviews || []).length;
+      const i = parseInt(e.currentTarget.dataset.idx, 10);
+      if (!n || Number.isNaN(i)) return;
+      this.setData({ spotActive: i, spotCount: pad2(i + 1) + ' / ' + pad2(n) });
     },
     onCountdownCtaTap() {
       const target = this.data.countdown?.ctaTarget;
