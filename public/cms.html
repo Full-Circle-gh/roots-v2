@@ -11004,42 +11004,47 @@ function buildKitchenStatusForm(m, b) {
 }
 
 function buildRecipeStoryForm(m, b) {
-  m.appendChild(field(T('Layout', '版式'),
-    T('Top = full-width image above the copy (current editorial look). Side = image on the left, copy on the right (more compact).', '顶部 = 全宽图片在文案上方(当前编辑风格)。侧边 = 图片在左,文案在右(更紧凑)。'),
+  const secLayout  = inspectorSection(m, b.type, 'layout',  T('Style & layout', '样式与版式'), { open: true });
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
+
+  // ── Style & layout ──────────────────────────────────────────────────
+  secLayout.appendChild(field(T('Layout', '版式'),
+    T('Top = a wide picture above the text. Side = picture on the left, text on the right (more compact).', '顶部 = 宽图片在文字上方。侧边 = 图片在左,文字在右(更紧凑)。'),
     sel(b.image_view || 'top', [
-      { value: 'top',  label: T('Top — image fills, body below', '顶部 — 图片铺满,正文在下') },
-      { value: 'side', label: T('Side — image left, body right', '侧边 — 图片在左,正文在右') },
+      { value: 'top',  label: T('Top — picture on top, text below', '顶部 — 图片在上,文字在下') },
+      { value: 'side', label: T('Side — picture left, text right', '侧边 — 图片在左,文字在右') },
     ], v => updateBlock(b.id, { image_view: v }))));
 
-  m.appendChild(field(T('Image', '图片'), T('The hero photo. Tall photos can dominate the block — pick a fixed ratio below to crop.', '主视觉照片。竖长照片可能占据整个模块 — 在下方选择固定比例以裁剪。'),
-    imgPicker(b.image_url, ({ url, aspect }) => updateBlock(b.id, { image_url: url, image_aspect: aspect }))));
-
-  m.appendChild(field(T('Image ratio', '图片比例'),
-    T('Auto = natural aspect of the photo (tall portraits will dominate). Fixed ratio = crop the photo to that shape so every story has identical visual weight.', '自动 = 照片原始比例(竖图会占主导)。固定比例 = 将照片裁剪为该形状,使每篇故事视觉权重一致。'),
+  secLayout.appendChild(field(T('Image shape', '图片形状'),
+    T('Auto = keep the photo\'s own shape (tall photos take more space). A fixed shape crops every photo the same, so all stories look even.', '自动 = 保持照片本身的形状(高图会占更多空间)。选择固定形状会把每张照片裁成一样,让所有故事看起来一致。'),
     sel(b.image_ratio || 'auto', [
-      { value: 'auto', label: T('Auto — natural aspect', '自动 — 原始比例') },
-      { value: '16:9', label: T('16:9 — landscape banner', '16:9 — 横向横幅') },
-      { value: '4:3',  label: T('4:3 — classic editorial', '4:3 — 经典编辑') },
+      { value: 'auto', label: T('Auto — keep photo shape', '自动 — 保持照片形状') },
+      { value: '16:9', label: T('16:9 — wide banner', '16:9 — 宽横幅') },
+      { value: '4:3',  label: T('4:3 — classic', '4:3 — 经典') },
       { value: '1:1',  label: T('1:1 — square', '1:1 — 正方形') },
-      { value: '3:4',  label: T('3:4 — portrait card', '3:4 — 竖向卡片') },
-      { value: '21:9', label: T('21:9 — cinematic strip', '21:9 — 电影宽幅') },
+      { value: '3:4',  label: T('3:4 — tall', '3:4 — 竖向') },
+      { value: '21:9', label: T('21:9 — wide strip', '21:9 — 宽条') },
     ], v => updateBlock(b.id, { image_ratio: v }))));
 
-  m.appendChild(field(T('Crop anchor', '裁剪锚点'),
-    T('When the photo doesn\'t match the chosen ratio, this picks which part stays in frame after the crop. Only applies when ratio is not Auto.', '当照片与所选比例不符时,决定裁剪后保留哪一部分。仅在比例不为「自动」时生效。'),
+  secLayout.appendChild(field(T('Which part to keep', '保留哪部分'),
+    T('When the photo is cropped to fit the shape, this chooses which part to keep. Only used when the shape is not Auto.', '把照片裁成所选形状时,决定保留哪一部分。仅在形状不是「自动」时使用。'),
     sel(b.image_position || 'center', [
       { value: 'center', label: T('Center', '居中') },
       { value: 'top',    label: T('Top — keep the upper part', '顶部 — 保留上半部分') },
       { value: 'bottom', label: T('Bottom — keep the lower part', '底部 — 保留下半部分') },
     ], v => updateBlock(b.id, { image_position: v }))));
 
-  m.appendChild(field(T('Kicker', '小标题'), '',
+  // ── Content ─────────────────────────────────────────────────────────
+  secContent.appendChild(field(T('Image', '图片'), T('The main photo. Very tall photos can take up a lot of space — choose a fixed shape above to crop it.', '主要照片。很高的照片会占很大空间 — 在上方选择固定形状来裁剪。'),
+    imgPicker(b.image_url, ({ url, aspect }) => updateBlock(b.id, { image_url: url, image_aspect: aspect }))));
+  secContent.appendChild(field(T('Small heading', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field(T('Headline', '标题'), T('Big Bear Serif headline — the story title.', '大号 Bear Serif 标题 — 故事标题。'),
+  secContent.appendChild(field(T('Headline', '标题'), T('The story title (shown in large text).', '故事标题(以大号文字显示)。'),
     txtPair(b.headline_en, b.headline_cn, ({ en, cn }) => updateBlockSilent(b.id, { headline_en: en, headline_cn: cn }))));
-  m.appendChild(field(T('Byline', '署名'), T('Optional — e.g. "by Roots Kitchen", "Chef Sam".', '可选 — 例如「by Roots Kitchen」「Chef Sam」。'),
+  secContent.appendChild(field(T('Author line', '署名'), T('Optional — e.g. "by Roots Kitchen" or "Chef Sam".', '可选 — 例如「by Roots Kitchen」或「Chef Sam」。'),
     txtPair(b.byline_en, b.byline_cn, ({ en, cn }) => updateBlockSilent(b.id, { byline_en: en, byline_cn: cn }))));
-  m.appendChild(field(T('Read-time (minutes)', '阅读时长(分钟)'), T('Optional — shows in the byline as "3 min". 0 to hide.', '可选 — 在署名处显示为「3 min」。设为 0 则隐藏。'),
+  secContent.appendChild(field(T('Read time (minutes)', '阅读时长(分钟)'), T('Optional — shows next to the author as "3 min". Set 0 to hide.', '可选 — 显示在作者旁边,如「3 min」。设为 0 则隐藏。'),
     num(b.read_time_minutes, v => updateBlockSilent(b.id, { read_time_minutes: v }), { min: 0, max: 60, step: 1 })));
 
   // Long-form body — bilingual textareas. Paragraphs split on blank lines.
@@ -11048,7 +11053,7 @@ function buildRecipeStoryForm(m, b) {
   bodyRow.innerHTML = `<label>${B('Body', '正文')}</label>`;
   const bodyHelp = document.createElement('div');
   bodyHelp.className = 'helper';
-  bodyHelp.textContent = T('Long-form text. Separate paragraphs with a blank line. Authored in both languages.', '长篇文字。段落之间空一行分隔。需撰写两种语言。');
+  bodyHelp.textContent = T('The main text. Leave a blank line between paragraphs. Write it in both languages.', '正文。段落之间空一行分隔。请用两种语言填写。');
   const makeTA = (val, lng, ph) => {
     const row = document.createElement('div');
     row.className = 'txt-pair-row';
@@ -11072,22 +11077,23 @@ function buildRecipeStoryForm(m, b) {
   );
   bodyRow.appendChild(taWrap);
   bodyRow.appendChild(bodyHelp);
-  m.appendChild(bodyRow);
+  secContent.appendChild(bodyRow);
 
-  m.appendChild(field(T('Linked product (optional)', '关联商品(可选)'),
-    T('Surfaces a tappable product card at the bottom of the story.', '在故事底部显示一张可点击的商品卡。'),
+  secContent.appendChild(field(T('Linked product (optional)', '关联商品(可选)'),
+    T('Shows a product you can tap at the bottom of the story.', '在故事底部显示一个可点击的商品。'),
     productPicker({ multi: false, value: b.product_id, onChange: v => updateBlock(b.id, { product_id: v }) })));
-
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
-    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
-    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Button colour', '按钮颜色'), T('Fill of the CTA button. Label colour auto-adjusts for contrast. Default is ink + lime.', 'CTA 按钮的填充色。文字颜色自动调整以保证对比度。默认为墨黑 + 青柠。'),
-    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
-  m.appendChild(field(T('CTA label', '按钮文字'), T('Optional — e.g. "READ MORE". Leave blank to hide.', '可选 — 例如「READ MORE」。留空则隐藏。'),
+  secContent.appendChild(field(T('Button text', '按钮文字'), T('Optional — e.g. "READ MORE". Leave empty to hide the button.', '可选 — 例如「READ MORE」。留空则隐藏按钮。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-  m.appendChild(field(T('CTA target', '按钮目标'), T('e.g. product:5 · category:8 · promotions', '例如 product:5 · category:8 · promotions'),
+  secContent.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. product:5 · category:8 · promotions', '按钮跳转到哪里。例如 product:5 · category:8 · promotions'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }))));
+
+  // ── Colours ─────────────────────────────────────────────────────────
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
+    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
+    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  secColours.appendChild(field(T('Button colour', '按钮颜色'), T('The colour of the button. The text colour is chosen for you so it stays easy to read. Default is black + lime.', '按钮的颜色。文字颜色会自动选择,保证清晰易读。默认为黑色 + 青柠。'),
+    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
 }
 
 // ── Bundle feel system (ported from the "Buy together" design handoff) ───
