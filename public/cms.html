@@ -4869,7 +4869,11 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
     // refreshed every 60s by a background timer (see below) so the
     // flash_sale_strip preview reflects what customers actually see.
     const [catsResp, prodsResp, flashResp, pollsResp] = await Promise.all([
-      fetch('/api/categories/product', { credentials: 'same-origin' }).then(r => r.json()),
+      // Tenant-aware categories (matches how products load below). The global
+      // /api/categories/product endpoint reads the non-tenant db, so under data
+      // isolation it returns the wrong tenant's (often empty) list — which left
+      // the category_tabs picker with no chips to toggle.
+      api('/api/retail-admin/categories'),
       api('/api/retail-admin/products'),
       fetch('/api/retail/flash-sales', { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ data: [] })),
       // Polls feed the voting_block auto-pull preview + the per-block
@@ -10180,7 +10184,8 @@ function buildCatTabsForm(m, b) {
   const wrap = field(T('Categories to show', '要显示的分类'), T('Click to toggle. Manage the master list in the main admin.', '点击切换。在主后台管理分类总表。'), document.createElement('div'));
   const chips = wrap.querySelector('.helper').previousElementSibling;
   chips.className = 'chips';
-  state.categories.forEach(c => {
+  const cats = state.categories || [];
+  cats.forEach(c => {
     const chip = document.createElement('div');
     chip.className = 'chip' + ((b.category_ids || []).includes(c.id) ? ' on' : '');
     chip.textContent = c.name;
@@ -10191,6 +10196,14 @@ function buildCatTabsForm(m, b) {
     });
     chips.appendChild(chip);
   });
+  // No product categories loaded → the toggle area would otherwise be blank
+  // ("nowhere to select them"). Explain why + where to create them.
+  if (!cats.length) {
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:12px;line-height:1.4;color:#a9362f;background:rgba(169,54,47,.07);border:1px solid rgba(169,54,47,.2);border-radius:6px;padding:10px 12px;';
+    note.textContent = T('No product categories exist yet. Create them in the Mini App Backend → Categories (or main admin → Categories), then they’ll appear here to toggle on.', '尚未创建商品分类。请到「小程序后台 → 分类」(或主后台 → 分类)中添加,之后会在此处显示可勾选。');
+    chips.appendChild(note);
+  }
   m.appendChild(wrap);
 
   // Per-circle colour overrides. One swatch picker per selected category (in
