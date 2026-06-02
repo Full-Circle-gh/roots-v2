@@ -10414,12 +10414,13 @@ function buildGridForm(m, b) {
     sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 }
 function buildSpacerForm(m, b) {
-  m.appendChild(field(T('Height (px)', '高度(像素)'), '', num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 4, max: 200 })));
-  m.appendChild(field(T('Divider', '分隔线'), T('Optional centred divider that turns the spacer into a section break.', '可选 — 居中分隔线,把留白变成区块分隔。'),
+  const secLayout = inspectorSection(m, b.type, 'layout', T('Style & layout', '样式与版式'), { open: true });
+  secLayout.appendChild(field(T('Height (px)', '高度(像素)'), '', num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 4, max: 200 })));
+  secLayout.appendChild(field(T('Divider', '分隔线'), T('An optional line in the middle that turns the gap into a section break.', '可选 — 中间的一条线,把留白变成区块分隔。'),
     sel(b.divider_style || 'none', DIVIDER_STYLE_OPTIONS,
         v => updateBlock(b.id, { divider_style: v }))));
   if ((b.divider_style || 'none') !== 'none') {
-    m.appendChild(field(T('Divider colour', '分隔线颜色'), '',
+    secLayout.appendChild(field(T('Divider colour', '分隔线颜色'), '',
       sel(b.divider_color || 'olive-moss', BRAND_COLOR_OPTIONS,
           v => updateBlock(b.id, { divider_color: v }))));
   }
@@ -10877,109 +10878,118 @@ function buildVotingForm(m, b) {
 
 function buildAffiliateForm(m, b) {
   const view = b.view || 'card';
+  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
 
-  m.appendChild(field(T('Layout', '版式'),
-    T('Card — full lime card with code pill + copy/share buttons (richest, takes most room).  Strip — one-line compact code + buttons.  Stat — big ¥earned hero; pulls the customer\'s real number once they have invites.  Receipt — paper aesthetic with dashed border + perforated edge.', '卡片 — 完整的青柠卡片,带邀请码胶囊 + 复制/分享按钮(最丰富,占地最大)。  条带 — 单行紧凑的邀请码 + 按钮。  数据 — 大号「已赚 ¥」主视觉;顾客有邀请后拉取其真实数字。  收据 — 纸质风格,带虚线边框 + 锯齿边。'),
+  secLayout.appendChild(field(T('Layout', '版式'),
+    T('Card — a full card with the code and copy/share buttons (biggest). Strip — one compact line: code + buttons. Stat — a big "¥ earned" number; it shows the customer\'s real total once they have invites. Receipt — a paper look with a dashed, torn edge.', '卡片 — 完整的卡片,带邀请码和复制/分享按钮(最大)。条带 — 紧凑的单行:邀请码 + 按钮。数据 — 大号「已赚 ¥」数字;顾客有邀请后显示其真实总额。收据 — 纸质外观,带虚线锯齿边。'),
     sel(view, [
-      { value: 'card',    label: T('Card — full hero with code pill', '卡片 — 完整主视觉,带邀请码胶囊') },
-      { value: 'strip',   label: T('Strip — one-line compact', '条带 — 单行紧凑') },
-      { value: 'stat',    label: T('Stat — big earned-¥ headline', '数据 — 大号已赚 ¥ 标题') },
-      { value: 'receipt', label: T('Receipt — paper / dashed aesthetic', '收据 — 纸质 / 虚线风格') },
+      { value: 'card',    label: T('Card — full card with the code', '卡片 — 完整卡片,带邀请码') },
+      { value: 'strip',   label: T('Strip — one compact line', '条带 — 单行紧凑') },
+      { value: 'stat',    label: T('Stat — big "¥ earned" number', '数据 — 大号已赚 ¥') },
+      { value: 'receipt', label: T('Receipt — paper look, dashed edge', '收据 — 纸质 / 虚线') },
     ], v => updateBlock(b.id, { view: v }))));
 
-  m.appendChild(field(T('Kicker', '小标题'), T('Small uppercase label above the title.', '标题上方的小号大写标签。'),
+  secContent.appendChild(field(T('Small heading', '小标题'), T('A small line above the title.', '标题上方的一行小字。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
 
   // Title/subtitle only meaningful for card/receipt views — strip & stat
   // have their own slot for the headline (code in strip, ¥earned in stat).
   if (view === 'card' || view === 'receipt') {
-    m.appendChild(field(T('Title', '标题'), T('Main headline. Default echoes the program reward.', '主标题。默认呼应计划奖励。'),
+    secContent.appendChild(field(T('Title', '标题'), T('The main line. By default it shows the reward.', '主标题。默认显示奖励内容。'),
       txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
   }
   if (view === 'card') {
-    m.appendChild(field(T('Subtitle', '副标题'), T('Optional supporting copy under the title.', '标题下方可选的辅助文案。'),
+    secContent.appendChild(field(T('Subtitle', '副标题'), T('Optional extra line under the title.', '标题下方可选的附加文字。'),
       txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
   }
 
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
+  secContent.appendChild(field(T('Tap link (whole block)', '整块点击链接'),
+    T('Tapping the block opens this page. The default "affiliate" opens the Refer-a-friend page. Reward rules and amounts are set in Mini App Backend → Affiliate.', '点击模块打开此页面。默认「affiliate」打开「邀请好友」页。奖励规则和金额在小程序后台 → 邀请好友中设置。'),
+    txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'affiliate')));
+
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Copy-button colour', '复制按钮颜色'),
-    T('Fill of the COPY button. The green SHARE button stays WeChat green.', '「复制」按钮的填充色。「分享」按钮保持微信绿。'),
+  secColours.appendChild(field(T('Copy-button colour', '复制按钮颜色'),
+    T('The colour of the COPY button. The SHARE button stays WeChat green.', '「复制」按钮的颜色。「分享」按钮保持微信绿。'),
     sel(b.accent_color || 'ink', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 
-  // Stats footer applies to all views; controls whether the "¥X earned · N
-  // invited" line shows up once the customer has any activity.
-  m.appendChild(field(T('Show stats', '显示统计'),
-    T('Shows "¥X earned · N invited" once the customer has any history. Hide for a cleaner block on fresh accounts.', '顾客有记录后显示「已赚 ¥X · 已邀 N 人」。新账号可隐藏以保持模块简洁。'),
+  secBehaviour.appendChild(field(T('Show stats', '显示统计'),
+    T('Shows "¥X earned · N invited" once the customer has some history. Hide it to keep the block simple for new customers.', '顾客有记录后显示「已赚 ¥X · 已邀 N 人」。新顾客可隐藏以保持模块简洁。'),
     sel(b.show_stats === false ? '0' : '1', [
       { value: '1', label: T('Show (¥earned · invited)', '显示(已赚 ¥ · 已邀)') },
       { value: '0', label: T('Hide — keep the card minimal', '隐藏 — 保持卡片简洁') },
     ], v => updateBlock(b.id, { show_stats: v === '1' }))));
-
-  m.appendChild(field(T('Tap-anywhere target', '整块点击目标'),
-    T('Tapping the block opens this destination. Default "affiliate" opens the Refer-a-friend page. Program rules + reward ¥ are managed in Mini App Backend → Affiliate.', '点击模块打开此目标。默认「affiliate」打开「邀请好友」页。计划规则 + 奖励 ¥ 在小程序后台 → 邀请好友中管理。'),
-    txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'affiliate')));
 }
 
 function buildGreetingForm(m, b) {
   const view = b.view || 'card';
-  m.appendChild(field(T('Layout', '版式'),
-    T('Card = bordered editorial card. Banner = full-bleed colour band, big greeting. Inline = compact one-line with pts pill on the right. Split = greeting left, big pts wallet right.',
-      '卡片 = 带边框的编辑卡片。横幅 = 全幅色带、大号问候语。行内 = 紧凑单行,积分胶囊在右侧。分栏 = 问候语在左,大号积分钱包在右。'),
+  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
+
+  secLayout.appendChild(field(T('Layout', '版式'),
+    T('Card = a card with a border. Banner = a full-width colour band with a big greeting. Inline = one compact line with the points on the right. Split = greeting on the left, a big points wallet on the right.',
+      '卡片 = 带边框的卡片。横幅 = 全宽色带,大号问候语。行内 = 紧凑单行,积分在右侧。分栏 = 问候语在左,大号积分钱包在右。'),
     sel(view, [
       { value: 'card',   label: T('Card — bordered (default)', '卡片 — 带边框(默认)') },
-      { value: 'banner', label: T('Banner — full-bleed, oversized greeting', '横幅 — 全幅、超大问候语') },
-      { value: 'inline', label: T('Inline — one-line, pts pill on right', '行内 — 单行,积分胶囊在右') },
+      { value: 'banner', label: T('Banner — full width, big greeting', '横幅 — 全宽、超大问候语') },
+      { value: 'inline', label: T('Inline — one line, points on right', '行内 — 单行,积分在右') },
       { value: 'split',  label: T('Split — greeting left, wallet right', '分栏 — 问候语在左,钱包在右') },
     ], v => updateBlock(b.id, { view: v }))));
-  m.appendChild(field(T('Kicker', '小标题'), T('Tiny uppercase label above the greeting (e.g. "WELCOME BACK").', '问候语上方的小号大写标签(例如「WELCOME BACK」)。'),
+
+  secContent.appendChild(field(T('Small heading', '小标题'), T('A small line above the greeting (e.g. "WELCOME BACK").', '问候语上方的一行小字(例如「WELCOME BACK」)。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
 
   const note = document.createElement('div');
   note.className = 'helper';
   note.style.cssText = 'margin-top:18px;padding:10px 12px;background:#fff7e6;border-left:3px solid #f2ca6c;font-size:12px;line-height:1.5;';
-  note.innerHTML = B(`<b>Tone overrides (optional)</b> — leave blank to use defaults: <i>Good morning · Good afternoon · Good evening · Hi night-owl</i>. The customer's first name + points balance are appended automatically.`,
-                     `<b>语气覆盖(可选)</b> — 留空则使用默认:<i>早上好 · 下午好 · 晚上好 · 夜深了</i>。系统会自动在后面加上顾客的名字 + 积分余额。`);
-  m.appendChild(note);
+  note.innerHTML = B(`<b>Greeting words (optional)</b> — leave blank to use the defaults: <i>Good morning · Good afternoon · Good evening · Hi night-owl</i>. The customer's first name and points are added automatically.`,
+                     `<b>问候语(可选)</b> — 留空则使用默认:<i>早上好 · 下午好 · 晚上好 · 夜深了</i>。系统会自动加上顾客的名字和积分。`);
+  secContent.appendChild(note);
 
-  m.appendChild(field(T('Morning override', '早晨问候覆盖'), T('5am – 12pm', '上午 5 点 – 中午 12 点'),
+  secContent.appendChild(field(T('Morning greeting', '早晨问候'), T('5am – 12pm', '上午 5 点 – 中午 12 点'),
     txtPair(b.greet_morning_en, b.greet_morning_cn,
       ({ en, cn }) => updateBlockSilent(b.id, { greet_morning_en: en, greet_morning_cn: cn }),
       { en: 'Good morning', cn: '早上好' })));
-  m.appendChild(field(T('Afternoon override', '下午问候覆盖'), T('12pm – 5pm', '中午 12 点 – 下午 5 点'),
+  secContent.appendChild(field(T('Afternoon greeting', '下午问候'), T('12pm – 5pm', '中午 12 点 – 下午 5 点'),
     txtPair(b.greet_afternoon_en, b.greet_afternoon_cn,
       ({ en, cn }) => updateBlockSilent(b.id, { greet_afternoon_en: en, greet_afternoon_cn: cn }),
       { en: 'Good afternoon', cn: '下午好' })));
-  m.appendChild(field(T('Evening override', '傍晚问候覆盖'), T('5pm – 10pm', '下午 5 点 – 晚上 10 点'),
+  secContent.appendChild(field(T('Evening greeting', '傍晚问候'), T('5pm – 10pm', '下午 5 点 – 晚上 10 点'),
     txtPair(b.greet_evening_en, b.greet_evening_cn,
       ({ en, cn }) => updateBlockSilent(b.id, { greet_evening_en: en, greet_evening_cn: cn }),
       { en: 'Good evening', cn: '晚上好' })));
-  m.appendChild(field(T('Night override', '夜间问候覆盖'), T('10pm – 5am', '晚上 10 点 – 凌晨 5 点'),
+  secContent.appendChild(field(T('Night greeting', '夜间问候'), T('10pm – 5am', '晚上 10 点 – 凌晨 5 点'),
     txtPair(b.greet_night_en, b.greet_night_cn,
       ({ en, cn }) => updateBlockSilent(b.id, { greet_night_en: en, greet_night_cn: cn }),
       { en: 'Hi night-owl', cn: '夜深了' })));
+  secContent.appendChild(field(T('Button text', '按钮文字'), T('Optional. Leave empty to hide the link.', '可选。留空则隐藏链接。'),
+    txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
+  secContent.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. wallet · me · membership', '按钮跳转到哪里。例如 wallet · me · membership'),
+    txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'wallet')));
 
-  m.appendChild(field(T('Show points balance', '显示积分余额'),
-    T('Off hides the "★ 228 pts · 抵¥2.28" line. Keep on to make the points feel valuable.', '关闭则隐藏「★ 228 积分 · 抵¥2.28」一行。保持开启可让积分更有价值感。'),
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
+    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
+    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  secColours.appendChild(field(T('Accent (points line)', '强调色(积分行)'), '',
+    sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+
+  secBehaviour.appendChild(field(T('Show points balance', '显示积分余额'),
+    T('Off hides the "★ 228 pts · 抵¥2.28" line. Keep it on to make points feel valuable.', '关闭则隐藏「★ 228 积分 · 抵¥2.28」一行。保持开启可让积分更有价值感。'),
     sel(b.show_points === false ? '0' : '1', [
       { value: '1', label: T('Show pts + ¥-value line', '显示积分 + ¥ 价值行') },
       { value: '0', label: T('Hide — name + greeting only', '隐藏 — 仅名字 + 问候语') },
     ], v => updateBlock(b.id, { show_points: v === '1' }))));
-  m.appendChild(field(T('Time-of-day emoji', '时段表情'), T('Prepend 🌅 ☀️ 🌙 🌟 to the greeting based on hour.', '根据时段在问候语前加上 🌅 ☀️ 🌙 🌟。'),
+  secBehaviour.appendChild(field(T('Time-of-day emoji', '时段表情'), T('Add 🌅 ☀️ 🌙 🌟 before the greeting, based on the time of day.', '根据时段在问候语前加上 🌅 ☀️ 🌙 🌟。'),
     sel(b.show_tod_emoji || 'off', TOD_EMOJI_OPTIONS,
         v => updateBlock(b.id, { show_tod_emoji: v }))));
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
-    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
-    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Accent (points line)', '强调色(积分行)'), '',
-    sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
-  m.appendChild(field(T('CTA label', '按钮文字'), T('Optional. Leave blank to hide the link line.', '可选。留空则隐藏链接行。'),
-    txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-  m.appendChild(field(T('CTA target', '按钮目标'), T('e.g. wallet · me · membership', '例如 wallet · me · membership'),
-    txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'wallet')));
 }
 
 function buildKitchenStatusForm(m, b) {
@@ -11896,9 +11906,13 @@ function buildLeaderboardForm(m, b) {
 }
 
 function buildCountdownForm(m, b) {
-  m.appendChild(field(T('Kicker', '小标题'), T('Small uppercase label above the title.', '标题上方的小号大写标签。'),
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
+
+  secContent.appendChild(field(T('Small heading', '小标题'), T('A small line above the title.', '标题上方的一行小字。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field(T('Title', '标题'), '',
+  secContent.appendChild(field(T('Title', '标题'), '',
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
 
   // datetime-local needs `YYYY-MM-DDTHH:mm` in local time; convert from
@@ -11919,25 +11933,24 @@ function buildCountdownForm(m, b) {
     const d = new Date(dt.value);
     if (!isNaN(d.getTime())) updateBlock(b.id, { ends_at: d.toISOString() });
   });
-  m.appendChild(field(T('Ends at', '结束时间'), T('Local time. The clock ticks down to this moment, then shows the ended message.', '本地时间。倒计时归零到此刻后,显示结束文案。'), dt));
+  secContent.appendChild(field(T('Ends at', '结束时间'), T('Your local time. The countdown runs to this moment, then shows the ended message below.', '你的本地时间。倒计时到此刻后,显示下方的结束文案。'), dt));
+  secContent.appendChild(field(T('Button text', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
+    txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
+  secContent.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. shop · category:5 · product:12', '按钮跳转到哪里。例如 shop · category:5 · product:12'),
+    txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'shop')));
+  secContent.appendChild(field(T('Ended message', '结束文案'), T('Shown after the countdown reaches zero.', '倒计时归零后显示。'),
+    txtPair(b.ended_text_en, b.ended_text_cn, ({ en, cn }) => updateBlockSilent(b.id, { ended_text_en: en, ended_text_cn: cn }))));
 
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), T('Use a contrasting brand colour for the digits.', '为数字选择对比鲜明的品牌色。'),
+  secColours.appendChild(field(T('Text colour', '文字颜色'), T('Pick a colour that stands out for the numbers.', '为数字选择一个醒目的颜色。'),
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Urgency animation', '紧迫感动画'), T('Pulse the digit cells as the deadline approaches.', '临近截止时让数字格闪动。'),
-    sel(b.urgency_anim || 'pulse', URGENCY_ANIM_OPTIONS,
-        v => updateBlock(b.id, { urgency_anim: v }))));
-  m.appendChild(field(T('Button colour', '按钮颜色'), T('Fill of the action button. Label colour auto-adjusts for contrast.', '操作按钮的填充色。文字颜色自动调整以保证对比度。'),
+  secColours.appendChild(field(T('Button colour', '按钮颜色'), T('The colour of the button. The text colour is chosen for you so it stays easy to read.', '按钮的颜色。文字颜色会自动选择,保证清晰易读。'),
     sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
 
-  m.appendChild(field(T('Button label', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
-    txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-  m.appendChild(field(T('Button target', '按钮目标'), T('e.g. shop · category:5 · product:12', '例如 shop · category:5 · product:12'),
-    txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'shop')));
-
-  m.appendChild(field(T('Ended message', '结束文案'), T("Shown once the clock hits zero.", '倒计时归零后显示。'),
-    txtPair(b.ended_text_en, b.ended_text_cn, ({ en, cn }) => updateBlockSilent(b.id, { ended_text_en: en, ended_text_cn: cn }))));
+  secBehaviour.appendChild(field(T('Urgency animation', '紧迫感动画'), T('Make the numbers flash as the deadline gets close.', '临近截止时让数字闪动。'),
+    sel(b.urgency_anim || 'pulse', URGENCY_ANIM_OPTIONS,
+        v => updateBlock(b.id, { urgency_anim: v }))));
 }
 
 
