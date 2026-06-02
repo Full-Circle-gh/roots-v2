@@ -1,10 +1,11 @@
 const express = require('express');
 const db = require('../database');
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
+const { normalizeCategoryPair } = require('../lib/category-tree');
 const router = express.Router();
 
 const PRODUCT_COLS = `
-  p.id, p.name_en, p.name_cn, p.sku, p.category, p.recipe_id, p.status,
+  p.id, p.name_en, p.name_cn, p.sku, p.category, p.top_category, p.subcategory, p.recipe_id, p.status,
   p.sell_price, p.weight, p.barcode,
   p.description_en, p.description_cn, p.free_of,
   p.image_data, p.images, p.label_data,
@@ -29,7 +30,7 @@ const PRODUCT_COLS = `
 // GET /api/products/:id/image instead. The full GET /api/products/:id still
 // returns everything (PRODUCT_COLS) for the edit form and detail page.
 const PRODUCT_LIST_COLS = `
-  p.id, p.name_en, p.name_cn, p.sku, p.category, p.recipe_id, p.status,
+  p.id, p.name_en, p.name_cn, p.sku, p.category, p.top_category, p.subcategory, p.recipe_id, p.status,
   p.sell_price, p.weight, p.barcode,
   p.notes, p.created_at, p.updated_at,
   p.external_id, p.sort_order, p.stock_qty, p.tags,
@@ -300,7 +301,7 @@ router.post('/api/products/variants/reorder', requireAuth, requirePermission('pr
 
 // Body keys the form sends; whitelisted to keep the SQL boring.
 const FIELDS = [
-  'name_en', 'name_cn', 'sku', 'category', 'recipe_id', 'status',
+  'name_en', 'name_cn', 'sku', 'category', 'top_category', 'subcategory', 'recipe_id', 'status',
   'sell_price', 'weight', 'barcode',
   'description_en', 'description_cn', 'description_format', 'free_of',
   'image_data', 'images', 'label_data', 'notes',
@@ -428,6 +429,9 @@ function pickBody(body) {
 router.post('/api/products', requireAuth, requirePermission('products'), (req, res) => {
   const p = pickBody(req.body);
   if (!p.name_en) return res.status(400).json({ error: 'name_en required · 英文名称必填' });
+  // Validate the 2-level category pair against the canonical tree.
+  const cat = normalizeCategoryPair(p.top_category, p.subcategory);
+  p.top_category = cat.top; p.subcategory = cat.sub;
   // Keep the primary image_data in sync with the gallery's first photo.
   if ('images' in req.body && !('image_data' in req.body)) {
     const arr = (Array.isArray(req.body.images) ? req.body.images : []).filter(s => typeof s === 'string' && s);
@@ -474,6 +478,18 @@ router.put('/api/products/:id', requireAuth, requirePermission('products'), (req
     const arr = (Array.isArray(req.body.images) ? req.body.images : []).filter(s => typeof s === 'string' && s);
     present.push('image_data');
     p.image_data = arr.length ? arr[0] : null;
+  }
+  // Validate the 2-level category pair. On a partial update we re-validate the
+  // MERGED pair (current row + incoming) and always write BOTH columns, so
+  // changing the top clears a now-stale sub.
+  if ('top_category' in req.body || 'subcategory' in req.body) {
+    const cur = db.prepare('SELECT top_category, subcategory FROM products WHERE id = ?').get(req.params.id) || {};
+    const top = 'top_category' in req.body ? req.body.top_category : cur.top_category;
+    const sub = 'subcategory'  in req.body ? req.body.subcategory  : cur.subcategory;
+    const cat = normalizeCategoryPair(top, sub);
+    p.top_category = cat.top; p.subcategory = cat.sub;
+    if (!present.includes('top_category')) present.push('top_category');
+    if (!present.includes('subcategory'))  present.push('subcategory');
   }
   try {
     const setClause = present.map(f => `${f}=?`).join(',') + ',updated_at=CURRENT_TIMESTAMP';

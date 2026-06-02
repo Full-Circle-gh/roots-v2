@@ -11632,6 +11632,11 @@ async function showProductForm(id) {
             </select>
             <button type="button" class="btn btn-secondary btn-sm" onclick="showProdCatManager()">✏️</button>
           </div></div>
+        <div class="form-group"><label>Shop section 店面分类</label>
+          <select id="pf_top_cat"><option value="">— Select —</option></select>
+          <div class="help-tip-inline" style="font-size:11px;color:var(--ink-soft,#888);margin-top:3px">Controls the mini-app shop's left rail · 控制小程序店面左栏</div></div>
+        <div class="form-group"><label>Subcategory 子分类</label>
+          <select id="pf_subcat"><option value="">— Select —</option></select></div>
         <div class="form-group"><label>Sell Price ¥ 售价</label><input type="number" id="pf_price" value="${prod?.sell_price||''}" placeholder="0.00" step="0.01"></div>
         <div class="form-group form-col-2">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
@@ -11871,6 +11876,9 @@ async function showProductForm(id) {
 
   // Set up file inputs on body
   setupPfImgInputs();
+  // 2-level shop category (top_category + subcategory) — async populate the
+  // dependent dropdowns from the canonical tree, then select the product's pair.
+  pfLoadCatTree(prod && prod.top_category, prod && prod.subcategory);
   // Autosave wiring — only for existing products. Delegated listener on the
   // overlay catches input/change on every field (text, number, select,
   // checkbox, textarea). Hidden inputs we set programmatically (image data,
@@ -14675,11 +14683,42 @@ function saveProdCatsFromDOM() {
 
 // Collects the product form into the JSON payload the API expects. Shared
 // between the explicit Save click and the autosave path so they can't drift.
+// Shop category tree (top_category → subcategory), shared with the mini-app
+// shop and Mini App Backend via the public /api/retail/category-tree endpoint.
+let _pfCatTree = null;
+async function pfLoadCatTree(selTop, selSub) {
+  if (!_pfCatTree) {
+    try {
+      const r = await fetch('/api/retail/category-tree');
+      const d = await r.json();
+      _pfCatTree = (d && d.success && Array.isArray(d.data)) ? d.data : [];
+    } catch { _pfCatTree = []; }
+  }
+  const topSel = document.getElementById('pf_top_cat');
+  const subSel = document.getElementById('pf_subcat');
+  if (!topSel || !subSel) return;
+  topSel.innerHTML = '<option value="">— Select —</option>' +
+    _pfCatTree.map(t => `<option value="${esc(t.name)}" ${selTop===t.name?'selected':''}>${esc(t.name)} · ${esc(t.name_cn||'')}</option>`).join('');
+  pfFillSubCats(selTop, selSub);
+  topSel.onchange = () => { pfFillSubCats(topSel.value, ''); };
+}
+function pfFillSubCats(topName, selSub) {
+  const subSel = document.getElementById('pf_subcat');
+  if (!subSel) return;
+  const node = (_pfCatTree || []).find(t => t.name === topName);
+  const subs = node ? (node.subs || []) : [];
+  subSel.innerHTML = '<option value="">— Select —</option>' +
+    subs.map(s => `<option value="${esc(s.name)}" ${selSub===s.name?'selected':''}>${esc(s.name)} · ${esc(s.name_cn||'')}</option>`).join('');
+  subSel.disabled = subs.length === 0;
+}
+
 function _pfCollect() {
   const freeOfChecked = ['gluten','nuts','soy','dairy','egg','5spice'].filter(id=>document.getElementById('pf_fo_'+id)?.checked);
   return {
     name_en: v('pf_en'), name_cn: v('pf_cn'), sku: v('pf_sku'),
     category: v('pf_cat'), status: v('pf_status'),
+    top_category: v('pf_top_cat') || null,
+    subcategory:  v('pf_subcat') || null,
     sell_price: parseFloat(v('pf_price'))||0,
     is_market: document.getElementById('pf_is_market')?.checked ? 1 : 0,
     is_restock_only: document.getElementById('pf_is_restock_only')?.checked ? 1 : 0,

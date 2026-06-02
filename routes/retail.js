@@ -20,7 +20,7 @@ const inventory = require('../lib/inventory');
 const geocode = require('../lib/geocode');
 const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
-const { CATEGORY_TREE } = require('../lib/category-tree');
+const { CATEGORY_TREE, normalizeCategoryPair } = require('../lib/category-tree');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
 const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
 const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
@@ -469,18 +469,6 @@ const PRODUCT_BADGES = ['new', 'pop', 'sale', 'hot'];
 function sanitizeProductBadge(v) {
   const t = String(v == null ? '' : v).trim().toLowerCase();
   return PRODUCT_BADGES.includes(t) ? t : null;
-}
-// Validate a (top_category, subcategory) pair against the canonical tree so
-// the shop's left rail / sub-headings only ever see known names. Unknown top
-// → both cleared; unknown/blank sub under a valid top → top kept, sub cleared.
-function normalizeCategoryPair(top, sub) {
-  const t = String(top == null ? '' : top).trim();
-  if (!t) return { top: null, sub: null };
-  const topNode = CATEGORY_TREE.find(x => x.name === t);
-  if (!topNode) return { top: null, sub: null };
-  const s = String(sub == null ? '' : sub).trim();
-  const subNode = s ? topNode.subs.find(x => x.name === s) : null;
-  return { top: topNode.name, sub: subNode ? subNode.name : null };
 }
 function resolveBundle(jsonStr) {
   if (typeof jsonStr !== 'string' || !jsonStr.trim()) return null;
