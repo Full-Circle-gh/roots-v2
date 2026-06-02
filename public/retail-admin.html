@@ -6365,10 +6365,13 @@
       .lb-field input[type="number"],
       .lb-field textarea,
       .lb-field select {
-        background: var(--bg-elev-1); border: 1px solid var(--line);
+        /* background-color (not the shorthand) so the global `select`
+           chevron image + no-repeat + right-aligned position survive. */
+        background-color: var(--bg-elev-1); border: 1px solid var(--line);
         border-radius: 6px; padding: 8px 10px; color: var(--text-1);
         font: inherit; font-size: 13px; width: 100%; box-sizing: border-box;
       }
+      .lb-field select { padding-right: 32px; }
       .lb-field textarea { resize: vertical; min-height: 60px; }
       .lb-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
       @media (max-width: 600px) { .lb-row-2 { grid-template-columns: 1fr; } }
