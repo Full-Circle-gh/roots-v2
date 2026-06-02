@@ -540,18 +540,24 @@
     gap: var(--s3); margin-bottom: var(--s3);
   }
   .db-kpi {
-    background: var(--bg-pane); border: 1px solid var(--line-soft);
+    position: relative;
+    background: var(--bg-pane); border: 1px solid var(--line);
     border-radius: var(--r-lg); padding: var(--s4);
     display: flex; flex-direction: column; gap: 4px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
   }
   .db-kpi .lbl {
     font-family: var(--f-mono);
-    font-size: 10px; text-transform: uppercase; letter-spacing: .14em;
-    color: var(--text-3); font-weight: 500;
+    font-size: 10px; text-transform: uppercase; letter-spacing: .12em;
+    color: var(--text-2); font-weight: 500;
   }
-  /* Headline stat — Plex Sans Light billboard number (brand: never bold). */
-  .db-kpi .val { font-size: 32px; font-weight: 300; letter-spacing: -.01em; color: var(--text-1); font-variant-numeric: tabular-nums; line-height: 1.05; }
-  /* Revenue is the hero financial signal — Tea Green per the brand. */
+  /* Headline stat — Plex Sans medium so the number leads the card, not whispers. */
+  .db-kpi .val { font-size: 38px; font-weight: 500; letter-spacing: -.02em; color: var(--text-1); font-variant-numeric: tabular-nums; line-height: 1.05; }
+  /* Revenue is the hero financial signal — Tea Green + a focal accent bar. */
+  .db-kpi.accent::before {
+    content: ""; position: absolute; left: 0; top: 12px; bottom: 12px;
+    width: 3px; border-radius: 0 3px 3px 0; background: var(--accent);
+  }
   .db-kpi.accent .val { color: var(--accent); }
   .db-kpi .sub { font-size: 11px; color: var(--text-3); }
   .db-delta { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -8323,22 +8329,22 @@
           <div class="group-card">
             <div class="group-card-head">
               <h3>Where to show · 显示位置</h3>
-              <div class="muted">Pick which pages display the chat button. Me tab is on by default. · 选择哪些页面显示客服按钮;"我的"页默认开启。</div>
+              <div class="muted">Pick which pages show the floating chat bubble. The look below applies to every page you tick. · 选择哪些页面显示悬浮客服按钮;下方样式将应用于所有勾选的页面。</div>
             </div>
             <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_me"> Me tab — menu row
+              <input type="checkbox" id="cfg-cs-show_me"> Me tab
             </label>
             <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_home"> Home tab — floating bubble bottom-right
+              <input type="checkbox" id="cfg-cs-show_home"> Home tab
             </label>
             <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_product"> Product detail — sticky action row
+              <input type="checkbox" id="cfg-cs-show_product"> Product detail
             </label>
             <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_checkout"> Checkout — header row
+              <input type="checkbox" id="cfg-cs-show_checkout"> Checkout
             </label>
             <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_order"> Order detail — under status timeline
+              <input type="checkbox" id="cfg-cs-show_order"> Order detail
             </label>
           </div>
 
@@ -8346,7 +8352,7 @@
           <div class="group-card">
             <div class="group-card-head">
               <h3>Floating bubble look · 悬浮按钮样式</h3>
-              <div class="muted">Style the round chat bubble on the Home & Favorites tabs — size, shape, colour, icon and where it sits. · 自定义首页与收藏页的悬浮客服按钮。</div>
+              <div class="muted">Style the round chat bubble — size, shape, colour, icon and where it sits. Applies on every page you enabled above. · 自定义悬浮客服按钮的大小、形状、颜色、图标与位置;应用于以上所有已开启的页面。</div>
             </div>
             <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-start;">
               <div style="flex: 1; min-width: 160px;">
