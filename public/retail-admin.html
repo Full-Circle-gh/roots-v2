@@ -5154,14 +5154,16 @@
   <!-- ─── CATEGORIES (2-level tree editor) ─── -->
   <section id="tab-categories">
     <style>
-      #cat-editor .cat-top { padding: 14px 16px; }
-      #cat-editor .cat-reorder .btn-icon {
-        border: 1px solid var(--line, #e3e3e0); background: #fff; border-radius: 6px;
-        line-height: 1; font-size: 10px; padding: 2px 5px; cursor: pointer; color: var(--muted, #888);
+      #cat-editor .cat-top { padding: 14px 16px; transition: box-shadow .12s, opacity .12s; }
+      #cat-editor .cat-drag {
+        cursor: grab; user-select: none; color: var(--muted, #9a9a93); font-size: 16px;
+        line-height: 1; padding: 4px 3px; border-radius: 6px; flex: 0 0 auto;
       }
-      #cat-editor .cat-reorder .btn-icon:hover:not(:disabled) { background: #f4f4f2; color: var(--ink, #222); }
-      #cat-editor .cat-reorder .btn-icon:disabled { opacity: .3; cursor: default; }
-      #cat-editor .cat-reorder .btn-icon + .btn-icon { margin-top: 2px; }
+      #cat-editor .cat-drag:hover { background: #f1f1ee; color: var(--ink, #444); }
+      #cat-editor .cat-drag:active { cursor: grabbing; }
+      #cat-editor .cat-dragging { opacity: .45; }
+      #cat-editor .cat-top.cat-droptarget { box-shadow: 0 0 0 2px var(--lime, #8db600) inset; }
+      #cat-editor .cat-subrow.cat-droptarget { background: rgba(141,182,0,.10); border-radius: 6px; }
       #cat-editor .cat-del { color: #b42318; }
       #cat-editor .cat-subrow input { padding: 6px 9px; font-size: 13px; }
       #cat-editor button.btn-icon.cat-del { border: 1px solid #f3d0cc; background: #fff; border-radius: 6px; padding: 4px 8px; }
@@ -8985,11 +8987,6 @@ function catRemoveTop(ti) {
   if (!confirm(msg)) return;
   catModel.splice(ti, 1); catRender(); catUpdateDirty();
 }
-function catMoveTop(ti, dir) {
-  const j = ti + dir; if (j < 0 || j >= catModel.length) return;
-  const [m] = catModel.splice(ti, 1); catModel.splice(j, 0, m);
-  catRender(); catUpdateDirty();
-}
 function catAddSub(ti) {
   catModel[ti].subs = catModel[ti].subs || [];
   catModel[ti].subs.push({ id: '', name: '', name_cn: '' });
@@ -9001,12 +8998,6 @@ function catAddSub(ti) {
 function catRemoveSub(ti, si) {
   catModel[ti].subs.splice(si, 1); catRender(); catUpdateDirty();
 }
-function catMoveSub(ti, si, dir) {
-  const subs = catModel[ti].subs; const j = si + dir;
-  if (j < 0 || j >= subs.length) return;
-  const [m] = subs.splice(si, 1); subs.splice(j, 0, m);
-  catRender(); catUpdateDirty();
-}
 
 function catRender() {
   const host = $('#cat-editor'); if (!host) return;
@@ -9016,22 +9007,22 @@ function catRender() {
   }
   host.innerHTML = catModel.map((t, ti) => {
     const subs = (t.subs || []).map((s, si) => `
-      <div class="cat-subrow" id="cat-sub-${ti}-${si}" style="display:flex;gap:6px;align-items:center;padding:5px 0;">
-        <div class="cat-reorder" style="display:flex;flex-direction:column;">
-          <button class="btn-icon" type="button" title="Move up" onclick="catMoveSub(${ti},${si},-1)" ${si === 0 ? 'disabled' : ''}>▲</button>
-          <button class="btn-icon" type="button" title="Move down" onclick="catMoveSub(${ti},${si},1)" ${si === subs_len(t) - 1 ? 'disabled' : ''}>▼</button>
-        </div>
+      <div class="cat-subrow" id="cat-sub-${ti}-${si}"
+           ondragover="catDragOver(event,'sub',${ti})" ondrop="catDrop(event,'sub',${ti},${si})" ondragleave="catDragLeave(event)"
+           style="display:flex;gap:6px;align-items:center;padding:5px 0;">
+        <span class="cat-drag" draggable="true" title="Drag to reorder · 拖动排序"
+              ondragstart="catDragStart(event,'sub',${ti},${si})" ondragend="catDragEnd()">⠿</span>
         <input type="text" class="input" data-f="name" value="${escapeAttr(s.name)}" placeholder="Subcategory (EN)" oninput="catSet(${ti},${si},'name',this.value)" style="flex:1;">
         <input type="text" class="input" data-f="name_cn" value="${escapeAttr(s.name_cn)}" placeholder="子分类 (中文)" oninput="catSet(${ti},${si},'name_cn',this.value)" style="flex:1;">
         <button class="btn-icon cat-del" type="button" title="Remove subcategory" onclick="catRemoveSub(${ti},${si})">✕</button>
       </div>`).join('');
     return `
-    <div class="card cat-top" id="cat-top-${ti}" style="margin-bottom:var(--s4);">
+    <div class="card cat-top" id="cat-top-${ti}"
+         ondragover="catDragOver(event,'top',${ti})" ondrop="catDrop(event,'top',${ti})" ondragleave="catDragLeave(event)"
+         style="margin-bottom:var(--s4);">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
-        <div class="cat-reorder" style="display:flex;flex-direction:column;">
-          <button class="btn-icon" type="button" title="Move up" onclick="catMoveTop(${ti},-1)" ${ti === 0 ? 'disabled' : ''}>▲</button>
-          <button class="btn-icon" type="button" title="Move down" onclick="catMoveTop(${ti},1)" ${ti === catModel.length - 1 ? 'disabled' : ''}>▼</button>
-        </div>
+        <span class="cat-drag cat-drag-top" draggable="true" title="Drag to reorder · 拖动排序"
+              ondragstart="catDragStart(event,'top',${ti})" ondragend="catDragEnd()">⠿</span>
         <input type="text" class="input" data-f="name" value="${escapeAttr(t.name)}" placeholder="Top category (EN)" oninput="catSet(${ti},-1,'name',this.value)" style="flex:1;font-weight:700;">
         <input type="text" class="input" data-f="name_cn" value="${escapeAttr(t.name_cn)}" placeholder="主分类 (中文)" oninput="catSet(${ti},-1,'name_cn',this.value)" style="flex:1;font-weight:700;">
         <button class="btn btn-sm cat-del" type="button" onclick="catRemoveTop(${ti})">Remove · 删除</button>
@@ -9043,7 +9034,48 @@ function catRender() {
     </div>`;
   }).join('');
 }
-function subs_len(t) { return (t.subs || []).length; }
+
+// ── Drag-and-drop reordering ───────────────────────────────────────────────
+// Tops reorder among themselves; subs reorder only WITHIN their parent top
+// (no cross-parent move, which keeps the rename-migration model simple — a
+// reorder changes neither name nor parent, so it never touches product rows).
+let catDrag = null;   // { kind:'top'|'sub', ti, si }
+function catDragStart(ev, kind, ti, si) {
+  catDrag = { kind, ti, si };
+  ev.dataTransfer.effectAllowed = 'move';
+  try { ev.dataTransfer.setData('text/plain', kind); } catch (e) {}
+  const row = ev.target.closest('.cat-top, .cat-subrow');
+  if (row) setTimeout(() => row.classList.add('cat-dragging'), 0);
+}
+function catDragEnd() {
+  catDrag = null;
+  $$('.cat-dragging').forEach(el => el.classList.remove('cat-dragging'));
+  $$('.cat-droptarget').forEach(el => el.classList.remove('cat-droptarget'));
+}
+function catDragOver(ev, kind, ti) {
+  if (!catDrag || catDrag.kind !== kind) return;          // only same-kind drops
+  if (kind === 'sub' && catDrag.ti !== ti) return;        // subs stay in their top
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'move';
+  const row = ev.currentTarget;
+  $$('.cat-droptarget').forEach(el => { if (el !== row) el.classList.remove('cat-droptarget'); });
+  row.classList.add('cat-droptarget');
+}
+function catDragLeave(ev) { ev.currentTarget.classList.remove('cat-droptarget'); }
+function catDrop(ev, kind, ti, si) {
+  if (!catDrag || catDrag.kind !== kind) return;
+  ev.preventDefault();
+  if (kind === 'top') {
+    const from = catDrag.ti;
+    if (from !== ti) { const m = catModel.splice(from, 1)[0]; catModel.splice(ti, 0, m); }
+  } else {
+    if (catDrag.ti !== ti) { catDragEnd(); return; }
+    const subs = catModel[ti].subs, from = catDrag.si;
+    if (from !== si) { const m = subs.splice(from, 1)[0]; subs.splice(si, 0, m); }
+  }
+  catDragEnd();
+  catRender(); catUpdateDirty();
+}
 
 async function catSave() {
   // Client-side guards mirror the server: no blank names, no dups.
