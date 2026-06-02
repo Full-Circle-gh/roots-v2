@@ -10325,36 +10325,54 @@ function buildGridForm(m, b) {
   const k = getBi(b, 'kicker');
   const t = getBi(b, 'title');
   const view = b.view || 'grid';
-  m.appendChild(field(T('Layout', '版式'), T('Grid = fixed N columns. Scroll = horizontal rail (good for "related products"). List = single column with bigger images.', '网格 = 固定 N 列。横滑 = 横向滑动条(适合「相关商品」)。列表 = 单列大图。'),
+  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
+
+  // ── Style & layout ──────────────────────────────────────────────────
+  secLayout.appendChild(field(T('Layout', '版式'), T('Grid = a fixed number of columns. Scroll = a row you swipe sideways (good for "related products"). List = one column with bigger images.', '网格 = 固定列数。横滑 = 可左右滑动的一行(适合「相关商品」)。列表 = 单列大图。'),
     sel(view, [
       { value: 'grid',   label: T('Grid — N columns', '网格 — N 列') },
-      { value: 'scroll', label: T('Scroll — horizontal rail', '横滑 — 横向滑动') },
+      { value: 'scroll', label: T('Scroll — swipe sideways', '横滑 — 左右滑动') },
       { value: 'list',   label: T('List — single column, big images', '列表 — 单列大图') },
     ], v => updateBlock(b.id, { view: v }))));
-  m.appendChild(field(T('Kicker', '小标题'), '',
+  if (view === 'grid') {
+    secLayout.appendChild(field(T('Columns', '列数'), '', sel(b.columns, [
+      { value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' },
+    ], v => updateBlock(b.id, { columns: Number(v) }))));
+  }
+  secLayout.appendChild(field(T('Limit (max products)', '数量上限(最多商品)'), view === 'scroll' ? T('How many to show. Extra ones scroll sideways.', '显示多少件。多出的可左右滑动。') : '',
+    num(b.limit, v => updateBlock(b.id, { limit: v }), { min: 1, max: 24 })));
+  secLayout.appendChild(field(T('Density', '密度'), T('How much space between cards.', '卡片之间的间距。'),
+    sel(b.density || 'normal', DENSITY_OPTIONS,
+        v => updateBlock(b.id, { density: v }))));
+
+  // ── Content ─────────────────────────────────────────────────────────
+  secContent.appendChild(field(T('Small heading', '小标题'), '',
     txtPair(k.en, k.cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn, kicker: undefined }))));
-  m.appendChild(field(T('Section title', '区块标题'), '',
+  secContent.appendChild(field(T('Section title', '区块标题'), '',
     txtPair(t.en, t.cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn, title: undefined }))));
-  m.appendChild(field(T('Source', '来源'), '', sel(b.source_type, [
+  secContent.appendChild(field(T('Source', '来源'), '', sel(b.source_type, [
     { value: 'category',    label: T('By category', '按分类') },
     { value: 'manual',      label: T('Hand-picked products', '手动挑选商品') },
     { value: 'top_selling', label: T('Top sellers — auto from sales data', '热销 — 自动取自销售数据') },
     { value: 'new_arrivals', label: T('New arrivals — newest products', '新品 — 最新商品') },
   ], v => updateBlock(b.id, { source_type: v }))));
   if (b.source_type === 'category') {
-    m.appendChild(field(T('Category', '分类'), '', sel(b.category_id || '', [
+    secContent.appendChild(field(T('Category', '分类'), '', sel(b.category_id || '', [
       { value: '', label: T('— pick one —', '— 选择一个 —') },
       ...state.categories.map(c => ({ value: c.id, label: c.name })),
     ], v => updateBlock(b.id, { category_id: v ? Number(v) : null }))));
   } else if (b.source_type === 'top_selling') {
-    m.appendChild(field(T('Window', '时间窗口'), T('Sales period to aggregate.', '用于汇总的销售周期。'),
+    secContent.appendChild(field(T('Window', '时间窗口'), T('How far back to count sales.', '统计多久以内的销量。'),
       sel(b.top_window || '7d', [
         { value: '7d',  label: T('Last 7 days', '最近 7 天') },
         { value: '30d', label: T('Last 30 days', '最近 30 天') },
         { value: '90d', label: T('Last 90 days', '最近 90 天') },
         { value: 'all', label: T('All time', '全部时间') },
       ], v => updateBlock(b.id, { top_window: v }))));
-    m.appendChild(field(T('Channel', '渠道'), T('Where the sales come from.', '销售数据的来源渠道。'),
+    secContent.appendChild(field(T('Channel', '渠道'), T('Where the sales come from.', '销售数据的来源渠道。'),
       sel(b.top_channel || 'combined', [
         { value: 'combined', label: T('Combined — mini app + in-store (recommended)', '合并 — 小程序 + 门店(推荐)') },
         { value: 'retail',   label: T('Mini app only', '仅小程序') },
@@ -10366,7 +10384,7 @@ function buildGridForm(m, b) {
     hintWrap.className = 'helper';
     hintWrap.style.cssText = 'margin: -4px 0 12px; padding: 8px 10px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
     hintWrap.textContent = T('Loading order data…', '正在加载订单数据…');
-    m.appendChild(hintWrap);
+    secContent.appendChild(hintWrap);
     fetch(`/api/retail/products/top?channel=${encodeURIComponent(b.top_channel || 'combined')}&window=${encodeURIComponent(b.top_window || '7d')}&limit=${b.limit || 6}`)
       .then(r => r.json())
       .then(j => {
@@ -10385,33 +10403,27 @@ function buildGridForm(m, b) {
     hint.className = 'helper';
     hint.style.cssText = 'margin: -4px 0 12px; padding: 8px 10px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
     hint.innerHTML = B('Shows your <b>newest products</b> first (by date added). Updates automatically as you add stock.', '按上架时间展示<b>最新商品</b>。新增库存时自动更新。');
-    m.appendChild(hint);
+    secContent.appendChild(hint);
   } else {
-    m.appendChild(field(T('Products', '商品'), T('Click to toggle. Search to filter.', '点击切换。搜索筛选。'), productPicker({
+    secContent.appendChild(field(T('Products', '商品'), T('Click to add or remove. Type to search.', '点击添加或移除。输入以搜索。'), productPicker({
       multi: true,
       value: b.product_ids || [],
       onChange: (v) => updateBlockSilent(b.id, { product_ids: v }),
     })));
   }
-  if (view === 'grid') {
-    m.appendChild(field(T('Columns', '列数'), '', sel(b.columns, [
-      { value: 1, label: '1' }, { value: 2, label: '2' }, { value: 3, label: '3' },
-    ], v => updateBlock(b.id, { columns: Number(v) }))));
-  }
-  m.appendChild(field(T('Limit (max products)', '数量上限(最多商品)'), view === 'scroll' ? T('Cap the rail. Scrolls horizontally if more fit.', '限制滑动条数量。超出则横向滚动。') : '',
-    num(b.limit, v => updateBlock(b.id, { limit: v }), { min: 1, max: 24 })));
-  m.appendChild(field(T('Density', '密度'), T('How much breathing room between cards.', '卡片之间的留白程度。'),
-    sel(b.density || 'normal', DENSITY_OPTIONS,
-        v => updateBlock(b.id, { density: v }))));
+
+  // ── Colours ─────────────────────────────────────────────────────────
+  secColours.appendChild(field(T('Background colour', '背景颜色'), T('A background colour behind the grid. Default = transparent (the page colour shows through).', '网格后面的背景色。默认 = 透明(显示页面底色)。'),
+    sel(b.bg_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  secColours.appendChild(field(T('Sale / accent colour', '促销 / 强调色'), T('Colours the sale price, flash badge and "X sold" text. Default = brand red. Rank medals keep their own colours.', '为促销价、秒杀角标和「已售」文字着色。默认 = 品牌红。排名奖牌保留自身颜色。'),
+    sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+
+  // ── Behaviour ───────────────────────────────────────────────────────
   if (b.source_type === 'top_selling') {
-    m.appendChild(field(T('Rank badges', '排名角标'), T('Number ribbons on the top sellers.', '热销品上的数字角标。'),
+    secBehaviour.appendChild(field(T('Rank badges', '排名角标'), T('Number badges on the top sellers.', '热销品上的数字角标。'),
       sel(b.rank_badge || 'top_3', RANK_BADGE_OPTIONS,
           v => updateBlock(b.id, { rank_badge: v }))));
   }
-  m.appendChild(field(T('Surface colour', '背景颜色'), T('Paints a panel behind the grid. Default = transparent (page colour shows through).', '在网格后绘制底色面板。默认 = 透明(显示页面底色)。'),
-    sel(b.bg_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Sale / accent colour', '促销 / 强调色'), T('Tints the sale price, flash badge, and "X sold" caption. Default = brand red. Rank medals keep their own colours.', '为促销价、秒杀角标和「已售」文字着色。默认 = 品牌红。排名奖牌保留自身颜色。'),
-    sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 }
 function buildSpacerForm(m, b) {
   const secLayout = inspectorSection(m, b.type, 'layout', T('Style & layout', '样式与版式'), { open: true });
@@ -11563,26 +11575,30 @@ function buildStoreInfoForm(m, b) {
     b.stores = seed;
   }
 
-  m.appendChild(field(T('Kicker', '小标题'), '',
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
+
+  secContent.appendChild(field(T('Small heading', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
+
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Open dot colour', '营业状态点颜色'), '',
+  secColours.appendChild(field(T('Open dot colour', '营业状态点颜色'), '',
     sel(b.open_color || 'pea-sprout', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { open_color: v }))));
-  m.appendChild(field(T('Closed dot colour', '打烊状态点颜色'), '',
+  secColours.appendChild(field(T('Closed dot colour', '打烊状态点颜色'), '',
     sel(b.closed_color || 'berry-punch', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { closed_color: v }))));
-  m.appendChild(field(T('Button colour', '按钮颜色'), T('Fill of each store\'s action button. Label colour auto-adjusts for contrast.', '每个门店操作按钮的填充色。文字颜色自动调整以保证对比度。'),
+  secColours.appendChild(field(T('Button colour', '按钮颜色'), T('The colour of each store\'s button. The text colour is chosen for you so it stays easy to read.', '每个门店按钮的颜色。文字颜色会自动选择,保证清晰易读。'),
     sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
 
-  // ── Stores repeater ────────────────────────────────────────────────
+  // ── Stores repeater (Content) ──────────────────────────────────────
   const listWrap = document.createElement('div');
   listWrap.className = 'field';
   listWrap.innerHTML = `<label>${B('Stores', '门店')}</label>`;
   const helper = document.createElement('div');
   helper.className = 'helper';
-  helper.textContent = T('Add one card per location. Open / close hour drives the live status dot; ETA shows only while open.', '每个门店添加一张卡片。开门 / 关门时间驱动实时状态点;预计时间仅在营业时显示。');
+  helper.textContent = T('Add one card per store. The open/close hours set the live status dot; the ETA only shows while open.', '每个门店添加一张卡片。开门/关门时间决定实时状态点;预计时间仅在营业时显示。');
   listWrap.appendChild(helper);
 
   const cardsHost = document.createElement('div');
@@ -11627,7 +11643,7 @@ function buildStoreInfoForm(m, b) {
         txtPair(s.name_en, s.name_cn, ({ en, cn }) => setFields({ name_en: en, name_cn: cn }))));
       card.appendChild(field(T('Address', '地址'), '',
         txtPair(s.address_en, s.address_cn, ({ en, cn }) => setFields({ address_en: en, address_cn: cn }))));
-      card.appendChild(field(T('Hours label', '营业时间标签'), T('Display text — e.g. "10:00 – 21:00" or "Mon–Sat · 10am–9pm".', '显示文字 — 例如「10:00 – 21:00」或「周一至周六 · 上午 10 点 – 晚 9 点」。'),
+      card.appendChild(field(T('Hours label', '营业时间标签'), T('Just the text shown — e.g. "10:00 – 21:00" or "Mon–Sat · 10am–9pm".', '仅显示的文字 — 例如「10:00 – 21:00」或「周一至周六 · 上午 10 点 – 晚 9 点」。'),
         txtPair(s.hours_en, s.hours_cn, ({ en, cn }) => setFields({ hours_en: en, hours_cn: cn }))));
 
       // Open / close hour pair
@@ -11636,7 +11652,7 @@ function buildStoreInfoForm(m, b) {
       hoursRow.innerHTML = `<label>${B('Open / close hour (24h)', '开门 / 关门时间(24 小时制)')}</label>`;
       const hoursHelp = document.createElement('div');
       hoursHelp.className = 'helper';
-      hoursHelp.textContent = T('Drives the live open/closed dot. Leave both blank to hide the dot. Closing past midnight is OK — set close to 1 / 2 / 3.', '驱动实时营业/打烊状态点。两者留空则隐藏状态点。跨午夜打烊也可以 — 关门时间设为 1 / 2 / 3。');
+      hoursHelp.textContent = T('Sets the live open/closed dot. Leave both blank to hide it. Closing after midnight is fine — set the close hour to 1 / 2 / 3.', '决定实时营业/打烊状态点。两者留空则隐藏。跨午夜打烊也可以 — 关门时间设为 1 / 2 / 3。');
       const pair = document.createElement('div');
       pair.style.cssText = 'display:flex;gap:10px;';
       const openIn  = num(s.open_hour,  v => setField('open_hour',  v), { min: 0, max: 23, step: 1 });
@@ -11647,13 +11663,13 @@ function buildStoreInfoForm(m, b) {
       hoursRow.appendChild(hoursHelp);
       card.appendChild(hoursRow);
 
-      card.appendChild(field(T('ETA (minutes)', '预计时间(分钟)'), T('Shown next to the open dot while open — e.g. "~25 min delivery". Set 0 to hide.', '营业时显示在状态点旁 — 例如「约 25 分钟送达」。设为 0 则隐藏。'),
+      card.appendChild(field(T('ETA (minutes)', '预计时间(分钟)'), T('Shown next to the open dot while open — e.g. "~25 min". Set 0 to hide.', '营业时显示在状态点旁 — 例如「约 25 分钟」。设为 0 则隐藏。'),
         num(s.eta_minutes, v => setField('eta_minutes', v), { min: 0, max: 240, step: 5 })));
-      card.appendChild(field(T('Phone', '电话'), T('Optional — tap-to-call when set.', '可选 — 设置后可点击拨打。'),
+      card.appendChild(field(T('Phone', '电话'), T('Optional — customers can tap to call.', '可选 — 顾客可点击拨打。'),
         txt(s.phone, v => setField('phone', v), '020-1234-5678')));
-      card.appendChild(field(T('Button label', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
+      card.appendChild(field(T('Button text', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
         txtPair(s.cta_label_en, s.cta_label_cn, ({ en, cn }) => setFields({ cta_label_en: en, cta_label_cn: cn }))));
-      card.appendChild(field(T('Button target', '按钮目标'), T('e.g. about · category:5 · product:7', '例如 about · category:5 · product:7'),
+      card.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. about · category:5 · product:7', '按钮跳转到哪里。例如 about · category:5 · product:7'),
         txt(s.cta_target, v => setField('cta_target', v), 'about')));
 
       cardsHost.appendChild(card);
@@ -11680,20 +11696,27 @@ function buildStoreInfoForm(m, b) {
     cardsHost.appendChild(addBtn);
   };
   renderCards();
-  m.appendChild(listWrap);
+  secContent.appendChild(listWrap);
 }
 
 function buildWecomContactForm(m, b) {
-  m.appendChild(field(T('Layout', '版式'),
-    T('Card — vertical, big button + QR. Strip — compact horizontal, smaller QR on the right.', '卡片 — 纵向,大按钮 + 二维码。条带 — 紧凑横向,二维码较小置于右侧。'),
+  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secConnect   = inspectorSection(m, b.type, 'connect',   T('Chat & QR setup', '客服与二维码设置'));
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
+
+  // ── Style & layout ──────────────────────────────────────────────────
+  secLayout.appendChild(field(T('Layout', '版式'),
+    T('Card — tall, with a big button and QR code. Strip — short and wide, with a smaller QR on the right.', '卡片 — 纵向,大按钮 + 二维码。条带 — 紧凑横向,二维码较小,在右侧。'),
     sel(b.view || 'card', [
       { value: 'card',  label: T('Card — full, centred QR', '卡片 — 完整、居中二维码') },
       { value: 'strip', label: T('Strip — compact, side QR', '条带 — 紧凑、侧边二维码') },
     ], v => updateBlock(b.id, { view: v }))));
 
   if ((b.view || 'card') === 'card') {
-    m.appendChild(field(T('Card style', '卡片风格'),
-      T('Four art directions — all use the colours + frame toggles below. Warm — playful cream pop, mascot over the top edge. Coupon — horizontal ticket with a perforated QR stub. Poster — big-headline editorial card. Compact — wide-short zigzag ticket.', '四种排版方向 — 均使用下方的颜色与边框开关。暖调 — 俏皮的奶油弹出卡,吉祥物探出顶边。优惠券 — 带打孔二维码副券的横向票券。海报 — 大标题编辑风卡片。紧凑 — 宽矮锯齿票券。'),
+    secLayout.appendChild(field(T('Card style', '卡片风格'),
+      T('Four looks — all use the colours and toggles below. Warm — a playful cream card with a mascot on the top edge. Coupon — a ticket shape with a tear-off QR. Poster — a big-headline card. Compact — a short, wide ticket.', '四种外观 — 均使用下方的颜色与开关。暖调 — 俏皮的奶油卡片,吉祥物在顶边。优惠券 — 票券造型,带可撕下的二维码。海报 — 大标题卡片。紧凑 — 短而宽的票券。'),
       sel(b.card_style || 'warm', [
         { value: 'warm',    label: T('Warm pop', '暖调弹出') },
         { value: 'coupon',  label: T('Coupon ticket', '优惠券票券') },
@@ -11702,86 +11725,84 @@ function buildWecomContactForm(m, b) {
       ], v => updateBlock(b.id, { card_style: v }))));
   }
 
-  m.appendChild(field(T('Kicker', '小标题'), T('Tiny uppercase label above the title.', '标题上方的小号大写标签。'),
+  // ── Content ─────────────────────────────────────────────────────────
+  secContent.appendChild(field(T('Small heading', '小标题'), T('A small line above the title.', '标题上方的一行小字。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field(T('Title', '标题'), '',
+  secContent.appendChild(field(T('Title', '标题'), '',
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  m.appendChild(field(T('Subtitle', '副标题'), T('One-line pitch — why add us.', '一行话术 — 为什么添加我们。'),
+  secContent.appendChild(field(T('Subtitle', '副标题'), T('One line — why customers should add you.', '一行话术 — 顾客为什么要添加你。'),
     txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
+  secContent.appendChild(field(T('Agent display name', '客服显示名称'), T('Optional — shown under the QR (e.g. "Roots Sales · 客服小李"). Leave empty to hide.', '可选 — 显示在二维码下方(例如「Roots Sales · 客服小李」)。留空则隐藏。'),
+    txt(b.agent_name, v => updateBlockSilent(b.id, { agent_name: v }), 'Roots Sales · 客服小李')));
+  secContent.appendChild(field(T('Hint text', '提示文字'), T('Short instruction under the QR. Leave both blank to use the default "Long-press QR · tap Add" / "长按二维码 · 识别添加".', '二维码下方的简短说明。两者留空则使用默认「Long-press QR · tap Add」/「长按二维码 · 识别添加」。'),
+    txtPair(b.hint_en, b.hint_cn, ({ en, cn }) => updateBlockSilent(b.id, { hint_en: en, hint_cn: cn }))));
+  secContent.appendChild(field(T('Member count (social proof)', '会员数(社交证明)'),
+    T('Card view only. Type a real number (e.g. "1,500+") to show a "Joined by 1,500+ members" line with avatars. Leave empty to hide — please do not invent a number.', '仅卡片版式。填写真实数字(如「1,500+」),显示带头像的「已有 1,500+ 位会员」一行。留空则隐藏 — 请勿编造数字。'),
+    txt(b.proof_count, v => updateBlockSilent(b.id, { proof_count: (v || '').trim() }), '1,500+')));
 
-  m.appendChild(field(T('Chat button', '客服按钮'),
-    T('Three modes (priority order): (1) if you upload a QR below, the button opens the QR full-screen so the customer can long-press → 添加朋友. (2) Else if you paste a WeCom 微信客服 URL below, the button calls wx.openCustomerServiceChat and lands the customer in your WeCom CSR session. (3) Else the button falls back to <button open-type="contact"> — routes to whichever CSR is bound in 小程序管理后台 → 设置 → 客服.', '三种模式(优先级顺序):(1)若在下方上传二维码,按钮会全屏打开二维码,顾客可长按 → 添加朋友。(2)否则若在下方粘贴企业微信「微信客服」链接,按钮调用 wx.openCustomerServiceChat,把顾客带入你的企微客服会话。(3)否则按钮回退到 <button open-type="contact"> — 路由到小程序管理后台 → 设置 → 客服中绑定的客服。'),
+  // ── Chat & QR setup ─────────────────────────────────────────────────
+  secConnect.appendChild(field(T('Chat button', '客服按钮'),
+    T('Controls the chat button. It adapts to your settings below: if you add a QR code, the button shows it full-screen for the customer to long-press and add. If you instead paste a WeCom 微信客服 link, the button opens your WeCom chat. If neither is set, it falls back to the mini-app\'s built-in customer-service contact.', '控制客服按钮。它会根据下方的设置自动适配:若添加二维码,按钮会全屏显示二维码,顾客长按即可添加。若改为粘贴企业微信「微信客服」链接,按钮会打开企微客服会话。若两者都没有,则回退到小程序自带的客服联系。'),
     sel(b.show_chat_button === false ? '0' : '1', [
-      { value: '1', label: T('Show — adapts to what you configure below', '显示 — 按下方配置自动适配') },
+      { value: '1', label: T('Show — adapts to your settings below', '显示 — 按下方配置自动适配') },
       { value: '0', label: T('Hide', '隐藏') },
     ], v => updateBlock(b.id, { show_chat_button: v === '1' }))));
 
-  m.appendChild(field(T('Chat button label', '客服按钮文字'), '',
+  secConnect.appendChild(field(T('Chat button text', '客服按钮文字'), '',
     txtPair(b.button_label_en, b.button_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { button_label_en: en, button_label_cn: cn }), { en: 'Chat with us', cn: '联系客服' })));
 
-  m.appendChild(field(T('WeCom 微信客服 URL', '企业微信「微信客服」链接'),
-    T('Paste a 微信客服 接入链接 from 企业微信管理后台 → 微信客服 → 创建/选择客服账号 → 接入网页/小程序 → 复制接入链接. Looks like "https://work.weixin.qq.com/kfid/kfc12345abc". When set (and no QR), the chat button routes to WeCom — not the OA\'s 公众号客服.', '从企业微信管理后台 → 微信客服 → 创建/选择客服账号 → 接入网页/小程序 → 复制接入链接,粘贴该「微信客服」接入链接。形如「https://work.weixin.qq.com/kfid/kfc12345abc」。设置后(且无二维码时),客服按钮将路由到企业微信 — 而非公众号客服。'),
+  secConnect.appendChild(field(T('WeCom 微信客服 link', '企业微信「微信客服」链接'),
+    T('Paste a 微信客服 link from 企业微信管理后台 → 微信客服 → (your account) → 接入网页/小程序 → copy link. It looks like "https://work.weixin.qq.com/kfid/kfc12345abc". When set (and no QR), the chat button opens WeCom instead of the official-account service.', '从企业微信管理后台 → 微信客服 → 创建/选择客服账号 → 接入网页/小程序 → 复制接入链接,粘贴该「微信客服」链接。形如「https://work.weixin.qq.com/kfid/kfc12345abc」。设置后(且无二维码时),客服按钮将打开企业微信,而非公众号客服。'),
     txt(b.wecom_kf_url, v => updateBlockSilent(b.id, { wecom_kf_url: (v || '').trim() }), 'https://work.weixin.qq.com/kfid/kfc…')));
 
-  m.appendChild(field(T('WeCom Corp ID (optional)', '企业微信 Corp ID(可选)'),
-    T('Required only for 企业微信外部联系人 routing — leave blank for unified 微信客服 links. Find in 企业微信 → 我的企业 → 企业信息 → CorpID.', '仅企业微信外部联系人路由需要 — 使用统一「微信客服」链接时请留空。在企业微信 → 我的企业 → 企业信息 → CorpID 中查找。'),
+  secConnect.appendChild(field(T('WeCom Corp ID (optional)', '企业微信 Corp ID(可选)'),
+    T('Only needed for 企业微信外部联系人 routing — leave empty for normal 微信客服 links. Find it in 企业微信 → 我的企业 → 企业信息 → CorpID.', '仅企业微信外部联系人路由需要 — 使用普通「微信客服」链接时请留空。在企业微信 → 我的企业 → 企业信息 → CorpID 中查找。'),
     txt(b.wecom_corp_id, v => updateBlockSilent(b.id, { wecom_corp_id: (v || '').trim() }), 'wxxxxxxxxxxx')));
 
-  m.appendChild(field(T('联系我 QR', '「联系我」二维码'),
-    T('Works on every device — customer long-presses → 识别二维码 → adds your WeCom employee as a contact (becomes a 客户 in your 企微 CRM). Recommended even when the chat button is on.', '在所有设备上都可用 — 顾客长按 → 识别二维码 → 将你的企微员工添加为联系人(成为企微 CRM 中的客户)。即使开启客服按钮也建议使用。'),
+  secConnect.appendChild(field(T('联系我 QR', '「联系我」二维码'),
+    T('Works on every phone — the customer long-presses the code → 识别二维码 → adds your WeCom staff as a contact. Recommended even when the chat button is on.', '在所有手机上都可用 — 顾客长按二维码 → 识别二维码 → 把你的企微员工添加为联系人。即使开启客服按钮也建议使用。'),
     sel(b.show_qr === false ? '0' : '1', [
       { value: '1', label: T('Show QR', '显示二维码') },
       { value: '0', label: T('Hide', '隐藏') },
     ], v => updateBlock(b.id, { show_qr: v === '1' }))));
 
-  m.appendChild(field(T('QR code image', '二维码图片'),
-    T('Upload your 联系我 QR PNG. Generate it in 企业微信管理后台 → 客户联系 → 联系我 → 添加联系方式 (single employee or 活码 for a team). Minimum 300×300.', '上传你的「联系我」二维码 PNG。在企业微信管理后台 → 客户联系 → 联系我 → 添加联系方式中生成(单个员工或团队活码)。最小 300×300。'),
+  secConnect.appendChild(field(T('QR code image', '二维码图片'),
+    T('Upload your 联系我 QR (PNG). Make it in 企业微信管理后台 → 客户联系 → 联系我 → 添加联系方式 (one employee, or 活码 for a team). At least 300×300.', '上传你的「联系我」二维码 PNG。在企业微信管理后台 → 客户联系 → 联系我 → 添加联系方式中生成(单个员工或团队活码)。最小 300×300。'),
     imgPicker(b.qr_image_url, ({ url }) => updateBlock(b.id, { qr_image_url: url }))));
 
-  m.appendChild(field(T('Agent display name', '客服显示名称'), T('Optional — shown under the QR (e.g. "Roots Sales · 客服小李"). Leave blank to hide.', '可选 — 显示在二维码下方(例如「Roots Sales · 客服小李」)。留空则隐藏。'),
-    txt(b.agent_name, v => updateBlockSilent(b.id, { agent_name: v }), 'Roots Sales · 客服小李')));
+  // ── Colours ─────────────────────────────────────────────────────────
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
+    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
+    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  secColours.appendChild(field(T('Accent colour', '强调色'), T('The colour of the ADD US badge and button accents. A bright colour (lime, papaya…) looks best.', 'ADD US 徽章和按钮的强调色。明亮的颜色(青柠、木瓜…)效果最好。'),
+    sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 
-  m.appendChild(field(T('Hint text', '提示文字'), T('Short instruction under the QR. Leave both blank to use the default "Long-press QR · tap Add" / "长按二维码 · 识别添加".', '二维码下方的简短说明。两者留空则使用默认「Long-press QR · tap Add」/「长按二维码 · 识别添加」。'),
-    txtPair(b.hint_en, b.hint_cn, ({ en, cn }) => updateBlockSilent(b.id, { hint_en: en, hint_cn: cn }))));
-
-  m.appendChild(field(T('Mascot', '吉祥物'),
-    T('Card view only — a Roots character perched on the top edge of the card. Turn off for a plainer look.', '仅卡片版式 — 卡片顶部探出的 Roots 角色。关闭后更简洁。'),
+  // ── Behaviour (card-look toggles) ───────────────────────────────────
+  secBehaviour.appendChild(field(T('Mascot', '吉祥物'),
+    T('Card view only — a character on the top edge of the card. Turn off for a plainer look.', '仅卡片版式 — 卡片顶边的角色。关闭后更简洁。'),
     sel(b.show_mascot === false ? '0' : '1', [
       { value: '1', label: T('Show mascot', '显示吉祥物') },
       { value: '0', label: T('Hide', '隐藏') },
     ], v => updateBlock(b.id, { show_mascot: v === '1' }))));
-
-  m.appendChild(field(T('Card shadow', '卡片阴影'),
-    T('Card view only — the hard offset drop-shadow behind the card. Turn off for a flat look.', '仅卡片版式 — 卡片背后的硬质偏移投影。关闭后呈现扁平效果。'),
+  secBehaviour.appendChild(field(T('Card shadow', '卡片阴影'),
+    T('Card view only — the shadow behind the card. Turn off for a flat look.', '仅卡片版式 — 卡片背后的阴影。关闭后呈现扁平效果。'),
     sel(b.show_shadow === false ? '0' : '1', [
       { value: '1', label: T('Show shadow', '显示阴影') },
       { value: '0', label: T('No shadow', '无阴影') },
     ], v => updateBlock(b.id, { show_shadow: v === '1' }))));
-
-  m.appendChild(field(T('Card border', '卡片边框'),
-    T('Card view only — the outline framing the card. Turn off for a borderless look.', '仅卡片版式 — 卡片外侧的描边。关闭后呈现无边框效果。'),
+  secBehaviour.appendChild(field(T('Card border', '卡片边框'),
+    T('Card view only — the outline around the card. Turn off for no border.', '仅卡片版式 — 卡片外侧的描边。关闭后无边框。'),
     sel(b.show_border === false ? '0' : '1', [
       { value: '1', label: T('Show border', '显示边框') },
       { value: '0', label: T('No border', '无边框') },
     ], v => updateBlock(b.id, { show_border: v === '1' }))));
-
-  m.appendChild(field(T('Card texture', '卡片纹理'),
-    T('Card view only — a subtle dotted "paper" grain over the background colour. Turn off for a clean, flat fill.', '仅卡片版式 — 在背景颜色上叠加细微的点状「纸纹」质感。关闭后呈现干净的纯色填充。'),
+  secBehaviour.appendChild(field(T('Card texture', '卡片纹理'),
+    T('Card view only — a subtle dotted "paper" texture over the background. Turn off for a clean, flat colour.', '仅卡片版式 — 背景上的细微点状「纸纹」质感。关闭后呈现干净的纯色。'),
     sel(b.show_texture === false ? '0' : '1', [
       { value: '1', label: T('Textured (paper)', '纸纹质感') },
       { value: '0', label: T('Plain — flat colour', '纯色 — 无纹理') },
     ], v => updateBlock(b.id, { show_texture: v === '1' }))));
-
-  m.appendChild(field(T('Social proof — member count', '社交证明 — 会员数'),
-    T('Card view only. Type a real number (e.g. "1,500+") to show a "Joined by 1,500+ members" line with avatars. Leave blank to hide — don\'t invent a number.', '仅卡片版式。填写真实数字(如「1,500+」),显示带头像的「已有 1,500+ 位会员」一行。留空则隐藏 — 请勿编造数字。'),
-    txt(b.proof_count, v => updateBlockSilent(b.id, { proof_count: (v || '').trim() }), '1,500+')));
-
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
-    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
-    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Accent colour', '强调色'), T('The ADD US badge, value chip + CTA accent. A bright colour (lime, papaya…) reads best.', 'ADD US 徽章、价值标签与按钮文字的强调色。明亮的颜色(青柠、木瓜…)效果最佳。'),
-    sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 }
 
 function buildFavoritesForm(m, b) {
