@@ -863,7 +863,27 @@
      ink keyline, a mascot perched on the top edge, an ADD US badge, four
      value-prop chips, then a footer that pairs the CTA + social proof on the
      left with the 联系我 QR on the right. bg/fg/accent stay operator-editable. -->
-<view wx:elif="{{type === 'wecom_contact' && wecom && wecom.view === 'card'}}" class="wc-blk wc-loop">
+<!-- Shared button trio (kfUrl → chat · qrUrl → QR preview · else bound 客服)
+     and social-proof row, reused across the coupon / poster / compact styles.
+     `cls` + `sty` let each style colour the CTA differently. -->
+<template name="wcCta">
+  <button wx:if="{{w.showButton && w.kfUrl}}" class="{{cls}}" bindtap="onWecomChatTap" style="{{sty}}"><text>{{w.buttonLabel}}</text><text class="wc-loop-cta-ar">→</text></button>
+  <button wx:elif="{{w.showButton && w.qrUrl}}" class="{{cls}}" bindtap="onWecomCtaTap" style="{{sty}}"><text>{{w.buttonLabel}}</text><text class="wc-loop-cta-ar">→</text></button>
+  <button wx:elif="{{w.showButton}}" class="{{cls}}" open-type="contact" session-from="wecom_contact_block" bindcontact="onWecomContactError" style="{{sty}}"><text>{{w.buttonLabel}}</text><text class="wc-loop-cta-ar">→</text></button>
+</template>
+<template name="wcProof">
+  <view wx:if="{{w.showProof}}" class="wc-loop-proof">
+    <view class="wc-loop-faces">
+      <view class="wc-loop-face wc-face-0"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
+      <view class="wc-loop-face wc-face-1"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
+      <view class="wc-loop-face wc-face-2"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
+      <view class="wc-loop-face wc-face-3"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
+    </view>
+    <text class="wc-loop-proof-tx">{{w.proofPre}}<text class="wc-loop-proof-n">{{w.proofCount}}</text>{{w.proofPost}}</text>
+  </view>
+</template>
+
+<view wx:elif="{{type === 'wecom_contact' && wecom && wecom.view === 'card' && wecom.cardStyle === 'warm'}}" class="wc-blk wc-loop">
   <image wx:if="{{wecom.showMascot}}" class="wc-loop-mascot" src="{{wecom.mascot}}" mode="aspectFit"/>
   <view class="wc-loop-card {{wecom.showShadow ? '' : 'wc-loop-flat'}} {{wecom.showBorder ? '' : 'wc-loop-noframe'}}" style="background:{{bg}};color:{{fg}}">
     <view wx:if="{{wecom.showTexture}}" class="wc-loop-paper"></view>
@@ -921,6 +941,77 @@
         </view>
         <text wx:if="{{wecom.agentName}}" class="wc-loop-qr-name">{{wecom.agentName}}</text>
         <text class="wc-loop-qr-hint">{{wecom.hint}}</text>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- Coupon ticket (D) — main stub + dashed perforation + accent QR stub. -->
+<view wx:elif="{{type === 'wecom_contact' && wecom && wecom.view === 'card' && wecom.cardStyle === 'coupon'}}" class="wc-blk wc-loop wc-loop-coupon">
+  <image wx:if="{{wecom.showMascot}}" class="wc-loop-mascot" src="{{wecom.mascot}}" mode="aspectFit"/>
+  <view class="wc-lc-ticket {{wecom.showShadow ? '' : 'wc-loop-flat'}} {{wecom.showBorder ? '' : 'wc-loop-noframe'}}">
+    <view class="wc-lc-main" style="background:{{bg}};color:{{fg}}">
+      <view wx:if="{{wecom.showTexture}}" class="wc-loop-paper"></view>
+      <view wx:if="{{wecom.kicker}}" class="wc-loop-badge" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.kicker}}</view>
+      <view wx:if="{{wecom.title}}" class="wc-lc-title">{{wecom.title}}</view>
+      <view class="wc-loop-props wc-loop-pills">
+        <view wx:for="{{wecom.props}}" wx:key="k" class="wc-loop-pill"><text>{{item.label}}</text></view>
+      </view>
+      <template is="wcProof" data="{{w: wecom}}"/>
+    </view>
+    <view class="wc-lc-perf"></view>
+    <view class="wc-lc-stub" style="{{wecom.stubStyle}}">
+      <view wx:if="{{wecom.showQr && wecom.qrUrl}}" class="wc-loop-qr-frame">
+        <image src="{{wecom.qrUrl}}" mode="aspectFit" class="wc-loop-qr-img" show-menu-by-longpress="{{true}}" bindtap="onWecomQrTap"/>
+      </view>
+      <template is="wcCta" data="{{w: wecom, cls: 'wc-lc-cta', sty: wecom.couponCtaStyle}}"/>
+      <text class="wc-lc-hint">{{wecom.hint}}</text>
+    </view>
+  </view>
+</view>
+
+<!-- Poster (E/F) — big headline, outlined pills, CTA beside the QR. -->
+<view wx:elif="{{type === 'wecom_contact' && wecom && wecom.view === 'card' && wecom.cardStyle === 'poster'}}" class="wc-blk wc-loop wc-loop-poster">
+  <image wx:if="{{wecom.showMascot}}" class="wc-loop-mascot" src="{{wecom.mascot}}" mode="aspectFit"/>
+  <view class="wc-loop-card wc-lp-card {{wecom.showShadow ? '' : 'wc-loop-flat'}} {{wecom.showBorder ? '' : 'wc-loop-noframe'}}" style="background:{{bg}};color:{{fg}}">
+    <view wx:if="{{wecom.showTexture}}" class="wc-loop-paper"></view>
+    <view wx:if="{{wecom.kicker}}" class="wc-loop-badge" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.kicker}}</view>
+    <view wx:if="{{wecom.title}}" class="wc-lp-title">{{wecom.title}}</view>
+    <view wx:if="{{wecom.subtitle}}" class="wc-loop-sub">{{wecom.subtitle}}</view>
+    <view class="wc-loop-props wc-loop-pills">
+      <view wx:for="{{wecom.props}}" wx:key="k" class="wc-loop-pill"><text>{{item.label}}</text></view>
+    </view>
+    <view class="wc-lp-foot">
+      <view class="wc-lp-foot-l">
+        <template is="wcCta" data="{{w: wecom, cls: 'wc-lp-cta', sty: wecom.fillCtaStyle}}"/>
+        <template is="wcProof" data="{{w: wecom}}"/>
+      </view>
+      <view wx:if="{{wecom.showQr && wecom.qrUrl}}" class="wc-lp-qr">
+        <view class="wc-loop-qr-frame">
+          <image src="{{wecom.qrUrl}}" mode="aspectFit" class="wc-loop-qr-img" show-menu-by-longpress="{{true}}" bindtap="onWecomQrTap"/>
+        </view>
+        <text class="wc-lc-hint">{{wecom.hint}}</text>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- Compact mini — wide-short zigzag ticket, one-line props, QR on the right. -->
+<view wx:elif="{{type === 'wecom_contact' && wecom && wecom.view === 'card' && wecom.cardStyle === 'compact'}}" class="wc-blk wc-loop wc-loop-compact">
+  <view class="wc-lm-card {{wecom.showShadow ? '' : 'wc-loop-flat'}}" style="background:{{bg}};color:{{fg}};clip-path:{{wecom.zigClip}};-webkit-clip-path:{{wecom.zigClip}}">
+    <view wx:if="{{wecom.showTexture}}" class="wc-loop-paper"></view>
+    <view class="wc-lm-body">
+      <view class="wc-lm-l">
+        <view wx:if="{{wecom.kicker}}" class="wc-lm-kicker" style="color:{{wecom.accent}}">{{wecom.kicker}}</view>
+        <view wx:if="{{wecom.title}}" class="wc-lm-title">{{wecom.title}}</view>
+        <view class="wc-lm-sub">{{wecom.subtitle || wecom.oneLineProps}}</view>
+        <template is="wcCta" data="{{w: wecom, cls: 'wc-lm-cta', sty: wecom.fillCtaStyle}}"/>
+      </view>
+      <view wx:if="{{wecom.showQr && wecom.qrUrl}}" class="wc-lm-qr">
+        <view class="wc-loop-qr-frame">
+          <image src="{{wecom.qrUrl}}" mode="aspectFit" class="wc-loop-qr-img" show-menu-by-longpress="{{true}}" bindtap="onWecomQrTap"/>
+        </view>
+        <text class="wc-lm-hint">{{wecom.hint}}</text>
       </view>
     </view>
   </view>

@@ -3410,6 +3410,13 @@
     display: flex; width: 100%; height: 100%; align-items: center; justify-content: center;
     background: var(--rv-circle, var(--b-pea)); font: 700 19px var(--bf-bear);
   }
+  .b-review-riso .riso-dots { display: flex; gap: 7px; justify-content: center; margin-top: 16px; }
+  .b-review-riso .riso-dots .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    border: 1.5px solid var(--rv-border, var(--b-ink)); background: transparent;
+    opacity: .55; transition: opacity .15s ease, background .15s ease;
+  }
+  .b-review-riso .riso-dots .dot.on { opacity: 1; background: var(--rv-accent, var(--b-lime)); }
 
   /* C · Spotlight — header band + dark hero card + thumbnail rail */
   .b-review-spotlight .spot-head {
@@ -7425,14 +7432,25 @@ function renderBlockBody(b) {
           return d;
         }
         if (view === 'riso') {
-          const r = reviews[0];
+          const activeIdx = (b._previewReviewIdx != null && reviews[b._previewReviewIdx]) ? b._previewReviewIdx : 0;
+          const r = reviews[activeIdx];
+          const dots = reviews.length > 1
+            ? `<div class="riso-dots">${reviews.map((_, i) => `<span class="dot${i === activeIdx ? ' on' : ''}" data-rv-idx="${i}" style="cursor:pointer"></span>`).join('')}</div>`
+            : '';
           d.innerHTML = `<div class="rv-card">
             <div class="riso-badge">${[1,2,3,4,5].map(() => '★').join('')}</div>
             <div class="riso-stamp">VERIFIED<small>真实评价</small></div>
             ${k.en || k.cn ? `<div class="riso-kicker">${biLabel(k.en, k.cn)}</div>` : ''}
             <div class="quote">${escapeHtml(pickLang(r.quote_en, r.quote_cn) || '')}</div>
             <div class="rv-person">${mono(r, true)}${personText(r)}</div>
-          </div>`;
+          </div>${dots}`;
+          d.querySelectorAll('.riso-dots .dot').forEach(el => el.addEventListener('click', ev => {
+            ev.stopPropagation();
+            const i = parseInt(el.dataset.rvIdx, 10);
+            if (Number.isNaN(i)) return;
+            b._previewReviewIdx = i;
+            renderPreview();
+          }));
           return d;
         }
         // spotlight — interactive index via _previewReviewIdx

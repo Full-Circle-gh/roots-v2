@@ -23,6 +23,17 @@ function absUrl(u) {
   return u;
 }
 
+// Zigzag (perforated) clip-path for the compact "Stay in the loop" ticket —
+// teeth cut into the top + bottom edges so the page colour shows through.
+// Same shape the Mini App Editor (cms.html loopZigzag) computes.
+function loopZigzag(teeth = 14, depth = 3.4) {
+  const s = 100 / teeth;
+  const pts = [];
+  for (let i = 0; i <= teeth; i++) pts.push(`${(i * s).toFixed(2)}% ${(i % 2 ? depth : 0).toFixed(2)}%`);
+  for (let i = teeth; i >= 0; i--) pts.push(`${(i * s).toFixed(2)}% ${(i % 2 ? 100 - depth : 100).toFixed(2)}%`);
+  return `polygon(${pts.join(', ')})`;
+}
+
 const COLOR_MAP = {
   'lime-leaf':   '#CCD900', 'forest-kale': '#365329', 'olive-moss': '#6A6E2D',
   'roasted-almond': '#C37F4E', 'golden-corn': '#F2CA6C', 'oat-milk': '#F2E7DF',
@@ -1242,8 +1253,20 @@ Component({
           out.bg = color(b.bg_color || 'oat-milk');
           out.fg = color(b.fg_color || 'ink');
           const view = b.view === 'strip' ? 'strip' : 'card';
+          // Card art direction (card view only): warm | coupon | poster |
+          // compact. Mirrors the four styles in the Mini App Editor.
+          const cardStyle = ['warm', 'coupon', 'poster', 'compact'].includes(b.card_style) ? b.card_style : 'warm';
+          const wcAccent = color(b.accent_color || 'forest-kale');
+          const wcBtnFg = btnText(b.accent_color || 'forest-kale');
           out.wecom = {
             view,
+            cardStyle,
+            // Precomputed CTA/stub style strings (template-friendly):
+            // coupon stub = accent fill; its inner button flips to fg-on-accent.
+            // poster/compact CTA = accent fill with auto-contrast text.
+            stubStyle:      `background:${wcAccent};color:${wcBtnFg}`,
+            couponCtaStyle: `background:${out.fg};color:${wcAccent}`,
+            fillCtaStyle:   `background:${wcAccent};color:${wcBtnFg}`,
             kicker:   lang.pick(b.kicker_en, b.kicker_cn, L),
             title:    lang.pick(b.title_en, b.title_cn, L),
             subtitle: lang.pick(b.subtitle_en, b.subtitle_cn, L),
@@ -1296,6 +1319,11 @@ Component({
             showProof: b.show_proof !== false && !!(b.proof_count || '').trim(),
             proofPre:  L === 'cn' ? '已有 ' : 'Joined by ',
             proofPost: L === 'cn' ? ' 位会员' : ' members',
+            // Compact style: one-line value props + zigzag (perforated) edge.
+            oneLineProps: (L === 'cn'
+              ? ['优惠活动', '新品首发', '专属福利', '专人客服']
+              : ['Promotions', 'New drops', 'Exclusive offers', 'Direct support']).join(' · '),
+            zigClip: cardStyle === 'compact' ? loopZigzag() : '',
           };
           break;
         }
