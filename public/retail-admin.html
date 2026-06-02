@@ -955,6 +955,11 @@
   body:not(.feat-reviews)     [data-feat="reviews"],
   body:not(.feat-feedback)    [data-feat="feedback"],
   body:not(.feat-socialProof) [data-feat="socialProof"] { display: none !important; }
+  /* The Inbox nav group holds ONLY Reviews + Feedback (both feature-gated), so
+     hide the whole group trigger when BOTH are off — otherwise it'd open an
+     empty dropdown. (Marketing/Loyalty/Content each keep always-on items, so
+     they never go empty.) */
+  body:not(.feat-reviews):not(.feat-feedback) .tabs-group[data-group="inbox"] { display: none !important; }
   .pa-dup-row {
     flex: none; width: 28px; height: 28px; padding: 0;
     border: 1px solid var(--line); border-radius: 6px;
@@ -3854,25 +3859,38 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-3 3-3-3"/><path d="M19 14V4"/></svg>
         Affiliate · 分销
       </button>
+      <button data-tab="broadcasts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l15-7v16L3 13v-2z"/><path d="M11 19a2 2 0 0 1-4 0v-4"/><path d="M18 8a4 4 0 0 1 0 8"/></svg>
+        Broadcasts · 广播
+      </button>
+    </div>
+  </div>
+
+  <!-- Loyalty & Wallet — the points engine + store credit. Membership tiers,
+       the points rules they depend on, the leaderboard that ranks members,
+       voting rewards, and wallet top-up all live together here. -->
+  <div class="tabs-group" data-group="loyalty">
+    <button type="button" class="tabs-group-trigger">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+      Loyalty &amp; Wallet · 会员与钱包
+      <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="tabs-popover">
+      <button data-tab="membership" data-feat="membership">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1 3-6z"/></svg>
+        Membership &amp; points · 会员积分
+      </button>
+      <button data-tab="topup">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        Top-up · 充值
+      </button>
       <button data-tab="leaderboard">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         Leaderboard · 排行榜
       </button>
-      <button data-tab="membership" data-feat="membership">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1 3-6z"/></svg>
-        Membership · 会员
-      </button>
       <button data-tab="voting">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         Voting · 投票
-      </button>
-      <button data-tab="topup">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-        Top-up &amp; points · 充值与积分
-      </button>
-      <button data-tab="broadcasts">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l15-7v16L3 13v-2z"/><path d="M11 19a2 2 0 0 1-4 0v-4"/><path d="M18 8a4 4 0 0 1 0 8"/></svg>
-        Broadcasts · 广播
       </button>
     </div>
   </div>
@@ -3892,14 +3910,6 @@
       <button data-tab="about">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         About page · 关于页
-      </button>
-      <button data-tab="reviews" data-feat="reviews">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        Reviews · 评价
-      </button>
-      <button data-tab="feedback" data-feat="feedback">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8a2 2 0 0 1 2 2v12l-4-3H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M12 6v3"/><circle cx="12" cy="11.5" r="0.4" fill="currentColor"/></svg>
-        Feedback · 反馈
       </button>
       <button data-tab="media">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -3921,6 +3931,26 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
         Product Page Editor · 产品页编辑器
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;opacity:.55;margin-left:auto"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Inbox — inbound customer voice (moderation/triage), distinct from the
+       outbound authoring in Content. Reviews + bug-report Feedback. -->
+  <div class="tabs-group" data-group="inbox">
+    <button type="button" class="tabs-group-trigger">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+      Inbox · 收件箱
+      <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="tabs-popover">
+      <button data-tab="reviews" data-feat="reviews">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        Reviews · 评价
+      </button>
+      <button data-tab="feedback" data-feat="feedback">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8a2 2 0 0 1 2 2v12l-4-3H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M12 6v3"/><circle cx="12" cy="11.5" r="0.4" fill="currentColor"/></svg>
+        Feedback · 反馈
       </button>
     </div>
   </div>
@@ -6116,48 +6146,9 @@
 
   <!-- ─── TOP-UP ─── -->
   <section id="tab-topup">
-    <h2>Top-up &amp; points · 充值与积分</h2>
+    <h2>Top-up · 充值</h2>
     <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
-      Customers can pre-load their wallet for a bonus-points kickback. The wallet ¥ amount is credited 1:1; bonus points are extra on top. <b>Order-earn rate:</b> every <span id="pts-ratemsg">¥100</span> spent earns 1 point.
-    </div>
-
-    <div class="card" style="margin-bottom: var(--s4);">
-      <h3 style="font-size: 13px; margin-bottom: 12px;">Points settings · 积分规则</h3>
-      <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Earn rule · 积分获取规则</label>
-          <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding-top: 2px;">
-            <span>Earn</span>
-            <input type="number" id="pts-earn-points" placeholder="1" min="1" style="width: 70px;">
-            <span>point(s) per ¥</span>
-            <input type="number" id="pts-earn-spend" placeholder="100" min="1" style="width: 90px;">
-            <span>spent</span>
-          </div>
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">e.g. 1 point per ¥100 = 1% loyalty rate. · 例:每消费 ¥100 得 1 积分。</div>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Point value · 积分价值</label>
-          <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding-top: 2px;">
-            <span>1 point = ¥</span>
-            <input type="number" id="pts-point-value" placeholder="1.00" min="0.01" max="1" step="0.01" style="width: 100px;">
-          </div>
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">Sets what every point is worth (incl. top-up bonus pts). · 决定每个积分(含充值赠送)的价值。</div>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Expire after (months) · 积分有效期(月)</label>
-          <input type="number" id="pts-expiry-months" placeholder="12" min="0" style="width: 140px;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">0 = never expire. Applies to new earns only.</div>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Points cover shipping · 积分可抵运费</label>
-          <label style="display:inline-flex; align-items:center; gap:8px; padding-top: 4px;">
-            <input type="checkbox" id="pts-cover-shipping">
-            <span class="muted" style="font-size: 12px;">Allow points to pay the shipping line · 允许积分支付运费</span>
-          </label>
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">Off = customer always pays shipping in cash. · 关闭时,运费始终以现金支付。</div>
-        </div>
-        <button class="btn btn-primary" onclick="savePointsSettings()">Save points settings · 保存积分设置</button>
-      </div>
+      Customers can pre-load their wallet for a bonus-points kickback. The wallet ¥ amount is credited 1:1; bonus points are extra on top. Points earn-rate, value and expiry are set under <b>Membership &amp; points</b>. · 充值即送积分:钱包金额 1:1 入账,赠送积分额外叠加。积分规则在“会员积分”中设置。
     </div>
 
     <div class="card" style="margin-bottom: var(--s4);">
@@ -6298,34 +6289,6 @@
       hide the bad one and let them write another from the order page.
     </div>
 
-    <!-- Tag-chip editor — what customers tap when leaving a review. -->
-    <div class="card" style="margin-bottom: var(--s4);">
-      <div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
-        <h3 style="font-size: 13px; margin: 0;">Review tags · 评价标签</h3>
-        <div class="muted" style="font-size: 11px;">Customers tap these chips when leaving a review. Edit labels and colours — the new wording appears in the mini app within ~60s (config cache TTL). · 顾客提交评价时点击的标签;修改文案与颜色后,小程序约 60 秒内生效(配置缓存)。</div>
-      </div>
-      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">
-        <b>id</b> is the slug stored in the database — change it only if no reviews have used the tag yet, otherwise older reviews lose their chip. Lowercase letters + hyphens only.
-      </div>
-      <div class="table-wrap" style="margin-bottom: 12px;">
-        <table id="rtags-table">
-          <thead><tr>
-            <th style="width: 150px;">id</th>
-            <th>English label · 英文名称</th>
-            <th>中文标签</th>
-            <th style="width: 140px;">Colour · 颜色</th>
-            <th style="width: 60px;"></th>
-          </tr></thead>
-          <tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
-        </table>
-      </div>
-      <div class="row" style="gap: 12px;">
-        <button class="btn" onclick="addReviewTag()">+ Add tag</button>
-        <button class="btn btn-primary" onclick="saveReviewTags()">Save tags · 保存标签</button>
-        <button class="btn" onclick="loadReviewTags()" style="margin-left: auto;">Reset (reload from server) · 重置(从服务端重新加载)</button>
-      </div>
-    </div>
-
     <div class="row" style="gap: 12px; margin-bottom: var(--s4); flex-wrap: wrap; align-items: center;">
       <div class="field" style="margin: 0;">
         <label class="stacked">Visibility · 可见度</label>
@@ -6366,6 +6329,34 @@
         </tr></thead>
         <tbody><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
       </table>
+    </div>
+
+    <!-- Tag-chip editor — setup done rarely, so it sits below the daily moderation queue. -->
+    <div class="card" style="margin-top: var(--s5);">
+      <div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+        <h3 style="font-size: 13px; margin: 0;">Review tags · 评价标签</h3>
+        <div class="muted" style="font-size: 11px;">Customers tap these chips when leaving a review. Edit labels and colours — the new wording appears in the mini app within ~60s (config cache TTL). · 顾客提交评价时点击的标签;修改文案与颜色后,小程序约 60 秒内生效(配置缓存)。</div>
+      </div>
+      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">
+        <b>id</b> is the slug stored in the database — change it only if no reviews have used the tag yet, otherwise older reviews lose their chip. Lowercase letters + hyphens only.
+      </div>
+      <div class="table-wrap" style="margin-bottom: 12px;">
+        <table id="rtags-table">
+          <thead><tr>
+            <th style="width: 150px;">id</th>
+            <th>English label · 英文名称</th>
+            <th>中文标签</th>
+            <th style="width: 140px;">Colour · 颜色</th>
+            <th style="width: 60px;"></th>
+          </tr></thead>
+          <tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="row" style="gap: 12px;">
+        <button class="btn" onclick="addReviewTag()">+ Add tag</button>
+        <button class="btn btn-primary" onclick="saveReviewTags()">Save tags · 保存标签</button>
+        <button class="btn" onclick="loadReviewTags()" style="margin-left: auto;">Reset (reload from server) · 重置(从服务端重新加载)</button>
+      </div>
     </div>
   </section>
 
@@ -6632,8 +6623,54 @@
 
   <!-- ─── MEMBERSHIP TIERS — Roots Club ladder ─── -->
   <section id="tab-membership" data-feat="membership">
-    <h2>Membership tiers · 会员等级</h2>
+    <h2>Membership &amp; points · 会员积分</h2>
     <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
+      How points are earned and what they're worth, plus the Roots Club tier ladder that multiplies them. <b>Order-earn rate:</b> every <span id="pts-ratemsg">¥100</span> spent earns 1 point. · 积分如何获取、价值几何,以及在此基础上叠加倍率的会员等级体系。
+    </div>
+
+    <!-- Points settings — the global loyalty rules. Moved here from Top-up so
+         they sit beside the tier "Points ×" multiplier that builds on them. -->
+    <div class="card" style="margin-bottom: var(--s4);">
+      <h3 style="font-size: 13px; margin-bottom: 12px;">Points settings · 积分规则</h3>
+      <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Earn rule · 积分获取规则</label>
+          <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding-top: 2px;">
+            <span>Earn</span>
+            <input type="number" id="pts-earn-points" placeholder="1" min="1" style="width: 70px;">
+            <span>point(s) per ¥</span>
+            <input type="number" id="pts-earn-spend" placeholder="100" min="1" style="width: 90px;">
+            <span>spent</span>
+          </div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">e.g. 1 point per ¥100 = 1% loyalty rate. · 例:每消费 ¥100 得 1 积分。</div>
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Point value · 积分价值</label>
+          <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding-top: 2px;">
+            <span>1 point = ¥</span>
+            <input type="number" id="pts-point-value" placeholder="1.00" min="0.01" max="1" step="0.01" style="width: 100px;">
+          </div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">Sets what every point is worth (incl. top-up bonus pts). · 决定每个积分(含充值赠送)的价值。</div>
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Expire after (months) · 积分有效期(月)</label>
+          <input type="number" id="pts-expiry-months" placeholder="12" min="0" style="width: 140px;">
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">0 = never expire. Applies to new earns only.</div>
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Points cover shipping · 积分可抵运费</label>
+          <label style="display:inline-flex; align-items:center; gap:8px; padding-top: 4px;">
+            <input type="checkbox" id="pts-cover-shipping">
+            <span class="muted" style="font-size: 12px;">Allow points to pay the shipping line · 允许积分支付运费</span>
+          </label>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">Off = customer always pays shipping in cash. · 关闭时,运费始终以现金支付。</div>
+        </div>
+        <button class="btn btn-primary" onclick="savePointsSettings()">Save points settings · 保存积分设置</button>
+      </div>
+    </div>
+
+    <h3 style="font-size: 13px; margin: 0 0 8px;">Membership tiers · 会员等级</h3>
+    <div class="muted" style="font-size: 12px; margin-top: -2px; margin-bottom: var(--s4); line-height: 1.5;">
       The Roots Club ladder shown on the mini-app Membership page. Threshold = minimum lifetime spend (¥) to reach the tier; the lowest threshold should be 0. Perks are one bullet per line. Tiers are sorted by threshold automatically when you save. Each customer's tier auto-promotes from their lifetime spend — no manual override. · 小程序“会员”页展示的等级体系。门槛 = 累计消费(¥)下限,最低需为 0;权益每行一条;保存后按门槛自动排序。每位顾客的等级根据累计消费自动升级。
     </div>
 
@@ -9331,7 +9368,8 @@ let ENTITLEMENTS = {};
   loadPopups();
   loadDeliveryZones();
   loadTopup();
-  loadRctiers();       // Marketing → Membership tiers (Roots Club ladder)
+  loadPointsSettings(); // Loyalty & Wallet → Membership & points (earn rate, point value, expiry)
+  loadRctiers();        // Loyalty & Wallet → Membership tier ladder (Roots Club)
   loadFaq();
 })();
 
@@ -11110,9 +11148,9 @@ function renderOpenOrder(o) {
             <div class="val" data-no-i18n><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
             <div class="sub" data-no-i18n>${escapeHtml(o.address_full || '')}</div>
           </div>`}
-          <div>
+          <div${o.customer_id ? ` onclick="orderGotoCustomer(${o.customer_id})" style="cursor: pointer;" title="View customer · 查看顾客"` : ''}>
             <div class="kicker">Customer</div>
-            <div class="val"><b>${escapeHtml(o.nickname || '—')}</b></div>
+            <div class="val"><b>${escapeHtml(o.nickname || '—')}</b>${o.customer_id ? ` <span style="color: var(--text-3); font-weight: 600;">›</span>` : ''}</div>
             ${o.customer_id ? `<div class="sub">ID #${o.customer_id}</div>` : ''}
           </div>
           <div>
@@ -14956,9 +14994,17 @@ async function submitBulkTag() {
 }
 
 // ════════════════════════════════════════════════════════════════
-// TOP-UP + POINTS
+// TOP-UP — wallet packages + transactions. (Points/loyalty rules moved to
+// the Membership & points tab — see loadPointsSettings() below.)
 // ════════════════════════════════════════════════════════════════
 async function loadTopup() {
+  await Promise.all([loadTopupPackages(), loadTopupTransactions()]);
+}
+
+// Points / loyalty rules — earn rate, point value, expiry, cover-shipping.
+// The inputs now render under the Membership & points tab; we still hydrate
+// them eagerly at boot since fields are looked up by id (location-independent).
+async function loadPointsSettings() {
   try {
     const cfg = await api('/api/retail-admin/config');
     const pts = cfg?.data?.points || {};
@@ -14977,7 +15023,6 @@ async function loadTopup() {
     if ($('#pts-cover-shipping')) $('#pts-cover-shipping').checked = !!pts.coverShipping;
     if ($('#pts-ratemsg'))        $('#pts-ratemsg').textContent = '¥' + earnSpend;
   } catch {}
-  await Promise.all([loadTopupPackages(), loadTopupTransactions()]);
 }
 
 async function loadTopupPackages() {
@@ -16199,6 +16244,13 @@ function cuBackToCustomer() {
   if (!backId) return;
   closeDrawer('#order-drawer');
   cuOpenDetail(backId);
+}
+
+// Jump from an order's Customer tile straight to that customer's detail.
+function orderGotoCustomer(id) {
+  if (!id) return;
+  closeDrawer('#order-drawer');
+  cuOpenDetail(Number(id));
 }
 
 // Close the drawer and clear state once the slide-out finishes.
