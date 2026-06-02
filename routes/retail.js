@@ -11325,7 +11325,10 @@ function zoneProvince(z) {
       }
     }
   }
-  if (z.zone_type === 'gz_district') return { cn: '广东省', en: 'Guangdong' };
+  // Guangzhou same-day districts are operationally distinct from the flat-rate
+  // 广东省 province row (different model — time-slots, not a flat fee), so they
+  // get their own "Guangzhou" group rather than being lumped under Guangdong.
+  if (z.zone_type === 'gz_district') return { cn: '广州市', en: 'Guangzhou' };
   if (z.match_district && HK_DISTRICTS_EN[z.match_district]) return { cn: HK_CN, en: 'Hong Kong' };
   if (z.match_city && HK_DISTRICTS_EN[z.match_city]) return { cn: HK_CN, en: 'Hong Kong' };
   return _zoneProvMap.get(z.match_city) || _zoneProvMap.get(z.match_district) || { cn: '其他', en: 'Other' };

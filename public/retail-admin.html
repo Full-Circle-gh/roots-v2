@@ -14019,7 +14019,9 @@ function groupZonesByProvince(rows) {
     map.get(key).rows.push(z);
   }
   const groups = order.map(k => map.get(k));
-  const rank = g => (g.cn === '广东省' ? 0 : (g.cn === '其他' ? 2 : 1));
+  // Guangzhou (live same-day area) first, then Guangdong, then the rest A→Z by
+  // English name, with "Other" pinned last.
+  const rank = g => (g.cn === '广州市' ? 0 : g.cn === '广东省' ? 1 : g.cn === '其他' ? 3 : 2);
   groups.sort((a, b) => (rank(a) - rank(b)) || (a.en || '').localeCompare(b.en || ''));
   return groups;
 }
@@ -14033,14 +14035,7 @@ function zoneGroupHeaderHtml(g, colspan) {
 }
 function groupedZoneBodyHtml(rows, colspan, rowFn) {
   return groupZonesByProvince(rows)
-    .map(g => {
-      // A province covered by a single province-wide row needs no heading —
-      // the row already names the province (全省). Headings only earn their
-      // keep when they group multiple city/district rows under a province.
-      const headerless = g.rows.length === 1 && g.rows[0].is_province_wide;
-      const head = headerless ? '' : zoneGroupHeaderHtml(g, colspan);
-      return head + g.rows.map(rowFn).join('');
-    })
+    .map(g => zoneGroupHeaderHtml(g, colspan) + g.rows.map(rowFn).join(''))
     .join('');
 }
 
