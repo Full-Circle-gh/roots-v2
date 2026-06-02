@@ -4330,13 +4330,17 @@
       .cu-grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--s4); margin-bottom: var(--s4); }
       .cu-tile {
         background: var(--bg-pane);
-        border: 1px solid var(--line-soft);
-        border-radius: var(--r-sm);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
         padding: 22px 22px 20px;
+        box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
       }
+      /* min-height keeps the headline numbers on one baseline across all three
+         tiles whether or not a tile has an Adjust button in its head row. */
       .cu-tile-head {
         display: flex; align-items: center; justify-content: space-between;
         gap: 8px;
+        min-height: 28px;
         margin-bottom: var(--s3);
         min-width: 0;
       }
@@ -4352,11 +4356,12 @@
         flex-shrink: 0;
         white-space: nowrap;
       }
-      /* Headline number — Plex Sans Light, the hero of each card. Tabular
-         nums so the balance doesn't jitter when the drawer re-renders. */
+      /* Headline number — the hero of each card. Medium weight (matches the
+         dashboard KPIs) so the figure pops instead of reading flat/thin.
+         Tabular nums so the balance doesn't jitter when the drawer re-renders. */
       .cu-tile-big {
         font-family: var(--f-sans);
-        font-size: 44px; font-weight: 300; line-height: 1;
+        font-size: 38px; font-weight: 500; line-height: 1;
         letter-spacing: -.02em; margin-bottom: var(--s4);
         color: var(--text-1);
         font-variant-numeric: tabular-nums;
