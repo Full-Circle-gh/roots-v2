@@ -2559,10 +2559,12 @@
   @keyframes b-slide-up   { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
   .b-hero.enter-fade,
   .b-featured.enter-fade,
-  .b-bundle.enter-fade    { animation: b-fade-in   .4s ease-out both; }
+  .b-bundle.enter-fade,
+  .b-voting.enter-fade    { animation: b-fade-in   .4s ease-out both; }
   .b-hero.enter-slide_up,
   .b-featured.enter-slide_up,
-  .b-bundle.enter-slide_up { animation: b-slide-up .45s var(--ease-out, cubic-bezier(.2,.7,.2,1)) both; }
+  .b-bundle.enter-slide_up,
+  .b-voting.enter-slide_up { animation: b-slide-up .45s var(--ease-out, cubic-bezier(.2,.7,.2,1)) both; }
 
   /* Hero scrim — dims the bottom 40% of the image so floating CTAs read on
      bright photography. Strength controlled by .scrim-{light|medium|dark}.
@@ -3714,6 +3716,109 @@
     font: 600 10px var(--bf-aleo);
     color: var(--b-olive);
     margin-left: auto;
+  }
+
+  /* ─── Voting · inline full-poll styles (Classic / Compact / Leaderboard) ───
+     Tunables ride on CSS vars set in JS: --vb-accent (your-vote fill),
+     --vb-bar (other options' fill), --vb-optbg (row card), --vb-border,
+     --vb-rowrad (row radius). Emoji + count toggles via no-emoji/no-counts. */
+  .b-voting.b-voting-poll .vb-poll-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .b-voting.b-voting-poll .vb-poll-status {
+    display: flex; align-items: center; gap: 6px;
+    font: 700 11px var(--bf-gothic); letter-spacing: .14em;
+  }
+  .b-voting.b-voting-poll .vb-poll-dot {
+    width: 9px; height: 9px; border-radius: 999px; display: inline-block;
+  }
+  .b-voting.b-voting-poll .vb-poll-tag {
+    font: 700 11px var(--bf-gothic); letter-spacing: .14em; color: var(--b-olive);
+  }
+  .b-voting.b-voting-poll .vb-poll-q {
+    font: 500 21px var(--bf-bear); line-height: 1.03; margin-top: 2px;
+  }
+  .b-voting.b-voting-poll .vb-poll-rows {
+    display: flex; flex-direction: column; gap: 10px; margin-top: 14px;
+  }
+  .b-voting.b-voting-poll.no-emoji .vb-pemoji { display: none !important; }
+  .b-voting.b-voting-poll.no-counts .vb-pcount { display: none !important; }
+  .b-voting.b-voting-poll .vb-poll-foot {
+    margin-top: 14px; text-align: center;
+    font: 700 8px var(--bf-toni); letter-spacing: .2em; color: var(--b-olive);
+  }
+
+  /* Classic + Leaderboard: bordered row with a full-height fill bar. */
+  .b-voting.b-voting-poll .vb-prow {
+    position: relative; overflow: hidden;
+    border: 1.5px solid var(--vb-border, var(--b-ink));
+    border-radius: var(--vb-rowrad, 14px);
+    background: var(--vb-optbg, #FFFCF7);
+    transition: all .35s ease;
+  }
+  .b-voting.b-voting-poll .vb-prow-fill {
+    position: absolute; top: 0; left: 0; bottom: 0;
+    background: var(--vb-bar, #E7E74C); opacity: .5;
+    transition: width .4s ease;
+  }
+  .b-voting.b-voting-poll .vb-prow.is-lead .vb-prow-fill {
+    background: var(--vb-accent, var(--b-lime)); opacity: .9;
+  }
+  .b-voting.b-voting-poll .vb-prow-body {
+    position: relative; display: flex; align-items: center; gap: 12px;
+    padding: 11px 14px;
+  }
+  .b-voting.b-voting-poll .vb-prow-letter {
+    width: 30px; height: 30px; border-radius: 999px; flex-shrink: 0;
+    border: 1.5px solid var(--vb-border, var(--b-ink));
+    display: flex; align-items: center; justify-content: center;
+    font: 700 15px var(--bf-gothic); background: rgba(255,255,255,.4);
+  }
+  .b-voting.b-voting-poll .vb-prow-rank {
+    font: 700 18px var(--bf-gothic); width: 18px; flex-shrink: 0;
+    color: var(--b-olive); text-align: center;
+  }
+  .b-voting.b-voting-poll .vb-prow.is-lead .vb-prow-rank { color: var(--vb-border, var(--b-ink)); }
+  .b-voting.b-voting-poll .vb-prow-main { flex: 1; min-width: 0; }
+  .b-voting.b-voting-poll .vb-prow-en { font: 500 15px var(--bf-bear); line-height: 1; }
+  .b-voting.b-voting-poll .vb-prow-cn {
+    font: 500 10px var(--bf-aleo); color: var(--b-olive); margin-top: 2px;
+  }
+  .b-voting.b-voting-poll .vb-lead-badge {
+    font: 700 9px var(--bf-gothic); letter-spacing: .08em;
+    background: var(--vb-border, var(--b-ink)); color: var(--vb-accent, var(--b-lime));
+    padding: 1px 6px; border-radius: 5px; margin-left: 6px; vertical-align: middle;
+  }
+  .b-voting.b-voting-poll .vb-prow-num { text-align: right; flex-shrink: 0; }
+  .b-voting.b-voting-poll .vb-prow-pct { font: 700 21px var(--bf-gothic); line-height: 1; }
+  .b-voting.b-voting-poll .vb-prow-votes {
+    font: 700 8px var(--bf-toni); letter-spacing: .1em; color: var(--b-olive); margin-top: 2px;
+  }
+
+  /* Compact: no card — slim row + thin underline progress bar. */
+  .b-voting.b-pollstyle-compact .vb-crow-top {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .b-voting.b-pollstyle-compact .vb-crow-letter {
+    width: 28px; height: 28px; border-radius: 999px; flex-shrink: 0;
+    border: 1.5px solid var(--vb-border, var(--b-ink));
+    background: var(--vb-optbg, #FFFCF7);
+    display: flex; align-items: center; justify-content: center;
+    font: 700 14px var(--bf-gothic);
+  }
+  .b-voting.b-pollstyle-compact .vb-crow-en {
+    flex: 1; min-width: 0; font: 500 15px var(--bf-bear);
+  }
+  .b-voting.b-pollstyle-compact .vb-crow-pct { font: 700 18px var(--bf-gothic); flex-shrink: 0; }
+  .b-voting.b-pollstyle-compact .vb-pct-sign { font-size: 12px; }
+  .b-voting.b-pollstyle-compact .vb-crow-track {
+    height: 6px; border-radius: 9px; background: rgba(0,0,0,.1);
+    margin-top: 7px; margin-left: 40px; overflow: hidden;
+  }
+  .b-voting.b-pollstyle-compact .vb-crow-bar {
+    height: 100%; background: var(--vb-accent, var(--b-lime)); opacity: .9;
+    transition: width .4s ease;
   }
   /* ═══════════════════════════════════════════════════════════════════
      BRAND FONT BINDINGS — override the generic shorthand families above
@@ -6369,6 +6474,22 @@ function makeBlock(type) {
         subtitle_cn: '每次投票得 5 积分,一起决定下一款产品。',
         bg_color: 'oat-milk', fg_color: 'ink',
         accent_color: 'lime-leaf',
+        status_color: 'berry-punch',
+        // Inline layout direction (full poll w/ options). classic — bordered
+        // fill-bar rows + letter chips. compact — slim pill rows w/ underline
+        // bar. leaderboard — ranked by votes, leader badge, re-sorts live.
+        poll_style: 'classic',
+        // Row card fill + the "other options" progress fill. Blank = default
+        // cream / lemon. Your-vote fill always uses accent_color.
+        option_bg_color: '', bar_color: '',
+        // Option-row corner radius (px) for the inline poll styles.
+        row_radius: 14,
+        // Tweaks (mirror the design's Tweaks panel): emoji after each option
+        // label, and the %/vote-count readout on the right.
+        show_emoji: 1, show_counts: 1,
+        // Cross-block chrome (same controls other blocks expose).
+        corner_radius: 'subtle',
+        entrance_anim: 'none',
         cta_label_en: 'VOTE NOW', cta_label_cn: '去投票',
         cta_target: 'voting',
       };
@@ -7587,15 +7708,11 @@ function renderBlockBody(b) {
       return d;
     }
     case 'voting_block': {
-      d.className = 'b-voting b-voting-' + (b.view || 'peek');
+      d.className = 'b-voting b-voting-' + (b.view || 'peek') + entranceAnimClass(b);
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
       const accent = brandColorVar(b.accent_color) || 'var(--b-lime)';
       const statusCol = brandColorVar(b.status_color) || '#E96174';   // "● OPEN" indicator
-      // Inline-view idle "PICK ONE TO VOTE" button colours (editable; default
-      // faint grey fill + olive text — matches the mini-app idle state).
-      const promptBg  = brandColorVar(b.prompt_bg_color)   || 'rgba(0,0,0,.08)';
-      const promptTxt = brandColorVar(b.prompt_text_color) || 'var(--b-olive)';
       const view = b.view || 'peek';
       const src  = b.data_source || 'auto_pull';
       const cta  = pickLang(b.cta_label_en, b.cta_label_cn);
@@ -7679,28 +7796,87 @@ function renderBlockBody(b) {
         return d;
       }
 
-      // Inline — show full poll with A/B/C/D options
+      // Inline — full poll with options, in one of three styles
+      // (classic | compact | leaderboard). All tunables ride on CSS vars so
+      // every coloured element + the row radius is author-editable.
       if (view === 'inline') {
-        const opts = livePoll.options || [];
+        const style = b.poll_style || 'classic';
+        const optBg = brandColorVar(b.option_bg_color) || '#FFFCF7';   // row card fill
+        const barCol = brandColorVar(b.bar_color) || '#E7E74C';        // "other options" fill
+        d.className += ' b-voting-poll b-pollstyle-' + style
+          + (b.show_emoji ? '' : ' no-emoji') + (b.show_counts ? '' : ' no-counts');
+        d.style.setProperty('--vb-accent', accent);
+        d.style.setProperty('--vb-bar', barCol);
+        d.style.setProperty('--vb-optbg', optBg);
+        d.style.setProperty('--vb-border', brandColorVar(b.fg_color) || 'var(--b-ink)');
+        d.style.setProperty('--vb-rowrad', (b.row_radius != null ? b.row_radius : 14) + 'px');
+
+        const opts = (livePoll.options || []);
         const daysLeft = votingDaysLeft(livePoll.closes_at);
-        const reward = livePoll.reward_points || 5;
         const total = opts.reduce((s, o) => s + (o.votes || 0), 0);
-        const optHtml = opts.map((o, i) => {
-          const letter = String.fromCharCode(65 + i);
-          const label = state.lang === 'cn' && o.label_cn ? o.label_cn : o.label_en;
-          return `
-            <div class="vb-opt">
-              <div class="vb-opt-letter">${letter}</div>
-              <div class="vb-opt-label">${escapeHtml(label || '')}</div>
-              <div class="vb-opt-tick"></div>
-            </div>`;
-        }).join('');
-        d.innerHTML = `
-          <div class="vb-status-pill" style="color:${statusCol}">●  ${state.lang === 'cn' ? '投票' : 'OPEN'}${daysLeft ? ' · ' + daysLeft + 'D LEFT' : ''}</div>
-          <div class="vb-q">${escapeHtml(state.lang === 'cn' && livePoll.question_cn ? livePoll.question_cn : livePoll.question_en)}</div>
-          <div class="vb-opts">${optHtml}</div>
-          <div class="vb-cta" style="background:${promptBg};color:${promptTxt}">${state.lang === 'cn' ? '请选择' : 'PICK ONE TO VOTE'}</div>
-          <div class="vb-foot">${total.toLocaleString()} ${state.lang === 'cn' ? '票' : 'votes so far'}</div>`;
+        const pctOf = o => total > 0 ? Math.round(((o.votes || 0) / total) * 100) : 0;
+        const labelOf = o => state.lang === 'cn' && o.label_cn ? o.label_cn : (o.label_en || '');
+
+        const headHtml = `
+          <div class="vb-poll-head">
+            <div class="vb-poll-status" style="color:${statusCol}">
+              <span class="vb-poll-dot" style="background:${statusCol}"></span>${state.lang === 'cn' ? '投票' : 'OPEN'}${daysLeft ? ' · ' + daysLeft + 'D' : ''}
+            </div>
+            <div class="vb-poll-tag">+${livePoll.reward_points || 5} ${state.lang === 'cn' ? '积分' : 'PTS'}</div>
+          </div>
+          <div class="vb-poll-q">${escapeHtml(state.lang === 'cn' && livePoll.question_cn ? livePoll.question_cn : livePoll.question_en)}</div>`;
+        const footHtml = `<div class="vb-poll-foot">${total.toLocaleString()} ${state.lang === 'cn' ? '票 · 点击投票' : 'VOTES SO FAR · TAP TO VOTE'}</div>`;
+
+        let rowsHtml;
+        if (style === 'compact') {
+          rowsHtml = opts.map((o, i) => {
+            const letter = String.fromCharCode(65 + i);
+            const emoji = o.emoji ? ` <span class="vb-pemoji">${o.emoji}</span>` : '';
+            return `
+              <div class="vb-crow">
+                <div class="vb-crow-top">
+                  <div class="vb-crow-letter">${letter}</div>
+                  <div class="vb-crow-en">${escapeHtml(labelOf(o))}${emoji}</div>
+                  <div class="vb-crow-pct vb-pcount">${pctOf(o)}<span class="vb-pct-sign">%</span></div>
+                </div>
+                <div class="vb-crow-track"><div class="vb-crow-bar" style="width:${pctOf(o)}%"></div></div>
+              </div>`;
+          }).join('');
+        } else {
+          // classic + leaderboard share the bordered fill-bar row; leaderboard
+          // sorts by votes and badges the leader.
+          let rows = opts.map((o, i) => ({ o, i }));
+          if (style === 'leaderboard') rows = rows.sort((a, b2) => (b2.o.votes || 0) - (a.o.votes || 0));
+          rowsHtml = rows.map((r, rank) => {
+            const o = r.o;
+            const letter = String.fromCharCode(65 + r.i);
+            const isLead = style === 'leaderboard' && rank === 0 && total > 0;
+            const emoji = o.emoji ? ` <span class="vb-pemoji">${o.emoji}</span>` : '';
+            const lead = isLead ? `<span class="vb-lead-badge">${state.lang === 'cn' ? '领先' : 'LEADING'}</span>` : '';
+            const left = style === 'leaderboard'
+              ? `<div class="vb-prow-rank">${rank + 1}</div>`
+              : `<div class="vb-prow-letter">${letter}</div>`;
+            return `
+              <div class="vb-prow${isLead ? ' is-lead' : ''}">
+                <div class="vb-prow-fill" style="width:${pctOf(o)}%"></div>
+                <div class="vb-prow-body">
+                  ${left}
+                  <div class="vb-prow-main">
+                    <div class="vb-prow-en">${escapeHtml(labelOf(o))}${emoji}${lead}</div>
+                    ${o.label_cn && state.lang !== 'cn' ? `<div class="vb-prow-cn">${escapeHtml(o.label_cn)}</div>` : ''}
+                  </div>
+                  <div class="vb-prow-num vb-pcount">
+                    <div class="vb-prow-pct">${pctOf(o)}%</div>
+                    <div class="vb-prow-votes">${(o.votes || 0).toLocaleString()} ${state.lang === 'cn' ? '票' : 'VOTES'}</div>
+                  </div>
+                </div>
+              </div>`;
+          }).join('');
+        }
+
+        d.innerHTML = headHtml
+          + `<div class="vb-poll-rows">${rowsHtml}</div>`
+          + footHtml;
         return d;
       }
 
@@ -9490,6 +9666,17 @@ function buildVotingForm(m, b) {
       { value: 'past_result', label: T('Past result — winner of last closed poll', '往期结果 — 上一场投票的获胜者') },
     ], v => updateBlock(b.id, { view: v }))));
 
+  // Inline view renders the full poll with options in one of three styles.
+  if (view === 'inline') {
+    m.appendChild(field(T('Poll style', '投票样式'),
+      T('Classic — bordered rows with full-height fill bars + letter chips. Compact — slim rows with a thin underline bar. Leaderboard — ranked by votes with a LEADING badge; rows re-sort live.', '经典 — 带边框、整行填充进度条 + 字母圆标。紧凑 — 纤细行 + 细下划线进度条。排行榜 — 按票数排名,带「领先」徽章;实时重排。'),
+      sel(b.poll_style || 'classic', [
+        { value: 'classic',     label: T('Classic — fill bars + letter chips', '经典 — 填充条 + 字母圆标') },
+        { value: 'compact',     label: T('Compact — slim pills + underline bar', '紧凑 — 纤细行 + 下划线条') },
+        { value: 'leaderboard', label: T('Leaderboard — ranked, re-sorts live', '排行榜 — 排名,实时重排') },
+      ], v => updateBlock(b.id, { poll_style: v }))));
+  }
+
   // Data source applies to peek/inline/past_result; teaser ignores it.
   if (view !== 'teaser') {
     m.appendChild(field(T('Data source', '数据来源'),
@@ -9563,7 +9750,10 @@ function buildVotingForm(m, b) {
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
   m.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Accent colour', '强调色'), T('Used for the vote CTA + result fill.', '用于投票按钮 + 结果填充。'),
+  m.appendChild(field(T('Accent colour', '强调色'),
+    view === 'inline'
+      ? T('Your-vote fill + the leaderboard LEADING badge.', '你所投选项的填充色 + 排行榜「领先」徽章。')
+      : T('Used for the vote CTA + result fill.', '用于投票按钮 + 结果填充。'),
     sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
   // The "● OPEN" live-status indicator only appears in peek/inline views.
   if (view === 'peek' || view === 'inline') {
@@ -9571,16 +9761,55 @@ function buildVotingForm(m, b) {
       T('Colour of the "● OPEN" live indicator (dot + label).', '「● 投票」进行中指示器(圆点 + 文字)的颜色。'),
       sel(b.status_color || 'berry-punch', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { status_color: v }))));
   }
-  // The inline view shows a full "PICK ONE TO VOTE" button before the customer
-  // taps an option. Let it be recoloured; empty keeps the default grey + olive.
+  // Inline poll styles expose the per-option colours + the design's Tweaks.
   if (view === 'inline') {
-    m.appendChild(field(T('Vote button fill', '投票按钮底色'),
-      T('Background of the idle "PICK ONE TO VOTE" button. Once an option is tapped it switches to the accent colour.', '「请选择」按钮的底色。选择某项后会切换为强调色。'),
-      sel(b.prompt_bg_color || '', [{ value: '', label: T('— default (grey) —', '— 默认(灰)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { prompt_bg_color: v }))));
-    m.appendChild(field(T('Vote button text', '投票按钮文字'),
-      T('Text colour of the idle "PICK ONE TO VOTE" button.', '「请选择」按钮的文字颜色。'),
-      sel(b.prompt_text_color || '', [{ value: '', label: T('— default (olive) —', '— 默认(橄榄)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { prompt_text_color: v }))));
+    m.appendChild(field(T('Option fill colour', '选项底色'),
+      T('Background of each option row. Blank keeps the default cream.', '每个选项行的底色。留空保持默认奶白。'),
+      sel(b.option_bg_color || '', [{ value: '', label: T('— default (cream) —', '— 默认(奶白)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { option_bg_color: v }))));
+    m.appendChild(field(T('Bar fill colour', '进度条颜色'),
+      T('Progress fill for the options you did NOT vote for. Blank keeps the default lemon. (Your vote uses the accent colour.)', '你未投选项的进度填充色。留空保持默认柠檬黄。(你所投选项使用强调色。)'),
+      sel(b.bar_color || '', [{ value: '', label: T('— default (lemon) —', '— 默认(柠檬黄)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { bar_color: v }))));
+    m.appendChild(field(T('Option row corners', '选项行圆角'),
+      T('Corner radius of each option row, in pixels (4–26).', '每个选项行的圆角,单位像素(4–26)。'),
+      num(b.row_radius != null ? b.row_radius : 14, v => updateBlock(b.id, { row_radius: Math.max(4, Math.min(26, v || 0)) }), { min: 4, max: 26, step: 1 })));
+
+    // Tweaks — emoji after each label, and the %/vote-count readout.
+    const emojiRow = document.createElement('div');
+    emojiRow.className = 'field';
+    emojiRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const emojiBox = document.createElement('input');
+    emojiBox.type = 'checkbox';
+    emojiBox.checked = !!b.show_emoji;
+    emojiBox.addEventListener('change', () => updateBlock(b.id, { show_emoji: emojiBox.checked ? 1 : 0 }));
+    const emojiLbl = document.createElement('label');
+    emojiLbl.style.cssText = 'cursor:pointer;font-size:13px;font-weight:500;';
+    emojiLbl.textContent = T('Show emoji after each option', '在每个选项后显示表情');
+    emojiLbl.addEventListener('click', () => { emojiBox.checked = !emojiBox.checked; emojiBox.dispatchEvent(new Event('change')); });
+    emojiRow.appendChild(emojiBox); emojiRow.appendChild(emojiLbl);
+    m.appendChild(emojiRow);
+
+    const countRow = document.createElement('div');
+    countRow.className = 'field';
+    countRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const countBox = document.createElement('input');
+    countBox.type = 'checkbox';
+    countBox.checked = !!b.show_counts;
+    countBox.addEventListener('change', () => updateBlock(b.id, { show_counts: countBox.checked ? 1 : 0 }));
+    const countLbl = document.createElement('label');
+    countLbl.style.cssText = 'cursor:pointer;font-size:13px;font-weight:500;';
+    countLbl.textContent = T('Show vote counts (% + votes)', '显示票数(% + 票数)');
+    countLbl.addEventListener('click', () => { countBox.checked = !countBox.checked; countBox.dispatchEvent(new Event('change')); });
+    countRow.appendChild(countBox); countRow.appendChild(countLbl);
+    m.appendChild(countRow);
   }
+
+  // Cross-block chrome — same corner + entrance controls other blocks expose.
+  m.appendChild(field(T('Card corners', '卡片圆角'),
+    T('Corner radius of the whole block card.', '整块卡片的圆角。'),
+    sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS, v => updateBlock(b.id, { corner_radius: v }))));
+  m.appendChild(field(T('Entrance animation', '入场动画'),
+    T('How the block animates in when it scrolls into view.', '模块滚动进入视图时的入场方式。'),
+    sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS, v => updateBlock(b.id, { entrance_anim: v }))));
 
   // CTA only applies to teaser/peek/past_result (inline has its own vote button).
   if (view !== 'inline') {
