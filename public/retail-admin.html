@@ -4836,10 +4836,6 @@
                   <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-land" style="width:15px;height:15px;"> 🚚 Land · 陆运</label>
                 </div>
               </div>
-              <div class="field">
-                <label class="stacked">Freshness · 新鲜度</label>
-                <label style="display:inline-flex;align-items:flex-start;gap:6px;cursor:pointer;font-weight:500;padding-top:4px;"><input type="checkbox" id="pd-batch-made" style="width:15px;height:15px;margin-top:2px;"> <span>🥗 Made fresh in batches · 分批新鲜现做<br><span style="font-weight:400;color:#888;font-size:12px;">Outside-Guangzhou orders wait for the next batch day, then ship same-day. 广州以外订单等下一批制作日当天发货。</span></span></label>
-              </div>
             </section>
           </aside>
         </div>
@@ -16937,7 +16933,6 @@ function pdOpen(id) {
   document.getElementById('pd-ship-air').checked  = !p || modes.includes('air');
   document.getElementById('pd-ship-land').checked = !p || modes.includes('land');
   document.getElementById('pd-published').checked = p ? p.is_published === 1 : false;
-  document.getElementById('pd-batch-made').checked = p ? p.is_batch_made === 1 : false;
   // Photo gallery — start empty, then (for an existing product) pull the
   // ordered list from the lightweight images endpoint. New products start blank.
   _pdGallery = []; _pdGalleryDirty = false;
@@ -17477,7 +17472,6 @@ async function pdSave() {
     ship_modes: modes.join(',') || 'air,land',
     description_en: descEn, description_cn: descCn, description_format: descFormat,
     is_published: document.getElementById('pd-published').checked ? 1 : 0,
-    is_batch_made: document.getElementById('pd-batch-made').checked ? 1 : 0,
   };
   if (_pdGalleryDirty) body.images = _pdGallery;  // gallery drives image_data (first = main)
   if (id && BU_ID === Number(id)) body.bundle = buBody();  // buy-together bundle (null clears)
