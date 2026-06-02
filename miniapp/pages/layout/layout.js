@@ -61,7 +61,7 @@ Page({
       const [cfg, prods, cats, flash, polls] = await Promise.all([
         config.load(force),
         api.get('/api/retail/products?limit=100').catch(() => []),
-        api.get('/api/retail/categories').catch(() => []),
+        api.get('/api/retail/category-tree').catch(() => []),
         api.get('/api/retail/flash-sales').catch(() => []),
         hasToken ? api.get('/api/retail/polls').catch(() => []) : Promise.resolve([]),
       ]);
@@ -69,7 +69,9 @@ Page({
       this.setData({
         layout,
         products: Array.isArray(prods) ? prods : prods?.data || [],
-        categories: Array.isArray(cats) ? cats : cats?.data || [],
+        // TOP nodes of the 2-level tree (legacy categories table is gone).
+        categories: (Array.isArray(cats) ? cats : cats?.data || [])
+          .map(t => ({ id: t.id, name: t.name, name_cn: t.name_cn || '' })),
         flashSales: Array.isArray(flash) ? flash : flash?.data || [],
         polls: Array.isArray(polls) ? polls : (polls?.data || []),
         loading: false,

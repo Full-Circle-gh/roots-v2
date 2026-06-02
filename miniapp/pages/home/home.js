@@ -195,7 +195,7 @@ Page({
       const [cfg, prods, cats, flash, aff, polls, favs, notif] = await Promise.all([
         config.load(force),
         api.get('/api/retail/products?limit=100').catch(() => []),
-        api.get('/api/retail/categories').catch(() => []),
+        api.get('/api/retail/category-tree').catch(() => []),
         api.get('/api/retail/flash-sales').catch(() => []),
         hasToken ? api.get('/api/retail/affiliate').catch(() => null) : Promise.resolve(null),
         // Polls feed voting_block in auto-pull mode. Requires auth, so
@@ -213,7 +213,11 @@ Page({
       this.setData({
         layout,
         products: Array.isArray(prods) ? prods : (prods?.data || []),
-        categories: Array.isArray(cats) ? cats : (cats?.data || []),
+        // Categories now come from the 2-level category tree's TOP nodes (the
+        // legacy categories table is gone). Shape each top as { id, name (EN,
+        // matches products.category), name_cn } so blocks match + show CN.
+        categories: (Array.isArray(cats) ? cats : (cats?.data || []))
+          .map(t => ({ id: t.id, name: t.name, name_cn: t.name_cn || '' })),
         flashSales: Array.isArray(flash) ? flash : (flash?.data || []),
         affiliate: aff || null,
         polls: Array.isArray(polls) ? polls : (polls?.data || []),

@@ -4869,18 +4869,17 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
     // refreshed every 60s by a background timer (see below) so the
     // flash_sale_strip preview reflects what customers actually see.
     const [catsResp, prodsResp, flashResp, pollsResp] = await Promise.all([
-      // Tenant-aware categories (matches how products load below). The global
-      // /api/categories/product endpoint reads the non-tenant db, so under data
-      // isolation it returns the wrong tenant's (often empty) list — which left
-      // the category_tabs picker with no chips to toggle.
-      api('/api/retail-admin/categories'),
+      // Categories are the TOP nodes of the 2-level category tree (the legacy
+      // categories table is gone — the tree is the only category system). Each
+      // top → { id, name (EN, matches products.category), name_cn }.
+      api('/api/retail-admin/category-tree'),
       api('/api/retail-admin/products'),
       fetch('/api/retail/flash-sales', { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ data: [] })),
       // Polls feed the voting_block auto-pull preview + the per-block
       // poll picker. Cheap (small table) so we load once at boot.
       api('/api/retail-admin/polls').catch(() => ({ data: [] })),
     ]);
-    state.categories = catsResp?.data || catsResp?.categories || [];
+    state.categories = (catsResp?.data || []).map(t => ({ id: t.id, name: t.name, name_cn: t.name_cn || '' }));
     state.products = prodsResp.data || [];
     state.flashSales = flashResp?.data || [];
     state.polls = pollsResp?.data || [];
@@ -7683,7 +7682,10 @@ function renderBlockBody(b) {
       // themselves carry neither), so the preview mirrors the live renderer.
       const catCount = (c) => (state.products || []).filter(p => p.category === c.name).length;
       const catCover = (c) => { const p = (state.products || []).find(x => x.category === c.name && thumbUrl(x)); return p ? thumbUrl(p) : ''; };
-      const splitBi = (name) => { const s = String(name || ''); const m = s.match(/[一-鿿]/); return m ? { en: s.slice(0, m.index).trim(), cn: s.slice(m.index).trim() } : { en: s, cn: '' }; };
+      // Tree tops carry EN `name` + separate `name_cn`. splitBi returns both
+      // halves; catLabel picks one for the current editor language.
+      const splitBi = (c) => ({ en: c.name || '', cn: c.name_cn || '' });
+      const catLabel = (c) => state.lang === 'cn' ? (c.name_cn || c.name || '') : (c.name || '');
       const ck = getBi(b, 'kicker');
       const ct = getBi(b, 'title');
       const head = `<div class="head"><div><div class="kicker">${biLabel(ck.en, ck.cn)}</div><div class="ttl">${biLabel(ct.en, ct.cn)}</div></div><div class="more">${state.lang === 'cn' ? '查看全部' : 'SEE ALL'}</div></div>`;
@@ -7693,7 +7695,7 @@ function renderBlockBody(b) {
       if (catStyle === 'index') {
         const rows = cats.map((c, i) => {
           const hex = catHex(c, i);
-          const nm = splitBi(c.name);
+          const nm = splitBi(c);
           const num = ('0' + (i + 1)).slice(-2);
           return `<div class="idx-row">
             <div class="idx-num">${num}</div>
@@ -7712,7 +7714,7 @@ function renderBlockBody(b) {
       if (catStyle === 'bento') {
         const tiles = cats.map((c, i) => {
           const hex = catHex(c, i);
-          const nm = splitBi(c.name);
+          const nm = splitBi(c);
           const num = ('0' + (i + 1)).slice(-2);
           const cover = catCover(c);
           const bgStyle = cover ? `background-image:url('${cover}')` : `background:${hex}`;
@@ -7731,7 +7733,7 @@ function renderBlockBody(b) {
       if (catStyle === 'sticker') {
         const chips = cats.map((c, i) => {
           const hex = catHex(c, i);
-          const nm = splitBi(c.name);
+          const nm = splitBi(c);
           return `<div class="chip-pill" style="background:${hex};color:${btnTextHex(hex)}">
             <span class="en">${escapeHtml(nm.en)}</span>${nm.cn ? `<span class="cn">${escapeHtml(nm.cn)}</span>` : ''}
             <span class="chip-count">${catCount(c)}</span>
@@ -7746,7 +7748,7 @@ function renderBlockBody(b) {
       if (view === 'icons') {
         const cols = Math.max(3, Math.min(5, b.columns || 4));
         const icons = cats.map((c, i) => {
-          const name = categoryNameForLang(c.name);
+          const name = catLabel(c);
           const letter = (name.trim()[0] || '').toUpperCase();
           return `<div class="icon-tile">
             <div class="icon-circle"${circleStyle(c, i)}>${escapeHtml(letter)}</div>
@@ -7759,7 +7761,7 @@ function renderBlockBody(b) {
 
       if (view === 'scroll') {
         const tilesHtml = cats.map((c, i) => {
-          const name = categoryNameForLang(c.name);
+          const name = catLabel(c);
           const letter = (name.trim()[0] || '').toUpperCase();
           return `<div class="scroll-tile">
             <div class="icon-circle"${circleStyle(c, i)}>${escapeHtml(letter)}</div>
@@ -7774,7 +7776,7 @@ function renderBlockBody(b) {
       const numWord = state.lang === 'cn' ? '分类' : 'CATEGORY';
       const tiles = cats.map((c, i) => {
         const hex = catHex(c, i);
-        const name = escapeHtml(categoryNameForLang(c.name));
+        const name = escapeHtml(catLabel(c));
         const num = `0${i + 1}`;
         return `<div class="tile" style="background:${hex};color:${btnTextHex(hex)}">
           <div class="num">${num} · ${numWord}</div>
@@ -10188,14 +10190,14 @@ function buildCatTabsForm(m, b) {
       num(b.columns, v => updateBlock(b.id, { columns: Math.max(3, Math.min(5, v)) }), { min: 3, max: 5 })));
   }
 
-  const wrap = field(T('Categories to show', '要显示的分类'), T('Click to toggle. Manage the master list in the main admin.', '点击切换。在主后台管理分类总表。'), document.createElement('div'));
+  const wrap = field(T('Categories to show', '要显示的分类'), T('Click to toggle. These are the shop categories — edit the list in the Mini App Backend → Categories.', '点击切换。这些是商店分类 — 在「小程序后台 → 分类」中编辑。'), document.createElement('div'));
   const chips = wrap.querySelector('.helper').previousElementSibling;
   chips.className = 'chips';
   const cats = state.categories || [];
   cats.forEach(c => {
     const chip = document.createElement('div');
     chip.className = 'chip' + ((b.category_ids || []).includes(c.id) ? ' on' : '');
-    chip.textContent = c.name;
+    chip.textContent = c.name + (c.name_cn ? ' · ' + c.name_cn : '');
     chip.addEventListener('click', () => {
       const set = new Set(b.category_ids || []);
       set.has(c.id) ? set.delete(c.id) : set.add(c.id);
@@ -10224,7 +10226,7 @@ function buildCatTabsForm(m, b) {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:8px;';
       const nm = document.createElement('div');
-      nm.textContent = c.name;
+      nm.textContent = c.name + (c.name_cn ? ' · ' + c.name_cn : '');
       nm.style.cssText = 'flex:0 0 38%;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
       const cur = (b.tile_colors || {})[c.id] || '';
       const picker = sel(cur, [{ value: '', label: 'Auto · 自动' }, ...BRAND_COLOR_OPTIONS], v => {
@@ -10362,8 +10364,9 @@ function buildGridForm(m, b) {
   if (b.source_type === 'category') {
     secContent.appendChild(field(T('Category', '分类'), '', sel(b.category_id || '', [
       { value: '', label: T('— pick one —', '— 选择一个 —') },
-      ...state.categories.map(c => ({ value: c.id, label: c.name })),
-    ], v => updateBlock(b.id, { category_id: v ? Number(v) : null }))));
+      // Tree top ids are stable strings (e.g. 'dry') — keep them as-is, never Number().
+      ...state.categories.map(c => ({ value: c.id, label: c.name + (c.name_cn ? ' · ' + c.name_cn : '') })),
+    ], v => updateBlock(b.id, { category_id: v || null }))));
   } else if (b.source_type === 'top_selling') {
     secContent.appendChild(field(T('Window', '时间窗口'), T('How far back to count sales.', '统计多久以内的销量。'),
       sel(b.top_window || '7d', [

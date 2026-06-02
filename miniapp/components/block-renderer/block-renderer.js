@@ -387,18 +387,11 @@ Component({
             const p = allProducts.find(x => x.category === c.name && (absUrl(x.image_url) || x.image_data));
             return p ? (absUrl(p.image_url) || p.image_data) : '';
           };
-          // Split a combined "Bread 面包" name into both halves (the rows /
-          // captions show EN and CN together, unlike splitMixed which picks one).
-          const splitBoth = (s) => {
-            const str = String(s || '');
-            const m = str.match(/[一-鿿]/);
-            return m
-              ? { en: str.slice(0, m.index).trim(), cn: str.slice(m.index).trim() }
-              : { en: str, cn: '' };
-          };
           out.tiles = cats.map((c, i) => {
-            const splitName = lang.splitMixed(c.name, L);
-            const both = splitBoth(c.name);
+            // Category tops carry EN `name` + separate `name_cn`. Pick one for
+            // the single label; expose both halves for rows that show EN+CN.
+            const splitName = (L === 'cn' && c.name_cn) ? c.name_cn : c.name;
+            const both = { en: c.name, cn: c.name_cn || '' };
             const letter = (splitName.trim()[0] || '').toUpperCase();
             const override = tileColors[c.id];
             const token = override || palette[i % 6];
