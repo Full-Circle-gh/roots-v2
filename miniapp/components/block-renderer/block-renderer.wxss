@@ -199,7 +199,20 @@
 }
 
 /* ── Category tabs ────────────────────────────────────────────────────── */
-.cattabs { padding: 0 44rpx; }
+.cattabs {
+  padding: 0 44rpx;
+  /* Per-element colour defaults — overridden by inline custom properties the
+     renderer sets from the inspector's colour pickers. */
+  --cat-text: #1a1a17;
+  --cat-accent: #6A6E2D;
+  --cat-keyline: #1a1a17;
+  --cat-shadow: #1a1a17;
+  --cat-surface: #F2E7DF;
+  --cat-radius: 4rpx;
+}
+.cattabs.corner-sharp  { --cat-radius: 0rpx; }
+.cattabs.corner-subtle { --cat-radius: 12rpx; }
+.cattabs.corner-bold   { --cat-radius: 28rpx; }
 .cattabs .head {
   display: flex;
   justify-content: space-between;
@@ -211,7 +224,7 @@
   font-size: calc(18rpx * var(--font-scale));
   font-weight: 700;
   letter-spacing: 0.14em;
-  color: var(--olive);
+  color: var(--cat-accent);
 }
 .cattabs .ttl {
   font-family: var(--f-bear);
@@ -219,13 +232,14 @@
   font-weight: 500;
   line-height: 1.05;
   margin-top: 8rpx;
+  color: var(--cat-text);
 }
 .cattabs .more {
   font-family: var(--f-toni);
   font-size: calc(18rpx * var(--font-scale));
   font-weight: 700;
   letter-spacing: 0.1em;
-  color: var(--olive);
+  color: var(--cat-accent);
   text-decoration: underline;
 }
 .cattabs .grid {
@@ -238,7 +252,7 @@
   padding: 24rpx;
   position: relative;
   overflow: hidden;
-  border-radius: 4rpx;
+  border-radius: var(--cat-radius);
 }
 .cattabs .tile .num {
   font-family: var(--f-toni);
@@ -256,6 +270,81 @@
   bottom: 24rpx;
   left: 24rpx;
   right: 24rpx;
+}
+/* ── Style · Riso pop ── flat brand-colour fill (inline) + ink keyline + hard
+   offset shadow. */
+.cattabs.cat-riso .tile {
+  border: 4rpx solid var(--cat-keyline);
+  box-shadow: 8rpx 8rpx 0 var(--cat-shadow);
+}
+.cattabs.cat-riso .icon-circle {
+  border: 4rpx solid var(--cat-keyline);
+  box-shadow: 6rpx 6rpx 0 var(--cat-shadow);
+}
+/* ── Style · Editorial ── oat surface, hairline keyline, big serif name, the
+   category colour as a thick left accent rule (border-left-color set inline). */
+.cattabs.cat-editorial .grid { gap: 16rpx; }
+.cattabs.cat-editorial .tile {
+  height: auto;
+  min-height: 184rpx;
+  background: var(--cat-surface);
+  color: var(--cat-text);
+  border: 2rpx solid var(--cat-keyline);
+  border-left: 10rpx solid var(--cat-keyline);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.cattabs.cat-editorial .tile .num {
+  position: static;
+  color: var(--cat-accent);
+  opacity: 1;
+  margin-bottom: 16rpx;
+}
+.cattabs.cat-editorial .tile .name {
+  position: static;
+  font-size: calc(38rpx * var(--font-scale));
+}
+.cattabs.cat-editorial .icon-circle { border: 2rpx solid var(--cat-keyline); }
+/* ── Style · Stack & tag ── oat surface, ink border, rotated sticker number
+   tag in the category colour. */
+.cattabs.cat-stack .grid { gap: 20rpx; }
+.cattabs.cat-stack .tile {
+  height: auto;
+  min-height: 192rpx;
+  padding: 36rpx 24rpx 24rpx;
+  background: var(--cat-surface);
+  color: var(--cat-text);
+  border: 4rpx solid var(--cat-keyline);
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.cattabs.cat-stack .tile .tag {
+  position: absolute;
+  top: -18rpx;
+  left: 20rpx;
+  font-family: var(--f-gothic);
+  font-size: calc(28rpx * var(--font-scale));
+  line-height: 1;
+  letter-spacing: 0.04em;
+  padding: 6rpx 14rpx;
+  transform: rotate(-4deg);
+  border: 3rpx solid var(--cat-keyline);
+}
+.cattabs.cat-stack .tile .num {
+  position: static;
+  color: var(--cat-accent);
+}
+.cattabs.cat-stack .tile .name {
+  position: static;
+  font-size: calc(36rpx * var(--font-scale));
+  margin-top: 6rpx;
+}
+.cattabs.cat-stack .icon-circle {
+  border: 4rpx solid var(--cat-keyline);
+  border-radius: 24rpx;
 }
 .cattabs .empty {
   color: rgba(0, 0, 0, 0.3);
@@ -281,6 +370,7 @@
 .cattabs .icon-name {
   font-family: var(--f-aleo);
   font-size: calc(22rpx * var(--font-scale));
+  color: var(--cat-text);
   text-align: center;
   line-height: 1.2;
   max-width: 100%;
@@ -3252,9 +3342,11 @@
 @keyframes blk-slide-up   { from { opacity: 0; transform: translateY(20rpx); } to { opacity: 1; transform: translateY(0); } }
 .hero.enter-fade,
 .featured.enter-fade,
+.cattabs.enter-fade,
 .bun-blk.enter-fade        { animation: blk-fade-in   .4s ease-out both; }
 .hero.enter-slide_up,
 .featured.enter-slide_up,
+.cattabs.enter-slide_up,
 .bun-blk.enter-slide_up    { animation: blk-slide-up .45s ease-out both; }
 /* `enter-none` is the legacy instant render. */
 

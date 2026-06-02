@@ -304,34 +304,51 @@ Component({
           out.kicker  = lang.pick(b.kicker_en ?? b.kicker, b.kicker_cn, L);
           out.title   = lang.pick(b.title_en ?? b.title, b.title_cn, L);
           out.seeAll  = L === 'cn' ? '查看全部' : 'SEE ALL';
-          out.seeAllTarget = 'shop';
+          out.seeAllTarget = b.link_target || 'shop';
           out.catWord = L === 'cn' ? '分类' : 'CATEGORY';
           out.catView = b.view || 'tiles';
+          // Visual direction — riso | editorial | stack. Independent of view.
+          out.catStyle = ['riso', 'editorial', 'stack'].includes(b.cat_style) ? b.cat_style : 'riso';
           out.catCols = Math.max(3, Math.min(5, b.columns || 4));
           out.catBg   = color(b.bg_color || '');
+          // Standard cross-block options.
+          out.catCorner = b.corner_radius || 'sharp';
+          out.catEnter  = b.entrance_anim || 'none';
+          // Per-element colour overrides — empty falls back to the style default.
+          out.catText    = color(b.fg_color || 'ink');
+          out.catAccent  = color(b.accent_color || 'olive-moss');
+          out.catKeyline = color(b.keyline_color || 'ink');
+          out.catShadow  = color(b.shadow_color || 'ink');
+          out.catSurface = color(b.tile_surface_color || 'oat-milk');
+          out.catSurfaceText = btnText(b.tile_surface_color || 'oat-milk');
           const cats = (b.category_ids || [])
             .map(id => this.properties.categories.find(c => c.id === id))
             .filter(Boolean);
           const palette = ['papaya-glow','pea-sprout','berry-punch','golden-corn','skyberry','lotus'];
           // Per-category colour overrides keyed by category id; unset → auto
-          // palette by position. fg auto-contrasts to the resolved fill.
+          // palette by position. Drives the whole tile fill (riso) or the
+          // accent rule / sticker tag (editorial / stack).
           const tileColors = b.tile_colors || {};
           out.tiles = cats.map((c, i) => {
             const splitName = lang.splitMixed(c.name, L);
             const letter = (splitName.trim()[0] || '').toUpperCase();
             const override = tileColors[c.id];
             const token = override || palette[i % 6];
-            const bg = color(token);
+            const catColor = color(token);
             // Overrides auto-contrast by luminance; the auto palette keeps its
             // hand-tuned text colour (white on pea-sprout/berry-punch).
-            const fg = override ? btnText(token) : (i % 6 === 1 || i % 6 === 2 ? '#fff' : '#1a1a17');
+            const catText = override ? btnText(token) : (i % 6 === 1 || i % 6 === 2 ? '#fff' : '#1a1a17');
             return {
               id: c.id,
               num: '0' + (i + 1),
               name: splitName,
               letter,
               color: token,
-              bg, fg,
+              // Riso: whole tile + circle take the category colour.
+              bg: catColor, fg: catText,
+              // Editorial / stack: tile uses the surface; the category colour
+              // is the accent (rule) or the sticker tag fill.
+              tagBg: catColor, tagFg: catText,
             };
           });
           break;

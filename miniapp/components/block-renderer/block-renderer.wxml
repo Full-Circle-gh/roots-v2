@@ -4,6 +4,28 @@
      colored outline frame and/or edge-to-edge full-bleed width. -->
 <view class="blk-outer {{frameOn ? 'framed' : ''}} {{fullBleed ? 'bleed' : ''}} {{blockFill ? 'fill' : ''}} corner-{{blockCorner}}" style="{{frameOn ? 'border-color:' + frameColor : ''}}">
 
+<!-- Shared button trio (kfUrl → chat · qrUrl → QR preview · else bound 客服)
+     and social-proof row, reused across the coupon / poster / compact styles.
+     `cls` + `sty` let each style colour the CTA differently.
+     Defined here (outside the wx:if/wx:elif dispatch chain) so they don't
+     break the chain — a template sitting between elif branches orphans them. -->
+<template name="wcCta">
+  <button wx:if="{{w.showButton && w.kfUrl}}" class="{{cls}}" bindtap="onWecomChatTap" style="{{sty}}"><text>{{w.buttonLabel}}</text><text class="wc-loop-cta-ar">→</text></button>
+  <button wx:elif="{{w.showButton && w.qrUrl}}" class="{{cls}}" bindtap="onWecomCtaTap" style="{{sty}}"><text>{{w.buttonLabel}}</text><text class="wc-loop-cta-ar">→</text></button>
+  <button wx:elif="{{w.showButton}}" class="{{cls}}" open-type="contact" session-from="wecom_contact_block" bindcontact="onWecomContactError" style="{{sty}}"><text>{{w.buttonLabel}}</text><text class="wc-loop-cta-ar">→</text></button>
+</template>
+<template name="wcProof">
+  <view wx:if="{{w.showProof}}" class="wc-loop-proof">
+    <view class="wc-loop-faces">
+      <view class="wc-loop-face wc-face-0"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
+      <view class="wc-loop-face wc-face-1"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
+      <view class="wc-loop-face wc-face-2"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
+      <view class="wc-loop-face wc-face-3"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
+    </view>
+    <text class="wc-loop-proof-tx">{{w.proofPre}}<text class="wc-loop-proof-n">{{w.proofCount}}</text>{{w.proofPost}}</text>
+  </view>
+</template>
+
 <view wx:if="{{type === 'announcement_bar'}}" class="announce anim-{{anim}} speed-{{speed}} {{announceLink ? 'announce-linked' : ''}}" style="background:{{bg}};color:{{fg}}" bindtap="onAnnounceTap">
   <!-- Marquee: clipped wrapper around a duplicated track for seamless loop -->
   <view wx:if="{{anim === 'marquee_rtl' || anim === 'marquee_ltr'}}" class="anim-clip">
@@ -69,7 +91,9 @@
   </view>
 </view>
 
-<view wx:elif="{{type === 'category_tabs'}}" class="cattabs cattabs-{{catView}}" style="{{catBg ? 'background:' + catBg : ''}}">
+<view wx:elif="{{type === 'category_tabs'}}"
+      class="cattabs cattabs-{{catView}} cat-{{catStyle}} corner-{{catCorner}} enter-{{catEnter}}"
+      style="{{catBg ? 'background:' + catBg + ';' : ''}}--cat-text:{{catText}};--cat-accent:{{catAccent}};--cat-keyline:{{catKeyline}};--cat-shadow:{{catShadow}};--cat-surface:{{catSurface}}">
   <view class="head">
     <view>
       <view class="kicker">{{kicker}}</view>
@@ -77,12 +101,15 @@
     </view>
     <view class="more" data-target="{{seeAllTarget}}" bindtap="onSeeAllTap">{{seeAll}}</view>
   </view>
-  <!-- Tiles view (default) -->
+  <!-- Tiles view (default). Colour usage depends on the style:
+       riso → category colour fills the tile; editorial → category colour is
+       the left accent rule; stack → category colour fills the number tag. -->
   <view wx:if="{{tiles.length && catView === 'tiles'}}" class="grid">
     <view wx:for="{{tiles}}" wx:key="id" class="tile"
-          style="background:{{item.bg}};color:{{item.fg}}"
+          style="{{catStyle === 'riso' ? 'background:' + item.bg + ';color:' + item.fg : (catStyle === 'editorial' ? 'border-left-color:' + item.bg : '')}}"
           data-id="{{item.id}}" bindtap="onCategoryTap">
-      <view class="num">{{item.num}} · {{catWord}}</view>
+      <view wx:if="{{catStyle === 'stack'}}" class="tag" style="background:{{item.tagBg}};color:{{item.tagFg}}">{{item.num}}</view>
+      <view class="num">{{catStyle === 'stack' ? catWord : item.num + ' · ' + catWord}}</view>
       <view class="name">{{item.name}}</view>
     </view>
   </view>
@@ -863,26 +890,6 @@
      ink keyline, a mascot perched on the top edge, an ADD US badge, four
      value-prop chips, then a footer that pairs the CTA + social proof on the
      left with the 联系我 QR on the right. bg/fg/accent stay operator-editable. -->
-<!-- Shared button trio (kfUrl → chat · qrUrl → QR preview · else bound 客服)
-     and social-proof row, reused across the coupon / poster / compact styles.
-     `cls` + `sty` let each style colour the CTA differently. -->
-<template name="wcCta">
-  <button wx:if="{{w.showButton && w.kfUrl}}" class="{{cls}}" bindtap="onWecomChatTap" style="{{sty}}"><text>{{w.buttonLabel}}</text><text class="wc-loop-cta-ar">→</text></button>
-  <button wx:elif="{{w.showButton && w.qrUrl}}" class="{{cls}}" bindtap="onWecomCtaTap" style="{{sty}}"><text>{{w.buttonLabel}}</text><text class="wc-loop-cta-ar">→</text></button>
-  <button wx:elif="{{w.showButton}}" class="{{cls}}" open-type="contact" session-from="wecom_contact_block" bindcontact="onWecomContactError" style="{{sty}}"><text>{{w.buttonLabel}}</text><text class="wc-loop-cta-ar">→</text></button>
-</template>
-<template name="wcProof">
-  <view wx:if="{{w.showProof}}" class="wc-loop-proof">
-    <view class="wc-loop-faces">
-      <view class="wc-loop-face wc-face-0"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
-      <view class="wc-loop-face wc-face-1"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
-      <view class="wc-loop-face wc-face-2"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
-      <view class="wc-loop-face wc-face-3"><image class="wc-loop-face-ic" src="/assets/icons/loop/member.svg"/></view>
-    </view>
-    <text class="wc-loop-proof-tx">{{w.proofPre}}<text class="wc-loop-proof-n">{{w.proofCount}}</text>{{w.proofPost}}</text>
-  </view>
-</template>
-
 <view wx:elif="{{type === 'wecom_contact' && wecom && wecom.view === 'card' && wecom.cardStyle === 'warm'}}" class="wc-blk wc-loop">
   <image wx:if="{{wecom.showMascot}}" class="wc-loop-mascot" src="{{wecom.mascot}}" mode="aspectFit"/>
   <view class="wc-loop-card {{wecom.showShadow ? '' : 'wc-loop-flat'}} {{wecom.showBorder ? '' : 'wc-loop-noframe'}}" style="background:{{bg}};color:{{fg}}">
