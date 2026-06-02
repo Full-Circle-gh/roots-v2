@@ -7966,6 +7966,53 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), (req
   res.json({ success: true, data: loadPrinterPrefs() });
 });
 
+// Sample order used for previews when a store has no real order yet. Rich
+// enough to exercise every template branch (bilingual names, options, size,
+// voucher, note, cutlery) so the operator sees real differences.
+function _sampleOrderForPreview() {
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const order = {
+    order_no: 'FCR-SAMPLE-0001', placed_at: now, paid_at: now,
+    recipient_name: 'Sample 示例', recipient_phone: '13800001234',
+    subtotal: 56, shipping_fee: 8, voucher_amount: 5, points_amount: 0,
+    total: 59, payment_method: 'WeChat 微信',
+    address_full: '示例小区 3 栋 502 · Sample Estate Bldg 3 #502',
+    customer_note: 'Less ice 少冰', needs_cutlery: 1,
+  };
+  const items = [
+    { name_cn: '燕麦拿铁', name_en: 'Oat Latte', size: 'L', qty: 2, unit_price: 22, line_total: 44,
+      options_json: JSON.stringify(['热 Hot', '半糖 Half sugar']) },
+    { name_cn: '抹茶可颂', name_en: 'Matcha Croissant', qty: 1, unit_price: 12, line_total: 12 },
+  ];
+  return { order, items };
+}
+
+// Render (but do NOT print) a slip for one store + template, so the backend
+// can show a live visual of how the print will come out. Uses the store's
+// latest real order if there is one, otherwise sample data. No credentials
+// needed — renderOrder is pure.
+//   GET /api/retail-admin/printer/preview?store_id=..&template=..
+router.get('/api/retail-admin/printer/preview', requireRetailAdmin, (req, res) => {
+  const prefs = loadPrinterPrefs();
+  const storeId = parseInt(req.query.store_id, 10);
+  let tpl = String(req.query.template || 'receipt');
+  if (!_feie.TEMPLATE_IDS.includes(tpl)) tpl = 'receipt';
+
+  let order, items, sample = false;
+  const last = Number.isFinite(storeId)
+    ? tdb().prepare("SELECT * FROM retail_orders WHERE store_id = ? AND status != 'pending_payment' ORDER BY id DESC LIMIT 1").get(storeId)
+    : null;
+  if (last) {
+    order = last;
+    items = tdb().prepare('SELECT * FROM retail_order_items WHERE order_id = ? ORDER BY id').all(last.id);
+  } else {
+    ({ order, items } = _sampleOrderForPreview());
+    sample = true;
+  }
+  const content = _feie.renderOrder(tpl, order, items, prefs.shop_name);
+  res.json({ ok: true, content, sample, template: tpl });
+});
+
 // Test print to ONE store's printer. Body: { store_id }. Prints the latest
 // real order for that store if there is one, otherwise a sample slip.
 router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, res) => {
