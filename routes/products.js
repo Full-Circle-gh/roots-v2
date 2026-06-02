@@ -12,7 +12,7 @@ const PRODUCT_COLS = `
   p.external_id, p.sort_order, p.stock_qty, p.tags,
   p.variant_group_id, p.variant_label, p.variant_sort,
   p.is_market, p.is_restock_only, p.is_published,
-  p.ship_modes, p.needs_ice_pack,
+  p.ship_modes, p.needs_ice_pack, p.is_batch_made,
   p.nutrition,
   p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,
   p.description_blocks, p.use_block_design, p.bundle,
@@ -35,7 +35,7 @@ const PRODUCT_LIST_COLS = `
   p.external_id, p.sort_order, p.stock_qty, p.tags,
   p.variant_group_id, p.variant_label, p.variant_sort,
   p.is_market, p.is_restock_only, p.is_published,
-  p.ship_modes, p.needs_ice_pack,
+  p.ship_modes, p.needs_ice_pack, p.is_batch_made,
   (p.image_data IS NOT NULL AND p.image_data != '') AS has_image,
   r.name_en AS recipe_name
 `;
@@ -315,6 +315,10 @@ const FIELDS = [
   // (The legacy needs_ice_pack cold-chain flag was retired — anything shipped
   // by air is packed with ice anyway, so it added no signal.)
   'ship_modes',
+  // Fresh batch-made flag — short-shelf-life items (fresh meals, wraps) the
+  // kitchen makes on a fixed cadence. Gates the outside-GZ "made fresh, ships
+  // on the next batch day" notice + promised dates.
+  'is_batch_made',
   // Nutrition panel — JSON: { basis_en, basis_cn, rows:[{label_en,label_cn,value}] }
   'nutrition',
   // "Buy together" bundle JSON: { title_en, title_cn, ids:[productId,…], price, voucher }
@@ -340,6 +344,7 @@ function pickBody(body) {
     else if (k === 'is_restock_only')    out[k] = body[k] ? 1 : 0;
     else if (k === 'is_published')       out[k] = body[k] ? 1 : 0;
     else if (k === 'use_block_design')   out[k] = body[k] ? 1 : 0;
+    else if (k === 'is_batch_made')      out[k] = body[k] ? 1 : 0;
     else if (k === 'description_format') {
       // Only two valid values; default anything else to 'plain'. Mini-app's
       // <rich-text> renders HTML when this is 'rich'; otherwise the front-end

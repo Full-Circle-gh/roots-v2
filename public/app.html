@@ -10399,6 +10399,7 @@ function _renderProdEssentialsCard(ctx) {
       ${_prodCbBool(p, 'is_published', 'Published · 上架', 'Visible in the mini-app store')}
       ${_prodCbBool(p, 'is_market', 'Market product · 市场产品', 'Sold at the farmer’s market')}
       ${_prodCbBool(p, 'is_restock_only', 'Restock-only · 仅补货', 'Internal stock control; not sold to customers')}
+      ${_prodCbBool(p, 'is_batch_made', '🥗 Made fresh in batches · 分批新鲜现做', 'Outside-Guangzhou orders wait for the next batch day, then ship same-day')}
     </div>
     <div>
       ${_prodPanelHead('Shipping modes · 配送方式')}
