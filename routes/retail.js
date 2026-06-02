@@ -7026,6 +7026,10 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     const norm = normalizeCategoryPair(top, sub, tdb());
     sets.push('top_category = ?'); params.push(norm.top);
     sets.push('subcategory = ?');  params.push(norm.sub);
+    // Auto-sync the legacy `category` column to the chosen top category. The
+    // operator picker is gone (tree is the only category system) but colophon
+    // mapping + any legacy reader still read products.category.
+    sets.push('category = ?'); params.push(norm.top);
   }
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
 
@@ -7130,7 +7134,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       name_en || name_cn, name_cn || null,
-      (b.sku || '').trim() || null, (b.category || '').trim() || null,
+      (b.sku || '').trim() || null, cat2.top,
       cat2.top, cat2.sub, (b.weight || '').trim() || null,
       Math.max(0, parseFloat(b.sell_price) || 0),
       (() => { const v = parseFloat(b.compare_at_price); return Number.isFinite(v) && v > 0 ? v : null; })(),

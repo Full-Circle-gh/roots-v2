@@ -5028,7 +5028,6 @@
                 <select id="pd-top-category" onchange="pdOnTopCatChange()"><option value="">— none · 无 —</option></select></div>
               <div class="field"><label class="stacked">Subcategory · 子分类 <span class="muted" style="font-weight:400;">(section heading)</span></label>
                 <select id="pd-subcategory"><option value="">— none · 无 —</option></select></div>
-              <div class="field"><label class="stacked">Category · 分类 <span class="muted" style="font-weight:400;">(legacy)</span></label><input type="text" id="pd-category" list="pd-cat-list" placeholder="e.g. Drinks · 例如 饮品"><datalist id="pd-cat-list"></datalist></div>
               <div class="field"><label class="stacked">Badge · 标签 <span class="muted" style="font-weight:400;">(shop card chip)</span></label>
                 <select id="pd-badge">
                   <option value="">None · 无</option>
@@ -18043,9 +18042,6 @@ function paOpenEdit(id) {
 let _pdGallery = [];
 let _pdGalleryDirty = false;
 let _pdDragFrom = null;
-function pdCats() {
-  return [...new Set((PA_PRODUCTS || []).map(p => (p.category || '').trim()).filter(Boolean))].sort();
-}
 // Map a product's free-text tags column to the one badge the dropdown shows.
 // Mirrors pickBadge() in the mini-app shop page so the editor reflects exactly
 // what customers see (priority: NEW > POP > SALE > HOT).
@@ -18100,7 +18096,7 @@ function pdOpen(id) {
   document.getElementById('pd-title').textContent = p ? (p.name_en || p.name_cn || 'Product · 产品') : 'New product · 新增产品';
   set('pd-name-en', p && p.name_en); set('pd-name-cn', p && p.name_cn);
   set('pd-price', p ? p.sell_price : ''); set('pd-stock', p ? (p.stock_qty != null ? p.stock_qty : 0) : '');
-  set('pd-sku', p && p.sku); set('pd-category', p && p.category); set('pd-weight', p && p.size);
+  set('pd-sku', p && p.sku); set('pd-weight', p && p.size);
   set('pd-badge', p ? pdBadgeOf(p.tags) : '');
   // Description is always the Classic (rich-text) editor now. A legacy plain
   // row is promoted to HTML so old text still shows formatted; on next save it
@@ -18124,7 +18120,6 @@ function pdOpen(id) {
       .then(j => { if (j && j.success && Array.isArray(j.images)) { _pdGallery = j.images.slice(); pdRenderGallery(); } })
       .catch(() => {});
   }
-  document.getElementById('pd-cat-list').innerHTML = pdCats().map(c => `<option value="${escapeAttr(c)}">`).join('');
   pdLoadCatTree().then(() => {
     pdFillTopCats(p && p.top_category);
     pdFillSubCats(p && p.top_category, p && p.subcategory);
@@ -18649,7 +18644,7 @@ async function pdSave() {
   const descCn = pdRteClean(document.getElementById('pd-rte-cn').innerHTML);
   const body = {
     name_en: g('pd-name-en'), name_cn: g('pd-name-cn'),
-    sku: g('pd-sku'), category: g('pd-category'), weight: g('pd-weight'),
+    sku: g('pd-sku'), weight: g('pd-weight'),
     top_category: g('pd-top-category'), subcategory: g('pd-subcategory'),
     tags: g('pd-badge'),
     sell_price: parseFloat(g('pd-price')) || 0,

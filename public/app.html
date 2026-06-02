@@ -9539,11 +9539,17 @@ function _bulkOpenStatus() {
     </div>`;
 }
 
-function _bulkOpenCategory() {
+async function _bulkOpenCategory() {
   if (_prodSelectedIds.size === 0) return;
-  const lookupCats = (typeof loadProdCats === 'function') ? loadProdCats() : [];
-  const inUseCats  = [...new Set((_products || []).map(p => p.category).filter(Boolean))];
-  const cats = [...new Set([...lookupCats, ...inUseCats])].sort((a, b) => a.localeCompare(b));
+  // Tree TOP categories are the only category system now. Setting one also
+  // clears the subcategory + mirrors into the legacy column server-side.
+  if (!_pfCatTree) {
+    try {
+      const r = await fetch('/api/retail/category-tree');
+      const d = await r.json();
+      _pfCatTree = (d && d.success && Array.isArray(d.data)) ? d.data : [];
+    } catch { _pfCatTree = []; }
+  }
   const overlay = mkOverlay('bulkActionOverlay');
   const box = overlay.querySelector('.overlay-box');
   box.style.maxWidth = '460px';
@@ -9555,7 +9561,7 @@ function _bulkOpenCategory() {
     <p style="font-size:12px;color:var(--muted);margin:0 0 14px">Apply to ${_prodSelectedIds.size} product${_prodSelectedIds.size===1?'':'s'} · 应用到 ${_prodSelectedIds.size} 个产品</p>
     <select id="bulkCatSel" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;margin-bottom:14px">
       <option value="">— Clear category · 清除分类 —</option>
-      ${cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+      ${(_pfCatTree || []).map(t => `<option value="${esc(t.name)}">${esc(t.name)}${t.name_cn ? ' · ' + esc(t.name_cn) : ''}</option>`).join('')}
     </select>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-secondary" onclick="closeOverlay('bulkActionOverlay')">Cancel 取消</button>
@@ -11582,14 +11588,6 @@ async function showProductForm(id) {
       if (d.success) _products = d.data || [];
     } catch {}
   }
-  // Category dropdown — union of the lookup list AND every category that
-  // actually appears on a product row. The lookup table can be empty (fresh
-  // install, never-managed) while the products page still shows categories
-  // because the list view derives them from the products themselves. The
-  // union makes sure the user can pick any category that's in use.
-  const lookupCats = loadProdCats();
-  const inUseCats  = [...new Set((_products || []).map(p => p.category).filter(Boolean))];
-  const cats = [...new Set([...lookupCats, ...inUseCats])].sort((a, b) => a.localeCompare(b));
   const statuses = ['Active','Inactive','Seasonal','Coming Soon'];
   const freeOfOpts = [
     {id:'gluten', label:'🌾 Gluten Free 无麸质'},
@@ -11648,15 +11646,6 @@ async function showProductForm(id) {
         <div class="form-group"><label>Status 状态</label>
           <select id="pf_status">${statuses.map(s=>`<option value="${s}" ${(prod?.status||'Active')===s?'selected':''}>${statusLabel(s, PRODUCT_STATUS_CN)}</option>`).join('')}</select></div>
         <div class="form-group"><label>Category 分类</label>
-          <div style="display:flex;gap:6px">
-            <select id="pf_cat" style="flex:1">
-              <option value="">— Select —</option>
-              ${cats.map(c=>`<option value="${c}" ${(prod?.category||'')===c?'selected':''}>${c}</option>`).join('')}
-              ${prod?.category&&!cats.includes(prod.category)?`<option value="${esc(prod.category)}" selected>${esc(prod.category)}</option>`:''}
-            </select>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="showProdCatManager()">✏️</button>
-          </div></div>
-        <div class="form-group"><label>Shop section 店面分类</label>
           <select id="pf_top_cat"><option value="">— Select —</option></select>
           <div class="help-tip-inline" style="font-size:11px;color:var(--ink-soft,#888);margin-top:3px">Controls the mini-app shop's left rail · 控制小程序店面左栏</div></div>
         <div class="form-group"><label>Subcategory 子分类</label>
@@ -12179,16 +12168,6 @@ async function pfOnRecipeChange(force) {
       dataEl.value = rec.image_data;
       previewEl.innerHTML = `<img src="${rec.image_data}" style="width:100%;height:100%;object-fit:cover">`;
       filled++;
-    }
-  }
-
-  // Category — only fill if the product has none and the recipe's category is
-  // also a registered product category (recipes & products use separate lists).
-  if (rec.category) {
-    const sel = document.getElementById('pf_cat');
-    if (sel && (force || !sel.value)) {
-      const opt = [...sel.options].find(o => o.value === rec.category);
-      if (opt) { sel.value = rec.category; filled++; }
     }
   }
 
@@ -14640,71 +14619,6 @@ async function deletePO(id, poNumber) {
   else toast('Error · 错误: '+d.error,'error');
 }
 
-function showProdCatManager() {
-  const overlay = mkOverlay('prodCatOverlay');
-  overlay.querySelector('.overlay-box').style.maxWidth = '440px';
-  renderProdCatContent();
-}
-
-function closeProdCatManager() { closeOverlay('prodCatOverlay'); }
-
-function renderProdCatContent() {
-  const box = document.querySelector('#prodCatOverlay .overlay-box');
-  if (!box) return;
-  const cats = loadProdCats();
-  box.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">'
-    +'<h2 style="font-size:18px;font-weight:900"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-2px;margin-right:8px;color:var(--text-3)"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4z"/></svg>Product Categories 产品分类</h2>'
-    +'<button class="btn-icon" onclick="closeProdCatManager()">✕</button></div>'
-    +'<div id="prodCatList" style="margin-bottom:16px">'
-    +cats.map((c,i)=>`<div style="display:flex;gap:8px;margin-bottom:8px"><input value="${esc(c)}" id="pcat_${i}" style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none"><button class="btn btn-danger btn-sm" onclick="deleteProdCat(${i})">🗑</button></div>`).join('')
-    +'</div>'
-    +'<div style="display:flex;gap:8px;margin-bottom:16px">'
-    +'<input id="newProdCatInput" placeholder="New category... · 新分类…" style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none">'
-    +'<button class="btn btn-primary" onclick="addProdCat()">+ Add</button></div>'
-    +'<div style="display:flex;gap:8px">'
-    +'<button class="btn btn-primary" style="flex:1" onclick="saveProdCatsFromDOM()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Save</button>'
-    +'<button class="btn btn-secondary" onclick="closeProdCatManager()">Cancel 取消</button></div>';
-}
-
-function addProdCat() {
-  const input = document.getElementById('newProdCatInput');
-  if (!input?.value.trim()) { toast('Category name required · 分类名称必填', 'error'); return; }
-  // Pull current edits from existing rows, then append the new one, so in-flight
-  // text changes aren't lost when we re-render.
-  const cats = readProdCatsFromDOM();
-  cats.push(input.value.trim());
-  saveProdCats(cats);
-  renderProdCatContent();
-}
-
-function deleteProdCat(idx) {
-  if (!confirm('Delete this category? · 删除此分类?')) return;
-  const cats = readProdCatsFromDOM();
-  cats.splice(idx, 1);
-  saveProdCats(cats);
-  renderProdCatContent();
-}
-
-// Pull category names from the modal's input rows.
-function readProdCatsFromDOM() {
-  const inputs = document.querySelectorAll('#prodCatList input');
-  return [...inputs].map(i => i.value.trim()).filter(Boolean);
-}
-
-// Modal "Save" handler — read DOM into the cache+server, then refresh the
-// product form's category <select> so the latest list is visible immediately.
-function saveProdCatsFromDOM() {
-  const cats = readProdCatsFromDOM();
-  saveProdCats(cats);
-  toast('✅ Categories saved · 分类已保存','success');
-  closeProdCatManager();
-  const sel = document.getElementById('pf_cat');
-  if (sel) {
-    const cur = sel.value;
-    sel.innerHTML = '<option value="">— Select —</option>'+cats.map(c=>`<option value="${c}" ${cur===c?'selected':''}>${c}</option>`).join('');
-  }
-}
-
 // Collects the product form into the JSON payload the API expects. Shared
 // between the explicit Save click and the autosave path so they can't drift.
 // Shop category tree (top_category → subcategory), shared with the mini-app
@@ -14740,7 +14654,7 @@ function _pfCollect() {
   const freeOfChecked = ['gluten','nuts','soy','dairy','egg','5spice'].filter(id=>document.getElementById('pf_fo_'+id)?.checked);
   return {
     name_en: v('pf_en'), name_cn: v('pf_cn'), sku: v('pf_sku'),
-    category: v('pf_cat'), status: v('pf_status'),
+    status: v('pf_status'),
     top_category: v('pf_top_cat') || null,
     subcategory:  v('pf_subcat') || null,
     sell_price: parseFloat(v('pf_price'))||0,

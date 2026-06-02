@@ -432,6 +432,10 @@ router.post('/api/products', requireAuth, requirePermission('products'), (req, r
   // Validate the 2-level category pair against the live tree.
   const cat = normalizeCategoryPair(p.top_category, p.subcategory, db);
   p.top_category = cat.top; p.subcategory = cat.sub;
+  // Keep the legacy freeform `category` column auto-synced to the chosen top
+  // category. The operator picker is gone (tree is the only category system),
+  // but colophon mapping + any legacy reader still read products.category.
+  p.category = cat.top;
   // Keep the primary image_data in sync with the gallery's first photo.
   if ('images' in req.body && !('image_data' in req.body)) {
     const arr = (Array.isArray(req.body.images) ? req.body.images : []).filter(s => typeof s === 'string' && s);
@@ -490,6 +494,9 @@ router.put('/api/products/:id', requireAuth, requirePermission('products'), (req
     p.top_category = cat.top; p.subcategory = cat.sub;
     if (!present.includes('top_category')) present.push('top_category');
     if (!present.includes('subcategory'))  present.push('subcategory');
+    // Auto-sync the legacy `category` column to the chosen top category.
+    p.category = cat.top;
+    if (!present.includes('category')) present.push('category');
   }
   try {
     const setClause = present.map(f => `${f}=?`).join(',') + ',updated_at=CURRENT_TIMESTAMP';
@@ -654,7 +661,8 @@ router.delete('/api/products/:id', requireAuth, requireDelete, requirePermission
 // Body: { ids: [int,...], action: string, value: any }
 // Actions:
 //   set_status            value = 'Active'|'Inactive'|'Seasonal'|'Coming Soon'
-//   set_category          value = category name (string, '' clears)
+//   set_category          value = TOP category name from the tree ('' clears);
+//                         also clears subcategory + mirrors into legacy category
 //   set_is_market         value = 0|1
 //   set_is_restock_only   value = 0|1
 //   set_is_published      value = 0|1 — toggles "Show in mini-app shop"
@@ -680,9 +688,12 @@ router.post('/api/products/bulk-update', requireAuth, requirePermission('product
       break;
     }
     case 'set_category': {
-      // '' / null clears the category (NULL in the column).
-      normalized = (value == null || value === '') ? null : String(value).trim();
-      stmt = db.prepare('UPDATE products SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+      // Value is a TOP category name from the live tree (the freeform legacy
+      // picker is gone). Validate against the tree; '' / null clears. Setting a
+      // top also clears any now-stale subcategory and mirrors into the legacy
+      // `category` column so colophon + legacy readers keep working.
+      normalized = (value == null || value === '') ? null : normalizeCategoryPair(value, null, db).top;
+      stmt = db.prepare('UPDATE products SET top_category = ?, subcategory = NULL, category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
       break;
     }
     case 'set_is_market': {
@@ -712,7 +723,9 @@ router.post('/api/products/bulk-update', requireAuth, requirePermission('product
   try {
     const tx = db.transaction(() => {
       for (const id of cleanIds) {
-        const r = (action === 'delete') ? stmt.run(id) : stmt.run(normalized, id);
+        const r = (action === 'delete') ? stmt.run(id)
+          : (action === 'set_category') ? stmt.run(normalized, normalized, id)
+          : stmt.run(normalized, id);
         if (r.changes > 0) affected += 1;
       }
     });
