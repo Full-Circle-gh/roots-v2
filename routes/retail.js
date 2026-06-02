@@ -5451,7 +5451,7 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
   ).all(id);
 
   const recentOrders = tdb().prepare(
-    `SELECT id, order_no, status, total, fulfillment_type, placed_at AS created_at
+    `SELECT id, order_no, status, total, placed_at AS created_at
        FROM retail_orders
       WHERE customer_id = ?
       ORDER BY id DESC LIMIT 10`
