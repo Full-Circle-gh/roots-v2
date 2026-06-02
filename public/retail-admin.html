@@ -2604,13 +2604,19 @@
     font-family: var(--f-mono); font-size: 9px; font-weight: 500;
     letter-spacing: .24em; text-transform: uppercase; color: var(--text-3);
   }
+  /* Metadata block is a contained card so it reads as structured, matching
+     the shipment + total cards below it (was a borderless grid floating on
+     the drawer field, which made the top half look flat/unanchored). */
   .order-detail {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: var(--s4) var(--s5);
-    margin-bottom: var(--s5);
-    padding-bottom: var(--s5);
-    border-bottom: 1px solid var(--line-soft);
+    margin-bottom: var(--s4);
+    background: var(--bg-pane);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: var(--s4) var(--s5);
+    box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
   }
   .order-detail .full { grid-column: 1 / -1; }
   /* Info labels — mono, wider tracking, to match the design's field labels. */
