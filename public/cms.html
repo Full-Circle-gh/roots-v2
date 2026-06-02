@@ -9973,85 +9973,41 @@ function buildOrderTrackerForm(m, b) {
     'Shows the signed-in customer\'s latest <b>in-flight order</b> with a live progress bar (paid → prep → on the way → delivered). It <b>hides itself</b> when they have no active order, so it\'s safe to place near the top.',
     '展示已登录顾客最新的<b>进行中订单</b>及实时进度条(已支付 → 准备中 → 配送中 → 已送达)。顾客无进行中订单时会<b>自动隐藏</b>,可放心置顶。'
   );
-  m.appendChild(note);
+  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
+
+  secContent.appendChild(note);
 
   const t = getBi(b, 'title');
-  m.appendChild(field(T('Title', '标题'), '',
+  secContent.appendChild(field(T('Title', '标题'), '',
     txtPair(t.en, t.cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn, title: undefined }))));
 
-  // Layout — the design's three directions.
-  m.appendChild(field(T('Style', '样式'),
-    T('Classic — ringed icon stepper with a bilingual label under each node. Track & truck — status-first headline + a rounded rail with a truck riding the current step. Status banner — bold accent header + chunky 4-segment progress + ticket button.',
-      '经典 — 带光环的图标步进器,每个节点下方有中英标签。轨道卡车 — 状态优先标题 + 圆角轨道,卡车停在当前节点。状态横幅 — 醒目强调色头部 + 粗四段进度 + 票券按钮。'),
+  // ── Style & layout ──────────────────────────────────────────────────
+  secLayout.appendChild(field(T('Style', '样式'),
+    T('Classic — circle steps with a label under each one. Track & truck — a status headline with a truck moving along a rail. Status banner — a bold coloured header with a 4-part progress bar and a button.',
+      '经典 — 圆形步骤,每步下方有标签。轨道卡车 — 状态标题 + 卡车沿轨道行进。状态横幅 — 醒目的彩色头部 + 四段进度条 + 按钮。'),
     sel(b.track_style || 'classic', [
-      { value: 'classic', label: T('Classic — ringed stepper', '经典 — 光环步进器') },
-      { value: 'truck',   label: T('Track & truck — riding rail', '轨道卡车 — 行进轨道') },
+      { value: 'classic', label: T('Classic — circle steps', '经典 — 圆形步骤') },
+      { value: 'truck',   label: T('Track & truck — moving truck', '轨道卡车 — 卡车行进') },
       { value: 'banner',  label: T('Status banner — segments', '状态横幅 — 分段进度') },
     ], v => updateBlock(b.id, { track_style: v }))));
 
   const style = b.track_style || 'classic';
 
-  // ── Core colours ──
-  m.appendChild(field(T('Accent colour', '主题色'),
-    T('Progress fill + primary action button.', '进度填充与主操作按钮颜色。'),
-    sel(b.accent_color || 'forest-kale', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
-
-  m.appendChild(field(T('Card background', '卡片背景'),
-    style === 'banner' ? T('Fill behind the banner body.', '横幅主体的背景填充色。') : T('Fill colour behind the card.', '卡片背景填充色。'),
-    sel(b.card_bg_color || '',
-      [{ value: '', label: T('— white —', '— 白色 —') }, ...BRAND_COLOR_OPTIONS],
-      v => updateBlock(b.id, { card_bg_color: v || undefined }))));
-
-  m.appendChild(field(T('Card border', '卡片边框'), T('Outline around the card. Pick — none — to remove it.', '卡片外边框。选「— 无 —」可移除。'),
-    sel(b.card_border_color === undefined ? 'ink' : b.card_border_color,
-      [{ value: '', label: T('— none —', '— 无 —') }, ...BRAND_COLOR_OPTIONS],
-      v => updateBlock(b.id, { card_border_color: v }))));
-
-  m.appendChild(field(T('Button text colour', '按钮文字色'),
-    T('Label colour on the action button (and status pill). Blank = auto.', '操作按钮(及状态胶囊)的文字颜色。留空 = 自动。'),
-    sel(b.cta_text_color || '', [{ value: '', label: T('— auto —', '— 自动 —') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { cta_text_color: v }))));
-
-  // ── Track + marker colours ──
-  m.appendChild(field(T('Empty track colour', '未完成轨道色'),
-    T('The unfilled progress track / connector.', '未填充的进度轨道 / 连接线。'),
-    sel(b.rail_color || '', [{ value: '', label: T('— default (grey) —', '— 默认(灰)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { rail_color: v }))));
-
-  if (style === 'truck' || style === 'banner') {
-    m.appendChild(field(T('Marker colour', '标记色'),
-      style === 'truck' ? T('The truck pin riding the rail.', '行进在轨道上的卡车标记。') : T('The status icon circle in the header.', '头部状态图标圆圈。'),
-      sel(b.marker_color || '', [{ value: '', label: T('— default (pink) —', '— 默认(粉)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { marker_color: v }))));
-    m.appendChild(field(T('Highlight colour', '高亮色'),
-      style === 'truck' ? T('Completed milestone dots.', '已完成里程碑圆点。') : T('Completed segments + the ticket button.', '已完成分段 + 票券按钮。'),
-      sel(b.bright_color || '', [{ value: '', label: T('— default (lime) —', '— 默认(柠檬黄)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { bright_color: v }))));
-  }
-
-  // ── Per-stage node colours (classic stepper) ──
-  if (style === 'classic') {
-    const stageHdr = document.createElement('div');
-    stageHdr.className = 'helper';
-    stageHdr.style.cssText = 'margin: 8px 0 2px; font-weight: 600;';
-    stageHdr.textContent = T('Stage node colours', '阶段节点颜色');
-    m.appendChild(stageHdr);
-    const stageField = (labEn, labCn, key, defLabel) =>
-      m.appendChild(field(T(labEn, labCn), '',
-        sel(b[key] || '', [{ value: '', label: defLabel }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { [key]: v }))));
-    stageField('Paid node',      '已付款节点', 'stage_paid_color',  T('— amber —', '— 琥珀 —'));
-    stageField('Prep node',      '备货节点',   'stage_prep_color',  T('— lime —',  '— 柠檬黄 —'));
-    stageField('On-way node',    '配送节点',   'stage_onway_color', T('— pink —',  '— 粉 —'));
-    stageField('Delivered node', '送达节点',   'stage_done_color',  T('— berry —', '— 莓红 —'));
-  }
-
-  // ── Tweaks (from the design's Energy + Stage controls) ──
-  m.appendChild(field(T('Weight', '视觉力度'),
-    T('Heading scale + banner frame weight. Refined is lighter; Bold is chunkier.', '标题大小 + 横幅边框力度。精致更轻;醒目更粗。'),
+  secLayout.appendChild(field(T('Weight', '视觉力度'),
+    T('Heading size and border weight. Refined is lighter; Bold is chunkier.', '标题大小与边框粗细。精致更轻;醒目更粗。'),
     sel(b.energy || 'balanced', [
       { value: 'refined',  label: T('Refined', '精致') },
       { value: 'balanced', label: T('Balanced', '均衡') },
       { value: 'bold',     label: T('Bold', '醒目') },
     ], v => updateBlock(b.id, { energy: v }))));
-
-  m.appendChild(field(T('Preview stage', '预览阶段'),
-    T('Editor preview only — pick a milestone to see how each state looks. The live block follows the customer\'s real order.', '仅编辑器预览 — 选择一个阶段查看各状态外观。线上模块跟随顾客真实订单。'),
+  secLayout.appendChild(field(T('Card corners', '卡片圆角'),
+    T('The corner radius of the whole block card.', '整块卡片的圆角。'),
+    sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS, v => updateBlock(b.id, { corner_radius: v }))));
+  secLayout.appendChild(field(T('Preview stage', '预览阶段'),
+    T('Preview only — pick a step to see how each state looks. The live block follows the customer\'s real order.', '仅预览 — 选择一个步骤查看各状态外观。线上模块跟随顾客真实订单。'),
     sel(String(b.preview_stage != null ? b.preview_stage : 2), [
       { value: '0', label: T('Paid', '已付款') },
       { value: '1', label: T('Preparing', '备货中') },
@@ -10059,12 +10015,58 @@ function buildOrderTrackerForm(m, b) {
       { value: '3', label: T('Delivered', '已送达') },
     ], v => updateBlock(b.id, { preview_stage: parseInt(v, 10) }))));
 
-  // ── Cross-block chrome — same corner + entrance controls other blocks expose.
-  m.appendChild(field(T('Card corners', '卡片圆角'),
-    T('Corner radius of the whole block card.', '整块卡片的圆角。'),
-    sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS, v => updateBlock(b.id, { corner_radius: v }))));
-  m.appendChild(field(T('Entrance animation', '入场动画'),
-    T('How the block animates in when it scrolls into view.', '模块滚动进入视图时的入场方式。'),
+  // ── Colours ─────────────────────────────────────────────────────────
+  secColours.appendChild(field(T('Accent colour', '主题色'),
+    T('The progress fill and the main button.', '进度填充与主按钮的颜色。'),
+    sel(b.accent_color || 'forest-kale', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+
+  secColours.appendChild(field(T('Card background', '卡片背景'),
+    style === 'banner' ? T('The colour behind the banner.', '横幅主体的背景色。') : T('The colour behind the card.', '卡片背景色。'),
+    sel(b.card_bg_color || '',
+      [{ value: '', label: T('— white —', '— 白色 —') }, ...BRAND_COLOR_OPTIONS],
+      v => updateBlock(b.id, { card_bg_color: v || undefined }))));
+
+  secColours.appendChild(field(T('Card border', '卡片边框'), T('The outline around the card. Pick — none — to remove it.', '卡片外边框。选「— 无 —」可移除。'),
+    sel(b.card_border_color === undefined ? 'ink' : b.card_border_color,
+      [{ value: '', label: T('— none —', '— 无 —') }, ...BRAND_COLOR_OPTIONS],
+      v => updateBlock(b.id, { card_border_color: v }))));
+
+  secColours.appendChild(field(T('Button text colour', '按钮文字色'),
+    T('The text colour on the button (and status tag). Leave empty for automatic.', '按钮(及状态标签)的文字颜色。留空 = 自动。'),
+    sel(b.cta_text_color || '', [{ value: '', label: T('— auto —', '— 自动 —') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { cta_text_color: v }))));
+
+  secColours.appendChild(field(T('Empty track colour', '未完成轨道色'),
+    T('The unfilled part of the progress bar.', '进度条未完成的部分。'),
+    sel(b.rail_color || '', [{ value: '', label: T('— default (grey) —', '— 默认(灰)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { rail_color: v }))));
+
+  if (style === 'truck' || style === 'banner') {
+    secColours.appendChild(field(T('Marker colour', '标记色'),
+      style === 'truck' ? T('The truck moving along the rail.', '沿轨道行进的卡车标记。') : T('The status icon circle in the header.', '头部状态图标圆圈。'),
+      sel(b.marker_color || '', [{ value: '', label: T('— default (pink) —', '— 默认(粉)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { marker_color: v }))));
+    secColours.appendChild(field(T('Highlight colour', '高亮色'),
+      style === 'truck' ? T('Completed milestone dots.', '已完成里程碑圆点。') : T('Completed segments + the ticket button.', '已完成分段 + 票券按钮。'),
+      sel(b.bright_color || '', [{ value: '', label: T('— default (lime) —', '— 默认(柠檬黄)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { bright_color: v }))));
+  }
+
+  // Per-stage node colours (classic stepper)
+  if (style === 'classic') {
+    const stageHdr = document.createElement('div');
+    stageHdr.className = 'helper';
+    stageHdr.style.cssText = 'margin: 8px 0 2px; font-weight: 600;';
+    stageHdr.textContent = T('Stage node colours', '阶段节点颜色');
+    secColours.appendChild(stageHdr);
+    const stageField = (labEn, labCn, key, defLabel) =>
+      secColours.appendChild(field(T(labEn, labCn), '',
+        sel(b[key] || '', [{ value: '', label: defLabel }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { [key]: v }))));
+    stageField('Paid node',      '已付款节点', 'stage_paid_color',  T('— amber —', '— 琥珀 —'));
+    stageField('Prep node',      '备货节点',   'stage_prep_color',  T('— lime —',  '— 柠檬黄 —'));
+    stageField('On-way node',    '配送节点',   'stage_onway_color', T('— pink —',  '— 粉 —'));
+    stageField('Delivered node', '送达节点',   'stage_done_color',  T('— berry —', '— 莓红 —'));
+  }
+
+  // ── Behaviour ───────────────────────────────────────────────────────
+  secBehaviour.appendChild(field(T('Entrance animation', '入场动画'),
+    T('How the block appears when it scrolls into view.', '模块滚动进入视图时的出现方式。'),
     sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS, v => updateBlock(b.id, { entrance_anim: v }))));
 }
 function buildNotificationBarForm(m, b) {
@@ -10075,32 +10077,37 @@ function buildNotificationBarForm(m, b) {
     'Shows the signed-in customer\'s <b>unread updates</b> ("📣 N new updates · Tap to view"). Tapping opens their notifications and marks them read. It <b>hides itself</b> when there\'s nothing unread, so it\'s safe to place at the top. The text + count are automatic — you control the look here.',
     '展示已登录顾客的<b>未读消息</b>(「📣 N 条新消息 · 点击查看」)。点击后打开通知并标为已读。无未读时会<b>自动隐藏</b>,可放心置顶。文案与数量为自动生成 — 此处仅控制外观。'
   );
-  m.appendChild(note);
+  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
 
-  m.appendChild(field(T('View', '视图'),
-    T('Bar = slim full-width strip. Card = rounded inset. Pill = compact centred. Banner = taller with a big icon.',
-      '条幅 = 细长通栏。卡片 = 圆角内嵌。胶囊 = 紧凑居中。横幅 = 更高 + 大图标。'),
+  secContent.appendChild(note);
+
+  secLayout.appendChild(field(T('View', '视图'),
+    T('Bar = a slim full-width strip. Card = a rounded card. Pill = compact and centred. Banner = taller, with a big icon.',
+      '条幅 = 细长通栏。卡片 = 圆角卡片。胶囊 = 紧凑居中。横幅 = 更高 + 大图标。'),
     sel(b.view || 'bar', [
       { value: 'bar',    label: T('Bar — slim full-width strip', '条幅 — 细长通栏') },
-      { value: 'card',   label: T('Card — rounded inset', '卡片 — 圆角内嵌') },
+      { value: 'card',   label: T('Card — rounded card', '卡片 — 圆角卡片') },
       { value: 'pill',   label: T('Pill — compact, centred', '胶囊 — 紧凑居中') },
       { value: 'banner', label: T('Banner — tall, big icon', '横幅 — 更高 + 大图标') },
     ], v => updateBlock(b.id, { view: v }))));
 
-  m.appendChild(field(T('Order & shipping updates', '订单与物流更新'),
-    T('On = include order-progress updates (paid, shipped, delivered) alongside announcements, invoices, and refunds. Off = announcements only — order/shipping updates are hidden here (customers still see them on their notifications page).',
+  secColours.appendChild(field(T('Background', '背景颜色'), T('The colour behind the bar.', '通知条的背景色。'),
+    sel(b.bg_color || 'ink', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  secColours.appendChild(field(T('Text colour', '文字颜色'), T('The message and icon colour.', '文字与图标颜色。'),
+    sel(b.fg_color || 'white', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  secColours.appendChild(field(T('Button colour', '按钮颜色'), T('The round arrow button. By default it matches the text colour; pick a brand colour to make it stand out.', '圆形箭头按钮。默认与文字同色;选一个品牌色使其更醒目。'),
+    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v || undefined }))));
+
+  secBehaviour.appendChild(field(T('Order & shipping updates', '订单与物流更新'),
+    T('On = also show order-progress updates (paid, shipped, delivered) along with announcements, invoices and refunds. Off = announcements only — order/shipping updates are hidden here (customers still see them on their notifications page).',
       '开启 = 在公告、发票、退款之外,同时显示订单进度更新(已付款、已发货、已送达)。关闭 = 仅公告 — 此处隐藏订单/物流更新(顾客仍可在通知页查看)。'),
     sel(b.show_order_status === false ? 'off' : 'on', [
       { value: 'on',  label: T('Show all updates', '显示全部更新') },
       { value: 'off', label: T('Announcements only', '仅公告') },
     ], v => updateBlock(b.id, { show_order_status: v === 'on' }))));
-
-  m.appendChild(field(T('Background', '背景颜色'), T('Fill behind the bar.', '通知条背景填充色。'),
-    sel(b.bg_color || 'ink', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), T('Message + icon colour.', '文字与图标颜色。'),
-    sel(b.fg_color || 'white', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Button colour', '按钮颜色'), T('The round arrow chip. Default blends into the text colour; pick a brand colour to make it pop. Label auto-contrasts.', '圆形箭头按钮。默认与文字同色;选一个品牌色使其更醒目。文字颜色自动对比。'),
-    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v || undefined }))));
 }
 
 function buildCtaRow(b, cta, idx) {
