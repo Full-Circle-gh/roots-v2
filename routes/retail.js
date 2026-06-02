@@ -20,6 +20,7 @@ const inventory = require('../lib/inventory');
 const geocode = require('../lib/geocode');
 const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
+const { CATEGORY_TREE } = require('../lib/category-tree');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
 const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
 const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
@@ -224,6 +225,14 @@ router.get('/api/retail/categories', (req, res) => {
   res.json({ success: true, data: rows });
 });
 
+// Public 2-level category tree (7 top categories → subcategories, EN/CN) that
+// drives the shop's left rail + subcategory section headings. Static structure
+// (lib/category-tree.js); the shop only renders tops/subs with products.
+router.get('/api/retail/category-tree', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json({ success: true, data: CATEGORY_TREE });
+});
+
 router.get('/api/retail/config', (req, res) => {
   try {
     const cfg = loadConfig();
@@ -380,7 +389,8 @@ router.get('/api/retail/free-shipping-threshold', requireRetailAuth, (req, res) 
 // price, description_en/cn is the description. No duplicate retail-only
 // columns to maintain. is_published is the only retail-specific gate.
 const RETAIL_PRODUCT_COLS = `
-  p.id, p.name_en, p.name_cn, p.sku, p.category, p.weight AS size, p.barcode,
+  p.id, p.name_en, p.name_cn, p.sku, p.category, p.top_category, p.subcategory,
+  p.weight AS size, p.barcode,
   p.sell_price AS price,
   p.compare_at_price,
   -- Stock surfaced to the mini-app. Prefer the SUM of per-store physical_qty
@@ -460,6 +470,18 @@ function sanitizeProductBadge(v) {
   const t = String(v == null ? '' : v).trim().toLowerCase();
   return PRODUCT_BADGES.includes(t) ? t : null;
 }
+// Validate a (top_category, subcategory) pair against the canonical tree so
+// the shop's left rail / sub-headings only ever see known names. Unknown top
+// → both cleared; unknown/blank sub under a valid top → top kept, sub cleared.
+function normalizeCategoryPair(top, sub) {
+  const t = String(top == null ? '' : top).trim();
+  if (!t) return { top: null, sub: null };
+  const topNode = CATEGORY_TREE.find(x => x.name === t);
+  if (!topNode) return { top: null, sub: null };
+  const s = String(sub == null ? '' : sub).trim();
+  const subNode = s ? topNode.subs.find(x => x.name === s) : null;
+  return { top: topNode.name, sub: subNode ? subNode.name : null };
+}
 function resolveBundle(jsonStr) {
   if (typeof jsonStr !== 'string' || !jsonStr.trim()) return null;
   let b; try { b = JSON.parse(jsonStr); } catch { return null; }
@@ -480,7 +502,7 @@ function resolveBundle(jsonStr) {
 
 router.get('/api/retail/products', (req, res) => {
   const { q, category, sort } = req.query;
-  const limit  = Math.min(parseInt(req.query.limit  || '50', 10) || 50, 100);
+  const limit  = Math.min(parseInt(req.query.limit  || '50', 10) || 50, 500);
   const offset = Math.max(parseInt(req.query.offset || '0',  10) || 0, 0);
 
   let sql = `SELECT ${RETAIL_PRODUCT_COLS}, p.updated_at FROM products p
@@ -6795,6 +6817,17 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   if ('bundle' in body) { sets.push('bundle = ?'); params.push(sanitizeBundle(body.bundle)); }
   if ('tags' in body) { sets.push('tags = ?'); params.push(sanitizeProductBadge(body.tags)); }
   if ('is_batch_made' in body) { sets.push('is_batch_made = ?'); params.push(body.is_batch_made ? 1 : 0); }
+  // Storefront 2-level category. Validated as a pair against CATEGORY_TREE; a
+  // partial edit (only top, or only sub) merges with the current row so the
+  // sub is checked under the right top.
+  if ('top_category' in body || 'subcategory' in body) {
+    const cur = tdb().prepare('SELECT top_category, subcategory FROM products WHERE id = ?').get(id) || {};
+    const top = 'top_category' in body ? body.top_category : cur.top_category;
+    const sub = 'subcategory'  in body ? body.subcategory  : cur.subcategory;
+    const norm = normalizeCategoryPair(top, sub);
+    sets.push('top_category = ?'); params.push(norm.top);
+    sets.push('subcategory = ?');  params.push(norm.sub);
+  }
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
 
   sets.push('updated_at = CURRENT_TIMESTAMP');
@@ -6812,7 +6845,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // hydrated description_blocks JSON, so the page can update its card
   // and re-open the editor with fresh data.
   const row = tdb().prepare(
-    `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
+    `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
             is_batch_made,
@@ -6850,7 +6883,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
   res.set('Cache-Control', 'no-store, must-revalidate');
   const id = parseInt(req.params.id, 10);
   const row = tdb().prepare(
-    `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
+    `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
             variant_group_id, variant_label, variant_sort,
@@ -6888,16 +6921,18 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   const descFormat = b.description_format === 'rich' ? 'rich' : 'plain';
   const descEn = descFormat === 'rich' ? sanitizeRichHtml(b.description_en) : ((b.description_en || '').trim() || null);
   const descCn = descFormat === 'rich' ? sanitizeRichHtml(b.description_cn) : ((b.description_cn || '').trim() || null);
+  const cat2 = normalizeCategoryPair(b.top_category, b.subcategory);
   let info;
   try {
     info = tdb().prepare(
       `INSERT INTO products
-         (name_en, name_cn, sku, category, weight, sell_price, compare_at_price, stock_qty, ship_modes,
+         (name_en, name_cn, sku, category, top_category, subcategory, weight, sell_price, compare_at_price, stock_qty, ship_modes,
           description_en, description_cn, description_format, image_data, images, tags, is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       name_en || name_cn, name_cn || null,
-      (b.sku || '').trim() || null, (b.category || '').trim() || null, (b.weight || '').trim() || null,
+      (b.sku || '').trim() || null, (b.category || '').trim() || null,
+      cat2.top, cat2.sub, (b.weight || '').trim() || null,
       Math.max(0, parseFloat(b.sell_price) || 0),
       (() => { const v = parseFloat(b.compare_at_price); return Number.isFinite(v) && v > 0 ? v : null; })(),
       Math.max(0, parseInt(b.stock_qty, 10) || 0),
@@ -6913,7 +6948,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   const id = info.lastInsertRowid;
   logActivity(req.user.id, req.user.username, 'create', 'product_retail', id, { name: name_en || name_cn }, req.ip);
   const row = tdb().prepare(
-    `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
+    `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, tags,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
@@ -7216,7 +7251,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   // MB and the page slow to load. So: omit image_data (send a lazy image URL
   // instead) and description_blocks (send a has_blocks flag). The per-product
   // editor fetches the real image + blocks on demand.
-  let sql = `SELECT id, name_en, name_cn, sku, category, weight AS size,
+  let sql = `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size,
                     sell_price, compare_at_price, stock_qty, ship_modes, image_url,
                     -- Effective stock = what the customer shop actually sees
                     -- (sum of per-store physical_qty, falling back to the legacy

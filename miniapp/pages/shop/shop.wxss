@@ -50,15 +50,20 @@
   color: var(--ink);
 }
 
-/* ─── Section headers (grid + gallery, between category groups) ──── */
+/* ─── Section headers (grid + gallery, between subcategory groups) ──── */
+/* sections = top categories (left-rail / scroll anchors); .cat-group =
+   one subcategory rendered as a visual heading + its product cards. A
+   thicker band sits above each NEW top category so the boundary reads
+   even though only subcategory titles are shown in the scroll pane. */
 .cat-section { padding-top: 4rpx; }
+.cat-section + .cat-section { border-top: 12rpx solid var(--oat); }
 .grid-section-head {
   padding: 32rpx 44rpx 16rpx;
   display: flex; align-items: baseline; justify-content: space-between;
   border-top: 2rpx solid rgba(0,0,0,.08);
   margin-top: 12rpx;
 }
-.cat-section:first-child .grid-section-head { border-top: 0; margin-top: 0; }
+.cat-group:first-child .grid-section-head { border-top: 0; margin-top: 0; }
 .grid-section-kicker {
   font-size: calc(28rpx * var(--font-scale));
   letter-spacing: 0.18em; color: var(--ink);

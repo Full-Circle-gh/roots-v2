@@ -993,7 +993,15 @@ addColumn('products', 'use_block_design',       'INTEGER DEFAULT 0');
 addColumn('products', 'colophon_character',     'TEXT');
 addColumn('products', 'colophon_tagline_en',    'TEXT');
 addColumn('products', 'colophon_tagline_cn',    'TEXT');
+// Two-level shop category scheme. `top_category` is one of the 7 storefront
+// categories (Dry & Pantry, Fresh & Deli, …); `subcategory` is the section
+// heading within it (Nuts & Seeds, Legumes, …). Populated by
+// scripts/organize_categories.js. The legacy free-form `category` column is
+// left intact (still drives other admin views); the shop reads these two.
+addColumn('products', 'top_category', 'TEXT');
+addColumn('products', 'subcategory',  'TEXT');
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_published ON products(is_published) WHERE is_published = 1'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_top_category ON products(top_category)'); } catch {}
 
 // ─── Flash sales (秒杀) ─────────────────────────────────────────────────────
 // A product is "on flash" between flash_starts_at and flash_ends_at, charged

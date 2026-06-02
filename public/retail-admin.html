@@ -4937,7 +4937,11 @@
             </section>
             <section class="pd-card">
               <div class="pd-card-h">Organization · 分类</div>
-              <div class="field"><label class="stacked">Category · 分类</label><input type="text" id="pd-category" list="pd-cat-list" placeholder="e.g. Drinks · 例如 饮品"><datalist id="pd-cat-list"></datalist></div>
+              <div class="field"><label class="stacked">Shop section · 商店分区 <span class="muted" style="font-weight:400;">(left rail)</span></label>
+                <select id="pd-top-category" onchange="pdOnTopCatChange()"><option value="">— none · 无 —</option></select></div>
+              <div class="field"><label class="stacked">Subcategory · 子分类 <span class="muted" style="font-weight:400;">(section heading)</span></label>
+                <select id="pd-subcategory"><option value="">— none · 无 —</option></select></div>
+              <div class="field"><label class="stacked">Category · 分类 <span class="muted" style="font-weight:400;">(legacy)</span></label><input type="text" id="pd-category" list="pd-cat-list" placeholder="e.g. Drinks · 例如 饮品"><datalist id="pd-cat-list"></datalist></div>
               <div class="field"><label class="stacked">Badge · 标签 <span class="muted" style="font-weight:400;">(shop card chip)</span></label>
                 <select id="pd-badge">
                   <option value="">None · 无</option>
@@ -17425,6 +17429,42 @@ function pdBadgeOf(tags) {
   if (/\bhot\b/.test(t))          return 'hot';
   return '';
 }
+// ── Storefront 2-level category (top → subcategory) ──────────────────
+// Canonical tree from lib/category-tree.js, served at /api/retail/category-tree.
+// Fetched once and cached; the two selects in the editor's Organization card
+// drive products.top_category / products.subcategory (the shop's left rail +
+// scroll-pane section headings).
+let PA_CAT_TREE = [];
+async function pdLoadCatTree() {
+  if (PA_CAT_TREE.length) return PA_CAT_TREE;
+  try {
+    const r = await fetch('/api/retail/category-tree', { credentials: 'same-origin' });
+    const j = await r.json();
+    if (j && j.success && Array.isArray(j.data)) PA_CAT_TREE = j.data;
+  } catch {}
+  return PA_CAT_TREE;
+}
+function pdFillTopCats(selected) {
+  const sel = document.getElementById('pd-top-category');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— none · 无 —</option>' +
+    PA_CAT_TREE.map(t => `<option value="${escapeAttr(t.name)}">${escapeHtml(t.name)} · ${escapeHtml(t.name_cn || '')}</option>`).join('');
+  sel.value = selected || '';
+}
+function pdFillSubCats(topName, selected) {
+  const sel = document.getElementById('pd-subcategory');
+  if (!sel) return;
+  const top = PA_CAT_TREE.find(t => t.name === topName);
+  const subs = top ? (top.subs || []) : [];
+  sel.innerHTML = '<option value="">— none · 无 —</option>' +
+    subs.map(s => `<option value="${escapeAttr(s.name)}">${escapeHtml(s.name)} · ${escapeHtml(s.name_cn || '')}</option>`).join('');
+  sel.value = selected || '';
+  sel.disabled = !subs.length;
+}
+function pdOnTopCatChange() {
+  pdFillSubCats(document.getElementById('pd-top-category').value, '');
+}
+
 function pdOpen(id) {
   const p = id != null ? (PA_PRODUCTS || []).find(x => x.id === id) : null;
   const set = (el, v) => { const n = document.getElementById(el); if (n) n.value = (v == null ? '' : v); };
@@ -17457,6 +17497,10 @@ function pdOpen(id) {
       .catch(() => {});
   }
   document.getElementById('pd-cat-list').innerHTML = pdCats().map(c => `<option value="${escapeAttr(c)}">`).join('');
+  pdLoadCatTree().then(() => {
+    pdFillTopCats(p && p.top_category);
+    pdFillSubCats(p && p.top_category, p && p.subcategory);
+  });
   // Duplicate + delete only apply to an existing product.
   document.getElementById('pd-dup-btn').style.display = p ? '' : 'none';
   document.getElementById('pd-delete-btn').style.display = p ? '' : 'none';
@@ -17978,6 +18022,7 @@ async function pdSave() {
   const body = {
     name_en: g('pd-name-en'), name_cn: g('pd-name-cn'),
     sku: g('pd-sku'), category: g('pd-category'), weight: g('pd-weight'),
+    top_category: g('pd-top-category'), subcategory: g('pd-subcategory'),
     tags: g('pd-badge'),
     sell_price: parseFloat(g('pd-price')) || 0,
     stock_qty: parseInt(g('pd-stock'), 10) || 0,

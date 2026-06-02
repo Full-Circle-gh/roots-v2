@@ -86,9 +86,13 @@ const LIST_STICKY_OFFSET_PX = 24;
 
 Page({
   data: {
-    sections: [],            // [{ id, name, label, items: [], countStr }]
+    // sections = the 7 TOP categories (left-rail + scroll-sync anchors).
+    // Each holds a `groups` array of subcategories rendered as visual
+    // section headings in the right pane (subs are NOT separately tappable).
+    // [{ id, name, label, groups: [{ id, label, items, countStr }] }]
+    sections: [],
     _raw: [],
-    categories: [],          // [{ id, name, label }] (without ALL)
+    categories: [],          // [{ id, name, label }] top categories (without ALL)
     activeCategory: '',      // '' = ALL / above all sections
     activeDietary: '',
     activeBadge: '',
@@ -256,16 +260,17 @@ Page({
   async refresh() {
     this.setData({ loading: true });
     try {
-      // No category filter at the API — we group client-side
-      const params = [];
+      // No category filter at the API — we group client-side. Pull the full
+      // catalog (cap raised server-side to 500) so every top/sub renders.
+      const params = ['limit=500'];
       if (this.data.query)          params.push('q=' + encodeURIComponent(this.data.query));
       const sortVal = SORT_OPTIONS[this.data.sortIndex]?.value;
       if (sortVal)                  params.push('sort=' + sortVal);
-      const qs = params.length ? '?' + params.join('&') : '';
+      const qs = '?' + params.join('&');
 
-      const [prods, cats] = await Promise.all([
+      const [prods, treeResp] = await Promise.all([
         api.get('/api/retail/products' + qs).catch(() => []),
-        api.get('/api/retail/categories').catch(() => []),
+        api.get('/api/retail/category-tree').catch(() => []),
       ]);
 
       let raw = (Array.isArray(prods) ? prods : prods?.data || []);
@@ -296,11 +301,7 @@ Page({
       }
 
       const L = this.data.lang;
-      const categories = (Array.isArray(cats) ? cats : cats?.data || []).map(c => ({
-        id: c.id,
-        name: c.name,
-        label: lang.splitMixed(c.name, L),
-      }));
+      const tree = (Array.isArray(treeResp) ? treeResp : treeResp?.data || []);
 
       // Collapse variant siblings (same variant_group_id) into one
       // representative card. Standalone products pass through untouched.
@@ -309,8 +310,10 @@ Page({
       this._memberMap = {};
       for (const p of display) if (p._members) this._memberMap[p.id] = p._members;
 
-      const sections = this._buildSections(display, categories, L);
-      const totalCount = sections.reduce((sum, s) => sum + s.items.length, 0);
+      const sections = this._buildSections(display, tree, L);
+      const categories = sections.map(s => ({ id: s.id, name: s.name, label: s.label }));
+      const totalCount = sections.reduce(
+        (sum, s) => sum + s.groups.reduce((n, g) => n + g.items.length, 0), 0);
 
       this.setData({
         _raw: raw,
@@ -327,39 +330,76 @@ Page({
     }
   },
 
-  _buildSections(rawProducts, categories, L) {
-    const byName = new Map();
-    for (const c of categories) byName.set(c.name, []);
+  // Build top-category sections from the category tree. Each section is a
+  // top category (left-rail entry + scroll anchor) holding a `groups` array
+  // of subcategories — each group renders a visual heading + its product
+  // rows. Tops/subs with no products are dropped; products missing a
+  // top_category fall into a trailing "Other" section so nothing vanishes.
+  _buildSections(rawProducts, tree, L) {
+    const pad = n => (n < 10 ? '0' + n : String(n));
+
+    // index products: top → sub → [products]
+    const byTop = new Map();
     const orphans = [];
     for (const p of rawProducts) {
-      if (p.category && byName.has(p.category)) {
-        byName.get(p.category).push(p);
-      } else {
-        orphans.push(p);
-      }
+      const top = p.top_category;
+      if (!top) { orphans.push(p); continue; }
+      if (!byTop.has(top)) byTop.set(top, new Map());
+      const subMap = byTop.get(top);
+      const key = p.subcategory || '__nosub__';
+      if (!subMap.has(key)) subMap.set(key, []);
+      subMap.get(key).push(p);
     }
 
-    const sections = categories
-      .map(c => ({
-        id: 'c' + c.id,
-        name: c.name,
-        label: (c.label || c.name).toUpperCase(),
-        items: this._toRows(byName.get(c.name) || [], L),
-      }))
-      .filter(s => s.items.length > 0);
+    const sections = [];
+    (tree || []).forEach((top, ti) => {
+      const subMap = byTop.get(top.name);
+      if (!subMap) return;
+      const groups = [];
+      let gi = 0;
+      // ordered subs from the tree first…
+      for (const sub of (top.subs || [])) {
+        const items = subMap.get(sub.name);
+        if (!items || !items.length) continue;
+        const rows = this._toRows(items, L);
+        groups.push({
+          id: `top${ti}-g${gi++}`,
+          label: ((L === 'cn' ? sub.name_cn : sub.name) || sub.name).toUpperCase(),
+          items: rows,
+          countStr: pad(rows.length),
+        });
+        subMap.delete(sub.name);
+      }
+      // …then any leftover subs not declared in the tree (incl. blank sub)
+      for (const [key, items] of subMap) {
+        if (!items.length) continue;
+        const rows = this._toRows(items, L);
+        groups.push({
+          id: `top${ti}-g${gi++}`,
+          label: key === '__nosub__' ? (L === 'cn' ? '更多' : 'MORE') : key.toUpperCase(),
+          items: rows,
+          countStr: pad(rows.length),
+        });
+      }
+      if (!groups.length) return;
+      sections.push({
+        id: `top${ti}`,
+        name: top.name,
+        label: ((L === 'cn' ? top.name_cn : top.name) || top.name).toUpperCase(),
+        groups,
+      });
+    });
 
     if (orphans.length) {
+      const rows = this._toRows(orphans, L);
       sections.push({
         id: 'other',
         name: '__other__',
         label: L === 'cn' ? '其他' : 'OTHER',
-        items: this._toRows(orphans, L),
+        groups: [{ id: 'other-g0', label: '', items: rows, countStr: pad(rows.length) }],
       });
     }
 
-    for (const s of sections) {
-      s.countStr = s.items.length < 10 ? '0' + s.items.length : String(s.items.length);
-    }
     return sections;
   },
 
