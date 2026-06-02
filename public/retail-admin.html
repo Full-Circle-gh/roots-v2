@@ -4836,6 +4836,10 @@
                   <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-land" style="width:15px;height:15px;"> 🚚 Land · 陆运</label>
                 </div>
               </div>
+              <div class="field">
+                <label class="stacked">Freshness · 新鲜度</label>
+                <label style="display:inline-flex;align-items:flex-start;gap:6px;cursor:pointer;font-weight:500;padding-top:4px;"><input type="checkbox" id="pd-batch-made" style="width:15px;height:15px;margin-top:2px;"> <span>🥗 Made fresh in batches · 分批新鲜现做<br><span style="font-weight:400;color:#888;font-size:12px;">Outside-Guangzhou orders wait for the next batch day, then ship same-day. 广州以外订单等下一批制作日当天发货。</span></span></label>
+              </div>
             </section>
           </aside>
         </div>
@@ -5679,6 +5683,37 @@
           <textarea id="dlv-holiday-msg-cn" rows="2" style="width: 100%;" placeholder="我们短暂休假中 — 订单将在我们回来后第一时间发货。"></textarea>
         </div>
         <button class="btn btn-primary" onclick="saveHolidayMode()" style="align-self: flex-end;">Save · 保存</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: var(--s4);">
+      <h3 style="font-size: 13px; margin-bottom: 4px;">
+        Fresh batch schedule · 新鲜现做排期
+        <span class="help-i" data-tip="For products flagged 'Made fresh in batches'. Outside-Guangzhou orders that hold one can't ship until the next batch day, then ship same-day so they arrive fresh. Sets the cadence and tells the customer the exact ship + arrival dates. · 用于标记为「分批新鲜现做」的商品。含此类商品的广州以外订单需等到下一制作日才发货,当天发出以保证新鲜。此处设置制作周期,并告知顾客确切的发货与送达日期。">?</span>
+      </h3>
+      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">Only affects outside-Guangzhou orders containing a batch-made product. In-Guangzhou orders are unaffected. · 仅影响含「分批现做」商品的广州以外订单,广州市内订单不受影响。</div>
+      <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Status · 状态</label>
+          <label class="fc-switch">
+            <input type="checkbox" id="batch-enabled">
+            <span class="fc-switch-track"></span>
+            <span id="batch-status-label" style="font-size: 12px;">OFF · 关闭</span>
+          </label>
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">A batch day · 某个制作日 <span class="help-i" data-tip="Any one date the kitchen makes a batch. The rhythm repeats out from this date in both directions. Move it only to permanently re-time the whole rhythm. · 厨房制作的任意一个日期。制作周期以此日期为基准向前后重复。仅在需要永久调整整个周期时才更改。">?</span></label>
+          <input type="date" id="batch-anchor" style="width: 170px;">
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Make every · 每隔 <span class="help-i" data-tip="Days between batches. 'Every other day' = 2. · 两次制作之间相隔的天数。「每隔一天」= 2。">?</span></label>
+          <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="batch-interval" min="1" step="1" value="2" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
+        </div>
+        <div class="field" style="margin: 0; flex: 1; min-width: 240px;">
+          <label class="stacked">Skip these dates (vacations) · 跳过这些日期(假期) <span class="help-i" data-tip="One date per line (YYYY-MM-DD). A batch that would land on a skipped date rolls forward to the next batch day. · 每行一个日期(YYYY-MM-DD)。原本落在跳过日期的制作批次将顺延到下一个制作日。">?</span></label>
+          <textarea id="batch-skip" rows="3" style="width: 100%; font-family: monospace; font-size: 12px;" placeholder="2026-07-14&#10;2026-07-16"></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="saveBatchSchedule()" style="align-self: flex-end;">Save · 保存</button>
       </div>
     </div>
 
@@ -9934,6 +9969,12 @@ function routingNote(reason) {
 // mode, surcharge note).
 function renderShipByTile(o) {
   const actionable = (o.status === 'paid' || o.status === 'preparing');
+  // Fresh batch-made order (outside-GZ): the kitchen must make a new batch on
+  // this exact day, then ship same-day. Surfaced so the packer doesn't ship
+  // early off the shelf.
+  const batchSub = o.promised_ship_date
+    ? `<div class="sub" style="color: var(--warn); font-weight: 600;">🥗 Make fresh on ${escapeHtml(o.promised_ship_date)} → arrives ~${escapeHtml(o.promised_delivery_date || '')}</div>`
+    : '';
   // Pickup orders have no "ship by" deadline — show the customer-chosen pickup
   // window instead so staff know when to have it ready at the counter.
   if (o.fulfillment_type === 'pickup') {
@@ -9952,6 +9993,7 @@ function renderShipByTile(o) {
       <div class="kicker">Ship by</div>
       <div class="val"><b style="color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">ASAP / Right away</b></div>
       <div class="sub">No slot picked${mode ? ' · ' + mode : ''}</div>
+      ${batchSub}
     </div>`;
   }
   const dt = new Date(String(o.scheduled_for).replace(' ', 'T') + 'Z');
@@ -9978,6 +10020,7 @@ function renderShipByTile(o) {
     <div class="kicker">Ship by · 截止发货</div>
     <div class="val"><b style="color: ${color};">${escapeHtml(label)}</b>${urgencyLabel ? ` <span style="font-size: 11px; color: ${color}; font-weight: 600;">· ${urgencyLabel}</span>` : ''}</div>
     <div class="sub">${mode}${surcharge}</div>
+    ${batchSub}
   </div>`;
 }
 
@@ -11562,7 +11605,7 @@ async function revokeGrant(grantId) {
 const SNIPPETS = [
   {
     group: 'Cart · 购物车', items: [
-      { key: 'copy.cart.kicker',       label: 'Kicker', help: 'Small caps label above the cart title.', en: 'YOUR BASKET · 购物车', cn: '购物车' },
+      { key: 'copy.cart.kicker',       label: 'Kicker', help: 'Small caps label above the cart title.', en: 'YOUR BASKET', cn: '购物车' },
       { key: 'copy.cart.title',        label: 'Headline', help: 'Big serif title on the cart screen.', en: 'Almost yours.', cn: '即将拥有。' },
       { key: 'copy.cart.empty',        label: 'Empty cart message', help: 'Shown when the customer has no items in their cart.', en: 'Your basket is empty — shop the garden →', cn: '购物车空空如也 — 去逛逛 →' },
       { key: 'copy.cart.checkout_btn', label: 'Checkout button', help: 'Full-width button at the bottom of the cart.', en: 'CHECK OUT', cn: '结账' },
@@ -13033,6 +13076,25 @@ async function loadDeliveryZones() {
         if (lbl) lbl.textContent = cb.checked ? 'ON · 开启' : 'OFF · 关闭';
       });
     }
+    // Fresh batch schedule
+    const batch = (cfg?.data && cfg.data.batch && cfg.data.batch.schedule) || {};
+    if ($('#batch-enabled')) {
+      const on = !!batch.enabled;
+      $('#batch-enabled').checked = on;
+      const blbl = $('#batch-status-label');
+      if (blbl) blbl.textContent = on ? 'ON · 开启' : 'OFF · 关闭';
+    }
+    if ($('#batch-anchor'))   $('#batch-anchor').value   = batch.anchor_date || '';
+    if ($('#batch-interval')) $('#batch-interval').value = batch.interval_days || 2;
+    if ($('#batch-skip'))     $('#batch-skip').value     = (Array.isArray(batch.skip_dates) ? batch.skip_dates : []).join('\n');
+    const bcb = $('#batch-enabled');
+    if (bcb && !bcb._wired) {
+      bcb._wired = true;
+      bcb.addEventListener('change', () => {
+        const blbl = $('#batch-status-label');
+        if (blbl) blbl.textContent = bcb.checked ? 'ON · 开启' : 'OFF · 关闭';
+      });
+    }
   } catch {}
 
   const r = await api('/api/retail-admin/delivery-zones');
@@ -13047,6 +13109,24 @@ async function saveHolidayMode() {
       en: ($('#dlv-holiday-msg-en').value || '').trim(),
       cn: ($('#dlv-holiday-msg-cn').value || '').trim(),
     },
+  };
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body });
+    toast('Saved · 已保存');
+  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
+}
+
+async function saveBatchSchedule() {
+  const anchor = ($('#batch-anchor').value || '').trim();
+  const enabled = !!$('#batch-enabled').checked;
+  if (enabled && !/^\d{4}-\d{2}-\d{2}$/.test(anchor)) {
+    toast('Pick a batch day first · 请先选择一个制作日', 'err'); return;
+  }
+  const interval = Math.max(1, parseInt($('#batch-interval').value, 10) || 2);
+  const skip = ($('#batch-skip').value || '')
+    .split(/[\s,]+/).map(s => s.trim()).filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s));
+  const body = {
+    'batch.schedule': { enabled, anchor_date: anchor, interval_days: interval, skip_dates: skip },
   };
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
@@ -16857,6 +16937,7 @@ function pdOpen(id) {
   document.getElementById('pd-ship-air').checked  = !p || modes.includes('air');
   document.getElementById('pd-ship-land').checked = !p || modes.includes('land');
   document.getElementById('pd-published').checked = p ? p.is_published === 1 : false;
+  document.getElementById('pd-batch-made').checked = p ? p.is_batch_made === 1 : false;
   // Photo gallery — start empty, then (for an existing product) pull the
   // ordered list from the lightweight images endpoint. New products start blank.
   _pdGallery = []; _pdGalleryDirty = false;
@@ -17396,6 +17477,7 @@ async function pdSave() {
     ship_modes: modes.join(',') || 'air,land',
     description_en: descEn, description_cn: descCn, description_format: descFormat,
     is_published: document.getElementById('pd-published').checked ? 1 : 0,
+    is_batch_made: document.getElementById('pd-batch-made').checked ? 1 : 0,
   };
   if (_pdGalleryDirty) body.images = _pdGallery;  // gallery drives image_data (first = main)
   if (id && BU_ID === Number(id)) body.bundle = buBody();  // buy-together bundle (null clears)
