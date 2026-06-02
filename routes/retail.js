@@ -9889,7 +9889,15 @@ function batchScheduleCfg() {
   const skip = Array.isArray(c.skip_dates)
     ? c.skip_dates.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s)))
     : [];
-  return { anchor_date: c.anchor_date, interval_days: interval, skip_dates: skip };
+  return {
+    anchor_date: c.anchor_date,
+    interval_days: interval,
+    skip_dates: skip,
+    // Optional operator-authored notice templates. Placeholders {ship_date}
+    // and {delivery_date} are filled with the resolved YYYY-MM-DD dates.
+    message_en: typeof c.message_en === 'string' ? c.message_en : '',
+    message_cn: typeof c.message_cn === 'string' ? c.message_cn : '',
+  };
 }
 
 // Local-midday Date for a YYYY-MM-DD string (midday dodges any DST edge; the
@@ -9953,11 +9961,16 @@ function computeBatchNotice(zone, productIds, now) {
   if (!shipDate) return null;
   const sd = parseYmdLocal(shipDate);
   const deliveryDate = toYmdLocal(new Date(sd.getTime() + 86400000));
+  const fill = (tpl) => tpl
+    .replace(/\{ship_date\}/g, shipDate)
+    .replace(/\{delivery_date\}/g, deliveryDate);
+  const defEn = `Your order includes freshly-made items. We make the next batch on ${shipDate} and ship it the same day, so it arrives fresh on ${deliveryDate}.`;
+  const defCn = `您的订单包含新鲜现做的商品。我们将于 ${shipDate} 制作下一批并当天发货，预计 ${deliveryDate} 新鲜送达。`;
   return {
     ship_date: shipDate,
     delivery_date: deliveryDate,
-    message_en: `Your order includes freshly-made items. We make the next batch on ${shipDate} and ship it the same day, so it arrives fresh around ${deliveryDate}.`,
-    message_cn: `您的订单包含新鲜现做的商品。我们将于 ${shipDate} 制作下一批并当天发货，预计 ${deliveryDate} 左右新鲜送达。`,
+    message_en: cfg.message_en ? fill(cfg.message_en) : defEn,
+    message_cn: cfg.message_cn ? fill(cfg.message_cn) : defCn,
   };
 }
 

@@ -5709,6 +5709,14 @@
           <label class="stacked">Skip these dates (vacations) · 跳过这些日期(假期) <span class="help-i" data-tip="One date per line (YYYY-MM-DD). A batch that would land on a skipped date rolls forward to the next batch day. · 每行一个日期(YYYY-MM-DD)。原本落在跳过日期的制作批次将顺延到下一个制作日。">?</span></label>
           <textarea id="batch-skip" rows="3" style="width: 100%; font-family: monospace; font-size: 12px;" placeholder="2026-07-14&#10;2026-07-16"></textarea>
         </div>
+        <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
+          <label class="stacked">Checkout notice — English · 结账提示(英文) <span class="help-i" data-tip="Shown on mini-app checkout when an outside-Guangzhou cart holds a batch-made item. Use {ship_date} and {delivery_date} as placeholders — they're replaced with the real dates. Leave blank to use the default wording. · 含「分批现做」商品的广州以外订单结账时显示。可用 {ship_date} 与 {delivery_date} 作为日期占位符,系统会替换为真实日期。留空则使用默认文案。">?</span></label>
+          <textarea id="batch-msg-en" rows="2" style="width: 100%;" placeholder="Your order includes freshly-made items. We make the next batch on {ship_date} and ship it the same day, so it arrives fresh on {delivery_date}."></textarea>
+        </div>
+        <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
+          <label class="stacked">结账提示(中文)· Checkout notice — Chinese</label>
+          <textarea id="batch-msg-cn" rows="2" style="width: 100%;" placeholder="您的订单包含新鲜现做的商品。我们将于 {ship_date} 制作下一批并当天发货,预计 {delivery_date} 新鲜送达。"></textarea>
+        </div>
         <button class="btn btn-primary" onclick="saveBatchSchedule()" style="align-self: flex-end;">Save · 保存</button>
       </div>
     </div>
@@ -13083,6 +13091,8 @@ async function loadDeliveryZones() {
     if ($('#batch-anchor'))   $('#batch-anchor').value   = batch.anchor_date || '';
     if ($('#batch-interval')) $('#batch-interval').value = batch.interval_days || 2;
     if ($('#batch-skip'))     $('#batch-skip').value     = (Array.isArray(batch.skip_dates) ? batch.skip_dates : []).join('\n');
+    if ($('#batch-msg-en'))   $('#batch-msg-en').value   = batch.message_en || '';
+    if ($('#batch-msg-cn'))   $('#batch-msg-cn').value   = batch.message_cn || '';
     const bcb = $('#batch-enabled');
     if (bcb && !bcb._wired) {
       bcb._wired = true;
@@ -13122,7 +13132,11 @@ async function saveBatchSchedule() {
   const skip = ($('#batch-skip').value || '')
     .split(/[\s,]+/).map(s => s.trim()).filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s));
   const body = {
-    'batch.schedule': { enabled, anchor_date: anchor, interval_days: interval, skip_dates: skip },
+    'batch.schedule': {
+      enabled, anchor_date: anchor, interval_days: interval, skip_dates: skip,
+      message_en: ($('#batch-msg-en').value || '').trim(),
+      message_cn: ($('#batch-msg-cn').value || '').trim(),
+    },
   };
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
