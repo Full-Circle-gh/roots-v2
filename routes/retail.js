@@ -10047,6 +10047,21 @@ function matchDeliveryZone(address) {
   // both forms substring-match.
   const stripSuffix = (s) => String(s || '').replace(/(市|区|县|省)$/u, '');
 
+  // Hong Kong: one flat rate for the whole SAR. HK is dropped from the EN
+  // picker, so the only way to pick it is WeChat's native CN region picker,
+  // which always stamps province = 香港特别行政区 — meaning the SAR name is
+  // always present in the blob. A blob hit is therefore reliable and can't
+  // false-match a mainland address (none contain 香港). Return the single 香港
+  // zone regardless of which HK district the picker dropped in, so we needn't
+  // keep a row per district.
+  if (/香港/.test(blob) || /hong\s*kong/i.test(blob)) {
+    const hk = tdb().prepare(
+      `SELECT * FROM retail_delivery_zones WHERE zone_type = 'city' AND is_active = 1 AND match_city = '香港'`
+    ).get();
+    if (hk) return hk;
+    // No HK row configured → fall through (default/no-match handles it).
+  }
+
   const inGuangzhou = isGuangzhou(address.city) || /广州/.test(blob) || /guangzhou/i.test(blob);
 
   if (inGuangzhou) {
