@@ -271,80 +271,154 @@
   left: 24rpx;
   right: 24rpx;
 }
-/* ── Style · Riso pop ── flat brand-colour fill (inline) + ink keyline + hard
-   offset shadow. */
-.cattabs.cat-riso .tile {
-  border: 4rpx solid var(--cat-keyline);
-  box-shadow: 8rpx 8rpx 0 var(--cat-shadow);
+/* ════ A · Index directory ════ numbered rows, colour dot, bilingual name,
+   category-coloured count pill, chevron. */
+.cattabs.cat-index .idx-list { display: flex; flex-direction: column; }
+.cattabs.cat-index .idx-row {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  padding: 24rpx 4rpx;
+  border-bottom: 2rpx solid rgba(0, 0, 0, 0.08);
 }
-.cattabs.cat-riso .icon-circle {
+.cattabs.cat-index .idx-row:last-child { border-bottom: 0; }
+.cattabs.cat-index .idx-num {
+  font-family: var(--f-gothic);
+  font-size: calc(26rpx * var(--font-scale));
+  color: var(--cat-accent);
+  width: 40rpx;
+  flex: 0 0 auto;
+}
+.cattabs.cat-index .idx-dot {
+  width: 24rpx;
+  height: 24rpx;
+  border-radius: var(--cat-radius);
+  flex: 0 0 auto;
+}
+.cattabs.cat-index .idx-name { flex: 1 1 auto; min-width: 0; }
+.cattabs.cat-index .idx-name .en {
+  font-family: var(--f-bear);
+  font-size: calc(32rpx * var(--font-scale));
+  font-weight: 500;
+  line-height: 1.05;
+  color: var(--cat-text);
+}
+.cattabs.cat-index .idx-name .cn {
+  font-family: var(--f-toni);
+  font-size: calc(20rpx * var(--font-scale));
+  color: var(--cat-accent);
+  margin-top: 2rpx;
+}
+.cattabs.cat-index .idx-count {
+  font-family: var(--f-gothic);
+  font-size: calc(22rpx * var(--font-scale));
+  min-width: 52rpx;
+  text-align: center;
+  padding: 6rpx 16rpx;
+  border-radius: 999rpx;
+  flex: 0 0 auto;
+}
+.cattabs.cat-index .idx-chev {
+  color: var(--cat-accent);
+  font-size: calc(36rpx * var(--font-scale));
+  opacity: 0.6;
+  flex: 0 0 auto;
+}
+/* ════ B · Bento mosaic ════ image tiles, first a wide hero, scrim caption,
+   "NN · count" badge. Colour-fill fallback when no product photo. */
+.cattabs.cat-bento .bento-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12rpx;
+}
+.cattabs.cat-bento .bento-tile {
+  position: relative;
+  min-height: 220rpx;
+  padding: 20rpx;
+  overflow: hidden;
+  border-radius: var(--cat-radius);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.cattabs.cat-bento .bento-tile.hero {
+  grid-column: 1 / -1;
+  min-height: 300rpx;
+}
+.cattabs.cat-bento .bento-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.cattabs.cat-bento .bento-tile::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0) 60%);
+}
+.cattabs.cat-bento .bento-badge {
+  position: absolute;
+  top: 16rpx;
+  left: 16rpx;
+  z-index: 2;
+  font-family: var(--f-toni);
+  font-size: calc(18rpx * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+}
+.cattabs.cat-bento .bento-cap { position: relative; z-index: 2; }
+.cattabs.cat-bento .bento-cap.on-img { color: #fff; }
+.cattabs.cat-bento .bento-cap .en {
+  font-family: var(--f-bear);
+  font-size: calc(36rpx * var(--font-scale));
+  font-weight: 500;
+  line-height: 1;
+}
+.cattabs.cat-bento .bento-cap .cn {
+  font-family: var(--f-toni);
+  font-size: calc(20rpx * var(--font-scale));
+  opacity: 0.9;
+  margin-top: 4rpx;
+}
+/* ════ C · Sticker chips ════ coloured pills, ink keyline + hard shadow,
+   bilingual name, dark count badge. Wrapping varying-width flow. */
+.cattabs.cat-sticker .chip-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+}
+.cattabs.cat-sticker .chip-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 14rpx;
+  padding: 14rpx 20rpx 14rpx 28rpx;
+  border-radius: 999rpx;
   border: 4rpx solid var(--cat-keyline);
   box-shadow: 6rpx 6rpx 0 var(--cat-shadow);
 }
-/* ── Style · Editorial ── oat surface, hairline keyline, big serif name, the
-   category colour as a thick left accent rule (border-left-color set inline). */
-.cattabs.cat-editorial .grid { gap: 16rpx; }
-.cattabs.cat-editorial .tile {
-  height: auto;
-  min-height: 184rpx;
-  background: var(--cat-surface);
-  color: var(--cat-text);
-  border: 2rpx solid var(--cat-keyline);
-  border-left: 10rpx solid var(--cat-keyline);
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-.cattabs.cat-editorial .tile .num {
-  position: static;
-  color: var(--cat-accent);
-  opacity: 1;
-  margin-bottom: 16rpx;
-}
-.cattabs.cat-editorial .tile .name {
-  position: static;
-  font-size: calc(38rpx * var(--font-scale));
-}
-.cattabs.cat-editorial .icon-circle { border: 2rpx solid var(--cat-keyline); }
-/* ── Style · Stack & tag ── oat surface, ink border, rotated sticker number
-   tag in the category colour. */
-.cattabs.cat-stack .grid { gap: 20rpx; }
-.cattabs.cat-stack .tile {
-  height: auto;
-  min-height: 192rpx;
-  padding: 36rpx 24rpx 24rpx;
-  background: var(--cat-surface);
-  color: var(--cat-text);
-  border: 4rpx solid var(--cat-keyline);
-  overflow: visible;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-.cattabs.cat-stack .tile .tag {
-  position: absolute;
-  top: -18rpx;
-  left: 20rpx;
-  font-family: var(--f-gothic);
-  font-size: calc(28rpx * var(--font-scale));
+.cattabs.cat-sticker .chip-pill .en {
+  font-family: var(--f-bear);
+  font-size: calc(30rpx * var(--font-scale));
+  font-weight: 500;
   line-height: 1;
-  letter-spacing: 0.04em;
-  padding: 6rpx 14rpx;
-  transform: rotate(-4deg);
-  border: 3rpx solid var(--cat-keyline);
 }
-.cattabs.cat-stack .tile .num {
-  position: static;
-  color: var(--cat-accent);
+.cattabs.cat-sticker .chip-pill .cn {
+  font-family: var(--f-toni);
+  font-size: calc(20rpx * var(--font-scale));
+  opacity: 0.85;
 }
-.cattabs.cat-stack .tile .name {
-  position: static;
-  font-size: calc(36rpx * var(--font-scale));
-  margin-top: 6rpx;
-}
-.cattabs.cat-stack .icon-circle {
-  border: 4rpx solid var(--cat-keyline);
-  border-radius: 24rpx;
+.cattabs.cat-sticker .chip-count {
+  font-family: var(--f-gothic);
+  font-size: calc(22rpx * var(--font-scale));
+  min-width: 40rpx;
+  text-align: center;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  background: var(--cat-text);
+  color: var(--cat-surface);
 }
 .cattabs .empty {
   color: rgba(0, 0, 0, 0.3);
