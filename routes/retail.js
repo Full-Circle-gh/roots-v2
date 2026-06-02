@@ -7906,8 +7906,9 @@ function printOrderById(orderId, prefs, pcfg) {
   const printer = pcfg || printerForStore(order.store_id, p);
   if (!printer || !printer.sn) return Promise.resolve({ ok: false, msg: 'no_printer_for_store' });
   const items = tdb().prepare('SELECT * FROM retail_order_items WHERE order_id = ? ORDER BY id').all(orderId);
+  const shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(orderId);
   const tpl = _feie.TEMPLATE_IDS.includes(printer.template) ? printer.template : 'receipt';
-  const content = _feie.renderOrder(tpl, order, items, p.shop_name);
+  const content = _feie.renderOrder(tpl, order, items, p.shop_name, shipments);
   return _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, fc);
 }
 
@@ -7967,8 +7968,9 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), (req
 });
 
 // Sample order used for previews when a store has no real order yet. Rich
-// enough to exercise every template branch (bilingual names, options, size,
-// voucher, note, cutlery) so the operator sees real differences.
+// enough to exercise every template branch (bilingual names, SKU, options,
+// size, voucher, note, cutlery) AND a split into two packages, so the
+// operator sees exactly how multi-qty, SKU and split shipments print.
 function _sampleOrderForPreview() {
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
   const order = {
@@ -7980,11 +7982,15 @@ function _sampleOrderForPreview() {
     customer_note: 'Less ice 少冰', needs_cutlery: 1,
   };
   const items = [
-    { name_cn: '燕麦拿铁', name_en: 'Oat Latte', size: 'L', qty: 2, unit_price: 22, line_total: 44,
-      options_json: JSON.stringify(['热 Hot', '半糖 Half sugar']) },
-    { name_cn: '抹茶可颂', name_en: 'Matcha Croissant', qty: 1, unit_price: 12, line_total: 12 },
+    { name_cn: '燕麦拿铁', name_en: 'Oat Latte', sku: 'OATLAT-L', size: 'L', qty: 2, unit_price: 22, line_total: 44,
+      options_json: JSON.stringify(['热 Hot', '半糖 Half sugar']), shipment_id: 1 },
+    { name_cn: '抹茶可颂', name_en: 'Matcha Croissant', sku: 'MATCRO', qty: 1, unit_price: 12, line_total: 12, shipment_id: 2 },
   ];
-  return { order, items };
+  const shipments = [
+    { id: 1, mode: 'land', label: 'Land shipment · 陆运' },
+    { id: 2, mode: 'air', label: 'Air shipment · 空运' },
+  ];
+  return { order, items, shipments };
 }
 
 // Render (but do NOT print) a slip for one store + template, so the backend
@@ -7998,18 +8004,19 @@ router.get('/api/retail-admin/printer/preview', requireRetailAdmin, (req, res) =
   let tpl = String(req.query.template || 'receipt');
   if (!_feie.TEMPLATE_IDS.includes(tpl)) tpl = 'receipt';
 
-  let order, items, sample = false;
+  let order, items, shipments = [], sample = false;
   const last = Number.isFinite(storeId)
     ? tdb().prepare("SELECT * FROM retail_orders WHERE store_id = ? AND status != 'pending_payment' ORDER BY id DESC LIMIT 1").get(storeId)
     : null;
   if (last) {
     order = last;
     items = tdb().prepare('SELECT * FROM retail_order_items WHERE order_id = ? ORDER BY id').all(last.id);
+    shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(last.id);
   } else {
-    ({ order, items } = _sampleOrderForPreview());
+    ({ order, items, shipments } = _sampleOrderForPreview());
     sample = true;
   }
-  const content = _feie.renderOrder(tpl, order, items, prefs.shop_name);
+  const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments);
   res.json({ ok: true, content, sample, template: tpl });
 });
 
@@ -8030,15 +8037,8 @@ router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, re
   if (last) {
     r = await printOrderById(last.id, prefs, printer);
   } else {
-    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const sample = {
-      order_no: 'TEST-0001', placed_at: now, paid_at: now,
-      recipient_name: 'Test 测试', recipient_phone: '13800000000',
-      subtotal: 18, shipping_fee: 0, total: 18, payment_method: 'wechat',
-      address_full: 'Test address 测试地址 1号',
-    };
-    const items = [{ name_cn: '测试商品', name_en: 'Test item', qty: 1, unit_price: 18, line_total: 18 }];
-    const content = _feie.renderOrder(tpl, sample, items, prefs.shop_name);
+    const { order, items, shipments } = _sampleOrderForPreview();
+    const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments);
     r = await _feie.printContent(content, { sn: printer.sn, copies: 1 }, integ().feie);
   }
   if (r.ok) return res.json({ ok: true });
