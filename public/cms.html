@@ -11432,37 +11432,42 @@ function getReviews(b) {
 
 function buildReviewForm(m, b) {
   const view = b.view || 'card';
-  m.appendChild(field(T('Layout', '版式'),
-    T('Card / Carousel paint full-width. Editorial, Riso pop & Spotlight sit as a bordered card on the page.', '卡片 / 轮播 为全宽。编辑风、印刷波普、聚焦 以带边框的卡片形式呈现。'),
+  const secLayout  = inspectorSection(m, b.type, 'layout',  T('Style & layout', '样式与版式'), { open: true });
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
+
+  secLayout.appendChild(field(T('Layout', '版式'),
+    T('Card and Carousel fill the full width. Editorial, Riso pop and Spotlight show as a bordered card.', '卡片 / 轮播 为全宽。编辑风、印刷波普、聚焦 以带边框的卡片形式显示。'),
     sel(view, [
       { value: 'card',      label: T('Card — single testimonial', '卡片 — 单条评价') },
       { value: 'carousel',  label: T('Carousel — swipe through several', '轮播 — 滑动浏览多条') },
       { value: 'editorial', label: T('Editorial — calm bordered card', '编辑风 — 沉静边框卡片') },
       { value: 'riso',      label: T('Riso pop — sticker + verified stamp', '印刷波普 — 贴纸 + 认证印章') },
-      { value: 'spotlight', label: T('Spotlight — dark hero + thumbnail rail', '聚焦 — 深色主卡 + 缩略导航') },
+      { value: 'spotlight', label: T('Spotlight — dark main card + thumbnails', '聚焦 — 深色主卡 + 缩略图') },
     ], v => updateBlock(b.id, { view: v }))));
 
   const isCardLayout = view === 'editorial' || view === 'riso' || view === 'spotlight';
 
-  m.appendChild(field(T('Kicker', '小标题'), '',
-    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field(T('Background colour', '背景颜色'), isCardLayout ? T('The page area behind the card.', '卡片后方的页面区域。') : '',
+  secColours.appendChild(field(T('Background colour', '背景颜色'), isCardLayout ? T('The page area behind the card.', '卡片后方的页面区域。') : '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Star colour', '星标颜色'), T('Colour of the filled rating stars. Default = gold.', '已点亮评分星的颜色。默认 = 金色。'),
+  secColours.appendChild(field(T('Star colour', '星标颜色'), T('The colour of the filled rating stars. Default = gold.', '已点亮评分星的颜色。默认 = 金色。'),
     sel(b.star_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { star_color: v }))));
 
   if (isCardLayout) {
-    m.appendChild(field(T('Card background', '卡片背景'), T('Fill of the testimonial card itself. Default = cream (Spotlight = forest).', '评价卡片本身的填充色。默认 = 奶白(聚焦 = 森绿)。'),
+    secColours.appendChild(field(T('Card background', '卡片背景'), T('The colour of the review card itself. Default = cream (Spotlight = forest).', '评价卡片本身的颜色。默认 = 奶白(聚焦 = 森绿)。'),
       sel(b.card_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { card_color: v }))));
-    m.appendChild(field(T('Card border', '卡片边框'), T('Outline around the card. Default = forest (Riso = ink).', '卡片轮廓。默认 = 森绿(印刷波普 = 墨黑)。'),
+    secColours.appendChild(field(T('Card border', '卡片边框'), T('The outline around the card. Default = forest (Riso = black).', '卡片轮廓。默认 = 森绿(印刷波普 = 墨黑)。'),
       sel(b.border_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { border_color: v }))));
-    m.appendChild(field(T('Accent colour', '强调色'), T('Kicker ticks, sticker badge, arrows & counter. Default = lime.', '小标题刻线、贴纸徽章、箭头与计数。默认 = 青柠。'),
+    secColours.appendChild(field(T('Accent colour', '强调色'), T('Small marks, the sticker badge, arrows and counter. Default = lime.', '小标记、贴纸徽章、箭头与计数。默认 = 青柠。'),
       sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
-    m.appendChild(field(T('Circle / avatar colour', '圆圈 / 头像颜色'), T('Background of the monogram disc next to each name. Default = pea.', '姓名旁字母圆圈的背景色。默认 = 豌豆绿。'),
+    secColours.appendChild(field(T('Circle / avatar colour', '圆圈 / 头像颜色'), T('The background of the letter circle next to each name. Default = pea green.', '姓名旁字母圆圈的背景色。默认 = 豌豆绿。'),
       sel(b.circle_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { circle_color: v }))));
   }
+
+  secContent.appendChild(field(T('Small heading', '小标题'), '',
+    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
 
   // Reviews list — each entry editable; carousel shows all, card shows only the first.
   const reviews = getReviews(b);
@@ -11542,7 +11547,7 @@ function buildReviewForm(m, b) {
     card.appendChild(ratingField);
 
     // Avatar (image picker)
-    const avatarField = field(T('Avatar image', '头像图片'), T('Optional — round thumbnail next to the byline.', '可选 — 署名旁的圆形缩略图。'),
+    const avatarField = field(T('Avatar image', '头像图片'), T('Optional — a round picture next to the name.', '可选 — 姓名旁的圆形小图。'),
       imgPicker(r.avatar_url, ({ url }) => updateReview(idx, { avatar_url: url })));
     avatarField.style.marginBottom = '8px';
     card.appendChild(avatarField);
@@ -11551,7 +11556,7 @@ function buildReviewForm(m, b) {
       txtPair(r.quote_en, r.quote_cn, ({ en, cn }) => updateReview(idx, { quote_en: en, quote_cn: cn }), {}, { multiline: true, rows: 3 })));
     card.appendChild(field(T('Author name', '作者姓名'), '',
       txt(r.author_name, v => updateReview(idx, { author_name: v }), 'Linda')));
-    card.appendChild(field(T('Author subline', '作者副行'), T('Optional — e.g. tier or location.', '可选 — 例如会员等级或地点。'),
+    card.appendChild(field(T('Author subline', '作者副行'), T('Optional — e.g. membership level or location.', '可选 — 例如会员等级或地点。'),
       txtPair(r.author_subline_en, r.author_subline_cn, ({ en, cn }) =>
         updateReview(idx, { author_subline_en: en, author_subline_cn: cn }))));
     listWrap.appendChild(card);
@@ -11563,7 +11568,7 @@ function buildReviewForm(m, b) {
   addBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> ${T('Add review', '添加评价')}`;
   addBtn.addEventListener('click', () => addReview());
   listWrap.appendChild(addBtn);
-  m.appendChild(listWrap);
+  secContent.appendChild(listWrap);
 }
 
 function buildStoreInfoForm(m, b) {
@@ -11853,19 +11858,26 @@ function buildLeaderboardForm(m, b) {
   note.className = 'helper';
   note.style.cssText = 'margin: -4px 0 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
   note.innerHTML = B(
-    'Pulls real top customers at runtime — names are masked server-side per the privacy setting below. The canvas preview uses sample data so live rankings don\'t leak while you\'re drafting.',
-    '运行时拉取真实排行 — 名字按下方隐私设置在服务端打码。预览使用示例数据,避免在编辑时泄露真实排行。'
+    'Shows your real top customers. Names are hidden on the server based on the privacy setting below. The preview here uses sample data so real rankings don\'t leak while you edit.',
+    '显示真实的顶级顾客。名字会在服务器上按下方的隐私设置打码。此处预览使用示例数据,编辑时不会泄露真实排行。'
   );
-  m.appendChild(note);
 
-  m.appendChild(field(T('Kicker', '小标题'), T('Tiny uppercase label above the title.', '标题上方的小号大写标签。'),
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  const secRanking = inspectorSection(m, b.type, 'ranking', T('Ranking & privacy', '排行与隐私'), { open: true });
+  const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
+
+  secContent.appendChild(note);
+  secContent.appendChild(field(T('Small heading', '小标题'), T('A small line above the title.', '标题上方的一行小字。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field(T('Title', '标题'), '',
+  secContent.appendChild(field(T('Title', '标题'), '',
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  m.appendChild(field(T('Subhead', '副标题'), T('Optional — one short line under the title.', '可选 — 标题下方的一句短文案。'),
+  secContent.appendChild(field(T('Subtitle', '副标题'), T('Optional — one short line under the title.', '可选 — 标题下方的一句短文案。'),
     txtPair(b.subhead_en, b.subhead_cn, ({ en, cn }) => updateBlockSilent(b.id, { subhead_en: en, subhead_cn: cn }))));
+  secContent.appendChild(field(T('Footer line', '底部文案'),
+    T('Optional — e.g. "Top 3 get a coupon each month". This is just text — no reward is given automatically.', '可选 — 例如「每月前三名得优惠券」。仅为文字展示 — 不会自动发放奖励。'),
+    txtPair(b.footer_en, b.footer_cn, ({ en, cn }) => updateBlockSilent(b.id, { footer_en: en, footer_cn: cn }))));
 
-  m.appendChild(field(T('Rank by', '排序依据'),
+  secRanking.appendChild(field(T('Rank by', '排序依据'),
     T('Spend — total ¥ across paid orders. Points — current Roots Club points balance. Orders — count of paid orders.', '消费 — 已支付订单的累计金额。积分 — 当前 Roots 会员积分余额。订单数 — 已支付订单数量。'),
     sel(b.metric || 'lifetime_spend', [
       { value: 'lifetime_spend', label: T('Spend (¥)',       '消费金额 (¥)') },
@@ -11873,8 +11885,8 @@ function buildLeaderboardForm(m, b) {
       { value: 'orders_count',   label: T('Order count',      '订单数量') },
     ], v => updateBlock(b.id, { metric: v }))));
 
-  m.appendChild(field(T('Window', '时间范围'),
-    T('Window the ranking covers. Spend / orders look at recent activity; points balance is point-in-time (window ignored).', '排行覆盖的时间范围。消费 / 订单看近期活动;积分余额为即时值(忽略此项)。'),
+  secRanking.appendChild(field(T('Window', '时间范围'),
+    T('The time range the ranking covers. Spend and orders use recent activity; points balance is the current value (this is ignored for points).', '排行覆盖的时间范围。消费和订单看近期活动;积分余额为当前值(积分会忽略此项)。'),
     sel(b.period || 'month', [
       { value: 'week',  label: T('This week',  '本周') },
       { value: 'month', label: T('This month', '本月') },
@@ -11882,14 +11894,14 @@ function buildLeaderboardForm(m, b) {
       { value: 'all',   label: T('All time',   '累计') },
     ], v => updateBlock(b.id, { period: v }))));
 
-  m.appendChild(field(T('How many to show', '显示数量'),
-    T('3–10 rows. Lower numbers feel tighter; higher gives more customers a chance to see themselves.', '3–10 行。数量少更紧凑,数量多让更多顾客看到自己。'),
+  secRanking.appendChild(field(T('How many to show', '显示数量'),
+    T('3–10 rows. Fewer rows feel tighter; more rows give more customers a chance to see themselves.', '3–10 行。数量少更紧凑,数量多让更多顾客看到自己。'),
     num(b.top_n, v => updateBlock(b.id, { top_n: Math.max(3, Math.min(10, v || 5)) }), { min: 3, max: 10 })));
 
-  m.appendChild(field(T('Name privacy', '名字隐私'),
-    T('First L. — recommended; shows the first character with the rest masked (CJK-friendly). Full — real nicknames. Hidden — fully masked to ** **.', '首字母 — 推荐;显示首字母,其余打码(支持中文)。完整 — 显示真实昵称。隐藏 — 完全打码为 ** **。'),
+  secRanking.appendChild(field(T('Name privacy', '名字隐私'),
+    T('First letter — recommended; shows the first character and hides the rest (works for Chinese too). Full — real nicknames. Hidden — fully hidden as ** **.', '首字母 — 推荐;显示首字母,其余打码(支持中文)。完整 — 显示真实昵称。隐藏 — 完全打码为 ** **。'),
     sel(b.reveal_mode || 'first_char', [
-      { value: 'first_char', label: T('First L. (recommended)', '首字母(推荐)') },
+      { value: 'first_char', label: T('First letter (recommended)', '首字母(推荐)') },
       { value: 'full',       label: T('Full nickname',          '完整昵称') },
       { value: 'masked',     label: T('Hidden (** **)',         '完全隐藏 (** **)') },
     ], v => updateBlock(b.id, { reveal_mode: v }))));
@@ -11907,22 +11919,18 @@ function buildLeaderboardForm(m, b) {
   showLbl.textContent = T('Show the value (¥ / pts / orders) next to each name', '在名字旁显示数值 (¥ / 积分 / 订单数)');
   showLbl.addEventListener('click', () => { showBox.checked = !showBox.checked; showBox.dispatchEvent(new Event('change')); });
   showRow.appendChild(showBox); showRow.appendChild(showLbl);
-  m.appendChild(showRow);
+  secRanking.appendChild(showRow);
 
-  m.appendChild(field(T('Footer line', '底部文案'),
-    T('Optional — e.g. "Top 3 get a coupon each month". Purely cosmetic, no auto-reward wired in v1.', '可选 — 例如「每月前三名得优惠券」。仅为展示,v1 未自动发放奖励。'),
-    txtPair(b.footer_en, b.footer_cn, ({ en, cn }) => updateBlockSilent(b.id, { footer_en: en, footer_cn: cn }))));
-
-  m.appendChild(field(T('Hide when fewer than', '少于此数时隐藏'),
-    T('Hide the block entirely if the leaderboard has fewer than this many qualifiers — avoids a sad short list early on.', '排行榜上榜人数少于此数时,完全隐藏本模块 — 避免初期出现冷清的短列表。'),
+  secRanking.appendChild(field(T('Hide when fewer than', '少于此数时隐藏'),
+    T('Hide the whole block if fewer than this many people qualify — avoids a short, empty-looking list early on.', '上榜人数少于此数时,完全隐藏本模块 — 避免初期出现冷清的短列表。'),
     num(b.hide_when_under, v => updateBlock(b.id, { hide_when_under: Math.max(0, Math.min(10, v || 0)) }), { min: 0, max: 10 })));
 
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Accent colour (rank value)', '强调色(数值)'),
-    T('Tint used for the ¥ / pts / orders number next to each name.', '名字旁的数值文字颜色。'),
+  secColours.appendChild(field(T('Accent colour (rank value)', '强调色(数值)'),
+    T('The colour of the ¥ / points / orders number next to each name.', '名字旁数值的颜色。'),
     sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 }
 
