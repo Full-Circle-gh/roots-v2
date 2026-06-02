@@ -10064,7 +10064,7 @@ function buildReviewForm(m, b) {
   const reviews = getReviews(b);
   const listWrap = document.createElement('div');
   listWrap.className = 'field';
-  const isMulti = view === 'carousel' || view === 'spotlight';
+  const isMulti = view === 'carousel' || view === 'spotlight' || view === 'riso';
   const lbl = document.createElement('label');
   lbl.textContent = isMulti
     ? T(`Reviews (${reviews.length})`, `评价(${reviews.length})`)
