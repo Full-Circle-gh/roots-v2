@@ -2731,41 +2731,42 @@
   .manifest .mf-total { font-size: 14px; font-weight: 600; color: var(--text-1); white-space: nowrap; }
   .manifest .mf-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .manifest .mf-zh { font-family: var(--f-sans); font-size: 11px; font-weight: 300; color: var(--text-3); }
-  /* SKU + quantity are the packer's critical fields — legible mono chips,
-     not faint micro-text. Unit price stays quiet; multi-unit qty goes brass
-     so a >1 line can't be shipped short. */
-  .manifest .mf-sku {
+  /* SKU + quantity are the packer's two critical fields — shared mono chips
+     used identically across all item layouts (manifest / table / cards), so
+     they read the same in every view. Unit price stays quiet; a multi-unit
+     qty goes brass so a >1 line can't be shipped short. */
+  .item-sku {
     font-family: var(--f-mono); font-size: 11px; font-weight: 600;
-    color: var(--text-1); letter-spacing: .04em;
+    color: var(--text-1); letter-spacing: .04em; white-space: nowrap;
     background: var(--bg-elev-1); border: 1px solid var(--line);
     border-radius: var(--r-sm); padding: 1px 7px;
   }
-  .manifest .mf-qty-chip {
+  .item-qty {
+    display: inline-block;
     font-family: var(--f-mono); font-size: 12px; font-weight: 700;
     color: var(--text-1); font-variant-numeric: tabular-nums; letter-spacing: .02em;
+    white-space: nowrap;
     background: var(--bg-elev-1); border: 1px solid var(--line);
     border-radius: var(--r-sm); padding: 1px 8px;
   }
-  .manifest .mf-qty-chip.qty-multi {
+  .item-qty.qty-multi {
     color: var(--brass);
     background: rgba(176, 141, 74, .10);
     border-color: rgba(176, 141, 74, .40);
   }
-  .manifest .mf-unit { font-family: var(--f-mono); font-size: 10.5px; color: var(--text-3); letter-spacing: .03em; }
+  .item-unit { font-family: var(--f-mono); font-size: 10.5px; color: var(--text-3); letter-spacing: .03em; }
   .manifest .mf-packs { margin-left: auto; display: inline-flex; align-items: center; }
   .manifest .mf-packs .pack-badge { margin-right: 0; margin-left: 4px; }
 
-  /* Per-item thumbnail (order detail) + multi-unit qty emphasis. Shared
-     across all three item layouts (manifest / table / cards). The thumbnail
-     gives the operator a visual cue of what was ordered; .qty-multi bolds the
-     ×N chip whenever more than one unit was ordered so it can't be missed. */
+  /* Per-item thumbnail (order detail) — shared across all three item layouts
+     (manifest / table / cards), giving the operator a visual cue of what was
+     ordered. (Quantity emphasis lives in the shared .item-qty chip above.) */
   .oi-thumb {
     flex-shrink: 0; width: 40px; height: 40px; border-radius: var(--r-sm);
     object-fit: cover; background: var(--bg-elev-2);
     border: 1px solid var(--line-soft); display: inline-block; vertical-align: middle;
   }
   .oi-thumb.is-empty { background: var(--bg-app); }
-  .item-qty.qty-multi { font-weight: 700; color: var(--text-1); }
 
   /* ─── Order detail · per-operator View tweaks ───────────────────────────
      The Full Circle Order Detail "Tweaks" panel made operator-selectable:
@@ -2790,7 +2791,7 @@
   /* Items — table (grid columns) */
   .oi-grid { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: var(--r-md); overflow: hidden; }
   .oi-grid .oi-th, .oi-grid .oi-row {
-    display: grid; grid-template-columns: 1fr 52px 80px 84px auto;
+    display: grid; grid-template-columns: 1fr 64px 80px 84px auto;
     align-items: center; gap: var(--s3); padding: var(--s3) var(--s4);
   }
   .oi-grid .oi-th { background: var(--bg-app); border-bottom: 1px solid var(--line-soft); }
@@ -2799,7 +2800,6 @@
   .oi-grid .oi-row:last-child { border-bottom: none; }
   .oi-grid .oi-name { font-size: 13px; font-weight: 500; color: var(--text-1); }
   .oi-grid .oi-zh { font-family: var(--f-sans); font-size: 11px; font-weight: 300; color: var(--text-3); margin-top: 2px; }
-  .oi-grid .oi-sku { font-family: var(--f-mono); font-size: 10.5px; font-weight: 600; color: var(--text-2); letter-spacing: .04em; margin-top: 2px; }
   .oi-grid .oi-c { font-family: var(--f-mono); font-size: 12px; color: var(--text-2); text-align: center; }
   .oi-grid .oi-r { font-family: var(--f-mono); font-size: 12px; color: var(--text-2); text-align: right; }
   .oi-grid .oi-total { font-size: 13px; font-weight: 600; color: var(--text-1); text-align: right; }
@@ -10663,12 +10663,15 @@ function renderPackBadges(it) {
   // macOS / Windows. The truck glyph has no text-presentation form, so
   // for that case we use just text "Land" — the .pack-badge.land colour
   // already carries the semantic.
-  if (hasAir && hasLand)
-    parts.push('<span class="pack-badge any" title="Ships by air or land · 空运陆运均可">Air + Land · 空陆</span>');
-  else if (hasAir)
-    parts.push('<span class="pack-badge air" title="Air shipping only · 仅空运">✈︎ Air · 空运</span>');
+  // Both modes allowed = no constraint. Once the shipment is routed this is
+  // pure noise — the shipment header already shows the chosen mode. Only
+  // surface a badge when the item is RESTRICTED to one mode, which is a real
+  // packing warning (e.g. "Land only — airline rejected").
+  if (hasAir && hasLand) return '';
+  if (hasAir)
+    parts.push('<span class="pack-badge air" title="Air shipping only · 仅空运">✈︎ Air only · 仅空运</span>');
   else
-    parts.push('<span class="pack-badge land" title="Land shipping only — airline rejected · 仅陆运">Land · 陆运</span>');
+    parts.push('<span class="pack-badge land" title="Land shipping only — airline rejected · 仅陆运">Land only · 仅陆运</span>');
   return parts.join('');
 }
 
@@ -10688,6 +10691,12 @@ function itemQtyHtml(it) {
   return `<span class="item-qty${Number(it.qty) > 1 ? ' qty-multi' : ''}">×${it.qty}</span>`;
 }
 
+// SKU chip — shared across all item layouts (manifest / table / cards) so the
+// packer's scan code reads identically in every view.
+function itemSkuHtml(it) {
+  return `<span class="item-sku">${it.sku ? escapeHtml(it.sku) : 'no SKU'}</span>`;
+}
+
 // One line of the packing manifest. `opts.index` (1-based) renders the
 // 01 / 02 … brass line number; `opts.showPack` toggles the pack badges.
 function renderItemRow(it, opts = {}) {
@@ -10700,7 +10709,6 @@ function renderItemRow(it, opts = {}) {
   const zh = (it.name_cn || it.size)
     ? `<span class="mf-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</span>`
     : '';
-  const sku = it.sku ? escapeHtml(it.sku) : 'no SKU';
   return `
     <div class="mf-row">
       <span class="mf-num">${num}</span>
@@ -10712,9 +10720,9 @@ function renderItemRow(it, opts = {}) {
         </div>
         <div class="mf-meta">
           ${zh}
-          <span class="mf-sku">${sku}</span>
-          <span class="mf-qty-chip${Number(it.qty) > 1 ? ' qty-multi' : ''}">×${it.qty}</span>
-          <span class="mf-unit">@ ¥${fmt(it.unit_price)}</span>
+          ${itemSkuHtml(it)}
+          ${itemQtyHtml(it)}
+          <span class="item-unit">@ ¥${fmt(it.unit_price)}</span>
           ${showPack ? `<span class="mf-packs">${renderPackBadges(it)}</span>` : ''}
         </div>
       </div>
@@ -10773,7 +10781,7 @@ function renderItemsAsGrid(items, showPack = true) {
     return `<div class="oi-row">
       <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
         ${itemThumb(it)}
-        <div style="min-width:0">${nameCell}${zh}<div class="oi-sku">${it.sku ? escapeHtml(it.sku) : 'no SKU'}</div></div>
+        <div style="min-width:0">${nameCell}${zh}<div style="margin-top:4px">${itemSkuHtml(it)}</div></div>
       </div>
       <span class="oi-c">${itemQtyHtml(it)}</span>
       <span class="oi-r">¥${fmt(it.unit_price)}</span>
@@ -10802,9 +10810,9 @@ function renderItemsAsCards(items, showPack = true) {
         <span class="oic-total">¥${fmt(it.line_total)}</span>
       </div>
       <div class="oic-bot">
-        <span class="oic-meta">${it.sku ? escapeHtml(it.sku) : 'no SKU'}</span>
-        <span style="color:var(--text-4)">·</span>
-        <span class="oic-meta">${itemQtyHtml(it)} @ ¥${fmt(it.unit_price)}</span>
+        ${itemSkuHtml(it)}
+        ${itemQtyHtml(it)}
+        <span class="item-unit">@ ¥${fmt(it.unit_price)}</span>
         ${showPack ? `<span class="oic-packs">${renderPackBadges(it)}</span>` : ''}
       </div>
     </div>`;
