@@ -211,6 +211,16 @@
         </view>
       </view>
 
+      <!-- Fresh batch notice — outside-GZ cart with a made-to-batch item.
+           Tells the customer the exact day we make it + when it arrives. -->
+      <view wx:if="{{batchNotice}}" class="holiday-banner">
+        <view class="hb-icon">🥗</view>
+        <view class="hb-body">
+          <view class="hb-title f-bear">{{lang === 'cn' ? '为您新鲜现做' : 'Made fresh for you'}}</view>
+          <view class="hb-msg">{{lang === 'cn' ? batchNotice.message_cn : batchNotice.message_en}}</view>
+        </view>
+      </view>
+
       <!-- Right away — always visible in time-slot mode; greyed when kitchen closed
            or holiday mode is on. Disabled state shows a reason below the label. -->
       <view wx:if="{{scheduling.mode !== 'day_only'}}"
@@ -333,7 +343,7 @@
            toggle OFF, potential >= ¥0.01:  "4 pts · worth ¥0.04 on this order"
            toggle OFF, potential <  ¥0.01:  "4 pts available · keep earning"
            toggle ON , covers all bill:     "Covers the bill ✓"
-           toggle ON , partial cover:       "Saving ¥X · WeChat for the rest"
+           toggle ON , partial cover:       "¥X off · ¥Y left to pay"
            toggle ON , potential = 0:       (toggle disables itself, not shown) -->
     <view wx:if="{{pointsBalance > 0}}" class="points-toggle-row">
       <view class="pt-body">
@@ -355,8 +365,8 @@
           </block>
           <!-- ON · partial cover -->
           <block wx:else>
-            <text class="pt-emph">{{lang === 'cn' ? '已抵 ¥' : 'Saving ¥'}}{{pointsDiscount}}</text>
-            <text>{{lang === 'cn' ? ' · 余额由所选方式支付' : ' · rest goes to your pick below'}}</text>
+            <text class="pt-emph">{{lang === 'cn' ? '已抵 ¥' : '¥'}}{{pointsDiscount}}{{lang === 'cn' ? '' : ' off'}}</text>
+            <text>{{lang === 'cn' ? ' · 还需支付 ¥' : ' · ¥'}}{{total}}{{lang === 'cn' ? '' : ' left to pay'}}</text>
           </block>
         </view>
       </view>

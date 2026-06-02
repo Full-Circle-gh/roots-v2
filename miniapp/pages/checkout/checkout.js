@@ -59,6 +59,7 @@ Page({
     usePoints: false,            // toggle: apply max usable on this order
     // Delivery scheduling — populated by the /quote response.
     scheduling: null,            // full scheduling object from server (slots, surcharge, hours)
+    batchNotice: null,           // { ship_date, delivery_date, message_en, message_cn } when an outside-GZ cart holds a batch-made item
     deliverySlotId: '',          // 'right_away' | 'YYYY-MM-DD' | 'YYYY-MM-DDTHH:MM' — required before placeOrder
     deliverySlotLabel: '',       // human-readable label for the picked slot (passed back to server)
     deliverySurcharge: 0,        // ¥ same-day surcharge for the picked slot
@@ -154,7 +155,7 @@ Page({
     isBound: true,
     lang: 'en',
     copy: {
-      kicker: 'CHECKOUT · 结账',
+      kicker: 'CHECKOUT',
       title: 'Where & how.',
       // Receipt-style section labels (kicker-styled, uppercase)
       orderSummary: 'YOUR ORDER',
@@ -1027,6 +1028,7 @@ Page({
           // points have value before flipping the switch.
           pointsPotentialDiscount: (pointsMaxUsable / (Number(data.points_redeem_rate) || 100)).toFixed(2),
           scheduling: sch,
+          batchNotice: data.batch_notice || null,
           slotsByDay,
           deliverySlotId: nextSlotId,
           deliverySlotLabel: nextSlotLabel,
