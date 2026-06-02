@@ -496,12 +496,17 @@
   h3 { font-size: 14px; font-weight: 600; margin-bottom: var(--s2); }
 
   .row { display: flex; gap: var(--s3); align-items: center; flex-wrap: wrap; }
+  /* Base card surface for every tab. Real edge (--line, not the near-invisible
+     --line-soft) + the two-layer lift shadow already used on the dashboard KPIs,
+     order-detail and customer tiles — so the rest of the backend reads as
+     contained/elevated, not as flat rectangles floating on the page. */
   .card {
     background: var(--bg-pane);
-    border: 1px solid var(--line-soft);
+    border: 1px solid var(--line);
     border-radius: var(--r-lg);
     padding: var(--s5);
     margin-bottom: var(--s3);
+    box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
   }
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -2685,15 +2690,19 @@
   .pack-badge.air   { background: rgba(176, 141, 74, .14); color: var(--brass); border-color: rgba(176, 141, 74, .3); }
   .pack-badge.land  { background: rgba(176, 141, 74, .14); color: var(--brass); border-color: rgba(176, 141, 74, .3); }
 
-  /* ─── Order total banner — hero strip below the drawer header ─── */
+  /* ─── Order total banner — hero strip below the drawer header. Lifted to the
+     same elevated card surface as the metadata block beneath it (was a recessed
+     bg-app strip with an invisible border, so the hero number read flatter than
+     the cards under it). ─── */
   .order-total-banner {
     display: flex; align-items: baseline; justify-content: space-between;
     gap: var(--s4);
     padding: var(--s4) var(--s5);
-    background: var(--bg-app);
-    border: 1px solid var(--line-soft);
-    border-radius: var(--r-md);
+    background: var(--bg-pane);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
     margin-bottom: var(--s5);
+    box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
   }
   .order-total-banner .otb-label {
     font-family: var(--f-mono); font-size: 10px; font-weight: 500;
@@ -2704,7 +2713,7 @@
     margin-top: 4px; letter-spacing: .02em;
   }
   .order-total-banner .otb-amount {
-    font-size: 40px; font-weight: 300; color: var(--text-1);
+    font-size: 40px; font-weight: 500; color: var(--text-1);
     line-height: 1; letter-spacing: -.02em; white-space: nowrap;
   }
   @media (max-width: 560px) {
@@ -2780,7 +2789,7 @@
      reproduce the standard look, so nothing changes until an operator picks. */
 
   /* Total — inline tile inside the info grid */
-  .od-total-inline .od-total-big { font-size: 28px; font-weight: 300; color: var(--text-1); line-height: 1; letter-spacing: -.02em; }
+  .od-total-inline .od-total-big { font-size: 28px; font-weight: 500; color: var(--text-1); line-height: 1; letter-spacing: -.02em; }
   .od-total-inline .od-total-sub { font-family: var(--f-mono); font-size: 11px; color: var(--text-3); margin-top: 4px; letter-spacing: .02em; }
 
   /* Total — sticky footer receipt bar that follows you as you scroll */
@@ -3438,12 +3447,15 @@
   /* ═══════════════════════════════════════════════════════════════════
      SETTINGS — per-control group cards, visual pickers, side mockups
      ═══════════════════════════════════════════════════════════════════ */
+  /* Group card (Settings / Delivery panels) — same elevated surface as .card
+     so grouped setting blocks sit as distinct cards, matching the polished pages. */
   .group-card {
     background: var(--bg-pane);
-    border: 1px solid var(--line-soft);
+    border: 1px solid var(--line);
     border-radius: var(--r-lg);
     padding: var(--s5);
     margin-bottom: var(--s3);
+    box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
   }
   .group-card-head { margin-bottom: var(--s4); }
   .group-card-head h3 {
@@ -5694,7 +5706,7 @@
     <style>
       .bc-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--s5); align-items: start; }
       @media (max-width: 1100px) { .bc-grid { grid-template-columns: 1fr; } }
-      .bc-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 10px; padding: var(--s4); }
+      .bc-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 10px; padding: var(--s4); box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05); }
       .bc-row { display: flex; gap: var(--s3); margin-bottom: var(--s3); }
       .bc-row > * { flex: 1; min-width: 0; }
       .bc-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
@@ -6541,6 +6553,7 @@
       .lb-card {
         background: var(--bg-pane); border: 1px solid var(--line);
         border-radius: 12px; padding: 20px 22px; margin-bottom: 18px;
+        box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
       }
       .lb-card h3 { margin: 0 0 4px; font-size: 14px; }
       .lb-card .muted { font-size: 11px; line-height: 1.55; }
@@ -19499,13 +19512,22 @@ cuApplyUiScale(cuGetUiScale());
     const t = el.textContent || '';
     return /[A-Za-z]/.test(t) && !/[一-鿿]/.test(t);
   }
+  // Block pairs are prose help text. Interactive chrome (the nav tab bar, the
+  // topbar) is not a translation pair — but in CN mode its labels are all
+  // Chinese, so isCNBlock() would match it and pair it with an EN sibling,
+  // stamping data-lang-block on a structural container. The CSS then hides the
+  // whole bar in the opposite language. Guard: never tag a container that holds
+  // interactive/structural children.
+  function isStructuralBlock(el) {
+    return !!el.querySelector('button, a, input, select, textarea, svg');
+  }
   function tagBlockPair(cnEl) {
     if (cnEl.dataset.langBlock || (cnEl.textContent || '').trim().length < 6) return;
-    if (inSkippedContext(cnEl)) return;
+    if (inSkippedContext(cnEl) || isStructuralBlock(cnEl)) return;
     const prev = cnEl.previousElementSibling, next = cnEl.nextElementSibling;
     let enEl = null;
-    if (prev && prev.tagName === cnEl.tagName && !prev.dataset.langBlock && isENBlock(prev) && !inSkippedContext(prev)) enEl = prev;
-    else if (next && next.tagName === cnEl.tagName && !next.dataset.langBlock && isENBlock(next) && !inSkippedContext(next)) enEl = next;
+    if (prev && prev.tagName === cnEl.tagName && !prev.dataset.langBlock && isENBlock(prev) && !inSkippedContext(prev) && !isStructuralBlock(prev)) enEl = prev;
+    else if (next && next.tagName === cnEl.tagName && !next.dataset.langBlock && isENBlock(next) && !inSkippedContext(next) && !isStructuralBlock(next)) enEl = next;
     if (!enEl) return;
     cnEl.dataset.langBlock = 'cn';
     enEl.dataset.langBlock = 'en';
