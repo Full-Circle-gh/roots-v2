@@ -9794,7 +9794,7 @@ function buildHeroForm(m, b) {
 
   // ── Style & layout ──────────────────────────────────────────────────
   secLayout.appendChild(field(T('Layout', '版式'),
-    T('Full = image fills, CTAs float over the image. Split = image on the left, headline + button on a coloured panel on the right (good for lighter, copy-driven designs).', '全幅 = 图片铺满,按钮浮于图上。分栏 = 图片在左,标题 + 按钮在右侧色块面板(适合更轻、以文案为主的设计)。'),
+    T('Full = the picture fills the whole banner, with the buttons on top of it. Split = the picture on the left, and your title and button in a coloured box on the right.', '全幅 = 图片铺满整个横幅,按钮显示在图片上面。分栏 = 图片在左边,标题和按钮放在右边的彩色方块里。'),
     sel(view, [
       { value: 'full',  label: T('Full — image fills with floating CTAs', '全幅 — 图片铺满,浮动按钮') },
       { value: 'split', label: T('Split — image left, copy panel right', '分栏 — 图片在左,文案面板在右') },
@@ -9804,8 +9804,8 @@ function buildHeroForm(m, b) {
   if (view === 'full') {
     secLayout.appendChild(field(
       T('Image fit', '图片填充方式'),
-      T('How the image fills the banner. Fill crops the edges to cover the whole banner; Whole image shows everything (banner matches the picture shape); Stretch fills exactly but may distort. Use the Banner height below to control how tall it is when filling.',
-        '图片如何填满横幅。填满 = 裁剪边缘以铺满整个横幅;完整显示 = 显示全部内容(横幅比例随图片);拉伸 = 精确填满但可能变形。填满时可用下方的横幅高度控制高度。'),
+      T('How the picture sits in the banner. Fill = cover the whole banner (some edges may be cut off). Whole image = show all of the picture. Stretch = force it to fit (it may look squashed).',
+        '图片在横幅里的显示方式。填满 = 铺满横幅(边缘可能被裁掉)。完整显示 = 显示整张图片。拉伸 = 强行填满(可能变形)。'),
       sel(heroFit, [
         { value: 'cover',   label: T('Fill banner — crop edges', '填满横幅 — 裁剪边缘') },
         { value: 'contain', label: T('Whole image — no crop', '完整显示 — 不裁剪') },
@@ -9817,7 +9817,7 @@ function buildHeroForm(m, b) {
     // placeholder. Contain keeps auto-height from the image shape.
     if (heroFit !== 'contain') {
       secLayout.appendChild(field(T('Banner height (px)', '横幅高度(像素)'),
-        T('How tall the filled banner is. The image is cropped to cover it.', '填满横幅的高度。图片将被裁剪以铺满。'),
+        T('How tall the banner is. The picture is cut to fit.', '横幅的高度。图片会被裁剪以铺满。'),
         num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
     }
   }
@@ -9825,21 +9825,21 @@ function buildHeroForm(m, b) {
   // Hide the placeholder-height field when the "Banner height" field above is
   // already shown (full view + fill/stretch), to avoid two inputs for height_px.
   if (!(view === 'full' && heroFit !== 'contain')) {
-    secLayout.appendChild(field(T('Placeholder height (px)', '占位高度(像素)'), T('Only used while no image is set.', '仅在未设置图片时使用。'), num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+    secLayout.appendChild(field(T('Placeholder height (px)', '占位高度(像素)'), T('Only used before you add a picture.', '仅在你还没有添加图片时使用。'), num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
   }
 
   // ── Content ─────────────────────────────────────────────────────────
   secContent.appendChild(field(
     T('Image', '图片'),
     view === 'split'
-      ? T('Cropped to a square on the left side of the panel.', '裁剪为正方形,置于面板左侧。')
-      : T('Banner height auto-fits the image — no stretch, no crop.', '横幅高度自动适配图片 — 不拉伸、不裁剪。'),
+      ? T('Shown as a square on the left side.', '会裁成正方形,放在左边。')
+      : T('The banner becomes as tall as your picture. Nothing is cut or stretched.', '横幅会自动变成图片的高度,不裁剪、不拉伸。'),
     imgPicker(b.image_url, ({ url, aspect }) => updateBlock(b.id, { image_url: url, image_aspect: aspect }))
   ));
 
   secContent.appendChild(field(
     T('Video (optional)', '视频(可选)'),
-    T('Plays muted on a loop, filling the banner. When set it replaces the image — the image above is used as the still poster shown while the clip loads, and to set the banner shape. Keep clips short (≤20MB MP4).', '静音循环播放,铺满横幅。设置后将替代图片 — 上方图片用作加载时的封面,并决定横幅比例。短片请保持精简(≤20MB 的 MP4)。'),
+    T('Plays on a loop with no sound and fills the banner. If you add a video, it shows instead of the picture (the picture is shown while the video is loading). Keep videos small — under 20MB, MP4.', '视频会无声循环播放,铺满横幅。添加后会代替图片显示(视频加载时会先显示图片)。请使用较小的视频 — 小于 20MB 的 MP4。'),
     videoPicker(b.video_url, url => updateBlock(b.id, { video_url: url }))
   ));
 
@@ -9848,7 +9848,7 @@ function buildHeroForm(m, b) {
     const sub = getBi(b, 'subtitle');
     secContent.appendChild(field(T('Headline', '标题'), '',
       txtPair(hl.en, hl.cn, ({ en, cn }) => updateBlockSilent(b.id, { headline_en: en, headline_cn: cn }))));
-    secContent.appendChild(field(T('Subtitle', '副标题'), T('One short supporting line.', '一行简短的辅助文案。'),
+    secContent.appendChild(field(T('Subtitle', '副标题'), T('One short line under the title.', '标题下面的一行短句。'),
       txtPair(sub.en, sub.cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
   }
 
@@ -9890,16 +9890,16 @@ function buildHeroForm(m, b) {
     secColours.appendChild(field(T('Panel text colour', '面板文字颜色'), '',
       sel(b.panel_fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { panel_fg_color: v }))));
   }
-  secColours.appendChild(field(T('Primary button colour', '主按钮颜色'), T('Fill of "Primary" buttons. Label colour auto-adjusts for contrast. Secondary + Link styles keep their default look.', '「主要」按钮的填充色。文字颜色自动调整以保证对比度。「次要」与「链接」样式保持默认外观。'),
+  secColours.appendChild(field(T('Primary button colour', '主按钮颜色'), T('The colour of your main button. The text colour is chosen for you so it stays easy to read. Other button styles do not change.', '主按钮的颜色。文字颜色会自动选择,保证清晰易读。其他样式的按钮不受影响。'),
     sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
 
   // ── Behaviour ───────────────────────────────────────────────────────
   if (view === 'full') {
-    secBehaviour.appendChild(field(T('Image scrim', '图片遮罩'), T('Dim the bottom of the image so floating CTAs stay legible on bright photography.', '压暗图片底部,让浮动按钮在明亮照片上仍清晰可读。'),
+    secBehaviour.appendChild(field(T('Image scrim', '图片遮罩'), T('Makes the bottom of the photo darker, so the buttons are easy to read on bright pictures.', '把图片底部调暗,让按钮在明亮的照片上也能看清。'),
       sel(b.scrim || 'medium', SCRIM_OPTIONS,
           v => updateBlock(b.id, { scrim: v }))));
   }
-  secBehaviour.appendChild(field(T('Entrance animation', '入场动画'), T('How the banner enters on first paint.', '横幅首次渲染时的入场方式。'),
+  secBehaviour.appendChild(field(T('Entrance animation', '入场动画'), T('How the banner appears when the page opens.', '页面打开时,横幅出现的方式。'),
     sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS,
         v => updateBlock(b.id, { entrance_anim: v }))));
 }
