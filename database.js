@@ -2282,6 +2282,20 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_retail_orders_tracking_number ON retail_
 addColumn('products', 'ship_modes',     "TEXT DEFAULT 'air,land'");
 addColumn('products', 'needs_ice_pack', 'INTEGER DEFAULT 0');
 
+// ── Batch-made (fresh) flag ─────────────────────────────────────────
+// Marks short-shelf-life items (fresh meals, wraps) the kitchen makes on a
+// fixed every-N-days cadence. Outside-Guangzhou orders containing one must
+// wait for the next production batch so they ship the day they're made (an
+// out-of-GZ parcel arrives next-day, eating the shelf life otherwise). The
+// cadence itself lives in storefront_config['batch.schedule'].
+addColumn('products', 'is_batch_made', 'INTEGER DEFAULT 0');
+
+// Promised production + arrival dates stamped on outside-GZ orders that hold
+// a batch-made item (YYYY-MM-DD). Drives the customer notice + the operator's
+// "make on this day" cue in the Mini App Backend.
+addColumn('retail_orders', 'promised_ship_date',     'TEXT');
+addColumn('retail_orders', 'promised_delivery_date', 'TEXT');
+
 // Snapshot the packing flags on each order item so later product edits
 // don't rewrite what the warehouse was instructed to do.
 addColumn('retail_order_items', 'ship_modes',     'TEXT');
