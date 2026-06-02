@@ -10171,33 +10171,37 @@ function buildCatTabsForm(m, b) {
   const catStyle = ['index', 'bento', 'sticker'].includes(b.cat_style) ? b.cat_style : 'classic';
   const view = b.view || 'tiles';
 
+  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
+
   // Visual direction. 'Classic' uses the Layout selector below; the three
-  // "Shop the garden" directions (Index / Bento / Sticker) are self-contained
-  // layouts that ignore it.
-  m.appendChild(field(T('Style', '样式'),
-    T('Classic = the Layout below (tiles / icons / scroll). Index directory = numbered list with count pills + chevrons. Bento mosaic = image grid tiles (uses each category’s product photo). Sticker chips = coloured pills with an ink keyline + hard shadow.', '经典 = 使用下方版式(色块 / 图标 / 横滑)。目录 = 编号列表 + 数量胶囊 + 箭头。便当拼贴 = 图片网格(用分类的商品图)。贴纸胶囊 = 带墨线与硬阴影的彩色药丸。'),
+  // directions (Index / Bento / Sticker) are self-contained layouts that ignore it.
+  secLayout.appendChild(field(T('Style', '样式'),
+    T('Classic = use the Layout below (tiles / icons / scroll). Index = a numbered list with count tags and arrows. Bento = an image grid (uses each category\'s product photo). Sticker = coloured pills with an outline and a hard shadow.', '经典 = 使用下方版式(色块 / 图标 / 横滑)。目录 = 编号列表 + 数量标签 + 箭头。便当 = 图片网格(用分类的商品图)。贴纸 = 带轮廓和硬阴影的彩色药丸。'),
     sel(b.cat_style || 'classic', CAT_STYLE_OPTIONS, v => updateBlock(b.id, { cat_style: v }))));
 
   if (catStyle === 'classic') {
-    m.appendChild(field(T('Layout', '版式'), T('Tiles = 2-col coloured rectangles. Icons = N-col circles with labels. Scroll = single row, drag left/right.', '色块 = 双列彩色矩形。图标 = N 列带标签的圆形。横滑 = 单行,左右拖动。'),
+    secLayout.appendChild(field(T('Layout', '版式'), T('Tiles = two columns of coloured rectangles. Icons = circles with labels (choose the columns below). Scroll = a single row you drag left/right.', '色块 = 双列彩色矩形。图标 = 带标签的圆形(在下方选列数)。横滑 = 单行,左右拖动。'),
       sel(view, [
-        { value: 'tiles',  label: T('Tiles — 2-col coloured rectangles', '色块 — 双列彩色矩形') },
-        { value: 'icons',  label: T('Icons — N-col circles with labels', '图标 — N 列带标签的圆形') },
+        { value: 'tiles',  label: T('Tiles — 2 columns of rectangles', '色块 — 双列矩形') },
+        { value: 'icons',  label: T('Icons — circles with labels', '图标 — 带标签的圆形') },
         { value: 'scroll', label: T('Scroll — single row, drag left/right', '横滑 — 单行,左右拖动') },
       ], v => updateBlock(b.id, { view: v }))));
   }
 
-  m.appendChild(field(T('Kicker', '小标题'), '',
-    txtPair(k.en, k.cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn, kicker: undefined }))));
-  m.appendChild(field(T('Section title', '区块标题'), '',
-    txtPair(t.en, t.cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn, title: undefined }))));
-
   if (catStyle === 'classic' && view === 'icons') {
-    m.appendChild(field(T('Columns', '列数'), T('3, 4, or 5 circles per row.', '每行 3、4 或 5 个圆形。'),
+    secLayout.appendChild(field(T('Columns', '列数'), T('3, 4, or 5 circles per row.', '每行 3、4 或 5 个圆形。'),
       num(b.columns, v => updateBlock(b.id, { columns: Math.max(3, Math.min(5, v)) }), { min: 3, max: 5 })));
   }
 
-  const wrap = field(T('Categories to show', '要显示的分类'), T('Click to toggle. These are the shop categories — edit the list in the Mini App Backend → Categories.', '点击切换。这些是商店分类 — 在「小程序后台 → 分类」中编辑。'), document.createElement('div'));
+  secContent.appendChild(field(T('Small heading', '小标题'), '',
+    txtPair(k.en, k.cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn, kicker: undefined }))));
+  secContent.appendChild(field(T('Section title', '区块标题'), '',
+    txtPair(t.en, t.cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn, title: undefined }))));
+
+  const wrap = field(T('Categories to show', '要显示的分类'), T('Click to turn on/off. These are your shop categories — edit the list in the Mini App Backend → Categories.', '点击开启/关闭。这些是你的商店分类 — 在「小程序后台 → 分类」中编辑列表。'), document.createElement('div'));
   const chips = wrap.querySelector('.helper').previousElementSibling;
   chips.className = 'chips';
   const cats = state.categories || [];
@@ -10220,7 +10224,7 @@ function buildCatTabsForm(m, b) {
     note.textContent = T('No product categories exist yet. Create them in the Mini App Backend → Categories (or main admin → Categories), then they’ll appear here to toggle on.', '尚未创建商品分类。请到「小程序后台 → 分类」(或主后台 → 分类)中添加,之后会在此处显示可勾选。');
     chips.appendChild(note);
   }
-  m.appendChild(wrap);
+  secContent.appendChild(wrap);
 
   // Per-circle colour overrides. One swatch picker per selected category (in
   // display order); 'Auto' falls back to the rotating palette in the renderer.
@@ -10254,37 +10258,37 @@ function buildCatTabsForm(m, b) {
         : catStyle === 'bento'
           ? T('The "NN · count" badge + the colour-fill fallback when a category has no product photo. Leave on Auto for the rotating palette.', '「编号 · 数量」徽标,以及分类无商品图时的色块兜底。保持「自动」使用轮换调色板。')
           : T('Fills each whole tile. Leave on Auto to use the rotating palette.', '填充每个色块。保持「自动」使用轮换调色板。');
-    m.appendChild(field(catColourLabel, catColourHelp, colorWrap));
+    secColours.appendChild(field(catColourLabel, catColourHelp, colorWrap));
   }
 
   // ── Block colours — every element overridable. Empty = the style default. ──
-  m.appendChild(field(T('Background', '背景颜色'), T('Surface colour behind the whole block. Transparent by default.', '整个模块背后的底色。默认透明。'),
+  secColours.appendChild(field(T('Background', '背景颜色'), T('The colour behind the whole block. Transparent by default.', '整个模块背后的颜色。默认透明。'),
     sel(b.bg_color || '', [{ value: '', label: T('— transparent —', '— 透明 —') }, ...BRAND_COLOR_OPTIONS],
         v => updateBlock(b.id, { bg_color: v || null }))));
-  m.appendChild(field(T('Tile surface', '色块底色'),
-    T('Classic tiles/circles fill + the Sticker count-badge text colour. Default = oat.', '经典色块 / 圆形底色,以及贴纸样式数量徽标的文字色。默认 = 燕麦白。'),
+  secColours.appendChild(field(T('Tile colour', '色块底色'),
+    T('The fill of Classic tiles/circles, and the Sticker count-badge text colour. Default = oat.', '经典色块 / 圆形底色,以及贴纸样式数量徽标的文字色。默认 = 燕麦白。'),
     sel(b.tile_surface_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { tile_surface_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'),
-    T('Section title + category names (Index rows). Default = ink. Also the Sticker count-badge fill. (Names on a colour fill auto-contrast.)', '区块标题 + 分类名称(目录行)。默认 = 墨黑。也是贴纸数量徽标底色。(色块上的名称会自动对比。)'),
+  secColours.appendChild(field(T('Text colour', '文字颜色'),
+    T('The section title and category names (Index rows). Default = black. Also the Sticker count-badge fill. (Names on a colour fill adjust automatically.)', '区块标题 + 分类名称(目录行)。默认 = 墨黑。也是贴纸数量徽标底色。(色块上的名称会自动对比。)'),
     sel(b.fg_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Accent colour', '强调色'),
-    T('Kicker + SEE ALL link, plus the Index row numbers, CN names + chevrons. Default = olive.', '小标题与「查看全部」,以及目录的行号、中文名与箭头。默认 = 橄榄绿。'),
+  secColours.appendChild(field(T('Accent colour', '强调色'),
+    T('The small heading and SEE ALL link, plus the Index row numbers, Chinese names and arrows. Default = olive.', '小标题与「查看全部」,以及目录的行号、中文名与箭头。默认 = 橄榄绿。'),
     sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
-  m.appendChild(field(T('Keyline colour', '描边颜色'),
-    T('Border / keyline on Classic tiles + Sticker chips. Default = ink.', '经典色块与贴纸胶囊的边框 / 描边。默认 = 墨黑。'),
+  secColours.appendChild(field(T('Outline colour', '描边颜色'),
+    T('The outline on Classic tiles and Sticker pills. Default = black.', '经典色块与贴纸胶囊的描边。默认 = 墨黑。'),
     sel(b.keyline_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { keyline_color: v }))));
-  m.appendChild(field(T('Shadow colour', '阴影颜色'),
-    T('The hard offset shadow on Sticker chips. Default = ink.', '贴纸胶囊的硬位移阴影。默认 = 墨黑。'),
+  secColours.appendChild(field(T('Shadow colour', '阴影颜色'),
+    T('The hard shadow on Sticker pills. Default = black.', '贴纸胶囊的硬阴影。默认 = 墨黑。'),
     sel(b.shadow_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { shadow_color: v }))));
 
   // ── Standard cross-block options ──────────────────────────────────────────
-  m.appendChild(field(T('Corner radius', '圆角'), T('Tile / circle corners.', '色块 / 圆形的圆角。'),
+  secLayout.appendChild(field(T('Corner radius', '圆角'), T('The corners of the tiles / circles.', '色块 / 圆形的圆角。'),
     sel(b.corner_radius || 'sharp', CORNER_RADIUS_OPTIONS, v => updateBlock(b.id, { corner_radius: v }))));
-  m.appendChild(field(T('Entrance animation', '入场动画'), T('How the block enters on first paint.', '模块首次渲染时的入场方式。'),
-    sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS, v => updateBlock(b.id, { entrance_anim: v }))));
-  m.appendChild(field(T('SEE ALL link', '「查看全部」跳转'),
-    T('Where the SEE ALL header link goes — e.g. shop, promotions, category:5. Blank = the Shop tab.', '「查看全部」链接的跳转位置 — 例如 shop、promotions、category:5。留空则跳转「商品」标签页。'),
+  secContent.appendChild(field(T('SEE ALL link', '「查看全部」跳转'),
+    T('Where the SEE ALL header link goes — e.g. shop, promotions, category:5. Leave empty for the Shop tab.', '「查看全部」链接的跳转位置 — 例如 shop、promotions、category:5。留空则跳转「商品」标签页。'),
     txt(b.link_target, v => updateBlockSilent(b.id, { link_target: v }), 'shop')));
+  secBehaviour.appendChild(field(T('Entrance animation', '入场动画'), T('How the block appears when the page opens.', '页面打开时,模块出现的方式。'),
+    sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS, v => updateBlock(b.id, { entrance_anim: v }))));
 }
 function buildFeaturedForm(m, b) {
   const view = b.view || 'card';
@@ -10527,10 +10531,10 @@ const DIVIDER_STYLE_OPTIONS = [
 ];
 // Category-block visual directions (ported from the design exploration).
 const CAT_STYLE_OPTIONS = [
-  { value: 'classic',  label: 'Classic — use the Layout above · 经典(用上方版式)' },
-  { value: 'index',    label: 'Index directory — numbered list + count pills · 目录(编号列表+数量)' },
-  { value: 'bento',    label: 'Bento mosaic — image grid tiles · 便当拼贴(图片网格)' },
-  { value: 'sticker',  label: 'Sticker chips — coloured pill stickers · 贴纸胶囊(彩色药丸)' },
+  { value: 'classic',  label: 'Classic — use the Layout below · 经典(用下方版式)' },
+  { value: 'index',    label: 'Index — numbered list with counts · 目录(编号列表+数量)' },
+  { value: 'bento',    label: 'Bento — image grid · 便当(图片网格)' },
+  { value: 'sticker',  label: 'Sticker — coloured pills · 贴纸(彩色药丸)' },
 ];
 const SCRIM_OPTIONS = [
   { value: 'none',   label: 'None · 无遮罩' },
@@ -10580,87 +10584,95 @@ function buildFlashStripForm(m, b) {
     banner.innerHTML = B(`<b>${liveCount}</b> active · <b>${upcoming}</b> upcoming flash sale${(liveCount + upcoming) === 1 ? '' : 's'}. The countdown binds to the soonest-ending active sale.`,
                          `<b>${liveCount}</b> 个进行中 · <b>${upcoming}</b> 个即将开始的限时秒杀。倒计时绑定到最快结束的进行中秒杀。`);
   }
-  m.appendChild(banner);
+  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
+
+  secContent.appendChild(banner);
 
   const view = b.view || 'strip';
   const isDesign = view === 'classic' || view === 'editorial' || view === 'urgency';
-  m.appendChild(field(T('Layout', '版式'), T('Strip / Hero / Banner are the compact live views. Classic / Editorial / Urgency are the full "Flash sale" section directions — coral band, cream zigzag edge, big countdown and a product carousel.', '条带 / 主视觉 / 横幅为紧凑实时视图。经典 / 编辑 / 紧迫为完整「限时秒杀」版块方向 — 珊瑚色条幅、奶白锯齿边、大号倒计时与商品轮播。'),
+  secLayout.appendChild(field(T('Layout', '版式'), T('Strip / Hero / Banner are the compact live views. Classic / Editorial / Urgency are the full "Flash sale" sections — a coral band, a cream zigzag edge, a big countdown and a row of products.', '条带 / 主视觉 / 横幅为紧凑实时视图。经典 / 编辑 / 紧迫为完整「限时秒杀」版块 — 珊瑚色条幅、奶白锯齿边、大号倒计时与一排商品。'),
     sel(view, [
       { value: 'strip',     label: T('Strip — compact row', '条带 — 紧凑单行') },
       { value: 'hero',      label: T('Hero — big countdown + products', '主视觉 — 大号倒计时 + 商品') },
       { value: 'banner',    label: T('Banner — countdown only, no products', '横幅 — 仅倒计时,无商品') },
-      { value: 'classic',   label: T('Classic — centred tiles + cream pill', '经典 — 居中色块 + 奶白按钮') },
-      { value: 'editorial', label: T('Editorial — left headline + ticker', '编辑 — 左对齐标题 + 横向计时条') },
+      { value: 'classic',   label: T('Classic — centred tiles + cream button', '经典 — 居中色块 + 奶白按钮') },
+      { value: 'editorial', label: T('Editorial — left headline + timer bar', '编辑 — 左对齐标题 + 计时条') },
       { value: 'urgency',   label: T('Urgency — LIVE tag + popping tiles', '紧迫 — LIVE 标签 + 立体色块') },
     ], v => updateBlock(b.id, { view: v }))));
 
   if (isDesign) {
-    m.appendChild(field(T('Energy', '风格强度'), T('Type scale + corner/border weight. Refined = smaller, tighter. Bold = larger headlines, chunkier borders.', '字号大小 + 圆角/描边粗细。精致 = 更小更紧凑。醒目 = 更大标题、更粗描边。'),
+    secLayout.appendChild(field(T('Energy', '风格强度'), T('Text size and corner/border weight. Refined = smaller, tighter. Bold = larger headlines, thicker borders.', '字号大小 + 圆角/描边粗细。精致 = 更小更紧凑。醒目 = 更大标题、更粗描边。'),
       sel(b.energy || 'balanced', [
         { value: 'refined',  label: T('Refined — smaller, tighter', '精致 — 更小更紧凑') },
         { value: 'balanced', label: T('Balanced — the design default', '平衡 — 设计默认') },
         { value: 'bold',     label: T('Bold — bigger, chunkier', '醒目 — 更大更粗') },
       ], v => updateBlock(b.id, { energy: v }))));
-    m.appendChild(field(T('Urgency', '紧迫感'), T('Live-pulse intensity. Mellow / Building stay still; Frantic gently pulses the countdown (and the LIVE dot). The real countdown always binds to the soonest-ending sale.', '动效强度。舒缓 / 渐强为静态;紧迫会让倒计时(及 LIVE 圆点)轻微脉动。倒计时始终绑定最快结束的秒杀。'),
+  }
+
+  secContent.appendChild(field(T('Small heading', '小标题'), '',
+    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
+  secContent.appendChild(field(T('Title', '标题'), isDesign ? T('The big headline on the band (e.g. "What are you waiting for?").', '条幅上的大号标题(例如「What are you waiting for?」)。') : '',
+    txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
+
+  if (view !== 'banner') {
+    secLayout.appendChild(field(T('Max products shown', '最多显示商品数'), view === 'hero'
+        ? T('Hero view focuses on the countdown — keep this small (1–3) so it stays bold.', '主视觉模式聚焦倒计时 — 数量保持较小(1–3),让视觉更醒目。')
+        : T('How many flash-sale items to show. Extra ones scroll sideways.', '显示多少件秒杀商品。多出的可左右滑动。'),
+      num(b.product_limit, v => updateBlock(b.id, { product_limit: Math.max(1, Math.min(8, v)) }), { min: 1, max: 8 })));
+  }
+
+  if (isDesign) {
+    // Per-element colours — every coloured piece is overridable; blank keeps
+    // the design's coral-story default.
+    secColours.appendChild(field(T('Band colour', '条幅底色'), T('The full-width band background. Default = brand red (coral).', '通栏条幅背景。默认 = 品牌红(珊瑚色)。'),
+      sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+    secColours.appendChild(field(T('Ink / detail colour', '墨色 / 细节色'), T('Headline and ink details: borders, the Classic discount badge, and the Urgency tiles, LIVE tag and SHOP NOW. Blank = ink black.', '标题与墨色细节:描边、经典折扣角标,以及紧迫版的色块、LIVE 标签和立即抢购按钮。留空 = 墨黑。'),
+      sel(b.ink_color || '', [{ value: '', label: T('— default (ink) —', '— 默认(墨黑)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { ink_color: v }))));
+    secColours.appendChild(field(T('Accent colour', '强调色'), T('Discount badges, the Editorial/Urgency buttons and tiles, the LIVE dot. Blank = brand lime.', '折扣角标、编辑/紧迫版的按钮与色块、LIVE 圆点。留空 = 品牌青柠。'),
+      sel(b.accent_color || '', [{ value: '', label: T('— default (lime) —', '— 默认(青柠)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { accent_color: v }))));
+    secColours.appendChild(field(T('Cream panel colour', '奶白面板色'), T('The zigzag top edge and cream surfaces: the Editorial timer bar and the Classic SHOP NOW button. Blank = soft cream.', '锯齿顶边与奶白面:编辑版计时条与经典版立即抢购按钮。留空 = 柔奶白。'),
+      sel(b.panel_color || '', [{ value: '', label: T('— default (cream) —', '— 默认(奶白)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { panel_color: v }))));
+    secColours.appendChild(field(T('Classic tile colour', '经典色块色'), T('The fill of the Classic countdown tiles. Blank = deep maroon. (Editorial uses the cream panel; Urgency uses the accent.)', '经典版倒计时色块的填充色。留空 = 深酒红。(编辑版用奶白面板;紧迫版用强调色。)'),
+      sel(b.tile_color || '', [{ value: '', label: T('— default (maroon) —', '— 默认(酒红)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { tile_color: v }))));
+    secColours.appendChild(field(T('Progress / label colour', '进度 / 标签色'), T('The "sold" progress fill on each card and the Urgency tile labels. Blank = forest green.', '每张卡片的「已售」进度填充 + 紧迫版色块标签。留空 = 森绿。'),
+      sel(b.fill_color || '', [{ value: '', label: T('— default (forest) —', '— 默认(森绿)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { fill_color: v }))));
+    secColours.appendChild(field(T('Sale price colour', '促销价颜色'), T('The big sale price on each product card. Blank = brand red.', '每张商品卡上的大号促销价。留空 = 品牌红。'),
+      sel(b.price_color || '', [{ value: '', label: T('— default (berry) —', '— 默认(莓红)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { price_color: v }))));
+  } else {
+    secColours.appendChild(field(T('Background colour', '背景颜色'), '',
+      sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+    secColours.appendChild(field(T('Text colour', '文字颜色'), '',
+      sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+    secColours.appendChild(field(T('Sale accent colour', '促销强调色'), T('Colours the sale price and the sold-progress bar on each card. Default = brand red.', '为每张卡片的促销价和已售进度条着色。默认 = 品牌红。'),
+      sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+  }
+
+  if (view === 'hero' || view === 'banner' || isDesign) {
+    secContent.appendChild(field(T('Button text', '按钮文字'), isDesign
+        ? T('The SHOP NOW button (an arrow is added). Leave both blank to hide it.', '立即抢购按钮(会自动加箭头)。两者留空则隐藏。')
+        : T('Shown under the big clock. Leave both blank to hide the button.', '显示在大号时钟下方。两者留空则隐藏按钮。'),
+      txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
+    secContent.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. shop · product:12 · category:5', '按钮跳转到哪里。例如 shop · product:12 · category:5'),
+      txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'shop')));
+  }
+
+  if (isDesign) {
+    secLayout.appendChild(field(T('Card corners', '卡片圆角'), T('Rounds the band edges. Sharp = edge-to-edge (the design default).', '为条幅边角加圆角。直角 = 通栏到边(设计默认)。'),
+      sel(b.corner_radius || 'sharp', CORNER_RADIUS_OPTIONS, v => updateBlock(b.id, { corner_radius: v }))));
+  }
+
+  // ── Behaviour ───────────────────────────────────────────────────────
+  if (isDesign) {
+    secBehaviour.appendChild(field(T('Urgency', '紧迫感'), T('How much it pulses. Mellow and Building stay still; Frantic gently pulses the countdown (and the LIVE dot). The real countdown always follows the soonest-ending sale.', '脉动强度。舒缓 / 渐强为静态;紧迫会让倒计时(及 LIVE 圆点)轻微脉动。倒计时始终跟随最快结束的秒杀。'),
       sel(b.urgency || 'building', [
         { value: 'mellow',   label: T('Mellow — still', '舒缓 — 静态') },
         { value: 'building', label: T('Building — still', '渐强 — 静态') },
         { value: 'frantic',  label: T('Frantic — pulsing clock', '紧迫 — 脉动时钟') },
       ], v => updateBlock(b.id, { urgency: v }))));
-  }
-
-  m.appendChild(field(T('Kicker', '小标题'), '',
-    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  m.appendChild(field(T('Title', '标题'), isDesign ? T('The big headline on the band (e.g. "What are you waiting for?").', '条幅上的大号标题(例如「What are you waiting for?」)。') : '',
-    txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-
-  if (isDesign) {
-    // Per-element colours — every coloured piece is overridable; blank keeps
-    // the design's coral-story default.
-    m.appendChild(field(T('Band colour', '条幅底色'), T('The full-width band background. Default = brand red (coral).', '通栏条幅背景。默认 = 品牌红(珊瑚色)。'),
-      sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-    m.appendChild(field(T('Ink / detail colour', '墨色 / 细节色'), T('Headline + ink details: borders, the Classic discount badge, and the Urgency tiles, LIVE tag & SHOP NOW. Blank = ink black.', '标题与墨色细节:描边、经典折扣角标,以及紧迫版的色块、LIVE 标签和立即抢购按钮。留空 = 墨黑。'),
-      sel(b.ink_color || '', [{ value: '', label: T('— default (ink) —', '— 默认(墨黑)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { ink_color: v }))));
-    m.appendChild(field(T('Accent colour', '强调色'), T('Discount badges, the Editorial/Urgency buttons & tiles, the LIVE dot. Blank = brand lime.', '折扣角标、编辑/紧迫版的按钮与色块、LIVE 圆点。留空 = 品牌青柠。'),
-      sel(b.accent_color || '', [{ value: '', label: T('— default (lime) —', '— 默认(青柠)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { accent_color: v }))));
-    m.appendChild(field(T('Cream panel colour', '奶白面板色'), T('The zigzag top edge + cream surfaces: the Editorial ticker and the Classic SHOP NOW pill. Blank = soft cream.', '锯齿顶边 + 奶白面:编辑版计时条与经典版立即抢购按钮。留空 = 柔奶白。'),
-      sel(b.panel_color || '', [{ value: '', label: T('— default (cream) —', '— 默认(奶白)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { panel_color: v }))));
-    m.appendChild(field(T('Classic tile colour', '经典色块色'), T('Fill of the Classic countdown tiles. Blank = deep maroon. (Editorial uses the cream panel; Urgency uses the accent.)', '经典版倒计时色块的填充色。留空 = 深酒红。(编辑版用奶白面板;紧迫版用强调色。)'),
-      sel(b.tile_color || '', [{ value: '', label: T('— default (maroon) —', '— 默认(酒红)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { tile_color: v }))));
-    m.appendChild(field(T('Progress / label colour', '进度 / 标签色'), T('The "sold" progress fill on each card + the Urgency tile labels. Blank = forest green.', '每张卡片的「已售」进度填充 + 紧迫版色块标签。留空 = 森绿。'),
-      sel(b.fill_color || '', [{ value: '', label: T('— default (forest) —', '— 默认(森绿)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { fill_color: v }))));
-    m.appendChild(field(T('Sale price colour', '促销价颜色'), T('The big sale price on each product card. Blank = brand red.', '每张商品卡上的大号促销价。留空 = 品牌红。'),
-      sel(b.price_color || '', [{ value: '', label: T('— default (berry) —', '— 默认(莓红)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { price_color: v }))));
-  } else {
-    m.appendChild(field(T('Background colour', '背景颜色'), '',
-      sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-    m.appendChild(field(T('Text colour', '文字颜色'), '',
-      sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-    m.appendChild(field(T('Sale accent colour', '促销强调色'), T('Colours the sale price and the sold-progress bar on each card. Default = brand red.', '为每张卡片的促销价和已售进度条着色。默认 = 品牌红。'),
-      sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
-  }
-
-  if (view !== 'banner') {
-    m.appendChild(field(T('Max products shown', '最多显示商品数'), view === 'hero'
-        ? T('Hero view focuses on the countdown — keep this small (1–3) so the visual stays bold.', '主视觉模式聚焦倒计时 — 数量保持较小(1–3),让视觉更醒目。')
-        : T('Caps how many flash-sale items render. The carousel horizontally scrolls if there are more.', '限制渲染多少件秒杀商品。超出则横向滚动。'),
-      num(b.product_limit, v => updateBlock(b.id, { product_limit: Math.max(1, Math.min(8, v)) }), { min: 1, max: 8 })));
-  }
-
-  if (view === 'hero' || view === 'banner' || isDesign) {
-    m.appendChild(field(T('Button label', '按钮文字'), isDesign
-        ? T('The SHOP NOW pill (an arrow is appended). Leave both blank to hide it.', '立即抢购按钮(会自动加箭头)。两者留空则隐藏。')
-        : T('Shown under the big clock. Leave both blank to hide the button.', '显示在大号时钟下方。两者留空则隐藏按钮。'),
-      txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-    m.appendChild(field(T('Button target', '按钮目标'), T('e.g. shop · product:12 · category:5', '例如 shop · product:12 · category:5'),
-      txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'shop')));
-  }
-
-  if (isDesign) {
-    // Cross-block chrome — same corner + entrance controls other blocks expose.
-    m.appendChild(field(T('Card corners', '卡片圆角'), T('Rounds the band edges. Sharp = edge-to-edge (the design default).', '为条幅边角加圆角。直角 = 通栏到边(设计默认)。'),
-      sel(b.corner_radius || 'sharp', CORNER_RADIUS_OPTIONS, v => updateBlock(b.id, { corner_radius: v }))));
-    m.appendChild(field(T('Entrance animation', '入场动画'), T('How the block animates in when it scrolls into view.', '模块滚动进入视图时的入场方式。'),
+    secBehaviour.appendChild(field(T('Entrance animation', '入场动画'), T('How the block appears when it scrolls into view.', '模块滚动进入视图时的出现方式。'),
       sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS, v => updateBlock(b.id, { entrance_anim: v }))));
   }
 
@@ -10671,13 +10683,13 @@ function buildFlashStripForm(m, b) {
       <input type="checkbox" id="fs-hide-empty" ${b.hide_when_empty ? 'checked' : ''}>
       <span>${B('Hide block when no flash sales are active', '无进行中秒杀时隐藏本模块')}</span>
     </label>
-    <div class="helper">${B('If unchecked, the block keeps rendering its header and empty-state message between sales.', '若不勾选,在两场秒杀之间本模块仍会渲染其标题和空状态文案。')}</div>`;
+    <div class="helper">${B('If unchecked, the block keeps showing its header and empty-state message between sales.', '若不勾选,在两场秒杀之间本模块仍会显示其标题和空状态文案。')}</div>`;
   hideWrap.querySelector('input').addEventListener('change', e => {
     updateBlock(b.id, { hide_when_empty: e.target.checked });
   });
-  m.appendChild(hideWrap);
+  secBehaviour.appendChild(hideWrap);
 
-  m.appendChild(field(T('Empty-state text', '空状态文案'), T("Shown when no flash sales are active and 'Hide block' is unchecked.", '当无进行中秒杀且未勾选「隐藏本模块」时显示。'),
+  secContent.appendChild(field(T('Empty-state text', '空状态文案'), T("Shown when no flash sales are active and 'Hide block' is unchecked.", '当无进行中秒杀且未勾选「隐藏本模块」时显示。'),
     txtPair(b.empty_text_en, b.empty_text_cn, ({ en, cn }) => updateBlockSilent(b.id, { empty_text_en: en, empty_text_cn: cn }))));
 }
 
@@ -10734,11 +10746,15 @@ function buildPointsForm(m, b) {
 function buildVotingForm(m, b) {
   const view = b.view || 'peek';
   const src  = b.data_source || 'auto_pull';
+  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
 
-  m.appendChild(field(T('Layout', '版式'),
-    T('Teaser — just kicker/title/CTA (smallest).  Peek — shows the live poll question.  Inline — full poll with vote buttons.  Past result — winner card from the latest closed poll.', '预告 — 仅小标题/标题/按钮(最小)。  预览 — 显示进行中的投票问题。  内嵌 — 带投票按钮的完整投票。  往期结果 — 最近一次已结束投票的获胜卡片。'),
+  secLayout.appendChild(field(T('Layout', '版式'),
+    T('Teaser — just heading, title and button (smallest). Peek — shows the live poll question. Inline — the full poll with vote buttons. Past result — the winner card from the last finished poll.', '预告 — 仅小标题/标题/按钮(最小)。预览 — 显示进行中的投票问题。内嵌 — 带投票按钮的完整投票。往期结果 — 最近一次已结束投票的获胜卡片。'),
     sel(view, [
-      { value: 'teaser',      label: T('Teaser — kicker + title + CTA', '预告 — 小标题 + 标题 + 按钮') },
+      { value: 'teaser',      label: T('Teaser — heading + title + button', '预告 — 小标题 + 标题 + 按钮') },
       { value: 'peek',        label: T('Peek — show live poll question', '预览 — 显示进行中投票问题') },
       { value: 'inline',      label: T('Inline — vote without leaving home', '内嵌 — 在首页直接投票') },
       { value: 'past_result', label: T('Past result — winner of last closed poll', '往期结果 — 上一场投票的获胜者') },
@@ -10746,10 +10762,10 @@ function buildVotingForm(m, b) {
 
   // Inline view renders the full poll with options in one of three styles.
   if (view === 'inline') {
-    m.appendChild(field(T('Poll style', '投票样式'),
-      T('Classic — bordered rows with full-height fill bars + letter chips. Compact — slim rows with a thin underline bar. Leaderboard — ranked by votes with a LEADING badge; rows re-sort live.', '经典 — 带边框、整行填充进度条 + 字母圆标。紧凑 — 纤细行 + 细下划线进度条。排行榜 — 按票数排名,带「领先」徽章;实时重排。'),
+    secLayout.appendChild(field(T('Poll style', '投票样式'),
+      T('Classic — bordered rows with full fill bars and letter circles. Compact — slim rows with a thin underline bar. Leaderboard — ranked by votes with a LEADING badge; rows re-sort live.', '经典 — 带边框、整行填充进度条 + 字母圆标。紧凑 — 纤细行 + 细下划线进度条。排行榜 — 按票数排名,带「领先」徽章;实时重排。'),
       sel(b.poll_style || 'classic', [
-        { value: 'classic',     label: T('Classic — fill bars + letter chips', '经典 — 填充条 + 字母圆标') },
+        { value: 'classic',     label: T('Classic — fill bars + letter circles', '经典 — 填充条 + 字母圆标') },
         { value: 'compact',     label: T('Compact — slim pills + underline bar', '紧凑 — 纤细行 + 下划线条') },
         { value: 'leaderboard', label: T('Leaderboard — ranked, re-sorts live', '排行榜 — 排名,实时重排') },
       ], v => updateBlock(b.id, { poll_style: v }))));
@@ -10757,11 +10773,11 @@ function buildVotingForm(m, b) {
 
   // Data source applies to peek/inline/past_result; teaser ignores it.
   if (view !== 'teaser') {
-    m.appendChild(field(T('Data source', '数据来源'),
-      T('Auto-pull binds to whichever poll is currently featured (or pinned below). Static lets you author the copy by hand — no live poll content.', '自动拉取绑定当前精选(或下方固定)的投票。静态则让你手动撰写文案 — 无实时投票内容。'),
+    secLayout.appendChild(field(T('Data source', '数据来源'),
+      T('Auto-pull uses whichever poll is currently featured (or pinned below). Static lets you write the text by hand — no live poll content.', '自动拉取使用当前精选(或下方固定)的投票。静态则让你手动撰写文案 — 无实时投票内容。'),
       sel(src, [
-        { value: 'auto_pull', label: T('Auto-pull — bind to live poll', '自动拉取 — 绑定实时投票') },
-        { value: 'static',    label: T('Static — author copy by hand', '静态 — 手动撰写文案') },
+        { value: 'auto_pull', label: T('Auto-pull — use the live poll', '自动拉取 — 使用实时投票') },
+        { value: 'static',    label: T('Static — write the text by hand', '静态 — 手动撰写文案') },
       ], v => updateBlock(b.id, { data_source: v }))));
   }
 
@@ -10778,8 +10794,8 @@ function buildVotingForm(m, b) {
       });
     }
     const pollIdStr = b.poll_id != null ? String(b.poll_id) : '';
-    m.appendChild(field(T('Specific poll', '指定投票'),
-      T('Optional — pin to one poll. Leave on Auto so the block tracks whatever is currently featured.', '可选 — 固定到某一场投票。保持「自动」则模块跟随当前精选的投票。'),
+    secLayout.appendChild(field(T('Specific poll', '指定投票'),
+      T('Optional — pin to one poll. Leave on Auto so the block follows whatever is currently featured.', '可选 — 固定到某一场投票。保持「自动」则模块跟随当前精选的投票。'),
       sel(pollIdStr, pollOptions, v => updateBlock(b.id, { poll_id: v ? parseInt(v, 10) : null }))));
 
     const hideRow = document.createElement('div');
@@ -10794,7 +10810,7 @@ function buildVotingForm(m, b) {
     hideLbl.textContent = T('Hide block when no matching poll exists', '无匹配投票时隐藏本模块');
     hideLbl.addEventListener('click', () => { hideBox.checked = !hideBox.checked; hideBox.dispatchEvent(new Event('change')); });
     hideRow.appendChild(hideBox); hideRow.appendChild(hideLbl);
-    m.appendChild(hideRow);
+    secLayout.appendChild(hideRow);
 
     if (view === 'peek' || view === 'inline') {
       const fbRow = document.createElement('div');
@@ -10806,49 +10822,57 @@ function buildVotingForm(m, b) {
       fbBox.addEventListener('change', () => updateBlock(b.id, { fallback_to_past: fbBox.checked ? 1 : 0 }));
       const fbLbl = document.createElement('label');
       fbLbl.style.cssText = 'cursor:pointer;font-size:13px;font-weight:500;';
-      fbLbl.textContent = T('If no open poll, fall back to winner card', '若无进行中投票,则回退到获胜卡片');
+      fbLbl.textContent = T('If no open poll, show the last winner card instead', '若无进行中投票,改为显示上一场的获胜卡片');
       fbLbl.addEventListener('click', () => { fbBox.checked = !fbBox.checked; fbBox.dispatchEvent(new Event('change')); });
       fbRow.appendChild(fbBox); fbRow.appendChild(fbLbl);
-      m.appendChild(fbRow);
+      secLayout.appendChild(fbRow);
     }
   }
 
   // Copy fields — used by teaser always, and by other views in static mode.
   const usesStaticCopy = view === 'teaser' || src === 'static';
   if (usesStaticCopy) {
-    m.appendChild(field(T('Kicker', '小标题'), '',
+    secContent.appendChild(field(T('Small heading', '小标题'), '',
       txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-    m.appendChild(field(T('Title', '标题'), '',
+    secContent.appendChild(field(T('Title', '标题'), '',
       txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-    m.appendChild(field(T('Subtitle', '副标题'), T('Optional supporting copy.', '可选的辅助文案。'),
+    secContent.appendChild(field(T('Subtitle', '副标题'), T('Optional extra line.', '可选的附加文字。'),
       txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
   }
 
-  m.appendChild(field(T('Background colour', '背景颜色'), '',
+  // CTA only applies to teaser/peek/past_result (inline has its own vote button).
+  if (view !== 'inline') {
+    secContent.appendChild(field(T('Button text', '按钮文字'), '',
+      txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
+    secContent.appendChild(field(T('Button link', '按钮链接'), T('The default "voting" opens the Your-say page. The polls themselves are managed in Mini App Backend → Voting.', '默认「voting」打开「你的心声」页。投票本身在小程序后台 → 投票中管理。'),
+      txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'voting')));
+  }
+
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Accent colour', '强调色'),
+  secColours.appendChild(field(T('Accent colour', '强调色'),
     view === 'inline'
       ? T('Your-vote fill + the leaderboard LEADING badge.', '你所投选项的填充色 + 排行榜「领先」徽章。')
-      : T('Used for the vote CTA + result fill.', '用于投票按钮 + 结果填充。'),
+      : T('Used for the vote button + result fill.', '用于投票按钮 + 结果填充。'),
     sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
   // The "● OPEN" live-status indicator only appears in peek/inline views.
   if (view === 'peek' || view === 'inline') {
-    m.appendChild(field(T('Status dot colour', '状态点颜色'),
-      T('Colour of the "● OPEN" live indicator (dot + label).', '「● 投票」进行中指示器(圆点 + 文字)的颜色。'),
+    secColours.appendChild(field(T('Status dot colour', '状态点颜色'),
+      T('The colour of the "● OPEN" live indicator (dot + label).', '「● 投票」进行中指示器(圆点 + 文字)的颜色。'),
       sel(b.status_color || 'berry-punch', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { status_color: v }))));
   }
-  // Inline poll styles expose the per-option colours + the design's Tweaks.
+  // Inline poll styles expose the per-option colours.
   if (view === 'inline') {
-    m.appendChild(field(T('Option fill colour', '选项底色'),
-      T('Background of each option row. Blank keeps the default cream.', '每个选项行的底色。留空保持默认奶白。'),
+    secColours.appendChild(field(T('Option fill colour', '选项底色'),
+      T('The background of each option row. Blank keeps the default cream.', '每个选项行的底色。留空保持默认奶白。'),
       sel(b.option_bg_color || '', [{ value: '', label: T('— default (cream) —', '— 默认(奶白)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { option_bg_color: v }))));
-    m.appendChild(field(T('Bar fill colour', '进度条颜色'),
-      T('Progress fill for the options you did NOT vote for. Blank keeps the default lemon. (Your vote uses the accent colour.)', '你未投选项的进度填充色。留空保持默认柠檬黄。(你所投选项使用强调色。)'),
+    secColours.appendChild(field(T('Bar fill colour', '进度条颜色'),
+      T('The progress fill for the options you did not vote for. Blank keeps the default lemon. (Your vote uses the accent colour.)', '你未投选项的进度填充色。留空保持默认柠檬黄。(你所投选项使用强调色。)'),
       sel(b.bar_color || '', [{ value: '', label: T('— default (lemon) —', '— 默认(柠檬黄)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { bar_color: v }))));
-    m.appendChild(field(T('Option row corners', '选项行圆角'),
-      T('Corner radius of each option row, in pixels (4–26).', '每个选项行的圆角,单位像素(4–26)。'),
+    secLayout.appendChild(field(T('Option row corners', '选项行圆角'),
+      T('The corner roundness of each option row, in pixels (4–26).', '每个选项行的圆角,单位像素(4–26)。'),
       num(b.row_radius != null ? b.row_radius : 14, v => updateBlock(b.id, { row_radius: Math.max(4, Math.min(26, v || 0)) }), { min: 4, max: 26, step: 1 })));
 
     // Tweaks — emoji after each label, and the %/vote-count readout.
@@ -10864,7 +10888,7 @@ function buildVotingForm(m, b) {
     emojiLbl.textContent = T('Show emoji after each option', '在每个选项后显示表情');
     emojiLbl.addEventListener('click', () => { emojiBox.checked = !emojiBox.checked; emojiBox.dispatchEvent(new Event('change')); });
     emojiRow.appendChild(emojiBox); emojiRow.appendChild(emojiLbl);
-    m.appendChild(emojiRow);
+    secBehaviour.appendChild(emojiRow);
 
     const countRow = document.createElement('div');
     countRow.className = 'field';
@@ -10878,24 +10902,15 @@ function buildVotingForm(m, b) {
     countLbl.textContent = T('Show vote counts (% + votes)', '显示票数(% + 票数)');
     countLbl.addEventListener('click', () => { countBox.checked = !countBox.checked; countBox.dispatchEvent(new Event('change')); });
     countRow.appendChild(countBox); countRow.appendChild(countLbl);
-    m.appendChild(countRow);
+    secBehaviour.appendChild(countRow);
   }
 
-  // Cross-block chrome — same corner + entrance controls other blocks expose.
-  m.appendChild(field(T('Card corners', '卡片圆角'),
-    T('Corner radius of the whole block card.', '整块卡片的圆角。'),
+  secLayout.appendChild(field(T('Card corners', '卡片圆角'),
+    T('The corner radius of the whole block card.', '整块卡片的圆角。'),
     sel(b.corner_radius || 'subtle', CORNER_RADIUS_OPTIONS, v => updateBlock(b.id, { corner_radius: v }))));
-  m.appendChild(field(T('Entrance animation', '入场动画'),
-    T('How the block animates in when it scrolls into view.', '模块滚动进入视图时的入场方式。'),
+  secBehaviour.appendChild(field(T('Entrance animation', '入场动画'),
+    T('How the block appears when it scrolls into view.', '模块滚动进入视图时的出现方式。'),
     sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS, v => updateBlock(b.id, { entrance_anim: v }))));
-
-  // CTA only applies to teaser/peek/past_result (inline has its own vote button).
-  if (view !== 'inline') {
-    m.appendChild(field(T('Button label', '按钮文字'), '',
-      txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-    m.appendChild(field(T('Button target', '按钮目标'), T('Default "voting" opens the Your-say page. Polls themselves live in Mini App Backend → Voting.', '默认「voting」打开「你的心声」页。投票本身在小程序后台 → 投票中管理。'),
-      txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'voting')));
-  }
 }
 
 function buildAffiliateForm(m, b) {
