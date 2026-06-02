@@ -10452,23 +10452,23 @@ const ENTRANCE_ANIM_OPTIONS = [
 ];
 // Bundle "Buy together" feel controls (ported from the design Tweaks panel).
 const BUNDLE_STYLE_OPTIONS = [
-  { value: 'classic', label: 'Classic — products joined by + · 经典(商品以 + 串联)' },
-  { value: 'receipt', label: 'Receipt — itemised tally · 收据(逐项清单)' },
-  { value: 'sticker', label: 'Sticker — overlapping tubs + save stamp · 贴纸(叠放 + 省字章)' },
+  { value: 'classic', label: 'Classic — products joined by "+" · 经典(商品用「+」连接)' },
+  { value: 'receipt', label: 'Receipt — a list with a total · 收据(清单加合计)' },
+  { value: 'sticker', label: 'Sticker — stacked items + "SAVE" stamp · 贴纸(叠放商品 + 省字章)' },
 ];
 const BUNDLE_MOOD_OPTIONS = [
-  { value: 'grocer',  label: 'Grocer — forest + lime · 杂货(森绿+青柠)' },
-  { value: 'harvest', label: 'Harvest — almond + corn · 丰收(杏棕+玉米)' },
+  { value: 'grocer',  label: 'Grocer — green + lime · 杂货(绿色+青柠)' },
+  { value: 'harvest', label: 'Harvest — almond + corn · 丰收(杏棕+玉米黄)' },
   { value: 'berry',   label: 'Berry — plum + guava · 莓果(梅红+番石榴)' },
 ];
 const BUNDLE_FINISH_OPTIONS = [
-  { value: 'riso',  label: 'Riso — ink keyline + hard shadow · 印刷(墨线+硬阴影)' },
-  { value: 'clean', label: 'Clean — soft shadow, no border · 简洁(柔阴影,无边框)' },
+  { value: 'riso',  label: 'Riso — bold outline + hard shadow · 印刷(粗轮廓+硬阴影)' },
+  { value: 'clean', label: 'Clean — soft shadow, no outline · 简洁(柔阴影,无边框)' },
 ];
 const BUNDLE_ENERGY_OPTIONS = [
-  { value: 'refined',  label: 'Refined — tight · 精致(紧凑)' },
+  { value: 'refined',  label: 'Refined — small & tight · 精致(小巧紧凑)' },
   { value: 'balanced', label: 'Balanced · 均衡' },
-  { value: 'bold',     label: 'Bold — chunky · 醒目(粗厚)' },
+  { value: 'bold',     label: 'Bold — big & chunky · 醒目(粗大)' },
 ];
 const DIVIDER_STYLE_OPTIONS = [
   { value: 'none',   label: 'None · 留白' },
@@ -11175,54 +11175,26 @@ function syncBundleFlatPatch(patch, currentVariants) {
 }
 
 function buildBundleForm(m, b) {
-  // Shared header — these apply to every variant.
-  m.appendChild(field(T('Kicker (shared)', '小标题(共用)'),
-    T('Sits above the variant pills — used as a section eyebrow.', '位于变体胶囊上方 — 用作区块小标题。'),
-    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
+  // Grouped sections — Style & layout + Content open; Colours + Behaviour collapsed.
+  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
+  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
 
-  // ── Style ────────────────────────────────────────────────────────────
-  m.appendChild(field(T('Style', '样式'),
-    T('Classic = products in a row joined by "+". Receipt = itemised list with a tally total. Sticker = overlapping tubs with a big SAVE stamp.', '经典 = 商品成排以「+」串联。收据 = 逐项清单加合计。贴纸 = 叠放商品配大号「省」字章。'),
+  // ── Style & layout ──────────────────────────────────────────────────
+  secLayout.appendChild(field(T('Style', '样式'),
+    T('Classic = products in a row with a "+" between them. Receipt = a list with the total added up. Sticker = products stacked with a big "SAVE" stamp.', '经典 = 商品排成一行,中间用「+」连接。收据 = 列表并显示合计。贴纸 = 商品叠放,配大号「省」字章。'),
     sel(b.bundle_style || 'classic', BUNDLE_STYLE_OPTIONS, v => updateBlock(b.id, { bundle_style: v }))));
-
-  // ── Feel tweaks (mood / finish / energy) ──────────────────────────────
-  m.appendChild(field(T('Colour story (mood)', '配色基调'),
-    T('Sets the default palette for every colour below. Pick one, then override any individual colour underneath.', '为下方所有颜色设定默认配色。先选一个,再按需单独覆盖。'),
-    sel(b.mood || 'grocer', BUNDLE_MOOD_OPTIONS, v => updateBlock(b.id, { mood: v }))));
-  m.appendChild(field(T('Finish (surface)', '表面质感'),
-    T('Riso = ink keyline with a hard offset shadow. Clean = soft drop shadow, no border, card fill shows.', '印刷 = 墨线加硬位移阴影。简洁 = 柔和投影、无边框、显示卡片填充色。'),
-    sel(b.finish || 'riso', BUNDLE_FINISH_OPTIONS, v => updateBlock(b.id, { finish: v }))));
-  m.appendChild(field(T('Energy (scale)', '力度'),
-    T('Border weight, corner radius and headline size — Refined (tight) → Bold (chunky).', '边框粗细、圆角与标题大小 — 精致(紧凑)→ 醒目(粗厚)。'),
+  secLayout.appendChild(field(T('Size & weight', '大小与粗细'),
+    T('Border thickness, rounded corners and title size — from Refined (small) to Bold (big).', '边框粗细、圆角与标题大小 — 从精致(小)到醒目(大)。'),
     sel(b.energy || 'balanced', BUNDLE_ENERGY_OPTIONS, v => updateBlock(b.id, { energy: v }))));
 
-  // ── Colours — every element overridable. Empty = use the mood palette. ─
-  m.appendChild(field(T('Surface colour', '背景颜色'),
-    T('Block background behind the card. Default follows the mood.', '卡片后方的区块背景。默认跟随基调。'),
-    sel(b.bg_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  m.appendChild(field(T('Card fill', '卡片填充'),
-    T('Inner card colour — only visible with the Clean finish. Default = cream.', '内层卡片颜色 — 仅在简洁质感下可见。默认 = 奶白。'),
-    sel(b.card_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { card_color: v }))));
-  m.appendChild(field(T('Text colour', '文字颜色'), '',
-    sel(b.fg_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  m.appendChild(field(T('Button / pill colour', '按钮 / 胶囊颜色'),
-    T('Fills the ADD button and the active variant pill. Default follows the mood.', '填充加入按钮与选中的变体胶囊。默认跟随基调。'),
-    sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
-  m.appendChild(field(T('Price colour', '价格颜色'),
-    T('The big bundle price number. Default = ink.', '套装大号价格数字。默认 = 墨黑。'),
-    sel(b.price_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { price_color: v }))));
-  m.appendChild(field(T('Savings colour', '优惠颜色'),
-    T('Strikethrough savings text + the SAVE stamp. Default = berry.', '划线优惠文字 + 「省」字章。默认 = 莓红。'),
-    sel(b.save_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { save_color: v }))));
-  m.appendChild(field(T('Sticker colour', '贴纸颜色'),
-    T('The "BUNDLE & SAVE" sticker — Sticker style only. Default = lime.', '「BUNDLE & SAVE」贴纸 — 仅贴纸样式。默认 = 青柠。'),
-    sel(b.sticker_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { sticker_color: v }))));
+  // ── Content ─────────────────────────────────────────────────────────
+  secContent.appendChild(field(T('Small heading (shared)', '小标题(共用)'),
+    T('A small heading shown above the bundle tabs.', '显示在套装标签上方的小标题。'),
+    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
 
-  m.appendChild(field(T('Entrance animation', '入场动画'), T('How the bundle enters on first paint.', '套装首次渲染时的入场方式。'),
-    sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS,
-        v => updateBlock(b.id, { entrance_anim: v }))));
-
-  // ── Variants repeater — each row is a swappable bundle. ──────────────────
+  // ── Variants repeater (Content) — each row is a swappable bundle. ────────
   const variants = getBundleVariants(b);
 
   function setVariants(next) {
@@ -11273,7 +11245,7 @@ function buildBundleForm(m, b) {
   const help = document.createElement('div');
   help.className = 'helper';
   help.style.marginTop = '4px';
-  help.textContent = T('Each variant is a swappable bundle in the same brick. Customers tap the pill at the top to switch. Mark one as "Recommended" — it loads first and gets a ★ badge.', '每个变体都是同一模块内可切换的套装。顾客点击顶部胶囊切换。将其中一个标记为「推荐」 — 它会优先加载并显示 ★ 角标。');
+  help.textContent = T('Each variant is a different bundle in the same block. Customers tap the tab at the top to switch. Mark one as "Recommended" — it shows first and gets a ★ badge.', '每个变体都是同一模块里的不同套装。顾客点击顶部标签切换。将其中一个标为「推荐」 — 它会优先显示并带 ★ 角标。');
   listWrap.appendChild(help);
 
   variants.forEach((v, idx) => {
@@ -11304,27 +11276,27 @@ function buildBundleForm(m, b) {
     recInput.checked = !!v.recommended;
     recInput.addEventListener('change', () => { if (recInput.checked) setRecommended(idx); });
     recLbl.appendChild(recInput);
-    recLbl.appendChild(document.createTextNode(T('★ Mark as recommended (loads first, badge shown)', '★ 标记为推荐(优先加载,显示角标)')));
+    recLbl.appendChild(document.createTextNode(T('★ Mark as recommended (shows first, with a badge)', '★ 标记为推荐(优先显示,带角标)')));
     recWrap.appendChild(recLbl);
     card.appendChild(recWrap);
 
-    card.appendChild(field(T('Pill label', '胶囊标签'),
-      T('Short — shows on the swap tab. e.g. "Starter", "Family", "Power".', '简短 — 显示在切换标签上。例如「Starter」「Family」「Power」。'),
+    card.appendChild(field(T('Tab label', '标签文字'),
+      T('Short — shows on the tab. e.g. "Starter", "Family", "Power".', '简短 — 显示在切换标签上。例如「Starter」「Family」「Power」。'),
       txtPair(v.label_en, v.label_cn, ({ en, cn }) => updateVariant(idx, { label_en: en, label_cn: cn }))));
     card.appendChild(field(T('Title', '标题'), '',
       txtPair(v.title_en, v.title_cn, ({ en, cn }) => updateVariant(idx, { title_en: en, title_cn: cn }))));
-    card.appendChild(field(T('Subtitle', '副标题'), T('Optional supporting line.', '可选的辅助文案。'),
+    card.appendChild(field(T('Subtitle', '副标题'), T('An optional extra line.', '可选的附加说明。'),
       txtPair(v.subtitle_en, v.subtitle_cn, ({ en, cn }) => updateVariant(idx, { subtitle_en: en, subtitle_cn: cn }))));
-    card.appendChild(field(T('Products in this variant', '此变体的商品'), T('Pick 2–5. Tap order is preserved.', '挑选 2–5 件。保留点击顺序。'),
+    card.appendChild(field(T('Products in this variant', '此变体的商品'), T('Choose 2–5 products. The order you tap is kept.', '选择 2–5 件商品。会保留你点击的顺序。'),
       productPicker({ multi: true, value: v.product_ids, onChange: val => updateVariant(idx, { product_ids: val }) })));
     card.appendChild(field(T('Bundle price (¥)', '套装价格(¥)'),
-      T('Optional — when below the sum, shows a strikethrough + "SAVE ¥X" badge. Items still add at their real prices; pair with the voucher field below to actually discount checkout.', '可选 — 低于合计时显示划线价 + 「SAVE ¥X」角标。商品仍按真实价格加入;搭配下方的优惠券字段才能真正在结算时减价。'),
+      T('Optional. If it is lower than the total, customers see the old price crossed out and a "SAVE ¥X" badge. The items still add at their normal prices — use the voucher box below to actually lower the price at checkout.', '可选。若低于合计,顾客会看到原价划线和「SAVE ¥X」角标。商品仍按原价加入 — 需配合下方的优惠券才能在结算时真正减价。'),
       num(v.bundle_price, val => updateVariant(idx, { bundle_price: val }), { min: 0, step: 0.01 })));
     card.appendChild(field(T('Auto-applied voucher code', '自动应用的优惠券码'),
-      T('Optional — staged at checkout when this variant is added. Must match a real voucher.', '可选 — 加入此变体时在结算页预置。必须匹配真实优惠券。'),
+      T('Optional. Added at checkout when this bundle is chosen. Must be a real voucher code.', '可选。选择此套装时在结算页自动添加。必须是真实存在的优惠券码。'),
       txt(v.auto_voucher_code, val => updateVariant(idx, { auto_voucher_code: (val || '').toUpperCase() }), 'BUNDLE10')));
-    card.appendChild(field(T('Button label (override)', '按钮文字(覆盖)'),
-      T('Leave blank for the auto-label "ADD BUNDLE · N ITEMS".', '留空则使用自动标签「ADD BUNDLE · N ITEMS」。'),
+    card.appendChild(field(T('Button text (optional)', '按钮文字(可选)'),
+      T('Leave empty to use the automatic text "ADD BUNDLE · N ITEMS".', '留空则使用自动文字「ADD BUNDLE · N ITEMS」。'),
       txtPair(v.cta_label_en, v.cta_label_cn, ({ en, cn }) => updateVariant(idx, { cta_label_en: en, cta_label_cn: cn }))));
 
     listWrap.appendChild(card);
@@ -11337,7 +11309,40 @@ function buildBundleForm(m, b) {
   addBtn.addEventListener('click', () => addVariant());
   listWrap.appendChild(addBtn);
 
-  m.appendChild(listWrap);
+  secContent.appendChild(listWrap);
+
+  // ── Colours ─────────────────────────────────────────────────────────
+  secColours.appendChild(field(T('Colour theme', '配色主题'),
+    T('Sets the starting colours for everything below. Pick one, then change any single colour if you want.', '为下方所有颜色设定起始配色。先选一个,需要时再单独修改某个颜色。'),
+    sel(b.mood || 'grocer', BUNDLE_MOOD_OPTIONS, v => updateBlock(b.id, { mood: v }))));
+  secColours.appendChild(field(T('Card look', '卡片外观'),
+    T('Riso = bold outline with a hard shadow. Clean = soft shadow, no outline, the card colour shows.', '印刷 = 粗轮廓加硬阴影。简洁 = 柔和阴影、无边框,显示卡片颜色。'),
+    sel(b.finish || 'riso', BUNDLE_FINISH_OPTIONS, v => updateBlock(b.id, { finish: v }))));
+  secColours.appendChild(field(T('Background colour', '背景颜色'),
+    T('The background behind the card. Leave empty to follow the colour theme.', '卡片后面的背景。留空则跟随配色主题。'),
+    sel(b.bg_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  secColours.appendChild(field(T('Card fill', '卡片填充'),
+    T('The inside card colour — only shows with the Clean look. Default is cream.', '内层卡片颜色 — 仅在「简洁」外观下显示。默认为奶白色。'),
+    sel(b.card_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { card_color: v }))));
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
+    sel(b.fg_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  secColours.appendChild(field(T('Button / tab colour', '按钮 / 标签颜色'),
+    T('The colour of the ADD button and the selected tab. Leave empty to follow the colour theme.', '「加入」按钮和选中标签的颜色。留空则跟随配色主题。'),
+    sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+  secColours.appendChild(field(T('Price colour', '价格颜色'),
+    T('The big price number. Default is black.', '大号价格数字。默认为黑色。'),
+    sel(b.price_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { price_color: v }))));
+  secColours.appendChild(field(T('Savings colour', '优惠颜色'),
+    T('The crossed-out old price and the "SAVE" stamp. Default is berry red.', '划线的原价和「省」字章。默认为莓红色。'),
+    sel(b.save_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { save_color: v }))));
+  secColours.appendChild(field(T('Sticker colour', '贴纸颜色'),
+    T('The "BUNDLE & SAVE" sticker — only in the Sticker style. Default is lime green.', '「BUNDLE & SAVE」贴纸 — 仅「贴纸」样式。默认为青柠绿。'),
+    sel(b.sticker_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { sticker_color: v }))));
+
+  // ── Behaviour ───────────────────────────────────────────────────────
+  secBehaviour.appendChild(field(T('Entrance animation', '入场动画'), T('How the bundle appears when the page opens.', '页面打开时,套装出现的方式。'),
+    sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS,
+        v => updateBlock(b.id, { entrance_anim: v }))));
 }
 
 // Migrate legacy single-review blocks (saved before the reviews[] refactor)
