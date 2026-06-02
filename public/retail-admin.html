@@ -2204,8 +2204,7 @@
     border-top: 1px solid var(--line);
     padding: 8px 12px;
   }
-  .dz-group-cn    { font-weight: 700; color: var(--text-1); }
-  .dz-group-en    { color: var(--text-3); font-size: 12px; margin-left: 6px; }
+  .dz-group-name  { font-weight: 700; color: var(--text-1); }
   .dz-group-count { color: var(--text-4); font-size: 11px; margin-left: 8px; }
   .dz-group-count::before { content: '· '; }
 
@@ -13945,9 +13944,10 @@ function groupZonesByProvince(rows) {
   return groups;
 }
 function zoneGroupHeaderHtml(g, colspan) {
+  const en = escapeHtml(g.en || g.cn);
+  const cn = escapeHtml(g.cn);
   return `<tr class="dz-group-row"><td colspan="${colspan}">
-    <span class="dz-group-cn">${escapeHtml(g.cn)}</span>
-    ${g.en && g.en !== g.cn ? `<span class="dz-group-en">${escapeHtml(g.en)}</span>` : ''}
+    <span class="dz-group-name" data-lang-block="en">${en}</span><span class="dz-group-name" data-lang-block="cn">${cn}</span>
     <span class="dz-group-count">${g.rows.length}</span>
   </td></tr>`;
 }
@@ -14040,14 +14040,22 @@ function zoneLabel(z) {
   return z.name_cn || z.match_district || z.match_city || '';
 }
 
+// EN/CN-aware label span: the active-language one shows, the other is hidden
+// by the global html[data-ui-lang] CSS — so chips read all-English in the EN
+// view and all-Chinese in the CN view.
+function dzLangSpan(en, cn) {
+  return `<span data-lang-block="en">${en}</span><span data-lang-block="cn">${cn}</span>`;
+}
 function zoneCellHtml(z) {
   const isGz = z.zone_type === 'gz_district';
   let cls, label;
   if (isGz) { cls = 'gz'; label = 'GZ'; }
   else if (z.is_province_wide) {
     cls = 'prov';
-    label = /(省|自治区)$/.test(z.match_city || '') ? '全省' : '全市';
-  } else { cls = 'city'; label = 'CITY'; }
+    label = /(省|自治区)$/.test(z.match_city || '')
+      ? dzLangSpan('Province', '全省')
+      : dzLangSpan('City-wide', '全市');
+  } else { cls = 'city'; label = dzLangSpan('City', '城市'); }
   const chip = `<span class="dz-type-chip ${cls}">${label}</span>`;
   const cn = escapeHtml(zoneLabel(z) || '—');
   const en = escapeHtml(z.name_en || '');

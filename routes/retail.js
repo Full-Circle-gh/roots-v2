@@ -4056,7 +4056,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     if (fees.error) return res.status(400).json({ success: false, error: fees.error });
     shippingFee    = fees.deliveryFee;
     packingFee     = fees.packingFee;
-    deliveryZoneId = zone.id;
+    deliveryZoneId = zone.is_default ? null : zone.id;
   } else {
     // Backwards-compatible fallback while zones are still being configured:
     // legacy 'fees.standardShipping' / 'fees.sameDayDelivery' kick in.
@@ -9994,6 +9994,41 @@ function isGuangzhou(city) {
 // Returns the best-matching zone row for an address. Falls back to null
 // if nothing matches — checkout should then refuse with an explanatory
 // error rather than guessing.
+// National fallback zone: since we deliver to all of mainland China at a flat
+// rate, rather than enumerate a row per province we keep ONE default profile in
+// config and synthesize a zone-shaped object from it. matchDeliveryZone returns
+// this when an address matches no specific zone, so any address is deliverable
+// without a row. Returns null when the default is disabled (then unmatched →
+// no_zone_match, the old behaviour). Exceptions (Guangdong, HK, GZ same-day,
+// Tibet/Xinjiang) stay as their own rows and win by specific match.
+function defaultDeliveryZone() {
+  const c = cfgValue('delivery.defaultZone', null);
+  if (!c || !c.enabled) return null;
+  return {
+    id: 'default',
+    is_default: 1,
+    zone_type: 'city',
+    name_en: 'Rest of China',
+    name_cn: '其他地区',
+    match_city: null,
+    match_district: null,
+    base_fee:              Number(c.base_fee ?? 25),
+    free_threshold:        c.free_threshold == null ? null : Number(c.free_threshold),
+    max_fee:               null,
+    packing_fee_per_item:  Number(c.packing_fee_per_item ?? 0),
+    packing_fee_cap:       c.packing_fee_cap == null ? null : Number(c.packing_fee_cap),
+    is_active:             1,
+    same_day_allowed:      c.same_day_allowed ? 1 : 0,
+    same_day_surcharge:    0,
+    min_lead_days:         Number(c.min_lead_days ?? 3),
+    max_lead_days:         Number(c.max_lead_days ?? 15),
+    slot_start_hour:       Number(c.slot_start_hour ?? 0),
+    slot_end_hour:         Number(c.slot_end_hour ?? 0),
+    slot_duration_minutes: Number(c.slot_duration_minutes ?? 0),
+    day_only:              c.day_only == null ? 1 : (c.day_only ? 1 : 0),
+  };
+}
+
 function matchDeliveryZone(address) {
   if (!address) return null;
   const wantDistrict = normalizeAreaName(address.district);
@@ -10046,7 +10081,9 @@ function matchDeliveryZone(address) {
     const stripped = stripSuffix(full);
     if (stripped && stripped.length >= 2 && blob.includes(stripped)) return r;
   }
-  return null;
+  // 4) National default (rest of China) — covers any mainland address with no
+  //    specific zone, so coverage no longer depends on a row per province.
+  return defaultDeliveryZone();
 }
 
 // ─── Batch-made (fresh) production cadence ─────────────────────────────────
