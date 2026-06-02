@@ -9796,8 +9796,8 @@ function buildHeroForm(m, b) {
   secLayout.appendChild(field(T('Layout', '版式'),
     T('Full = the picture fills the whole banner, with the buttons on top of it. Split = the picture on the left, and your title and button in a coloured box on the right.', '全幅 = 图片铺满整个横幅,按钮显示在图片上面。分栏 = 图片在左边,标题和按钮放在右边的彩色方块里。'),
     sel(view, [
-      { value: 'full',  label: T('Full — image fills with floating CTAs', '全幅 — 图片铺满,浮动按钮') },
-      { value: 'split', label: T('Split — image left, copy panel right', '分栏 — 图片在左,文案面板在右') },
+      { value: 'full',  label: T('Full — picture fills, buttons on top', '全幅 — 图片铺满,按钮在上面') },
+      { value: 'split', label: T('Split — picture left, text box right', '分栏 — 图片在左,文字框在右') },
     ], v => updateBlock(b.id, { view: v }))));
 
   // Image fit — only meaningful for the full view (split crops to a square).
@@ -9807,9 +9807,9 @@ function buildHeroForm(m, b) {
       T('How the picture sits in the banner. Fill = cover the whole banner (some edges may be cut off). Whole image = show all of the picture. Stretch = force it to fit (it may look squashed).',
         '图片在横幅里的显示方式。填满 = 铺满横幅(边缘可能被裁掉)。完整显示 = 显示整张图片。拉伸 = 强行填满(可能变形)。'),
       sel(heroFit, [
-        { value: 'cover',   label: T('Fill banner — crop edges', '填满横幅 — 裁剪边缘') },
-        { value: 'contain', label: T('Whole image — no crop', '完整显示 — 不裁剪') },
-        { value: 'stretch', label: T('Stretch to fill — may distort', '拉伸填满 — 可能变形') },
+        { value: 'cover',   label: T('Fill banner — cut the edges', '填满横幅 — 裁掉边缘') },
+        { value: 'contain', label: T('Whole picture — nothing cut', '完整显示 — 不裁剪') },
+        { value: 'stretch', label: T('Stretch — may look squashed', '拉伸填满 — 可能变形') },
       ], v => updateBlock(b.id, { image_fit: v }))));
 
     // When filling/stretching the banner uses a fixed height (the picture is
@@ -9895,7 +9895,7 @@ function buildHeroForm(m, b) {
 
   // ── Behaviour ───────────────────────────────────────────────────────
   if (view === 'full') {
-    secBehaviour.appendChild(field(T('Image scrim', '图片遮罩'), T('Makes the bottom of the photo darker, so the buttons are easy to read on bright pictures.', '把图片底部调暗,让按钮在明亮的照片上也能看清。'),
+    secBehaviour.appendChild(field(T('Darken photo bottom', '压暗图片底部'), T('Makes the bottom of the photo darker, so the buttons are easy to read on bright pictures.', '把图片底部调暗,让按钮在明亮的照片上也能看清。'),
       sel(b.scrim || 'medium', SCRIM_OPTIONS,
           v => updateBlock(b.id, { scrim: v }))));
   }
