@@ -1270,6 +1270,8 @@ Component({
             showShadow: b.show_shadow !== false,
             // Outer border framing the card. Optional per block.
             showBorder: b.show_border !== false,
+            // Dotted "paper" texture over the bg colour. Optional per block.
+            showTexture: b.show_texture !== false,
             // Social proof — opt-in and real-number-only: hidden unless the
             // operator types an actual member count (e.g. "1,500+").
             proofCount: (b.proof_count || '').trim(),

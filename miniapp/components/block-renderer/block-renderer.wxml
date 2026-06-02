@@ -781,7 +781,7 @@
 <view wx:elif="{{type === 'wecom_contact' && wecom && wecom.view === 'card'}}" class="wc-blk wc-loop">
   <image wx:if="{{wecom.showMascot}}" class="wc-loop-mascot" src="{{wecom.mascot}}" mode="aspectFit"/>
   <view class="wc-loop-card {{wecom.showShadow ? '' : 'wc-loop-flat'}} {{wecom.showBorder ? '' : 'wc-loop-noframe'}}" style="background:{{bg}};color:{{fg}}">
-    <view class="wc-loop-paper"></view>
+    <view wx:if="{{wecom.showTexture}}" class="wc-loop-paper"></view>
 
     <view wx:if="{{wecom.kicker}}" class="wc-loop-badge" style="background:{{wecom.accent}};color:{{wecom.btnFg}}">{{wecom.kicker}}</view>
 
