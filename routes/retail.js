@@ -4303,6 +4303,24 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     return res.status(500).json({ success: false, error: 'order_create_failed' });
   }
 
+  // Batch-made fresh items shipping outside GZ: stamp the promised production
+  // + arrival dates and drop the customer a heads-up that we'll make the next
+  // batch before it ships. Best-effort — never fails the placed order.
+  try {
+    const notice = computeBatchNotice(zone, resolved.map((r) => r.product.id), new Date());
+    if (notice) {
+      tdb().prepare(
+        'UPDATE retail_orders SET promised_ship_date = ?, promised_delivery_date = ? WHERE id = ?'
+      ).run(notice.ship_date, notice.delivery_date, orderId);
+      notifyCustomer(req.customer.id, {
+        category: 'order', type: 'batch_delay',
+        title_en: 'Made fresh for you', title_cn: '为您新鲜现做',
+        body_en: notice.message_en, body_cn: notice.message_cn,
+        ref_type: 'order', ref_id: orderId,
+      });
+    }
+  } catch (e) { console.warn('[batch notice]', e.message); }
+
   const order = loadOrderForCustomer(orderId, req.customer.id, `${req.protocol}://${req.get('host')}`);
   res.json({ success: true, data: order });
 });
@@ -4324,6 +4342,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
             refund_reviewed_at, refund_approved_at, refund_paid_at,
             store_id, routing_reason, channel, fulfillment_type,
             scheduled_for, delivery_slot_label,
+            promised_ship_date, promised_delivery_date,
             tracking_carrier, tracking_number, tracking_status,
             tracking_events_json, tracking_synced_at,
             tracking_scenario, tracking_scenario_data_json,
@@ -6775,6 +6794,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   }
   if ('bundle' in body) { sets.push('bundle = ?'); params.push(sanitizeBundle(body.bundle)); }
   if ('tags' in body) { sets.push('tags = ?'); params.push(sanitizeProductBadge(body.tags)); }
+  if ('is_batch_made' in body) { sets.push('is_batch_made = ?'); params.push(body.is_batch_made ? 1 : 0); }
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
 
   sets.push('updated_at = CURRENT_TIMESTAMP');
@@ -6795,6 +6815,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
+            is_batch_made,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM products WHERE id = ?`
   ).get(id);
@@ -6833,6 +6854,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
             variant_group_id, variant_label, variant_sort,
+            is_batch_made,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1`
   ).get(id);
@@ -7213,6 +7235,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
                     nutrition, bundle, tags,
                     variant_group_id, variant_label, variant_sort,
+                    is_batch_made,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
                     (image_data IS NOT NULL AND image_data != '') AS has_image_data,
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks
@@ -7382,6 +7405,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.channel, o.fulfillment_type,
                     o.scheduled_for, o.delivery_slot_label,
+                    o.promised_ship_date, o.promised_delivery_date,
                     o.tracking_carrier, o.tracking_number, o.tracking_status,
                     o.tracking_kd100_subscribed,
                     s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
@@ -9844,6 +9868,99 @@ function matchDeliveryZone(address) {
   return null;
 }
 
+// ─── Batch-made (fresh) production cadence ─────────────────────────────────
+// Certain short-shelf-life products (fresh meals, wraps) are cooked on a fixed
+// every-N-days cadence rather than held in stock. An outside-Guangzhou order
+// containing one can't ship until the next production day — the parcel arrives
+// next-day, so shipping it any earlier would eat the shelf life. We compute the
+// next batch day, promise an exact ship + arrival date, and tell the customer.
+//
+// Config (storefront_config['batch.schedule']):
+//   { enabled, anchor_date:'YYYY-MM-DD', interval_days:2, skip_dates:['YYYY-MM-DD'] }
+// anchor_date is any reference batch day; the rhythm steps out from it both
+// ways in interval_days jumps. skip_dates are one-off closures (vacations) the
+// cadence rolls past. There is no daily cutoff — an order on a batch day still
+// catches that day's batch.
+function batchScheduleCfg() {
+  const c = cfgValue('batch.schedule', null);
+  if (!c || !c.enabled || !c.anchor_date) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(c.anchor_date))) return null;
+  const interval = Math.max(1, parseInt(c.interval_days, 10) || 2);
+  const skip = Array.isArray(c.skip_dates)
+    ? c.skip_dates.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s)))
+    : [];
+  return { anchor_date: c.anchor_date, interval_days: interval, skip_dates: skip };
+}
+
+// Local-midday Date for a YYYY-MM-DD string (midday dodges any DST edge; the
+// host runs UTC+8 with no DST anyway). Returns null on a malformed string.
+function parseYmdLocal(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
+}
+function toYmdLocal(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Smallest batch day (YYYY-MM-DD) on or after `fromDate`, skipping any
+// skip_dates by rolling forward another whole interval. null when disabled.
+function nextBatchShipDate(fromDate, cfg) {
+  cfg = cfg || batchScheduleCfg();
+  if (!cfg) return null;
+  const anchor = parseYmdLocal(cfg.anchor_date);
+  if (!anchor) return null;
+  const DAY = 86400000;
+  const interval = cfg.interval_days;
+  const skip = new Set(cfg.skip_dates);
+  const from = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(), 12, 0, 0, 0);
+  const diff = Math.round((from.getTime() - anchor.getTime()) / DAY);
+  const rem = ((diff % interval) + interval) % interval;       // 0..interval-1
+  const offset = rem === 0 ? diff : diff + (interval - rem);   // first on-cadence day >= diff
+  let cand = new Date(anchor.getTime() + offset * DAY);
+  let guard = 0;
+  while (skip.has(toYmdLocal(cand)) && guard < 365) {
+    cand = new Date(cand.getTime() + interval * DAY);
+    guard++;
+  }
+  return toYmdLocal(cand);
+}
+
+// True when any of the given product ids is flagged is_batch_made.
+function cartHasBatchItem(productIds) {
+  const ids = [...new Set((productIds || []).map((n) => parseInt(n, 10)).filter(Boolean))];
+  if (!ids.length) return false;
+  const ph = ids.map(() => '?').join(',');
+  const row = tdb().prepare(
+    `SELECT 1 FROM products WHERE id IN (${ph}) AND COALESCE(is_batch_made, 0) = 1 LIMIT 1`
+  ).get(...ids);
+  return !!row;
+}
+
+// The customer-facing delay notice for an outside-GZ order holding a batch
+// item, or null when it doesn't apply (in-GZ, no batch item, or cadence off).
+// Outside-GZ = zone_type 'city'; GZ districts get it fresh same/next day so
+// the batch wait never bites there.
+function computeBatchNotice(zone, productIds, now) {
+  if (!zone || zone.zone_type !== 'city') return null;
+  const cfg = batchScheduleCfg();
+  if (!cfg) return null;
+  if (!cartHasBatchItem(productIds)) return null;
+  const shipDate = nextBatchShipDate(now || new Date(), cfg);
+  if (!shipDate) return null;
+  const sd = parseYmdLocal(shipDate);
+  const deliveryDate = toYmdLocal(new Date(sd.getTime() + 86400000));
+  return {
+    ship_date: shipDate,
+    delivery_date: deliveryDate,
+    message_en: `Your order includes freshly-made items. We make the next batch on ${shipDate} and ship it the same day, so it arrives fresh around ${deliveryDate}.`,
+    message_cn: `您的订单包含新鲜现做的商品。我们将于 ${shipDate} 制作下一批并当天发货，预计 ${deliveryDate} 左右新鲜送达。`,
+  };
+}
+
 // ─── Delivery-slot enumerator ────────────────────────────────────────────
 // Given a matched zone (or null) + the current server time, produce the
 // list of slots the customer can pick from on the checkout page.
@@ -10680,6 +10797,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
         free_threshold: zone.free_threshold,
       },
       scheduling: computeDeliverySlots(zone, new Date()),
+      batch_notice: computeBatchNotice(zone, (items || []).map((i) => i.product_id), new Date()),
       routing: routingPreview,
     },
   });
@@ -11771,3 +11889,9 @@ router.delete('/api/retail-admin/polls/:id', requireRetailAdmin, (req, res) => {
 });
 
 module.exports = router;
+// Shared so the inventory routes (routes/retail-inventory.js) gate on the same
+// dual-realm guard — Mini App Backend operator (tenant_users) OR legacy kitchen
+// user with the `retail` permission. Without this, backend operators 401 on the
+// inventory endpoints while every other /api/retail-admin/* route lets them in,
+// which used to send retail-admin.html into a login→dashboard redirect loop.
+module.exports.requireRetailAdmin = requireRetailAdmin;

@@ -10,7 +10,7 @@ const express = require('express');
 const db = require('../database');
 const inventory = require('../lib/inventory');
 const geocode = require('../lib/geocode');
-const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
+const { requireAuth, logActivity } = require('../middleware/auth');
 
 // Background geocode for a store row. Called after create + update when
 // an address-y field changed and the admin didn't supply explicit lat/lng.
@@ -31,21 +31,28 @@ function geocodeStoreAsync(storeId) {
 }
 
 const router = express.Router();
-const requireRetailAdmin = [requireAuth, requirePermission('retail')];
+// Dual-realm gate (Mini App Backend operator OR kitchen user with `retail`),
+// shared with the rest of /api/retail-admin/*. Using the kitchen-only guard
+// here meant backend operators 401'd on the inventory routes — and that single
+// 401 (from the orders store-filter on load) bounced retail-admin.html into a
+// /backend/login → /retail-admin redirect loop.
+const { requireRetailAdmin } = require('./retail');
 
-// Read-only access to inventory data. Anyone with the `retail` permission,
-// admin, OR an assigned `retail_store_id` can browse stores + the cross-
-// store stock grid. Edits are still gated more strictly on the PATCH route.
-const requireInventoryRead = [
-  requireAuth,
-  (req, res, next) => {
+// Read-only access to inventory data. A Mini App Backend operator passes the
+// same dual-realm gate as everywhere else; a kitchen session is allowed for
+// admins, the `retail` permission, OR an assigned `retail_store_id` (store
+// staff browsing the cross-store grid in app.html). Edits stay gated below.
+function requireInventoryRead(req, res, next) {
+  if (req.session?.backendUserId) return requireRetailAdmin(req, res, next);
+  requireAuth(req, res, (err) => {
+    if (err) return next(err);
     if (req.user?.role === 'admin') return next();
     if (req.permissions?.retail) return next();
     const u = db.prepare('SELECT retail_store_id FROM users WHERE id = ?').get(req.user.id);
     if (u?.retail_store_id) return next();
     return res.status(403).json({ error: 'no_inventory_access' });
-  },
-];
+  });
+}
 
 // ─── Stores ─────────────────────────────────────────────────────────────
 router.get('/api/retail-admin/stores', requireInventoryRead, (req, res) => {
