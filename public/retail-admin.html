@@ -2731,8 +2731,27 @@
   .manifest .mf-total { font-size: 14px; font-weight: 600; color: var(--text-1); white-space: nowrap; }
   .manifest .mf-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .manifest .mf-zh { font-family: var(--f-sans); font-size: 11px; font-weight: 300; color: var(--text-3); }
-  .manifest .mf-spec { font-family: var(--f-mono); font-size: 10.5px; color: var(--text-4); letter-spacing: .03em; }
-  .manifest .mf-qty { color: var(--text-3); }
+  /* SKU + quantity are the packer's critical fields — legible mono chips,
+     not faint micro-text. Unit price stays quiet; multi-unit qty goes brass
+     so a >1 line can't be shipped short. */
+  .manifest .mf-sku {
+    font-family: var(--f-mono); font-size: 11px; font-weight: 600;
+    color: var(--text-1); letter-spacing: .04em;
+    background: var(--bg-elev-1); border: 1px solid var(--line);
+    border-radius: var(--r-sm); padding: 1px 7px;
+  }
+  .manifest .mf-qty-chip {
+    font-family: var(--f-mono); font-size: 12px; font-weight: 700;
+    color: var(--text-1); font-variant-numeric: tabular-nums; letter-spacing: .02em;
+    background: var(--bg-elev-1); border: 1px solid var(--line);
+    border-radius: var(--r-sm); padding: 1px 8px;
+  }
+  .manifest .mf-qty-chip.qty-multi {
+    color: var(--brass);
+    background: rgba(176, 141, 74, .10);
+    border-color: rgba(176, 141, 74, .40);
+  }
+  .manifest .mf-unit { font-family: var(--f-mono); font-size: 10.5px; color: var(--text-3); letter-spacing: .03em; }
   .manifest .mf-packs { margin-left: auto; display: inline-flex; align-items: center; }
   .manifest .mf-packs .pack-badge { margin-right: 0; margin-left: 4px; }
 
@@ -2780,7 +2799,7 @@
   .oi-grid .oi-row:last-child { border-bottom: none; }
   .oi-grid .oi-name { font-size: 13px; font-weight: 500; color: var(--text-1); }
   .oi-grid .oi-zh { font-family: var(--f-sans); font-size: 11px; font-weight: 300; color: var(--text-3); margin-top: 2px; }
-  .oi-grid .oi-sku { font-family: var(--f-mono); font-size: 10px; color: var(--text-4); letter-spacing: .03em; margin-top: 2px; }
+  .oi-grid .oi-sku { font-family: var(--f-mono); font-size: 10.5px; font-weight: 600; color: var(--text-2); letter-spacing: .04em; margin-top: 2px; }
   .oi-grid .oi-c { font-family: var(--f-mono); font-size: 12px; color: var(--text-2); text-align: center; }
   .oi-grid .oi-r { font-family: var(--f-mono); font-size: 12px; color: var(--text-2); text-align: right; }
   .oi-grid .oi-total { font-size: 13px; font-weight: 600; color: var(--text-1); text-align: right; }
@@ -2873,8 +2892,12 @@
   .shipment-head .mode-pill.mode-air,
   .shipment-head .mode-pill.mode-land,
   .shipment-head .mode-pill.mode-local { background: var(--bg-elev-1); color: var(--text-1); border-color: var(--line); }
+  /* Units-to-ship count — pushed to the right edge and given real weight so
+     the packer reads the total at a glance ("4 lines · 6 units"). */
   .shipment-head .count {
-    font-size: 11px; color: var(--text-3);
+    margin-left: auto;
+    font-family: var(--f-mono); font-size: 11px; font-weight: 600;
+    color: var(--text-2); letter-spacing: .04em;
   }
   /* Route note — brass-bordered pill (the design's shipment route pill). */
   .outside-gz-note {
@@ -10689,7 +10712,9 @@ function renderItemRow(it, opts = {}) {
         </div>
         <div class="mf-meta">
           ${zh}
-          <span class="mf-spec">${sku} · <span class="mf-qty">${itemQtyHtml(it)} @ ¥${fmt(it.unit_price)}</span></span>
+          <span class="mf-sku">${sku}</span>
+          <span class="mf-qty-chip${Number(it.qty) > 1 ? ' qty-multi' : ''}">×${it.qty}</span>
+          <span class="mf-unit">@ ¥${fmt(it.unit_price)}</span>
           ${showPack ? `<span class="mf-packs">${renderPackBadges(it)}</span>` : ''}
         </div>
       </div>
