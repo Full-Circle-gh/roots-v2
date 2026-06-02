@@ -1,4 +1,5 @@
 <view class="page">
+  <mascot />
   <!-- Back button — floats over the hero -->
   <view class="back-btn" bindtap="back">
     <view class="back-glyph">←</view>

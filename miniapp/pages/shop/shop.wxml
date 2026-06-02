@@ -1,4 +1,5 @@
 <view class="page page-{{layout}}">
+  <mascot />
 
   <!-- ════ FLY-TO-CART ANIMATION ════════════════════════════════ -->
   <view wx:if="{{flyShow}}"

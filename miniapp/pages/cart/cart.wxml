@@ -1,4 +1,5 @@
 <view class="page">
+  <mascot />
   <view class="header">
     <view class="kicker f-toni">{{copy.kicker}}</view>
     <view class="title-row">

@@ -1,0 +1,85 @@
+/* Full-viewport, tap-transparent layer the pickle lives in. */
+.mascot-layer{
+  position: fixed;
+  left: 0; right: 0; top: 0; bottom: 0;
+  pointer-events: none;        /* never intercept a tap */
+  z-index: 120;                /* above content, below most modals */
+  overflow: visible;
+}
+
+/* Position + glide. translate is driven inline from data; the duration is
+   inline too so each move can have its own leisurely pace. */
+.mascot{
+  position: absolute;
+  left: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 120rpx);  /* clear the tab bar */
+  width: 168rpx;
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(.37,.16,.27,1);   /* lazy ease */
+  will-change: transform;
+}
+
+.mascot-face{
+  width: 100%;
+  transform-origin: 50% 100%;
+}
+
+/* Slow reggae sway — always running, this is the "chill" tell. */
+.mascot-bob{
+  width: 100%;
+  transform-origin: 50% 100%;
+  animation: mascotSway 3s ease-in-out infinite;
+}
+
+/* The artwork. mix-blend-mode multiply drops the white JPG background out
+   against the page, so no transparent PNG is required to ship. (Swap to a
+   real transparent PNG later to read cleanly over photos too.) */
+.mascot-img{
+  display: block;
+  width: 100%;
+  transform-origin: 50% 100%;
+  mix-blend-mode: multiply;
+}
+
+.mascot-img.mood-idle{ animation: mascotBreathe 3.6s ease-in-out infinite; }
+.mascot-img.mood-wave{ animation: mascotWave 1.5s ease-in-out 1; }
+.mascot-img.mood-hop { animation: mascotHop .85s cubic-bezier(.33,.66,.3,1) 1; }
+.mascot-img.mood-roll{ animation: mascotRoll .8s ease-in-out 1; }
+
+@keyframes mascotSway{
+  0%,100%{ transform: rotate(-3.4deg); }
+  50%    { transform: rotate(3.4deg); }
+}
+
+@keyframes mascotBreathe{
+  0%,100%{ transform: translateY(0) scale(1); }
+  50%    { transform: translateY(-4rpx) scale(1.035); }
+}
+
+/* A friendly greeting nod (single image, so the whole body tilts hello). */
+@keyframes mascotWave{
+  0%  { transform: rotate(0); }
+  18% { transform: rotate(-9deg); }
+  42% { transform: rotate(7deg); }
+  64% { transform: rotate(-5deg); }
+  84% { transform: rotate(3deg); }
+  100%{ transform: rotate(0); }
+}
+
+/* A little ollie: crouch, pop, land. */
+@keyframes mascotHop{
+  0%  { transform: translateY(0) scaleY(1); }
+  18% { transform: translateY(0) scaleY(.9); }
+  42% { transform: translateY(-34rpx) scaleY(1.04); }
+  60% { transform: translateY(-40rpx); }
+  78% { transform: translateY(-6rpx) scaleY(.97); }
+  100%{ transform: translateY(0) scaleY(1); }
+}
+
+/* Lean into a push when scooting across. */
+@keyframes mascotRoll{
+  0%  { transform: rotate(0); }
+  28% { transform: rotate(-11deg); }
+  62% { transform: rotate(6deg); }
+  100%{ transform: rotate(0); }
+}

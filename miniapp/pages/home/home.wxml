@@ -1,4 +1,5 @@
 <view class="page" style="{{themeBg ? 'background:' + themeBg : ''}}">
+  <mascot />
   <!-- Floating language toggle — top-right, always visible. Customer-facing
        quick swap; the bigger picker on Me tab is the "settings" home. -->
   <view class="lang-fab">
