@@ -10368,22 +10368,29 @@ function buildCatTabsForm(m, b) {
   const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
   const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
 
-  // Visual direction. 'Classic' uses the Layout selector below; the three
-  // directions (Index / Bento / Sticker) are self-contained layouts that ignore it.
+  // Visual direction. 'Classic' uses the Layout selector below; the other
+  // directions (Circles / Index / Bento / Sticker) are self-contained layouts
+  // that ignore it. 'Circles' is the icons layout promoted to a top-level style,
+  // so it maps to the already-supported classic + view:'icons' combo.
+  const isCircles = catStyle === 'classic' && view === 'icons';
+  const styleValue = isCircles ? 'circles' : catStyle;
   secLayout.appendChild(field(T('Style', '样式'),
-    T('Classic = use the Layout below (tiles / icons / scroll). Index = a numbered list with count tags and arrows. Bento = an image grid (uses each category\'s product photo). Sticker = coloured pills with an outline and a hard shadow.', '经典 = 使用下方版式(色块 / 图标 / 横滑)。目录 = 编号列表 + 数量标签 + 箭头。便当 = 图片网格(用分类的商品图)。贴纸 = 带轮廓和硬阴影的彩色药丸。'),
-    sel(b.cat_style || 'classic', CAT_STYLE_OPTIONS, v => updateBlock(b.id, { cat_style: v }))));
+    T('Classic = use the Layout below (tiles / scroll). Circles = round icons with labels (choose the columns below). Index = a numbered list with count tags and arrows. Bento = an image grid (uses each category\'s product photo). Sticker = coloured pills with an outline and a hard shadow.', '经典 = 使用下方版式(色块 / 横滑)。圆形 = 带标签的圆形图标(在下方选列数)。目录 = 编号列表 + 数量标签 + 箭头。便当 = 图片网格(用分类的商品图)。贴纸 = 带轮廓和硬阴影的彩色药丸。'),
+    sel(styleValue, CAT_STYLE_OPTIONS, v => {
+      if (v === 'circles')      updateBlock(b.id, { cat_style: 'classic', view: 'icons' });
+      else if (v === 'classic') updateBlock(b.id, { cat_style: 'classic', view: view === 'icons' ? 'tiles' : view });
+      else                      updateBlock(b.id, { cat_style: v });
+    })));
 
-  if (catStyle === 'classic') {
-    secLayout.appendChild(field(T('Layout', '版式'), T('Tiles = two columns of coloured rectangles. Icons = circles with labels (choose the columns below). Scroll = a single row you drag left/right.', '色块 = 双列彩色矩形。图标 = 带标签的圆形(在下方选列数)。横滑 = 单行,左右拖动。'),
+  if (catStyle === 'classic' && !isCircles) {
+    secLayout.appendChild(field(T('Layout', '版式'), T('Tiles = two columns of coloured rectangles. Scroll = a single row you drag left/right.', '色块 = 双列彩色矩形。横滑 = 单行,左右拖动。'),
       sel(view, [
         { value: 'tiles',  label: T('Tiles — 2 columns of rectangles', '色块 — 双列矩形') },
-        { value: 'icons',  label: T('Icons — circles with labels', '图标 — 带标签的圆形') },
         { value: 'scroll', label: T('Scroll — single row, drag left/right', '横滑 — 单行,左右拖动') },
       ], v => updateBlock(b.id, { view: v }))));
   }
 
-  if (catStyle === 'classic' && view === 'icons') {
+  if (isCircles) {
     secLayout.appendChild(field(T('Columns', '列数'), T('3, 4, or 5 circles per row.', '每行 3、4 或 5 个圆形。'),
       num(b.columns, v => updateBlock(b.id, { columns: Math.max(3, Math.min(5, v)) }), { min: 3, max: 5 })));
   }
@@ -10724,6 +10731,7 @@ const DIVIDER_STYLE_OPTIONS = [
 // Category-block visual directions (ported from the design exploration).
 const CAT_STYLE_OPTIONS = [
   { value: 'classic',  label: 'Classic — use the Layout below · 经典(用下方版式)' },
+  { value: 'circles',  label: 'Circles — round icons with labels · 圆形(带标签的圆形图标)' },
   { value: 'index',    label: 'Index — numbered list with counts · 目录(编号列表+数量)' },
   { value: 'bento',    label: 'Bento — image grid · 便当(图片网格)' },
   { value: 'sticker',  label: 'Sticker — coloured pills · 贴纸(彩色药丸)' },
