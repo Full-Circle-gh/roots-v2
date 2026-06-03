@@ -5320,6 +5320,62 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       FROM retail_orders
      WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?`).get(from, to);
 
+  // ── Checkout abandonment (quoted but never paid in the window) ──
+  // started   = distinct customers who reached the checkout pricing step
+  // converted = of those, the ones who placed a paid order in the same window
+  // abandoned = started − converted; products = what sits in abandoned carts.
+  // All best-effort: the source table is a fire-and-forget log, so a missing
+  // table or bad row must never sink the whole dashboard.
+  let checkout = { started: 0, converted: 0, abandoned: 0, conversion_rate: null, products: [] };
+  try {
+    const ck = tdb().prepare(`
+      SELECT COUNT(DISTINCT q.customer_id) AS started,
+             COUNT(DISTINCT CASE WHEN EXISTS (
+                     SELECT 1 FROM retail_orders o
+                      WHERE o.customer_id = q.customer_id AND ${PAIDO}
+                        AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?
+                   ) THEN q.customer_id END) AS converted
+        FROM retail_checkout_quotes q
+       WHERE q.customer_id IS NOT NULL
+         AND date(q.created_at, '${TZ}') BETWEEN ? AND ?`).get(from, to, from, to);
+    const started   = ck.started   || 0;
+    const converted = ck.converted || 0;
+    const abandoned = Math.max(0, started - converted);
+    // Products left in abandoned checkouts — quotes whose customer placed no
+    // paid order in the window. Ranked by how many distinct customers walked
+    // away from each product.
+    const prods = tdb().prepare(`
+      SELECT CAST(json_extract(j.value, '$.product_id') AS INTEGER) AS product_id,
+             COALESCE(SUM(CAST(json_extract(j.value, '$.qty') AS INTEGER)), 0) AS qty,
+             COUNT(DISTINCT q.customer_id) AS customers
+        FROM retail_checkout_quotes q, json_each(q.items_json) j
+       WHERE q.customer_id IS NOT NULL
+         AND date(q.created_at, '${TZ}') BETWEEN ? AND ?
+         AND NOT EXISTS (
+               SELECT 1 FROM retail_orders o
+                WHERE o.customer_id = q.customer_id AND ${PAIDO}
+                  AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?)
+       GROUP BY product_id
+       ORDER BY customers DESC, qty DESC LIMIT 10`).all(from, to, from, to);
+    const products = prods.filter((p) => p.product_id).map((p) => {
+      const meta = tdb().prepare(
+        'SELECT name_en, name_cn, image_url, sku FROM products WHERE id = ?'
+      ).get(p.product_id) || {};
+      return {
+        product_id: p.product_id, qty: p.qty, customers: p.customers,
+        name_en: meta.name_en || null, name_cn: meta.name_cn || null,
+        image_url: meta.image_url || null, sku: meta.sku || null,
+      };
+    });
+    checkout = {
+      started, converted, abandoned,
+      conversion_rate: started > 0 ? Math.round((converted / started) * 1000) / 10 : null,
+      products,
+    };
+  } catch (e) {
+    console.error('[dashboard/checkout]', e.message);
+  }
+
   const conversion = vis.sessions > 0 ? (kpi.orders / vis.sessions) * 100 : null;
   const pct = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 
@@ -5365,6 +5421,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       marketing: { vouchers, points },
       traffic: { scenes },
       heat, cohorts, cohortSizes, composition,
+      checkout,
     },
   });
 });
@@ -11208,6 +11265,26 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
 
   const priced = priceCart(items, req.customer.id);
   if (priced.error) return res.status(400).json({ success: false, error: priced.error });
+
+  // Best-effort checkout-abandonment log. Every reach of this point means the
+  // customer opened checkout and got a valid price; if they never place a paid
+  // order in the same window the dashboard flags it as an abandoned checkout.
+  // Wrapped so a logging failure can never break pricing.
+  try {
+    const slimItems = (items || [])
+      .map((i) => ({ product_id: parseInt(i.product_id, 10), qty: Number(i.qty) || 0 }))
+      .filter((i) => i.product_id && i.qty > 0);
+    tdb().prepare(
+      `INSERT INTO retail_checkout_quotes (customer_id, openid, item_count, subtotal, items_json)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(
+      req.customer.id,
+      req.customer.openid || null,
+      priced.totalQty || 0,
+      priced.subtotal || 0,
+      JSON.stringify(slimItems)
+    );
+  } catch (e) { /* logging is best-effort — never block the quote */ }
 
   // Backfill province from city (and lift a province-named "city" the EN wheel
   // produced) before matching — the same normalization the save path applies.

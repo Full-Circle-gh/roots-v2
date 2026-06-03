@@ -1452,6 +1452,26 @@ db.exec(`CREATE TABLE IF NOT EXISTS retail_media_folders (
 )`);
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_media_folder_id ON retail_media(folder_id)'); } catch {}
 
+// Imported product-page templates. The product editor ships built-in templates
+// (PA_TEMPLATES in product-editor.html); these are operator-uploaded ones from
+// a template file (Claude-authored design). `id` is the slug saved to
+// products.page_template, so it must not collide with a built-in id. `blocks`
+// is the seeded block stack (JSON, same shape as products.page_blocks);
+// `skin_css` is an optional CSS re-skin the editor injects scoped to
+// .pa-tpl-<id>. Shared across all operators (one row = one selectable card).
+db.exec(`CREATE TABLE IF NOT EXISTS retail_page_templates (
+  id          TEXT PRIMARY KEY,              -- slug, e.g. 'bold_deli'
+  label_en    TEXT NOT NULL,
+  label_cn    TEXT NOT NULL,
+  desc_en     TEXT DEFAULT '',
+  desc_cn     TEXT DEFAULT '',
+  blocks      TEXT NOT NULL DEFAULT '[]',    -- JSON array of blocks
+  skin_css    TEXT DEFAULT '',               -- optional CSS scoped to .pa-tpl-<id>
+  created_by  INTEGER,                       -- staff user_id or backend operator id
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
 // Broadcasts — operator-composed announcements that fan out to every active
 // (non-blocked) customer's notification feed. Each row here is the authored
 // message; the per-customer copies live in retail_notifications with
@@ -2417,6 +2437,26 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_visits_created  ON retail_visits(created_at);
   CREATE INDEX IF NOT EXISTS idx_retail_visits_customer ON retail_visits(customer_id);
   CREATE INDEX IF NOT EXISTS idx_retail_visits_session  ON retail_visits(session_id);
+
+  -- Checkout-abandonment log. One row per /api/retail/checkout/quote call
+  -- (the pricing step the mini-app hits when the customer opens checkout).
+  -- A customer who quoted but placed no paid order in the same window is an
+  -- abandoned checkout. Best-effort write (wrapped in try/catch at the call
+  -- site) so a logging failure never breaks pricing. items_json mirrors the
+  -- quote's items array ([{product_id, qty}]) so the dashboard can tally
+  -- which products sit in abandoned checkouts.
+  CREATE TABLE IF NOT EXISTS retail_checkout_quotes (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id  INTEGER,
+    openid       TEXT,
+    item_count   INTEGER DEFAULT 0,        -- total qty across the cart
+    subtotal     REAL    DEFAULT 0,        -- yuan-decimal product subtotal
+    items_json   TEXT,                     -- JSON [{product_id, qty}]
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_checkout_quotes_created  ON retail_checkout_quotes(created_at);
+  CREATE INDEX IF NOT EXISTS idx_retail_checkout_quotes_customer ON retail_checkout_quotes(customer_id);
 `);
 
 // Order-level columns for the 4-option / 5-option fallback flow:

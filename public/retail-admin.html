@@ -10506,6 +10506,25 @@ const BENTO_CATALOGUE = {
       body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
     },
   },
+  checkout_abandon: {
+    title_en: 'Abandoned checkouts', title_cn: '弃单分析', source: 'dash',
+    render: (body, tile) => {
+      const d = (DASH_DATA && DASH_DATA.checkout) || { started: 0, converted: 0, abandoned: 0, conversion_rate: null, products: [] };
+      if (!d.started) return body.innerHTML = `<div class="db-tile-num good">0</div><div class="db-tile-sub">No checkouts in range · 区间内无结算</div>`;
+      if (d.abandoned > 0 && tile) tile.classList.add('alert');
+      const conv = d.conversion_rate != null ? d.conversion_rate : 0;
+      const numClass = d.abandoned > 0 ? 'warn' : 'good';
+      // Top products left behind — value column is how many distinct customers
+      // walked away from that product (more telling than raw qty).
+      const rows = (d.products || []).slice(0, 6).map(p => `<div class="db-tile-list-row">
+        <span class="name">${escapeHtml(p.name_en || p.name_cn || ('#' + p.product_id))}</span>
+        <span class="val">${p.customers || 0}</span>
+      </div>`).join('');
+      body.innerHTML = `<div class="db-tile-num ${numClass}">${d.abandoned}</div>
+        <div class="db-tile-sub">${conv}% completed · 完成率 ${conv}%</div>
+        ${rows ? `<div class="db-tile-list" style="margin-top:10px">${rows}</div>` : ''}`;
+    },
+  },
 };
 
 let DASH_OPS = null;
