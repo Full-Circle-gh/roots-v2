@@ -613,6 +613,100 @@
   #db-activity-drawer .db-dw-meta dd { margin: 0; color: var(--text-1); }
   #db-activity-drawer .db-dw-quote { background: var(--bg-app); border: 1px solid var(--line-soft); border-left: 3px solid var(--brass); border-radius: 6px; padding: 10px 14px; font-size: 13px; line-height: 1.55; color: var(--text-1); white-space: pre-wrap; }
 
+  /* Phase 3 — bento grid above the fold. 4 cols × 3 rows. Hero spans cols
+     1–3 × rows 1–2 (big and tall); tiles A/B stack in col 4 above it; tiles
+     C–F fill row 3. Below the bento sits the Deep-dive collapse holding the
+     legacy KPI strip + 12 chart cards. Layout collapses to a 2-col stack
+     under 1080px, full single column under 720px. */
+  .db-bento {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: minmax(120px, auto) minmax(120px, auto) minmax(190px, auto);
+    gap: var(--s3);
+    margin-bottom: var(--s4);
+  }
+  .db-bento #db-hero { grid-column: 1 / 4; grid-row: 1 / 3; margin-bottom: 0; }
+  .db-bento .db-tile[data-slot="a"] { grid-column: 4; grid-row: 1; }
+  .db-bento .db-tile[data-slot="b"] { grid-column: 4; grid-row: 2; }
+  .db-bento .db-tile[data-slot="c"] { grid-column: 1; grid-row: 3; }
+  .db-bento .db-tile[data-slot="d"] { grid-column: 2; grid-row: 3; }
+  .db-bento .db-tile[data-slot="e"] { grid-column: 3; grid-row: 3; }
+  .db-bento .db-tile[data-slot="f"] { grid-column: 4; grid-row: 3; }
+  @media (max-width: 1080px) {
+    .db-bento { grid-template-columns: repeat(2, 1fr); grid-template-rows: auto; }
+    .db-bento #db-hero { grid-column: 1 / 3; grid-row: auto; }
+    .db-bento .db-tile { grid-column: auto; grid-row: auto; }
+  }
+  @media (max-width: 720px) {
+    .db-bento { grid-template-columns: 1fr; }
+    .db-bento #db-hero { grid-column: 1; }
+  }
+
+  /* Hero internals — when the hero grows tall in the bento, reshape its
+     internal layout so the activity feed takes the lower full-width row
+     and the live + today panes share the top. Phase 2 used a 1-row 3-col
+     layout; this overrides that when sitting inside .db-bento. */
+  .db-bento .db-hero-grid {
+    grid-template-columns: 220px 1fr;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "live  today"
+      "feed  feed";
+    height: 100%;
+  }
+  .db-bento .db-hero .db-live          { grid-area: live;  }
+  .db-bento .db-hero .db-today-pane    { grid-area: today; }
+  .db-bento .db-hero .db-feed-pane     { grid-area: feed; min-height: 200px; }
+  .db-bento .db-hero .db-feed-list     { max-height: none; flex: 1 1 auto; min-height: 0; }
+  @media (max-width: 960px) {
+    .db-bento .db-hero-grid {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto;
+      grid-template-areas: "live" "today" "feed";
+    }
+  }
+
+  /* Bento tile chrome — title bar + ⋯ swap menu + content body.
+     Scoped under .db-bento because .db-tile is also used by the legacy
+     `dashRenderTiers` mini-cards inside the Deep dive. */
+  .db-bento .db-tile { display: flex; flex-direction: column; padding: 0; min-height: 0; overflow: hidden; }
+  .db-bento .db-tile .db-tile-head { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; border-bottom: 1px solid var(--line-soft); flex-shrink: 0; }
+  .db-bento .db-tile .db-tile-head h4 { margin: 0; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; font-family: var(--f-mono); color: var(--text-2); font-weight: 700; }
+  .db-bento .db-tile .db-tile-menu { border: none; background: transparent; cursor: pointer; color: var(--text-3); padding: 0 6px; border-radius: 4px; font-size: 16px; line-height: 1; height: 22px; }
+  .db-bento .db-tile .db-tile-menu:hover { color: var(--text-1); background: var(--bg-elev-1); }
+  .db-bento .db-tile .db-tile-body { flex: 1 1 auto; min-height: 0; padding: 10px 14px; overflow-y: auto; }
+  .db-bento .db-tile .db-tile-num { font-size: 28px; font-weight: 600; letter-spacing: -.02em; color: var(--text-1); line-height: 1; font-variant-numeric: tabular-nums; }
+  .db-bento .db-tile .db-tile-num.accent { color: var(--accent); }
+  .db-bento .db-tile .db-tile-sub { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+  .db-tile-list { font-size: 12px; }
+  .db-tile-list-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px dotted var(--line-soft); }
+  .db-tile-list-row:last-child { border-bottom: 0; }
+  .db-tile-list-row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .db-tile-list-row .val  { color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; font-weight: 500; }
+  .db-tile-empty { font-size: 12px; color: var(--text-3); padding: 8px 0; text-align: center; }
+  /* Mini heatmap for the bento variant — squished cells, no labels. */
+  .db-bento .db-tile .db-heat-mini { display: grid; grid-template-columns: repeat(24, 1fr); gap: 1px; }
+  .db-bento .db-tile .db-heat-mini > i { display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: 2px; background: var(--line-soft); }
+
+  /* Tile-swap popover. Floats above on click, dismissed by outside-click. */
+  .db-tile-pop { position: fixed; min-width: 220px; max-width: 280px; background: var(--bg-pane); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 6px; z-index: 250; }
+  .db-tile-pop .db-tile-pop-head { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); padding: 6px 8px; font-family: var(--f-mono); }
+  .db-tile-pop button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 6px 8px; border: none; background: transparent; color: var(--text-1); font: inherit; font-size: 12px; cursor: pointer; border-radius: 4px; }
+  .db-tile-pop button:hover { background: var(--bg-elev-1); }
+  .db-tile-pop button.active { background: var(--bg-app); color: var(--accent); font-weight: 600; }
+
+  /* Deep-dive disclosure — wraps the legacy KPI strip + 12 chart cards.
+     Starts collapsed; toggle persisted nowhere (always opens fresh, per
+     the project recommendation to keep front-door clean). */
+  .db-deepdive { margin-top: var(--s4); border: 1px solid var(--line-soft); border-radius: var(--r-lg); background: var(--bg-pane); overflow: hidden; }
+  .db-deepdive > summary { list-style: none; cursor: pointer; padding: 12px 16px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; color: var(--text-1); user-select: none; }
+  .db-deepdive > summary::-webkit-details-marker { display: none; }
+  .db-deepdive > summary::before { content: "▸"; color: var(--text-3); font-size: 10px; transition: transform .2s ease; display: inline-block; }
+  .db-deepdive[open] > summary::before { transform: rotate(90deg); }
+  .db-deepdive-hint { color: var(--text-3); font-weight: 400; font-size: 11px; margin-left: auto; }
+  .db-deepdive-body { padding: 16px; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: var(--s3); }
+  .db-deepdive-body .db-kpis { margin: 0; }
+
   .db-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
   @media (max-width: 980px) { .db-grid-2 { grid-template-columns: 1fr; } }
   .db-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); margin-bottom: var(--s4); }
@@ -4122,6 +4216,11 @@
       </div>
     </div>
 
+    <!-- Phase 3 bento — hero (live + today + activity) on the left
+         spanning 3 cols × 2 rows; 6 swappable tiles fill the rest above
+         the fold. Tile picks persist per-operator to localStorage
+         (retail-admin-dash-view, the existing key). -->
+    <div class="db-bento" id="db-bento">
     <!-- Right-now hero (phase 2 of 3) — live presence, today's mini-KPIs,
          activity feed. Polled independently of the historical date-range
          picker above, since "right now" is always now. -->
@@ -4140,7 +4239,7 @@
           <div class="db-live-lbl">Viewing products · 浏览中</div>
           <div class="db-live-sub" id="db-live-sub">—</div>
         </div>
-        <div class="db-hero-pane">
+        <div class="db-hero-pane db-today-pane">
           <div class="db-hero-h">Today · 今日</div>
           <div class="db-today-grid">
             <div class="db-today-cell"><div class="val" id="db-today-rev">¥—</div><div class="lbl">Revenue · 营收</div></div>
@@ -4148,7 +4247,7 @@
             <div class="db-today-cell"><div class="val" id="db-today-new">—</div><div class="lbl">New · 新客</div></div>
           </div>
         </div>
-        <div class="db-hero-pane">
+        <div class="db-hero-pane db-feed-pane">
           <div class="db-hero-h">Activity · 动态</div>
           <div class="db-feed-list" id="db-feed-list">
             <div class="db-feed-empty">Loading… · 加载中…</div>
@@ -4156,7 +4255,63 @@
         </div>
       </div>
     </section>
+    <!-- 6 swappable bento tiles. Each cell has a generic chrome (title + ⋯
+         swap menu); JS dispatches to the registered render fn per tile type.
+         Slot positions a/b are stacked on the hero's right; c/d/e/f form
+         the row below. -->
+    <section class="card db-tile" data-slot="a" id="db-tile-a">
+      <div class="db-tile-head">
+        <h4 class="db-tile-title">—</h4>
+        <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'a')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
+      </div>
+      <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
+    </section>
+    <section class="card db-tile" data-slot="b" id="db-tile-b">
+      <div class="db-tile-head">
+        <h4 class="db-tile-title">—</h4>
+        <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'b')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
+      </div>
+      <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
+    </section>
+    <section class="card db-tile" data-slot="c" id="db-tile-c">
+      <div class="db-tile-head">
+        <h4 class="db-tile-title">—</h4>
+        <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'c')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
+      </div>
+      <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
+    </section>
+    <section class="card db-tile" data-slot="d" id="db-tile-d">
+      <div class="db-tile-head">
+        <h4 class="db-tile-title">—</h4>
+        <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'd')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
+      </div>
+      <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
+    </section>
+    <section class="card db-tile" data-slot="e" id="db-tile-e">
+      <div class="db-tile-head">
+        <h4 class="db-tile-title">—</h4>
+        <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'e')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
+      </div>
+      <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
+    </section>
+    <section class="card db-tile" data-slot="f" id="db-tile-f">
+      <div class="db-tile-head">
+        <h4 class="db-tile-title">—</h4>
+        <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'f')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
+      </div>
+      <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
+    </section>
+    </div>
+    <!-- end #db-bento -->
 
+    <!-- Deep dive — the legacy KPI strip + 12 chart cards collapse here.
+         Starts closed so the dashboard's front door is the bento above. -->
+    <details class="db-deepdive" id="db-deepdive">
+      <summary>
+        Deep dive · 详细
+        <span class="db-deepdive-hint">8 KPIs + 12 charts · 历史详情</span>
+      </summary>
+      <div class="db-deepdive-body">
     <!-- KPI strip -->
     <div class="db-kpis" id="db-kpis"></div>
 
@@ -4235,6 +4390,10 @@
         <div id="db-cohorts"></div>
       </div>
     </div>
+
+      </div>
+    </details>
+    <!-- end #db-deepdive -->
 
     <!-- Activity drill-through drawer — populated by dashFeedClick.
          Reuses the global .side-drawer chrome (CSS at top). -->
@@ -9883,6 +10042,7 @@ function dashInit() {
   dvApply();           // apply saved View tweaks (heatmap/number classes)
   dashSetRange('30');  // default window + initial load
   dashHeroInit();      // right-now hero (phase 2): polling + drawer wiring
+  bentoInit();         // bento tiles (phase 3): layout + /ops polling
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -10115,6 +10275,269 @@ function dashJumpTab(name) {
   btn.click();
   return true;
 }
+
+// ════════════════════════════════════════════════════════════════
+// BENTO (phase 3/3) — 6 swappable tiles above the Deep-dive fold.
+// Per-operator layout persisted to localStorage under the existing
+// `retail-admin-dash-view` key (extends, doesn't replace, the View
+// popover's saved settings). Data sources:
+//   - DASH_DATA  : the historical date-range pull (already loaded)
+//   - DASH_OPS   : a tiny snapshot of low-stock + refunds queue,
+//                  refreshed every 60s by bentoLoadOps()
+// Tiles re-render automatically when either source updates — we
+// monkey-patch the existing dashRenderAll to trigger a bento refresh.
+// ════════════════════════════════════════════════════════════════
+const BENTO_SLOTS = ['a','b','c','d','e','f'];
+const BENTO_DEFAULT = ['low_stock','refunds','top_products','top_customers','geography','heatmap_mini'];
+
+// Tile catalogue — { key → { title_en, title_cn, render(slot), source } }.
+// `source` ∈ {'ops','dash'} — bentoRefresh() filters by source so an
+// /ops refresh doesn't re-render dash-data tiles and vice versa.
+const BENTO_CATALOGUE = {
+  low_stock: {
+    title_en: 'Low stock', title_cn: '缺货预警', source: 'ops',
+    render: (body) => {
+      const d = (DASH_OPS && DASH_OPS.low_stock) || { count: 0, items: [] };
+      if (!d.count) return body.innerHTML = `<div class="db-tile-num">0</div><div class="db-tile-sub">All stocked · 库存充足</div>`;
+      const rows = d.items.slice(0, 6).map(it => `<div class="db-tile-list-row">
+        <span class="name">${escapeHtml(it.name_en || it.name_cn || '—')}</span>
+        <span class="val">${it.stock_qty}</span>
+      </div>`).join('');
+      body.innerHTML = `<div class="db-tile-num">${d.count}</div>
+        <div class="db-tile-sub">items ≤ 5 · 件需补货</div>
+        <div class="db-tile-list" style="margin-top:10px">${rows}</div>`;
+    },
+  },
+  refunds: {
+    title_en: 'Refunds queue', title_cn: '退款队列', source: 'ops',
+    render: (body) => {
+      const d = (DASH_OPS && DASH_OPS.refunds) || { count: 0, items: [] };
+      if (!d.count) return body.innerHTML = `<div class="db-tile-num">0</div><div class="db-tile-sub">No open requests · 暂无</div>`;
+      const rows = d.items.slice(0, 6).map(it => `<div class="db-tile-list-row">
+        <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(it.buyer || '')}</span>
+        <span class="val">${it.amount ? '¥' + Number(it.amount).toLocaleString() : '—'}</span>
+      </div>`).join('');
+      body.innerHTML = `<div class="db-tile-num accent">${d.count}</div>
+        <div class="db-tile-sub">pending / reviewing · 待处理</div>
+        <div class="db-tile-list" style="margin-top:10px">${rows}</div>`;
+    },
+  },
+  top_products: {
+    title_en: 'Top products', title_cn: '热销产品', source: 'dash',
+    render: (body) => {
+      const list = (DASH_DATA && DASH_DATA.topProducts) || [];
+      if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No sales in range · 区间内无销售</div>`;
+      const rows = list.slice(0, 6).map(p => `<div class="db-tile-list-row">
+        <span class="name">${escapeHtml(p.name_en || p.name_cn || '—')}</span>
+        <span class="val">${p.units || 0}</span>
+      </div>`).join('');
+      body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
+    },
+  },
+  top_customers: {
+    title_en: 'Top customers', title_cn: '顶级顾客', source: 'dash',
+    render: (body) => {
+      const list = (DASH_DATA && DASH_DATA.topCustomers) || [];
+      if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No customers in range · 区间内无顾客</div>`;
+      const rows = list.slice(0, 6).map(c => `<div class="db-tile-list-row">
+        <span class="name">${escapeHtml(c.nickname || ('#' + c.customer_id))}</span>
+        <span class="val">¥${Number(c.revenue || 0).toLocaleString()}</span>
+      </div>`).join('');
+      body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
+    },
+  },
+  geography: {
+    title_en: 'Top areas', title_cn: '热门地区', source: 'dash',
+    render: (body) => {
+      const list = (DASH_DATA && DASH_DATA.geoCities) || [];
+      if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No delivery data · 暂无数据</div>`;
+      const rows = list.slice(0, 6).map(g => `<div class="db-tile-list-row">
+        <span class="name">${escapeHtml(g.city || '—')}</span>
+        <span class="val">${g.orders || 0}</span>
+      </div>`).join('');
+      body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
+    },
+  },
+  heatmap_mini: {
+    title_en: 'Demand heatmap', title_cn: '需求热力图', source: 'dash',
+    render: (body) => {
+      const heat = (DASH_DATA && DASH_DATA.heat) || [];
+      if (!heat.length) return body.innerHTML = `<div class="db-tile-empty">No data · 暂无数据</div>`;
+      // 7 rows (day of week) × 24 cols (hour). Server returns a flat
+      // [{dow, hour, n}] list. Build a 7×24 grid; intensity = n / max.
+      const grid = Array.from({ length: 7 }, () => new Array(24).fill(0));
+      let max = 0;
+      for (const r of heat) {
+        const d = Number(r.dow); const h = Number(r.hour); const n = Number(r.orders || 0);
+        if (d >= 0 && d < 7 && h >= 0 && h < 24) { grid[d][h] = n; if (n > max) max = n; }
+      }
+      const cells = grid.map(row => row.map(n => {
+        const t = max ? n / max : 0;
+        const op = t > 0 ? (0.18 + 0.72 * t).toFixed(2) : 0;
+        return `<i style="background: rgba(176,141,74,${op})"></i>`;
+      }).join('')).join('');
+      body.innerHTML = `<div class="db-heat-mini">${cells}</div>
+        <div class="db-tile-sub" style="margin-top:8px">7 days × 24 hours · 7天 × 24小时</div>`;
+    },
+  },
+  customer_tiers: {
+    title_en: 'Customer mix', title_cn: '顾客构成', source: 'dash',
+    render: (body) => {
+      const list = (DASH_DATA && DASH_DATA.tiers) || [];
+      if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No data · 暂无数据</div>`;
+      const rows = list.slice(0, 4).map(t => `<div class="db-tile-list-row">
+        <span class="name">${escapeHtml(t.label || t.tier_key || '—')}</span>
+        <span class="val">${t.n || t.count || 0}</span>
+      </div>`).join('');
+      body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
+    },
+  },
+  payment_split: {
+    title_en: 'Payment split', title_cn: '支付构成', source: 'dash',
+    render: (body) => {
+      const list = (DASH_DATA && DASH_DATA.payments) || [];
+      if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No data · 暂无数据</div>`;
+      const total = list.reduce((s, r) => s + (r.revenue || 0), 0) || 1;
+      const rows = list.slice(0, 4).map(p => `<div class="db-tile-list-row">
+        <span class="name">${escapeHtml(p.method || '—')}</span>
+        <span class="val">${((p.revenue || 0) / total * 100).toFixed(0)}%</span>
+      </div>`).join('');
+      body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
+    },
+  },
+  delivery_split: {
+    title_en: 'Delivery split', title_cn: '配送构成', source: 'dash',
+    render: (body) => {
+      const list = (DASH_DATA && DASH_DATA.delivery) || [];
+      if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No data · 暂无数据</div>`;
+      const total = list.reduce((s, r) => s + (r.orders || 0), 0) || 1;
+      const rows = list.slice(0, 4).map(d => `<div class="db-tile-list-row">
+        <span class="name">${escapeHtml(d.mode || '—')}</span>
+        <span class="val">${((d.orders || 0) / total * 100).toFixed(0)}%</span>
+      </div>`).join('');
+      body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
+    },
+  },
+};
+
+let DASH_OPS = null;
+
+function bentoLoadLayout() {
+  // Merge with View popup saved state — same key, different sub-object.
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('retail-admin-dash-view') || '{}'); } catch (e) {}
+  const layout = Array.isArray(saved.bento) && saved.bento.length === 6 ? saved.bento : BENTO_DEFAULT.slice();
+  // Sanitise: unknown keys → fall back to default for that slot.
+  return layout.map((k, i) => BENTO_CATALOGUE[k] ? k : BENTO_DEFAULT[i]);
+}
+function bentoSaveLayout(layout) {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('retail-admin-dash-view') || '{}'); } catch (e) {}
+  saved.bento = layout;
+  try { localStorage.setItem('retail-admin-dash-view', JSON.stringify(saved)); } catch (e) {}
+}
+
+function bentoInit() {
+  bentoRenderAll();
+  bentoLoadOps();
+  // /ops snapshot refreshes every 60s, but only while the tab is visible —
+  // the same visibility listener the hero uses gates this loop too.
+  if (!DASH_HERO._opsTimer) {
+    DASH_HERO._opsTimer = setInterval(() => { if (!document.hidden) bentoLoadOps(); }, 60000);
+  }
+}
+
+async function bentoLoadOps() {
+  try {
+    const j = await api('/api/retail-admin/dashboard/ops');
+    DASH_OPS = j.data || null;
+    bentoRefresh('ops');
+  } catch (e) { /* silent — next tick retries */ }
+}
+
+function bentoRenderAll() {
+  const layout = bentoLoadLayout();
+  layout.forEach((key, idx) => bentoRenderSlot(BENTO_SLOTS[idx], key));
+}
+
+function bentoRefresh(sourceFilter) {
+  const layout = bentoLoadLayout();
+  layout.forEach((key, idx) => {
+    const entry = BENTO_CATALOGUE[key];
+    if (!entry) return;
+    if (sourceFilter && entry.source !== sourceFilter) return;
+    bentoRenderSlot(BENTO_SLOTS[idx], key);
+  });
+}
+
+function bentoRenderSlot(slot, key) {
+  const tile = document.getElementById('db-tile-' + slot); if (!tile) return;
+  const entry = BENTO_CATALOGUE[key]; if (!entry) return;
+  const title = tile.querySelector('.db-tile-title');
+  const body  = tile.querySelector('.db-tile-body');
+  if (title) title.textContent = `${entry.title_en} · ${entry.title_cn}`;
+  if (body) {
+    try { entry.render(body); }
+    catch (e) { body.innerHTML = `<div class="db-tile-empty">Render failed · 渲染失败</div>`; }
+  }
+}
+
+// ── Tile swap popover ─────────────────────────────────────────────────────
+function bentoMenuOpen(buttonEl, slot) {
+  bentoMenuClose();
+  const layout = bentoLoadLayout();
+  const currentKey = layout[BENTO_SLOTS.indexOf(slot)];
+  const pop = document.createElement('div');
+  pop.className = 'db-tile-pop';
+  pop.id = 'db-tile-pop';
+  const items = Object.entries(BENTO_CATALOGUE).map(([k, entry]) => {
+    const active = k === currentKey ? ' active' : '';
+    return `<button type="button" class="${active.trim()}" onclick="bentoSetTile('${slot}','${k}')">
+      ${escapeHtml(entry.title_en)} · ${escapeHtml(entry.title_cn)}
+    </button>`;
+  }).join('');
+  pop.innerHTML = `<div class="db-tile-pop-head">Show in this tile · 显示内容</div>${items}`;
+  document.body.appendChild(pop);
+  // Anchor to the button — fixed-position so scroll doesn't dislodge it.
+  const r = buttonEl.getBoundingClientRect();
+  const popRect = pop.getBoundingClientRect();
+  let left = r.right - popRect.width;       // align right edge with button
+  let top  = r.bottom + 6;
+  if (left < 8) left = 8;
+  if (left + popRect.width > window.innerWidth - 8) left = window.innerWidth - popRect.width - 8;
+  if (top + popRect.height > window.innerHeight - 8) top = r.top - popRect.height - 6;
+  pop.style.left = left + 'px';
+  pop.style.top  = top + 'px';
+  // Outside-click closes; defer the listener so the opening click doesn't fire it.
+  setTimeout(() => document.addEventListener('mousedown', bentoMenuOutside), 0);
+}
+function bentoMenuClose() {
+  const pop = document.getElementById('db-tile-pop'); if (pop) pop.remove();
+  document.removeEventListener('mousedown', bentoMenuOutside);
+}
+function bentoMenuOutside(e) {
+  if (!e.target.closest || !e.target.closest('.db-tile-pop')) bentoMenuClose();
+}
+function bentoSetTile(slot, key) {
+  if (!BENTO_CATALOGUE[key]) return;
+  const layout = bentoLoadLayout();
+  layout[BENTO_SLOTS.indexOf(slot)] = key;
+  bentoSaveLayout(layout);
+  bentoRenderSlot(slot, key);
+  bentoMenuClose();
+}
+
+// Hook into the existing dashRenderAll so bento tiles that read from
+// DASH_DATA refresh whenever the date range loads. Wrap once.
+(function wireBentoToDashRender(){
+  if (typeof dashRenderAll !== 'function' || dashRenderAll._bentoWrapped) return;
+  const orig = dashRenderAll;
+  dashRenderAll = function() {
+    orig.apply(this, arguments);
+    try { bentoRefresh('dash'); } catch (e) {}
+  };
+  dashRenderAll._bentoWrapped = true;
+})();
 
 async function dashLoad() {
   const from = $('#db-from').value, to = $('#db-to').value;

@@ -5505,6 +5505,65 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
   res.json({ success: true, data: { events: out, since: sinceMs, server_now: Date.now() } });
 });
 
+// ── Dashboard: operational snapshot (low stock + refunds queue) ────────────
+// Feeds the bento "Low stock" and "Refunds queue" tiles. Counts + small
+// preview lists in one round-trip. Cheap; polled every ~60s alongside today's
+// KPIs. Low-stock definition matches alerts.js (stock_qty 1..5, Active).
+router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => {
+  const previewLimit = Math.min(Math.max(parseInt(req.query.preview || '8', 10) || 8, 1), 50);
+  let low = { count: 0, items: [] };
+  let refunds = { count: 0, items: [] };
+
+  try {
+    const lowCount = tdb().prepare(`
+      SELECT COUNT(*) AS n FROM products
+       WHERE COALESCE(stock_qty,0) > 0 AND COALESCE(stock_qty,0) <= 5
+         AND status = 'Active' AND COALESCE(is_active,1) = 1
+    `).get().n;
+    const lowItems = tdb().prepare(`
+      SELECT id, name_en, name_cn, sku, stock_qty
+        FROM products
+       WHERE COALESCE(stock_qty,0) > 0 AND COALESCE(stock_qty,0) <= 5
+         AND status = 'Active' AND COALESCE(is_active,1) = 1
+       ORDER BY stock_qty ASC, name_en LIMIT ?
+    `).all(previewLimit);
+    low = { count: lowCount, items: lowItems };
+
+    // Refunds awaiting operator attention. refund_status states:
+    //   pending | reviewing | approved | paid | rejected | withdrawn
+    // We surface the first two — actionable queue, not history.
+    const refOpen = tdb().prepare(`
+      SELECT COUNT(*) AS n FROM retail_orders
+       WHERE refund_status IN ('pending','reviewing')
+    `).get().n;
+    const refItems = tdb().prepare(`
+      SELECT o.id, o.order_no, o.refund_amount_requested AS amount,
+             o.refund_status AS status, o.refund_requested_at,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE o.refund_status IN ('pending','reviewing')
+       ORDER BY o.refund_requested_at DESC LIMIT ?
+    `).all(previewLimit);
+    refunds = {
+      count: refOpen,
+      items: refItems.map(r => ({
+        id:           r.id,
+        order_no:     r.order_no,
+        amount:       r.amount,
+        status:       r.status,
+        requested_at: r.refund_requested_at,
+        buyer:        maskBuyerName(r.buyer),
+      })),
+    };
+  } catch (e) {
+    console.error('[dashboard/ops]', e.message);
+  }
+
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, data: { low_stock: low, refunds, server_now: Date.now() } });
+});
+
 // Admin CRUD for vouchers.
 router.get('/api/retail-admin/vouchers', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
