@@ -145,6 +145,8 @@ async function _callAnthropic({ system, tools, messages, max_tokens, key }) {
   const data = await r.json();
   return {
     content_blocks: data.content || [],
+    // 'max_tokens' here means the model's reply was cut off mid-output.
+    truncated: data.stop_reason === 'max_tokens',
     usage: {
       input_tokens:               data.usage?.input_tokens                || 0,
       output_tokens:              data.usage?.output_tokens               || 0,
@@ -274,6 +276,8 @@ async function _callDeepSeek({ system, tools, messages, max_tokens, key }) {
 
   return {
     content_blocks: blocks,
+    // OpenAI-shape APIs report a cut-off reply as finish_reason 'length'.
+    truncated: choice?.finish_reason === 'length',
     usage: {
       input_tokens:  data.usage?.prompt_tokens     || 0,
       output_tokens: data.usage?.completion_tokens || 0,
@@ -605,7 +609,10 @@ router.post('/api/ai/compose-blocks', requireAuth, requirePermission('retail', '
     const userMsg = parts.join('\n\n') + '\n\nCall emit_blocks now with the organised blocks.';
 
     const result = await callLLM({
-      max_tokens: 2400,
+      // Long bilingual products (full EN + CN copy) easily exceed a few
+      // thousand output tokens once expanded into paired blocks. Too low a cap
+      // truncates the emit_blocks tool call mid-JSON, leaving nothing parseable.
+      max_tokens: 8000,
       system: { static: COMPOSE_SYSTEM, dynamic: composeLangDirective(hasEn, hasCn, translate) },
       tools: [COMPOSE_TOOL],
       messages: [{ role: 'user', content: userMsg }],
@@ -626,6 +633,28 @@ router.post('/api/ai/compose-blocks', requireAuth, requirePermission('retail', '
     // Repair the common "all-English blocks, then all-Chinese blocks" output
     // into properly paired bilingual blocks.
     if (hasEn && hasCn) blocks = mergeStackedBilingual(blocks);
+
+    // The reply was cut off mid-output — the tool call is partial, so any blocks
+    // we did parse are unreliable. Surface this as its own error instead of the
+    // misleading "no sections built", which reads as "the model emitted nothing"
+    // and isn't retryable in the operator's mind.
+    if (result.truncated) {
+      console.warn('[compose-blocks] truncated reply (max_tokens hit)', {
+        product: product.id || null, raw_count: rawBlocks.length, kept: blocks.length, usage: result.usage,
+      });
+      logActivity(req.user.id, req.user.username, 'ai_compose_blocks', 'product', product.id || null,
+        { count: blocks.length, truncated: true, translate, tokens: result.usage, provider: _provider }, req.ip);
+      return res.status(502).json({
+        error: 'The description was too long to build in one pass — shorten it a little, or design the page in the Product Page Editor · 描述过长,无法一次生成,请精简后重试或在商品页编辑器中设计',
+      });
+    }
+    if (!blocks.length) {
+      console.warn('[compose-blocks] no usable blocks parsed', {
+        product: product.id || null, raw_count: rawBlocks.length,
+        had_tool_use: !!toolUse,
+        text_preview: (result.content_blocks || []).filter(b => b.type === 'text').map(b => (b.text || '').slice(0, 200)).join(' | ').slice(0, 400),
+      });
+    }
     logActivity(req.user.id, req.user.username, 'ai_compose_blocks', 'product', product.id || null,
       { count: blocks.length, translate, tokens: result.usage, provider: _provider }, req.ip);
     res.json({ success: true, blocks, usage: result.usage, provider: _provider });
