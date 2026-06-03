@@ -337,6 +337,13 @@
   .pe-modal-head { display: flex; align-items: center; justify-content: space-between; }
   .pe-modal-title { font-size: 15px; font-weight: 600; color: var(--text-1); }
   .pe-modal-x { padding: 4px 9px; }
+  /* Full template preview lightbox — head + foot stay put, the phone scrolls. */
+  .pe-tplprev-modal { width: auto; max-width: 460px; max-height: 90vh; gap: var(--s3); }
+  .pe-tplprev-body { flex: 1; min-height: 0; overflow: auto; display: flex; justify-content: center; padding: 4px; }
+  .pe-tplprev-frame { margin: 0 auto; flex: none; }
+  /* Grow the device to the full page length instead of the fixed 812 viewport. */
+  .pe-tplprev-screen { height: auto !important; overflow: visible !important; }
+  .pe-tplprev-foot { display: flex; justify-content: flex-end; gap: var(--s3); flex: none; }
   .pe-modal-hint { font-size: 12px; color: var(--text-2); line-height: 1.6; }
   .pe-smart-fields { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); margin: var(--s3) 0; }
   @media (max-width: 560px) { .pe-smart-fields { grid-template-columns: 1fr; } }
@@ -720,6 +727,15 @@
   }
   .pa-preset-thumb.pa-tpl-editorial_light::after { background: linear-gradient(to bottom, rgba(242,231,223,0), #F2E7DF); }
   .pa-preset-thumb.pa-tpl-quiet_minimal::after   { background: linear-gradient(to bottom, rgba(250,248,243,0), #FAF8F3); }
+  /* "Opens a full preview" cue — a magnify badge that fades in on hover. */
+  .pa-preset-thumb::before {
+    content: '⤢'; position: absolute; top: 8px; right: 8px; z-index: 2;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(26, 26, 23, 0.55); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; opacity: 0; transition: opacity var(--t-fast);
+  }
+  .pa-preset-card:hover .pa-preset-thumb::before { opacity: 1; }
 
   /* Block rows — match the Mini App Editor's .palette-item exactly */
   .pa-block-row {
@@ -1430,6 +1446,25 @@
           <button class="btn" type="button" onclick="peSmartBack()">← Back · 返回</button>
           <button class="btn btn-primary" type="button" id="pe-smart-apply" onclick="peSmartApply()">Add sections · 添加板块</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Click-to-open full template preview — the whole page in the template's skin -->
+  <div id="pe-tplprev-overlay" class="pe-modal-overlay" hidden onmousedown="if(event.target===this)paCloseTemplatePreview()">
+    <div class="pe-modal pe-tplprev-modal" role="dialog" aria-modal="true">
+      <div class="pe-modal-head">
+        <span class="pe-modal-title" id="pe-tplprev-title" data-no-i18n></span>
+        <button class="btn btn-ghost pe-modal-x" type="button" onclick="paCloseTemplatePreview()" aria-label="Close" data-no-i18n>✕</button>
+      </div>
+      <div class="pe-tplprev-body">
+        <div class="pa-prev-frame pe-tplprev-frame">
+          <div class="pa-prev-screen pe-tplprev-screen" id="pe-tplprev-screen"></div>
+        </div>
+      </div>
+      <div class="pe-tplprev-foot">
+        <button class="btn" type="button" onclick="paCloseTemplatePreview()" data-no-i18n><span data-lang-block="en">Close</span><span data-lang-block="cn">关闭</span></button>
+        <button class="btn btn-primary" type="button" id="pe-tplprev-use" data-no-i18n onclick="paUseTemplateFromPreview()"></button>
       </div>
     </div>
   </div>
@@ -2475,25 +2510,86 @@ const PA_THUMB_SAMPLE = [
     { name_en: 'Nothing else', name_cn: '别无他物', pct: '', lead: false },
   ] },
 ];
-// Build a true scaled-down render of the real product page in template `id`'s
-// skin. Reuses the live preview's per-block renderer + the .pa-prev-screen markup
-// and pa-tpl-<id> skin class, so the card shows exactly the look the template
-// applies. JS (paFitThumbs) scales the fixed 390px render to the card width.
-function paThumbHtml(id) {
+// Full sample stack for the click-to-open preview — covers every block the
+// templates seed, with representative copy, so the modal shows the COMPLETE page
+// in that template's skin (not just the top few blocks the thumbnail reveals).
+const PA_PREVIEW_SAMPLE = [
+  ...PA_THUMB_SAMPLE,   // spec · hero_intro · why · ingredients_chips
+  { type: 'how_to_use', tiles: [
+    { icon: '🥣', label_en: 'Stir through',  label_cn: '拌入',   sub_en: 'noodles & grain bowls', sub_cn: '面与谷物碗' },
+    { icon: '🍞', label_en: 'Spread',        label_cn: '涂抹',   sub_en: 'warm toast',           sub_cn: '热吐司'     },
+    { icon: '🥗', label_en: 'Whisk dressing',label_cn: '调成酱汁', sub_en: 'lemon + water',        sub_cn: '柠檬 + 水'  },
+    { icon: '🍯', label_en: 'Drizzle',       label_cn: '淋上',   sub_en: 'over fruit',           sub_cn: '水果上'     },
+    { icon: '🥄', label_en: 'Bake',          label_cn: '烘焙',   sub_en: 'cookies & cakes',      sub_cn: '饼干与蛋糕' },
+    { icon: '☕', label_en: 'Blend',         label_cn: '搅打',   sub_en: 'into smoothies',       sub_cn: '加入冰沙'   },
+  ] },
+  { type: 'storage_box',
+    left:  { icon: '🌡', head_en: 'Unopened',      head_cn: '未开封', num_en: 'Cool & dry',  num_cn: '阴凉干燥', unit_en: 'Away from heat & light',         unit_cn: '远离高温和光照',     alt: false },
+    right: { icon: '❄', head_en: 'After opening', head_cn: '开封后', num_en: 'Refrigerate', num_cn: '冷藏',     unit_en: 'Seal tightly, use in 3 months', unit_cn: '密封冷藏,三个月内食用', alt: true  },
+    note_en: 'Natural oil separation is normal — stir before each use.',
+    note_cn: '天然油脂分离属正常现象,每次使用前请搅拌。' },
+  { type: 'allergen_card', contains_en: 'Sesame', contains_cn: '芝麻', may_contain_en: 'Tree nuts, peanuts', may_contain_cn: '树坚果、花生' },
+  { type: 'notes_callout', text_en: 'Made in small batches. Cold-stored, never heat-treated.', text_cn: '小批量制作,全程冷藏,绝不高温处理。' },
+];
+// Build the .pa-prev-screen inner markup for a sample stack — shared by the card
+// thumbnail and the full preview. Reuses the live preview's per-block renderer so
+// the look always matches what the template applies.
+function _paSampleScreen(sample, withColophon) {
   const prev = _paPreviewLang;
   _paPreviewLang = _paPreviewLang || (typeof cuLang === 'function' ? cuLang() : 'en');
   const PL = _paPreviewLang;
-  const blocks = PA_THUMB_SAMPLE.map(b => _paPreviewBlockHtml(b)).filter(Boolean).join('');
+  const blocks = (sample || []).map(b => _paPreviewBlockHtml(b)).filter(Boolean).join('');
   _paPreviewLang = prev;
-  const name = PL === 'cn' ? '芝麻酱' : 'Sesame Tahini';
-  const sub  = PL === 'cn' ? 'Sesame Tahini · 石磨' : '芝麻酱 · stone-ground';
-  return `<div class="pa-thumb-scale"><div class="pa-prev-screen pa-thumb-screen pa-tpl-${id}">
+  const name    = PL === 'cn' ? '芝麻酱' : 'Sesame Tahini';
+  const sub     = PL === 'cn' ? 'Sesame Tahini · 石磨' : '芝麻酱 · stone-ground';
+  const tagline = PL === 'cn' ? '一罐,一种原料' : 'One jar, one ingredient';
+  const colophon = withColophon ? `
+    <div class="pa-prev-colophon">
+      <img class="pa-prev-colophon-img" src="/assets/brand/ip-soilsoul.jpg" alt="" onerror="this.style.display='none'">
+      <div class="pa-prev-colophon-tagline">${PL === 'cn' ? '从土壤到灵魂' : 'From Soil to Soul'}</div>
+      <div class="pa-prev-colophon-meta"><span class="pa-prev-colophon-rule"></span><span>Roots · ESTD 2017</span><span class="pa-prev-colophon-rule"></span></div>
+    </div>` : '';
+  return `
     <div class="pa-prev-hero">🛍</div>
     <div class="pa-prev-body">
-      <div class="pa-prev-head"><div class="pa-prev-name">${name}</div><div class="pa-prev-subtitle">${sub}</div></div>
+      <div class="pa-prev-head"><div class="pa-prev-name">${name}</div><div class="pa-prev-subtitle">${sub}</div><div class="pa-prev-tagline">${tagline}</div></div>
       ${blocks}
-    </div>
-  </div></div>`;
+      ${colophon}
+    </div>`;
+}
+// Card thumbnail: a true scaled-down render of the page top in the template's
+// skin. JS (paFitThumbs) scales the fixed 390px render to the card width.
+function paThumbHtml(id) {
+  return `<div class="pa-thumb-scale"><div class="pa-prev-screen pa-thumb-screen pa-tpl-${id}">${_paSampleScreen(PA_THUMB_SAMPLE, false)}</div></div>`;
+}
+// Click-to-open full preview: render the COMPLETE sample page in `id`'s skin into
+// the lightbox so an operator can see the whole template before applying it.
+function paOpenTemplatePreview(id) {
+  const tpl = PA_TEMPLATES.find(p => p.id === id); if (!tpl) return;
+  const overlay = document.getElementById('pe-tplprev-overlay'); if (!overlay) return;
+  const screen  = document.getElementById('pe-tplprev-screen');
+  [...screen.classList].forEach(c => { if (c.indexOf('pa-tpl-') === 0) screen.classList.remove(c); });
+  screen.classList.add('pa-tpl-' + id.replace(/[^a-z0-9_-]/gi, ''));
+  screen.innerHTML = _paSampleScreen(PA_PREVIEW_SAMPLE, true);
+  document.getElementById('pe-tplprev-title').innerHTML =
+    `<span data-lang-block="en">${escapeHtml(tpl.label_en)}</span><span data-lang-block="cn">${escapeHtml(tpl.label_cn)}</span>`;
+  const useBtn = document.getElementById('pe-tplprev-use');
+  const isCur  = id === window._paTemplate && (window._paBlocks || []).length;
+  useBtn.dataset.tpl = id;
+  useBtn.disabled = !!isCur;
+  useBtn.innerHTML = isCur
+    ? `<span data-lang-block="en">✓ Current template</span><span data-lang-block="cn">✓ 当前模板</span>`
+    : `<span data-lang-block="en">Use this template</span><span data-lang-block="cn">套用此模板</span>`;
+  overlay.hidden = false;
+  overlay.querySelector('.pe-tplprev-body').scrollTop = 0;
+}
+function paCloseTemplatePreview() {
+  const o = document.getElementById('pe-tplprev-overlay'); if (o) o.hidden = true;
+}
+function paUseTemplateFromPreview() {
+  const id = document.getElementById('pe-tplprev-use').dataset.tpl; if (!id) return;
+  paCloseTemplatePreview();
+  paApplyTemplate(id);   // carries its own "replace existing blocks?" confirm
 }
 // Scale each mini-render (fixed 390px wide) to its card's actual width.
 function paFitThumbs(root) {
@@ -2516,7 +2612,7 @@ function paRenderPresets() {
       ? paBiTitle('✓ Current', '✓ 当前')
       : paBiTitle(n + ' blocks', n + ' 个板块');
     return `
-    <button type="button" class="pa-preset-card${active ? ' active' : ''}" onclick="paApplyTemplate('${p.id}')" title="${escapeHtml(p.desc_en + ' · ' + p.desc_cn)}">
+    <button type="button" class="pa-preset-card${active ? ' active' : ''}" onclick="paOpenTemplatePreview('${p.id}')" title="${escapeHtml(p.desc_en + ' · ' + p.desc_cn)}">
       <div class="pa-preset-thumb pa-tpl-${p.id}">${paThumbHtml(p.id)}</div>
       <div class="pa-preset-meta">
         <span class="pa-preset-card-label" data-no-i18n>${paBiTitle(escapeHtml(p.label_en), escapeHtml(p.label_cn))}</span>
@@ -3633,6 +3729,8 @@ function paRenderPreview() {
 window.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); paSaveEdit(); return; }
   if (e.key === 'Escape') {
+    const tp = document.getElementById('pe-tplprev-overlay');
+    if (tp && !tp.hidden) { e.preventDefault(); paCloseTemplatePreview(); return; }
     const ov = document.getElementById('pe-smart-overlay');
     if (ov && !ov.hidden) { e.preventDefault(); peSmartClose(); return; }
     const sw = document.getElementById('pe-switcher-panel');
