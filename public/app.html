@@ -10403,12 +10403,14 @@ async function iedToggleBlockDesign(pid, btn) {
   }
 }
 
-// Auto-seed description_blocks from the EN+CN kitchen description when the
-// operator flips the design toggle ON for a product that has no blocks yet.
+// Build description_blocks from the EN+CN kitchen description when the operator
+// flips the design toggle ON. Fresh products seed automatically; a product that
+// already has sections gets a confirm to REBUILD from the current description
+// (replacing them) — so a bad first pass can be redone right from the toggle.
 // Mirrors product-editor's peAutoFillFromKitchen (same /api/ai/compose-blocks
 // endpoint) but runs from here so the toggle alone is enough. Convenience: any
-// miss (no AI, one language only, blocks already exist) just stays quiet — the
-// flag is already saved, so the operator can still design by hand in the editor.
+// miss (no AI, one language only) just stays quiet — the flag is already saved,
+// so the operator can still design by hand in the editor.
 function _iedStripToText(html) {
   let s = String(html == null ? '' : html);
   if (!s.trim()) return '';
@@ -10484,9 +10486,17 @@ async function iedAutoComposeBlocks(pid, btn) {
   let existingNutri = p.nutrition;
   if (typeof existingNutri === 'string') { try { existingNutri = JSON.parse(existingNutri); } catch { existingNutri = null; } }
   const hasExistingNutri = !!(existingNutri && (existingNutri.basis_en || existingNutri.basis_cn || (existingNutri.rows || []).length));
-  if (hasBlocks && hasExistingNutri) {
-    toast('This product already has a designed page — open the Product Page Editor to edit it · 该商品已有设计页面,可在商品页编辑器中编辑', 'ok');
-    return;
+  // Already has a designed page: don't silently keep the old sections — the
+  // operator flipped the toggle expecting their description to (re)build the
+  // page. Offer a rebuild (replaces the existing sections + nutrition); cancel
+  // keeps the current design untouched (the flag stays on either way).
+  const _T = (en, cn) => (window.cuT ? window.cuT(en, cn) : en);
+  let rebuild = false;
+  if (hasBlocks) {
+    rebuild = confirm(_T(
+      'This product already has ' + blocks.length + ' designed section(s).\n\nRebuild them from the current description? This replaces the existing sections.',
+      '该商品已有 ' + blocks.length + ' 个板块。\n\n要根据当前描述重新生成吗?这将替换现有板块。'));
+    if (!rebuild) return;
   }
   const textEn = _iedStripToText(p.description_en);
   const textCn = _iedStripToText(p.description_cn);
@@ -10529,7 +10539,7 @@ async function iedAutoComposeBlocks(pid, btn) {
     // product that already has sections must NOT overwrite the operator's work;
     // in that case we only backfill the missing nutrition panel below.
     let savedSections = 0;
-    if (composed.length && !hasBlocks) {
+    if (composed.length && (!hasBlocks || rebuild)) {
       await iedSaveField(pid, 'description_blocks', composed);
       p.description_blocks = composed;   // keep the cache in sync
       savedSections = composed.length;
@@ -10537,7 +10547,7 @@ async function iedAutoComposeBlocks(pid, btn) {
     // Only seed nutrition when the product has none yet — never clobber an
     // existing nutrition panel the operator already filled in by hand.
     let savedNutrition = false;
-    if (nutriBlock && !hasExistingNutri) {
+    if (nutriBlock && (!hasExistingNutri || rebuild)) {
       const nutrition = {
         basis_en: nutriBlock.basis_en || '',
         basis_cn: nutriBlock.basis_cn || '',
