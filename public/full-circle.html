@@ -155,6 +155,16 @@ p{margin:0;}
 .blob.b4{background:radial-gradient(circle at 50% 45%,#7BA07F,transparent 62%);transform:rotate(120deg) scale(1.02);opacity:.38;}
 @keyframes blob-spin{to{transform:rotate(360deg);}}
 
+/* ===== animated mesh-gradient shader (vanilla WebGL port of
+   @paper-design/shaders MeshGradient) — recolored to brand tokens.
+   Sits behind the hero; a charcoal veil keeps the headline readable. ===== */
+.mesh{position:absolute;inset:0;width:100%;height:100%;z-index:0;display:block;pointer-events:none;}
+.mesh-veil{position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:
+    linear-gradient(90deg,rgba(18,22,26,.86) 0%,rgba(18,22,26,.58) 44%,rgba(18,22,26,.18) 100%),
+    linear-gradient(180deg,rgba(18,22,26,.30) 0%,rgba(18,22,26,0) 30%,rgba(18,22,26,.42) 100%);}
+@media (max-width:980px){.mesh-veil{background:linear-gradient(180deg,rgba(18,22,26,.55),rgba(18,22,26,.40) 45%,rgba(18,22,26,.62));}}
+
 /* Burb-style highlighted headline word — tea swatch that wipes in */
 .hl{position:relative;white-space:nowrap;color:#fff;}
 .hl::before{
@@ -526,14 +536,8 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
 
 <!-- ======================= HERO ======================= -->
 <section class="hero on-ink">
-  <div class="blobs" aria-hidden="true">
-    <div class="blobs__spin">
-      <span class="blob b1"></span>
-      <span class="blob b2"></span>
-      <span class="blob b3"></span>
-      <span class="blob b4"></span>
-    </div>
-  </div>
+  <canvas class="mesh" id="meshGl" aria-hidden="true"></canvas>
+  <div class="mesh-veil" aria-hidden="true"></div>
   <div class="wrap hero__grid">
     <div class="hero__copy">
       <span class="kicker anim d1" data-en="Done-for-you WeChat mini-apps" data-zh="微信小程序 · 全程托管">Done-for-you WeChat mini-apps</span>
@@ -1135,6 +1139,120 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
     ok.classList.add('show');
     window.location.href = 'mailto:hello@fullcircle.example?subject=' + subject + '&body=' + body;
   });
+})();
+</script>
+
+<!-- ===== animated mesh-gradient shader (self-contained, no deps) ===== -->
+<script>
+(function(){
+  "use strict";
+  var canvas = document.getElementById('meshGl');
+  if(!canvas) return;
+  var gl = canvas.getContext('webgl', {antialias:false, alpha:false, premultipliedAlpha:false})
+        || canvas.getContext('experimental-webgl');
+  if(!gl){ canvas.style.display='none'; return; }  /* graceful: hero stays Ink Charcoal */
+
+  /* --- tunables (mirror the React component's props) --- */
+  var DISTORTION = 1.1, SWIRL = 0.7, SPEED = 0.5, OFFSET_X = 0.08;
+  /* brand palette: ink -> deep tea -> tea -> brass (kept dark on the left for contrast) */
+  var COLORS = ['#0E1216','#1A2B22','#3E5A42','#6B8E6F','#7BA07F','#B08D4A'];
+  function rgb(hex){ var n=parseInt(hex.slice(1),16); return [((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]; }
+  var C = COLORS.map(rgb);
+
+  var VERT = 'attribute vec2 a_pos;varying vec2 v_uv;void main(){v_uv=a_pos*0.5+0.5;gl_Position=vec4(a_pos,0.0,1.0);}';
+  var FRAG = [
+    'precision highp float;',
+    'varying vec2 v_uv;',
+    'uniform float u_time;uniform vec2 u_res;',
+    'uniform float u_distortion;uniform float u_swirl;uniform float u_offsetX;',
+    'uniform vec3 u_c0;uniform vec3 u_c1;uniform vec3 u_c2;uniform vec3 u_c3;uniform vec3 u_c4;uniform vec3 u_c5;',
+    'float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}',
+    'float noise(vec2 p){vec2 i=floor(p);vec2 f=fract(p);vec2 u=f*f*(3.0-2.0*f);',
+    ' return mix(mix(hash(i),hash(i+vec2(1.0,0.0)),u.x),mix(hash(i+vec2(0.0,1.0)),hash(i+vec2(1.0,1.0)),u.x),u.y);}',
+    'float fbm(vec2 p){float v=0.0;float a=0.5;for(int k=0;k<5;k++){v+=a*noise(p);p=p*2.0;a*=0.5;}return v;}',
+    'vec3 ramp(float x){x=clamp(x,0.0,1.0);vec3 c=u_c0;',
+    ' c=mix(c,u_c1,smoothstep(0.0,0.2,x));c=mix(c,u_c2,smoothstep(0.2,0.4,x));',
+    ' c=mix(c,u_c3,smoothstep(0.4,0.6,x));c=mix(c,u_c4,smoothstep(0.6,0.8,x));',
+    ' c=mix(c,u_c5,smoothstep(0.8,1.0,x));return c;}',
+    'void main(){',
+    ' float aspect=u_res.x/u_res.y;',
+    ' vec2 p=v_uv;p.x*=aspect;p.x+=u_offsetX;',
+    ' vec2 ctr=vec2(0.5*aspect,0.5);vec2 d=p-ctr;float r=length(d);',
+    ' float ang=u_swirl*(1.2-r)*2.0+u_time*0.25;float s=sin(ang);float co=cos(ang);',
+    ' p=ctr+mat2(co,-s,s,co)*d;',
+    ' float w1=fbm(p*1.6+vec2(u_time*0.10,u_time*0.06));',
+    ' float w2=fbm(p*1.4-vec2(u_time*0.08,u_time*0.05));',
+    ' p+=u_distortion*0.35*vec2(w1,w2);',
+    ' float f=fbm(p*1.7+w1*0.8);',
+    ' vec3 col=ramp(f);',
+    ' col=mix(col,u_c0,smoothstep(0.55,1.05,r));',
+    ' gl_FragColor=vec4(col,1.0);',
+    '}'
+  ].join('\n');
+
+  function compile(type, src){
+    var sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
+    if(!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) return null;
+    return sh;
+  }
+  var vs = compile(gl.VERTEX_SHADER, VERT), fs = compile(gl.FRAGMENT_SHADER, FRAG);
+  if(!vs || !fs){ canvas.style.display='none'; return; }
+  var prog = gl.createProgram();
+  gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){ canvas.style.display='none'; return; }
+  gl.useProgram(prog);
+
+  var buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  var aPos = gl.getAttribLocation(prog, 'a_pos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  var U = {
+    time: gl.getUniformLocation(prog,'u_time'),
+    res: gl.getUniformLocation(prog,'u_res'),
+    distortion: gl.getUniformLocation(prog,'u_distortion'),
+    swirl: gl.getUniformLocation(prog,'u_swirl'),
+    offsetX: gl.getUniformLocation(prog,'u_offsetX')
+  };
+  gl.uniform1f(U.distortion, DISTORTION);
+  gl.uniform1f(U.swirl, SWIRL);
+  gl.uniform1f(U.offsetX, OFFSET_X);
+  ['u_c0','u_c1','u_c2','u_c3','u_c4','u_c5'].forEach(function(name,i){
+    gl.uniform3fv(gl.getUniformLocation(prog,name), C[i]);
+  });
+
+  var SCALE = 0.62, W = 0, H = 0;
+  function resize(){
+    var dpr = Math.min(window.devicePixelRatio || 1, 1.5) * SCALE;
+    var w = Math.max(2, Math.round(canvas.clientWidth * dpr));
+    var h = Math.max(2, Math.round(canvas.clientHeight * dpr));
+    if(w === W && h === H) return;
+    W = w; H = h; canvas.width = w; canvas.height = h;
+    gl.viewport(0, 0, w, h);
+    gl.uniform2f(U.res, w, h);
+  }
+  window.addEventListener('resize', resize, {passive:true});
+  resize();
+
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var visible = true;
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(es){ visible = es[0].isIntersecting; if(visible && !reduce) requestAnimationFrame(frame); },
+      {threshold:0}).observe(canvas);
+  }
+
+  var t0 = performance.now(), raf = 0;
+  function frame(now){
+    raf = 0;
+    resize();
+    gl.uniform1f(U.time, ((now - t0) / 1000) * SPEED);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    if(visible && !reduce) raf = requestAnimationFrame(frame);
+  }
+  if(reduce){ frame(t0); }          /* one static frame, no animation */
+  else { raf = requestAnimationFrame(frame); }
 })();
 </script>
 </body>
