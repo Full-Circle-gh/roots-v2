@@ -874,12 +874,13 @@
   .pa-edit-grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s3); }
   @media (max-width: 620px) { .pa-edit-grid-2 { grid-template-columns: 1fr; } }
   .pa-edit-grid-2 .field { margin-bottom: 0; min-width: 0; }
-  /* spec_strip cells: stack Label over Value so each EN/中 input gets the full
-     panel width (side-by-side cropped the text). */
-  .pa-spec-cell-grid { display: grid; grid-template-columns: 1fr; gap: var(--s3); }
-  .pa-spec-cell-grid .field { margin-bottom: 0; min-width: 0; }
-  .pa-spec-cell-grid .field input,
-  .pa-spec-cell-grid .field textarea { width: 100%; }
+  /* Stack EN/中 paired fields one-per-row so each input gets the full panel
+     width — used where two paPairs would otherwise sit side-by-side and crop
+     their text (spec_strip cells, how-to tiles, storage-box cards). */
+  .pa-pairs-stack { display: grid; grid-template-columns: 1fr; gap: var(--s3); }
+  .pa-pairs-stack .field { margin-bottom: 0; min-width: 0; }
+  .pa-pairs-stack .field input,
+  .pa-pairs-stack .field textarea { width: 100%; }
   /* Per-block colour picker (bg / fg / accent) — stacked rows like the Mini
      App Editor, each a swatch dropdown so operators SEE the colour. */
   .pa-color-grid { display: grid; grid-template-columns: 1fr; gap: var(--s4); }
@@ -3022,7 +3023,7 @@ function _paBlockEditorBody(b) {
             <span class="pa-edit-section-title">Cell · 第 ${i + 1} 格</span>
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','cells',${i})" ${cells.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
-          <div class="pa-spec-cell-grid">
+          <div class="pa-pairs-stack">
             ${paPair({ label: paBiTitle('Label', '标签'), keyEn: 'k_en', keyCn: 'k_cn', valEn: c.k_en, valCn: c.k_cn, phEn: 'Type', phCn: '类型', attrs: `data-cellidx="${i}"` })}
             ${paPair({ label: paBiTitle('Value', '值'), keyEn: 'v_en', keyCn: 'v_cn', valEn: c.v_en, valCn: c.v_cn, phEn: 'Refrigerated dip', phCn: '冷藏蘸酱', attrs: `data-cellidx="${i}"` })}
           </div>
@@ -3095,7 +3096,7 @@ function _paBlockEditorBody(b) {
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','tiles',${i})" ${tiles.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
           <div class="field" style="max-width:180px;margin-bottom:10px"><label class="stacked">Icon · 图标</label><div class="pe-emoji-field"><input data-rowidx="${i}" data-bkey="icon" type="text" value="${escapeAttr(tl.icon || '')}" placeholder="🥖" style="text-align:center;font-size:18px"><button type="button" class="pe-emoji-btn" title="Pick emoji · 选择表情" onclick="peEmojiOpen(this)">😀</button></div></div>
-          <div class="pa-edit-grid-2">
+          <div class="pa-pairs-stack">
             ${paPair({ label: paBiTitle('Label', '标签'), keyEn: 'label_en', keyCn: 'label_cn', valEn: tl.label_en, valCn: tl.label_cn, phEn: 'Toast', phCn: '吐司', attrs: `data-rowidx="${i}"` })}
             ${paPair({ label: paBiTitle('Sub (optional)', '副标(可选)'), keyEn: 'sub_en', keyCn: 'sub_cn', valEn: tl.sub_en, valCn: tl.sub_cn, phEn: 'over eggs', phCn: '盖在鸡蛋上', attrs: `data-rowidx="${i}"` })}
           </div>
@@ -3108,7 +3109,7 @@ function _paBlockEditorBody(b) {
     const card = (which, c) => `
       <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
         <div class="pa-edit-section-title" style="margin-bottom:8px">${which === 'left' ? 'Left card · 左卡' : 'Right card · 右卡'}</div>
-        <div class="pa-edit-grid-2">
+        <div class="pa-pairs-stack">
           ${paPair({ label: paBiTitle('Head', '标题'), keyEn: 'head_en', keyCn: 'head_cn', valEn: c.head_en, valCn: c.head_cn, phEn: 'Unopened', phCn: '未开封', attrs: `data-sub="${which}"` })}
           ${paPair({ label: paBiTitle('Big word', '大字'), keyEn: 'num_en', keyCn: 'num_cn', valEn: c.num_en || c.num, valCn: c.num_cn, phEn: 'Cool & dry', phCn: '阴凉干燥', attrs: `data-sub="${which}"` })}
           ${paPair({ label: paBiTitle('Unit', '单位'), keyEn: 'unit_en', keyCn: 'unit_cn', valEn: c.unit_en, valCn: c.unit_cn, phEn: 'Store away from heat', phCn: '远离高温和潮湿', attrs: `data-sub="${which}"` })}
