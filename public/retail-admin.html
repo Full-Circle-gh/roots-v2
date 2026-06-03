@@ -570,6 +570,49 @@
   .db-delta.down { color: var(--brass); }
   .db-delta.flat { color: var(--text-3); }
 
+  /* Right-now hero — sits above the historical KPI strip. Live presence on the
+     left, today's mini-KPIs in the middle, activity feed on the right. Polls
+     /dashboard/presence (15s) and /dashboard/activity (20s) while the
+     dashboard tab is visible. Phase 3 will reshape this into the full bento. */
+  .db-hero { padding: 14px 18px; margin-bottom: 14px; }
+  .db-hero-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .db-hero-head h3 { margin: 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); font-weight: 700; }
+  .db-hero-sync { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .db-hero-grid { display: grid; grid-template-columns: 200px 1fr 1.3fr; gap: 14px; align-items: stretch; }
+  @media (max-width: 960px) { .db-hero-grid { grid-template-columns: 1fr; } }
+  .db-hero-pane { background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; min-width: 0; }
+  .db-hero-h { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); font-weight: 700; margin-bottom: 8px; font-family: var(--f-mono); }
+  /* Live count — pulsing dot when there are viewers, grey when zero. */
+  .db-live { justify-content: center; gap: 4px; }
+  .db-live-row { display: flex; align-items: center; gap: 10px; }
+  .db-live-dot { width: 10px; height: 10px; border-radius: 50%; background: #3aa55a; box-shadow: 0 0 0 4px rgba(58, 165, 90, .18); animation: db-pulse 2.4s ease-in-out infinite; flex: none; }
+  .db-live-dot.zero { background: #a9a9a4; box-shadow: none; animation: none; }
+  @keyframes db-pulse { 0%,100% { box-shadow: 0 0 0 4px rgba(58, 165, 90, .18); } 50% { box-shadow: 0 0 0 10px rgba(58, 165, 90, 0); } }
+  .db-live-num { font-size: 38px; line-height: 1; font-weight: 600; letter-spacing: -.02em; color: var(--text-1); font-variant-numeric: tabular-nums; }
+  .db-live-lbl { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+  .db-live-sub { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; margin-top: 4px; }
+  /* Today mini-KPI strip — three small cells. */
+  .db-today-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex: 1; }
+  .db-today-cell { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+  .db-today-cell .val { font-size: 18px; font-weight: 600; letter-spacing: -.01em; color: var(--text-1); font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .db-today-cell .lbl { font-size: 10px; color: var(--text-3); margin-top: 3px; letter-spacing: .04em; text-transform: uppercase; font-family: var(--f-mono); }
+  /* Activity feed — scrollable list inside the pane, rows hover-highlight + click → drawer. */
+  .db-feed-list { display: flex; flex-direction: column; gap: 2px; max-height: 200px; overflow-y: auto; padding-right: 4px; margin-right: -4px; }
+  .db-feed-list::-webkit-scrollbar { width: 6px; }
+  .db-feed-list::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+  .db-feed-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 12px; line-height: 1.4; border: 1px solid transparent; }
+  .db-feed-row:hover { background: var(--bg-elev-1, rgba(0,0,0,.04)); border-color: var(--line-soft); }
+  .db-feed-ts { color: var(--text-3); font-variant-numeric: tabular-nums; flex: none; min-width: 38px; font-size: 11px; }
+  .db-feed-icon { flex: none; font-size: 13px; width: 16px; text-align: center; }
+  .db-feed-text { flex: 1; min-width: 0; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .db-feed-text b { font-weight: 600; }
+  .db-feed-empty { font-size: 12px; color: var(--text-3); padding: 12px 8px; text-align: center; }
+  /* Drawer-specific tweaks — the activity drawer reuses the global .side-drawer. */
+  #db-activity-drawer .db-dw-meta { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 13px; margin-bottom: 16px; }
+  #db-activity-drawer .db-dw-meta dt { color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-family: var(--f-mono); align-self: center; }
+  #db-activity-drawer .db-dw-meta dd { margin: 0; color: var(--text-1); }
+  #db-activity-drawer .db-dw-quote { background: var(--bg-app); border: 1px solid var(--line-soft); border-left: 3px solid var(--brass); border-radius: 6px; padding: 10px 14px; font-size: 13px; line-height: 1.55; color: var(--text-1); white-space: pre-wrap; }
+
   .db-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
   @media (max-width: 980px) { .db-grid-2 { grid-template-columns: 1fr; } }
   .db-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); margin-bottom: var(--s4); }
@@ -4079,6 +4122,41 @@
       </div>
     </div>
 
+    <!-- Right-now hero (phase 2 of 3) — live presence, today's mini-KPIs,
+         activity feed. Polled independently of the historical date-range
+         picker above, since "right now" is always now. -->
+    <section class="card db-hero" id="db-hero">
+      <div class="db-hero-head">
+        <h3>Right now · 实时</h3>
+        <span class="db-hero-sync" id="db-hero-sync">syncing… · 同步中…</span>
+      </div>
+      <div class="db-hero-grid">
+        <div class="db-hero-pane db-live">
+          <div class="db-hero-h">Live · 实时</div>
+          <div class="db-live-row">
+            <span class="db-live-dot zero" id="db-live-dot"></span>
+            <span class="db-live-num" id="db-live-num">—</span>
+          </div>
+          <div class="db-live-lbl">Viewing products · 浏览中</div>
+          <div class="db-live-sub" id="db-live-sub">—</div>
+        </div>
+        <div class="db-hero-pane">
+          <div class="db-hero-h">Today · 今日</div>
+          <div class="db-today-grid">
+            <div class="db-today-cell"><div class="val" id="db-today-rev">¥—</div><div class="lbl">Revenue · 营收</div></div>
+            <div class="db-today-cell"><div class="val" id="db-today-ord">—</div><div class="lbl">Orders · 订单</div></div>
+            <div class="db-today-cell"><div class="val" id="db-today-new">—</div><div class="lbl">New · 新客</div></div>
+          </div>
+        </div>
+        <div class="db-hero-pane">
+          <div class="db-hero-h">Activity · 动态</div>
+          <div class="db-feed-list" id="db-feed-list">
+            <div class="db-feed-empty">Loading… · 加载中…</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- KPI strip -->
     <div class="db-kpis" id="db-kpis"></div>
 
@@ -4157,6 +4235,22 @@
         <div id="db-cohorts"></div>
       </div>
     </div>
+
+    <!-- Activity drill-through drawer — populated by dashFeedClick.
+         Reuses the global .side-drawer chrome (CSS at top). -->
+    <aside id="db-activity-drawer" class="side-drawer" aria-hidden="true">
+      <button class="drawer-close" onclick="closeDrawer('#db-activity-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div class="drawer-head">
+        <h3 id="db-drawer-title" style="margin:0;font-size:14px">Activity · 动态</h3>
+      </div>
+      <div class="drawer-body" id="db-drawer-body"></div>
+      <div class="drawer-foot">
+        <button class="btn" onclick="closeDrawer('#db-activity-drawer')">Close · 关闭</button>
+        <button class="btn btn-primary" id="db-drawer-open" style="display:none">Open ↗</button>
+      </div>
+    </aside>
   </section>
 
   <!-- ─── INVOICES ─── -->
@@ -9788,6 +9882,238 @@ function dashInit() {
   }));
   dvApply();           // apply saved View tweaks (heatmap/number classes)
   dashSetRange('30');  // default window + initial load
+  dashHeroInit();      // right-now hero (phase 2): polling + drawer wiring
+}
+
+// ════════════════════════════════════════════════════════════════
+// RIGHT-NOW HERO (phase 2/3) — live presence, today's mini-KPIs,
+// activity feed. Pulls /api/retail-admin/dashboard/presence (15s),
+// /api/retail-admin/dashboard/activity (20s), and a single
+// /api/retail-admin/dashboard?from=today&to=today (60s for the
+// "Today" mini-row). Polling pauses while the document is hidden
+// so we don't hammer the server with a backgrounded tab.
+// ════════════════════════════════════════════════════════════════
+const DASH_HERO = { presence:null, activity:null, today:null, lastSync:0, eventsById:new Map() };
+const DASH_HERO_INTERVALS = { presence: 15000, activity: 20000, today: 60000 };
+
+function dashHeroInit() {
+  // Single bootstrap — once wired, the timers + visibility listener carry it.
+  if (DASH_HERO._wired) { dashHeroRefreshAll(); return; }
+  DASH_HERO._wired = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) dashHeroStop();
+    else dashHeroStart();
+  });
+  dashHeroStart();
+}
+function dashHeroStart() {
+  dashHeroStop();  // idempotent — clear any stale timers first
+  dashHeroRefreshAll();
+  DASH_HERO.presence = setInterval(dashHeroLoadPresence, DASH_HERO_INTERVALS.presence);
+  DASH_HERO.activity = setInterval(dashHeroLoadActivity, DASH_HERO_INTERVALS.activity);
+  DASH_HERO.today    = setInterval(dashHeroLoadToday,    DASH_HERO_INTERVALS.today);
+}
+function dashHeroStop() {
+  for (const k of ['presence', 'activity', 'today']) {
+    if (DASH_HERO[k]) { clearInterval(DASH_HERO[k]); DASH_HERO[k] = null; }
+  }
+}
+function dashHeroRefreshAll() {
+  dashHeroLoadPresence();
+  dashHeroLoadActivity();
+  dashHeroLoadToday();
+}
+function dashHeroSyncStamp() {
+  DASH_HERO.lastSync = Date.now();
+  const el = $('#db-hero-sync'); if (!el) return;
+  const d = new Date(DASH_HERO.lastSync);
+  const pad = n => String(n).padStart(2, '0');
+  el.textContent = `synced ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} · 已同步`;
+}
+
+async function dashHeroLoadPresence() {
+  try {
+    const j = await api('/api/retail-admin/dashboard/presence');
+    const d = j.data || {};
+    const num = $('#db-live-num'); const dot = $('#db-live-dot'); const sub = $('#db-live-sub');
+    if (num) num.textContent = String(d.viewing || 0);
+    if (dot) dot.classList.toggle('zero', !d.viewing);
+    if (sub) {
+      const p = d.products_with_viewers || 0;
+      sub.textContent = p
+        ? `${p} ${p === 1 ? 'product' : 'products'} · ${p} 件商品`
+        : 'No one browsing right now · 暂无浏览';
+    }
+    dashHeroSyncStamp();
+  } catch (e) { /* silent — next tick retries */ }
+}
+
+async function dashHeroLoadToday() {
+  // Trailing-zero local-day in GZ (+8). Server tolerates same-day from/to and
+  // returns hourly trend; we only need the headline KPIs.
+  const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  try {
+    const j = await api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}`);
+    const k = (j.data && j.data.kpis) || {};
+    const rev = $('#db-today-rev'); const ord = $('#db-today-ord'); const nw = $('#db-today-new');
+    if (rev) rev.textContent = '¥' + Number(k.revenue || 0).toLocaleString();
+    if (ord) ord.textContent = String(k.orders || 0);
+    if (nw)  nw.textContent  = String(k.new_customers || 0);
+  } catch (e) { /* silent */ }
+}
+
+async function dashHeroLoadActivity() {
+  try {
+    const j = await api('/api/retail-admin/dashboard/activity?limit=30');
+    const events = (j.data && j.data.events) || [];
+    dashFeedRender(events);
+  } catch (e) {
+    const list = $('#db-feed-list');
+    if (list) list.innerHTML = `<div class="db-feed-empty">Failed to load · 加载失败</div>`;
+  }
+}
+
+// Render feed rows. Cache the raw event objects keyed by a stable id so the
+// drawer-open click can grab the full payload without another fetch.
+function dashFeedRender(events) {
+  const list = $('#db-feed-list'); if (!list) return;
+  if (!events.length) {
+    list.innerHTML = `<div class="db-feed-empty">Nothing recent · 暂无动态</div>`;
+    DASH_HERO.eventsById.clear();
+    return;
+  }
+  DASH_HERO.eventsById.clear();
+  const html = events.map((e, i) => {
+    const key = `${e.type}-${e.ref_type}-${e.ref_id}-${e.ts}-${i}`;
+    DASH_HERO.eventsById.set(key, e);
+    const ts = new Date(e.ts);
+    const pad = n => String(n).padStart(2, '0');
+    const tstr = `${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
+    const meta = dashFeedMeta(e);
+    return `<div class="db-feed-row" data-key="${escapeHtml(key)}" onclick="dashFeedClick(this)">
+      <span class="db-feed-ts">${tstr}</span>
+      <span class="db-feed-icon">${meta.icon}</span>
+      <span class="db-feed-text">${meta.text}</span>
+    </div>`;
+  }).join('');
+  list.innerHTML = html;
+}
+
+// Compact one-line summary shown in the feed row, per event type.
+// Real text only — no fake demo strings (per project memory).
+function dashFeedMeta(e) {
+  const p = e.payload || {};
+  switch (e.type) {
+    case 'paid_order':
+      return { icon: '🟢', text: `<b>Paid · 已付</b> ${escapeHtml(p.order_no || '')} · ¥${Number(p.total || 0).toLocaleString()} · ${escapeHtml(p.buyer || '')}` };
+    case 'refund_request':
+      return { icon: '🟡', text: `<b>Refund · 退款</b> ${escapeHtml(p.order_no || '')}${p.amount ? ' · ¥' + Number(p.amount).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}` };
+    case 'low_stock':
+      return { icon: '🔴', text: `<b>Low · 缺货</b> ${escapeHtml(p.name_en || p.name_cn || '')} (${p.stock} left · 剩 ${p.stock})` };
+    case 'new_customer':
+      return { icon: '👤', text: `<b>New · 新客</b> ${escapeHtml(p.name || '—')}` };
+    case 'feedback':
+      return { icon: '💬', text: `<b>Feedback · 反馈</b> "${escapeHtml(p.excerpt || '')}"` };
+    default:
+      return { icon: '•', text: escapeHtml(e.type) };
+  }
+}
+
+// Drawer open — populate the body from the cached event payload, set the
+// "Open ↗" button to jump to the relevant tab. Tab-jump uses the existing
+// data-tab click handler (the global tab switcher closes any open drawer
+// as part of switching, so the drawer auto-dismisses).
+function dashFeedClick(row) {
+  const key = row.getAttribute('data-key');
+  const e = DASH_HERO.eventsById.get(key); if (!e) return;
+  const p = e.payload || {};
+  const title = $('#db-drawer-title');
+  const body  = $('#db-drawer-body');
+  const open  = $('#db-drawer-open');
+  if (!title || !body || !open) return;
+
+  const TITLES = {
+    paid_order:     'Paid order · 已付订单',
+    refund_request: 'Refund request · 退款申请',
+    low_stock:      'Low stock · 缺货预警',
+    new_customer:   'New customer · 新客户',
+    feedback:       'Customer feedback · 顾客反馈',
+  };
+  title.textContent = TITLES[e.type] || (e.type || 'Event');
+
+  const ts = new Date(e.ts);
+  const tstr = ts.toLocaleString();
+  let html = `<dl class="db-dw-meta">
+    <dt>When · 时间</dt><dd>${escapeHtml(tstr)}</dd>`;
+
+  switch (e.type) {
+    case 'paid_order':
+      html += `
+        <dt>Order · 订单</dt><dd>${escapeHtml(p.order_no || '')}</dd>
+        <dt>Amount · 金额</dt><dd>¥${Number(p.total || 0).toLocaleString()}</dd>
+        <dt>Buyer · 顾客</dt><dd>${escapeHtml(p.buyer || '—')}</dd>
+      </dl>`;
+      open.textContent = 'Open in Orders · 在订单中打开 ↗';
+      open.style.display = '';
+      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('orders'); };
+      break;
+    case 'refund_request':
+      html += `
+        <dt>Order · 订单</dt><dd>${escapeHtml(p.order_no || '')}</dd>
+        ${p.amount ? `<dt>Amount · 金额</dt><dd>¥${Number(p.amount).toLocaleString()}</dd>` : ''}
+        ${p.status ? `<dt>Status · 状态</dt><dd>${escapeHtml(p.status)}</dd>` : ''}
+        <dt>Buyer · 顾客</dt><dd>${escapeHtml(p.buyer || '—')}</dd>
+      </dl>
+      ${p.reason ? `<div class="db-dw-quote">${escapeHtml(p.reason)}</div>` : ''}`;
+      open.textContent = 'Open in Refunds · 在退款中打开 ↗';
+      open.style.display = '';
+      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('refunds') || dashJumpTab('orders'); };
+      break;
+    case 'low_stock':
+      html += `
+        <dt>Product · 产品</dt><dd>${escapeHtml(p.name_en || '')}${p.name_cn ? ' · ' + escapeHtml(p.name_cn) : ''}</dd>
+        ${p.sku ? `<dt>SKU · 货号</dt><dd>${escapeHtml(p.sku)}</dd>` : ''}
+        <dt>Stock · 库存</dt><dd>${p.stock} left · 剩 ${p.stock}</dd>
+      </dl>`;
+      open.textContent = 'Open in Products · 在产品中打开 ↗';
+      open.style.display = '';
+      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('products'); };
+      break;
+    case 'new_customer':
+      html += `
+        <dt>Name · 姓名</dt><dd>${escapeHtml(p.name || '—')}</dd>
+      </dl>`;
+      open.textContent = 'Open in Customers · 在顾客中打开 ↗';
+      open.style.display = '';
+      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('customers'); };
+      break;
+    case 'feedback':
+      html += `
+        <dt>From · 来自</dt><dd>${escapeHtml(p.name || '—')}</dd>
+      </dl>
+      <div class="db-dw-quote">${escapeHtml(p.excerpt || '')}</div>`;
+      open.textContent = 'Open in Feedback · 在反馈中打开 ↗';
+      open.style.display = '';
+      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('feedback'); };
+      break;
+    default:
+      html += `</dl>`;
+      open.style.display = 'none';
+      open.onclick = null;
+  }
+
+  body.innerHTML = html;
+  openDrawer('#db-activity-drawer');
+}
+
+// Programmatic tab-switch — clicks the tab button so the global switcher
+// runs (closes drawers, updates active classes, etc.). Returns true if the
+// tab exists, false otherwise — lets callers fall back to a sibling tab.
+function dashJumpTab(name) {
+  const btn = document.querySelector(`.tabs [data-tab="${name}"]`);
+  if (!btn) return false;
+  btn.click();
+  return true;
 }
 
 async function dashLoad() {
