@@ -10424,26 +10424,28 @@ function _iedComposeProgress() {
   document.getElementById('iedComposeOv')?.remove();
   const ov = document.createElement('div');
   ov.id = 'iedComposeOv';
+  // Single active language only (matches the rest of the backend's i18n).
+  const T = (en, cn) => (window.cuT ? window.cuT(en, cn) : en);
   ov.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(20,24,16,.55);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;animation:imgZoomIn .15s ease';
   ov.innerHTML = `
-    <div style="background:var(--card,#fff);border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.35);padding:24px 24px 22px;width:min(92vw,360px);font-family:inherit">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-        <span style="font-size:24px">🎨</span>
-        <div style="font-weight:800;font-size:15px;color:var(--dk,#1a1a17);line-height:1.25">Building your product page<br><span style="font-weight:600;font-size:12px;color:var(--muted,#8a8a82)">正在根据描述生成商品页</span></div>
+    <div style="background:var(--card-bg,#fff);border:1px solid var(--border,#e6e0d2);border-radius:var(--radius,12px);box-shadow:var(--sh-3,0 24px 60px rgba(0,0,0,.3));padding:22px 24px 20px;width:min(92vw,360px);font-family:var(--f-sans,inherit)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <div style="width:22px;height:22px;flex:none;border:3px solid var(--accent-soft,rgba(107,142,111,.22));border-top-color:var(--accent,#6B8E6F);border-radius:50%;animation:spin .8s linear infinite"></div>
+        <div style="font-weight:700;font-size:15px;color:var(--text-1,#1a2314);line-height:1.3">${T('Building your product page', '正在生成商品页')}</div>
       </div>
-      <div style="height:8px;border-radius:999px;background:#e9e9e3;overflow:hidden">
-        <div data-bar style="height:100%;width:6%;border-radius:999px;background:linear-gradient(90deg,#CCD900,#F2CA6C);transition:width .4s ease"></div>
+      <div style="height:8px;border-radius:999px;background:var(--bg-elev-1,#e9e9e3);overflow:hidden">
+        <div data-bar style="height:100%;width:6%;border-radius:999px;background:linear-gradient(90deg,var(--accent,#6B8E6F),var(--brass,#B08D4A));transition:width .4s ease"></div>
       </div>
-      <div data-msg style="margin-top:12px;font-size:12px;color:var(--muted,#8a8a82);line-height:1.4;min-height:1.4em">Reading your description… · 正在读取描述…</div>
+      <div data-msg style="margin-top:12px;font-size:12px;color:var(--text-3,#7d7a72);line-height:1.4;min-height:1.4em">${T('Reading your description…', '正在读取描述…')}</div>
     </div>`;
   document.body.appendChild(ov);
   const bar = ov.querySelector('[data-bar]');
   const msg = ov.querySelector('[data-msg]');
   const stages = [
-    'Reading your description… · 正在读取描述…',
-    'Writing the sections… · 正在编排板块…',
-    'Laying out the page… · 正在排版…',
-    'Almost done… · 即将完成…',
+    T('Reading your description…', '正在读取描述…'),
+    T('Writing the sections…', '正在编排板块…'),
+    T('Laying out the page…', '正在排版…'),
+    T('Almost done…', '即将完成…'),
   ];
   let pct = 6, si = 0;
   const tick = setInterval(() => {
@@ -10456,7 +10458,7 @@ function _iedComposeProgress() {
     done(ok, text) {
       clearInterval(tick);
       bar.style.width = '100%';
-      bar.style.background = ok ? 'linear-gradient(90deg,#7cb342,#aed581)' : 'linear-gradient(90deg,#e57373,#ef9a9a)';
+      bar.style.background = ok ? 'linear-gradient(90deg,var(--accent,#6B8E6F),var(--accent-hi,#7BA07F))' : 'linear-gradient(90deg,var(--danger,#e8556a),#ef9a9a)';
       if (text) msg.textContent = text;
       setTimeout(() => ov.remove(), ok ? 900 : 1400);
     },
@@ -10504,7 +10506,7 @@ async function iedAutoComposeBlocks(pid, btn) {
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) {
-      prog.done(false, 'Couldn\'t build · 生成失败');
+      prog.done(false, cuT('Couldn\'t build', '生成失败'));
       toast(j.error || 'Couldn\'t auto-build — open the Product Page Editor to design it · 自动生成失败,请在商品页编辑器中设计', 'error');
       return;
     }
@@ -10519,7 +10521,7 @@ async function iedAutoComposeBlocks(pid, btn) {
       .filter(b => b.type !== 'nutrition_facts')
       .map((b, i) => ({ ...b, id: b.id || ('b' + Date.now().toString(36) + i) }));
     if (!composed.length && !nutriBlock) {
-      prog.done(false, 'Couldn\'t build · 生成失败');
+      prog.done(false, cuT('Couldn\'t build', '生成失败'));
       toast('No sections built — open the Product Page Editor to design it · 未生成板块,请在商品页编辑器中设计', 'error');
       return;
     }
@@ -10554,13 +10556,13 @@ async function iedAutoComposeBlocks(pid, btn) {
     if (!parts.length) {
       // Nothing new to write: blocks already existed and either there was no
       // nutrition to add or nutrition was already present.
-      prog.done(true, 'Done · 完成');
+      prog.done(true, cuT('Done', '完成'));
       toast(nutriBlock
         ? 'Nutrition was already set — nothing to add · 营养表已存在,无需添加'
         : 'No nutrition found in the description to add · 描述中未找到可添加的营养信息', 'ok');
       return;
     }
-    prog.done(true, 'Built ' + parts.join(' + ') + ' ✓ · 已生成 ✓');
+    prog.done(true, cuT('Built ✓', '已生成 ✓'));
     toast('Built ' + parts.join(' + ') + ' — review in the Product Page Editor ✓ · 已生成,可在商品页编辑器中查看 ✓', 'ok');
   } catch (e) {
     prog.done(false, 'Couldn\'t build · 生成失败');
