@@ -1153,8 +1153,10 @@ Component({
           const pts = Number(c.points_balance) || 0;
           const showPts = b.show_points !== false && pts > 0;
           const ptsValue = (pts / 100).toFixed(2);
+          const view = b.view || 'card';
+          const isDesign = view === 'classic' || view === 'wallet' || view === 'coin';
           out.greeting = {
-            view: b.view || 'card',
+            view,
             kicker:   lang.pick(b.kicker_en, b.kicker_cn, L),
             headline,
             pointsLabel: showPts
@@ -1168,6 +1170,52 @@ Component({
             ctaTarget: b.cta_target || '',
             accent: color(b.accent_color || 'lime-leaf'),
           };
+          if (isDesign) {
+            // Welcome-back design directions: mood colour story + energy
+            // scale, all per-element-overridable. Mirrors cms.html preview.
+            const MOODS = {
+              forest: { band: '#34421C', accent: '#CCD900', kicker: '#A7AE5E', badge: '#F2CA6C' },
+              dusk:   { band: '#39301A', accent: '#F2CA6C', kicker: '#B79A5E', badge: '#FFAF60' },
+              berry:  { band: '#3A2330', accent: '#F4B8CB', kicker: '#C892A4', badge: '#E96174' },
+            };
+            const EN = ({
+              refined:  { head: 0.9,  border: 1.5, radius: 12, coin: 3, halftone: 0.06 },
+              balanced: { head: 1.0,  border: 2,   radius: 16, coin: 4, halftone: 0.12 },
+              playful:  { head: 1.14, border: 2.5, radius: 20, coin: 7, halftone: 0.20 },
+            })[b.energy] || { head: 1.0, border: 2, radius: 16, coin: 4, halftone: 0.12 };
+            const mp = MOODS[b.mood] || MOODS.forest;
+            const g = out.greeting;
+            g.firstName = firstName;
+            g.greetWord = greeting;            // greeting without the name suffix
+            // Classic shows a small CN sub-line under the big greeting; default
+            // to the tone's CN phrase so it reads bilingual even in EN.
+            g.cnLine    = b['greet_' + tone + '_cn'] || b.greet_cn || greetMap.cn[tone];
+            const ink   = color(b.ink_color) || '#1a1a17';
+            g.band     = color(b.band_color)   || mp.band;
+            g.accentC  = color(b.accent_color) || mp.accent;
+            g.kickerC  = color(b.kicker_color) || mp.kicker;
+            g.badgeC   = color(b.badge_color)  || mp.badge;
+            g.inkC     = ink;
+            g.head     = EN.head;
+            g.border   = EN.border;
+            g.radius   = EN.radius;
+            g.coinShadow = `0 ${EN.coin}px 0 ${ink}`;
+            g.halftone = EN.halftone;
+            const walletV = (Number(c.balance) || 0).toFixed(2);
+            g.walletLabel = (L === 'cn' ? '钱包' : 'WALLET');
+            g.walletValue = '¥' + walletV;
+            g.ptsUnit  = (L === 'cn' ? '积分' : 'pts');
+            g.ptsCny   = showPts ? ('¥' + ptsValue) : '';
+            g.ptsUnitCny = showPts ? (g.ptsUnit + ' · ¥' + ptsValue) : '';
+            g.corner   = b.corner_radius || 'sharp';
+            g.enter    = b.entrance_anim || 'none';
+            // Pre-built inline style: band background + ink text + the --gr-*
+            // custom properties the design CSS reads. Keeps the WXML clean.
+            g.bandStyle = `background:${g.band};color:${ink};`
+              + `--gr-accent:${g.accentC};--gr-kicker:${g.kickerC};--gr-badge:${g.badgeC};--gr-ink:${ink};`
+              + `--gr-head:${g.head};--gr-border:${g.border}px;--gr-radius:${g.radius}px;`
+              + `--gr-coin:${g.coinShadow};--gr-halftone:${g.halftone};`;
+          }
           break;
         }
         case 'kitchen_status': {

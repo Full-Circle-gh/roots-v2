@@ -2409,6 +2409,80 @@
   text-align: center;
 }
 
+/* ═══ Welcome-back design directions (classic / wallet / coin) ════════════
+   Full-bleed mood band + time-based greeting + points/wallet. Every colour
+   rides on a --gr-* var the renderer sets inline (band/accent/kicker/badge/
+   ink), so the inspector can recolour each piece; energy drives --gr-head
+   (type scale), --gr-border, --gr-radius and --gr-coin (coin depth). */
+.greet-blk-classic, .greet-blk-wallet, .greet-blk-coin {
+  margin: 0;
+  padding: 56rpx 44rpx;
+  border: 0;
+  position: relative;
+  overflow: hidden;
+}
+.greet-blk-classic .grd-kicker,
+.greet-blk-wallet .grd-kicker,
+.greet-blk-coin .grd-kicker {
+  font-family: var(--f-toni);
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--gr-kicker);
+}
+.greet-blk-classic .grd-top,
+.greet-blk-coin .grd-top { display: flex; align-items: center; gap: 14rpx; }
+
+/* Classic — greeting left, accent-outlined points card right */
+.greet-blk-classic .grd-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 32rpx; }
+.greet-blk-classic .grd-col { flex: 1; min-width: 0; }
+.greet-blk-classic .grd-head {
+  font-family: var(--f-bear);
+  font-size: calc(66rpx * var(--gr-head) * var(--font-scale));
+  line-height: 0.98; color: var(--gr-ink); margin-top: 20rpx;
+}
+.greet-blk-classic .grd-name-br { display: block; }
+.greet-blk-classic .grd-cn { font-family: var(--f-yuan); font-weight: 700; font-size: calc(26rpx * var(--font-scale)); color: var(--gr-kicker); margin-top: 12rpx; }
+.greet-blk-classic .grd-link { display: inline-flex; align-items: center; margin-top: 32rpx; padding-bottom: 6rpx; border-bottom: var(--gr-border) solid var(--gr-ink); }
+.greet-blk-classic .grd-link-lbl { font-family: var(--f-gothic); font-size: calc(32rpx * var(--font-scale)); letter-spacing: 0.08em; color: var(--gr-ink); }
+.greet-blk-classic .grd-link-ar { font-family: var(--f-gothic); font-size: calc(32rpx * var(--font-scale)); color: var(--gr-ink); }
+.greet-blk-classic .grd-pts-card {
+  flex-shrink: 0; width: 176rpx; box-sizing: border-box;
+  border: var(--gr-border) solid var(--gr-accent); border-radius: var(--gr-radius);
+  padding: 28rpx 0; text-align: center;
+}
+.greet-blk-classic .grd-pts-num { font-family: var(--f-bear); font-size: calc(88rpx * var(--gr-head) * var(--font-scale)); line-height: 1; color: var(--gr-accent); }
+.greet-blk-classic .grd-pts-unit { font-family: var(--f-gothic); font-size: calc(26rpx * var(--font-scale)); letter-spacing: 0.06em; color: var(--gr-accent); margin-top: 12rpx; }
+
+/* Wallet — greeting on top, split wallet/points bar below */
+.greet-blk-wallet .grd-top { display: flex; align-items: center; gap: 16rpx; }
+.greet-blk-wallet .grd-head { font-family: var(--f-bear); font-size: calc(64rpx * var(--gr-head) * var(--font-scale)); line-height: 1; color: var(--gr-ink); margin-top: 20rpx; }
+.greet-blk-wallet .grd-bar { display: flex; align-items: stretch; border: var(--gr-border) solid var(--gr-accent); border-radius: var(--gr-radius); margin-top: 36rpx; overflow: hidden; }
+.greet-blk-wallet .grd-seg { flex: 1; padding: 24rpx 32rpx; }
+.greet-blk-wallet .grd-seg-lbl { font-family: var(--f-toni); font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.2em; text-transform: uppercase; color: var(--gr-kicker); }
+.greet-blk-wallet .grd-seg-val { font-family: var(--f-bear); font-size: calc(48rpx * var(--gr-head) * var(--font-scale)); line-height: 1; color: var(--gr-accent); margin-top: 8rpx; }
+.greet-blk-wallet .grd-seg-pts { display: flex; align-items: baseline; gap: 12rpx; margin-top: 8rpx; }
+.greet-blk-wallet .grd-seg-num { font-family: var(--f-bear); font-size: calc(48rpx * var(--gr-head) * var(--font-scale)); line-height: 1; color: var(--gr-accent); }
+.greet-blk-wallet .grd-seg-unit { font-family: var(--f-gothic); font-size: calc(24rpx * var(--font-scale)); letter-spacing: 0.05em; color: var(--gr-kicker); }
+.greet-blk-wallet .grd-bar-div { width: 4rpx; background: var(--gr-accent); opacity: 0.5; margin: 20rpx 0; }
+.greet-blk-wallet .grd-bar-arrow { background: var(--gr-accent); color: var(--gr-ink); display: flex; align-items: center; padding: 0 32rpx; font-family: var(--f-gothic); font-size: calc(40rpx * var(--font-scale)); }
+
+/* Coin — name in accent, points coin + pill CTA */
+.greet-blk-coin .grd-halftone { position: absolute; top: 0; right: 0; width: 300rpx; height: 300rpx; opacity: var(--gr-halftone); pointer-events: none; background-image: radial-gradient(var(--gr-ink) 3rpx, transparent 3.4rpx); background-size: 20rpx 20rpx; }
+.greet-blk-coin .grd-row { position: relative; display: flex; align-items: flex-start; justify-content: space-between; gap: 32rpx; }
+.greet-blk-coin .grd-col { flex: 1; min-width: 0; }
+.greet-blk-coin .grd-top-accent { color: var(--gr-accent); }
+.greet-blk-coin .grd-top-accent .grd-kicker { color: var(--gr-accent); }
+.greet-blk-coin .grd-head { font-family: var(--f-bear); font-size: calc(66rpx * var(--gr-head) * var(--font-scale)); line-height: 0.98; color: var(--gr-ink); margin-top: 20rpx; }
+.greet-blk-coin .grd-name { display: block; color: var(--gr-accent); }
+.greet-blk-coin .grd-pill { display: inline-flex; align-items: center; margin-top: 32rpx; background: var(--gr-accent); color: var(--gr-ink); border-radius: 999rpx; padding: 18rpx 32rpx; }
+.greet-blk-coin .grd-pill-lbl { font-family: var(--f-gothic); font-size: calc(30rpx * var(--font-scale)); letter-spacing: 0.06em; color: var(--gr-ink); }
+.greet-blk-coin .grd-coin-wrap { flex-shrink: 0; text-align: center; }
+.greet-blk-coin .grd-coin { position: relative; width: 164rpx; height: 164rpx; border-radius: 999rpx; background: var(--gr-accent); border: 4rpx solid var(--gr-ink); display: flex; align-items: center; justify-content: center; box-shadow: var(--gr-coin); }
+.greet-blk-coin .grd-coin-num { font-family: var(--f-bear); font-size: calc(80rpx * var(--gr-head) * var(--font-scale)); line-height: 1; color: var(--gr-ink); }
+.greet-blk-coin .grd-coin-star { position: absolute; top: -16rpx; right: -12rpx; background: var(--gr-badge); border: 3rpx solid var(--gr-ink); color: var(--gr-ink); font-size: calc(22rpx * var(--font-scale)); width: 44rpx; height: 44rpx; border-radius: 999rpx; display: flex; align-items: center; justify-content: center; }
+.greet-blk-coin .grd-coin-unit { font-family: var(--f-gothic); font-size: calc(26rpx * var(--font-scale)); letter-spacing: 0.05em; color: var(--gr-accent); margin-top: 16rpx; }
+
 
 /* ─── Kitchen status block ────────────────────────────────────────────── */
 .kit-blk {
@@ -3552,10 +3626,12 @@
 .hero.enter-fade,
 .featured.enter-fade,
 .cattabs.enter-fade,
+.greet-blk.enter-fade,
 .bun-blk.enter-fade        { animation: blk-fade-in   .4s ease-out both; }
 .hero.enter-slide_up,
 .featured.enter-slide_up,
 .cattabs.enter-slide_up,
+.greet-blk.enter-slide_up,
 .bun-blk.enter-slide_up    { animation: blk-slide-up .45s ease-out both; }
 /* `enter-none` is the legacy instant render. */
 

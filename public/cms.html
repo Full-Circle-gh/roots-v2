@@ -2911,6 +2911,71 @@
   .b-greeting-banner .gr-kicker { opacity: .55; }
   .b-greeting-banner .gr-hint { margin-top: 18px; }
 
+  /* ═══ Welcome-back design directions (classic / wallet / coin) ═════════
+     Full-bleed forest band + time-based greeting + points/wallet, bilingual.
+     Every colour rides on a --gr-* var so the inspector can recolour each
+     piece; mood sets the palette, energy drives --gr-head (type scale),
+     --gr-border, --gr-radius and --gr-coin (coin depth). */
+  .b-greeting-classic, .b-greeting-wallet, .b-greeting-coin {
+    padding: 28px 22px; border: 0; position: relative; overflow: hidden;
+    font-family: var(--bf-aleo);
+  }
+  .b-greeting-classic.corner-subtle, .b-greeting-wallet.corner-subtle, .b-greeting-coin.corner-subtle { border-radius: 14px; }
+  .b-greeting-classic.corner-bold,   .b-greeting-wallet.corner-bold,   .b-greeting-coin.corner-bold   { border-radius: 22px; }
+  .b-greeting-classic .grd-kicker, .b-greeting-wallet .grd-kicker, .b-greeting-coin .grd-kicker {
+    font: 400 11px var(--bf-toni); letter-spacing: .3em; text-transform: uppercase; color: var(--gr-kicker);
+  }
+  .b-greeting-classic .grd-kicker .cn, .b-greeting-wallet .grd-kicker .cn, .b-greeting-coin .grd-kicker .cn { font-family: var(--bf-yuan); }
+  .b-greeting-classic .grd-hint, .b-greeting-wallet .grd-hint, .b-greeting-coin .grd-hint {
+    margin-top: 16px; font: 500 10px var(--bf-aleo); color: var(--gr-kicker); opacity: .85; letter-spacing: .02em;
+  }
+  .b-greeting-classic .grd-top, .b-greeting-coin .grd-top { display: flex; align-items: center; gap: 7px; }
+  .b-greeting-wallet .grd-top { display: flex; align-items: center; gap: 8px; }
+  .grd-icon { display: block; flex-shrink: 0; }
+
+  /* A · Classic — greeting left, lime-outlined points card right */
+  .b-greeting-classic .grd-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .b-greeting-classic .grd-col { flex: 1; min-width: 0; }
+  .b-greeting-classic .grd-head { font: 400 calc(33px * var(--gr-head)) var(--bf-bear); line-height: .98; color: var(--gr-ink); margin-top: 10px; }
+  .b-greeting-classic .grd-cn { font: 700 13px var(--bf-yuan); color: var(--gr-kicker); margin-top: 6px; }
+  .b-greeting-classic .grd-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding-bottom: 3px; border-bottom: 1.5px solid var(--gr-ink); }
+  .b-greeting-classic .grd-link-lbl { font: 400 16px var(--bf-gothic); letter-spacing: .08em; color: var(--gr-ink); }
+  .b-greeting-classic .grd-link .grd-icon { width: 17px; height: 17px; }
+  .b-greeting-classic .grd-pts-card { flex-shrink: 0; width: 88px; box-sizing: border-box; border: var(--gr-border) solid var(--gr-accent); border-radius: var(--gr-radius); padding: 14px 0; text-align: center; }
+  .b-greeting-classic .grd-pts-num { font: 400 calc(44px * var(--gr-head)) var(--bf-bear); line-height: 1; color: var(--gr-accent); }
+  .b-greeting-classic .grd-pts-unit { font: 400 13px var(--bf-gothic); letter-spacing: .06em; color: var(--gr-accent); margin-top: 6px; }
+
+  /* B · Wallet strip — greeting on top, split wallet/points bar below */
+  .b-greeting-wallet .grd-top .grd-icon { width: 16px; height: 16px; }
+  .b-greeting-wallet .grd-head { font: 400 calc(32px * var(--gr-head)) var(--bf-bear); line-height: 1; color: var(--gr-ink); margin-top: 10px; }
+  .b-greeting-wallet .grd-bar { display: flex; align-items: stretch; border: var(--gr-border) solid var(--gr-accent); border-radius: var(--gr-radius); margin-top: 18px; overflow: hidden; }
+  .b-greeting-wallet .grd-seg { flex: 1; padding: 12px 16px; }
+  .b-greeting-wallet .grd-seg-lbl { font: 400 9px var(--bf-toni); letter-spacing: .2em; text-transform: uppercase; color: var(--gr-kicker); }
+  .b-greeting-wallet .grd-seg-lbl .cn { font-family: var(--bf-yuan); }
+  .b-greeting-wallet .grd-seg-val { font: 400 calc(24px * var(--gr-head)) var(--bf-bear); line-height: 1; color: var(--gr-accent); margin-top: 4px; }
+  .b-greeting-wallet .grd-seg-pts { display: flex; align-items: baseline; gap: 6px; margin-top: 4px; }
+  .b-greeting-wallet .grd-seg-num { font: 400 calc(24px * var(--gr-head)) var(--bf-bear); line-height: 1; color: var(--gr-accent); }
+  .b-greeting-wallet .grd-seg-unit { font: 400 12px var(--bf-gothic); letter-spacing: .05em; color: var(--gr-kicker); }
+  .b-greeting-wallet .grd-bar-div { width: 2px; background: var(--gr-accent); opacity: .5; margin: 10px 0; }
+  .b-greeting-wallet .grd-bar-arrow { background: var(--gr-accent); display: flex; align-items: center; padding: 0 16px; }
+  .b-greeting-wallet .grd-bar-arrow .grd-icon { width: 20px; height: 20px; }
+
+  /* C · Coin playful — name in accent, points coin + pill CTA */
+  .b-greeting-coin .grd-halftone { position: absolute; top: 0; right: 0; width: 150px; height: 150px; opacity: var(--gr-halftone); pointer-events: none; background-image: radial-gradient(var(--gr-ink) 1.4px, transparent 1.6px); background-size: 10px 10px; }
+  .b-greeting-coin .grd-row { position: relative; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .b-greeting-coin .grd-col { flex: 1; min-width: 0; }
+  .b-greeting-coin .grd-top .grd-icon { width: 17px; height: 17px; }
+  .b-greeting-coin .grd-head { font: 400 calc(33px * var(--gr-head)) var(--bf-bear); line-height: .98; color: var(--gr-ink); margin-top: 10px; }
+  .b-greeting-coin .grd-name { color: var(--gr-accent); }
+  .b-greeting-coin .grd-pill { display: inline-flex; align-items: center; gap: 7px; margin-top: 16px; background: var(--gr-accent); color: var(--gr-ink); border-radius: 999px; padding: 9px 16px; }
+  .b-greeting-coin .grd-pill .grd-icon { width: 16px; height: 16px; }
+  .b-greeting-coin .grd-pill-lbl { font: 400 15px var(--bf-gothic); letter-spacing: .06em; }
+  .b-greeting-coin .grd-coin-wrap { flex-shrink: 0; text-align: center; }
+  .b-greeting-coin .grd-coin { position: relative; width: 82px; height: 82px; border-radius: 999px; background: var(--gr-accent); border: 2px solid var(--gr-ink); display: flex; align-items: center; justify-content: center; box-shadow: var(--gr-coin); }
+  .b-greeting-coin .grd-coin-num { font: 400 calc(40px * var(--gr-head)) var(--bf-bear); line-height: 1; color: var(--gr-ink); }
+  .b-greeting-coin .grd-coin-star { position: absolute; top: -8px; right: -6px; background: var(--gr-badge); border: 1.5px solid var(--gr-ink); color: var(--gr-ink); font-size: 11px; width: 22px; height: 22px; border-radius: 999px; display: flex; align-items: center; justify-content: center; }
+  .b-greeting-coin .grd-coin-unit { font: 400 13px var(--bf-gothic); letter-spacing: .05em; color: var(--gr-accent); margin-top: 8px; }
+
   /* ─── Kitchen status preview ────────────────────────────────────────── */
   .b-kitchen {
     padding: 14px 16px;
@@ -6890,10 +6955,16 @@ function makeBlock(type) {
       // mini app; admin only sets the decorations + tone overrides here.
       return {
         id, type,
+        // Legacy compact views:
         // 'card'   — bordered editorial card (legacy default)
         // 'banner' — full-bleed colour band with light copy
         // 'inline' — one-line greeting, compact pts pill on the right
         // 'split'  — greeting left, mini wallet card right
+        // Claude-Design "Welcome back" header directions (forest band,
+        // points/wallet, time-based greeting, bilingual EN/CN):
+        // 'classic' — A · greeting left, lime-outlined points card right
+        // 'wallet'  — B · greeting on top, split wallet/points bar below
+        // 'coin'    — C · name in accent, a points coin + pill CTA
         view: 'card',
         kicker_en: 'WELCOME BACK', kicker_cn: '欢迎回来',
         // Per-tone overrides are optional — leave blank to use the default
@@ -6907,7 +6978,22 @@ function makeBlock(type) {
         // afternoon, 🌙 evening, 🌟 night. 'off' is the legacy text-only.
         show_tod_emoji: 'off',
         bg_color: 'oat-milk', fg_color: 'ink',
-        accent_color: 'lime-leaf',
+        // Blank → legacy views fall back to lime; design views fall back to
+        // the mood palette's accent.
+        accent_color: '',
+        // ── Welcome-back design controls (classic / wallet / coin) ──
+        // mood = colour story; energy = type scale + border weight + radius
+        // + coin depth. Per-element overrides below win over the mood palette.
+        mood: 'forest',     // forest | dusk | berry
+        energy: 'balanced', // refined | balanced | playful
+        // Override slots — blank = use the mood palette colour.
+        band_color: '',     // the full-width band background
+        kicker_color: '',   // the WELCOME BACK kicker + CN sub-line
+        badge_color: '',    // the ★ star badge on the C coin
+        ink_color: '',      // headline + ink details (borders, card text)
+        // Cross-block chrome — same controls other design blocks expose.
+        corner_radius: 'sharp',
+        entrance_anim: 'none',
         cta_label_en: 'OPEN WALLET', cta_label_cn: '查看钱包',
         cta_target: 'wallet',
       };
@@ -8769,6 +8855,103 @@ function renderBlockBody(b) {
       const kickerHtml = (k.en || k.cn) ? `<div class="gr-kicker">${biLabel(k.en, k.cn)}</div>` : '';
       const hintHtml = `<div class="gr-hint">Preview · live name + points pull from the customer's account.</div>`;
 
+      // ── Welcome-back design directions: classic / wallet / coin ────────
+      // Forest band + time-based greeting + points/wallet, bilingual. Every
+      // colour rides on a --gr-* var so each piece is recolourable; mood sets
+      // the palette, energy drives the type scale + border + radius + coin.
+      if (view === 'classic' || view === 'wallet' || view === 'coin') {
+        d.className = 'b-greeting b-greeting-' + view + cornerRadiusClass(b) + entranceAnimClass(b);
+        const MOODS = {
+          forest: { band: '#34421C', accent: '#CCD900', kicker: '#A7AE5E', badge: '#F2CA6C' },
+          dusk:   { band: '#39301A', accent: '#F2CA6C', kicker: '#B79A5E', badge: '#FFAF60' },
+          berry:  { band: '#3A2330', accent: '#F4B8CB', kicker: '#C892A4', badge: '#E96174' },
+        };
+        const mp = MOODS[b.mood] || MOODS.forest;
+        const EN = ({ refined:  { head: .9,   border: 1.5, radius: 12, coin: 3, halftone: .06 },
+                      balanced: { head: 1,    border: 2,   radius: 16, coin: 4, halftone: .12 },
+                      playful:  { head: 1.14, border: 2.5, radius: 20, coin: 7, halftone: .2  } })[b.energy]
+                   || { head: 1, border: 2, radius: 16, coin: 4, halftone: .12 };
+        const band   = brandColorVar(b.band_color)   || mp.band;
+        const accentC= brandColorVar(b.accent_color) || mp.accent;
+        const kickerC= brandColorVar(b.kicker_color) || mp.kicker;
+        const badgeC = brandColorVar(b.badge_color)  || mp.badge;
+        const inkC   = brandColorVar(b.ink_color)    || '#1a1a17';
+        d.style.background = band;
+        d.style.color = inkC;
+        d.style.setProperty('--gr-accent', accentC);
+        d.style.setProperty('--gr-kicker', kickerC);
+        d.style.setProperty('--gr-badge', badgeC);
+        d.style.setProperty('--gr-ink', inkC);
+        d.style.setProperty('--gr-head', EN.head);
+        d.style.setProperty('--gr-border', EN.border + 'px');
+        d.style.setProperty('--gr-radius', EN.radius + 'px');
+        d.style.setProperty('--gr-coin', `0 ${EN.coin}px 0 ${inkC}`);
+        d.style.setProperty('--gr-halftone', EN.halftone);
+
+        const cnGreet = overrideCn || defaults.cn[tone];
+        const nm = escapeHtml(sampleName);
+        const gTxt = escapeHtml(greet);
+        const ptsN = '228', ptsCny = state.lang === 'cn' ? '抵 ¥2.28' : '¥2.28', walletV = '420.50';
+        const ptsUnit = state.lang === 'cn' ? '积分' : 'pts';
+        const kHtml = (k.en && k.cn)
+          ? `${escapeHtml(k.en)} <span class="cn">· ${escapeHtml(k.cn)}</span>`
+          : escapeHtml(k.en || k.cn || '');
+        const icoKind = (tone === 'evening' || tone === 'night') ? 'moon' : 'sun';
+        const ico = (kind, cls) => {
+          if (kind === 'sun')   return `<svg class="grd-icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg>`;
+          if (kind === 'moon')  return `<svg class="grd-icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z"/></svg>`;
+          if (kind === 'arrow') return `<svg class="grd-icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg>`;
+          return `<svg class="grd-icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7h15a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7zM3 7l1-3h12l1 3M17 13h.01"/></svg>`;
+        };
+        const kEl = (k.en || k.cn) ? `<div class="grd-kicker">${kHtml}</div>` : '';
+
+        if (view === 'classic') {
+          d.innerHTML = `
+            <div class="grd-row">
+              <div class="grd-col">
+                ${kEl}
+                <div class="grd-head">${gTxt},<br>${nm}.</div>
+                <div class="grd-cn">${escapeHtml(cnGreet)},${nm}</div>
+                ${cta ? `<div class="grd-link" style="color:${inkC}"><span class="grd-link-lbl">${escapeHtml(cta)}</span>${ico('arrow', '')}</div>` : ''}
+              </div>
+              ${showPts ? `<div class="grd-pts-card"><div class="grd-pts-num">${ptsN}</div><div class="grd-pts-unit">${ptsUnit} · ${ptsCny.replace('抵 ', '')}</div></div>` : ''}
+            </div>
+            ${hintHtml.replace('gr-hint', 'grd-hint')}`;
+        } else if (view === 'wallet') {
+          d.innerHTML = `
+            <div class="grd-top" style="color:${kickerC}">${ico(icoKind, '')}<span class="grd-kicker">${kHtml}</span></div>
+            <div class="grd-head">${gTxt}, ${nm}.</div>
+            ${showPts ? `
+              <div class="grd-bar">
+                <div class="grd-seg">
+                  <div class="grd-seg-lbl">${state.lang === 'cn' ? '钱包' : 'WALLET'} <span class="cn">· ${state.lang === 'cn' ? 'WALLET' : '钱包'}</span></div>
+                  <div class="grd-seg-val">¥${walletV}</div>
+                </div>
+                <div class="grd-bar-div"></div>
+                <div class="grd-seg">
+                  <div class="grd-seg-lbl">${state.lang === 'cn' ? '积分' : 'POINTS'} <span class="cn">· ${state.lang === 'cn' ? 'POINTS' : '积分'}</span></div>
+                  <div class="grd-seg-pts"><span class="grd-seg-num">${ptsN}</span><span class="grd-seg-unit">${ptsUnit} · ${ptsCny.replace('抵 ', '')}</span></div>
+                </div>
+                <div class="grd-bar-arrow" style="color:${inkC}">${ico('arrow', '')}</div>
+              </div>` : ''}
+            ${hintHtml.replace('gr-hint', 'grd-hint')}`;
+        } else {
+          // coin
+          d.innerHTML = `
+            <div class="grd-halftone"></div>
+            <div class="grd-row">
+              <div class="grd-col">
+                <div class="grd-top" style="color:${accentC}">${ico(icoKind, '')}<span class="grd-kicker">${kHtml}</span></div>
+                <div class="grd-head">${gTxt},<br><span class="grd-name">${nm}.</span></div>
+                ${cta ? `<div class="grd-pill">${ico('wallet', '')}<span class="grd-pill-lbl">${escapeHtml(cta)}</span></div>` : ''}
+              </div>
+              ${showPts ? `<div class="grd-coin-wrap"><div class="grd-coin"><span class="grd-coin-num">${ptsN}</span><span class="grd-coin-star">★</span></div><div class="grd-coin-unit">${ptsUnit} · ${ptsCny.replace('抵 ', '')}</div></div>` : ''}
+            </div>
+            ${hintHtml.replace('gr-hint', 'grd-hint')}`;
+        }
+        return d;
+      }
+
       if (view === 'inline') {
         // Compact one-line: kicker+greeting on left, pts pill on right.
         d.innerHTML = `
@@ -9403,6 +9586,11 @@ function renderInspector() {
   const ae = document.activeElement;
   if (ae && mount.contains(ae) && /^(INPUT|TEXTAREA)$/.test(ae.tagName)
       && !['checkbox', 'radio'].includes(ae.type)) return;
+  // Leaving a block resets every section back to its folded default.
+  if (state.selectedId !== lastInspectedId) {
+    for (const k in inspectorOpen) delete inspectorOpen[k];
+    lastInspectedId = state.selectedId;
+  }
   const b = findBlock(state.selectedId);
   if (!b) {
     mount.innerHTML = `
@@ -9524,6 +9712,9 @@ function field(label, helper, inner) {
 // "<blockType>:<sectionKey>". The inspector rebuilds on every edit, so without
 // this every keystroke would re-collapse the sections the operator just opened.
 const inspectorOpen = Object.create(null);
+// The block whose inspector was last built. When the operator moves to a
+// different block, inspectorOpen is wiped so the new block opens fully folded.
+let lastInspectedId = null;
 
 // Create a collapsible section inside the inspector body and return its inner
 // content element — append fields to the returned node, not to `body`. Default
@@ -9532,7 +9723,11 @@ const inspectorOpen = Object.create(null);
 // renderInspector, so a build fn can safely create a section it might not fill.
 function inspectorSection(body, blockType, key, title, { open = false } = {}) {
   const mapKey = blockType + ':' + key;
-  const isOpen = (mapKey in inspectorOpen) ? inspectorOpen[mapKey] : open;
+  // Every section starts folded; the `open` hint is ignored on first build so
+  // the inspector opens compact. Once the operator expands a section it's
+  // remembered (inspectorOpen) until they leave the block — see renderInspector,
+  // which clears that memory on every block change so the next block opens folded.
+  const isOpen = (mapKey in inspectorOpen) ? inspectorOpen[mapKey] : false;
   const sec = document.createElement('div');
   sec.className = 'insp-sec' + (isOpen ? ' open' : '');
   const head = document.createElement('button');
@@ -10965,20 +11160,39 @@ function buildAffiliateForm(m, b) {
 
 function buildGreetingForm(m, b) {
   const view = b.view || 'card';
-  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
-  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
+  const isDesign = view === 'classic' || view === 'wallet' || view === 'coin';
+  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'));
+  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'));
   const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
   const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
 
   secLayout.appendChild(field(T('Layout', '版式'),
-    T('Card = a card with a border. Banner = a full-width colour band with a big greeting. Inline = one compact line with the points on the right. Split = greeting on the left, a big points wallet on the right.',
-      '卡片 = 带边框的卡片。横幅 = 全宽色带,大号问候语。行内 = 紧凑单行,积分在右侧。分栏 = 问候语在左,大号积分钱包在右。'),
+    T('Card = bordered editorial card. Banner = full-bleed colour band, big greeting. Inline = compact one-line with pts pill on the right. Split = greeting left, big pts wallet right. Classic / Wallet / Coin are the full "Welcome back" directions — coloured band, Bear Serif greeting, and a points/wallet display.',
+      '卡片 = 带边框的编辑卡片。横幅 = 全幅色带、大号问候语。行内 = 紧凑单行,积分胶囊在右侧。分栏 = 问候语在左,大号积分钱包在右。经典 / 钱包 / 金币为完整「欢迎回来」方向 — 彩色条幅、Bear Serif 问候语,以及积分/钱包展示。'),
     sel(view, [
-      { value: 'card',   label: T('Card — bordered (default)', '卡片 — 带边框(默认)') },
-      { value: 'banner', label: T('Banner — full width, big greeting', '横幅 — 全宽、超大问候语') },
-      { value: 'inline', label: T('Inline — one line, points on right', '行内 — 单行,积分在右') },
-      { value: 'split',  label: T('Split — greeting left, wallet right', '分栏 — 问候语在左,钱包在右') },
+      { value: 'card',    label: T('Card — bordered (default)', '卡片 — 带边框(默认)') },
+      { value: 'banner',  label: T('Banner — full-bleed, oversized greeting', '横幅 — 全幅、超大问候语') },
+      { value: 'inline',  label: T('Inline — one-line, pts pill on right', '行内 — 单行,积分胶囊在右') },
+      { value: 'split',   label: T('Split — greeting left, wallet right', '分栏 — 问候语在左,钱包在右') },
+      { value: 'classic', label: T('Classic — editorial greeting + points card', '经典 — 编辑式问候 + 积分卡') },
+      { value: 'wallet',  label: T('Wallet — greeting + wallet/points strip', '钱包 — 问候语 + 钱包/积分条') },
+      { value: 'coin',    label: T('Coin — playful greeting + accent coin', '金币 — 活泼问候 + 强调金币') },
     ], v => updateBlock(b.id, { view: v }))));
+
+  if (isDesign) {
+    secLayout.appendChild(field(T('Energy', '风格强度'), T('Type scale + corner/border weight + coin depth. Refined = smaller, tighter. Playful = larger headline, chunkier borders, bigger coin shadow.', '字号大小 + 圆角/描边粗细 + 金币立体感。精致 = 更小更紧凑。活泼 = 更大标题、更粗描边、更厚金币阴影。'),
+      sel(b.energy || 'balanced', [
+        { value: 'refined',  label: T('Refined — smaller, tighter', '精致 — 更小更紧凑') },
+        { value: 'balanced', label: T('Balanced — the design default', '平衡 — 设计默认') },
+        { value: 'playful',  label: T('Playful — bigger, chunkier', '活泼 — 更大更粗') },
+      ], v => updateBlock(b.id, { energy: v }))));
+    secLayout.appendChild(field(T('Mood', '色彩故事'), T('Colour story for the band + accents. Forest = green band, lime accent. Dusk = warm brown, amber accent. Berry = plum band, pink accent. Each per-element colour below overrides its mood default.', '条幅与强调色的色彩故事。森林 = 绿色条幅、青柠强调。黄昏 = 暖棕、琥珀强调。莓果 = 李紫条幅、粉色强调。下方每个单项颜色可覆盖其色彩故事默认值。'),
+      sel(b.mood || 'forest', [
+        { value: 'forest', label: T('Forest — green + lime', '森林 — 绿 + 青柠') },
+        { value: 'dusk',   label: T('Dusk — warm brown + amber', '黄昏 — 暖棕 + 琥珀') },
+        { value: 'berry',  label: T('Berry — plum + pink', '莓果 — 李紫 + 粉') },
+      ], v => updateBlock(b.id, { mood: v }))));
+  }
 
   secContent.appendChild(field(T('Small heading', '小标题'), T('A small line above the greeting (e.g. "WELCOME BACK").', '问候语上方的一行小字(例如「WELCOME BACK」)。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
@@ -11011,12 +11225,27 @@ function buildGreetingForm(m, b) {
   secContent.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. wallet · me · membership', '按钮跳转到哪里。例如 wallet · me · membership'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'wallet')));
 
-  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
-    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
-    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  secColours.appendChild(field(T('Accent (points line)', '强调色(积分行)'), '',
-    sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+  if (isDesign) {
+    // Per-element colours — every coloured piece is overridable; blank keeps
+    // the mood's colour-story default.
+    secColours.appendChild(field(T('Band colour', '条幅底色'), T('The block background band. Blank = mood band (forest green / dusk brown / berry plum).', '模块背景条幅。留空 = 色彩故事条幅(森绿 / 暖棕 / 李紫)。'),
+      sel(b.band_color || '', [{ value: '', label: T('— default (mood) —', '— 默认(色彩故事)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { band_color: v }))));
+    secColours.appendChild(field(T('Accent colour', '强调色'), T('Points number, links/CTA, the Coin face & Wallet bar. Blank = mood accent (lime / amber / pink).', '积分数字、链接/按钮、金币面与钱包条。留空 = 色彩故事强调色(青柠 / 琥珀 / 粉)。'),
+      sel(b.accent_color || '', [{ value: '', label: T('— default (mood) —', '— 默认(色彩故事)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { accent_color: v }))));
+    secColours.appendChild(field(T('Kicker colour', '小标题颜色'), T('The tiny uppercase label above the greeting. Blank = mood kicker tone.', '问候语上方的小号大写标签。留空 = 色彩故事小标题色。'),
+      sel(b.kicker_color || '', [{ value: '', label: T('— default (mood) —', '— 默认(色彩故事)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { kicker_color: v }))));
+    secColours.appendChild(field(T('Badge colour', '徽章颜色'), T('The Coin star + small badge accents. Blank = mood badge (amber / amber / coral).', '金币上的星标 + 小徽章细节。留空 = 色彩故事徽章色(琥珀 / 琥珀 / 珊瑚)。'),
+      sel(b.badge_color || '', [{ value: '', label: T('— default (mood) —', '— 默认(色彩故事)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { badge_color: v }))));
+    secColours.appendChild(field(T('Ink / text colour', '墨色 / 文字色'), T('Greeting headline, CN line + ink details: borders, the Coin face number. Blank = ink black.', '问候标题、中文行与墨色细节:描边、金币面数字。留空 = 墨黑。'),
+      sel(b.ink_color || '', [{ value: '', label: T('— default (ink) —', '— 默认(墨黑)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { ink_color: v }))));
+  } else {
+    secColours.appendChild(field(T('Background colour', '背景颜色'), '',
+      sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+    secColours.appendChild(field(T('Text colour', '文字颜色'), '',
+      sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+    secColours.appendChild(field(T('Accent (points line)', '强调色(积分行)'), '',
+      sel(b.accent_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+  }
 
   secBehaviour.appendChild(field(T('Show points balance', '显示积分余额'),
     T('Off hides the "★ 228 pts · 抵¥2.28" line. Keep it on to make points feel valuable.', '关闭则隐藏「★ 228 积分 · 抵¥2.28」一行。保持开启可让积分更有价值感。'),
@@ -11027,6 +11256,13 @@ function buildGreetingForm(m, b) {
   secBehaviour.appendChild(field(T('Time-of-day emoji', '时段表情'), T('Add 🌅 ☀️ 🌙 🌟 before the greeting, based on the time of day.', '根据时段在问候语前加上 🌅 ☀️ 🌙 🌟。'),
     sel(b.show_tod_emoji || 'off', TOD_EMOJI_OPTIONS,
         v => updateBlock(b.id, { show_tod_emoji: v }))));
+  if (isDesign) {
+    // Cross-block chrome — same corner + entrance controls other blocks expose.
+    secBehaviour.appendChild(field(T('Card corners', '卡片圆角'), T('Rounds the band edges. Sharp = edge-to-edge (the design default).', '为条幅边角加圆角。直角 = 通栏到边(设计默认)。'),
+      sel(b.corner_radius || 'sharp', CORNER_RADIUS_OPTIONS, v => updateBlock(b.id, { corner_radius: v }))));
+    secBehaviour.appendChild(field(T('Entrance animation', '入场动画'), T('How the block animates in when it scrolls into view.', '模块滚动进入视图时的入场方式。'),
+      sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS, v => updateBlock(b.id, { entrance_anim: v }))));
+  }
 }
 
 function buildKitchenStatusForm(m, b) {

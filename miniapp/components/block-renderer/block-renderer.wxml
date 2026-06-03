@@ -788,11 +788,58 @@
   </view>
 </view>
 
-<view wx:elif="{{type === 'greeting' && greeting}}" class="greet-blk greet-blk-{{greeting.view}}" style="background:{{bg}};color:{{fg}}" bindtap="onGreetingCtaTap">
+<view wx:elif="{{type === 'greeting' && greeting}}" class="greet-blk greet-blk-{{greeting.view}} {{greeting.bandStyle ? 'enter-' + greeting.enter : ''}}" style="{{greeting.bandStyle ? greeting.bandStyle : 'background:' + bg + ';color:' + fg}}" bindtap="onGreetingCtaTap">
   <!-- Unread notifications now live in the standalone notification_bar block,
        not pinned to the greeting card. -->
+
+  <!-- Classic: editorial greeting left, accent-bordered points card right -->
+  <view wx:if="{{greeting.view === 'classic'}}" class="grd-row">
+    <view class="grd-col">
+      <view wx:if="{{greeting.kicker}}" class="grd-kicker">{{greeting.kicker}}</view>
+      <view class="grd-head">{{greeting.greetWord}}{{greeting.firstName ? ',' : '.'}}<text wx:if="{{greeting.firstName}}" class="grd-name-br"> {{greeting.firstName}}.</text></view>
+      <view wx:if="{{greeting.cnLine}}" class="grd-cn">{{greeting.cnLine}}{{greeting.firstName ? ',' + greeting.firstName : ''}}</view>
+      <view wx:if="{{greeting.ctaLabel}}" class="grd-link"><text class="grd-link-lbl">{{greeting.ctaLabel}}</text><text class="grd-link-ar"> →</text></view>
+    </view>
+    <view wx:if="{{greeting.pointsNum}}" class="grd-pts-card">
+      <view class="grd-pts-num">{{greeting.pointsNum}}</view>
+      <view class="grd-pts-unit">{{greeting.ptsUnitCny}}</view>
+    </view>
+  </view>
+
+  <!-- Wallet: top kicker, big greeting, accent-bordered wallet/points strip -->
+  <view wx:elif="{{greeting.view === 'wallet'}}">
+    <view wx:if="{{greeting.kicker}}" class="grd-top"><text class="grd-kicker">{{greeting.kicker}}</text></view>
+    <view class="grd-head">{{greeting.greetWord}}<text wx:if="{{greeting.firstName}}">, {{greeting.firstName}}</text>.</view>
+    <view wx:if="{{greeting.pointsNum}}" class="grd-bar">
+      <view class="grd-seg">
+        <view class="grd-seg-lbl">{{greeting.walletLabel}}</view>
+        <view class="grd-seg-val">{{greeting.walletValue}}</view>
+      </view>
+      <view class="grd-bar-div"></view>
+      <view class="grd-seg">
+        <view class="grd-seg-lbl">{{greeting.ptsUnit}}</view>
+        <view class="grd-seg-pts"><text class="grd-seg-num">{{greeting.pointsNum}}</text><text class="grd-seg-unit"> {{greeting.ptsUnitCny}}</text></view>
+      </view>
+      <view class="grd-bar-arrow">→</view>
+    </view>
+  </view>
+
+  <!-- Coin: playful greeting with halftone, accent coin with star -->
+  <view wx:elif="{{greeting.view === 'coin'}}" class="grd-row grd-coin-row">
+    <view class="grd-halftone"></view>
+    <view class="grd-col">
+      <view wx:if="{{greeting.kicker}}" class="grd-top grd-top-accent"><text class="grd-kicker">{{greeting.kicker}}</text></view>
+      <view class="grd-head">{{greeting.greetWord}}{{greeting.firstName ? ',' : '.'}}<text wx:if="{{greeting.firstName}}" class="grd-name"> {{greeting.firstName}}.</text></view>
+      <view wx:if="{{greeting.ctaLabel}}" class="grd-pill"><text class="grd-pill-lbl">{{greeting.ctaLabel}} →</text></view>
+    </view>
+    <view wx:if="{{greeting.pointsNum}}" class="grd-coin-wrap">
+      <view class="grd-coin"><text class="grd-coin-num">{{greeting.pointsNum}}</text><text class="grd-coin-star">★</text></view>
+      <view class="grd-coin-unit">{{greeting.ptsUnitCny}}</view>
+    </view>
+  </view>
+
   <!-- Split: greeting + CTA on left, big points wallet on right -->
-  <view wx:if="{{greeting.view === 'split'}}" class="gr-split-row">
+  <view wx:elif="{{greeting.view === 'split'}}" class="gr-split-row">
     <view class="gr-split-left">
       <view wx:if="{{greeting.kicker}}" class="gr-kicker">{{greeting.kicker}}</view>
       <view class="gr-headline">{{greeting.headline}}</view>
