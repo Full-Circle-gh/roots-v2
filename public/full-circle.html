@@ -127,7 +127,7 @@ p{margin:0;}
 .hero{background:var(--ink);color:var(--on-ink-1);position:relative;overflow:hidden;padding:78px 0 64px;}
 .hero::before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(232,229,220,.05) 1px,transparent 1.4px);background-size:7px 7px;opacity:.5;pointer-events:none;}
 .hero__grid{position:relative;display:grid;grid-template-columns:1.05fr .95fr;gap:54px;align-items:center;}
-.hero h1{font-size:clamp(38px,6vw,72px);font-weight:600;color:#fff;margin:18px 0 0;letter-spacing:-.025em;}
+.hero h1{font-size:clamp(38px,6vw,72px);font-weight:700;color:#fff;margin:18px 0 0;letter-spacing:-.028em;}
 .hero h1 .em{color:var(--brass-hi);position:relative;white-space:nowrap;}
 .hero h1 .em::after{content:"";position:absolute;left:0;right:0;bottom:-.1em;height:3px;background:var(--tea);border-radius:3px;transform:scaleX(0);transform-origin:left;transition:transform .9s var(--ease) .5s;}
 .js .hero h1 .em.drawn::after{transform:scaleX(1);}
@@ -213,7 +213,7 @@ p{margin:0;}
 /* ---------- section frame ---------- */
 section{padding:84px 0;}
 .sec-head{max-width:660px;margin-bottom:46px;}
-.sec-head h2{font-size:clamp(29px,4.2vw,46px);margin-top:14px;font-weight:600;}
+.sec-head h2{font-size:clamp(30px,4.4vw,50px);margin-top:14px;font-weight:700;letter-spacing:-.028em;}
 .sec-head p{margin-top:16px;font-size:18px;color:var(--text-2);}
 
 /* ---------- features ---------- */
@@ -234,7 +234,7 @@ section{padding:84px 0;}
 .band::after{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(232,229,220,.06) 1px,transparent 1.4px);background-size:8px 8px;opacity:.6;pointer-events:none;}
 .band__in{position:relative;display:grid;grid-template-columns:1.1fr .9fr;gap:44px;align-items:center;}
 .band .kicker{color:var(--tea-hi);} .band .kicker::before{background:var(--tea-hi);}
-.band h2{color:#fff;font-size:clamp(27px,3.8vw,44px);margin-top:14px;font-weight:600;}
+.band h2{color:#fff;font-size:clamp(27px,3.8vw,44px);margin-top:14px;font-weight:700;letter-spacing:-.028em;}
 .band p{color:var(--on-ink-2);margin-top:18px;font-size:18px;max-width:42ch;}
 .flow{display:flex;flex-direction:column;gap:10px;}
 .flow__row{display:flex;align-items:center;gap:14px;background:var(--ink-1);border:1px solid var(--ink-line);border-radius:var(--r-lg);padding:15px 17px;}
@@ -451,7 +451,7 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
 .eco::after{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(232,229,220,.06) 1px,transparent 1.4px);background-size:8px 8px;opacity:.55;pointer-events:none;}
 .eco__in{position:relative;z-index:1;}
 .eco .kicker{color:var(--tea-hi);} .eco .kicker::before{background:var(--tea-hi);}
-.display{font-size:clamp(32px,5.6vw,62px);font-weight:600;letter-spacing:-.03em;line-height:1.04;color:#fff;margin-top:14px;max-width:18ch;}
+.display{font-size:clamp(32px,5.6vw,62px);font-weight:700;letter-spacing:-.032em;line-height:1.04;color:#fff;margin-top:14px;max-width:18ch;}
 .display .b{color:var(--brass-hi);}
 .eco p{color:var(--on-ink-2);margin-top:18px;font-size:18px;max-width:52ch;}
 .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px;}
@@ -459,6 +459,24 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
 .echip:hover{border-color:var(--tea-hi);background:var(--ink-2);}
 .echip .d{width:7px;height:7px;border-radius:50%;background:var(--tea-hi);}
 .echip .d.brass{background:var(--brass-hi);}
+
+/* ===== Burb-style outlined display word (stroke, transparent fill) ===== */
+.ol{-webkit-text-fill-color:transparent;-webkit-text-stroke:1.7px var(--tea);color:var(--tea);}
+.ol.b{-webkit-text-stroke-color:var(--brass);color:var(--brass);}
+.hero .ol,.on-ink .ol{-webkit-text-stroke-color:var(--tea-hi);}
+.hero .ol.b,.on-ink .ol.b{-webkit-text-stroke-color:var(--brass-hi);}
+@supports not ((-webkit-text-stroke:1px black)){.ol{-webkit-text-fill-color:currentColor;color:var(--tea);}.ol.b{color:var(--brass);}}
+
+/* ===== Burb-style halftone divider strips (full-bleed, dotted) ===== */
+.divider{height:44px;width:100%;position:relative;z-index:1;
+  background:
+    radial-gradient(var(--ddot,rgba(18,22,26,.20)) 1.5px,transparent 1.7px) 0 0/12px 12px,
+    radial-gradient(var(--ddot,rgba(18,22,26,.20)) 1.5px,transparent 1.7px) 6px 6px/12px 12px;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 14%,#000 86%,transparent);
+          mask-image:linear-gradient(90deg,transparent,#000 14%,#000 86%,transparent);
+}
+.divider.tea{--ddot:rgba(107,142,111,.55);}
+.divider.brass{--ddot:rgba(176,141,74,.5);}
 
 /* ---------- responsive ---------- */
 @media (max-width:980px){
@@ -536,7 +554,7 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
       <span class="kicker anim d1" data-en="Done-for-you WeChat mini-apps" data-zh="微信小程序 · 全程托管">Done-for-you WeChat mini-apps</span>
       <h1 class="anim d2">
         <span data-en="Your WeChat mini-app, " data-zh="你的微信小程序，">Your WeChat mini-app, </span><span class="hl" id="hl-draw" data-en="built and run," data-zh="搭建并运营，">built and run,</span>
-        <span class="em" id="em-draw" data-en="full circle." data-zh="全程闭环。">full circle.</span>
+        <span class="em ol b" id="em-draw" data-en="full circle." data-zh="全程闭环。">full circle.</span>
       </h1>
       <p class="hero__sub anim d3" data-en="One team designs, builds, hosts and runs it — backend, storage and support included. You get a beautiful storefront; we handle everything behind it." data-zh="一支团队负责设计、搭建、托管与运营——后端、存储、客服全包。你拥有美观的前台，幕后一切交给我们。">One team designs, builds, hosts and runs it — backend, storage and support included. You get a beautiful storefront; we handle everything behind it.</p>
       <div class="hero__cta anim d4">
@@ -804,6 +822,8 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
   </div>
 </section>
 
+<div class="divider tea" aria-hidden="true"></div>
+
 <!-- ======================= HOW IT WORKS ======================= -->
 <section id="how">
   <div class="wrap">
@@ -868,6 +888,8 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
   </div>
 </section>
 
+<div class="divider brass" aria-hidden="true"></div>
+
 <!-- ======================= PRICING ======================= -->
 <section id="pricing">
   <div class="wrap">
@@ -903,6 +925,8 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
     </div>
   </div>
 </section>
+
+<div class="divider tea" aria-hidden="true"></div>
 
 <!-- ======================= CTA / DEMO FORM ======================= -->
 <section class="cta" id="demo">
