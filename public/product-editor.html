@@ -689,68 +689,37 @@
   .pa-preset-card-count { font-size: 10px; letter-spacing: .04em; color: var(--text-3); }
   .pa-preset-card.active .pa-preset-card-count { color: var(--accent); font-weight: 700; }
 
-  /* Auto-drawn layout wireframe — one mini shape per block (paPresetThumb) */
+  /* Template thumbnail = a true, scaled-down render of the real product page in
+     that template's skin (paThumbHtml). Both templates seed the same blocks —
+     the difference is the skin — so a real mini-render is the only honest preview.
+     The inner .pa-prev-screen is rendered at full 390px phone width and scaled to
+     fit by JS (paFitThumbs); this frame just clips + fades the bottom. */
   .pa-preset-thumb {
     position: relative;
-    height: 150px; overflow: hidden;
-    padding: 12px 14px;
+    height: 168px; overflow: hidden;
+    padding: 0;
     background: var(--bg-elev-2);
     border-bottom: 1px solid var(--line-soft);
-    display: flex; flex-direction: column; gap: 5px;
   }
-  /* fade the clipped bottom so a long stack reads as "more page below" */
+  .pa-thumb-scale { width: 100%; height: 100%; }
+  /* Real phone-screen markup, shrunk. Width is fixed; JS sets the scale. */
+  .pa-preset-thumb .pa-thumb-screen {
+    width: 390px; height: auto; min-height: 0;
+    border-radius: 0; overflow: visible;
+    transform-origin: top left;
+    pointer-events: none;        /* clicks fall through to the card button */
+  }
+  /* Child combinator: only the page's image hero, never the hero_intro block
+     (both share .pa-prev-hero; the block lives inside .pa-prev-body). */
+  .pa-preset-thumb .pa-thumb-screen > .pa-prev-hero { aspect-ratio: auto; height: 150px; font-size: 46px; }
+  /* fade the clipped bottom so the page reads as "continues below" — tinted to
+     each skin's page colour so the fade blends instead of greying out. */
   .pa-preset-thumb::after {
-    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 28px;
-    background: linear-gradient(to bottom, transparent, var(--bg-elev-2));
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 40px;
     pointer-events: none;
   }
-  .pa-preset-card:hover .pa-preset-thumb { background: var(--bg-elev-1); }
-  .pa-preset-card:hover .pa-preset-thumb::after { background: linear-gradient(to bottom, transparent, var(--bg-elev-1)); }
-  .pa-preset-thumb .tr { display: flex; gap: 4px; flex: none; }
-  .pa-preset-thumb .tr i { display: block; background: var(--line); border-radius: 2px; }
-  .pa-preset-thumb .tr.spec i  { flex: 1; height: 9px; }
-  .pa-preset-thumb .tr.lines   { flex-direction: column; gap: 3px; }
-  .pa-preset-thumb .tr.lines i { height: 4px; }
-  .pa-preset-thumb .tr.lines i:nth-child(2) { width: 85%; }
-  .pa-preset-thumb .tr.lines i:nth-child(3) { width: 55%; }
-  .pa-preset-thumb .tr.stat    { height: 20px; background: var(--accent); opacity: .85; border-radius: 3px; }
-  .pa-preset-thumb .tr.why     { flex-direction: column; gap: 3px; }
-  .pa-preset-thumb .tr.why i   { height: 4px; width: 72%; }
-  .pa-preset-thumb .tr.chips   { flex-wrap: wrap; gap: 3px; }
-  .pa-preset-thumb .tr.chips i { height: 9px; border-radius: 5px; }
-  .pa-preset-thumb .tr.iline i { flex: 1; height: 6px; }
-  .pa-preset-thumb .tr.quote   { height: 16px; background: var(--bg-pane); border-left: 3px solid var(--accent); border-radius: 2px; }
-  .pa-preset-thumb .tr.grid    { flex-wrap: wrap; gap: 3px; }
-  .pa-preset-thumb .tr.grid i  { width: calc(33.33% - 3px); height: 14px; border-radius: 3px; }
-  .pa-preset-thumb .tr.storage i { flex: 1; height: 20px; border-radius: 3px; }
-  .pa-preset-thumb .tr.allergen  { height: 15px; border: 1px solid var(--line); border-radius: 3px; }
-  .pa-preset-thumb .tr.notes   { height: 11px; background: var(--accent); opacity: .25; border-radius: 2px; }
-  .pa-preset-thumb .tr.bar     { height: 9px; background: var(--line); border-radius: 2px; }
-
-  /* Per-template thumb skins. Both templates seed the SAME block stack, so the
-     auto-wireframe is identical — the only real difference is the visual skin.
-     These rules let each card preview its own look (warm editorial vs. minimal
-     hairline) instead of showing the same grey skeleton twice. Card-prefixed so
-     they survive the hover/active background overrides above. */
-  /* Editorial Light — warm paper, solid bars, accent on the callout/stat. */
-  .pa-preset-card .pa-preset-thumb.pa-tpl-editorial_light { background: #F3ECE2; }
-  .pa-preset-card .pa-preset-thumb.pa-tpl-editorial_light::after { background: linear-gradient(to bottom, transparent, #F3ECE2); }
-  .pa-preset-thumb.pa-tpl-editorial_light .tr i { background: #BCAF9B; }
-  .pa-preset-thumb.pa-tpl-editorial_light .tr.notes,
-  .pa-preset-thumb.pa-tpl-editorial_light .tr.stat { background: var(--accent); opacity: .9; }
-
-  /* Quiet Minimal — white, generous whitespace, hairline rules, single lime accent. */
-  .pa-preset-card .pa-preset-thumb.pa-tpl-quiet_minimal { background: #fff; gap: 9px; padding: 14px 16px; }
-  .pa-preset-card .pa-preset-thumb.pa-tpl-quiet_minimal::after { background: linear-gradient(to bottom, transparent, #fff); }
-  .pa-preset-thumb.pa-tpl-quiet_minimal .tr i { background: #DBDBD4; }
-  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.spec i { height: 6px; }
-  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.lines i { height: 3px; }
-  /* chips → outlined hairline pills, lead chip gets the lone lime accent */
-  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.chips i { background: transparent; border: 1px solid #DBDBD4; }
-  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.chips i:first-child { border-color: var(--accent); }
-  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.storage i { background: transparent; border: 1px solid #DBDBD4; }
-  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.allergen { border-color: #DBDBD4; }
-  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.notes { background: var(--accent); opacity: .85; height: 3px; }
+  .pa-preset-thumb.pa-tpl-editorial_light::after { background: linear-gradient(to bottom, rgba(242,231,223,0), #F2E7DF); }
+  .pa-preset-thumb.pa-tpl-quiet_minimal::after   { background: linear-gradient(to bottom, rgba(250,248,243,0), #FAF8F3); }
 
   /* Block rows — match the Mini App Editor's .palette-item exactly */
   .pa-block-row {
@@ -905,6 +874,12 @@
   .pa-edit-grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s3); }
   @media (max-width: 620px) { .pa-edit-grid-2 { grid-template-columns: 1fr; } }
   .pa-edit-grid-2 .field { margin-bottom: 0; min-width: 0; }
+  /* spec_strip cells: stack Label over Value so each EN/中 input gets the full
+     panel width (side-by-side cropped the text). */
+  .pa-spec-cell-grid { display: grid; grid-template-columns: 1fr; gap: var(--s3); }
+  .pa-spec-cell-grid .field { margin-bottom: 0; min-width: 0; }
+  .pa-spec-cell-grid .field input,
+  .pa-spec-cell-grid .field textarea { width: 100%; }
   /* Per-block colour picker (bg / fg / accent) — stacked rows like the Mini
      App Editor, each a swatch dropdown so operators SEE the colour. */
   .pa-color-grid { display: grid; grid-template-columns: 1fr; gap: var(--s4); }
@@ -2426,6 +2401,9 @@ function peInspTab(mode) {
   document.getElementById('pe-block-pane').style.display = isPage ? 'none' : '';
   document.getElementById('pe-tab-page').classList.toggle('active', isPage);
   document.getElementById('pe-tab-block').classList.toggle('active', !isPage);
+  // Thumbs render at 0 width while the pane is hidden, so their scale can't be
+  // computed — refit now that the pane is laid out.
+  if (isPage) paFitThumbs(document.getElementById('pa-presets-row'));
   peUpdatePageDot();
 }
 
@@ -2472,26 +2450,57 @@ function paClearColophonChar() {
 // which drives the active-card highlight here and the per-template style layer
 // added later. Switching template is destructive — it reseeds the block stack.
 //
-// Draw a tiny abstract wireframe of a template's layout straight from its
-// `blocks` array — each block type maps to a representative shape. It's
-// derived data, so the preview always matches what the template applies.
-const PA_THUMB_SHAPE = {
-  spec_strip:        b => `<div class="tr spec">${'<i></i>'.repeat(Math.min((b.cells || []).length || 3, 4))}</div>`,
-  hero_intro:        () => `<div class="tr lines"><i></i><i></i><i></i></div>`,
-  big_stat:          () => `<div class="tr stat"></div>`,
-  why:               b => `<div class="tr why">${'<i></i>'.repeat(Math.min((b.rows || []).length || 3, 6))}</div>`,
-  ingredients_chips: b => `<div class="tr chips">${[22,30,17,26,20,28,16].slice(0, Math.min((b.items || []).length || 5, 7)).map(w => `<i style="width:${w}px"></i>`).join('')}</div>`,
-  ingredients_line:  b => `<div class="tr iline">${'<i></i>'.repeat(Math.min((b.items || []).length || 5, 7))}</div>`,
-  pull_quote:        () => `<div class="tr quote"></div>`,
-  how_to_use:        b => `<div class="tr grid">${'<i></i>'.repeat(Math.min((b.tiles || []).length || 6, 12))}</div>`,
-  storage_box:       () => `<div class="tr storage"><i></i><i></i></div>`,
-  allergen_card:     () => `<div class="tr allergen"></div>`,
-  notes_callout:     () => `<div class="tr notes"></div>`,
-};
-function paPresetThumb(blocks) {
-  return (blocks || []).map(b =>
-    (PA_THUMB_SHAPE[b.type] || (() => '<div class="tr bar"></div>'))(b)
-  ).join('');
+// Representative sample content for the thumbnail mini-render. The two templates
+// seed an identical block stack — their only difference is the skin — so one
+// shared sample stack, rendered once per skin, shows the real difference. Kept
+// short (top of the page) since the thumb only reveals the first ~170px.
+const PA_THUMB_SAMPLE = [
+  { type: 'spec_strip', cells: [
+    { k_en: 'Type',   k_cn: '类型', v_en: 'Spread', v_cn: '酱'    },
+    { k_en: 'Net Wt', k_cn: '净重', v_en: '250g',   v_cn: '250克' },
+    { k_en: 'Origin', k_cn: '产地', v_en: 'Yunnan', v_cn: '云南'  },
+  ] },
+  { type: 'hero_intro', kicker_en: 'Stone-ground', kicker_cn: '石磨研磨',
+    body_en: 'Slow-roasted sesame, milled to a silken pour.', body_cn: '慢烘芝麻,研磨至顺滑流动。',
+    highlight_en: 'silken pour', highlight_cn: '顺滑流动' },
+  { type: 'why', rows: [
+    { claim_en: 'Single ingredient, nothing added', claim_cn: '单一原料,无添加'  },
+    { claim_en: 'Cold-pressed for a cleaner taste',  claim_cn: '冷压工艺,口感纯净' },
+    { claim_en: 'High in plant protein',             claim_cn: '富含植物蛋白'     },
+  ] },
+  { type: 'ingredients_chips', items: [
+    { name_en: 'Sesame',       name_cn: '芝麻',   pct: 99, lead: true  },
+    { name_en: 'Sea salt',     name_cn: '海盐',   pct: 1,  lead: false },
+    { name_en: 'Nothing else', name_cn: '别无他物', pct: '', lead: false },
+  ] },
+];
+// Build a true scaled-down render of the real product page in template `id`'s
+// skin. Reuses the live preview's per-block renderer + the .pa-prev-screen markup
+// and pa-tpl-<id> skin class, so the card shows exactly the look the template
+// applies. JS (paFitThumbs) scales the fixed 390px render to the card width.
+function paThumbHtml(id) {
+  const prev = _paPreviewLang;
+  _paPreviewLang = _paPreviewLang || (typeof cuLang === 'function' ? cuLang() : 'en');
+  const PL = _paPreviewLang;
+  const blocks = PA_THUMB_SAMPLE.map(b => _paPreviewBlockHtml(b)).filter(Boolean).join('');
+  _paPreviewLang = prev;
+  const name = PL === 'cn' ? '芝麻酱' : 'Sesame Tahini';
+  const sub  = PL === 'cn' ? 'Sesame Tahini · 石磨' : '芝麻酱 · stone-ground';
+  return `<div class="pa-thumb-scale"><div class="pa-prev-screen pa-thumb-screen pa-tpl-${id}">
+    <div class="pa-prev-hero">🛍</div>
+    <div class="pa-prev-body">
+      <div class="pa-prev-head"><div class="pa-prev-name">${name}</div><div class="pa-prev-subtitle">${sub}</div></div>
+      ${blocks}
+    </div>
+  </div></div>`;
+}
+// Scale each mini-render (fixed 390px wide) to its card's actual width.
+function paFitThumbs(root) {
+  (root || document).querySelectorAll('.pa-thumb-scale').forEach(wrap => {
+    const screen = wrap.querySelector('.pa-thumb-screen'); if (!screen) return;
+    const w = wrap.clientWidth; if (!w) return;
+    screen.style.transform = `scale(${(w / 390).toFixed(4)})`;
+  });
 }
 // Rebuilds the template chooser. The card matching window._paTemplate (the
 // product's saved template) gets an `active` class so the operator can see
@@ -2507,13 +2516,14 @@ function paRenderPresets() {
       : paBiTitle(n + ' blocks', n + ' 个板块');
     return `
     <button type="button" class="pa-preset-card${active ? ' active' : ''}" onclick="paApplyTemplate('${p.id}')" title="${escapeHtml(p.desc_en + ' · ' + p.desc_cn)}">
-      <div class="pa-preset-thumb pa-tpl-${p.id}">${paPresetThumb(p.blocks)}</div>
+      <div class="pa-preset-thumb pa-tpl-${p.id}">${paThumbHtml(p.id)}</div>
       <div class="pa-preset-meta">
         <span class="pa-preset-card-label" data-no-i18n>${paBiTitle(escapeHtml(p.label_en), escapeHtml(p.label_cn))}</span>
         <span class="pa-preset-card-count" data-no-i18n>${count}</span>
       </div>
     </button>`;
   }).join('');
+  paFitThumbs(row);
 }
 function paApplyTemplate(id) {
   const tpl = PA_TEMPLATES.find(p => p.id === id); if (!tpl) return;
@@ -3012,7 +3022,7 @@ function _paBlockEditorBody(b) {
             <span class="pa-edit-section-title">Cell · 第 ${i + 1} 格</span>
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','cells',${i})" ${cells.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
-          <div class="pa-edit-grid-2">
+          <div class="pa-spec-cell-grid">
             ${paPair({ label: paBiTitle('Label', '标签'), keyEn: 'k_en', keyCn: 'k_cn', valEn: c.k_en, valCn: c.k_cn, phEn: 'Type', phCn: '类型', attrs: `data-cellidx="${i}"` })}
             ${paPair({ label: paBiTitle('Value', '值'), keyEn: 'v_en', keyCn: 'v_cn', valEn: c.v_en, valCn: c.v_cn, phEn: 'Refrigerated dip', phCn: '冷藏蘸酱', attrs: `data-cellidx="${i}"` })}
           </div>
@@ -3627,6 +3637,12 @@ window.addEventListener('keydown', (e) => {
     const sw = document.getElementById('pe-switcher-panel');
     if (sw && !sw.hidden) { e.preventDefault(); peCloseSwitcher(); }
   }
+});
+// Keep template-thumbnail scale correct when the inspector column resizes.
+let _paFitThumbsTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_paFitThumbsTimer);
+  _paFitThumbsTimer = setTimeout(() => paFitThumbs(document.getElementById('pa-presets-row')), 120);
 });
 
 // ── i18n / Language toggle ──────────────────────────────────────────────
