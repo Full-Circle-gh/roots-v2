@@ -811,6 +811,32 @@
     font-size: 10px; font-weight: 600; letter-spacing: .1em;
     text-transform: uppercase; color: var(--text-3);
   }
+  /* Collapsible inspector folds (Content / Colours) — mirrors the Mini App
+     Editor's section folding so a long block form folds away. The head is a
+     full-width button; the body shows only when .open. Open/closed survives the
+     inspector's rebuild on add/remove via the paInspectorOpen map (see
+     paInspSec / paRenderSelectedEditor). */
+  .insp-sec { border-top: 1px solid var(--line-soft); }
+  .insp-sec:first-child { border-top: 0; }
+  .insp-sec-head {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; gap: 8px; text-align: left;
+    background: transparent; border: 0; cursor: pointer;
+    padding: 14px 0 12px; margin: 0; font: inherit;
+  }
+  .insp-sec-title {
+    font: 700 11px var(--f-sans); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-3); transition: color var(--t-fast) ease;
+  }
+  .insp-sec-head:hover .insp-sec-title { color: var(--text-1); }
+  .insp-sec-chev {
+    width: 14px; height: 14px; color: var(--text-4); flex-shrink: 0;
+    transition: transform var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .insp-sec.open .insp-sec-chev { transform: rotate(180deg); }
+  .insp-sec-head:hover .insp-sec-chev { color: var(--text-2); }
+  .insp-sec-body { display: none; padding-bottom: var(--s4); }
+  .insp-sec.open .insp-sec-body { display: block; }
   /* minmax(0,…) lets the columns shrink below their inputs' intrinsic width,
      and width:100% makes inputs fill the column — so EN/CN pairs sit side by
      side in the narrow 288px inspector without cropping. */
@@ -818,7 +844,6 @@
   @media (max-width: 620px) { .pa-edit-grid-2 { grid-template-columns: 1fr; } }
   .pa-edit-grid-2 .field { margin-bottom: 0; min-width: 0; }
   /* Per-block colour picker (bg / fg / accent) */
-  .pa-color-section { border-top: 1px dashed var(--line-soft); margin-top: 18px; padding-top: 4px; }
   .pa-color-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s3); }
   @media (max-width: 620px) { .pa-color-grid { grid-template-columns: 1fr; } }
   .pa-color-grid .field { margin-bottom: 0; min-width: 0; }
@@ -1672,6 +1697,36 @@ function paBlockColorStyle(b) {
   if (ac) out.push('--pa-accent:' + ac);
   return out.join(';');
 }
+// ── Collapsible inspector folds (Content / Colours) ──
+// String-based mirror of the Mini App Editor's section folding. The open map is
+// keyed per block type so a fold's open/closed choice survives the inspector's
+// rebuild on add/remove; paRenderSelectedEditor wipes it when the operator moves
+// to a different block, so each block opens at its own defaults.
+const paInspectorOpen = Object.create(null);
+let paLastInspectedId = null;
+// Bilingual fold title — switches live with the chrome language toggle via the
+// data-lang-block CSS rules (no rebuild needed).
+function paBiTitle(en, cn) {
+  return `<span data-lang-block="en">${en}</span><span data-lang-block="cn">${cn}</span>`;
+}
+function paInspSec(key, titleHtml, innerHtml, { open = false } = {}) {
+  const isOpen = (key in paInspectorOpen) ? paInspectorOpen[key] : open;
+  return `<div class="insp-sec${isOpen ? ' open' : ''}" data-insp-sec="${escapeAttr(key)}">
+    <button type="button" class="insp-sec-head" onclick="paInspToggle(this)">
+      <span class="insp-sec-title" data-no-i18n>${titleHtml}</span>
+      <svg class="insp-sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    </button>
+    <div class="insp-sec-body">${innerHtml}</div>
+  </div>`;
+}
+function paInspToggle(btn) {
+  const sec = btn.closest('.insp-sec'); if (!sec) return;
+  const key = sec.getAttribute('data-insp-sec');
+  const nowOpen = !sec.classList.contains('open');
+  sec.classList.toggle('open', nowOpen);
+  if (key) paInspectorOpen[key] = nowOpen;
+}
+
 // Colour-picker section appended to every applicable block's inspector.
 function _paColorEditorHtml(b) {
   const slots = PA_DC_FIELDS[b.type];
@@ -1693,11 +1748,8 @@ function _paColorEditorHtml(b) {
     </div>`;
   };
   return `
-    <div class="pa-color-section">
-      <div class="pa-edit-section-title" style="margin:20px 0 10px">Colours · 颜色</div>
-      <div class="pa-color-grid">${slots.map(cell).join('')}</div>
-      <div class="helper">Optional. Leave on Default to follow the template's look. · 可选,默认跟随模板风格。</div>
-    </div>`;
+    <div class="pa-color-grid">${slots.map(cell).join('')}</div>
+    <div class="helper">Optional. Leave on Default to follow the template's look. · 可选,默认跟随模板风格。</div>`;
 }
 
 // ── State ──
@@ -3154,9 +3206,17 @@ function paRenderSelectedEditor() {
   }
   let b = blocks.find(x => x.id === PA_SELECTED_BLOCK_ID);
   if (!b) { b = blocks[0]; PA_SELECTED_BLOCK_ID = b.id; }
+  // Moving to a different block resets every fold to its default open state.
+  if (b.id !== paLastInspectedId) {
+    for (const k in paInspectorOpen) delete paInspectorOpen[k];
+    paLastInspectedId = b.id;
+  }
   const tName = PA_TYPE_NAME[b.type] || { en: b.type, cn: '' };
   const icon  = peTypeIcon(b.type);
-  const body  = _paBlockEditorBody(b) + _paColorEditorHtml(b);
+  const colorInner = _paColorEditorHtml(b);
+  const body =
+    paInspSec(b.type + ':content', paBiTitle('Content', '内容'), _paBlockEditorBody(b), { open: true })
+    + (colorInner ? paInspSec(b.type + ':colours', paBiTitle('Colours', '颜色'), colorInner) : '');
   mount.innerHTML = `
     <div class="pa-inspector-head" data-blockid="${b.id}">
       <div class="pa-inspector-head-left">
