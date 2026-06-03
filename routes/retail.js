@@ -851,7 +851,7 @@ const SOCIAL_PROOF_PAID =
 const SOCIAL_PROOF_DEFAULTS = Object.freeze({
   bought_count:  { enabled: true, min_today: 2, min_week: 2, min_month: 1, min_all: 2, boost_min: 0, boost_max: 0 },
   recent_buyers: { enabled: true, window_days: 7, manual: [] },
-  viewing_now:   { enabled: true, ttl_sec: 45, boost_min: 0, boost_max: 0 },
+  viewing_now:   { enabled: true, show_in_app: true, ttl_sec: 45, boost_min: 0, boost_max: 0 },
   last_ordered:  { enabled: true, max_hours: 24, fallback_min_minutes: 0, fallback_max_minutes: 0 },
   sold_badge:    { enabled: true, min_units: 3, boost_min: 0, boost_max: 0 },
 });
@@ -1329,7 +1329,12 @@ router.post('/api/retail/products/:id/viewing', express.json(), (req, res) => {
     boost = Math.max(0, Math.round(boost * (1 + driftPct)));
   }
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { count: viewers.size + boost } });
+  // Track always (so the backend LIVE pane reads the raw VIEWING map), but only
+  // reveal the count to the mini-app when show_in_app is on. When it's off the
+  // operator gets backend-only counting and the customer badge stays hidden
+  // (count:0 trips the mini-app's ≥2 gate).
+  const shown = (vn.show_in_app === false) ? 0 : (viewers.size + boost);
+  res.json({ success: true, data: { count: shown } });
 });
 
 // Active + upcoming flash sales — feeds the flash_sale_strip CMS block and

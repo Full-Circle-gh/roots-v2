@@ -8621,10 +8621,17 @@
               <h3>"N viewing now" — product page · "X 人正在查看" — 商品页</h3>
               <div class="muted">Real concurrent-viewer count. In-memory; resets when the app restarts. Mini-app shows the badge only at 2+ viewers. · 实时查看人数(内存中保存,重启后重置);客户端在 2 人以上才显示。</div>
             </div>
-            <label class="ckbox" style="margin-bottom: 12px;">
+            <label class="ckbox" style="margin-bottom: 8px;">
               <input type="checkbox" id="cfg-social-vn-enabled">
-              <span>Track + show viewer counts · 追踪并显示在线人数</span>
+              <span>Track viewer counts (powers the dashboard LIVE pane) · 追踪在线人数(用于后台实时面板)</span>
             </label>
+            <label class="ckbox" style="margin-bottom: 12px;">
+              <input type="checkbox" id="cfg-social-vn-show_in_app">
+              <span>Also show the "N viewing now" badge to customers · 同时向客户显示"N 人正在查看"标签</span>
+            </label>
+            <div class="helper" style="margin: -4px 0 12px; line-height: 1.5;">
+              Leave the second box off to count viewers for yourself only — the backend LIVE pane fills in, but customers never see the badge. · 仅勾选第一项即可只在后台统计,客户端不显示。
+            </div>
             <div class="row" style="gap: 16px; flex-wrap: wrap;">
               <div class="field" style="margin: 0;">
                 <label class="stacked">Viewer freshness · 在线时长</label>
@@ -13635,6 +13642,7 @@ async function loadConfig() {
     })) : [];
     renderManualBuyers();
     $('#cfg-social-vn-enabled').checked   = sp_vn.enabled !== false;
+    $('#cfg-social-vn-show_in_app').checked = sp_vn.show_in_app !== false;
     $('#cfg-social-vn-ttl_sec').value     = sp_vn.ttl_sec ?? 45;
     $('#cfg-social-vn-boost_min').value   = sp_vn.boost_min ?? vnBoostLegacy;
     $('#cfg-social-vn-boost_max').value   = sp_vn.boost_max ?? vnBoostLegacy;
@@ -13759,7 +13767,8 @@ async function saveConfig() {
             .filter(m => m.name && (m.product_en || m.product_cn)),
         },
         viewing_now: {
-          enabled:   $('#cfg-social-vn-enabled').checked,
+          enabled:     $('#cfg-social-vn-enabled').checked,
+          show_in_app: $('#cfg-social-vn-show_in_app').checked,
           ttl_sec:   Math.max(5, Math.min(600, Number($('#cfg-social-vn-ttl_sec').value) || 45)),
           boost_min: vnR.min,
           boost_max: vnR.max,
