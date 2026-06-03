@@ -6955,7 +6955,14 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     } else if (Array.isArray(v)) { arr = v; }
     sets.push('description_blocks = ?');
     params.push(arr && arr.length ? JSON.stringify(arr) : null);
+    // Designing a page here makes it live without a second trip back to the
+    // kitchen app's design toggle: a non-empty block stack auto-switches the
+    // mini-app to the block renderer. An explicit use_block_design wins.
+    if (!('use_block_design' in body) && arr && arr.length) {
+      sets.push('use_block_design = ?'); params.push(1);
+    }
   }
+  if ('use_block_design' in body) { sets.push('use_block_design = ?'); params.push(body.use_block_design ? 1 : 0); }
   // Nutrition panel — stored as its own JSON column, edited from the product
   // editor as a (pseudo) block. Shape: { basis_en, basis_cn, rows:[{label_en,
   // label_cn, value}] }. Sanitised here so we never persist junk. null/empty
