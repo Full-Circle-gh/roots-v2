@@ -722,8 +722,13 @@
   .db-tile-list-row .val  { color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; font-weight: 500; }
   .db-tile-empty { font-size: 12px; color: var(--text-3); padding: 8px 0; text-align: center; }
   /* Mini heatmap for the bento variant — squished cells, no labels. */
-  .db-bento .db-tile .db-heat-mini { display: grid; grid-template-columns: repeat(24, 1fr); gap: 1px; }
-  .db-bento .db-tile .db-heat-mini > i { display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: 2px; background: var(--line-soft); }
+  /* Mini heatmap — day-of-week rows (labelled) × 24 hour cells, with an hour
+     axis beneath. The "Busiest …" caption carries the actual takeaway. */
+  .db-bento .db-tile .db-heat-mini { display: grid; grid-template-columns: 12px 1fr; gap: 2px 5px; align-items: center; }
+  .db-bento .db-tile .db-heat-day { font-size: 9px; line-height: 1; color: var(--text-3); font-family: var(--f-mono); text-align: right; }
+  .db-bento .db-tile .db-heat-cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 1px; }
+  .db-bento .db-tile .db-heat-cells > i { display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: 2px; background: var(--line-soft); }
+  .db-bento .db-tile .db-heat-axis { display: flex; justify-content: space-between; font-size: 8px; line-height: 1; color: var(--text-3); font-family: var(--f-mono); }
 
   /* Tile-swap popover. Floats above on click, dismissed by outside-click. */
   .db-tile-pop { position: fixed; min-width: 220px; max-width: 280px; background: var(--bg-pane); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 6px; z-index: 250; }
@@ -10424,21 +10429,39 @@ const BENTO_CATALOGUE = {
     render: (body) => {
       const heat = (DASH_DATA && DASH_DATA.heat) || [];
       if (!heat.length) return body.innerHTML = `<div class="db-tile-empty">No data · 暂无数据</div>`;
-      // 7 rows (day of week) × 24 cols (hour). Server returns a flat
-      // [{dow, hour, n}] list. Build a 7×24 grid; intensity = n / max.
+      // 7 rows (day of week, dow 0=Sun..6=Sat) × 24 cols (hour). Server
+      // returns a flat [{dow, hour, orders}] list. Build a 7×24 grid; cell
+      // intensity = orders / max. Track the single busiest cell for the caption.
       const grid = Array.from({ length: 7 }, () => new Array(24).fill(0));
-      let max = 0;
+      let max = 0, peak = null;
       for (const r of heat) {
         const d = Number(r.dow); const h = Number(r.hour); const n = Number(r.orders || 0);
-        if (d >= 0 && d < 7 && h >= 0 && h < 24) { grid[d][h] = n; if (n > max) max = n; }
+        if (d >= 0 && d < 7 && h >= 0 && h < 24) {
+          grid[d][h] = n;
+          if (n > max) max = n;
+          if (n > 0 && (!peak || n > peak.n)) peak = { n, dow: d, hour: h };
+        }
       }
-      const cells = grid.map(row => row.map(n => {
-        const t = max ? n / max : 0;
-        const op = t > 0 ? (0.18 + 0.72 * t).toFixed(2) : 0;
-        return `<i style="background: rgba(176,141,74,${op})"></i>`;
-      }).join('')).join('');
-      body.innerHTML = `<div class="db-heat-mini">${cells}</div>
-        <div class="db-tile-sub" style="margin-top:8px">7 days × 24 hours · 7天 × 24小时</div>`;
+      const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+      const rowsHtml = grid.map((row, d) => {
+        const cells = row.map(n => {
+          const t = max ? n / max : 0;
+          const op = t > 0 ? (0.18 + 0.72 * t).toFixed(2) : 0;
+          return `<i style="background: rgba(176,141,74,${op})"></i>`;
+        }).join('');
+        return `<span class="db-heat-day">${DAYS[d]}</span><div class="db-heat-cells">${cells}</div>`;
+      }).join('');
+      const axis = `<span></span><div class="db-heat-axis"><span>0</span><span>6</span><span>12</span><span>18</span><span>23</span></div>`;
+      // Caption keeps the English half free of " · " so the i18n splitter
+      // (first " · " = EN|CN divider) parses it correctly.
+      const EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+      const hh = peak ? String(peak.hour).padStart(2, '0') : '';
+      const cap = peak
+        ? `Busiest ${EN[peak.dow]} ${hh}:00 · 最忙 ${CN[peak.dow]} ${hh}:00`
+        : `7 days × 24 hours · 7天 × 24小时`;
+      body.innerHTML = `<div class="db-heat-mini">${rowsHtml}${axis}</div>
+        <div class="db-tile-sub" style="margin-top:8px">${cap}</div>`;
     },
   },
   customer_tiers: {
@@ -20999,19 +21022,20 @@ cuApplyUiScale(cuGetUiScale());
   // Auto-translate content added by JS after load (order drawers, table rows,
   // etc.). Rewriting nodeValue does NOT fire childList mutations, so there is
   // no feedback loop and no need to disconnect.
-  let _moTimer, _pending = [];
   const _mo = new MutationObserver(function (mutations) {
+    const batch = [];
     for (const m of mutations) {
       for (const node of m.addedNodes) {
-        if (node.nodeType === 1 || node.nodeType === 3) _pending.push(node);
+        if (node.nodeType === 1 || node.nodeType === 3) batch.push(node);
       }
     }
-    if (!_pending.length) return;
-    clearTimeout(_moTimer);
-    _moTimer = setTimeout(function () {
-      const batch = _pending; _pending = [];
-      batch.forEach(function (nd) { try { processSubtree(nd); } catch (e) {} });
-    }, 60);
+    if (!batch.length) return;
+    // Process synchronously here (the observer callback is a microtask that
+    // runs BEFORE the browser paints) rather than on a deferred timer. The
+    // old 60ms setTimeout let freshly-inserted "EN · CN" nodes paint raw for
+    // a frame, which showed as a flash of Chinese whenever the dashboard
+    // re-rendered — e.g. on tab re-focus / window minimize-restore.
+    batch.forEach(function (nd) { try { processSubtree(nd); } catch (e) {} });
   });
 
   window.cuToggleLang  = function () { applyLang(_lang === 'cn' ? 'en' : 'cn'); };
