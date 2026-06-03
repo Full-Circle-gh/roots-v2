@@ -1828,6 +1828,17 @@ function paInspToggle(btn) {
 
 // Colour-picker section appended to every applicable block's inspector.
 function _paColorEditorHtml(b) {
+  // big_stat / stat_callout don't use the bg/fg/accent slots — they carry a
+  // single dedicated slab colour. Surface it here so it lives in the Colours
+  // fold rather than under Content.
+  if (b.type === 'big_stat' || b.type === 'stat_callout') {
+    const bgOpts = ['lime', 'carrot', 'pink', 'corn', 'sky', 'lotus', 'papaya', 'cucumber'];
+    return `
+      <div class="field"><label class="stacked">Slab colour · 色块颜色</label>
+        <select data-bkey="bg">${bgOpts.map(c => `<option value="${c}" ${b.bg === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
+      </div>
+      <div class="helper">The colour of the stat slab. · 数字色块的颜色。</div>`;
+  }
   const slots = PA_DC_FIELDS[b.type];
   if (!slots || !slots.length) return '';
   const meta = { bg: ['Background', '背景'], fg: ['Text', '文字'], accent: ['Accent', '点缀'] };
@@ -3114,7 +3125,6 @@ function _paBlockEditorBody(b) {
       </div>`;
   }
   if (b.type === 'big_stat' || b.type === 'stat_callout') {
-    const bgOpts = ['lime','carrot','pink','corn','sky','lotus','papaya','cucumber'];
     return `
       <div class="pa-edit-grid-2">
         <div class="field" style="grid-column:span 2"><label class="stacked">Stat · 数字</label>
@@ -3123,9 +3133,6 @@ function _paBlockEditorBody(b) {
         </div>
         ${paPair({ label: paBiTitle('What', '内容'), keyEn: 'what_en', keyCn: 'what_cn', valEn: b.what_en, valCn: b.what_cn, phEn: 'HAZELNUTS', phCn: '榛子', span2: true, helper: 'Caps label under the stat. · 数字下方的大写小标题。' })}
         ${paPair({ label: paBiTitle('Claim (optional)', '说明(可选)'), keyEn: 'claim_en', keyCn: 'claim_cn', valEn: b.claim_en, valCn: b.claim_cn, phEn: 'Nuts first, not sugar.', phCn: '坚果当先,不靠糖分。', span2: true, helper: 'Italic one-liner under the what-label. · 内容标签下方的斜体一行说明。' })}
-        <div class="field" style="grid-column:span 2"><label class="stacked">Slab colour · 色块颜色</label>
-          <select data-bkey="bg">${bgOpts.map(c => `<option value="${c}" ${b.bg === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
-        </div>
       </div>`;
   }
   if (b.type === 'pull_quote') {
