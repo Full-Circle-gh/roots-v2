@@ -3447,7 +3447,7 @@ function paRenderSelectedEditor() {
   const icon  = peTypeIcon(b.type);
   const colorInner = _paColorEditorHtml(b);
   const body =
-    paInspSec(b.type + ':content', paBiTitle('Content', '内容'), _paBlockEditorBody(b))
+    paInspSec(b.type + ':content', paBiTitle('Content', '内容'), _paBlockEditorBody(b), { open: true })
     + (colorInner ? paInspSec(b.type + ':colours', paBiTitle('Colours', '颜色'), colorInner) : '');
   mount.innerHTML = `
     <div class="pa-inspector-head" data-blockid="${b.id}">
