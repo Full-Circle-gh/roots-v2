@@ -11476,7 +11476,7 @@ async function viewProduct(id) {
     <div id="prodHero">${_renderProdHero(ctx)}</div>
     <div class="card" id="prodEssentialsCard" style="padding:14px 18px;margin-bottom:16px">${_renderProdEssentialsCard(ctx)}</div>
     <div id="prodBento" class="prod-bento">
-      <div class="card" id="prodStockCard" style="padding:14px 18px;color:var(--muted);font-size:13px">📦 Loading stock by store · 加载库存…</div>
+      <div class="card" id="prodStockCard" style="padding:14px 18px;color:var(--muted);font-size:13px">${_prodStockCardSkeleton()}</div>
       <div class="card" id="prodSizesCard" style="padding:14px 18px">${_renderSizesCardInner(ctx)}</div>
       <details class="card" id="prodBundleCollapse" style="padding:14px 18px"${_kbuHasBundle(ctx.p) ? ' open' : ''}>
         <summary><div class="card-title">🎁 ${_kbuSummary(ctx.p)}</div></summary>
@@ -12928,6 +12928,41 @@ async function saveStockAdjust() {
 // adjust buttons (+/-/=) that open the modal pre-bound to that store. The
 // "Restocking · 补货到" line in the modal then makes it crystal clear
 // which store the change applies to.
+// Active stores are global + stable across products, so cache the store list
+// from the first successful load. The next product opened can then paint a
+// same-shape skeleton (header + one row per known store) instead of a single
+// short "Loading…" line — the card no longer collapses-then-grows on open,
+// which is the visible flash the operator sees. Only the live quantities pulse
+// in; layout height stays constant.
+let _prodStoresCache = null;
+function _prodStockCardSkeleton() {
+  if (!Array.isArray(_prodStoresCache) || !_prodStoresCache.length) {
+    return `📦 Loading stock by store · 加载库存…`;
+  }
+  const pulse = 'animation:pulseSlow 1.2s ease-in-out infinite';
+  const skelRow = s => `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;flex-wrap:wrap">
+      <span style="font-size:18px">🏪</span>
+      <div style="flex:1;min-width:140px">
+        <div style="font-weight:700;font-size:13px">${esc(s.store_name_cn || s.store_name_en || s.store_code || '')}</div>
+        ${s.store_name_en && s.store_name_cn ? `<div style="font-size:11px;color:var(--muted)">${esc(s.store_name_en)}</div>` : ''}
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="display:inline-block;width:48px;height:30px;border-radius:99px;background:var(--border);${pulse}"></span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <span class="btn btn-secondary btn-sm" style="opacity:.5;pointer-events:none">+ Add 入库</span>
+        <span class="btn btn-secondary btn-sm" style="opacity:.5;pointer-events:none">− Remove 出库</span>
+        <span class="btn btn-secondary btn-sm" style="opacity:.5;pointer-events:none">= Set 设定</span>
+      </div>
+    </div>`;
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+      <span style="font-size:13px;font-weight:800;color:var(--dk)">📦 Stock · 库存 <span style="color:var(--muted);font-weight:500;font-size:11px">(per store · 按门店)</span></span>
+      <span style="font-size:12px;color:var(--muted)">Total across stores · 合计 <span style="display:inline-block;width:34px;height:14px;border-radius:6px;background:var(--border);vertical-align:middle;${pulse}"></span></span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">${_prodStoresCache.map(skelRow).join('')}</div>`;
+}
+
 async function loadProdStoreStocks(productId) {
   const card = document.getElementById('prodStockCard');
   if (!card) return;
@@ -12945,6 +12980,12 @@ async function loadProdStoreStocks(productId) {
     card.innerHTML = `<div style="display:flex;align-items:center;gap:10px"><span style="font-size:13px;font-weight:800">📦 Stock · 库存</span><span style="color:var(--muted);font-size:12px">No active stores configured · 暂无激活门店</span></div>`;
     return;
   }
+  // Remember the store list so the next product opened can skeleton-render
+  // the same shape immediately (no collapse-then-grow flash).
+  _prodStoresCache = rows.map(r => ({
+    store_id: r.store_id, store_code: r.store_code,
+    store_name_en: r.store_name_en, store_name_cn: r.store_name_cn,
+  }));
   const total = rows.reduce((s, r) => s + (parseInt(r.physical_qty || 0, 10) || 0), 0);
   const storeRow = r => {
     const q = parseInt(r.physical_qty || 0, 10) || 0;
