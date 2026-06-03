@@ -11498,6 +11498,9 @@ async function viewProduct(id) {
       </details>
     </div>
   `;
+  // Strip bilingual labels in the same task as the render so the first paint is
+  // already single-language — avoids the "SKU · 货号" → "SKU" flash on open.
+  window.cuApply && window.cuApply(document.getElementById('main'));
   _pdRenderSaveControls();   // sync the auto-save toggle + Save button to current mode
   loadProdStoreStocks(ctx.p.id);
   // Sales lazy-load: defer the fetch until the operator opens the collapse.
@@ -13014,6 +13017,7 @@ async function loadProdStoreStocks(productId) {
     </div>
     <div style="display:flex;flex-direction:column;gap:8px">${rows.map(storeRow).join('')}</div>
   `;
+  window.cuApply && window.cuApply(card);
 }
 
 // Inline stock-cell edit on the products list. Click the cell → swap in a
@@ -28386,6 +28390,12 @@ function sproutPageContext() {
   window.cuT           = function (en, cn) { return _lang === 'cn' ? cn : en; };
   window.cuLang        = function () { return _lang; };
   window.onLangChange  = function (cb) { _listeners.push(cb); };
+  // Strip bilingual literals on a freshly-rendered subtree SYNCHRONOUSLY, in
+  // the same task that built it — callers use this right after an innerHTML
+  // swap so the first paint already shows the active language. The observer
+  // would catch it too, but only after the swap returns; on the heavier views
+  // (the product page) that left a one-frame "SKU · 货号" → "SKU" flash.
+  window.cuApply       = function (el) { try { processSubtree(el || document.body); } catch (e) {} };
 
   function init() {
     document.documentElement.dataset.uiLang = _lang;
