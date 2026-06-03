@@ -843,13 +843,51 @@
   .pa-edit-grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s3); }
   @media (max-width: 620px) { .pa-edit-grid-2 { grid-template-columns: 1fr; } }
   .pa-edit-grid-2 .field { margin-bottom: 0; min-width: 0; }
-  /* Per-block colour picker (bg / fg / accent) */
-  .pa-color-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s3); }
-  @media (max-width: 620px) { .pa-color-grid { grid-template-columns: 1fr; } }
+  /* Per-block colour picker (bg / fg / accent) — stacked rows like the Mini
+     App Editor, each a swatch dropdown so operators SEE the colour. */
+  .pa-color-grid { display: grid; grid-template-columns: 1fr; gap: var(--s4); }
   .pa-color-grid .field { margin-bottom: 0; min-width: 0; }
-  .pa-color-cell { display: flex; align-items: center; gap: 8px; }
-  .pa-color-cell select { flex: 1; min-width: 0; }
-  .pa-color-sw { width: 20px; height: 20px; border-radius: 50%; flex: none; border: 1px solid var(--line-strong); box-shadow: inset 0 0 0 2px var(--bg-input); }
+  /* Swatch dropdown (ported from the Mini App Editor's colorSelect). */
+  .color-select { position: relative; }
+  .cs-trigger {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 8px 10px;
+    background: var(--bg-input); border: 1px solid var(--line);
+    color: var(--text-1); font: 13px var(--f-sans);
+    border-radius: var(--r-md); cursor: pointer; text-align: left;
+    transition: border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
+  }
+  .cs-trigger:hover { border-color: var(--line-strong); }
+  .color-select .cs-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cs-chev { width: 14px; height: 14px; color: var(--text-3); flex-shrink: 0; }
+  .cs-sw {
+    width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0;
+    border: 1px solid rgba(0,0,0,.20);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
+  }
+  /* Default / none: diagonal slash over a faint checker. */
+  .cs-sw-none {
+    border-color: var(--line-strong);
+    background:
+      linear-gradient(135deg, transparent 44%, var(--text-3) 44%, var(--text-3) 56%, transparent 56%),
+      repeating-conic-gradient(var(--bg-elev-2) 0% 25%, var(--bg-elev-1) 0% 50%) 0 / 8px 8px;
+  }
+  .cs-menu {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 60;
+    max-height: 300px; overflow-y: auto;
+    background: var(--bg-pane); border: 1px solid var(--line-strong);
+    border-radius: var(--r-md); box-shadow: var(--sh-2); padding: 4px;
+  }
+  .cs-menu[hidden] { display: none; }
+  .cs-opt {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 6px 8px; border: 0; border-radius: var(--r-sm);
+    background: transparent; color: var(--text-1); font: 13px var(--f-sans);
+    cursor: pointer; text-align: left;
+  }
+  .cs-opt:hover { background: var(--bg-elev-1); }
+  .cs-opt.is-sel { background: var(--bg-elev-1); }
+  .cs-opt.is-sel .cs-label { font-weight: 600; }
   .pa-edit-grid-2 .field input,
   .pa-edit-grid-2 .field select,
   .pa-edit-grid-2 .field textarea { width: 100%; }
@@ -1733,23 +1771,77 @@ function _paColorEditorHtml(b) {
   if (!slots || !slots.length) return '';
   const meta = { bg: ['Background', '背景'], fg: ['Text', '文字'], accent: ['Accent', '点缀'] };
   const keyOf = { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' };
+  const swatch = (val) => {
+    const hex = paColorHex(val);
+    return hex
+      ? `<span class="cs-sw" style="background:${hex}"></span>`
+      : `<span class="cs-sw cs-sw-none"></span>`;
+  };
+  const lbl = (en, cn) => `<span class="cs-label" data-no-i18n>${paBiTitle(escapeHtml(en), escapeHtml(cn))}</span>`;
   const cell = (slot) => {
     const key = keyOf[slot];
     const cur = b[key] || '';
-    const opts = ['<option value="">— Default · 默认 —</option>']
-      .concat(PA_COLOR_OPTIONS.map(o => `<option value="${o.value}" ${cur === o.value ? 'selected' : ''}>${o.label}</option>`))
-      .join('');
+    // [{ value, en, cn }] — empty value = follow the template (Default).
+    const optList = [{ value: '', en: 'Default', cn: '默认' }].concat(
+      PA_COLOR_OPTIONS.map(o => { const p = paSplitLabel(o.label); return { value: o.value, en: p.en, cn: p.cn }; }));
+    const curOpt = optList.find(o => o.value === cur) || optList[0];
     return `<div class="field">
       <label class="stacked">${meta[slot][0]} · ${meta[slot][1]}</label>
-      <div class="pa-color-cell">
-        <span class="pa-color-sw" style="background:${paColorHex(cur) || 'transparent'}"></span>
-        <select data-bkey="${key}" onchange="this.previousElementSibling.style.background = (window.paColorHex ? (paColorHex(this.value) || 'transparent') : 'transparent')">${opts}</select>
+      <div class="color-select" data-key="${key}">
+        <input type="hidden" data-bkey="${key}" value="${escapeAttr(cur)}">
+        <button type="button" class="cs-trigger" aria-haspopup="listbox" aria-expanded="false">
+          ${swatch(curOpt.value)}${lbl(curOpt.en, curOpt.cn)}
+          <svg class="cs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="cs-menu" role="listbox" hidden>
+          ${optList.map(o => `<button type="button" class="cs-opt${o.value === cur ? ' is-sel' : ''}" role="option" data-v="${escapeAttr(o.value)}">${swatch(o.value)}${lbl(o.en, o.cn)}</button>`).join('')}
+        </div>
       </div>
     </div>`;
   };
   return `
     <div class="pa-color-grid">${slots.map(cell).join('')}</div>
     <div class="helper">Optional. Leave on Default to follow the template's look. · 可选,默认跟随模板风格。</div>`;
+}
+// Split a fused "Lime · 青柠" colour label into { en, cn }.
+function paSplitLabel(label) {
+  const s = String(label || '');
+  const i = s.indexOf(' · ');
+  return i < 0 ? { en: s, cn: s } : { en: s.slice(0, i), cn: s.slice(i + 3) };
+}
+// Wire the swatch dropdowns after the inspector's innerHTML is set: open/close
+// the popover, close on outside click or another opening, and on pick write the
+// value into the hidden data-bkey input + refresh the trigger + live preview.
+function paWireColorSelects(mount) {
+  mount.querySelectorAll('.color-select').forEach(wrap => {
+    const trigger = wrap.querySelector('.cs-trigger');
+    const menu = wrap.querySelector('.cs-menu');
+    const hidden = wrap.querySelector('input[data-bkey]');
+    const onOutside = (e) => { if (!wrap.contains(e.target)) close(); };
+    function close() {
+      menu.hidden = true; trigger.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('mousedown', onOutside);
+    }
+    trigger.addEventListener('click', () => {
+      if (menu.hidden) {
+        mount.querySelectorAll('.cs-menu:not([hidden])').forEach(m => { if (m !== menu) m.hidden = true; });
+        menu.hidden = false; trigger.setAttribute('aria-expanded', 'true');
+        const sel = menu.querySelector('.cs-opt.is-sel'); if (sel) sel.scrollIntoView({ block: 'nearest' });
+        setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
+      } else { close(); }
+    });
+    menu.querySelectorAll('.cs-opt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (hidden) hidden.value = btn.dataset.v || '';
+        trigger.querySelector('.cs-sw').outerHTML = btn.querySelector('.cs-sw').outerHTML;
+        trigger.querySelector('.cs-label').outerHTML = btn.querySelector('.cs-label').outerHTML;
+        menu.querySelectorAll('.cs-opt').forEach(o => o.classList.remove('is-sel'));
+        btn.classList.add('is-sel');
+        close();
+        paLivePreview();
+      });
+    });
+  });
 }
 
 // ── State ──
@@ -3232,6 +3324,7 @@ function paRenderSelectedEditor() {
     const ev = el.type === 'checkbox' ? 'change' : 'input';
     el.addEventListener(ev, paLivePreview);
   });
+  paWireColorSelects(mount);
 }
 
 // ── Live phone-frame preview ──
