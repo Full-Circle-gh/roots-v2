@@ -9688,6 +9688,13 @@ async function _loadProductCtx(id) {
   const d = await r.json();
   if (!d.success) return null;
   const p = d.data;
+  // Manual-save mode: a partial re-render (e.g. free-of chips) refetches server
+  // truth, which doesn't have the operator's held edits. Overlay the optimistic
+  // _products cache (updated by iedSaveField) so unsaved fields don't revert.
+  if (!_pdAutosave && _pdQueue.length && Number(id) === _pdCurrentPid()) {
+    const cached = (_products || []).find(x => Number(x.id) === Number(id));
+    if (cached) Object.assign(p, cached);
+  }
   let costInfo = null;
   let allergens = [];
   if (p.recipe_id) {
@@ -9743,8 +9750,10 @@ async function _loadProductCtx(id) {
 function _renderProdTopBar(ctx) {
   const { p, safeName } = ctx;
   return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap">
-    <button class="btn btn-secondary" onclick="renderProducts()">← Back 返回</button>
+    <button class="btn btn-secondary" onclick="_pdBack()">← Back 返回</button>
     <span id="pd-save-status" data-pid="${p.id}" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 10px;border-radius:999px;background:#ecfdf5;color:#065f46"><span style="width:7px;height:7px;border-radius:50%;background:#22c55e;display:inline-block"></span>Saved · 已保存</span>
+    <button id="pd-autosave-toggle" class="btn btn-secondary" type="button" onclick="_pdToggleAutosave()" title="When on, every edit saves instantly. When off, edits are held until you press Save. · 开启时每次编辑即时保存;关闭时编辑暂存,按保存后才提交。"></button>
+    <button id="pd-flush-btn" class="btn btn-primary" type="button" onclick="_pdFlushQueue()" style="display:none"></button>
     <span style="flex:1"></span>
     <button class="btn btn-secondary" onclick="printProductLabel(${p.id})">🏷 Print Label 打印标签</button>
     <button class="btn btn-danger" onclick="deleteProduct(${p.id},'${safeName}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1.5 14a2 2 0 0 1-2 1.8H8.5a2 2 0 0 1-2-1.8L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete 删除</button>
@@ -9793,6 +9802,7 @@ document.addEventListener('input', (e) => {
   if (window._pdFetchWrapped) return;
   window._pdFetchWrapped = true;
   const _origFetch = window.fetch.bind(window);
+  window._pdOrigFetch = _origFetch;   // flush replays queued writes through this
   let _inflight = 0;
   window.fetch = function(input, init) {
     const url = typeof input === 'string' ? input : (input && input.url) || '';
@@ -9800,6 +9810,16 @@ document.addEventListener('input', (e) => {
     const isWrite = method !== 'GET' && method !== 'HEAD';
     const touchesProduct = isWrite && /\/api\/(products|inventory|stock|recipes\/.+\/cost)/.test(url);
     const hasPill = !!document.getElementById('pd-save-status');
+    // Manual-save mode only defers plain field edits — a one-product PUT
+    // (`PUT /api/products/:id`). Structural ops (variant group/reorder, stock,
+    // create/delete) read their own response, so they always pass through.
+    const isFieldWrite = method === 'PUT' && /\/api\/products\/\d+(\?|$)/.test(url);
+    // Manual-save mode: hold the field write in a queue instead of sending it.
+    // Hand the caller a synthetic success so its optimistic UI proceeds; the
+    // real request is replayed on Save (when _pdFlushing is set, fall through).
+    if (isFieldWrite && hasPill && !_pdAutosave && !window._pdFlushing) {
+      return _pdEnqueueWrite(input, init);
+    }
     if (!touchesProduct || !hasPill) return _origFetch(input, init);
     _inflight++;
     _pdSetStatus('saving');
@@ -9822,6 +9842,106 @@ document.addEventListener('input', (e) => {
     return p;
   };
 })();
+
+// ── Auto-save toggle (operator's choice; persisted per device) ───────────
+// ON  (default): every edit saves instantly — the original behaviour.
+// OFF (manual batch): product writes are held in _pdQueue and the operator
+//   presses Save to commit them all at once. Lets you review before saving.
+let _pdAutosave = true;
+try { _pdAutosave = localStorage.getItem('pd_autosave') !== '0'; } catch (e) {}
+let _pdQueue = [];   // [{ input, init }] held writes awaiting a manual Save
+
+// Queue a held write and hand back a synthetic success so the caller's
+// optimistic UI (and _products cache update) proceeds as if it saved.
+function _pdEnqueueWrite(input, init) {
+  _pdQueue.push({ input, init });
+  _pdSetStatus('dirty');
+  _pdRenderSaveControls();
+  const body = JSON.stringify({ success: true, _queued: true });
+  return Promise.resolve(new Response(body, {
+    status: 200, headers: { 'Content-Type': 'application/json' },
+  }));
+}
+
+// Replay every queued write for real, in order, then refresh from the server.
+async function _pdFlushQueue() {
+  if (!_pdQueue.length) { _pdSetStatus('saved'); return; }
+  const pid = _pdCurrentPid();
+  const jobs = _pdQueue.slice();
+  _pdQueue = [];
+  _pdRenderSaveControls();
+  _pdSetStatus('saving');
+  window._pdFlushing = true;   // let the wrapper send these through for real
+  try {
+    for (const job of jobs) {
+      const r = await window._pdOrigFetch(job.input, job.init);
+      const ok = r && r.ok;
+      let bad = !ok;
+      if (ok && r.clone) { try { const j = await r.clone().json(); bad = j && j.success === false; } catch (e) {} }
+      if (bad) throw new Error('save failed');
+    }
+    _pdSetStatus('saved');
+    if (pid != null) await viewProduct(pid);   // re-render from server truth
+  } catch (e) {
+    // Re-hold the un-sent jobs so nothing is silently dropped.
+    _pdQueue = jobs.concat(_pdQueue);
+    _pdSetStatus('error');
+    _pdRenderSaveControls();
+    toast('Save failed · 保存失败: ' + e.message, 'error');
+  } finally {
+    window._pdFlushing = false;
+  }
+}
+
+function _pdToggleAutosave() {
+  // Turning auto-save back ON commits anything pending so the two states never
+  // disagree about what's saved.
+  if (!_pdAutosave && _pdQueue.length) { _pdSetAutosave(true); _pdFlushQueue(); return; }
+  _pdSetAutosave(!_pdAutosave);
+}
+function _pdSetAutosave(on) {
+  _pdAutosave = !!on;
+  try { localStorage.setItem('pd_autosave', _pdAutosave ? '1' : '0'); } catch (e) {}
+  _pdRenderSaveControls();
+}
+
+// Back guard: in manual mode, warn before discarding held edits.
+function _pdBack() {
+  if (!_pdAutosave && _pdQueue.length &&
+      !confirm('You have ' + _pdQueue.length + ' unsaved change' + (_pdQueue.length === 1 ? '' : 's') +
+               ' that will be lost. Leave anyway? · 有未保存的更改将丢失,仍要离开吗?')) return;
+  _pdQueue = [];
+  renderProducts();
+}
+
+function _pdCurrentPid() {
+  const pill = document.getElementById('pd-save-status');
+  const pid = pill && pill.dataset.pid;
+  return pid != null && pid !== '' ? Number(pid) : null;
+}
+
+// Sync the toggle label + Save button to the current mode / queue depth.
+function _pdRenderSaveControls() {
+  const tgl = document.getElementById('pd-autosave-toggle');
+  if (tgl) tgl.innerHTML = _pdAutosave
+    ? '<span style="color:#22c55e">●</span> Auto-save: On · 自动保存:开'
+    : '<span style="color:#f59e0b">●</span> Auto-save: Off · 自动保存:关';
+  const btn = document.getElementById('pd-flush-btn');
+  if (btn) {
+    const n = _pdQueue.length;
+    if (!_pdAutosave && n) {
+      btn.style.display = '';
+      btn.disabled = false;
+      btn.textContent = 'Save ' + n + ' change' + (n === 1 ? '' : 's') + ' · 保存';
+    } else if (!_pdAutosave) {
+      btn.style.display = '';
+      btn.disabled = true;
+      btn.textContent = 'Save · 保存';
+    } else {
+      btn.style.display = 'none';
+    }
+  }
+}
 
 // Inline photo-upload from the product detail hero. Opens the file picker,
 // processes the chosen file with the same resize/encode pipeline as the
@@ -11318,6 +11438,10 @@ async function pfApplyVariantOrder() {
 }
 
 async function viewProduct(id) {
+  // Manual-save mode: don't reload over the operator's held edits. A post-save
+  // re-render would refetch server truth and wipe the unsaved changes still
+  // sitting in the DOM. (Flush clears the queue first, so it re-renders fine.)
+  if (!_pdAutosave && _pdQueue.length && Number(id) === _pdCurrentPid()) return;
   // Run the product fetch and the recipe-cache warm-up in parallel so the
   // inline recipe picker is populated on first paint without doubling the wait.
   const [ctx] = await Promise.all([_loadProductCtx(id), _ensureRecipesLoaded()]);
@@ -11353,6 +11477,7 @@ async function viewProduct(id) {
       </details>
     </div>
   `;
+  _pdRenderSaveControls();   // sync the auto-save toggle + Save button to current mode
   loadProdStoreStocks(ctx.p.id);
   // Sales lazy-load: defer the fetch until the operator opens the collapse.
   const sales = document.getElementById('prodSalesCollapse');
