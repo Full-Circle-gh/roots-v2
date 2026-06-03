@@ -724,11 +724,15 @@
   /* Mini heatmap for the bento variant — squished cells, no labels. */
   /* Mini heatmap — day-of-week rows (labelled) × 24 hour cells, with an hour
      axis beneath. The "Busiest …" caption carries the actual takeaway. */
-  .db-bento .db-tile .db-heat-mini { display: grid; grid-template-columns: 12px 1fr; gap: 2px 5px; align-items: center; }
-  .db-bento .db-tile .db-heat-day { font-size: 9px; line-height: 1; color: var(--text-3); font-family: var(--f-mono); text-align: right; }
-  .db-bento .db-tile .db-heat-cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 1px; }
-  .db-bento .db-tile .db-heat-cells > i { display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: 2px; background: var(--line-soft); }
-  .db-bento .db-tile .db-heat-axis { display: flex; justify-content: space-between; font-size: 8px; line-height: 1; color: var(--text-3); font-family: var(--f-mono); }
+  /* Let the heatmap fill the tile's full height instead of sitting at its
+     small intrinsic (square-cell) size — row-3 tiles stretch to the tallest
+     sibling, so otherwise the grid leaves dead space below. */
+  .db-bento .db-tile .db-tile-body:has(.db-heat-mini) { display: flex; flex-direction: column; }
+  .db-bento .db-tile .db-heat-mini { display: grid; grid-template-columns: 14px 1fr; grid-template-rows: repeat(7, 1fr) auto; gap: 4px 6px; align-items: stretch; flex: 1 1 auto; min-height: 0; }
+  .db-bento .db-tile .db-heat-day { font-size: 10px; line-height: 1; color: var(--text-3); font-family: var(--f-mono); text-align: right; align-self: center; }
+  .db-bento .db-tile .db-heat-cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; height: 100%; }
+  .db-bento .db-tile .db-heat-cells > i { display: block; width: 100%; height: 100%; min-height: 12px; border-radius: 2px; background: var(--line-soft); }
+  .db-bento .db-tile .db-heat-axis { display: flex; justify-content: space-between; font-size: 9px; line-height: 1; color: var(--text-3); font-family: var(--f-mono); align-self: center; }
 
   /* Tile-swap popover. Floats above on click, dismissed by outside-click. */
   .db-tile-pop { position: fixed; min-width: 220px; max-width: 280px; background: var(--bg-pane); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 6px; z-index: 250; }
@@ -4290,7 +4294,7 @@
           <div class="db-today-grid">
             <div class="db-today-cell hero"><div class="val" id="db-today-rev">¥—</div><div class="lbl">Revenue · 营收</div></div>
             <div class="db-today-cell"><div class="val" id="db-today-ord">—</div><div class="lbl">Orders · 订单</div></div>
-            <div class="db-today-cell"><div class="val" id="db-today-new">—</div><div class="lbl">New · 新客</div></div>
+            <div class="db-today-cell"><div class="val" id="db-today-new">—</div><div class="lbl">New customers · 新客</div></div>
           </div>
         </div>
         <div class="db-hero-pane db-feed-pane">
