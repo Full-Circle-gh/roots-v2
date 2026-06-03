@@ -542,9 +542,11 @@ BLOCK TYPES (pick the ones that fit — skip the rest, never force-fill):
 - **nutrition_facts** — only if the text has a nutrition table. Fields: basis_en/cn (e.g. "Per 100g"), rows[] of { label_en, label_cn, value }.
 
 RULES:
+- COVER EVERYTHING. Walk the source top to bottom and map EVERY distinct section or heading to its best-fit block. Each meaningful chunk of copy must land in some block — never silently drop a section. A product with Description / Why / Ingredients / Allergens / How to use / Storage / Nutrition / Notes should produce a block for EACH of those, in that reading order. Under-covering a rich paste (emitting only the easy tabular blocks and skipping the prose) is the #1 failure — do not do it.
+- Match by meaning, not exact wording. Typical headings → block types: an intro/overview paragraph → hero_intro; "why people choose it" / benefits → why; an ingredient list → ingredients_chips (or ingredients_line); "contains / may contain" → allergen_card; "how to use" / serving ideas → how_to_use; storage / shelf life → storage_box; a nutrition table → nutrition_facts; closing fine-print / "intended use" / disclaimers → notes_callout; meta facts (type, net weight, origin) → spec_strip.
 - Order blocks the way they should read on the page (intro first, fine-print/notes last).
 - Don't duplicate content across blocks. Each fact lives in one block.
-- Only emit a block if the source text actually supports it. A sparse paste might be just hero_intro + ingredients. That's fine — fewer, accurate blocks beat many empty ones.
+- Don't fabricate: only emit a block type when the source genuinely has that content, and never pad a block with invented fields. This is NOT licence to skip sections that ARE present — when in doubt, include a block for a section you can see rather than omit it.
 - pct is a string ("12%" or "") and lead/alt are booleans.`;
 
 // Build the language directive from which source texts are present + whether
