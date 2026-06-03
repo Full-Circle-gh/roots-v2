@@ -8613,7 +8613,7 @@
           <div class="group-card">
             <div class="group-card-head">
               <h3>Recent-buyers ticker — home · 最近购买滚动条 — 首页</h3>
-              <div class="muted">Cycles real recent purchases as a dismissible toast ("李** bought X · 5 min ago"). Names are masked server-side; only paid orders count. · 在首页循环显示真实的近期购买记录(姓名已脱敏)。</div>
+              <div class="muted">Cycles real recent purchases as a dismissible toast ("W** bought X, 5 min ago"). Names are masked server-side; only paid orders count. · 在首页循环显示真实的近期购买记录(姓名已脱敏)。</div>
             </div>
             <label class="ckbox" style="margin-bottom: 12px;">
               <input type="checkbox" id="cfg-social-rb-enabled">
@@ -8634,7 +8634,7 @@
             <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
             <div style="margin-bottom: 8px;">
               <b style="font-size: 13px;">Manual fake entries · 手动虚拟条目</b>
-              <div class="muted" style="margin-top: 4px;">Mixed into the real feed and sorted by time. Names should be pre-masked (type "李**" or "M***"). Each entry's displayed time gets a small ±4-min jitter so duplicates don't show identical "X min ago". · 与真实订单合并并按时间排序;姓名请预先脱敏;显示时间会有 ±4 分钟微抖动避免重复。</div>
+              <div class="muted" style="margin-top: 4px;">Mixed into the real feed and sorted by time. Names should be pre-masked (type "W**" or "M***"). Each entry's displayed time gets a small ±4-min jitter so duplicates don't show identical "X min ago". · 与真实订单合并并按时间排序;姓名请预先脱敏;显示时间会有 ±4 分钟微抖动避免重复。</div>
             </div>
             <div id="cfg-social-rb-manual-list" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;"></div>
             <button type="button" class="btn btn-sm" onclick="addManualBuyer()">+ Add fake entry · 添加虚拟条目</button>
@@ -13876,7 +13876,7 @@ function renderManualBuyers() {
          padding: 8px; background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: 6px;">
       <input type="text" data-mb-i="${i}" data-mb-f="name"
              value="${escapeAttr(m.name || '')}"
-             placeholder="李** · masked name"
+             data-ph-en="Masked name, e.g. W**" data-ph-cn="已脱敏姓名,如 李**"
              style="flex: 1 1 110px; min-width: 90px; font-size: 12px;">
       <input type="text" data-mb-i="${i}" data-mb-f="product_en"
              value="${escapeAttr(m.product_en || '')}"
