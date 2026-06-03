@@ -34,6 +34,16 @@ function loopZigzag(teeth = 14, depth = 3.4) {
   return `polygon(${pts.join(', ')})`;
 }
 
+// Cream cap with a sawtooth BOTTOM edge for the flash-sale design directions
+// (classic/editorial/urgency). Flat across the top; teeth point down into the
+// coral band. Applied as an inline clip-path on the .fsd-zig cap element.
+function fsdZigClip(teeth = 24) {
+  const s = 100 / teeth;
+  const pts = ['0% 0%', '100% 0%'];
+  for (let i = teeth; i >= 0; i--) pts.push(`${(i * s).toFixed(2)}% ${i % 2 ? '42%' : '100%'}`);
+  return `polygon(${pts.join(', ')})`;
+}
+
 const COLOR_MAP = {
   'lime-leaf':   '#CCD900', 'forest-kale': '#365329', 'olive-moss': '#6A6E2D',
   'roasted-almond': '#C37F4E', 'golden-corn': '#F2CA6C', 'oat-milk': '#F2E7DF',
@@ -358,6 +368,8 @@ Component({
           // scroll). index/bento/sticker are the three "Shop the garden"
           // design directions, each a self-contained layout that ignores view.
           out.catStyle = ['index', 'bento', 'sticker'].includes(b.cat_style) ? b.cat_style : 'classic';
+          // Bento number badge ("NN · count") on each tile; on unless turned off.
+          out.bentoBadge = b.bento_badge !== 0;
           out.catCols = Math.max(3, Math.min(5, b.columns || 4));
           out.catBg   = color(b.bg_color || '');
           // Standard cross-block options.

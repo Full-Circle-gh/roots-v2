@@ -122,7 +122,7 @@
           style="{{item.cover ? '' : 'background:' + item.bg + ';color:' + item.fg}}"
           data-id="{{item.id}}" bindtap="onCategoryTap">
       <image wx:if="{{item.cover}}" src="{{item.cover}}" mode="aspectFill" class="bento-img"/>
-      <view class="bento-badge" style="background:{{item.bg}};color:{{item.fg}}">{{item.num}} · {{item.count}}</view>
+      <view wx:if="{{bentoBadge}}" class="bento-badge" style="background:{{item.bg}};color:{{item.fg}}">{{item.num}} · {{item.count}}</view>
       <view class="bento-cap {{item.cover ? 'on-img' : ''}}">
         <view class="en">{{item.name}}</view>
       </view>

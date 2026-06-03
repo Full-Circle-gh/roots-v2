@@ -7809,8 +7809,9 @@ function renderBlockBody(b) {
           const cover = catCover(c);
           const bgStyle = cover ? `background-image:url('${cover}')` : `background:${hex}`;
           const fg = cover ? '#fff' : btnTextHex(hex);
+          const badge = b.bento_badge === 0 ? '' : `<div class="bento-badge" style="background:${hex};color:${btnTextHex(hex)}">${num} · ${catCount(c)}</div>`;
           return `<div class="bento-tile${i === 0 ? ' hero' : ''}" style="${bgStyle};color:${fg}">
-            <div class="bento-badge" style="background:${hex};color:${btnTextHex(hex)}">${num} · ${catCount(c)}</div>
+            ${badge}
             <div class="bento-cap"><div class="en">${escapeHtml(catLabel(c))}</div></div>
           </div>`;
         }).join('');
@@ -10518,6 +10519,21 @@ function buildCatTabsForm(m, b) {
   secContent.appendChild(field(T('SEE ALL link', '「查看全部」跳转'),
     T('Where the SEE ALL header link goes — e.g. shop, promotions, category:5. Leave empty for the Shop tab.', '「查看全部」链接的跳转位置 — 例如 shop、promotions、category:5。留空则跳转「商品」标签页。'),
     txt(b.link_target, v => updateBlockSilent(b.id, { link_target: v }), 'shop')));
+  if (catStyle === 'bento') {
+    const badgeRow = document.createElement('div');
+    badgeRow.className = 'field';
+    badgeRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const badgeBox = document.createElement('input');
+    badgeBox.type = 'checkbox';
+    badgeBox.checked = b.bento_badge !== 0;
+    badgeBox.addEventListener('change', () => updateBlock(b.id, { bento_badge: badgeBox.checked ? 1 : 0 }));
+    const badgeLbl = document.createElement('label');
+    badgeLbl.style.cssText = 'cursor:pointer;font-size:13px;font-weight:500;';
+    badgeLbl.textContent = T('Show the number badge on each picture', '在每张图片上显示编号徽标');
+    badgeLbl.addEventListener('click', () => { badgeBox.checked = !badgeBox.checked; badgeBox.dispatchEvent(new Event('change')); });
+    badgeRow.appendChild(badgeBox); badgeRow.appendChild(badgeLbl);
+    secBehaviour.appendChild(badgeRow);
+  }
   secBehaviour.appendChild(field(T('Entrance animation', '入场动画'), T('How the block appears when the page opens.', '页面打开时,模块出现的方式。'),
     sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS, v => updateBlock(b.id, { entrance_anim: v }))));
 }
