@@ -3103,10 +3103,8 @@ function _paBlockEditorBody(b) {
     return `
       <div class="helper" style="margin:-4px 0 14px">Editorial sourcing/producer quote on warm tan background. First-person voice from the kitchen. · 编辑式引文,温色背景,第一人称。</div>
       <div class="pa-edit-grid-2">
-        <div class="field" style="grid-column:span 2"><label class="stacked">Quote EN · 引文(英文)</label><textarea data-bkey="text_en" rows="3" placeholder='"Our hazelnuts are slow-roasted in small batches…"'>${t('text_en')}</textarea></div>
-        <div class="field" style="grid-column:span 2"><label class="stacked">Quote CN · 引文(中文)</label><textarea data-bkey="text_cn" rows="3" placeholder='"我们的榛子在小批量中慢烘…"'>${t('text_cn')}</textarea></div>
-        <div class="field"><label class="stacked">Attribution EN · 引用来源(英文)</label><input data-bkey="who_en" type="text" value="${v('who_en')}" placeholder="Our kitchen · Guangzhou"></div>
-        <div class="field"><label class="stacked">Attribution CN · 引用来源(中文)</label><input data-bkey="who_cn" type="text" value="${v('who_cn')}" placeholder="我们的厨房 · 广州"></div>
+        ${paPair({ label: paBiTitle('Quote', '引文'), keyEn: 'text_en', keyCn: 'text_cn', valEn: b.text_en, valCn: b.text_cn, phEn: '"Our hazelnuts are slow-roasted in small batches…"', phCn: '"我们的榛子在小批量中慢烘…"', multiline: true, rows: 3, span2: true })}
+        ${paPair({ label: paBiTitle('Attribution', '引用来源'), keyEn: 'who_en', keyCn: 'who_cn', valEn: b.who_en, valCn: b.who_cn, phEn: 'Our kitchen · Guangzhou', phCn: '我们的厨房 · 广州', span2: true })}
       </div>`;
   }
   if (b.type === 'nutrition_facts') {
@@ -3114,8 +3112,7 @@ function _paBlockEditorBody(b) {
     return `
       <div class="helper" style="margin:-4px 0 14px">Renders as the bordered Nutrition card on the product page (fixed position, after the sections). Rows like Energy / Total fat / Carbohydrate render bold; their sub-rows (Saturated, Sugars…) auto-indent. · 在产品页以带框营养卡呈现(固定位置)。能量/脂肪/碳水等为主行加粗,其子项(饱和脂肪、糖等)自动缩进。</div>
       <div class="pa-edit-grid-2" style="margin-bottom:14px">
-        <div class="field"><label class="stacked">Basis EN · 基准(英文)</label><input data-bkey="basis_en" type="text" value="${v('basis_en')}" placeholder="Per 100g"></div>
-        <div class="field"><label class="stacked">Basis CN · 基准(中文)</label><input data-bkey="basis_cn" type="text" value="${v('basis_cn')}" placeholder="每100克"></div>
+        ${paPair({ label: paBiTitle('Basis', '基准'), keyEn: 'basis_en', keyCn: 'basis_cn', valEn: b.basis_en, valCn: b.basis_cn, phEn: 'Per 100g', phCn: '每100克', span2: true })}
       </div>
       ${rows.map((r, i) => `
         <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
@@ -3123,10 +3120,7 @@ function _paBlockEditorBody(b) {
             <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','rows',${i})" ${rows.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
-          <div class="pa-edit-grid-2">
-            <div class="field"><label class="stacked">Label EN · 标签(英文)</label><input data-rowidx="${i}" data-bkey="label_en" type="text" value="${escapeAttr(r.label_en || '')}" placeholder="Energy"></div>
-            <div class="field"><label class="stacked">Label CN · 标签(中文)</label><input data-rowidx="${i}" data-bkey="label_cn" type="text" value="${escapeAttr(r.label_cn || '')}" placeholder="能量"></div>
-          </div>
+          ${paPair({ label: paBiTitle('Label', '标签'), keyEn: 'label_en', keyCn: 'label_cn', valEn: r.label_en, valCn: r.label_cn, phEn: 'Energy', phCn: '能量', attrs: `data-rowidx="${i}"` })}
           <div class="field" style="margin-top:8px"><label class="stacked">Value · 数值</label><input data-rowidx="${i}" data-bkey="value" type="text" value="${escapeAttr(r.value || '')}" placeholder="2100 kJ"></div>
         </div>`).join('')}
       <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','rows',{label_en:'',label_cn:'',value:''})">+ Add row · 添加一行</button>`;
@@ -3161,8 +3155,7 @@ function _paBlockEditorBody(b) {
         <div class="helper">Fixed ratios crop to a clean shape; Natural keeps the photo's own proportions. · 固定比例会裁剪成统一形状;原始比例保留照片本身比例。</div>
       </div>
       <div class="pa-edit-grid-2">
-        <div class="field"><label class="stacked">Caption EN (optional) · 说明(英文,可选)</label><input data-bkey="caption_en" type="text" value="${v('caption_en')}" placeholder="On warm sourdough, just before serving"></div>
-        <div class="field"><label class="stacked">Caption CN · 说明(中文,可选)</label><input data-bkey="caption_cn" type="text" value="${v('caption_cn')}" placeholder="温热的酸面包上,上桌前抹开"></div>
+        ${paPair({ label: paBiTitle('Caption (optional)', '说明(可选)'), keyEn: 'caption_en', keyCn: 'caption_cn', valEn: b.caption_en, valCn: b.caption_cn, phEn: 'On warm sourdough, just before serving', phCn: '温热的酸面包上,上桌前抹开', span2: true })}
       </div>`;
   }
   if (b.type === 'recipe_steps') {
@@ -3170,8 +3163,7 @@ function _paBlockEditorBody(b) {
     return `
       <div class="helper" style="margin:-4px 0 14px">Numbered method that turns the product into a simple recipe. Each step can carry an optional timing chip (e.g. "2 min"). · 编号做法,把产品变成简单食谱。每步可选时间标签(如"2 分钟")。</div>
       <div class="pa-edit-grid-2" style="margin-bottom:14px">
-        <div class="field"><label class="stacked">Title EN (optional) · 标题(英文,可选)</label><input data-bkey="title_en" type="text" value="${v('title_en')}" placeholder="5-minute dip"></div>
-        <div class="field"><label class="stacked">Title CN · 标题(中文,可选)</label><input data-bkey="title_cn" type="text" value="${v('title_cn')}" placeholder="5 分钟蘸酱"></div>
+        ${paPair({ label: paBiTitle('Title (optional)', '标题(可选)'), keyEn: 'title_en', keyCn: 'title_cn', valEn: b.title_en, valCn: b.title_cn, phEn: '5-minute dip', phCn: '5 分钟蘸酱', span2: true })}
       </div>
       ${steps.map((s, i) => `
         <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
@@ -3179,12 +3171,8 @@ function _paBlockEditorBody(b) {
             <span class="pa-edit-section-title">Step · 第 ${i + 1} 步</span>
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','steps',${i})" ${steps.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
-          <div class="field" style="margin-bottom:8px"><label class="stacked">Step EN · 步骤(英文)</label><textarea data-rowidx="${i}" data-bkey="text_en" rows="2" placeholder="Spread a generous layer on warm toast.">${escapeHtml(s.text_en || '')}</textarea></div>
-          <div class="field" style="margin-bottom:8px"><label class="stacked">Step CN · 步骤(中文)</label><textarea data-rowidx="${i}" data-bkey="text_cn" rows="2" placeholder="在温热的吐司上厚厚抹一层。">${escapeHtml(s.text_cn || '')}</textarea></div>
-          <div class="pa-edit-grid-2">
-            <div class="field"><label class="stacked">Time EN (optional) · 时间(英文,可选)</label><input data-rowidx="${i}" data-bkey="time_en" type="text" value="${escapeAttr(s.time_en || '')}" placeholder="2 min"></div>
-            <div class="field"><label class="stacked">Time CN · 时间(中文,可选)</label><input data-rowidx="${i}" data-bkey="time_cn" type="text" value="${escapeAttr(s.time_cn || '')}" placeholder="2 分钟"></div>
-          </div>
+          <div style="margin-bottom:8px">${paPair({ label: paBiTitle('Step', '步骤'), keyEn: 'text_en', keyCn: 'text_cn', valEn: s.text_en, valCn: s.text_cn, phEn: 'Spread a generous layer on warm toast.', phCn: '在温热的吐司上厚厚抹一层。', attrs: `data-rowidx="${i}"`, multiline: true, rows: 2 })}</div>
+          ${paPair({ label: paBiTitle('Time (optional)', '时间(可选)'), keyEn: 'time_en', keyCn: 'time_cn', valEn: s.time_en, valCn: s.time_cn, phEn: '2 min', phCn: '2 分钟', attrs: `data-rowidx="${i}"` })}
         </div>`).join('')}
       <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','steps',{text_en:'',text_cn:'',time_en:'',time_cn:''})">+ Add step · 添加步骤</button>`;
   }
@@ -3199,8 +3187,7 @@ function _paBlockEditorBody(b) {
     return `
       <div class="helper" style="margin:-4px 0 14px">Cross-sell tiles — products that go well with this one. Each tile pulls its photo + name live from the catalog and links straight to that product page. · 搭配推荐卡片 — 与本品相配的商品。每张卡片实时取用商品图片和名称,并直接跳转到对应商品页。</div>
       <div class="pa-edit-grid-2" style="margin-bottom:14px">
-        <div class="field"><label class="stacked">Title EN (optional) · 标题(英文,可选)</label><input data-bkey="title_en" type="text" value="${v('title_en')}" placeholder="Goes well with"></div>
-        <div class="field"><label class="stacked">Title CN · 标题(中文,可选)</label><input data-bkey="title_cn" type="text" value="${v('title_cn')}" placeholder="搭配推荐"></div>
+        ${paPair({ label: paBiTitle('Title (optional)', '标题(可选)'), keyEn: 'title_en', keyCn: 'title_cn', valEn: b.title_en, valCn: b.title_cn, phEn: 'Goes well with', phCn: '搭配推荐', span2: true })}
       </div>
       ${items.length ? items.map((it, i) => `
         <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:8px">
@@ -3221,8 +3208,7 @@ function _paBlockEditorBody(b) {
     return `
       <div class="helper" style="margin:-4px 0 14px">Question / answer pairs shown as a tap-to-expand accordion on the product page. Keep questions short; answers can be 1–3 sentences. · 问答对,在商品页以点击展开的折叠面板呈现。问题简短,答案 1-3 句。</div>
       <div class="pa-edit-grid-2" style="margin-bottom:14px">
-        <div class="field"><label class="stacked">Title EN (optional) · 标题(英文,可选)</label><input data-bkey="title_en" type="text" value="${v('title_en')}" placeholder="Questions"></div>
-        <div class="field"><label class="stacked">Title CN · 标题(中文,可选)</label><input data-bkey="title_cn" type="text" value="${v('title_cn')}" placeholder="常见问题"></div>
+        ${paPair({ label: paBiTitle('Title (optional)', '标题(可选)'), keyEn: 'title_en', keyCn: 'title_cn', valEn: b.title_en, valCn: b.title_cn, phEn: 'Questions', phCn: '常见问题', span2: true })}
       </div>
       ${items.map((it, i) => `
         <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
@@ -3230,12 +3216,8 @@ function _paBlockEditorBody(b) {
             <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','items',${i})" ${items.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
-          <div class="pa-edit-grid-2">
-            <div class="field"><label class="stacked">Question EN · 问题(英文)</label><input data-rowidx="${i}" data-bkey="q_en" type="text" value="${escapeAttr(it.q_en || '')}" placeholder="Is it spicy?"></div>
-            <div class="field"><label class="stacked">Question CN · 问题(中文)</label><input data-rowidx="${i}" data-bkey="q_cn" type="text" value="${escapeAttr(it.q_cn || '')}" placeholder="辣吗?"></div>
-          </div>
-          <div class="field" style="margin-top:8px"><label class="stacked">Answer EN · 回答(英文)</label><textarea data-rowidx="${i}" data-bkey="a_en" rows="2" placeholder="Mild — a gentle warmth, never overpowering.">${escapeHtml(it.a_en || '')}</textarea></div>
-          <div class="field" style="margin-top:8px"><label class="stacked">Answer CN · 回答(中文)</label><textarea data-rowidx="${i}" data-bkey="a_cn" rows="2" placeholder="微辣 — 温和的辣度,不抢味。">${escapeHtml(it.a_cn || '')}</textarea></div>
+          ${paPair({ label: paBiTitle('Question', '问题'), keyEn: 'q_en', keyCn: 'q_cn', valEn: it.q_en, valCn: it.q_cn, phEn: 'Is it spicy?', phCn: '辣吗?', attrs: `data-rowidx="${i}"` })}
+          <div style="margin-top:8px">${paPair({ label: paBiTitle('Answer', '回答'), keyEn: 'a_en', keyCn: 'a_cn', valEn: it.a_en, valCn: it.a_cn, phEn: 'Mild — a gentle warmth, never overpowering.', phCn: '微辣 — 温和的辣度,不抢味。', attrs: `data-rowidx="${i}"`, multiline: true, rows: 2 })}</div>
         </div>`).join('')}
       <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','items',{q_en:'',q_cn:'',a_en:'',a_cn:''})">+ Add question · 添加问题</button>`;
   }
@@ -3328,7 +3310,10 @@ function paRenderSelectedEditor() {
     <div class="pa-inspector-head" data-blockid="${b.id}">
       <div class="pa-inspector-head-left">
         <div class="pa-inspector-icon">${icon}</div>
-        <span class="pa-inspector-title" data-no-i18n><span data-lang-block="en">${escapeHtml(tName.en)}</span><span data-lang-block="cn">${escapeHtml(tName.cn || tName.en)}</span></span>
+        <div style="min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span class="pa-inspector-title" data-no-i18n><span data-lang-block="en">${escapeHtml(tName.en)}</span><span data-lang-block="cn">${escapeHtml(tName.cn || tName.en)}</span></span>
+          <span class="pa-inspector-sub" data-no-i18n>id: ${escapeHtml(b.id)}</span>
+        </div>
       </div>
       <div class="pa-inspector-actions">
         <button type="button" class="btn btn-icon danger" title="Delete block · 删除板块" onclick="paBlocksRemove('${b.id}')">${PE_UI.x}</button>
