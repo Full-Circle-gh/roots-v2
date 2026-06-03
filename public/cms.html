@@ -10413,7 +10413,7 @@ function buildCatTabsForm(m, b) {
   cats.forEach(c => {
     const chip = document.createElement('div');
     chip.className = 'chip' + ((b.category_ids || []).includes(c.id) ? ' on' : '');
-    chip.textContent = c.name + (c.name_cn ? ' · ' + c.name_cn : '');
+    chip.textContent = (state.lang === 'cn' ? (c.name_cn || c.name || '') : (c.name || ''));
     chip.addEventListener('click', () => {
       const set = new Set(b.category_ids || []);
       set.has(c.id) ? set.delete(c.id) : set.add(c.id);
@@ -10442,7 +10442,7 @@ function buildCatTabsForm(m, b) {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:8px;';
       const nm = document.createElement('div');
-      nm.textContent = c.name + (c.name_cn ? ' · ' + c.name_cn : '');
+      nm.textContent = (state.lang === 'cn' ? (c.name_cn || c.name || '') : (c.name || ''));
       nm.style.cssText = 'flex:0 0 38%;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
       const cur = (b.tile_colors || {})[c.id] || '';
       const picker = sel(cur, [{ value: '', label: 'Auto · 自动' }, ...BRAND_COLOR_OPTIONS], v => {
@@ -10475,7 +10475,7 @@ function buildCatTabsForm(m, b) {
       const row = document.createElement('div');
       row.style.cssText = 'margin-bottom:14px;';
       const nm = document.createElement('div');
-      nm.textContent = c.name + (c.name_cn ? ' · ' + c.name_cn : '');
+      nm.textContent = (state.lang === 'cn' ? (c.name_cn || c.name || '') : (c.name || ''));
       nm.style.cssText = 'font-size:13px;font-weight:600;margin-bottom:6px;';
       const cur = (b.tile_images || {})[c.id] || '';
       const picker = imgPicker(cur, ({ url }) => {
@@ -10607,7 +10607,7 @@ function buildGridForm(m, b) {
     secContent.appendChild(field(T('Category', '分类'), '', sel(b.category_id || '', [
       { value: '', label: T('— pick one —', '— 选择一个 —') },
       // Tree top ids are stable strings (e.g. 'dry') — keep them as-is, never Number().
-      ...state.categories.map(c => ({ value: c.id, label: c.name + (c.name_cn ? ' · ' + c.name_cn : '') })),
+      ...state.categories.map(c => ({ value: c.id, label: (state.lang === 'cn' ? (c.name_cn || c.name || '') : (c.name || '')) })),
     ], v => updateBlock(b.id, { category_id: v || null }))));
   } else if (b.source_type === 'top_selling') {
     secContent.appendChild(field(T('Window', '时间窗口'), T('How far back to count sales.', '统计多久以内的销量。'),
