@@ -339,6 +339,124 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
 .js .surface--phone{animation:floaty 7s ease-in-out infinite;}
 .js .surface--dash{animation:floaty 7s ease-in-out infinite .8s;}
 .js .glow{animation:floaty 9s ease-in-out infinite;}
+.js .cf1{animation:floaty 6.5s ease-in-out infinite;}
+.js .cf2{animation:floaty 7.5s ease-in-out infinite .6s;}
+.js .cf3{animation:floaty 6s ease-in-out infinite 1s;}
+
+/* ===== inline headline chip (Burb accent, on-brand SVG not emoji) ===== */
+.ichip{display:inline-grid;place-items:center;width:.96em;height:.96em;border-radius:var(--r-sm);vertical-align:-.12em;margin:0 .04em;}
+.ichip svg{width:.6em;height:.6em;}
+.ichip.tea{background:var(--tea);color:#fff;}
+.ichip.brass{background:var(--brass);color:var(--accent-ink);}
+
+/* ===== floating hero chips (the 'alive' product fragments) ===== */
+.chip-float{position:absolute;z-index:4;display:flex;align-items:center;gap:9px;background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-2);padding:9px 12px;}
+.chip-float b{display:block;font-size:12.5px;color:var(--text-1);font-weight:600;line-height:1.15;}
+.chip-float .sub{font-size:10px;color:var(--text-3);font-family:var(--f-mono);letter-spacing:.02em;}
+.chip-float .ck{width:22px;height:22px;border-radius:50%;background:var(--tea);color:#fff;display:grid;place-items:center;flex:0 0 auto;}
+.chip-float .ck.brass{background:var(--brass);color:var(--accent-ink);}
+.chip-float .ck svg{width:13px;height:13px;}
+.cf1{left:-9%;top:24%;} .cf2{right:-7%;top:58%;} .cf3{left:-4%;bottom:6%;}
+
+/* ===== mini product UI (inside bento + path nodes) ===== */
+.av{width:24px;height:24px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-family:var(--f-sans);font-weight:600;font-size:10px;color:#fff;background:linear-gradient(135deg,var(--tea),var(--tea-hi));}
+.av.b{background:linear-gradient(135deg,var(--brass),var(--brass-hi));color:var(--accent-ink);}
+.av.c{background:linear-gradient(135deg,#5f7e8a,#86a6b0);}
+.av.s{width:20px;height:20px;font-size:9px;}
+.avstack{display:flex;align-items:center;}
+.avstack .av{margin-left:-7px;box-shadow:0 0 0 2px var(--bg-pane);}
+.avstack .av:first-child{margin-left:0;}
+.avstack .more{margin-left:8px;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:11px;color:var(--text-3);}
+.mui{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);padding:11px;display:flex;flex-direction:column;gap:9px;box-shadow:var(--sh-1);}
+.mui__hd{display:flex;align-items:center;gap:7px;}
+.mui__hd .ttl{font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.09em;font-size:9.5px;color:var(--text-3);}
+.mui__hd .live{margin-left:auto;font-family:var(--f-mono);font-size:8.5px;letter-spacing:.08em;color:var(--tea);display:flex;align-items:center;gap:5px;}
+.mui__hd .live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--tea);}
+.mrow{display:flex;align-items:center;gap:9px;}
+.mrow .nm{font-weight:600;color:var(--text-1);font-size:12.5px;line-height:1.2;}
+.mrow .ro{font-size:10px;color:var(--text-3);font-family:var(--f-mono);}
+.mrow .val{margin-left:auto;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--text-2);}
+.pill{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-mono);font-size:10px;letter-spacing:.03em;padding:4px 9px;border-radius:999px;border:1px solid var(--line);color:var(--text-2);background:var(--bg-elev-1);}
+.pill.tea{color:#3e5a42;background:rgba(107,142,111,.16);border-color:rgba(107,142,111,.32);}
+.pill.brass{color:#6b521f;background:rgba(176,141,74,.18);border-color:rgba(176,141,74,.36);}
+.pill svg{width:11px;height:11px;}
+.crow{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--text-2);background:var(--bg-elev-1);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:8px 10px;}
+.crow .ck{width:17px;height:17px;border-radius:50%;background:var(--tea);color:#fff;display:grid;place-items:center;flex:0 0 auto;}
+.crow .ck svg{width:10px;height:10px;}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.tiles i{aspect-ratio:1;border-radius:var(--r-sm);background:var(--bg-elev-1);border:1px solid var(--line-soft);display:block;}
+.tiles i.on{background:rgba(107,142,111,.22);border-color:rgba(107,142,111,.4);}
+.tiles i.brass{background:rgba(176,141,74,.22);border-color:rgba(176,141,74,.4);}
+.bars{display:flex;align-items:flex-end;gap:5px;height:48px;}
+.bars i{flex:1;background:var(--tea);border-radius:2px 2px 0 0;opacity:.78;display:block;}
+.bars i.b{background:var(--brass);opacity:1;}
+.blocks{display:flex;flex-direction:column;gap:6px;}
+.blocks i{height:11px;border-radius:var(--r-sm);background:var(--bg-elev-2);display:block;}
+.blocks i.w70{width:70%;} .blocks i.w50{width:50%;} .blocks i.tea{background:rgba(107,142,111,.3);}
+
+/* ===== bento platform grid ===== */
+.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;align-items:stretch;}
+.bcard{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-xl);padding:24px;box-shadow:var(--lift);transition:transform var(--t-med) var(--ease),box-shadow var(--t-med) var(--ease);display:flex;flex-direction:column;gap:15px;overflow:hidden;}
+.bcard:hover{transform:translateY(-3px);box-shadow:var(--sh-2);}
+.bcard .feat__ic{margin:0;}
+.bcard h3{font-size:19px;font-weight:600;}
+.bcard p{font-size:15px;color:var(--text-2);}
+.bcard .mui-wrap{margin-top:auto;}
+.b-2{grid-column:span 2;} .b-3{grid-column:span 3;} .b-4{grid-column:span 4;}
+.bcard.ink{background:var(--ink);color:var(--on-ink-1);border-color:var(--ink-line);position:relative;}
+.bcard.ink::after{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(232,229,220,.06) 1px,transparent 1.4px);background-size:8px 8px;opacity:.6;pointer-events:none;}
+.bcard.ink h3{color:#fff;} .bcard.ink p{color:var(--on-ink-2);}
+.bcard.ink .feat__ic{background:var(--ink-1);border-color:var(--ink-line);}
+.bcard.ink .feat__ic svg{color:var(--tea-hi);}
+.bcard.ink>*{position:relative;z-index:1;}
+
+/* ===== winding path: how it works ===== */
+.path{position:relative;margin-top:14px;}
+.path__svg{position:absolute;left:0;right:0;top:8%;height:84%;width:100%;overflow:visible;pointer-events:none;z-index:0;}
+.path__svg .base{fill:none;stroke:var(--line-strong);stroke-width:2;stroke-dasharray:2 9;stroke-linecap:round;vector-effect:non-scaling-stroke;}
+.path__svg .draw{fill:none;stroke:var(--tea);stroke-width:3;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;vector-effect:non-scaling-stroke;transition:stroke-dashoffset 2.6s var(--ease);}
+.reveal-in .path__svg .draw{stroke-dashoffset:0;}
+.path__row{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;position:relative;z-index:1;align-items:start;}
+.path__row .pnode:nth-child(1){transform:translateY(0);}
+.path__row .pnode:nth-child(2){transform:translateY(34px);}
+.path__row .pnode:nth-child(3){transform:translateY(6px);}
+.path__row .pnode:nth-child(4){transform:translateY(40px);}
+.pnode{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-xl);padding:20px;box-shadow:var(--lift);display:flex;flex-direction:column;gap:11px;}
+.pnode__n{width:34px;height:34px;border-radius:50%;background:var(--tea);color:#fff;font-family:var(--f-mono);font-weight:600;font-size:14px;display:grid;place-items:center;font-variant-numeric:tabular-nums;}
+.pnode:last-child .pnode__n{background:var(--brass);color:var(--accent-ink);}
+.pnode h3{font-size:17.5px;font-weight:600;}
+.pnode p{font-size:14px;color:var(--text-2);}
+
+/* ===== pastel highlight wall (Burb 'customers' block, made truthful) ===== */
+.pastel{position:relative;overflow:hidden;border-radius:var(--r-xl);border:1px solid rgba(107,142,111,.24);padding:clamp(28px,4.5vw,56px);background:linear-gradient(180deg,rgba(107,142,111,.18),rgba(107,142,111,.06));}
+.pastel::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.7;background-image:radial-gradient(rgba(54,83,41,.07) 1px,transparent 1.4px);background-size:8px 8px;}
+.pastel__in{position:relative;z-index:1;}
+.pastel .sec-head h2{color:var(--text-1);}
+.wall{columns:3 230px;column-gap:14px;margin-top:8px;}
+.wcard{break-inside:avoid;margin-bottom:14px;background:rgba(255,255,255,.8);border:1px solid rgba(107,142,111,.2);border-radius:var(--r-lg);padding:18px;box-shadow:var(--sh-1);}
+.wcard .chip{width:34px;height:34px;border-radius:var(--r-md);display:grid;place-items:center;background:rgba(107,142,111,.16);border:1px solid rgba(107,142,111,.3);margin-bottom:12px;}
+.wcard .chip svg{width:17px;height:17px;color:var(--tea);stroke-width:1.8;}
+.wcard .chip.brass{background:rgba(176,141,74,.16);border-color:rgba(176,141,74,.34);}
+.wcard .chip.brass svg{color:var(--brass);}
+.wcard b{display:block;font-size:17px;font-weight:600;color:var(--text-1);margin-bottom:6px;letter-spacing:-.01em;}
+.wcard p{font-size:14px;color:var(--text-2);}
+.wcard .mk{color:#3e5a42;background:rgba(107,142,111,.22);border-radius:4px;padding:0 .18em;white-space:nowrap;}
+.pastel .stats{margin-top:24px;position:relative;z-index:1;}
+.pastel .stat{background:rgba(255,255,255,.74);border-color:rgba(107,142,111,.2);}
+
+/* ===== ecosystem band (big display headline) ===== */
+.eco{background:var(--ink);color:var(--on-ink-1);border-radius:var(--r-xl);padding:clamp(34px,5.5vw,66px);position:relative;overflow:hidden;}
+.eco::after{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(232,229,220,.06) 1px,transparent 1.4px);background-size:8px 8px;opacity:.55;pointer-events:none;}
+.eco__in{position:relative;z-index:1;}
+.eco .kicker{color:var(--tea-hi);} .eco .kicker::before{background:var(--tea-hi);}
+.display{font-size:clamp(32px,5.6vw,62px);font-weight:600;letter-spacing:-.03em;line-height:1.04;color:#fff;margin-top:14px;max-width:18ch;}
+.display .b{color:var(--brass-hi);}
+.eco p{color:var(--on-ink-2);margin-top:18px;font-size:18px;max-width:52ch;}
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px;}
+.echip{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:13px;letter-spacing:.02em;color:var(--on-ink-1);background:var(--ink-1);border:1px solid var(--ink-line-strong);border-radius:999px;padding:9px 15px;transition:border-color var(--t-fast),background var(--t-fast);}
+.echip:hover{border-color:var(--tea-hi);background:var(--ink-2);}
+.echip .d{width:7px;height:7px;border-radius:50%;background:var(--tea-hi);}
+.echip .d.brass{background:var(--brass-hi);}
 
 /* ---------- responsive ---------- */
 @media (max-width:980px){
@@ -346,17 +464,23 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
   .blobs{inset:-12% -22%;opacity:.85;}
   .stage{max-width:430px;margin-inline:auto;width:100%;}
   .band__in,.price,.cta__card{grid-template-columns:1fr;}
-  .feat-grid{grid-template-columns:1fr 1fr;}
-  .steps,.stats{grid-template-columns:1fr 1fr;}
+  .bento{grid-template-columns:repeat(2,1fr);}
+  .bento .bcard{grid-column:auto;}
+  .path__svg{display:none;}
+  .path__row{grid-template-columns:1fr 1fr;gap:16px;}
+  .path__row .pnode{transform:none!important;}
+  .stats{grid-template-columns:1fr 1fr;}
   .cta__left{order:-1;}
 }
 @media (max-width:560px){
   body{font-size:16px;}
   section{padding:58px 0;}
-  .feat-grid,.steps,.stats,.row2{grid-template-columns:1fr;}
+  .bento,.path__row,.stats,.row2{grid-template-columns:1fr;}
+  .wall{columns:1;}
   .hero{padding:48px 0 36px;}
   .nav__cta .btn-primary{display:none;}
   .stage{max-width:310px;}
+  .chip-float{display:none;}
   .blobs{opacity:.6;filter:saturate(.95);}
 }
 @media (prefers-reduced-motion:reduce){
@@ -450,6 +574,19 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
         </div>
         <div class="dash__chart"><i style="height:40%"></i><i style="height:62%"></i><i style="height:48%"></i><i style="height:80%"></i><i style="height:58%"></i><i style="height:92%"></i><i style="height:70%"></i></div>
       </div>
+
+      <div class="chip-float cf1">
+        <span class="av b s">¥</span>
+        <div><b class="tabnum">New order · ¥86</b><span class="sub" data-en="just now" data-zh="刚刚">just now</span></div>
+      </div>
+      <div class="chip-float cf2">
+        <span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>
+        <div><b data-en="Settled to your bank" data-zh="已结算到你的银行">Settled to your bank</b><span class="sub">0% → us</span></div>
+      </div>
+      <div class="chip-float cf3">
+        <span class="avstack"><span class="av s">A</span><span class="av b s">B</span><span class="av c s">C</span></span>
+        <div><b data-en="142 viewing now" data-zh="142 人正在浏览" class="tabnum">142 viewing now</b><span class="sub" data-en="live" data-zh="实时">live</span></div>
+      </div>
     </div>
   </div>
 </section>
@@ -484,37 +621,74 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
       <h2 data-en="Everything a modern retail brand needs to sell." data-zh="一个现代零售品牌所需的一切。">Everything a modern retail brand needs to sell.</h2>
       <p data-en="From the shopper's first tap to the warehouse pick slip — and the money in your account — it's the same connected system." data-zh="从顾客的第一次点击，到仓库的拣货单，再到账户里的收入——同一套互联系统。">From the shopper's first tap to the warehouse pick slip — and the money in your account — it's the same connected system.</p>
     </div>
-    <div class="feat-grid stagger reveal">
-      <article class="feat">
+    <div class="bento stagger reveal">
+
+      <article class="bcard b-3">
         <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 21V9"/></svg></div>
         <h3 data-en="Storefront builder" data-zh="商城搭建器">Storefront builder</h3>
-        <p data-en="A block-based page editor with your brand colours and fonts. Launch flash sales, category tabs and editorial layouts without code." data-zh="基于区块的页面编辑器，套用你的品牌色与字体。无需代码即可上线闪购、分类标签与编排版式。">A block-based page editor with your brand colours and fonts. Launch flash sales, category tabs and editorial layouts without code.</p>
+        <p data-en="A block-based page editor with your brand colours and fonts — flash sales, category tabs and editorial layouts, no code." data-zh="基于区块的页面编辑器，套用你的品牌色与字体——闪购、分类标签与编排版式，无需代码。">A block-based page editor with your brand colours and fonts — flash sales, category tabs and editorial layouts, no code.</p>
+        <div class="mui-wrap mui">
+          <div class="mui__hd"><span class="ttl">Storefront · draft</span><span class="live" data-en="EDITING" data-zh="编辑中">EDITING</span></div>
+          <div class="blocks"><i class="tea"></i><i class="w70"></i><i class="w50"></i><i></i></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill tea">Hero</span><span class="pill">Grid</span><span class="pill">Spacer</span><span class="pill brass">Sale</span></div>
+        </div>
       </article>
-      <article class="feat">
-        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg></div>
-        <h3 data-en="Native mini-app" data-zh="原生小程序">Native mini-app</h3>
-        <p data-en="A fast WeChat mini-app shoppers already trust — product pages, cart, wallet top-up and a customer 'Me' page, all branded as you." data-zh="顾客熟悉信赖的微信小程序——商品详情、购物车、钱包充值与个人中心，全部以你的品牌呈现。">A fast WeChat mini-app shoppers already trust — product pages, cart, wallet top-up and a customer 'Me' page, all branded as you.</p>
-      </article>
-      <article class="feat">
+
+      <article class="bcard b-3">
         <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18l-1.5 12.5a2 2 0 0 1-2 1.5H6.5a2 2 0 0 1-2-1.5z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg></div>
         <h3 data-en="Order fulfillment" data-zh="订单履约">Order fulfillment</h3>
-        <p data-en="Stores and warehouse staff pick, pack and dispatch from one clean queue. Delivery zones, lead times and slots are all configurable." data-zh="门店与仓库人员在同一个清爽队列中拣货、打包、发货。配送区域、时效与时段均可配置。">Stores and warehouse staff pick, pack and dispatch from one clean queue. Delivery zones, lead times and slots are all configurable.</p>
+        <p data-en="Stores and warehouse staff pick, pack and dispatch from one clean queue. Zones, lead times and slots all configurable." data-zh="门店与仓库人员在同一个清爽队列中拣货、打包、发货。配送区域、时效与时段均可配置。">Stores and warehouse staff pick, pack and dispatch from one clean queue. Zones, lead times and slots all configurable.</p>
+        <div class="mui-wrap mui">
+          <div class="mui__hd"><span class="ttl">Orders · today</span><span class="live">LIVE</span></div>
+          <div class="mrow"><span class="av s">1</span><div class="nm">#1042 · 3 items</div><span class="pill tea" style="margin-left:auto" data-en="Packing" data-zh="打包中">Packing</span></div>
+          <div class="mrow"><span class="av b s">2</span><div class="nm">#1041 · 1 item</div><span class="pill" style="margin-left:auto" data-en="Ready" data-zh="待发">Ready</span></div>
+          <div class="mrow"><span class="av c s">3</span><div class="nm">#1039 · 5 items</div><span class="pill brass" style="margin-left:auto" data-en="Dispatched" data-zh="已发货">Dispatched</span></div>
+        </div>
       </article>
-      <article class="feat">
-        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M2 10h20M7 18v3M17 18v3"/></svg></div>
-        <h3 data-en="POS & stations" data-zh="收银台与工位">POS &amp; stations</h3>
-        <p data-en="Tablet POS for in-store checkout, plus kitchen and restock station shells — installable as PWAs, working hand-in-hand with online orders." data-zh="用于门店结账的平板收银台，以及厨房与补货工位——可作为 PWA 安装，与线上订单无缝协作。">Tablet POS for in-store checkout, plus kitchen and restock station shells — installable as PWAs, working hand-in-hand with online orders.</p>
-      </article>
-      <article class="feat">
+
+      <article class="bcard ink b-2">
         <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M5 10v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/><path d="M12 14v3"/></svg></div>
         <h3 data-en="Payments to your bank" data-zh="直达你的银行">Payments to your bank</h3>
-        <p data-en="Real WeChat Pay (JSAPI v3). Every order and top-up settles to your own merchant account — no platform middleman, no 分账." data-zh="真实微信支付（JSAPI v3）。每笔订单与充值都结算到你自己的商户号——没有平台中间方，没有分账。">Real WeChat Pay (JSAPI v3). Every order and top-up settles to your own merchant account — no platform middleman, no 分账.</p>
+        <p data-en="Real WeChat Pay (JSAPI v3). Every order settles to the merchant account you own." data-zh="真实微信支付（JSAPI v3）。每笔订单都结算到你自己的商户号。">Real WeChat Pay (JSAPI v3). Every order settles to the merchant account you own.</p>
+        <div class="mui-wrap" style="display:flex;flex-direction:column;gap:7px">
+          <span class="crow"><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><span data-en="Shopper pays" data-zh="顾客付款">Shopper pays</span></span>
+          <span class="crow"><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><span data-en="Your merchant account" data-zh="你的商户号">Your merchant account</span></span>
+          <span class="crow"><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><span data-en="Your bank · 0% to us" data-zh="你的银行 · 抽成 0%">Your bank · 0% to us</span></span>
+        </div>
       </article>
-      <article class="feat">
+
+      <article class="bcard b-2">
+        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg></div>
+        <h3 data-en="Native mini-app" data-zh="原生小程序">Native mini-app</h3>
+        <p data-en="A fast WeChat mini-app shoppers already trust — product pages, cart and wallet, all branded as you." data-zh="顾客熟悉信赖的微信小程序——商品、购物车与钱包，全部以你的品牌呈现。">A fast WeChat mini-app shoppers already trust — product pages, cart and wallet, all branded as you.</p>
+        <div class="mui-wrap mui">
+          <div class="mui__hd"><span class="ttl">Mini-app</span><span class="live">LIVE</span></div>
+          <div class="blocks"><i class="tea"></i><i></i><i class="w70"></i></div>
+          <div style="display:flex;gap:6px"><span class="pill">Cart</span><span class="pill tea">Wallet</span><span class="pill">Me</span></div>
+        </div>
+      </article>
+
+      <article class="bcard b-2">
+        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M2 10h20M7 18v3M17 18v3"/></svg></div>
+        <h3 data-en="POS &amp; stations" data-zh="收银台与工位">POS &amp; stations</h3>
+        <p data-en="Tablet POS for in-store checkout, plus station shells — installable as PWAs alongside online orders." data-zh="用于门店结账的平板收银台，以及工位外壳——可作为 PWA 与线上订单并行安装。">Tablet POS for in-store checkout, plus station shells — installable as PWAs alongside online orders.</p>
+        <div class="mui-wrap mui">
+          <div class="mui__hd"><span class="ttl">POS · tiles</span></div>
+          <div class="tiles"><i class="on"></i><i></i><i class="brass"></i><i></i><i></i><i class="on"></i><i></i><i></i></div>
+        </div>
+      </article>
+
+      <article class="bcard b-2">
         <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><path d="M16 4a3 3 0 0 1 0 6M21 20c0-2.5-1.5-4-4-4.5"/></svg></div>
-        <h3 data-en="Multi-tenant & bilingual" data-zh="多租户与双语">Multi-tenant &amp; bilingual</h3>
-        <p data-en="Run one brand or many from a SaaS admin with a guided onboarding checklist. Every surface speaks English and 中文, switched by one toggle." data-zh="在 SaaS 管理后台中运营一个或多个品牌，配有引导式上线清单。每个界面均支持英文与中文，一键切换。">Run one brand or many from a SaaS admin with a guided onboarding checklist. Every surface speaks English and 中文, switched by one toggle.</p>
+        <h3 data-en="Multi-tenant &amp; bilingual" data-zh="多租户与双语">Multi-tenant &amp; bilingual</h3>
+        <p data-en="Run one brand or many from a SaaS admin. Every surface speaks EN &amp; 中文, one toggle." data-zh="在 SaaS 后台运营一个或多个品牌。每个界面均支持中英双语，一键切换。">Run one brand or many from a SaaS admin. Every surface speaks EN &amp; 中文, one toggle.</p>
+        <div class="mui-wrap mui">
+          <div class="mui__hd"><span class="ttl">Tenants</span><span class="live">EN · 中文</span></div>
+          <div class="mrow"><span class="av s">R</span><div><div class="nm">Roots</div></div><span class="pill tea" style="margin-left:auto">Live</span></div>
+          <div class="mrow"><span class="av b s">Y</span><div><div class="nm" data-en="Your brand" data-zh="你的品牌">Your brand</div></div><span class="pill" style="margin-left:auto" data-en="Onboarding" data-zh="上线中">Onboarding</span></div>
+        </div>
       </article>
+
     </div>
   </div>
 </section>
@@ -544,12 +718,50 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
 <!-- ======================= STATS ======================= -->
 <section style="padding-top:0;">
   <div class="wrap">
-    <div class="statspanel">
-      <div class="stats stagger reveal">
-        <div class="stat"><b class="tabnum" data-count="6">6</b><span data-en="connected surfaces" data-zh="互联触点">connected surfaces</span></div>
-        <div class="stat"><b class="tabnum" data-count="2">2</b><span data-en="languages, everywhere" data-zh="全局双语">languages, everywhere</span></div>
-        <div class="stat"><b class="tabnum brass" data-count="100" data-suffix="%">100%</b><span data-en="of revenue stays yours" data-zh="收入全部归你">of revenue stays yours</span></div>
-        <div class="stat"><b class="tabnum" data-count="0">0</b><span data-en="middlemen on your money" data-zh="资金零中间方">middlemen on your money</span></div>
+    <div class="pastel reveal">
+      <div class="pastel__in">
+        <div class="sec-head" style="margin-bottom:28px;max-width:560px">
+          <span class="kicker" data-en="The short version" data-zh="一句话总结">The short version</span>
+          <h2 data-en="Less to stitch together. More that just works." data-zh="更少拼接，更多开箱即用。">Less to stitch together. More that just works.</h2>
+        </div>
+        <div class="wall stagger reveal">
+          <div class="wcard">
+            <div class="chip brass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div>
+            <b data-en="0% revenue share" data-zh="0% 分账">0% revenue share</b>
+            <p data-en="Every sale settles to your own merchant account — we never touch the funds." data-zh="每笔销售都结算到你自己的商户号——我们从不经手资金。">Every sale settles to <span class="mk">your own</span> merchant account — we never touch the funds.</p>
+          </div>
+          <div class="wcard">
+            <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg></div>
+            <b data-en="Bilingual, everywhere" data-zh="全局双语">Bilingual, everywhere</b>
+            <p data-en="Every screen speaks English and 中文 — switched by one toggle." data-zh="每个界面都支持英文与中文——一键切换。">Every screen speaks English and 中文 — switched by <span class="mk">one toggle</span>.</p>
+          </div>
+          <div class="wcard">
+            <div class="chip brass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12z"/></svg></div>
+            <b data-en="Live in days" data-zh="数日内上线">Live in days</b>
+            <p data-en="A branded mini-app and storefront — not quarters of build time." data-zh="品牌小程序与商城——无需数个季度的开发。">A branded mini-app and storefront — <span class="mk">not quarters</span> of build time.</p>
+          </div>
+          <div class="wcard">
+            <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+            <b data-en="One connected system" data-zh="一套互联系统">One connected system</b>
+            <p data-en="Storefront, fulfillment, POS and payments share the same data — not bolted-on tools." data-zh="商城、履约、收银与收款共用同一套数据——而非拼凑的工具。">Storefront, fulfillment, POS and payments share the same data — not bolted-on tools.</p>
+          </div>
+          <div class="wcard">
+            <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></div>
+            <b data-en="Block-based editor" data-zh="区块式编辑器">Block-based editor</b>
+            <p data-en="Restyle the storefront any time — no redeploy, no developer." data-zh="随时重新设计商城——无需重新部署，无需开发。">Restyle the storefront <span class="mk">any time</span> — no redeploy.</p>
+          </div>
+          <div class="wcard">
+            <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h13l-3-3M21 16H8l3 3"/></svg></div>
+            <b data-en="Self-serve or managed" data-zh="自助或托管">Self-serve or managed</b>
+            <p data-en="Run it yourself, or let us operate setup and day-to-day for you." data-zh="自己运营，或交由我们完成搭建与日常运营。">Run it yourself, or let us operate it for you.</p>
+          </div>
+        </div>
+        <div class="stats stagger reveal">
+          <div class="stat"><b class="tabnum" data-count="6">6</b><span data-en="connected surfaces" data-zh="互联触点">connected surfaces</span></div>
+          <div class="stat"><b class="tabnum" data-count="2">2</b><span data-en="languages, everywhere" data-zh="全局双语">languages, everywhere</span></div>
+          <div class="stat"><b class="tabnum brass" data-count="100" data-suffix="%">100%</b><span data-en="of revenue stays yours" data-zh="收入全部归你">of revenue stays yours</span></div>
+          <div class="stat"><b class="tabnum" data-count="0">0</b><span data-en="middlemen on your money" data-zh="资金零中间方">middlemen on your money</span></div>
+        </div>
       </div>
     </div>
   </div>
@@ -563,26 +775,57 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
       <h2 data-en="Live in four steps — self-serve or fully managed." data-zh="四步上线——自助或全托管。">Live in four steps — self-serve or fully managed.</h2>
       <p data-en="Pick how much you want to run yourself. Either way, a guided onboarding checklist keeps the launch on track." data-zh="自由选择你想亲自掌控的程度。无论哪种方式，引导式上线清单都会让发布按部就班。">Pick how much you want to run yourself. Either way, a guided onboarding checklist keeps the launch on track.</p>
     </div>
-    <div class="steps reveal">
-      <div class="step">
-        <span class="step__n">01</span><div class="step__line"></div>
-        <h3 data-en="Brand & catalog" data-zh="品牌与商品">Brand &amp; catalog</h3>
-        <p data-en="Drop in your logo, colours and products. The storefront takes your look instantly." data-zh="导入你的标志、配色与商品。商城即刻套用你的风格。">Drop in your logo, colours and products. The storefront takes your look instantly.</p>
+    <div class="path reveal">
+      <svg class="path__svg" viewBox="0 0 1000 200" fill="none" preserveAspectRatio="none" aria-hidden="true">
+        <path class="base" pathLength="100" d="M40 70 C 180 70 210 150 360 150 C 500 150 540 60 660 66 C 800 73 850 150 960 142"/>
+        <path class="draw" pathLength="100" d="M40 70 C 180 70 210 150 360 150 C 500 150 540 60 660 66 C 800 73 850 150 960 142"/>
+      </svg>
+      <div class="path__row">
+        <div class="pnode">
+          <span class="pnode__n">01</span>
+          <h3 data-en="Brand &amp; catalog" data-zh="品牌与商品">Brand &amp; catalog</h3>
+          <p data-en="Drop in your logo, colours and products — the storefront takes your look instantly." data-zh="导入你的标志、配色与商品——商城即刻套用你的风格。">Drop in your logo, colours and products — the storefront takes your look instantly.</p>
+          <div><span class="pill tea" data-en="Logo · colours · products" data-zh="标志 · 配色 · 商品">Logo · colours · products</span></div>
+        </div>
+        <div class="pnode">
+          <span class="pnode__n">02</span>
+          <h3 data-en="Connect payments" data-zh="连接收款">Connect payments</h3>
+          <p data-en="Link your own WeChat Pay merchant account. Funds settle to your bank from day one." data-zh="绑定你自己的微信支付商户号。从第一天起资金即结算到你的银行。">Link your own WeChat Pay merchant account. Funds settle to your bank from day one.</p>
+          <div><span class="pill brass" data-en="Your merchant account" data-zh="你的商户号">Your merchant account</span></div>
+        </div>
+        <div class="pnode">
+          <span class="pnode__n">03</span>
+          <h3 data-en="Set up fulfillment" data-zh="配置履约">Set up fulfillment</h3>
+          <p data-en="Define stores, delivery zones and slots. Staff get a clean orders queue and POS." data-zh="设定门店、配送区域与时段。员工获得清爽的订单队列与收银台。">Define stores, delivery zones and slots. Staff get a clean orders queue and POS.</p>
+          <div><span class="pill" data-en="Zones · slots · POS" data-zh="区域 · 时段 · 收银">Zones · slots · POS</span></div>
+        </div>
+        <div class="pnode">
+          <span class="pnode__n">04</span>
+          <h3 data-en="Publish &amp; sell" data-zh="发布开售">Publish &amp; sell</h3>
+          <p data-en="Push the mini-app live and start taking orders. Iterate any time, no redeploy." data-zh="发布小程序，开始接单。随时调整，无需重新部署。">Push the mini-app live and start taking orders. Iterate any time, no redeploy.</p>
+          <div><span class="pill tea" data-en="Live in days" data-zh="数日内上线">Live in days</span></div>
+        </div>
       </div>
-      <div class="step">
-        <span class="step__n">02</span><div class="step__line"></div>
-        <h3 data-en="Connect payments" data-zh="连接收款">Connect payments</h3>
-        <p data-en="Link your own WeChat Pay merchant account. Funds settle to your bank from day one." data-zh="绑定你自己的微信支付商户号。从第一天起资金即结算到你的银行。">Link your own WeChat Pay merchant account. Funds settle to your bank from day one.</p>
-      </div>
-      <div class="step">
-        <span class="step__n">03</span><div class="step__line"></div>
-        <h3 data-en="Set up fulfillment" data-zh="配置履约">Set up fulfillment</h3>
-        <p data-en="Define stores, delivery zones and slots. Staff get a clean orders queue and POS." data-zh="设定门店、配送区域与时段。员工获得清爽的订单队列与收银台。">Define stores, delivery zones and slots. Staff get a clean orders queue and POS.</p>
-      </div>
-      <div class="step">
-        <span class="step__n">04</span><div class="step__line"></div>
-        <h3 data-en="Publish & sell" data-zh="发布开售">Publish &amp; sell</h3>
-        <p data-en="Push the mini-app live and start taking orders. Iterate the storefront any time, no redeploy." data-zh="发布小程序，开始接单。随时调整商城，无需重新部署。">Push the mini-app live and start taking orders. Iterate the storefront any time, no redeploy.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= ECOSYSTEM BAND ======================= -->
+<section style="padding-top:0;">
+  <div class="wrap">
+    <div class="eco reveal">
+      <div class="eco__in">
+        <span class="kicker" data-en="Built for the WeChat world" data-zh="为微信生态打造">Built for the WeChat world</span>
+        <h2 class="display"><span data-en="One platform for the world your shoppers" data-zh="一套平台，扎根于你的顾客">One platform for the world your shoppers</span> <span class="b" data-en="already live in." data-zh="日常所在之处。">already live in.</span></h2>
+        <p data-en="No new app to download, no new habits to learn. Full Circle plugs into the surfaces and payment rails your customers already use every day." data-zh="无需下载新应用，无需养成新习惯。Full Circle 直接接入你的顾客每天都在使用的触点与支付通道。">No new app to download, no new habits to learn. Full Circle plugs into the surfaces and payment rails your customers already use every day.</p>
+        <div class="chips">
+          <span class="echip"><span class="d"></span>WeChat Mini-App</span>
+          <span class="echip"><span class="d brass"></span>WeChat Pay · JSAPI v3</span>
+          <span class="echip"><span class="d"></span><span data-en="In-store POS" data-zh="门店收银">In-store POS</span></span>
+          <span class="echip"><span class="d"></span><span data-en="PWA stations" data-zh="PWA 工位">PWA stations</span></span>
+          <span class="echip"><span class="d brass"></span><span data-en="SaaS multi-tenant" data-zh="SaaS 多租户">SaaS multi-tenant</span></span>
+          <span class="echip"><span class="d"></span>Bilingual EN · 中文</span>
+        </div>
       </div>
     </div>
   </div>
