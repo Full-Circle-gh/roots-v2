@@ -5153,20 +5153,26 @@
   <!-- ─── CATEGORIES (2-level tree editor) ─── -->
   <section id="tab-categories">
     <style>
-      #cat-editor .cat-top { padding: 14px 16px; transition: box-shadow .12s, opacity .12s; }
+      #cat-editor .cat-top { padding: var(--s4); transition: box-shadow var(--t-fast), opacity var(--t-fast); }
       #cat-editor .cat-drag {
-        cursor: grab; user-select: none; color: var(--muted, #9a9a93); font-size: 16px;
-        line-height: 1; padding: 4px 3px; border-radius: 6px; flex: 0 0 auto;
+        cursor: grab; user-select: none; color: var(--text-3); font-size: 16px;
+        line-height: 1; padding: 4px 3px; border-radius: var(--r-md); flex: 0 0 auto;
       }
-      #cat-editor .cat-drag:hover { background: #f1f1ee; color: var(--ink, #444); }
+      #cat-editor .cat-drag:hover { background: var(--bg-elev-1); color: var(--text-1); }
       #cat-editor .cat-drag:active { cursor: grabbing; }
       #cat-editor .cat-dragging { opacity: .45; }
-      #cat-editor .cat-top.cat-droptarget { box-shadow: 0 0 0 2px var(--lime, #8db600) inset; }
-      #cat-editor .cat-subrow.cat-droptarget { background: rgba(141,182,0,.10); border-radius: 6px; }
-      #cat-editor .cat-del { color: #b42318; }
+      #cat-editor .cat-top.cat-droptarget { box-shadow: 0 0 0 2px var(--accent) inset; }
+      #cat-editor .cat-subrow.cat-droptarget { background: rgba(107,142,111,.12); border-radius: var(--r-md); }
+      #cat-editor .cat-del { color: var(--danger); }
+      /* Name fields don't stretch edge-to-edge — capped so a row reads as a compact
+         EN/中文 label pair, not two long bars. */
+      #cat-editor .cat-name { flex: 1 1 200px; max-width: 300px; }
+      #cat-editor .cat-top-head .cat-name { font-weight: 700; }
+      #cat-editor .cat-subrow .cat-name { flex: 1 1 180px; max-width: 260px; }
       #cat-editor .cat-subrow input { padding: 6px 9px; font-size: 13px; }
-      #cat-editor button.btn-icon.cat-del { border: 1px solid #f3d0cc; background: #fff; border-radius: 6px; padding: 4px 8px; }
-      #cat-editor button.btn-icon.cat-del:hover { background: #fdf2f1; }
+      #cat-editor .cat-subs-kicker { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); margin: 2px 0 6px; }
+      #cat-editor button.btn-icon.cat-del { border: 1px solid var(--line); background: var(--bg-pane); border-radius: var(--r-md); padding: 4px 8px; }
+      #cat-editor button.btn-icon.cat-del:hover { background: var(--danger-soft); border-color: var(--danger); }
     </style>
     <h2>Categories · 分类</h2>
     <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
@@ -9011,22 +9017,23 @@ function catRender() {
            style="display:flex;gap:6px;align-items:center;padding:5px 0;">
         <span class="cat-drag" draggable="true" title="Drag to reorder · 拖动排序"
               ondragstart="catDragStart(event,'sub',${ti},${si})" ondragend="catDragEnd()">⠿</span>
-        <input type="text" class="input" data-f="name" value="${escapeAttr(s.name)}" placeholder="Subcategory (EN)" oninput="catSet(${ti},${si},'name',this.value)" style="flex:1;">
-        <input type="text" class="input" data-f="name_cn" value="${escapeAttr(s.name_cn)}" placeholder="子分类 (中文)" oninput="catSet(${ti},${si},'name_cn',this.value)" style="flex:1;">
+        <input type="text" class="input cat-name" data-f="name" value="${escapeAttr(s.name)}" placeholder="Subcategory (EN)" oninput="catSet(${ti},${si},'name',this.value)">
+        <input type="text" class="input cat-name" data-f="name_cn" value="${escapeAttr(s.name_cn)}" placeholder="子分类 (中文)" oninput="catSet(${ti},${si},'name_cn',this.value)">
         <button class="btn-icon cat-del" type="button" title="Remove subcategory" onclick="catRemoveSub(${ti},${si})">✕</button>
       </div>`).join('');
     return `
     <div class="card cat-top" id="cat-top-${ti}"
          ondragover="catDragOver(event,'top',${ti})" ondrop="catDrop(event,'top',${ti})" ondragleave="catDragLeave(event)"
          style="margin-bottom:var(--s4);">
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+      <div class="cat-top-head" style="display:flex;gap:8px;align-items:center;margin-bottom:var(--s3);">
         <span class="cat-drag cat-drag-top" draggable="true" title="Drag to reorder · 拖动排序"
               ondragstart="catDragStart(event,'top',${ti})" ondragend="catDragEnd()">⠿</span>
-        <input type="text" class="input" data-f="name" value="${escapeAttr(t.name)}" placeholder="Top category (EN)" oninput="catSet(${ti},-1,'name',this.value)" style="flex:1;font-weight:700;">
-        <input type="text" class="input" data-f="name_cn" value="${escapeAttr(t.name_cn)}" placeholder="主分类 (中文)" oninput="catSet(${ti},-1,'name_cn',this.value)" style="flex:1;font-weight:700;">
-        <button class="btn btn-sm cat-del" type="button" onclick="catRemoveTop(${ti})">Remove · 删除</button>
+        <input type="text" class="input cat-name" data-f="name" value="${escapeAttr(t.name)}" placeholder="Top category (EN)" oninput="catSet(${ti},-1,'name',this.value)">
+        <input type="text" class="input cat-name" data-f="name_cn" value="${escapeAttr(t.name_cn)}" placeholder="主分类 (中文)" oninput="catSet(${ti},-1,'name_cn',this.value)">
+        <button class="btn btn-sm cat-del" type="button" onclick="catRemoveTop(${ti})" style="margin-left:auto;">Remove · 删除</button>
       </div>
       <div style="padding-left:34px;">
+        ${(t.subs || []).length ? `<div class="cat-subs-kicker">${(t.subs).length} subcategor${(t.subs).length === 1 ? 'y' : 'ies'} · 子分类</div>` : ''}
         ${subs || '<div class="muted" style="font-size:12px;padding:4px 0;">No subcategories · 无子分类</div>'}
         <button class="btn btn-sm" type="button" onclick="catAddSub(${ti})" style="margin-top:8px;">＋ Add subcategory · 新增子分类</button>
       </div>
