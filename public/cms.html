@@ -7766,11 +7766,11 @@ function renderBlockBody(b) {
       const catHex = (c, i) => dcResolveHex(tileColors[c.id] || palette[i % 6]);
       // Count + cover image are derived from the loaded products (categories
       // themselves carry neither), so the preview mirrors the live renderer.
-      const catCount = (c) => (state.products || []).filter(p => p.category === c.name).length;
-      const catCover = (c) => { const p = (state.products || []).find(x => x.category === c.name && thumbUrl(x)); return p ? thumbUrl(p) : ''; };
-      // Tree tops carry EN `name` + separate `name_cn`. splitBi returns both
-      // halves; catLabel picks one for the current editor language.
-      const splitBi = (c) => ({ en: c.name || '', cn: c.name_cn || '' });
+      const dcInCat = (p, c) => (p.top_category || p.category) === c.name;
+      const catCount = (c) => (state.products || []).filter(p => dcInCat(p, c)).length;
+      const catCover = (c) => { const p = (state.products || []).find(x => dcInCat(x, c) && thumbUrl(x)); return p ? thumbUrl(p) : ''; };
+      // Tree tops carry EN `name` + separate `name_cn`. catLabel picks one for
+      // the current editor language — each language shows only its own name.
       const catLabel = (c) => state.lang === 'cn' ? (c.name_cn || c.name || '') : (c.name || '');
       const ck = getBi(b, 'kicker');
       const ct = getBi(b, 'title');
@@ -7781,12 +7781,11 @@ function renderBlockBody(b) {
       if (catStyle === 'index') {
         const rows = cats.map((c, i) => {
           const hex = catHex(c, i);
-          const nm = splitBi(c);
           const num = ('0' + (i + 1)).slice(-2);
           return `<div class="idx-row">
             <div class="idx-num">${num}</div>
             <div class="idx-dot" style="background:${hex}"></div>
-            <div class="idx-name"><div class="en">${escapeHtml(nm.en)}</div>${nm.cn ? `<div class="cn">${escapeHtml(nm.cn)}</div>` : ''}</div>
+            <div class="idx-name"><div class="en">${escapeHtml(catLabel(c))}</div></div>
             <div class="idx-count" style="background:${hex};color:${btnTextHex(hex)}">${catCount(c)}</div>
             <div class="idx-chev">›</div>
           </div>`;
@@ -7800,14 +7799,13 @@ function renderBlockBody(b) {
       if (catStyle === 'bento') {
         const tiles = cats.map((c, i) => {
           const hex = catHex(c, i);
-          const nm = splitBi(c);
           const num = ('0' + (i + 1)).slice(-2);
           const cover = catCover(c);
           const bgStyle = cover ? `background-image:url('${cover}')` : `background:${hex}`;
           const fg = cover ? '#fff' : btnTextHex(hex);
           return `<div class="bento-tile${i === 0 ? ' hero' : ''}" style="${bgStyle};color:${fg}">
             <div class="bento-badge" style="background:${hex};color:${btnTextHex(hex)}">${num} · ${catCount(c)}</div>
-            <div class="bento-cap"><div class="en">${escapeHtml(nm.en)}</div>${nm.cn ? `<div class="cn">${escapeHtml(nm.cn)}</div>` : ''}</div>
+            <div class="bento-cap"><div class="en">${escapeHtml(catLabel(c))}</div></div>
           </div>`;
         }).join('');
         d.innerHTML = head + `<div class="bento-grid">${tiles}</div>`;
@@ -7819,9 +7817,8 @@ function renderBlockBody(b) {
       if (catStyle === 'sticker') {
         const chips = cats.map((c, i) => {
           const hex = catHex(c, i);
-          const nm = splitBi(c);
           return `<div class="chip-pill" style="background:${hex};color:${btnTextHex(hex)}">
-            <span class="en">${escapeHtml(nm.en)}</span>${nm.cn ? `<span class="cn">${escapeHtml(nm.cn)}</span>` : ''}
+            <span class="en">${escapeHtml(catLabel(c))}</span>
             <span class="chip-count">${catCount(c)}</span>
           </div>`;
         }).join('');

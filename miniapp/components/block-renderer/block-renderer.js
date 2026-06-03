@@ -382,16 +382,19 @@ Component({
           // products (count = products in the category; cover = first product
           // with an image). Mirrors the CMS preview.
           const allProducts = this.properties.products || [];
-          const catCount = (c) => allProducts.filter(p => p.category === c.name).length;
+          // Match on the storefront `top_category` (the field the category tree
+          // is built from); fall back to the legacy free-form `category` for
+          // products not yet re-saved under the two-level scheme.
+          const inCat = (p, c) => (p.top_category || p.category) === c.name;
+          const catCount = (c) => allProducts.filter(p => inCat(p, c)).length;
           const catCover = (c) => {
-            const p = allProducts.find(x => x.category === c.name && (absUrl(x.image_url) || x.image_data));
+            const p = allProducts.find(x => inCat(x, c) && (absUrl(x.image_url) || x.image_data));
             return p ? (absUrl(p.image_url) || p.image_data) : '';
           };
           out.tiles = cats.map((c, i) => {
-            // Category tops carry EN `name` + separate `name_cn`. Pick one for
-            // the single label; expose both halves for rows that show EN+CN.
+            // Category tops carry EN `name` + separate `name_cn`. Pick the one
+            // for the active language — each language shows only its own name.
             const splitName = (L === 'cn' && c.name_cn) ? c.name_cn : c.name;
-            const both = { en: c.name, cn: c.name_cn || '' };
             const letter = (splitName.trim()[0] || '').toUpperCase();
             const override = tileColors[c.id];
             const token = override || palette[i % 6];
@@ -404,8 +407,6 @@ Component({
               id: c.id,
               num: '0' + (i + 1),
               name: splitName,
-              nameEn: both.en,
-              nameCn: both.cn,
               letter,
               color: token,
               count: catCount(c),

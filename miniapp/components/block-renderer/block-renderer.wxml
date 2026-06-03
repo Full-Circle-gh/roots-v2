@@ -109,8 +109,7 @@
       <view class="idx-num">{{item.num}}</view>
       <view class="idx-dot" style="background:{{item.bg}}"></view>
       <view class="idx-name">
-        <view class="en">{{item.nameEn}}</view>
-        <view wx:if="{{item.nameCn}}" class="cn">{{item.nameCn}}</view>
+        <view class="en">{{item.name}}</view>
       </view>
       <view class="idx-count" style="background:{{item.bg}};color:{{item.fg}}">{{item.count}}</view>
       <view class="idx-chev">›</view>
@@ -125,8 +124,7 @@
       <image wx:if="{{item.cover}}" src="{{item.cover}}" mode="aspectFill" class="bento-img"/>
       <view class="bento-badge" style="background:{{item.bg}};color:{{item.fg}}">{{item.num}} · {{item.count}}</view>
       <view class="bento-cap {{item.cover ? 'on-img' : ''}}">
-        <view class="en">{{item.nameEn}}</view>
-        <view wx:if="{{item.nameCn}}" class="cn">{{item.nameCn}}</view>
+        <view class="en">{{item.name}}</view>
       </view>
     </view>
   </view>
@@ -136,8 +134,7 @@
     <view wx:for="{{tiles}}" wx:key="id" class="chip-pill"
           style="background:{{item.bg}};color:{{item.fg}}"
           data-id="{{item.id}}" bindtap="onCategoryTap">
-      <text class="en">{{item.nameEn}}</text>
-      <text wx:if="{{item.nameCn}}" class="cn">{{item.nameCn}}</text>
+      <text class="en">{{item.name}}</text>
       <text class="chip-count">{{item.count}}</text>
     </view>
   </view>
