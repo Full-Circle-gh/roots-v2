@@ -727,6 +727,31 @@
   .pa-preset-thumb .tr.notes   { height: 11px; background: var(--accent); opacity: .25; border-radius: 2px; }
   .pa-preset-thumb .tr.bar     { height: 9px; background: var(--line); border-radius: 2px; }
 
+  /* Per-template thumb skins. Both templates seed the SAME block stack, so the
+     auto-wireframe is identical — the only real difference is the visual skin.
+     These rules let each card preview its own look (warm editorial vs. minimal
+     hairline) instead of showing the same grey skeleton twice. Card-prefixed so
+     they survive the hover/active background overrides above. */
+  /* Editorial Light — warm paper, solid bars, accent on the callout/stat. */
+  .pa-preset-card .pa-preset-thumb.pa-tpl-editorial_light { background: #F3ECE2; }
+  .pa-preset-card .pa-preset-thumb.pa-tpl-editorial_light::after { background: linear-gradient(to bottom, transparent, #F3ECE2); }
+  .pa-preset-thumb.pa-tpl-editorial_light .tr i { background: #BCAF9B; }
+  .pa-preset-thumb.pa-tpl-editorial_light .tr.notes,
+  .pa-preset-thumb.pa-tpl-editorial_light .tr.stat { background: var(--accent); opacity: .9; }
+
+  /* Quiet Minimal — white, generous whitespace, hairline rules, single lime accent. */
+  .pa-preset-card .pa-preset-thumb.pa-tpl-quiet_minimal { background: #fff; gap: 9px; padding: 14px 16px; }
+  .pa-preset-card .pa-preset-thumb.pa-tpl-quiet_minimal::after { background: linear-gradient(to bottom, transparent, #fff); }
+  .pa-preset-thumb.pa-tpl-quiet_minimal .tr i { background: #DBDBD4; }
+  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.spec i { height: 6px; }
+  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.lines i { height: 3px; }
+  /* chips → outlined hairline pills, lead chip gets the lone lime accent */
+  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.chips i { background: transparent; border: 1px solid #DBDBD4; }
+  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.chips i:first-child { border-color: var(--accent); }
+  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.storage i { background: transparent; border: 1px solid #DBDBD4; }
+  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.allergen { border-color: #DBDBD4; }
+  .pa-preset-thumb.pa-tpl-quiet_minimal .tr.notes { background: var(--accent); opacity: .85; height: 3px; }
+
   /* Block rows — match the Mini App Editor's .palette-item exactly */
   .pa-block-row {
     display: flex; align-items: center; gap: var(--s3);
@@ -1373,8 +1398,8 @@
         <div class="pa-inspector-presets">
           <div class="pa-presets">
             <div class="pa-presets-head">
-              <span class="pa-presets-title">Choose a template · 选择模板</span>
-              <span class="pa-presets-hint helper">Seeds a coherent block stack. Switching replaces the current blocks. · 套用一套连贯板块,切换会替换现有板块。</span>
+              <span class="pa-presets-title" data-no-i18n><span data-lang-block="en">Choose a template</span><span data-lang-block="cn">选择模板</span></span>
+              <span class="pa-presets-hint helper" data-no-i18n><span data-lang-block="en">Seeds a coherent block stack. Switching replaces the current blocks.</span><span data-lang-block="cn">套用一套连贯板块,切换会替换现有板块。</span></span>
             </div>
             <div class="pa-presets-row" id="pa-presets-row"></div>
           </div>
@@ -2465,12 +2490,16 @@ function paRenderPresets() {
   const row = document.getElementById('pa-presets-row'); if (!row) return;
   row.innerHTML = PA_TEMPLATES.map(p => {
     const active = p.id === window._paTemplate;
+    const n = (p.blocks || []).length;
+    const count = active
+      ? paBiTitle('✓ Current', '✓ 当前')
+      : paBiTitle(n + ' blocks', n + ' 个板块');
     return `
     <button type="button" class="pa-preset-card${active ? ' active' : ''}" onclick="paApplyTemplate('${p.id}')" title="${escapeHtml(p.desc_en + ' · ' + p.desc_cn)}">
-      <div class="pa-preset-thumb">${paPresetThumb(p.blocks)}</div>
+      <div class="pa-preset-thumb pa-tpl-${p.id}">${paPresetThumb(p.blocks)}</div>
       <div class="pa-preset-meta">
-        <span class="pa-preset-card-label">${escapeHtml(p.label_en)}<br>${escapeHtml(p.label_cn)}</span>
-        <span class="pa-preset-card-count">${active ? '✓ Current · 当前' : (p.blocks || []).length + ' blocks · ' + (p.blocks || []).length + ' 个板块'}</span>
+        <span class="pa-preset-card-label" data-no-i18n>${paBiTitle(escapeHtml(p.label_en), escapeHtml(p.label_cn))}</span>
+        <span class="pa-preset-card-count" data-no-i18n>${count}</span>
       </div>
     </button>`;
   }).join('');
