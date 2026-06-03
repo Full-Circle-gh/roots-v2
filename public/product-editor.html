@@ -898,26 +898,25 @@
 
   /* ─── Live phone preview ── */
   .pa-prev-frame {
-    width: 395px;
+    width: 390px;
     background: #2a2a30;
     border-radius: 38px;
     padding: 10px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0,0,0,.3);
-    /* Fill the canvas height left AFTER the "Preview as" langbar (the canvas is
-       a flex column), so the device always fits without canvas scroll — at any
-       text-size zoom. Column flex lets the screen child flex-fill the frame. */
-    flex: 1 1 0;
-    min-height: 0;
+    /* Fixed-size device (like the Mini App Editor) — the canvas scrolls around
+       it instead of the frame shrinking to fit, so the phone stays full-size at
+       any text-size zoom rather than squishing short. */
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
   }
   .pa-prev-screen {
     background: #F2E7DF;
     width: 100%;
-    /* Flex-fill the frame instead of a fixed vh height (which ignored the
-       langbar and the zoom). The product page scrolls inside the screen. */
-    flex: 1;
-    min-height: 0;
+    /* Real device viewport height — the product page scrolls inside the screen.
+       Was flex-fill, which let the frame collapse on short/zoomed windows. */
+    height: 812px;
+    flex: none;
     border-radius: 30px;
     overflow-y: auto; overflow-x: hidden;
     position: relative;
