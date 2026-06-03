@@ -193,6 +193,43 @@
   }
   .field { margin-bottom: var(--s4); }
   .helper { font-size: 11px; color: var(--text-4); margin-top: 6px; line-height: 1.5; }
+  /* EN/中 paired widget — groups both languages into one bordered field with tag chips (mirrors the Mini App Editor). */
+  .txt-pair { display: flex; flex-direction: column; gap: 6px; }
+  .txt-pair-row {
+    display: flex; align-items: stretch;
+    border: 1px solid var(--line);
+    background: var(--bg-input);
+    border-radius: var(--r-md);
+    overflow: hidden;
+    transition: border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
+  }
+  .txt-pair-row:focus-within {
+    border-color: rgba(107, 142, 111, .45);
+    box-shadow: 0 0 0 3px var(--ring);
+  }
+  .txt-pair-row .lang-tag {
+    padding: 0 10px;
+    background: var(--bg-elev-1);
+    color: var(--text-3);
+    font-size: 10px; font-weight: 700; letter-spacing: .08em;
+    border-right: 1px solid var(--line);
+    display: flex; align-items: center;
+    min-width: 38px;
+    user-select: none;
+  }
+  .txt-pair-row input,
+  .txt-pair-row textarea {
+    flex: 1; border: 0 !important; background: transparent !important;
+    padding: 8px 10px !important;
+    border-radius: 0 !important; box-shadow: none !important;
+  }
+  .txt-pair-row input:focus,
+  .txt-pair-row textarea:focus { box-shadow: none !important; border: 0 !important; }
+  .txt-pair-row textarea {
+    font: inherit; line-height: 1.4; resize: vertical; min-height: 60px;
+  }
+  .txt-pair-row.is-multiline { align-items: flex-start; }
+  .txt-pair-row.is-multiline .lang-tag { align-items: flex-start; padding-top: 8px; }
   code { font-family: var(--f-mono); font-size: .92em; background: var(--bg-elev-1); padding: 1px 5px; border-radius: 4px; }
 
   /* ── PAGE SHELL: topbar + full-viewport 3-pane ── */
@@ -2903,6 +2940,23 @@ function paRefreshTabLabels() {
 }
 
 // ── Selected-block editor form ──
+// EN/中 paired input widget — one field label, then EN + 中 rows grouped into a
+// single bordered control with tag chips (mirrors the Mini App Editor's txtPair).
+// `label` is already-built bilingual HTML (use paBiTitle). `attrs` (e.g.
+// data-cellidx / data-rowidx / data-sub) is applied to BOTH inputs so
+// paBlocksSyncFromDOM keeps working unchanged.
+function paPair({ label, keyEn, keyCn, valEn = '', valCn = '', phEn = '', phCn = '', attrs = '', helper = '', multiline = false, rows = 2, span2 = false }) {
+  const ml = multiline ? ' is-multiline' : '';
+  const ctrl = (key, val, ph) => multiline
+    ? `<textarea data-bkey="${key}" ${attrs} rows="${rows}" placeholder="${escapeAttr(ph)}">${escapeHtml(val || '')}</textarea>`
+    : `<input data-bkey="${key}" ${attrs} type="text" value="${escapeAttr(val || '')}" placeholder="${escapeAttr(ph)}">`;
+  return `<div class="field"${span2 ? ' style="grid-column:span 2"' : ''}><label class="stacked">${label}</label>
+    <div class="txt-pair">
+      <div class="txt-pair-row${ml}"><span class="lang-tag">EN</span>${ctrl(keyEn, valEn, phEn)}</div>
+      <div class="txt-pair-row${ml}"><span class="lang-tag">中</span>${ctrl(keyCn, valCn, phCn)}</div>
+    </div>${helper ? `<div class="helper">${helper}</div>` : ''}
+  </div>`;
+}
 function _paBlockEditorBody(b) {
   const v = (k) => escapeAttr(b[k] || '');
   const t = (k) => escapeHtml(b[k] || '');
@@ -2919,10 +2973,8 @@ function _paBlockEditorBody(b) {
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','cells',${i})" ${cells.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
           <div class="pa-edit-grid-2">
-            <div class="field"><label class="stacked">Label EN · 标签(英文)</label><input data-cellidx="${i}" data-bkey="k_en" type="text" value="${escapeAttr(c.k_en || '')}" placeholder="Type"></div>
-            <div class="field"><label class="stacked">Label CN · 标签(中文)</label><input data-cellidx="${i}" data-bkey="k_cn" type="text" value="${escapeAttr(c.k_cn || '')}" placeholder="类型"></div>
-            <div class="field"><label class="stacked">Value EN · 值(英文)</label><input data-cellidx="${i}" data-bkey="v_en" type="text" value="${escapeAttr(c.v_en || '')}" placeholder="Refrigerated dip"></div>
-            <div class="field"><label class="stacked">Value CN · 值(中文)</label><input data-cellidx="${i}" data-bkey="v_cn" type="text" value="${escapeAttr(c.v_cn || '')}" placeholder="冷藏蘸酱"></div>
+            ${paPair({ label: paBiTitle('Label', '标签'), keyEn: 'k_en', keyCn: 'k_cn', valEn: c.k_en, valCn: c.k_cn, phEn: 'Type', phCn: '类型', attrs: `data-cellidx="${i}"` })}
+            ${paPair({ label: paBiTitle('Value', '值'), keyEn: 'v_en', keyCn: 'v_cn', valEn: c.v_en, valCn: c.v_cn, phEn: 'Refrigerated dip', phCn: '冷藏蘸酱', attrs: `data-cellidx="${i}"` })}
           </div>
         </div>`).join('')}
       <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','cells',{k_en:'',k_cn:'',v_en:'',v_cn:''})">+ Add cell · 添加一格</button>`;
@@ -2930,18 +2982,9 @@ function _paBlockEditorBody(b) {
   if (b.type === 'hero_intro') {
     return `
       <div class="pa-edit-grid-2">
-        <div class="field"><label class="stacked">Kicker EN · 引题(英文)</label>
-          <input data-bkey="kicker_en" type="text" value="${v('kicker_en')}" placeholder="The story">
-          <div class="helper">Optional caps prefix above the paragraph. · 段落上方的小标题(大写,可选)。</div>
-        </div>
-        <div class="field"><label class="stacked">Kicker CN · 引题(中文)</label><input data-bkey="kicker_cn" type="text" value="${v('kicker_cn')}" placeholder="故事"></div>
-        <div class="field" style="grid-column:span 2"><label class="stacked">Body EN · 正文</label><textarea data-bkey="body_en" rows="5">${t('body_en')}</textarea></div>
-        <div class="field" style="grid-column:span 2"><label class="stacked">Body CN · 正文(中文)</label><textarea data-bkey="body_cn" rows="5">${t('body_cn')}</textarea></div>
-        <div class="field"><label class="stacked">Highlight EN · 重点(英文)</label>
-          <input data-bkey="highlight_en" type="text" value="${v('highlight_en')}" placeholder="just enough heat to wake things up">
-          <div class="helper">If this phrase appears in the body, it renders inline on a lime slab. · 若该短语出现在正文中,会以青柠色块呈现。</div>
-        </div>
-        <div class="field"><label class="stacked">Highlight CN · 重点(中文)</label><input data-bkey="highlight_cn" type="text" value="${v('highlight_cn')}" placeholder="刚好够把舌头叫醒"></div>
+        ${paPair({ label: paBiTitle('Kicker', '引题'), keyEn: 'kicker_en', keyCn: 'kicker_cn', valEn: b.kicker_en, valCn: b.kicker_cn, phEn: 'The story', phCn: '故事', span2: true, helper: 'Optional caps prefix above the paragraph. · 段落上方的小标题(大写,可选)。' })}
+        ${paPair({ label: paBiTitle('Body', '正文'), keyEn: 'body_en', keyCn: 'body_cn', valEn: b.body_en, valCn: b.body_cn, multiline: true, rows: 5, span2: true })}
+        ${paPair({ label: paBiTitle('Highlight', '重点'), keyEn: 'highlight_en', keyCn: 'highlight_cn', valEn: b.highlight_en, valCn: b.highlight_cn, phEn: 'just enough heat to wake things up', phCn: '刚好够把舌头叫醒', span2: true, helper: 'If this phrase appears in the body, it renders inline on a lime slab. · 若该短语出现在正文中,会以青柠色块呈现。' })}
       </div>`;
   }
   if (b.type === 'why') {
@@ -2954,10 +2997,7 @@ function _paBlockEditorBody(b) {
             <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','rows',${i})" ${rows.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
-          <div class="pa-edit-grid-2">
-            <div class="field"><label class="stacked">Claim EN · 说明(英文)</label><input data-rowidx="${i}" data-bkey="claim_en" type="text" value="${escapeAttr(r.claim_en || '')}" placeholder="Fresh herb flavor with controlled heat."></div>
-            <div class="field"><label class="stacked">Claim CN · 说明(中文)</label><input data-rowidx="${i}" data-bkey="claim_cn" type="text" value="${escapeAttr(r.claim_cn || '')}" placeholder="鲜草本风味,可控辣度。"></div>
-          </div>
+          ${paPair({ label: paBiTitle('Claim', '说明'), keyEn: 'claim_en', keyCn: 'claim_cn', valEn: r.claim_en, valCn: r.claim_cn, phEn: 'Fresh herb flavor with controlled heat.', phCn: '鲜草本风味,可控辣度。', attrs: `data-rowidx="${i}"` })}
         </div>`).join('')}
       <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','rows',{claim_en:'',claim_cn:''})" ${rows.length >= 5 ? 'disabled' : ''}>+ Add claim · 添加</button>`;
   }
@@ -2975,8 +3015,7 @@ function _paBlockEditorBody(b) {
             <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','items',${i})" ${items.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
           <div class="pa-edit-grid-2">
-            <div class="field"><label class="stacked">Name EN · 名称(英文)</label><input data-rowidx="${i}" data-bkey="name_en" type="text" value="${escapeAttr(it.name_en || '')}" placeholder="Fresh cilantro"></div>
-            <div class="field"><label class="stacked">Name CN · 名称(中文)</label><input data-rowidx="${i}" data-bkey="name_cn" type="text" value="${escapeAttr(it.name_cn || '')}" placeholder="鲜香菜"></div>
+            ${paPair({ label: paBiTitle('Name', '名称'), keyEn: 'name_en', keyCn: 'name_cn', valEn: it.name_en, valCn: it.name_cn, phEn: 'Fresh cilantro', phCn: '鲜香菜', attrs: `data-rowidx="${i}"`, span2: true })}
             <div class="field"><label class="stacked">% (optional) · 百分比(可选)</label><input data-rowidx="${i}" data-bkey="pct" type="number" min="0" max="100" value="${escapeAttr(it.pct == null ? '' : it.pct)}" placeholder="38"></div>
             <div class="field"><label class="stacked">Hero · 主料</label>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-1);cursor:pointer">
@@ -2991,16 +3030,8 @@ function _paBlockEditorBody(b) {
   if (b.type === 'allergen_card') {
     return `
       <div class="pa-edit-grid-2">
-        <div class="field"><label class="stacked">Contains EN · 包含(英文)</label>
-          <input data-bkey="contains_en" type="text" value="${v('contains_en')}" placeholder="Tree nuts, Hazelnuts">
-          <div class="helper">Comma-separated, shown as berry strong chips. Leave blank for "None declared". · 逗号分隔,显示为深莓色标签。</div>
-        </div>
-        <div class="field"><label class="stacked">Contains CN · 含有(中文)</label><input data-bkey="contains_cn" type="text" value="${v('contains_cn')}" placeholder="树坚果,榛子"></div>
-        <div class="field"><label class="stacked">May Contain EN · 可能含有(英文)</label>
-          <input data-bkey="may_contain_en" type="text" value="${v('may_contain_en')}" placeholder="Other tree nuts, soy">
-          <div class="helper">Comma-separated, shown as corn soft chips. · 逗号分隔,显示为玉米色软标签。</div>
-        </div>
-        <div class="field"><label class="stacked">May Contain CN · 可能含有(中文)</label><input data-bkey="may_contain_cn" type="text" value="${v('may_contain_cn')}" placeholder="其他树坚果、大豆"></div>
+        ${paPair({ label: paBiTitle('Contains', '包含'), keyEn: 'contains_en', keyCn: 'contains_cn', valEn: b.contains_en, valCn: b.contains_cn, phEn: 'Tree nuts, Hazelnuts', phCn: '树坚果,榛子', span2: true, helper: 'Comma-separated, shown as berry strong chips. Leave blank for "None declared". · 逗号分隔,显示为深莓色标签。' })}
+        ${paPair({ label: paBiTitle('May Contain', '可能含有'), keyEn: 'may_contain_en', keyCn: 'may_contain_cn', valEn: b.may_contain_en, valCn: b.may_contain_cn, phEn: 'Other tree nuts, soy', phCn: '其他树坚果、大豆', span2: true, helper: 'Comma-separated, shown as corn soft chips. · 逗号分隔,显示为玉米色软标签。' })}
       </div>`;
   }
   if (b.type === 'how_to_use') {
@@ -3015,10 +3046,8 @@ function _paBlockEditorBody(b) {
           </div>
           <div class="field" style="max-width:180px;margin-bottom:10px"><label class="stacked">Icon · 图标</label><div class="pe-emoji-field"><input data-rowidx="${i}" data-bkey="icon" type="text" value="${escapeAttr(tl.icon || '')}" placeholder="🥖" style="text-align:center;font-size:18px"><button type="button" class="pe-emoji-btn" title="Pick emoji · 选择表情" onclick="peEmojiOpen(this)">😀</button></div></div>
           <div class="pa-edit-grid-2">
-            <div class="field"><label class="stacked">Label EN · 标签(英文)</label><input data-rowidx="${i}" data-bkey="label_en" type="text" value="${escapeAttr(tl.label_en || '')}" placeholder="Toast"></div>
-            <div class="field"><label class="stacked">Label CN · 标签(中文)</label><input data-rowidx="${i}" data-bkey="label_cn" type="text" value="${escapeAttr(tl.label_cn || '')}" placeholder="吐司"></div>
-            <div class="field"><label class="stacked">Sub EN (optional) · 副标(英文,可选)</label><input data-rowidx="${i}" data-bkey="sub_en" type="text" value="${escapeAttr(tl.sub_en || '')}" placeholder="over eggs"></div>
-            <div class="field"><label class="stacked">Sub CN · 副标(中文,可选)</label><input data-rowidx="${i}" data-bkey="sub_cn" type="text" value="${escapeAttr(tl.sub_cn || '')}" placeholder="盖在鸡蛋上"></div>
+            ${paPair({ label: paBiTitle('Label', '标签'), keyEn: 'label_en', keyCn: 'label_cn', valEn: tl.label_en, valCn: tl.label_cn, phEn: 'Toast', phCn: '吐司', attrs: `data-rowidx="${i}"` })}
+            ${paPair({ label: paBiTitle('Sub (optional)', '副标(可选)'), keyEn: 'sub_en', keyCn: 'sub_cn', valEn: tl.sub_en, valCn: tl.sub_cn, phEn: 'over eggs', phCn: '盖在鸡蛋上', attrs: `data-rowidx="${i}"` })}
           </div>
         </div>`).join('')}
       <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','tiles',{icon:'',label_en:'',label_cn:'',sub_en:'',sub_cn:''})" ${tiles.length >= 8 ? 'disabled' : ''}>+ Add tile · 添加用法</button>`;
@@ -3030,12 +3059,9 @@ function _paBlockEditorBody(b) {
       <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
         <div class="pa-edit-section-title" style="margin-bottom:8px">${which === 'left' ? 'Left card · 左卡' : 'Right card · 右卡'}</div>
         <div class="pa-edit-grid-2">
-          <div class="field"><label class="stacked">Head EN · 标题(英文)</label><input data-sub="${which}" data-bkey="head_en" type="text" value="${escapeAttr(c.head_en || '')}" placeholder="Unopened"></div>
-          <div class="field"><label class="stacked">Head CN · 标题(中文)</label><input data-sub="${which}" data-bkey="head_cn" type="text" value="${escapeAttr(c.head_cn || '')}" placeholder="未开封"></div>
-          <div class="field"><label class="stacked">Big word EN · 大字(英文)</label><input data-sub="${which}" data-bkey="num_en" type="text" value="${escapeAttr(c.num_en || c.num || '')}" placeholder="Cool & dry"></div>
-          <div class="field"><label class="stacked">Big word CN · 大字(中文)</label><input data-sub="${which}" data-bkey="num_cn" type="text" value="${escapeAttr(c.num_cn || '')}" placeholder="阴凉干燥"></div>
-          <div class="field"><label class="stacked">Unit EN · 单位(英文)</label><input data-sub="${which}" data-bkey="unit_en" type="text" value="${escapeAttr(c.unit_en || '')}" placeholder="Store away from heat"></div>
-          <div class="field"><label class="stacked">Unit CN · 单位(中文)</label><input data-sub="${which}" data-bkey="unit_cn" type="text" value="${escapeAttr(c.unit_cn || '')}" placeholder="远离高温和潮湿"></div>
+          ${paPair({ label: paBiTitle('Head', '标题'), keyEn: 'head_en', keyCn: 'head_cn', valEn: c.head_en, valCn: c.head_cn, phEn: 'Unopened', phCn: '未开封', attrs: `data-sub="${which}"` })}
+          ${paPair({ label: paBiTitle('Big word', '大字'), keyEn: 'num_en', keyCn: 'num_cn', valEn: c.num_en || c.num, valCn: c.num_cn, phEn: 'Cool & dry', phCn: '阴凉干燥', attrs: `data-sub="${which}"` })}
+          ${paPair({ label: paBiTitle('Unit', '单位'), keyEn: 'unit_en', keyCn: 'unit_cn', valEn: c.unit_en, valCn: c.unit_cn, phEn: 'Store away from heat', phCn: '远离高温和潮湿', attrs: `data-sub="${which}"` })}
           <div class="field"><label class="stacked">Icon · 图标</label><div class="pe-emoji-field"><input data-sub="${which}" data-bkey="icon" type="text" value="${escapeAttr(c.icon || '')}" placeholder="❄" style="text-align:center;font-size:18px"><button type="button" class="pe-emoji-btn" title="Pick emoji · 选择表情" onclick="peEmojiOpen(this)">😀</button></div></div>
         </div>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-1);margin-top:10px;cursor:pointer">
@@ -3048,16 +3074,14 @@ function _paBlockEditorBody(b) {
       ${card('left',  L)}
       ${card('right', R)}
       <div class="pa-edit-grid-2" style="margin-top:8px">
-        <div class="field"><label class="stacked">After-opening note EN · 开封后备注(英文)</label><input data-bkey="note_en" type="text" value="${v('note_en')}" placeholder="After opening · refrigerate"></div>
-        <div class="field"><label class="stacked">Note CN · 开封后备注(中文)</label><input data-bkey="note_cn" type="text" value="${v('note_cn')}" placeholder="开封后冷藏"></div>
+        ${paPair({ label: paBiTitle('After-opening note', '开封后备注'), keyEn: 'note_en', keyCn: 'note_cn', valEn: b.note_en, valCn: b.note_cn, phEn: 'After opening · refrigerate', phCn: '开封后冷藏', span2: true })}
       </div>`;
   }
   if (b.type === 'notes_callout') {
     return `
       <div class="helper" style="margin:-4px 0 14px">Fine-print band — "shake before use", warnings, sourcing notes. Max ~3 lines. · 小字注释。</div>
       <div class="pa-edit-grid-2">
-        <div class="field" style="grid-column:span 2"><label class="stacked">Text EN · 文字(英文)</label><textarea data-bkey="text_en" rows="3">${t('text_en')}</textarea></div>
-        <div class="field" style="grid-column:span 2"><label class="stacked">Text CN · 文字(中文)</label><textarea data-bkey="text_cn" rows="3">${t('text_cn')}</textarea></div>
+        ${paPair({ label: paBiTitle('Text', '文字'), keyEn: 'text_en', keyCn: 'text_cn', valEn: b.text_en, valCn: b.text_cn, multiline: true, rows: 3, span2: true })}
       </div>`;
   }
   if (b.type === 'big_stat' || b.type === 'stat_callout') {
@@ -3068,16 +3092,8 @@ function _paBlockEditorBody(b) {
           <input data-bkey="stat" type="text" value="${v('stat')}" placeholder="81%" style="font-size:22px;font-weight:700;text-align:center">
           <div class="helper">e.g. <code>81%</code>, <code>500g</code>, <code>0g</code></div>
         </div>
-        <div class="field"><label class="stacked">What EN · 内容(英文)</label>
-          <input data-bkey="what_en" type="text" value="${v('what_en')}" placeholder="HAZELNUTS">
-          <div class="helper">Caps label under the stat. · 数字下方的大写小标题。</div>
-        </div>
-        <div class="field"><label class="stacked">What CN · 内容(中文)</label><input data-bkey="what_cn" type="text" value="${v('what_cn')}" placeholder="榛子"></div>
-        <div class="field" style="grid-column:span 2"><label class="stacked">Claim EN (optional) · 说明(英文,可选)</label>
-          <input data-bkey="claim_en" type="text" value="${v('claim_en')}" placeholder="Nuts first, not sugar.">
-          <div class="helper">Italic one-liner under the what-label. · 内容标签下方的斜体一行说明。</div>
-        </div>
-        <div class="field" style="grid-column:span 2"><label class="stacked">Claim CN · 说明(中文,可选)</label><input data-bkey="claim_cn" type="text" value="${v('claim_cn')}" placeholder="坚果当先,不靠糖分。"></div>
+        ${paPair({ label: paBiTitle('What', '内容'), keyEn: 'what_en', keyCn: 'what_cn', valEn: b.what_en, valCn: b.what_cn, phEn: 'HAZELNUTS', phCn: '榛子', span2: true, helper: 'Caps label under the stat. · 数字下方的大写小标题。' })}
+        ${paPair({ label: paBiTitle('Claim (optional)', '说明(可选)'), keyEn: 'claim_en', keyCn: 'claim_cn', valEn: b.claim_en, valCn: b.claim_cn, phEn: 'Nuts first, not sugar.', phCn: '坚果当先,不靠糖分。', span2: true, helper: 'Italic one-liner under the what-label. · 内容标签下方的斜体一行说明。' })}
         <div class="field" style="grid-column:span 2"><label class="stacked">Slab colour · 色块颜色</label>
           <select data-bkey="bg">${bgOpts.map(c => `<option value="${c}" ${b.bg === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
         </div>
@@ -3306,7 +3322,7 @@ function paRenderSelectedEditor() {
   const icon  = peTypeIcon(b.type);
   const colorInner = _paColorEditorHtml(b);
   const body =
-    paInspSec(b.type + ':content', paBiTitle('Content', '内容'), _paBlockEditorBody(b), { open: true })
+    paInspSec(b.type + ':content', paBiTitle('Content', '内容'), _paBlockEditorBody(b))
     + (colorInner ? paInspSec(b.type + ':colours', paBiTitle('Colours', '颜色'), colorInner) : '');
   mount.innerHTML = `
     <div class="pa-inspector-head" data-blockid="${b.id}">
