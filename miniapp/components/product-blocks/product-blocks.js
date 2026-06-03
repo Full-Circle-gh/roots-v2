@@ -27,6 +27,41 @@ const api = require('../../utils/api');
 
 function _pick(en, cn, L) { return lang.pick(en, cn, L); }
 
+// ── Per-block colour palette (mirrors the editor's PA_HEX / CMS DC_HEX) ──
+// Office can tint a block's background / text / accent independently. Tokens
+// resolve to the same brand hexes used across the storefront + product page.
+const PB_HEX = {
+  'lime-leaf': '#CCD900', 'forest-kale': '#365329', 'olive-moss': '#6A6E2D',
+  'roasted-almond': '#C37F4E', 'golden-corn': '#F2CA6C', 'oat-milk': '#F2E7DF',
+  'ink': '#1a1a17', 'pink-guava': '#F4B8CB', 'berry-punch': '#E96174',
+  'carrot-blaze': '#FF6B0C', 'papaya-glow': '#FFAF60', 'skyberry': '#B2CFED',
+  'lotus': '#EEB8E4', 'citrus-zest': '#E7E74C', 'pea-sprout': '#7BBD3B',
+  'white': '#FFFFFF',
+};
+// Block types that accept colour slots (big_stat keeps its own slab colour;
+// image_band / nutrition opt out). Mirrors the editor's PA_DC_FIELDS keys.
+const PB_COLOR_TYPES = {
+  spec_strip: 1, hero_intro: 1, why: 1, ingredients_chips: 1, ingredients_line: 1,
+  allergen_card: 1, how_to_use: 1, storage_box: 1, notes_callout: 1, pull_quote: 1,
+  recipe_steps: 1, pairings: 1, faq: 1,
+};
+function _colorHex(tok) {
+  if (!tok) return '';
+  return PB_HEX[tok] || (/^#[0-9a-f]{3,6}$/i.test(tok) ? tok : '');
+}
+// Inline style for a block wrapper from its colour tokens. bg/fg apply
+// directly; accent rides --pa-accent, which the WXSS honours via
+// var(--pa-accent, <default>). Returns '' when nothing is set.
+function _blockStyle(b) {
+  if (!b || !PB_COLOR_TYPES[b.type]) return '';
+  const out = [];
+  const bg = _colorHex(b.bg_color), fg = _colorHex(b.fg_color), ac = _colorHex(b.accent_color);
+  if (bg) out.push('background-color:' + bg, '--pa-bg:' + bg);
+  if (fg) out.push('color:' + fg, '--pa-fg:' + fg);
+  if (ac) out.push('--pa-accent:' + ac);
+  return out.join(';');
+}
+
 // Resolve a stored media path to an absolute URL the mini-app can load.
 // Office-uploaded images come back as relative /api/retail/media/:id; data:
 // and absolute URLs pass through untouched. Mirrors utils/cart.absUrl.
@@ -322,7 +357,7 @@ Component({
       const L = this.data.lang || 'en';
       const arr = this.data.blocks || [];
       const resolved = arr
-        .map((b, i) => ({ ...(_resolveBlock(b, L) || {}), _k: b.id || ('b' + i) }))
+        .map((b, i) => ({ ...(_resolveBlock(b, L) || {}), _k: b.id || ('b' + i), _style: _blockStyle(b) }))
         .filter(b => b.type !== '_skip');
       this.setData({ resolved });
     },

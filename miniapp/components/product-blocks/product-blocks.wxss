@@ -160,7 +160,7 @@
   font-family: var(--f-gothic);
   font-size: 68rpx;
   line-height: 0.85;
-  color: var(--ink);
+  color: var(--pa-accent, var(--ink));
 }
 .pb-why-claim {
   font-family: var(--f-toni);
@@ -221,7 +221,7 @@
   color: var(--ink);
 }
 .pb-chip-lead {
-  background: var(--ink);
+  background: var(--pa-accent, var(--ink));
   color: var(--oat);
   font-family: var(--f-bear);
   font-size: 36rpx;
@@ -256,7 +256,7 @@
   display: inline-block;
   width: 16rpx;
   height: 16rpx;
-  background: var(--lime);
+  background: var(--pa-accent, var(--lime));
   border-radius: 50%;
   margin: 0 0.35em 0.12em;
   vertical-align: middle;
@@ -484,7 +484,7 @@
   position: absolute;
   left: 0;
   top: 0;
-  color: var(--olive);
+  color: var(--pa-accent, var(--olive));
   font-style: normal;
 }
 
@@ -602,7 +602,7 @@
   font-family: var(--f-gothic);
   font-size: 56rpx;
   line-height: 0.9;
-  color: var(--olive);
+  color: var(--pa-accent, var(--olive));
 }
 .pb-recipe-body {
   display: flex;
@@ -753,7 +753,7 @@
 .pb-tpl-quiet_minimal .pb-why-head-r { display: none !important; }
 .pb-tpl-quiet_minimal .pb-why-row { grid-template-columns: 48rpx 1fr !important; gap: 32rpx !important; padding: 28rpx 0 !important; border-top: 2rpx solid var(--ink-12) !important; }
 .pb-tpl-quiet_minimal .pb-why-row.first { border-top: none !important; }
-.pb-tpl-quiet_minimal .pb-why-n { font-family: monospace !important; font-size: 22rpx !important; line-height: 1.5 !important; color: var(--olive) !important; padding-top: 4rpx; }
+.pb-tpl-quiet_minimal .pb-why-n { font-family: monospace !important; font-size: 22rpx !important; line-height: 1.5 !important; color: var(--pa-accent, var(--olive)) !important; padding-top: 4rpx; }
 .pb-tpl-quiet_minimal .pb-why-claim { font-family: var(--f-aleo) !important; font-weight: 400 !important; font-size: 28rpx !important; line-height: 1.55 !important; }
 
 /* ingredients — quiet serif run, lime slashes, mono % */
@@ -763,7 +763,7 @@
 .pb-tpl-quiet_minimal .pb-chip-pct { font-family: monospace !important; font-size: 24rpx !important; color: var(--ink-60) !important; }
 .pb-tpl-quiet_minimal .pb-ing-line { font-family: var(--f-bear) !important; font-size: 38rpx !important; line-height: 1.5 !important; }
 .pb-tpl-quiet_minimal .pb-ing-line-sep { width: auto; height: auto; background: none; border-radius: 0; margin: 0; vertical-align: baseline; }
-.pb-tpl-quiet_minimal .pb-ing-line-sep::before { content: ' / '; color: var(--lime); }
+.pb-tpl-quiet_minimal .pb-ing-line-sep::before { content: ' / '; color: var(--pa-accent, var(--lime)); }
 .pb-tpl-quiet_minimal .pb-ing-line-pct { font-family: monospace !important; font-size: 24rpx !important; color: var(--ink-60) !important; }
 
 /* how to use — clean two-column hairline list, no boxes/icons */
@@ -799,7 +799,7 @@
 .pb-tpl-quiet_minimal .pb-al-chip:not(:last-child)::after { content: ', '; }
 
 /* notes — quiet lime hairline rule, italic serif */
-.pb-tpl-quiet_minimal .pb-notes-p { padding-left: 28rpx !important; border-left: 4rpx solid var(--lime); font-family: var(--f-bear) !important; font-style: italic !important; font-size: 28rpx !important; line-height: 1.5 !important; color: var(--ink) !important; }
+.pb-tpl-quiet_minimal .pb-notes-p { padding-left: 28rpx !important; border-left: 4rpx solid var(--pa-accent, var(--lime)); font-family: var(--f-bear) !important; font-style: italic !important; font-size: 28rpx !important; line-height: 1.5 !important; color: var(--ink) !important; }
 .pb-tpl-quiet_minimal .pb-notes-p::before { display: none !important; }
 
 /* big_stat / pull_quote — softened (no loud slab / huge type) */
@@ -807,7 +807,7 @@
 .pb-tpl-quiet_minimal .pb-bigstat::before, .pb-tpl-quiet_minimal .pb-bigstat::after { display: none !important; }
 .pb-tpl-quiet_minimal .pb-bigstat-num { font-size: 128rpx !important; }
 .pb-tpl-quiet_minimal .pb-bigstat-what { letter-spacing: 0.2em !important; color: var(--ink-60) !important; }
-.pb-tpl-quiet_minimal .pb-pullquote { background: none !important; padding: 8rpx 16rpx 8rpx 28rpx !important; border-left: 4rpx solid var(--lime); }
+.pb-tpl-quiet_minimal .pb-pullquote { background: none !important; padding: 8rpx 16rpx 8rpx 28rpx !important; border-left: 4rpx solid var(--pa-accent, var(--lime)); }
 .pb-tpl-quiet_minimal .pb-pullquote-p { font-family: var(--f-bear) !important; font-style: italic !important; font-size: 32rpx !important; }
 
 /* image band — bleed full-width for the lifestyle break, quiet caption inset */
@@ -817,6 +817,6 @@
 /* recipe / faq — quiet olive→mono numerals, lighter weights */
 .pb-tpl-quiet_minimal .pb-recipe-step { grid-template-columns: 48rpx 1fr !important; gap: 32rpx !important; border-top: 2rpx solid var(--ink-12) !important; }
 .pb-tpl-quiet_minimal .pb-recipe-step:first-of-type { border-top: none !important; }
-.pb-tpl-quiet_minimal .pb-recipe-n { font-family: monospace !important; font-size: 24rpx !important; line-height: 1.5 !important; color: var(--olive) !important; padding-top: 4rpx; }
+.pb-tpl-quiet_minimal .pb-recipe-n { font-family: monospace !important; font-size: 24rpx !important; line-height: 1.5 !important; color: var(--pa-accent, var(--olive)) !important; padding-top: 4rpx; }
 .pb-tpl-quiet_minimal .pb-faq-item:first-of-type { border-top: none !important; }
 .pb-tpl-quiet_minimal .pb-faq-q-txt { font-family: var(--f-aleo) !important; font-size: 28rpx !important; }

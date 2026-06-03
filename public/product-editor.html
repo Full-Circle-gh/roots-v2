@@ -817,6 +817,14 @@
   .pa-edit-grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s3); }
   @media (max-width: 620px) { .pa-edit-grid-2 { grid-template-columns: 1fr; } }
   .pa-edit-grid-2 .field { margin-bottom: 0; min-width: 0; }
+  /* Per-block colour picker (bg / fg / accent) */
+  .pa-color-section { border-top: 1px dashed var(--line-soft); margin-top: 18px; padding-top: 4px; }
+  .pa-color-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s3); }
+  @media (max-width: 620px) { .pa-color-grid { grid-template-columns: 1fr; } }
+  .pa-color-grid .field { margin-bottom: 0; min-width: 0; }
+  .pa-color-cell { display: flex; align-items: center; gap: 8px; }
+  .pa-color-cell select { flex: 1; min-width: 0; }
+  .pa-color-sw { width: 20px; height: 20px; border-radius: 50%; flex: none; border: 1px solid var(--line-strong); box-shadow: inset 0 0 0 2px var(--bg-input); }
   .pa-edit-grid-2 .field input,
   .pa-edit-grid-2 .field select,
   .pa-edit-grid-2 .field textarea { width: 100%; }
@@ -911,18 +919,18 @@
   .pa-prev-why-r { font-family: 'Toni Grotesk', sans-serif; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
   .pa-prev-why-row { display: grid; grid-template-columns: 36px 1fr; gap: 14px; align-items: baseline; padding: 14px 0; border-top: 1px solid rgba(26, 26, 23, 0.12); }
   .pa-prev-why-row.first { border-top: 1px solid #1a1a17; }
-  .pa-prev-why-n { font-family: 'League Gothic', sans-serif; font-size: 34px; line-height: 0.85; color: #1a1a17; }
+  .pa-prev-why-n { font-family: 'League Gothic', sans-serif; font-size: 34px; line-height: 0.85; color: var(--pa-accent, #1a1a17); }
   .pa-prev-why-claim { font-family: 'Toni Grotesk', sans-serif; font-size: 14.5px; line-height: 1.35; font-weight: 400; color: #1a1a17; }
   /* 04a · INGREDIENTS · CHIP CLOUD + 04b · EDITORIAL LINE */
   .pa-prev-ing { padding: 30px 22px 30px; }
   .pa-prev-ing-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
   .pa-prev-chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 9px 13px 8px; border: 1px solid #1a1a17; border-radius: 999px; background: transparent; font-family: 'Toni Grotesk', sans-serif; font-size: 13px; line-height: 1; color: #1a1a17; }
-  .pa-prev-chip.lead { background: #1a1a17; color: #F2E7DF; font-family: 'Bear Serif', serif; font-size: 18px; padding: 11px 16px 10px; }
+  .pa-prev-chip.lead { background: var(--pa-accent, #1a1a17); color: #F2E7DF; font-family: 'Bear Serif', serif; font-size: 18px; padding: 11px 16px 10px; }
   .pa-prev-chip-pct { font-family: 'League Gothic', sans-serif; font-size: 14px; letter-spacing: 0.02em; color: #E96174; }
   .pa-prev-chip.lead .pa-prev-chip-pct { color: #CCD900; }
   .pa-prev-ing-line { font-family: 'Bear Serif', serif; font-weight: 400; font-size: 22px; line-height: 1.25; letter-spacing: -0.005em; color: #1a1a17; }
   .pa-prev-ing-line-pct { font-family: 'League Gothic', sans-serif; color: #E96174; font-size: 0.85em; margin-left: 0.05em; }
-  .pa-prev-ing-line-sep { display: inline-block; width: 8px; height: 8px; background: #CCD900; border-radius: 50%; margin: 0 0.35em 0.12em; vertical-align: middle; }
+  .pa-prev-ing-line-sep { display: inline-block; width: 8px; height: 8px; background: var(--pa-accent, #CCD900); border-radius: 50%; margin: 0 0.35em 0.12em; vertical-align: middle; }
   /* 05 · ALLERGEN CARD */
   .pa-prev-allergen { padding: 30px 22px 30px; }
   .pa-prev-allergen-card { border: 1px solid #1a1a17; background: #FAF1E8; padding: 18px 16px 16px; }
@@ -958,7 +966,7 @@
   /* 09 · NOTES CALLOUT */
   .pa-prev-notes { padding: 24px 22px 28px; }
   .pa-prev-notes-p { font-family: 'Aleo', serif; font-style: italic; font-size: 12.5px; line-height: 1.55; color: rgba(26, 26, 23, 0.6); position: relative; padding-left: 14px; }
-  .pa-prev-notes-p::before { content: "✱"; position: absolute; left: 0; top: 0; color: #6A6E2D; font-style: normal; }
+  .pa-prev-notes-p::before { content: "✱"; position: absolute; left: 0; top: 0; color: var(--pa-accent, #6A6E2D); font-style: normal; }
   /* +1 · BIG STAT CALLOUT */
   .pa-prev-stat { padding: 38px 22px 40px; color: #1a1a17; text-align: center; position: relative; overflow: hidden; }
   .pa-prev-stat-num { font-family: 'Bear Serif', serif; font-weight: 400; font-size: 110px; line-height: 0.85; letter-spacing: -0.02em; color: #1a1a17; }
@@ -983,7 +991,7 @@
   .pa-prev-recipe { padding: 22px 22px 26px; }
   .pa-prev-recipe-step { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid rgba(26, 26, 23, 0.12); }
   .pa-prev-recipe-step:first-of-type { border-top: none; }
-  .pa-prev-recipe-n { font-family: 'Bear Serif', serif; font-size: 22px; line-height: 1; color: #6A6E2D; flex: none; min-width: 30px; }
+  .pa-prev-recipe-n { font-family: 'Bear Serif', serif; font-size: 22px; line-height: 1; color: var(--pa-accent, #6A6E2D); flex: none; min-width: 30px; }
   .pa-prev-recipe-body { flex: 1; min-width: 0; }
   .pa-prev-recipe-text { font-family: 'Aleo', serif; font-size: 13.5px; line-height: 1.5; color: #1a1a17; }
   .pa-prev-recipe-time { display: inline-block; margin-top: 6px; font-family: 'Toni Grotesk', sans-serif; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(26, 26, 23, 0.55); background: #E9ECC9; padding: 2px 8px; border-radius: 999px; }
@@ -1076,7 +1084,7 @@
   .pa-tpl-quiet_minimal .pa-prev-why-head::after { content: ''; flex: 1; height: 1px; background: rgba(26,26,23,.12); }
   .pa-tpl-quiet_minimal .pa-prev-why-row { grid-template-columns: 24px 1fr !important; gap: 16px !important; padding: 14px 0 !important; border-top: 1px solid rgba(26,26,23,.14) !important; }
   .pa-tpl-quiet_minimal .pa-prev-why-row.first { border-top: none !important; }
-  .pa-tpl-quiet_minimal .pa-prev-why-n { font-family: ui-monospace, monospace !important; font-size: 11px !important; line-height: 1.5 !important; color: #6A6E2D !important; padding-top: 2px; }
+  .pa-tpl-quiet_minimal .pa-prev-why-n { font-family: ui-monospace, monospace !important; font-size: 11px !important; line-height: 1.5 !important; color: var(--pa-accent, #6A6E2D) !important; padding-top: 2px; }
   .pa-tpl-quiet_minimal .pa-prev-why-claim { font-family: 'Aleo',serif !important; font-weight: 400 !important; font-size: 14px !important; line-height: 1.55 !important; }
 
   /* ingredients — quiet serif run, lime slashes, mono % */
@@ -1085,7 +1093,7 @@
   .pa-tpl-quiet_minimal .pa-prev-chip:not(:last-child)::after { content: ' / '; color: #CCD900; }
   .pa-tpl-quiet_minimal .pa-prev-chip-pct { font-family: ui-monospace, monospace !important; font-size: 12px !important; color: rgba(26,26,23,.5) !important; }
   .pa-tpl-quiet_minimal .pa-prev-ing-line { font-family: 'Bear Serif',serif !important; font-size: 19px !important; line-height: 1.5 !important; }
-  .pa-tpl-quiet_minimal .pa-prev-ing-line-sep::before { content: ' / '; color: #CCD900; }
+  .pa-tpl-quiet_minimal .pa-prev-ing-line-sep::before { content: ' / '; color: var(--pa-accent, #CCD900); }
   .pa-tpl-quiet_minimal .pa-prev-ing-line-pct { font-family: ui-monospace, monospace !important; font-size: 12px !important; color: rgba(26,26,23,.5) !important; }
 
   /* how to use — clean two-column hairline list, no boxes/icons */
@@ -1121,7 +1129,7 @@
   .pa-tpl-quiet_minimal .pa-prev-allergen-empty { font-style: italic; }
 
   /* notes — quiet lime hairline rule, italic serif */
-  .pa-tpl-quiet_minimal .pa-prev-notes-p { padding-left: 14px !important; border-left: 2px solid #CCD900; font-family: 'Bear Serif',serif !important; font-style: italic !important; font-size: 14px !important; line-height: 1.5 !important; color: #1a1a17 !important; }
+  .pa-tpl-quiet_minimal .pa-prev-notes-p { padding-left: 14px !important; border-left: 2px solid var(--pa-accent, #CCD900); font-family: 'Bear Serif',serif !important; font-style: italic !important; font-size: 14px !important; line-height: 1.5 !important; color: #1a1a17 !important; }
   .pa-tpl-quiet_minimal .pa-prev-notes-p::before { display: none !important; }
 
   /* big_stat / pull_quote — softened (no loud bg / huge type) */
@@ -1129,7 +1137,7 @@
   .pa-tpl-quiet_minimal .pa-prev-stat::before, .pa-tpl-quiet_minimal .pa-prev-stat::after { display: none !important; }
   .pa-tpl-quiet_minimal .pa-prev-stat-num { font-size: 64px !important; }
   .pa-tpl-quiet_minimal .pa-prev-stat-claim { letter-spacing: .2em !important; color: rgba(26,26,23,.5) !important; }
-  .pa-tpl-quiet_minimal .pa-prev-pullquote { background: none !important; padding: 4px 0 4px 14px !important; border-left: 2px solid #CCD900; }
+  .pa-tpl-quiet_minimal .pa-prev-pullquote { background: none !important; padding: 4px 0 4px 14px !important; border-left: 2px solid var(--pa-accent, #CCD900); }
   .pa-tpl-quiet_minimal .pa-prev-pullquote-p { font-family: 'Bear Serif',serif !important; font-size: 16px !important; }
 
   /* image band — let it bleed back to the soft frame edge */
@@ -1598,6 +1606,99 @@ const PA_TEMPLATES = [
     ],
   },
 ];
+
+// ── Per-block colour palette (reuses the CMS 15-token brand palette) ──
+// Operators tint any block's background / text / accent independently —
+// no per-template lock. Tokens resolve to the same hexes the storefront
+// CMS uses (DC_HEX), so a colour reads identically across both editors.
+const PA_HEX = {
+  'lime-leaf': '#CCD900', 'forest-kale': '#365329', 'olive-moss': '#6A6E2D',
+  'roasted-almond': '#C37F4E', 'golden-corn': '#F2CA6C', 'oat-milk': '#F2E7DF',
+  'ink': '#1a1a17', 'pink-guava': '#F4B8CB', 'berry-punch': '#E96174',
+  'carrot-blaze': '#FF6B0C', 'papaya-glow': '#FFAF60', 'skyberry': '#B2CFED',
+  'lotus': '#EEB8E4', 'citrus-zest': '#E7E74C', 'pea-sprout': '#7BBD3B',
+  'white': '#FFFFFF',
+};
+const PA_COLOR_OPTIONS = [
+  { value: 'lime-leaf',     label: 'Lime · 青柠' },
+  { value: 'forest-kale',   label: 'Forest · 森绿' },
+  { value: 'olive-moss',    label: 'Olive · 橄榄绿' },
+  { value: 'pea-sprout',    label: 'Pea · 豌豆绿' },
+  { value: 'citrus-zest',   label: 'Citrus · 柑橘' },
+  { value: 'golden-corn',   label: 'Corn · 玉米黄' },
+  { value: 'papaya-glow',   label: 'Papaya · 木瓜' },
+  { value: 'carrot-blaze',  label: 'Carrot · 胡萝卜橙' },
+  { value: 'roasted-almond',label: 'Almond · 杏仁棕' },
+  { value: 'berry-punch',   label: 'Berry · 莓红' },
+  { value: 'pink-guava',    label: 'Pink · 粉红' },
+  { value: 'lotus',         label: 'Lotus · 莲粉' },
+  { value: 'skyberry',      label: 'Sky · 天蓝' },
+  { value: 'oat-milk',      label: 'Oat · 燕麦白' },
+  { value: 'white',         label: 'White · 白色' },
+  { value: 'ink',           label: 'Ink · 墨黑' },
+];
+// Which colour slots each block exposes. bg = block background,
+// fg = text tint, accent = the block's highlight (numbers, rules, dots,
+// lead chip). big_stat keeps its own dedicated slab picker; image_band /
+// nutrition opt out. Mirrors the CMS DC_FIELDS idea.
+const PA_DC_FIELDS = {
+  spec_strip:        ['bg', 'fg', 'accent'],
+  hero_intro:        ['bg', 'fg', 'accent'],
+  why:               ['bg', 'fg', 'accent'],
+  ingredients_chips: ['bg', 'fg', 'accent'],
+  ingredients_line:  ['bg', 'fg', 'accent'],
+  allergen_card:     ['bg', 'fg', 'accent'],
+  how_to_use:        ['bg', 'fg', 'accent'],
+  storage_box:       ['bg', 'fg', 'accent'],
+  notes_callout:     ['bg', 'fg', 'accent'],
+  pull_quote:        ['bg', 'fg', 'accent'],
+  recipe_steps:      ['bg', 'fg', 'accent'],
+  pairings:          ['bg', 'fg', 'accent'],
+  faq:               ['bg', 'fg', 'accent'],
+};
+function paColorHex(token) {
+  if (!token) return '';
+  return PA_HEX[token] || (/^#[0-9a-f]{3,6}$/i.test(token) ? token : '');
+}
+// Inline style string for a preview block root, from its colour tokens.
+// bg/fg apply directly; accent rides a CSS var the skin honours via
+// var(--pa-accent, <default>). Returns '' when nothing is set.
+function paBlockColorStyle(b) {
+  if (!b || !PA_DC_FIELDS[b.type]) return '';
+  const out = [];
+  const bg = paColorHex(b.bg_color), fg = paColorHex(b.fg_color), ac = paColorHex(b.accent_color);
+  if (bg) out.push('background-color:' + bg, '--pa-bg:' + bg);
+  if (fg) out.push('color:' + fg, '--pa-fg:' + fg);
+  if (ac) out.push('--pa-accent:' + ac);
+  return out.join(';');
+}
+// Colour-picker section appended to every applicable block's inspector.
+function _paColorEditorHtml(b) {
+  const slots = PA_DC_FIELDS[b.type];
+  if (!slots || !slots.length) return '';
+  const meta = { bg: ['Background', '背景'], fg: ['Text', '文字'], accent: ['Accent', '点缀'] };
+  const keyOf = { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' };
+  const cell = (slot) => {
+    const key = keyOf[slot];
+    const cur = b[key] || '';
+    const opts = ['<option value="">— Default · 默认 —</option>']
+      .concat(PA_COLOR_OPTIONS.map(o => `<option value="${o.value}" ${cur === o.value ? 'selected' : ''}>${o.label}</option>`))
+      .join('');
+    return `<div class="field">
+      <label class="stacked">${meta[slot][0]} · ${meta[slot][1]}</label>
+      <div class="pa-color-cell">
+        <span class="pa-color-sw" style="background:${paColorHex(cur) || 'transparent'}"></span>
+        <select data-bkey="${key}" onchange="this.previousElementSibling.style.background = (window.paColorHex ? (paColorHex(this.value) || 'transparent') : 'transparent')">${opts}</select>
+      </div>
+    </div>`;
+  };
+  return `
+    <div class="pa-color-section">
+      <div class="pa-edit-section-title" style="margin:20px 0 10px">Colours · 颜色</div>
+      <div class="pa-color-grid">${slots.map(cell).join('')}</div>
+      <div class="helper">Optional. Leave on Default to follow the template's look. · 可选,默认跟随模板风格。</div>
+    </div>`;
+}
 
 // ── State ──
 let PA_CURRENT = null;          // the product being edited
@@ -3055,7 +3156,7 @@ function paRenderSelectedEditor() {
   if (!b) { b = blocks[0]; PA_SELECTED_BLOCK_ID = b.id; }
   const tName = PA_TYPE_NAME[b.type] || { en: b.type, cn: '' };
   const icon  = peTypeIcon(b.type);
-  const body  = _paBlockEditorBody(b);
+  const body  = _paBlockEditorBody(b) + _paColorEditorHtml(b);
   mount.innerHTML = `
     <div class="pa-inspector-head" data-blockid="${b.id}">
       <div class="pa-inspector-head-left">
@@ -3306,7 +3407,9 @@ function paRenderPreview() {
   const heroStyle = img ? `background-image:url('${escapeAttr(img)}'); background-color:transparent;` : '';
   const blocksHtml = (window._paBlocks || []).map(b => {
     const html = _paPreviewBlockHtml(b);
-    return html ? html.replace('class="pa-prev-block', `data-prev-blockid="${b.id}" class="pa-prev-block`) : '';
+    if (!html) return '';
+    const style = paBlockColorStyle(b);
+    return html.replace('class="pa-prev-block', `data-prev-blockid="${b.id}" ${style ? `style="${style}" ` : ''}class="pa-prev-block`);
   }).filter(Boolean).join('');
   screen.innerHTML = `
     <div class="pa-prev-hero" style="${heroStyle}">${img ? '' : '🛍'}</div>

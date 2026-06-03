@@ -1,5 +1,5 @@
 <view class="pb-wrap {{tplClass}}">
-  <view wx:for="{{resolved}}" wx:key="_k" wx:for-index="bi" class="pb pb-{{item.type}}">
+  <view wx:for="{{resolved}}" wx:key="_k" wx:for-index="bi" class="pb pb-{{item.type}}" style="{{item._style}}">
 
     <!-- 01 · SPEC STRIP -->
     <block wx:if="{{item.type === 'spec_strip'}}">
