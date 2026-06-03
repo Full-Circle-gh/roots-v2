@@ -309,9 +309,13 @@ Component({
   properties: {
     blocks: { type: Array,  value: [], observer() { this._resolveAll(); } },
     lang:   { type: String, value: 'en', observer() { this._resolveAll(); } },
+    // page_template id (e.g. 'editorial_light') → drives the per-template visual
+    // skin on the wrapper (pb-tpl-<id>). Empty = base styling.
+    template: { type: String, value: '', observer() { this._applyTpl(); } },
   },
   data: {
     resolved: [],
+    tplClass: '',
   },
   methods: {
     _resolveAll() {
@@ -335,8 +339,12 @@ Component({
       if (!id) return;
       wx.navigateTo({ url: '/pages/product/product?id=' + id });
     },
+    _applyTpl() {
+      const id = String(this.data.template || '').replace(/[^a-z0-9_-]/gi, '');
+      this.setData({ tplClass: id ? ('pb-tpl-' + id) : '' });
+    },
   },
   lifetimes: {
-    attached() { this._resolveAll(); },
+    attached() { this._applyTpl(); this._resolveAll(); },
   },
 });

@@ -1023,6 +1023,127 @@
   .pa-prev-nrow.child .pa-prev-nrow-l { font-family: 'Aleo', serif; font-style: italic; font-size: 12px; color: rgba(26, 26, 23, 0.6); position: relative; }
   .pa-prev-nrow.child .pa-prev-nrow-l::before { content: "— "; }
   .pa-prev-nrow.child .pa-prev-nrow-r { font-size: 16px; color: rgba(26, 26, 23, 0.6); }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     TEMPLATE SKIN · editorial_light → Style A "無印 Quiet Minimal"
+     Restraint, whitespace, hairlines, mono labels, lime as a single accent.
+     A pure CSS re-skin of the shared block markup — the renderer is untouched,
+     so every EN/CN label keeps working. Scoped to .pa-tpl-editorial_light, which
+     paRenderPreview() puts on #pa-preview-screen for this template only.
+     ═══════════════════════════════════════════════════════════════════════ */
+  .pa-prev-screen.pa-tpl-editorial_light { background: #FAF8F3; font-family: 'Aleo','PingFang SC',Georgia,serif; }
+  .pa-tpl-editorial_light .pa-prev-body { padding: 0 30px 50px !important; background: #FAF8F3; counter-reset: qsec; }
+
+  /* hero — framed, not full-bleed; soft 4:5 portrait */
+  .pa-tpl-editorial_light > .pa-prev-hero { margin: 22px 30px 0; width: auto; aspect-ratio: 4/5; background-color: #ece4da; }
+
+  /* title — mono-olive kicker above a quiet serif name; airy lead */
+  .pa-tpl-editorial_light .pa-prev-head { display: flex; flex-direction: column; margin: 24px 0 0 !important; padding: 0 !important; border-bottom: none !important; }
+  .pa-tpl-editorial_light .pa-prev-subtitle { order: -1; margin: 0 0 8px !important; font-family: ui-monospace, SFMono-Regular, monospace !important; font-size: 10.5px !important; font-weight: 400 !important; letter-spacing: .2em !important; text-transform: uppercase; color: #6A6E2D !important; }
+  .pa-tpl-editorial_light .pa-prev-name { font-family: 'Bear Serif','DF Yuan',serif !important; font-size: 30px !important; line-height: 1.08 !important; letter-spacing: -.01em !important; }
+  .pa-tpl-editorial_light .pa-prev-tagline { margin-top: 14px !important; font-family: 'Aleo',serif !important; font-weight: 400 !important; font-size: 15px !important; letter-spacing: 0 !important; text-transform: none !important; line-height: 1.6 !important; color: rgba(26,26,23,.82) !important; }
+
+  /* blocks — no heavy ink dividers; separated by whitespace only */
+  .pa-tpl-editorial_light .pa-prev-block { margin: 36px 0 0 !important; padding: 0 !important; border: none !important; }
+  .pa-tpl-editorial_light .pa-prev-block:first-of-type { margin-top: 26px !important; }
+
+  /* shared quiet section label · "01  INGREDIENTS ───────" */
+  .pa-tpl-editorial_light .pa-prev-section-head { justify-content: flex-start; align-items: baseline; gap: 10px; margin-bottom: 18px; counter-increment: qsec; }
+  .pa-tpl-editorial_light .pa-prev-section-head::before { content: counter(qsec, decimal-leading-zero); font-family: ui-monospace, monospace; font-size: 11px; color: #6A6E2D; letter-spacing: .05em; flex: none; }
+  .pa-tpl-editorial_light .pa-prev-section-h3 { font-family: ui-monospace, monospace !important; font-weight: 400 !important; font-size: 10.5px !important; line-height: 1.4 !important; letter-spacing: .28em !important; text-transform: uppercase; color: rgba(26,26,23,.5) !important; }
+  .pa-tpl-editorial_light .pa-prev-section-tag { display: none !important; }
+  .pa-tpl-editorial_light .pa-prev-section-head::after { content: ''; flex: 1; height: 1px; background: rgba(26,26,23,.12); }
+
+  /* hero_intro story — quiet serif body + italic phrase (no lime marker) */
+  .pa-tpl-editorial_light .pa-prev-block.pa-prev-hero { padding: 0 !important; }
+  .pa-tpl-editorial_light .pa-prev-hero-lead { color: #6A6E2D !important; }
+  .pa-tpl-editorial_light .pa-prev-hero-lead::before { background: #6A6E2D !important; }
+  .pa-tpl-editorial_light .pa-prev-hero-body { font-family: 'Aleo',serif !important; font-size: 15px !important; line-height: 1.7 !important; color: rgba(26,26,23,.82) !important; }
+  .pa-tpl-editorial_light .pa-prev-hero-hl { background: none !important; padding: 0 !important; font-style: italic !important; font-family: 'Bear Serif',serif !important; color: #1a1a17 !important; }
+
+  /* spec — quiet label/value hairline rows */
+  .pa-tpl-editorial_light .pa-prev-spec { display: block; }
+  .pa-tpl-editorial_light .pa-prev-spec-cell { flex-direction: row; justify-content: space-between; align-items: baseline; gap: 10px; padding: 11px 0 !important; border-right: none !important; border-top: 1px solid rgba(26,26,23,.14); }
+  .pa-tpl-editorial_light .pa-prev-spec-cell:first-child { border-top: none; }
+  .pa-tpl-editorial_light .pa-prev-spec-k { font-family: ui-monospace, monospace !important; font-size: 11px !important; letter-spacing: .12em !important; color: rgba(26,26,23,.5) !important; }
+  .pa-tpl-editorial_light .pa-prev-spec-v { font-family: 'Aleo',serif !important; font-size: 14px !important; line-height: 1.3 !important; }
+
+  /* why — mono numbered, airy hairlines */
+  .pa-tpl-editorial_light .pa-prev-why-head { justify-content: flex-start; align-items: baseline; gap: 10px; padding: 0 !important; margin-bottom: 18px; counter-increment: qsec; }
+  .pa-tpl-editorial_light .pa-prev-why-head::before { content: counter(qsec, decimal-leading-zero); font-family: ui-monospace, monospace; font-size: 11px; color: #6A6E2D; letter-spacing: .05em; }
+  .pa-tpl-editorial_light .pa-prev-why-l { font-family: ui-monospace, monospace !important; font-size: 10.5px !important; letter-spacing: .28em !important; color: rgba(26,26,23,.5) !important; }
+  .pa-tpl-editorial_light .pa-prev-why-r { display: none !important; }
+  .pa-tpl-editorial_light .pa-prev-why-head::after { content: ''; flex: 1; height: 1px; background: rgba(26,26,23,.12); }
+  .pa-tpl-editorial_light .pa-prev-why-row { grid-template-columns: 24px 1fr !important; gap: 16px !important; padding: 14px 0 !important; border-top: 1px solid rgba(26,26,23,.14) !important; }
+  .pa-tpl-editorial_light .pa-prev-why-row.first { border-top: none !important; }
+  .pa-tpl-editorial_light .pa-prev-why-n { font-family: ui-monospace, monospace !important; font-size: 11px !important; line-height: 1.5 !important; color: #6A6E2D !important; padding-top: 2px; }
+  .pa-tpl-editorial_light .pa-prev-why-claim { font-family: 'Aleo',serif !important; font-weight: 400 !important; font-size: 14px !important; line-height: 1.55 !important; }
+
+  /* ingredients — quiet serif run, lime slashes, mono % */
+  .pa-tpl-editorial_light .pa-prev-ing-chips { display: block; font-family: 'Bear Serif',serif; font-size: 19px; line-height: 1.5; }
+  .pa-tpl-editorial_light .pa-prev-chip { display: inline !important; border: none !important; border-radius: 0 !important; padding: 0 !important; background: none !important; color: #1a1a17 !important; font-family: 'Bear Serif',serif !important; font-size: 19px !important; }
+  .pa-tpl-editorial_light .pa-prev-chip:not(:last-child)::after { content: ' / '; color: #CCD900; }
+  .pa-tpl-editorial_light .pa-prev-chip-pct { font-family: ui-monospace, monospace !important; font-size: 12px !important; color: rgba(26,26,23,.5) !important; }
+  .pa-tpl-editorial_light .pa-prev-ing-line { font-family: 'Bear Serif',serif !important; font-size: 19px !important; line-height: 1.5 !important; }
+  .pa-tpl-editorial_light .pa-prev-ing-line-sep::before { content: ' / '; color: #CCD900; }
+  .pa-tpl-editorial_light .pa-prev-ing-line-pct { font-family: ui-monospace, monospace !important; font-size: 12px !important; color: rgba(26,26,23,.5) !important; }
+
+  /* how to use — clean two-column hairline list, no boxes/icons */
+  .pa-tpl-editorial_light .pa-prev-how-grid { grid-template-columns: 1fr 1fr !important; gap: 0 24px !important; background: none !important; border: none !important; }
+  .pa-tpl-editorial_light .pa-prev-how-tile { background: none !important; text-align: left; align-items: flex-start; justify-content: flex-start; min-height: 0 !important; padding: 13px 0 !important; gap: 4px !important; border-top: 1px solid rgba(26,26,23,.14); }
+  .pa-tpl-editorial_light .pa-prev-how-ic { display: none !important; }
+  .pa-tpl-editorial_light .pa-prev-how-lbl { font-family: 'Aleo',serif !important; font-size: 14px !important; letter-spacing: 0 !important; text-transform: none !important; }
+  .pa-tpl-editorial_light .pa-prev-how-sub { font-family: ui-monospace, monospace !important; font-style: normal !important; font-size: 10.5px !important; letter-spacing: .04em !important; color: rgba(26,26,23,.5) !important; margin-top: 0 !important; }
+
+  /* storage — inline hairline rows: head … num · unit */
+  .pa-tpl-editorial_light .pa-prev-storage-pair { display: block !important; }
+  .pa-tpl-editorial_light .pa-prev-storage-card { flex-direction: row !important; align-items: baseline; gap: 8px; min-height: 0 !important; padding: 12px 0 !important; border: none !important; border-top: 1px solid rgba(26,26,23,.14) !important; background: none !important; color: #1a1a17 !important; }
+  .pa-tpl-editorial_light .pa-prev-storage-ic { display: none !important; }
+  .pa-tpl-editorial_light .pa-prev-storage-head { flex: 1; font-family: ui-monospace, monospace !important; font-size: 11px !important; letter-spacing: .1em !important; text-transform: uppercase; color: rgba(26,26,23,.5) !important; }
+  .pa-tpl-editorial_light .pa-prev-storage-num { font-family: 'Aleo',serif !important; font-size: 14px !important; margin-top: 0 !important; text-align: right; }
+  .pa-tpl-editorial_light .pa-prev-storage-unit { font-family: 'Aleo',serif !important; font-size: 14px !important; letter-spacing: 0 !important; text-transform: none !important; color: rgba(26,26,23,.5) !important; }
+  .pa-tpl-editorial_light .pa-prev-storage-unit::before { content: '· '; }
+  .pa-tpl-editorial_light .pa-prev-storage-note { font-family: 'Bear Serif',serif !important; font-style: italic !important; font-size: 13px !important; text-align: left !important; margin-top: 16px !important; color: rgba(26,26,23,.5) !important; }
+
+  /* allergens — single quiet line, no card/warn/pills */
+  .pa-tpl-editorial_light .pa-prev-allergen-card { border: none !important; background: none !important; padding: 0 !important; }
+  .pa-tpl-editorial_light .pa-prev-allergen-top { justify-content: flex-start; gap: 10px; align-items: baseline; padding-bottom: 0 !important; margin-bottom: 14px !important; border-bottom: none !important; counter-increment: qsec; }
+  .pa-tpl-editorial_light .pa-prev-allergen-top::before { content: counter(qsec, decimal-leading-zero); font-family: ui-monospace, monospace; font-size: 11px; color: #6A6E2D; letter-spacing: .05em; }
+  .pa-tpl-editorial_light .pa-prev-allergen-warn { display: none !important; }
+  .pa-tpl-editorial_light .pa-prev-allergen-ttl { font-family: ui-monospace, monospace !important; font-size: 10.5px !important; letter-spacing: .28em !important; text-transform: uppercase; color: rgba(26,26,23,.5) !important; }
+  .pa-tpl-editorial_light .pa-prev-allergen-meta { display: none !important; }
+  .pa-tpl-editorial_light .pa-prev-allergen-top::after { content: ''; flex: 1; height: 1px; background: rgba(26,26,23,.12); }
+  .pa-tpl-editorial_light .pa-prev-allergen-row { display: block !important; padding: 4px 0 !important; border: none !important; font-family: 'Aleo',serif; font-size: 14px; line-height: 1.6; }
+  .pa-tpl-editorial_light .pa-prev-allergen-lbl { display: inline !important; flex: none !important; font-family: 'Aleo',serif !important; font-size: 14px !important; letter-spacing: 0 !important; text-transform: none !important; color: #1a1a17 !important; }
+  .pa-tpl-editorial_light .pa-prev-allergen-chips { display: inline !important; }
+  .pa-tpl-editorial_light .pa-prev-allergen-chip { display: inline !important; padding: 0 !important; border-radius: 0 !important; background: none !important; color: rgba(26,26,23,.5) !important; font-family: 'Aleo',serif !important; font-size: 14px !important; font-weight: 400 !important; }
+  .pa-tpl-editorial_light .pa-prev-allergen-chip:not(:last-child)::after { content: ', '; }
+  .pa-tpl-editorial_light .pa-prev-allergen-empty { font-style: italic; }
+
+  /* notes — quiet lime hairline rule, italic serif */
+  .pa-tpl-editorial_light .pa-prev-notes-p { padding-left: 14px !important; border-left: 2px solid #CCD900; font-family: 'Bear Serif',serif !important; font-style: italic !important; font-size: 14px !important; line-height: 1.5 !important; color: #1a1a17 !important; }
+  .pa-tpl-editorial_light .pa-prev-notes-p::before { display: none !important; }
+
+  /* big_stat / pull_quote — softened (no loud bg / huge type) */
+  .pa-tpl-editorial_light .pa-prev-stat { background: none !important; padding: 8px 0 !important; text-align: left; }
+  .pa-tpl-editorial_light .pa-prev-stat::before, .pa-tpl-editorial_light .pa-prev-stat::after { display: none !important; }
+  .pa-tpl-editorial_light .pa-prev-stat-num { font-size: 64px !important; }
+  .pa-tpl-editorial_light .pa-prev-stat-claim { letter-spacing: .2em !important; color: rgba(26,26,23,.5) !important; }
+  .pa-tpl-editorial_light .pa-prev-pullquote { background: none !important; padding: 4px 0 4px 14px !important; border-left: 2px solid #CCD900; }
+  .pa-tpl-editorial_light .pa-prev-pullquote-p { font-family: 'Bear Serif',serif !important; font-size: 16px !important; }
+
+  /* image band — let it bleed back to the soft frame edge */
+  .pa-tpl-editorial_light .pa-prev-image { margin: 36px -30px 0 !important; }
+  .pa-tpl-editorial_light .pa-prev-image-cap { padding: 8px 30px 0 !important; }
+
+  /* nutrition — drop the boxed border to quiet hairlines */
+  .pa-tpl-editorial_light .pa-prev-nut-card { border: none !important; padding: 0 !important; }
+  .pa-tpl-editorial_light .pa-prev-nut-top { border-bottom: 1px solid rgba(26,26,23,.14) !important; }
+  .pa-tpl-editorial_light .pa-prev-nut-ttl { font-family: ui-monospace, monospace !important; font-size: 10.5px !important; letter-spacing: .28em !important; text-transform: uppercase; color: rgba(26,26,23,.5) !important; }
+  .pa-tpl-editorial_light .pa-prev-nrow-r { font-family: 'Aleo',serif !important; font-size: 14px !important; }
+
+  /* colophon — quiet hairline, matched paper */
+  .pa-tpl-editorial_light .pa-prev-colophon { margin-top: 8px; border-top: 1px solid rgba(26,26,23,.14) !important; background: #FAF8F3 !important; }
 </style>
 </head>
 <body>
@@ -3115,6 +3236,12 @@ function _paSyncPreviewLangToggle() {
 function paRenderPreview() {
   const screen = document.getElementById('pa-preview-screen'); if (!screen || !PA_CURRENT) return;
   const p = PA_CURRENT;
+  // Per-template visual skin — the preview screen carries a pa-tpl-<id> class so
+  // scoped CSS (e.g. Style A "Quiet Minimal" for editorial_light) can restyle the
+  // shared block markup without touching the renderer (keeps EN/CN labels intact).
+  [...screen.classList].forEach(c => { if (c.indexOf('pa-tpl-') === 0) screen.classList.remove(c); });
+  const _tplId = (window._paTemplate || '').replace(/[^a-z0-9_-]/gi, '');
+  if (_tplId) screen.classList.add('pa-tpl-' + _tplId);
   // Default the preview language to whatever the editor UI is in, then it
   // moves independently via the EN/中 toggle on the phone frame.
   if (_paPreviewLang === null) _paPreviewLang = (typeof cuLang === 'function' ? cuLang() : 'en');
