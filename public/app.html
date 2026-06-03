@@ -10100,12 +10100,14 @@ function _renderProdHero(ctx) {
     return parts.join(' ');
   };
   const statusOpts = Object.keys(PRODUCT_STATUS_CN).map(k => [k, k + ' · ' + PRODUCT_STATUS_CN[k]]);
-  // Category dropdown: existing categories used across the catalogue + a
-  // "+ New category…" sentinel that prompts the operator for a fresh value.
-  // The current product's own category is always included even if it's the
-  // only product using it (so picking it again is a no-op, not a "delete").
-  const knownCats = [...new Set([...(_products || []).map(x => x.category).filter(Boolean), p.category].filter(Boolean))].sort((a,b) => a.localeCompare(b));
-  const catOpts = [['', '— None · 无 —'], ...knownCats.map(c => [c, c]), ['__new__', '+ New category… · 新建分类']];
+  // Category: edited as a 2-level pair (top_category → subcategory) straight off
+  // the live storefront tree, so the options always match the Categories tab and
+  // drive the mini-app shop's left rail. Sub options are scoped to the chosen top.
+  const _catTree = _pdCatTree || [];
+  const topOpts = [['', '— None · 无 —'], ..._catTree.map(t => [t.name, t.name + (t.name_cn ? ' · ' + t.name_cn : '')])];
+  const _curTop = _catTree.find(t => t.name === p.top_category);
+  const _subList = _curTop ? (_curTop.subs || []) : [];
+  const subOpts = [['', '— None · 无 —'], ..._subList.map(s => [s.name, s.name + (s.name_cn ? ' · ' + s.name_cn : '')])];
   const mutedPh = `style="color:var(--muted);font-style:italic;font-weight:400"`;
   // Compact hero — image trimmed to 220px, tighter padding. Identity-only:
   // status, category, name, price, weight. SKU + barcode + label moved to the
@@ -10124,7 +10126,9 @@ function _renderProdHero(ctx) {
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
           <span ${iedAttrs('status','select',p.status||'Active',statusOpts)} style="display:inline-block">${productStatusPill(p.status||'Active', statusLabel(p.status||'Active', PRODUCT_STATUS_CN))}</span>
           <span style="color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.05em">·</span>
-          <span ${iedAttrs('category','select',p.category||'',catOpts)} style="color:var(--muted);font-size:12px;font-weight:600">${p.category ? esc(p.category) : `<span ${mutedPh}>+ category 分类</span>`}</span>
+          <span ${iedAttrs('top_category','select',p.top_category||'',topOpts)} style="color:var(--muted);font-size:12px;font-weight:600">${p.top_category ? esc(p.top_category) : `<span ${mutedPh}>+ category 分类</span>`}</span>
+          ${p.top_category ? `<span style="color:var(--muted);font-size:12px">›</span>
+          <span ${iedAttrs('subcategory','select',p.subcategory||'',subOpts)} style="color:var(--muted);font-size:12px;font-weight:600">${p.subcategory ? esc(p.subcategory) : `<span ${mutedPh}>+ subcategory 子分类</span>`}</span>` : ''}
         </div>
         <div>
           <h1 ${iedAttrs('name_en','text',p.name_en||'')} style="font-size:24px;line-height:1.15;margin:0;color:var(--dk);font-weight:800;letter-spacing:-.01em;word-break:break-word">${p.name_en ? esc(p.name_en) : `<span ${mutedPh}>Name · 名称</span>`}</h1>
@@ -10205,6 +10209,21 @@ function _renderRecipeDietCard(ctx) {
       ${allergenRow}
       ${freeOfRow}
     </div>`;
+}
+
+// Live storefront category tree (top_category → subcategory), shared with the
+// mini-app shop and Mini App Backend via /api/retail/category-tree. The product
+// detail hero edits top_category/subcategory against THIS tree — not the legacy
+// free-text `category` column — so the options always match the Categories tab.
+let _pdCatTree = [];
+async function _pdEnsureCatTree() {
+  if (_pdCatTree && _pdCatTree.length) return _pdCatTree;
+  try {
+    const r = await fetch('/api/retail/category-tree');
+    const d = await r.json();
+    _pdCatTree = (d && d.success && Array.isArray(d.data)) ? d.data : [];
+  } catch { _pdCatTree = []; }
+  return _pdCatTree;
 }
 
 // Recipe cache — populated by viewProduct() so the picker has data on first
@@ -11444,7 +11463,7 @@ async function viewProduct(id) {
   if (!_pdAutosave && _pdQueue.length && Number(id) === _pdCurrentPid()) return;
   // Run the product fetch and the recipe-cache warm-up in parallel so the
   // inline recipe picker is populated on first paint without doubling the wait.
-  const [ctx] = await Promise.all([_loadProductCtx(id), _ensureRecipesLoaded()]);
+  const [ctx] = await Promise.all([_loadProductCtx(id), _ensureRecipesLoaded(), _pdEnsureCatTree()]);
   if (!ctx) return;
   // Bento grid: hero pinned at top, then three cards on row 1 (Stock, Sizes,
   // Recipe & Diet), Description (2-col) + Notes on row 2, then collapsed
