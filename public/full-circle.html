@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F2E7DF">
+<title>Full Circle — The plant-based commerce platform</title>
+<meta name="description" content="Storefront, fulfillment, POS and payments — one bilingual platform built for WeChat. Every sale settles to your own merchant account, straight to your bank.">
+<script>document.documentElement.classList.add('js');</script>
+<style>
+/* ============================================================
+   FULL CIRCLE — B2B platform landing
+   Warm editorial "paper & ink". Brand tokens from brand.css.
+   ============================================================ */
+
+/* --- Brand display fonts (local, font-display:swap) --- */
+@font-face{font-family:'Bear Serif';src:url('/assets/fonts/BearSerif.otf') format('opentype');font-display:swap;}
+@font-face{font-family:'League Gothic';src:url('/assets/fonts/LeagueGothic.ttf') format('truetype');font-display:swap;}
+@font-face{font-family:'Toni Grotesk';src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype');font-display:swap;}
+@font-face{font-family:'Aleo';src:url('/assets/fonts/Aleo-Regular.otf') format('opentype');font-display:swap;}
+@font-face{font-family:'DF Yuan';src:url('/assets/fonts/DFYuanW7.ttf') format('truetype');font-weight:700;font-display:swap;}
+
+:root{
+  /* palette (brand.css) */
+  --lime-leaf:#CCD900; --forest-kale:#365329; --olive-moss:#6A6E2D;
+  --roasted-almond:#C37F4E; --golden-corn:#F2CA6C; --oat-milk:#F2E7DF;
+  --ink:#1a1a17; --pink-guava:#F4B8CB; --berry-punch:#E96174;
+  --carrot-blaze:#FF6B0C; --papaya-glow:#FFAF60; --skyberry:#B2CFED;
+  --pea-sprout:#7BBD3B; --avocado-soft:#73BF83;
+
+  /* semantic */
+  --paper:#FBF7F1;            /* page background */
+  --paper-2:#F4ECE1;          /* lifted surface */
+  --card:#FFFFFF;
+  --line:rgba(54,83,41,.14);
+  --line-soft:rgba(26,26,23,.08);
+  --text-1:#1f211b;           /* headings */
+  --text-2:#4c4f44;           /* body */
+  --text-3:#7a7c6f;           /* meta */
+  --brand:#365329;            /* primary action — forest kale */
+  --brand-hi:#2c4521;
+  --zest:#CCD900;             /* highlight — lime leaf */
+  --warm:#FF6B0C;             /* warm accent — carrot */
+  --ring:rgba(54,83,41,.45);
+
+  /* type */
+  --f-display:'Bear Serif',Georgia,'Songti SC',serif;
+  --f-cond:'League Gothic','Toni Grotesk','Arial Narrow',sans-serif;
+  --f-body:'Toni Grotesk',system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;
+  --f-quote:'Aleo',Georgia,serif;
+
+  /* rhythm */
+  --r-sm:10px; --r:16px; --r-lg:24px; --r-xl:34px;
+  --shadow-1:0 1px 2px rgba(26,26,23,.05),0 6px 18px rgba(54,83,41,.06);
+  --shadow-2:0 2px 6px rgba(26,26,23,.06),0 22px 50px rgba(54,83,41,.12);
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+
+/* CN tweaks: heavier rounded face for headings when lang=zh */
+html[lang="zh"]{ --f-display:'DF Yuan','Bear Serif',"PingFang SC","Microsoft YaHei",sans-serif; }
+
+*,*::before,*::after{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
+body{
+  margin:0; background:var(--paper); color:var(--text-2);
+  font-family:var(--f-body); font-size:17px; line-height:1.6;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+/* paper grain — pure CSS, no image weight */
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.5;
+  background-image:
+    radial-gradient(rgba(54,83,41,.035) 1px,transparent 1.5px),
+    radial-gradient(rgba(26,26,23,.025) 1px,transparent 1.5px);
+  background-size:3px 3px,7px 7px; background-position:0 0,1px 2px;
+}
+main,header,footer{position:relative;z-index:1;}
+
+img{max-width:100%;display:block;}
+a{color:inherit;text-decoration:none;}
+:focus-visible{outline:3px solid var(--ring);outline-offset:2px;border-radius:6px;}
+
+h1,h2,h3{font-family:var(--f-display);color:var(--text-1);line-height:1.05;letter-spacing:-.01em;margin:0;font-weight:400;}
+p{margin:0;}
+
+.wrap{width:min(1180px,100% - 44px);margin-inline:auto;}
+.kicker{
+  font-family:var(--f-cond);text-transform:uppercase;letter-spacing:.14em;
+  font-size:14px;color:var(--brand);display:inline-flex;align-items:center;gap:9px;
+}
+.kicker::before{content:"";width:22px;height:2px;background:var(--zest);border-radius:2px;}
+
+/* ---------- buttons ---------- */
+.btn{
+  --bg:var(--brand);--fg:#fff;
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  font-family:var(--f-body);font-weight:600;font-size:16px;line-height:1;
+  min-height:52px;padding:0 26px;border-radius:999px;border:1px solid transparent;
+  background:var(--bg);color:var(--fg);cursor:pointer;
+  transition:transform .2s var(--ease),box-shadow .2s var(--ease),background .2s var(--ease);
+  box-shadow:var(--shadow-1);-webkit-tap-highlight-color:transparent;
+}
+.btn:hover{transform:translateY(-2px);box-shadow:var(--shadow-2);background:var(--brand-hi);}
+.btn:active{transform:translateY(0);}
+.btn--ghost{--bg:transparent;--fg:var(--brand);border-color:var(--line);box-shadow:none;}
+.btn--ghost:hover{--bg:rgba(54,83,41,.06);background:var(--bg);box-shadow:none;}
+.btn--zest{--bg:var(--zest);--fg:#222a06;}
+.btn--zest:hover{background:#bcc700;}
+.btn svg{width:18px;height:18px;}
+
+/* ---------- top nav ---------- */
+.nav{
+  position:sticky;top:0;z-index:50;
+  backdrop-filter:saturate(1.2) blur(10px);
+  background:color-mix(in srgb,var(--paper) 82%,transparent);
+  border-bottom:1px solid transparent;transition:border-color .3s,background .3s;
+}
+.nav.scrolled{border-bottom-color:var(--line);background:color-mix(in srgb,var(--paper) 94%,transparent);}
+.nav__in{display:flex;align-items:center;gap:18px;height:72px;}
+.brand{display:flex;align-items:center;gap:11px;font-family:var(--f-display);font-size:22px;color:var(--text-1);letter-spacing:-.02em;}
+.brand .mark{width:30px;height:30px;flex:0 0 auto;}
+.brand .mark circle{transition:stroke-dashoffset 1.2s var(--ease);}
+.nav__links{display:flex;gap:26px;margin-left:auto;}
+.nav__links a{font-size:15px;color:var(--text-2);position:relative;padding:6px 0;transition:color .2s;}
+.nav__links a::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:0;background:var(--zest);transition:width .25s var(--ease);}
+.nav__links a:hover{color:var(--text-1);}
+.nav__links a:hover::after{width:100%;}
+.nav__cta{display:flex;align-items:center;gap:10px;}
+.langtoggle{
+  display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;
+  font-family:var(--f-cond);text-transform:uppercase;letter-spacing:.06em;font-size:14px;
+}
+.langtoggle button{
+  appearance:none;border:0;background:transparent;color:var(--text-3);
+  padding:9px 13px;min-height:40px;cursor:pointer;transition:background .2s,color .2s;
+}
+.langtoggle button[aria-pressed="true"]{background:var(--brand);color:#fff;}
+.menu-btn{display:none;}
+
+@media (max-width:860px){
+  .nav__links{display:none;}
+  .nav__in{height:64px;}
+}
+
+/* ---------- hero ---------- */
+.hero{padding:64px 0 40px;position:relative;}
+.hero__grid{display:grid;grid-template-columns:1.05fr .95fr;gap:54px;align-items:center;}
+.hero h1{font-size:clamp(40px,6.4vw,78px);margin:18px 0 0;}
+.hero h1 .em{color:var(--brand);position:relative;white-space:nowrap;}
+.hero h1 .em svg{position:absolute;left:0;right:0;bottom:-.12em;width:100%;height:.34em;overflow:visible;}
+.hero h1 .em svg path{stroke:var(--zest);stroke-width:7;fill:none;stroke-linecap:round;}
+.hero__sub{font-size:clamp(17px,2.1vw,21px);color:var(--text-2);max-width:34ch;margin-top:22px;}
+.hero__cta{display:flex;flex-wrap:wrap;gap:14px;margin-top:30px;}
+.hero__assure{display:flex;align-items:center;gap:9px;margin-top:22px;color:var(--text-3);font-size:15px;}
+.hero__assure svg{width:18px;height:18px;color:var(--brand);flex:0 0 auto;}
+
+/* hero visual — stacked product surfaces, pure CSS */
+.stage{position:relative;aspect-ratio:5/5.4;}
+.blob{position:absolute;border-radius:50%;filter:blur(2px);opacity:.5;z-index:0;}
+.blob.b1{width:60%;height:60%;left:-8%;top:-6%;background:radial-gradient(circle at 30% 30%,var(--lime-leaf),transparent 70%);}
+.blob.b2{width:55%;height:55%;right:-6%;bottom:-2%;background:radial-gradient(circle at 60% 40%,var(--papaya-glow),transparent 70%);}
+.surface{position:absolute;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow-2);overflow:hidden;}
+/* phone (mini app) */
+.surface--phone{width:50%;left:6%;top:4%;aspect-ratio:9/19;border-radius:30px;padding:9px;z-index:3;}
+.phone__screen{height:100%;border-radius:22px;overflow:hidden;background:var(--paper-2);display:flex;flex-direction:column;}
+.phone__hero{height:38%;background:linear-gradient(150deg,var(--forest-kale),var(--olive-moss));position:relative;}
+.phone__hero::after{content:"";position:absolute;inset:0;background:radial-gradient(rgba(255,255,255,.22) 1px,transparent 1.4px);background-size:7px 7px;}
+.phone__hero .tag{position:absolute;left:11px;bottom:11px;color:#fff;font-family:var(--f-display);font-size:13px;}
+.phone__row{display:flex;gap:7px;padding:9px;}
+.phone__card{flex:1;height:46px;border-radius:9px;background:#fff;border:1px solid var(--line-soft);}
+.phone__card.alt{background:var(--oat-milk);}
+.phone__list{padding:0 9px;display:flex;flex-direction:column;gap:7px;}
+.phone__li{height:13px;border-radius:5px;background:#eadfce;}
+.phone__li.s{width:62%;}
+.phone__bar{margin-top:auto;height:42px;background:#fff;border-top:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-around;}
+.phone__dot{width:18px;height:18px;border-radius:6px;background:#e3d8c6;}
+.phone__dot.on{background:var(--brand);}
+/* dashboard card */
+.surface--dash{width:62%;right:0;bottom:2%;border-radius:18px;padding:14px;z-index:2;}
+.dash__top{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+.dash__dotrow{display:flex;gap:5px;}
+.dash__dotrow i{width:9px;height:9px;border-radius:50%;background:var(--line);display:block;}
+.dash__title{font-family:var(--f-cond);text-transform:uppercase;letter-spacing:.1em;font-size:12px;color:var(--text-3);margin-left:4px;}
+.dash__stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-bottom:12px;}
+.dash__stat{background:var(--paper-2);border-radius:11px;padding:10px;}
+.dash__stat b{font-family:var(--f-cond);font-size:22px;color:var(--text-1);display:block;line-height:1;}
+.dash__stat span{font-size:10px;color:var(--text-3);}
+.dash__chart{height:74px;display:flex;align-items:flex-end;gap:6px;padding:8px;background:var(--paper-2);border-radius:11px;}
+.dash__chart i{flex:1;background:linear-gradient(var(--pea-sprout),var(--forest-kale));border-radius:4px 4px 0 0;display:block;transform-origin:bottom;}
+
+/* ---------- marquee trust ---------- */
+.trust{padding:26px 0;border-block:1px solid var(--line-soft);overflow:hidden;}
+.marquee{display:flex;gap:0;width:max-content;animation:slide 30s linear infinite;}
+.marquee__g{display:flex;gap:46px;padding-right:46px;}
+.marquee span{font-family:var(--f-cond);text-transform:uppercase;letter-spacing:.08em;font-size:19px;color:var(--text-3);white-space:nowrap;display:inline-flex;align-items:center;gap:14px;}
+.marquee span::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--zest);}
+@keyframes slide{to{transform:translateX(-50%);}}
+.trust:hover .marquee{animation-play-state:paused;}
+
+/* ---------- section frame ---------- */
+section{padding:84px 0;}
+.sec-head{max-width:640px;margin-bottom:46px;}
+.sec-head h2{font-size:clamp(30px,4.4vw,48px);margin-top:14px;}
+.sec-head p{margin-top:16px;font-size:18px;color:var(--text-2);}
+
+/* ---------- features ---------- */
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+.feat{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:26px;
+  transition:transform .25s var(--ease),box-shadow .25s var(--ease),border-color .25s;
+  position:relative;overflow:hidden;
+}
+.feat:hover{transform:translateY(-4px);box-shadow:var(--shadow-2);border-color:transparent;}
+.feat__ic{width:48px;height:48px;border-radius:13px;display:grid;place-items:center;background:var(--paper-2);margin-bottom:16px;transition:background .25s;}
+.feat__ic svg{width:24px;height:24px;color:var(--brand);stroke-width:1.7;}
+.feat:hover .feat__ic{background:var(--zest);}
+.feat h3{font-size:21px;margin-bottom:8px;}
+.feat p{font-size:15.5px;color:var(--text-2);}
+
+/* ---------- payments band ---------- */
+.band{background:linear-gradient(155deg,var(--forest-kale),#243a1c);color:#f4f0e6;border-radius:var(--r-xl);padding:clamp(34px,5vw,64px);position:relative;overflow:hidden;}
+.band::after{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.07) 1px,transparent 1.4px);background-size:8px 8px;opacity:.7;}
+.band__in{position:relative;display:grid;grid-template-columns:1.1fr .9fr;gap:44px;align-items:center;}
+.band .kicker{color:var(--lime-leaf);}
+.band .kicker::before{background:var(--lime-leaf);}
+.band h2{color:#fff;font-size:clamp(28px,4vw,46px);margin-top:14px;}
+.band p{color:rgba(244,240,230,.82);margin-top:18px;font-size:18px;max-width:42ch;}
+.flow{display:flex;flex-direction:column;gap:12px;}
+.flow__row{display:flex;align-items:center;gap:14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:16px 18px;}
+.flow__row .n{font-family:var(--f-cond);font-size:20px;width:34px;height:34px;border-radius:50%;background:var(--lime-leaf);color:#243a1c;display:grid;place-items:center;flex:0 0 auto;}
+.flow__row b{color:#fff;display:block;font-weight:600;}
+.flow__row span{font-size:14px;color:rgba(244,240,230,.7);}
+.flow__arrow{height:14px;display:flex;justify-content:center;}
+.flow__arrow svg{width:16px;height:16px;color:var(--lime-leaf);}
+
+/* ---------- how it works ---------- */
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;counter-reset:step;}
+.step{position:relative;padding-top:18px;}
+.step__n{font-family:var(--f-cond);font-size:15px;letter-spacing:.1em;color:var(--brand);}
+.step__line{height:3px;background:var(--line);border-radius:3px;margin:12px 0 16px;position:relative;overflow:hidden;}
+.step__line::after{content:"";position:absolute;inset:0;width:0;background:var(--zest);border-radius:3px;transition:width 1s var(--ease);}
+.reveal-in .step__line::after{width:100%;}
+.step h3{font-size:19px;margin-bottom:8px;}
+.step p{font-size:15px;color:var(--text-2);}
+
+/* ---------- stat counters ---------- */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;text-align:center;}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:30px 16px;}
+.stat b{font-family:var(--f-cond);font-size:clamp(40px,6vw,62px);color:var(--brand);line-height:.9;display:block;}
+.stat span{color:var(--text-3);font-size:14px;margin-top:8px;display:block;}
+
+/* ---------- pricing ---------- */
+.price{display:grid;grid-template-columns:1.1fr .9fr;gap:24px;align-items:stretch;}
+.price__card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-xl);padding:clamp(28px,4vw,44px);box-shadow:var(--shadow-1);}
+.price__card.feature{background:linear-gradient(160deg,#fff,var(--oat-milk));border-color:var(--brand);}
+.price__tag{font-family:var(--f-cond);text-transform:uppercase;letter-spacing:.1em;font-size:13px;color:var(--text-3);}
+.price__amt{font-family:var(--f-display);font-size:clamp(34px,5vw,52px);color:var(--text-1);margin:6px 0 2px;}
+.price__amt small{font-size:18px;color:var(--text-3);font-family:var(--f-body);}
+.price__note{color:var(--text-2);margin-bottom:20px;}
+.price ul{list-style:none;margin:0 0 24px;padding:0;display:flex;flex-direction:column;gap:12px;}
+.price li{display:flex;gap:11px;font-size:15.5px;align-items:flex-start;}
+.price li svg{width:20px;height:20px;color:var(--brand);flex:0 0 auto;margin-top:1px;}
+
+/* ---------- CTA / form ---------- */
+.cta{padding-bottom:96px;}
+.cta__card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-xl);overflow:hidden;display:grid;grid-template-columns:1fr 1fr;box-shadow:var(--shadow-2);}
+.cta__left{padding:clamp(30px,4vw,52px);background:linear-gradient(160deg,var(--oat-milk),#fff);}
+.cta__left h2{font-size:clamp(28px,3.6vw,42px);}
+.cta__left p{margin-top:16px;color:var(--text-2);font-size:17px;}
+.cta__points{margin-top:24px;display:flex;flex-direction:column;gap:13px;}
+.cta__points div{display:flex;gap:11px;align-items:center;color:var(--text-2);font-size:15.5px;}
+.cta__points svg{width:19px;height:19px;color:var(--brand);flex:0 0 auto;}
+form{padding:clamp(30px,4vw,52px);display:flex;flex-direction:column;gap:16px;}
+.field{display:flex;flex-direction:column;gap:7px;}
+.field label{font-size:14px;font-weight:600;color:var(--text-1);}
+.field label .req{color:var(--warm);}
+.field input,.field textarea,.field select{
+  font-family:var(--f-body);font-size:16px;color:var(--text-1);
+  background:var(--paper);border:1px solid var(--line);border-radius:12px;
+  padding:13px 14px;min-height:50px;transition:border-color .2s,box-shadow .2s;width:100%;
+}
+.field textarea{min-height:96px;resize:vertical;}
+.field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--ring);}
+.field .err{font-size:13px;color:var(--berry-punch);min-height:0;display:none;}
+.field.invalid input,.field.invalid textarea,.field.invalid select{border-color:var(--berry-punch);}
+.field.invalid .err{display:block;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.form__ok{display:none;gap:11px;align-items:center;background:rgba(123,189,59,.14);border:1px solid var(--pea-sprout);color:var(--brand-hi);border-radius:12px;padding:14px;font-size:15px;}
+.form__ok svg{width:20px;height:20px;flex:0 0 auto;}
+.form__ok.show{display:flex;}
+
+/* ---------- footer ---------- */
+footer{background:var(--paper-2);border-top:1px solid var(--line);padding:54px 0 40px;}
+.foot{display:flex;flex-wrap:wrap;gap:24px;justify-content:space-between;align-items:flex-start;}
+.foot__brand{max-width:300px;}
+.foot__brand p{margin-top:12px;color:var(--text-3);font-size:14.5px;}
+.foot__cols{display:flex;gap:54px;flex-wrap:wrap;}
+.foot__col h4{font-family:var(--f-cond);text-transform:uppercase;letter-spacing:.1em;font-size:13px;color:var(--text-3);margin:0 0 12px;}
+.foot__col a{display:block;color:var(--text-2);font-size:15px;padding:5px 0;transition:color .2s;}
+.foot__col a:hover{color:var(--brand);}
+.foot__bot{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;color:var(--text-3);font-size:13.5px;}
+
+/* ---------- reveal animation ---------- */
+.js .reveal{opacity:0;transform:translateY(22px);transition:opacity .7s var(--ease),transform .7s var(--ease);}
+.js .reveal.reveal-in{opacity:1;transform:none;}
+.js .stagger>*{opacity:0;transform:translateY(18px);}
+.js .stagger.reveal-in>*{opacity:1;transform:none;transition:opacity .6s var(--ease),transform .6s var(--ease);}
+.js .stagger.reveal-in>*:nth-child(1){transition-delay:.02s;}
+.js .stagger.reveal-in>*:nth-child(2){transition-delay:.08s;}
+.js .stagger.reveal-in>*:nth-child(3){transition-delay:.14s;}
+.js .stagger.reveal-in>*:nth-child(4){transition-delay:.20s;}
+.js .stagger.reveal-in>*:nth-child(5){transition-delay:.26s;}
+.js .stagger.reveal-in>*:nth-child(6){transition-delay:.32s;}
+
+/* on-load hero entrance */
+.js .hero .anim{opacity:0;transform:translateY(20px);animation:rise .9s var(--ease) forwards;}
+.js .hero .anim.d1{animation-delay:.05s;}
+.js .hero .anim.d2{animation-delay:.16s;}
+.js .hero .anim.d3{animation-delay:.27s;}
+.js .hero .anim.d4{animation-delay:.38s;}
+.js .hero .stage{opacity:0;animation:fadeScale 1.1s var(--ease) .25s forwards;}
+@keyframes rise{to{opacity:1;transform:none;}}
+@keyframes fadeScale{from{opacity:0;transform:translateY(24px) scale(.97);}to{opacity:1;transform:none;}}
+@keyframes floaty{0%,100%{transform:translateY(0);}50%{transform:translateY(-12px);}}
+.js .surface--phone{animation:floaty 7s ease-in-out infinite;}
+.js .surface--dash{animation:floaty 7s ease-in-out infinite .8s;}
+.js .blob{animation:floaty 9s ease-in-out infinite;}
+
+/* underline draw in hero — animate via JS adding class */
+.hero h1 .em svg path{stroke-dasharray:240;stroke-dashoffset:240;}
+.js .hero .em.drawn svg path{transition:stroke-dashoffset 1s var(--ease) .6s;stroke-dashoffset:0;}
+
+/* lang visibility */
+[data-zh]{}
+.lang-zh [lang]{}
+
+/* ---------- responsive ---------- */
+@media (max-width:980px){
+  .hero__grid{grid-template-columns:1fr;gap:30px;}
+  .stage{max-width:440px;margin-inline:auto;width:100%;}
+  .band__in,.price,.cta__card{grid-template-columns:1fr;}
+  .feat-grid{grid-template-columns:1fr 1fr;}
+  .steps{grid-template-columns:1fr 1fr;}
+  .stats{grid-template-columns:1fr 1fr;}
+  .cta__left{order:-1;}
+}
+@media (max-width:560px){
+  body{font-size:16px;}
+  section{padding:60px 0;}
+  .feat-grid,.steps,.stats,.row2{grid-template-columns:1fr;}
+  .hero{padding:40px 0 20px;}
+  .nav__cta .btn{display:none;}
+  .stage{max-width:320px;}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important;}
+  .js .reveal,.js .stagger>*,.js .hero .anim,.js .hero .stage{opacity:1!important;transform:none!important;}
+  .marquee{animation:none!important;}
+  .hero h1 .em svg path{stroke-dashoffset:0!important;}
+  .step__line::after{width:100%!important;}
+}
+</style>
+</head>
+<body>
+
+<!-- ======================= NAV ======================= -->
+<header class="nav" id="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="#top" aria-label="Full Circle home">
+      <svg class="mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <circle cx="20" cy="20" r="16" stroke="#365329" stroke-width="3" stroke-dasharray="100" stroke-dashoffset="0" stroke-linecap="round"/>
+        <path d="M20 27c-4 0-8-3-8-8 5 0 8 3 8 8z" fill="#CCD900"/>
+        <path d="M20 27c4 0 8-3 8-8-5 0-8 3-8 8z" fill="#7BBD3B"/>
+        <path d="M20 12v15" stroke="#365329" stroke-width="2.4" stroke-linecap="round"/>
+      </svg>
+      <span>Full Circle</span>
+    </a>
+    <nav class="nav__links" aria-label="Primary">
+      <a href="#platform" data-en="Platform" data-zh="平台能力">Platform</a>
+      <a href="#payments" data-en="Payments" data-zh="收款">Payments</a>
+      <a href="#how" data-en="How it works" data-zh="如何上线">How it works</a>
+      <a href="#pricing" data-en="Pricing" data-zh="定价">Pricing</a>
+    </nav>
+    <div class="nav__cta">
+      <div class="langtoggle" role="group" aria-label="Language">
+        <button type="button" id="lang-en" aria-pressed="true">EN</button>
+        <button type="button" id="lang-zh" aria-pressed="false">中文</button>
+      </div>
+      <a href="#demo" class="btn" data-en="Book a demo" data-zh="预约演示">Book a demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ======================= HERO ======================= -->
+<section class="hero">
+  <div class="wrap hero__grid">
+    <div class="hero__copy">
+      <span class="kicker anim d1" data-en="The plant-based commerce platform" data-zh="植物基零售平台">The plant-based commerce platform</span>
+      <h1 class="anim d2">
+        <span data-en="Launch your retail brand," data-zh="开一家属于你的零售品牌，">Launch your retail brand,</span>
+        <span class="em" id="em-draw">
+          <span data-en="full circle." data-zh="完整闭环。">full circle.</span>
+          <svg viewBox="0 0 220 12" preserveAspectRatio="none" aria-hidden="true"><path d="M3 8 Q60 2 110 6 T217 5"/></svg>
+        </span>
+      </h1>
+      <p class="hero__sub anim d3" data-en="Storefront, fulfillment, POS and payments — one bilingual platform built for WeChat. Spin up a branded mini-app in days, not quarters." data-zh="商城、履约、收银台与收款——一套为微信打造的中英双语平台。几天即可上线你的品牌小程序，而非几个季度。">Storefront, fulfillment, POS and payments — one bilingual platform built for WeChat. Spin up a branded mini-app in days, not quarters.</p>
+      <div class="hero__cta anim d4">
+        <a href="#demo" class="btn" data-en="Book a demo" data-zh="预约演示">Book a demo
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+        <a href="#platform" class="btn btn--ghost" data-en="See the platform" data-zh="了解平台">See the platform</a>
+      </div>
+      <div class="hero__assure anim d4">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        <span data-en="No revenue share. Every sale settles to your own bank." data-zh="无分账。每一笔收入直接结算到你自己的银行账户。">No revenue share. Every sale settles to your own bank.</span>
+      </div>
+    </div>
+
+    <!-- hero visual -->
+    <div class="stage" aria-hidden="true">
+      <span class="blob b1"></span>
+      <span class="blob b2"></span>
+      <!-- phone / mini app -->
+      <div class="surface surface--phone">
+        <div class="phone__screen">
+          <div class="phone__hero"><span class="tag">Full Circle</span></div>
+          <div class="phone__row"><div class="phone__card"></div><div class="phone__card alt"></div></div>
+          <div class="phone__list"><span class="phone__li"></span><span class="phone__li s"></span><span class="phone__li"></span></div>
+          <div class="phone__bar"><span class="phone__dot on"></span><span class="phone__dot"></span><span class="phone__dot"></span><span class="phone__dot"></span></div>
+        </div>
+      </div>
+      <!-- dashboard -->
+      <div class="surface surface--dash">
+        <div class="dash__top"><span class="dash__dotrow"><i></i><i></i><i></i></span><span class="dash__title">Orders · today</span></div>
+        <div class="dash__stats">
+          <div class="dash__stat"><b>284</b><span>orders</span></div>
+          <div class="dash__stat"><b>¥38k</b><span>revenue</span></div>
+          <div class="dash__stat"><b>4.9★</b><span>rating</span></div>
+        </div>
+        <div class="dash__chart"><i style="height:40%"></i><i style="height:62%"></i><i style="height:48%"></i><i style="height:80%"></i><i style="height:58%"></i><i style="height:92%"></i><i style="height:70%"></i></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= TRUST MARQUEE ======================= -->
+<div class="trust" aria-hidden="true">
+  <div class="marquee" id="marquee">
+    <div class="marquee__g">
+      <span data-en="WeChat Mini-App" data-zh="微信小程序">WeChat Mini-App</span>
+      <span data-en="Storefront builder" data-zh="商城搭建器">Storefront builder</span>
+      <span data-en="Order fulfillment" data-zh="订单履约">Order fulfillment</span>
+      <span data-en="In-store POS" data-zh="门店收银">In-store POS</span>
+      <span data-en="WeChat Pay JSAPI" data-zh="微信支付">WeChat Pay JSAPI</span>
+      <span data-en="Bilingual EN · 中文" data-zh="中英双语">Bilingual EN · 中文</span>
+    </div>
+    <div class="marquee__g" aria-hidden="true">
+      <span data-en="WeChat Mini-App" data-zh="微信小程序">WeChat Mini-App</span>
+      <span data-en="Storefront builder" data-zh="商城搭建器">Storefront builder</span>
+      <span data-en="Order fulfillment" data-zh="订单履约">Order fulfillment</span>
+      <span data-en="In-store POS" data-zh="门店收银">In-store POS</span>
+      <span data-en="WeChat Pay JSAPI" data-zh="微信支付">WeChat Pay JSAPI</span>
+      <span data-en="Bilingual EN · 中文" data-zh="中英双语">Bilingual EN · 中文</span>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= PLATFORM / FEATURES ======================= -->
+<section id="platform">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker" data-en="One platform, six surfaces" data-zh="一套平台，六个触点">One platform, six surfaces</span>
+      <h2 data-en="Everything a modern retail brand needs to sell." data-zh="一个现代零售品牌所需的一切。">Everything a modern retail brand needs to sell.</h2>
+      <p data-en="From the shopper's first tap to the warehouse pick slip — and the money in your account — it's the same connected system." data-zh="从顾客的第一次点击，到仓库的拣货单，再到账户里的收入——同一套互联系统。">From the shopper's first tap to the warehouse pick slip — and the money in your account — it's the same connected system.</p>
+    </div>
+    <div class="feat-grid stagger reveal">
+      <article class="feat">
+        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 21V9"/></svg></div>
+        <h3 data-en="Storefront builder" data-zh="商城搭建器">Storefront builder</h3>
+        <p data-en="A block-based page editor with your brand colours and fonts. Launch flash sales, category tabs and editorial layouts without code." data-zh="基于区块的页面编辑器，套用你的品牌色与字体。无需代码即可上线闪购、分类标签与编排版式。">A block-based page editor with your brand colours and fonts. Launch flash sales, category tabs and editorial layouts without code.</p>
+      </article>
+      <article class="feat">
+        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg></div>
+        <h3 data-en="Native mini-app" data-zh="原生小程序">Native mini-app</h3>
+        <p data-en="A fast WeChat mini-app shoppers already trust — product pages, cart, wallet top-up and a customer 'Me' page, all branded as you." data-zh="顾客熟悉信赖的微信小程序——商品详情、购物车、钱包充值与个人中心，全部以你的品牌呈现。">A fast WeChat mini-app shoppers already trust — product pages, cart, wallet top-up and a customer 'Me' page, all branded as you.</p>
+      </article>
+      <article class="feat">
+        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18l-1.5 12.5a2 2 0 0 1-2 1.5H6.5a2 2 0 0 1-2-1.5z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg></div>
+        <h3 data-en="Order fulfillment" data-zh="订单履约">Order fulfillment</h3>
+        <p data-en="Stores and warehouse staff pick, pack and dispatch from one clean queue. Delivery zones, lead times and slots are all configurable." data-zh="门店与仓库人员在同一个清爽队列中拣货、打包、发货。配送区域、时效与时段均可配置。">Stores and warehouse staff pick, pack and dispatch from one clean queue. Delivery zones, lead times and slots are all configurable.</p>
+      </article>
+      <article class="feat">
+        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M2 10h20M7 18v3M17 18v3"/></svg></div>
+        <h3 data-en="POS & stations" data-zh="收银台与工位">POS &amp; stations</h3>
+        <p data-en="Tablet POS for in-store checkout, plus kitchen and restock station shells — installable as PWAs, working hand-in-hand with online orders." data-zh="用于门店结账的平板收银台，以及厨房与补货工位——可作为 PWA 安装，与线上订单无缝协作。">Tablet POS for in-store checkout, plus kitchen and restock station shells — installable as PWAs, working hand-in-hand with online orders.</p>
+      </article>
+      <article class="feat">
+        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M5 10v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/><path d="M12 14v3"/></svg></div>
+        <h3 data-en="Payments to your bank" data-zh="直达你的银行">Payments to your bank</h3>
+        <p data-en="Real WeChat Pay (JSAPI v3). Every order and top-up settles to your own merchant account — no platform middleman, no 分账." data-zh="真实微信支付（JSAPI v3）。每笔订单与充值都结算到你自己的商户号——没有平台中间方，没有分账。">Real WeChat Pay (JSAPI v3). Every order and top-up settles to your own merchant account — no platform middleman, no 分账.</p>
+      </article>
+      <article class="feat">
+        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><path d="M16 4a3 3 0 0 1 0 6M21 20c0-2.5-1.5-4-4-4.5"/></svg></div>
+        <h3 data-en="Multi-tenant & bilingual" data-zh="多租户与双语">Multi-tenant &amp; bilingual</h3>
+        <p data-en="Run one brand or many from a SaaS admin with a guided onboarding checklist. Every surface speaks English and 中文, switched by one toggle." data-zh="在 SaaS 管理后台中运营一个或多个品牌，配有引导式上线清单。每个界面均支持英文与中文，一键切换。">Run one brand or many from a SaaS admin with a guided onboarding checklist. Every surface speaks English and 中文, switched by one toggle.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= PAYMENTS BAND ======================= -->
+<section id="payments" style="padding-top:0;">
+  <div class="wrap">
+    <div class="band reveal">
+      <div class="band__in">
+        <div>
+          <span class="kicker" data-en="Your money, your bank" data-zh="你的钱，你的银行">Your money, your bank</span>
+          <h2 data-en="The revenue is yours — all of it." data-zh="收入归你——一分不少。">The revenue is yours — all of it.</h2>
+          <p data-en="Most platforms route your sales through their account and skim a cut. Full Circle wires WeChat Pay straight to the merchant account you own. We never touch the funds." data-zh="大多数平台让你的销售额经过它们的账户并抽取分成。Full Circle 将微信支付直接连接到你自己的商户号。我们从不经手资金。">Most platforms route your sales through their account and skim a cut. Full Circle wires WeChat Pay straight to the merchant account you own. We never touch the funds.</p>
+        </div>
+        <div class="flow">
+          <div class="flow__row"><span class="n">1</span><div><b data-en="Shopper pays" data-zh="顾客付款">Shopper pays</b><span data-en="WeChat Pay in the mini-app" data-zh="在小程序内使用微信支付">WeChat Pay in the mini-app</span></div></div>
+          <div class="flow__arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></div>
+          <div class="flow__row"><span class="n">2</span><div><b data-en="Your merchant account" data-zh="你的商户号">Your merchant account</b><span data-en="Your WeChat Pay merchant ID" data-zh="你自己的微信支付商户号">Your WeChat Pay merchant ID</span></div></div>
+          <div class="flow__arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></div>
+          <div class="flow__row"><span class="n">3</span><div><b data-en="Your bank" data-zh="你的银行">Your bank</b><span data-en="Settled directly — 0% to us" data-zh="直接结算——平台抽成 0%">Settled directly — 0% to us</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= STATS ======================= -->
+<section style="padding-top:0;">
+  <div class="wrap">
+    <div class="stats stagger reveal">
+      <div class="stat"><b data-count="6">6</b><span data-en="connected surfaces" data-zh="互联触点">connected surfaces</span></div>
+      <div class="stat"><b data-count="2">2</b><span data-en="languages, everywhere" data-zh="全局双语">languages, everywhere</span></div>
+      <div class="stat"><b data-count="100" data-suffix="%">100%</b><span data-en="of revenue stays yours" data-zh="收入全部归你">of revenue stays yours</span></div>
+      <div class="stat"><b data-count="0">0</b><span data-en="middlemen on your money" data-zh="资金零中间方">middlemen on your money</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= HOW IT WORKS ======================= -->
+<section id="how">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker" data-en="From kickoff to live" data-zh="从启动到上线">From kickoff to live</span>
+      <h2 data-en="Live in four steps — self-serve or fully managed." data-zh="四步上线——自助或全托管。">Live in four steps — self-serve or fully managed.</h2>
+      <p data-en="Pick how much you want to run yourself. Either way, a guided onboarding checklist keeps the launch on track." data-zh="自由选择你想亲自掌控的程度。无论哪种方式，引导式上线清单都会让发布按部就班。">Pick how much you want to run yourself. Either way, a guided onboarding checklist keeps the launch on track.</p>
+    </div>
+    <div class="steps reveal">
+      <div class="step">
+        <span class="step__n">01</span><div class="step__line"></div>
+        <h3 data-en="Brand & catalog" data-zh="品牌与商品">Brand &amp; catalog</h3>
+        <p data-en="Drop in your logo, colours and products. The storefront takes your look instantly." data-zh="导入你的标志、配色与商品。商城即刻套用你的风格。">Drop in your logo, colours and products. The storefront takes your look instantly.</p>
+      </div>
+      <div class="step">
+        <span class="step__n">02</span><div class="step__line"></div>
+        <h3 data-en="Connect payments" data-zh="连接收款">Connect payments</h3>
+        <p data-en="Link your own WeChat Pay merchant account. Funds settle to your bank from day one." data-zh="绑定你自己的微信支付商户号。从第一天起资金即结算到你的银行。">Link your own WeChat Pay merchant account. Funds settle to your bank from day one.</p>
+      </div>
+      <div class="step">
+        <span class="step__n">03</span><div class="step__line"></div>
+        <h3 data-en="Set up fulfillment" data-zh="配置履约">Set up fulfillment</h3>
+        <p data-en="Define stores, delivery zones and slots. Staff get a clean orders queue and POS." data-zh="设定门店、配送区域与时段。员工获得清爽的订单队列与收银台。">Define stores, delivery zones and slots. Staff get a clean orders queue and POS.</p>
+      </div>
+      <div class="step">
+        <span class="step__n">04</span><div class="step__line"></div>
+        <h3 data-en="Publish & sell" data-zh="发布开售">Publish &amp; sell</h3>
+        <p data-en="Push the mini-app live and start taking orders. Iterate the storefront any time, no redeploy." data-zh="发布小程序，开始接单。随时调整商城，无需重新部署。">Push the mini-app live and start taking orders. Iterate the storefront any time, no redeploy.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= PRICING ======================= -->
+<section id="pricing">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker" data-en="Honest pricing" data-zh="坦诚定价">Honest pricing</span>
+      <h2 data-en="One setup fee. No cut of your sales." data-zh="一次性建站费。绝不抽取你的销售额。">One setup fee. No cut of your sales.</h2>
+    </div>
+    <div class="price reveal">
+      <div class="price__card feature">
+        <span class="price__tag" data-en="Launch package" data-zh="上线套餐">Launch package</span>
+        <div class="price__amt"><small data-en="one-time" data-zh="一次性">one-time</small> <span data-en="setup fee" data-zh="建站费">setup fee</span></div>
+        <p class="price__note" data-en="A single onboarding fee gets your brand fully live. After that, the revenue is entirely yours." data-zh="一次性上线费即可让你的品牌完整上线。此后，收入完全归你。">A single onboarding fee gets your brand fully live. After that, the revenue is entirely yours.</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg><span data-en="Branded WeChat mini-app & storefront" data-zh="品牌微信小程序与商城">Branded WeChat mini-app &amp; storefront</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg><span data-en="Your own WeChat Pay — 0% revenue share" data-zh="你自己的微信支付——0% 分账">Your own WeChat Pay — 0% revenue share</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg><span data-en="Fulfillment queue, POS & stations" data-zh="履约队列、收银台与工位">Fulfillment queue, POS &amp; stations</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg><span data-en="Guided onboarding — self-serve or managed" data-zh="引导式上线——自助或托管">Guided onboarding — self-serve or managed</span></li>
+        </ul>
+        <a href="#demo" class="btn" data-en="Get a quote" data-zh="获取报价">Get a quote</a>
+      </div>
+      <div class="price__card">
+        <span class="price__tag" data-en="Two ways to run it" data-zh="两种运营方式">Two ways to run it</span>
+        <div style="display:flex;flex-direction:column;gap:18px;margin-top:14px;">
+          <div>
+            <h3 style="font-size:22px;margin-bottom:6px;" data-en="Model A · Self-serve" data-zh="模式 A · 自助">Model A · Self-serve</h3>
+            <p style="font-size:15.5px;color:var(--text-2);" data-en="Your team owns the day-to-day — catalog, content, fulfillment. We hand over the keys and stay on call." data-zh="你的团队掌控日常——商品、内容、履约。我们交付钥匙并随时待命。">Your team owns the day-to-day — catalog, content, fulfillment. We hand over the keys and stay on call.</p>
+          </div>
+          <div style="height:1px;background:var(--line);"></div>
+          <div>
+            <h3 style="font-size:22px;margin-bottom:6px;" data-en="Model B · Managed" data-zh="模式 B · 托管">Model B · Managed</h3>
+            <p style="font-size:15.5px;color:var(--text-2);" data-en="We run setup and ongoing operations for you, so you can focus on the product and the brand." data-zh="我们为你完成搭建与持续运营，让你专注于产品与品牌。">We run setup and ongoing operations for you, so you can focus on the product and the brand.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= CTA / DEMO FORM ======================= -->
+<section class="cta" id="demo">
+  <div class="wrap">
+    <div class="cta__card reveal">
+      <div class="cta__left">
+        <span class="kicker" data-en="Let's talk" data-zh="聊聊吧">Let's talk</span>
+        <h2 data-en="Book a demo of Full Circle." data-zh="预约 Full Circle 演示。">Book a demo of Full Circle.</h2>
+        <p data-en="Tell us about your brand and we'll walk you through a live storefront, the operator backend and the payments flow — in English or 中文." data-zh="告诉我们你的品牌，我们将带你实地体验商城、运营后台与收款流程——中英文皆可。">Tell us about your brand and we'll walk you through a live storefront, the operator backend and the payments flow — in English or 中文.</p>
+        <div class="cta__points">
+          <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span data-en="30-minute live walkthrough" data-zh="30 分钟实时演示">30-minute live walkthrough</span></div>
+          <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg><span data-en="See your brand on a real mini-app" data-zh="在真实小程序上看到你的品牌">See your brand on a real mini-app</span></div>
+          <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M5 10v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/></svg><span data-en="A clear answer on setup cost" data-zh="清晰的建站费用说明">A clear answer on setup cost</span></div>
+        </div>
+      </div>
+      <form id="demoForm" novalidate>
+        <div class="row2">
+          <div class="field">
+            <label for="f-name" data-en="Your name" data-zh="你的姓名">Your name <span class="req">*</span></label>
+            <input id="f-name" name="name" type="text" autocomplete="name" required>
+            <span class="err" data-en="Please tell us your name." data-zh="请填写你的姓名。">Please tell us your name.</span>
+          </div>
+          <div class="field">
+            <label for="f-brand" data-en="Brand / store" data-zh="品牌 / 门店">Brand / store <span class="req">*</span></label>
+            <input id="f-brand" name="brand" type="text" autocomplete="organization" required>
+            <span class="err" data-en="Please tell us your brand." data-zh="请填写你的品牌。">Please tell us your brand.</span>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="f-email" data-en="Email" data-zh="邮箱">Email <span class="req">*</span></label>
+            <input id="f-email" name="email" type="email" autocomplete="email" inputmode="email" required>
+            <span class="err" data-en="Enter a valid email address." data-zh="请输入有效的邮箱地址。">Enter a valid email address.</span>
+          </div>
+          <div class="field">
+            <label for="f-model" data-en="Preferred model" data-zh="偏好模式">Preferred model</label>
+            <select id="f-model" name="model">
+              <option value="" data-en="Not sure yet" data-zh="尚未确定">Not sure yet</option>
+              <option value="self-serve" data-en="Model A · Self-serve" data-zh="模式 A · 自助">Model A · Self-serve</option>
+              <option value="managed" data-en="Model B · Managed" data-zh="模式 B · 托管">Model B · Managed</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-msg" data-en="Anything else? (optional)" data-zh="还有什么想说的？（选填）">Anything else? (optional)</label>
+          <textarea id="f-msg" name="message" autocomplete="off"></textarea>
+        </div>
+        <button type="submit" class="btn" data-en="Request a demo" data-zh="申请演示">Request a demo
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+        <div class="form__ok" id="formOk" role="status" aria-live="polite">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+          <span data-en="Thanks! Your email app is opening with the details — just hit send." data-zh="谢谢！你的邮件应用正在打开并已填好内容——点击发送即可。">Thanks! Your email app is opening with the details — just hit send.</span>
+        </div>
+      </form>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ======================= FOOTER ======================= -->
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div class="foot__brand">
+        <a class="brand" href="#top">
+          <svg class="mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+            <circle cx="20" cy="20" r="16" stroke="#365329" stroke-width="3" stroke-linecap="round"/>
+            <path d="M20 27c-4 0-8-3-8-8 5 0 8 3 8 8z" fill="#CCD900"/>
+            <path d="M20 27c4 0 8-3 8-8-5 0-8 3-8 8z" fill="#7BBD3B"/>
+            <path d="M20 12v15" stroke="#365329" stroke-width="2.4" stroke-linecap="round"/>
+          </svg>
+          <span>Full Circle</span>
+        </a>
+        <p data-en="The bilingual commerce platform for plant-based and modern retail brands on WeChat." data-zh="面向微信上植物基与现代零售品牌的中英双语商务平台。">The bilingual commerce platform for plant-based and modern retail brands on WeChat.</p>
+      </div>
+      <div class="foot__cols">
+        <div class="foot__col">
+          <h4 data-en="Platform" data-zh="平台">Platform</h4>
+          <a href="#platform" data-en="Storefront" data-zh="商城">Storefront</a>
+          <a href="#platform" data-en="Fulfillment" data-zh="履约">Fulfillment</a>
+          <a href="#payments" data-en="Payments" data-zh="收款">Payments</a>
+          <a href="#how" data-en="Onboarding" data-zh="上线">Onboarding</a>
+        </div>
+        <div class="foot__col">
+          <h4 data-en="Company" data-zh="公司">Company</h4>
+          <a href="#pricing" data-en="Pricing" data-zh="定价">Pricing</a>
+          <a href="#demo" data-en="Book a demo" data-zh="预约演示">Book a demo</a>
+          <a href="mailto:hello@fullcircle.example" data-en="Contact" data-zh="联系我们">Contact</a>
+        </div>
+      </div>
+    </div>
+    <div class="foot__bot">
+      <span>© <span id="year"></span> Full Circle. <span data-en="All rights reserved." data-zh="保留所有权利。">All rights reserved.</span></span>
+      <span data-en="Built for WeChat · EN & 中文" data-zh="为微信打造 · 中英双语">Built for WeChat · EN &amp; 中文</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- year ---- */
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  /* ---- language toggle ---- */
+  var nodes = document.querySelectorAll('[data-en]');
+  var btnEn = document.getElementById('lang-en');
+  var btnZh = document.getElementById('lang-zh');
+  function setLang(lang){
+    document.documentElement.lang = lang;
+    nodes.forEach(function(n){
+      var v = lang === 'zh' ? n.getAttribute('data-zh') : n.getAttribute('data-en');
+      if(v == null) return;
+      // options: set textContent; everything else too
+      n.textContent = v;
+    });
+    btnEn.setAttribute('aria-pressed', String(lang === 'en'));
+    btnZh.setAttribute('aria-pressed', String(lang === 'zh'));
+    try{ localStorage.setItem('fc_lang', lang); }catch(e){}
+  }
+  btnEn.addEventListener('click', function(){ setLang('en'); });
+  btnZh.addEventListener('click', function(){ setLang('zh'); });
+  var saved = 'en';
+  try{ saved = localStorage.getItem('fc_lang') || 'en'; }catch(e){}
+  if(saved === 'zh') setLang('zh');
+
+  /* ---- nav shadow on scroll ---- */
+  var nav = document.getElementById('nav');
+  function onScroll(){ nav.classList.toggle('scrolled', window.scrollY > 8); }
+  onScroll();
+  window.addEventListener('scroll', onScroll, {passive:true});
+
+  /* ---- reveal on scroll ---- */
+  var revealEls = document.querySelectorAll('.reveal');
+  if('IntersectionObserver' in window && !reduce){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if(en.isIntersecting){ en.target.classList.add('reveal-in'); io.unobserve(en.target); }
+      });
+    }, {threshold:0.16, rootMargin:'0px 0px -8% 0px'});
+    revealEls.forEach(function(el){ io.observe(el); });
+  } else {
+    revealEls.forEach(function(el){ el.classList.add('reveal-in'); });
+  }
+
+  /* ---- hero underline draw ---- */
+  var em = document.getElementById('em-draw');
+  if(em && !reduce){ requestAnimationFrame(function(){ setTimeout(function(){ em.classList.add('drawn'); }, 200); }); }
+  else if(em){ em.classList.add('drawn'); }
+
+  /* ---- count-up stats ---- */
+  var counters = document.querySelectorAll('[data-count]');
+  function animateCount(el){
+    var target = parseFloat(el.getAttribute('data-count'));
+    var suffix = el.getAttribute('data-suffix') || '';
+    if(reduce || target === 0){ el.textContent = target + suffix; return; }
+    var start = null, dur = 1100;
+    function tick(ts){
+      if(start === null) start = ts;
+      var p = Math.min((ts - start)/dur, 1);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * eased) + suffix;
+      if(p < 1) requestAnimationFrame(tick);
+      else el.textContent = target + suffix;
+    }
+    requestAnimationFrame(tick);
+  }
+  if('IntersectionObserver' in window){
+    var cio = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if(en.isIntersecting){ animateCount(en.target); cio.unobserve(en.target); }
+      });
+    }, {threshold:0.6});
+    counters.forEach(function(c){ cio.observe(c); });
+  } else {
+    counters.forEach(function(c){ c.textContent = c.getAttribute('data-count') + (c.getAttribute('data-suffix')||''); });
+  }
+
+  /* ---- demo form: validate + mailto fallback ---- */
+  var form = document.getElementById('demoForm');
+  var ok = document.getElementById('formOk');
+  function fieldOf(input){ return input.closest('.field'); }
+  function validEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+  function validateField(input){
+    var f = fieldOf(input), bad = false;
+    if(input.hasAttribute('required') && !input.value.trim()) bad = true;
+    if(input.type === 'email' && input.value.trim() && !validEmail(input.value.trim())) bad = true;
+    f.classList.toggle('invalid', bad);
+    return !bad;
+  }
+  ['f-name','f-brand','f-email'].forEach(function(id){
+    var input = document.getElementById(id);
+    input.addEventListener('blur', function(){ validateField(input); });
+    input.addEventListener('input', function(){ if(fieldOf(input).classList.contains('invalid')) validateField(input); });
+  });
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    var inputs = ['f-name','f-brand','f-email'].map(function(id){ return document.getElementById(id); });
+    var allOk = true, firstBad = null;
+    inputs.forEach(function(input){ if(!validateField(input)){ allOk = false; if(!firstBad) firstBad = input; } });
+    if(!allOk){ if(firstBad) firstBad.focus(); return; }
+
+    var zh = document.documentElement.lang === 'zh';
+    var name = document.getElementById('f-name').value.trim();
+    var brand = document.getElementById('f-brand').value.trim();
+    var email = document.getElementById('f-email').value.trim();
+    var modelSel = document.getElementById('f-model');
+    var model = modelSel.options[modelSel.selectedIndex].text;
+    var msg = document.getElementById('f-msg').value.trim();
+    var subject = encodeURIComponent('Full Circle demo request — ' + brand);
+    var bodyLines = [
+      (zh?'姓名：':'Name: ') + name,
+      (zh?'品牌：':'Brand: ') + brand,
+      (zh?'邮箱：':'Email: ') + email,
+      (zh?'偏好模式：':'Preferred model: ') + model,
+      '',
+      (zh?'留言：':'Message:'),
+      msg
+    ];
+    var body = encodeURIComponent(bodyLines.join('\n'));
+    ok.classList.add('show');
+    window.location.href = 'mailto:hello@fullcircle.example?subject=' + subject + '&body=' + body;
+  });
+})();
+</script>
+</body>
+</html>

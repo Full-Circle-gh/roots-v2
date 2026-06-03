@@ -330,6 +330,13 @@ app.get('/storefront', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'storefront.html'));
 });
 
+// Public marketing landing page — the B2B pitch for the Full Circle
+// platform. No auth, shareable link for prospects/investors.
+app.get('/full-circle', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=300');
+  res.sendFile(path.join(__dirname, 'public', 'full-circle.html'));
+});
+
 // Tablet/phone POS shell. PUBLIC route (no requireAuth) so Chrome can
 // validate the manifest's start_url during PWA install — otherwise it
 // silently fails when the route returns 302→/login. The page itself
