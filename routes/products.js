@@ -16,7 +16,7 @@ const PRODUCT_COLS = `
   p.ship_modes, p.needs_ice_pack, p.is_batch_made,
   p.nutrition,
   p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,
-  p.description_blocks, p.use_block_design, p.bundle,
+  p.description_blocks, p.use_block_design, p.page_template, p.bundle,
   p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,
   r.name_en AS recipe_name
 `;
@@ -331,6 +331,10 @@ const FIELDS = [
   // Office toggle (kitchen Description card): when 1, mini-app renders
   // blocks; when 0/null (default), it renders the classic description path.
   'use_block_design',
+  // Which product-page template the block design was seeded from (id string,
+  // e.g. 'editorial_light'). Provenance label that drives the editor's
+  // template highlight + the per-template style layer; blank = none chosen.
+  'page_template',
   // Colophon overrides — blank fields fall back to category-mapped character
   // + default "From Soil to Soul" tagline.
   'colophon_character', 'colophon_tagline_en', 'colophon_tagline_cn',

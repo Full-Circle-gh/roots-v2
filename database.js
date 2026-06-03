@@ -984,6 +984,15 @@ addColumn('products', 'description_blocks',     'TEXT');
 // sticky if the office wants to keep drafted blocks while still publishing
 // the classic copy. Set from the kitchen product editor's Description card.
 addColumn('products', 'use_block_design',       'INTEGER DEFAULT 0');
+// Which product-page TEMPLATE the block design is built from. A template is a
+// self-contained design system (a default block stack + its own per-block
+// style/colour defaults). Stored as the template id string (e.g.
+// 'editorial_light'); blank/NULL → no template chosen yet (legacy block pages
+// that pre-date templates render fine — the id only drives the editor's
+// template highlight + the per-template style layer added later). Switching
+// template is destructive (reseeds the block stack), so this is just a label
+// of provenance, not a constraint on what's stored in description_blocks.
+addColumn('products', 'page_template',           'TEXT');
 // Page colophon overrides — v1 design renders a single IP character + a
 // brand tagline as the page sign-off. By default we auto-pick the
 // character by product category and use "From Soil to Soul" as the line,

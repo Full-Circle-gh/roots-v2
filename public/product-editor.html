@@ -644,9 +644,13 @@
     text-align: left; min-width: 0; overflow: hidden;
   }
   .pa-preset-card:hover { border-color: var(--accent); }
+  /* Active = the template this page is built from (window._paTemplate). */
+  .pa-preset-card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .pa-preset-card.active .pa-preset-thumb { background: var(--bg-elev-1); }
   .pa-preset-meta { padding: var(--s3) var(--s4) calc(var(--s3) + 1px); display: flex; flex-direction: column; gap: 3px; }
   .pa-preset-card-label { font-size: 13px; font-weight: 600; color: var(--text-1); line-height: 1.3; }
   .pa-preset-card-count { font-size: 10px; letter-spacing: .04em; color: var(--text-3); }
+  .pa-preset-card.active .pa-preset-card-count { color: var(--accent); font-weight: 700; }
 
   /* Auto-drawn layout wireframe — one mini shape per block (paPresetThumb) */
   .pa-preset-thumb {
@@ -1132,17 +1136,17 @@
       <div class="pe-insp-tabs">
         <div class="pe-insp-seg">
           <button id="pe-tab-block" class="active" onclick="peInspTab('block')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> Block · 板块</button>
-          <button id="pe-tab-page" onclick="peInspTab('page')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="9" height="7" rx="1"/><rect x="16" y="14" width="5" height="7" rx="1"/></svg> Presets · 版型</button>
+          <button id="pe-tab-page" onclick="peInspTab('page')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="9" height="7" rx="1"/><rect x="16" y="14" width="5" height="7" rx="1"/></svg> Templates · 模板</button>
         </div>
       </div>
       <div class="pa-edit-inspector-scroll">
-        <!-- PAGE mode: presets only (card chrome + colophon live in the left rail) -->
+        <!-- PAGE mode: templates only (card chrome + colophon live in the left rail) -->
         <div id="pe-page-pane" style="display:none">
         <div class="pa-inspector-presets">
           <div class="pa-presets">
             <div class="pa-presets-head">
-              <span class="pa-presets-title">Start from a preset · 套用版型</span>
-              <span class="pa-presets-hint helper">Pre-fills a coherent block stack. · 套用一套连贯板块。</span>
+              <span class="pa-presets-title">Choose a template · 选择模板</span>
+              <span class="pa-presets-hint helper">Seeds a coherent block stack. Switching replaces the current blocks. · 套用一套连贯板块,切换会替换现有板块。</span>
             </div>
             <div class="pa-presets-row" id="pa-presets-row"></div>
           </div>
@@ -1388,11 +1392,16 @@ const PA_IP_CHARACTERS = [
   { key: 'hula',           label: 'Hula'        },
 ];
 
-const PA_PAGE_PRESETS = [
+// Product-page templates. Each entry is a self-contained design: an id (saved
+// to products.page_template), bilingual label/description, and the default
+// `blocks` stack it seeds. Add new templates here — the chooser + apply flow
+// pick them up automatically. (Per-template block style/colour variants are a
+// later layer; the framework already carries the template id so it's ready.)
+const PA_TEMPLATES = [
   {
     id: 'editorial_light',
-    label_en: 'Editorial Light — Green Chili Dip layout',
-    label_cn: '清淡编辑风 — 青辣椒酱版式',
+    label_en: 'Editorial Light',
+    label_cn: '清淡编辑风',
     desc_en: 'Spec · story · why × 3 · chip-cloud ingredients · 6-tile how-to · storage · allergen · notes',
     desc_cn: '规格 · 故事 · 3 条理由 · 配料云标签 · 6 用法 · 储存 · 过敏原 · 备注',
     blocks: [
@@ -1428,49 +1437,6 @@ const PA_PAGE_PRESETS = [
       { type: 'notes_callout', text_en: '', text_cn: '' },
     ],
   },
-  {
-    id: 'editorial_bold',
-    label_en: 'Editorial Bold — Hazel Chocolate Spread layout',
-    label_cn: '醒目编辑风 — 榛子巧克力酱版式',
-    desc_en: 'Spec · story · big stat · why × 5 · editorial-line ingredients · pull quote · 8-tile how-to · storage · allergen · notes',
-    desc_cn: '规格 · 故事 · 大数字 · 5 条理由 · 配料编辑式 · 引文 · 8 用法 · 储存 · 过敏原 · 备注',
-    blocks: [
-      { type: 'spec_strip', cells: [
-        { k_en: 'Type',   k_cn: '类型', v_en: '', v_cn: '' },
-        { k_en: 'Net Wt', k_cn: '净重', v_en: '', v_cn: '' },
-        { k_en: 'Origin', k_cn: '产地', v_en: '', v_cn: '' },
-      ] },
-      { type: 'hero_intro', kicker_en: '', kicker_cn: '', body_en: '', body_cn: '', highlight_en: '', highlight_cn: '' },
-      { type: 'big_stat', stat: '', what_en: '', what_cn: '', claim_en: '', claim_cn: '', bg: 'lime' },
-      { type: 'why', rows: [
-        { claim_en: '', claim_cn: '' },
-        { claim_en: '', claim_cn: '' },
-        { claim_en: '', claim_cn: '' },
-        { claim_en: '', claim_cn: '' },
-        { claim_en: '', claim_cn: '' },
-      ] },
-      { type: 'ingredients_line', items: [
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-      ] },
-      { type: 'pull_quote', text_en: '', text_cn: '', who_en: '', who_cn: '' },
-      { type: 'how_to_use', tiles: Array.from({ length: 8 }, () => (
-        { icon: '', label_en: '', label_cn: '', sub_en: '', sub_cn: '' }
-      )) },
-      { type: 'storage_box',
-        left:  { icon: '🌡', head_en: 'Unopened',      head_cn: '未开封', num_en: 'Cool & dry',  num_cn: '阴凉干燥', unit_en: 'Store away from heat and moisture',                    unit_cn: '远离高温和潮湿',           alt: false },
-        right: { icon: '❄', head_en: 'After opening', head_cn: '开封后', num_en: 'Refrigerate', num_cn: '冷藏',     unit_en: 'Stir well, seal tightly, refrigerate for best texture', unit_cn: '搅拌均匀,密封冷藏以保持最佳口感', alt: true  },
-        note_en: 'Natural oil separation may occur — this is normal. Stir before each use.',
-        note_cn: '天然油脂分离属正常现象,每次使用前请搅拌。' },
-      { type: 'allergen_card', contains_en: '', contains_cn: '', may_contain_en: '', may_contain_cn: '' },
-      { type: 'notes_callout', text_en: '', text_cn: '' },
-    ],
-  },
 ];
 
 // ── State ──
@@ -1480,6 +1446,7 @@ let PA_ALL_PRODUCTS = [];       // full catalog, kept for the in-editor switcher
 let PA_SAVED_SNAPSHOT = null;   // serialized state at last load/save — drives the dirty guard
 let _paPreviewLang = null;      // 'en' | 'cn' — language the phone preview renders (independent of chrome lang)
 window._paBlocks = [];
+window._paTemplate = null;      // product's page_template id — which template this page is built from
 
 // ── Boot — read ?id= from URL, fetch the product, paint the editor ──
 async function peBoot() {
@@ -1913,6 +1880,7 @@ function peMount(p) {
   document.getElementById('pa-edit-colophon-tagline-cn').value = p.colophon_tagline_cn || '';
   paRenderColophonGrid();
 
+  window._paTemplate = p.page_template || null;
   window._paBlocks = Array.isArray(p.description_blocks)
     ? p.description_blocks.map(b => ({ ...b, id: b.id || paBlocksGenId() }))
     : [];
@@ -2020,10 +1988,16 @@ function paClearColophonChar() {
   peUpdatePageDot();
 }
 
-// ── Presets ──
-// Draw a tiny abstract wireframe of a preset's layout straight from its
+// ── Templates ──
+// A template is a self-contained product-page design: a default block stack
+// (plus, later, its own per-block style/colour defaults). The product records
+// which template it was built from in `page_template` (window._paTemplate),
+// which drives the active-card highlight here and the per-template style layer
+// added later. Switching template is destructive — it reseeds the block stack.
+//
+// Draw a tiny abstract wireframe of a template's layout straight from its
 // `blocks` array — each block type maps to a representative shape. It's
-// derived data, so the preview always matches what the preset applies.
+// derived data, so the preview always matches what the template applies.
 const PA_THUMB_SHAPE = {
   spec_strip:        b => `<div class="tr spec">${'<i></i>'.repeat(Math.min((b.cells || []).length || 3, 4))}</div>`,
   hero_intro:        () => `<div class="tr lines"><i></i><i></i><i></i></div>`,
@@ -2042,32 +2016,45 @@ function paPresetThumb(blocks) {
     (PA_THUMB_SHAPE[b.type] || (() => '<div class="tr bar"></div>'))(b)
   ).join('');
 }
+// Rebuilds the template chooser. The card matching window._paTemplate (the
+// product's saved template) gets an `active` class so the operator can see
+// which design this page is built from. Always rebuilds (no children guard) so
+// applying a template repaints the highlight.
 function paRenderPresets() {
   const row = document.getElementById('pa-presets-row'); if (!row) return;
-  if (row.children.length) return;
-  row.innerHTML = PA_PAGE_PRESETS.map(p => `
-    <button type="button" class="pa-preset-card" onclick="paApplyPreset('${p.id}')" title="${escapeHtml(p.desc_en + ' · ' + p.desc_cn)}">
+  row.innerHTML = PA_TEMPLATES.map(p => {
+    const active = p.id === window._paTemplate;
+    return `
+    <button type="button" class="pa-preset-card${active ? ' active' : ''}" onclick="paApplyTemplate('${p.id}')" title="${escapeHtml(p.desc_en + ' · ' + p.desc_cn)}">
       <div class="pa-preset-thumb">${paPresetThumb(p.blocks)}</div>
       <div class="pa-preset-meta">
         <span class="pa-preset-card-label">${escapeHtml(p.label_en)}<br>${escapeHtml(p.label_cn)}</span>
-        <span class="pa-preset-card-count">${(p.blocks || []).length} blocks · ${(p.blocks || []).length} 个板块</span>
+        <span class="pa-preset-card-count">${active ? '✓ Current · 当前' : (p.blocks || []).length + ' blocks · ' + (p.blocks || []).length + ' 个板块'}</span>
       </div>
-    </button>
-  `).join('');
+    </button>`;
+  }).join('');
 }
-function paApplyPreset(id) {
-  const preset = PA_PAGE_PRESETS.find(p => p.id === id); if (!preset) return;
+function paApplyTemplate(id) {
+  const tpl = PA_TEMPLATES.find(p => p.id === id); if (!tpl) return;
+  // Re-picking the template the page is already built from would needlessly
+  // wipe the operator's edits — no-op instead.
+  if (id === window._paTemplate && (window._paBlocks || []).length) {
+    toast('Already using this template · 已是当前模板');
+    return;
+  }
   const existing = (window._paBlocks || []).length;
   if (existing > 0) {
     const ok = confirm(
-      'Apply this preset? · 套用此版型?\n\n' +
+      'Switch template? · 切换模板?\n\n' +
       'It will REPLACE the ' + existing + ' block(s) currently on this product. ' +
       '\n将替换当前产品上的 ' + existing + ' 个板块,无法撤销。'
     );
     if (!ok) return;
   }
-  window._paBlocks = preset.blocks.map(b => ({ ...JSON.parse(JSON.stringify(b)), id: paBlocksGenId() }));
+  window._paTemplate = id;
+  window._paBlocks = tpl.blocks.map(b => ({ ...JSON.parse(JSON.stringify(b)), id: paBlocksGenId() }));
   PA_SELECTED_BLOCK_ID = window._paBlocks[0]?.id || null;
+  paRenderPresets();   // repaint the active-card highlight
   paRenderAll();
 }
 
@@ -2147,6 +2134,7 @@ function peCollectBody() {
     colophon_tagline_cn:   document.getElementById('pa-edit-colophon-tagline-cn').value.trim() || null,
     description_blocks:    paBlocksCollect(),
     nutrition:             paCollectNutrition(),
+    page_template:         window._paTemplate || null,
   };
 }
 // Serialized fingerprint of the editable state — compared against the

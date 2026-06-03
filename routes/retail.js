@@ -6942,7 +6942,8 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   const body = req.body || {};
   if ('is_published' in body) { sets.push('is_published = ?'); params.push(body.is_published ? 1 : 0); }
   for (const k of ['keywords_en', 'keywords_cn', 'tagline_en', 'tagline_cn',
-                   'colophon_character', 'colophon_tagline_en', 'colophon_tagline_cn']) {
+                   'colophon_character', 'colophon_tagline_en', 'colophon_tagline_cn',
+                   'page_template']) {
     if (k in body) { sets.push(`${k} = ?`); params.push(body[k] || null); }
   }
   if ('description_blocks' in body) {
@@ -7051,7 +7052,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
-            is_batch_made,
+            is_batch_made, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM products WHERE id = ?`
   ).get(id);
@@ -7090,7 +7091,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
             variant_group_id, variant_label, variant_sort,
-            is_batch_made,
+            is_batch_made, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1`
   ).get(id);
