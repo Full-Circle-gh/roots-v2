@@ -25,6 +25,26 @@
     <text class="wc-loop-proof-tx">{{w.proofPre}}<text class="wc-loop-proof-n">{{w.proofCount}}</text>{{w.proofPost}}</text>
   </view>
 </template>
+<!-- Flash-sale design card (classic/editorial/urgency). `c` = card data,
+     `badge` = corner | stamp | ribbon. Shares the component's tap handler. -->
+<template name="fsdCard">
+  <view class="fsd-card" data-id="{{c.id}}" bindtap="onFlashCardTap">
+    <view class="fsd-img">
+      <image wx:if="{{c.image}}" src="{{c.image}}" mode="aspectFill" class="img-full"/>
+      <view wx:if="{{c.badge}}" class="fsd-badge-{{badge}}">{{c.badge}}</view>
+    </view>
+    <view class="fsd-meta">
+      <view class="fsd-name">{{c.name}}</view>
+      <view wx:if="{{c.sub}}" class="fsd-cn">{{c.sub}}</view>
+      <view class="fsd-prices">
+        <text class="fsd-now">{{c.priceNow}}</text>
+        <text wx:if="{{c.priceWas}}" class="fsd-was">{{c.priceWas}}</text>
+      </view>
+      <view wx:if="{{c.meterPct !== null}}" class="fsd-meter"><view class="fsd-meter-bar" style="width:{{c.meterPct}}%"></view></view>
+      <view class="fsd-sold">{{c.soldLbl}}</view>
+    </view>
+  </view>
+</template>
 
 <view wx:if="{{type === 'announcement_bar'}}" class="announce anim-{{anim}} speed-{{speed}} {{announceLink ? 'announce-linked' : ''}}" style="background:{{bg}};color:{{fg}}" bindtap="onAnnounceTap">
   <!-- Marquee: clipped wrapper around a duplicated track for seamless loop -->
@@ -374,6 +394,75 @@
     </view>
   </scroll-view>
   <view wx:if="{{flashStrip.isEmpty}}" class="fs-empty">{{flashStrip.emptyText}}</view>
+</view>
+
+<!-- Flash sale: design directions (classic / editorial / urgency) — coral band,
+     cream zigzag edge, live countdown, SHOP NOW pill and a product carousel. -->
+<view wx:elif="{{type === 'flash_sale_strip' && !flashHidden && flashDesign}}"
+      class="fsd-wrap fsd-{{flashDesign.view}} corner-{{flashDesign.corner}}"
+      style="background:{{bg}};color:{{fg}};{{flashDesign.styleVars}}">
+  <view class="fsd-zig" style="clip-path:{{flashDesign.zigClip}};-webkit-clip-path:{{flashDesign.zigClip}}"></view>
+  <view class="fsd-body">
+
+    <!-- A · Classic — centred, cream tiles with ":" separators -->
+    <block wx:if="{{flashDesign.view === 'classic'}}">
+      <view class="fsd-head">
+        <view class="fsd-kicker">{{flashDesign.kickerEn}}<text wx:if="{{flashDesign.kickerEn && flashDesign.kickerCn}}" class="cn"> · {{flashDesign.kickerCn}}</text><text wx:if="{{!flashDesign.kickerEn}}" class="cn">{{flashDesign.kickerCn}}</text></view>
+        <view wx:if="{{flashDesign.title}}" class="fsd-title">{{flashDesign.title}}</view>
+      </view>
+      <view class="fsd-ends">
+        <view class="fsd-ends-lbl">{{flashDesign.endsLabel}}</view>
+        <view class="fsd-clock {{flashDesign.pulse ? 'fs-pulse' : ''}}">
+          <block wx:for="{{flashDesign.tiles}}" wx:key="lbl">
+            <view class="fsd-tile"><view class="fsd-tile-num">{{item.num}}</view><view class="fsd-tile-lbl">{{item.lbl}}</view></view>
+            <text wx:if="{{index < 3}}" class="fsd-colon">:</text>
+          </block>
+        </view>
+      </view>
+      <view wx:if="{{flashDesign.shop}}" class="fsd-cta-wrap"><view class="fsd-cta" bindtap="onFlashCtaTap">{{flashDesign.shop}} →</view></view>
+      <scroll-view class="fsd-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+        <template is="fsdCard" wx:for="{{flashDesign.cards}}" wx:key="id" data="{{c: item, badge: 'corner'}}"/>
+      </scroll-view>
+    </block>
+
+    <!-- B · Editorial — left headline, horizontal cream ticker -->
+    <block wx:elif="{{flashDesign.view === 'editorial'}}">
+      <view class="fsd-head">
+        <view class="fsd-kicker">{{flashDesign.kickerEn}}<text wx:if="{{flashDesign.kickerEn && flashDesign.kickerCn}}" class="cn"> · {{flashDesign.kickerCn}}</text><text wx:if="{{!flashDesign.kickerEn}}" class="cn">{{flashDesign.kickerCn}}</text></view>
+        <view wx:if="{{flashDesign.title}}" class="fsd-title">{{flashDesign.title}}</view>
+        <view class="fsd-ticker {{flashDesign.pulse ? 'fs-pulse' : ''}}">
+          <block wx:for="{{flashDesign.tiles}}" wx:key="lbl">
+            <view class="fsd-seg"><view class="fsd-seg-num">{{item.num}}</view><view class="fsd-seg-lbl">{{item.lbl}}</view></view>
+            <view wx:if="{{index < 3}}" class="fsd-seg-div"></view>
+          </block>
+        </view>
+        <view class="fsd-cta-row">
+          <view wx:if="{{flashDesign.shop}}" class="fsd-cta" bindtap="onFlashCtaTap">{{flashDesign.shop}} →</view>
+          <view class="fsd-off">{{flashDesign.offMain}}<text class="cn">{{flashDesign.offSub}}</text></view>
+        </view>
+      </view>
+      <scroll-view class="fsd-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+        <template is="fsdCard" wx:for="{{flashDesign.cards}}" wx:key="id" data="{{c: item, badge: 'ribbon'}}"/>
+      </scroll-view>
+    </block>
+
+    <!-- C · Urgency — LIVE tag, accent tiles popping on the band -->
+    <block wx:else>
+      <view class="fsd-head">
+        <view class="fsd-live"><view class="fsd-live-dot {{flashDesign.pulse ? 'fs-pulse-dot' : ''}}"></view><text class="fsd-live-lbl">{{flashDesign.liveLbl}}</text></view>
+        <view wx:if="{{flashDesign.title}}" class="fsd-title">{{flashDesign.title}}</view>
+        <view wx:if="{{flashDesign.subLine}}" class="fsd-sub">{{flashDesign.subLine}}</view>
+      </view>
+      <view class="fsd-clock {{flashDesign.pulse ? 'fs-pulse' : ''}}">
+        <view wx:for="{{flashDesign.tiles}}" wx:key="lbl" class="fsd-tile"><view class="fsd-tile-num">{{item.num}}</view><view class="fsd-tile-lbl">{{item.lbl}}</view></view>
+      </view>
+      <view wx:if="{{flashDesign.shop}}" class="fsd-cta-wrap"><view class="fsd-cta" bindtap="onFlashCtaTap">{{flashDesign.shop}} →</view></view>
+      <scroll-view class="fsd-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+        <template is="fsdCard" wx:for="{{flashDesign.cards}}" wx:key="id" data="{{c: item, badge: 'stamp'}}"/>
+      </scroll-view>
+    </block>
+
+  </view>
 </view>
 
 <view wx:elif="{{type === 'coupon_block' && coupon}}" class="coupon-blk" style="background:{{bg}};color:{{fg}}">

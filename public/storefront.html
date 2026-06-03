@@ -630,6 +630,97 @@
     border-radius: 999px;
   }
   .b-flash-hero .hero-cards { margin-top: 22px; }
+
+  /* ── FLASH SALE · design directions (Classic / Editorial / Urgency) ──
+     Coral band, cream zigzag top edge, live countdown, SHOP NOW pill and a
+     product carousel. Every coloured element rides on a --fs-* CSS var set in
+     JS so each piece can be recoloured independently. Mirrors cms.html. */
+  .b-flash-classic, .b-flash-editorial, .b-flash-urgency {
+    padding: 0 !important;
+    position: relative; overflow: hidden;
+    font-family: var(--bf-aleo);
+    border-radius: 0;
+    --fs-head: 1; --fs-radius: 16px; --fs-border: 1.5px;
+    --fs-panel: #FBF1F1; --fs-tile: #C24E61; --fs-accent: var(--lime);
+    --fs-fill: var(--forest); --fs-price: var(--berry); --fs-ink: var(--ink);
+  }
+  .b-flash-classic.corner-subtle, .b-flash-editorial.corner-subtle, .b-flash-urgency.corner-subtle { border-radius: 14px; }
+  .b-flash-classic.corner-bold,   .b-flash-editorial.corner-bold,   .b-flash-urgency.corner-bold   { border-radius: 22px; }
+  .b-flash-classic .fsd-cap, .b-flash-editorial .fsd-cap, .b-flash-urgency .fsd-cap {
+    height: 12px; background: var(--fs-panel);
+  }
+  .fsd-zig { position: absolute; top: 0; left: 0; right: 0; display: block; z-index: 3; pointer-events: none; }
+  .fsd-body { padding: 22px 0; color: var(--fs-ink); }
+
+  @keyframes fsPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+  @keyframes fsDot   { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(1.5); } }
+  @media (prefers-reduced-motion: no-preference) {
+    .b-flash .fs-pulse     { animation: fsPulse 1s ease-in-out infinite; }
+    .b-flash .fs-pulse-dot { animation: fsDot .9s ease-in-out infinite; }
+  }
+
+  .fsd-cards { display: flex; gap: 12px; overflow-x: auto; padding: 0 16px 4px; scrollbar-width: none; }
+  .fsd-cards::-webkit-scrollbar { display: none; }
+  .fsd-card { flex: 0 0 150px; background: #FFFCF7; color: var(--ink); border-radius: var(--fs-radius); overflow: hidden; box-sizing: border-box; }
+  .fsd-card .fsd-img { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: #eee; }
+  .fsd-card .fsd-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .fsd-badge-corner { position: absolute; top: 10px; left: 10px; background: var(--fs-ink); color: var(--fs-accent); padding: 3px 8px; border-radius: 7px; font: 400 15px var(--bf-gothic); letter-spacing: .03em; }
+  .fsd-badge-stamp  { position: absolute; top: 8px; right: 8px; background: var(--fs-accent); color: var(--fs-ink); border: var(--fs-border) solid var(--fs-ink); box-shadow: 2px 2px 0 var(--fs-ink); transform: rotate(7deg); padding: 5px 8px; font: 400 16px var(--bf-gothic); letter-spacing: .03em; line-height: 1; }
+  .fsd-badge-ribbon { position: absolute; top: 14px; left: -28px; width: 110px; transform: rotate(-45deg); background: var(--fs-accent); color: var(--fs-ink); text-align: center; font: 400 13px var(--bf-gothic); letter-spacing: .06em; padding: 3px 0; }
+  .fsd-card .fsd-meta { padding: 12px 13px 14px; }
+  .fsd-card .fsd-name { font: 400 15.5px var(--bf-bear); line-height: 1.05; }
+  .fsd-card .fsd-cn { font: 500 10.5px var(--bf-yuan); color: #6A6E2D; margin-top: 2px; }
+  .fsd-card .fsd-prices { display: flex; align-items: baseline; gap: 7px; margin-top: 8px; }
+  .fsd-card .fsd-now { font: 400 22px var(--bf-gothic); color: var(--fs-price); letter-spacing: .02em; }
+  .fsd-card .fsd-was { font: 400 12px var(--bf-aleo); color: #6A6E2D; text-decoration: line-through; }
+  .fsd-card .fsd-meter { margin-top: 9px; height: 4px; border-radius: 9px; background: rgba(0,0,0,.12); position: relative; overflow: hidden; }
+  .fsd-card .fsd-meter > span { position: absolute; inset: 0; background: var(--fs-fill); border-radius: 9px; }
+  .fsd-card .fsd-sold { font: 400 9px var(--bf-toni); letter-spacing: .12em; color: #6A6E2D; margin-top: 5px; }
+
+  .fsd-kicker .cn { font-family: var(--bf-yuan); font-weight: 700; letter-spacing: .12em; }
+
+  /* A · Classic — centred, cream tiles with ":" separators, cream CTA pill */
+  .b-flash-classic .fsd-head { text-align: center; padding: 0 24px; }
+  .b-flash-classic .fsd-kicker { font: 400 12px var(--bf-toni); letter-spacing: .34em; }
+  .b-flash-classic .fsd-title { font: 400 calc(31px * var(--fs-head)) var(--bf-bear); line-height: 1; margin-top: 8px; }
+  .b-flash-classic .fsd-ends { text-align: center; margin-top: 20px; }
+  .b-flash-classic .fsd-ends-lbl { font: 400 10px var(--bf-toni); letter-spacing: .28em; color: rgba(26,26,23,.7); }
+  .b-flash-classic .fsd-clock { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 10px; }
+  .b-flash-classic .fsd-tile { background: var(--fs-tile); border-radius: 14px; width: 66px; padding: 11px 0 8px; text-align: center; }
+  .b-flash-classic .fsd-tile-num { font: 400 calc(34px * var(--fs-head)) var(--bf-bear); line-height: 1; color: #FFFCF7; }
+  .b-flash-classic .fsd-tile-lbl { font: 400 8px var(--bf-toni); letter-spacing: .18em; color: rgba(255,255,255,.7); margin-top: 4px; }
+  .b-flash-classic .fsd-colon { font: 400 24px var(--bf-bear); color: rgba(26,26,23,.5); }
+  .b-flash-classic .fsd-cta-wrap { display: flex; justify-content: center; margin: 22px 0; }
+  .b-flash-classic .fsd-cta { background: var(--fs-panel); color: var(--ink); border-radius: 999px; padding: 14px 40px; font: 400 18px var(--bf-gothic); letter-spacing: .1em; cursor: pointer; }
+
+  /* B · Editorial — left headline, horizontal cream ticker, accent CTA */
+  .b-flash-editorial .fsd-head { padding: 0 20px; }
+  .b-flash-editorial .fsd-kicker { font: 400 11px var(--bf-toni); letter-spacing: .3em; }
+  .b-flash-editorial .fsd-title { font: 400 calc(34px * var(--fs-head)) var(--bf-bear); line-height: .95; margin-top: 6px; max-width: 300px; }
+  .b-flash-editorial .fsd-ticker { display: flex; align-items: stretch; background: var(--fs-panel); border-radius: var(--fs-radius); margin-top: 16px; overflow: hidden; }
+  .b-flash-editorial .fsd-seg { flex: 1; text-align: center; padding: 10px 0 8px; }
+  .b-flash-editorial .fsd-seg-num { font: 400 calc(30px * var(--fs-head)) var(--bf-gothic); line-height: 1; color: var(--ink); letter-spacing: .02em; }
+  .b-flash-editorial .fsd-seg-lbl { font: 400 8px var(--bf-toni); letter-spacing: .16em; color: #6A6E2D; margin-top: 2px; }
+  .b-flash-editorial .fsd-seg-div { width: 1px; background: rgba(0,0,0,.12); margin: 10px 0; }
+  .b-flash-editorial .fsd-cta-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+  .b-flash-editorial .fsd-cta { background: var(--fs-accent); color: var(--ink); border: var(--fs-border) solid var(--fs-ink); border-radius: 999px; padding: 12px 26px; font: 400 17px var(--bf-gothic); letter-spacing: .08em; box-shadow: 0 3px 0 var(--fs-ink); cursor: pointer; }
+  .b-flash-editorial .fsd-off { font: 400 12px var(--bf-aleo); color: rgba(26,26,23,.75); line-height: 1.3; }
+  .b-flash-editorial .fsd-off .cn { font: 500 10.5px var(--bf-yuan); }
+  .b-flash-editorial .fsd-cards { margin-top: 20px; }
+
+  /* C · Urgency — LIVE tag, accent tiles popping on the band, ink CTA */
+  .b-flash-urgency .fsd-head { text-align: center; padding: 0 24px; }
+  .b-flash-urgency .fsd-live { display: inline-flex; align-items: center; gap: 7px; background: var(--fs-ink); color: var(--fs-accent); border-radius: 999px; padding: 4px 12px; }
+  .b-flash-urgency .fsd-live-dot { width: 7px; height: 7px; border-radius: 9px; background: var(--fs-accent); display: inline-block; }
+  .b-flash-urgency .fsd-live-lbl { font: 400 10px var(--bf-toni); letter-spacing: .24em; }
+  .b-flash-urgency .fsd-title { font: 400 calc(33px * var(--fs-head)) var(--bf-bear); line-height: .98; margin-top: 12px; }
+  .b-flash-urgency .fsd-sub { font: 700 13px var(--bf-yuan); color: var(--ink); margin-top: 6px; opacity: .85; }
+  .b-flash-urgency .fsd-clock { display: flex; justify-content: center; gap: 7px; margin-top: 18px; padding: 0 16px; }
+  .b-flash-urgency .fsd-tile { flex: 1; max-width: 80px; background: var(--fs-accent); border: var(--fs-border) solid var(--fs-ink); border-radius: 12px; padding: 10px 0 7px; text-align: center; box-shadow: 0 4px 0 var(--fs-ink); }
+  .b-flash-urgency .fsd-tile-num { font: 400 calc(32px * var(--fs-head)) var(--bf-bear); line-height: 1; color: var(--ink); }
+  .b-flash-urgency .fsd-tile-lbl { font: 400 8px var(--bf-toni); letter-spacing: .16em; color: var(--fs-fill); margin-top: 3px; }
+  .b-flash-urgency .fsd-cta-wrap { display: flex; justify-content: center; margin: 20px 0 22px; }
+  .b-flash-urgency .fsd-cta { background: var(--fs-ink); color: var(--fs-accent); border-radius: 999px; padding: 14px 44px; font: 400 18px var(--bf-gothic); letter-spacing: .1em; cursor: pointer; }
   .b-coupon {
     margin: 14px 18px; padding: 18px; border-radius: 8px;
     display: flex; align-items: center; gap: 16px;
@@ -1614,6 +1705,138 @@ function renderBlock(b) {
         </div>`;
       }).join('');
 
+      // ── Design directions: classic / editorial / urgency ──────────────
+      // Coral band + cream zigzag + live countdown + SHOP NOW + carousel.
+      // Mirrors cms.html; every colour rides on a --fs-* var.
+      if (view === 'classic' || view === 'editorial' || view === 'urgency') {
+        const fsVar = (token, fallback) => brandColorVar(token) || fallback || '';
+        const EN = ({ refined: { head: .9, border: 1.5, radius: 12 },
+                      balanced: { head: 1, border: 1.5, radius: 16 },
+                      bold: { head: 1.14, border: 2, radius: 18 } })[b.energy] || { head: 1, border: 1.5, radius: 16 };
+        const styleParts = [`background:${bg}`, `color:${fg}`,
+          `--fs-head:${EN.head}`, `--fs-border:${EN.border}px`, `--fs-radius:${EN.radius}px`];
+        const setVar = (prop, token) => { const v = brandColorVar(token); if (v) styleParts.push(`${prop}:${v}`); };
+        setVar('--fs-ink', b.ink_color);
+        setVar('--fs-panel', b.panel_color);
+        setVar('--fs-tile', b.tile_color);
+        setVar('--fs-accent', b.accent_color);
+        setVar('--fs-fill', b.fill_color);
+        setVar('--fs-price', b.price_color);
+        const styleStr = styleParts.join(';');
+        const cornerClass = b.corner_radius ? ' corner-' + b.corner_radius : ' corner-subtle';
+        const pulse = b.urgency === 'frantic' ? ' fs-pulse' : '';
+        const pulseDot = b.urgency === 'frantic' ? ' fs-pulse-dot' : '';
+
+        // cream zigzag teeth hanging into the band (fill tracks --fs-panel)
+        const teeth = 30, ZW = 120, zh = 6, zw = ZW / teeth;
+        let zd = 'M0 0 ';
+        for (let i = 0; i < teeth; i++) zd += `L${(i * zw + zw / 2).toFixed(2)} ${zh} L${((i + 1) * zw).toFixed(2)} 0 `;
+        zd += 'Z';
+        const zig = `<svg class="fsd-zig" viewBox="0 0 ${ZW} ${zh}" preserveAspectRatio="none" width="100%" height="${zh}"><path d="${zd}" fill="var(--fs-panel)"></path></svg>`;
+        const cap = `<div class="fsd-cap"></div>${zig}`;
+
+        const vals = [split.d, split.h, split.m, split.s].map(v => String(v).padStart(2, '0'));
+        const endsAttr = soonestEnd ? ` data-ends-at="${escapeAttr(new Date(soonestEnd).toISOString())}"` : '';
+        const kHtml = (k.en && k.cn)
+          ? `${escapeHtml(k.en)} <span class="cn">· ${escapeHtml(k.cn)}</span>`
+          : escapeHtml(k.en || k.cn || '');
+        const headline = escapeHtml(pickLang(b.title_en, b.title_cn) || '');
+        const shop = ctaLabel ? `${escapeHtml(ctaLabel)} →` : '';
+        const ctaAttr = b.cta_target ? ` data-cta-target="${escapeAttr(b.cta_target)}"` : '';
+
+        const designCards = (badge) => products.map(p => {
+          const fp = Number(p.flash.price) || 0;
+          const rp = Number(p.price) || 0;
+          const off = rp > 0 ? Math.round(((rp - fp) / rp) * 100) : 0;
+          const img = p.image_url || p.image_data || '';
+          const nm = pickLang(p.name_en, p.name_cn) || '';
+          const sub = state.lang === 'cn' ? (p.name_en || '') : (p.name_cn || '');
+          const sold = p.flash.stock_sold || 0;
+          const capN = p.flash.stock_limit;
+          const pct = (capN != null && capN > 0) ? Math.min(100, Math.round((sold / capN) * 100)) : null;
+          const soldLbl = state.lang === 'cn'
+            ? (capN != null ? `已抢 ${sold} / ${capN}` : `已抢 ${sold}`)
+            : (capN != null ? `${sold} OF ${capN} SOLD` : `${sold} SOLD`);
+          const badgeHtml = off > 0 ? `<div class="fsd-badge-${badge}">−${off}%</div>` : '';
+          return `<div class="fsd-card" data-product-id="${escapeAttr(p.id)}">
+            <div class="fsd-img">${img ? `<img src="${escapeAttr(img)}" alt="">` : ''}${badgeHtml}</div>
+            <div class="fsd-meta">
+              <div class="fsd-name">${escapeHtml(nm)}</div>
+              ${sub ? `<div class="fsd-cn">${escapeHtml(sub)}</div>` : ''}
+              <div class="fsd-prices">
+                <span class="fsd-now">¥${fp.toFixed(2)}</span>
+                ${rp > fp ? `<span class="fsd-was">¥${rp.toFixed(2)}</span>` : ''}
+              </div>
+              ${pct != null ? `<div class="fsd-meter"><span style="width:${pct}%"></span></div>` : ''}
+              <div class="fsd-sold">${escapeHtml(soldLbl)}</div>
+            </div>
+          </div>`;
+        }).join('');
+
+        if (view === 'classic') {
+          const tiles = vals.map((v, i) => `
+            <div class="fsd-tile"><div class="fsd-tile-num js-fsd-num">${v}</div><div class="fsd-tile-lbl">${cellsLabels[i]}</div></div>${i < 3 ? '<span class="fsd-colon">:</span>' : ''}`).join('');
+          return `<div class="b-flash b-flash-classic${cornerClass}" data-block-id="${escapeAttr(b.id)}" style="${styleStr}">${cap}
+            <div class="fsd-body">
+              <div class="fsd-head">
+                <div class="fsd-kicker">${kHtml}</div>
+                ${headline ? `<div class="fsd-title">${headline}</div>` : ''}
+              </div>
+              <div class="fsd-ends">
+                <div class="fsd-ends-lbl">${endsLbl}</div>
+                <div class="fsd-clock${pulse}"${endsAttr}>${tiles}</div>
+              </div>
+              ${shop ? `<div class="fsd-cta-wrap"><div class="fsd-cta"${ctaAttr}>${shop}</div></div>` : ''}
+              <div class="fsd-cards">${designCards('corner')}</div>
+            </div>
+          </div>`;
+        }
+
+        if (view === 'editorial') {
+          const off = products.reduce((mx, p) => {
+            const rp = Number(p.price) || 0, fp = Number(p.flash.price) || 0;
+            return rp > 0 ? Math.max(mx, Math.round(((rp - fp) / rp) * 100)) : mx;
+          }, 0);
+          const offLine = state.lang === 'cn'
+            ? `最高省 ${off}%<br><span class="cn">限时秒杀</span>`
+            : `Up to ${off}% off<br><span class="cn">最高 ${off}%</span>`;
+          const seg = vals.map((v, i) => `
+            <div class="fsd-seg"><div class="fsd-seg-num js-fsd-num">${v}</div><div class="fsd-seg-lbl">${cellsLabels[i]}</div></div>${i < 3 ? '<div class="fsd-seg-div"></div>' : ''}`).join('');
+          return `<div class="b-flash b-flash-editorial${cornerClass}" data-block-id="${escapeAttr(b.id)}" style="${styleStr}">${cap}
+            <div class="fsd-body">
+              <div class="fsd-head">
+                <div class="fsd-kicker">${kHtml}</div>
+                ${headline ? `<div class="fsd-title">${headline}</div>` : ''}
+                <div class="fsd-ticker${pulse}"${endsAttr}>${seg}</div>
+                <div class="fsd-cta-row">
+                  ${shop ? `<div class="fsd-cta"${ctaAttr}>${shop}</div>` : ''}
+                  <div class="fsd-off">${offLine}</div>
+                </div>
+              </div>
+              <div class="fsd-cards">${designCards('ribbon')}</div>
+            </div>
+          </div>`;
+        }
+
+        // view === 'urgency'
+        const tiles = vals.map((v, i) => `
+          <div class="fsd-tile"><div class="fsd-tile-num js-fsd-num">${v}</div><div class="fsd-tile-lbl">${cellsLabels[i]}</div></div>`).join('');
+        const liveLbl = state.lang === 'cn' ? '限时秒杀 · 进行中' : 'FLASH SALE · LIVE';
+        const subLine = state.lang === 'cn' ? '' : (t.cn ? `<div class="fsd-sub">${escapeHtml(t.cn)}</div>` : '');
+        return `<div class="b-flash b-flash-urgency${cornerClass}" data-block-id="${escapeAttr(b.id)}" style="${styleStr}">${cap}
+          <div class="fsd-body">
+            <div class="fsd-head">
+              <div class="fsd-live"><span class="fsd-live-dot${pulseDot}"></span><span class="fsd-live-lbl">${liveLbl}</span></div>
+              ${headline ? `<div class="fsd-title">${headline}</div>` : ''}
+              ${subLine}
+            </div>
+            <div class="fsd-clock${pulse}"${endsAttr}>${tiles}</div>
+            ${shop ? `<div class="fsd-cta-wrap"><div class="fsd-cta"${ctaAttr}>${shop}</div></div>` : ''}
+            <div class="fsd-cards">${designCards('stamp')}</div>
+          </div>
+        </div>`;
+      }
+
       if (view === 'hero' || view === 'banner') {
         return `<div class="b-flash b-flash-${view}" data-block-id="${escapeAttr(b.id)}" style="background:${bg};color:${fg}">
           <div class="hero-kicker">${biLabel(k.en, k.cn)}</div>
@@ -2014,6 +2237,22 @@ setInterval(() => {
     const ms = new Date(ends).getTime() - Date.now();
     if (ms <= 0) { crossedZero = true; return; }
     const nums = clock.querySelectorAll('.hero-num');
+    if (nums.length !== 4) return;
+    const p = splitCountdown(ms);
+    const vals = [p.d, p.h, p.m, p.s];
+    nums.forEach((el, i) => {
+      const next = String(vals[i]).padStart(2, '0');
+      if (el.textContent !== next) el.textContent = next;
+    });
+  });
+  // Design directions (classic/editorial/urgency): .fsd-clock or .fsd-ticker
+  // with .js-fsd-num cells.
+  document.querySelectorAll('.b-flash .fsd-clock[data-ends-at], .b-flash .fsd-ticker[data-ends-at]').forEach(clock => {
+    const ends = clock.dataset.endsAt;
+    if (!ends) return;
+    const ms = new Date(ends).getTime() - Date.now();
+    if (ms <= 0) { crossedZero = true; return; }
+    const nums = clock.querySelectorAll('.js-fsd-num');
     if (nums.length !== 4) return;
     const p = splitCountdown(ms);
     const vals = [p.d, p.h, p.m, p.s];

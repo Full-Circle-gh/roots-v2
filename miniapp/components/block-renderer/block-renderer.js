@@ -219,6 +219,7 @@ Component({
     countdown: null,
     // flash sale strip
     flashStrip: null,
+    flashDesign: null,
     flashHidden: false,
     // coupon / points / review / store
     coupon: null,
@@ -695,6 +696,7 @@ Component({
           out.flashAccent = b.accent_color ? color(b.accent_color) : '';
           const view = b.view || 'strip';
           out.flashView = view;
+          out.flashDesign = null;
           const all = this.properties.flashSales || [];
           const active = all.filter(p => p.flash && p.flash.state === 'active');
           const max = view === 'banner' ? 0 : Math.max(1, Math.min(8, b.product_limit || 3));
@@ -769,6 +771,70 @@ Component({
               };
             }),
           };
+          // Design directions (classic/editorial/urgency): same active-sale
+          // data, plus recolourable --fs-* vars, energy type-scale and the
+          // bilingual kicker/off-line the full sections show.
+          if (view === 'classic' || view === 'editorial' || view === 'urgency') {
+            const EN = ({ refined: { head: 0.9, border: 1.5, radius: 12 },
+                         balanced: { head: 1, border: 1.5, radius: 16 },
+                         bold: { head: 1.14, border: 2, radius: 18 } })[b.energy] || { head: 1, border: 1.5, radius: 16 };
+            let sv = `--fs-head:${EN.head};--fs-border:${EN.border}px;--fs-radius:${EN.radius * 2}rpx`;
+            const setVar = (prop, token) => { const c = token ? color(token) : ''; if (c) sv += `;${prop}:${c}`; };
+            setVar('--fs-ink', b.ink_color);
+            setVar('--fs-panel', b.panel_color);
+            setVar('--fs-tile', b.tile_color);
+            setVar('--fs-accent', b.accent_color);
+            setVar('--fs-fill', b.fill_color);
+            setVar('--fs-price', b.price_color);
+            const maxOff = products.reduce((mx, p) => {
+              const rp = Number(p.price) || 0, fp = Number(p.flash.price) || 0;
+              return rp > 0 ? Math.max(mx, Math.round(((rp - fp) / rp) * 100)) : mx;
+            }, 0);
+            out.flashDesign = {
+              view,
+              styleVars: sv,
+              corner: b.corner_radius || 'subtle',
+              pulse: b.urgency === 'frantic',
+              zigClip: fsdZigClip(),
+              kickerEn: b.kicker_en || '',
+              kickerCn: b.kicker_cn || '',
+              title: lang.pick(b.title_en, b.title_cn, L),
+              shop: lang.pick(b.cta_label_en, b.cta_label_cn, L),
+              endsLabel: L === 'cn' ? '距结束' : 'ENDS IN',
+              tiles: [
+                { num: pad(d), lbl: cellLabels[0] },
+                { num: pad(h), lbl: cellLabels[1] },
+                { num: pad(m), lbl: cellLabels[2] },
+                { num: pad(s), lbl: cellLabels[3] },
+              ],
+              liveLbl: L === 'cn' ? '限时秒杀 · 进行中' : 'FLASH SALE · LIVE',
+              subLine: (L !== 'cn' && b.title_cn) ? b.title_cn : '',
+              offMain: L === 'cn' ? `最高省 ${maxOff}%` : `Up to ${maxOff}% off`,
+              offSub: L === 'cn' ? '限时秒杀' : `最高 ${maxOff}%`,
+              cards: products.map(p => {
+                const fp = Number(p.flash.price) || 0;
+                const rp = Number(p.price) || 0;
+                const off = rp > 0 && fp < rp ? Math.round(((rp - fp) / rp) * 100) : 0;
+                const sold = p.flash.stock_sold || 0;
+                const cap = p.flash.stock_limit;
+                const pctc = (cap != null && cap > 0) ? Math.min(100, Math.round((sold / cap) * 100)) : null;
+                const soldLbl = L === 'cn'
+                  ? (cap != null ? `已抢 ${sold} / ${cap}` : `已抢 ${sold}`)
+                  : (cap != null ? `${sold} OF ${cap} SOLD` : `${sold} SOLD`);
+                return {
+                  id: p.id,
+                  image: absUrl(p.image_url) || p.image_data || '',
+                  name: lang.pick(p.name_en, p.name_cn, L),
+                  sub: L === 'cn' ? (p.name_en || '') : (p.name_cn || ''),
+                  priceNow: '¥' + fp.toFixed(2),
+                  priceWas: rp > fp ? '¥' + rp.toFixed(2) : '',
+                  badge: off > 0 ? '−' + off + '%' : '',
+                  meterPct: pctc,
+                  soldLbl,
+                };
+              }),
+            };
+          }
           break;
         }
         case 'coupon_block': {
