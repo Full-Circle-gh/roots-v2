@@ -5364,6 +5364,147 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   });
 });
 
+// ── Dashboard: live presence (global concurrent viewers) ──────────────────
+// Unions the per-product VIEWING Map by viewer key, so one customer hopping
+// between products counts once. Honest-labelled "viewing products now" —
+// only product pages heartbeat today; a future mini-app publish that adds
+// global page heartbeats can broaden this without changing the endpoint
+// shape. Cheap (in-memory only) so polled directly by the dashboard, no cache.
+router.get('/api/retail-admin/dashboard/presence', requireRetailAdmin, (req, res) => {
+  const now = Date.now();
+  const uniq = new Set();
+  let productsWithViewers = 0;
+  for (const [, viewers] of VIEWING) {
+    let has = false;
+    for (const [vid, ts] of viewers) {
+      if (now - ts <= VIEW_TTL_MS) { uniq.add(vid); has = true; }
+    }
+    if (has) productsWithViewers++;
+  }
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, data: {
+    viewing: uniq.size,
+    products_with_viewers: productsWithViewers,
+    scope: 'product_pages',     // label honestly until global heartbeats ship
+    server_now: now,
+  }});
+});
+
+// ── Dashboard: activity feed (real events the operator might act on) ──────
+// Unions 5 real-data event streams into one timeline: paid orders, refund
+// requests, low-stock items (currently <=5 and recently touched), new
+// customers, customer feedback. Each row has { type, ts, ref_type, ref_id,
+// payload } so the front-end can render and drill-through uniformly. Default
+// window: last 24h; ?since=<ms> + ?limit=N tune it. Polled every ~20s by the
+// dashboard; no cache (cheap query, freshness matters).
+router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res) => {
+  const limit   = Math.min(Math.max(parseInt(req.query.limit || '50', 10) || 50, 1), 200);
+  const sinceMs = parseInt(req.query.since || '0', 10) || (Date.now() - 24 * 3600 * 1000);
+  // SQLite stores DEFAULT CURRENT_TIMESTAMP as "YYYY-MM-DD HH:MM:SS" UTC.
+  const sinceIso = new Date(sinceMs).toISOString().slice(0, 19).replace('T', ' ');
+  const parseTs  = s => Date.parse(String(s || '').replace(' ', 'T') + 'Z') || null;
+  const events = [];
+
+  try {
+    // Paid orders — fires once per order on first successful payment.
+    const paid = tdb().prepare(`
+      SELECT o.id, o.order_no, o.total, o.paid_at,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE o.paid_at IS NOT NULL AND o.paid_at >= ?
+       ORDER BY o.paid_at DESC LIMIT ?
+    `).all(sinceIso, limit);
+    for (const r of paid) events.push({
+      type: 'paid_order',
+      ts: parseTs(r.paid_at),
+      ref_type: 'order', ref_id: r.id,
+      payload: { order_no: r.order_no, total: r.total, buyer: maskBuyerName(r.buyer) },
+    });
+
+    // Refund requests — refund_requested_at is set when the customer files.
+    const refunds = tdb().prepare(`
+      SELECT o.id, o.order_no, o.refund_amount_requested, o.refund_reason,
+             o.refund_status, o.refund_requested_at,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE o.refund_requested_at IS NOT NULL AND o.refund_requested_at >= ?
+       ORDER BY o.refund_requested_at DESC LIMIT ?
+    `).all(sinceIso, limit);
+    for (const r of refunds) events.push({
+      type: 'refund_request',
+      ts: parseTs(r.refund_requested_at),
+      ref_type: 'order', ref_id: r.id,
+      payload: {
+        order_no: r.order_no,
+        amount:   r.refund_amount_requested,
+        reason:   r.refund_reason,
+        status:   r.refund_status,
+        buyer:    maskBuyerName(r.buyer),
+      },
+    });
+
+    // Low stock — items currently low + recently touched. We don't track a
+    // true "crossing" event (no stock history), so we proxy with updated_at:
+    // shows items that became (or stayed) low in the window. Matches the
+    // existing alerts.js definition (>0 AND <=5, Active products only).
+    const low = tdb().prepare(`
+      SELECT id, name_en, name_cn, sku, stock_qty, updated_at
+        FROM products
+       WHERE COALESCE(stock_qty,0) > 0 AND COALESCE(stock_qty,0) <= 5
+         AND status = 'Active' AND COALESCE(is_active,1) = 1
+         AND updated_at >= ?
+       ORDER BY updated_at DESC LIMIT ?
+    `).all(sinceIso, limit);
+    for (const r of low) events.push({
+      type: 'low_stock',
+      ts: parseTs(r.updated_at),
+      ref_type: 'product', ref_id: r.id,
+      payload: { name_en: r.name_en, name_cn: r.name_cn, sku: r.sku, stock: r.stock_qty },
+    });
+
+    // New customers — first WeChat sign-in writes the retail_customers row.
+    const newCust = tdb().prepare(`
+      SELECT id, nickname, created_at FROM retail_customers
+       WHERE created_at >= ? ORDER BY created_at DESC LIMIT ?
+    `).all(sinceIso, limit);
+    for (const r of newCust) events.push({
+      type: 'new_customer',
+      ts: parseTs(r.created_at),
+      ref_type: 'customer', ref_id: r.id,
+      payload: { name: maskBuyerName(r.nickname || '') },
+    });
+
+    // Customer feedback from the mini-app "Found a bug?" form.
+    const fb = tdb().prepare(`
+      SELECT id, customer_id, customer_name, message, created_at
+        FROM retail_feedback
+       WHERE created_at >= ? ORDER BY created_at DESC LIMIT ?
+    `).all(sinceIso, limit);
+    for (const r of fb) events.push({
+      type: 'feedback',
+      ts: parseTs(r.created_at),
+      ref_type: 'feedback', ref_id: r.id,
+      payload: {
+        excerpt: String(r.message || '').slice(0, 80),
+        name:    maskBuyerName(r.customer_name || ''),
+      },
+    });
+  } catch (e) {
+    console.error('[dashboard/activity]', e.message);
+  }
+
+  // Merge: newest first, cap at limit. Drop rows whose ts couldn't parse.
+  const out = events
+    .filter(e => e.ts)
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, limit);
+
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, data: { events: out, since: sinceMs, server_now: Date.now() } });
+});
+
 // Admin CRUD for vouchers.
 router.get('/api/retail-admin/vouchers', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
