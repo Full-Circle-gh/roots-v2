@@ -5163,7 +5163,11 @@
       #cat-editor .cat-dragging { opacity: .45; }
       #cat-editor .cat-top.cat-droptarget { box-shadow: 0 0 0 2px var(--accent) inset; }
       #cat-editor .cat-subrow.cat-droptarget { background: rgba(107,142,111,.12); border-radius: var(--r-md); }
-      #cat-editor .cat-del { color: var(--danger); }
+      /* Destructive controls stay quiet (neutral) at rest and only flush red on
+         hover — a wall of resting red fights the calm aesthetic (brief §6/§9). */
+      #cat-editor .cat-del { color: var(--text-3); }
+      #cat-editor .cat-del:hover { color: var(--danger); }
+      #cat-editor button.btn.cat-del:hover { background: var(--danger-soft); border-color: var(--danger); }
       /* Name fields don't stretch edge-to-edge — capped so a row reads as a compact
          EN/中文 label pair, not two long bars. */
       #cat-editor .cat-name { flex: 1 1 200px; max-width: 300px; }
