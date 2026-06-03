@@ -387,7 +387,11 @@ Component({
           // products not yet re-saved under the two-level scheme.
           const inCat = (p, c) => (p.top_category || p.category) === c.name;
           const catCount = (c) => allProducts.filter(p => inCat(p, c)).length;
+          // Per-category image override (bento) keyed by category id; unset →
+          // first product in the category that has a photo. Mirrors CMS preview.
+          const tileImages = b.tile_images || {};
           const catCover = (c) => {
+            if (tileImages[c.id]) return absUrl(tileImages[c.id]);
             const p = allProducts.find(x => inCat(x, c) && (absUrl(x.image_url) || x.image_data));
             return p ? (absUrl(p.image_url) || p.image_data) : '';
           };

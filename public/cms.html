@@ -7768,7 +7768,13 @@ function renderBlockBody(b) {
       // themselves carry neither), so the preview mirrors the live renderer.
       const dcInCat = (p, c) => (p.top_category || p.category) === c.name;
       const catCount = (c) => (state.products || []).filter(p => dcInCat(p, c)).length;
-      const catCover = (c) => { const p = (state.products || []).find(x => dcInCat(x, c) && thumbUrl(x)); return p ? thumbUrl(p) : ''; };
+      // Per-category image override (bento) → first matching product photo.
+      const tileImages = b.tile_images || {};
+      const catCover = (c) => {
+        if (tileImages[c.id]) return tileImages[c.id];
+        const p = (state.products || []).find(x => dcInCat(x, c) && thumbUrl(x));
+        return p ? thumbUrl(p) : '';
+      };
       // Tree tops carry EN `name` + separate `name_cn`. catLabel picks one for
       // the current editor language — each language shows only its own name.
       const catLabel = (c) => state.lang === 'cn' ? (c.name_cn || c.name || '') : (c.name || '');
@@ -10375,7 +10381,7 @@ function buildCatTabsForm(m, b) {
   const isCircles = catStyle === 'classic' && view === 'icons';
   const styleValue = isCircles ? 'circles' : catStyle;
   secLayout.appendChild(field(T('Style', '样式'),
-    T('Classic = use the Layout below (tiles / scroll). Circles = round icons with labels (choose the columns below). Index = a numbered list with count tags and arrows. Bento = an image grid (uses each category\'s product photo). Sticker = coloured pills with an outline and a hard shadow.', '经典 = 使用下方版式(色块 / 横滑)。圆形 = 带标签的圆形图标(在下方选列数)。目录 = 编号列表 + 数量标签 + 箭头。便当 = 图片网格(用分类的商品图)。贴纸 = 带轮廓和硬阴影的彩色药丸。'),
+    T('Classic = use the Layout below (tiles / scroll). Circles = round icons with labels (choose the columns below). Index = a numbered list with count tags and arrows. Bento = an image grid (uses each category\'s product photo, or pick your own below). Sticker = coloured pills with an outline and a hard shadow.', '经典 = 使用下方版式(色块 / 横滑)。圆形 = 带标签的圆形图标(在下方选列数)。目录 = 编号列表 + 数量标签 + 箭头。便当 = 图片网格(用分类的商品图,或在下方自选)。贴纸 = 带轮廓和硬阴影的彩色药丸。'),
     sel(styleValue, CAT_STYLE_OPTIONS, v => {
       if (v === 'circles')      updateBlock(b.id, { cat_style: 'classic', view: 'icons' });
       else if (v === 'classic') updateBlock(b.id, { cat_style: 'classic', view: view === 'icons' ? 'tiles' : view });
@@ -10458,6 +10464,32 @@ function buildCatTabsForm(m, b) {
           ? T('The "NN · count" badge + the colour-fill fallback when a category has no product photo. Leave on Auto for the rotating palette.', '「编号 · 数量」徽标,以及分类无商品图时的色块兜底。保持「自动」使用轮换调色板。')
           : T('Fills each whole tile. Leave on Auto to use the rotating palette.', '填充每个色块。保持「自动」使用轮换调色板。');
     secColours.appendChild(field(catColourLabel, catColourHelp, colorWrap));
+  }
+
+  // Per-category image override (Bento only). One image picker per selected
+  // category (in display order); leave empty to keep auto-pulling that
+  // category's first product photo.
+  if (catStyle === 'bento' && selectedCats.length) {
+    const imgWrap = document.createElement('div');
+    selectedCats.forEach(c => {
+      const row = document.createElement('div');
+      row.style.cssText = 'margin-bottom:14px;';
+      const nm = document.createElement('div');
+      nm.textContent = c.name + (c.name_cn ? ' · ' + c.name_cn : '');
+      nm.style.cssText = 'font-size:13px;font-weight:600;margin-bottom:6px;';
+      const cur = (b.tile_images || {})[c.id] || '';
+      const picker = imgPicker(cur, ({ url }) => {
+        const next = { ...(b.tile_images || {}) };
+        if (url) next[c.id] = url; else delete next[c.id];
+        updateBlock(b.id, { tile_images: next });
+      });
+      row.appendChild(nm);
+      row.appendChild(picker);
+      imgWrap.appendChild(row);
+    });
+    secContent.appendChild(field(T('Category pictures', '分类图片'),
+      T('The main picture for each tile. Leave empty to auto-use that category\'s first product photo.', '每个色块的主图。留空则自动使用该分类的第一张商品图。'),
+      imgWrap));
   }
 
   // ── Block colours — every element overridable. Empty = the style default. ──
