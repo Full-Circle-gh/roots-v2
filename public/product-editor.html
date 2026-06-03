@@ -677,7 +677,9 @@
   }
   .pa-presets-hint { margin: 0; }
   .pa-presets-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+  .pa-presets-head .pa-tpl-import-btn { margin-left: auto; align-self: center; padding: 4px 10px; font-size: 11px; }
   .pa-preset-card {
+    position: relative;
     background: var(--bg-pane);
     border: 1px solid var(--line);
     border-radius: var(--r-md);
@@ -687,6 +689,23 @@
     display: flex; flex-direction: column;
     text-align: left; min-width: 0; overflow: hidden;
   }
+  /* Imported templates carry a corner badge + a remove control. */
+  .pa-preset-custom-tag {
+    position: absolute; top: 6px; left: 6px; z-index: 2;
+    padding: 2px 7px; border-radius: 999px;
+    font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    background: var(--accent); color: #fff;
+  }
+  .pa-preset-del {
+    position: absolute; top: 6px; right: 6px; z-index: 2;
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; line-height: 1; cursor: pointer;
+    background: rgba(0,0,0,.45); color: #fff; opacity: 0;
+    transition: opacity var(--t-fast), background var(--t-fast);
+  }
+  .pa-preset-card:hover .pa-preset-del { opacity: 1; }
+  .pa-preset-del:hover { background: var(--danger, #c0392b); }
   .pa-preset-card:hover { border-color: var(--accent); }
   /* Active = the template this page is built from (window._paTemplate). */
   .pa-preset-card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
@@ -1392,6 +1411,10 @@
             <div class="pa-presets-head">
               <span class="pa-presets-title" data-no-i18n><span data-lang-block="en">Choose a template</span><span data-lang-block="cn">选择模板</span></span>
               <span class="pa-presets-hint helper" data-no-i18n><span data-lang-block="en">Seeds a coherent block stack. Switching replaces the current blocks.</span><span data-lang-block="cn">套用一套连贯板块,切换会替换现有板块。</span></span>
+              <button type="button" class="btn btn-ghost pa-tpl-import-btn" onclick="paOpenImport()" data-no-i18n title="Upload a template file (.json) · 上传模板文件">
+                <span data-lang-block="en">⬆ Import template</span><span data-lang-block="cn">⬆ 导入模板</span>
+              </button>
+              <input type="file" id="pa-import-file" accept="application/json,.json" hidden onchange="paHandleImportFile(this)">
             </div>
             <div class="pa-presets-row" id="pa-presets-row"></div>
           </div>
@@ -1527,15 +1550,15 @@ const PA_BLOCK_TYPES = [
   },
   {
     type: 'ingredients_chips', glyph: '🌿',
-    label_en: '🌿 Ingredients · Chip Cloud — pills with optional % + hero',
-    label_cn: '🌿 配料 · 云标签 — 圆角标签,可选百分比/主料',
+    label_en: '🌿 Ingredients (Chip Cloud) — rounded pills, optional % + hero',
+    label_cn: '🌿 配料(云标签)— 圆角标签,可选百分比/主料',
     name_en: 'Ingredients · Chips', name_cn: '配料 · 云标签',
     make: () => ({ items: [ { name_en: '', name_cn: '', pct: '', lead: false } ] }),
   },
   {
     type: 'ingredients_line', glyph: '🌱',
-    label_en: '🌱 Ingredients · Editorial Line — typographic run',
-    label_cn: '🌱 配料 · 编辑式排版 — 大字一行体',
+    label_en: '🌱 Ingredients (Editorial Line) — one big typographic run',
+    label_cn: '🌱 配料(编辑式)— 大字一行体',
     name_en: 'Ingredients · Line', name_cn: '配料 · 编辑式',
     make: () => ({ items: [ { name_en: '', name_cn: '', pct: '', lead: false } ] }),
   },
@@ -2391,6 +2414,7 @@ function peMount(p) {
   PA_SELECTED_BLOCK_ID = window._paBlocks[0]?.id || null;
   paBlocksPopulatePicker();
   paRenderPresets();
+  paLoadCustomTemplates();   // async — merges imported templates into the chooser when they arrive
   paRenderAll();
 
   // Wire chrome inputs → live preview + page-dot refresh. Bind ONCE — peMount
@@ -2599,6 +2623,69 @@ function paFitThumbs(root) {
     screen.style.transform = `scale(${(w / 390).toFixed(4)})`;
   });
 }
+// ── Imported (custom) templates ──
+// Built-in templates live in the PA_TEMPLATES const above; operators upload more
+// from a template file (Claude-authored design). We fetch those on mount, mutate
+// them into PA_TEMPLATES (flagged `custom`) so the chooser/preview/apply flow —
+// which all iterate PA_TEMPLATES — pick them up unchanged, and inject each one's
+// optional CSS skin scoped to its own .pa-tpl-<id>.
+async function paLoadCustomTemplates() {
+  try {
+    const r = await fetch('/api/retail-admin/page-templates', { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j || !j.success) return;
+    paMergeCustomTemplates(j.data || []);
+  } catch (e) { /* offline / not yet deployed — built-ins still work */ }
+}
+function paMergeCustomTemplates(list) {
+  // Drop any previously-merged custom entries, then re-add the fresh set.
+  for (let i = PA_TEMPLATES.length - 1; i >= 0; i--) if (PA_TEMPLATES[i].custom) PA_TEMPLATES.splice(i, 1);
+  (list || []).forEach(t => PA_TEMPLATES.push({ ...t, custom: true }));
+  paInjectCustomSkins(list);
+  paRenderPresets();
+}
+function paInjectCustomSkins(list) {
+  let style = document.getElementById('pa-custom-skins');
+  if (!style) { style = document.createElement('style'); style.id = 'pa-custom-skins'; document.head.appendChild(style); }
+  style.textContent = (list || []).map(t => t.skin_css || '').filter(Boolean).join('\n\n');
+}
+function paOpenImport() { const f = document.getElementById('pa-import-file'); if (f) f.click(); }
+async function paHandleImportFile(input) {
+  const file = input.files && input.files[0];
+  input.value = '';   // let the same file be re-picked after an edit
+  if (!file) return;
+  let data;
+  try { data = JSON.parse(await file.text()); }
+  catch { toast('Not a valid template file (bad JSON) · 模板文件无效(JSON 错误)', 'err'); return; }
+  if (!data || data.fc_template == null) {
+    toast('Not a Full Circle template file · 不是模板文件', 'err'); return;
+  }
+  try {
+    const r = await fetch('/api/retail-admin/page-templates', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin', body: JSON.stringify(data),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) { toast('Import failed · 导入失败: ' + (j.error || r.status), 'err'); return; }
+    await paLoadCustomTemplates();
+    toast('Template imported ✓ · 模板已导入');
+  } catch (e) { toast('Import failed · 导入失败: ' + e.message, 'err'); }
+}
+async function paDeleteCustomTemplate(ev, id) {
+  ev.stopPropagation();
+  if (!confirm('Remove this template? Products already built from it keep their blocks. · 删除此模板?已套用的产品保留其板块。')) return;
+  try {
+    const r = await fetch('/api/retail-admin/page-templates/' + encodeURIComponent(id), {
+      method: 'DELETE', credentials: 'same-origin',
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) { toast('Delete failed · 删除失败', 'err'); return; }
+    await paLoadCustomTemplates();
+    toast('Removed · 已删除');
+  } catch (e) { toast('Delete failed · 删除失败: ' + e.message, 'err'); }
+}
+
 // Rebuilds the template chooser. The card matching window._paTemplate (the
 // product's saved template) gets an `active` class so the operator can see
 // which design this page is built from. Always rebuilds (no children guard) so
@@ -2611,8 +2698,15 @@ function paRenderPresets() {
     const count = active
       ? paBiTitle('✓ Current', '✓ 当前')
       : paBiTitle(n + ' blocks', n + ' 个板块');
+    const customTag = p.custom
+      ? `<span class="pa-preset-custom-tag" data-no-i18n>${paBiTitle('Custom', '自定义')}</span>` : '';
+    const delBtn = p.custom
+      ? `<span class="pa-preset-del" role="button" tabindex="0" title="Remove · 删除" data-no-i18n
+           onclick="paDeleteCustomTemplate(event, '${p.id}')"
+           onkeydown="if(event.key==='Enter'||event.key===' ')paDeleteCustomTemplate(event,'${p.id}')">✕</span>` : '';
     return `
     <button type="button" class="pa-preset-card${active ? ' active' : ''}" onclick="paOpenTemplatePreview('${p.id}')" title="${escapeHtml(p.desc_en + ' · ' + p.desc_cn)}">
+      ${customTag}${delBtn}
       <div class="pa-preset-thumb pa-tpl-${p.id}">${paThumbHtml(p.id)}</div>
       <div class="pa-preset-meta">
         <span class="pa-preset-card-label" data-no-i18n>${paBiTitle(escapeHtml(p.label_en), escapeHtml(p.label_cn))}</span>
