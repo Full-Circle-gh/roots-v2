@@ -3,301 +3,315 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#12161A">
+<meta name="theme-color" content="#E8E5DC">
 <title>Full Circle — Done-for-you WeChat mini-apps</title>
-<meta name="description" content="We onboard your business onto a WeChat mini-app and run it end to end — design, backend, hosting, storage, support and commerce. Built fast on our Block system. You keep 100% of your sales.">
+<meta name="description" content="We design, build, host and run your WeChat mini-app end to end. Built fast on our Block system. You keep 100% of your sales.">
 <script>document.documentElement.classList.add('js');</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+SC:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
-   FULL CIRCLE — B2B platform landing
-   Full Circle design system: IBM Plex · Ink Charcoal / Deeper
-   Paper · Tea Green (live) + Aged Brass (the one CTA). Tight
-   geometry, two-layer card lift, paper-and-ink editorial calm.
-   Tokens lifted verbatim from the Full Circle design brief.
+   FULL CIRCLE — light & airy zen-tech landing.
+   Deeper-Paper canvas, blueprint detail, IBM Plex, tea/brass
+   accents. Hero block-assembly + scroll-told service scenes.
    ============================================================ */
 :root{
-  /* --- LIGHT theme (Deeper Paper) — page base --- */
-  --bg-app:#E8E5DC; --bg-pane:#FFFFFF; --bg-elev-1:#F1EEE7; --bg-elev-2:#E3DFD5;
+  --paper:#E8E5DC; --paper-2:#EFEDE6; --pane:#FFFFFF; --elev-1:#F4F2EC; --elev-2:#E3DFD5;
   --line-soft:rgba(18,22,26,.07); --line:rgba(18,22,26,.12); --line-strong:rgba(18,22,26,.20);
   --text-1:#12161A; --text-2:#43413a; --text-3:#6a675c; --text-4:#9a978c;
-
-  /* --- DARK theme (Ink Charcoal) — hero / band / footer --- */
-  --ink:#12161A; --ink-pane:#1A1F24; --ink-1:#1F252B; --ink-2:#262E35;
-  --ink-line:rgba(232,229,220,.10); --ink-line-strong:rgba(232,229,220,.18);
-  --on-ink-1:#E8E5DC; --on-ink-2:#AEABA2; --on-ink-3:#7d7a72;
-
-  /* --- accents (semantic — do not mix up) --- */
-  --tea:#6B8E6F; --tea-hi:#7BA07F;      /* active / live / selected — NEVER a primary button */
-  --brass:#B08D4A; --brass-hi:#C29B54;  /* the ONE primary action */
-  --accent-ink:#12161A;                  /* text on a brass/tea fill */
-  --danger:#e8556a;
-
-  /* spacing / radii / elevation (brief) */
-  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s7:32px;--s8:48px;--s9:72px;
-  --r-sm:4px; --r-md:6px; --r-lg:10px; --r-xl:14px; --r-btn:9px;
-  --sh-1:0 1px 3px rgba(40,30,5,.10); --sh-2:0 6px 18px rgba(40,30,5,.12); --sh-3:0 24px 60px rgba(40,30,5,.22);
-  --lift:0 1px 2px rgba(40,30,5,.05),0 6px 18px rgba(40,30,5,.10);
-
-  /* type + motion (brief) */
+  --ink:#12161A; --ink-pane:#1A1F24; --on-ink-1:#E8E5DC; --on-ink-2:#AEABA2; --on-ink-3:#7d7a72;
+  --ink-line:rgba(232,229,220,.12);
+  --tea:#6B8E6F; --tea-hi:#7BA07F; --tea-deep:#3E5A42;
+  --brass:#B08D4A; --brass-hi:#C29B54; --accent-ink:#12161A; --danger:#e8556a;
+  --r-sm:4px; --r-md:6px; --r-lg:10px; --r-xl:14px; --r-2xl:20px; --r-btn:9px;
+  --sh-1:0 1px 3px rgba(40,30,5,.08); --sh-2:0 8px 24px rgba(40,30,5,.10); --sh-3:0 28px 70px rgba(40,30,5,.16);
+  --lift:0 1px 2px rgba(40,30,5,.05),0 8px 22px rgba(40,30,5,.08);
   --f-sans:'IBM Plex Sans','IBM Plex Sans SC','PingFang SC','Hiragino Sans GB',system-ui,sans-serif;
   --f-mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
-  --ease:cubic-bezier(.16,1,.3,1);
-  --t-fast:120ms; --t-med:220ms;
+  --ease:cubic-bezier(.16,1,.3,1); --spring:cubic-bezier(.34,1.56,.64,1);
+  --t-fast:140ms; --t-med:260ms; --t-slow:.7s;
 }
-
 *,*::before,*::after{box-sizing:border-box;}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
-body{
-  margin:0; background:var(--bg-app); color:var(--text-2);
-  font-family:var(--f-sans); font-size:17px; line-height:1.6; font-weight:400;
-  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
-  overflow-x:hidden;
-}
-/* paper grain — pure CSS, no image weight */
-body::before{
-  content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.6;
+body{margin:0;background:var(--paper);color:var(--text-2);font-family:var(--f-sans);font-size:17px;line-height:1.62;font-weight:400;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden;}
+/* faint blueprint grid + paper grain — pure CSS */
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;
   background-image:
-    radial-gradient(rgba(18,22,26,.028) 1px,transparent 1.5px),
+    linear-gradient(rgba(18,22,26,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(18,22,26,.025) 1px,transparent 1px),
     radial-gradient(rgba(18,22,26,.02) 1px,transparent 1.5px);
-  background-size:3px 3px,7px 7px; background-position:0 0,1px 2px;
-}
+  background-size:64px 64px,64px 64px,7px 7px;}
 main,header,footer{position:relative;z-index:1;}
 img{max-width:100%;display:block;}
 a{color:inherit;text-decoration:none;}
 :focus-visible{outline:2px solid var(--tea);outline-offset:2px;border-radius:4px;}
-
-h1,h2,h3,h4{font-family:var(--f-sans);color:var(--text-1);line-height:1.08;letter-spacing:-.02em;margin:0;font-weight:600;}
+h1,h2,h3,h4{font-family:var(--f-sans);color:var(--text-1);line-height:1.06;letter-spacing:-.028em;margin:0;font-weight:700;}
 p{margin:0;}
-
 .wrap{width:min(1180px,100% - 44px);margin-inline:auto;}
-.kicker{
-  font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.14em;font-weight:500;
-  font-size:12.5px;color:var(--tea);display:inline-flex;align-items:center;gap:9px;
-}
-.kicker::before{content:"";width:18px;height:2px;background:var(--tea);border-radius:2px;}
+.mono{font-family:var(--f-mono);}
 .tabnum{font-variant-numeric:tabular-nums;}
+.kicker{font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.16em;font-weight:500;font-size:12px;color:var(--tea-deep);display:inline-flex;align-items:center;gap:9px;}
+.kicker::before{content:"";width:16px;height:2px;background:var(--tea);border-radius:2px;}
+.idx{font-family:var(--f-mono);font-size:12px;letter-spacing:.12em;color:var(--text-4);}
 
 /* ---------- buttons ---------- */
-.btn{
-  display:inline-flex;align-items:center;justify-content:center;gap:8px;
-  font-family:var(--f-sans);font-weight:600;font-size:15px;line-height:1;
-  min-height:50px;padding:0 22px;border-radius:var(--r-btn);border:1px solid transparent;
-  cursor:pointer;transition:transform var(--t-fast) var(--ease),box-shadow var(--t-med) var(--ease),background var(--t-fast),border-color var(--t-fast),color var(--t-fast);
-  -webkit-tap-highlight-color:transparent;background:var(--bg-elev-1);color:var(--text-1);
-}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--f-sans);font-weight:600;font-size:15px;line-height:1;min-height:50px;padding:0 22px;border-radius:var(--r-btn);border:1px solid transparent;cursor:pointer;transition:transform var(--t-fast) var(--ease),box-shadow var(--t-med) var(--ease),background var(--t-fast),border-color var(--t-fast),color var(--t-fast);-webkit-tap-highlight-color:transparent;background:var(--elev-1);color:var(--text-1);}
 .btn svg{width:17px;height:17px;}
-/* the ONE primary — Aged Brass */
 .btn-primary{background:var(--brass);color:var(--accent-ink);box-shadow:var(--lift);}
 .btn-primary:hover{background:var(--brass-hi);transform:translateY(-2px);box-shadow:var(--sh-2);}
 .btn-primary:active{transform:translateY(0);}
-/* outline / ghost */
 .btn-line{background:transparent;color:var(--text-1);border-color:var(--line-strong);}
-.btn-line:hover{background:var(--bg-elev-1);border-color:var(--text-3);}
-/* on dark */
-.on-ink .btn-line{color:var(--on-ink-1);border-color:var(--ink-line-strong);}
+.btn-line:hover{background:var(--pane);border-color:var(--text-3);transform:translateY(-2px);}
+.on-ink .btn-line{color:var(--on-ink-1);border-color:rgba(232,229,220,.22);}
 .on-ink .btn-line:hover{background:rgba(232,229,220,.08);border-color:var(--on-ink-2);}
 
-/* ---------- top nav ---------- */
-.nav{
-  position:sticky;top:0;z-index:50;
-  backdrop-filter:saturate(1.1) blur(10px);
-  background:color-mix(in srgb,var(--bg-app) 80%,transparent);
-  border-bottom:1px solid transparent;transition:border-color var(--t-med),background var(--t-med);
-}
-.nav.scrolled{border-bottom-color:var(--line);background:color-mix(in srgb,var(--bg-app) 94%,transparent);}
+/* ---------- nav ---------- */
+.nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(1.1) blur(10px);background:color-mix(in srgb,var(--paper) 78%,transparent);border-bottom:1px solid transparent;transition:border-color var(--t-med),background var(--t-med);}
+.nav.scrolled{border-bottom-color:var(--line);background:color-mix(in srgb,var(--paper) 92%,transparent);}
 .nav__in{display:flex;align-items:center;gap:18px;height:70px;}
-.brand{display:flex;align-items:center;gap:11px;font-family:var(--f-sans);font-weight:600;font-size:19px;color:var(--text-1);letter-spacing:-.02em;}
+.brand{display:flex;align-items:center;gap:11px;font-weight:600;font-size:19px;color:var(--text-1);letter-spacing:-.02em;}
 .brand .mark{width:28px;height:28px;flex:0 0 auto;}
+.js .brand .mark .spin{transform-origin:16px 16px;animation:markspin 14s linear infinite;}
+@keyframes markspin{to{transform:rotate(360deg);}}
 .nav__links{display:flex;gap:26px;margin-left:auto;}
 .nav__links a{font-size:15px;color:var(--text-2);position:relative;padding:6px 0;transition:color var(--t-fast);}
 .nav__links a::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:0;background:var(--tea);transition:width var(--t-med) var(--ease);}
-.nav__links a:hover{color:var(--text-1);}
-.nav__links a:hover::after{width:100%;}
+.nav__links a:hover{color:var(--text-1);} .nav__links a:hover::after{width:100%;}
 .nav__cta{display:flex;align-items:center;gap:10px;}
 .langtoggle{display:inline-flex;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.04em;font-size:13px;}
 .langtoggle button{appearance:none;border:0;background:transparent;color:var(--text-3);padding:9px 12px;min-height:40px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast);}
 .langtoggle button[aria-pressed="true"]{background:var(--ink);color:var(--on-ink-1);}
 @media (max-width:860px){.nav__links{display:none;}.nav__in{height:62px;}}
 
-/* ---------- HERO (dark Ink Charcoal) ---------- */
-.hero{background:var(--ink);color:var(--on-ink-1);position:relative;overflow:hidden;padding:78px 0 64px;}
-.hero::before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(232,229,220,.05) 1px,transparent 1.4px);background-size:7px 7px;opacity:.5;pointer-events:none;}
-.hero__grid{position:relative;display:grid;grid-template-columns:1.05fr .95fr;gap:54px;align-items:center;}
-.hero h1{font-size:clamp(38px,6vw,72px);font-weight:700;color:#fff;margin:18px 0 0;letter-spacing:-.028em;}
-.hero h1 .em{color:var(--brass-hi);position:relative;white-space:nowrap;}
-.hero h1 .em::after{content:"";position:absolute;left:0;right:0;bottom:-.1em;height:3px;background:var(--tea);border-radius:3px;transform:scaleX(0);transform-origin:left;transition:transform .9s var(--ease) .5s;}
-.js .hero h1 .em.drawn::after{transform:scaleX(1);}
-.hero__sub{font-size:clamp(17px,2.1vw,20px);color:var(--on-ink-2);max-width:36ch;margin-top:22px;}
+/* ---------- HERO ---------- */
+.hero{padding:64px 0 40px;position:relative;overflow:hidden;}
+.hero__in{display:grid;grid-template-columns:1.02fr .98fr;gap:48px;align-items:center;}
+.hero h1{font-size:clamp(40px,6.2vw,74px);font-weight:700;color:var(--text-1);margin:18px 0 0;letter-spacing:-.035em;line-height:1.02;}
+.hero h1 .hl{position:relative;white-space:nowrap;color:var(--text-1);}
+.hero h1 .hl::before{content:"";position:absolute;left:-.1em;right:-.1em;top:.08em;bottom:.06em;z-index:-1;background:rgba(107,142,111,.18);border-bottom:2px solid var(--tea);border-radius:var(--r-sm);transform:scaleX(0);transform-origin:left;transition:transform .8s var(--ease) .5s;}
+.js .hero h1 .hl.drawn::before{transform:scaleX(1);}
+.hero h1 .em{color:var(--brass);}
+.hero__sub{font-size:clamp(17px,2.1vw,20px);color:var(--text-2);max-width:40ch;margin-top:22px;}
 .hero__cta{display:flex;flex-wrap:wrap;gap:13px;margin-top:30px;}
-.hero__assure{display:flex;align-items:center;gap:9px;margin-top:24px;color:var(--on-ink-3);font-size:14.5px;font-family:var(--f-mono);letter-spacing:.01em;}
-.hero__assure svg{width:18px;height:18px;color:var(--tea-hi);flex:0 0 auto;}
-.hero .kicker{color:var(--tea-hi);}
-.hero .kicker::before{background:var(--tea-hi);}
-.hero__grid{z-index:1;}
+.hero__assure{display:flex;align-items:center;gap:9px;margin-top:22px;color:var(--text-3);font-size:14px;font-family:var(--f-mono);letter-spacing:.01em;}
+.hero__assure svg{width:18px;height:18px;color:var(--tea);flex:0 0 auto;}
 
-/* ambient brand blobs — the AnimatedBlobs idea, recolored to Full Circle
-   tokens and screen-blended on Ink Charcoal. Biased to the right so the
-   headline keeps full contrast. Pure CSS, transform/opacity only. */
-.blobs{position:absolute;inset:-16% -12% -16% 26%;display:grid;place-items:center;overflow:hidden;z-index:0;pointer-events:none;}
-.blobs__spin{display:grid;place-items:center;width:min(116vmin,1120px);aspect-ratio:1;will-change:transform;animation:blob-spin 34s linear infinite;}
-.blob{
-  grid-area:1/1;aspect-ratio:1;height:80%;
-  border-radius:115% 140% 145% 110% / 125% 140% 110% 125%;
-  mix-blend-mode:screen;filter:blur(3.4vmin);
-}
-.blob.b1{background:radial-gradient(circle at 50% 45%,#6B8E6F,transparent 66%);transform:rotate(30deg) scale(1.03);opacity:.5;}
-.blob.b2{background:radial-gradient(circle at 50% 45%,#B08D4A,transparent 64%);transform:rotate(60deg) scale(.95);opacity:.4;}
-.blob.b3{background:radial-gradient(circle at 50% 45%,#3E5A42,transparent 70%);transform:rotate(90deg) scale(.97);opacity:.5;}
-.blob.b4{background:radial-gradient(circle at 50% 45%,#7BA07F,transparent 62%);transform:rotate(120deg) scale(1.02);opacity:.38;}
-@keyframes blob-spin{to{transform:rotate(360deg);}}
+/* hero entrance */
+.js .hero .anim{opacity:0;transform:translateY(18px);animation:rise .8s var(--ease) forwards;}
+.js .hero .anim.d1{animation-delay:.05s;}.js .hero .anim.d2{animation-delay:.15s;}.js .hero .anim.d3{animation-delay:.25s;}.js .hero .anim.d4{animation-delay:.35s;}
+@keyframes rise{to{opacity:1;transform:none;}}
 
-/* ===== animated mesh-gradient shader (vanilla WebGL port of
-   @paper-design/shaders MeshGradient) — recolored to brand tokens.
-   Sits behind the hero; a charcoal veil keeps the headline readable. ===== */
-.mesh{position:absolute;inset:0;width:100%;height:100%;z-index:0;display:block;pointer-events:none;}
-.mesh-veil{position:absolute;inset:0;z-index:0;pointer-events:none;
-  background:
-    linear-gradient(90deg,rgba(18,22,26,.86) 0%,rgba(18,22,26,.58) 44%,rgba(18,22,26,.18) 100%),
-    linear-gradient(180deg,rgba(18,22,26,.30) 0%,rgba(18,22,26,0) 30%,rgba(18,22,26,.42) 100%);}
-@media (max-width:980px){.mesh-veil{background:linear-gradient(180deg,rgba(18,22,26,.55),rgba(18,22,26,.40) 45%,rgba(18,22,26,.62));}}
+/* ===== hero assembly stage ===== */
+.stage{position:relative;aspect-ratio:1/1;display:grid;place-items:center;}
+.stage__glow{position:absolute;width:70%;height:70%;border-radius:50%;filter:blur(60px);background:radial-gradient(circle,rgba(107,142,111,.30),transparent 70%);z-index:0;}
+.stage__glow.b{width:48%;height:48%;right:8%;bottom:6%;background:radial-gradient(circle,rgba(176,141,74,.26),transparent 70%);}
+/* phone frame being assembled */
+.dev{position:relative;z-index:2;width:min(290px,74%);aspect-ratio:9/18.6;background:#0e1115;border:1px solid #2a3038;border-radius:30px;padding:9px;box-shadow:var(--sh-3);}
+.js .dev{animation:floaty 8s ease-in-out infinite;}
+@keyframes floaty{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
+.scr{position:relative;height:100%;border-radius:22px;overflow:hidden;background:var(--elev-1);display:flex;flex-direction:column;}
+.scr__live{flex:1;width:100%;height:100%;border:0;display:block;background:#F2E7DF;}
+/* assembling blocks */
+.blk{opacity:0;transform:translateY(14px) scale(.92);transition:opacity .5s var(--ease),transform .55s var(--spring);}
+.built .blk{opacity:1;transform:none;}
+.built .blk.b1{transition-delay:.05s;}.built .blk.b2{transition-delay:.22s;}.built .blk.b3{transition-delay:.39s;}.built .blk.b4{transition-delay:.56s;}.built .blk.b5{transition-delay:.73s;}.built .blk.b6{transition-delay:.92s;}
+.sbar{display:flex;align-items:center;justify-content:space-between;padding:8px 12px 4px;font-family:var(--f-mono);font-size:9px;color:var(--text-3);}
+.sbar i{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--text-4);margin-left:3px;}
+.sbanner{margin:4px 10px 0;height:78px;border-radius:var(--r-lg);background:linear-gradient(135deg,var(--tea),var(--tea-deep));position:relative;overflow:hidden;display:flex;align-items:flex-end;padding:10px;}
+.sbanner-tag{font-family:var(--f-sans);font-weight:600;font-size:13px;color:#fff;}
+.sbanner::after{content:"";position:absolute;inset:0;background:radial-gradient(rgba(255,255,255,.5) 1px,transparent 1.4px);background-size:10px 10px;opacity:.25;}
+.ssearch{margin:9px 10px 0;height:24px;border-radius:999px;background:var(--pane);border:1px solid var(--line);}
+.schips{display:flex;gap:6px;margin:9px 10px 0;}
+.schips span{flex:1;height:18px;border-radius:999px;background:var(--pane);border:1px solid var(--line);}
+.schips span.on{background:rgba(107,142,111,.2);border-color:rgba(107,142,111,.4);}
+.sgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:9px 10px 0;}
+.scell{background:var(--pane);border:1px solid var(--line);border-radius:var(--r-md);padding:7px;display:flex;flex-direction:column;gap:5px;}
+.scell .img{height:34px;border-radius:var(--r-sm);background:var(--elev-2);}
+.scell .ln{height:6px;border-radius:3px;background:var(--elev-2);}
+.scell .ln.s{width:55%;}
+.scell .pr{font-family:var(--f-mono);font-size:9px;color:var(--tea-deep);font-weight:600;}
+.stabs{margin-top:auto;height:34px;background:var(--pane);border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-around;}
+.stabs i{width:14px;height:14px;border-radius:var(--r-sm);background:var(--elev-2);}
+.stabs i.on{background:var(--tea);}
+.sbadge{position:absolute;top:96px;right:16px;z-index:3;font-family:var(--f-mono);font-size:9px;font-weight:600;letter-spacing:.04em;color:var(--accent-ink);background:var(--brass);padding:3px 7px;border-radius:999px;opacity:0;transform:scale(.5) rotate(-12deg);transition:opacity .4s,transform .5s var(--spring);}
+.built .sbadge{opacity:1;transform:scale(1) rotate(-8deg);transition-delay:1.05s;}
+.livepill{position:absolute;top:10px;right:12px;z-index:4;display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:999px;background:rgba(14,17,21,.72);backdrop-filter:blur(6px);color:#fff;font-family:var(--f-mono);font-size:8px;letter-spacing:.12em;opacity:0;transition:opacity .5s ease 1.2s;}
+.built .livepill{opacity:1;}
+.livepill i{width:6px;height:6px;border-radius:50%;background:var(--tea-hi);animation:pulse 2.2s ease-out infinite;}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(123,160,127,.55);}70%{box-shadow:0 0 0 7px rgba(123,160,127,0);}100%{box-shadow:0 0 0 0 rgba(123,160,127,0);}}
 
-/* Burb-style highlighted headline word — tea swatch that wipes in */
-.hl{position:relative;white-space:nowrap;color:#fff;}
-.hl::before{
-  content:"";position:absolute;left:-.16em;right:-.16em;top:.04em;bottom:.05em;z-index:-1;
-  background:rgba(123,160,127,.22);border:1px solid rgba(123,160,127,.42);border-radius:var(--r-md);
-  transform:scaleX(0);transform-origin:left;transition:transform .7s var(--ease) .4s;
-}
-.js .hl.drawn::before{transform:scaleX(1);}
+/* build-log card */
+.buildlog{position:absolute;left:-6%;bottom:8%;z-index:3;width:min(230px,52%);background:var(--pane);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-2);padding:13px 14px;font-family:var(--f-mono);}
+.buildlog__hd{display:flex;align-items:center;justify-content:space-between;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);margin-bottom:9px;}
+.replay{appearance:none;border:1px solid var(--line);background:var(--elev-1);color:var(--text-2);font-family:var(--f-mono);font-size:9px;letter-spacing:.06em;border-radius:var(--r-sm);padding:3px 7px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:background var(--t-fast),border-color var(--t-fast);}
+.replay:hover{background:var(--pane);border-color:var(--tea);color:var(--text-1);}
+.buildlog ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;}
+.buildlog li{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-2);opacity:0;transform:translateX(-6px);transition:opacity .35s ease,transform .35s var(--ease);}
+.built .buildlog li{opacity:1;transform:none;}
+.built .buildlog li:nth-child(1){transition-delay:.1s;}.built .buildlog li:nth-child(2){transition-delay:.27s;}.built .buildlog li:nth-child(3){transition-delay:.44s;}.built .buildlog li:nth-child(4){transition-delay:.61s;}.built .buildlog li:nth-child(5){transition-delay:.96s;}
+.buildlog li .ck{width:14px;height:14px;border-radius:50%;background:var(--tea);color:#fff;display:grid;place-items:center;flex:0 0 auto;}
+.buildlog li .ck svg{width:9px;height:9px;}
+.buildlog li.live .ck{background:var(--brass);color:var(--accent-ink);}
+@media (max-width:560px){.buildlog{display:none;}}
 
-/* hero visual — stacked product surfaces, pure CSS */
-.stage{position:relative;aspect-ratio:5/5.3;}
-.glow{position:absolute;border-radius:50%;filter:blur(34px);opacity:.5;z-index:0;}
-.glow.g1{width:55%;height:55%;left:-6%;top:-4%;background:radial-gradient(circle,var(--tea),transparent 70%);}
-.glow.g2{width:50%;height:50%;right:-4%;bottom:-2%;background:radial-gradient(circle,var(--brass),transparent 70%);opacity:.4;}
-.surface{position:absolute;background:var(--bg-pane);border:1px solid rgba(0,0,0,.06);box-shadow:var(--sh-3);overflow:hidden;}
-.surface--phone{width:48%;left:5%;top:3%;aspect-ratio:9/19;border-radius:26px;padding:8px;z-index:3;background:#0e1115;border:1px solid #2a3038;}
-.phone__screen{position:relative;height:100%;border-radius:19px;overflow:hidden;background:var(--bg-elev-1);display:flex;flex-direction:column;}
-.phone__live{flex:1;width:100%;height:100%;border:0;display:block;background:#F2E7DF;}
-.phone__livepill{position:absolute;top:9px;right:9px;z-index:2;display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:999px;background:rgba(14,17,21,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:#fff;font-family:var(--f-mono);font-size:8px;letter-spacing:.12em;pointer-events:none;}
-.phone__livepill i{width:6px;height:6px;border-radius:50%;background:var(--tea-hi);box-shadow:0 0 0 0 rgba(123,160,127,.6);animation:livepulse 2.2s ease-out infinite;}
-@keyframes livepulse{0%{box-shadow:0 0 0 0 rgba(123,160,127,.55);}70%{box-shadow:0 0 0 7px rgba(123,160,127,0);}100%{box-shadow:0 0 0 0 rgba(123,160,127,0);}}
-.surface--phone:hover{animation-play-state:paused;}
-@media (hover:none){.phone__live{pointer-events:none;}}
-.surface--dash{width:60%;right:0;bottom:2%;border-radius:var(--r-xl);padding:14px;z-index:2;}
-.dash__top{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
-.dash__dotrow{display:flex;gap:5px;}
-.dash__dotrow i{width:8px;height:8px;border-radius:50%;background:var(--line);display:block;}
-.dash__title{font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.1em;font-size:10px;color:var(--text-3);margin-left:4px;}
-.dash__stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-bottom:12px;}
-.dash__stat{background:var(--bg-elev-1);border-radius:var(--r-lg);padding:10px;border:1px solid var(--line-soft);}
-.dash__stat b{font-family:var(--f-sans);font-weight:500;font-size:22px;color:var(--text-1);display:block;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em;}
-.dash__stat span{font-family:var(--f-mono);font-size:9px;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;}
-.dash__chart{height:70px;display:flex;align-items:flex-end;gap:6px;padding:8px;background:var(--bg-elev-1);border-radius:var(--r-lg);border:1px solid var(--line-soft);}
-.dash__chart i{flex:1;background:var(--tea);border-radius:3px 3px 0 0;display:block;}
-.dash__chart i:last-child{background:var(--brass);}
-
-/* ---------- trust marquee ---------- */
-.trust{padding:22px 0;border-bottom:1px solid var(--line);background:var(--bg-elev-1);overflow:hidden;}
-.marquee{display:flex;width:max-content;animation:slide 32s linear infinite;}
-.marquee__g{display:flex;gap:44px;padding-right:44px;}
-.marquee span{font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.08em;font-size:14px;color:var(--text-3);white-space:nowrap;display:inline-flex;align-items:center;gap:13px;}
+/* ---------- trust strip ---------- */
+.trust{padding:20px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);overflow:hidden;background:linear-gradient(180deg,var(--paper-2),var(--paper));}
+.marquee{display:flex;width:max-content;animation:slide 34s linear infinite;}
+.marquee__g{display:flex;gap:42px;padding-right:42px;}
+.marquee span{font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.08em;font-size:13px;color:var(--text-3);white-space:nowrap;display:inline-flex;align-items:center;gap:12px;}
 .marquee span::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--tea);}
 @keyframes slide{to{transform:translateX(-50%);}}
 .trust:hover .marquee{animation-play-state:paused;}
 
-/* ---------- section frame ---------- */
-section{padding:84px 0;}
-.sec-head{max-width:660px;margin-bottom:46px;}
-.sec-head h2{font-size:clamp(30px,4.4vw,50px);margin-top:14px;font-weight:700;letter-spacing:-.028em;}
-.sec-head p{margin-top:16px;font-size:18px;color:var(--text-2);}
+/* ---------- scroll-told scenes ---------- */
+.scene{padding:92px 0;}
+.scene__grid{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;}
+.scene--flip .scene__copy{order:2;}
+.scene__copy .idx{display:block;margin-bottom:14px;}
+.scene__copy h2{font-size:clamp(28px,4vw,44px);margin-top:12px;font-weight:700;}
+.scene__copy p{margin-top:16px;font-size:17.5px;color:var(--text-2);max-width:46ch;}
+.scene__list{margin:22px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:11px;}
+.scene__list li{display:flex;gap:11px;font-size:15.5px;color:var(--text-2);align-items:flex-start;}
+.scene__list svg{width:19px;height:19px;color:var(--tea);flex:0 0 auto;margin-top:1px;}
+.scene__cta{margin-top:26px;}
+/* demo panel shell */
+.demo{position:relative;background:var(--pane);border:1px solid var(--line);border-radius:var(--r-2xl);box-shadow:var(--lift);padding:22px;overflow:hidden;}
+.demo::after{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(18,22,26,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(18,22,26,.02) 1px,transparent 1px);background-size:28px 28px;opacity:.7;}
+.demo__hd{display:flex;align-items:center;gap:8px;margin-bottom:16px;position:relative;z-index:1;}
+.demo__dots{display:flex;gap:5px;}.demo__dots i{width:9px;height:9px;border-radius:50%;background:var(--line);}
+.demo__ttl{font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.1em;font-size:10px;color:var(--text-3);}
+.demo__live{margin-left:auto;font-family:var(--f-mono);font-size:9px;letter-spacing:.1em;color:var(--tea-deep);display:flex;align-items:center;gap:5px;}
+.demo__live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--tea);}
+.demo__body{position:relative;z-index:1;}
 
-/* ---------- features ---------- */
-.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
-.feat{
-  background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-xl);padding:26px;
-  box-shadow:var(--lift);transition:transform var(--t-med) var(--ease),box-shadow var(--t-med) var(--ease);
-}
-.feat:hover{transform:translateY(-3px);box-shadow:var(--sh-2);}
-.feat__ic{width:46px;height:46px;border-radius:var(--r-lg);display:grid;place-items:center;background:var(--bg-elev-1);margin-bottom:16px;border:1px solid var(--line-soft);transition:background var(--t-med),border-color var(--t-med);}
-.feat__ic svg{width:23px;height:23px;color:var(--tea);stroke-width:1.7;}
-.feat:hover .feat__ic{background:rgba(107,142,111,.12);border-color:rgba(107,142,111,.3);}
-.feat h3{font-size:20px;margin-bottom:8px;font-weight:600;}
-.feat p{font-size:15.5px;color:var(--text-2);}
+/* reveal */
+.js .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s var(--ease),transform .7s var(--ease);}
+.js .reveal.in{opacity:1;transform:none;}
 
-/* ---------- payments band (dark) ---------- */
-.band{background:var(--ink);color:var(--on-ink-1);border-radius:var(--r-xl);padding:clamp(32px,5vw,60px);position:relative;overflow:hidden;}
-.band::after{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(232,229,220,.06) 1px,transparent 1.4px);background-size:8px 8px;opacity:.6;pointer-events:none;}
-.band__in{position:relative;display:grid;grid-template-columns:1.1fr .9fr;gap:44px;align-items:center;}
-.band .kicker{color:var(--tea-hi);} .band .kicker::before{background:var(--tea-hi);}
-.band h2{color:#fff;font-size:clamp(27px,3.8vw,44px);margin-top:14px;font-weight:700;letter-spacing:-.028em;}
-.band p{color:var(--on-ink-2);margin-top:18px;font-size:18px;max-width:42ch;}
-.flow{display:flex;flex-direction:column;gap:10px;}
-.flow__row{display:flex;align-items:center;gap:14px;background:var(--ink-1);border:1px solid var(--ink-line);border-radius:var(--r-lg);padding:15px 17px;}
-.flow__row .n{font-family:var(--f-mono);font-weight:600;font-size:15px;width:30px;height:30px;border-radius:50%;background:var(--tea);color:var(--accent-ink);display:grid;place-items:center;flex:0 0 auto;}
-.flow__row.is-bank .n{background:var(--brass);}
-.flow__row b{color:#fff;display:block;font-weight:600;font-size:15.5px;}
-.flow__row span{font-size:13px;color:var(--on-ink-3);font-family:var(--f-mono);letter-spacing:.01em;}
-.flow__arrow{height:12px;display:flex;justify-content:center;}
-.flow__arrow svg{width:15px;height:15px;color:var(--on-ink-3);}
+/* ===== DEMO 1: product editor (fields organize) ===== */
+.pe{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;}
+.pe__col h4{font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);margin:0 0 9px;}
+.pe__raw{display:flex;flex-wrap:wrap;gap:6px;}
+.pe__chip{font-family:var(--f-mono);font-size:11px;color:var(--text-2);background:var(--elev-1);border:1px solid var(--line);border-radius:var(--r-sm);padding:5px 8px;transition:transform .5s var(--spring),opacity .4s ease;}
+.scene.in .pe__chip{transform:translate(0,0);}
+.pe__chip.a{opacity:.5;}
+.pe__tpl{display:flex;flex-direction:column;gap:8px;}
+.pe__row{display:flex;align-items:center;gap:9px;background:var(--elev-1);border:1px solid var(--line);border-radius:var(--r-md);padding:8px 10px;opacity:0;transform:translateX(12px);transition:opacity .5s ease,transform .5s var(--ease);}
+.scene.in .pe__row{opacity:1;transform:none;}
+.scene.in .pe__row:nth-child(1){transition-delay:.5s;}.scene.in .pe__row:nth-child(2){transition-delay:.66s;}.scene.in .pe__row:nth-child(3){transition-delay:.82s;}.scene.in .pe__row:nth-child(4){transition-delay:.98s;}
+.pe__row .k{font-family:var(--f-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-4);width:54px;flex:0 0 auto;}
+.pe__row .v{font-size:12.5px;color:var(--text-1);font-weight:500;}
+.pe__row .v.tea{color:var(--tea-deep);}
+.pe__arrow{display:flex;align-items:center;justify-content:center;color:var(--text-4);}
+.pe__arrow svg{width:20px;height:20px;}
+@media (max-width:520px){.pe{grid-template-columns:1fr;}.pe__arrow{transform:rotate(90deg);}}
 
-/* ---------- stats ---------- */
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;text-align:center;}
-.stat{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-xl);padding:30px 16px;box-shadow:var(--lift);}
-.stat b{font-family:var(--f-sans);font-weight:500;font-size:clamp(38px,5.6vw,58px);color:var(--text-1);line-height:.9;display:block;font-variant-numeric:tabular-nums;letter-spacing:-.03em;}
-.stat b.brass{color:var(--brass);}
-.stat span{font-family:var(--f-mono);color:var(--text-3);font-size:12px;margin-top:10px;display:block;text-transform:uppercase;letter-spacing:.08em;}
-/* Burb-style soft pastel block holding the stats */
-.statspanel{position:relative;overflow:hidden;border-radius:var(--r-xl);border:1px solid rgba(107,142,111,.24);padding:clamp(26px,4vw,46px);background:linear-gradient(180deg,rgba(107,142,111,.16),rgba(107,142,111,.06));}
-.statspanel::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.7;background-image:radial-gradient(rgba(54,83,41,.07) 1px,transparent 1.4px);background-size:8px 8px;}
-.statspanel .stats{position:relative;z-index:1;}
-.statspanel .stat{background:rgba(255,255,255,.72);border-color:rgba(107,142,111,.18);}
+/* ===== DEMO 2: brand restyle (interactive) ===== */
+.shop{--b-accent:#6B8E6F;--b-accent2:#3E5A42;--b-bg:#F4F2EC;display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--b-bg);border-radius:var(--r-lg);padding:10px;transition:background .5s ease;}
+.shop__hero{grid-column:1/-1;height:60px;border-radius:var(--r-md);background:linear-gradient(135deg,var(--b-accent),var(--b-accent2));display:flex;align-items:flex-end;padding:8px;transition:background .5s ease;}
+.shop__hero b{font-size:12px;color:#fff;font-weight:600;}
+.shop__cell{background:var(--pane);border:1px solid var(--line);border-radius:var(--r-md);padding:7px;display:flex;flex-direction:column;gap:5px;}
+.shop__cell .img{height:30px;border-radius:var(--r-sm);background:color-mix(in srgb,var(--b-accent) 18%,var(--elev-2));transition:background .5s ease;}
+.shop__cell .ln{height:6px;border-radius:3px;background:var(--elev-2);}
+.shop__cell .ln.s{width:50%;}
+.shop__cell .pr{font-family:var(--f-mono);font-size:9px;font-weight:600;color:var(--b-accent2);transition:color .5s ease;}
+.swatches{display:flex;gap:9px;margin-top:16px;flex-wrap:wrap;}
+.swatch{appearance:none;cursor:pointer;border:1px solid var(--line);background:var(--pane);border-radius:var(--r-md);padding:7px 11px 7px 8px;display:flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:11px;color:var(--text-2);transition:border-color var(--t-fast),transform var(--t-fast);}
+.swatch:hover{transform:translateY(-2px);}
+.swatch[aria-pressed="true"]{border-color:var(--tea);box-shadow:0 0 0 2px rgba(107,142,111,.25);color:var(--text-1);}
+.swatch .dot{width:16px;height:16px;border-radius:var(--r-sm);flex:0 0 auto;}
 
-/* ---------- how it works ---------- */
-.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;}
-.step__n{font-family:var(--f-mono);font-size:13px;letter-spacing:.12em;color:var(--tea);font-weight:600;}
-.step__line{height:3px;background:var(--line);border-radius:3px;margin:12px 0 16px;position:relative;overflow:hidden;}
-.step__line::after{content:"";position:absolute;inset:0;width:0;background:var(--tea);border-radius:3px;transition:width 1s var(--ease);}
-.reveal-in .step__line::after{width:100%;}
-.step h3{font-size:18.5px;margin-bottom:8px;font-weight:600;}
-.step p{font-size:15px;color:var(--text-2);}
+/* ===== DEMO 3: infra (nodes + flowing pulses) ===== */
+.infra{position:relative;height:230px;}
+.infra svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;}
+.infra .wire{fill:none;stroke:var(--line-strong);stroke-width:1.5;stroke-dasharray:3 6;}
+.infra .flow{fill:none;stroke:var(--tea);stroke-width:2.4;stroke-linecap:round;stroke-dasharray:60 240;stroke-dashoffset:300;}
+.scene.in .infra .flow{animation:dash 2.6s linear infinite;}
+@keyframes dash{to{stroke-dashoffset:0;}}
+.inode{position:absolute;transform:translate(-50%,-50%);background:var(--pane);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-1);padding:9px 11px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-1);font-weight:500;white-space:nowrap;}
+.inode svg{width:15px;height:15px;color:var(--tea);position:static;inset:auto;}
+.inode .live{position:absolute;top:-6px;right:-6px;width:11px;height:11px;border-radius:50%;background:var(--tea);box-shadow:0 0 0 0 rgba(107,142,111,.5);animation:pulse 2.4s ease-out infinite;}
+.uptime{display:inline-flex;align-items:center;gap:8px;margin-top:18px;font-family:var(--f-mono);font-size:12px;color:var(--tea-deep);}
+.uptime b{font-weight:600;}
+
+/* ===== DEMO 4: commerce flow ===== */
+.pay{position:relative;display:flex;flex-direction:column;gap:10px;}
+.pay__row{display:flex;align-items:center;gap:13px;background:var(--elev-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 16px;}
+.pay__row .n{font-family:var(--f-mono);font-weight:600;font-size:14px;width:30px;height:30px;border-radius:50%;background:var(--tea);color:#fff;display:grid;place-items:center;flex:0 0 auto;}
+.pay__row.bank .n{background:var(--brass);color:var(--accent-ink);}
+.pay__row b{display:block;color:var(--text-1);font-weight:600;font-size:15px;}
+.pay__row span{font-size:12.5px;color:var(--text-3);font-family:var(--f-mono);}
+.pay__token{position:absolute;left:14px;top:14px;font-family:var(--f-mono);font-weight:600;font-size:12px;color:var(--accent-ink);background:var(--brass);border-radius:999px;padding:3px 9px;box-shadow:var(--sh-2);z-index:3;}
+.scene.in .pay__token{animation:drop 3.4s var(--ease) infinite;}
+@keyframes drop{0%{transform:translateY(0);opacity:0;}10%{opacity:1;}40%{transform:translateY(60px);}70%{transform:translateY(120px);opacity:1;}85%{opacity:1;}100%{transform:translateY(120px);opacity:0;}}
+.pay__stamp{display:inline-flex;align-items:center;gap:7px;margin-top:16px;font-family:var(--f-mono);font-size:12px;color:var(--brass);border:1px dashed var(--brass);border-radius:999px;padding:6px 12px;}
+
+/* ===== Roots proof (live phone) ===== */
+.proof{background:var(--ink);border-radius:var(--r-2xl);padding:clamp(30px,5vw,56px);position:relative;overflow:hidden;color:var(--on-ink-1);}
+.proof::after{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(232,229,220,.06) 1px,transparent 1.4px);background-size:8px 8px;opacity:.5;pointer-events:none;}
+.proof__grid{position:relative;z-index:1;display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center;}
+.proof .kicker{color:var(--tea-hi);}.proof .kicker::before{background:var(--tea-hi);}
+.proof h2{color:#fff;font-size:clamp(28px,4vw,46px);margin-top:12px;}
+.proof h2 .em{color:var(--brass-hi);}
+.proof p{color:var(--on-ink-2);margin-top:16px;font-size:17.5px;max-width:46ch;}
+.proof__chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:24px;}
+.echip{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:12px;color:var(--on-ink-1);background:var(--ink-pane);border:1px solid var(--ink-line);border-radius:999px;padding:8px 13px;}
+.echip .d{width:7px;height:7px;border-radius:50%;background:var(--tea-hi);}.echip .d.brass{background:var(--brass-hi);}
+.proof__dev{justify-self:center;width:min(280px,80%);aspect-ratio:9/18.6;background:#0e1115;border:1px solid #2a3038;border-radius:30px;padding:9px;box-shadow:var(--sh-3);}
+.js .proof__dev{animation:floaty 8s ease-in-out infinite;}
+.proof__dev:hover{animation-play-state:paused;}
+.proof__scr{position:relative;height:100%;border-radius:22px;overflow:hidden;background:#F2E7DF;}
+.proof__scr iframe{width:100%;height:100%;border:0;display:block;background:#F2E7DF;}
+@media (hover:none){.proof__scr iframe{pointer-events:none;}}
+
+/* ---------- paired band: bilingual + fast ---------- */
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.pcard{background:var(--pane);border:1px solid var(--line);border-radius:var(--r-2xl);padding:28px;box-shadow:var(--lift);}
+.pcard .ic{width:44px;height:44px;border-radius:var(--r-lg);display:grid;place-items:center;background:var(--elev-1);border:1px solid var(--line-soft);margin-bottom:15px;}
+.pcard .ic svg{width:22px;height:22px;color:var(--tea);}
+.pcard h3{font-size:21px;margin-bottom:8px;}
+.pcard p{font-size:15.5px;color:var(--text-2);}
+.flip{margin-top:16px;font-family:var(--f-mono);font-size:13px;color:var(--tea-deep);background:var(--elev-1);border:1px solid var(--line);border-radius:var(--r-md);padding:10px 12px;min-height:42px;display:flex;align-items:center;}
+.flip span{transition:opacity .4s ease;}
+.ship{margin-top:16px;display:flex;flex-direction:column;gap:7px;}
+.ship .row{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--text-2);background:var(--elev-1);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:8px 10px;}
+.ship .row .pill{margin-left:auto;font-family:var(--f-mono);font-size:9.5px;letter-spacing:.04em;padding:3px 8px;border-radius:999px;}
+.ship .pill.tea{color:var(--tea-deep);background:rgba(107,142,111,.16);border:1px solid rgba(107,142,111,.3);}
+.ship .pill.brass{color:#6b521f;background:rgba(176,141,74,.18);border:1px solid rgba(176,141,74,.34);}
 
 /* ---------- pricing ---------- */
-.price{display:grid;grid-template-columns:1.1fr .9fr;gap:20px;align-items:stretch;}
-.price__card{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-xl);padding:clamp(26px,4vw,42px);box-shadow:var(--lift);}
+.sec-head{max-width:680px;margin:0 auto 48px;text-align:center;}
+.sec-head h2{font-size:clamp(30px,4.4vw,50px);margin-top:14px;font-weight:700;}
+.sec-head p{margin-top:16px;font-size:18px;color:var(--text-2);}
+.sec-head .kicker{justify-content:center;}
+.price{display:grid;grid-template-columns:1.1fr .9fr;gap:20px;align-items:stretch;max-width:920px;margin-inline:auto;}
+.price__card{background:var(--pane);border:1px solid var(--line);border-radius:var(--r-2xl);padding:clamp(26px,4vw,40px);box-shadow:var(--lift);}
 .price__card.feature{border-color:var(--brass);box-shadow:0 0 0 1px var(--brass),var(--sh-2);}
 .price__tag{font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.1em;font-size:12px;color:var(--text-3);font-weight:500;}
-.price__amt{font-family:var(--f-sans);font-weight:600;font-size:clamp(30px,4.4vw,44px);color:var(--text-1);margin:8px 0 2px;letter-spacing:-.02em;}
-.price__amt small{font-size:16px;color:var(--text-3);font-weight:400;}
+.price__amt{font-weight:700;font-size:clamp(28px,4vw,40px);color:var(--text-1);margin:8px 0 2px;letter-spacing:-.02em;}
+.price__amt small{font-size:15px;color:var(--text-3);font-weight:400;}
 .price__note{color:var(--text-2);margin-bottom:20px;}
 .price ul{list-style:none;margin:0 0 24px;padding:0;display:flex;flex-direction:column;gap:11px;}
 .price li{display:flex;gap:11px;font-size:15.5px;align-items:flex-start;color:var(--text-2);}
 .price li svg{width:19px;height:19px;color:var(--tea);flex:0 0 auto;margin-top:1px;}
 
-/* ---------- CTA / form ---------- */
-.cta{padding-bottom:96px;}
-.cta__card{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-xl);overflow:hidden;display:grid;grid-template-columns:1fr 1fr;box-shadow:var(--sh-2);}
-.cta__left{padding:clamp(30px,4vw,52px);background:var(--bg-elev-1);}
-.cta__left h2{font-size:clamp(27px,3.4vw,40px);font-weight:600;}
-.cta__left p{margin-top:16px;color:var(--text-2);font-size:17px;}
-.cta__points{margin-top:24px;display:flex;flex-direction:column;gap:12px;}
+/* ---------- CTA form ---------- */
+.cta__card{background:var(--pane);border:1px solid var(--line);border-radius:var(--r-2xl);overflow:hidden;display:grid;grid-template-columns:1fr 1fr;box-shadow:var(--sh-2);max-width:980px;margin-inline:auto;}
+.cta__left{padding:clamp(30px,4vw,48px);background:var(--elev-1);}
+.cta__left h2{font-size:clamp(26px,3.2vw,38px);}
+.cta__left p{margin-top:14px;color:var(--text-2);font-size:16.5px;}
+.cta__points{margin-top:22px;display:flex;flex-direction:column;gap:11px;}
 .cta__points div{display:flex;gap:11px;align-items:center;color:var(--text-2);font-size:15px;}
 .cta__points svg{width:18px;height:18px;color:var(--tea);flex:0 0 auto;}
-form{padding:clamp(30px,4vw,52px);display:flex;flex-direction:column;gap:15px;}
+form{padding:clamp(30px,4vw,48px);display:flex;flex-direction:column;gap:15px;}
 .field{display:flex;flex-direction:column;gap:6px;}
-.field label{font-size:13px;font-weight:600;color:var(--text-1);font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.06em;}
+.field label{font-size:12.5px;font-weight:600;color:var(--text-1);font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.06em;}
 .field label .req{color:var(--brass);}
-.field input,.field textarea,.field select{
-  font-family:var(--f-sans);font-size:16px;color:var(--text-1);
-  background:var(--bg-app);border:1px solid var(--line);border-radius:var(--r-md);
-  padding:12px 13px;min-height:48px;transition:border-color var(--t-fast),box-shadow var(--t-fast);width:100%;
-}
-.field textarea{min-height:94px;resize:vertical;}
-.field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--tea);box-shadow:0 0 0 3px rgba(107,142,111,.35);}
+.field input,.field textarea,.field select{font-family:var(--f-sans);font-size:16px;color:var(--text-1);background:var(--paper);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 13px;min-height:48px;transition:border-color var(--t-fast),box-shadow var(--t-fast);width:100%;}
+.field textarea{min-height:92px;resize:vertical;}
+.field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--tea);box-shadow:0 0 0 3px rgba(107,142,111,.3);}
 .field .err{font-size:13px;color:var(--danger);display:none;}
 .field.invalid input,.field.invalid textarea,.field.invalid select{border-color:var(--danger);}
 .field.invalid .err{display:block;}
@@ -306,11 +320,10 @@ form{padding:clamp(30px,4vw,52px);display:flex;flex-direction:column;gap:15px;}
 .form__ok svg{width:20px;height:20px;color:var(--tea);flex:0 0 auto;}
 .form__ok.show{display:flex;}
 
-/* ---------- footer (dark) ---------- */
-footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--ink-line);padding:54px 0 40px;}
+/* ---------- footer ---------- */
+footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--ink-line);padding:54px 0 40px;margin-top:40px;}
 .foot{display:flex;flex-wrap:wrap;gap:24px;justify-content:space-between;align-items:flex-start;}
-.foot__brand{max-width:300px;}
-.foot__brand .brand{color:#fff;}
+.foot__brand{max-width:300px;}.foot__brand .brand{color:#fff;}
 .foot__brand p{margin-top:12px;color:var(--on-ink-3);font-size:14.5px;}
 .foot__cols{display:flex;gap:54px;flex-wrap:wrap;}
 .foot__col h4{font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.1em;font-size:12px;color:var(--on-ink-3);margin:0 0 12px;font-weight:500;}
@@ -318,199 +331,26 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
 .foot__col a:hover{color:var(--tea-hi);}
 .foot__bot{margin-top:40px;padding-top:20px;border-top:1px solid var(--ink-line);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;color:var(--on-ink-3);font-size:13px;font-family:var(--f-mono);letter-spacing:.02em;}
 
-/* ---------- reveal animation ---------- */
-.js .reveal{opacity:0;transform:translateY(20px);transition:opacity .65s var(--ease),transform .65s var(--ease);}
-.js .reveal.reveal-in{opacity:1;transform:none;}
-.js .stagger>*{opacity:0;transform:translateY(16px);}
-.js .stagger.reveal-in>*{opacity:1;transform:none;transition:opacity .55s var(--ease),transform .55s var(--ease);}
-.js .stagger.reveal-in>*:nth-child(1){transition-delay:.02s;}
-.js .stagger.reveal-in>*:nth-child(2){transition-delay:.07s;}
-.js .stagger.reveal-in>*:nth-child(3){transition-delay:.12s;}
-.js .stagger.reveal-in>*:nth-child(4){transition-delay:.17s;}
-.js .stagger.reveal-in>*:nth-child(5){transition-delay:.22s;}
-.js .stagger.reveal-in>*:nth-child(6){transition-delay:.27s;}
-
-/* hero on-load entrance */
-.js .hero .anim{opacity:0;transform:translateY(18px);animation:rise .8s var(--ease) forwards;}
-.js .hero .anim.d1{animation-delay:.04s;} .js .hero .anim.d2{animation-delay:.14s;}
-.js .hero .anim.d3{animation-delay:.24s;} .js .hero .anim.d4{animation-delay:.34s;}
-.js .hero .stage{opacity:0;animation:fadeScale 1s var(--ease) .22s forwards;}
-@keyframes rise{to{opacity:1;transform:none;}}
-@keyframes fadeScale{from{opacity:0;transform:translateY(20px) scale(.98);}to{opacity:1;transform:none;}}
-@keyframes floaty{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
-.js .surface--phone{animation:floaty 7s ease-in-out infinite;}
-.js .surface--dash{animation:floaty 7s ease-in-out infinite .8s;}
-.js .glow{animation:floaty 9s ease-in-out infinite;}
-.js .cf1{animation:floaty 6.5s ease-in-out infinite;}
-.js .cf2{animation:floaty 7.5s ease-in-out infinite .6s;}
-.js .cf3{animation:floaty 6s ease-in-out infinite 1s;}
-
-/* ===== inline headline chip (Burb accent, on-brand SVG not emoji) ===== */
-.ichip{display:inline-grid;place-items:center;width:.96em;height:.96em;border-radius:var(--r-sm);vertical-align:-.12em;margin:0 .04em;}
-.ichip svg{width:.6em;height:.6em;}
-.ichip.tea{background:var(--tea);color:#fff;}
-.ichip.brass{background:var(--brass);color:var(--accent-ink);}
-
-/* ===== floating hero chips (the 'alive' product fragments) ===== */
-.chip-float{position:absolute;z-index:4;display:flex;align-items:center;gap:9px;background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-2);padding:9px 12px;}
-.chip-float b{display:block;font-size:12.5px;color:var(--text-1);font-weight:600;line-height:1.15;}
-.chip-float .sub{font-size:10px;color:var(--text-3);font-family:var(--f-mono);letter-spacing:.02em;}
-.chip-float .ck{width:22px;height:22px;border-radius:50%;background:var(--tea);color:#fff;display:grid;place-items:center;flex:0 0 auto;}
-.chip-float .ck.brass{background:var(--brass);color:var(--accent-ink);}
-.chip-float .ck svg{width:13px;height:13px;}
-.cf1{left:-9%;top:24%;} .cf2{right:-7%;top:58%;} .cf3{left:-4%;bottom:6%;}
-
-/* ===== mini product UI (inside bento + path nodes) ===== */
-.av{width:24px;height:24px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-family:var(--f-sans);font-weight:600;font-size:10px;color:#fff;background:linear-gradient(135deg,var(--tea),var(--tea-hi));}
-.av.b{background:linear-gradient(135deg,var(--brass),var(--brass-hi));color:var(--accent-ink);}
-.av.c{background:linear-gradient(135deg,#5f7e8a,#86a6b0);}
-.av.s{width:20px;height:20px;font-size:9px;}
-.avstack{display:flex;align-items:center;}
-.avstack .av{margin-left:-7px;box-shadow:0 0 0 2px var(--bg-pane);}
-.avstack .av:first-child{margin-left:0;}
-.avstack .more{margin-left:8px;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:11px;color:var(--text-3);}
-.mui{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);padding:11px;display:flex;flex-direction:column;gap:9px;box-shadow:var(--sh-1);}
-.mui__hd{display:flex;align-items:center;gap:7px;}
-.mui__hd .ttl{font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.09em;font-size:9.5px;color:var(--text-3);}
-.mui__hd .live{margin-left:auto;font-family:var(--f-mono);font-size:8.5px;letter-spacing:.08em;color:var(--tea);display:flex;align-items:center;gap:5px;}
-.mui__hd .live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--tea);}
-.mrow{display:flex;align-items:center;gap:9px;}
-.mrow .nm{font-weight:600;color:var(--text-1);font-size:12.5px;line-height:1.2;}
-.mrow .ro{font-size:10px;color:var(--text-3);font-family:var(--f-mono);}
-.mrow .val{margin-left:auto;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--text-2);}
-.pill{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-mono);font-size:10px;letter-spacing:.03em;padding:4px 9px;border-radius:999px;border:1px solid var(--line);color:var(--text-2);background:var(--bg-elev-1);}
-.pill.tea{color:#3e5a42;background:rgba(107,142,111,.16);border-color:rgba(107,142,111,.32);}
-.pill.brass{color:#6b521f;background:rgba(176,141,74,.18);border-color:rgba(176,141,74,.36);}
-.pill svg{width:11px;height:11px;}
-.crow{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--text-2);background:var(--bg-elev-1);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:8px 10px;}
-.crow .ck{width:17px;height:17px;border-radius:50%;background:var(--tea);color:#fff;display:grid;place-items:center;flex:0 0 auto;}
-.crow .ck svg{width:10px;height:10px;}
-.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
-.tiles i{aspect-ratio:1;border-radius:var(--r-sm);background:var(--bg-elev-1);border:1px solid var(--line-soft);display:block;}
-.tiles i.on{background:rgba(107,142,111,.22);border-color:rgba(107,142,111,.4);}
-.tiles i.brass{background:rgba(176,141,74,.22);border-color:rgba(176,141,74,.4);}
-.bars{display:flex;align-items:flex-end;gap:5px;height:48px;}
-.bars i{flex:1;background:var(--tea);border-radius:2px 2px 0 0;opacity:.78;display:block;}
-.bars i.b{background:var(--brass);opacity:1;}
-.blocks{display:flex;flex-direction:column;gap:6px;}
-.blocks i{height:11px;border-radius:var(--r-sm);background:var(--bg-elev-2);display:block;}
-.blocks i.w70{width:70%;} .blocks i.w50{width:50%;} .blocks i.tea{background:rgba(107,142,111,.3);}
-
-/* ===== bento platform grid ===== */
-.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;align-items:stretch;}
-.bcard{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-xl);padding:24px;box-shadow:var(--lift);transition:transform var(--t-med) var(--ease),box-shadow var(--t-med) var(--ease);display:flex;flex-direction:column;gap:15px;overflow:hidden;}
-.bcard:hover{transform:translateY(-3px);box-shadow:var(--sh-2);}
-.bcard .feat__ic{margin:0;}
-.bcard h3{font-size:19px;font-weight:600;}
-.bcard p{font-size:15px;color:var(--text-2);}
-.bcard .mui-wrap{margin-top:auto;}
-.b-2{grid-column:span 2;} .b-3{grid-column:span 3;} .b-4{grid-column:span 4;}
-.bcard.ink{background:var(--ink);color:var(--on-ink-1);border-color:var(--ink-line);position:relative;}
-.bcard.ink::after{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(232,229,220,.06) 1px,transparent 1.4px);background-size:8px 8px;opacity:.6;pointer-events:none;}
-.bcard.ink h3{color:#fff;} .bcard.ink p{color:var(--on-ink-2);}
-.bcard.ink .feat__ic{background:var(--ink-1);border-color:var(--ink-line);}
-.bcard.ink .feat__ic svg{color:var(--tea-hi);}
-.bcard.ink>*{position:relative;z-index:1;}
-
-/* ===== winding path: how it works ===== */
-.path{position:relative;margin-top:14px;}
-.path__svg{position:absolute;left:0;right:0;top:8%;height:84%;width:100%;overflow:visible;pointer-events:none;z-index:0;}
-.path__svg .base{fill:none;stroke:var(--line-strong);stroke-width:2;stroke-dasharray:2 9;stroke-linecap:round;vector-effect:non-scaling-stroke;}
-.path__svg .draw{fill:none;stroke:var(--tea);stroke-width:3;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;vector-effect:non-scaling-stroke;transition:stroke-dashoffset 2.6s var(--ease);}
-.reveal-in .path__svg .draw{stroke-dashoffset:0;}
-.path__row{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;position:relative;z-index:1;align-items:start;}
-.path__row .pnode:nth-child(1){transform:translateY(0);}
-.path__row .pnode:nth-child(2){transform:translateY(34px);}
-.path__row .pnode:nth-child(3){transform:translateY(6px);}
-.path__row .pnode:nth-child(4){transform:translateY(40px);}
-.pnode{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-xl);padding:20px;box-shadow:var(--lift);display:flex;flex-direction:column;gap:11px;}
-.pnode__n{width:34px;height:34px;border-radius:50%;background:var(--tea);color:#fff;font-family:var(--f-mono);font-weight:600;font-size:14px;display:grid;place-items:center;font-variant-numeric:tabular-nums;}
-.pnode:last-child .pnode__n{background:var(--brass);color:var(--accent-ink);}
-.pnode h3{font-size:17.5px;font-weight:600;}
-.pnode p{font-size:14px;color:var(--text-2);}
-
-/* ===== pastel highlight wall (Burb 'customers' block, made truthful) ===== */
-.pastel{position:relative;overflow:hidden;border-radius:var(--r-xl);border:1px solid rgba(107,142,111,.24);padding:clamp(28px,4.5vw,56px);background:linear-gradient(180deg,rgba(107,142,111,.18),rgba(107,142,111,.06));}
-.pastel::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.7;background-image:radial-gradient(rgba(54,83,41,.07) 1px,transparent 1.4px);background-size:8px 8px;}
-.pastel__in{position:relative;z-index:1;}
-.pastel .sec-head h2{color:var(--text-1);}
-.wall{columns:3 230px;column-gap:14px;margin-top:8px;}
-.wcard{break-inside:avoid;margin-bottom:14px;background:rgba(255,255,255,.8);border:1px solid rgba(107,142,111,.2);border-radius:var(--r-lg);padding:18px;box-shadow:var(--sh-1);}
-.wcard .chip{width:34px;height:34px;border-radius:var(--r-md);display:grid;place-items:center;background:rgba(107,142,111,.16);border:1px solid rgba(107,142,111,.3);margin-bottom:12px;}
-.wcard .chip svg{width:17px;height:17px;color:var(--tea);stroke-width:1.8;}
-.wcard .chip.brass{background:rgba(176,141,74,.16);border-color:rgba(176,141,74,.34);}
-.wcard .chip.brass svg{color:var(--brass);}
-.wcard b{display:block;font-size:17px;font-weight:600;color:var(--text-1);margin-bottom:6px;letter-spacing:-.01em;}
-.wcard p{font-size:14px;color:var(--text-2);}
-.wcard .mk{color:#3e5a42;background:rgba(107,142,111,.22);border-radius:4px;padding:0 .18em;white-space:nowrap;}
-.pastel .stats{margin-top:24px;position:relative;z-index:1;}
-.pastel .stat{background:rgba(255,255,255,.74);border-color:rgba(107,142,111,.2);}
-
-/* ===== ecosystem band (big display headline) ===== */
-.eco{background:var(--ink);color:var(--on-ink-1);border-radius:var(--r-xl);padding:clamp(34px,5.5vw,66px);position:relative;overflow:hidden;}
-.eco::after{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(232,229,220,.06) 1px,transparent 1.4px);background-size:8px 8px;opacity:.55;pointer-events:none;}
-.eco__in{position:relative;z-index:1;}
-.eco .kicker{color:var(--tea-hi);} .eco .kicker::before{background:var(--tea-hi);}
-.display{font-size:clamp(32px,5.6vw,62px);font-weight:700;letter-spacing:-.032em;line-height:1.04;color:#fff;margin-top:14px;max-width:18ch;}
-.display .b{color:var(--brass-hi);}
-.eco p{color:var(--on-ink-2);margin-top:18px;font-size:18px;max-width:52ch;}
-.chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px;}
-.echip{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:13px;letter-spacing:.02em;color:var(--on-ink-1);background:var(--ink-1);border:1px solid var(--ink-line-strong);border-radius:999px;padding:9px 15px;transition:border-color var(--t-fast),background var(--t-fast);}
-.echip:hover{border-color:var(--tea-hi);background:var(--ink-2);}
-.echip .d{width:7px;height:7px;border-radius:50%;background:var(--tea-hi);}
-.echip .d.brass{background:var(--brass-hi);}
-
-/* ===== Burb-style outlined display word (stroke, transparent fill) ===== */
-.ol{-webkit-text-fill-color:transparent;-webkit-text-stroke:1.7px var(--tea);color:var(--tea);}
-.ol.b{-webkit-text-stroke-color:var(--brass);color:var(--brass);}
-.hero .ol,.on-ink .ol{-webkit-text-stroke-color:var(--tea-hi);}
-.hero .ol.b,.on-ink .ol.b{-webkit-text-stroke-color:var(--brass-hi);}
-@supports not ((-webkit-text-stroke:1px black)){.ol{-webkit-text-fill-color:currentColor;color:var(--tea);}.ol.b{color:var(--brass);}}
-
-/* ===== Burb-style halftone divider strips (full-bleed, dotted) ===== */
-.divider{height:44px;width:100%;position:relative;z-index:1;
-  background:
-    radial-gradient(var(--ddot,rgba(18,22,26,.20)) 1.5px,transparent 1.7px) 0 0/12px 12px,
-    radial-gradient(var(--ddot,rgba(18,22,26,.20)) 1.5px,transparent 1.7px) 6px 6px/12px 12px;
-  -webkit-mask-image:linear-gradient(90deg,transparent,#000 14%,#000 86%,transparent);
-          mask-image:linear-gradient(90deg,transparent,#000 14%,#000 86%,transparent);
-}
-.divider.tea{--ddot:rgba(107,142,111,.55);}
-.divider.brass{--ddot:rgba(176,141,74,.5);}
-
 /* ---------- responsive ---------- */
 @media (max-width:980px){
-  .hero__grid{grid-template-columns:1fr;gap:30px;}
-  .stage{max-width:300px;margin-inline:auto;width:100%;aspect-ratio:9/19;}
-  .surface--phone{position:relative;width:100%;left:0;top:0;}
-  .surface--dash,.chip-float{display:none;}
-  .band__in,.price,.cta__card{grid-template-columns:1fr;}
-  .bento{grid-template-columns:repeat(2,1fr);}
-  .bento .bcard{grid-column:auto;}
-  .path__svg{display:none;}
-  .path__row{grid-template-columns:1fr 1fr;gap:16px;}
-  .path__row .pnode{transform:none!important;}
-  .stats{grid-template-columns:1fr 1fr;}
+  .hero__in,.scene__grid,.proof__grid,.cta__card,.price,.pair{grid-template-columns:1fr;}
+  .hero{padding:44px 0 30px;}
+  .scene__copy{order:-1!important;}
+  .stage{max-width:330px;margin-inline:auto;aspect-ratio:auto;}
   .cta__left{order:-1;}
+  .proof__dev{margin-top:8px;}
 }
 @media (max-width:560px){
   body{font-size:16px;}
-  section{padding:58px 0;}
-  .bento,.path__row,.stats,.row2{grid-template-columns:1fr;}
-  .wall{columns:1;}
-  .hero{padding:48px 0 36px;}
+  .scene{padding:60px 0;}
   .nav__cta .btn-primary{display:none;}
-  .stage{max-width:310px;}
-  .chip-float{display:none;}
-  .blobs{opacity:.6;filter:saturate(.95);}
+  .infra{height:280px;}
 }
 @media (prefers-reduced-motion:reduce){
   *{animation:none!important;transition:none!important;}
-  .js .reveal,.js .stagger>*,.js .hero .anim,.js .hero .stage{opacity:1!important;transform:none!important;}
-  .marquee{animation:none!important;}
-  .hero h1 .em::after{transform:scaleX(1)!important;}
-  .hl::before{transform:scaleX(1)!important;}
-  .step__line::after{width:100%!important;}
+  .js .reveal,.js .hero .anim{opacity:1!important;transform:none!important;}
+  .blk,.pe__row,.buildlog li,.sbadge,.livepill{opacity:1!important;transform:none!important;}
+  .hero h1 .hl::before{transform:scaleX(1)!important;}
 }
 </style>
 </head>
@@ -522,15 +362,15 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
     <a class="brand" href="#top" aria-label="Full Circle home">
       <svg class="mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
         <circle cx="16" cy="16" r="12.5" stroke="#12161A" stroke-width="2.5"/>
-        <path d="M16 3.5a12.5 12.5 0 0 1 0 25" stroke="#6B8E6F" stroke-width="2.5" stroke-linecap="round"/>
+        <path class="spin" d="M16 3.5a12.5 12.5 0 0 1 0 25" stroke="#6B8E6F" stroke-width="2.5" stroke-linecap="round"/>
         <circle cx="16" cy="16" r="4" fill="#B08D4A"/>
       </svg>
       <span>Full Circle</span>
     </a>
     <nav class="nav__links" aria-label="Primary">
-      <a href="#block" data-en="The Block" data-zh="Block 系统">The Block</a>
-      <a href="#service" data-en="What we do" data-zh="服务内容">What we do</a>
-      <a href="#how" data-en="How it works" data-zh="如何上线">How it works</a>
+      <a href="#build" data-en="How we build" data-zh="如何搭建">How we build</a>
+      <a href="#run" data-en="What we run" data-zh="运营内容">What we run</a>
+      <a href="#proof" data-en="Proof" data-zh="真实案例">Proof</a>
       <a href="#pricing" data-en="Pricing" data-zh="定价">Pricing</a>
     </nav>
     <div class="nav__cta">
@@ -546,22 +386,19 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
 <main id="top">
 
 <!-- ======================= HERO ======================= -->
-<section class="hero on-ink">
-  <canvas class="mesh" id="meshGl" aria-hidden="true"></canvas>
-  <div class="mesh-veil" aria-hidden="true"></div>
-  <div class="wrap hero__grid">
+<section class="hero">
+  <div class="wrap hero__in">
     <div class="hero__copy">
       <span class="kicker anim d1" data-en="Done-for-you WeChat mini-apps" data-zh="微信小程序 · 全程托管">Done-for-you WeChat mini-apps</span>
       <h1 class="anim d2">
-        <span data-en="Your WeChat mini-app, " data-zh="你的微信小程序，">Your WeChat mini-app, </span><span class="hl" id="hl-draw" data-en="built and run," data-zh="搭建并运营，">built and run,</span>
-        <span class="em ol b" id="em-draw" data-en="full circle." data-zh="全程闭环。">full circle.</span>
+        <span data-en="We build and run your " data-zh="我们搭建并运营你的">We build and run your </span><span class="hl" id="hl-draw" data-en="WeChat mini-app" data-zh="微信小程序">WeChat mini-app</span><span data-en=" — " data-zh="——"> — </span><span class="em" data-en="full circle." data-zh="全程闭环。">full circle.</span>
       </h1>
-      <p class="hero__sub anim d3" data-en="One team designs, builds, hosts and runs it — backend, storage and support included. You get a beautiful storefront; we handle everything behind it." data-zh="一支团队负责设计、搭建、托管与运营——后端、存储、客服全包。你拥有美观的前台，幕后一切交给我们。">One team designs, builds, hosts and runs it — backend, storage and support included. You get a beautiful storefront; we handle everything behind it.</p>
+      <p class="hero__sub anim d3" data-en="One team designs it, builds it, hosts it and keeps it running — backend, storage and support included. You get a beautiful storefront; we handle everything behind it." data-zh="一支团队负责设计、搭建、托管与持续运营——后端、存储、客服全包。你拥有美观的前台，幕后一切交给我们。">One team designs it, builds it, hosts it and keeps it running — backend, storage and support included. You get a beautiful storefront; we handle everything behind it.</p>
       <div class="hero__cta anim d4">
         <a href="#demo" class="btn btn-primary" data-en="Book a demo" data-zh="预约演示">Book a demo
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </a>
-        <a href="#block" class="btn btn-line" data-en="See the Block" data-zh="了解 Block 系统">See the Block</a>
+        <a href="#build" class="btn btn-line" data-en="See how we build" data-zh="看我们如何搭建">See how we build</a>
       </div>
       <div class="hero__assure anim d4">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
@@ -570,47 +407,50 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
     </div>
 
     <div class="stage" aria-hidden="true">
-      <span class="glow g1"></span>
-      <span class="glow g2"></span>
-      <div class="surface surface--phone">
-        <div class="phone__screen">
-          <iframe class="phone__live" id="rootsLive" title="Roots mini-app — live demo" src="/storefront?preview=1&amp;lang=en" loading="lazy" referrerpolicy="no-referrer" scrolling="yes"></iframe>
-          <span class="phone__livepill"><i></i>LIVE · Roots</span>
+      <span class="stage__glow"></span>
+      <span class="stage__glow b"></span>
+      <div class="dev" id="dev">
+        <div class="scr">
+          <span class="livepill"><i></i>LIVE</span>
+          <div class="sbar blk b1"><span>9:41</span><span><i></i><i></i><i></i></span></div>
+          <div class="sbanner blk b2"><span class="sbanner-tag">Your storefront</span></div>
+          <div class="ssearch blk b2"></div>
+          <div class="schips blk b3"><span class="on"></span><span></span><span></span><span></span></div>
+          <div class="sgrid blk b4">
+            <div class="scell"><div class="img"></div><div class="ln"></div><div class="ln s"></div><div class="pr">¥86</div></div>
+            <div class="scell"><div class="img"></div><div class="ln"></div><div class="ln s"></div><div class="pr">¥42</div></div>
+            <div class="scell"><div class="img"></div><div class="ln"></div><div class="ln s"></div><div class="pr">¥58</div></div>
+            <div class="scell"><div class="img"></div><div class="ln"></div><div class="ln s"></div><div class="pr">¥30</div></div>
+          </div>
+          <span class="sbadge">SALE</span>
+          <div class="stabs blk b5"><i class="on"></i><i></i><i></i><i></i></div>
         </div>
       </div>
-      <div class="surface surface--dash">
-        <div class="dash__top"><span class="dash__dotrow"><i></i><i></i><i></i></span><span class="dash__title">Orders · today</span></div>
-        <div class="dash__stats">
-          <div class="dash__stat"><b class="tabnum">284</b><span>orders</span></div>
-          <div class="dash__stat"><b class="tabnum">¥38k</b><span>revenue</span></div>
-          <div class="dash__stat"><b class="tabnum">4.9★</b><span>rating</span></div>
+      <div class="buildlog" id="buildlog">
+        <div class="buildlog__hd"><span data-en="build" data-zh="搭建">build</span>
+          <button type="button" class="replay" id="replay" aria-label="Replay build animation">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="9" height="9"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+            <span data-en="replay" data-zh="重播">replay</span>
+          </button>
         </div>
-        <div class="dash__chart"><i style="height:40%"></i><i style="height:62%"></i><i style="height:48%"></i><i style="height:80%"></i><i style="height:58%"></i><i style="height:92%"></i><i style="height:70%"></i></div>
-      </div>
-
-      <div class="chip-float cf1">
-        <span class="av b s">¥</span>
-        <div><b class="tabnum">New order · ¥86</b><span class="sub" data-en="just now" data-zh="刚刚">just now</span></div>
-      </div>
-      <div class="chip-float cf2">
-        <span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>
-        <div><b data-en="Built &amp; launched" data-zh="已搭建并上线">Built &amp; launched</b><span class="sub" data-en="by Full Circle" data-zh="由 Full Circle">by Full Circle</span></div>
-      </div>
-      <div class="chip-float cf3">
-        <span class="avstack"><span class="av s">A</span><span class="av b s">B</span><span class="av c s">C</span></span>
-        <div><b data-en="142 viewing now" data-zh="142 人正在浏览" class="tabnum">142 viewing now</b><span class="sub" data-en="live" data-zh="实时">live</span></div>
+        <ul>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><span data-en="placing storefront blocks" data-zh="放置商城区块">placing storefront blocks</span></li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><span data-en="arranging 24 products" data-zh="编排 24 件商品">arranging 24 products</span></li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><span data-en="wiring WeChat Pay" data-zh="接入微信支付">wiring WeChat Pay</span></li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><span data-en="bilingual EN · 中文" data-zh="中英双语">bilingual EN · 中文</span></li>
+          <li class="live"><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><span data-en="live — we run it" data-zh="已上线——由我们运营">live — we run it</span></li>
+        </ul>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ======================= TRUST MARQUEE ======================= -->
+<!-- ======================= TRUST STRIP ======================= -->
 <div class="trust" aria-hidden="true">
   <div class="marquee" id="marquee">
     <div class="marquee__g">
       <span data-en="Onboarding A–Z" data-zh="全程上线">Onboarding A–Z</span>
       <span data-en="The Block system" data-zh="Block 系统">The Block system</span>
-      <span data-en="Product Editor" data-zh="商品编辑器">Product Editor</span>
       <span data-en="Done-for-you design" data-zh="代客设计">Done-for-you design</span>
       <span data-en="Backend &amp; hosting" data-zh="后端与托管">Backend &amp; hosting</span>
       <span data-en="WeChat Pay · 0%" data-zh="微信支付 · 0% 分账">WeChat Pay · 0%</span>
@@ -620,7 +460,6 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
     <div class="marquee__g">
       <span data-en="Onboarding A–Z" data-zh="全程上线">Onboarding A–Z</span>
       <span data-en="The Block system" data-zh="Block 系统">The Block system</span>
-      <span data-en="Product Editor" data-zh="商品编辑器">Product Editor</span>
       <span data-en="Done-for-you design" data-zh="代客设计">Done-for-you design</span>
       <span data-en="Backend &amp; hosting" data-zh="后端与托管">Backend &amp; hosting</span>
       <span data-en="WeChat Pay · 0%" data-zh="微信支付 · 0% 分账">WeChat Pay · 0%</span>
@@ -630,279 +469,191 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
   </div>
 </div>
 
-<!-- ======================= PLATFORM / FEATURES ======================= -->
-<section id="block">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <span class="kicker" data-en="The Block — what makes us different" data-zh="Block 系统——我们的不同之处">The Block — what makes us different</span>
-      <h2 data-en="Our own system for building mini-apps — fast, and beautifully." data-zh="我们自有的小程序搭建系统——又快又美。">Our own system for building mini-apps — fast, and beautifully.</h2>
-      <p data-en="The Block is how we organize your products, design your storefront and ship changes in a fraction of the usual time. Two editors, a done-for-you design team, and AI doing the heavy lifting." data-zh="Block 是我们整理商品、设计商城、并以远超常规的速度交付改动的方式。两个编辑器、一支代客设计团队，AI 负责繁重的工作。">The Block is how we organize your products, design your storefront and ship changes in a fraction of the usual time. Two editors, a done-for-you design team, and AI doing the heavy lifting.</p>
+<!-- ============ SCENE 1 · PRODUCT EDITOR ============ -->
+<section class="scene reveal" id="build">
+  <div class="wrap scene__grid">
+    <div class="scene__copy">
+      <span class="idx">01 / 05 · <span data-en="The Block" data-zh="Block 系统">The Block</span></span>
+      <span class="kicker" data-en="Product Editor" data-zh="商品编辑器">Product Editor</span>
+      <h2 data-en="Messy product info in. Clean template out." data-zh="杂乱的商品信息进，整洁的模板出。">Messy product info in. Clean template out.</h2>
+      <p data-en="Drop in whatever you have — names, specs, photos, prices in any order. Our AI content organizer arranges it into one consistent template in minutes." data-zh="把你手头的一切都丢进来——名称、规格、照片、价格，顺序随意。我们的 AI 内容整理器几分钟内就将其编排进统一模板。">Drop in whatever you have — names, specs, photos, prices in any order. Our AI content organizer arranges it into one consistent template in minutes.</p>
+      <ul class="scene__list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg><span data-en="One template, every product consistent" data-zh="一套模板，所有商品统一">One template, every product consistent</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg><span data-en="Specs, images, copy and pricing, sorted" data-zh="规格、图片、文案与价格，自动归位">Specs, images, copy and pricing, sorted</span></li>
+      </ul>
     </div>
-    <div class="bento stagger reveal">
-
-      <article class="bcard b-3">
-        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></div>
-        <h3 data-en="Product Editor" data-zh="商品编辑器">Product Editor</h3>
-        <p data-en="Drop in your product information and our AI content organizer arranges it into a clean template in minutes — specs, images, copy, pricing — all consistent." data-zh="录入你的商品信息，我们的 AI 内容整理器几分钟内就将其编排进整洁模板——规格、图片、文案、价格，全部统一。">Drop in your product information and our AI content organizer arranges it into a clean template in minutes — specs, images, copy, pricing — all consistent.</p>
-        <div class="mui-wrap mui">
-          <div class="mui__hd"><span class="ttl">Product · template</span><span class="live" data-en="AI ORGANIZING" data-zh="AI 整理中">AI ORGANIZING</span></div>
-          <div class="blocks"><i class="tea"></i><i class="w70"></i><i class="w50"></i></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill tea">Name</span><span class="pill">Specs</span><span class="pill">Images</span><span class="pill brass">Price</span></div>
+    <div class="demo">
+      <div class="demo__hd"><span class="demo__dots"><i></i><i></i><i></i></span><span class="demo__ttl">Product · template</span><span class="demo__live" data-en="AI ORGANIZING" data-zh="AI 整理中">AI ORGANIZING</span></div>
+      <div class="demo__body pe">
+        <div class="pe__col">
+          <h4 data-en="raw input" data-zh="原始输入">raw input</h4>
+          <div class="pe__raw">
+            <span class="pe__chip">¥86.00</span><span class="pe__chip">Oat Milk</span><span class="pe__chip a">IMG_2381.jpg</span>
+            <span class="pe__chip">1L · barista</span><span class="pe__chip a">in stock</span><span class="pe__chip">plant-based</span>
+            <span class="pe__chip a">DSC_0099.png</span><span class="pe__chip">creamy, no sugar</span>
+          </div>
         </div>
-      </article>
-
-      <article class="bcard b-3">
-        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 21V9"/></svg></div>
-        <h3 data-en="Mini App Editor" data-zh="小程序编辑器">Mini App Editor</h3>
-        <p data-en="Your storefront, built from blocks — hero banners, category tabs, flash sales and editorial layouts, all in your brand colours and fonts. Restyle any time, no redeploy." data-zh="你的商城由区块搭建——主视觉横幅、分类标签、闪购与编排版式，全部套用你的品牌色与字体。随时重排，无需重新部署。">Your storefront, built from blocks — hero banners, category tabs, flash sales and editorial layouts, all in your brand colours and fonts. Restyle any time, no redeploy.</p>
-        <div class="mui-wrap mui">
-          <div class="mui__hd"><span class="ttl">Storefront · draft</span><span class="live" data-en="EDITING" data-zh="编辑中">EDITING</span></div>
-          <div class="blocks"><i class="tea"></i><i class="w70"></i><i></i><i class="w50"></i></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill tea">Hero</span><span class="pill">Grid</span><span class="pill">Spacer</span><span class="pill brass">Sale</span></div>
+        <div class="pe__arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        <div class="pe__col">
+          <h4 data-en="organized template" data-zh="整理后的模板">organized template</h4>
+          <div class="pe__tpl">
+            <div class="pe__row"><span class="k">Name</span><span class="v">Oat Milk · Barista</span></div>
+            <div class="pe__row"><span class="k">Specs</span><span class="v">1L · plant-based · no sugar</span></div>
+            <div class="pe__row"><span class="k">Images</span><span class="v tea">2 sorted</span></div>
+            <div class="pe__row"><span class="k">Price</span><span class="v">¥86.00</span></div>
+          </div>
         </div>
-      </article>
-
-      <article class="bcard ink b-2">
-        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7-4-4-7 7v4z"/><path d="M14 6l4 4M5 19h4"/></svg></div>
-        <h3 data-en="Done-for-you design" data-zh="代客设计">Done-for-you design</h3>
-        <p data-en="Give us your brand identity. We design the product templates and the storefront blocks for you — quick execution, on-brand result." data-zh="把你的品牌识别交给我们。我们为你设计商品模板与商城区块——执行迅速，紧贴品牌。">Give us your brand identity. We design the product templates and the storefront blocks for you — quick execution, on-brand result.</p>
-        <div class="mui-wrap" style="display:flex;flex-direction:column;gap:7px">
-          <span class="crow"><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><span data-en="Your brand identity in" data-zh="提交品牌识别">Your brand identity in</span></span>
-          <span class="crow"><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><span data-en="Product templates designed" data-zh="商品模板已设计">Product templates designed</span></span>
-          <span class="crow"><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><span data-en="Storefront blocks designed" data-zh="商城区块已设计">Storefront blocks designed</span></span>
-        </div>
-      </article>
-
-      <article class="bcard b-2">
-        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="3.2"/></svg></div>
-        <h3 data-en="AI-assisted, end to end" data-zh="AI 全程协助">AI-assisted, end to end</h3>
-        <p data-en="We use modern AI tools to organize content, generate visuals and execute work — so the quality is high and the turnaround is short." data-zh="我们用现代 AI 工具整理内容、生成视觉并执行工作——质量更高，周期更短。">We use modern AI tools to organize content, generate visuals and execute work — so the quality is high and the turnaround is short.</p>
-        <div class="mui-wrap mui">
-          <div class="mui__hd"><span class="ttl">AI · pipeline</span><span class="live" data-en="RUNNING" data-zh="运行中">RUNNING</span></div>
-          <div class="bars"><i style="height:40%"></i><i style="height:66%"></i><i style="height:52%"></i><i class="b" style="height:88%"></i><i style="height:70%"></i><i style="height:94%"></i></div>
-        </div>
-      </article>
-
-      <article class="bcard b-2">
-        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12z"/></svg></div>
-        <h3 data-en="Fast turnaround" data-zh="快速响应">Fast turnaround</h3>
-        <p data-en="Found a bug? Want a tweak or a new feature? It ships fast — our AI tooling lets us execute changes far quicker than a typical agency." data-zh="发现问题？想做调整或加新功能？很快就能上线——AI 工具让我们的执行速度远超一般服务商。">Found a bug? Want a tweak or a new feature? It ships fast — our AI tooling lets us execute changes far quicker than a typical agency.</p>
-        <div class="mui-wrap mui">
-          <div class="mui__hd"><span class="ttl">Requests</span><span class="live" data-en="SHIPPING" data-zh="交付中">SHIPPING</span></div>
-          <div class="mrow"><span class="av s">!</span><div class="nm" data-en="Bug fix" data-zh="问题修复">Bug fix</div><span class="pill tea" style="margin-left:auto" data-en="Shipped" data-zh="已上线">Shipped</span></div>
-          <div class="mrow"><span class="av b s">+</span><div class="nm" data-en="New feature" data-zh="新功能">New feature</div><span class="pill brass" style="margin-left:auto" data-en="In progress" data-zh="进行中">In progress</span></div>
-        </div>
-      </article>
-
+      </div>
     </div>
   </div>
 </section>
 
-<!-- ======================= SERVICE / WHAT WE RUN ======================= -->
-<section id="service" style="padding-top:0;">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <span class="kicker" data-en="What we run for you" data-zh="我们为你运营的一切">What we run for you</span>
-      <h2 data-en="A team that handles the whole mini-app — A to Z." data-zh="一支团队，搞定整个小程序——从 A 到 Z。">A team that handles the whole mini-app — A to Z.</h2>
-      <p data-en="You focus on your business. We onboard you, build it, host it and keep it running — including the parts most teams never want to touch." data-zh="你专注于你的生意。我们负责上线、搭建、托管并持续运营——包括大多数团队都不愿碰的部分。">You focus on your business. We onboard you, build it, host it and keep it running — including the parts most teams never want to touch.</p>
+<!-- ============ SCENE 2 · DESIGN / BRAND RESTYLE ============ -->
+<section class="scene scene--flip reveal" id="design">
+  <div class="wrap scene__grid">
+    <div class="scene__copy">
+      <span class="idx">02 / 05 · <span data-en="The Block" data-zh="Block 系统">The Block</span></span>
+      <span class="kicker" data-en="Mini App Editor · done-for-you design" data-zh="小程序编辑器 · 代客设计">Mini App Editor · done-for-you design</span>
+      <h2 data-en="Your brand, restyled in seconds." data-zh="你的品牌，几秒重塑。">Your brand, restyled in seconds.</h2>
+      <p data-en="Hand us your brand identity. Your whole storefront — hero, grid, badges — takes on your colours and fonts instantly, built from blocks. Try a few looks on the right." data-zh="把品牌识别交给我们。整个商城——主视觉、网格、标签——瞬间套用你的品牌色与字体，全部由区块搭建。在右侧试几种风格。">Hand us your brand identity. Your whole storefront — hero, grid, badges — takes on your colours and fonts instantly, built from blocks. Try a few looks on the right.</p>
+      <ul class="scene__list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg><span data-en="We design the templates and blocks for you" data-zh="模板与区块由我们为你设计">We design the templates and blocks for you</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg><span data-en="Restyle any time — no redeploy" data-zh="随时重排——无需重新部署">Restyle any time — no redeploy</span></li>
+      </ul>
     </div>
-    <div class="feat-grid stagger reveal">
-
-      <article class="feat">
-        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 7l9-4 9 4M5 9v8l7 3 7-3V9"/></svg></div>
-        <h3 data-en="Onboarding, A–Z" data-zh="全程上线">Onboarding, A–Z</h3>
-        <p data-en="We take you from nothing — or from your existing mini-app — all the way to live. You don't need to know how any of it works." data-zh="无论你是从零开始，还是已有小程序，我们都把你一路带到上线。你无需了解其中的技术细节。">We take you from nothing — or from your existing mini-app — all the way to live. You don't need to know how any of it works.</p>
-      </article>
-
-      <article class="feat">
-        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg></div>
-        <h3 data-en="Backend &amp; hosting" data-zh="后端与托管">Backend &amp; hosting</h3>
-        <p data-en="Servers, the operator backend, deployments and uptime are ours to manage. The backend stays clean and easy for your team to use." data-zh="服务器、运营后台、部署与稳定性都由我们打理。后台保持整洁，方便你的团队使用。">Servers, the operator backend, deployments and uptime are ours to manage. The backend stays clean and easy for your team to use.</p>
-      </article>
-
-      <article class="feat">
-        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></div>
-        <h3 data-en="Storage &amp; infrastructure" data-zh="存储与基础设施">Storage &amp; infrastructure</h3>
-        <p data-en="Product images, data and media are stored and served on infrastructure we provide and maintain — scaled as you grow." data-zh="商品图片、数据与媒体由我们提供并维护的基础设施存储和分发——随你的成长而扩展。">Product images, data and media are stored and served on infrastructure we provide and maintain — scaled as you grow.</p>
-      </article>
-
-      <article class="feat">
-        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-        <h3 data-en="Customer service" data-zh="客户支持">Customer service</h3>
-        <p data-en="Ongoing support is part of the subscription. When something needs attention, there's a team that already knows your setup." data-zh="持续的支持包含在订阅中。需要处理问题时，有一支已经熟悉你系统的团队。">Ongoing support is part of the subscription. When something needs attention, there's a team that already knows your setup.</p>
-      </article>
-
-      <article class="feat">
-        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18l-1.5 12.5a2 2 0 0 1-2 1.5H6.5a2 2 0 0 1-2-1.5z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg></div>
-        <h3 data-en="Commerce, included" data-zh="内置电商">Commerce, included</h3>
-        <p data-en="Storefront, order fulfillment and in-store POS come built in, with WeChat Pay integrated — and we take 0% of your sales." data-zh="商城、订单履约与门店收银内置其中，集成微信支付——我们对你的销售额抽成 0%。">Storefront, order fulfillment and in-store POS come built in, with WeChat Pay integrated — and we take 0% of your sales.</p>
-      </article>
-
-      <article class="feat">
-        <div class="feat__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg></div>
-        <h3 data-en="Bilingual by default" data-zh="默认双语">Bilingual by default</h3>
-        <p data-en="Every screen ships in English and 中文 with one toggle. Need another language? We add it on request." data-zh="每个界面都内置中英双语，一键切换。需要其他语言？按需添加。">Every screen ships in English and 中文 with one toggle. Need another language? We add it on request.</p>
-      </article>
-
+    <div class="demo">
+      <div class="demo__hd"><span class="demo__dots"><i></i><i></i><i></i></span><span class="demo__ttl">Storefront · theme</span><span class="demo__live" data-en="EDITING" data-zh="编辑中">EDITING</span></div>
+      <div class="demo__body">
+        <div class="shop" id="shop">
+          <div class="shop__hero"><b data-en="Your storefront" data-zh="你的商城">Your storefront</b></div>
+          <div class="shop__cell"><div class="img"></div><div class="ln"></div><div class="ln s"></div><div class="pr">¥86</div></div>
+          <div class="shop__cell"><div class="img"></div><div class="ln"></div><div class="ln s"></div><div class="pr">¥42</div></div>
+        </div>
+        <div class="swatches" role="group" aria-label="Brand theme">
+          <button type="button" class="swatch" data-pressed="true" data-a="#6B8E6F" data-b="#3E5A42"><span class="dot" style="background:#6B8E6F"></span><span data-en="Tea house" data-zh="茶屋">Tea house</span></button>
+          <button type="button" class="swatch" data-a="#B08D4A" data-b="#6b521f"><span class="dot" style="background:#B08D4A"></span><span data-en="Studio" data-zh="工作室">Studio</span></button>
+          <button type="button" class="swatch" data-a="#5f7e8a" data-b="#33505a"><span class="dot" style="background:#5f7e8a"></span><span data-en="Coastal" data-zh="海岸">Coastal</span></button>
+          <button type="button" class="swatch" data-a="#9a5b6e" data-b="#5f3744"><span class="dot" style="background:#9a5b6e"></span><span data-en="Bloom" data-zh="花studio">Bloom</span></button>
+        </div>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- ======================= COMMERCE BAND ======================= -->
-<section id="payments" style="padding-top:0;">
+<!-- ============ SCENE 3 · WE RUN IT (INFRA) ============ -->
+<section class="scene reveal" id="run">
+  <div class="wrap scene__grid">
+    <div class="scene__copy">
+      <span class="idx">03 / 05 · <span data-en="Operations" data-zh="运营">Operations</span></span>
+      <span class="kicker" data-en="Backend · hosting · storage · support" data-zh="后端 · 托管 · 存储 · 支持">Backend · hosting · storage · support</span>
+      <h2 data-en="We run everything behind the screen." data-zh="屏幕背后的一切，由我们运营。">We run everything behind the screen.</h2>
+      <p data-en="Servers, the operator backend, storage and uptime are ours to manage — with a team that already knows your setup. You never touch infrastructure." data-zh="服务器、运营后台、存储与稳定性都由我们打理——还有一支熟悉你系统的团队。你完全无需碰基础设施。">Servers, the operator backend, storage and uptime are ours to manage — with a team that already knows your setup. You never touch infrastructure.</p>
+      <div class="uptime"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span data-en="Monitored &amp; maintained" data-zh="持续监控与维护">Monitored &amp; maintained</span> · <b class="tabnum">99.9%</b> <span data-en="uptime target" data-zh="可用性目标">uptime target</span></div>
+    </div>
+    <div class="demo">
+      <div class="demo__hd"><span class="demo__dots"><i></i><i></i><i></i></span><span class="demo__ttl">Infrastructure</span><span class="demo__live" data-en="HEALTHY" data-zh="运行正常">HEALTHY</span></div>
+      <div class="demo__body infra">
+        <svg viewBox="0 0 400 220" preserveAspectRatio="none" aria-hidden="true">
+          <path class="wire" d="M70 40 C 160 40 160 110 200 110 C 240 110 240 40 330 40"/>
+          <path class="wire" d="M70 180 C 160 180 160 110 200 110 C 240 110 240 180 330 180"/>
+          <path class="flow" d="M70 40 C 160 40 160 110 200 110 C 240 110 240 180 330 180"/>
+          <path class="flow" style="animation-delay:1.3s" d="M70 180 C 160 180 160 110 200 110 C 240 110 240 40 330 40"/>
+        </svg>
+        <div class="inode" style="left:17%;top:18%"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/></svg><span data-en="Servers" data-zh="服务器">Servers</span></div>
+        <div class="inode" style="left:17%;top:82%"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/></svg><span data-en="Storage" data-zh="存储">Storage</span></div>
+        <div class="inode" style="left:50%;top:50%"><span class="live"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg><span data-en="Your mini-app" data-zh="你的小程序">Your mini-app</span></div>
+        <div class="inode" style="left:83%;top:18%"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span data-en="Support" data-zh="支持">Support</span></div>
+        <div class="inode" style="left:83%;top:82%"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 7l9-4 9 4"/></svg><span data-en="Backend" data-zh="后台">Backend</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCENE 4 · COMMERCE 0% ============ -->
+<section class="scene scene--flip reveal" id="commerce">
+  <div class="wrap scene__grid">
+    <div class="scene__copy">
+      <span class="idx">04 / 05 · <span data-en="Commerce" data-zh="电商">Commerce</span></span>
+      <span class="kicker" data-en="WeChat Pay · 0% of your revenue" data-zh="微信支付 · 收入抽成 0%">WeChat Pay · 0% of your revenue</span>
+      <h2 data-en="Sell from day one. Keep every cent." data-zh="开售即赚，分文不少。">Sell from day one. Keep every cent.</h2>
+      <p data-en="Storefront, fulfillment and in-store POS come built in, with real WeChat Pay. Every sale settles to the merchant account you own — straight to your bank. We take 0%." data-zh="商城、履约与门店收银内置其中，并接入真实微信支付。每笔销售都结算到你自己的商户号——直达你的银行。我们抽成 0%。">Storefront, fulfillment and in-store POS come built in, with real WeChat Pay. Every sale settles to the merchant account you own — straight to your bank. We take 0%.</p>
+      <span class="pay__stamp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg><span data-en="We earn from onboarding &amp; subscription — never your sales" data-zh="我们的收入来自上线费与订阅——绝非你的销售额">We earn from onboarding &amp; subscription — never your sales</span></span>
+    </div>
+    <div class="demo">
+      <div class="demo__hd"><span class="demo__dots"><i></i><i></i><i></i></span><span class="demo__ttl">Settlement</span><span class="demo__live" data-en="SETTLING" data-zh="结算中">SETTLING</span></div>
+      <div class="demo__body pay">
+        <span class="pay__token">¥86</span>
+        <div class="pay__row"><span class="n">1</span><div><b data-en="Shopper pays" data-zh="顾客付款">Shopper pays</b><span data-en="WeChat Pay in the mini-app" data-zh="在小程序内用微信支付">WeChat Pay in the mini-app</span></div></div>
+        <div class="pay__row"><span class="n">2</span><div><b data-en="Your merchant account" data-zh="你的商户号">Your merchant account</b><span data-en="Your own WeChat Pay merchant ID" data-zh="你自己的微信支付商户号">Your own WeChat Pay merchant ID</span></div></div>
+        <div class="pay__row bank"><span class="n">3</span><div><b data-en="Your bank" data-zh="你的银行">Your bank</b><span data-en="Settled directly — 0% to us" data-zh="直接结算——平台抽成 0%">Settled directly — 0% to us</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCENE 5 · ROOTS PROOF (LIVE) ============ -->
+<section class="scene reveal" id="proof">
   <div class="wrap">
-    <div class="band on-ink reveal">
-      <div class="band__in">
+    <div class="proof">
+      <div class="proof__grid">
         <div>
-          <span class="kicker" data-en="Commerce, built in" data-zh="内置电商">Commerce, built in</span>
-          <h2 data-en="Sell from day one — and keep every cent." data-zh="开售即赚——分文不少。">Sell from day one — and keep every cent.</h2>
-          <p data-en="Storefront, fulfillment and POS are part of the build, with real WeChat Pay. Every sale settles to the merchant account you own, straight to your bank. We take 0% of your revenue — we earn from onboarding and the subscription, never your sales." data-zh="商城、履约与收银台都是搭建的一部分，并接入真实微信支付。每笔销售都结算到你自己的商户号，直达你的银行。我们对你的收入抽成 0%——我们的收入来自上线费与订阅，而非你的销售额。">Storefront, fulfillment and POS are part of the build, with real WeChat Pay. Every sale settles to the merchant account you own, straight to your bank. We take 0% of your revenue — we earn from onboarding and the subscription, never your sales.</p>
+          <span class="idx" style="color:var(--on-ink-3)">05 / 05 · <span data-en="Proof, not promises" data-zh="真实案例，而非空谈">Proof, not promises</span></span>
+          <span class="kicker" style="margin-top:14px;display:inline-flex" data-en="Live right now" data-zh="此刻在线">Live right now</span>
+          <h2><span data-en="Roots runs on " data-zh="Roots 正运行在 ">Roots runs on </span><span class="em">Full Circle.</span></h2>
+          <p data-en="This is a real brand, live on our platform — the same mini-app, design system and operator backend we'd build for you. Tap the phone; it's the real thing." data-zh="这是一个真实品牌，已上线在我们的平台上——与我们将为你打造的小程序、设计系统、运营后台完全一致。点一点手机，它是真的。">This is a real brand, live on our platform — the same mini-app, design system and operator backend we'd build for you. Tap the phone; it's the real thing.</p>
+          <div class="proof__chips">
+            <span class="echip"><span class="d"></span>WeChat Mini-App</span>
+            <span class="echip"><span class="d brass"></span><span data-en="The Block" data-zh="Block 系统">The Block</span></span>
+            <span class="echip"><span class="d"></span><span data-en="WeChat Pay · 0%" data-zh="微信支付 · 0% 分账">WeChat Pay · 0%</span></span>
+            <span class="echip"><span class="d brass"></span><span data-en="We run the backend" data-zh="后端由我们运营">We run the backend</span></span>
+          </div>
         </div>
-        <div class="flow">
-          <div class="flow__row"><span class="n">1</span><div><b data-en="Shopper pays" data-zh="顾客付款">Shopper pays</b><span data-en="WeChat Pay in the mini-app" data-zh="在小程序内使用微信支付">WeChat Pay in the mini-app</span></div></div>
-          <div class="flow__arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></div>
-          <div class="flow__row"><span class="n">2</span><div><b data-en="Your merchant account" data-zh="你的商户号">Your merchant account</b><span data-en="Your own WeChat Pay merchant ID" data-zh="你自己的微信支付商户号">Your own WeChat Pay merchant ID</span></div></div>
-          <div class="flow__arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></div>
-          <div class="flow__row is-bank"><span class="n">3</span><div><b data-en="Your bank" data-zh="你的银行">Your bank</b><span data-en="Settled directly — 0% to us" data-zh="直接结算——平台抽成 0%">Settled directly — 0% to us</span></div></div>
+        <div class="proof__dev">
+          <div class="proof__scr">
+            <span class="livepill" style="opacity:1"><i></i>LIVE · Roots</span>
+            <iframe title="Roots mini-app — live demo" src="/storefront?preview=1&amp;lang=en" loading="lazy" referrerpolicy="no-referrer"></iframe>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ======================= STATS ======================= -->
-<section style="padding-top:0;">
-  <div class="wrap">
-    <div class="pastel reveal">
-      <div class="pastel__in">
-        <div class="sec-head" style="margin-bottom:28px;max-width:560px">
-          <span class="kicker" data-en="The short version" data-zh="一句话总结">The short version</span>
-          <h2 data-en="One team, the whole mini-app — nothing left for you to stitch together." data-zh="一支团队，整个小程序——无需你再去拼接任何东西。">One team, the whole mini-app — nothing left for you to stitch together.</h2>
-        </div>
-        <div class="wall stagger reveal">
-          <div class="wcard">
-            <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 7l9-4 9 4M5 9v8l7 3 7-3V9"/></svg></div>
-            <b data-en="A team from A to Z" data-zh="从 A 到 Z 的团队">A team from A to Z</b>
-            <p data-en="People who understand everything it takes to launch and run your mini-app — so you don't have to." data-zh="一群懂得上线与运营小程序所需一切的人——这样你就不必懂。">People who understand everything it takes to launch and run your mini-app — so you don't have to.</p>
-          </div>
-          <div class="wcard">
-            <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg></div>
-            <b data-en="We run it for you" data-zh="我们替你运营">We run it for you</b>
-            <p data-en="Backend, servers, hosting, storage and a team that supports yours — all handled, all part of the subscription." data-zh="后端、服务器、托管、存储，还有一支支持你团队的人马——全部打理，全部包含在订阅中。">Backend, servers, hosting, storage and a team that supports yours — all handled, all part of the subscription.</p>
-          </div>
-          <div class="wcard">
-            <div class="chip brass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12z"/></svg></div>
-            <b data-en="The Block ships fast" data-zh="Block 交付迅速">The Block ships fast</b>
-            <p data-en="Our Product Editor and Mini App Editor, powered by AI, build and change your mini-app in a fraction of the usual time." data-zh="我们由 AI 驱动的商品编辑器与小程序编辑器，以远超常规的速度搭建与修改你的小程序。">Our Product Editor and Mini App Editor, powered by AI, build and change your mini-app in a fraction of the usual time.</p>
-          </div>
-          <div class="wcard">
-            <div class="chip brass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7-4-4-7 7v4z"/><path d="M14 6l4 4M5 19h4"/></svg></div>
-            <b data-en="Design from your brand" data-zh="基于品牌的设计">Design from your brand</b>
-            <p data-en="Hand us your brand identity and we design the product templates and storefront blocks for you, quickly." data-zh="把品牌识别交给我们，我们迅速为你设计商品模板与商城区块。">Hand us your brand identity and we design the product templates and storefront blocks for you, quickly.</p>
-          </div>
-          <div class="wcard">
-            <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg></div>
-            <b data-en="Bilingual, more on request" data-zh="双语，按需扩展">Bilingual, more on request</b>
-            <p data-en="Every screen speaks English and 中文 by default — and we add more languages whenever you need them." data-zh="每个界面默认支持英文与中文——需要时我们随时增加更多语言。">Every screen speaks English and 中文 by default — and we add more languages whenever you need them.</p>
-          </div>
-          <div class="wcard">
-            <div class="chip brass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div>
-            <b data-en="0% of your revenue" data-zh="0% 抽成">0% of your revenue</b>
-            <p data-en="WeChat Pay settles to your own merchant account. We charge onboarding and a subscription — never a cut of your sales." data-zh="微信支付结算到你自己的商户号。我们收取上线费与订阅费——绝不抽取你的销售额。">WeChat Pay settles to your own merchant account. We charge onboarding and a subscription — never a cut of your sales.</p>
-          </div>
-        </div>
-        <div class="stats stagger reveal">
-          <div class="stat"><b>A–Z</b><span data-en="we handle it all" data-zh="全程由我们负责">we handle it all</span></div>
-          <div class="stat"><b class="tabnum" data-count="2">2</b><span data-en="languages, more on request" data-zh="双语，可按需增加">languages, more on request</span></div>
-          <div class="stat"><b class="tabnum brass" data-count="100" data-suffix="%">100%</b><span data-en="of revenue stays yours" data-zh="收入全部归你">of revenue stays yours</span></div>
-          <div class="stat"><b class="tabnum" data-count="0">0</b><span data-en="% we take of sales" data-zh="销售额抽成比例">% we take of sales</span></div>
-        </div>
+<!-- ============ PAIRED BAND · BILINGUAL + FAST ============ -->
+<section class="scene reveal" style="padding-top:0;">
+  <div class="wrap pair">
+    <div class="pcard">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg></div>
+      <h3 data-en="Bilingual by default" data-zh="默认双语">Bilingual by default</h3>
+      <p data-en="Every screen ships in English and 中文 with one toggle. Need another language? We add it on request." data-zh="每个界面都内置中英双语，一键切换。需要其他语言？按需添加。">Every screen ships in English and 中文 with one toggle. Need another language? We add it on request.</p>
+      <div class="flip"><span id="flipText">Add to cart</span></div>
+    </div>
+    <div class="pcard">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12z"/></svg></div>
+      <h3 data-en="Fast turnaround" data-zh="快速响应">Fast turnaround</h3>
+      <p data-en="Found a bug? Want a tweak or a new feature? It ships fast — our AI tooling lets us execute far quicker than a typical agency." data-zh="发现问题？想做调整或加新功能？很快上线——AI 工具让我们的执行速度远超一般服务商。">Found a bug? Want a tweak or a new feature? It ships fast — our AI tooling lets us execute far quicker than a typical agency.</p>
+      <div class="ship">
+        <div class="row"><span data-en="Bug fix" data-zh="问题修复">Bug fix</span><span class="pill tea" data-en="Shipped" data-zh="已上线">Shipped</span></div>
+        <div class="row"><span data-en="New feature" data-zh="新功能">New feature</span><span class="pill brass" data-en="In progress" data-zh="进行中">In progress</span></div>
       </div>
     </div>
   </div>
 </section>
 
-<div class="divider tea" aria-hidden="true"></div>
-
-<!-- ======================= HOW IT WORKS ======================= -->
-<section id="how">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <span class="kicker" data-en="From kickoff to live" data-zh="从启动到上线">From kickoff to live</span>
-      <h2 data-en="Four steps, and we do the heavy lifting." data-zh="四个步骤，繁重的工作由我们完成。">Four steps, and we do the heavy lifting.</h2>
-      <p data-en="You share, we build. Whether you're starting from zero or moving an existing mini-app, the path to live is the same — and we walk it with you." data-zh="你提供，我们搭建。无论从零开始还是迁移现有小程序，上线路径都一致——而且全程有我们陪同。">You share, we build. Whether you're starting from zero or moving an existing mini-app, the path to live is the same — and we walk it with you.</p>
-    </div>
-    <div class="path reveal">
-      <svg class="path__svg" viewBox="0 0 1000 200" fill="none" preserveAspectRatio="none" aria-hidden="true">
-        <path class="base" pathLength="100" d="M40 70 C 180 70 210 150 360 150 C 500 150 540 60 660 66 C 800 73 850 150 960 142"/>
-        <path class="draw" pathLength="100" d="M40 70 C 180 70 210 150 360 150 C 500 150 540 60 660 66 C 800 73 850 150 960 142"/>
-      </svg>
-      <div class="path__row">
-        <div class="pnode">
-          <span class="pnode__n">01</span>
-          <h3 data-en="Share your brand" data-zh="提交你的品牌">Share your brand</h3>
-          <p data-en="Send us your brand identity, your products and your goals. New to mini-apps or migrating an old one — both are fine." data-zh="把你的品牌识别、商品与目标发给我们。无论是初次做小程序还是迁移旧的，都没问题。">Send us your brand identity, your products and your goals. New to mini-apps or migrating an old one — both are fine.</p>
-          <div><span class="pill tea" data-en="Brand · products · goals" data-zh="品牌 · 商品 · 目标">Brand · products · goals</span></div>
-        </div>
-        <div class="pnode">
-          <span class="pnode__n">02</span>
-          <h3 data-en="We build it" data-zh="我们来搭建">We build it</h3>
-          <p data-en="We organize your catalog in the Product Editor and design your storefront with the Block — templates and block designs from your identity." data-zh="我们用商品编辑器整理你的商品，并用 Block 设计你的商城——模板与区块设计皆源自你的品牌识别。">We organize your catalog in the Product Editor and design your storefront with the Block — templates and block designs from your identity.</p>
-          <div><span class="pill brass" data-en="The Block · design" data-zh="Block · 设计">The Block · design</span></div>
-        </div>
-        <div class="pnode">
-          <span class="pnode__n">03</span>
-          <h3 data-en="Connect commerce" data-zh="接入电商">Connect commerce</h3>
-          <p data-en="We wire WeChat Pay to your own merchant account and set up fulfillment and POS — so you're ready to sell." data-zh="我们将微信支付接到你自己的商户号，并配置履约与收银台——让你随时可以开售。">We wire WeChat Pay to your own merchant account and set up fulfillment and POS — so you're ready to sell.</p>
-          <div><span class="pill" data-en="Payments · fulfillment" data-zh="收款 · 履约">Payments · fulfillment</span></div>
-        </div>
-        <div class="pnode">
-          <span class="pnode__n">04</span>
-          <h3 data-en="Launch &amp; we run it" data-zh="上线并由我们运营">Launch &amp; we run it</h3>
-          <p data-en="We publish, host and operate it for you — and ship fixes, tweaks and new features fast whenever you need them." data-zh="我们为你发布、托管并运营——并在你需要时快速交付修复、调整与新功能。">We publish, host and operate it for you — and ship fixes, tweaks and new features fast whenever you need them.</p>
-          <div><span class="pill tea" data-en="Live · we run it" data-zh="上线 · 由我们运营">Live · we run it</span></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ======================= ECOSYSTEM BAND ======================= -->
-<section style="padding-top:0;">
-  <div class="wrap">
-    <div class="eco reveal">
-      <div class="eco__in">
-        <span class="kicker" data-en="Proof, not promises" data-zh="真实案例，而非空谈">Proof, not promises</span>
-        <h2 class="display"><span data-en="See it live —" data-zh="亲眼看看——">See it live —</span> <span class="b" data-en="Roots runs on Full Circle." data-zh="Roots 正运行在 Full Circle 上。">Roots runs on Full Circle.</span></h2>
-        <p data-en="Roots is a real brand operating its storefront and backend on our platform. The same mini-app, design system and operator backend we'd build for you — already live and serving customers. We'll walk you through it in the demo." data-zh="Roots 是一个真实品牌，其商城与后台都运行在我们的平台上。我们将为你打造的同一套小程序、设计系统与运营后台——已经上线并服务着顾客。演示中我们会带你逐一了解。">Roots is a real brand operating its storefront and backend on our platform. The same mini-app, design system and operator backend we'd build for you — already live and serving customers. We'll walk you through it in the demo.</p>
-        <div class="chips">
-          <span class="echip"><span class="d"></span>WeChat Mini-App</span>
-          <span class="echip"><span class="d brass"></span><span data-en="The Block" data-zh="Block 系统">The Block</span></span>
-          <span class="echip"><span class="d"></span><span data-en="Done-for-you design" data-zh="代客设计">Done-for-you design</span></span>
-          <span class="echip"><span class="d"></span><span data-en="WeChat Pay · 0%" data-zh="微信支付 · 0% 分账">WeChat Pay · 0%</span></span>
-          <span class="echip"><span class="d brass"></span><span data-en="We run the backend" data-zh="后端由我们运营">We run the backend</span></span>
-          <span class="echip"><span class="d"></span>Bilingual EN · 中文</span>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<div class="divider brass" aria-hidden="true"></div>
 
 <!-- ======================= PRICING ======================= -->
-<section id="pricing">
+<section class="scene reveal" id="pricing">
   <div class="wrap">
-    <div class="sec-head reveal">
+    <div class="sec-head">
       <span class="kicker" data-en="Simple, two-part pricing" data-zh="简单的两段式定价">Simple, two-part pricing</span>
       <h2 data-en="An onboarding fee, then a monthly subscription." data-zh="一次上线费，之后按月订阅。">An onboarding fee, then a monthly subscription.</h2>
       <p data-en="No cut of your sales — ever. Exact numbers depend on your situation, so we quote you in the demo." data-zh="绝不抽取你的销售额——永远。具体金额视你的情况而定，我们会在演示中报价。">No cut of your sales — ever. Exact numbers depend on your situation, so we quote you in the demo.</p>
     </div>
-    <div class="price reveal">
+    <div class="price">
       <div class="price__card feature">
         <span class="price__tag" data-en="Part one · onboarding" data-zh="第一部分 · 上线">Part one · onboarding</span>
         <div class="price__amt"><span data-en="Onboarding fee" data-zh="上线费">Onboarding fee</span> <small data-en="one-time" data-zh="一次性">one-time</small></div>
-        <p class="price__note" data-en="A one-time fee to get you fully live. It depends on where you start — from zero, or migrating a mini-app you already have." data-zh="一次性费用，让你完整上线。金额取决于你的起点——从零开始，还是迁移你已有的小程序。">A one-time fee to get you fully live. It depends on where you start — from zero, or migrating a mini-app you already have.</p>
+        <p class="price__note" data-en="A one-time fee to get you fully live — from zero, or migrating a mini-app you already have." data-zh="一次性费用，让你完整上线——从零开始，或迁移你已有的小程序。">A one-time fee to get you fully live — from zero, or migrating a mini-app you already have.</p>
         <ul>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg><span data-en="Catalog organized in the Product Editor" data-zh="在商品编辑器中整理商品">Catalog organized in the Product Editor</span></li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg><span data-en="Storefront &amp; product design from your brand" data-zh="基于你品牌的商城与商品设计">Storefront &amp; product design from your brand</span></li>
@@ -926,12 +677,10 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
   </div>
 </section>
 
-<div class="divider tea" aria-hidden="true"></div>
-
 <!-- ======================= CTA / DEMO FORM ======================= -->
-<section class="cta" id="demo">
+<section class="scene reveal" id="demo" style="padding-bottom:20px;">
   <div class="wrap">
-    <div class="cta__card reveal">
+    <div class="cta__card">
       <div class="cta__left">
         <span class="kicker" data-en="Let's talk" data-zh="聊聊吧">Let's talk</span>
         <h2 data-en="Book a demo of Full Circle." data-zh="预约 Full Circle 演示。">Book a demo of Full Circle.</h2>
@@ -986,9 +735,8 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
   </div>
 </section>
 
-</main>
 
-<!-- ======================= FOOTER ======================= -->
+</main>
 <footer class="on-ink">
   <div class="wrap">
     <div class="foot">
@@ -1006,10 +754,10 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
       <div class="foot__cols">
         <div class="foot__col">
           <h4 data-en="Service" data-zh="服务">Service</h4>
-          <a href="#block" data-en="The Block" data-zh="Block 系统">The Block</a>
-          <a href="#service" data-en="What we do" data-zh="服务内容">What we do</a>
-          <a href="#payments" data-en="Commerce" data-zh="电商">Commerce</a>
-          <a href="#how" data-en="How it works" data-zh="如何上线">How it works</a>
+          <a href="#build" data-en="How we build" data-zh="如何搭建">How we build</a>
+          <a href="#run" data-en="What we run" data-zh="运营内容">What we run</a>
+          <a href="#commerce" data-en="Commerce" data-zh="电商">Commerce</a>
+          <a href="#proof" data-en="Proof" data-zh="真实案例">Proof</a>
         </div>
         <div class="foot__col">
           <h4 data-en="Company" data-zh="公司">Company</h4>
@@ -1021,7 +769,7 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
     </div>
     <div class="foot__bot">
       <span>© <span id="year"></span> Full Circle. <span data-en="All rights reserved." data-zh="保留所有权利。">All rights reserved.</span></span>
-      <span data-en="Built for WeChat · EN & 中文" data-zh="为微信打造 · 中英双语">Built for WeChat · EN &amp; 中文</span>
+      <span data-en="Built for WeChat · EN &amp; 中文" data-zh="为微信打造 · 中英双语">Built for WeChat · EN &amp; 中文</span>
     </div>
   </div>
 </footer>
@@ -1030,14 +778,17 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
 (function(){
   "use strict";
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var $ = function(s,c){ return (c||document).querySelector(s); };
+  var $$ = function(s,c){ return Array.prototype.slice.call((c||document).querySelectorAll(s)); };
 
-  document.getElementById('year').textContent = new Date().getFullYear();
+  $('#year').textContent = new Date().getFullYear();
 
-  /* ---- language toggle ---- */
-  var nodes = document.querySelectorAll('[data-en]');
-  var btnEn = document.getElementById('lang-en');
-  var btnZh = document.getElementById('lang-zh');
+  /* ---- bilingual toggle ---- */
+  var nodes = $$('[data-en]');
+  var btnEn = $('#lang-en'), btnZh = $('#lang-zh');
+  var curLang = 'en';
   function setLang(lang){
+    curLang = lang;
     document.documentElement.lang = lang;
     nodes.forEach(function(n){
       var v = lang === 'zh' ? n.getAttribute('data-zh') : n.getAttribute('data-en');
@@ -1055,219 +806,112 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
   if(saved === 'zh') setLang('zh');
 
   /* ---- nav border on scroll ---- */
-  var nav = document.getElementById('nav');
+  var nav = $('#nav');
   function onScroll(){ nav.classList.toggle('scrolled', window.scrollY > 8); }
   onScroll();
   window.addEventListener('scroll', onScroll, {passive:true});
 
-  /* ---- reveal on scroll ---- */
-  var revealEls = document.querySelectorAll('.reveal');
+  /* ---- reveal + scene-in on scroll ---- */
+  var revealEls = $$('.reveal');
   if('IntersectionObserver' in window && !reduce){
     var io = new IntersectionObserver(function(entries){
       entries.forEach(function(en){
-        if(en.isIntersecting){ en.target.classList.add('reveal-in'); io.unobserve(en.target); }
+        if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); }
       });
-    }, {threshold:0.16, rootMargin:'0px 0px -8% 0px'});
+    }, {threshold:0.18, rootMargin:'0px 0px -8% 0px'});
     revealEls.forEach(function(el){ io.observe(el); });
   } else {
-    revealEls.forEach(function(el){ el.classList.add('reveal-in'); });
+    revealEls.forEach(function(el){ el.classList.add('in'); });
   }
 
-  /* ---- hero highlight + underline draw ---- */
-  var draws = [document.getElementById('hl-draw'), document.getElementById('em-draw')];
-  draws.forEach(function(el){
-    if(!el) return;
-    if(reduce){ el.classList.add('drawn'); return; }
-    requestAnimationFrame(function(){ setTimeout(function(){ el.classList.add('drawn'); }, 200); });
+  /* ---- hero highlight draw ---- */
+  var hl = $('#hl-draw');
+  if(hl){ if(reduce){ hl.classList.add('drawn'); } else { setTimeout(function(){ hl.classList.add('drawn'); }, 350); } }
+
+  /* ---- hero assembly + replay ---- */
+  var dev = $('#dev');
+  function build(){ if(dev){ dev.classList.add('built'); } }
+  function replay(){
+    if(!dev) return;
+    dev.classList.remove('built');
+    void dev.offsetWidth; /* reflow to restart transitions */
+    requestAnimationFrame(build);
+  }
+  if(reduce){ build(); } else { setTimeout(build, 420); }
+  var rp = $('#replay');
+  if(rp){ rp.addEventListener('click', replay); }
+
+  /* ---- interactive brand restyle ---- */
+  var shop = $('#shop');
+  var swatches = $$('.swatch');
+  swatches.forEach(function(b){
+    if(b.getAttribute('data-pressed') === 'true'){ b.setAttribute('aria-pressed','true'); }
+    b.addEventListener('click', function(){
+      swatches.forEach(function(o){ o.setAttribute('aria-pressed','false'); });
+      b.setAttribute('aria-pressed','true');
+      if(shop){
+        shop.style.setProperty('--b-accent', b.getAttribute('data-a'));
+        shop.style.setProperty('--b-accent2', b.getAttribute('data-b'));
+      }
+    });
   });
 
-  /* ---- count-up stats ---- */
-  var counters = document.querySelectorAll('[data-count]');
-  function animateCount(el){
-    var target = parseFloat(el.getAttribute('data-count'));
-    var suffix = el.getAttribute('data-suffix') || '';
-    if(reduce || target === 0){ el.textContent = target + suffix; return; }
-    var start = null, dur = 1100;
-    function tick(ts){
-      if(start === null) start = ts;
-      var p = Math.min((ts - start)/dur, 1);
-      var eased = 1 - Math.pow(1 - p, 3);
-      el.textContent = Math.round(target * eased) + suffix;
-      if(p < 1) requestAnimationFrame(tick);
-      else el.textContent = target + suffix;
+  /* ---- bilingual flip demo (gated to view) ---- */
+  var flip = $('#flipText');
+  if(flip){
+    var pairs = [['Add to cart','加入购物车'],['Checkout','去结算'],['Order received','订单已接收'],['Out for delivery','配送中']];
+    var fi = 0, ftimer = null;
+    function tick(){
+      fi = (fi+1) % pairs.length;
+      flip.style.opacity = '0';
+      setTimeout(function(){ flip.textContent = pairs[fi][ curLang === 'zh' ? 1 : 0 ]; flip.style.opacity = '1'; }, 380);
     }
-    requestAnimationFrame(tick);
-  }
-  if('IntersectionObserver' in window){
-    var cio = new IntersectionObserver(function(entries){
-      entries.forEach(function(en){
-        if(en.isIntersecting){ animateCount(en.target); cio.unobserve(en.target); }
-      });
-    }, {threshold:0.6});
-    counters.forEach(function(c){ cio.observe(c); });
-  } else {
-    counters.forEach(function(c){ c.textContent = c.getAttribute('data-count') + (c.getAttribute('data-suffix')||''); });
+    if(!reduce && 'IntersectionObserver' in window){
+      var fio = new IntersectionObserver(function(es){
+        es.forEach(function(e){
+          if(e.isIntersecting && !ftimer){ ftimer = setInterval(tick, 2200); }
+          else if(!e.isIntersecting && ftimer){ clearInterval(ftimer); ftimer = null; }
+        });
+      }, {threshold:0.5});
+      fio.observe(flip);
+    }
   }
 
-  /* ---- demo form: validate + mailto fallback ---- */
-  var form = document.getElementById('demoForm');
-  var ok = document.getElementById('formOk');
-  function fieldOf(input){ return input.closest('.field'); }
-  function validEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
-  function validateField(input){
-    var f = fieldOf(input), bad = false;
-    if(input.hasAttribute('required') && !input.value.trim()) bad = true;
-    if(input.type === 'email' && input.value.trim() && !validEmail(input.value.trim())) bad = true;
-    f.classList.toggle('invalid', bad);
-    return !bad;
+  /* ---- demo form: compose a mailto, no backend ---- */
+  var form = $('#demoForm');
+  if(form){
+    var ok = $('#formOk');
+    function markField(input, valid){
+      var f = input.closest('.field');
+      if(f){ f.classList.toggle('invalid', !valid); }
+      return valid;
+    }
+    function emailOk(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var name = $('#f-name'), brand = $('#f-brand'), email = $('#f-email');
+      var v1 = markField(name, name.value.trim().length > 0);
+      var v2 = markField(brand, brand.value.trim().length > 0);
+      var v3 = markField(email, emailOk(email.value.trim()));
+      if(!(v1 && v2 && v3)){
+        var bad = form.querySelector('.field.invalid input');
+        if(bad){ bad.focus(); }
+        return;
+      }
+      var model = $('#f-model').value, msg = $('#f-msg').value.trim();
+      var lines = [
+        'Name: ' + name.value.trim(),
+        'Business: ' + brand.value.trim(),
+        'Email: ' + email.value.trim(),
+        'Situation: ' + (model || 'Not sure yet'),
+        '', (msg || '(no message)')
+      ];
+      var subject = 'Demo request — ' + brand.value.trim();
+      var href = 'mailto:hello@fullcircle.example?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(lines.join('\n'));
+      window.location.href = href;
+      if(ok){ ok.classList.add('show'); }
+    });
   }
-  ['f-name','f-brand','f-email'].forEach(function(id){
-    var input = document.getElementById(id);
-    input.addEventListener('blur', function(){ validateField(input); });
-    input.addEventListener('input', function(){ if(fieldOf(input).classList.contains('invalid')) validateField(input); });
-  });
-  form.addEventListener('submit', function(e){
-    e.preventDefault();
-    var inputs = ['f-name','f-brand','f-email'].map(function(id){ return document.getElementById(id); });
-    var allOk = true, firstBad = null;
-    inputs.forEach(function(input){ if(!validateField(input)){ allOk = false; if(!firstBad) firstBad = input; } });
-    if(!allOk){ if(firstBad) firstBad.focus(); return; }
-
-    var zh = document.documentElement.lang === 'zh';
-    var name = document.getElementById('f-name').value.trim();
-    var brand = document.getElementById('f-brand').value.trim();
-    var email = document.getElementById('f-email').value.trim();
-    var modelSel = document.getElementById('f-model');
-    var model = modelSel.options[modelSel.selectedIndex].text;
-    var msg = document.getElementById('f-msg').value.trim();
-    var subject = encodeURIComponent('Full Circle demo request — ' + brand);
-    var bodyLines = [
-      (zh?'姓名：':'Name: ') + name,
-      (zh?'品牌：':'Brand: ') + brand,
-      (zh?'邮箱：':'Email: ') + email,
-      (zh?'你的情况：':'Situation: ') + model,
-      '',
-      (zh?'留言：':'Message:'),
-      msg
-    ];
-    var body = encodeURIComponent(bodyLines.join('\n'));
-    ok.classList.add('show');
-    window.location.href = 'mailto:hello@fullcircle.example?subject=' + subject + '&body=' + body;
-  });
-})();
-</script>
-
-<!-- ===== animated mesh-gradient shader (self-contained, no deps) ===== -->
-<script>
-(function(){
-  "use strict";
-  var canvas = document.getElementById('meshGl');
-  if(!canvas) return;
-  var gl = canvas.getContext('webgl', {antialias:false, alpha:false, premultipliedAlpha:false})
-        || canvas.getContext('experimental-webgl');
-  if(!gl){ canvas.style.display='none'; return; }  /* graceful: hero stays Ink Charcoal */
-
-  /* --- tunables (mirror the React component's props) --- */
-  var DISTORTION = 1.1, SWIRL = 0.7, SPEED = 0.5, OFFSET_X = 0.08;
-  /* brand palette: ink -> deep tea -> tea -> brass (kept dark on the left for contrast) */
-  var COLORS = ['#0E1216','#1A2B22','#3E5A42','#6B8E6F','#7BA07F','#B08D4A'];
-  function rgb(hex){ var n=parseInt(hex.slice(1),16); return [((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]; }
-  var C = COLORS.map(rgb);
-
-  var VERT = 'attribute vec2 a_pos;varying vec2 v_uv;void main(){v_uv=a_pos*0.5+0.5;gl_Position=vec4(a_pos,0.0,1.0);}';
-  var FRAG = [
-    'precision highp float;',
-    'varying vec2 v_uv;',
-    'uniform float u_time;uniform vec2 u_res;',
-    'uniform float u_distortion;uniform float u_swirl;uniform float u_offsetX;',
-    'uniform vec3 u_c0;uniform vec3 u_c1;uniform vec3 u_c2;uniform vec3 u_c3;uniform vec3 u_c4;uniform vec3 u_c5;',
-    'float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}',
-    'float noise(vec2 p){vec2 i=floor(p);vec2 f=fract(p);vec2 u=f*f*(3.0-2.0*f);',
-    ' return mix(mix(hash(i),hash(i+vec2(1.0,0.0)),u.x),mix(hash(i+vec2(0.0,1.0)),hash(i+vec2(1.0,1.0)),u.x),u.y);}',
-    'float fbm(vec2 p){float v=0.0;float a=0.5;for(int k=0;k<5;k++){v+=a*noise(p);p=p*2.0;a*=0.5;}return v;}',
-    'vec3 ramp(float x){x=clamp(x,0.0,1.0);vec3 c=u_c0;',
-    ' c=mix(c,u_c1,smoothstep(0.0,0.2,x));c=mix(c,u_c2,smoothstep(0.2,0.4,x));',
-    ' c=mix(c,u_c3,smoothstep(0.4,0.6,x));c=mix(c,u_c4,smoothstep(0.6,0.8,x));',
-    ' c=mix(c,u_c5,smoothstep(0.8,1.0,x));return c;}',
-    'void main(){',
-    ' float aspect=u_res.x/u_res.y;',
-    ' vec2 p=v_uv;p.x*=aspect;p.x+=u_offsetX;',
-    ' vec2 ctr=vec2(0.5*aspect,0.5);vec2 d=p-ctr;float r=length(d);',
-    ' float ang=u_swirl*(1.2-r)*2.0+u_time*0.25;float s=sin(ang);float co=cos(ang);',
-    ' p=ctr+mat2(co,-s,s,co)*d;',
-    ' float w1=fbm(p*1.6+vec2(u_time*0.10,u_time*0.06));',
-    ' float w2=fbm(p*1.4-vec2(u_time*0.08,u_time*0.05));',
-    ' p+=u_distortion*0.35*vec2(w1,w2);',
-    ' float f=fbm(p*1.7+w1*0.8);',
-    ' vec3 col=ramp(f);',
-    ' col=mix(col,u_c0,smoothstep(0.55,1.05,r));',
-    ' gl_FragColor=vec4(col,1.0);',
-    '}'
-  ].join('\n');
-
-  function compile(type, src){
-    var sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
-    if(!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) return null;
-    return sh;
-  }
-  var vs = compile(gl.VERTEX_SHADER, VERT), fs = compile(gl.FRAGMENT_SHADER, FRAG);
-  if(!vs || !fs){ canvas.style.display='none'; return; }
-  var prog = gl.createProgram();
-  gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
-  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){ canvas.style.display='none'; return; }
-  gl.useProgram(prog);
-
-  var buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
-  var aPos = gl.getAttribLocation(prog, 'a_pos');
-  gl.enableVertexAttribArray(aPos);
-  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
-
-  var U = {
-    time: gl.getUniformLocation(prog,'u_time'),
-    res: gl.getUniformLocation(prog,'u_res'),
-    distortion: gl.getUniformLocation(prog,'u_distortion'),
-    swirl: gl.getUniformLocation(prog,'u_swirl'),
-    offsetX: gl.getUniformLocation(prog,'u_offsetX')
-  };
-  gl.uniform1f(U.distortion, DISTORTION);
-  gl.uniform1f(U.swirl, SWIRL);
-  gl.uniform1f(U.offsetX, OFFSET_X);
-  ['u_c0','u_c1','u_c2','u_c3','u_c4','u_c5'].forEach(function(name,i){
-    gl.uniform3fv(gl.getUniformLocation(prog,name), C[i]);
-  });
-
-  var SCALE = 0.62, W = 0, H = 0;
-  function resize(){
-    var dpr = Math.min(window.devicePixelRatio || 1, 1.5) * SCALE;
-    var w = Math.max(2, Math.round(canvas.clientWidth * dpr));
-    var h = Math.max(2, Math.round(canvas.clientHeight * dpr));
-    if(w === W && h === H) return;
-    W = w; H = h; canvas.width = w; canvas.height = h;
-    gl.viewport(0, 0, w, h);
-    gl.uniform2f(U.res, w, h);
-  }
-  window.addEventListener('resize', resize, {passive:true});
-  resize();
-
-  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var visible = true;
-  if('IntersectionObserver' in window){
-    new IntersectionObserver(function(es){ visible = es[0].isIntersecting; if(visible && !reduce) requestAnimationFrame(frame); },
-      {threshold:0}).observe(canvas);
-  }
-
-  var t0 = performance.now(), raf = 0;
-  function frame(now){
-    raf = 0;
-    resize();
-    gl.uniform1f(U.time, ((now - t0) / 1000) * SPEED);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    if(visible && !reduce) raf = requestAnimationFrame(frame);
-  }
-  if(reduce){ frame(t0); }          /* one static frame, no animation */
-  else { raf = requestAnimationFrame(frame); }
 })();
 </script>
 </body>
