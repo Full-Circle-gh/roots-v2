@@ -10403,6 +10403,16 @@ async function iedToggleBlockDesign(pid, btn) {
   }
 }
 
+// Flip the design flag back OFF and sync the toggle pill. Used as the safety
+// net when a fresh turn-on can't produce blocks: rather than strand the
+// mini-app on an empty designed page, we fall back to the classic description.
+async function _iedDesignOff(pid, btn) {
+  try {
+    await iedSaveField(pid, 'use_block_design', 0);
+    if (btn) { btn.dataset.on = '0'; btn.innerHTML = _descToggleInner(0); }
+  } catch {}
+}
+
 // Build description_blocks from the EN+CN kitchen description when the operator
 // flips the design toggle ON. Fresh products seed automatically; a product that
 // already has sections gets a confirm to REBUILD from the current description
@@ -10473,10 +10483,16 @@ async function iedAutoComposeBlocks(pid, btn) {
   try {
     const pr = await fetch('/api/products/' + pid, { credentials: 'same-origin' });
     const pd = await pr.json().catch(() => ({}));
-    if (!pr.ok || !pd.success) return;
+    if (!pr.ok || !pd.success || !pd.data) throw new Error('fetch');
     p = pd.data;
-  } catch { return; }
-  if (!p) return;
+  } catch {
+    // Couldn't read the product to build from. Don't strand a freshly-enabled
+    // page on empty blocks — flip the flag back off (classic description shows)
+    // and tell the operator. Any existing blocks are untouched.
+    await _iedDesignOff(pid, btn);
+    toast('Couldn\'t read the product to auto-build — kept the classic description, try again · 读取商品失败,已保留经典描述,请重试', 'error');
+    return;
+  }
   // Work out what the product already has, so we never clobber it. We may
   // still backfill the MISSING half: e.g. blocks exist but nutrition doesn't
   // (the original auto-build dropped nutrition), so re-toggling tops it up.
@@ -10500,9 +10516,18 @@ async function iedAutoComposeBlocks(pid, btn) {
   }
   const textEn = _iedStripToText(p.description_en);
   const textCn = _iedStripToText(p.description_cn);
+  // A FRESH turn-on (no prior blocks) already saved the flag; if the build now
+  // fails we'd strand the mini-app on an empty designed page. So every failure
+  // below flips the flag back OFF for a fresh product — the classic description
+  // returns and nothing is lost. A REBUILD keeps the existing sections instead
+  // (we never overwrite them with an empty/failed result).
+  const revertFresh = () => hasBlocks ? Promise.resolve() : _iedDesignOff(pid, btn);
   // Match the editor's default rule: only auto-compose when BOTH languages exist.
   if (!textEn || !textCn) {
-    toast('Need both an English and a Chinese description to auto-build — fill both, then toggle again · 需要中英文描述才能自动生成,补全后再切换', 'error');
+    await revertFresh();
+    toast(hasBlocks
+      ? 'Need both an English and a Chinese description to rebuild — fill both, then try again · 需要中英文描述才能重新生成,补全后重试'
+      : 'Need both an English and a Chinese description to auto-build — kept the classic description; fill both, then toggle again · 需要中英文描述才能自动生成,已保留经典描述,补全后再切换', 'error');
     return;
   }
   const prog = _iedComposeProgress();
@@ -10516,8 +10541,11 @@ async function iedAutoComposeBlocks(pid, btn) {
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) {
+      await revertFresh();
       prog.done(false, cuT('Couldn\'t build', '生成失败'));
-      toast(j.error || 'Couldn\'t auto-build — open the Product Page Editor to design it · 自动生成失败,请在商品页编辑器中设计', 'error');
+      toast(j.error || (hasBlocks
+        ? 'Couldn\'t rebuild — kept the existing sections; open the Product Page Editor to design it · 重新生成失败,已保留现有板块,可在商品页编辑器中设计'
+        : 'Couldn\'t auto-build — kept the classic description; open the Product Page Editor to design it · 自动生成失败,已保留经典描述,可在商品页编辑器中设计'), 'error');
       return;
     }
     const all = (j.blocks || []).filter(b => b && b.type);
@@ -10531,8 +10559,11 @@ async function iedAutoComposeBlocks(pid, btn) {
       .filter(b => b.type !== 'nutrition_facts')
       .map((b, i) => ({ ...b, id: b.id || ('b' + Date.now().toString(36) + i) }));
     if (!composed.length && !nutriBlock) {
+      await revertFresh();
       prog.done(false, cuT('Couldn\'t build', '生成失败'));
-      toast('No sections built — open the Product Page Editor to design it · 未生成板块,请在商品页编辑器中设计', 'error');
+      toast(hasBlocks
+        ? 'No sections built — kept the existing design; open the Product Page Editor to edit it · 未生成板块,已保留现有设计,可在商品页编辑器中编辑'
+        : 'No sections built — kept the classic description; open the Product Page Editor to design it · 未生成板块,已保留经典描述,可在商品页编辑器中设计', 'error');
       return;
     }
     // Only write description_blocks when the product had none — re-toggling a
@@ -10560,6 +10591,19 @@ async function iedAutoComposeBlocks(pid, btn) {
         savedNutrition = true;
       }
     }
+    // A FRESH turn-on that produced no description SECTIONS (only nutrition, or
+    // a description too thin to section) would leave the mini-app on an empty
+    // designed page — nutrition alone isn't a product page. Flip back to classic
+    // so the page always renders. (Nutrition, if saved, lives in its own column
+    // and still shows under the classic description.)
+    if (!hasBlocks && !rebuild && savedSections === 0) {
+      await _iedDesignOff(pid, btn);
+      prog.done(false, _T('Kept classic', '已保留经典'));
+      toast(savedNutrition
+        ? 'Added a nutrition panel, but couldn\'t build description sections — kept the classic description · 已添加营养表,但未能生成描述板块,已保留经典描述'
+        : 'Couldn\'t build sections from this description — kept the classic description; add more detail and try again · 未能从描述生成板块,已保留经典描述,补充内容后重试', 'error');
+      return;
+    }
     const parts = [];
     if (savedSections) parts.push(savedSections + ' section' + (savedSections === 1 ? '' : 's'));
     if (savedNutrition) parts.push('a nutrition panel · 营养表');
@@ -10575,8 +10619,11 @@ async function iedAutoComposeBlocks(pid, btn) {
     prog.done(true, cuT('Built ✓', '已生成 ✓'));
     toast('Built ' + parts.join(' + ') + ' — review in the Product Page Editor ✓ · 已生成,可在商品页编辑器中查看 ✓', 'ok');
   } catch (e) {
+    await revertFresh();
     prog.done(false, 'Couldn\'t build · 生成失败');
-    toast('Couldn\'t auto-build — open the Product Page Editor to design it · 自动生成失败,请在商品页编辑器中设计', 'error');
+    toast(hasBlocks
+      ? 'Couldn\'t rebuild — kept the existing sections; open the Product Page Editor to design it · 重新生成失败,已保留现有板块,可在商品页编辑器中设计'
+      : 'Couldn\'t auto-build — kept the classic description; open the Product Page Editor to design it · 自动生成失败,已保留经典描述,可在商品页编辑器中设计', 'error');
   }
 }
 

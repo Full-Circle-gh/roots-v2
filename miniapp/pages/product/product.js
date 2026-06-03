@@ -516,6 +516,10 @@ Page({
       };
     }
 
+    // Blocks only "win" when the toggle is on AND blocks were actually authored.
+    // An empty/failed designed page falls back to the classic description below.
+    const useBlocks = !!(p.use_block_design && Array.isArray(p.description_blocks) && p.description_blocks.length);
+
     this.setData({
       bundle,
       image: img,
@@ -532,15 +536,16 @@ Page({
       flashEnds,
       description: rawDesc,
       // `use_block_design` is the office's per-product toggle in the kitchen
-      // Description card. When true → mini-app renders ONLY blocks (even if
-      // none were authored, in which case the description area is empty);
-      // when false (default) → mini-app renders ONLY the classic path
-      // (rich-text or ## parsed). The flag exists because blocks would
-      // otherwise silently win as soon as any were authored, with no way to
-      // preview the classic copy without deleting the drafted blocks.
-      descHtml: p.use_block_design ? '' : descHtml,
-      descriptionParts: p.use_block_design ? [] : (isRichDesc ? [] : descParts),
-      descriptionBlocks: p.use_block_design && Array.isArray(p.description_blocks) ? p.description_blocks : [],
+      // Description card. When true AND blocks were actually authored → render
+      // ONLY blocks; when false (default) OR the flag is on but no blocks
+      // exist → fall back to the classic path (rich-text or ## parsed). The
+      // fallback matters: a freshly-toggled product whose auto-build failed or
+      // is still empty would otherwise show a blank description area. The flag
+      // exists because blocks would otherwise silently win as soon as any were
+      // authored, with no way to preview the classic copy without deleting them.
+      descHtml: useBlocks ? '' : descHtml,
+      descriptionParts: useBlocks ? [] : (isRichDesc ? [] : descParts),
+      descriptionBlocks: useBlocks ? p.description_blocks : [],
       size: p.size || p.weight || '',
       keywords: lang.pick(p.keywords_en, p.keywords_cn, L),
       tagline: rawTag,
