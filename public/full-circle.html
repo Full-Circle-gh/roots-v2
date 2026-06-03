@@ -181,21 +181,13 @@ p{margin:0;}
 .glow.g2{width:50%;height:50%;right:-4%;bottom:-2%;background:radial-gradient(circle,var(--brass),transparent 70%);opacity:.4;}
 .surface{position:absolute;background:var(--bg-pane);border:1px solid rgba(0,0,0,.06);box-shadow:var(--sh-3);overflow:hidden;}
 .surface--phone{width:48%;left:5%;top:3%;aspect-ratio:9/19;border-radius:26px;padding:8px;z-index:3;background:#0e1115;border:1px solid #2a3038;}
-.phone__screen{height:100%;border-radius:19px;overflow:hidden;background:var(--bg-elev-1);display:flex;flex-direction:column;}
-.phone__hero{height:36%;background:linear-gradient(155deg,var(--ink-pane),#0e1115);position:relative;}
-.phone__hero::after{content:"";position:absolute;inset:0;background:radial-gradient(rgba(123,160,127,.5) 1px,transparent 1.4px);background-size:8px 8px;opacity:.35;}
-.phone__hero .tag{position:absolute;left:11px;bottom:11px;color:#fff;font-family:var(--f-sans);font-weight:600;font-size:13px;}
-.phone__hero .live{position:absolute;right:11px;top:11px;font-family:var(--f-mono);font-size:8px;letter-spacing:.1em;color:var(--tea-hi);display:flex;align-items:center;gap:4px;}
-.phone__hero .live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--tea);}
-.phone__row{display:flex;gap:7px;padding:9px;}
-.phone__card{flex:1;height:44px;border-radius:var(--r-md);background:#fff;border:1px solid var(--line-soft);}
-.phone__card.alt{background:var(--bg-elev-2);}
-.phone__list{padding:0 9px;display:flex;flex-direction:column;gap:7px;}
-.phone__li{height:12px;border-radius:var(--r-sm);background:#ded9cf;}
-.phone__li.s{width:60%;}
-.phone__bar{margin-top:auto;height:40px;background:#fff;border-top:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-around;}
-.phone__dot{width:16px;height:16px;border-radius:var(--r-sm);background:#ddd6c9;}
-.phone__dot.on{background:var(--tea);}
+.phone__screen{position:relative;height:100%;border-radius:19px;overflow:hidden;background:var(--bg-elev-1);display:flex;flex-direction:column;}
+.phone__live{flex:1;width:100%;height:100%;border:0;display:block;background:#F2E7DF;}
+.phone__livepill{position:absolute;top:9px;right:9px;z-index:2;display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:999px;background:rgba(14,17,21,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:#fff;font-family:var(--f-mono);font-size:8px;letter-spacing:.12em;pointer-events:none;}
+.phone__livepill i{width:6px;height:6px;border-radius:50%;background:var(--tea-hi);box-shadow:0 0 0 0 rgba(123,160,127,.6);animation:livepulse 2.2s ease-out infinite;}
+@keyframes livepulse{0%{box-shadow:0 0 0 0 rgba(123,160,127,.55);}70%{box-shadow:0 0 0 7px rgba(123,160,127,0);}100%{box-shadow:0 0 0 0 rgba(123,160,127,0);}}
+.surface--phone:hover{animation-play-state:paused;}
+@media (hover:none){.phone__live{pointer-events:none;}}
 .surface--dash{width:60%;right:0;bottom:2%;border-radius:var(--r-xl);padding:14px;z-index:2;}
 .dash__top{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
 .dash__dotrow{display:flex;gap:5px;}
@@ -471,8 +463,9 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
 /* ---------- responsive ---------- */
 @media (max-width:980px){
   .hero__grid{grid-template-columns:1fr;gap:30px;}
-  .blobs{inset:-12% -22%;opacity:.85;}
-  .stage{max-width:430px;margin-inline:auto;width:100%;}
+  .stage{max-width:300px;margin-inline:auto;width:100%;aspect-ratio:9/19;}
+  .surface--phone{position:relative;width:100%;left:0;top:0;}
+  .surface--dash,.chip-float{display:none;}
   .band__in,.price,.cta__card{grid-template-columns:1fr;}
   .bento{grid-template-columns:repeat(2,1fr);}
   .bento .bcard{grid-column:auto;}
@@ -563,10 +556,8 @@ footer{background:var(--ink);color:var(--on-ink-2);border-top:1px solid var(--in
       <span class="glow g2"></span>
       <div class="surface surface--phone">
         <div class="phone__screen">
-          <div class="phone__hero"><span class="tag">Full Circle</span><span class="live">LIVE</span></div>
-          <div class="phone__row"><div class="phone__card"></div><div class="phone__card alt"></div></div>
-          <div class="phone__list"><span class="phone__li"></span><span class="phone__li s"></span><span class="phone__li"></span></div>
-          <div class="phone__bar"><span class="phone__dot on"></span><span class="phone__dot"></span><span class="phone__dot"></span><span class="phone__dot"></span></div>
+          <iframe class="phone__live" id="rootsLive" title="Roots mini-app — live demo" src="/storefront?preview=1&amp;lang=en" loading="lazy" referrerpolicy="no-referrer" scrolling="yes"></iframe>
+          <span class="phone__livepill"><i></i>LIVE · Roots</span>
         </div>
       </div>
       <div class="surface surface--dash">
