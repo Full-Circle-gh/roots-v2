@@ -613,7 +613,15 @@
   .db-feed-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 12px; line-height: 1.4; border: 1px solid transparent; }
   .db-feed-row:hover { background: var(--bg-elev-1, rgba(0,0,0,.04)); border-color: var(--line-soft); }
   .db-feed-ts { color: var(--text-3); font-variant-numeric: tabular-nums; flex: none; min-width: 38px; font-size: 11px; }
-  .db-feed-icon { flex: none; font-size: 13px; width: 16px; text-align: center; }
+  /* Thin-stroke line icons (not OS emoji) so the feed matches the flat,
+     editorial chrome. Tinted by meaning: green = money in, brass = needs
+     attention, red = stock alert, muted = informational. */
+  .db-feed-icon { flex: none; width: 18px; display: inline-flex; align-items: center; justify-content: center; }
+  .db-feed-icon svg { width: 15px; height: 15px; }
+  .db-feed-icon.db-fi-ok    { color: var(--success); }
+  .db-feed-icon.db-fi-warn  { color: var(--warn); }
+  .db-feed-icon.db-fi-bad   { color: var(--danger); }
+  .db-feed-icon.db-fi-muted { color: var(--text-3); }
   .db-feed-text { flex: 1; min-width: 0; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .db-feed-text b { font-weight: 600; }
   .db-feed-empty { font-size: 12px; color: var(--text-3); padding: 12px 8px; text-align: center; }
@@ -2697,6 +2705,9 @@
                 visibility 0s linear 0s;
   }
   .side-drawer.dw-wide { --drawer-vw: 80vw; --drawer-px: 980px; }
+  /* Compact peek — the activity drawer holds only a few lines, so it doesn't
+     need the full editor width. Narrower panel sized to its content. */
+  .side-drawer.dw-compact { --drawer-vw: 32vw; --drawer-px: 420px; min-width: 360px; }
   .side-drawer .drawer-head {
     padding: 14px 18px;
     display: flex; align-items: center; justify-content: space-between;
@@ -2760,6 +2771,7 @@
   @media (max-width: 720px) {
     .side-drawer { width: 100vw; min-width: 0; border-left: 0; }
     .side-drawer.dw-wide { width: 100vw; }
+    .side-drawer.dw-compact { width: 100vw; min-width: 0; }
   }
   .prod-link {
     color: inherit;
@@ -4426,7 +4438,7 @@
 
     <!-- Activity drill-through drawer — populated by dashFeedClick.
          Reuses the global .side-drawer chrome (CSS at top). -->
-    <aside id="db-activity-drawer" class="side-drawer" aria-hidden="true">
+    <aside id="db-activity-drawer" class="side-drawer dw-compact" aria-hidden="true">
       <button class="drawer-close" onclick="closeDrawer('#db-activity-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -10188,12 +10200,23 @@ function dashFeedRender(events) {
     const meta = dashFeedMeta(e);
     return `<div class="db-feed-row" data-key="${escapeHtml(key)}" onclick="dashFeedClick(this)">
       <span class="db-feed-ts">${tstr}</span>
-      <span class="db-feed-icon">${meta.icon}</span>
+      <span class="db-feed-icon db-fi-${meta.tone || 'muted'}">${meta.icon}</span>
       <span class="db-feed-text">${meta.text}</span>
     </div>`;
   }).join('');
   list.innerHTML = html;
 }
+
+// Thin-stroke line icons for the activity feed — 16-box viewBox, currentColor
+// so the .db-fi-* tone class drives the tint. Flat + editorial, no emoji.
+const FEED_SVG = {
+  ok:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M5.2 8.2l1.9 1.9 3.7-4"/></svg>',
+  refund:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5h6.5a3.5 3.5 0 0 1 0 7H5"/><path d="M5.2 3l-2.3 2.5L5.2 8"/></svg>',
+  alert: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2l6 11H2z"/><path d="M8 6.6v3.2"/><path d="M8 11.8h.01"/></svg>',
+  person:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.6"/><path d="M3 13.5a5 5 0 0 1 10 0"/></svg>',
+  chat:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5 5 0 0 1-7.2 4.5L3 13.5l1-3.3A5 5 0 1 1 13.5 8z"/></svg>',
+  dot:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="3"/></svg>',
+};
 
 // Compact one-line summary shown in the feed row, per event type.
 // Real text only — no fake demo strings (per project memory).
@@ -10201,17 +10224,17 @@ function dashFeedMeta(e) {
   const p = e.payload || {};
   switch (e.type) {
     case 'paid_order':
-      return { icon: '🟢', text: `<b>Paid · 已付</b> ${escapeHtml(p.order_no || '')} · ¥${Number(p.total || 0).toLocaleString()} · ${escapeHtml(p.buyer || '')}` };
+      return { icon: FEED_SVG.ok, tone: 'ok', text: `<b>Paid · 已付</b> ${escapeHtml(p.order_no || '')} · ¥${Number(p.total || 0).toLocaleString()} · ${escapeHtml(p.buyer || '')}` };
     case 'refund_request':
-      return { icon: '🟡', text: `<b>Refund · 退款</b> ${escapeHtml(p.order_no || '')}${p.amount ? ' · ¥' + Number(p.amount).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}` };
+      return { icon: FEED_SVG.refund, tone: 'warn', text: `<b>Refund · 退款</b> ${escapeHtml(p.order_no || '')}${p.amount ? ' · ¥' + Number(p.amount).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}` };
     case 'low_stock':
-      return { icon: '🔴', text: `<b>Low · 缺货</b> ${escapeHtml(p.name_en || p.name_cn || '')} (${p.stock} left · 剩 ${p.stock})` };
+      return { icon: FEED_SVG.alert, tone: 'bad', text: `<b>Low · 缺货</b> ${escapeHtml(p.name_en || p.name_cn || '')} (${p.stock} left · 剩 ${p.stock})` };
     case 'new_customer':
-      return { icon: '👤', text: `<b>New · 新客</b> ${escapeHtml(p.name || '—')}` };
+      return { icon: FEED_SVG.person, tone: 'muted', text: `<b>New · 新客</b> ${escapeHtml(p.name || '—')}` };
     case 'feedback':
-      return { icon: '💬', text: `<b>Feedback · 反馈</b> "${escapeHtml(p.excerpt || '')}"` };
+      return { icon: FEED_SVG.chat, tone: 'muted', text: `<b>Feedback · 反馈</b> "${escapeHtml(p.excerpt || '')}"` };
     default:
-      return { icon: '•', text: escapeHtml(e.type) };
+      return { icon: FEED_SVG.dot, tone: 'muted', text: escapeHtml(e.type) };
   }
 }
 
