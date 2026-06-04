@@ -8476,6 +8476,12 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
   o.shipping_city      = city;
   o.outside_guangzhou  = !!city && !isGuangzhou(city);
 
+  // JD waybills don't use kd100 — they pull events from JD's own trace API
+  // (syncJdTrackingForCustomer), which only runs when JD creds are configured.
+  // Surface that so the UI can show a JD-specific live-sync badge instead of
+  // the (now irrelevant) kd100 flag.
+  const jdLiveOn = jd.jdEnabled(integ().jd);
+
   // Hydrate each shipment with its assigned items + tracking view.
   o.shipments = shipmentRows.map(s => ({
     id: s.id, order_id: s.order_id, mode: s.mode, label: s.label,
@@ -8483,6 +8489,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
     tracking_number:  s.tracking_number,
     tracking_status:  s.tracking_status,
     tracking_kd100_subscribed: !!s.tracking_kd100_subscribed,
+    jd_live: s.tracking_carrier === 'jd' && !!s.tracking_number && jdLiveOn,
     tracking_last_error: s.tracking_last_error,
     tracking_synced_at:  s.tracking_synced_at,
     dispatched_at: s.dispatched_at,
