@@ -587,11 +587,18 @@
   .db-hero-pane { background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; min-width: 0; }
   .db-hero-h { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); font-weight: 700; margin-bottom: 8px; font-family: var(--f-mono); }
   /* Live count — pulsing dot when there are viewers, grey when zero. */
-  .db-live { justify-content: center; gap: 4px; }
-  .db-live-row { display: flex; align-items: center; gap: 10px; }
-  .db-live-dot { width: 10px; height: 10px; border-radius: 50%; background: #3aa55a; box-shadow: 0 0 0 4px rgba(58, 165, 90, .18); animation: db-pulse 2.4s ease-in-out infinite; flex: none; }
-  .db-live-dot.zero { background: #a9a9a4; box-shadow: none; animation: none; }
-  @keyframes db-pulse { 0%,100% { box-shadow: 0 0 0 4px rgba(58, 165, 90, .18); } 50% { box-shadow: 0 0 0 10px rgba(58, 165, 90, 0); } }
+  .db-live { justify-content: center; align-items: center; gap: 4px; }
+  /* LIVE ring gauge — a faint track with the viewer count centred; a green arc
+     fades in + breathes when viewers are present. This is BOTH the live cue and
+     the brand's circle motif, so there's no separate always-on dot (which had
+     collided with the tab-bar refresh + orders indicators). */
+  .db-live-ring-wrap { position: relative; width: 92px; height: 92px; display: flex; align-items: center; justify-content: center; margin: 2px 0 4px; }
+  .db-live-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+  .db-live-ring .track { fill: none; stroke: var(--line); stroke-width: 2.5; }
+  .db-live-ring .arc { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 119.38; stroke-dashoffset: 119.38; opacity: 0; transition: stroke-dashoffset .6s ease, opacity .45s ease; }
+  .db-live-ring.live .arc { opacity: 1; stroke-dashoffset: 30; animation: db-ring-breathe 3.6s ease-in-out infinite; }
+  @keyframes db-ring-breathe { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .db-live-ring.live .arc { animation: none; } }
   .db-live-num { font-size: 38px; line-height: 1; font-weight: 600; letter-spacing: -.02em; color: var(--text-1); font-variant-numeric: tabular-nums; }
   .db-live-num.live-on { color: var(--accent); }
   .db-live-lbl { font-size: 11px; color: var(--text-3); margin-top: 2px; }
@@ -751,6 +758,64 @@
   .db-bento .db-tile .db-heat-cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; height: 100%; }
   .db-bento .db-tile .db-heat-cells > i { display: block; width: 100%; height: 100%; min-height: 12px; border-radius: 2px; background: var(--line-soft); }
   .db-bento .db-tile .db-heat-axis { display: flex; justify-content: space-between; font-size: 9px; line-height: 1; color: var(--text-3); font-family: var(--f-mono); align-self: center; }
+
+  /* ── Magnitude bars, period captions, tile icons (data-viz pass) ───────── */
+  /* A left-anchored tint behind each list row, scaled to the tile's own max
+     (--mag 0–1, set inline by dashBarRows) so rows rank at a glance — a chart
+     without the chart. */
+  .db-tile-list-row.has-bar { position: relative; }
+  .db-tile-list-row.has-bar::before {
+    content: ""; position: absolute; left: -6px; top: 2px; bottom: 2px;
+    width: calc(var(--mag, 0) * (100% + 6px));
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+    border-radius: 0 3px 3px 0; z-index: 0; pointer-events: none;
+    transition: width .5s cubic-bezier(.22,.61,.36,1);
+  }
+  .db-tile-list-row.has-bar .name, .db-tile-list-row.has-bar .val { position: relative; z-index: 1; }
+  /* Mute zero rows — "no data", not signal. */
+  .db-tile-list-row.is-zero .name, .db-tile-list-row.is-zero .val { color: var(--text-3); opacity: .7; }
+  .db-tile-list-row.is-zero.has-bar::before { display: none; }
+  /* Period caption anchoring a range tile to the window it's showing. */
+  .db-tile-foot { font-size: 10px; color: var(--text-3); font-family: var(--f-mono); letter-spacing: .04em; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line-soft); }
+  /* Tile-header icon — a separate span so the i18n TreeWalker never rewrites it. */
+  .db-tile-ttl { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+  .db-tile-ic { flex: none; width: 13px; height: 13px; color: var(--text-3); display: inline-flex; }
+  .db-tile-ic svg { width: 13px; height: 13px; }
+
+  /* Intraday sparkline under the hero "Today" revenue — revenue-by-hour. */
+  .db-spark-wrap { margin-top: 8px; height: 24px; color: var(--accent); }
+  .db-spark { display: block; width: 100%; height: 100%; }
+  .db-today-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+
+  /* Flatten the right-now panes — inside the bento hero they read as
+     card-in-card-in-card; drop their fills/borders so the hero is one surface,
+     keeping only the today mini-cells framed. Thin dividers stand in for the
+     old pane borders. */
+  .db-bento .db-hero .db-hero-pane { background: transparent; border: 0; border-radius: 0; padding: 4px 8px; }
+  .db-bento .db-hero .db-today-pane { border-left: 1px solid var(--line-soft); padding-left: 16px; }
+  .db-bento .db-hero .db-feed-pane { border-top: 1px solid var(--line-soft); padding-top: 10px; margin-top: 2px; }
+  @media (max-width: 960px) {
+    .db-bento .db-hero .db-today-pane { border-left: 0; padding-left: 8px; }
+  }
+
+  /* Concentric-circle brand watermark in the hero corner — echoes the live
+     ring + the "Full Circle" name. Purely decorative, sits behind content. */
+  .db-bento #db-hero { position: relative; overflow: hidden; }
+  .db-bento #db-hero::after {
+    content: ""; position: absolute; top: -28px; right: -28px; width: 150px; height: 150px;
+    pointer-events: none; z-index: 0; opacity: .45;
+    background:
+      radial-gradient(circle, transparent 0 40px, color-mix(in srgb, var(--accent) 22%, transparent) 40px 41px, transparent 41px) center / 100% 100% no-repeat,
+      radial-gradient(circle, transparent 0 55px, color-mix(in srgb, var(--accent) 13%, transparent) 55px 56px, transparent 56px) center / 100% 100% no-repeat,
+      radial-gradient(circle, transparent 0 70px, color-mix(in srgb, var(--accent) 8%, transparent) 70px 71px, transparent 71px) center / 100% 100% no-repeat;
+  }
+  .db-bento #db-hero > * { position: relative; z-index: 1; }
+
+  /* Subtle paper grain in the dashboard gutters — light theme only, so the
+     dark theme stays clean. */
+  :root[data-theme="light"] #db-bento {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  }
 
   /* Tile-swap popover. Floats above on click, dismissed by outside-click. */
   .db-tile-pop { position: fixed; min-width: 220px; max-width: 280px; background: var(--bg-pane); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 6px; z-index: 250; }
@@ -4300,8 +4365,11 @@
       <div class="db-hero-grid">
         <div class="db-hero-pane db-live">
           <div class="db-hero-h">Live · 实时</div>
-          <div class="db-live-row">
-            <span class="db-live-dot zero" id="db-live-dot"></span>
+          <div class="db-live-ring-wrap">
+            <svg class="db-live-ring" id="db-live-ring" viewBox="0 0 44 44" aria-hidden="true">
+              <circle class="track" cx="22" cy="22" r="19"></circle>
+              <circle class="arc" cx="22" cy="22" r="19"></circle>
+            </svg>
             <span class="db-live-num" id="db-live-num">—</span>
           </div>
           <div class="db-live-lbl">Viewing products · 浏览中</div>
@@ -4310,7 +4378,11 @@
         <div class="db-hero-pane db-today-pane">
           <div class="db-hero-h">Today · 今日</div>
           <div class="db-today-grid">
-            <div class="db-today-cell hero"><div class="val" id="db-today-rev">¥—</div><div class="lbl">Revenue · 营收</div></div>
+            <div class="db-today-cell hero">
+              <div class="val" id="db-today-rev">¥—</div>
+              <div class="lbl">Revenue · 营收</div>
+              <div class="db-spark-wrap" id="db-today-spark"></div>
+            </div>
             <div class="db-today-cell"><div class="val" id="db-today-ord">—</div><div class="lbl">Orders · 订单</div></div>
             <div class="db-today-cell"><div class="val" id="db-today-new">—</div><div class="lbl">New customers · 新客</div></div>
           </div>
@@ -4329,42 +4401,42 @@
          the row below. -->
     <section class="card db-tile" data-slot="a" id="db-tile-a">
       <div class="db-tile-head">
-        <h4 class="db-tile-title">—</h4>
+        <span class="db-tile-ttl"><span class="db-tile-ic" aria-hidden="true"></span><h4 class="db-tile-title">—</h4></span>
         <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'a')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
       </div>
       <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
     </section>
     <section class="card db-tile" data-slot="b" id="db-tile-b">
       <div class="db-tile-head">
-        <h4 class="db-tile-title">—</h4>
+        <span class="db-tile-ttl"><span class="db-tile-ic" aria-hidden="true"></span><h4 class="db-tile-title">—</h4></span>
         <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'b')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
       </div>
       <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
     </section>
     <section class="card db-tile" data-slot="c" id="db-tile-c">
       <div class="db-tile-head">
-        <h4 class="db-tile-title">—</h4>
+        <span class="db-tile-ttl"><span class="db-tile-ic" aria-hidden="true"></span><h4 class="db-tile-title">—</h4></span>
         <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'c')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
       </div>
       <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
     </section>
     <section class="card db-tile" data-slot="d" id="db-tile-d">
       <div class="db-tile-head">
-        <h4 class="db-tile-title">—</h4>
+        <span class="db-tile-ttl"><span class="db-tile-ic" aria-hidden="true"></span><h4 class="db-tile-title">—</h4></span>
         <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'd')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
       </div>
       <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
     </section>
     <section class="card db-tile" data-slot="e" id="db-tile-e">
       <div class="db-tile-head">
-        <h4 class="db-tile-title">—</h4>
+        <span class="db-tile-ttl"><span class="db-tile-ic" aria-hidden="true"></span><h4 class="db-tile-title">—</h4></span>
         <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'e')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
       </div>
       <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
     </section>
     <section class="card db-tile" data-slot="f" id="db-tile-f">
       <div class="db-tile-head">
-        <h4 class="db-tile-title">—</h4>
+        <span class="db-tile-ttl"><span class="db-tile-ic" aria-hidden="true"></span><h4 class="db-tile-title">—</h4></span>
         <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'f')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
       </div>
       <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
@@ -10093,6 +10165,72 @@ function dashDelta(pct) {
   return `<span class="db-delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</span>`;
 }
 
+// ── Bento data-viz helpers ────────────────────────────────────────────────
+// Build list-tile rows with a left-anchored magnitude bar. `opt.value(item)`
+// drives the bar (scaled to the row set's own max); `opt.display(item)` is the
+// right-hand string; `opt.name(item)` is the raw (un-escaped) left label.
+function dashBarRows(items, opt) {
+  const vals = items.map(it => Math.max(0, Number(opt.value(it)) || 0));
+  const max = Math.max(1, ...vals);
+  return items.map((it, i) => {
+    const v = vals[i];
+    const mag = Math.max(0, Math.min(1, v / max));
+    const zero = v <= 0;
+    return `<div class="db-tile-list-row has-bar${zero ? ' is-zero' : ''}" style="--mag:${mag.toFixed(3)}">
+      <span class="name">${escapeHtml(opt.name(it))}</span>
+      <span class="val">${opt.display(it)}</span>
+    </div>`;
+  }).join('');
+}
+
+// A flat-stroke sparkline (no end dot — keeps the line crisp when stretched
+// full-width via preserveAspectRatio="none" + non-scaling-stroke).
+function dashSparkline(values) {
+  const vals = (values || []).map(v => Number(v) || 0);
+  if (vals.length < 2) return '';
+  const W = 100, H = 24, pad = 2, n = vals.length;
+  const max = Math.max(1, ...vals), min = Math.min(0, ...vals);
+  const span = (max - min) || 1;
+  const x = i => pad + (i / (n - 1)) * (W - 2 * pad);
+  const y = v => (H - pad) - ((v - min) / span) * (H - 2 * pad);
+  const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+  const area = `<polygon points="${x(0).toFixed(1)},${(H - pad).toFixed(1)} ${pts.join(' ')} ${x(n - 1).toFixed(1)},${(H - pad).toFixed(1)}" fill="currentColor" opacity="0.1" stroke="none"/>`;
+  const line = `<polyline points="${pts.join(' ')}" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>`;
+  return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${area}${line}</svg>`;
+}
+
+// Period caption ("Last 30 days · 近30天") from the active date-range window —
+// only for dash-source tiles, so each tile says which window it's summarising.
+function dashRangeFoot() {
+  const w = (typeof DASH_DATA !== 'undefined' && DASH_DATA && DASH_DATA.window) || null;
+  if (!w) return '';
+  const d = Number(w.span_days) || 1;
+  const en = d <= 1 ? 'Today' : `Last ${d} days`;
+  const cn = d <= 1 ? '今日' : `近${d}天`;
+  return `<div class="db-tile-foot">${en} · ${cn}</div>`;
+}
+
+// Tween a number into `el` on change. First paint (no cached value) sets it
+// instantly; reduced-motion users skip the tween.
+function dashCountUp(el, to, fmt) {
+  if (!el) return;
+  const f = fmt || (n => String(Math.round(n)));
+  to = Number(to) || 0;
+  const from = (el._cuVal != null) ? el._cuVal : to;
+  el._cuVal = to;
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || from === to) { el.textContent = f(to); return; }
+  if (el._cuRaf) cancelAnimationFrame(el._cuRaf);
+  const dur = 600, t0 = performance.now();
+  const step = (t) => {
+    const p = Math.min(1, (t - t0) / dur);
+    const e = 1 - Math.pow(1 - p, 3);   // easeOutCubic
+    el.textContent = f(from + (to - from) * e);
+    if (p < 1) el._cuRaf = requestAnimationFrame(step);
+  };
+  el._cuRaf = requestAnimationFrame(step);
+}
+
 // Set the date inputs from a range key and reload.
 function dashSetRange(key) {
   $$('#db-range-seg button').forEach(b => b.classList.toggle('active', b.dataset.range === key));
@@ -10147,11 +10285,14 @@ function dashHeroStart() {
   DASH_HERO.presence = setInterval(dashHeroLoadPresence, DASH_HERO_INTERVALS.presence);
   DASH_HERO.activity = setInterval(dashHeroLoadActivity, DASH_HERO_INTERVALS.activity);
   DASH_HERO.today    = setInterval(dashHeroLoadToday,    DASH_HERO_INTERVALS.today);
+  // Keep the relative "synced Xs ago" stamp ticking between polls.
+  DASH_HERO._syncTimer = setInterval(dashRenderSync, 10000);
 }
 function dashHeroStop() {
   for (const k of ['presence', 'activity', 'today']) {
     if (DASH_HERO[k]) { clearInterval(DASH_HERO[k]); DASH_HERO[k] = null; }
   }
+  if (DASH_HERO._syncTimer) { clearInterval(DASH_HERO._syncTimer); DASH_HERO._syncTimer = null; }
 }
 function dashHeroRefreshAll() {
   dashHeroLoadPresence();
@@ -10160,19 +10301,28 @@ function dashHeroRefreshAll() {
 }
 function dashHeroSyncStamp() {
   DASH_HERO.lastSync = Date.now();
-  const el = $('#db-hero-sync'); if (!el) return;
-  const d = new Date(DASH_HERO.lastSync);
-  const pad = n => String(n).padStart(2, '0');
-  el.textContent = `synced ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} · 已同步`;
+  dashRenderSync();
+}
+// Relative "synced Xs/Xm ago" stamp — re-rendered on each poll and by the 10s
+// ticker so it stays honest between polls. Keeps EN free of " · " for the i18n
+// splitter.
+function dashRenderSync() {
+  const el = $('#db-hero-sync'); if (!el || !DASH_HERO.lastSync) return;
+  const secs = Math.max(0, Math.round((Date.now() - DASH_HERO.lastSync) / 1000));
+  let en, cn;
+  if (secs < 8)        { en = 'synced just now';   cn = '刚刚同步'; }
+  else if (secs < 60)  { en = `synced ${secs}s ago`; cn = `${secs}秒前同步`; }
+  else                 { const m = Math.floor(secs / 60); en = `synced ${m}m ago`; cn = `${m}分钟前同步`; }
+  el.textContent = `${en} · ${cn}`;
 }
 
 async function dashHeroLoadPresence() {
   try {
     const j = await api('/api/retail-admin/dashboard/presence');
     const d = j.data || {};
-    const num = $('#db-live-num'); const dot = $('#db-live-dot'); const sub = $('#db-live-sub');
-    if (num) { num.textContent = String(d.viewing || 0); num.classList.toggle('live-on', !!d.viewing); }
-    if (dot) dot.classList.toggle('zero', !d.viewing);
+    const num = $('#db-live-num'); const ring = $('#db-live-ring'); const sub = $('#db-live-sub');
+    if (num) { dashCountUp(num, Number(d.viewing || 0)); num.classList.toggle('live-on', !!d.viewing); }
+    if (ring) ring.classList.toggle('live', !!d.viewing);
     if (sub) {
       const v = d.viewing || 0;
       const p = d.products_with_viewers || 0;
@@ -10193,11 +10343,18 @@ async function dashHeroLoadToday() {
   const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   try {
     const j = await api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}`);
-    const k = (j.data && j.data.kpis) || {};
-    const rev = $('#db-today-rev'); const ord = $('#db-today-ord'); const nw = $('#db-today-new');
-    if (rev) rev.textContent = '¥' + Number(k.revenue || 0).toLocaleString();
-    if (ord) ord.textContent = String(k.orders || 0);
-    if (nw)  nw.textContent  = String(k.new_customers || 0);
+    const data = j.data || {};
+    const k = data.kpis || {};
+    dashCountUp($('#db-today-rev'), Number(k.revenue || 0), n => '¥' + Math.round(n).toLocaleString());
+    dashCountUp($('#db-today-ord'), Number(k.orders || 0));
+    dashCountUp($('#db-today-new'), Number(k.new_customers || 0));
+    // Intraday revenue sparkline — the same-day window returns hourly trend
+    // buckets; plot revenue-per-hour so the day's shape is visible at a glance.
+    const spark = $('#db-today-spark');
+    if (spark) {
+      const vals = (data.trend || []).map(p => Number(p.revenue || 0));
+      spark.innerHTML = dashSparkline(vals);
+    }
   } catch (e) { /* silent */ }
 }
 
@@ -10467,6 +10624,21 @@ function dashJumpTab(name) {
 const BENTO_SLOTS = ['a','b','c','d','e','f'];
 const BENTO_DEFAULT = ['low_stock','refunds','top_products','top_customers','geography','heatmap_mini'];
 
+// Thin-stroke header glyphs per tile (16-box viewBox, currentColor → tinted by
+// .db-tile-ic). A quiet visual anchor so the eye learns each tile by shape.
+const BENTO_ICONS = {
+  low_stock:        '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5L8 2.2 13.5 5v6L8 13.8 2.5 11z"/><path d="M2.5 5L8 7.8 13.5 5"/><path d="M8 7.8v6"/></svg>',
+  refunds:          '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5h6.5a3.5 3.5 0 0 1 0 7H5"/><path d="M5.2 3l-2.3 2.5L5.2 8"/></svg>',
+  top_products:     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.6 2.2H13v4.4l-6.4 6.4a1 1 0 0 1-1.4 0L2.4 9.8a1 1 0 0 1 0-1.4z"/><circle cx="10.4" cy="4.6" r="0.9"/></svg>',
+  top_customers:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.6"/><path d="M3 13.5a5 5 0 0 1 10 0"/></svg>',
+  geography:        '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 14s4.5-4.2 4.5-7.5a4.5 4.5 0 0 0-9 0C3.5 9.8 8 14 8 14z"/><circle cx="8" cy="6.4" r="1.6"/></svg>',
+  heatmap_mini:     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="1.4"/><path d="M6 2.4v11.2M10 2.4v11.2M2.4 6h11.2M2.4 10h11.2"/></svg>',
+  customer_tiers:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2l5.5 3-5.5 3-5.5-3z"/><path d="M2.5 8L8 11l5.5-3"/><path d="M2.5 11L8 14l5.5-3"/></svg>',
+  payment_split:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="4" width="11.6" height="8" rx="1.4"/><path d="M2.2 6.6h11.6"/><path d="M5 9.6h2"/></svg>',
+  delivery_split:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 4.5h7.4v6H1.8z"/><path d="M9.2 6.5h2.6L14 8.6v1.9H9.2z"/><circle cx="4.4" cy="11.4" r="1.3"/><circle cx="11" cy="11.4" r="1.3"/></svg>',
+  checkout_abandon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h1.7l1.4 7.2a1 1 0 0 0 1 .8h5a1 1 0 0 0 1-.8l.9-4.5H4.3"/><circle cx="6.2" cy="13" r="0.9"/><circle cx="11.4" cy="13" r="0.9"/></svg>',
+};
+
 // Tile catalogue — { key → { title_en, title_cn, render(slot), source } }.
 // `source` ∈ {'ops','dash'} — bentoRefresh() filters by source so an
 // /ops refresh doesn't re-render dash-data tiles and vice versa.
@@ -10506,11 +10678,12 @@ const BENTO_CATALOGUE = {
     render: (body) => {
       const list = (DASH_DATA && DASH_DATA.topProducts) || [];
       if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No sales in range · 区间内无销售</div>`;
-      const rows = list.slice(0, 6).map(p => `<div class="db-tile-list-row">
-        <span class="name">${escapeHtml(dbProdName(p))}</span>
-        <span class="val">${p.units || 0}</span>
-      </div>`).join('');
-      body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
+      const rows = dashBarRows(list.slice(0, 6), {
+        name: p => dbProdName(p),
+        value: p => Number(p.units || 0),
+        display: p => String(p.units || 0),
+      });
+      body.innerHTML = `<div class="db-tile-list">${rows}</div>${dashRangeFoot()}`;
     },
   },
   top_customers: {
@@ -10518,11 +10691,12 @@ const BENTO_CATALOGUE = {
     render: (body) => {
       const list = (DASH_DATA && DASH_DATA.topCustomers) || [];
       if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No customers in range · 区间内无顾客</div>`;
-      const rows = list.slice(0, 6).map(c => `<div class="db-tile-list-row">
-        <span class="name">${escapeHtml(c.nickname || ('#' + c.customer_id))}</span>
-        <span class="val">¥${Number(c.revenue || 0).toLocaleString()}</span>
-      </div>`).join('');
-      body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
+      const rows = dashBarRows(list.slice(0, 6), {
+        name: c => c.nickname || ('#' + c.customer_id),
+        value: c => Number(c.revenue || 0),
+        display: c => '¥' + Number(c.revenue || 0).toLocaleString(),
+      });
+      body.innerHTML = `<div class="db-tile-list">${rows}</div>${dashRangeFoot()}`;
     },
   },
   geography: {
@@ -10530,11 +10704,12 @@ const BENTO_CATALOGUE = {
     render: (body) => {
       const list = (DASH_DATA && DASH_DATA.geoCities) || [];
       if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No delivery data · 暂无数据</div>`;
-      const rows = list.slice(0, 6).map(g => `<div class="db-tile-list-row">
-        <span class="name">${escapeHtml(g.city || '—')}</span>
-        <span class="val">${g.orders || 0}</span>
-      </div>`).join('');
-      body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
+      const rows = dashBarRows(list.slice(0, 6), {
+        name: g => g.city || '—',
+        value: g => Number(g.orders || 0),
+        display: g => String(g.orders || 0),
+      });
+      body.innerHTML = `<div class="db-tile-list">${rows}</div>${dashRangeFoot()}`;
     },
   },
   heatmap_mini: {
@@ -10582,11 +10757,12 @@ const BENTO_CATALOGUE = {
     render: (body) => {
       const list = (DASH_DATA && DASH_DATA.tiers) || [];
       if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No data · 暂无数据</div>`;
-      const rows = list.slice(0, 4).map(t => `<div class="db-tile-list-row">
-        <span class="name">${escapeHtml(t.label || t.tier_key || '—')}</span>
-        <span class="val">${t.n || t.count || 0}</span>
-      </div>`).join('');
-      body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
+      const rows = dashBarRows(list.slice(0, 4), {
+        name: t => t.label || t.tier_key || '—',
+        value: t => Number(t.n || t.count || 0),
+        display: t => String(t.n || t.count || 0),
+      });
+      body.innerHTML = `<div class="db-tile-list">${rows}</div>${dashRangeFoot()}`;
     },
   },
   payment_split: {
@@ -10595,11 +10771,12 @@ const BENTO_CATALOGUE = {
       const list = (DASH_DATA && DASH_DATA.payments) || [];
       if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No data · 暂无数据</div>`;
       const total = list.reduce((s, r) => s + (r.revenue || 0), 0) || 1;
-      const rows = list.slice(0, 4).map(p => `<div class="db-tile-list-row">
-        <span class="name">${escapeHtml(p.method || '—')}</span>
-        <span class="val">${((p.revenue || 0) / total * 100).toFixed(0)}%</span>
-      </div>`).join('');
-      body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
+      const rows = dashBarRows(list.slice(0, 4), {
+        name: p => p.method || '—',
+        value: p => Number(p.revenue || 0),
+        display: p => ((p.revenue || 0) / total * 100).toFixed(0) + '%',
+      });
+      body.innerHTML = `<div class="db-tile-list">${rows}</div>${dashRangeFoot()}`;
     },
   },
   delivery_split: {
@@ -10608,11 +10785,12 @@ const BENTO_CATALOGUE = {
       const list = (DASH_DATA && DASH_DATA.delivery) || [];
       if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No data · 暂无数据</div>`;
       const total = list.reduce((s, r) => s + (r.orders || 0), 0) || 1;
-      const rows = list.slice(0, 4).map(d => `<div class="db-tile-list-row">
-        <span class="name">${escapeHtml(d.mode || '—')}</span>
-        <span class="val">${((d.orders || 0) / total * 100).toFixed(0)}%</span>
-      </div>`).join('');
-      body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
+      const rows = dashBarRows(list.slice(0, 4), {
+        name: d => d.mode || '—',
+        value: d => Number(d.orders || 0),
+        display: d => ((d.orders || 0) / total * 100).toFixed(0) + '%',
+      });
+      body.innerHTML = `<div class="db-tile-list">${rows}</div>${dashRangeFoot()}`;
     },
   },
   checkout_abandon: {
@@ -10707,8 +10885,10 @@ function bentoRenderSlot(slot, key) {
   const tile = document.getElementById('db-tile-' + slot); if (!tile) return;
   const entry = BENTO_CATALOGUE[key]; if (!entry) return;
   const title = tile.querySelector('.db-tile-title');
+  const ic    = tile.querySelector('.db-tile-ic');
   const body  = tile.querySelector('.db-tile-body');
   if (title) title.textContent = `${entry.title_en} · ${entry.title_cn}`;
+  if (ic) ic.innerHTML = (BENTO_ICONS && BENTO_ICONS[key]) || '';
   // Each render starts clean — only attention tiles re-flag .alert below.
   tile.classList.remove('alert');
   if (body) {
