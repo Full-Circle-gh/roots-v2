@@ -528,7 +528,7 @@ Return your answer ONLY by calling the \`emit_blocks\` tool. Do not write prose.
 VOICE: warm, plain-spoken, editorial. Never marketing-fluff. Keep the operator's own wording where it's already good; tighten where it rambles.
 
 BLOCK TYPES (pick the ones that fit — skip the rest, never force-fill):
-- **spec_strip** — three quick meta facts. Fields: cells[] of { k_en, k_cn, v_en, v_cn } (k = label like "Net Wt", v = value). Use ~3 cells.
+- **spec_strip** — three quick meta facts (type, net weight, origin, shelf life). Fields: cells[] of { k_en, k_cn, v_en, v_cn } (k = label like "Net Wt", v = value). Use ~3 cells. NOT for nutrient values (energy/fat/carbohydrate/protein/sugar/sodium) — those go in nutrition_facts.
 - **hero_intro** — the opening editorial paragraph. Fields: kicker_en/cn (tiny eyebrow line, optional), body_en/cn (the paragraph), highlight_en/cn (one pull-out phrase, optional).
 - **why** — why people choose it, as short numbered claims. Fields: rows[] of { claim_en, claim_cn }. 3–5 rows.
 - **ingredients_chips** — ingredient list as pills. Fields: items[] of { name_en, name_cn, pct (string % or ""), lead (boolean: true for a hero ingredient) }.
@@ -539,11 +539,11 @@ BLOCK TYPES (pick the ones that fit — skip the rest, never force-fill):
 - **notes_callout** — fine-print note. Fields: text_en/cn.
 - **big_stat** — one big number. Fields: stat (the number/figure), what_en/cn (what it measures), claim_en/cn (short line), bg ("lime").
 - **pull_quote** — sourcing / provenance line. Fields: text_en/cn, who_en/cn (attribution, optional).
-- **nutrition_facts** — only if the text has a nutrition table. Fields: basis_en/cn (e.g. "Per 100g"), rows[] of { label_en, label_cn, value }.
+- **nutrition_facts** — nutrition information, whether laid out as a grid/table OR as a simple labelled list (e.g. a "Nutrition" / "营养信息" heading followed by lines like "Energy 98kcal", "Fat 9g", "Carbohydrate 3g", "Protein 3.4g"). Fields: basis_en/cn (the per-serving/per-100g basis, e.g. "Per 100g" / "Per 16g serving"), rows[] of { label_en, label_cn, value } — one row per nutrient (label = "Energy"/"能量", value = "98kcal"). These nutrient lines belong HERE, never in spec_strip.
 
 RULES:
 - COVER EVERYTHING. Walk the source top to bottom and map EVERY distinct section or heading to its best-fit block. Each meaningful chunk of copy must land in some block — never silently drop a section. A product with Description / Why / Ingredients / Allergens / How to use / Storage / Nutrition / Notes should produce a block for EACH of those, in that reading order. Under-covering a rich paste (emitting only the easy tabular blocks and skipping the prose) is the #1 failure — do not do it.
-- Match by meaning, not exact wording. Typical headings → block types: an intro/overview paragraph → hero_intro; "why people choose it" / benefits → why; an ingredient list → ingredients_chips (or ingredients_line); "contains / may contain" → allergen_card; "how to use" / serving ideas → how_to_use; storage / shelf life → storage_box; a nutrition table → nutrition_facts; closing fine-print / "intended use" / disclaimers → notes_callout; meta facts (type, net weight, origin) → spec_strip.
+- Match by meaning, not exact wording. Typical headings → block types: an intro/overview paragraph → hero_intro; "why people choose it" / benefits → why; an ingredient list → ingredients_chips (or ingredients_line); "contains / may contain" → allergen_card; "how to use" / serving ideas → how_to_use; storage / shelf life → storage_box; "nutrition" / "nutrition facts" / "营养" / "营养信息" — including a plain list of nutrient lines like Energy/Fat/Carbohydrate/Protein — → nutrition_facts (NOT spec_strip); closing fine-print / "intended use" / disclaimers → notes_callout; meta facts (type, net weight, origin) → spec_strip.
 - Order blocks the way they should read on the page (intro first, fine-print/notes last).
 - Don't duplicate content across blocks. Each fact lives in one block.
 - Don't fabricate: only emit a block type when the source genuinely has that content, and never pad a block with invented fields. This is NOT licence to skip sections that ARE present — when in doubt, include a block for a section you can see rather than omit it.
@@ -568,7 +568,10 @@ Before calling emit_blocks, re-read your blocks and confirm NO _cn field is empt
     return translate
       ? `
 
-LANGUAGES: Only English copy is provided. Fill the _en fields from it, then also draft the _cn fields yourself — idiomatic and on-brand, NOT a literal word-for-word gloss.`
+LANGUAGES: Only English copy is provided. Fill the _en fields from it, then WRITE the matching _cn fields yourself — as ORIGINAL Chinese brand copy, the way a native 中文 copywriter for Roots would write it from scratch.
+- Carry the SAME facts, but in the brand VOICE above: warm, plain-spoken, editorial — never marketing fluff.
+- Use natural, idiomatic 中文. Adapt phrasing, sentence rhythm, idioms and units the way a Chinese reader expects — NOT a literal word-for-word gloss of the English.
+- A Chinese reader must not be able to tell this was drafted from English. If a sentence reads like translationese, rewrite it the way a person would actually say it in Chinese.`
       : `
 
 LANGUAGES: Only English copy is provided. Fill the _en fields and leave every _cn field as an empty string (""). Do not invent Chinese — the operator will write it.`;
@@ -577,7 +580,7 @@ LANGUAGES: Only English copy is provided. Fill the _en fields and leave every _c
   return translate
     ? `
 
-LANGUAGES: Only Chinese copy is provided. Fill the _cn fields from it, then also draft the _en fields yourself — idiomatic and on-brand, NOT a literal word-for-word gloss.`
+LANGUAGES: Only Chinese copy is provided. Fill the _cn fields from it, then WRITE the matching _en fields yourself — as ORIGINAL English brand copy in the brand VOICE above (warm, plain-spoken, editorial), idiomatic and natural, NOT a literal word-for-word gloss of the Chinese. Carry the same facts.`
     : `
 
 LANGUAGES: Only Chinese copy is provided. Fill the _cn fields and leave every _en field as an empty string (""). Do not invent English — the operator will write it.`;
