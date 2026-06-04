@@ -3,6 +3,10 @@
 
 const api  = require('../../utils/api');
 const lang = require('../../utils/lang');
+const { createPoller } = require('../../utils/livepoll');
+
+// Statuses past which the order no longer changes on its own — stop polling.
+const TERMINAL_STATUS = new Set(['delivered', 'cancelled', 'refunded']);
 
 function absUrl(u) {
   if (!u) return '';
@@ -139,6 +143,30 @@ Page({
     await this.refresh();
   },
 
+  onShow() {
+    // First show is covered by onLoad's refresh; on later re-entries (e.g.
+    // back from the Alipay page, or returning after the admin advanced the
+    // order) re-pull so the status/timeline reflect the latest state.
+    if (this.data.order) this.refresh(true);
+    // Keep the order live while it's on screen and still in flight.
+    if (!this._orderPoller) {
+      this._orderPoller = createPoller(() => {
+        const st = this.data.order && this.data.order.status;
+        if (st && TERMINAL_STATUS.has(st)) { this._orderPoller.stop(); return; }
+        return this.refresh(true);
+      });
+    }
+    this._orderPoller.start();
+  },
+
+  onHide() {
+    if (this._orderPoller) this._orderPoller.stop();
+  },
+
+  onUnload() {
+    if (this._orderPoller) this._orderPoller.stop();
+  },
+
   async onPullDownRefresh() {
     await this.refresh();
     wx.stopPullDownRefresh();
@@ -208,9 +236,11 @@ Page({
     });
   },
 
-  async refresh() {
+  async refresh(silent = false) {
     if (!this.data.id) return;
-    this.setData({ loading: true });
+    // Silent refreshes (background poll / re-entry) skip the loading flag so
+    // the page doesn't flash its skeleton while the user is reading it.
+    if (!silent) this.setData({ loading: true });
     try {
       const o = await api.get('/api/retail/orders/' + this.data.id);
       const data = o?.data || o;
@@ -342,6 +372,9 @@ Page({
       });
     } catch (e) {
       console.warn('[order] load failed:', e.message);
+      // A background poll hitting a transient error must not blank a page the
+      // user is already reading — only the initial/explicit load shows notFound.
+      if (silent) return;
       this.setData({ notFound: true, loading: false });
     }
   },

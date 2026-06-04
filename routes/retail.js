@@ -10915,6 +10915,15 @@ function computeDeliverySlots(zone, now) {
     };
   }
 
+  // Day-only "Express / ship ASAP" date — the zone's TRUE earliest fulfillable
+  // day, independent of the schedule calendar's SCHEDULE_MIN_LEAD (=3) floor.
+  // That floor only exists so the calendar never overlaps Today/Tomorrow; the
+  // Express slot must NOT inherit it, or it reads "Earliest +3 days" even for
+  // zones that ship in 1–2 days. Floor at 1 (tomorrow) because a day-only
+  // Express slot is never "today" — today is the separate same-day day chip.
+  const expressDays    = Math.max(1, cfg.min_lead_days);
+  const expressDateIso = fmtDateIso(new Date(startOfDay.getTime() + expressDays * 86400000));
+
   return {
     mode: isDayOnly ? 'day_only' : 'time_slots',
     right_away_available: rightAwayAvailable,
@@ -10944,22 +10953,24 @@ function computeDeliverySlots(zone, now) {
     // window exists — otherwise the mini-app's day-only handler bails on
     // an empty `slots` array and renders the Express radio with no label
     // (visible as an empty box). This synth slot is the "ship as soon as
-    // possible" option, anchored to schedule.min_date. resolveDeliverySlot
-    // accepts any date inside the schedule window so the synth slot_id is
-    // valid on /orders POST.
+    // possible" option, anchored to the zone's true earliest day
+    // (expressDateIso), NOT schedule.min_date. resolveDeliverySlot matches
+    // the slot_id against `slots` directly (before the schedule-window check)
+    // so an Express date earlier than schedule.min_date still validates on
+    // the /orders POST.
     slots: isDayOnly
       ? (todayDayChip
           ? [todayDayChip]
           : (schedule
               ? [{
-                  slot_id:    schedule.min_date,
-                  date_iso:   schedule.min_date,
+                  slot_id:    expressDateIso,
+                  date_iso:   expressDateIso,
                   is_same_day: false,
                   is_day_only: true,
                   requires_surcharge: false,
                   surcharge:  0,
-                  label_en:   `Earliest ${schedule.min_date}`,
-                  label_cn:   `最早 ${schedule.min_date}`,
+                  label_en:   `Earliest ${expressDateIso}`,
+                  label_cn:   `最早 ${expressDateIso}`,
                 }]
               : []))
       : todaySlots,

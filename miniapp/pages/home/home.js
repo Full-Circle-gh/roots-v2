@@ -8,6 +8,7 @@ const cart   = require('../../utils/cart');
 const config = require('../../utils/config');
 const lang   = require('../../utils/lang');
 const theme  = require('../../utils/theme');
+const { createPoller } = require('../../utils/livepoll');
 
 Page({
   data: {
@@ -133,6 +134,23 @@ Page({
     // count from onLoad — e.g. user opens Notifications, reads items,
     // returns to Home, strip still says "3 new updates".
     this._refreshNotifUnread();
+    // Re-pull the order-tracker banner so an admin marking the order paid
+    // (or shipping it) reflects the moment Home becomes visible again,
+    // not only on a manual pull-to-refresh.
+    this._fetchActiveOrderFor(this.data.layout);
+    // …and keep it live while Home stays on screen.
+    if (!this._orderPoller) {
+      this._orderPoller = createPoller(() => this._fetchActiveOrderFor(this.data.layout));
+    }
+    this._orderPoller.start();
+  },
+
+  onHide() {
+    if (this._orderPoller) this._orderPoller.stop();
+  },
+
+  onUnload() {
+    if (this._orderPoller) this._orderPoller.stop();
   },
 
   // Lightweight side-fetch — runs on every onShow without touching the

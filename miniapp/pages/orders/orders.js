@@ -3,6 +3,7 @@
 
 const api  = require('../../utils/api');
 const lang = require('../../utils/lang');
+const { createPoller } = require('../../utils/livepoll');
 
 function absUrl(u) {
   if (!u) return '';
@@ -59,6 +60,20 @@ Page({
       this.applyLangCopy();
     }
     this.refresh();
+    // Keep the list live while it's on screen so status chips advance as the
+    // admin works the orders, without the user backing out and re-entering.
+    if (!this._orderPoller) {
+      this._orderPoller = createPoller(() => this.refresh(true));
+    }
+    this._orderPoller.start();
+  },
+
+  onHide() {
+    if (this._orderPoller) this._orderPoller.stop();
+  },
+
+  onUnload() {
+    if (this._orderPoller) this._orderPoller.stop();
   },
 
   async onPullDownRefresh() {
@@ -84,8 +99,8 @@ Page({
     });
   },
 
-  async refresh() {
-    this.setData({ loading: true });
+  async refresh(silent = false) {
+    if (!silent) this.setData({ loading: true });
     try {
       const qs = this.data.activeFilter ? '?status=' + this.data.activeFilter : '';
       const list = await api.get('/api/retail/orders' + qs);
