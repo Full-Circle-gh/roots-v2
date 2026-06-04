@@ -10174,10 +10174,14 @@ async function dashHeroLoadPresence() {
     if (num) { num.textContent = String(d.viewing || 0); num.classList.toggle('live-on', !!d.viewing); }
     if (dot) dot.classList.toggle('zero', !d.viewing);
     if (sub) {
+      const v = d.viewing || 0;
       const p = d.products_with_viewers || 0;
-      sub.textContent = p
-        ? `${p} ${p === 1 ? 'product' : 'products'} · ${p} 件商品`
-        : 'No one browsing right now · 暂无浏览';
+      // With a single viewer the product count is trivially 1 — redundant with
+      // the big number. Only surface "across N products" once it adds signal
+      // (multiple viewers: are they clustered on one product or spread out?).
+      sub.textContent = !v
+        ? 'No one browsing right now · 暂无浏览'
+        : (v > 1 ? `across ${p} ${p === 1 ? 'product' : 'products'} · ${p} 件商品` : '');
     }
     dashHeroSyncStamp();
   } catch (e) { /* silent — next tick retries */ }
