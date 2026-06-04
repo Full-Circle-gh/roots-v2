@@ -672,6 +672,17 @@
   .db-today-cell.hero { grid-area: rev; position: relative; padding-left: 16px; background: rgba(107,142,111,.07); border-color: rgba(107,142,111,.28); }
   .db-today-cell.hero::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
   .db-today-cell.hero .val { font-size: 34px; color: var(--accent); letter-spacing: -.02em; }
+  /* Label row pairs the small-caps label with a calm delta-vs-yesterday badge. */
+  .db-today-lblrow { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: 3px; }
+  .db-today-lblrow .lbl { margin-top: 0; }
+  .db-delta { font-size: 10px; font-weight: 600; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; font-family: var(--f-mono); letter-spacing: .02em; }
+  .db-delta.is-up   { color: var(--accent); }
+  .db-delta.is-down { color: #bf8a6e; }   /* soft clay — a calm "down", never alarm-red */
+  .db-delta.is-flat { color: var(--text-3); opacity: .7; }
+  /* Hover warms the cell border toward the accent — the same ensō cue as the live ring. */
+  .db-today-cell { transition: border-color .5s ease, background-color .5s ease; }
+  .db-today-cell:hover { border-color: rgba(107,142,111,.45); cursor: default; }
+  .db-today-cell.hero:hover { background: rgba(107,142,111,.11); }
   /* Activity feed — scrollable list inside the pane, rows hover-highlight + click → drawer. */
   .db-feed-list { display: flex; flex-direction: column; gap: 2px; max-height: 200px; overflow-y: auto; padding-right: 4px; margin-right: -4px; }
   .db-feed-list::-webkit-scrollbar { width: 6px; }
@@ -841,9 +852,16 @@
   .db-tile-ic { flex: none; width: 13px; height: 13px; color: var(--text-3); display: inline-flex; }
   .db-tile-ic svg { width: 13px; height: 13px; }
 
-  /* Intraday sparkline under the hero "Today" revenue — revenue-by-hour. */
-  .db-spark-wrap { margin-top: 8px; height: 24px; color: var(--accent); }
+  /* Intraday sparkline under the hero "Today" revenue — revenue-by-hour. The
+     last point carries a "you-are-here" dot; the hero's softly breathes so the
+     day reads as still-live, the orders one stays static to keep the calm. */
+  .db-spark-wrap { position: relative; margin-top: 8px; height: 24px; color: var(--accent); }
+  .db-spark-wrap.db-spark-sm { height: 16px; margin-top: 6px; opacity: .85; }
   .db-spark { display: block; width: 100%; height: 100%; }
+  .db-spark-dot { position: absolute; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--accent); pointer-events: none; }
+  .db-spark-dot.is-breathing { box-shadow: 0 0 0 0 rgba(107,142,111,.45); animation: dbSparkBreathe 2.6s ease-out infinite; }
+  @keyframes dbSparkBreathe { 0% { box-shadow: 0 0 0 0 rgba(107,142,111,.45); } 70% { box-shadow: 0 0 0 6px rgba(107,142,111,0); } 100% { box-shadow: 0 0 0 0 rgba(107,142,111,0); } }
+  @media (prefers-reduced-motion: reduce) { .db-spark-dot.is-breathing { animation: none; } }
   .db-today-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 
   /* Flatten the right-now panes — inside the bento hero they read as
@@ -4476,13 +4494,20 @@
         <div class="db-hero-pane db-today-pane">
           <div class="db-hero-h">Today · 今日</div>
           <div class="db-today-grid">
-            <div class="db-today-cell hero">
+            <div class="db-today-cell hero" id="db-today-cell-rev">
               <div class="val" id="db-today-rev">¥—</div>
-              <div class="lbl">Revenue · 营收</div>
+              <div class="db-today-lblrow"><span class="lbl">Revenue · 营收</span><span class="db-delta" id="db-today-rev-d"></span></div>
               <div class="db-spark-wrap" id="db-today-spark"></div>
             </div>
-            <div class="db-today-cell"><div class="val" id="db-today-ord">—</div><div class="lbl">Orders · 订单</div></div>
-            <div class="db-today-cell"><div class="val" id="db-today-new">—</div><div class="lbl">New customers · 新客</div></div>
+            <div class="db-today-cell" id="db-today-cell-ord">
+              <div class="val" id="db-today-ord">—</div>
+              <div class="db-today-lblrow"><span class="lbl">Orders · 订单</span><span class="db-delta" id="db-today-ord-d"></span></div>
+              <div class="db-spark-wrap db-spark-sm" id="db-today-ord-spark"></div>
+            </div>
+            <div class="db-today-cell" id="db-today-cell-new">
+              <div class="val" id="db-today-new">—</div>
+              <div class="db-today-lblrow"><span class="lbl">New customers · 新客</span><span class="db-delta" id="db-today-new-d"></span></div>
+            </div>
           </div>
         </div>
         <div class="db-hero-pane db-feed-pane" id="db-feed-pane">
@@ -10344,9 +10369,11 @@ function dashBarRows(items, opt) {
   }).join('');
 }
 
-// A flat-stroke sparkline (no end dot — keeps the line crisp when stretched
-// full-width via preserveAspectRatio="none" + non-scaling-stroke).
-function dashSparkline(values) {
+// A flat-stroke sparkline stretched full-width via preserveAspectRatio="none"
+// + non-scaling-stroke. opts.dot adds an HTML last-point marker (opts.pulse =
+// the softly breathing variant); without opts the line stays bare and crisp.
+function dashSparkline(values, opts) {
+  opts = opts || {};
   const vals = (values || []).map(v => Number(v) || 0);
   const W = 100, H = 24, pad = 2;
   // Degenerate state (no data yet today, or a single bucket): instead of
@@ -10366,7 +10393,16 @@ function dashSparkline(values) {
   const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
   const area = `<polygon points="${x(0).toFixed(1)},${(H - pad).toFixed(1)} ${pts.join(' ')} ${x(n - 1).toFixed(1)},${(H - pad).toFixed(1)}" fill="currentColor" opacity="0.1" stroke="none"/>`;
   const line = `<polyline points="${pts.join(' ')}" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>`;
-  return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${area}${line}</svg>`;
+  // Last-point marker as an HTML overlay (not an SVG circle): the chart uses
+  // preserveAspectRatio="none", which would squash a <circle> into an ellipse.
+  // The wrap is position:relative, so percentage offsets land it on the point.
+  let dot = '';
+  if (opts.dot) {
+    const lx = (x(n - 1) / W * 100).toFixed(1);
+    const ly = (y(vals[n - 1]) / H * 100).toFixed(1);
+    dot = `<i class="db-spark-dot${opts.pulse ? ' is-breathing' : ''}" style="left:${lx}%;top:${ly}%"></i>`;
+  }
+  return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${area}${line}</svg>${dot}`;
 }
 
 // Period caption ("Last 30 days · 近30天") from the active date-range window —
@@ -10458,6 +10494,8 @@ function dashHeroInit() {
   // Single bootstrap — once wired, the timers + visibility listener carry it.
   if (DASH_HERO._wired) { dashHeroRefreshAll(); return; }
   DASH_HERO._wired = true;
+  // Language toggle repaints the Today badges + tooltips from the stashed data.
+  if (window.onLangChange) onLangChange(dashHeroTodayRepaint);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) dashHeroStop();
     else dashHeroStart();
@@ -10524,23 +10562,96 @@ async function dashHeroLoadPresence() {
 
 async function dashHeroLoadToday() {
   // Trailing-zero local-day in GZ (+8). Server tolerates same-day from/to and
-  // returns hourly trend; we only need the headline KPIs.
+  // returns 24 hourly trend buckets (revenue + orders) plus deltas-vs-yesterday.
   const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   try {
     const j = await api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}`);
     const data = j.data || {};
+    DASH_HERO.todayData = data;   // stashed so a language toggle can repaint without refetching
     const k = data.kpis || {};
     dashCountUp($('#db-today-rev'), Number(k.revenue || 0), n => '¥' + Math.round(n).toLocaleString());
     dashCountUp($('#db-today-ord'), Number(k.orders || 0));
     dashCountUp($('#db-today-new'), Number(k.new_customers || 0));
-    // Intraday revenue sparkline — the same-day window returns hourly trend
-    // buckets; plot revenue-per-hour so the day's shape is visible at a glance.
-    const spark = $('#db-today-spark');
-    if (spark) {
-      const vals = (data.trend || []).map(p => Number(p.revenue || 0));
-      spark.innerHTML = dashSparkline(vals);
-    }
+    // Intraday sparklines — revenue (focal, breathing dot) and orders (static
+    // dot) each plot their per-hour curve so the day's shape reads at a glance.
+    const trend = data.trend || [];
+    const sRev = $('#db-today-spark');
+    if (sRev) sRev.innerHTML = dashSparkline(trend.map(p => Number(p.revenue || 0)), { dot: true, pulse: true });
+    const sOrd = $('#db-today-ord-spark');
+    if (sOrd) sOrd.innerHTML = dashSparkline(trend.map(p => Number(p.orders || 0)), { dot: true });
+    dashHeroTodayRepaint();   // delta badges + hover tooltips (language-aware)
   } catch (e) { /* silent */ }
+}
+
+// Paint the language-dependent bits of the Today mini-row — the delta-vs-
+// yesterday badges and the per-cell hover tooltips. Split from the loader so a
+// language toggle repaints without refetching (sparklines + count-ups are
+// language-neutral and stay put).
+function dashHeroTodayRepaint() {
+  const data = DASH_HERO.todayData; if (!data) return;
+  const k = data.kpis || {}, d = data.deltas || {}, trend = data.trend || [];
+  const rev = Number(k.revenue || 0), ord = Number(k.orders || 0), nu = Number(k.new_customers || 0);
+  dashSetDelta('#db-today-rev-d', d.revenue, rev);
+  dashSetDelta('#db-today-ord-d', d.orders, ord);
+  dashSetDelta('#db-today-new-d', d.new_customers, nu);
+  const pRev = dashPeakHour(trend, 'revenue'), pOrd = dashPeakHour(trend, 'orders');
+  dashSetTip('#db-today-cell-rev', [
+    cuT('Revenue today', '今日营收') + ' ¥' + Math.round(rev).toLocaleString(),
+    dashDeltaPhrase(d.revenue, rev),
+    pRev ? cuT(`busiest ${pRev.label} (¥${Math.round(pRev.val).toLocaleString()})`,
+               `高峰 ${pRev.label}(¥${Math.round(pRev.val).toLocaleString()})`) : '',
+  ]);
+  dashSetTip('#db-today-cell-ord', [
+    cuT('Orders today', '今日订单') + ' ' + ord,
+    dashDeltaPhrase(d.orders, ord),
+    pOrd ? cuT(`busiest ${pOrd.label} (${pOrd.val})`, `高峰 ${pOrd.label}(${pOrd.val})`) : '',
+  ]);
+  dashSetTip('#db-today-cell-new', [
+    cuT('New customers today', '今日新客') + ' ' + nu,
+    dashDeltaPhrase(d.new_customers, nu),
+  ]);
+}
+// Delta badge: muted ▲/▼ percent vs yesterday. null delta = no baseline
+// (yesterday was zero) → "new" when there's activity, else a quiet dash.
+function dashSetDelta(sel, delta, cur) {
+  const el = $(sel); if (!el) return;
+  el.classList.remove('is-up', 'is-down', 'is-flat');
+  if (delta == null) {
+    if (cur > 0) { el.classList.add('is-up');   el.textContent = '▲ ' + cuT('new', '新'); }
+    else         { el.classList.add('is-flat'); el.textContent = '—'; }
+    return;
+  }
+  const r = Math.round(delta);
+  if (r > 0)      { el.classList.add('is-up');   el.textContent = '▲ ' + r + '%'; }
+  else if (r < 0) { el.classList.add('is-down'); el.textContent = '▼ ' + Math.abs(r) + '%'; }
+  else            { el.classList.add('is-flat'); el.textContent = '±0%'; }
+}
+// Long-form delta line for the hover tooltip.
+function dashDeltaPhrase(delta, cur) {
+  if (delta == null) {
+    return cur > 0 ? cuT('up from none yesterday', '较昨日从无到有')
+                   : cuT('same as yesterday', '与昨日持平');
+  }
+  const r = Math.round(delta);
+  if (r > 0) return cuT(`▲${r}% vs yesterday`, `较昨日 ▲${r}%`);
+  if (r < 0) return cuT(`▼${Math.abs(r)}% vs yesterday`, `较昨日 ▼${Math.abs(r)}%`);
+  return cuT('level with yesterday', '与昨日持平');
+}
+function dashSetTip(sel, parts) {
+  const el = $(sel); if (!el) return;
+  el.title = parts.filter(Boolean).join(' · ');
+}
+// Busiest hour for a metric in the intraday trend → { label, val } or null.
+function dashPeakHour(trend, key) {
+  let best = null;
+  (trend || []).forEach(p => {
+    const v = Number(p[key] || 0);
+    if (v > 0 && (!best || v > best.v)) best = { b: p.bucket, v };
+  });
+  if (!best) return null;
+  const h = parseInt(best.b, 10) || 0;
+  const pad = x => String(x).padStart(2, '0');
+  return { label: `${pad(h)}:00–${pad((h + 1) % 24)}:00`, val: best.v };
 }
 
 // Activity feed shows only the first DASH_FEED_PREVIEW events by default; the
