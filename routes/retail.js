@@ -4577,6 +4577,23 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
   }
   delete o.refund_lines_json;
   o.tracking = buildTrackingView(o);
+  // Multi-package orders: when a parcel is split across two+ shipments and
+  // more than one has a waybill attached, the single legacy `tracking` (the
+  // primary shipment only) would hide the other tracking numbers from the
+  // customer. Surface a per-shipment `shipments[]` so the order page can show
+  // a tracking card for each parcel, with the items that ride in it.
+  try {
+    const tracked = tdb().prepare(
+      `SELECT * FROM retail_shipments WHERE order_id = ? AND tracking_number IS NOT NULL AND tracking_number != '' ORDER BY id ASC`
+    ).all(orderId);
+    if (tracked.length > 1) {
+      o.shipments = tracked.map((s, i) => ({
+        ...buildShipmentTrackingView(s),
+        index: i + 1,
+        total: tracked.length,
+      }));
+    }
+  } catch (e) { /* shipments table is optional — fall back to single tracking */ }
   // Items snapshot historical name + price at order time, but image_url
   // was never captured (always null on insert). Fall through to the live
   // product image so order/review thumbnails actually render. The tradeoff
@@ -4585,7 +4602,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
   o.items = tdb().prepare(
     `SELECT oi.id, oi.product_id, oi.name_en, oi.name_cn, oi.sku, oi.size,
             COALESCE(NULLIF(oi.image_url, ''), p.image_url, p.image_data) AS image_url,
-            oi.qty, oi.unit_price, oi.line_total, oi.options_json
+            oi.qty, oi.unit_price, oi.line_total, oi.options_json, oi.shipment_id
        FROM retail_order_items oi
   LEFT JOIN products p ON p.id = oi.product_id
       WHERE oi.order_id = ? ORDER BY oi.id ASC`
@@ -4601,6 +4618,14 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
     }
     return it;
   });
+  // Tell the customer which items ride in each parcel (split-package orders).
+  if (o.shipments) {
+    o.shipments.forEach(s => {
+      s.items = o.items
+        .filter(it => it.shipment_id === s.shipment_id)
+        .map(it => ({ name_en: it.name_en, name_cn: it.name_cn, qty: it.qty }));
+    });
+  }
   o.timeline = orderTimeline(o);
   return o;
 }

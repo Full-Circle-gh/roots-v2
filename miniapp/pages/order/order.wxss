@@ -632,6 +632,32 @@
   color: var(--olive);
   text-transform: uppercase;
 }
+
+/* Split-package: each parcel is its own bordered card so the customer can
+   tell the two waybills apart at a glance. */
+.trk-pkg {
+  padding: 24rpx 0;
+  border-top: 2rpx solid rgba(0,0,0,0.08);
+}
+.trk-pkg:first-of-type { border-top: none; }
+.trk-pkg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  margin-bottom: 8rpx;
+}
+.trk-pkg-label {
+  font-size: calc(26rpx * var(--font-scale));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--olive);
+}
+.trk-pkg-items {
+  font-size: calc(22rpx * var(--font-scale));
+  line-height: 1.35;
+  margin-bottom: 16rpx;
+}
 .trk-toggle:active { opacity: 0.5; }
 .trk-link {
   margin-top: 20rpx;

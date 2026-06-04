@@ -32,8 +32,48 @@
       </view>
     </view>
 
+    <!-- Split-package tracking — one card per parcel so the customer sees
+         every waybill, not just the primary shipment's. -->
+    <view wx:if="{{shipments.length > 1}}" class="section tracking-section">
+      <view class="section-label f-toni">{{copy.trackingLabel}}</view>
+      <view wx:for="{{shipments}}" wx:key="shipment_id" wx:for-item="sh" class="trk-pkg">
+        <view class="trk-pkg-head">
+          <view class="trk-pkg-label f-bear">{{sh.label}}</view>
+          <view wx:if="{{sh.status_label}}" class="trk-status-pill">
+            <view class="trk-status-dot"></view>
+            <text>{{sh.status_label}}</text>
+          </view>
+        </view>
+        <view wx:if="{{sh.items_str}}" class="trk-pkg-items muted">{{sh.items_str}}</view>
+        <view class="trk-head">
+          <view class="trk-carrier">
+            <view class="trk-carrier-name f-bear">{{sh.carrier_name}}</view>
+            <view class="trk-number-row" bindtap="copyShipmentTracking" data-number="{{sh.number}}" hover-class="trk-number-row-tap">
+              <view class="trk-number">{{sh.number}}</view>
+              <image class="trk-copy-icon" src="/assets/icons/copy.svg" mode="aspectFit" aria-label="copy"></image>
+            </view>
+          </view>
+        </view>
+        <view wx:if="{{sh.latest_event}}" class="trk-events">
+          <view class="trk-event latest">
+            <view class="trk-event-dot"></view>
+            <view class="trk-event-body">
+              <view class="trk-event-line">{{sh.latest_event.description}}</view>
+              <view class="trk-event-meta muted">
+                <text class="trk-event-time">{{sh.latest_event.time}}</text>
+                <text wx:if="{{sh.latest_event.location}}" class="trk-event-loc"> · {{sh.latest_event.location}}</text>
+              </view>
+            </view>
+          </view>
+          <view class="trk-toggle" bindtap="openShipmentLink" data-number="{{sh.number}}">{{copy.trackingViewLive}} →</view>
+        </view>
+        <view wx:elif="{{sh.synced_at}}" class="trk-empty muted">{{copy.trackingNoEvents}}</view>
+        <view wx:else class="trk-empty muted">{{copy.trackingPending}}</view>
+      </view>
+    </view>
+
     <!-- Shipment tracking — only shown once a waybill is attached -->
-    <view wx:if="{{tracking}}" class="section tracking-section">
+    <view wx:elif="{{tracking}}" class="section tracking-section">
       <view class="section-label f-toni">{{copy.trackingLabel}}</view>
 
       <!-- Scenario banner — appears once kd100 has classified the latest

@@ -41,6 +41,7 @@ Page({
     items: [],
     timeline: [],
     tracking: null,
+    shipments: [],
     trackingEvents: [],
     trackingEventsVisible: [],   // computed: 1 latest by default, all when expanded
     trackingEventsExpanded: false,
@@ -287,6 +288,34 @@ Page({
           : (ev.description_en || ev.description_cn || ''),
       }));
 
+      // Split-package orders return shipments[] (one per parcel, each with its
+      // own waybill + items). When present we render a card per parcel instead
+      // of the single tracking block, so the customer sees every tracking
+      // number — not just the primary shipment's.
+      const shipments = (data.shipments || []).map(s => {
+        const latest = (s.events || [])[0] || null;
+        return {
+          shipment_id: s.shipment_id,
+          label: L === 'cn'
+            ? `包裹 ${s.index} / ${s.total}`
+            : `Package ${s.index} of ${s.total}`,
+          carrier_name: L === 'cn' ? s.carrier_name_cn : s.carrier_name_en,
+          number: s.number,
+          status_label: L === 'cn' ? s.status_label_cn : s.status_label_en,
+          synced_at: s.synced_at,
+          latest_event: latest ? {
+            description: L === 'cn'
+              ? (latest.description_cn || latest.description_en || '')
+              : (latest.description_en || latest.description_cn || ''),
+            time: (latest.time || '').slice(0, 16),
+            location: latest.location || '',
+          } : null,
+          items_str: (s.items || [])
+            .map(it => `${lang.pick(it.name_en, it.name_cn, L)} ×${it.qty}`)
+            .join(L === 'cn' ? '、' : ', '),
+        };
+      });
+
       // Collapse to just the latest event by default — the section was
       // dominating the order page on long-haul shipments with 10+ events.
       // Preserves the user's expand state across refreshes (e.g. pull
@@ -352,6 +381,7 @@ Page({
         items,
         timeline,
         tracking,
+        shipments,
         trackingEvents,
         trackingEventsVisible,
         refundView,
@@ -403,6 +433,39 @@ Page({
         title: this.data.lang === 'cn' ? '运单号已复制' : 'Tracking number copied',
         icon: 'success',
       }),
+    });
+  },
+
+  // Copy a specific parcel's waybill number (split-package orders show one
+  // tracking card per parcel; each card's number row is independently copyable).
+  copyShipmentTracking(e) {
+    const n = e.currentTarget.dataset.number || '';
+    if (!n) return;
+    wx.setClipboardData({
+      data: n,
+      success: () => wx.showToast({
+        title: this.data.lang === 'cn' ? '运单号已复制' : 'Tracking number copied',
+        icon: 'success',
+      }),
+    });
+  },
+
+  // Open the full carrier tracking page for one parcel of a split-package order.
+  openShipmentLink(e) {
+    const o = this.data.order || {};
+    const n = e.currentTarget.dataset.number || '';
+    if (!o.order_no || !n) return;
+    wx.navigateTo({
+      url: `/pages/track-webview/track-webview?order_no=${encodeURIComponent(o.order_no)}&number=${encodeURIComponent(n)}`,
+      fail: () => {
+        wx.setClipboardData({
+          data: n,
+          success: () => wx.showToast({
+            title: this.data.lang === 'cn' ? '运单号已复制' : 'Tracking copied',
+            icon: 'success',
+          }),
+        });
+      },
     });
   },
 
