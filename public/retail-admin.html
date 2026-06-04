@@ -891,7 +891,7 @@
   }
 
   /* Tile-swap popover. Floats above on click, dismissed by outside-click. */
-  .db-tile-pop { position: fixed; min-width: 220px; max-width: 280px; background: var(--bg-pane); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 6px; z-index: 250; }
+  .db-tile-pop { position: fixed; min-width: 220px; max-width: 280px; background: var(--bg-pane); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 6px; z-index: 250; overflow-y: auto; overscroll-behavior: contain; }
   .db-tile-pop .db-tile-pop-head { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); padding: 6px 8px; font-family: var(--f-mono); }
   .db-tile-pop button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 6px 8px; border: none; background: transparent; color: var(--text-1); font: inherit; font-size: 12px; cursor: pointer; border-radius: 4px; }
   .db-tile-pop button:hover { background: var(--bg-elev-1); }
@@ -11219,13 +11219,27 @@ function bentoMenuOpen(buttonEl, slot) {
   // Anchor to the button — fixed-position so scroll doesn't dislodge it.
   const r = buttonEl.getBoundingClientRect();
   const popRect = pop.getBoundingClientRect();
-  let left = r.right - popRect.width;       // align right edge with button
-  let top  = r.bottom + 6;
-  if (left < 8) left = 8;
-  if (left + popRect.width > window.innerWidth - 8) left = window.innerWidth - popRect.width - 8;
-  if (top + popRect.height > window.innerHeight - 8) top = r.top - popRect.height - 6;
+  const margin = 8, gap = 6;
+  // Horizontal: align right edge with button, then clamp into the viewport.
+  let left = r.right - popRect.width;
+  if (left < margin) left = margin;
+  if (left + popRect.width > window.innerWidth - margin) left = window.innerWidth - popRect.width - margin;
+  // Vertical: open below when it fits, else flip to whichever side has more
+  // room. Cap height to the available space so a long list scrolls inside the
+  // popover instead of running off the bottom of the screen.
+  const spaceBelow = window.innerHeight - r.bottom - gap - margin;
+  const spaceAbove = r.top - gap - margin;
+  let top, maxH;
+  if (popRect.height <= spaceBelow || spaceBelow >= spaceAbove) {
+    maxH = spaceBelow;
+    top  = r.bottom + gap;
+  } else {
+    maxH = spaceAbove;
+    top  = r.top - gap - Math.min(popRect.height, maxH);
+  }
+  pop.style.maxHeight = Math.max(120, maxH) + 'px';
   pop.style.left = left + 'px';
-  pop.style.top  = top + 'px';
+  pop.style.top  = Math.max(margin, top) + 'px';
   // Outside-click closes; defer the listener so the opening click doesn't fire it.
   setTimeout(() => document.addEventListener('mousedown', bentoMenuOutside), 0);
 }
