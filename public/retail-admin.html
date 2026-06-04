@@ -535,6 +535,21 @@
     padding: var(--s5);
     margin-bottom: var(--s3);
     box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
+    transition: box-shadow .35s var(--ease-calm), transform .35s var(--ease-calm);
+  }
+  /* Gentle hover raise on every card — the same hand as the dashboard tiles, so
+     order/invoice/zone/setting cards all feel alive under the cursor instead of
+     reading as flat panels. (Calm 1px lift; suppressed for reduced-motion.) */
+  .card:hover {
+    box-shadow: 0 2px 4px rgba(18,22,26,.06), 0 12px 28px rgba(18,22,26,.11);
+    transform: translateY(-1px);
+  }
+  /* The dashboard hero is a large live panel, not a tappable tile — keep it
+     planted. (The small bento tiles + deep-dive cards still lift via their own
+     rules; this only opts the one big panel out of the global card raise.) */
+  .db-hero:hover {
+    transform: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
   }
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -613,6 +628,13 @@
     border: 1px solid var(--line); border-radius: var(--r-lg);
     padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;
     box-shadow: 0 1px 2px rgba(18,22,26,.05), 0 8px 22px rgba(18,22,26,.07);
+    transition: box-shadow .35s var(--ease-calm), transform .35s var(--ease-calm);
+  }
+  /* Gentle hover raise — same hand as .fc-tile / the dashboard tiles, so every
+     summary card feels alive under the cursor, not a flat panel. */
+  .fc-kpi:hover {
+    box-shadow: 0 2px 4px rgba(18,22,26,.06), 0 12px 28px rgba(18,22,26,.11);
+    transform: translateY(-1px);
   }
   .fc-kpi .lbl { font-family: var(--f-mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fc-kpi .val { font-size: 30px; font-weight: 500; letter-spacing: -.02em; color: var(--text-1); font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
@@ -682,8 +704,8 @@
   .fc-row-in { animation: fc-row-in 2s var(--ease-calm) 1; }
 
   @media (prefers-reduced-motion: reduce) {
-    .fc-tile { transition: none; }
-    .fc-tile:hover { transform: none; }
+    .fc-tile, .fc-kpi, .card { transition: none; }
+    .fc-tile:hover, .fc-kpi:hover, .card:hover { transform: none; }
     .fc-spark-dot.is-breathing { animation: none; }
     .fc-row-in { animation: none; }
     .fc-barrow.has-bar::before { transition: none; }
