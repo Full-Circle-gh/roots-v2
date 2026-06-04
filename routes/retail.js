@@ -8638,7 +8638,7 @@ router.post('/api/retail-admin/integrations/jd/test', requireRetailAdmin, async 
   const jc = integ().jd;
   if (!jd.jdEnabled(jc)) return res.json({ ok: false, error: 'not_configured' });
   const r = await jd.pingJd(jc);
-  if (r.ok) return res.json({ ok: true, server_time: r.data?.serverTime || null });
+  if (r.ok) return res.json({ ok: true, note: r.note || null });
   return res.json({ ok: false, error: r.error });
 });
 
