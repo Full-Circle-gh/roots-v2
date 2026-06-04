@@ -9995,12 +9995,14 @@ function _renderProdGalleryStrip(p, gallery) {
       <button onclick="event.stopPropagation();_prodGalleryRemove(${p.id},${idx})" title="Remove · 删除"
         style="position:absolute;top:1px;right:1px;width:15px;height:15px;line-height:13px;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:11px;cursor:pointer">×</button>
     </div>`;
-  const addTile = canAdd ? `<div onclick="_prodGalleryAdd(${p.id})" title="Add photos · 添加图片"
+  const addTile = canAdd ? `<div onclick="_prodGalleryAdd(${p.id})" title="Upload photos · 上传图片"
       style="width:46px;height:46px;flex:0 0 auto;border-radius:6px;border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:20px;cursor:pointer">+</div>` : '';
+  const libTile = canAdd ? `<div onclick="_prodGalleryAddLibrary(${p.id})" title="Add from media library · 从媒体库添加"
+      style="width:46px;height:46px;flex:0 0 auto;border-radius:6px;border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:18px;cursor:pointer">🖼</div>` : '';
   // Skip index 0 (the primary, shown above); list the rest as removable thumbs.
   const thumbs = gallery.slice(1).map((src, i) => thumb(src, i + 1)).join('');
   return `<div style="display:flex;gap:6px;padding:8px;overflow-x:auto;align-items:center;background:var(--gray);border-top:1px solid var(--border)">
-      ${thumbs}${addTile}
+      ${thumbs}${addTile}${libTile}
     </div>`;
 }
 
@@ -10069,6 +10071,76 @@ async function _prodGalleryRemove(productId, idx) {
   await _prodGallerySave(productId, cur);
 }
 
+// ── Media-library picker ───────────────────────────────────────────────────
+// Lets the operator pick an existing image from the shared media library (the
+// same `retail_media` store the Mini App Backend / CMS uses) instead of always
+// re-uploading. The chosen value is the public /api/retail/media/<id> URL —
+// stored straight into image_data / the gallery array (an <img src> reads a URL
+// just as happily as a base64 data-URI, so nothing downstream needs to change).
+// Opens an overlay grid and calls onPick(url) when the operator picks one.
+async function _prodMediaLibraryPick(onPick) {
+  const overlay = mkOverlay('prodMediaLibOverlay');
+  const box = overlay.querySelector('.overlay-box');
+  box.style.maxWidth = '720px';
+  box.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h2 style="font-size:16px;font-weight:900;display:flex;align-items:center;gap:8px">🖼 Media library · 媒体库</h2>
+      <button class="btn-icon" onclick="closeOverlay('prodMediaLibOverlay')">✕</button>
+    </div>
+    <div id="prodMediaLibGrid" style="min-height:160px;max-height:60vh;overflow:auto">
+      <div style="text-align:center;color:var(--muted);padding:40px;font-size:13px">Loading… · 加载中…</div>
+    </div>`;
+  const grid = box.querySelector('#prodMediaLibGrid');
+  // Resolve the chosen URL via a stashed callback so the per-tile inline
+  // onclick can reach it without re-binding listeners after innerHTML.
+  window._prodMediaLibOnPick = (url) => { closeOverlay('prodMediaLibOverlay'); onPick(url); };
+  try {
+    const r = await fetch('/api/retail-admin/cms/media');
+    const res = await r.json();
+    if (!res.success) throw new Error(res.error || 'load failed');
+    const items = (res.data || []).filter(it => (it.mime_type || '').startsWith('image/'));
+    if (!items.length) {
+      grid.innerHTML = `<div style="text-align:center;color:var(--muted);padding:40px;font-size:13px;line-height:1.7">No images in the library yet · 媒体库还没有图片<br><span style="font-size:11px">Add images in the Mini App Backend → Media. · 可在小程序后台 → 媒体 中上传。</span></div>`;
+      return;
+    }
+    grid.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px">${
+      items.map(it => `<div onclick="window._prodMediaLibOnPick && window._prodMediaLibOnPick('/api/retail/media/${it.id}')" title="${esc(it.filename || ('#' + it.id))}"
+        style="position:relative;aspect-ratio:1/1;border-radius:8px;overflow:hidden;border:1px solid var(--border);cursor:pointer;background:var(--gray)">
+        <img src="/api/retail/media/${it.id}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block">
+      </div>`).join('')
+    }</div>`;
+  } catch (e) {
+    grid.innerHTML = `<div style="text-align:center;color:var(--danger,#c0392b);padding:40px;font-size:13px">Couldn't load the library · 无法加载媒体库<br><span style="font-size:11px;color:var(--muted)">${esc(e.message || '')}</span></div>`;
+  }
+}
+
+// Hero: set the primary photo from the library (writes image_data).
+async function _prodHeroPickLibrary(productId) {
+  _prodMediaLibraryPick(async (url) => {
+    try {
+      const r = await fetch('/api/products/' + productId, {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ image_data: url }),
+      });
+      const res = await r.json();
+      if (!res.success) throw new Error(res.error || 'save failed');
+      toast('✅ Photo added from library · 已从媒体库添加图片', 'success');
+      await viewProduct(productId);
+    } catch (e) {
+      toast('Failed · 失败: ' + e.message, 'error');
+    }
+  });
+}
+
+// Gallery: append a library image to the gallery array.
+async function _prodGalleryAddLibrary(productId) {
+  _prodMediaLibraryPick(async (url) => {
+    const cur = (window._pdGalleryImages || []).slice();
+    if (cur.length >= PROD_GALLERY_MAX) { toast(`Max ${PROD_GALLERY_MAX} photos · 最多 ${PROD_GALLERY_MAX} 张图片`, 'error'); return; }
+    await _prodGallerySave(productId, cur.concat([url]));
+  });
+}
+
 function _renderProdHero(ctx) {
   const { p, safeName, zoomCall } = ctx;
   // Hero-image cell. When there's an image: zoom on click. When there isn't:
@@ -10118,7 +10190,7 @@ function _renderProdHero(ctx) {
         <div style="aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;cursor:${heroCursor}" ${heroAction}>
           ${p.image_data
             ? `<img src="${esc(p.image_data)}" alt="${esc(p.name_en||'')}" style="width:100%;height:100%;object-fit:cover;display:block">`
-            : `<div style="text-align:center;color:var(--muted);pointer-events:none"><div style="font-size:48px;line-height:1">${p.category?getCategoryEmoji(p.category):'🛍'}</div><div style="font-size:10px;margin-top:6px;letter-spacing:.1em;text-transform:uppercase;font-weight:700">📷 Add photo · 添加图片</div></div>`}
+            : `<div style="text-align:center;color:var(--muted)"><div style="font-size:48px;line-height:1;pointer-events:none">${p.category?getCategoryEmoji(p.category):'🛍'}</div><div style="font-size:10px;margin-top:6px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;pointer-events:none">📷 Add photo · 添加图片</div><button onclick="event.stopPropagation();_prodHeroPickLibrary(${p.id})" title="Choose from media library · 从媒体库选择" style="margin-top:9px;background:rgba(0,0,0,.05);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit">🖼 From library · 从媒体库</button></div>`}
         </div>
         ${galleryStrip}
       </div>

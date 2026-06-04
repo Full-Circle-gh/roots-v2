@@ -5430,6 +5430,32 @@
     <!-- LIST VIEW (always visible; detail opens as a side-drawer overlay) -->
     <div>
       <h2>Customers · 顾客</h2>
+      <!-- Roster pulse — shared fc-* KPI strip. Active base + tier totals come
+           from the dashboard's tiers snapshot; New today carries the full
+           delta + hourly sparkline. Blocked flips to .alert when > 0. -->
+      <div class="fc-kpis" id="cu-kpis">
+        <div class="fc-kpi accent">
+          <div class="lbl">Total customers · 顾客总数</div>
+          <div class="val" id="cu-kpi-total">—</div>
+          <div class="sub">all accounts · 全部账户</div>
+        </div>
+        <div class="fc-kpi">
+          <div class="lbl">New today · 今日新增</div>
+          <div class="val" id="cu-kpi-new">—</div>
+          <div class="fc-kpi-foot"><span class="fc-delta is-flat" id="cu-kpi-new-d" onmouseenter="fcDeltaHover(event)" onmouseleave="fcDeltaLeave(event)">—</span></div>
+          <div class="fc-spark-wrap sm" id="cu-kpi-new-spark" onmousemove="fcSparkMove(event)" onmouseleave="fcSparkLeave(event)"></div>
+        </div>
+        <div class="fc-kpi">
+          <div class="lbl">Active base · 在册账户</div>
+          <div class="val" id="cu-kpi-active">—</div>
+          <div class="sub">not blocked · 未封禁</div>
+        </div>
+        <div class="fc-kpi" id="cu-kpi-blocked-tile">
+          <div class="lbl">Blocked · 已封禁</div>
+          <div class="val" id="cu-kpi-blocked">—</div>
+          <div class="sub" id="cu-kpi-blocked-sub">&nbsp;</div>
+        </div>
+      </div>
       <div class="row" style="margin-bottom: var(--s4)">
         <input type="text" id="cu-q" placeholder="Search name, phone, openid, or order #…" oninput="cuSearchDebounced()" style="flex: 1; min-width: 240px">
         <select id="cu-tier" onchange="cuLoad()">
@@ -5448,7 +5474,7 @@
         <label style="font-size: 12px; display: inline-flex; align-items: center; gap: 6px; color: var(--text-2);">
           <input type="checkbox" id="cu-blocked" onchange="cuLoad()" style="width: 16px; height: 16px;"> Include blocked
         </label>
-        <button class="btn" onclick="cuLoad()">
+        <button class="btn" onclick="cuLoad(); cuLoadKpis(true)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
           Refresh
         </button>
@@ -18768,6 +18794,56 @@ function cuSearchDebounced() {
   cuSearchTimer = setTimeout(() => { CU_PAGE = 1; cuLoad(); }, 220);
 }
 
+// ── Customers KPI strip — roster pulse on the shared fc-* layer ──────────
+// Two cheap fetches: the today dashboard (new_customers + baseline delta +
+// hourly sparkline, plus a tiers snapshot whose sum is the non-blocked base)
+// and a single customers count (includeBlocked=1, pageSize=1) for the grand
+// total. Blocked = total − active base, so no third call is needed.
+let _CU_KPI_AT = 0;
+let _CU_KPI_DASH = null;
+let _CU_KPI_TOTAL = null;
+let _CU_KPI_LANG_HOOKED = false;
+async function cuLoadKpis(force) {
+  if (!document.getElementById('cu-kpis')) return;
+  if (!force && Date.now() - _CU_KPI_AT < 45000) return;
+  _CU_KPI_AT = Date.now();
+  if (!_CU_KPI_LANG_HOOKED && window.onLangChange) { _CU_KPI_LANG_HOOKED = true; onLangChange(cuRepaintKpis); }
+  const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  try {
+    const [dash, tot] = await Promise.all([
+      api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}`),
+      api('/api/retail-admin/customers?includeBlocked=1&pageSize=1'),
+    ]);
+    _CU_KPI_DASH = dash.data || {};
+    _CU_KPI_TOTAL = (tot && typeof tot.total === 'number') ? tot.total : null;
+    cuRenderKpis();
+  } catch (e) {}
+}
+function cuRenderKpis() {
+  const d = _CU_KPI_DASH; if (!d) return;
+  const activeBase = (d.tiers || []).reduce((s, t) => s + Number(t.n || 0), 0);
+  const total = _CU_KPI_TOTAL != null ? _CU_KPI_TOTAL : activeBase;
+  const blocked = Math.max(0, total - activeBase);
+  dashCountUp($('#cu-kpi-total'), total);
+  dashCountUp($('#cu-kpi-new'), Number(d.kpis && d.kpis.new_customers || 0));
+  dashCountUp($('#cu-kpi-active'), activeBase);
+  dashCountUp($('#cu-kpi-blocked'), blocked);
+  const bTile = $('#cu-kpi-blocked-tile'); if (bTile) bTile.classList.toggle('alert', blocked > 0);
+  cuRepaintKpis();
+}
+function cuRepaintKpis() {
+  const d = _CU_KPI_DASH; if (!d) return;
+  const k = d.kpis || {}, b = d.baseline || null, trend = d.trend || [];
+  fcSetDelta('#cu-kpi-new-d', b && b.new_customers, Number(k.new_customers || 0), b && b.days,
+             v => dashTrim(v) + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'));
+  fcRenderSpark($('#cu-kpi-new-spark'), trend.map(p => Number(p.new_customers || 0)), trend.map(p => p.bucket),
+                v => v + ' ' + cuT(v === 1 ? 'signup' : 'signups', '注册'), true);
+  const activeBase = (d.tiers || []).reduce((s, t) => s + Number(t.n || 0), 0);
+  const total = _CU_KPI_TOTAL != null ? _CU_KPI_TOTAL : activeBase;
+  const blocked = Math.max(0, total - activeBase);
+  const bsub = $('#cu-kpi-blocked-sub');
+  if (bsub) bsub.textContent = blocked > 0 ? cuT('restricted · 受限', '受限账户') : cuT('none blocked · 无封禁', '无封禁');
+}
 async function cuLoad() {
   const params = new URLSearchParams({
     q: $('#cu-q').value.trim(),
@@ -19353,6 +19429,7 @@ async function cuToggleBlock() {
       toast('Unblocked · 已解封');
     } catch { return; }
   }
+  cuLoadKpis(true);   // blocked/active counts changed — refresh the strip
   cuOpenDetail(c.id);
 }
 
@@ -19560,6 +19637,7 @@ function cuFmtDate(iso) {
 
 document.querySelector('[data-tab="customers"]').addEventListener('click', () => {
   if (!CUSTOMERS_LOADED) { CUSTOMERS_LOADED = true; cuLoad(); }
+  cuLoadKpis();   // throttled (45s) — keeps the New-today pulse fresh on open
 });
 
 // ════════════════════════════════════════════════════════════════
