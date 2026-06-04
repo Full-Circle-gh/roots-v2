@@ -187,10 +187,12 @@
   html, body { height: 100%; }
   /* Reserve the scrollbar gutter so locking page scroll (when a modal/drawer
      is open) doesn't shift the layout sideways. */
-  html { scrollbar-gutter: stable; }
+  /* Page colour lives on <html> so the ambient backdrop (a fixed z-index:-1
+     layer) can show through the gutters; <body> is transparent over it. */
+  html { scrollbar-gutter: stable; background: var(--bg-app); }
   body {
     font: 13px var(--f-sans);
-    background: var(--bg-app);
+    background: transparent;
     color: var(--text-1);
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
@@ -198,6 +200,57 @@
   }
   button { font: inherit; }
   ::selection { background: var(--ring); color: var(--text-1); }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     AMBIENT — Zen Sand Garden backdrop (purely decorative).
+     Self-contained: delete this block, the #ambient-garden element, and
+     the ambientGarden <script> to remove it entirely. Sits strictly
+     behind all content (z-index:-1, pointer-events:none); the raked-sand
+     texture only shows through the empty left/right gutters because
+     <main> carries an opaque page-coloured background. No gutter math.
+     ═══════════════════════════════════════════════════════════════════ */
+  #ambient-garden {
+    position: fixed; inset: 0; z-index: -1;
+    pointer-events: none; overflow: hidden;
+    contain: layout paint;
+    --ambient-opacity: 0.5;   /* subtle by default */
+    --ambient-speed: 1;       /* higher = faster drift */
+    opacity: var(--ambient-opacity);
+  }
+  #ambient-garden .ag-frame { position: absolute; inset: 0; }
+  #ambient-garden .z-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  /* Honour the theme toggle — dark by default, light when opted in. */
+  #ambient-garden .ag-light { display: none; }
+  :root[data-theme="light"] #ambient-garden .ag-light { display: block; }
+  :root[data-theme="light"] #ambient-garden .ag-dark  { display: none; }
+
+  /* A few px of drift over minutes — opposite directions read as parallax,
+     ease-in-out there-and-back so the loop is seamless. */
+  @keyframes agBase      { 0%,100%{transform:translate(0,0)} 50%{transform:translate(3px,-3px)} }
+  @keyframes agGroove    { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-4px,5px)} }
+  @keyframes agRingDrift { 0%,100%{transform:translate(0,0)} 50%{transform:translate(5px,-4px)} }
+  @keyframes agRingBreath{ 0%,100%{transform:scale(1);opacity:.95} 50%{transform:scale(1.006);opacity:1} }
+  @keyframes agGrain     { 0%,100%{transform:translate(0,0)} 50%{transform:translate(2px,1px)} }
+  #ambient-garden .z-base        { animation: agBase      calc(200s / var(--ambient-speed)) ease-in-out infinite; will-change: transform; }
+  #ambient-garden .z-grooves     { animation: agGroove    calc(150s / var(--ambient-speed)) ease-in-out infinite; will-change: transform; }
+  #ambient-garden .z-rings-drift { animation: agRingDrift calc(116s / var(--ambient-speed)) ease-in-out infinite; will-change: transform; }
+  #ambient-garden .z-rings-breathe { animation: agRingBreath calc(94s / var(--ambient-speed)) ease-in-out infinite; transform-box: fill-box; transform-origin: center; will-change: transform, opacity; }
+  #ambient-garden .z-grain       { animation: agGrain     calc(220s / var(--ambient-speed)) ease-in-out infinite; will-change: transform; }
+
+  /* Pause when the tab is hidden (JS toggles .ag-paused) or the user has
+     asked for reduced motion (swap to the static surface). */
+  #ambient-garden.ag-paused .z-base,
+  #ambient-garden.ag-paused .z-grooves,
+  #ambient-garden.ag-paused .z-rings-drift,
+  #ambient-garden.ag-paused .z-rings-breathe,
+  #ambient-garden.ag-paused .z-grain { animation-play-state: paused; }
+  @media (prefers-reduced-motion: reduce) {
+    #ambient-garden .z-base,
+    #ambient-garden .z-grooves,
+    #ambient-garden .z-rings-drift,
+    #ambient-garden .z-rings-breathe,
+    #ambient-garden .z-grain { animation: none !important; }
+  }
 
   /* ═══════════════════════════════════════════════════════════════════
      TOPBAR
@@ -509,7 +562,9 @@
   /* ═══════════════════════════════════════════════════════════════════
      LAYOUT
      ═══════════════════════════════════════════════════════════════════ */
-  main { padding: var(--s6) var(--s6) var(--s7); max-width: min(1440px, 92vw); margin: 0 auto; }
+  /* Opaque page-coloured backdrop so the ambient texture never shows behind
+     content — it reads only in the gutters outside this centred column. */
+  main { padding: var(--s6) var(--s6) var(--s7); max-width: min(1440px, 92vw); margin: 0 auto; background: var(--bg-app); }
   section { display: none; }
   section.active { display: block; }
 
@@ -675,7 +730,7 @@
   /* Label row pairs the small-caps label with a calm delta-vs-yesterday badge. */
   .db-today-lblrow { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: 3px; }
   .db-today-lblrow .lbl { margin-top: 0; }
-  .db-delta { font-size: 10px; font-weight: 600; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; font-family: var(--f-mono); letter-spacing: .02em; }
+  .db-delta { font-size: 10px; font-weight: 600; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; font-family: var(--f-mono); letter-spacing: .02em; cursor: help; }
   .db-delta.is-up   { color: var(--accent); }
   .db-delta.is-down { color: #bf8a6e; }   /* soft clay — a calm "down", never alarm-red */
   .db-delta.is-flat { color: var(--text-3); opacity: .7; }
@@ -4513,6 +4568,7 @@
             <div class="db-today-cell">
               <div class="val" id="db-today-new">—</div>
               <div class="db-today-lblrow"><span class="lbl">New customers · 新客</span><span class="db-delta" id="db-today-new-d"></span></div>
+              <div class="db-spark-wrap db-spark-sm" id="db-today-new-spark"></div>
             </div>
           </div>
         </div>
@@ -10492,7 +10548,7 @@ function dashInit() {
 // "Today" mini-row). Polling pauses while the document is hidden
 // so we don't hammer the server with a backgrounded tab.
 // ════════════════════════════════════════════════════════════════
-const DASH_HERO = { presence:null, activity:null, today:null, lastSync:0, eventsById:new Map(), seenIds:null };
+const DASH_HERO = { presence:null, activity:null, today:null, lastSync:0, seenIds:null };
 const DASH_HERO_INTERVALS = { presence: 15000, activity: 20000, today: 60000 };
 
 function dashHeroInit() {
@@ -10502,10 +10558,16 @@ function dashHeroInit() {
   // Language toggle repaints the Today delta badges from the stashed data.
   if (window.onLangChange) onLangChange(dashHeroTodayRepaint);
   // Hover-scrub the Today sparklines to read each hour of the day.
-  ['#db-today-spark', '#db-today-ord-spark'].forEach(sel => {
+  ['#db-today-spark', '#db-today-ord-spark', '#db-today-new-spark'].forEach(sel => {
     const w = $(sel); if (!w) return;
     w.addEventListener('pointermove', dashSparkMove);
     w.addEventListener('pointerleave', dashSparkLeave);
+  });
+  // Hover the delta badges for a chip explaining the comparison baseline.
+  ['#db-today-rev-d', '#db-today-ord-d', '#db-today-new-d'].forEach(sel => {
+    const b = $(sel); if (!b) return;
+    b.addEventListener('pointerenter', dashDeltaHover);
+    b.addEventListener('pointerleave', dashDeltaLeave);
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) dashHeroStop();
@@ -10591,32 +10653,63 @@ async function dashHeroLoadToday() {
                     v => '¥' + Math.round(v).toLocaleString(), true);
     dashRenderSpark($('#db-today-ord-spark'), trend.map(p => Number(p.orders || 0)), labels,
                     v => v + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), false);
+    dashRenderSpark($('#db-today-new-spark'), trend.map(p => Number(p.new_customers || 0)), labels,
+                    v => v + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'), false);
     dashHeroTodayRepaint();   // delta badges (language-aware)
   } catch (e) { /* silent */ }
 }
 
-// Repaint the language-dependent bit of the Today mini-row — the delta-vs-
-// yesterday badges. Split from the loader so a language toggle reflows the
-// "new" wording without refetching (numbers + sparklines are language-neutral).
+// Repaint the language-dependent bit of the Today mini-row — the delta badges
+// (vs a trailing 7-day average). Split from the loader so a language toggle
+// reflows the wording + hover chips without refetching (numbers + sparklines
+// are language-neutral).
 function dashHeroTodayRepaint() {
   const data = DASH_HERO.todayData; if (!data) return;
-  const k = data.kpis || {}, d = data.deltas || {};
-  dashSetDelta('#db-today-rev-d', d.revenue,       Number(k.revenue || 0));
-  dashSetDelta('#db-today-ord-d', d.orders,        Number(k.orders || 0));
-  dashSetDelta('#db-today-new-d', d.new_customers, Number(k.new_customers || 0));
+  const k = data.kpis || {}, b = data.baseline || null;
+  dashSetDelta('#db-today-rev-d', b && b.revenue,       Number(k.revenue || 0),       b && b.days, v => '¥' + Math.round(v).toLocaleString());
+  dashSetDelta('#db-today-ord-d', b && b.orders,        Number(k.orders || 0),        b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'));
+  dashSetDelta('#db-today-new-d', b && b.new_customers, Number(k.new_customers || 0), b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'));
 }
-// Delta badge vs yesterday. Nothing yet today → a calm dash, never an alarming
-// ▼100%. Activity today but none yesterday → genuinely "new". Otherwise ▲/▼ %.
-function dashSetDelta(sel, delta, cur) {
+// Integer when whole, else one decimal — keeps "/day" averages readable.
+function dashTrim(n) {
+  return Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toFixed(1);
+}
+// Delta badge vs the trailing N-day average. Nothing yet today → a calm dash,
+// never an alarming ▼100%. No baseline yet (young shop) or activity today but a
+// flat-zero recent average → genuinely "new". Otherwise ▲/▼ % vs the average.
+// Stashes a language-aware hover chip on the element (el._tip) for the badge
+// scrub wired in dashHeroInit.
+function dashSetDelta(sel, base, cur, days, fmtAvg) {
   const el = $(sel); if (!el) return;
   el.classList.remove('is-up', 'is-down', 'is-flat');
-  if (!cur)          { el.classList.add('is-flat'); el.textContent = '—'; return; }
-  if (delta == null) { el.classList.add('is-up');   el.textContent = '▲ ' + cuT('new', '新'); return; }
-  const r = Math.round(delta);
+  el._tip = '';
+  if (!cur) {
+    el.classList.add('is-flat'); el.textContent = '—';
+    el._tip = cuT('none yet today', '今日暂无');
+    return;
+  }
+  if (!base || !days || base.delta == null) {
+    el.classList.add('is-up'); el.textContent = '▲ ' + cuT('new', '新');
+    el._tip = cuT('no recent baseline', '暂无近期基准');
+    return;
+  }
+  el._tip = cuT(`vs ${days}-day avg · ${fmtAvg(base.avg)}/day`, `较 ${days} 日均值 · ${fmtAvg(base.avg)}/日`);
+  const r = Math.round(base.delta);
   if (r > 0)      { el.classList.add('is-up');   el.textContent = '▲ ' + r + '%'; }
   else if (r < 0) { el.classList.add('is-down'); el.textContent = '▼ ' + Math.abs(r) + '%'; }
   else            { el.classList.add('is-flat'); el.textContent = '±0%'; }
 }
+// Badge hover → reuse the spark chip to explain the comparison baseline.
+function dashDeltaHover(e) {
+  const el = e.currentTarget; if (!el._tip) return;
+  const rect = el.getBoundingClientRect();
+  const tip = dashSparkTipEl();
+  tip.textContent = el._tip;
+  tip.style.left = (rect.left + rect.width / 2) + 'px';
+  tip.style.top  = rect.top + 'px';
+  tip.classList.add('show');
+}
+function dashDeltaLeave() { dashSparkTipEl().classList.remove('show'); }
 
 // ── Interactive sparkline scrub ──────────────────────────────────────────
 // Render a sparkline into a wrap and stash its series so a hover can scrub it.
@@ -10705,7 +10798,6 @@ function dashFeedRender(events) {
   DASH_HERO._lastEvents = events;
   if (!events.length) {
     list.innerHTML = `<div class="db-feed-empty">Nothing recent · 暂无动态</div>`;
-    DASH_HERO.eventsById.clear();
     if (toggle) toggle.hidden = true;
     return;
   }
@@ -10716,16 +10808,16 @@ function dashFeedRender(events) {
   const firstPaint = DASH_HERO.seenIds === null;
   const prevSeen = DASH_HERO.seenIds || new Set();
   const nextSeen = new Set(events.map(idOf));
-  DASH_HERO.eventsById.clear();
+  // The click handler only needs the event's type + ref_id, so carry them on
+  // the row itself. Reading straight off the clicked element can't go stale —
+  // a separate id→event Map would silently miss whenever a poll rebuilt it.
   const rowHtml = (e, i) => {
-    const key = `${e.type}-${e.ref_type}-${e.ref_id}-${e.ts}-${i}`;
     const isNew = !firstPaint && !prevSeen.has(idOf(e));
-    DASH_HERO.eventsById.set(key, e);
     const ts = new Date(e.ts);
     const pad = n => String(n).padStart(2, '0');
     const tstr = `${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
     const meta = dashFeedMeta(e);
-    return `<div class="db-feed-row${isNew ? ' is-new' : ''}" data-key="${escapeHtml(key)}" onclick="dashFeedClick(this)">
+    return `<div class="db-feed-row${isNew ? ' is-new' : ''}" data-type="${escapeHtml(e.type)}" data-ref-id="${escapeHtml(e.ref_id == null ? '' : e.ref_id)}" onclick="dashFeedClick(this)">
       <span class="db-feed-ts">${tstr}</span>
       <span class="db-feed-icon db-fi-${meta.tone || 'muted'}">${meta.icon}</span>
       <span class="db-feed-text">${meta.text}</span>
@@ -10815,17 +10907,17 @@ function dashFeedMeta(e) {
 // drawer over the dashboard (same target the old "Open in Orders" button
 // used); everything else jumps to its owning tab.
 function dashFeedClick(row) {
-  const key = row.getAttribute('data-key');
-  const e = DASH_HERO.eventsById.get(key); if (!e) return;
+  const type = row.getAttribute('data-type');
+  const refId = row.getAttribute('data-ref-id');
 
-  switch (e.type) {
+  switch (type) {
     case 'paid_order':
     case 'order_dispatched':
     case 'order_delivered':
     case 'refund_request':
     case 'refund_paid':
     case 'refund_rejected':
-      dashOpenOrderFromFeed(e.ref_id);
+      dashOpenOrderFromFeed(refId);
       break;
     case 'topup':
       dashJumpTab('topup');
@@ -10850,7 +10942,7 @@ function dashFeedClick(row) {
 // with no tab change.
 function dashOpenOrderFromFeed(orderId) {
   closeDrawer('#db-activity-drawer');
-  if (orderId != null) openOrder(orderId);
+  if (orderId !== null && orderId !== undefined && orderId !== '') openOrder(orderId);
 }
 
 // Programmatic tab-switch — clicks the tab button so the global switcher

@@ -5171,6 +5171,38 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const newCust     = tdb().prepare(newCustSql).get(from, to).n;
   const newCustPrev = tdb().prepare(newCustSql).get(prevFrom, prevTo).n;
 
+  // ── Trailing 7-day baseline (single-day view only). A calmer comparison than
+  // a single noisy "yesterday": average each metric over the active days in the
+  // prior week so "Today" reads against a typical recent day. `days` counts only
+  // days with history behind them, so a young shop isn't diluted by pre-launch
+  // zeros (days = 0 → no baseline yet → the UI shows "new"). ──
+  let baseline = null;
+  if (hourly) {
+    const baseFrom = new Date(new Date(from).getTime() - 7 * 86400000).toISOString().slice(0, 10);
+    const baseTo   = prevTo;   // the day before `from`
+    const bk   = tdb().prepare(kpiSql).get(baseFrom, baseTo);
+    const bnew = tdb().prepare(newCustSql).get(baseFrom, baseTo).n;
+    const fo = tdb().prepare(`SELECT MIN(date(placed_at, '${TZ}')) AS d FROM retail_orders WHERE ${PAID}`).get().d;
+    const fc = tdb().prepare(`SELECT MIN(date(created_at, '${TZ}')) AS d FROM retail_customers`).get().d;
+    const firstD = [fo, fc].filter(Boolean).sort()[0] || null;
+    let days = 0;
+    if (firstD) {
+      const lo = firstD > baseFrom ? firstD : baseFrom;
+      days = Math.min(7, Math.max(0, Math.round((new Date(baseTo) - new Date(lo)) / 86400000) + 1));
+    }
+    const pctOf = (cur, avg) => (avg > 0 ? Math.round(((cur - avg) / avg) * 1000) / 10 : null);
+    const mk = (cur, sum) => {
+      const avg = days > 0 ? sum / days : 0;
+      return { avg, delta: days > 0 ? pctOf(cur, avg) : null };
+    };
+    baseline = {
+      days,
+      revenue:       mk(kpi.revenue, bk.revenue),
+      orders:        mk(kpi.orders,  bk.orders),
+      new_customers: mk(newCust,     bnew),
+    };
+  }
+
   // ── Status funnel (gross — every status in the window) ──
   const funnel = tdb().prepare(`
     SELECT status, COUNT(*) AS n, COALESCE(SUM(total), 0) AS revenue
@@ -5198,14 +5230,21 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
         FROM retail_visits
        WHERE date(created_at, '${TZ}') = ?
        GROUP BY b`).all(from);
+    const c = tdb().prepare(`
+      SELECT CAST(strftime('%H', created_at, '${TZ}') AS INTEGER) AS b, COUNT(*) AS n
+        FROM retail_customers
+       WHERE date(created_at, '${TZ}') = ?
+       GROUP BY b`).all(from);
     const om = Object.fromEntries(o.map(r => [r.b, r]));
     const vm = Object.fromEntries(v.map(r => [r.b, r]));
+    const cm = Object.fromEntries(c.map(r => [r.b, r]));
     trend = Array.from({ length: 24 }, (_, h) => ({
       bucket: String(h).padStart(2, '0') + ':00',
-      orders:   om[h]?.orders   || 0,
-      revenue:  om[h]?.revenue  || 0,
-      visits:   vm[h]?.visits   || 0,
-      sessions: vm[h]?.sessions || 0,
+      orders:        om[h]?.orders   || 0,
+      revenue:       om[h]?.revenue  || 0,
+      visits:        vm[h]?.visits   || 0,
+      sessions:      vm[h]?.sessions || 0,
+      new_customers: cm[h]?.n        || 0,
     }));
   } else {
     const o = tdb().prepare(`
@@ -5472,6 +5511,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
         visits:        pct(vis.visits, visPrev.visits),
         sessions:      pct(vis.sessions, visPrev.sessions),
       },
+      baseline,
       trend,
       funnel: byStatus,
       new_vs_returning: {
