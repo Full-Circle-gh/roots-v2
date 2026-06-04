@@ -630,6 +630,33 @@
   .db-feed-badge.db-fb-first { color: var(--brass); background: color-mix(in srgb, var(--brass) 14%, transparent); }
   .db-feed-badge.db-fb-big   { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
   .db-feed-empty { font-size: 12px; color: var(--text-3); padding: 12px 8px; text-align: center; }
+  /* Live "pulse" — a small dot beside the Activity header that slowly breathes,
+     reassuring the operator the board is live. It catches a stronger single
+     pulse the moment a poll brings a genuinely new event (.is-fresh, added by
+     JS then removed when the animation ends). Calm + low-contrast by design. */
+  .db-feed-h { display: inline-flex; align-items: center; gap: 7px; }
+  .db-live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex: none;
+                 box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 55%, transparent);
+                 animation: db-breathe 3.2s ease-in-out infinite; }
+  .db-live-dot.is-fresh { animation: db-breathe 3.2s ease-in-out infinite, db-ping 1.4s ease-out 1; }
+  @keyframes db-breathe { 0%,100% { opacity: .35; transform: scale(.82); } 50% { opacity: 1; transform: scale(1); } }
+  @keyframes db-ping {
+    0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 55%, transparent); }
+    70%  { box-shadow: 0 0 0 7px color-mix(in srgb, var(--success) 0%, transparent); }
+    100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 0%, transparent); }
+  }
+  /* New row eases in from the top with a soft highlight that decays — the
+     "something just happened" signal, only on rows the latest poll added. */
+  @keyframes db-row-in {
+    0%   { opacity: 0; transform: translateY(-6px); background: color-mix(in srgb, var(--success) 16%, transparent); }
+    60%  { opacity: 1; transform: translateY(0); background: color-mix(in srgb, var(--success) 16%, transparent); }
+    100% { opacity: 1; transform: translateY(0); background: transparent; }
+  }
+  .db-feed-row.is-new { animation: db-row-in 2s ease-out 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .db-live-dot, .db-live-dot.is-fresh { animation: none; opacity: .9; }
+    .db-feed-row.is-new { animation: none; }
+  }
   /* Drawer-specific tweaks — the activity drawer reuses the global .side-drawer. */
   #db-activity-drawer .db-dw-meta { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 13px; margin-bottom: 16px; }
   #db-activity-drawer .db-dw-meta dt { color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-family: var(--f-mono); align-self: center; }
@@ -4303,7 +4330,7 @@
           </div>
         </div>
         <div class="db-hero-pane db-feed-pane">
-          <div class="db-hero-h">Activity · 动态</div>
+          <div class="db-hero-h db-feed-h">Activity · 动态<span class="db-live-dot" id="db-live-dot" title="Live · 实时"></span></div>
           <div class="db-feed-list" id="db-feed-list">
             <div class="db-feed-empty">Loading… · 加载中…</div>
           </div>
@@ -10115,7 +10142,7 @@ function dashInit() {
 // "Today" mini-row). Polling pauses while the document is hidden
 // so we don't hammer the server with a backgrounded tab.
 // ════════════════════════════════════════════════════════════════
-const DASH_HERO = { presence:null, activity:null, today:null, lastSync:0, eventsById:new Map() };
+const DASH_HERO = { presence:null, activity:null, today:null, lastSync:0, eventsById:new Map(), seenIds:null };
 const DASH_HERO_INTERVALS = { presence: 15000, activity: 20000, today: 60000 };
 
 function dashHeroInit() {
@@ -10205,20 +10232,44 @@ function dashFeedRender(events) {
     return;
   }
   DASH_HERO.eventsById.clear();
+  // Stable identity (no row index) so "new since last poll" survives re-renders.
+  const idOf = e => `${e.type}-${e.ref_type}-${e.ref_id}-${e.ts}`;
+  // First paint has no baseline — don't animate the whole list in. After that,
+  // any id we haven't seen before is a genuinely fresh event.
+  const firstPaint = DASH_HERO.seenIds === null;
+  const prevSeen = DASH_HERO.seenIds || new Set();
+  const nextSeen = new Set();
+  let freshCount = 0;
   const html = events.map((e, i) => {
     const key = `${e.type}-${e.ref_type}-${e.ref_id}-${e.ts}-${i}`;
+    const id  = idOf(e);
+    nextSeen.add(id);
+    const isNew = !firstPaint && !prevSeen.has(id);
+    if (isNew) freshCount++;
     DASH_HERO.eventsById.set(key, e);
     const ts = new Date(e.ts);
     const pad = n => String(n).padStart(2, '0');
     const tstr = `${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
     const meta = dashFeedMeta(e);
-    return `<div class="db-feed-row" data-key="${escapeHtml(key)}" onclick="dashFeedClick(this)">
+    return `<div class="db-feed-row${isNew ? ' is-new' : ''}" data-key="${escapeHtml(key)}" onclick="dashFeedClick(this)">
       <span class="db-feed-ts">${tstr}</span>
       <span class="db-feed-icon db-fi-${meta.tone || 'muted'}">${meta.icon}</span>
       <span class="db-feed-text">${meta.text}</span>
     </div>`;
   }).join('');
   list.innerHTML = html;
+  DASH_HERO.seenIds = nextSeen;
+  if (freshCount) dashLiveDotPulse();
+}
+
+// One stronger "catch" of the breathing live dot when fresh events land.
+// Toggle .is-fresh off after the ping so it can re-trigger next time.
+function dashLiveDotPulse() {
+  const dot = $('#db-live-dot'); if (!dot) return;
+  dot.classList.remove('is-fresh');
+  void dot.offsetWidth; // reflow so re-adding restarts the animation
+  dot.classList.add('is-fresh');
+  setTimeout(() => dot.classList.remove('is-fresh'), 1500);
 }
 
 // Thin-stroke line icons for the activity feed — 16-box viewBox, currentColor
