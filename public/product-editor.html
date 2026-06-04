@@ -359,11 +359,8 @@
   .pe-smart-translate { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); cursor: pointer; margin-bottom: var(--s4); }
   .pe-smart-translate input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
   .pe-modal-actions { display: flex; justify-content: flex-end; gap: var(--s2); }
-  .pe-smart-spinner {
-    width: 28px; height: 28px; margin: 24px auto 10px;
-    border: 3px solid var(--line); border-top-color: var(--accent);
-    border-radius: 50%; animation: pe-spin .8s linear infinite;
-  }
+  /* Spinner for the Smart-paste build overlay (_peComposeProgress) — matches the
+     kitchen app's product-edit progress card. */
   @keyframes pe-spin { to { transform: rotate(360deg); } }
   .pe-smart-preview-list { display: flex; flex-direction: column; gap: 6px; margin: var(--s3) 0 var(--s4); }
   .pe-smart-prev-item {
@@ -1456,10 +1453,9 @@
         </div>
       </div>
 
-      <div id="pe-smart-step-loading" hidden>
-        <div class="pe-smart-spinner"></div>
-        <p class="pe-modal-hint" style="text-align:center">Reading your text… · 正在解析文字…</p>
-      </div>
+      <!-- Loading uses the kitchen app's build overlay (_peComposeProgress) instead
+           of an in-modal step, so the "Smart paste" wait looks identical to the
+           kitchen product-edit page's "Building your product page" card. -->
 
       <div id="pe-smart-step-preview" hidden>
         <p class="pe-modal-hint" id="pe-smart-preview-hint"></p>
@@ -2222,17 +2218,70 @@ function peSmartOpen() {
 function peSmartClose() { const o = document.getElementById('pe-smart-overlay'); if (o) o.hidden = true; }
 function peSmartBack() { peSmartStep('input'); }
 function peSmartStep(step) {
-  ['input', 'loading', 'preview'].forEach(s => {
+  ['input', 'preview'].forEach(s => {
     const el = document.getElementById('pe-smart-step-' + s);
     if (el) el.hidden = (s !== step);
   });
+}
+// Blocking build overlay for Smart paste — a faithful port of the kitchen app's
+// product-edit progress card (_iedComposeProgress in app.html) so the wait looks
+// identical across both editors. A single AI call gives no real percentage, so
+// the bar creeps toward 90% to show motion, then snaps to 100% on done().
+function _peComposeProgress() {
+  document.getElementById('peComposeOv')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'peComposeOv';
+  // Single active language only (matches the rest of the backend's i18n).
+  const T = (en, cn) => (window.cuT ? window.cuT(en, cn) : en);
+  ov.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(20,24,16,.55);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center';
+  ov.innerHTML = `
+    <div style="background:var(--card-bg,#fff);border:1px solid var(--border,#e6e0d2);border-radius:var(--radius,12px);box-shadow:var(--sh-3,0 24px 60px rgba(0,0,0,.3));padding:22px 24px 20px;width:min(92vw,360px);font-family:var(--f-sans,inherit)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <div style="width:22px;height:22px;flex:none;border:3px solid var(--accent-soft,rgba(107,142,111,.22));border-top-color:var(--accent,#6B8E6F);border-radius:50%;animation:pe-spin .8s linear infinite"></div>
+        <div style="font-weight:700;font-size:15px;color:var(--text-1,#1a2314);line-height:1.3">${T('Building your product page', '正在生成商品页')}</div>
+      </div>
+      <div style="height:8px;border-radius:999px;background:var(--bg-elev-1,#e9e9e3);overflow:hidden">
+        <div data-bar style="height:100%;width:6%;border-radius:999px;background:linear-gradient(90deg,var(--accent,#6B8E6F),var(--brass,#B08D4A));transition:width .4s ease"></div>
+      </div>
+      <div data-msg style="margin-top:12px;font-size:12px;color:var(--text-3,#7d7a72);line-height:1.4;min-height:1.4em">${T('Reading your text…', '正在解析文字…')}</div>
+    </div>`;
+  document.body.appendChild(ov);
+  const bar = ov.querySelector('[data-bar]');
+  const msg = ov.querySelector('[data-msg]');
+  const stages = [
+    T('Reading your text…', '正在解析文字…'),
+    T('Writing the sections…', '正在编排板块…'),
+    T('Laying out the page…', '正在排版…'),
+    T('Almost done…', '即将完成…'),
+  ];
+  let pct = 6, si = 0;
+  const tick = setInterval(() => {
+    pct = Math.min(90, pct + (90 - pct) * 0.12 + 1);
+    bar.style.width = pct.toFixed(1) + '%';
+    const next = Math.min(stages.length - 1, Math.floor(pct / 24));
+    if (next !== si) { si = next; msg.textContent = stages[si]; }
+  }, 450);
+  return {
+    done(ok, text) {
+      clearInterval(tick);
+      bar.style.width = '100%';
+      bar.style.background = ok ? 'linear-gradient(90deg,var(--accent,#6B8E6F),var(--accent-hi,#7BA07F))' : 'linear-gradient(90deg,var(--danger,#e8556a),#ef9a9a)';
+      if (text) msg.textContent = text;
+      setTimeout(() => ov.remove(), ok ? 900 : 1400);
+    },
+  };
 }
 async function peSmartDivide() {
   const textEn = (document.getElementById('pe-smart-text-en').value || '').trim();
   const textCn = (document.getElementById('pe-smart-text-cn').value || '').trim();
   if (!textEn && !textCn) { toast(cuT('Paste some text first · 请先粘贴文字', '请先粘贴文字'), 'err'); return; }
   const translate = !!document.getElementById('pe-smart-translate').checked;
-  peSmartStep('loading');
+  // Hide the paste modal and show the kitchen-style build overlay, so the wait is
+  // identical to the kitchen product-edit page. The modal is re-shown (at the
+  // preview or input step) underneath, then revealed as the overlay fades.
+  const overlay = document.getElementById('pe-smart-overlay');
+  if (overlay) overlay.hidden = true;
+  const prog = _peComposeProgress();
   try {
     const r = await fetch('/api/ai/compose-blocks', {
       method: 'POST',
@@ -2247,18 +2296,25 @@ async function peSmartDivide() {
     });
     if (r.status === 401 || r.status === 403) { location.href = '/'; return; }
     const j = await r.json().catch(() => ({}));
-    if (r.status === 503) { toast(cuT('AI is not configured yet · AI 尚未配置', 'AI 尚未配置'), 'err'); peSmartStep('input'); return; }
+    if (r.status === 503) {
+      prog.done(false, cuT('AI is not configured yet · AI 尚未配置', 'AI 尚未配置'));
+      toast(cuT('AI is not configured yet · AI 尚未配置', 'AI 尚未配置'), 'err');
+      if (overlay) overlay.hidden = false; peSmartStep('input'); return;
+    }
     if (!r.ok || !j.success) throw new Error(j.error || 'compose_failed');
     _peSmartBlocks = (j.blocks || []).map(b => ({ ...b, id: paBlocksGenId() }));
     if (!_peSmartBlocks.length) {
+      prog.done(false, cuT('Couldn’t find sections · 未能识别出板块', '未能识别出板块'));
       toast(cuT('Couldn’t find sections in that text · 未能从文字中识别出板块', '未能从文字中识别出板块'), 'err');
-      peSmartStep('input'); return;
+      if (overlay) overlay.hidden = false; peSmartStep('input'); return;
     }
     peRenderSmartPreview();
-    peSmartStep('preview');
+    prog.done(true);
+    if (overlay) overlay.hidden = false; peSmartStep('preview');
   } catch (e) {
+    prog.done(false, cuT('Smart paste failed · 智能粘贴失败', '智能粘贴失败'));
     toast(cuT('Smart paste failed · 智能粘贴失败: ', '智能粘贴失败: ') + e.message, 'err');
-    peSmartStep('input');
+    if (overlay) overlay.hidden = false; peSmartStep('input');
   }
 }
 function peRenderSmartPreview() {
@@ -2336,8 +2392,12 @@ async function peAutoFillFromKitchen(p) {
   if (Array.isArray(p.description_blocks) && p.description_blocks.length) return;
   const textEn = _peStripToText(p.description_en);
   const textCn = _peStripToText(p.description_cn);
-  // Default rule: auto-copy only when BOTH languages exist in the kitchen app.
-  if (!textEn || !textCn) return;
+  // Need at least ONE language — when only one is written, the AI drafts the
+  // other side itself in the brand voice (original, idiomatic, NOT a literal
+  // gloss), so a single-language kitchen description still produces a fully
+  // bilingual page for the operator to review.
+  if (!textEn && !textCn) return;
+  const translate = !(textEn && textCn);
   _peAutoFilledFor = p.id;
   toast(cuT('Auto-filling sections from the kitchen description… · 正在根据厨房描述生成板块…', '正在根据厨房描述生成板块…'));
   try {
@@ -2346,7 +2406,7 @@ async function peAutoFillFromKitchen(p) {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
       body: JSON.stringify({
-        text_en: textEn, text_cn: textCn, translate: false,
+        text_en: textEn, text_cn: textCn, translate,
         product: { id: p.id, name_en: p.name_en, name_cn: p.name_cn, category: p.category },
       }),
     });
@@ -2367,9 +2427,14 @@ async function peAutoFillFromKitchen(p) {
     PA_SELECTED_BLOCK_ID = window._paBlocks[0]?.id || null;
     paRenderAll();
     peInspTab('block');
+    const draftNote = translate
+      ? (!textCn
+          ? cuT(' (drafted the 中文 in the brand voice — give it a read)', '(已按品牌语气替你撰写中文,请校对)')
+          : cuT(' (drafted the English in the brand voice — give it a read)', '(已按品牌语气替你撰写英文,请校对)'))
+      : '';
     toast(cuT(
-      'Auto-filled ' + fresh.length + ' section' + (fresh.length === 1 ? '' : 's') + ' from the kitchen description — review and save ✓',
-      '已根据厨房描述自动生成 ' + fresh.length + ' 个板块 — 请审阅后保存 ✓'));
+      'Auto-filled ' + fresh.length + ' section' + (fresh.length === 1 ? '' : 's') + ' from the kitchen description' + draftNote + ' — review and save ✓',
+      '已根据厨房描述自动生成 ' + fresh.length + ' 个板块' + draftNote + ' — 请审阅后保存 ✓'));
   } catch (e) { /* convenience feature — stay silent on failure */ }
 }
 
