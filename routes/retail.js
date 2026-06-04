@@ -2054,6 +2054,7 @@ router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req,
     } catch (_) { /* ignore malformed json */ }
   }
   delete order.address_json;
+  localizeOrderTimes(order);
   res.json({ success: true, data: order });
 });
 
@@ -4545,6 +4546,40 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   res.json({ success: true, data: order });
 });
 
+// SQLite's CURRENT_TIMESTAMP / datetime('now') return UTC as a bare
+// "YYYY-MM-DD HH:MM:SS" string. Customers and stores are all GZ local
+// (UTC+8), so those bare timestamps read 8 hours behind on the client.
+// Shift them to GZ local at the serving boundary. ISO strings (scheduled_for
+// carries a 'T'/'Z' and is already tz-aware) and date-only values
+// (promised_*_date) don't match the regex and pass through untouched, so
+// this can't double-shift them.
+const BARE_UTC_TS_RE = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
+function toGzLocalTs(s) {
+  if (typeof s !== 'string') return s;
+  const m = BARE_UTC_TS_RE.exec(s);
+  if (!m) return s;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) + 8 * 3600 * 1000);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ` +
+         `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+}
+const GZ_LOCAL_TS_FIELDS = [
+  'placed_at', 'paid_at', 'preparing_at', 'dispatched_at', 'delivered_at',
+  'cancelled_at', 'updated_at', 'seen_at',
+  'refund_requested_at', 'refund_reviewed_at', 'refund_approved_at', 'refund_paid_at',
+  'invoice_issued_at', 'tracking_synced_at',
+];
+function localizeTimes(row, fields) {
+  if (!row) return row;
+  for (const f of fields) {
+    if (row[f] != null) row[f] = toGzLocalTs(row[f]);
+  }
+  return row;
+}
+function localizeOrderTimes(row) {
+  return localizeTimes(row, GZ_LOCAL_TS_FIELDS);
+}
+
 function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
   const o = tdb().prepare(
     `SELECT id, order_no, status, payment_method,
@@ -4570,6 +4605,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
        FROM retail_orders WHERE id = ? AND customer_id = ?`
   ).get(orderId, customerId);
   if (!o) return null;
+  localizeOrderTimes(o);
   if (o.address_json) { try { o.address = JSON.parse(o.address_json); } catch {} }
   delete o.address_json;
   if (o.refund_lines_json) {
@@ -4737,6 +4773,7 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
   params.push(limit, offset);
 
   const rows = tdb().prepare(sql).all(...params);
+  rows.forEach(localizeOrderTimes);
 
   // Attach a tiny preview of items + item_count so the list can render
   // thumbs without N+1 follow-ups. Batched into two queries regardless of
@@ -4799,6 +4836,7 @@ router.get('/api/retail/invoices', requireRetailAuth, (req, res) => {
       WHERE customer_id = ? AND needs_invoice = 1
       ORDER BY placed_at DESC LIMIT 100`
   ).all(req.customer.id);
+  rows.forEach(localizeOrderTimes);
   res.json({ success: true, data: rows });
 });
 
@@ -11714,6 +11752,7 @@ router.get('/api/retail/points/transactions', requireRetailAuth, (req, res) => {
        FROM retail_points_transactions WHERE customer_id = ?
       ORDER BY id DESC LIMIT ? OFFSET ?`
   ).all(req.customer.id, limit, offset);
+  rows.forEach(r => localizeTimes(r, ['created_at', 'expires_at', 'expired_at']));
   res.json({ success: true, data: rows });
 });
 
@@ -11739,6 +11778,7 @@ router.get('/api/retail/topup/transactions', requireRetailAuth, (req, res) => {
        FROM retail_topup_transactions WHERE customer_id = ?
       ORDER BY id DESC LIMIT ? OFFSET ?`
   ).all(req.customer.id, limit, offset);
+  rows.forEach(r => localizeTimes(r, ['created_at', 'paid_at']));
   res.json({ success: true, data: rows });
 });
 
