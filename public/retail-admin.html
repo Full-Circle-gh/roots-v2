@@ -802,21 +802,8 @@
     .db-bento .db-hero .db-today-pane { border-left: 0; padding-left: 8px; }
   }
 
-  /* Concentric-circle brand watermark in the hero corner — echoes the live
-     ring + the "Full Circle" name. Purely decorative, sits behind content. */
-  .db-bento #db-hero { position: relative; overflow: hidden; }
-  /* Quiet, static brand mark — the "breath" now lives on the LIVE ring around
-     the counter, where the motion is meaningful; this corner is just a faint
-     echo of that circle motif. */
-  .db-bento #db-hero::after {
-    content: ""; position: absolute; top: -28px; right: -28px; width: 150px; height: 150px;
-    pointer-events: none; z-index: 0; opacity: .32;
-    background:
-      radial-gradient(circle, transparent 0 40px, color-mix(in srgb, var(--accent) 22%, transparent) 40px 41px, transparent 41px) center / 100% 100% no-repeat,
-      radial-gradient(circle, transparent 0 55px, color-mix(in srgb, var(--accent) 13%, transparent) 55px 56px, transparent 56px) center / 100% 100% no-repeat,
-      radial-gradient(circle, transparent 0 70px, color-mix(in srgb, var(--accent) 8%, transparent) 70px 71px, transparent 71px) center / 100% 100% no-repeat;
-  }
-  .db-bento #db-hero > * { position: relative; z-index: 1; }
+  /* The circle motif now lives solely on the breathing LIVE ring around the
+     viewer counter — no corner ornament. */
 
   /* Subtle paper grain in the dashboard gutters — light theme only, so the
      dark theme stays clean. */
@@ -8228,6 +8215,20 @@
               <div class="field"><label class="stacked">Credit line CN · 落款(中文)</label><input type="text" id="cfg-footer-credit-cn" placeholder="由 Full Circle 提供技术支持"></div>
             </div>
           </div>
+
+          <!-- Me page menu — reorder + show/hide the customer's Me-page rows.
+               Stored under the 'me_page.rows' storefront_config key (array of
+               { id, enabled }); the mini-app reads it from /api/retail/config
+               and renders via miniapp/pages/me/me.js → buildRows(). Hydrated /
+               serialised through the shared loadConfig()/saveConfig() flow, so
+               it saves with the main "Save settings" button. -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Me page menu · 「我的」页菜单</h3>
+              <div class="muted">Reorder or hide the rows customers see on their <b>Me</b> page. Use ↑ ↓ to reorder; untick to hide. · 调整顾客「我的」页面菜单行的顺序或隐藏。用 ↑ ↓ 排序,取消勾选即隐藏。</div>
+            </div>
+            <ul id="me-rows-list" style="list-style:none; margin:0; padding:0; border:1px solid var(--line); border-radius:6px; overflow:hidden;"></ul>
+          </div>
         </div>
 
         <!-- ────── HOME / CMS PAGES ────── -->
@@ -14039,6 +14040,9 @@ async function loadConfig() {
     $('#cfg-footer-tagline-cn').value    = mef.tagline_cn    || '';
     $('#cfg-footer-credit-en').value     = mef.credit_en     || '';
     $('#cfg-footer-credit-cn').value     = mef.credit_cn     || '';
+    // Me page menu — hydrate the reorder/visibility list from me_page.rows.
+    hydrateMeRows(c.me_page && c.me_page.rows);
+    renderMeRows();
     // Social-proof widgets — five sub-objects under social_proof. Defaults
     // mirror the server-side fallbacks in routes/retail.js getSocialConfig().
     const sp = c.social_proof || {};
@@ -14157,6 +14161,8 @@ async function saveConfig() {
       credit_en:      ($('#cfg-footer-credit-en').value     || '').trim() || null,
       credit_cn:      ($('#cfg-footer-credit-cn').value     || '').trim() || null,
     },
+    // Me page menu order + visibility (array of { id, enabled }).
+    'me_page.rows': _meRows.map(r => ({ id: r.id, enabled: !!r.enabled })),
     // Social proof — single nested blob so storefront_config holds one row,
     // matching the shape getSocialConfig() in routes/retail.js expects.
     'social_proof': (() => {
@@ -14237,6 +14243,78 @@ async function saveConfig() {
 // manage a side-channel base64 buffer between picker → save.
 // ════════════════════════════════════════════════════════════════
 let _footerWordmarkData = null;  // base64 data URL held between upload + save
+
+// ════════════════════════════════════════════════════════════════
+// ME PAGE MENU — operator-controlled row order + visibility.
+// Stored under storefront_config['me_page.rows'] (array of { id, enabled });
+// the mini-app reads it via /api/retail/config and renders it in
+// miniapp/pages/me/me.js → buildRows(). Hydrate + serialise are folded into
+// loadConfig() / saveConfig() so they ride the main "Save settings" button.
+// IDs here MUST match ROW_DEFS in miniapp/pages/me/me.js.
+// ════════════════════════════════════════════════════════════════
+const ME_ROW_DEFS = [
+  { id: 'notif',      label: 'Notifications · 通知' },
+  { id: 'addresses',  label: 'Delivery addresses · 收货地址' },
+  { id: 'wallet',     label: 'Wallet & points · 钱包积分' },
+  { id: 'topup',      label: 'Top up · 充值' },
+  { id: 'affiliate',  label: 'Refer a friend · 推广计划' },
+  { id: 'coupons',    label: 'Coupons · 优惠券' },
+  { id: 'invoices',   label: 'Invoices · 我的发票' },
+  { id: 'favorites',  label: 'Favorites · 收藏夹' },
+  { id: 'membership', label: 'Membership · 会员' },
+  { id: 'voting',     label: 'Your say · 投票' },
+  { id: 'about',      label: 'About · 关于我们' },
+  { id: 'faq',        label: 'Help & FAQ · 帮助中心' },
+  { id: 'bug',        label: 'Found a bug? · 报告问题' },
+  { id: 'tour',       label: 'Take the tour · 查看教程' },
+];
+let _meRows = [];  // working copy: [{ id, enabled }] in display order
+
+// Build the working list from saved config, keeping saved order/visibility and
+// appending any newly shipped rows (absent from older saved configs) as shown.
+function hydrateMeRows(savedRows) {
+  const saved = Array.isArray(savedRows) ? savedRows : [];
+  const known = new Set(ME_ROW_DEFS.map(d => d.id));
+  const seen = new Set();
+  const out = [];
+  for (const r of saved) {
+    if (!r || !known.has(r.id) || seen.has(r.id)) continue;
+    seen.add(r.id);
+    out.push({ id: r.id, enabled: r.enabled !== false });
+  }
+  for (const d of ME_ROW_DEFS) if (!seen.has(d.id)) out.push({ id: d.id, enabled: true });
+  _meRows = out;
+}
+
+function renderMeRows() {
+  const ul = $('#me-rows-list');
+  if (!ul) return;
+  const labelOf = id => (ME_ROW_DEFS.find(d => d.id === id) || {}).label || id;
+  ul.innerHTML = _meRows.map((r, i) => `
+    <li style="display:flex; align-items:center; justify-content:space-between; gap:10px;
+        padding:9px 12px; border-bottom:1px solid var(--line); ${r.enabled ? '' : 'opacity:.5;'}">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; flex:1; min-width:0;">
+        <input type="checkbox" class="me-row-cb" data-i="${i}" ${r.enabled ? 'checked' : ''}>
+        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${labelOf(r.id)}</span>
+      </label>
+      <span style="display:flex; gap:4px; flex-shrink:0;">
+        <button type="button" class="btn me-row-up"   data-i="${i}" ${i === 0 ? 'disabled' : ''} style="padding:2px 9px;">↑</button>
+        <button type="button" class="btn me-row-down" data-i="${i}" ${i === _meRows.length - 1 ? 'disabled' : ''} style="padding:2px 9px;">↓</button>
+      </span>
+    </li>`).join('');
+  ul.querySelectorAll('.me-row-cb').forEach(cb => cb.onchange = e => {
+    _meRows[+e.target.dataset.i].enabled = e.target.checked;
+    renderMeRows();
+  });
+  ul.querySelectorAll('.me-row-up').forEach(b => b.onclick = e => {
+    const i = +e.currentTarget.dataset.i;
+    if (i > 0) { [_meRows[i - 1], _meRows[i]] = [_meRows[i], _meRows[i - 1]]; renderMeRows(); }
+  });
+  ul.querySelectorAll('.me-row-down').forEach(b => b.onclick = e => {
+    const i = +e.currentTarget.dataset.i;
+    if (i < _meRows.length - 1) { [_meRows[i + 1], _meRows[i]] = [_meRows[i], _meRows[i + 1]]; renderMeRows(); }
+  });
+}
 
 // ════════════════════════════════════════════════════════════════
 // SOCIAL PROOF — manual fake-buyers list (recent-buyers ticker card)
