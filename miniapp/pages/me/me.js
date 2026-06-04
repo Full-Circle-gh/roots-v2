@@ -128,6 +128,29 @@ const COPY_CN = {
   noAddressMeta: '点击添加地址',
 };
 
+// Canonical menu-row catalogue. Order here is the default; the operator can
+// reorder/hide rows from the Mini App Backend (Settings → Me page menu),
+// persisted to storefront_config['me_page.rows'] and read back via
+// /api/retail/config → config.me_page.rows. `titleKey` is the COPY_* base
+// key (its `…Cn` sibling is the secondary label). accent = highlighted row.
+const ROW_DEFS = [
+  { id: 'notif',      handler: 'goNotifications', titleKey: 'menuNotif' },
+  { id: 'addresses',  handler: 'goAddresses',     titleKey: 'menuAddresses' },
+  { id: 'wallet',     handler: 'goWallet',        titleKey: 'menuWallet' },
+  { id: 'topup',      handler: 'goTopup',         titleKey: 'menuTopup',     accent: true },
+  { id: 'affiliate',  handler: 'goAffiliate',     titleKey: 'menuAffiliate', accent: true },
+  { id: 'coupons',    handler: 'goCoupons',       titleKey: 'menuCoupons' },
+  { id: 'invoices',   handler: 'goInvoices',      titleKey: 'menuInvoices' },
+  { id: 'favorites',  handler: 'goFavorites',     titleKey: 'menuFavorites' },
+  { id: 'membership', handler: 'goMembership',    titleKey: 'menuMembership' },
+  { id: 'voting',     handler: 'goVoting',        titleKey: 'menuVoting' },
+  { id: 'about',      handler: 'goAbout',         titleKey: 'menuAbout' },
+  { id: 'faq',        handler: 'goFaq',           titleKey: 'menuFaq' },
+  { id: 'bug',        handler: 'goBugReport',     titleKey: 'menuBug' },
+  { id: 'tour',       handler: 'goTour',          titleKey: 'menuTour' },
+];
+const ROW_DEF_MAP = ROW_DEFS.reduce((m, r) => (m[r.id] = r, m), {});
+
 Page({
   data: {
     customer: null,
@@ -147,6 +170,11 @@ Page({
     // manual re-tour entry point. Default true so a config miss still
     // lets users re-watch.
     tourEnabled: true,
+    // Operator-defined row layout (config.me_page.rows): array of
+    // { id, enabled }. null = use the ROW_DEFS default order, all shown.
+    meRowsConfig: null,
+    // Fully resolved, render-ready menu rows (built by buildRows()).
+    menuRows: [],
     // Brand footer — wordmark / tagline / credit line. Hydrated from
     // app.globalData.config.brand.me_footer (set by the operator in the Mini
     // App Backend → Settings → Mini-app footer). Defaults reflect the SaaS
@@ -178,6 +206,72 @@ Page({
 
   applyLangCopy() {
     this.setData({ copy: this.data.lang === 'cn' ? COPY_CN : COPY_EN });
+    this.buildRows();
+  },
+
+  // Resolve the visible row order from meRowsConfig (operator layout) on top
+  // of the ROW_DEFS catalogue. Saved order/visibility wins; any row the
+  // operator's saved config predates (a newly shipped row) is appended and
+  // shown by default so the menu never silently drops a feature. The tour row
+  // is always dropped when onboarding is disabled, regardless of layout.
+  resolveRowOrder() {
+    const cfg = Array.isArray(this.data.meRowsConfig) ? this.data.meRowsConfig : null;
+    let ordered;
+    if (cfg && cfg.length) {
+      const seen = new Set();
+      ordered = [];
+      for (const r of cfg) {
+        if (!r || !ROW_DEF_MAP[r.id] || seen.has(r.id)) continue;
+        seen.add(r.id);
+        if (r.enabled !== false) ordered.push(r.id);
+      }
+      for (const def of ROW_DEFS) if (!seen.has(def.id)) ordered.push(def.id);
+    } else {
+      ordered = ROW_DEFS.map(r => r.id);
+    }
+    if (!this.data.tourEnabled) ordered = ordered.filter(id => id !== 'tour');
+    return ordered;
+  },
+
+  // Compute the per-row meta line (dynamic counts / previews) for an id.
+  rowMeta(id) {
+    const c = this.data.copy;
+    const cust = this.data.customer || {};
+    switch (id) {
+      case 'notif':      return this.data.notifUnread > 0 ? (this.data.notifUnread + ' ' + c.notifMeta) : '';
+      case 'addresses':  return this.data.defaultAddrPreview || c.noAddressMeta;
+      case 'wallet':     return '¥' + this.data.balanceDisplay + ' · ' + (cust.points_balance || 0) + ' pts';
+      case 'topup':      return c.topupMeta;
+      case 'affiliate':  return c.affiliateMeta;
+      case 'coupons':    return (cust.coupon_count || 0) + ' ' + c.couponsMeta;
+      case 'invoices':   return '';
+      case 'favorites':  return (cust.favorite_count || 0) + ' ' + c.favoritesMeta;
+      case 'membership': return this.data.tierName + ' · LVL ' + this.data.tierLevel;
+      case 'voting':     return c.votingMeta;
+      case 'about':      return c.aboutMeta;
+      case 'faq':        return c.faqMeta;
+      case 'bug':        return c.bugMeta;
+      case 'tour':       return c.tourMeta;
+      default:           return '';
+    }
+  },
+
+  buildRows() {
+    const c = this.data.copy;
+    const notif = this.data.notifUnread || 0;
+    const rows = this.resolveRowOrder().map(id => {
+      const def = ROW_DEF_MAP[id];
+      return {
+        id,
+        handler: def.handler,
+        title:   c[def.titleKey],
+        titleCn: c[def.titleKey + 'Cn'],
+        meta:    this.rowMeta(id),
+        badge:   id === 'notif' && notif > 0 ? (notif > 99 ? '99+' : notif) : '',
+        accent:  id === 'notif' ? notif > 0 : !!def.accent,
+      };
+    });
+    this.setData({ menuRows: rows });
   },
 
   // Resolve the brand-footer fields from /api/retail/config. We await
@@ -189,11 +283,14 @@ Page({
   async applyFooter() {
     let cfg = {};
     let tourEnabled = true;
+    let meRowsConfig = null;
     try {
       const full = await config.load(false);
       cfg = (full && full.brand && full.brand.me_footer) || {};
       // show_to='off' disables onboarding entirely → hide the re-tour row.
       tourEnabled = full?.onboarding?.show_to !== 'off';
+      // Operator's Me-page row layout (order + visibility).
+      if (Array.isArray(full?.me_page?.rows)) meRowsConfig = full.me_page.rows;
     } catch {}
     const lang = this.data.lang;
     const tEN = (cfg.tagline_en || '').trim();
@@ -209,6 +306,7 @@ Page({
     // otherwise wx:if (image) wins anyway and the text wouldn't render.
     this.setData({
       tourEnabled,
+      meRowsConfig,
       footer: {
         wordmark_image: cfg.wordmark_image || '',
         wordmark_text:  cfg.wordmark_text  || (cfg.wordmark_image ? '' : 'Full Circle'),
@@ -216,6 +314,7 @@ Page({
         credit,
       },
     });
+    this.buildRows();
   },
 
   async refresh() {
@@ -266,10 +365,18 @@ Page({
         total:       statsData.total || 0,
       };
       this.setData(next);
+      this.buildRows();
     } catch (e) {
       console.warn('[me] refresh failed:', e.message);
       this.setData({ loading: false });
     }
+  },
+
+  // Single tap dispatcher for the data-driven menu rows — each row carries
+  // its handler name in data-handler.
+  onRowTap(e) {
+    const fn = e.currentTarget.dataset.handler;
+    if (fn && typeof this[fn] === 'function') this[fn]();
   },
 
   switchLang(e) {

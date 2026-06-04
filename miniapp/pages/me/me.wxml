@@ -80,145 +80,20 @@
     </view>
   </view>
 
-  <!-- Menu rows (borderless, hairline-separated) -->
+  <!-- Menu rows (borderless, hairline-separated). Order + visibility are
+       operator-controlled from the Mini App Backend (Settings → Me page menu);
+       the resolved list is built in me.js → buildRows() as data.menuRows. -->
   <view class="rows">
-    <view class="row {{notifUnread > 0 ? 'row-accent' : ''}}" bindtap="goNotifications">
+    <view wx:for="{{menuRows}}" wx:key="id"
+          class="row {{item.accent ? 'row-accent' : ''}}"
+          data-handler="{{item.handler}}" bindtap="onRowTap">
       <view class="row-body">
         <view class="row-title">
-          <text class="f-bear">{{copy.menuNotif}}</text>
-          <text wx:if="{{notifUnread > 0}}" class="row-badge">{{notifUnread > 99 ? '99+' : notifUnread}}</text>
-          <text class="row-cn muted">  · {{copy.menuNotifCn}}</text>
+          <text class="f-bear">{{item.title}}</text>
+          <text wx:if="{{item.badge}}" class="row-badge">{{item.badge}}</text>
+          <text class="row-cn muted">  · {{item.titleCn}}</text>
         </view>
-        <view wx:if="{{notifUnread > 0}}" class="row-meta">{{notifUnread}} {{copy.notifMeta}}</view>
-      </view>
-      <view class="row-arrow">→</view>
-    </view>
-    <view class="row" bindtap="goAddresses">
-      <view class="row-body">
-        <view class="row-title">
-          <text class="f-bear">{{copy.menuAddresses}}</text>
-          <text class="row-cn muted">  · {{copy.menuAddressesCn}}</text>
-        </view>
-        <view class="row-meta">{{defaultAddrPreview || copy.noAddressMeta}}</view>
-      </view>
-      <view class="row-arrow">→</view>
-    </view>
-    <view class="row" bindtap="goWallet">
-      <view class="row-body">
-        <view class="row-title">
-          <text class="f-bear">{{copy.menuWallet}}</text>
-          <text class="row-cn muted">  · {{copy.menuWalletCn}}</text>
-        </view>
-        <view class="row-meta">¥{{balanceDisplay}} · {{customer.points_balance || 0}} pts</view>
-      </view>
-      <view class="row-arrow">→</view>
-    </view>
-    <view class="row row-accent" bindtap="goTopup">
-      <view class="row-body">
-        <view class="row-title">
-          <text class="f-bear">{{copy.menuTopup}}</text>
-          <text class="row-cn muted">  · {{copy.menuTopupCn}}</text>
-        </view>
-        <view class="row-meta">{{copy.topupMeta}}</view>
-      </view>
-      <view class="row-arrow">→</view>
-    </view>
-    <view class="row row-accent" bindtap="goAffiliate">
-      <view class="row-body">
-        <view class="row-title">
-          <text class="f-bear">{{copy.menuAffiliate}}</text>
-          <text class="row-cn muted">  · {{copy.menuAffiliateCn}}</text>
-        </view>
-        <view class="row-meta">{{copy.affiliateMeta}}</view>
-      </view>
-      <view class="row-arrow">→</view>
-    </view>
-    <view class="row" bindtap="goCoupons">
-      <view class="row-body">
-        <view class="row-title">
-          <text class="f-bear">{{copy.menuCoupons}}</text>
-          <text class="row-cn muted">  · {{copy.menuCouponsCn}}</text>
-        </view>
-        <view class="row-meta">{{customer.coupon_count || 0}} {{copy.couponsMeta}}</view>
-      </view>
-      <view class="row-arrow">→</view>
-    </view>
-    <view class="row" bindtap="goInvoices">
-      <view class="row-body">
-        <view class="row-title">
-          <text class="f-bear">{{copy.menuInvoices}}</text>
-          <text class="row-cn muted">  · {{copy.menuInvoicesCn}}</text>
-        </view>
-      </view>
-      <view class="row-arrow">→</view>
-    </view>
-    <view class="row" bindtap="goFavorites">
-      <view class="row-body">
-        <view class="row-title">
-          <text class="f-bear">{{copy.menuFavorites}}</text>
-          <text class="row-cn muted">  · {{copy.menuFavoritesCn}}</text>
-        </view>
-        <view class="row-meta">{{customer.favorite_count || 0}} {{copy.favoritesMeta}}</view>
-      </view>
-      <view class="row-arrow">→</view>
-    </view>
-    <view class="row" bindtap="goMembership">
-      <view class="row-body">
-        <view class="row-title">
-          <text class="f-bear">{{copy.menuMembership}}</text>
-          <text class="row-cn muted">  · {{copy.menuMembershipCn}}</text>
-        </view>
-        <view class="row-meta">{{tierName}} · LVL {{tierLevel}}</view>
-      </view>
-      <view class="row-arrow">→</view>
-    </view>
-    <view class="row" bindtap="goVoting">
-      <view class="row-body">
-        <view class="row-title">
-          <text class="f-bear">{{copy.menuVoting}}</text>
-          <text class="row-cn muted">  · {{copy.menuVotingCn}}</text>
-        </view>
-        <view class="row-meta">{{copy.votingMeta}}</view>
-      </view>
-      <view class="row-arrow">→</view>
-    </view>
-    <view class="row" bindtap="goAbout">
-      <view class="row-body">
-        <view class="row-title">
-          <text class="f-bear">{{copy.menuAbout}}</text>
-          <text class="row-cn muted">  · {{copy.menuAboutCn}}</text>
-        </view>
-        <view class="row-meta">{{copy.aboutMeta}}</view>
-      </view>
-      <view class="row-arrow">→</view>
-    </view>
-    <view class="row" bindtap="goFaq">
-      <view class="row-body">
-        <view class="row-title">
-          <text class="f-bear">{{copy.menuFaq}}</text>
-          <text class="row-cn muted">  · {{copy.menuFaqCn}}</text>
-        </view>
-        <view class="row-meta">{{copy.faqMeta}}</view>
-      </view>
-      <view class="row-arrow">→</view>
-    </view>
-    <view class="row" bindtap="goBugReport">
-      <view class="row-body">
-        <view class="row-title">
-          <text class="f-bear">{{copy.menuBug}}</text>
-          <text class="row-cn muted">  · {{copy.menuBugCn}}</text>
-        </view>
-        <view class="row-meta">{{copy.bugMeta}}</view>
-      </view>
-      <view class="row-arrow">→</view>
-    </view>
-    <view wx:if="{{tourEnabled}}" class="row" bindtap="goTour">
-      <view class="row-body">
-        <view class="row-title">
-          <text class="f-bear">{{copy.menuTour}}</text>
-          <text class="row-cn muted">  · {{copy.menuTourCn}}</text>
-        </view>
-        <view class="row-meta">{{copy.tourMeta}}</view>
+        <view wx:if="{{item.meta}}" class="row-meta">{{item.meta}}</view>
       </view>
       <view class="row-arrow">→</view>
     </view>

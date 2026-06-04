@@ -3387,7 +3387,7 @@
   }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
   .toast.err  { background: rgba(120, 30, 40, .92); border-color: var(--danger); color: #fff; }
-  .toast.ok   { background: rgba(54, 83, 41, .55); border-color: var(--success); }
+  .toast.ok   { background: rgba(46, 74, 34, .96); border-color: var(--success); color: #fff; }
 
   .empty-state {
     padding: 60px var(--s5);
@@ -9269,7 +9269,11 @@ const ICONS = {
 function toast(msg, kind = 'ok') {
   const t = $('#toast');
   t.textContent = msg;
-  t.className = 'toast ' + kind;
+  // Normalize aliases so every caller lands on a styled variant (.ok / .err).
+  const cls = (kind === 'error' || kind === 'err') ? 'err'
+            : (kind === 'success' || kind === 'ok') ? 'ok'
+            : kind;
+  t.className = 'toast ' + cls;
   requestAnimationFrame(() => t.classList.add('show'));
   clearTimeout(toast._h);
   toast._h = setTimeout(() => t.classList.remove('show'), 2600);
