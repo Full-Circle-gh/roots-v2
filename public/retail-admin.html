@@ -935,6 +935,61 @@
   .db-cohort-tbl td.empty { background: var(--bg-elev-1); color: var(--text-4); }
   .db-cohort-note { font-size: 11px; color: var(--text-3); line-height: 1.55; margin-top: var(--s3); }
 
+  /* ═══ Deep-dive — display-options bar + reveal liveliness ════════════════
+     The legacy KPI strip + 12 charts used to sit flat on the page. This pass
+     lifts them to the bento's quality: resting depth + a hover lift on every
+     card, plus motion that fires when the operator opens the fold — cards fade
+     up in sequence, magnitude bars sweep out, trend/cohort lines draw on, and
+     KPI numbers count up. All reveal motion is gated behind .dd-open-anim
+     (toggled by the <details> `toggle` handler in dashInit) so it plays on
+     reveal, not invisibly while the fold is still closed. Honors
+     reduced-motion. */
+  .db-dd-bar { display: flex; align-items: center; justify-content: flex-end; gap: var(--s3); margin-top: -2px; }
+
+  /* Lift the cards off the page so they read as objects, not flat panels —
+     same depth + hover float language as the bento tiles above the fold. */
+  .db-deepdive-body .card {
+    box-shadow: 0 1px 2px rgba(18,22,26,.05), 0 6px 20px rgba(18,22,26,.07);
+    border-color: var(--line);
+    transition: box-shadow .18s ease, transform .18s ease;
+  }
+  .db-deepdive-body .card:hover {
+    box-shadow: 0 2px 4px rgba(18,22,26,.06), 0 12px 28px rgba(18,22,26,.11);
+    transform: translateY(-1px);
+  }
+  .db-deepdive-body .db-kpi { transition: box-shadow .18s ease, transform .18s ease; }
+  .db-deepdive-body .db-kpi:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(18,22,26,.06), 0 12px 28px rgba(18,22,26,.11);
+  }
+  /* Product / customer rows read as interactive. */
+  .db-deepdive-body .db-list .db-row { border-radius: 6px; transition: background .14s ease; }
+  .db-deepdive-body .db-list .db-row:hover { background: var(--bg-elev-1); }
+
+  @keyframes db-card-in { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+  @keyframes db-bar-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @keyframes db-line-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+
+  .db-deepdive.dd-open-anim .db-deepdive-body > * { animation: db-card-in .5s cubic-bezier(.22,.61,.36,1) both; }
+  .db-deepdive.dd-open-anim .db-deepdive-body > *:nth-child(1) { animation-delay: .02s; }
+  .db-deepdive.dd-open-anim .db-deepdive-body > *:nth-child(2) { animation-delay: .07s; }
+  .db-deepdive.dd-open-anim .db-deepdive-body > *:nth-child(3) { animation-delay: .12s; }
+  .db-deepdive.dd-open-anim .db-deepdive-body > *:nth-child(4) { animation-delay: .17s; }
+  .db-deepdive.dd-open-anim .db-deepdive-body > *:nth-child(5) { animation-delay: .22s; }
+  .db-deepdive.dd-open-anim .db-deepdive-body > *:nth-child(n+6) { animation-delay: .27s; }
+  /* Magnitude bars sweep out from the left as their card lands. */
+  .db-deepdive.dd-open-anim .db-track > span { transform-origin: left center; animation: db-bar-grow .65s cubic-bezier(.22,.61,.36,1) both; }
+  /* Trend + cohort lines draw on (pathLength="1" normalises any series length). */
+  .db-deepdive.dd-open-anim .db-chart .line,
+  .db-deepdive.dd-open-anim .db-cohort-curve .line { stroke-dasharray: 1; animation: db-line-draw .9s ease both; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .db-deepdive.dd-open-anim .db-deepdive-body > *,
+    .db-deepdive.dd-open-anim .db-track > span,
+    .db-deepdive.dd-open-anim .db-chart .line,
+    .db-deepdive.dd-open-anim .db-cohort-curve .line { animation: none; }
+  }
+
   /* ═══════════════════════════════════════════════════════════════════
      PRODUCTS TAB — mini-app product surface editor
      ═══════════════════════════════════════════════════════════════════ */
@@ -4310,36 +4365,6 @@
         <input type="date" id="db-to" aria-label="To date">
         <button class="db-btn primary" onclick="dashLoad()">Apply · 应用</button>
         <button class="db-btn" onclick="dashLoad()" title="Refresh · 刷新">↻</button>
-        <div class="ovp-wrap">
-          <button class="db-btn" id="dv-btn" onclick="dvToggle()" aria-haspopup="true" title="Display options · 显示选项">View · 视图</button>
-          <div id="dv-pop" class="ovp" hidden>
-            <div class="ovp-head">Display options · 显示选项</div>
-            <div class="ovp-group">
-              <div class="ovp-label">Trend chart · 趋势图</div>
-              <div class="ovp-seg" data-dv="chart">
-                <button data-v="curve" onclick="dvSet('chart','curve')">Curve · 曲线</button>
-                <button data-v="bars"  onclick="dvSet('chart','bars')">Bars · 柱状</button>
-                <button data-v="dots"  onclick="dvSet('chart','dots')">Dots · 散点</button>
-              </div>
-            </div>
-            <div class="ovp-group">
-              <div class="ovp-label">Demand heatmap · 热力图</div>
-              <div class="ovp-seg" data-dv="heat">
-                <button data-v="cells"  onclick="dvSet('heat','cells')">Cells · 方格</button>
-                <button data-v="dots"   onclick="dvSet('heat','dots')">Dots · 圆点</button>
-                <button data-v="dashes" onclick="dvSet('heat','dashes')">Dashes · 短条</button>
-              </div>
-            </div>
-            <div class="ovp-group">
-              <div class="ovp-label">Headline numbers · 数字</div>
-              <div class="ovp-seg" data-dv="numbers">
-                <button data-v="light"   onclick="dvSet('numbers','light')">Light · 轻</button>
-                <button data-v="display" onclick="dvSet('numbers','display')">Display · 大</button>
-                <button data-v="mono"    onclick="dvSet('numbers','mono')">Mono · 等宽</button>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -4446,6 +4471,42 @@
         <span class="db-deepdive-hint">8 KPIs + 12 charts · 历史详情</span>
       </summary>
       <div class="db-deepdive-body">
+    <!-- Display options — these tweaks (trend shape, heatmap shape, headline
+         numbers) only touch the cards below, so the control lives with them
+         rather than up in the date-range bar. -->
+    <div class="db-dd-bar">
+      <div class="ovp-wrap">
+        <button class="db-btn" id="dv-btn" onclick="dvToggle()" aria-haspopup="true" title="Display options · 显示选项">View · 视图</button>
+        <div id="dv-pop" class="ovp" hidden>
+          <div class="ovp-head">Display options · 显示选项</div>
+          <div class="ovp-group">
+            <div class="ovp-label">Trend chart · 趋势图</div>
+            <div class="ovp-seg" data-dv="chart">
+              <button data-v="curve" onclick="dvSet('chart','curve')">Curve · 曲线</button>
+              <button data-v="bars"  onclick="dvSet('chart','bars')">Bars · 柱状</button>
+              <button data-v="dots"  onclick="dvSet('chart','dots')">Dots · 散点</button>
+            </div>
+          </div>
+          <div class="ovp-group">
+            <div class="ovp-label">Demand heatmap · 热力图</div>
+            <div class="ovp-seg" data-dv="heat">
+              <button data-v="cells"  onclick="dvSet('heat','cells')">Cells · 方格</button>
+              <button data-v="dots"   onclick="dvSet('heat','dots')">Dots · 圆点</button>
+              <button data-v="dashes" onclick="dvSet('heat','dashes')">Dashes · 短条</button>
+            </div>
+          </div>
+          <div class="ovp-group">
+            <div class="ovp-label">Headline numbers · 数字</div>
+            <div class="ovp-seg" data-dv="numbers">
+              <button data-v="light"   onclick="dvSet('numbers','light')">Light · 轻</button>
+              <button data-v="display" onclick="dvSet('numbers','display')">Display · 大</button>
+              <button data-v="mono"    onclick="dvSet('numbers','mono')">Mono · 等宽</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- KPI strip -->
     <div class="db-kpis" id="db-kpis"></div>
 
@@ -10206,8 +10267,17 @@ function dashBarRows(items, opt) {
 // full-width via preserveAspectRatio="none" + non-scaling-stroke).
 function dashSparkline(values) {
   const vals = (values || []).map(v => Number(v) || 0);
-  if (vals.length < 2) return '';
-  const W = 100, H = 24, pad = 2, n = vals.length;
+  const W = 100, H = 24, pad = 2;
+  // Degenerate state (no data yet today, or a single bucket): instead of
+  // vanishing — which reads as "missing chart" — draw a faint dashed baseline
+  // so the sparkline is always visibly present and clearly says "no activity".
+  if (vals.length < 2 || vals.every(v => v <= 0)) {
+    const midY = (H / 2).toFixed(1);
+    return `<svg class="db-spark is-flat" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">`
+      + `<line x1="${pad}" y1="${midY}" x2="${W - pad}" y2="${midY}" stroke="currentColor" stroke-width="1" `
+      + `vector-effect="non-scaling-stroke" stroke-dasharray="2 3" opacity="0.35"/></svg>`;
+  }
+  const n = vals.length;
   const max = Math.max(1, ...vals), min = Math.min(0, ...vals);
   const span = (max - min) || 1;
   const x = i => pad + (i / (n - 1)) * (W - 2 * pad);
@@ -10272,6 +10342,21 @@ function dashInit() {
     if (DASH_DATA) dashRenderTrend();
   }));
   dvApply();           // apply saved View tweaks (heatmap/number classes)
+  // Deep-dive reveal motion — replay the fade-up / bar-grow / line-draw /
+  // count-up each time the fold opens (gated behind .dd-open-anim so it plays
+  // on reveal, not invisibly while collapsed). Removing + re-adding the class
+  // with a reflow restarts the CSS animations on the already-rendered cards.
+  const dd = document.getElementById('db-deepdive');
+  if (dd) dd.addEventListener('toggle', () => {
+    if (dd.open) {
+      dd.classList.remove('dd-open-anim');
+      void dd.offsetWidth;
+      dd.classList.add('dd-open-anim');
+      dashKpiAnimate();
+    } else {
+      dd.classList.remove('dd-open-anim');
+    }
+  });
   dashSetRange('30');  // default window + initial load
   dashHeroInit();      // right-now hero (phase 2): polling + drawer wiring
   bentoInit();         // bento tiles (phase 3): layout + /ops polling
@@ -11017,21 +11102,40 @@ function dashRenderKpis() {
   const k = DASH_DATA.kpis, d = DASH_DATA.deltas;
   const conv = k.conversion_rate == null ? '—' : k.conversion_rate.toFixed(1) + '%';
   const cards = [
-    { lbl: 'Revenue · 营收',        val: dashMoney(k.revenue),       delta: d.revenue,       sub: '', accent: true },
-    { lbl: 'Orders · 订单',         val: dashNum(k.orders),          delta: d.orders,        sub: '' },
-    { lbl: 'Avg order · 客单价',     val: dashMoney(k.aov, 2),        delta: d.aov,           sub: '' },
-    { lbl: 'New customers · 新客',   val: dashNum(k.new_customers),   delta: d.new_customers, sub: '' },
-    { lbl: 'Visits · 访问',         val: dashNum(k.visits),          delta: d.visits,        sub: k.visits === 0 ? 'No data yet · 暂无' : dashNum(k.sessions) + ' sessions' },
-    { lbl: 'Unique visitors · 访客', val: dashNum(k.visitors),        delta: null,            sub: '' },
-    { lbl: 'Conversion · 转化率',    val: conv,                       delta: null,            sub: 'orders ÷ sessions' },
-    { lbl: 'Refund rate · 退款率',   val: (k.refund_rate || 0).toFixed(1) + '%', delta: null, sub: dashNum(k.refunded_orders) + ' refunded' },
+    { lbl: 'Revenue · 营收',        val: dashMoney(k.revenue),       num: k.revenue,         fmt: 'money',  delta: d.revenue,       sub: '', accent: true },
+    { lbl: 'Orders · 订单',         val: dashNum(k.orders),          num: k.orders,          fmt: 'num',    delta: d.orders,        sub: '' },
+    { lbl: 'Avg order · 客单价',     val: dashMoney(k.aov, 2),        num: k.aov,             fmt: 'money2', delta: d.aov,           sub: '' },
+    { lbl: 'New customers · 新客',   val: dashNum(k.new_customers),   num: k.new_customers,   fmt: 'num',    delta: d.new_customers, sub: '' },
+    { lbl: 'Visits · 访问',         val: dashNum(k.visits),          num: k.visits,          fmt: 'num',    delta: d.visits,        sub: k.visits === 0 ? 'No data yet · 暂无' : dashNum(k.sessions) + ' sessions' },
+    { lbl: 'Unique visitors · 访客', val: dashNum(k.visitors),        num: k.visitors,        fmt: 'num',    delta: null,            sub: '' },
+    { lbl: 'Conversion · 转化率',    val: conv,                       num: k.conversion_rate, fmt: 'pct',    delta: null,            sub: 'orders ÷ sessions' },
+    { lbl: 'Refund rate · 退款率',   val: (k.refund_rate || 0).toFixed(1) + '%', num: k.refund_rate || 0, fmt: 'pct', delta: null, sub: dashNum(k.refunded_orders) + ' refunded' },
   ];
   $('#db-kpis').innerHTML = cards.map(c => {
     const hasDelta = c.delta !== null && c.delta !== undefined;
     const foot = hasDelta ? dashDelta(c.delta) : (c.sub ? `<div class="sub">${escapeHtml(c.sub)}</div>` : '<div class="sub">&nbsp;</div>');
     const extra = hasDelta && c.sub ? `<div class="sub">${escapeHtml(c.sub)}</div>` : '';
-    return `<div class="db-kpi${c.accent ? ' accent' : ''}"><div class="lbl">${c.lbl}</div><div class="val">${c.val}</div>${foot}${extra}</div>`;
+    // data-cu/data-fmt let the reveal animation count the number up from 0;
+    // the printed value stays correct if the script never runs.
+    const cu = (c.num != null && isFinite(c.num)) ? ` data-cu="${c.num}" data-fmt="${c.fmt}"` : '';
+    return `<div class="db-kpi${c.accent ? ' accent' : ''}"><div class="lbl">${c.lbl}</div><div class="val"${cu}>${c.val}</div>${foot}${extra}</div>`;
   }).join('');
+  // If the fold is already open when fresh data lands, count up now (the open
+  // event won't fire again). Otherwise the open handler runs it on reveal.
+  if (document.getElementById('db-deepdive')?.open) dashKpiAnimate();
+}
+
+// Count the KPI headline numbers up from 0 — called on fold-reveal and on a
+// data refresh while open. Seeds _cuVal=0 so dashCountUp tweens from zero
+// rather than snapping (its first-paint shortcut). Respects reduced-motion.
+function dashKpiAnimate() {
+  const fmts = { money: n => dashMoney(n), money2: n => dashMoney(n, 2), pct: n => n.toFixed(1) + '%', num: n => dashNum(Math.round(n)) };
+  document.querySelectorAll('#db-kpis .val[data-cu]').forEach(el => {
+    const to = Number(el.dataset.cu) || 0;
+    const f = fmts[el.dataset.fmt] || fmts.num;
+    el._cuVal = 0;
+    dashCountUp(el, to, f);
+  });
 }
 
 function dashRenderTrend() {
@@ -11058,7 +11162,7 @@ function dashRenderTrend() {
   }
   const linePts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
   const area = n > 1 ? `<path class="area" d="M ${linePts.join(' L ')} L ${x(n - 1).toFixed(1)},${(padT + innerH).toFixed(1)} L ${x(0).toFixed(1)},${(padT + innerH).toFixed(1)} Z"/>` : '';
-  const line = n > 1 ? `<polyline class="line" points="${linePts.join(' ')}"/>` : '';
+  const line = n > 1 ? `<polyline class="line" points="${linePts.join(' ')}" pathLength="1"/>` : '';
 
   const labelEvery = Math.max(1, Math.ceil(n / 6));
   let xl = '', dots = '', hover = '';
@@ -11452,7 +11556,7 @@ function dashRenderCohorts() {
     });
     const pts = curve.map((c, i) => `${xs(i).toFixed(1)},${ys(c.pct).toFixed(1)}`);
     const area = `<path class="area" d="M ${pts.join(' L ')} L ${xs(curve.length - 1).toFixed(1)},${(padT + ih).toFixed(1)} L ${padL},${(padT + ih).toFixed(1)} Z"/>`;
-    const line = `<polyline class="line" points="${pts.join(' ')}"/>`;
+    const line = `<polyline class="line" points="${pts.join(' ')}" pathLength="1"/>`;
     curve.forEach((c, i) => {
       dots += `<circle class="dot" cx="${xs(i).toFixed(1)}" cy="${ys(c.pct).toFixed(1)}" r="2.5"><title>M${c.offset}: ${c.pct}%</title></circle>`;
       xl += `<text class="ax" x="${xs(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">M${c.offset}</text>`;
