@@ -4305,9 +4305,10 @@
 
   var clampO = function(v){ return Math.max(0, Math.min(0.95, v)); };
 
-  // Balanced rake + soft relief — the design defaults.
+  // Calm rake — keep the raked grooves for texture, but few stones/rings
+  // so the background reads quiet rather than busy with circles.
   function makeComposition(){
-    var cfg = { bands:6, ringN:5, lineBase:6, gap:11 };
+    var cfg = { bands:6, ringN:3, lineBase:6, gap:11 };
     var rand = rng(20260604);
     var bands = [];
     for (var i=0;i<cfg.bands;i++){
@@ -4318,7 +4319,7 @@
       var y1 = full ? 1030 : 520 + Math.floor(rand()*480);
       bands.push({ x:x, n:n, gap:cfg.gap, y0:y0, y1:y1, s:i*7+3 });
     }
-    var baseRs = [[70,108,150,192],[58,92,128],[66,104,146,188],[72,112,156],[60,96,134],[64,100,140,180],[54,86,120]];
+    var baseRs = [[112,176],[150],[96,158]];   // 1–2 ripples per stone — sparse on purpose
     var rings = [];
     for (var j=0;j<cfg.ringN;j++){
       var cx = 150 + rand()*(W-300);
@@ -10935,10 +10936,14 @@ function dashSparkPct(vals, idx) {
     y: ((H - pad) - ((vals[idx] - min) / span) * (H - 2 * pad)) / H * 100,
   };
 }
-function dashSparkTipEl(wrap) {
-  let el = wrap.querySelector('.db-spark-tip');
-  if (!el) { el = document.createElement('div'); el.className = 'db-spark-tip'; wrap.appendChild(el); }
-  return el;
+// One shared tip element, re-parented into whichever host (sparkline wrap or
+// delta badge) is currently hovered. A single element means two tips can never
+// show at once — moving to another spark relocates the same chip.
+let _dashSparkTip = null;
+function dashSparkTipEl(host) {
+  if (!_dashSparkTip) { _dashSparkTip = document.createElement('div'); _dashSparkTip.className = 'db-spark-tip'; }
+  if (_dashSparkTip.parentNode !== host) { _dashSparkTip.classList.remove('show'); host.appendChild(_dashSparkTip); }
+  return _dashSparkTip;
 }
 function dashSparkMove(e) {
   const wrap = e.currentTarget, s = wrap._spark;
