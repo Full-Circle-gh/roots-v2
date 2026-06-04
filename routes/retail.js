@@ -314,18 +314,18 @@ router.put('/api/retail-admin/category-tree', requireRetailAdmin, express.json({
     const tx = db.transaction(() => {
       // Top renames via a per-id sentinel so chained/swapped names can't collide.
       for (const r of topRenames) {
-        db.prepare("UPDATE products SET top_category = ? WHERE top_category = ?").run(' T' + r.id, r.oldName);
+        db.prepare("UPDATE products SET top_category = ? WHERE top_category = ?").run('\u0000T' + r.id, r.oldName);
       }
       for (const r of topRenames) {
-        const info = db.prepare("UPDATE products SET top_category = ? WHERE top_category = ?").run(r.newName, ' T' + r.id);
+        const info = db.prepare("UPDATE products SET top_category = ? WHERE top_category = ?").run(r.newName, '\u0000T' + r.id);
         migrated += info.changes;
       }
       // Sub renames scoped by the (now-new) parent top name, same sentinel trick.
       for (const r of subRenames) {
-        db.prepare("UPDATE products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run(' S' + r.id, r.parentNewName, r.oldName);
+        db.prepare("UPDATE products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run('\u0000S' + r.id, r.parentNewName, r.oldName);
       }
       for (const r of subRenames) {
-        const info = db.prepare("UPDATE products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run(r.newName, r.parentNewName, ' S' + r.id);
+        const info = db.prepare("UPDATE products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run(r.newName, r.parentNewName, '\u0000S' + r.id);
         migrated += info.changes;
       }
       upsert.run(JSON.stringify(incoming), (req.user && req.user.id) || null);
