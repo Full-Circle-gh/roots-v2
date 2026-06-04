@@ -5469,9 +5469,19 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
 
   try {
     // Paid orders — fires once per order on first successful payment.
+    // first_order flags a customer's very first paid order (milestone);
+    // big_order flags an unusually large basket (VIP signal). Guests
+    // (no customer_id) are never flagged "first" — can't dedupe them.
+    const BIG_ORDER_YUAN = 200;
     const paid = tdb().prepare(`
-      SELECT o.id, o.order_no, o.total, o.paid_at,
-             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+      SELECT o.id, o.order_no, o.total, o.paid_at, o.customer_id,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer,
+             (o.customer_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM retail_orders o2
+                 WHERE o2.customer_id = o.customer_id
+                   AND o2.paid_at IS NOT NULL
+                   AND o2.paid_at < o.paid_at
+             )) AS first_order
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE o.paid_at IS NOT NULL AND o.paid_at >= ?
@@ -5481,7 +5491,44 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       type: 'paid_order',
       ts: parseTs(r.paid_at),
       ref_type: 'order', ref_id: r.id,
-      payload: { order_no: r.order_no, total: r.total, buyer: maskBuyerName(r.buyer) },
+      payload: {
+        order_no: r.order_no, total: r.total, buyer: maskBuyerName(r.buyer),
+        first_order: !!r.first_order,
+        big_order: Number(r.total || 0) >= BIG_ORDER_YUAN,
+      },
+    });
+
+    // Fulfillment — order left the store/warehouse, and reached the customer.
+    // Both timestamps are set independently; a delivered order surfaces both
+    // its dispatch and delivery rows.
+    const dispatched = tdb().prepare(`
+      SELECT o.id, o.order_no, o.dispatched_at,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE o.dispatched_at IS NOT NULL AND o.dispatched_at >= ?
+       ORDER BY o.dispatched_at DESC LIMIT ?
+    `).all(sinceIso, limit);
+    for (const r of dispatched) events.push({
+      type: 'order_dispatched',
+      ts: parseTs(r.dispatched_at),
+      ref_type: 'order', ref_id: r.id,
+      payload: { order_no: r.order_no, buyer: maskBuyerName(r.buyer) },
+    });
+
+    const delivered = tdb().prepare(`
+      SELECT o.id, o.order_no, o.delivered_at,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE o.delivered_at IS NOT NULL AND o.delivered_at >= ?
+       ORDER BY o.delivered_at DESC LIMIT ?
+    `).all(sinceIso, limit);
+    for (const r of delivered) events.push({
+      type: 'order_delivered',
+      ts: parseTs(r.delivered_at),
+      ref_type: 'order', ref_id: r.id,
+      payload: { order_no: r.order_no, buyer: maskBuyerName(r.buyer) },
     });
 
     // Refund requests — refund_requested_at is set when the customer files.
@@ -5552,6 +5599,73 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
         excerpt: String(r.message || '').slice(0, 80),
         name:    maskBuyerName(r.customer_name || ''),
       },
+    });
+
+    // Refund resolved — closes the loop the refund_request row opened.
+    // Paid out (refund_paid_at) and rejected (refund_reviewed_at on a
+    // rejected status) are the two terminal states an operator reacts to.
+    const refundPaid = tdb().prepare(`
+      SELECT o.id, o.order_no, o.refund_amount_paid, o.refund_paid_at,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE o.refund_paid_at IS NOT NULL AND o.refund_paid_at >= ?
+       ORDER BY o.refund_paid_at DESC LIMIT ?
+    `).all(sinceIso, limit);
+    for (const r of refundPaid) events.push({
+      type: 'refund_paid',
+      ts: parseTs(r.refund_paid_at),
+      ref_type: 'order', ref_id: r.id,
+      payload: { order_no: r.order_no, amount: r.refund_amount_paid, buyer: maskBuyerName(r.buyer) },
+    });
+
+    const refundRejected = tdb().prepare(`
+      SELECT o.id, o.order_no, o.refund_review_note, o.refund_reviewed_at,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE o.refund_status = 'rejected' AND o.refund_reviewed_at IS NOT NULL
+         AND o.refund_reviewed_at >= ?
+       ORDER BY o.refund_reviewed_at DESC LIMIT ?
+    `).all(sinceIso, limit);
+    for (const r of refundRejected) events.push({
+      type: 'refund_rejected',
+      ts: parseTs(r.refund_reviewed_at),
+      ref_type: 'order', ref_id: r.id,
+      payload: { order_no: r.order_no, note: r.refund_review_note, buyer: maskBuyerName(r.buyer) },
+    });
+
+    // Wallet top-ups — real money in, settled (status='success', paid_at set).
+    const topups = tdb().prepare(`
+      SELECT t.id, t.amount, t.paid_at,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), '') AS buyer
+        FROM retail_topup_transactions t
+        LEFT JOIN retail_customers c ON c.id = t.customer_id
+       WHERE t.status = 'success' AND t.paid_at IS NOT NULL AND t.paid_at >= ?
+       ORDER BY t.paid_at DESC LIMIT ?
+    `).all(sinceIso, limit);
+    for (const r of topups) events.push({
+      type: 'topup',
+      ts: parseTs(r.paid_at),
+      ref_type: 'customer', ref_id: r.id,
+      payload: { amount: r.amount, buyer: maskBuyerName(r.buyer) },
+    });
+
+    // Out of stock — distinct from low_stock (1..5); qty hit zero on an
+    // Active product. More urgent: the item is now unbuyable.
+    const oos = tdb().prepare(`
+      SELECT id, name_en, name_cn, sku, updated_at
+        FROM products
+       WHERE COALESCE(stock_qty,0) = 0
+         AND status = 'Active' AND COALESCE(is_active,1) = 1
+         AND updated_at >= ?
+       ORDER BY updated_at DESC LIMIT ?
+    `).all(sinceIso, limit);
+    for (const r of oos) events.push({
+      type: 'out_of_stock',
+      ts: parseTs(r.updated_at),
+      ref_type: 'product', ref_id: r.id,
+      payload: { name_en: r.name_en, name_cn: r.name_cn, sku: r.sku },
     });
   } catch (e) {
     console.error('[dashboard/activity]', e.message);

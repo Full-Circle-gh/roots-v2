@@ -624,6 +624,11 @@
   .db-feed-icon.db-fi-muted { color: var(--text-3); }
   .db-feed-text { flex: 1; min-width: 0; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .db-feed-text b { font-weight: 600; }
+  /* Milestone pill on a paid-order row — first order or unusually big basket. */
+  .db-feed-badge { display: inline-flex; align-items: center; gap: 3px; padding: 0 5px; margin-left: 4px; border-radius: 999px; font-size: 10px; font-weight: 600; vertical-align: middle; }
+  .db-feed-badge svg { width: 10px; height: 10px; }
+  .db-feed-badge.db-fb-first { color: var(--brass); background: color-mix(in srgb, var(--brass) 14%, transparent); }
+  .db-feed-badge.db-fb-big   { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
   .db-feed-empty { font-size: 12px; color: var(--text-3); padding: 12px 8px; text-align: center; }
   /* Drawer-specific tweaks — the activity drawer reuses the global .side-drawer. */
   #db-activity-drawer .db-dw-meta { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 13px; margin-bottom: 16px; }
@@ -10224,6 +10229,10 @@ const FEED_SVG = {
   alert: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2l6 11H2z"/><path d="M8 6.6v3.2"/><path d="M8 11.8h.01"/></svg>',
   person:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.6"/><path d="M3 13.5a5 5 0 0 1 10 0"/></svg>',
   chat:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5 5 0 0 1-7.2 4.5L3 13.5l1-3.3A5 5 0 1 1 13.5 8z"/></svg>',
+  truck: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 4.5h7v6h-7z"/><path d="M8.5 6.5h3l2 2.2v1.8h-5z"/><circle cx="4.2" cy="11.6" r="1.2"/><circle cx="11" cy="11.6" r="1.2"/></svg>',
+  box:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8l5.5 3v6.4L8 14.2l-5.5-3V4.8z"/><path d="M2.6 4.9L8 7.8l5.4-2.9"/><path d="M8 7.8v6.4"/></svg>',
+  wallet:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h10.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/><path d="M2 4.5V4a1 1 0 0 1 1-1h7.5"/><circle cx="10.8" cy="8.5" r=".9"/></svg>',
+  star:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.9 4.4 13.1l.7-4L2.2 6.3l4-.6z"/></svg>',
   dot:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="3"/></svg>',
 };
 
@@ -10232,12 +10241,27 @@ const FEED_SVG = {
 function dashFeedMeta(e) {
   const p = e.payload || {};
   switch (e.type) {
-    case 'paid_order':
-      return { icon: FEED_SVG.ok, tone: 'ok', text: `<b>Paid · 已付</b> ${escapeHtml(p.order_no || '')} · ¥${Number(p.total || 0).toLocaleString()} · ${escapeHtml(p.buyer || '')}` };
+    case 'paid_order': {
+      const badge = p.first_order ? ` <span class="db-feed-badge db-fb-first">${FEED_SVG.star}First · 首单</span>`
+                  : p.big_order   ? ` <span class="db-feed-badge db-fb-big">${FEED_SVG.star}Big · 大单</span>` : '';
+      return { icon: FEED_SVG.ok, tone: 'ok', text: `<b>Paid · 已付</b> ${escapeHtml(p.order_no || '')} · ¥${Number(p.total || 0).toLocaleString()} · ${escapeHtml(p.buyer || '')}${badge}` };
+    }
+    case 'order_dispatched':
+      return { icon: FEED_SVG.truck, tone: 'muted', text: `<b>Dispatched · 已发货</b> ${escapeHtml(p.order_no || '')} · ${escapeHtml(p.buyer || '')}` };
+    case 'order_delivered':
+      return { icon: FEED_SVG.box, tone: 'ok', text: `<b>Delivered · 已送达</b> ${escapeHtml(p.order_no || '')} · ${escapeHtml(p.buyer || '')}` };
     case 'refund_request':
       return { icon: FEED_SVG.refund, tone: 'warn', text: `<b>Refund · 退款</b> ${escapeHtml(p.order_no || '')}${p.amount ? ' · ¥' + Number(p.amount).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}` };
+    case 'refund_paid':
+      return { icon: FEED_SVG.refund, tone: 'ok', text: `<b>Refunded · 已退款</b> ${escapeHtml(p.order_no || '')}${p.amount ? ' · ¥' + Number(p.amount).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}` };
+    case 'refund_rejected':
+      return { icon: FEED_SVG.refund, tone: 'bad', text: `<b>Refund rejected · 退款驳回</b> ${escapeHtml(p.order_no || '')} · ${escapeHtml(p.buyer || '')}` };
+    case 'topup':
+      return { icon: FEED_SVG.wallet, tone: 'ok', text: `<b>Top-up · 充值</b> ¥${Number(p.amount || 0).toLocaleString()} · ${escapeHtml(p.buyer || '')}` };
     case 'low_stock':
       return { icon: FEED_SVG.alert, tone: 'bad', text: `<b>Low · 缺货</b> ${escapeHtml(p.name_en || p.name_cn || '')} (${p.stock} left · 剩 ${p.stock})` };
+    case 'out_of_stock':
+      return { icon: FEED_SVG.alert, tone: 'bad', text: `<b>Out · 售罄</b> ${escapeHtml(p.name_en || p.name_cn || '')}` };
     case 'new_customer':
       return { icon: FEED_SVG.person, tone: 'muted', text: `<b>New · 新客</b> ${escapeHtml(p.name || '—')}` };
     case 'feedback':
@@ -10261,11 +10285,17 @@ function dashFeedClick(row) {
   if (!title || !body || !open) return;
 
   const TITLES = {
-    paid_order:     'Paid order · 已付订单',
-    refund_request: 'Refund request · 退款申请',
-    low_stock:      'Low stock · 缺货预警',
-    new_customer:   'New customer · 新客户',
-    feedback:       'Customer feedback · 顾客反馈',
+    paid_order:       'Paid order · 已付订单',
+    order_dispatched: 'Order dispatched · 订单已发货',
+    order_delivered:  'Order delivered · 订单已送达',
+    refund_request:   'Refund request · 退款申请',
+    refund_paid:      'Refund paid · 退款已支付',
+    refund_rejected:  'Refund rejected · 退款已驳回',
+    topup:            'Wallet top-up · 钱包充值',
+    low_stock:        'Low stock · 缺货预警',
+    out_of_stock:     'Out of stock · 售罄',
+    new_customer:     'New customer · 新客户',
+    feedback:         'Customer feedback · 顾客反馈',
   };
   title.textContent = TITLES[e.type] || (e.type || 'Event');
 
@@ -10279,6 +10309,18 @@ function dashFeedClick(row) {
       html += `
         <dt>Order · 订单</dt><dd>${escapeHtml(p.order_no || '')}</dd>
         <dt>Amount · 金额</dt><dd>¥${Number(p.total || 0).toLocaleString()}</dd>
+        ${p.first_order ? `<dt>Milestone · 里程碑</dt><dd>First order · 首单</dd>`
+          : p.big_order ? `<dt>Milestone · 里程碑</dt><dd>Big order · 大单</dd>` : ''}
+        <dt>Buyer · 顾客</dt><dd>${escapeHtml(p.buyer || '—')}</dd>
+      </dl>`;
+      open.textContent = 'Open in Orders · 在订单中打开 ↗';
+      open.style.display = '';
+      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('orders'); };
+      break;
+    case 'order_dispatched':
+    case 'order_delivered':
+      html += `
+        <dt>Order · 订单</dt><dd>${escapeHtml(p.order_no || '')}</dd>
         <dt>Buyer · 顾客</dt><dd>${escapeHtml(p.buyer || '—')}</dd>
       </dl>`;
       open.textContent = 'Open in Orders · 在订单中打开 ↗';
@@ -10297,11 +10339,50 @@ function dashFeedClick(row) {
       open.style.display = '';
       open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('refunds') || dashJumpTab('orders'); };
       break;
+    case 'refund_paid':
+      html += `
+        <dt>Order · 订单</dt><dd>${escapeHtml(p.order_no || '')}</dd>
+        ${p.amount ? `<dt>Amount · 金额</dt><dd>¥${Number(p.amount).toLocaleString()}</dd>` : ''}
+        <dt>Buyer · 顾客</dt><dd>${escapeHtml(p.buyer || '—')}</dd>
+      </dl>`;
+      open.textContent = 'Open in Refunds · 在退款中打开 ↗';
+      open.style.display = '';
+      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('refunds') || dashJumpTab('orders'); };
+      break;
+    case 'refund_rejected':
+      html += `
+        <dt>Order · 订单</dt><dd>${escapeHtml(p.order_no || '')}</dd>
+        <dt>Buyer · 顾客</dt><dd>${escapeHtml(p.buyer || '—')}</dd>
+      </dl>
+      ${p.note ? `<div class="db-dw-quote">${escapeHtml(p.note)}</div>` : ''}`;
+      open.textContent = 'Open in Refunds · 在退款中打开 ↗';
+      open.style.display = '';
+      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('refunds') || dashJumpTab('orders'); };
+      break;
+    case 'topup':
+      html += `
+        <dt>Amount · 金额</dt><dd>¥${Number(p.amount || 0).toLocaleString()}</dd>
+        <dt>Customer · 顾客</dt><dd>${escapeHtml(p.buyer || '—')}</dd>
+      </dl>`;
+      open.textContent = 'Open in Top-up · 在充值中打开 ↗';
+      open.style.display = '';
+      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('topup'); };
+      break;
     case 'low_stock':
       html += `
         <dt>Product · 产品</dt><dd>${escapeHtml(p.name_en || '')}${p.name_cn ? ' · ' + escapeHtml(p.name_cn) : ''}</dd>
         ${p.sku ? `<dt>SKU · 货号</dt><dd>${escapeHtml(p.sku)}</dd>` : ''}
         <dt>Stock · 库存</dt><dd>${p.stock} left · 剩 ${p.stock}</dd>
+      </dl>`;
+      open.textContent = 'Open in Products · 在产品中打开 ↗';
+      open.style.display = '';
+      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('products'); };
+      break;
+    case 'out_of_stock':
+      html += `
+        <dt>Product · 产品</dt><dd>${escapeHtml(p.name_en || '')}${p.name_cn ? ' · ' + escapeHtml(p.name_cn) : ''}</dd>
+        ${p.sku ? `<dt>SKU · 货号</dt><dd>${escapeHtml(p.sku)}</dd>` : ''}
+        <dt>Stock · 库存</dt><dd>0 · 售罄</dd>
       </dl>`;
       open.textContent = 'Open in Products · 在产品中打开 ↗';
       open.style.display = '';
