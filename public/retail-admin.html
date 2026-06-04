@@ -11141,12 +11141,15 @@ function dashRenderKpis() {
   ];
   $('#db-kpis').innerHTML = cards.map(c => {
     const hasDelta = c.delta !== null && c.delta !== undefined;
-    const foot = hasDelta ? dashDelta(c.delta) : (c.sub ? `<div class="sub">${escapeHtml(c.sub)}</div>` : '<div class="sub">&nbsp;</div>');
-    const extra = hasDelta && c.sub ? `<div class="sub">${escapeHtml(c.sub)}</div>` : '';
+    // One foot row per card: delta and/or sub on a single baseline (or a
+    // non-breaking space placeholder) so all cards are the same height.
+    const deltaHtml = hasDelta ? dashDelta(c.delta) : '';
+    const subHtml = c.sub ? `<span class="sub">${escapeHtml(c.sub)}</span>` : '';
+    const foot = `<div class="db-kpi-foot">${deltaHtml + subHtml || '&nbsp;'}</div>`;
     // data-cu/data-fmt let the reveal animation count the number up from 0;
     // the printed value stays correct if the script never runs.
     const cu = (c.num != null && isFinite(c.num)) ? ` data-cu="${c.num}" data-fmt="${c.fmt}"` : '';
-    return `<div class="db-kpi${c.accent ? ' accent' : ''}"><div class="lbl">${c.lbl}</div><div class="val"${cu}>${c.val}</div>${foot}${extra}</div>`;
+    return `<div class="db-kpi${c.accent ? ' accent' : ''}"><div class="lbl">${c.lbl}</div><div class="val"${cu}>${c.val}</div>${foot}</div>`;
   }).join('');
   // If the fold is already open when fresh data lands, count up now (the open
   // event won't fire again). Otherwise the open handler runs it on reveal.
