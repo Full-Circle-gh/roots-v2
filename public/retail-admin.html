@@ -803,12 +803,20 @@
   .db-bento #db-hero { position: relative; overflow: hidden; }
   .db-bento #db-hero::after {
     content: ""; position: absolute; top: -28px; right: -28px; width: 150px; height: 150px;
-    pointer-events: none; z-index: 0; opacity: .45;
+    pointer-events: none; z-index: 0; opacity: .45; transform-origin: center;
     background:
       radial-gradient(circle, transparent 0 40px, color-mix(in srgb, var(--accent) 22%, transparent) 40px 41px, transparent 41px) center / 100% 100% no-repeat,
       radial-gradient(circle, transparent 0 55px, color-mix(in srgb, var(--accent) 13%, transparent) 55px 56px, transparent 56px) center / 100% 100% no-repeat,
       radial-gradient(circle, transparent 0 70px, color-mix(in srgb, var(--accent) 8%, transparent) 70px 71px, transparent 71px) center / 100% 100% no-repeat;
+    /* Slow ambient "breath" — the rings drift out + back over 11s, echoing the
+       LIVE ring's pulse. Long + low-amplitude so it reads as alive, not busy. */
+    animation: db-hero-breath 11s ease-in-out infinite;
   }
+  @keyframes db-hero-breath {
+    0%, 100% { transform: scale(1);    opacity: .38; }
+    50%      { transform: scale(1.06); opacity: .52; }
+  }
+  @media (prefers-reduced-motion: reduce) { .db-bento #db-hero::after { animation: none; } }
   .db-bento #db-hero > * { position: relative; z-index: 1; }
 
   /* Subtle paper grain in the dashboard gutters — light theme only, so the
@@ -10685,7 +10693,10 @@ const BENTO_CATALOGUE = {
     render: (body) => {
       const list = (DASH_DATA && DASH_DATA.topProducts) || [];
       if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No sales in range · 区间内无销售</div>`;
-      const rows = dashBarRows(list.slice(0, 6), {
+      // Rank by units so the magnitude bars descend cleanly (the backend list
+      // is revenue-ranked, which fought the units-based bars).
+      const ranked = list.slice().sort((a, b) => (Number(b.units) || 0) - (Number(a.units) || 0));
+      const rows = dashBarRows(ranked.slice(0, 6), {
         name: p => dbProdName(p),
         value: p => Number(p.units || 0),
         display: p => String(p.units || 0),
