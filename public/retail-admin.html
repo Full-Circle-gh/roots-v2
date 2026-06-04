@@ -625,14 +625,17 @@
      collapsible wrapper that eases open/closed via a grid-rows transition
      (0fr → 1fr), so the list breathes rather than snapping. */
   .db-feed-more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 1.4s cubic-bezier(.33,1,.68,1); }
-  .db-feed-pane.is-expanded .db-feed-more { grid-template-rows: 1fr; }
-  .db-feed-more-inner { overflow: hidden; min-height: 0; display: flex; flex-direction: column; gap: 2px; opacity: 0; transform: translateY(-4px); transition: opacity 1.2s ease .2s, transform 1.2s cubic-bezier(.33,1,.68,1) .2s; }
-  .db-feed-pane.is-expanded .db-feed-more-inner { opacity: 1; transform: translateY(0); }
+  /* Expand is the meditative direction — slower than the collapse. The
+     transition of the *target* state wins, so opening uses these longer
+     durations while closing falls back to the base 1.4s above. */
+  .db-feed-pane.is-expanded .db-feed-more { grid-template-rows: 1fr; transition: grid-template-rows 2.2s cubic-bezier(.33,1,.68,1); }
+  .db-feed-more-inner { overflow: hidden; min-height: 0; display: flex; flex-direction: column; gap: 2px; opacity: 0; transform: translateY(-4px); transition: opacity 1.2s ease, transform 1.2s cubic-bezier(.33,1,.68,1); }
+  .db-feed-pane.is-expanded .db-feed-more-inner { opacity: 1; transform: translateY(0); transition: opacity 1.9s ease .3s, transform 1.9s cubic-bezier(.33,1,.68,1) .3s; }
   /* The toggle hugs the rows as a quiet footer action with a hairline above. */
   .db-feed-toggle { display: inline-flex; align-items: center; gap: 6px; width: 100%; margin-top: 6px; padding: 8px 2px 0; border: 0; border-top: 1px solid var(--line-soft); background: transparent; cursor: pointer; font-family: var(--f-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; color: var(--text-3); }
   .db-feed-toggle:hover { color: var(--accent); }
   .db-feed-toggle::after { content: ""; width: 6px; height: 6px; border-right: 1.4px solid currentColor; border-bottom: 1.4px solid currentColor; transform: rotate(45deg); transition: transform 1.1s cubic-bezier(.33,1,.68,1); margin-top: -2px; }
-  .db-feed-toggle.is-open::after { transform: rotate(225deg); margin-top: 2px; }
+  .db-feed-toggle.is-open::after { transform: rotate(225deg); margin-top: 2px; transition: transform 1.9s cubic-bezier(.33,1,.68,1); }
   /* Live count — pulsing dot when there are viewers, grey when zero. */
   .db-live { justify-content: center; align-items: center; gap: 4px; }
   /* LIVE ring gauge — a faint track with the viewer count centred; a green arc
