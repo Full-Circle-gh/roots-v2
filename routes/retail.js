@@ -5556,7 +5556,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       ts: parseTs(r.paid_at),
       ref_type: 'order', ref_id: r.id,
       payload: {
-        order_no: r.order_no, total: r.total, buyer: maskBuyerName(r.buyer),
+        order_no: r.order_no, total: r.total, buyer: r.buyer,
         first_order: !!r.first_order,
         big_order: Number(r.total || 0) >= BIG_ORDER_YUAN,
       },
@@ -5577,7 +5577,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       type: 'order_dispatched',
       ts: parseTs(r.dispatched_at),
       ref_type: 'order', ref_id: r.id,
-      payload: { order_no: r.order_no, buyer: maskBuyerName(r.buyer) },
+      payload: { order_no: r.order_no, buyer: r.buyer },
     });
 
     const delivered = tdb().prepare(`
@@ -5592,7 +5592,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       type: 'order_delivered',
       ts: parseTs(r.delivered_at),
       ref_type: 'order', ref_id: r.id,
-      payload: { order_no: r.order_no, buyer: maskBuyerName(r.buyer) },
+      payload: { order_no: r.order_no, buyer: r.buyer },
     });
 
     // Refund requests — refund_requested_at is set when the customer files.
@@ -5614,7 +5614,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
         amount:   r.refund_amount_requested,
         reason:   r.refund_reason,
         status:   r.refund_status,
-        buyer:    maskBuyerName(r.buyer),
+        buyer:    r.buyer,
       },
     });
 
@@ -5646,7 +5646,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       type: 'new_customer',
       ts: parseTs(r.created_at),
       ref_type: 'customer', ref_id: r.id,
-      payload: { name: maskBuyerName(r.nickname || '') },
+      payload: { name: r.nickname || '' },
     });
 
     // Customer feedback from the mini-app "Found a bug?" form.
@@ -5661,7 +5661,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       ref_type: 'feedback', ref_id: r.id,
       payload: {
         excerpt: String(r.message || '').slice(0, 80),
-        name:    maskBuyerName(r.customer_name || ''),
+        name:    r.customer_name || '',
       },
     });
 
@@ -5680,7 +5680,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       type: 'refund_paid',
       ts: parseTs(r.refund_paid_at),
       ref_type: 'order', ref_id: r.id,
-      payload: { order_no: r.order_no, amount: r.refund_amount_paid, buyer: maskBuyerName(r.buyer) },
+      payload: { order_no: r.order_no, amount: r.refund_amount_paid, buyer: r.buyer },
     });
 
     const refundRejected = tdb().prepare(`
@@ -5696,7 +5696,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       type: 'refund_rejected',
       ts: parseTs(r.refund_reviewed_at),
       ref_type: 'order', ref_id: r.id,
-      payload: { order_no: r.order_no, note: r.refund_review_note, buyer: maskBuyerName(r.buyer) },
+      payload: { order_no: r.order_no, note: r.refund_review_note, buyer: r.buyer },
     });
 
     // Wallet top-ups — real money in, settled (status='success', paid_at set).
@@ -5712,7 +5712,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       type: 'topup',
       ts: parseTs(r.paid_at),
       ref_type: 'customer', ref_id: r.id,
-      payload: { amount: r.amount, buyer: maskBuyerName(r.buyer) },
+      payload: { amount: r.amount, buyer: r.buyer },
     });
 
     // Out of stock — distinct from low_stock (1..5); qty hit zero on an
