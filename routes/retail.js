@@ -592,12 +592,55 @@ function resolveBundle(jsonStr) {
   return { title_en: b.title_en || null, title_cn: b.title_cn || null, price: Number(b.price) || 0, voucher: b.voucher || null, ids, items };
 }
 
+// ── Variant photo inheritance ("fallback when empty") ──────────────────────
+// Variants are independent product rows linked by variant_group_id. A variant
+// with NO photo of its own should show a sibling's photo by default — so all
+// sizes of one product look identical until a variant gets its own upload.
+// We resolve this at READ time (never copy into the row), so the variant stays
+// truly "empty" in the DB and keeps tracking the sibling. Preference order:
+// the variant's own photo → the group owner (id = variant_group_id) → lowest
+// variant_sort/id among active siblings that have a photo.
+//
+// SQL flag (1 when this row OR an active sibling has any stored photo) — pass
+// the products-table alias used in the surrounding query.
+function hasImageFallbackSql(alias) {
+  return `(
+    (${alias}.image_data IS NOT NULL AND ${alias}.image_data != '')
+    OR (${alias}.image_url IS NOT NULL AND ${alias}.image_url != '')
+    OR (${alias}.variant_group_id IS NOT NULL AND EXISTS(
+         SELECT 1 FROM products vsib
+          WHERE vsib.variant_group_id = ${alias}.variant_group_id
+            AND COALESCE(vsib.is_active, 1) = 1
+            AND ((vsib.image_data IS NOT NULL AND vsib.image_data != '')
+              OR (vsib.image_url IS NOT NULL AND vsib.image_url != ''))))
+  )`;
+}
+// Resolve the effective primary photo (a data: URI or plain URL string), with
+// sibling fallback for variants. Returns null when neither this row nor any
+// sibling has one. Used by the two /image byte-streaming endpoints.
+function resolveProductImage(id) {
+  const row = tdb().prepare('SELECT image_data, image_url, variant_group_id FROM products WHERE id = ?').get(id);
+  if (!row) return null;
+  if (row.image_data) return row.image_data;
+  if (row.image_url)  return row.image_url;
+  if (!row.variant_group_id) return null;
+  const sib = tdb().prepare(
+    `SELECT image_data, image_url FROM products
+      WHERE variant_group_id = ? AND COALESCE(is_active, 1) = 1
+        AND ((image_data IS NOT NULL AND image_data != '')
+          OR (image_url IS NOT NULL AND image_url != ''))
+      ORDER BY (id = variant_group_id) DESC, COALESCE(variant_sort, 0) ASC, id ASC
+      LIMIT 1`
+  ).get(row.variant_group_id);
+  return sib ? (sib.image_data || sib.image_url || null) : null;
+}
+
 router.get('/api/retail/products', (req, res) => {
   const { q, category, sort } = req.query;
   const limit  = Math.min(parseInt(req.query.limit  || '50', 10) || 50, 500);
   const offset = Math.max(parseInt(req.query.offset || '0',  10) || 0, 0);
 
-  let sql = `SELECT ${RETAIL_PRODUCT_COLS}, p.updated_at FROM products p
+  let sql = `SELECT ${RETAIL_PRODUCT_COLS}, p.updated_at, ${hasImageFallbackSql('p')} AS has_group_image FROM products p
              WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`;
   const params = [];
   if (q) {
@@ -635,7 +678,13 @@ router.get('/api/retail/products', (req, res) => {
   // trust-proxy is on (server.js) so req.protocol respects X-Forwarded-Proto.
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   for (const r of rows) {
+    const hasGroupImg = r.has_group_image;
+    delete r.has_group_image;
     if (typeof r.image_data === 'string' && /^data:/i.test(r.image_data)) {
+      r.image_data = `${baseUrl}/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`;
+    } else if (!r.image_data && !r.image_url && hasGroupImg) {
+      // Variant with no photo of its own — point at its image route, which
+      // resolves a sibling's photo ("fallback when empty").
       r.image_data = `${baseUrl}/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`;
     }
     delete r.updated_at;
@@ -663,11 +712,12 @@ router.get('/api/retail/products', (req, res) => {
 router.get('/api/retail/products/:id/image', (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).end();
-  const row = tdb().prepare(
-    `SELECT image_data FROM products
+  const gate = tdb().prepare(
+    `SELECT id FROM products
       WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
   ).get(id);
-  const data = row && row.image_data;
+  // Variant with no photo of its own falls back to a sibling's (resolveProductImage).
+  const data = gate && resolveProductImage(id);
   if (!data) return res.status(404).end();
   const m = /^data:([^;,]*?)(;base64)?,([\s\S]*)$/.exec(data);
   if (!m) return res.redirect(String(data));
@@ -783,7 +833,7 @@ router.get('/api/retail/products/top', (req, res) => {
   if (candidateIds.length) {
     const placeholders = candidateIds.map(() => '?').join(',');
     products = tdb().prepare(
-      `SELECT ${RETAIL_PRODUCT_COLS}, p.updated_at FROM products p
+      `SELECT ${RETAIL_PRODUCT_COLS}, p.updated_at, ${hasImageFallbackSql('p')} AS has_group_image FROM products p
         WHERE p.id IN (${placeholders})
           AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`
     ).all(...candidateIds);
@@ -802,7 +852,11 @@ router.get('/api/retail/products/top', (req, res) => {
     const decorated = flashsales.decorateProduct(hydrateNutrition(p), now);
     decorated.units_sold = Math.round(r.units);
     decorated.revenue    = Math.round(r.revenue * 100) / 100;
+    const hasGroupImg = decorated.has_group_image;
+    delete decorated.has_group_image;
     if (typeof decorated.image_data === 'string' && /^data:/i.test(decorated.image_data)) {
+      decorated.image_data = `${baseUrl}/api/retail/products/${decorated.id}/image?v=${encodeURIComponent(decorated.updated_at || '')}`;
+    } else if (!decorated.image_data && !decorated.image_url && hasGroupImg) {
       decorated.image_data = `${baseUrl}/api/retail/products/${decorated.id}/image?v=${encodeURIComponent(decorated.updated_at || '')}`;
     }
     delete decorated.updated_at;
@@ -1041,10 +1095,12 @@ router.get('/api/retail/products/:id', (req, res) => {
   if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
 
   const product = flashsales.decorateProduct(hydrateNutrition(tdb().prepare(
-    `SELECT ${RETAIL_PRODUCT_COLS} FROM products p
+    `SELECT ${RETAIL_PRODUCT_COLS}, ${hasImageFallbackSql('p')} AS has_group_image FROM products p
      WHERE p.id = ? AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`
   ).get(id)));
   if (!product) return res.status(404).json({ success: false, error: 'not_found' });
+  const hasGroupImg = product.has_group_image;
+  delete product.has_group_image;
 
   // Lazy hero image — strip the inline base64 (typically 150–300 KB per row)
   // and replace it with a URL the mini-app fetches separately. The image
@@ -1052,7 +1108,9 @@ router.get('/api/retail/products/:id', (req, res) => {
   // ?v=updated_at so editor saves invalidate the cached copy. Mini-app
   // product.js already prefers `image_url || image_data`, so this is
   // transparent for products that already had an external image_url set.
-  if (product.image_data && !product.image_url) {
+  if ((product.image_data || (!product.image_url && hasGroupImg)) && !product.image_url) {
+    // Own photo → lazy URL; variant with none → its image route resolves a
+    // sibling's photo ("fallback when empty").
     product.image_url = `/api/retail/products/${id}/image?v=${encodeURIComponent(product.updated_at || '')}`;
   }
   product.image_data = null;
@@ -1121,7 +1179,7 @@ router.get('/api/retail/products/:id', (req, res) => {
               p.flash_price, p.flash_starts_at, p.flash_ends_at,
               p.flash_stock_limit, p.flash_sold,
               p.image_url, p.updated_at,
-              (p.image_data IS NOT NULL AND p.image_data != '') AS has_image,
+              ${hasImageFallbackSql('p')} AS has_image,
               COALESCE(
                 (SELECT SUM(rss.physical_qty) FROM retail_store_stock rss
                    JOIN retail_stores rs ON rs.id = rss.store_id
@@ -7963,7 +8021,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     variant_group_id, variant_label, variant_sort,
                     is_batch_made,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
-                    (image_data IS NOT NULL AND image_data != '') AS has_image_data,
+                    ${hasImageFallbackSql('products')} AS has_image_data,
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks
                FROM products WHERE COALESCE(is_active, 1) = 1`;
   const params = [];
@@ -8014,8 +8072,8 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
 // with a long cache window (?v=updated_at busts it). Plain-URL images redirect.
 router.get('/api/retail-admin/products/:id/image', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const row = tdb().prepare('SELECT image_data FROM products WHERE id = ?').get(id);
-  const data = row && row.image_data;
+  // Variant with no photo of its own falls back to a sibling's (resolveProductImage).
+  const data = resolveProductImage(id);
   if (!data) return res.status(404).end();
   const m = /^data:([^;,]*?)(;base64)?,([\s\S]*)$/.exec(data);
   if (!m) return res.redirect(String(data));
@@ -8031,11 +8089,34 @@ router.get('/api/retail-admin/products/:id/image', requireRetailAdmin, (req, res
 // separate from the product list so list payloads stay light.
 router.get('/api/retail-admin/products/:id/images', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const row = tdb().prepare('SELECT images, image_data, image_url FROM products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
+  const row = tdb().prepare('SELECT images, image_data, image_url, variant_group_id FROM products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
   if (!row) return res.status(404).json({ success: false, error: 'not_found' });
   let images = parseJsonArray(row.images);
   if (!images.length) { const primary = row.image_data || row.image_url; if (primary) images = [primary]; }
-  res.json({ success: true, images });
+  // Variant with no gallery of its own inherits a sibling's photos by default
+  // ("fallback when empty"). We return them so the editor SHOWS the inherited
+  // photo, but the row stays empty in the DB — the editor only persists images
+  // when the operator actually edits the gallery (then it becomes that
+  // variant's own override). `inherited` lets the UI hint at the default.
+  let inherited = false;
+  if (!images.length && row.variant_group_id) {
+    const sib = tdb().prepare(
+      `SELECT images, image_data, image_url FROM products
+        WHERE variant_group_id = ? AND id != ? AND COALESCE(is_active, 1) = 1
+          AND (
+            (images IS NOT NULL AND images != '' AND images != '[]')
+            OR (image_data IS NOT NULL AND image_data != '')
+            OR (image_url IS NOT NULL AND image_url != ''))
+        ORDER BY (id = variant_group_id) DESC, COALESCE(variant_sort, 0) ASC, id ASC
+        LIMIT 1`
+    ).get(row.variant_group_id, id);
+    if (sib) {
+      let sibImgs = parseJsonArray(sib.images);
+      if (!sibImgs.length) { const p = sib.image_data || sib.image_url; if (p) sibImgs = [p]; }
+      if (sibImgs.length) { images = sibImgs; inherited = true; }
+    }
+  }
+  res.json({ success: true, images, inherited });
 });
 
 // ── Variant grouping (retail-admin scope) ───────────────────────────────────
