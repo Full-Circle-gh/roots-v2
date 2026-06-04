@@ -10594,12 +10594,18 @@ async function iedAutoComposeBlocks(pid, btn) {
   // returns and nothing is lost. A REBUILD keeps the existing sections instead
   // (we never overwrite them with an empty/failed result).
   const revertFresh = () => hasBlocks ? Promise.resolve() : _iedDesignOff(pid, btn);
-  // Match the editor's default rule: only auto-compose when BOTH languages exist.
-  if (!textEn || !textCn) {
+  // Need at least ONE language to build from — but not BOTH. When only one side
+  // is written, the AI drafts the other itself in the brand's voice: original,
+  // idiomatic, on-brand copy in the target language — NOT a literal word-for-word
+  // gloss — so a Chinese reader never feels they're reading a translation. The
+  // operator can write the description in a single language and still get a fully
+  // bilingual page; the drafted side is left for them to review in the editor.
+  const translate = !(textEn && textCn);
+  if (!textEn && !textCn) {
     await revertFresh();
     toast(hasBlocks
-      ? 'Need both an English and a Chinese description to rebuild — fill both, then try again · 需要中英文描述才能重新生成,补全后重试'
-      : 'Need both an English and a Chinese description to auto-build — kept the classic description; fill both, then toggle again · 需要中英文描述才能自动生成,已保留经典描述,补全后再切换', 'error');
+      ? 'Need a description to rebuild — write English or Chinese, then try again · 需要描述才能重新生成,填写中文或英文后重试'
+      : 'Need a description to auto-build — kept the classic description; write English or Chinese, then toggle again · 需要描述才能自动生成,已保留经典描述,填写中文或英文后再切换', 'error');
     return;
   }
   const prog = _iedComposeProgress();
@@ -10607,7 +10613,7 @@ async function iedAutoComposeBlocks(pid, btn) {
     const r = await fetch('/api/ai/compose-blocks', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
       body: JSON.stringify({
-        text_en: textEn, text_cn: textCn, translate: false,
+        text_en: textEn, text_cn: textCn, translate,
         product: { id: p.id, name_en: p.name_en, name_cn: p.name_cn, category: p.category },
       }),
     });
@@ -10690,6 +10696,13 @@ async function iedAutoComposeBlocks(pid, btn) {
     }
     prog.done(true, cuT('Built ✓', '已生成 ✓'));
     toast('Built ' + parts.join(' + ') + ' — review in the Product Page Editor ✓ · 已生成,可在商品页编辑器中查看 ✓', 'ok');
+    // When only one language was written, the AI drafted the other side in the
+    // brand voice. Flag it so the operator gives the drafted copy a quick read.
+    if (translate) {
+      toast(!textCn
+        ? 'Wrote the 中文 for you in the brand voice — give it a quick read in the Product Page Editor · 已按品牌语气替你撰写中文,请在商品页编辑器中校对'
+        : 'Wrote the English for you in the brand voice — give it a quick read in the Product Page Editor · 已按品牌语气替你撰写英文,请在商品页编辑器中校对', 'ok');
+    }
   } catch (e) {
     await revertFresh();
     prog.done(false, 'Couldn\'t build · 生成失败');
@@ -12716,9 +12729,13 @@ async function pfQuickAddSize(parentId) {
       </div>
     ` : ''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div style="grid-column:span 2">
-        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">New Variant Name · 新规格 *</label>
-        <input id="qs_label" placeholder="e.g. 500ml / Large 大 / Mint 薄荷" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Variant Name (EN) · 规格 *</label>
+        <input id="qs_label_en" placeholder="e.g. Small / 500ml" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Variant Name (CN) · 中文</label>
+        <input id="qs_label_cn" placeholder="例如 小 / 大" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
       </div>
       <div>
         <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">SKU · 编号 *</label>
@@ -12743,7 +12760,7 @@ async function pfQuickAddSize(parentId) {
     </div>
   `;
   setTimeout(() => {
-    const f = document.getElementById(needsParentLabel ? 'qs_parent_label' : 'qs_label');
+    const f = document.getElementById(needsParentLabel ? 'qs_parent_label' : 'qs_label_en');
     if (f) f.focus();
   }, 50);
 }
@@ -12758,7 +12775,12 @@ async function pfSaveQuickSize(parentId) {
     parent = d.data;
   } catch (e) { return toast('Failed to load parent · 加载失败: ' + e.message, 'error'); }
 
-  const newLabel  = (document.getElementById('qs_label')?.value || '').trim();
+  const newLabelEn = (document.getElementById('qs_label_en')?.value || '').trim();
+  const newLabelCn = (document.getElementById('qs_label_cn')?.value || '').trim();
+  // Bilingual variant label is stored as one " · "-joined string so existing
+  // chip/list renderers keep working without a schema change (mirrors the
+  // Edit Variant modal's qe_label_en/qe_label_cn save path).
+  const newLabel  = newLabelEn && newLabelCn ? `${newLabelEn} · ${newLabelCn}` : (newLabelEn || newLabelCn);
   const newSku    = (document.getElementById('qs_sku')?.value || '').trim();
   const newPriceS = document.getElementById('qs_price')?.value || '';
   const newPrice  = parseFloat(newPriceS);
@@ -16375,8 +16397,10 @@ async function _testJd() {
   try {
     const r = await fetch('/api/retail-admin/integrations/jd/test', { method: 'POST' });
     const j = await r.json();
-    if (j.ok) toast('✅ JD reachable · auth OK', 'success');
-    else      toast('JD ping failed: ' + (j.error || 'unknown'), 'error');
+    if (j.ok) {
+      toast('✅ JD reachable · auth OK', 'success');
+      if (j.note && /customercode|商家编码/i.test(j.note)) toast('Next: enter CUSTOMER_CODE (商家编码) to enable waybill push · 还需填写商家编码', 'info');
+    } else toast('JD ping failed: ' + (j.error || 'unknown'), 'error');
   } catch (e) { toast('Test failed: ' + e.message, 'error'); }
 }
 
