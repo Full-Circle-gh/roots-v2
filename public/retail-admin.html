@@ -516,7 +516,7 @@
      alive rather than a hard cut. display:none→block restarts the anim each
      time a section becomes active. */
   @keyframes tab-fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-  section.active { display: block; animation: tab-fade-in .6s cubic-bezier(.16, 1, .3, 1) both; }
+  section.active { display: block; animation: tab-fade-in .69s cubic-bezier(.16, 1, .3, 1) both; }
   @media (prefers-reduced-motion: reduce) { section.active { animation: none; } }
 
   h2 {
@@ -13513,7 +13513,8 @@ let _ODV_OPEN = false;
 function odvSet(key, val) {
   ODV[key] = val;
   try { localStorage.setItem('retail-admin-order-detail-tweaks', JSON.stringify(ODV)); } catch (e) {}
-  _ODV_OPEN = true;                       // keep the popover open across the re-render
+  _ODV_OPEN = false;                      // close the popover once a view is chosen
+  document.removeEventListener('mousedown', odvOutside);
   // Defer the re-render to the next tick. Re-rendering synchronously inside
   // the click handler detaches the clicked button before the drawer's
   // click-outside-to-dismiss handler runs; that handler's `closest('.side-drawer')`
