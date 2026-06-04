@@ -434,7 +434,8 @@
   }
   /* Push the settings gear (and its sibling live-dot) to the right edge. */
   .tabs > button.tabs-live-dot { margin-left: auto; }
-  .tabs > button.tabs-live-dot + .tabs-settings { margin-left: 0; }
+  .tabs > button.tabs-live-dot + .tabs-sound-toggle,
+  .tabs > button.tabs-sound-toggle + .tabs-settings { margin-left: 0; }
   /* Tiny live-poll status dot — sits in the tab bar just before the
      settings gear. Green pulsing when live, dim/static when paused.
      Click toggles. No label — the dot IS the indicator.
@@ -477,6 +478,33 @@
     0%, 100% { box-shadow: 0 0 0 0   rgba(107, 142, 111, .45); }
     50%      { box-shadow: 0 0 0 8px rgba(107, 142, 111, 0); }
   }
+
+  /* New-order sound toggle — same 32×32 icon-button chrome as the live dot. */
+  .tabs > button.tabs-sound-toggle {
+    box-sizing: border-box;
+    width: 32px; height: 32px;
+    min-width: 32px; max-width: 32px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-bottom: 2px solid transparent;
+    color: var(--text-3);
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+    align-self: center;
+  }
+  .tabs > button.tabs-sound-toggle:hover { background: var(--bg-elev-1); color: var(--text-2); }
+  .tabs > button.tabs-sound-toggle svg { width: 15px; height: 15px; }
+  /* Show speaker-on icon when enabled, muted icon when off. Default markup
+     shows both; JS flips the `.muted` class on the button. */
+  .tabs > button.tabs-sound-toggle .ico-off { display: none; }
+  .tabs > button.tabs-sound-toggle.muted .ico-on { display: none; }
+  .tabs > button.tabs-sound-toggle.muted .ico-off { display: inline; }
+  .tabs > button.tabs-sound-toggle.muted { color: var(--text-4); }
 
   /* ═══════════════════════════════════════════════════════════════════
      LAYOUT
@@ -4331,6 +4359,15 @@
           onclick="toggleOrdersLive()" title="Auto-refresh · 自动刷新 — click to pause/resume · 点击暂停/恢复"
           aria-label="Toggle live updates">
     <span class="dot"></span>
+  </button>
+
+  <!-- New-order chime mute toggle — plays a soft ding when an order lands.
+       Click toggles sound on/off; choice persists in localStorage. -->
+  <button id="orders-sound-toggle" class="tabs-sound-toggle" type="button"
+          onclick="toggleOrdersSound()" title="New-order sound · 新订单提示音 — click to mute/unmute · 点击静音/开启"
+          aria-label="Toggle new-order sound">
+    <svg class="ico-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+    <svg class="ico-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
   </button>
 
   <!-- Settings — pinned to right edge -->
@@ -11974,6 +12011,7 @@ async function loadOrders(opts = {}) {
     if (arrivals.length && prevSeen) {
       const word = arrivals.length === 1 ? 'order' : 'orders';
       toast(`${arrivals.length} new ${word} · ${arrivals.length} 个新订单`);
+      notifyNewOrders(arrivals.length);
     }
   } finally {
     _ORDERS_IN_FLIGHT = false;
@@ -12093,18 +12131,97 @@ function _paintOrdersBadge(count) {
   }
 }
 
+// ── New-order chime ────────────────────────────────────────────────────
+// A soft two-note ding synthesised with WebAudio (no asset to ship/cache).
+// Muteable; preference persists in localStorage. The AudioContext is
+// created lazily and resumed on the first operator gesture so browser
+// autoplay policy doesn't swallow the first ding.
+const ORDERS_SOUND_KEY = 'roots-v2-orders-sound-on';
+let _ordersAudioCtx = null;
+
+function _ordersSoundOn() {
+  try { return localStorage.getItem(ORDERS_SOUND_KEY) !== '0'; }  // default ON
+  catch { return true; }
+}
+function _paintSoundToggle() {
+  const btn = document.getElementById('orders-sound-toggle');
+  if (btn) btn.classList.toggle('muted', !_ordersSoundOn());
+}
+function toggleOrdersSound() {
+  const next = !_ordersSoundOn();
+  try { localStorage.setItem(ORDERS_SOUND_KEY, next ? '1' : '0'); } catch {}
+  _paintSoundToggle();
+  if (next) { _unlockOrdersAudio(); _playOrderChime(); }  // unmuting previews the ding
+}
+function _unlockOrdersAudio() {
+  try {
+    if (!_ordersAudioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      _ordersAudioCtx = new AC();
+    }
+    if (_ordersAudioCtx.state === 'suspended') _ordersAudioCtx.resume();
+  } catch {}
+}
+function _playOrderChime() {
+  if (!_ordersSoundOn()) return;
+  _unlockOrdersAudio();
+  const ctx = _ordersAudioCtx;
+  if (!ctx) return;
+  try {
+    const now = ctx.currentTime;
+    // Two ascending notes (G5 → C6) — a gentle, recognisable "ding-dong".
+    [[784, 0], [1047, 0.16]].forEach(([freq, at]) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const t = now + at;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.45);
+    });
+  } catch {}
+}
+// Unlock audio on the first operator interaction (autoplay policy).
+['click', 'keydown'].forEach(ev =>
+  window.addEventListener(ev, _unlockOrdersAudio, { once: true, capture: true }));
+
+// Notify on a new order — chime + a brief tab-badge pulse even while the
+// operator is sitting on the Orders tab (the normal badge path suppresses
+// itself there, so without this an order would land silently in front of
+// them). The pulse auto-clears on the next seen-sweep.
+function notifyNewOrders(count) {
+  _playOrderChime();
+  const onOrdersTab = document.getElementById('tab-orders')?.classList.contains('active');
+  if (onOrdersTab) {
+    _paintOrdersBadge(count);
+    clearTimeout(notifyNewOrders._t);
+    notifyNewOrders._t = setTimeout(_markOrdersSeenNow, 6000);
+  }
+}
+
+let _ordersUnseenPrev = null;
 async function _pollUnseenOrders() {
   // Skip when the tab is hidden — the user wouldn't see the dot animate
   // anyway, and we'd waste API calls.
   if (document.hidden) return;
   // If the user is already on the Orders tab, treat everything as seen.
   const orderTabActive = document.getElementById('tab-orders')?.classList.contains('active');
-  if (orderTabActive) { _markOrdersSeenNow(); return; }
+  if (orderTabActive) { _markOrdersSeenNow(); _ordersUnseenPrev = 0; return; }
   try {
     const since = _ordersLastSeen();
     const j = await api('/api/retail-admin/orders/unseen-count?since=' + encodeURIComponent(since));
     if (!j?.success) return;
-    _paintOrdersBadge(j.data?.count || 0);
+    const count = j.data?.count || 0;
+    _paintOrdersBadge(count);
+    // Chime only on a genuine increase (a NEW order arriving), not on the
+    // first poll after load and not on every steady-state tick.
+    if (_ordersUnseenPrev !== null && count > _ordersUnseenPrev) _playOrderChime();
+    _ordersUnseenPrev = count;
   } catch {
     // Network / unauthorized — silently leave the badge alone.
   }
@@ -12113,6 +12230,7 @@ async function _pollUnseenOrders() {
 (function _startUnseenOrdersPoller() {
   if (window._unseenOrdersPollerWired) return;
   window._unseenOrdersPollerWired = true;
+  _paintSoundToggle();
   // First check on next tick so the DOM is ready, then on an interval.
   setTimeout(_pollUnseenOrders, 200);
   _ORDERS_UNSEEN_TIMER = setInterval(_pollUnseenOrders, ORDERS_UNSEEN_POLL_MS);
