@@ -621,11 +621,16 @@
   @media (max-width: 960px) { .db-hero-grid { grid-template-columns: 1fr; } }
   .db-hero-pane { background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; min-width: 0; }
   .db-hero-h { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); font-weight: 700; margin-bottom: 8px; font-family: var(--f-mono); }
-  /* Activity feed "show all / collapse" toggle — caps the list to a few rows
-     by default; click to reveal the full history, click again to re-collapse. */
-  .db-feed-toggle { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; border: 0; background: transparent; padding: 4px 2px; cursor: pointer; font-family: var(--f-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; color: var(--text-3); }
+  /* Activity feed "show all / collapse" — rows past the preview live in a
+     collapsible wrapper that eases open/closed via a grid-rows transition
+     (0fr → 1fr), so the list breathes rather than snapping. */
+  .db-feed-more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .5s cubic-bezier(.4,0,.2,1); }
+  .db-feed-pane.is-expanded .db-feed-more { grid-template-rows: 1fr; }
+  .db-feed-more-inner { overflow: hidden; min-height: 0; display: flex; flex-direction: column; gap: 2px; }
+  /* The toggle hugs the rows as a quiet footer action with a hairline above. */
+  .db-feed-toggle { display: inline-flex; align-items: center; gap: 6px; width: 100%; margin-top: 6px; padding: 8px 2px 0; border: 0; border-top: 1px solid var(--line-soft); background: transparent; cursor: pointer; font-family: var(--f-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; color: var(--text-3); }
   .db-feed-toggle:hover { color: var(--accent); }
-  .db-feed-toggle::after { content: ""; width: 7px; height: 7px; border-right: 1.4px solid currentColor; border-bottom: 1.4px solid currentColor; transform: rotate(45deg); transition: transform .18s ease; margin-top: -2px; }
+  .db-feed-toggle::after { content: ""; width: 6px; height: 6px; border-right: 1.4px solid currentColor; border-bottom: 1.4px solid currentColor; transform: rotate(45deg); transition: transform .35s cubic-bezier(.4,0,.2,1); margin-top: -2px; }
   .db-feed-toggle.is-open::after { transform: rotate(225deg); margin-top: 2px; }
   /* Live count — pulsing dot when there are viewers, grey when zero. */
   .db-live { justify-content: center; align-items: center; gap: 4px; }
@@ -750,7 +755,7 @@
   .db-bento .db-hero .db-live          { grid-area: live;  }
   .db-bento .db-hero .db-today-pane    { grid-area: today; }
   .db-bento .db-hero .db-feed-pane     { grid-area: feed; min-height: 200px; }
-  .db-bento .db-hero .db-feed-list     { max-height: none; flex: 1 1 auto; min-height: 0; }
+  .db-bento .db-hero .db-feed-list     { max-height: 340px; flex: 0 1 auto; min-height: 0; }
   @media (max-width: 960px) {
     .db-bento .db-hero-grid {
       grid-template-columns: 1fr;
@@ -10543,7 +10548,9 @@ function dashFeedExpanded() {
 function dashFeedToggleExpand() {
   const next = !dashFeedExpanded();
   try { localStorage.setItem('retail-admin-feed-expanded', next ? '1' : '0'); } catch (e) {}
-  if (DASH_HERO._lastEvents) dashFeedRender(DASH_HERO._lastEvents);
+  // Flip classes only — re-rendering would swap the DOM and kill the
+  // grid-rows transition mid-flight.
+  dashFeedSyncExpand();
 }
 
 async function dashHeroLoadActivity() {
@@ -10569,35 +10576,17 @@ function dashFeedRender(events) {
     if (toggle) toggle.hidden = true;
     return;
   }
-  // Cap to a short preview unless the operator has expanded the feed.
-  const expanded = dashFeedExpanded();
-  const shown = expanded ? events : events.slice(0, DASH_FEED_PREVIEW);
-  if (toggle) {
-    if (events.length > DASH_FEED_PREVIEW) {
-      toggle.hidden = false;
-      toggle.classList.toggle('is-open', expanded);
-      toggle.innerHTML = expanded
-        ? 'Collapse · 收起'
-        : `Show all (${events.length}) · 展开`;
-    } else {
-      toggle.hidden = true;
-    }
-  }
-  DASH_HERO.eventsById.clear();
   // Stable identity (no row index) so "new since last poll" survives re-renders.
   const idOf = e => `${e.type}-${e.ref_type}-${e.ref_id}-${e.ts}`;
   // First paint has no baseline — don't animate the whole list in. After that,
   // any id we haven't seen before is a genuinely fresh event.
   const firstPaint = DASH_HERO.seenIds === null;
   const prevSeen = DASH_HERO.seenIds || new Set();
-  // Track every event (not just the visible preview) so expanding the feed
-  // later doesn't flash the previously-hidden rows as "new".
   const nextSeen = new Set(events.map(idOf));
-  const html = shown.map((e, i) => {
+  DASH_HERO.eventsById.clear();
+  const rowHtml = (e, i) => {
     const key = `${e.type}-${e.ref_type}-${e.ref_id}-${e.ts}-${i}`;
-    const id  = idOf(e);
-    nextSeen.add(id);
-    const isNew = !firstPaint && !prevSeen.has(id);
+    const isNew = !firstPaint && !prevSeen.has(idOf(e));
     DASH_HERO.eventsById.set(key, e);
     const ts = new Date(e.ts);
     const pad = n => String(n).padStart(2, '0');
@@ -10608,9 +10597,34 @@ function dashFeedRender(events) {
       <span class="db-feed-icon db-fi-${meta.tone || 'muted'}">${meta.icon}</span>
       <span class="db-feed-text">${meta.text}</span>
     </div>`;
-  }).join('');
+  };
+  // Preview rows render directly; the overflow lives in a collapsible wrapper
+  // that the toggle eases open/closed — all rows stay in the DOM so the
+  // grid-rows transition has something to animate against.
+  const preview = events.slice(0, DASH_FEED_PREVIEW).map(rowHtml).join('');
+  const rest = events.slice(DASH_FEED_PREVIEW);
+  const moreHtml = rest.length
+    ? `<div class="db-feed-more"><div class="db-feed-more-inner">${rest.map((e, i) => rowHtml(e, i + DASH_FEED_PREVIEW)).join('')}</div></div>`
+    : '';
+  const html = preview + moreHtml;
   list.innerHTML = html;
+  dashFeedSyncExpand(rest.length);
   DASH_HERO.seenIds = nextSeen;
+}
+
+// Reflect the expanded/collapsed state onto the pane + toggle. `overflow`
+// is the count of rows hidden behind the fold; when zero the toggle hides.
+function dashFeedSyncExpand(overflow) {
+  const pane = $('#db-feed-pane'), toggle = $('#db-feed-toggle');
+  if (overflow == null) overflow = ($$('.db-feed-more-inner .db-feed-row') || []).length;
+  const expanded = dashFeedExpanded();
+  if (pane) pane.classList.toggle('is-expanded', expanded);
+  if (!toggle) return;
+  if (!overflow) { toggle.hidden = true; return; }
+  const total = (DASH_HERO._lastEvents || []).length;
+  toggle.hidden = false;
+  toggle.classList.toggle('is-open', expanded);
+  toggle.innerHTML = expanded ? 'Collapse · 收起' : `Show all (${total}) · 展开`;
 }
 
 // Thin-stroke line icons for the activity feed — 16-box viewBox, currentColor
