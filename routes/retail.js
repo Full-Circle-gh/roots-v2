@@ -4637,7 +4637,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
   // new one — acceptable for "remind me what I bought" UX.
   o.items = tdb().prepare(
     `SELECT oi.id, oi.product_id, oi.name_en, oi.name_cn, oi.sku, oi.size,
-            COALESCE(NULLIF(oi.image_url, ''), p.image_url, p.image_data) AS image_url,
+            COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json, oi.shipment_id
        FROM retail_order_items oi
   LEFT JOIN products p ON p.id = oi.product_id
@@ -4787,7 +4787,7 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
     const previews = tdb().prepare(
       `SELECT order_id, product_id, name_en, name_cn, qty, image_url FROM (
          SELECT oi.order_id, oi.product_id, oi.name_en, oi.name_cn, oi.qty,
-                COALESCE(NULLIF(oi.image_url, ''), p.image_url, p.image_data) AS image_url,
+                COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
                 ROW_NUMBER() OVER (PARTITION BY oi.order_id ORDER BY oi.id ASC) AS rn
            FROM retail_order_items oi
       LEFT JOIN products p ON p.id = oi.product_id
@@ -4937,7 +4937,7 @@ router.post('/api/retail/orders/:id/invoice-request', requireRetailAuth, express
 router.get('/api/retail/reviews/pending', requireRetailAuth, (req, res) => {
   const rows = tdb().prepare(
     `SELECT oi.product_id, oi.name_en, oi.name_cn,
-            COALESCE(NULLIF(oi.image_url, ''), p.image_url, p.image_data) AS image_url,
+            COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty,
             o.id AS order_id, o.order_no, o.delivered_at
        FROM retail_order_items oi
@@ -8163,7 +8163,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
   // for the public streamed-image URL so the drawer payload stays small.
   o.items = tdb().prepare(
     `SELECT oi.id, oi.product_id, oi.name_en, oi.name_cn, oi.sku, oi.size,
-            COALESCE(NULLIF(oi.image_url, ''), p.image_url, p.image_data) AS image_url,
+            COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json,
             oi.ship_modes, oi.needs_ice_pack, oi.shipment_id
        FROM retail_order_items oi
@@ -10576,7 +10576,7 @@ function defaultDeliveryZone() {
     is_active:             1,
     same_day_allowed:      c.same_day_allowed ? 1 : 0,
     same_day_surcharge:    0,
-    min_lead_days:         Number(c.min_lead_days ?? 3),
+    min_lead_days:         Number(c.min_lead_days ?? 1),
     max_lead_days:         Number(c.max_lead_days ?? 15),
     slot_start_hour:       Number(c.slot_start_hour ?? 0),
     slot_end_hour:         Number(c.slot_end_hour ?? 0),
@@ -10774,8 +10774,10 @@ function computeBatchNotice(zone, productIds, now) {
 //   • Panyu-style override (same_day_surcharge > 0): the customer can pick
 //     a same-day slot ONLY by paying the surcharge; without it they must
 //     start from tomorrow.
-//   • Outside GZ (zone_type = 'city', min_lead_days = 3 by default):
-//     earliest selectable day is today + min_lead_days.
+//   • Outside GZ (zone_type = 'city', min_lead_days = 1 by default):
+//     earliest selectable day is today + min_lead_days. The customer-facing
+//     Express copy promises "1–2 days", so the lead is 1 (earliest = tomorrow)
+//     to keep the scheduled earliest day in step with that promise.
 //   • "Right away" is suppressed whenever the kitchen is not running this
 //     minute — before slot_start_hour AND after slot_end_hour.
 //   • Today's time-slot chips show every future slot up to slot_end_hour,
@@ -11953,8 +11955,9 @@ router.post('/api/retail-admin/delivery-zones', requireRetailAdmin, express.json
     return res.status(400).json({ success: false, error: 'match_city_required' });
   }
   // Defaults are GZ-friendly: same-day allowed, no surcharge, 10am–8pm
-  // 2-hour slots. City zones override min_lead_days to 3 below.
-  const defaultMinLead = b.zone_type === 'city' ? 3 : 0;
+  // 2-hour slots. City zones override min_lead_days to 1 below (earliest =
+  // tomorrow, matching the "1–2 days" Express promise).
+  const defaultMinLead = b.zone_type === 'city' ? 1 : 0;
   const info = tdb().prepare(
     `INSERT INTO retail_delivery_zones
        (zone_type, name_en, name_cn, match_city, match_district, base_fee, max_fee,
