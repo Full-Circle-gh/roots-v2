@@ -4764,6 +4764,75 @@ function orderTimeline(o) {
   ];
 }
 
+// JD waybills don't ride the 快递100 push pipeline — JD exposes its own trace
+// API (jingdong.ldop.receive.trace.get). When a customer opens a JD-shipped
+// order we pull events straight from JD and persist them into the SAME
+// tracking_events_json the kd100 callback writes, so the mini app renders them
+// identically. Freshness-guarded so we hit JD at most ~every 8 min per order,
+// and never again once delivered. Ownership is enforced by the customer_id
+// filter, so this is safe to call straight from the customer endpoint.
+const _JD_TRACE_STALE_MS = 8 * 60_000;
+async function syncJdTrackingForCustomer(orderId, customerId) {
+  const o = tdb().prepare(
+    `SELECT id, status, tracking_carrier, tracking_number, tracking_events_json,
+            tracking_synced_at, tracking_scenario_notified
+       FROM retail_orders WHERE id = ? AND customer_id = ?`
+  ).get(orderId, customerId);
+  if (!o || o.tracking_carrier !== 'jd' || !o.tracking_number) return;
+  if (o.status !== 'dispatched' && o.status !== 'delivered') return;
+  // Skip if we already have events that are still fresh, or the order is final.
+  if (o.tracking_events_json) {
+    if (o.status === 'delivered') return;
+    const synced = o.tracking_synced_at ? Date.parse(o.tracking_synced_at + 'Z') : 0;
+    if (synced && (Date.now() - synced) < _JD_TRACE_STALE_MS) return;
+  }
+  const jc = integ().jd;
+  if (!jd.jdEnabled(jc)) return;
+  let r;
+  try { r = await jd.getTrace(o.tracking_number, jc); }
+  catch (e) { console.error('[jd.trace] order=' + o.id + ' threw', e); return; }
+  if (!r.ok) {
+    tdb().prepare("UPDATE retail_orders SET tracking_last_error = ?, tracking_synced_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .run(String(r.error || 'jd_trace_failed').slice(0, 200), o.id);
+    return;
+  }
+  const norm = jd.normalizeTrace(r.data);
+  if (!norm.events.length) {
+    tdb().prepare("UPDATE retail_orders SET tracking_synced_at = CURRENT_TIMESTAMP, tracking_last_error = NULL WHERE id = ?").run(o.id);
+    return;
+  }
+  const scenario = tracking.classifyDeliveryEvent(norm.events[0].description_cn);
+  tdb().prepare(
+    `UPDATE retail_orders
+        SET tracking_status             = ?,
+            tracking_events_json        = ?,
+            tracking_scenario           = ?,
+            tracking_scenario_data_json = ?,
+            tracking_synced_at          = CURRENT_TIMESTAMP,
+            tracking_last_error         = NULL,
+            updated_at                  = CURRENT_TIMESTAMP
+      WHERE id = ?`
+  ).run(
+    norm.delivered ? 'delivered' : 'in_transit',
+    JSON.stringify(norm.events),
+    scenario?.scenario || null,
+    scenario ? JSON.stringify(scenario) : null,
+    o.id,
+  );
+  if (scenario && scenario.scenario !== o.tracking_scenario_notified) {
+    try {
+      notifyTrackingScenario(o.id, scenario);
+      tdb().prepare("UPDATE retail_orders SET tracking_scenario_notified = ? WHERE id = ?").run(scenario.scenario, o.id);
+    } catch (e) { console.error('[jd.trace] notify failed', e); }
+  }
+  if (norm.delivered && o.status === 'dispatched') {
+    try {
+      tdb().prepare("UPDATE retail_orders SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'dispatched'").run(o.id);
+      notifyOrderStatusChange(o.id, 'delivered');
+    } catch (e) { console.error('[jd.trace] auto-deliver failed', e); }
+  }
+}
+
 // Decorate a raw retail_orders row with the bits the mini app needs to
 // render the shipment tracking card: carrier name (EN+CN), normalized
 // status label, deep-link to the carrier's own tracking page, parsed
@@ -4952,8 +5021,12 @@ router.get('/api/retail/orders/stats', requireRetailAuth, (req, res) => {
   });
 });
 
-router.get('/api/retail/orders/:id', requireRetailAuth, (req, res) => {
+router.get('/api/retail/orders/:id', requireRetailAuth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  // Pull fresh JD trace (if this is a JD waybill) before rendering, so the
+  // mini app shows live events instead of "waiting for the first update".
+  try { await syncJdTrackingForCustomer(id, req.customer.id); }
+  catch (e) { console.error('[jd.trace] sync failed', e); }
   const order = loadOrderForCustomer(id, req.customer.id, `${req.protocol}://${req.get('host')}`);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
   res.json({ success: true, data: order });
