@@ -4256,6 +4256,208 @@
      the platform) has turned off. -->
 <body class="feat-membership feat-affiliate feat-reviews feat-feedback feat-socialProof">
 
+<!-- Ambient Zen Sand Garden backdrop · decorative only · see #ambient-garden CSS -->
+<div id="ambient-garden" aria-hidden="true" role="presentation"></div>
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   Ambient Zen Sand Garden — generated raked-sand backdrop.
+   Self-contained: renders one light + one dark SVG into #ambient-garden;
+   CSS picks which shows per [data-theme]. Geometry is deterministic
+   (seeded) so the two themes line up. No external deps, no dashboard
+   coupling. Toggle off by removing the element, this script, and the
+   #ambient-garden CSS block.
+   ════════════════════════════════════════════════════════════════════ */
+(function(){
+  var host = document.getElementById('ambient-garden');
+  if (!host) return;
+
+  var W = 1600, H = 1000;
+
+  function rng(seed){
+    var t = seed >>> 0;
+    return function(){
+      t += 0x6D2B79F5;
+      var r = Math.imul(t ^ (t >>> 15), 1 | t);
+      r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  var PAL = {
+    light:{
+      base:'#E8E5DC', baseHi:'#F2EFE8', baseLo:'#DBD6C9',
+      shadow:'#C3BBA8', shadowO:0.5, hi:'#F7F4ED', hiO:0.8,
+      stoneA:'#DBD3C3', stoneB:'#BBB099', stoneEdge:'#A99D84', stoneShadow:'#B3A98F',
+      grainRGB:'0 0 0', grainO:0.05, vignette:'rgba(150,142,120,.16)'
+    },
+    dark:{
+      base:'#12161A', baseHi:'#171D22', baseLo:'#0C0F12',
+      shadow:'#070A0C', shadowO:0.6, hi:'#283139', hiO:0.42,
+      stoneA:'#1D242B', stoneB:'#10151A', stoneEdge:'#080B0E', stoneShadow:'#090C0F',
+      grainRGB:'1 1 1', grainO:0.05, vignette:'rgba(0,0,0,.30)'
+    }
+  };
+
+  var clampO = function(v){ return Math.max(0, Math.min(0.95, v)); };
+
+  // Balanced rake + soft relief — the design defaults.
+  function makeComposition(){
+    var cfg = { bands:6, ringN:5, lineBase:6, gap:11 };
+    var rand = rng(20260604);
+    var bands = [];
+    for (var i=0;i<cfg.bands;i++){
+      var x  = 44 + (W-100) * (i/(cfg.bands-1)) + (rand()-0.5)*48;
+      var n  = cfg.lineBase + Math.floor(rand()*3);
+      var full = rand() > 0.42;
+      var y0 = full ? -30 : Math.floor(rand()*320);
+      var y1 = full ? 1030 : 520 + Math.floor(rand()*480);
+      bands.push({ x:x, n:n, gap:cfg.gap, y0:y0, y1:y1, s:i*7+3 });
+    }
+    var baseRs = [[70,108,150,192],[58,92,128],[66,104,146,188],[72,112,156],[60,96,134],[64,100,140,180],[54,86,120]];
+    var rings = [];
+    for (var j=0;j<cfg.ringN;j++){
+      var cx = 150 + rand()*(W-300);
+      var cy = 130 + rand()*(H-260);
+      rings.push({ cx:cx, cy:cy, rs:baseRs[j % baseRs.length], stone:38 + Math.floor(rand()*12), s:j*13+5 });
+    }
+    return { bands:bands, rings:rings };
+  }
+
+  var RELIEF = { sMul:1, hMul:1, grainMul:1, wMul:1, blur:0.7, blur2:0.85 };
+
+  function grooveLine(x, y0, y1, seed){
+    var rand = rng((seed*97)|0);
+    var ph1 = rand()*6.28, ph2 = rand()*6.28;
+    var d = '', i = 0;
+    for (var y = y0; y <= y1; y += 46, i++){
+      var wob = Math.sin(y*0.0061 + ph1)*3.0 + Math.sin(y*0.0143 + ph2)*1.5;
+      d += (i?'L':'M') + (x+wob).toFixed(1) + ' ' + y.toFixed(1) + ' ';
+    }
+    return d.trim();
+  }
+
+  function ringPath(cx, cy, r, seed){
+    var rand = rng((seed*131)|0);
+    var ph1=rand()*6.28, ph2=rand()*6.28, ph3=rand()*6.28;
+    var a1 = r*0.022, a2 = r*0.013;
+    var pts = 56, d = '';
+    for (var i=0;i<=pts;i++){
+      var a = i/pts*Math.PI*2;
+      var wob = Math.sin(a*2+ph1)*a1 + Math.sin(a*3+ph2)*a2 + Math.sin(a*5+ph3)*2.2;
+      var rr = r + wob;
+      var x = cx + Math.cos(a)*rr;
+      var y = cy + Math.sin(a)*rr*0.985;
+      d += (i?'L':'M') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
+    }
+    return d.trim()+'Z';
+  }
+
+  function pebblePath(cx, cy, r, seed){
+    var rand = rng((seed*373)|0);
+    var ph1 = rand()*6.28, ph2 = rand()*6.28, rot = (rand()-0.5)*0.7;
+    var sx = 1 + (rand()-0.5)*0.14, sy = 0.82 + (rand()-0.5)*0.06;
+    var pts = 44, d='';
+    for (var i=0;i<=pts;i++){
+      var a = i/pts*Math.PI*2;
+      var wob = Math.sin(a*2+ph1)*r*0.05 + Math.sin(a*3+ph2)*r*0.03;
+      var rr = r + wob;
+      var x = Math.cos(a)*rr*sx, y = Math.sin(a)*rr*sy;
+      var xr = x*Math.cos(rot) - y*Math.sin(rot);
+      var yr = x*Math.sin(rot) + y*Math.cos(rot);
+      d += (i?'L':'M') + (cx+xr).toFixed(1) + ' ' + (cy+yr).toFixed(1) + ' ';
+    }
+    return d.trim()+'Z';
+  }
+
+  function buildGrooves(p, bands){
+    var s='';
+    bands.forEach(function(b){
+      var rand = rng((b.s*53)|0);
+      for (var i=0;i<b.n;i++){
+        var x = b.x + i*b.gap + (rand()-0.5)*2;
+        var d = grooveLine(x, b.y0, b.y1, b.s+i);
+        s += '<path d="'+d+'" fill="none" stroke="'+p.shadow+'" stroke-opacity="'+clampO(p.shadowO*RELIEF.sMul)+'" stroke-width="'+(2.3*RELIEF.wMul).toFixed(2)+'" stroke-linecap="round"/>';
+        s += '<path d="'+d+'" transform="translate(-1.4,-0.7)" fill="none" stroke="'+p.hi+'" stroke-opacity="'+clampO(p.hiO*RELIEF.hMul)+'" stroke-width="'+(1*RELIEF.wMul).toFixed(2)+'" stroke-linecap="round"/>';
+      }
+    });
+    return s;
+  }
+
+  function buildRings(p, rings){
+    var s='';
+    rings.forEach(function(set){
+      var rand = rng((set.s*211)|0);
+      set.rs.forEach(function(r,ri){
+        var jx = (rand()-0.5)*ri*1.6, jy = (rand()-0.5)*ri*1.4;
+        var d = ringPath(set.cx+jx, set.cy+jy, r, set.s+ri);
+        s += '<path d="'+d+'" fill="none" stroke="'+p.shadow+'" stroke-opacity="'+clampO(p.shadowO*RELIEF.sMul)+'" stroke-width="'+(3*RELIEF.wMul).toFixed(2)+'" stroke-linecap="round"/>';
+        s += '<path d="'+d+'" transform="translate(-1.4,-1.7)" fill="none" stroke="'+p.hi+'" stroke-opacity="'+clampO(p.hiO*RELIEF.hMul)+'" stroke-width="'+(1.3*RELIEF.wMul).toFixed(2)+'" stroke-linecap="round"/>';
+      });
+      var r = set.stone;
+      var pd = pebblePath(set.cx, set.cy, r, set.s);
+      s += '<ellipse cx="'+set.cx+'" cy="'+(set.cy + r*0.44)+'" rx="'+(r*1.06)+'" ry="'+(r*0.5)+'" fill="'+p.stoneShadow+'" fill-opacity="'+clampO(p.shadowO*RELIEF.sMul*0.7)+'" filter="url(#agPebbleAO-'+p._suf+')"/>';
+      s += '<path d="'+pd+'" fill="url(#agStone-'+p._suf+')"/>';
+      s += '<ellipse cx="'+set.cx+'" cy="'+(set.cy + r*0.32)+'" rx="'+(r*0.74)+'" ry="'+(r*0.44)+'" fill="'+p.stoneEdge+'" fill-opacity="0.32" filter="url(#agPebbleAO-'+p._suf+')"/>';
+      s += '<ellipse cx="'+(set.cx - r*0.18)+'" cy="'+(set.cy - r*0.34)+'" rx="'+(r*0.52)+'" ry="'+(r*0.32)+'" fill="'+p.hi+'" fill-opacity="0.13" filter="url(#agSoft2-'+p._suf+')"/>';
+    });
+    return s;
+  }
+
+  function buildBase(p){
+    return '<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="'+p.base+'"/>'
+      + '<ellipse cx="380" cy="300" rx="640" ry="520" fill="url(#agBlobHi-'+p._suf+')"/>'
+      + '<ellipse cx="1280" cy="760" rx="720" ry="560" fill="url(#agBlobHi-'+p._suf+')"/>'
+      + '<ellipse cx="900" cy="520" rx="900" ry="640" fill="url(#agBlobLo-'+p._suf+')"/>';
+  }
+
+  function defs(p){
+    return '<defs>'
+      + '<radialGradient id="agStone-'+p._suf+'" cx="38%" cy="34%" r="72%">'
+      +   '<stop offset="0%" stop-color="'+p.stoneA+'"/><stop offset="62%" stop-color="'+p.stoneB+'"/><stop offset="100%" stop-color="'+p.stoneEdge+'"/>'
+      + '</radialGradient>'
+      + '<radialGradient id="agBlobHi-'+p._suf+'" cx="50%" cy="50%" r="50%">'
+      +   '<stop offset="0%" stop-color="'+p.baseHi+'" stop-opacity="0.9"/><stop offset="100%" stop-color="'+p.baseHi+'" stop-opacity="0"/>'
+      + '</radialGradient>'
+      + '<radialGradient id="agBlobLo-'+p._suf+'" cx="50%" cy="50%" r="50%">'
+      +   '<stop offset="0%" stop-color="'+p.baseLo+'" stop-opacity="0.85"/><stop offset="100%" stop-color="'+p.baseLo+'" stop-opacity="0"/>'
+      + '</radialGradient>'
+      + '<radialGradient id="agVig-'+p._suf+'" cx="50%" cy="46%" r="62%">'
+      +   '<stop offset="55%" stop-color="'+p.vignette+'" stop-opacity="0"/><stop offset="100%" stop-color="'+p.vignette+'"/>'
+      + '</radialGradient>'
+      + '<filter id="agSoft-'+p._suf+'" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="'+RELIEF.blur+'"/></filter>'
+      + '<filter id="agSoft2-'+p._suf+'" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="'+RELIEF.blur2+'"/></filter>'
+      + '<filter id="agPebbleAO-'+p._suf+'" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="3.4"/></filter>'
+      + '<filter id="agGrain-'+p._suf+'" x="0" y="0" width="100%" height="100%">'
+      +   '<feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" seed="7"/>'
+      +   '<feColorMatrix type="matrix" values="0 0 0 0 '+p.grainRGB.split(' ')[0]+' 0 0 0 0 '+p.grainRGB.split(' ')[1]+' 0 0 0 0 '+p.grainRGB.split(' ')[2]+' 0.33 0.33 0.33 0 0"/>'
+      + '</filter>'
+      + '</defs>';
+  }
+
+  function svgMarkup(kind, suf, comp){
+    var p = Object.assign({_suf:suf}, PAL[kind]);
+    return '<svg class="z-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">'
+      + defs(p)
+      + '<g class="z-base">'+buildBase(p)+'</g>'
+      + '<g class="z-grooves" filter="url(#agSoft-'+suf+')">'+buildGrooves(p, comp.bands)+'</g>'
+      + '<g class="z-rings-drift"><g class="z-rings-breathe" filter="url(#agSoft2-'+suf+')">'+buildRings(p, comp.rings)+'</g></g>'
+      + '<rect class="z-grain" x="0" y="0" width="'+W+'" height="'+H+'" filter="url(#agGrain-'+suf+')" opacity="'+clampO(p.grainO*RELIEF.grainMul)+'" style="pointer-events:none"/>'
+      + '<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="url(#agVig-'+suf+')" style="pointer-events:none"/>'
+      + '</svg>';
+  }
+
+  var comp = makeComposition();
+  host.innerHTML =
+    '<div class="ag-frame ag-dark">'  + svgMarkup('dark','agD',comp)  + '</div>' +
+    '<div class="ag-frame ag-light">' + svgMarkup('light','agL',comp) + '</div>';
+
+  // Pause the drift while the tab is hidden — no work in the background.
+  function syncPause(){ host.classList.toggle('ag-paused', document.hidden); }
+  document.addEventListener('visibilitychange', syncPause);
+  syncPause();
+})();
+</script>
+
 <div class="topbar">
   <div class="brand">
     <div class="brand-mark">
