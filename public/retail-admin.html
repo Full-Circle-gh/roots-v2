@@ -944,7 +944,10 @@
      (toggled by the <details> `toggle` handler in dashInit) so it plays on
      reveal, not invisibly while the fold is still closed. Honors
      reduced-motion. */
-  .db-dd-bar { display: flex; align-items: center; justify-content: flex-end; gap: var(--s3); margin-top: -2px; }
+  /* position+z-index lifts the whole toolbar's stacking context (and the
+     popover it contains) above the KPI/chart cards that follow it in the DOM
+     — otherwise those later siblings paint over the open popover. */
+  .db-dd-bar { position: relative; z-index: 30; display: flex; align-items: center; justify-content: flex-end; gap: var(--s3); margin-top: -2px; }
 
   /* Lift the cards off the page so they read as objects, not flat panels —
      same depth + hover float language as the bento tiles above the fold. */
@@ -10212,6 +10215,7 @@ function dvSet(key, val) {
   try { localStorage.setItem('retail-admin-dash-view', JSON.stringify(DASH_VIEW)); } catch (e) {}
   dvApply();
   if (key === 'chart' && typeof DASH_DATA !== 'undefined' && DASH_DATA && DASH_DATA.trend) dashRenderTrend();
+  dvClose();   // a pick is a one-shot choice — close the popover after it
 }
 function dvSyncPanel() {
   const pop = document.getElementById('dv-pop'); if (!pop) return;
