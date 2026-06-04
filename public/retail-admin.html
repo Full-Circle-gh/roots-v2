@@ -1235,6 +1235,13 @@
   .db-deepdive-body .db-list .db-row { border-radius: 6px; transition: background .14s ease; }
   .db-deepdive-body .db-list .db-row:hover { background: var(--bg-elev-1); }
 
+  /* Ambient tab-switch fade for the trend chart (Revenue/Orders/Visits) —
+     the new series drifts up + fades in on the Mini App Editor's soft
+     deceleration instead of hard-cutting. Re-triggered via .is-swap. */
+  @keyframes db-swap-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+  #db-trend.is-swap .db-chart { animation: db-swap-in .55s cubic-bezier(.16, 1, .3, 1) both; }
+  @media (prefers-reduced-motion: reduce) { #db-trend.is-swap .db-chart { animation: none; } }
+
   @keyframes db-card-in { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
   @keyframes db-bar-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
   @keyframes db-line-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
@@ -3130,6 +3137,24 @@
   /* Compact peek — the activity drawer holds only a few lines, so it doesn't
      need the full editor width. Narrower panel sized to its content. */
   .side-drawer.dw-compact { --drawer-vw: 32vw; --drawer-px: 420px; min-width: 360px; }
+  /* ─── Order detail: slow "zen" open ───
+     The order window glides in on the Mini App Editor's signature soft
+     deceleration (cubic-bezier .16,1,.3,1) over a longer beat, so it
+     settles rather than snaps. Only the OPEN transition is slowed — the
+     base .side-drawer rule still governs the slide-out, so close keeps the
+     standard 220ms (and the ~240ms content-clear hook stays valid). The
+     inner content drifts up + fades in a beat behind the panel. */
+  #order-drawer.open {
+    transition: transform 560ms cubic-bezier(.16, 1, .3, 1),
+                visibility 0s linear 0s;
+  }
+  #order-detail-mount > * { opacity: 0; transform: translateY(8px); }
+  #order-drawer.open #order-detail-mount > * {
+    opacity: 1;
+    transform: none;
+    transition: opacity 520ms cubic-bezier(.16, 1, .3, 1) 140ms,
+                transform 520ms cubic-bezier(.16, 1, .3, 1) 140ms;
+  }
   .side-drawer .drawer-head {
     padding: 14px 18px;
     display: flex; align-items: center; justify-content: space-between;
@@ -10804,7 +10829,7 @@ function dashRangeFoot() {
 
 // Tween a number into `el` on change. First paint (no cached value) sets it
 // instantly; reduced-motion users skip the tween.
-function dashCountUp(el, to, fmt) {
+function dashCountUp(el, to, fmt, dur) {
   if (!el) return;
   const f = fmt || (n => String(Math.round(n)));
   to = Number(to) || 0;
@@ -10813,10 +10838,14 @@ function dashCountUp(el, to, fmt) {
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (reduce || from === to) { el.textContent = f(to); return; }
   if (el._cuRaf) cancelAnimationFrame(el._cuRaf);
-  const dur = 600, t0 = performance.now();
+  dur = dur || 600;
+  // Long roll-ups (the Deep dive reveal) get a softer easeOutQuint so the
+  // last stretch drifts to rest — the "zen" settle, not a 600ms snap-stop.
+  const quint = dur >= 1000;
+  const t0 = performance.now();
   const step = (t) => {
     const p = Math.min(1, (t - t0) / dur);
-    const e = 1 - Math.pow(1 - p, 3);   // easeOutCubic
+    const e = quint ? 1 - Math.pow(1 - p, 5) : 1 - Math.pow(1 - p, 3);
     el.textContent = f(from + (to - from) * e);
     if (p < 1) el._cuRaf = requestAnimationFrame(step);
   };
@@ -10842,7 +10871,13 @@ function dashInit() {
   $$('#db-trend-metrics button').forEach(b => b.addEventListener('click', () => {
     DASH_METRIC = b.dataset.metric;
     $$('#db-trend-metrics button').forEach(x => x.classList.toggle('active', x === b));
-    if (DASH_DATA) dashRenderTrend();
+    if (DASH_DATA) {
+      dashRenderTrend();
+      // Ambient cross-fade on tab switch — replay the soft fade-in so the new
+      // series drifts in rather than hard-cutting (reflow restarts the anim).
+      const tr = document.getElementById('db-trend');
+      if (tr) { tr.classList.remove('is-swap'); void tr.offsetWidth; tr.classList.add('is-swap'); }
+    }
   }));
   dvApply();           // apply saved View tweaks (heatmap/number classes)
   // Deep-dive reveal motion — replay the fade-up / bar-grow / line-draw /
@@ -11782,7 +11817,7 @@ function dashKpiAnimate() {
     const to = Number(el.dataset.cu) || 0;
     const f = fmts[el.dataset.fmt] || fmts.num;
     el._cuVal = 0;
-    dashCountUp(el, to, f);
+    dashCountUp(el, to, f, 1700);   // slow, ambient roll-up on fold open
   });
 }
 
