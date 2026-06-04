@@ -600,8 +600,8 @@
   /* The ring itself carries a slow ambient breath even at idle — the live
      monitor's "heartbeat" (the 0 + caption still state the literal truth). Once
      viewers are present a brighter green arc breathes over it. */
-  @keyframes db-live-breath { 0%, 100% { transform: rotate(-90deg) scale(1); } 50% { transform: rotate(-90deg) scale(1.04); } }
-  @keyframes db-ring-breathe { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+  @keyframes db-live-breath { 0%, 100% { transform: rotate(-90deg) scale(1); } 50% { transform: rotate(-90deg) scale(1.046); } }
+  @keyframes db-ring-breathe { 0%, 100% { opacity: .425; } 50% { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .db-live-ring, .db-live-ring.live .arc { animation: none; } }
   .db-live-num { font-size: 38px; line-height: 1; font-weight: 600; letter-spacing: -.02em; color: var(--text-1); font-variant-numeric: tabular-nums; }
   .db-live-num.live-on { color: var(--accent); }
@@ -4389,8 +4389,20 @@
           <div class="db-hero-h">Live · 实时</div>
           <div class="db-live-ring-wrap">
             <svg class="db-live-ring" id="db-live-ring" viewBox="0 0 44 44" aria-hidden="true">
-              <circle class="track" cx="22" cy="22" r="19"></circle>
-              <circle class="arc" cx="22" cy="22" r="19"></circle>
+              <!-- ensō-style wobble: low-freq turbulence displaces the stroke so
+                   the ring reads as a hand-inked brush circle, not a compass-
+                   perfect one. Geometry stays a true r=19 circle so the arc's
+                   dash-reveal math below is untouched. -->
+              <defs>
+                <filter id="db-enso-wobble" x="-25%" y="-25%" width="150%" height="150%">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.026 0.032" numOctaves="2" seed="7" result="n"></feTurbulence>
+                  <feDisplacementMap in="SourceGraphic" in2="n" scale="2.8" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+                </filter>
+              </defs>
+              <g filter="url(#db-enso-wobble)">
+                <circle class="track" cx="22" cy="22" r="19"></circle>
+                <circle class="arc" cx="22" cy="22" r="19"></circle>
+              </g>
             </svg>
             <span class="db-live-num" id="db-live-num">—</span>
           </div>
