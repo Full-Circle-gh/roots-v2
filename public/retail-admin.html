@@ -1347,6 +1347,15 @@
      Hide the catalog-write controls; clicking a card opens the page designer. */
   body.catalog-upstream #pa-add-btn,
   body.catalog-upstream .pa-dup { display: none !important; }
+  /* Upstream mode never docks the in-page editor either — clicking a product
+     opens the standalone Product Page Editor in a new tab, so the right-hand
+     editor pane is permanently empty dead weight (and its placeholder even
+     points at the now-hidden "+ Add product" button). Force the catalogue
+     full-width in every view and drop the editor pane + its placeholder, so the
+     List view is a real full-width row list instead of a narrow column beside a
+     useless panel. */
+  body.catalog-upstream .pa-split { grid-template-columns: 1fr !important; }
+  body.catalog-upstream .pa-split-editor { display: none !important; }
   /* Per-tenant feature gating. A feature is shown only when its body class is
      present (set in applyFeatureGates: entitled AND operator-enabled). Anything
      tagged data-feat="<key>" is hidden when feat-<key> is absent — nav buttons,
