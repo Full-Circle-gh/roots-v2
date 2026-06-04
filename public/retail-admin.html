@@ -10669,7 +10669,7 @@ function dashFeedClick(row) {
       </dl>`;
       open.textContent = 'Open in Orders · 在订单中打开 ↗';
       open.style.display = '';
-      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('orders'); };
+      open.onclick = () => dashOpenOrderFromFeed(e.ref_id);
       break;
     case 'order_dispatched':
     case 'order_delivered':
@@ -10679,7 +10679,7 @@ function dashFeedClick(row) {
       </dl>`;
       open.textContent = 'Open in Orders · 在订单中打开 ↗';
       open.style.display = '';
-      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('orders'); };
+      open.onclick = () => dashOpenOrderFromFeed(e.ref_id);
       break;
     case 'refund_request':
       html += `
@@ -10689,9 +10689,9 @@ function dashFeedClick(row) {
         <dt>Buyer · 顾客</dt><dd>${escapeHtml(p.buyer || '—')}</dd>
       </dl>
       ${p.reason ? `<div class="db-dw-quote">${escapeHtml(p.reason)}</div>` : ''}`;
-      open.textContent = 'Open in Refunds · 在退款中打开 ↗';
+      open.textContent = 'Open in Orders · 在订单中打开 ↗';
       open.style.display = '';
-      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('refunds') || dashJumpTab('orders'); };
+      open.onclick = () => dashOpenOrderFromFeed(e.ref_id);
       break;
     case 'refund_paid':
       html += `
@@ -10699,9 +10699,9 @@ function dashFeedClick(row) {
         ${p.amount ? `<dt>Amount · 金额</dt><dd>¥${Number(p.amount).toLocaleString()}</dd>` : ''}
         <dt>Buyer · 顾客</dt><dd>${escapeHtml(p.buyer || '—')}</dd>
       </dl>`;
-      open.textContent = 'Open in Refunds · 在退款中打开 ↗';
+      open.textContent = 'Open in Orders · 在订单中打开 ↗';
       open.style.display = '';
-      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('refunds') || dashJumpTab('orders'); };
+      open.onclick = () => dashOpenOrderFromFeed(e.ref_id);
       break;
     case 'refund_rejected':
       html += `
@@ -10709,9 +10709,9 @@ function dashFeedClick(row) {
         <dt>Buyer · 顾客</dt><dd>${escapeHtml(p.buyer || '—')}</dd>
       </dl>
       ${p.note ? `<div class="db-dw-quote">${escapeHtml(p.note)}</div>` : ''}`;
-      open.textContent = 'Open in Refunds · 在退款中打开 ↗';
+      open.textContent = 'Open in Orders · 在订单中打开 ↗';
       open.style.display = '';
-      open.onclick = () => { closeDrawer('#db-activity-drawer'); dashJumpTab('refunds') || dashJumpTab('orders'); };
+      open.onclick = () => dashOpenOrderFromFeed(e.ref_id);
       break;
     case 'topup':
       html += `
@@ -10767,6 +10767,16 @@ function dashFeedClick(row) {
 
   body.innerHTML = html;
   openDrawer('#db-activity-drawer');
+}
+
+// Jump from an activity-feed event straight to its order, opened in the
+// global order drawer. We switch to the Orders tab first (so closing the
+// drawer leaves the operator in the right context) then openOrder() loads
+// the order by id into the floating drawer — no manual searching needed.
+function dashOpenOrderFromFeed(orderId) {
+  closeDrawer('#db-activity-drawer');
+  dashJumpTab('orders');
+  if (orderId != null) openOrder(orderId);
 }
 
 // Programmatic tab-switch — clicks the tab button so the global switcher
@@ -13252,7 +13262,13 @@ async function saveTracking(orderId, shipmentId, ev) {
       method: 'PUT', body, errLabelEn: 'Save failed', errLabelCn: '保存失败',
     });
     toast('Tracking saved · 运单号已保存');
+    // openOrder() rebuilds the whole drawer body, which yanks scroll back to the
+    // top — jarring when the operator is mid-list updating a parcel. Snapshot the
+    // scroll offset and restore it once the re-render lands.
+    const _mount = document.getElementById('order-detail-mount');
+    const _scrollTop = _mount ? _mount.scrollTop : 0;
     await openOrder(orderId);
+    if (_mount) _mount.scrollTop = _scrollTop;
     for (const d of drafts) {
       const inp = document.getElementById('trk-number-' + d.sid);
       if (inp && !inp.value.trim()) inp.value = d.number;
@@ -13271,7 +13287,10 @@ async function clearTracking(orderId, shipmentId, ev) {
       method: 'DELETE', errLabelEn: 'Clear failed', errLabelCn: '清除失败',
     });
     toast('Tracking cleared · 运单号已清除');
-    openOrder(orderId);
+    const _mount = document.getElementById('order-detail-mount');
+    const _scrollTop = _mount ? _mount.scrollTop : 0;
+    await openOrder(orderId);
+    if (_mount) _mount.scrollTop = _scrollTop;
   } catch {}
 }
 
