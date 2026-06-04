@@ -56,7 +56,7 @@
   :root {
     /* ── Ambient Zen Sand Garden backdrop — tuning knobs ──
        Adjust the decorative raked-sand background here (see #ambient-garden). */
-    --ambient-opacity: 0.5;   /* 0 = off · 1 = strongest texture */
+    --ambient-opacity: 0.3;   /* 0 = off · 1 = strongest texture */
     --ambient-speed:   1;     /* 1 = default slow drift · higher = faster */
 
     /* ── Full Circle palette · dark-mode-first ──
@@ -4319,13 +4319,13 @@
       var y1 = full ? 1030 : 520 + Math.floor(rand()*480);
       bands.push({ x:x, n:n, gap:cfg.gap, y0:y0, y1:y1, s:i*7+3 });
     }
-    var baseRs = [[112,176],[150],[96,158]];   // 1–2 ripples per stone — sparse on purpose
-    var rings = [];
-    for (var j=0;j<cfg.ringN;j++){
-      var cx = 150 + rand()*(W-300);
-      var cy = 130 + rand()*(H-260);
-      rings.push({ cx:cx, cy:cy, rs:baseRs[j % baseRs.length], stone:38 + Math.floor(rand()*12), s:j*13+5 });
-    }
+    // Two stones at fixed spots — one up top, one down low — placed toward
+    // the side gutters so their ripples read in the margins, not behind the
+    // centred content. Coordinate space is 1600 x 1000 (top-left origin).
+    var rings = [
+      { cx: 150,  cy: 205, rs:[112, 176], stone: 46, s: 5  },   // top · left gutter
+      { cx: 1450, cy: 815, rs:[96, 158],  stone: 42, s: 18 }    // bottom · right gutter
+    ];
     return { bands:bands, rings:rings };
   }
 
