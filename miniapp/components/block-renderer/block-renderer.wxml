@@ -379,6 +379,9 @@
       <view class="ot-bn-cta">{{orderTracker.ctaArrow}}</view>
     </view>
   </view>
+
+  <!-- More-orders link — shown only when the customer has >1 order in flight -->
+  <view wx:if="{{orderTracker && orderTracker.moreLabel}}" class="ot-more" catchtap="onOrderTrackerMore">{{orderTracker.moreLabel}}</view>
 </view>
 
 <!-- Notification bar — standalone unread strip; only renders when notifUnread>0.

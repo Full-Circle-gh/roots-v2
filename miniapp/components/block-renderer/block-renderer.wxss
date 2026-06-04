@@ -809,6 +809,17 @@
 /* Colour + energy controls ride on .ot-wrap as --ot-* CSS vars so every
    layout (classic / truck / banner) inherits them. */
 .ot-wrap { padding: 0 44rpx; }
+/* "N more orders in progress →" link beneath the card. Quiet by design — a
+   text link, not a second button, so the tracker stays a single focal card. */
+.ot-more {
+  margin-top: 16rpx;
+  text-align: center;
+  font-family: var(--f-toni);
+  font-size: calc(22rpx * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ot-accent, var(--forest, #365329));
+}
 .ot-card {
   background: var(--ot-card-bg, #fff);
   border: var(--ot-card-border, 3rpx solid var(--ink, #1a1a17));

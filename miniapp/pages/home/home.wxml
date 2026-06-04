@@ -29,6 +29,7 @@
     leaderboards="{{leaderboards}}"
     new-arrivals="{{newArrivals}}"
     active-order="{{activeOrder}}"
+    active-order-count="{{activeOrderCount}}"
     affiliate="{{affiliate}}"
     polls="{{polls}}"
     customer="{{customer}}"

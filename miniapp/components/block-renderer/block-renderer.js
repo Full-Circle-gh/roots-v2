@@ -183,6 +183,9 @@ Component({
     // or null. Feeds the order_tracker block; host page fetches it when the
     // layout contains one and the customer is authed.
     activeOrder: { type: Object, value: null },
+    // How many of the customer's orders are still in flight. When >1 the
+    // order_tracker surfaces a "N orders in progress →" link to the full list.
+    activeOrderCount: { type: Number, value: 0 },
   },
 
   data: {
@@ -248,7 +251,7 @@ Component({
   },
 
   observers: {
-    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards, newArrivals, activeOrder, notifUnread, notifNoOrderUnread, notifIsFresh, notifNoOrderFresh, notifHasBroadcast': function () {
+    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards, newArrivals, activeOrder, activeOrderCount, notifUnread, notifNoOrderUnread, notifIsFresh, notifNoOrderFresh, notifHasBroadcast': function () {
       this.recompute();
     },
   },
@@ -630,6 +633,13 @@ Component({
             const ctaLabel = o.status === 'pending_payment'
               ? (cn ? '去支付' : 'Pay now')
               : (cn ? '查看订单' : 'View order');
+            // When the customer has more than one order in flight, the card
+            // tracks only the newest — surface a link to the full list so the
+            // others aren't hidden. '' → the wxml omits the link entirely.
+            const moreCount = Math.max(0, (this.properties.activeOrderCount || 0) - 1);
+            const moreLabel = moreCount > 0
+              ? (cn ? `还有 ${moreCount} 个订单进行中 →` : `${moreCount} more order${moreCount === 1 ? '' : 's'} in progress →`)
+              : '';
             out.orderTracker = {
               id: o.id,
               style,
@@ -674,6 +684,7 @@ Component({
               total: Number(o.total) > 0 ? '¥' + Number(o.total).toFixed(2) : '',
               ctaLabel,
               ctaArrow: ctaLabel + ' →',
+              moreLabel,
               // CSS vars shared across all three layouts (mirror cms.html).
               vars: `--ot-accent:${accent};--ot-card-bg:${cardBg};--ot-card-border:${cardBorder};`
                 + `--ot-marker:${marker};--ot-bright:${bright};--ot-rail:${rail};`
@@ -1919,6 +1930,10 @@ Component({
     onOrderTrackerTap() {
       const ot = this.data.orderTracker;
       if (ot && ot.id) this.triggerEvent('order', { id: ot.id });
+    },
+    // "N more orders in progress →" link — route to the full orders list.
+    onOrderTrackerMore() {
+      this.triggerEvent('cta', { target: 'orders' });
     },
     onFavoritesTap() {
       // "See all" link on the favorites block — route to /pages/favorites.

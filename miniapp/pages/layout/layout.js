@@ -22,6 +22,7 @@ Page({
     leaderboards: {},
     newArrivals: {},
     activeOrder: null,
+    activeOrderCount: 0,
     polls: [],
     customer: null,
     lang: 'en',
@@ -169,9 +170,14 @@ Page({
       const res = await api.get('/api/retail/orders?limit=5');
       const rows = Array.isArray(res) ? res : (res?.data || []);
       const ACTIVE = new Set(['pending_payment', 'paid', 'preparing', 'dispatched']);
-      this.setData({ activeOrder: rows.find(o => ACTIVE.has(o.status)) || null });
+      const newest = rows[0];
+      const activeCount = rows.filter(o => ACTIVE.has(o.status)).length;
+      this.setData({
+        activeOrder: (newest && ACTIVE.has(newest.status)) ? newest : null,
+        activeOrderCount: activeCount,
+      });
     } catch {
-      this.setData({ activeOrder: null });
+      this.setData({ activeOrder: null, activeOrderCount: 0 });
     }
   },
 
@@ -224,6 +230,7 @@ Page({
     if (t === 'affiliate')   return wx.navigateTo({ url: '/pages/affiliate/affiliate' });
     if (t === 'topup')       return wx.navigateTo({ url: '/pages/topup/topup' });
     if (t === 'leaderboard') return wx.navigateTo({ url: '/pages/leaderboard/leaderboard' });
+    if (t === 'orders')      return wx.navigateTo({ url: '/pages/orders/orders' });
     if (ALLOWED.has(t))      return wx.navigateTo({ url: '/pages/layout/layout?page=' + t });
     if (t.startsWith('product:'))  return wx.navigateTo({ url: '/pages/product/product?id=' + t.split(':')[1] });
     if (t.startsWith('category:')) return wx.switchTab({ url: '/pages/shop/shop' });

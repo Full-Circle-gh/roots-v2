@@ -22,6 +22,7 @@
     leaderboards="{{leaderboards}}"
     new-arrivals="{{newArrivals}}"
     active-order="{{activeOrder}}"
+    active-order-count="{{activeOrderCount}}"
     polls="{{polls}}"
     customer="{{customer}}"
     bind:cta="onCta"

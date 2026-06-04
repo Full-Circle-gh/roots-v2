@@ -342,10 +342,12 @@ Page({
   },
 
   // The order_tracker block shows the customer's latest in-flight order.
-  // Only fetch when the layout has one and the user is authed; pick the
-  // newest order whose status is still active (unpaid / paid / preparing /
-  // dispatched). Terminal orders (delivered / cancelled / refunded) leave
-  // activeOrder null so the block hides.
+  // Only fetch when the layout has one and the user is authed. We follow the
+  // single most recent order (orders come back placed_at DESC): if it's still
+  // active (unpaid / paid / preparing / dispatched) we show it, otherwise the
+  // block hides. We deliberately do NOT fall back to an older still-active
+  // order — doing so made the tracker appear to jump backwards (e.g. marking
+  // the newest order delivered would resurrect an older "Paid" order).
   async _fetchActiveOrderFor(layout) {
     const wants = (layout || []).some(b => b.type === 'order_tracker');
     if (!wants) return;
@@ -355,9 +357,16 @@ Page({
       const res = await api.get('/api/retail/orders?limit=5');
       const rows = Array.isArray(res) ? res : (res?.data || []);
       const ACTIVE = new Set(['pending_payment', 'paid', 'preparing', 'dispatched']);
-      this.setData({ activeOrder: rows.find(o => ACTIVE.has(o.status)) || null });
+      const newest = rows[0];
+      // Count ALL active orders so the card can surface a "N orders in
+      // progress →" link when the customer has more than one in flight.
+      const activeCount = rows.filter(o => ACTIVE.has(o.status)).length;
+      this.setData({
+        activeOrder: (newest && ACTIVE.has(newest.status)) ? newest : null,
+        activeOrderCount: activeCount,
+      });
     } catch {
-      this.setData({ activeOrder: null });
+      this.setData({ activeOrder: null, activeOrderCount: 0 });
     }
   },
 
@@ -458,6 +467,7 @@ Page({
     if (t === 'affiliate')  return wx.navigateTo({ url: '/pages/affiliate/affiliate' });
     if (t === 'topup')      return wx.navigateTo({ url: '/pages/topup/topup' });
     if (t === 'favorites')  return wx.navigateTo({ url: '/pages/favorites/favorites' });
+    if (t === 'orders')     return wx.navigateTo({ url: '/pages/orders/orders' });
     if (t === 'leaderboard') return wx.navigateTo({ url: '/pages/leaderboard/leaderboard' });
     if (t === 'notifications') {
       // Tapping the strip is the dismissal action — zero the badge locally
