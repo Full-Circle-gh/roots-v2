@@ -621,6 +621,13 @@
   @media (max-width: 960px) { .db-hero-grid { grid-template-columns: 1fr; } }
   .db-hero-pane { background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; min-width: 0; }
   .db-hero-h { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); font-weight: 700; margin-bottom: 8px; font-family: var(--f-mono); }
+  /* Foldable Activity header — click to collapse the feed list. */
+  .db-feed-fold { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; border: 0; background: transparent; padding: 0; cursor: pointer; text-align: left; color: var(--text-3); }
+  .db-feed-fold:hover { color: var(--text-1); }
+  .db-feed-caret { flex: none; transition: transform .18s ease; }
+  .db-feed-pane.is-folded .db-feed-list { display: none; }
+  .db-feed-pane.is-folded .db-feed-fold { margin-bottom: 0; }
+  .db-feed-pane.is-folded .db-feed-caret { transform: rotate(-90deg); }
   /* Live count — pulsing dot when there are viewers, grey when zero. */
   .db-live { justify-content: center; align-items: center; gap: 4px; }
   /* LIVE ring gauge — a faint track with the viewer count centred; a green arc
@@ -4470,8 +4477,11 @@
             <div class="db-today-cell"><div class="val" id="db-today-new">—</div><div class="lbl">New customers · 新客</div></div>
           </div>
         </div>
-        <div class="db-hero-pane db-feed-pane">
-          <div class="db-hero-h">Activity · 动态</div>
+        <div class="db-hero-pane db-feed-pane" id="db-feed-pane">
+          <button class="db-hero-h db-feed-fold" type="button" id="db-feed-fold" onclick="dashFeedToggleFold()" aria-expanded="true">
+            <span>Activity · 动态</span>
+            <svg class="db-feed-caret" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </button>
           <div class="db-feed-list" id="db-feed-list">
             <div class="db-feed-empty">Loading… · 加载中…</div>
           </div>
@@ -10442,6 +10452,7 @@ function dashHeroInit() {
   // Single bootstrap — once wired, the timers + visibility listener carry it.
   if (DASH_HERO._wired) { dashHeroRefreshAll(); return; }
   DASH_HERO._wired = true;
+  dashFeedApplyFold();   // restore the operator's folded/unfolded preference
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) dashHeroStop();
     else dashHeroStart();
@@ -10525,6 +10536,22 @@ async function dashHeroLoadToday() {
       spark.innerHTML = dashSparkline(vals);
     }
   } catch (e) { /* silent */ }
+}
+
+// Fold/unfold the Activity feed. State persists per-operator so a folded feed
+// stays folded across reloads.
+function dashFeedApplyFold() {
+  const pane = $('#db-feed-pane'), btn = $('#db-feed-fold'); if (!pane) return;
+  let folded = false;
+  try { folded = localStorage.getItem('retail-admin-feed-folded') === '1'; } catch (e) {}
+  pane.classList.toggle('is-folded', folded);
+  if (btn) btn.setAttribute('aria-expanded', folded ? 'false' : 'true');
+}
+function dashFeedToggleFold() {
+  const pane = $('#db-feed-pane'); if (!pane) return;
+  const folded = !pane.classList.contains('is-folded');
+  try { localStorage.setItem('retail-admin-feed-folded', folded ? '1' : '0'); } catch (e) {}
+  dashFeedApplyFold();
 }
 
 async function dashHeroLoadActivity() {
