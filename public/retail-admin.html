@@ -54,6 +54,11 @@
      DESIGN TOKENS (mirror of /cms)
      ═══════════════════════════════════════════════════════════════════ */
   :root {
+    /* ── Ambient Zen Sand Garden backdrop — tuning knobs ──
+       Adjust the decorative raked-sand background here (see #ambient-garden). */
+    --ambient-opacity: 0.5;   /* 0 = off · 1 = strongest texture */
+    --ambient-speed:   1;     /* 1 = default slow drift · higher = faster */
+
     /* ── Full Circle palette · dark-mode-first ──
        Ink Charcoal canvas, Deeper Paper type, strict Tea + Brass accents.
        Tea = active / live / positive; Brass = primary action / attention. */
@@ -203,18 +208,18 @@
 
   /* ═══════════════════════════════════════════════════════════════════
      AMBIENT — Zen Sand Garden backdrop (purely decorative).
+     ▸ TUNE IT with the two variables in :root above:
+         --ambient-opacity  (0 = off … 1 = strongest texture)
+         --ambient-speed    (1 = default drift … higher = faster)
      Self-contained: delete this block, the #ambient-garden element, and
      the ambientGarden script block to remove it entirely. Sits strictly
-     behind all content (z-index:-1, pointer-events:none); the raked-sand
-     texture only shows through the empty left/right gutters because
-     <main> carries an opaque page-coloured background. No gutter math.
+     behind all content (z-index:-1, pointer-events:none) as one
+     continuous surface; the opaque cards/panels float over it.
      ═══════════════════════════════════════════════════════════════════ */
   #ambient-garden {
     position: fixed; inset: 0; z-index: -1;
     pointer-events: none; overflow: hidden;
     contain: layout paint;
-    --ambient-opacity: 0.5;   /* subtle by default */
-    --ambient-speed: 1;       /* higher = faster drift */
     opacity: var(--ambient-opacity);
   }
   #ambient-garden .ag-frame { position: absolute; inset: 0; }
@@ -562,9 +567,9 @@
   /* ═══════════════════════════════════════════════════════════════════
      LAYOUT
      ═══════════════════════════════════════════════════════════════════ */
-  /* Opaque page-coloured backdrop so the ambient texture never shows behind
-     content — it reads only in the gutters outside this centred column. */
-  main { padding: var(--s6) var(--s6) var(--s7); max-width: min(1440px, 92vw); margin: 0 auto; background: var(--bg-app); }
+  /* Transparent so the ambient texture reads as one continuous surface
+     across the whole page; the opaque cards/panels inside float on it. */
+  main { padding: var(--s6) var(--s6) var(--s7); max-width: min(1440px, 92vw); margin: 0 auto; }
   section { display: none; }
   section.active { display: block; }
 
@@ -730,7 +735,7 @@
   /* Label row pairs the small-caps label with a calm delta-vs-yesterday badge. */
   .db-today-lblrow { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: 3px; }
   .db-today-lblrow .lbl { margin-top: 0; }
-  .db-delta { font-size: 10px; font-weight: 600; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; font-family: var(--f-mono); letter-spacing: .02em; cursor: help; }
+  .db-delta { position: relative; font-size: 10px; font-weight: 600; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; font-family: var(--f-mono); letter-spacing: .02em; cursor: help; }
   .db-delta.is-up   { color: var(--accent); }
   .db-delta.is-down { color: #bf8a6e; }   /* soft clay — a calm "down", never alarm-red */
   .db-delta.is-flat { color: var(--text-3); opacity: .7; }
@@ -921,7 +926,7 @@
      cursor and a small chip names the hour + value. */
   .db-spark-wrap { cursor: crosshair; }
   .db-spark-dot.is-active { animation: none; transform: scale(1.5); transition: left .06s linear, top .06s linear; box-shadow: 0 0 0 3px rgba(107,142,111,.18); }
-  .db-spark-tip { position: fixed; z-index: 60; transform: translate(-50%, -100%); margin-top: -6px; padding: 3px 8px; background: var(--bg-elev-2); color: var(--text-1); border: 1px solid var(--line); border-radius: 6px; font-size: 11px; font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .12s ease; box-shadow: 0 6px 18px rgba(0,0,0,.16); }
+  .db-spark-tip { position: absolute; z-index: 60; transform: translate(-50%, -100%); margin-top: -4px; padding: 3px 8px; background: var(--bg-elev-2); color: var(--text-1); border: 1px solid var(--line); border-radius: 6px; font-size: 11px; font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .12s ease; box-shadow: 0 6px 18px rgba(0,0,0,.16); }
   .db-spark-tip.show { opacity: 1; }
   .db-today-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 
@@ -10904,14 +10909,13 @@ function dashSetDelta(sel, base, cur, days, fmtAvg) {
 // Badge hover → reuse the spark chip to explain the comparison baseline.
 function dashDeltaHover(e) {
   const el = e.currentTarget; if (!el._tip) return;
-  const rect = el.getBoundingClientRect();
-  const tip = dashSparkTipEl();
+  const tip = dashSparkTipEl(el);
   tip.textContent = el._tip;
-  tip.style.left = (rect.left + rect.width / 2) + 'px';
-  tip.style.top  = rect.top + 'px';
+  tip.style.left = '50%';
+  tip.style.top  = '0';
   tip.classList.add('show');
 }
-function dashDeltaLeave() { dashSparkTipEl().classList.remove('show'); }
+function dashDeltaLeave(e) { dashSparkTipEl(e.currentTarget).classList.remove('show'); }
 
 // ── Interactive sparkline scrub ──────────────────────────────────────────
 // Render a sparkline into a wrap and stash its series so a hover can scrub it.
@@ -10931,9 +10935,9 @@ function dashSparkPct(vals, idx) {
     y: ((H - pad) - ((vals[idx] - min) / span) * (H - 2 * pad)) / H * 100,
   };
 }
-function dashSparkTipEl() {
-  let el = document.getElementById('db-spark-tip');
-  if (!el) { el = document.createElement('div'); el.id = 'db-spark-tip'; el.className = 'db-spark-tip'; document.body.appendChild(el); }
+function dashSparkTipEl(wrap) {
+  let el = wrap.querySelector('.db-spark-tip');
+  if (!el) { el = document.createElement('div'); el.className = 'db-spark-tip'; wrap.appendChild(el); }
   return el;
 }
 function dashSparkMove(e) {
@@ -10942,17 +10946,19 @@ function dashSparkMove(e) {
   const rect = wrap.getBoundingClientRect();
   const f = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
   const idx = Math.round(f * (s.vals.length - 1));
+  const p = dashSparkPct(s.vals, idx);
   const dot = wrap.querySelector('.db-spark-dot');
   if (dot) {
-    const p = dashSparkPct(s.vals, idx);
     dot.style.left = p.x.toFixed(1) + '%';
     dot.style.top  = p.y.toFixed(1) + '%';
     dot.classList.add('is-active');
   }
-  const tip = dashSparkTipEl();
+  // Anchor the tip inside the wrap with the same % as the dot, so it tracks the
+  // data point exactly and is immune to page zoom / fixed-coord drift.
+  const tip = dashSparkTipEl(wrap);
   tip.textContent = (s.labels[idx] || '') + ' · ' + s.fmt(s.vals[idx]);
-  tip.style.left = e.clientX + 'px';
-  tip.style.top  = rect.top + 'px';
+  tip.style.left = p.x.toFixed(1) + '%';
+  tip.style.top  = p.y.toFixed(1) + '%';
   tip.classList.add('show');
 }
 function dashSparkLeave(e) {
@@ -10964,7 +10970,7 @@ function dashSparkLeave(e) {
     dot.style.top  = p.y.toFixed(1) + '%';
     dot.classList.remove('is-active');
   }
-  dashSparkTipEl().classList.remove('show');
+  dashSparkTipEl(wrap).classList.remove('show');
 }
 
 // Activity feed shows only the first DASH_FEED_PREVIEW events by default; the
