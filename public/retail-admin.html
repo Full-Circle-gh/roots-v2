@@ -13233,13 +13233,32 @@ async function saveTracking(orderId, shipmentId, ev) {
   if (!number) { toast('Enter a tracking number first · 请先输入运单号', 'err'); return; }
   const body = { carrier, tracking_number: number };
   if (shipmentId) body.shipment_id = shipmentId;
+  // Re-opening the order rebuilds every shipment card from scratch, which wipes
+  // any waybill the operator typed into a *sibling* parcel's field but hasn't
+  // saved yet. Snapshot those unsaved drafts (everything except the row we just
+  // saved) and restore them after the re-render. Keyed off the input id suffix
+  // so it matches whatever sid the rebuilt card uses.
+  const drafts = [];
+  document.querySelectorAll('[id^="trk-number-"]').forEach(inp => {
+    const sid = inp.id.slice('trk-number-'.length);
+    if (sid === String(key)) return;            // the row being saved
+    const draft = inp.value.trim();
+    if (!draft) return;
+    drafts.push({ sid, number: draft, carrier: document.getElementById('trk-carrier-' + sid)?.value });
+  });
   try {
     await adminWrite({
       btn: ev?.currentTarget, url: `/api/retail-admin/orders/${orderId}/tracking`,
       method: 'PUT', body, errLabelEn: 'Save failed', errLabelCn: '保存失败',
     });
     toast('Tracking saved · 运单号已保存');
-    openOrder(orderId);
+    await openOrder(orderId);
+    for (const d of drafts) {
+      const inp = document.getElementById('trk-number-' + d.sid);
+      if (inp && !inp.value.trim()) inp.value = d.number;
+      const sel = document.getElementById('trk-carrier-' + d.sid);
+      if (sel && d.carrier) sel.value = d.carrier;
+    }
   } catch {}
 }
 
