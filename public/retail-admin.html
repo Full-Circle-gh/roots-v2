@@ -10474,7 +10474,7 @@ const BENTO_CATALOGUE = {
       if (!d.count) return body.innerHTML = `<div class="db-tile-num good">0</div><div class="db-tile-sub">All stocked · 库存充足</div>`;
       if (tile) tile.classList.add('alert');
       const rows = d.items.slice(0, 6).map(it => `<div class="db-tile-list-row">
-        <span class="name">${escapeHtml(it.name_en || it.name_cn || '—')}</span>
+        <span class="name">${escapeHtml(dbProdName(it))}</span>
         <span class="val">${it.stock_qty}</span>
       </div>`).join('');
       body.innerHTML = `<div class="db-tile-num warn">${d.count}</div>
@@ -10503,7 +10503,7 @@ const BENTO_CATALOGUE = {
       const list = (DASH_DATA && DASH_DATA.topProducts) || [];
       if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No sales in range · 区间内无销售</div>`;
       const rows = list.slice(0, 6).map(p => `<div class="db-tile-list-row">
-        <span class="name">${escapeHtml(p.name_en || p.name_cn || '—')}</span>
+        <span class="name">${escapeHtml(dbProdName(p))}</span>
         <span class="val">${p.units || 0}</span>
       </div>`).join('');
       body.innerHTML = `<div class="db-tile-list">${rows}</div>`;
@@ -10680,6 +10680,13 @@ async function bentoLoadOps() {
 function bentoRenderAll() {
   const layout = bentoLoadLayout();
   layout.forEach((key, idx) => bentoRenderSlot(BENTO_SLOTS[idx], key));
+}
+
+// Pick a product's name in the active UI language, falling back to the
+// other language when the preferred one is missing.
+function dbProdName(o) {
+  const cn = (window.cuLang && cuLang() === 'cn');
+  return (cn ? (o.name_cn || o.name_en) : (o.name_en || o.name_cn)) || '—';
 }
 
 function bentoRefresh(sourceFilter) {
@@ -22028,6 +22035,8 @@ function popOutLivePreview() {
 
 // Re-apply language to JS-controlled elements when user toggles language.
 window.onLangChange(function () {
+  // Re-render dashboard tiles so product names switch language immediately.
+  if (typeof bentoRenderAll === 'function') { try { bentoRenderAll(); } catch (e) {} }
   // Leaderboard enabled pill
   if (typeof lbUpdateEnabledPill === 'function') lbUpdateEnabledPill();
   // Flash sale form labels — re-set based on whether an edit is in progress
