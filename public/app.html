@@ -11490,8 +11490,8 @@ function _renderSizesCardInner(ctx) {
     </div>
     ${((p.siblings||[]).length || p.variant_label) ? (() => {
       const all = [
-        { id: p.id, variant_label: p.variant_label, sku: p.sku, sell_price: p.sell_price, variant_sort: p.variant_sort, isCurrent: true },
-        ...(p.siblings || []).map(s => ({ id: s.id, variant_label: s.variant_label, sku: s.sku, sell_price: s.sell_price, variant_sort: s.variant_sort, isCurrent: false })),
+        { id: p.id, variant_label: p.variant_label, sku: p.sku, sell_price: p.sell_price, variant_sort: p.variant_sort, is_published: p.is_published, isCurrent: true },
+        ...(p.siblings || []).map(s => ({ id: s.id, variant_label: s.variant_label, sku: s.sku, sell_price: s.sell_price, variant_sort: s.variant_sort, is_published: s.is_published, isCurrent: false })),
       ];
       // Operator-chosen display order (variant_sort) — the same order the
       // customer sees in the mini-app picker; drag a chip to change it. Ties
@@ -11502,6 +11502,23 @@ function _renderSizesCardInner(ctx) {
         (a.id - b.id));
       PF_VARIANTS = all; PF_PROD_CTX = ctx;
       const canReorder = all.length > 1;
+      // "Hidden on app" badge — a variant with is_published = 0 still shows in
+      // this editor list (so operators can manage it) but is invisible in the
+      // mini-app shop. Surfacing it here stops the "why is my variant missing"
+      // confusion (the shop only shows published siblings).
+      const hiddenBadge = (v) => v.is_published === 0
+        ? `<span title="Not shown in the mini-app shop · 未在小程序店面显示" style="font-size:10px;background:rgba(220,38,38,.15);color:#dc2626;padding:1px 7px;border-radius:99px;font-weight:700;white-space:nowrap">Hidden 隐藏</span>`
+        : '';
+      // Inline "show in shop" toggle (👁 visible / 🚫 hidden) so the operator
+      // can publish a variant without opening it. Hits the same bulk-update
+      // endpoint as the row flags, then re-renders the card via switchVariant.
+      const pubToggle = (v) => {
+        const on = v.is_published !== 0;
+        const brd = v.isCurrent ? 'rgba(0,0,0,.15)' : 'var(--border)';
+        const baseOp = on ? (v.isCurrent ? '.55' : '.5') : '.9';
+        const col = on ? (v.isCurrent ? 'var(--dk)' : 'var(--text)') : '#dc2626';
+        return `<button onclick="event.stopPropagation();pfToggleVariantPublish(${v.id},${on ? 1 : 0},${p.id})" title="${on ? 'Showing in mini-app shop — click to hide · 在小程序店面显示,点击隐藏' : 'Hidden from mini-app shop — click to show · 未在小程序显示,点击上架'}" aria-label="Toggle mini-app visibility" style="background:none;border:none;border-left:1px solid ${brd};cursor:pointer;color:${col};opacity:${baseOp};padding:6px 9px;font-size:12px;line-height:1;align-self:stretch" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=${baseOp}">${on ? '👁' : '🚫'}</button>`;
+      };
       const chip = (v, idx) => {
         const dnd = canReorder ? `draggable="true" data-vid="${v.id}" ondragstart="pfVarDragStart(event,${idx})" ondragover="pfVarDragOver(event,${idx})" ondragleave="pfVarDragLeave(event)" ondrop="pfVarDrop(event,${idx})" ondragend="pfVarDragEnd(event)"` : '';
         return v.isCurrent
@@ -11511,7 +11528,9 @@ function _renderSizesCardInner(ctx) {
               <span>${v.variant_label ? esc(v.variant_label) : '<span style="font-style:italic;font-weight:500">no label</span>'}</span>
               ${v.sku ? `<span style="opacity:.6;font-family:monospace;font-size:10px">${esc(v.sku)}</span>` : ''}
               <span style="opacity:.7;font-size:11px">¥${parseFloat(v.sell_price||0).toFixed(2)}</span>
+              ${hiddenBadge(v)}
             </span>
+            ${pubToggle(v)}
             <button onclick="pfQuickEditSize(${v.id},${p.id})" title="Edit this variant · 编辑此规格" aria-label="Edit this variant" style="background:none;border:none;border-left:1px solid rgba(0,0,0,.15);cursor:pointer;color:var(--dk);opacity:.55;padding:6px 9px;font-size:12px;line-height:1;border-radius:0 8px 8px 0;align-self:stretch" onmouseover="this.style.opacity=1;this.style.background='rgba(0,0,0,.08)'" onmouseout="this.style.opacity=.55;this.style.background='none'">✏️</button>
           </div>`
         : (() => {
@@ -11521,7 +11540,9 @@ function _renderSizesCardInner(ctx) {
               <span style="font-weight:700">${esc(v.variant_label || '—')}</span>
               ${v.sku ? `<span style="color:var(--muted);font-family:monospace;font-size:10px">${esc(v.sku)}</span>` : ''}
               <span style="color:var(--muted)">¥${parseFloat(v.sell_price||0).toFixed(2)}</span>
+              ${hiddenBadge(v)}
             </span>
+            ${pubToggle(v)}
             <button onclick="event.stopPropagation();pfQuickEditSize(${v.id},${p.id})" title="Edit this variant · 编辑此规格" aria-label="Edit this variant" style="background:none;border:none;border-left:1px solid var(--border);cursor:pointer;color:var(--text);opacity:.45;padding:6px 9px;font-size:12px;line-height:1;align-self:stretch" onmouseover="this.style.opacity=1;this.style.background='rgba(0,0,0,.05)'" onmouseout="this.style.opacity=.45;this.style.background='none'">✏️</button>
             <button onclick="event.stopPropagation();deleteVariant(${p.id},${v.id},'${esc(delName)}')" title="Delete this variant · 删除此规格" aria-label="Delete this variant" style="background:none;border:none;border-left:1px solid var(--border);cursor:pointer;color:#dc2626;opacity:.45;padding:6px 9px;font-size:13px;line-height:1;border-radius:0 8px 8px 0;align-self:stretch" onmouseover="this.style.opacity=1;this.style.background='rgba(220,38,38,.08)'" onmouseout="this.style.opacity=.45;this.style.background='none'">🗑</button>
           </div>`;
@@ -15205,6 +15226,27 @@ async function deleteProduct(id, name) {
   const d = await r.json();
   if (d.success) { toast('✅ Deleted 已删除','success'); _products = (_products || []).filter(p => Number(p.id) !== Number(id)); await renderProducts(); }
   else toast('Error · 错误: '+d.error,'error');
+}
+
+// Toggle one variant's mini-app shop visibility (is_published) straight from
+// its chip in the Sizes card — no need to open the variant. Reuses the same
+// bulk-update endpoint as the row flags, then re-renders the detail bento
+// (switchVariant) so the chip's 👁/🚫 + Hidden badge reflect the new state.
+async function pfToggleVariantPublish(variantId, currentlyPublished, displayedId) {
+  const next = currentlyPublished ? 0 : 1;
+  try {
+    const r = await fetch('/api/products/bulk-update', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [variantId], action: 'set_is_published', value: next }),
+    });
+    const d = await r.json();
+    if (!d.success) throw new Error(d.error || 'failed');
+    // Keep the in-memory list in sync so a later re-render is consistent.
+    const lp = (_products || []).find(p => Number(p.id) === Number(variantId));
+    if (lp) lp.is_published = next;
+    toast(next ? '🛍 Variant shown in shop · 已上架' : '🚫 Variant hidden from shop · 已隐藏', 'success');
+    await switchVariant(displayedId);
+  } catch (e) { toast('Error · 错误: ' + e.message, 'error'); }
 }
 
 // Delete a sibling size variant from the Sizes card of the product detail.

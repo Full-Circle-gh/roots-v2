@@ -220,7 +220,7 @@ router.get('/api/products/:id', requireAuth, requirePermission('products'), (req
   if (row.variant_group_id) {
     siblings = db.prepare(`
       SELECT id, name_en, name_cn, sku, sell_price, stock_qty,
-             variant_label, variant_sort, status, updated_at,
+             variant_label, variant_sort, status, is_published, updated_at,
              (image_data IS NOT NULL AND image_data != '') AS has_image
         FROM products
        WHERE variant_group_id = ? AND id != ? AND COALESCE(is_active, 1) = 1
