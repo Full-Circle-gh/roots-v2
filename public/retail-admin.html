@@ -10770,12 +10770,12 @@ function dashFeedClick(row) {
 }
 
 // Jump from an activity-feed event straight to its order, opened in the
-// global order drawer. We switch to the Orders tab first (so closing the
-// drawer leaves the operator in the right context) then openOrder() loads
-// the order by id into the floating drawer — no manual searching needed.
+// global order drawer. The main screen STAYS on the Dashboard tab — we do
+// NOT switch to Orders. openOrder() fetches the order by id independently of
+// the Orders list, so it surfaces in the floating drawer over the dashboard
+// with no tab change.
 function dashOpenOrderFromFeed(orderId) {
   closeDrawer('#db-activity-drawer');
-  dashJumpTab('orders');
   if (orderId != null) openOrder(orderId);
 }
 
