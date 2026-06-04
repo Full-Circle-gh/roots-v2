@@ -538,6 +538,153 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════════
+     SHARED COMPONENT LAYER (.fc-*) — promoted from the dashboard db-* pass
+     so every tab speaks one design language: mono-caps section markers,
+     lift-shadow tiles with a hover raise, headline tabular numbers, calm
+     deltas (down = clay, never alarm-red), inline magnitude bars, scrubbable
+     sparklines, and one calm-motion easing. Values are copied verbatim from
+     the dashboard so the look is identical; pages opt in by using these
+     classes instead of inventing per-tab prefixes.
+     ═══════════════════════════════════════════════════════════════════ */
+
+  /* Calm-motion tokens — the long, settling easing the dashboard uses for
+     expands/slide-ins. One var so every page animates with the same hand. */
+  :root { --ease-calm: cubic-bezier(.33,1,.68,1); }
+
+  /* ── Page head: title row + actions (lifted from .db-head) ───────────── */
+  .fc-pagehead {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: var(--s3); margin-bottom: var(--s4);
+  }
+  .fc-pagehead h2, .fc-pagehead h3 { margin: 0; }
+  .fc-pagehead-actions { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+
+  /* The signature section marker — Aged-Brass-neutral mono caps. Use on any
+     small "this is a section" label (was .db-tile-head h4 / .cu-tile-title). */
+  .fc-eyebrow {
+    font-family: var(--f-mono);
+    font-size: 10px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text-2);
+  }
+
+  /* ── Tile: the elevated card with a mono-caps head + hover raise ─────── */
+  .fc-tile {
+    position: relative; display: flex; flex-direction: column;
+    background: var(--bg-pane);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    overflow: hidden; min-height: 0;
+    box-shadow: 0 1px 2px rgba(18,22,26,.05), 0 8px 22px rgba(18,22,26,.07);
+    transition: box-shadow .35s var(--ease-calm), transform .35s var(--ease-calm);
+  }
+  .fc-tile:hover {
+    box-shadow: 0 2px 4px rgba(18,22,26,.06), 0 12px 28px rgba(18,22,26,.11);
+    transform: translateY(-1px);
+  }
+  .fc-tile-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; padding: 9px 14px; border-bottom: 1px solid var(--line-soft);
+    flex-shrink: 0;
+  }
+  .fc-tile-head h4 {
+    margin: 0; font-family: var(--f-mono);
+    font-size: 10px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text-2);
+  }
+  .fc-tile-ttl { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+  .fc-tile-ic { flex: none; width: 13px; height: 13px; color: var(--text-3); display: inline-flex; }
+  .fc-tile-ic svg { width: 13px; height: 13px; }
+  .fc-tile-body { flex: 1 1 auto; min-height: 0; padding: 12px 14px; overflow-y: auto; }
+  .fc-tile-num { font-size: 28px; font-weight: 600; letter-spacing: -.02em; color: var(--text-1); line-height: 1; font-variant-numeric: tabular-nums; }
+  .fc-tile-num.accent { color: var(--accent); }
+  .fc-tile-num.good   { color: var(--accent); }
+  .fc-tile-num.warn   { color: var(--warn); }
+  .fc-tile-sub { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+  .fc-tile-foot { font-size: 10px; color: var(--text-3); font-family: var(--f-mono); letter-spacing: .04em; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line-soft); }
+  /* Attention state — a left brass rail + a faint head wash (was .db-tile.alert). */
+  .fc-tile.alert { border-color: rgba(176,141,74,.42); }
+  .fc-tile.alert::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--warn); z-index: 1; }
+  .fc-tile.alert .fc-tile-head { background: rgba(176,141,74,.08); }
+
+  /* ── KPI strip: the summary numbers that head a data page ────────────── */
+  .fc-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--s3); margin-bottom: var(--s4); }
+  .fc-kpi {
+    position: relative; background: var(--bg-pane);
+    border: 1px solid var(--line); border-radius: var(--r-lg);
+    padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;
+    box-shadow: 0 1px 2px rgba(18,22,26,.05), 0 8px 22px rgba(18,22,26,.07);
+  }
+  .fc-kpi .lbl { font-family: var(--f-mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fc-kpi .val { font-size: 30px; font-weight: 500; letter-spacing: -.02em; color: var(--text-1); font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
+  .fc-kpi .sub { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fc-kpi-foot { display: flex; align-items: baseline; gap: 6px; min-height: 15px; min-width: 0; }
+  .fc-kpi-foot .sub { min-width: 0; }
+  .fc-kpi.accent::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+  .fc-kpi.accent .val { color: var(--accent); }
+
+  /* ── Delta: change vs the prior period. The calm rule — a down delta is
+     soft clay, never alarm-red, so the page never reads as an emergency. ── */
+  .fc-delta {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap;
+    font-variant-numeric: tabular-nums; font-family: var(--f-mono);
+    letter-spacing: .02em; cursor: help;
+  }
+  .fc-delta.is-up   { color: var(--accent); }
+  .fc-delta.is-down { color: #bf8a6e; }            /* soft clay — a calm "down" */
+  .fc-delta.is-flat { color: var(--text-3); opacity: .7; }
+
+  /* ── Magnitude-bar list: a chart without the chart. Each row gets a
+     left-anchored tint scaled to the tile's max via inline --mag (0–1). ── */
+  .fc-barlist { font-size: 12px; }
+  .fc-barrow { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px dotted var(--line-soft); }
+  .fc-barrow:last-child { border-bottom: 0; }
+  .fc-barrow .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fc-barrow .val  { color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; font-weight: 500; }
+  .fc-barrow.has-bar { position: relative; }
+  .fc-barrow.has-bar::before {
+    content: ""; position: absolute; left: -6px; top: 2px; bottom: 2px;
+    width: calc(var(--mag, 0) * (100% + 6px));
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+    border-radius: 0 3px 3px 0; z-index: 0; pointer-events: none;
+    transition: width .5s cubic-bezier(.22,.61,.36,1);
+  }
+  .fc-barrow.has-bar .name, .fc-barrow.has-bar .val { position: relative; z-index: 1; }
+  .fc-barrow.is-zero .name, .fc-barrow.is-zero .val { color: var(--text-3); opacity: .7; }
+  .fc-barrow.is-zero.has-bar::before { display: none; }
+
+  /* ── Dotted list rows (name + value), the plain sibling of the bar list ─ */
+  .fc-listrow { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px dotted var(--line-soft); font-size: 12px; }
+  .fc-listrow:last-child { border-bottom: 0; }
+  .fc-listrow .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fc-listrow .val  { color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; font-weight: 500; }
+  .fc-list-empty { font-size: 12px; color: var(--text-3); padding: 10px 0; text-align: center; }
+
+  /* ── Sparkline: small inline trend with a breathing "you-are-here" dot,
+     and an optional hover-scrub tip (lifted from .db-spark*). ──────────── */
+  .fc-spark-wrap { position: relative; margin-top: 8px; height: 24px; color: var(--accent); cursor: crosshair; }
+  .fc-spark-wrap.sm { height: 16px; margin-top: 6px; opacity: .85; }
+  .fc-spark { display: block; width: 100%; height: 100%; }
+  .fc-spark-dot { position: absolute; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--accent); pointer-events: none; }
+  .fc-spark-dot.is-breathing { box-shadow: 0 0 0 0 rgba(107,142,111,.45); animation: fcSparkBreathe 2.6s ease-out infinite; }
+  .fc-spark-dot.is-active { animation: none; transform: scale(1.5); transition: left .06s linear, top .06s linear; box-shadow: 0 0 0 3px rgba(107,142,111,.18); }
+  @keyframes fcSparkBreathe { 0% { box-shadow: 0 0 0 0 rgba(107,142,111,.45); } 70% { box-shadow: 0 0 0 6px rgba(107,142,111,0); } 100% { box-shadow: 0 0 0 0 rgba(107,142,111,0); } }
+  .fc-spark-tip { position: absolute; z-index: 60; transform: translate(-50%, -100%); margin-top: -4px; padding: 3px 8px; background: var(--bg-elev-2); color: var(--text-1); border: 1px solid var(--line); border-radius: 6px; font-size: 11px; font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .12s ease; box-shadow: 0 6px 18px rgba(0,0,0,.16); }
+  .fc-spark-tip.show { opacity: 1; }
+
+  /* ── Calm "new row" slide-in — fires once when a fresh row arrives ───── */
+  @keyframes fc-row-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  .fc-row-in { animation: fc-row-in 2s var(--ease-calm) 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fc-tile { transition: none; }
+    .fc-tile:hover { transform: none; }
+    .fc-spark-dot.is-breathing { animation: none; }
+    .fc-row-in { animation: none; }
+    .fc-barrow.has-bar::before { transition: none; }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
      DASHBOARD TAB — channel analytics overview
      ═══════════════════════════════════════════════════════════════════ */
   .db-head {
@@ -2431,9 +2578,12 @@
      ═══════════════════════════════════════════════════════════════════ */
   .table-wrap {
     background: var(--bg-pane);
-    border: 1px solid var(--line-soft);
+    border: 1px solid var(--line);
     border-radius: var(--r-lg);
     overflow: hidden;
+    /* Same two-layer lift as .fc-tile / .fc-kpi so tables read as elevated
+       surfaces too, not flat rectangles — one elevation across the backend. */
+    box-shadow: 0 1px 2px rgba(18,22,26,.05), 0 8px 22px rgba(18,22,26,.07);
   }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td {
@@ -4749,6 +4899,35 @@
   <section id="tab-orders">
     <h2>Retail orders · 零售订单</h2>
 
+    <!-- Today's pulse — KPI strip on the shared fc-* layer. Reuses the same
+         /dashboard?from=today&to=today call the dashboard hero makes (no extra
+         backend). Orders + Revenue carry intraday sparklines; deltas compare to
+         the trailing baseline (calm rule: a down delta is clay, never red). -->
+    <div class="fc-kpis" id="ord-kpis">
+      <div class="fc-kpi accent">
+        <div class="lbl">Orders today · 今日订单</div>
+        <div class="val" id="ord-kpi-orders">—</div>
+        <div class="fc-kpi-foot"><span class="fc-delta is-flat" id="ord-kpi-orders-d" onmouseenter="fcDeltaHover(event)" onmouseleave="fcDeltaLeave(event)">—</span></div>
+        <div class="fc-spark-wrap sm" id="ord-kpi-orders-spark" onmousemove="fcSparkMove(event)" onmouseleave="fcSparkLeave(event)"></div>
+      </div>
+      <div class="fc-kpi">
+        <div class="lbl">Revenue today · 今日营收</div>
+        <div class="val" id="ord-kpi-rev">—</div>
+        <div class="fc-kpi-foot"><span class="fc-delta is-flat" id="ord-kpi-rev-d" onmouseenter="fcDeltaHover(event)" onmouseleave="fcDeltaLeave(event)">—</span></div>
+        <div class="fc-spark-wrap sm" id="ord-kpi-rev-spark" onmousemove="fcSparkMove(event)" onmouseleave="fcSparkLeave(event)"></div>
+      </div>
+      <div class="fc-kpi">
+        <div class="lbl">Avg order value · 客单价</div>
+        <div class="val" id="ord-kpi-aov">—</div>
+        <div class="fc-kpi-foot"><span class="sub">per order today · 今日每单</span></div>
+      </div>
+      <div class="fc-kpi">
+        <div class="lbl">New customers · 新客</div>
+        <div class="val" id="ord-kpi-new">—</div>
+        <div class="fc-kpi-foot"><span class="fc-delta is-flat" id="ord-kpi-new-d" onmouseenter="fcDeltaHover(event)" onmouseleave="fcDeltaLeave(event)">—</span></div>
+      </div>
+    </div>
+
     <!-- Status chip strip — click to filter, auto-loads -->
     <div class="status-chips" id="orders-status-chips" style="margin-bottom: var(--s3)">
       <div class="status-chip st-all active"             data-status=""                 onclick="setOrderStatus(this)"><span class="dot"></span>All</div>
@@ -4781,7 +4960,7 @@
         <option value="">All stores · 全部门店</option>
       </select>
       <input type="text" id="orders-q" oninput="debouncedLoadOrders()" placeholder="Search order #, name, phone…" style="flex: 1; min-width: 220px">
-      <button class="btn" onclick="loadOrders()" title="Refresh now · 立即刷新">
+      <button class="btn" onclick="loadOrders(); ordLoadKpis(true)" title="Refresh now · 立即刷新">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
         Refresh
       </button>
@@ -10511,6 +10690,11 @@ function dashHeroInit() {
   DASH_HERO._wired = true;
   // Language toggle repaints the Today delta badges from the stashed data.
   if (window.onLangChange) onLangChange(dashHeroTodayRepaint);
+  // ...and re-renders the activity feed so baked-in product names follow the
+  // active language (the " · " labels auto-translate, the names don't).
+  if (window.onLangChange) onLangChange(() => {
+    if (DASH_HERO._lastEvents) dashFeedRender(DASH_HERO._lastEvents);
+  });
   // Hover-scrub the Today sparklines to read each hour of the day.
   ['#db-today-spark', '#db-today-ord-spark', '#db-today-new-spark'].forEach(sel => {
     const w = $(sel); if (!w) return;
@@ -10724,6 +10908,40 @@ function dashSparkLeave(e) {
   dashSparkTipEl(wrap).classList.remove('show');
 }
 
+// ── Shared KPI / chart helpers (fc*) ───────────────────────────────────────
+// The dashboard's number / sparkline / delta helpers, re-exported under a
+// design-system-neutral name so every tab's KPI strip (Orders, Invoices,
+// Customers, …) calls one shared API instead of reaching into dashboard
+// internals. Same proven code, neutral name — the .fc-* CSS styles their output
+// identically to the dashboard's db-* markup.
+const fcMoney       = dashMoney;
+const fcNum         = dashNum;
+const fcRenderSpark = dashRenderSpark;
+const fcSetDelta    = dashSetDelta;
+// These four are referenced from inline on*="" handlers in markup, so they must
+// be real function declarations (hoisted onto window). A top-level const is not
+// resolvable from an inline handler's scope chain.
+function fcSparkMove(e)  { return dashSparkMove(e); }
+function fcSparkLeave(e) { return dashSparkLeave(e); }
+function fcDeltaHover(e) { return dashDeltaHover(e); }
+function fcDeltaLeave(e) { return dashDeltaLeave(e); }
+// Magnitude-bar rows in the shared .fc-barrow markup (mirror of dashBarRows,
+// which emits the dashboard's db-tile-list-row markup).
+function fcBarRows(items, opt) {
+  const BAR_CAP = 0.85;
+  const curve = opt.curve === 'sqrt' ? (x => Math.sqrt(x)) : (x => x);
+  const vals = items.map(it => Math.max(0, Number(opt.value(it)) || 0));
+  const max = Math.max(1, ...vals);
+  return items.map((it, i) => {
+    const v = vals[i];
+    const mag = v <= 0 ? 0 : curve(Math.min(1, v / max)) * BAR_CAP;
+    const zero = v <= 0;
+    return `<div class="fc-barrow has-bar${zero ? ' is-zero' : ''}" style="--mag:${mag.toFixed(3)}">`
+      + `<span class="name">${escapeHtml(opt.name(it))}</span>`
+      + `<span class="val">${opt.display(it)}</span></div>`;
+  }).join('');
+}
+
 // Activity feed shows only the first DASH_FEED_PREVIEW events by default; the
 // operator can expand to the full list and collapse again. Preference persists.
 const DASH_FEED_PREVIEW = 5;
@@ -10830,6 +11048,10 @@ const FEED_SVG = {
 // Real text only — no fake demo strings (per project memory).
 function dashFeedMeta(e) {
   const p = e.payload || {};
+  // Product names carry both languages; show the one matching the active UI
+  // language (the " · " labels auto-translate, but baked-in names don't).
+  const pickName = (en, cn) => (window.cuLang && cuLang() === 'cn')
+    ? (cn || en || '') : (en || cn || '');
   switch (e.type) {
     case 'paid_order': {
       const badge = p.first_order ? ` <span class="db-feed-badge db-fb-first">${FEED_SVG.star}First · 首单</span>`
@@ -10849,9 +11071,9 @@ function dashFeedMeta(e) {
     case 'topup':
       return { icon: FEED_SVG.wallet, tone: 'ok', text: `<b>Top-up · 充值</b> ¥${Number(p.amount || 0).toLocaleString()} · ${escapeHtml(p.buyer || '')}` };
     case 'low_stock':
-      return { icon: FEED_SVG.alert, tone: 'bad', text: `<b>Low · 缺货</b> ${escapeHtml(p.name_en || p.name_cn || '')} (${p.stock} left · 剩 ${p.stock})` };
+      return { icon: FEED_SVG.alert, tone: 'bad', text: `<b>Low · 缺货</b> ${escapeHtml(pickName(p.name_en, p.name_cn))} (${p.stock} left · 剩 ${p.stock})` };
     case 'out_of_stock':
-      return { icon: FEED_SVG.alert, tone: 'bad', text: `<b>Out · 售罄</b> ${escapeHtml(p.name_en || p.name_cn || '')}` };
+      return { icon: FEED_SVG.alert, tone: 'bad', text: `<b>Out · 售罄</b> ${escapeHtml(pickName(p.name_en, p.name_cn))}` };
     case 'new_customer':
       return { icon: FEED_SVG.person, tone: 'muted', text: p.name ? `<b>New · 新客</b> ${escapeHtml(p.name)}` : `<b>New customer · 新客户</b>` };
     case 'feedback':
@@ -10887,7 +11109,7 @@ function dashFeedClick(row, ev) {
       break;
     case 'low_stock':
     case 'out_of_stock':
-      dashJumpTab('products');
+      dashOpenProductFromFeed(refId);
       break;
     case 'new_customer':
       dashJumpTab('customers');
@@ -10906,6 +11128,19 @@ function dashFeedClick(row, ev) {
 function dashOpenOrderFromFeed(orderId) {
   closeDrawer('#db-activity-drawer');
   if (orderId !== null && orderId !== undefined && orderId !== '') openOrder(orderId);
+}
+
+// Jump from a low-stock / out-of-stock activity event straight to that
+// product's edit page in the KITCHEN app — stock/master data lives there, not
+// in this Mini App Backend, and restocking is the next action. Reuses the same
+// `/?openProduct=ID` deep link the order-item links use (kitchen app navigates
+// to Products → viewProduct). Opens in a new tab so the dashboard stays put.
+function dashOpenProductFromFeed(productId) {
+  if (productId === null || productId === undefined || productId === '') return;
+  const id = Number(productId);
+  if (Number.isNaN(id) || id <= 0) return;
+  closeDrawer('#db-activity-drawer');
+  window.open('/?openProduct=' + encodeURIComponent(id), '_blank', 'noopener');
 }
 
 // Programmatic tab-switch — clicks the tab button so the global switcher
@@ -12040,6 +12275,53 @@ function ordTweakOutside(e) {
   if (!wrap) ordTweakClose();
 }
 
+// ── Orders KPI strip — today's pulse (shared fc-* layer) ────────────────────
+// Reuses /dashboard?from=today&to=today (the same call the dashboard hero
+// makes), so there's no new backend. Throttled so the orders poller can ping it
+// cheaply; force=true bypasses the throttle (tab open / manual Refresh).
+let _ORD_KPI_AT = 0;
+let _ORD_KPI_DATA = null;
+let _ORD_KPI_LANG_HOOKED = false;
+async function ordLoadKpis(force) {
+  if (!document.getElementById('ord-kpis')) return;
+  if (!force && Date.now() - _ORD_KPI_AT < 45000) return;
+  _ORD_KPI_AT = Date.now();
+  // Re-render the language-dependent bits (delta words, spark tip labels) on a
+  // language toggle, without refetching. Registered lazily so window.onLangChange
+  // (defined later in the i18n module) exists by the time we wire it.
+  if (!_ORD_KPI_LANG_HOOKED && window.onLangChange) { _ORD_KPI_LANG_HOOKED = true; onLangChange(ordRepaintKpiLabels); }
+  const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  try {
+    const j = await api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}`);
+    _ORD_KPI_DATA = j.data || {};
+    ordRenderKpis();
+  } catch (e) { /* silent — the table is the source of truth; KPIs are a bonus */ }
+}
+function ordRenderKpis() {
+  const data = _ORD_KPI_DATA; if (!data) return;
+  const k = data.kpis || {};
+  const orders = Number(k.orders || 0), revenue = Number(k.revenue || 0);
+  dashCountUp($('#ord-kpi-orders'), orders);
+  dashCountUp($('#ord-kpi-rev'), revenue, n => '¥' + Math.round(n).toLocaleString());
+  $('#ord-kpi-aov').textContent = orders ? '¥' + Math.round(revenue / orders).toLocaleString() : '—';
+  $('#ord-kpi-new').textContent = fcNum(k.new_customers || 0);
+  ordRepaintKpiLabels();   // deltas + sparklines (language-aware)
+}
+// Language-dependent half — delta badges (the "new" word) and sparkline tip
+// labels. Split out so a language toggle reflows wording without re-animating
+// the headline numbers.
+function ordRepaintKpiLabels() {
+  const data = _ORD_KPI_DATA; if (!data || !document.getElementById('ord-kpis')) return;
+  const k = data.kpis || {}, b = data.baseline || null;
+  fcSetDelta('#ord-kpi-orders-d', b && b.orders,        Number(k.orders || 0),        b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'));
+  fcSetDelta('#ord-kpi-rev-d',    b && b.revenue,       Number(k.revenue || 0),       b && b.days, v => '¥' + Math.round(v).toLocaleString());
+  fcSetDelta('#ord-kpi-new-d',    b && b.new_customers, Number(k.new_customers || 0), b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'));
+  const trend = data.trend || [];
+  const labels = trend.map(p => String(p.bucket || ''));
+  fcRenderSpark($('#ord-kpi-orders-spark'), trend.map(p => Number(p.orders || 0)),  labels, v => v + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), false);
+  fcRenderSpark($('#ord-kpi-rev-spark'),    trend.map(p => Number(p.revenue || 0)), labels, v => '¥' + Math.round(v).toLocaleString(), true);
+}
+
 async function loadOrders(opts = {}) {
   const silent = !!opts.silent;
 
@@ -12184,6 +12466,7 @@ function _ordersAutoTick() {
   const ae = document.activeElement;
   if (ae && ae !== document.body && ae.matches('input, select, textarea, [contenteditable="true"]')) return;
   loadOrders({ silent: true });
+  ordLoadKpis();   // throttled (45s) — keeps the today pulse live on the tab
 }
 
 function _paintOrdersLivePill() {
@@ -12231,6 +12514,7 @@ function toggleOrdersLive() {
   const ordersTabBtn = document.querySelector('.tabs [data-tab="orders"]');
   if (ordersTabBtn) ordersTabBtn.addEventListener('click', () => {
     setTimeout(_ordersAutoTick, 50);
+    ordLoadKpis(true);   // fresh today pulse on tab open
     _markOrdersSeenNow();
   });
 })();
@@ -19250,11 +19534,17 @@ function _paPagerHtml(total, pages, start, shown) {
     + `<option value="all"${PA_PAGE_SIZE === 'all' ? ' selected' : ''}>All · 全部</option>`;
   const btn = (label, page, dis) =>
     `<button class="btn btn-sm" type="button" ${dis ? 'disabled' : ''} onclick="paSetPage(${page})" style="font-family:var(--f-sans)">${label}</button>`;
-  return `<span class="muted" style="font-size:12px;font-family:var(--f-sans)">Showing <b>${from}–${to}</b> of <b>${total}</b> · 显示 ${from}–${to} / 共 ${total}</span>
+  // EN/CN are kept as separate, self-contained spans tagged with data-lang-block
+  // so the page's i18n CSS shows only the active language (never both glued
+  // together). The inline `<b>` tags would otherwise split "Showing …" across
+  // several text nodes and defeat the auto " · " splitter, leaking both halves.
+  const prev = `<span data-lang-block="en">‹ Prev</span><span data-lang-block="cn">‹ 上一页</span>`;
+  const next = `<span data-lang-block="en">Next ›</span><span data-lang-block="cn">下一页 ›</span>`;
+  return `<span class="muted" style="font-size:12px;font-family:var(--f-sans)"><span data-lang-block="en">Showing <b>${from}–${to}</b> of <b>${total}</b></span><span data-lang-block="cn">显示 <b>${from}–${to}</b> / 共 <b>${total}</b></span></span>
     <div style="display:flex;align-items:center;gap:8px">
       <select onchange="paSetPageSize(this.value)" title="Products per page · 每页产品数"
         style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;background:var(--bg-elev-1);color:var(--text-1);font-family:var(--f-sans)">${sizeOpts}</select>
-      ${PA_PAGE_SIZE === 'all' ? '' : `${btn('‹ Prev 上一页', PA_PAGE - 1, PA_PAGE <= 1)}<span style="font-size:12px;white-space:nowrap">${PA_PAGE} / ${pages}</span>${btn('Next 下一页 ›', PA_PAGE + 1, PA_PAGE >= pages)}`}
+      ${PA_PAGE_SIZE === 'all' ? '' : `${btn(prev, PA_PAGE - 1, PA_PAGE <= 1)}<span style="font-size:12px;white-space:nowrap">${PA_PAGE} / ${pages}</span>${btn(next, PA_PAGE + 1, PA_PAGE >= pages)}`}
     </div>`;
 }
 
