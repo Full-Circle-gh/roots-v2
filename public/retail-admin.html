@@ -593,12 +593,16 @@
      the brand's circle motif, so there's no separate always-on dot (which had
      collided with the tab-bar refresh + orders indicators). */
   .db-live-ring-wrap { position: relative; width: 92px; height: 92px; display: flex; align-items: center; justify-content: center; margin: 2px 0 4px; }
-  .db-live-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+  .db-live-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); transform-origin: center; animation: db-live-breath 6.5s ease-in-out infinite; }
   .db-live-ring .track { fill: none; stroke: var(--line); stroke-width: 2.5; }
   .db-live-ring .arc { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 119.38; stroke-dashoffset: 119.38; opacity: 0; transition: stroke-dashoffset .6s ease, opacity .45s ease; }
   .db-live-ring.live .arc { opacity: 1; stroke-dashoffset: 30; animation: db-ring-breathe 3.6s ease-in-out infinite; }
+  /* The ring itself carries a slow ambient breath even at idle — the live
+     monitor's "heartbeat" (the 0 + caption still state the literal truth). Once
+     viewers are present a brighter green arc breathes over it. */
+  @keyframes db-live-breath { 0%, 100% { transform: rotate(-90deg) scale(1); } 50% { transform: rotate(-90deg) scale(1.04); } }
   @keyframes db-ring-breathe { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
-  @media (prefers-reduced-motion: reduce) { .db-live-ring.live .arc { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .db-live-ring, .db-live-ring.live .arc { animation: none; } }
   .db-live-num { font-size: 38px; line-height: 1; font-weight: 600; letter-spacing: -.02em; color: var(--text-1); font-variant-numeric: tabular-nums; }
   .db-live-num.live-on { color: var(--accent); }
   .db-live-lbl { font-size: 11px; color: var(--text-3); margin-top: 2px; }
@@ -801,22 +805,17 @@
   /* Concentric-circle brand watermark in the hero corner — echoes the live
      ring + the "Full Circle" name. Purely decorative, sits behind content. */
   .db-bento #db-hero { position: relative; overflow: hidden; }
+  /* Quiet, static brand mark — the "breath" now lives on the LIVE ring around
+     the counter, where the motion is meaningful; this corner is just a faint
+     echo of that circle motif. */
   .db-bento #db-hero::after {
     content: ""; position: absolute; top: -28px; right: -28px; width: 150px; height: 150px;
-    pointer-events: none; z-index: 0; opacity: .45; transform-origin: center;
+    pointer-events: none; z-index: 0; opacity: .32;
     background:
       radial-gradient(circle, transparent 0 40px, color-mix(in srgb, var(--accent) 22%, transparent) 40px 41px, transparent 41px) center / 100% 100% no-repeat,
       radial-gradient(circle, transparent 0 55px, color-mix(in srgb, var(--accent) 13%, transparent) 55px 56px, transparent 56px) center / 100% 100% no-repeat,
       radial-gradient(circle, transparent 0 70px, color-mix(in srgb, var(--accent) 8%, transparent) 70px 71px, transparent 71px) center / 100% 100% no-repeat;
-    /* Slow ambient "breath" — the rings drift out + back over 11s, echoing the
-       LIVE ring's pulse. Long + low-amplitude so it reads as alive, not busy. */
-    animation: db-hero-breath 11s ease-in-out infinite;
   }
-  @keyframes db-hero-breath {
-    0%, 100% { transform: scale(1);    opacity: .38; }
-    50%      { transform: scale(1.06); opacity: .52; }
-  }
-  @media (prefers-reduced-motion: reduce) { .db-bento #db-hero::after { animation: none; } }
   .db-bento #db-hero > * { position: relative; z-index: 1; }
 
   /* Subtle paper grain in the dashboard gutters — light theme only, so the
