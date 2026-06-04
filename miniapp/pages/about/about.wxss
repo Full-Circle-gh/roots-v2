@@ -31,12 +31,6 @@
   color: var(--olive);
   text-transform: uppercase;
 }
-.kicker-cn {
-  font-family: var(--f-yuan);
-  font-size: calc(20rpx * var(--font-scale));
-  letter-spacing: 0.04em;
-  margin-left: 6rpx;
-}
 
 /* Manifesto */
 .manifesto {
@@ -93,6 +87,11 @@
   border: 3rpx solid var(--ink);
   position: relative;
 }
+.founder-photo-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 .founder-photo-empty {
   position: absolute;
   inset: 0;
@@ -121,6 +120,12 @@
   color: var(--forest);
   font-style: italic;
   margin-top: 16rpx;
+}
+.founder-quote.clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
 }
 .founder-link {
   display: inline-block;
@@ -188,14 +193,6 @@
 }
 .promise-item.dark   { color: #fff; }
 .promise-item.strike { text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, 0.5); }
-.promise-item-cn {
-  font-size: calc(20rpx * var(--font-scale));
-  color: rgba(0, 0, 0, 0.55);
-  padding-left: 16rpx;
-  text-decoration: none;
-  margin-top: 2rpx;
-}
-.promise-item.dark .promise-item-cn { color: rgba(255, 255, 255, 0.55); }
 
 /* Outro sign-off */
 .outro {

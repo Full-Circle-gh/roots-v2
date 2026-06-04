@@ -84,7 +84,10 @@ Page({
     c: DEFAULTS,                  // merged content (defaults ← server)
     manifestoSegments: [],        // [{ text, bold }] for the active language
     founderPhoto: '',             // resolved absolute URL or ''
+    storyExpanded: false,         // founder quote clamp/expand toggle
   },
+
+  toggleStory() { this.setData({ storyExpanded: !this.data.storyExpanded }); },
 
   onShow() {
     const app = getApp();

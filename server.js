@@ -195,6 +195,7 @@ app.use(require('./routes/feedback'));
 app.use('/api/retail', require('./middleware/public-tenant').publicTenantScope);
 app.use(require('./routes/retail'));
 app.use(require('./routes/retail-inventory'));
+app.use(require('./routes/retail-page-templates')); // product editor: imported custom templates
 
 // Login page
 app.get('/login', (req, res) => {

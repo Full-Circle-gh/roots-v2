@@ -7,8 +7,7 @@
   <!-- Manifesto pull-quote -->
   <view class="section section-manifesto">
     <view class="kicker f-toni">
-      <text>{{c.kicker_en}}</text>
-      <text wx:if="{{c.kicker_cn}}" class="kicker-cn"> · {{c.kicker_cn}}</text>
+      <text>{{lang === 'cn' ? (c.kicker_cn || c.kicker_en) : c.kicker_en}}</text>
     </view>
     <view class="manifesto f-aleo">
       <text wx:for="{{manifestoSegments}}" wx:key="index" class="{{item.bold ? 'bold' : ''}}">{{item.text}}</text>
@@ -29,8 +28,7 @@
   <!-- Founder -->
   <view class="section">
     <view class="kicker f-toni">
-      <text>{{c.founder_kicker_en}}</text>
-      <text wx:if="{{c.founder_kicker_cn}}" class="kicker-cn"> · {{c.founder_kicker_cn}}</text>
+      <text>{{lang === 'cn' ? (c.founder_kicker_cn || c.founder_kicker_en) : c.founder_kicker_en}}</text>
     </view>
     <view class="founder-row">
       <view class="founder-photo">
@@ -40,11 +38,10 @@
       <view class="founder-meta">
         <view class="founder-name f-bear">{{lang === 'cn' ? (c.founder_name_cn || c.founder_name_en) : (c.founder_name_en || c.founder_name_cn)}}</view>
         <view class="founder-title f-toni">
-          <text>{{c.founder_title_en}}</text>
-          <text wx:if="{{c.founder_title_cn}}" class="kicker-cn"> · {{c.founder_title_cn}}</text>
+          <text>{{lang === 'cn' ? (c.founder_title_cn || c.founder_title_en) : c.founder_title_en}}</text>
         </view>
-        <view class="founder-quote f-aleo">"{{lang === 'cn' ? (c.founder_quote_cn || c.founder_quote_en) : (c.founder_quote_en || c.founder_quote_cn)}}"</view>
-        <view class="founder-link f-toni">READ THE FULL STORY →</view>
+        <view class="founder-quote f-aleo {{storyExpanded ? '' : 'clamp'}}">"{{lang === 'cn' ? (c.founder_quote_cn || c.founder_quote_en) : (c.founder_quote_en || c.founder_quote_cn)}}"</view>
+        <view class="founder-link f-toni" bindtap="toggleStory">{{storyExpanded ? (lang === 'cn' ? '收起 ↑' : 'SHOW LESS ↑') : (lang === 'cn' ? '阅读完整故事 →' : 'READ THE FULL STORY →')}}</view>
       </view>
     </view>
   </view>
@@ -52,8 +49,7 @@
   <!-- What's IN / What's OUT -->
   <view class="section">
     <view class="kicker f-toni">
-      <text>{{c.promise_kicker_en}}</text>
-      <text wx:if="{{c.promise_kicker_cn}}" class="kicker-cn"> · {{c.promise_kicker_cn}}</text>
+      <text>{{lang === 'cn' ? (c.promise_kicker_cn || c.promise_kicker_en) : c.promise_kicker_en}}</text>
     </view>
     <view class="promise-title f-bear">
       What's <text class="hl">in</text>.
@@ -65,31 +61,29 @@
       <view class="promise-col promise-in">
         <view class="promise-head f-gothic">
           <view class="promise-tick">✓</view>
-          <text>IN · 是</text>
+          <text>{{lang === 'cn' ? '是' : 'IN'}}</text>
         </view>
         <view wx:for="{{c.in_items}}" wx:key="index" class="promise-item f-aleo">
-          · {{item.en}}
-          <view wx:if="{{item.cn}}" class="promise-item-cn f-yuan">{{item.cn}}</view>
+          · {{lang === 'cn' ? (item.cn || item.en) : item.en}}
         </view>
       </view>
 
       <view class="promise-col promise-out">
         <view class="promise-head light f-gothic">
           <view class="promise-tick light">✕</view>
-          <text>OUT · 否</text>
+          <text>{{lang === 'cn' ? '否' : 'OUT'}}</text>
         </view>
         <view wx:for="{{c.out_items}}" wx:key="index" class="promise-item dark strike f-aleo">
-          · {{item.en}}
-          <view wx:if="{{item.cn}}" class="promise-item-cn f-yuan">{{item.cn}}</view>
+          · {{lang === 'cn' ? (item.cn || item.en) : item.en}}
         </view>
       </view>
     </view>
   </view>
 
-  <!-- Outro sign-off — EN title always shown, CN below when present -->
+  <!-- Outro sign-off — show only the active language -->
   <view class="section outro">
-    <view wx:if="{{c.outro_en}}" class="outro-title f-bear">{{c.outro_en}}</view>
-    <view wx:if="{{c.outro_cn}}" class="outro-cn f-yuan">{{c.outro_cn}}</view>
+    <view wx:if="{{lang === 'cn'}}" class="outro-cn f-yuan">{{c.outro_cn || c.outro_en}}</view>
+    <view wx:else class="outro-title f-bear">{{c.outro_en}}</view>
     <view class="outro-cta f-gothic" bindtap="goShop">{{lang === 'cn' ? (c.cta_cn || c.cta_en) : (c.cta_en || c.cta_cn)}} →</view>
   </view>
 </view>

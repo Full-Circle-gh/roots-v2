@@ -61,7 +61,7 @@ function readDefaultZone() {
     is_active:             1,
     same_day_allowed:      c.same_day_allowed ? 1 : 0,
     same_day_surcharge:    0,
-    min_lead_days:         Number(c.min_lead_days ?? 3),
+    min_lead_days:         Number(c.min_lead_days ?? 1),
     max_lead_days:         Number(c.max_lead_days ?? 15),
     slot_start_hour:       Number(c.slot_start_hour ?? 0),
     slot_end_hour:         Number(c.slot_end_hour ?? 0),
