@@ -3158,8 +3158,8 @@
   /* Switching orders while the drawer is already open: cross-fade the whole
      mount — old order fades out, new one fades back in on the same zen ease
      as the drawer slide. JS toggles .od-swapping around the data swap. */
-  #order-detail-mount { transition: opacity 900ms cubic-bezier(.16, 1, .3, 1); }
-  #order-detail-mount.od-swapping { opacity: 0; transition: opacity 360ms cubic-bezier(.16, 1, .3, 1); }
+  #order-detail-mount { transition: opacity 990ms cubic-bezier(.16, 1, .3, 1); }
+  #order-detail-mount.od-swapping { opacity: 0; transition: opacity 396ms cubic-bezier(.16, 1, .3, 1); }
   .side-drawer .drawer-head {
     padding: 14px 18px;
     display: flex; align-items: center; justify-content: space-between;
@@ -13387,11 +13387,11 @@ async function openOrder(id) {
     openDrawer('#order-drawer');
   }
   try {
-    // When switching, wait for the fade-out (360ms) and the data together so
+    // When switching, wait for the fade-out (396ms) and the data together so
     // the new order lands into a fully-faded, hidden mount — a clean cross-fade
     // with no "Loading…" flash between the two orders.
     const settled = switching
-      ? await Promise.all([fetchP, new Promise(r => setTimeout(r, 360))])
+      ? await Promise.all([fetchP, new Promise(r => setTimeout(r, 396))])
       : [await fetchP];
     const o = settled[0][0].data;
     _OPEN_ORDER = o;
