@@ -19753,6 +19753,9 @@ function paOpenEdit(id) {
 // (element [0] = the main photo). _pdGalleryDirty = send `images` on save.
 let _pdGallery = [];
 let _pdGalleryDirty = false;
+// True when the shown photos are inherited from a sibling variant (this variant
+// has none of its own). Adding/removing a photo makes them this variant's own.
+let _pdGalleryInherited = false;
 let _pdDragFrom = null;
 // Map a product's free-text tags column to the one badge the dropdown shows.
 // Mirrors pickBadge() in the mini-app shop page so the editor reflects exactly
@@ -19823,13 +19826,13 @@ function pdOpen(id) {
   document.getElementById('pd-published').checked = p ? p.is_published === 1 : false;
   // Photo gallery — start empty, then (for an existing product) pull the
   // ordered list from the lightweight images endpoint. New products start blank.
-  _pdGallery = []; _pdGalleryDirty = false;
+  _pdGallery = []; _pdGalleryDirty = false; _pdGalleryInherited = false;
   pdRenderGallery(); pdGalleryWire();
   document.getElementById('pd-img-file').value = '';
   if (p) {
     fetch('/api/retail-admin/products/' + p.id + '/images', { credentials: 'same-origin' })
       .then(r => r.json())
-      .then(j => { if (j && j.success && Array.isArray(j.images)) { _pdGallery = j.images.slice(); pdRenderGallery(); } })
+      .then(j => { if (j && j.success && Array.isArray(j.images)) { _pdGallery = j.images.slice(); _pdGalleryInherited = !!j.inherited; pdRenderGallery(); } })
       .catch(() => {});
   }
   pdLoadCatTree().then(() => {
@@ -20174,7 +20177,10 @@ function pdRenderGallery() {
     wrap.innerHTML = '<div class="muted" style="font-size:12px;">No photos yet · 暂无图片</div>';
     return;
   }
-  wrap.innerHTML = _pdGallery.map((src, i) => `
+  const hint = _pdGalleryInherited
+    ? `<div class="muted" style="font-size:11px;margin-bottom:6px;flex-basis:100%">${cuT('Shared from another variant — add a photo here to give this variant its own.', '与其他规格共用图片 — 在此添加图片可为本规格单独设置。')}</div>`
+    : '';
+  wrap.innerHTML = hint + _pdGallery.map((src, i) => `
     <div class="pd-thumb" draggable="true" data-i="${i}">
       <div class="pd-thumb-img" style="background-image:url('${String(src).replace(/'/g, '%27')}')"></div>
       ${i === 0 ? '<span class="pd-thumb-main">Main · 主图</span>' : ''}
@@ -20190,14 +20196,14 @@ function pdAddPhotos(e) {
   if (!pending) { e.target.value = ''; return; }
   take.forEach(f => {
     const rd = new FileReader();
-    rd.onload = () => { _pdGallery.push(rd.result); _pdGalleryDirty = true; if (--pending === 0) pdRenderGallery(); };
+    rd.onload = () => { _pdGallery.push(rd.result); _pdGalleryDirty = true; _pdGalleryInherited = false; if (--pending === 0) pdRenderGallery(); };
     rd.readAsDataURL(f);
   });
   e.target.value = '';
 }
 function pdRemovePhoto(i) {
   if (i < 0 || i >= _pdGallery.length) return;
-  _pdGallery.splice(i, 1); _pdGalleryDirty = true; pdRenderGallery();
+  _pdGallery.splice(i, 1); _pdGalleryDirty = true; _pdGalleryInherited = false; pdRenderGallery();
 }
 // Delegated drag-reorder + remove. Wired once on the container.
 function pdGalleryWire() {
@@ -20229,7 +20235,7 @@ function pdGalleryWire() {
     if (Number.isFinite(to) && to !== _pdDragFrom) {
       const [moved] = _pdGallery.splice(_pdDragFrom, 1);
       _pdGallery.splice(to, 0, moved);
-      _pdGalleryDirty = true; pdRenderGallery();
+      _pdGalleryDirty = true; _pdGalleryInherited = false; pdRenderGallery();
     }
     _pdDragFrom = null;
   });
