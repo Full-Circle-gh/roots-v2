@@ -30,6 +30,17 @@ const STATUS_LABELS_CN = {
   cancelled:       '已取消',
   refunded:        '已退款',
 };
+// Partial / in-progress refund tags. A full refund flips status→'refunded'
+// (its own chip), so any refund_status seen alongside a non-refunded status
+// is a partial / pending refund and gets flagged separately.
+const REFUND_TAGS_EN = {
+  pending: 'Refund requested', reviewing: 'Refund in review',
+  approved: 'Refund processing', paying: 'Refund processing', paid: 'Partially refunded',
+};
+const REFUND_TAGS_CN = {
+  pending: '退款申请中', reviewing: '退款审核中',
+  approved: '退款处理中', paying: '退款处理中', paid: '已部分退款',
+};
 
 Page({
   data: {
@@ -106,9 +117,15 @@ Page({
       const list = await api.get('/api/retail/orders' + qs);
       const arr = Array.isArray(list) ? list : list?.data || [];
       const labels = this.data.lang === 'cn' ? STATUS_LABELS_CN : STATUS_LABELS_EN;
+      const refundTags = this.data.lang === 'cn' ? REFUND_TAGS_CN : REFUND_TAGS_EN;
       const orders = arr.map(o => ({
         ...o,
         status_label: labels[o.status] || o.status,
+        // Only flag refunds on orders that aren't already in a refunded/
+        // cancelled terminal state (those carry their own status chip).
+        refund_tag: (o.status !== 'refunded' && o.status !== 'cancelled')
+          ? (refundTags[o.refund_status] || '')
+          : '',
         is_pickup: o.fulfillment_type === 'pickup',
         pickup_label: this.data.lang === 'cn' ? '🏬 自提' : '🏬 Pickup',
         total_display: '¥' + Number(o.total || 0).toFixed(2),

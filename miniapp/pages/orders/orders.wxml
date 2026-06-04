@@ -31,6 +31,7 @@
         <view class="order-no">{{item.order_no}}</view>
         <view class="card-top-right">
           <view wx:if="{{item.is_pickup}}" class="pickup-tag f-toni">{{item.pickup_label}}</view>
+          <view wx:if="{{item.refund_tag}}" class="refund-tag f-toni">{{item.refund_tag}}</view>
           <view class="status-pill status-{{item.status}}">{{item.status_label}}</view>
         </view>
       </view>

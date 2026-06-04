@@ -4703,6 +4703,7 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
                     store_id, routing_reason, channel,
                     fulfillment_type, scheduled_for, delivery_slot_label,
                     tracking_carrier, tracking_number, tracking_status,
+                    refund_status, refund_amount_approved, refund_amount_paid,
                     placed_at, paid_at, dispatched_at, delivered_at
                FROM retail_orders WHERE customer_id = ?`;
   const params = [req.customer.id];

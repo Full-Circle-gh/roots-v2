@@ -275,30 +275,108 @@
   <view wx:if="{{dividerStyle !== 'none'}}" class="spacer-divider" style="border-color:{{dividerColor}};background:{{dividerStyle === 'line' ? dividerColor : 'transparent'}}"></view>
 </view>
 
-<!-- Order tracker — only renders when the customer has a live order -->
-<view wx:elif="{{type === 'order_tracker'}}" class="ot-wrap">
-  <view wx:if="{{orderTracker}}" class="ot-card corner-{{orderTrackerCorner}}" style="{{orderTracker.cardStyle}}" bindtap="onOrderTrackerTap">
+<!-- Order tracker — only renders when the customer has a live order. Three
+     layouts (classic / truck / banner) mirror the Mini App Editor; colour +
+     energy controls ride on the wrapper as CSS vars. -->
+<view wx:elif="{{type === 'order_tracker'}}" class="ot-wrap" style="{{orderTracker.vars}}">
+  <!-- A · Classic — ringed icon stepper -->
+  <view wx:if="{{orderTracker && orderTracker.style === 'classic'}}" class="ot-card corner-{{orderTrackerCorner}}" bindtap="onOrderTrackerTap">
     <view class="ot-head">
       <view class="ot-title">{{orderTracker.title}}</view>
-      <view class="ot-status {{orderTracker.isUnpaid ? 'unpaid' : ''}}" style="{{orderTracker.isUnpaid ? '' : 'background:' + orderTracker.accent}}">{{orderTracker.statusLabel}}</view>
+      <view class="ot-status {{orderTracker.isUnpaid ? 'unpaid' : ''}}">{{orderTracker.statusLabel}}</view>
+      <view wx:if="{{orderTracker.refundTag}}" class="ot-refund-tag">{{orderTracker.refundTag}}</view>
     </view>
     <view class="ot-body">
-      <image wx:if="{{orderTracker.thumb}}" src="{{orderTracker.thumb}}" mode="aspectFill" class="ot-thumb"/>
+      <view class="ot-thumbs">
+        <view wx:for="{{orderTracker.thumbs}}" wx:key="index" class="ot-th">
+          <image wx:if="{{item}}" src="{{item}}" mode="aspectFill" class="ot-th-img"/>
+        </view>
+      </view>
       <view class="ot-info">
         <view class="ot-no">{{orderTracker.orderNo}}</view>
         <view wx:if="{{orderTracker.countLabel}}" class="ot-sub">{{orderTracker.countLabel}}<text wx:if="{{orderTracker.total}}"> · {{orderTracker.total}}</text></view>
         <view wx:if="{{orderTracker.eta}}" class="ot-sub">{{orderTracker.eta}}</view>
       </view>
-      <view class="ot-cta" style="background:{{orderTracker.accent}}">{{orderTracker.ctaLabel}}</view>
+      <view class="ot-cta">{{orderTracker.ctaLabel}}</view>
     </view>
     <view wx:if="{{!orderTracker.isUnpaid}}" class="ot-track">
-      <view wx:for="{{orderTracker.steps}}" wx:key="label" class="ot-node {{item.filled ? 'filled' : 'upcoming'}} {{item.current ? 'current' : ''}}">
+      <view wx:for="{{orderTracker.steps}}" wx:key="label" class="ot-node {{item.filled ? 'filled' : 'upcoming'}} {{item.current ? 'current' : ''}}" style="--ot-candy:{{item.candy}}">
         <view wx:if="{{index > 0}}" class="ot-bar {{item.filled ? 'on' : ''}}"></view>
         <view class="ot-circle" style="{{item.filled ? 'background:' + item.candy : ''}}">
           <image class="ot-ic" src="{{item.icon}}" mode="aspectFit"/>
         </view>
         <view class="ot-node-label">{{item.label}}</view>
       </view>
+    </view>
+  </view>
+
+  <!-- B · Track & truck — status headline + rail with a riding truck -->
+  <view wx:elif="{{orderTracker && orderTracker.style === 'truck'}}" class="ot-card ot-truck corner-{{orderTrackerCorner}}" bindtap="onOrderTrackerTap">
+    <view class="ot-tk-top">
+      <view class="ot-tk-headtext">
+        <view class="ot-kicker">{{orderTracker.kicker}}</view>
+        <view class="ot-bighead">{{orderTracker.bighead}}</view>
+        <view wx:if="{{orderTracker.refundTag}}" class="ot-refund-tag">{{orderTracker.refundTag}}</view>
+        <view class="ot-tk-sub">{{orderTracker.countLabel}}<text wx:if="{{orderTracker.eta}}"> · </text><text wx:if="{{orderTracker.eta}}" class="b">{{orderTracker.eta}}</text></view>
+      </view>
+      <view class="ot-thumbs">
+        <view wx:for="{{orderTracker.thumbs}}" wx:key="index" class="ot-th">
+          <image wx:if="{{item}}" src="{{item}}" mode="aspectFill" class="ot-th-img"/>
+        </view>
+      </view>
+    </view>
+    <view class="ot-rail">
+      <view class="ot-rail-base"></view>
+      <view class="ot-rail-fill" style="width:{{orderTracker.pct}}"></view>
+      <block wx:for="{{orderTracker.dots}}" wx:key="left">
+        <view wx:if="{{item.show}}" class="ot-rail-dot" style="left:{{item.left}};background:{{item.color}}"></view>
+      </block>
+      <view class="ot-truck-marker" style="left:{{orderTracker.pct}}">
+        <image class="ot-mk-ic" src="{{orderTracker.markerIcon}}" mode="aspectFit"/>
+      </view>
+    </view>
+    <view class="ot-tk-labels">
+      <view wx:for="{{orderTracker.tkLabels}}" wx:key="label" class="ot-tl {{item.on ? 'on' : ''}} {{item.current ? 'current' : ''}}" style="text-align:{{item.align}}">
+        <view class="ot-tl-en">{{item.label}}</view>
+      </view>
+    </view>
+    <view class="ot-tk-cta">{{orderTracker.ctaArrow}}</view>
+  </view>
+
+  <!-- C · Status banner — accent header band + 4-segment bar + ticket button -->
+  <view wx:elif="{{orderTracker && orderTracker.style === 'banner'}}" class="ot-banner corner-{{orderTrackerCorner}}" bindtap="onOrderTrackerTap">
+    <view class="ot-bn-head">
+      <view class="ot-bn-marker">
+        <image class="ot-mk-ic" src="{{orderTracker.markerIcon}}" mode="aspectFit"/>
+      </view>
+      <view class="ot-bn-headtext">
+        <view class="ot-bn-kicker">{{orderTracker.kicker}}</view>
+        <view class="ot-bn-eta">{{orderTracker.bighead}}</view>
+        <view wx:if="{{orderTracker.refundTag}}" class="ot-refund-tag">{{orderTracker.refundTag}}</view>
+      </view>
+    </view>
+    <view class="ot-bn-body">
+      <view class="ot-bn-row">
+        <view class="ot-thumbs">
+          <view wx:for="{{orderTracker.thumbs}}" wx:key="index" class="ot-th">
+            <image wx:if="{{item}}" src="{{item}}" mode="aspectFill" class="ot-th-img"/>
+          </view>
+        </view>
+        <view class="ot-info">
+          <view wx:if="{{orderTracker.countLabel}}" class="ot-count">{{orderTracker.countLabel}}</view>
+          <view wx:if="{{orderTracker.orderNo}}" class="ot-eta">{{orderTracker.orderNo}}</view>
+        </view>
+      </view>
+      <view class="ot-segs">
+        <view wx:for="{{orderTracker.segs}}" wx:key="label" class="ot-seg {{item.on ? 'on' : ''}} {{item.done ? 'done' : ''}} {{item.current ? 'current' : ''}}">
+          <view class="ot-seg-bar"></view>
+          <view class="ot-seg-lbl">
+            <image class="ot-seg-ic" src="{{item.icon}}" mode="aspectFit"/>
+            <text>{{item.label}}</text>
+          </view>
+        </view>
+      </view>
+      <view class="ot-bn-cta">{{orderTracker.ctaArrow}}</view>
     </view>
   </view>
 </view>
@@ -407,7 +485,7 @@
     <!-- A · Classic — centred, cream tiles with ":" separators -->
     <block wx:if="{{flashDesign.view === 'classic'}}">
       <view class="fsd-head">
-        <view class="fsd-kicker">{{flashDesign.kickerEn}}<text wx:if="{{flashDesign.kickerEn && flashDesign.kickerCn}}" class="cn"> · {{flashDesign.kickerCn}}</text><text wx:if="{{!flashDesign.kickerEn}}" class="cn">{{flashDesign.kickerCn}}</text></view>
+        <view wx:if="{{flashDesign.kicker}}" class="fsd-kicker">{{flashDesign.kicker}}</view>
         <view wx:if="{{flashDesign.title}}" class="fsd-title">{{flashDesign.title}}</view>
       </view>
       <view class="fsd-ends">
@@ -428,7 +506,7 @@
     <!-- B · Editorial — left headline, horizontal cream ticker -->
     <block wx:elif="{{flashDesign.view === 'editorial'}}">
       <view class="fsd-head">
-        <view class="fsd-kicker">{{flashDesign.kickerEn}}<text wx:if="{{flashDesign.kickerEn && flashDesign.kickerCn}}" class="cn"> · {{flashDesign.kickerCn}}</text><text wx:if="{{!flashDesign.kickerEn}}" class="cn">{{flashDesign.kickerCn}}</text></view>
+        <view wx:if="{{flashDesign.kicker}}" class="fsd-kicker">{{flashDesign.kicker}}</view>
         <view wx:if="{{flashDesign.title}}" class="fsd-title">{{flashDesign.title}}</view>
         <view class="fsd-ticker {{flashDesign.pulse ? 'fs-pulse' : ''}}">
           <block wx:for="{{flashDesign.tiles}}" wx:key="lbl">
@@ -525,7 +603,7 @@
       <view class="riso-badge">
         <text class="riso-badge-star">★</text><text class="riso-badge-star">★</text><text class="riso-badge-star">★</text><text class="riso-badge-star">★</text><text class="riso-badge-star">★</text>
       </view>
-      <view class="riso-stamp">VERIFIED<text class="riso-stamp-cn">真实评价</text></view>
+      <view class="riso-stamp">{{lang === 'cn' ? '真实评价' : 'VERIFIED'}}</view>
       <view wx:if="{{reviewKicker}}" class="riso-kicker">{{reviewKicker}}</view>
       <view wx:if="{{reviews[0].quote}}" class="rv-quote rv-quote-left">{{reviews[0].quote}}</view>
       <view class="rv-person">

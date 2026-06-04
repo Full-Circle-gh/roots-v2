@@ -566,35 +566,78 @@ Component({
           out.orderTrackerCorner = b.corner_radius || 'subtle';
           if (o && o.id) {
             const cn = L === 'cn';
+            // track_style picks the layout (must mirror cms.html's editor):
+            //   classic — ringed icon stepper; truck — status headline + a
+            //   truck riding a rail; banner — accent header band + segments.
+            const style = ['classic', 'truck', 'banner'].includes(b.track_style) ? b.track_style : 'classic';
+            // Energy → heading scale (--ot-h), banner frame weight (--ot-bw)
+            // and radius (--ot-radius). px values from the editor ×2 for rpx.
+            const E = ({ refined: { h: 0.92, bw: 3, rad: 24 }, balanced: { h: 1, bw: 4, rad: 32 }, bold: { h: 1.12, bw: 5, rad: 40 } })[b.energy] || { h: 1, bw: 4, rad: 32 };
             const STATUS = cn
               ? { pending_payment: '待支付', paid: '已支付', preparing: '准备中', dispatched: '配送中' }
               : { pending_payment: 'Awaiting payment', paid: 'Paid', preparing: 'Preparing', dispatched: 'On the way' };
+            // Status headline (truck bighead / banner eta line).
+            const HEAD = cn
+              ? { pending_payment: '待支付', paid: '已下单', preparing: '打包中', dispatched: '配送中' }
+              : { pending_payment: 'Awaiting payment', paid: 'Order placed.', preparing: 'Packing up.', dispatched: 'On the way.' };
             // Steps filled per status: unpaid 0 → paid 1 → preparing 2 → on-the-way 3.
             const STEP = { pending_payment: 0, paid: 1, preparing: 2, dispatched: 3 };
             const filled = STEP[o.status] ?? 0;
+            // active = current milestone index (0..3); pct = rail fill.
+            const active = Math.max(0, filled - 1);
+            const POS = ['0%', '33.3%', '66.6%', '100%'];
+            const pct = POS[active];
             // Each node carries its own candy colour + outline glyph, reusing
             // the "My orders" bucket vocabulary (coin/box/truck/house). Colour
             // encodes PROGRESS, not category: only done/current nodes get the
             // candy fill — `filled` (i < step) drives that AND the green
             // connector bar leading into the node; `current` adds the pulse.
+            // stage_*_color overrides the candy default per stage (classic).
             const TRACK = [
-              { labelEn: 'Paid',      labelCn: '已支付', candy: '#F2CA6C', icon: '/assets/icons/tracker/paid.svg' },
-              { labelEn: 'Prep',      labelCn: '准备中', candy: '#CCD900', icon: '/assets/icons/tracker/prep.svg' },
-              { labelEn: 'On way',    labelCn: '配送中', candy: '#F4B8CB', icon: '/assets/icons/tracker/onway.svg' },
-              { labelEn: 'Delivered', labelCn: '已送达', candy: '#E96174', icon: '/assets/icons/tracker/delivered.svg' },
+              { labelEn: 'Paid',      labelCn: '已支付', candy: b.stage_paid_color  ? color(b.stage_paid_color)  : '#F2CA6C', icon: '/assets/icons/tracker/paid.svg' },
+              { labelEn: 'Prep',      labelCn: '准备中', candy: b.stage_prep_color  ? color(b.stage_prep_color)  : '#CCD900', icon: '/assets/icons/tracker/prep.svg' },
+              { labelEn: 'On way',    labelCn: '配送中', candy: b.stage_onway_color ? color(b.stage_onway_color) : '#F4B8CB', icon: '/assets/icons/tracker/onway.svg' },
+              { labelEn: 'Delivered', labelCn: '已送达', candy: b.stage_done_color  ? color(b.stage_done_color)  : '#E96174', icon: '/assets/icons/tracker/delivered.svg' },
             ];
             const preview = Array.isArray(o.items_preview) ? o.items_preview : [];
-            const thumb = preview.length ? (absUrl(preview[0].image_url) || preview[0].image_url || '') : '';
+            const thumbs = (preview.length ? preview.slice(0, 3) : [{}])
+              .map(p => absUrl(p.image_url) || p.image_url || '');
             const count = o.item_count || preview.length || 0;
             // ETA line — prefer the human delivery slot, else the scheduled date.
             let eta = o.delivery_slot_label || '';
             if (!eta && o.scheduled_for) eta = String(o.scheduled_for).slice(0, 16).replace('T', ' ');
+            // Colour controls — '' falls back to the design default. These ride
+            // on the wrapper as CSS vars so every layout inherits them.
+            const accent  = color(b.accent_color || 'forest-kale');
+            const cardBg  = b.card_bg_color ? color(b.card_bg_color) : '#fff';
+            const cardBorder = b.card_border_color === ''
+              ? 'none'
+              : `3rpx solid ${b.card_border_color ? color(b.card_border_color) : '#1a1a17'}`;
+            const marker  = b.marker_color ? color(b.marker_color) : '#F4B8CB';
+            const bright  = b.bright_color ? color(b.bright_color) : '#CCD900';
+            const rail    = b.rail_color   ? color(b.rail_color)   : '#D3D1C7';
+            const ctaText = b.cta_text_color ? color(b.cta_text_color) : '';
+            const statusLabel = STATUS[o.status] || o.status;
+            // Refund tag — the order is still in the active tracker (a full
+            // refund flips status→'refunded' and drops out entirely), so any
+            // refund_status seen here belongs to a PARTIAL or in-progress
+            // refund. Surface it so a refunded order never masquerades as a
+            // plain Paid order. rejected/withdrawn → no tag (order proceeds).
+            const REFUND_TAG = cn
+              ? { pending: '退款申请中', reviewing: '退款审核中', approved: '退款处理中', paying: '退款处理中', paid: '已部分退款' }
+              : { pending: 'Refund requested', reviewing: 'Refund in review', approved: 'Refund processing', paying: 'Refund processing', paid: 'Partially refunded' };
+            const refundTag = REFUND_TAG[o.refund_status] || '';
+            const ctaLabel = o.status === 'pending_payment'
+              ? (cn ? '去支付' : 'Pay now')
+              : (cn ? '查看订单' : 'View order');
             out.orderTracker = {
               id: o.id,
+              style,
               title: lang.pick(b.title_en, b.title_cn, L) || (cn ? '你的订单' : 'Your order'),
               orderNo: o.order_no || '',
-              statusLabel: STATUS[o.status] || o.status,
+              statusLabel,
               isUnpaid: o.status === 'pending_payment',
+              // Classic stepper nodes.
               steps: TRACK.map((s, i) => ({
                 label:   cn ? s.labelCn : s.labelEn,
                 icon:    s.icon,
@@ -602,25 +645,40 @@ Component({
                 filled:  i < filled,         // done OR current → candy fill
                 current: i === filled - 1,   // adds the pulsing ring
               })),
-              thumb,
+              // Truck rail dots (skip the one the truck sits on).
+              dots: POS.map((left, i) => ({ left, show: i !== active, color: i < filled ? bright : rail })),
+              // Truck milestone labels.
+              tkLabels: TRACK.map((s, i) => ({
+                label:   cn ? s.labelCn : s.labelEn,
+                on:      i <= active,
+                current: i === active,
+                align:   i === 0 ? 'left' : i === 3 ? 'right' : 'center',
+              })),
+              // Banner progress segments.
+              segs: TRACK.map((s, i) => ({
+                label:   cn ? s.labelCn : s.labelEn,
+                icon:    s.icon,
+                done:    i < active,
+                current: i === active,
+                on:      i <= active,
+              })),
+              pct,
+              markerIcon: TRACK[active].icon,
+              // Truck headline copy.
+              kicker:  style === 'banner' ? statusLabel : (cn ? '我的订单' : 'YOUR ORDER'),
+              bighead: style === 'banner' ? (eta || HEAD[o.status] || statusLabel) : (HEAD[o.status] || statusLabel),
+              thumbs,
               countLabel: count > 0 ? (cn ? `${count} 件商品` : `${count} item${count === 1 ? '' : 's'}`) : '',
+              refundTag,
               eta,
               total: Number(o.total) > 0 ? '¥' + Number(o.total).toFixed(2) : '',
-              ctaLabel: o.status === 'pending_payment'
-                ? (cn ? '去支付' : 'Pay now')
-                : (cn ? '查看订单' : 'View order'),
-              accent: color(b.accent_color || 'forest-kale'),
-              // Card surface + outline overrides. card_bg_color blank → WXSS
-              // white default; card_border_color undefined → WXSS ink default,
-              // '' (— none —) → no border.
-              cardStyle: (() => {
-                let s = '';
-                const cbg = b.card_bg_color ? color(b.card_bg_color) : '';
-                if (cbg) s += `background:${cbg};`;
-                if (b.card_border_color === '') s += 'border:none;';
-                else if (b.card_border_color) s += `border:3rpx solid ${color(b.card_border_color)};`;
-                return s;
-              })(),
+              ctaLabel,
+              ctaArrow: ctaLabel + ' →',
+              // CSS vars shared across all three layouts (mirror cms.html).
+              vars: `--ot-accent:${accent};--ot-card-bg:${cardBg};--ot-card-border:${cardBorder};`
+                + `--ot-marker:${marker};--ot-bright:${bright};--ot-rail:${rail};`
+                + `--ot-bw:${E.bw}rpx;--ot-radius:${E.rad}rpx;--ot-h:${E.h};`
+                + (ctaText ? `--ot-cta-text:${ctaText};` : ''),
             };
           }
           // No live order → the inner card is skipped, so suppress the block's
@@ -796,8 +854,7 @@ Component({
               corner: b.corner_radius || 'subtle',
               pulse: b.urgency === 'frantic',
               zigClip: fsdZigClip(),
-              kickerEn: b.kicker_en || '',
-              kickerCn: b.kicker_cn || '',
+              kicker: lang.pick(b.kicker_en, b.kicker_cn, L),
               title: lang.pick(b.title_en, b.title_cn, L),
               shop: lang.pick(b.cta_label_en, b.cta_label_cn, L),
               endsLabel: L === 'cn' ? '距结束' : 'ENDS IN',
@@ -808,9 +865,9 @@ Component({
                 { num: pad(s), lbl: cellLabels[3] },
               ],
               liveLbl: L === 'cn' ? '限时秒杀 · 进行中' : 'FLASH SALE · LIVE',
-              subLine: (L !== 'cn' && b.title_cn) ? b.title_cn : '',
+              subLine: '',
               offMain: L === 'cn' ? `最高省 ${maxOff}%` : `Up to ${maxOff}% off`,
-              offSub: L === 'cn' ? '限时秒杀' : `最高 ${maxOff}%`,
+              offSub: L === 'cn' ? '限时秒杀' : '',
               cards: products.map(p => {
                 const fp = Number(p.flash.price) || 0;
                 const rp = Number(p.price) || 0;
@@ -825,7 +882,7 @@ Component({
                   id: p.id,
                   image: absUrl(p.image_url) || p.image_data || '',
                   name: lang.pick(p.name_en, p.name_cn, L),
-                  sub: L === 'cn' ? (p.name_en || '') : (p.name_cn || ''),
+                  sub: '',
                   priceNow: '¥' + fp.toFixed(2),
                   priceWas: rp > fp ? '¥' + rp.toFixed(2) : '',
                   badge: off > 0 ? '−' + off + '%' : '',
@@ -1270,9 +1327,9 @@ Component({
             const g = out.greeting;
             g.firstName = firstName;
             g.greetWord = greeting;            // greeting without the name suffix
-            // Classic shows a small CN sub-line under the big greeting; default
-            // to the tone's CN phrase so it reads bilingual even in EN.
-            g.cnLine    = b['greet_' + tone + '_cn'] || b.greet_cn || greetMap.cn[tone];
+            // No secondary cross-language greeting line — each language stays
+            // single-language (no EN+CN mix).
+            g.cnLine    = '';
             const ink   = color(b.ink_color) || '#1a1a17';
             g.band     = color(b.band_color)   || mp.band;
             g.accentC  = color(b.accent_color) || mp.accent;
@@ -1418,7 +1475,7 @@ Component({
                 id: p.id,
                 image: absUrl(p.image_url) || p.image_data || '',
                 name:  lang.pick(p.name_en, p.name_cn, L),
-                cn:    p.name_cn || '',
+                cn:    '',
                 price: eff > 0 ? '¥' + eff.toFixed(2) : '',
               };
             });
@@ -1498,7 +1555,7 @@ Component({
             tallyPriceSize: Math.round(52 * HS) + 'rpx',
             stickerPriceSize: Math.round(56 * HS) + 'rpx',
             // Static labels.
-            stickerLabel:     'BUNDLE & SAVE · 搭配省',
+            stickerLabel:     L === 'cn' ? '搭配省' : 'BUNDLE & SAVE',
             tapText:          L === 'cn' ? '一键直达购物车' : 'Tap once — straight to cart',
             itemsTotalLabel:  L === 'cn' ? '单买' : 'Items total',
             bundlePriceLabel: L === 'cn' ? '套装价' : 'Bundle price',

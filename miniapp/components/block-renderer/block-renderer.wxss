@@ -806,10 +806,12 @@
 }
 
 /* ── Order tracker ───────────────────────────────────────────────────── */
+/* Colour + energy controls ride on .ot-wrap as --ot-* CSS vars so every
+   layout (classic / truck / banner) inherits them. */
 .ot-wrap { padding: 0 44rpx; }
 .ot-card {
-  background: #fff;
-  border: 3rpx solid var(--ink, #1a1a17);
+  background: var(--ot-card-bg, #fff);
+  border: var(--ot-card-border, 3rpx solid var(--ink, #1a1a17));
   border-radius: 12rpx;
   padding: 28rpx 28rpx 24rpx;
 }
@@ -826,25 +828,49 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--oat, #F2E7DF);
-  background: var(--forest, #365329);
+  color: var(--ot-cta-text, var(--oat, #F2E7DF));
+  background: var(--ot-accent, var(--forest, #365329));
   padding: 8rpx 22rpx;
   border-radius: 999rpx;
   white-space: nowrap;
 }
 .ot-status.unpaid { background: #E96174; color: #fff; }
-.ot-body { display: flex; align-items: center; gap: 20rpx; margin-top: 22rpx; }
-.ot-thumb {
-  flex: 0 0 96rpx; width: 96rpx; height: 96rpx;
-  border-radius: 14rpx; background: #eee; overflow: hidden;
+/* Refund tag — flags a partial / in-progress refund so a refunded order
+   never reads as a plain Paid order. Sits inline in classic's head and
+   stacked under the headline in truck/banner. */
+.ot-refund-tag {
+  align-self: flex-start;
+  margin-top: 8rpx;
+  font-family: var(--f-toni);
+  font-size: calc(18rpx * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  background: #E96174;
+  padding: 5rpx 16rpx;
+  border-radius: 999rpx;
+  white-space: nowrap;
 }
+.ot-head .ot-refund-tag { margin-top: 0; }
+.ot-body { display: flex; align-items: center; gap: 20rpx; margin-top: 22rpx; }
+/* Stacked product thumbnails (shared across all three layouts). */
+.ot-thumbs { display: flex; flex: none; }
+.ot-th {
+  width: 88rpx; height: 88rpx; border-radius: 18rpx;
+  background: #e3ddcf; border: 4rpx solid var(--ot-card-bg, #fff);
+  margin-left: -24rpx; box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.15);
+  overflow: hidden; position: relative;
+}
+.ot-th:first-child { margin-left: 0; }
+.ot-th-img { width: 100%; height: 100%; }
 .ot-info { flex: 1; min-width: 0; }
-.ot-no {
+.ot-no, .ot-count {
   font-family: var(--f-gothic);
   font-size: calc(26rpx * var(--font-scale));
   font-weight: 600;
 }
-.ot-sub {
+.ot-sub, .ot-eta {
   font-family: var(--f-aleo);
   font-size: calc(22rpx * var(--font-scale));
   color: rgba(0, 0, 0, 0.55);
@@ -852,7 +878,8 @@
 }
 .ot-cta {
   flex: 0 0 auto;
-  color: #fff;
+  color: var(--ot-cta-text, #fff);
+  background: var(--ot-accent, var(--forest, #365329));
   font-family: var(--f-gothic);
   font-size: calc(24rpx * var(--font-scale));
   font-weight: 700;
@@ -860,11 +887,11 @@
   border-radius: 999rpx;
   white-space: nowrap;
 }
-/* Icon-node tracker. Colour encodes progress: done/current nodes get a
+/* A · Icon-node tracker. Colour encodes progress: done/current nodes get a
    candy fill (set inline from step.candy) + charcoal ring + charcoal glyph;
    upcoming nodes stay grey. The connector bar leading into a filled node
-   turns brand-green, so the fill runs from the first node up to the current
-   one. The current node also gets a pulsing green ring. */
+   turns the accent colour, so the fill runs from the first node up to the
+   current one. The current node also gets a pulsing accent ring. */
 .ot-track {
   display: flex; justify-content: space-between;
   margin-top: 26rpx; padding-top: 26rpx;
@@ -876,23 +903,23 @@
 }
 .ot-bar {
   position: absolute; top: 43rpx; left: -50%; width: 100%; height: 6rpx;
-  background: #D3D1C7; border-radius: 999rpx; z-index: 0;
+  background: var(--ot-rail, #D3D1C7); border-radius: 999rpx; z-index: 0;
 }
-.ot-bar.on { background: var(--forest, #365329); }
+.ot-bar.on { background: var(--ot-accent, var(--forest, #365329)); }
 .ot-circle {
   position: relative; z-index: 1;
   width: 92rpx; height: 92rpx; border-radius: 999rpx;
-  background: #D3D1C7; border: 2rpx solid #9A988E;
+  background: var(--ot-rail, #D3D1C7); border: 2rpx solid #9A988E;
   display: flex; align-items: center; justify-content: center;
 }
 .ot-node.filled .ot-circle { border-color: var(--ink, #1a1a17); }
 .ot-ic { width: 46rpx; height: 46rpx; opacity: 0.38; }
 .ot-node.filled .ot-ic { opacity: 1; }
-/* Pulsing tea-green ring on the current node only. */
+/* Pulsing accent ring on the current node only. */
 .ot-node.current .ot-circle::after {
   content: ''; position: absolute;
   top: -10rpx; left: -10rpx; right: -10rpx; bottom: -10rpx;
-  border-radius: 999rpx; border: 4rpx solid var(--forest, #365329);
+  border-radius: 999rpx; border: 4rpx solid var(--ot-accent, var(--forest, #365329));
   animation: ot-pulse 1.6s ease-out infinite;
 }
 @keyframes ot-pulse {
@@ -907,6 +934,118 @@
   color: #9A988E;
 }
 .ot-node.filled .ot-node-label { color: var(--ink, #1a1a17); }
+
+/* B · Track & truck — status headline + rounded rail with a truck riding the
+   current milestone. */
+.ot-truck .ot-tk-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24rpx; }
+.ot-tk-headtext { flex: 1; min-width: 0; }
+.ot-kicker {
+  font-family: var(--f-toni);
+  font-size: calc(18rpx * var(--font-scale));
+  font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
+  color: #6A6E2D;
+}
+.ot-bighead {
+  font-family: var(--f-bear);
+  font-size: calc(44rpx * var(--ot-h, 1) * var(--font-scale));
+  font-weight: 600; line-height: 1; margin-top: 10rpx;
+  color: var(--ink, #1a1a17);
+}
+.ot-tk-sub {
+  font-family: var(--f-aleo);
+  font-size: calc(24rpx * var(--font-scale));
+  color: #6A6E2D; margin-top: 8rpx;
+}
+.ot-tk-sub .b { color: var(--ink, #1a1a17); font-weight: 700; }
+.ot-rail { position: relative; height: 84rpx; margin: 44rpx 8rpx 8rpx; }
+.ot-rail-base {
+  position: absolute; top: 50%; left: 0; right: 0; height: 16rpx;
+  transform: translateY(-50%); border-radius: 18rpx;
+  background: var(--ot-rail, #D3D1C7);
+}
+.ot-rail-fill {
+  position: absolute; top: 50%; left: 0; height: 16rpx;
+  transform: translateY(-50%); border-radius: 18rpx;
+  background: var(--ot-accent, var(--forest, #365329));
+}
+.ot-rail-dot {
+  position: absolute; top: 50%; width: 28rpx; height: 28rpx; border-radius: 999rpx;
+  transform: translate(-50%, -50%); border: 4rpx solid var(--ot-card-bg, #fff);
+}
+.ot-truck-marker {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  width: 80rpx; height: 80rpx; border-radius: 999rpx;
+  background: var(--ot-marker, #F4B8CB); border: 4rpx solid var(--ink, #1a1a17);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 8rpx var(--ot-card-bg, #fff); z-index: 2;
+}
+.ot-mk-ic { width: 44rpx; height: 44rpx; }
+.ot-tk-labels { display: flex; justify-content: space-between; margin-top: 20rpx; }
+.ot-tl { flex: 1; }
+.ot-tl-en {
+  font-family: var(--f-gothic);
+  font-size: calc(22rpx * var(--font-scale));
+  font-weight: 700; letter-spacing: 0.05em; color: #9A988E;
+}
+.ot-tl.on .ot-tl-en { color: var(--ink, #1a1a17); }
+.ot-tl.current .ot-tl-en { color: var(--ot-accent, var(--forest, #365329)); }
+.ot-tk-cta {
+  margin-top: 32rpx; text-align: center; border-radius: 24rpx; padding: 24rpx 0;
+  font-family: var(--f-gothic); font-size: calc(28rpx * var(--font-scale));
+  font-weight: 700; letter-spacing: 0.06em;
+  color: var(--ot-cta-text, #fff); background: var(--ot-accent, var(--forest, #365329));
+}
+
+/* C · Status banner — accent header band + chunky 4-segment progress + a
+   raised ticket button. */
+.ot-banner {
+  border-radius: var(--ot-radius, 32rpx); overflow: hidden;
+  border: var(--ot-bw, 4rpx) solid var(--ink, #1a1a17);
+}
+.ot-bn-head {
+  display: flex; align-items: center; gap: 22rpx; padding: 26rpx 30rpx;
+  background: var(--ot-accent, var(--forest, #365329)); color: var(--ot-cta-text, #fff);
+}
+.ot-bn-marker {
+  width: 84rpx; height: 84rpx; border-radius: 999rpx; flex: none;
+  background: var(--ot-marker, #F4B8CB);
+  display: flex; align-items: center; justify-content: center;
+}
+.ot-bn-headtext { flex: 1; min-width: 0; }
+.ot-bn-kicker {
+  font-family: var(--f-toni);
+  font-size: calc(18rpx * var(--font-scale));
+  font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--ot-bright, #CCD900);
+}
+.ot-bn-eta {
+  font-family: var(--f-bear);
+  font-size: calc(38rpx * var(--ot-h, 1) * var(--font-scale));
+  font-weight: 600; line-height: 1; margin-top: 6rpx;
+}
+.ot-bn-body { background: var(--ot-card-bg, #FFFCF7); padding: 26rpx 30rpx 30rpx; }
+.ot-bn-row { display: flex; align-items: center; gap: 22rpx; }
+.ot-segs { display: flex; gap: 10rpx; margin-top: 30rpx; }
+.ot-seg { flex: 1; text-align: center; }
+.ot-seg-bar { height: 14rpx; border-radius: 18rpx; background: var(--ot-rail, #D3D1C7); }
+.ot-seg.done .ot-seg-bar { background: var(--ot-bright, #CCD900); }
+.ot-seg.current .ot-seg-bar { background: var(--ot-marker, #F4B8CB); border: 3rpx solid var(--ink, #1a1a17); }
+.ot-seg-lbl { display: flex; align-items: center; justify-content: center; gap: 8rpx; margin-top: 14rpx; }
+.ot-seg-ic { width: 28rpx; height: 28rpx; opacity: 0.38; }
+.ot-seg.on .ot-seg-ic { opacity: 1; }
+.ot-seg-lbl text {
+  font-family: var(--f-gothic);
+  font-size: calc(20rpx * var(--font-scale));
+  font-weight: 700; letter-spacing: 0.03em; color: #9A988E;
+}
+.ot-seg.on .ot-seg-lbl text { color: var(--ink, #1a1a17); }
+.ot-bn-cta {
+  margin-top: 30rpx; text-align: center; border-radius: 24rpx; padding: 22rpx 0;
+  font-family: var(--f-gothic); font-size: calc(28rpx * var(--font-scale));
+  font-weight: 700; letter-spacing: 0.06em;
+  color: var(--ink, #1a1a17); background: var(--ot-bright, #CCD900);
+  border: 3rpx solid var(--ink, #1a1a17); box-shadow: 0 6rpx 0 var(--ink, #1a1a17);
+}
 
 /* ── Countdown timer (flash-sale / 秒杀) ─────────────────────────────── */
 .countdown {
@@ -3691,6 +3830,7 @@
 .recipe-blk.corner-sharp .recipe-img,
 .recipe-blk.corner-sharp,
 .ot-card.corner-sharp,
+.ot-banner.corner-sharp,
 .countdown.corner-sharp { border-radius: 0 !important; }
 .featured.corner-bold .card,
 .grid-block.corner-bold .card,
@@ -3699,6 +3839,7 @@
 .recipe-blk.corner-bold .recipe-img,
 .recipe-blk.corner-bold,
 .ot-card.corner-bold,
+.ot-banner.corner-bold,
 .countdown.corner-bold { border-radius: 28rpx !important; }
 /* Self-framed blocks (poll, referral, store, coupon, greeting, WeCom) don't
    carry the corner class on their own element, so reach them via the
