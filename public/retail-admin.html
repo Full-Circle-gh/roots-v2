@@ -6018,6 +6018,27 @@
       店面的两级分类结构：主分类（左栏）与子分类（区块标题）。可中英文重命名、增删、排序。<b>重命名</b>会自动迁移该分类下的所有产品。店面仅显示有上架产品的分类。
     </p>
 
+    <!-- Structure at a glance — shared fc-* summary, computed in-browser from the
+         live (possibly unsaved) catModel. The Empty tile flips to .alert because
+         the shop hides any category with no published products under it. -->
+    <div class="fc-kpis" id="cat-kpis">
+      <div class="fc-kpi accent">
+        <div class="lbl">Top categories · 主分类</div>
+        <div class="val" id="cat-kpi-top">—</div>
+        <div class="sub">left-rail sections · 左栏板块</div>
+      </div>
+      <div class="fc-kpi">
+        <div class="lbl">Subcategories · 子分类</div>
+        <div class="val" id="cat-kpi-sub">—</div>
+        <div class="sub">section headings · 区块标题</div>
+      </div>
+      <div class="fc-kpi" id="cat-kpi-empty-tile">
+        <div class="lbl">Empty · 空分类</div>
+        <div class="val" id="cat-kpi-empty">—</div>
+        <div class="sub" id="cat-kpi-empty-sub">&nbsp;</div>
+      </div>
+    </div>
+
     <div class="card cat-bar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:sticky;top:8px;z-index:5;">
       <button class="btn btn-sm" type="button" onclick="catAddTop()">＋ Add top category · 新增主分类</button>
       <span id="cat-dirty" class="muted" style="font-size:12px;"></span>
@@ -6759,6 +6780,32 @@
       </div>
       <div style="margin-top: 10px; font-size: 11px; color: var(--text-4);">
         Hover the <span class="help-i" data-tip="Each column header has a ? icon — hover it to see what that field does. · 每个列标题旁的 ? 图标:鼠标悬停查看字段说明。">?</span> on any column header or drawer field for a plain-language explanation. · 鼠标悬停 ? 图标查看字段说明。
+      </div>
+    </div>
+
+    <!-- Coverage at a glance — shared fc-* KPI strip, computed in-browser from the
+         already-loaded zone list (no extra fetch). The Disabled tile flips to
+         .alert because a turned-off zone silently rejects every address there. -->
+    <div class="fc-kpis" id="dz-kpis">
+      <div class="fc-kpi accent">
+        <div class="lbl">Active zones · 启用配送区</div>
+        <div class="val" id="dz-kpi-active">—</div>
+        <div class="sub" id="dz-kpi-active-sub">&nbsp;</div>
+      </div>
+      <div class="fc-kpi">
+        <div class="lbl">Provinces · 覆盖省份</div>
+        <div class="val" id="dz-kpi-prov">—</div>
+        <div class="sub">with active areas · 有启用区域</div>
+      </div>
+      <div class="fc-kpi">
+        <div class="lbl">Same-day · 同日达</div>
+        <div class="val" id="dz-kpi-sameday">—</div>
+        <div class="sub">GZ districts · 广州区</div>
+      </div>
+      <div class="fc-kpi" id="dz-kpi-off-tile">
+        <div class="lbl">Disabled · 已停用</div>
+        <div class="val" id="dz-kpi-off">—</div>
+        <div class="sub" id="dz-kpi-off-sub">&nbsp;</div>
       </div>
     </div>
 
@@ -9863,8 +9910,28 @@ function catRemoveSub(ti, si) {
   catModel[ti].subs.splice(si, 1); catRender(); catUpdateDirty();
 }
 
+// Structure summary — computed in-browser from the live catModel (no fetch), so
+// it tracks unsaved adds/removes as the operator edits. Empty = top categories
+// with zero subs (a structural gap, since the shop hides empty categories).
+let _CAT_KPI_LANG_HOOKED = false;
+function catRenderKpis() {
+  if (!document.getElementById('cat-kpis')) return;
+  if (!_CAT_KPI_LANG_HOOKED && window.onLangChange) { _CAT_KPI_LANG_HOOKED = true; onLangChange(catRenderKpis); }
+  const tops = Array.isArray(catModel) ? catModel : [];
+  let subTotal = 0, empty = 0;
+  for (const t of tops) { const n = (t.subs || []).length; subTotal += n; if (!n) empty++; }
+  const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = fcNum(n); };
+  set('cat-kpi-top', tops.length);
+  set('cat-kpi-sub', subTotal);
+  set('cat-kpi-empty', empty);
+  const tile = document.getElementById('cat-kpi-empty-tile'); if (tile) tile.classList.toggle('alert', empty > 0);
+  const sub = document.getElementById('cat-kpi-empty-sub');
+  if (sub) sub.textContent = empty > 0 ? cuT('no subcategories yet', '尚无子分类') : cuT('all populated', '均有子分类');
+}
+
 function catRender() {
   const host = $('#cat-editor'); if (!host) return;
+  catRenderKpis();
   if (!catModel.length) {
     host.innerHTML = `<div class="card" style="text-align:center;color:var(--muted);padding:28px;">No categories yet · 暂无分类<br><br><button class="btn btn-sm" type="button" onclick="catAddTop()">＋ Add top category · 新增主分类</button></div>`;
     return;
@@ -16217,6 +16284,7 @@ async function loadDeliveryZones() {
   const r = await api('/api/retail-admin/delivery-zones');
   _zones = r?.data || [];
   renderZoneTable();
+  dzRenderKpis(true);
 }
 
 async function saveHolidayMode() {
@@ -16342,6 +16410,33 @@ function groupedZoneBodyHtml(rows, colspan, rowFn) {
   return groupZonesByProvince(rows)
     .map(g => zoneGroupHeaderHtml(g, colspan) + g.rows.map(rowFn).join(''))
     .join('');
+}
+
+// Coverage KPIs — computed in-browser from the in-memory _zones list (no extra
+// fetch), mirroring the Products strip. animate=true (fresh load) rolls the
+// count-up; plain set on search / sub-tab / toggle re-renders so the numbers
+// don't re-animate on every keystroke.
+let _DZ_KPI_LANG_HOOKED = false;
+function dzRenderKpis(animate) {
+  if (!document.getElementById('dz-kpis')) return;
+  if (!_DZ_KPI_LANG_HOOKED && window.onLangChange) { _DZ_KPI_LANG_HOOKED = true; onLangChange(function () { dzRenderKpis(false); }); }
+  const rows = Array.isArray(_zones) ? _zones : [];
+  const total = rows.length;
+  const active = rows.filter(z => z.is_active);
+  const off = total - active.length;
+  const provs = new Set(active.map(z => z.province_cn || z.province_en || '').filter(Boolean));
+  const sameday = active.filter(z => z.zone_type === 'gz_district' && (z.same_day_allowed || Number(z.same_day_surcharge) > 0)).length;
+  const set = (id, n) => { const el = document.getElementById(id); if (!el) return; if (animate) dashCountUp(el, n); else el.textContent = fcNum(n); };
+  set('dz-kpi-active', active.length);
+  set('dz-kpi-prov', provs.size);
+  set('dz-kpi-sameday', sameday);
+  set('dz-kpi-off', off);
+  const aSub = document.getElementById('dz-kpi-active-sub');
+  if (aSub) aSub.textContent = cuT('of ' + total + ' total', '共 ' + total + ' 个');
+  const oSub = document.getElementById('dz-kpi-off-sub');
+  if (oSub) oSub.textContent = off > 0 ? cuT("won't match addresses", '地址将无法匹配') : cuT('all live', '全部启用');
+  const oTile = document.getElementById('dz-kpi-off-tile');
+  if (oTile) oTile.classList.toggle('alert', off > 0);
 }
 
 function renderZoneTable() {
@@ -16886,6 +16981,10 @@ async function updateZone(id, field, val) {
   if (val === '' && ['same_day_surcharge','min_lead_days','slot_start_hour','slot_end_hour','slot_duration_minutes'].includes(field)) val = 0;
   try {
     await api(`/api/retail-admin/delivery-zones/${id}`, { method: 'PATCH', body: { [field]: val } });
+    // Keep local state + coverage tiles in sync after an optimistic inline edit
+    // (the on/off checkbox) without a full reload.
+    const z = _zones.find(z => z.id === id); if (z) z[field] = val;
+    if (field === 'is_active') dzRenderKpis(false);
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); loadDeliveryZones(); }
 }
 
