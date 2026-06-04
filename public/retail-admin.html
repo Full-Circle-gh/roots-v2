@@ -582,6 +582,19 @@
     text-transform: uppercase; color: var(--text-2);
   }
 
+  /* In-page section header — slightly larger sibling of .fc-eyebrow for the
+     <h3>-level "this card is a section" labels (Delivery's group cards etc.).
+     Mono caps so section rhythm matches the dashboard. */
+  .fc-sec {
+    font-family: var(--f-mono);
+    font-size: 11px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text-2);
+  }
+
+  /* Helper lede directly beneath a page title — one consistent pull-up so the
+     descriptive line hugs the heading the same way on every page. */
+  .fc-lede { margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4); }
+
   /* ── Tile: the elevated card with a mono-caps head + hover raise ─────── */
   .fc-tile {
     position: relative; display: flex; flex-direction: column;
@@ -4061,6 +4074,14 @@
     font-size: 14px; font-weight: 600;
     margin: 0 0 4px;
   }
+  /* Delivery page: section heads adopt the mono-caps rhythm (#tab-delivery
+     scope wins over the shared .group-card-head h3 rule above). */
+  #tab-delivery .group-card-head h3 {
+    font-family: var(--f-mono);
+    font-size: 11px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text-2);
+    margin: 0 0 4px;
+  }
   .group-card-head .muted {
     font-size: 12px; line-height: 1.55;
     color: var(--text-3);
@@ -6793,7 +6814,7 @@
   <!-- ─── DELIVERY ZONES ─── -->
   <section id="tab-delivery">
     <h2>Delivery zones · 配送区</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.6;">
+    <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4); line-height: 1.6;">
       <div style="margin-bottom: 8px;">
         One row per area you deliver to. <b>Pricing</b> shows the ¥ a customer pays; <b>Scheduling</b> shows when they can pick. Click any row to edit. An address that matches no active zone fails at checkout.
       </div>
@@ -6832,7 +6853,7 @@
     </div>
 
     <div class="card" style="margin-bottom: var(--s4);">
-      <h3 style="font-size: 13px; margin-bottom: 12px;">Global defaults · 全局默认</h3>
+      <h3 class="fc-sec" style="margin-bottom: 12px;">Global defaults · 全局默认</h3>
       <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
         <div class="field" style="margin: 0; flex: 1; min-width: 240px;">
           <label class="stacked">Kitchen address (customer-facing) · 厨房地址(顾客可见) <span class="help-i" data-tip="Shown on the mini-app checkout when a customer's address doesn't match any zone — so they know where you ship from. Not used for distance calculations. · 当顾客地址不在任何配送区时,在小程序结账页显示给顾客,告知厨房位置。不用于距离计算。">?</span></label>
@@ -6847,7 +6868,7 @@
          same fees.* / pickup.window keys for all pricing, so this is a UI move only;
          a zone's own Base fee / Free-over / packing still overrides the globals below. -->
     <h2 style="margin-top: var(--s5);">Delivery &amp; pickup fees · 配送与自提费用</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.6;">
+    <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4); line-height: 1.6;">
       The ¥ customers pay across delivery methods and store pickup. A zone's own <b>Base fee</b> / <b>Free-over</b> / packing (set on each zone above) overrides these global values for that area. · 各配送方式与到店自提收取的费用。各配送区自设的基础运费 / 免运门槛 / 包装费会覆盖此处的全局值。
     </div>
 
@@ -7005,7 +7026,7 @@
     </div>
 
     <div class="card" style="margin-bottom: var(--s4);">
-      <h3 style="font-size: 13px; margin-bottom: 4px;">
+      <h3 class="fc-sec" style="margin-bottom: 4px;">
         Holiday mode · 假期模式
         <span class="help-i" data-tip="Turn ON when the kitchen is closed for a holiday. Customers can still place orders — same-day delivery is suppressed, the calendar still works, and a banner with your message appears on checkout. · 厨房放假时开启。顾客仍可下单,即时配送被禁用,日历选择仍可用,结账页将显示您设置的提示横幅。">?</span>
       </h3>
@@ -7032,7 +7053,7 @@
     </div>
 
     <div class="card" style="margin-bottom: var(--s4);">
-      <h3 style="font-size: 13px; margin-bottom: 4px;">
+      <h3 class="fc-sec" style="margin-bottom: 4px;">
         Fresh batch schedule · 新鲜现做排期
         <span class="help-i" data-tip="For products flagged 'Made fresh in batches'. Outside-Guangzhou orders that hold one can't ship until the next batch day, then ship same-day so they arrive fresh. Sets the cadence and tells the customer the exact ship + arrival dates. · 用于标记为「分批新鲜现做」的商品。含此类商品的广州以外订单需等到下一制作日才发货,当天发出以保证新鲜。此处设置制作周期,并告知顾客确切的发货与送达日期。">?</span>
       </h3>
@@ -7071,7 +7092,7 @@
     </div>
 
     <div class="card" style="margin-bottom: var(--s4);">
-      <h3 style="font-size: 13px; margin-bottom: 4px;">
+      <h3 class="fc-sec" style="margin-bottom: 4px;">
         Default delivery — rest of China · 默认配送 — 中国其他地区
         <span class="help-i" data-tip="One flat fee for any mainland address not covered by a zone below. Turn this on and you only need to add zones for the exceptions (cheaper provinces, same-day Guangzhou, Hong Kong). Off = addresses with no matching zone can't check out. · 适用于下方未单独设置区域的任何中国大陆地址的统一运费。开启后,您只需为「例外」添加区域(更便宜的省份、广州当日达、香港)。关闭时,无匹配区域的地址将无法结账。">?</span>
       </h3>
@@ -13694,7 +13715,9 @@ function renderShipmentTrackingCard(o, s) {
 
   let kdBadge = '';
   if (has) {
-    if (s.tracking_kd100_subscribed) {
+    if (s.jd_live) {
+      kdBadge = `<span class="muted" style="font-size:11px; color: #5a8c2a;">● JD live sync on</span>`;
+    } else if (s.tracking_kd100_subscribed) {
       kdBadge = `<span class="muted" style="font-size:11px; color: #5a8c2a;">● kd100 live sync on</span>`;
     } else if (s.tracking_last_error) {
       kdBadge = `<span style="font-size:11px; color: var(--danger);">⚠ ${escapeHtml(s.tracking_last_error)}</span>
