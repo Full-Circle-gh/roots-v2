@@ -15,6 +15,18 @@ data/*.db-shm
 data/*.db-wal
 data/*.db.bak.*
 data/roots-pre-*.db*
+# Root-level dev database (live data, never commit)
+/roots.db
+/roots.db-shm
+/roots.db-wal
+
+# Design scratch artifacts — large local-only exploration dumps
+/design_index.html
+/design_bundle/
+/design-brief-mini-app-backend.md
+
+# Stray redirect/scratch output
+/8000
 
 # OS / editor cruft
 .DS_Store
