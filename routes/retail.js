@@ -4772,38 +4772,44 @@ function orderTimeline(o) {
 // and never again once delivered. Ownership is enforced by the customer_id
 // filter, so this is safe to call straight from the customer endpoint.
 const _JD_TRACE_STALE_MS = 8 * 60_000;
-async function syncJdTrackingForCustomer(orderId, customerId) {
-  const o = tdb().prepare(
-    `SELECT id, status, tracking_carrier, tracking_number, tracking_events_json,
-            tracking_synced_at, tracking_scenario_notified
-       FROM retail_orders WHERE id = ? AND customer_id = ?`
-  ).get(orderId, customerId);
-  if (!o || o.tracking_carrier !== 'jd' || !o.tracking_number) return;
-  if (o.status !== 'dispatched' && o.status !== 'delivered') return;
-  // Skip if we already have events that are still fresh, or the order is final.
-  if (o.tracking_events_json) {
-    if (o.status === 'delivered') return;
-    const synced = o.tracking_synced_at ? Date.parse(o.tracking_synced_at + 'Z') : 0;
-    if (synced && (Date.now() - synced) < _JD_TRACE_STALE_MS) return;
+
+// Fetch + normalize a JD waybill's trace once per pass. Split-package orders
+// can carry the same waybill on both a retail_shipments row and the legacy
+// retail_orders mirror; the cache keeps that to a single JD call.
+async function _jdFetchTrace(jc, number, cache) {
+  if (cache.has(number)) return cache.get(number);
+  let res;
+  try {
+    const r = await jd.getTrace(number, jc);
+    res = r.ok
+      ? { ok: true, norm: jd.normalizeTrace(r.data) }
+      : { ok: false, error: String(r.error || 'jd_trace_failed').slice(0, 200) };
+  } catch (e) {
+    console.error('[jd.trace] fetch threw for ' + number, e);
+    res = { ok: false, error: 'jd_trace_threw' };
   }
-  const jc = integ().jd;
-  if (!jd.jdEnabled(jc)) return;
-  let r;
-  try { r = await jd.getTrace(o.tracking_number, jc); }
-  catch (e) { console.error('[jd.trace] order=' + o.id + ' threw', e); return; }
-  if (!r.ok) {
-    tdb().prepare("UPDATE retail_orders SET tracking_last_error = ?, tracking_synced_at = CURRENT_TIMESTAMP WHERE id = ?")
-      .run(String(r.error || 'jd_trace_failed').slice(0, 200), o.id);
-    return;
+  cache.set(number, res);
+  return res;
+}
+
+// Persist a fetched trace into one tracking row (retail_orders OR
+// retail_shipments — both carry the same tracking_* column set). Returns
+// { delivered, scenario } or null on a failed/empty fetch. `table` is a fixed
+// internal literal, never user input.
+function _jdApplyTrace(table, rowId, fetchRes) {
+  if (!fetchRes.ok) {
+    tdb().prepare(`UPDATE ${table} SET tracking_last_error = ?, tracking_synced_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .run(fetchRes.error, rowId);
+    return null;
   }
-  const norm = jd.normalizeTrace(r.data);
+  const norm = fetchRes.norm;
   if (!norm.events.length) {
-    tdb().prepare("UPDATE retail_orders SET tracking_synced_at = CURRENT_TIMESTAMP, tracking_last_error = NULL WHERE id = ?").run(o.id);
-    return;
+    tdb().prepare(`UPDATE ${table} SET tracking_synced_at = CURRENT_TIMESTAMP, tracking_last_error = NULL WHERE id = ?`).run(rowId);
+    return { delivered: false, scenario: null };
   }
   const scenario = tracking.classifyDeliveryEvent(norm.events[0].description_cn);
   tdb().prepare(
-    `UPDATE retail_orders
+    `UPDATE ${table}
         SET tracking_status             = ?,
             tracking_events_json        = ?,
             tracking_scenario           = ?,
@@ -4817,19 +4823,97 @@ async function syncJdTrackingForCustomer(orderId, customerId) {
     JSON.stringify(norm.events),
     scenario?.scenario || null,
     scenario ? JSON.stringify(scenario) : null,
-    o.id,
+    rowId,
   );
-  if (scenario && scenario.scenario !== o.tracking_scenario_notified) {
-    try {
-      notifyTrackingScenario(o.id, scenario);
-      tdb().prepare("UPDATE retail_orders SET tracking_scenario_notified = ? WHERE id = ?").run(scenario.scenario, o.id);
-    } catch (e) { console.error('[jd.trace] notify failed', e); }
+  return { delivered: norm.delivered, scenario };
+}
+
+async function syncJdTrackingForCustomer(orderId, customerId) {
+  const o = tdb().prepare(
+    `SELECT id, status, tracking_carrier, tracking_number, tracking_events_json,
+            tracking_synced_at, tracking_scenario_notified
+       FROM retail_orders WHERE id = ? AND customer_id = ?`
+  ).get(orderId, customerId);
+  if (!o) return;
+  if (o.status !== 'dispatched' && o.status !== 'delivered') return;
+  const jc = integ().jd;
+  if (!jd.jdEnabled(jc)) return;
+
+  // Gather every JD-shipped row to refresh: each split-package shipment, plus
+  // the legacy order-level mirror (the only row on single-shipment orders, and
+  // a mirror of the primary parcel on split ones). kd100/SF parcels are left
+  // to their own push pipeline.
+  const targets = [];
+  const shipments = tdb().prepare(
+    `SELECT id, tracking_carrier, tracking_number, tracking_status,
+            tracking_events_json, tracking_synced_at
+       FROM retail_shipments WHERE order_id = ?`
+  ).all(o.id);
+  for (const s of shipments) {
+    if (s.tracking_carrier === 'jd' && s.tracking_number) {
+      targets.push({
+        table: 'retail_shipments', id: s.id, number: s.tracking_number,
+        hasEvents: !!s.tracking_events_json, syncedAt: s.tracking_synced_at,
+        isFinal: s.tracking_status === 'delivered',
+      });
+    }
   }
-  if (norm.delivered && o.status === 'dispatched') {
-    try {
-      tdb().prepare("UPDATE retail_orders SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'dispatched'").run(o.id);
-      notifyOrderStatusChange(o.id, 'delivered');
-    } catch (e) { console.error('[jd.trace] auto-deliver failed', e); }
+  if (o.tracking_carrier === 'jd' && o.tracking_number) {
+    targets.push({
+      table: 'retail_orders', id: o.id, number: o.tracking_number,
+      hasEvents: !!o.tracking_events_json, syncedAt: o.tracking_synced_at,
+      isFinal: o.status === 'delivered', primary: true,
+    });
+  }
+  if (!targets.length) return;
+
+  // Freshness guard, per row: skip if it already has events that are still
+  // fresh, or the row is already delivered.
+  const needsSync = (t) => {
+    if (!t.hasEvents) return true;
+    if (t.isFinal) return false;
+    const synced = t.syncedAt ? Date.parse(t.syncedAt + 'Z') : 0;
+    return !(synced && (Date.now() - synced) < _JD_TRACE_STALE_MS);
+  };
+
+  const cache = new Map();
+  for (const t of targets) {
+    if (!needsSync(t)) continue;
+    const fetchRes = await _jdFetchTrace(jc, t.number, cache);
+    let res;
+    try { res = _jdApplyTrace(t.table, t.id, fetchRes); }
+    catch (e) { console.error('[jd.trace] apply failed ' + t.table + '=' + t.id, e); continue; }
+    // Push notifications are anchored to the order, so only the primary mirror
+    // fires them — avoids one toast per parcel on split orders.
+    if (t.primary && res && res.scenario && res.scenario.scenario !== o.tracking_scenario_notified) {
+      try {
+        notifyTrackingScenario(o.id, res.scenario);
+        tdb().prepare("UPDATE retail_orders SET tracking_scenario_notified = ? WHERE id = ?").run(res.scenario.scenario, o.id);
+      } catch (e) { console.error('[jd.trace] notify failed', e); }
+    }
+  }
+
+  // Auto-flip the order to delivered only when EVERY tracked parcel reads
+  // delivered (both pipelines write tracking_status='delivered'). Split orders
+  // with a still-moving parcel stay 'dispatched'.
+  if (o.status === 'dispatched') {
+    const tracked = tdb().prepare(
+      `SELECT tracking_status FROM retail_shipments
+        WHERE order_id = ? AND tracking_number IS NOT NULL AND tracking_number != ''`
+    ).all(o.id);
+    let allDelivered;
+    if (tracked.length) {
+      allDelivered = tracked.every(r => r.tracking_status === 'delivered');
+    } else {
+      const fresh = tdb().prepare("SELECT tracking_status FROM retail_orders WHERE id = ?").get(o.id);
+      allDelivered = !!(fresh && fresh.tracking_status === 'delivered');
+    }
+    if (allDelivered) {
+      try {
+        tdb().prepare("UPDATE retail_orders SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'dispatched'").run(o.id);
+        notifyOrderStatusChange(o.id, 'delivered');
+      } catch (e) { console.error('[jd.trace] auto-deliver failed', e); }
+    }
   }
 }
 
