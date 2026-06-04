@@ -10170,11 +10170,18 @@ function dashDelta(pct) {
 // drives the bar (scaled to the row set's own max); `opt.display(item)` is the
 // right-hand string; `opt.name(item)` is the raw (un-escaped) left label.
 function dashBarRows(items, opt) {
+  // Bars top out at BAR_CAP (not full width) so even the leader keeps a visible
+  // right edge instead of washing the whole row into a flat tint. opt.curve =
+  // 'sqrt' gives whale-skewed sets (e.g. revenue with one big customer) a
+  // gentler ramp so the non-leaders stay distinguishable rather than all
+  // collapsing into near-identical slivers.
+  const BAR_CAP = 0.85;
+  const curve = opt.curve === 'sqrt' ? (x => Math.sqrt(x)) : (x => x);
   const vals = items.map(it => Math.max(0, Number(opt.value(it)) || 0));
   const max = Math.max(1, ...vals);
   return items.map((it, i) => {
     const v = vals[i];
-    const mag = Math.max(0, Math.min(1, v / max));
+    const mag = v <= 0 ? 0 : curve(Math.min(1, v / max)) * BAR_CAP;
     const zero = v <= 0;
     return `<div class="db-tile-list-row has-bar${zero ? ' is-zero' : ''}" style="--mag:${mag.toFixed(3)}">
       <span class="name">${escapeHtml(opt.name(it))}</span>
@@ -10448,7 +10455,7 @@ function dashFeedMeta(e) {
     case 'out_of_stock':
       return { icon: FEED_SVG.alert, tone: 'bad', text: `<b>Out · 售罄</b> ${escapeHtml(p.name_en || p.name_cn || '')}` };
     case 'new_customer':
-      return { icon: FEED_SVG.person, tone: 'muted', text: `<b>New · 新客</b> ${escapeHtml(p.name || '—')}` };
+      return { icon: FEED_SVG.person, tone: 'muted', text: p.name ? `<b>New · 新客</b> ${escapeHtml(p.name)}` : `<b>New customer · 新客户</b>` };
     case 'feedback':
       return { icon: FEED_SVG.chat, tone: 'muted', text: `<b>Feedback · 反馈</b> "${escapeHtml(p.excerpt || '')}"` };
     default:
@@ -10695,6 +10702,7 @@ const BENTO_CATALOGUE = {
         name: c => c.nickname || ('#' + c.customer_id),
         value: c => Number(c.revenue || 0),
         display: c => '¥' + Number(c.revenue || 0).toLocaleString(),
+        curve: 'sqrt',   // revenue is whale-skewed — spread the non-leaders out
       });
       body.innerHTML = `<div class="db-tile-list">${rows}</div>${dashRangeFoot()}`;
     },
