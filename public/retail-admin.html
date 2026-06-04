@@ -555,16 +555,23 @@
     font-family: var(--f-mono);
     font-size: 10px; text-transform: uppercase; letter-spacing: .12em;
     color: var(--text-2); font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  /* Headline stat — Plex Sans medium so the number leads the card, not whispers. */
-  .db-kpi .val { font-size: 38px; font-weight: 500; letter-spacing: -.02em; color: var(--text-1); font-variant-numeric: tabular-nums; line-height: 1.05; }
+  /* Headline stat — Plex Sans medium so the number leads the card, not whispers.
+     Sized to keep the widest value (e.g. ¥131.27) on one line at the ~155px card
+     width; nowrap stops a stray wrap from floating one card's number out of line. */
+  .db-kpi .val { font-size: 30px; font-weight: 500; letter-spacing: -.02em; color: var(--text-1); font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
   /* Revenue is the hero financial signal — Tea Green + a focal accent bar. */
   .db-kpi.accent::before {
     content: ""; position: absolute; left: 0; top: 12px; bottom: 12px;
     width: 3px; border-radius: 0 3px 3px 0; background: var(--accent);
   }
   .db-kpi.accent .val { color: var(--accent); }
-  .db-kpi .sub { font-size: 11px; color: var(--text-3); }
+  .db-kpi .sub { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* One uniform foot row per card (delta and/or sub on a single baseline) so
+     every card is exactly 3 rows tall — keeps the headline numbers in line. */
+  .db-kpi-foot { display: flex; align-items: baseline; gap: 6px; min-height: 15px; min-width: 0; }
+  .db-kpi-foot .sub { min-width: 0; }
   .db-delta { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .db-delta.up   { color: var(--success); }
   .db-delta.down { color: var(--brass); }
@@ -594,6 +601,11 @@
      collided with the tab-bar refresh + orders indicators). */
   .db-live-ring-wrap { position: relative; width: 92px; height: 92px; display: flex; align-items: center; justify-content: center; margin: 2px 0 4px; }
   .db-live-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); transform-origin: center; animation: db-live-breath 6.5s ease-in-out infinite; }
+  /* The inked ring slowly turns on its own axis (a calm, ensō "drawing" drift)
+     while the svg above handles the breathing pulse — kept on the inner group
+     so the two transforms don't collide. */
+  .db-live-ring g { transform-box: view-box; transform-origin: 22px 22px; animation: db-ring-spin 48s linear infinite; }
+  @keyframes db-ring-spin { to { transform: rotate(360deg); } }
   .db-live-ring .track { fill: none; stroke: var(--line); stroke-width: 2.5; }
   .db-live-ring .arc { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 119.38; stroke-dashoffset: 119.38; opacity: 0; transition: stroke-dashoffset .6s ease, opacity .45s ease; }
   .db-live-ring.live .arc { opacity: 1; stroke-dashoffset: 30; animation: db-ring-breathe 3.6s ease-in-out infinite; }
@@ -602,7 +614,7 @@
      viewers are present a brighter green arc breathes over it. */
   @keyframes db-live-breath { 0%, 100% { transform: rotate(-90deg) scale(1); } 50% { transform: rotate(-90deg) scale(1.046); } }
   @keyframes db-ring-breathe { 0%, 100% { opacity: .425; } 50% { opacity: 1; } }
-  @media (prefers-reduced-motion: reduce) { .db-live-ring, .db-live-ring.live .arc { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .db-live-ring, .db-live-ring g, .db-live-ring.live .arc { animation: none; } }
   .db-live-num { font-size: 38px; line-height: 1; font-weight: 600; letter-spacing: -.02em; color: var(--text-1); font-variant-numeric: tabular-nums; }
   .db-live-num.live-on { color: var(--accent); }
   .db-live-lbl { font-size: 11px; color: var(--text-3); margin-top: 2px; }
@@ -914,8 +926,8 @@
   /* ── Dashboard View tweaks (per-operator) — Trend bars, heatmap shape,
      headline number style. Defaults (curve / cells / light) = base look. ── */
   .db-chart .bar { fill: var(--accent); }
-  #tab-dashboard.dv-num-display .db-kpi .val { font-weight: 600; font-size: 40px; letter-spacing: -.02em; }
-  #tab-dashboard.dv-num-mono .db-kpi .val { font-family: var(--f-mono); font-weight: 500; font-size: 26px; letter-spacing: 0; }
+  #tab-dashboard.dv-num-display .db-kpi .val { font-weight: 600; font-size: 33px; letter-spacing: -.02em; }
+  #tab-dashboard.dv-num-mono .db-kpi .val { font-family: var(--f-mono); font-weight: 500; font-size: 22px; letter-spacing: 0; }
   #tab-dashboard.dv-heat-dots .db-heat-cell { border-radius: 50%; }
   #tab-dashboard.dv-heat-dashes .db-heat-cell { border-radius: 1px; transform: scaleY(.5); }
 
