@@ -621,6 +621,11 @@
   .fc-kpi-foot .sub { min-width: 0; }
   .fc-kpi.accent::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
   .fc-kpi.accent .val { color: var(--accent); }
+  /* Attention state — same brass rail language as .fc-tile.alert, for an
+     SLA-style "this one's been waiting" signal (e.g. oldest pending fapiao). */
+  .fc-kpi.alert { border-color: rgba(176,141,74,.42); }
+  .fc-kpi.alert::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--warn); }
+  .fc-kpi.alert .val { color: var(--warn); }
 
   /* ── Delta: change vs the prior period. The calm rule — a down delta is
      soft clay, never alarm-red, so the page never reads as an emergency. ── */
@@ -4888,10 +4893,35 @@
           <button data-f="issued" onclick="invSetFilter('issued')">Issued · 已开 <span id="inv-count-issued"></span></button>
           <button data-f="all" onclick="invSetFilter('all')">All · 全部</button>
         </div>
-        <button class="db-btn" onclick="loadInvoices()" title="Refresh · 刷新">↻</button>
+        <button class="db-btn" onclick="loadInvoices(); invLoadKpis(true)" title="Refresh · 刷新">↻</button>
       </div>
     </div>
     <p style="color:var(--text-3); font-size:12px; margin:0 0 var(--s4)">Send info to your accountant with “Copy for accounting”, then paste the link / attach the PDF or photo + Mark issued. · 用“复制开票信息”发给会计,开好后粘贴链接/上传 PDF 或图片 并标记已开。</p>
+    <!-- Fapiao queue summary — shared fc-* KPI strip. No baseline/trend exists
+         for fapiao, so this stays deltas/sparkline-free; the oldest-pending
+         tile flips to .alert as an SLA nudge. -->
+    <div class="fc-kpis" id="inv-kpis">
+      <div class="fc-kpi accent">
+        <div class="lbl">Pending · 待开</div>
+        <div class="val" id="inv-kpi-pending">—</div>
+        <div class="sub">to issue · 待处理</div>
+      </div>
+      <div class="fc-kpi">
+        <div class="lbl">Awaiting value · 待开金额</div>
+        <div class="val" id="inv-kpi-value">—</div>
+        <div class="sub" id="inv-kpi-value-sub">&nbsp;</div>
+      </div>
+      <div class="fc-kpi">
+        <div class="lbl">Issued · 已开</div>
+        <div class="val" id="inv-kpi-issued">—</div>
+        <div class="sub">fapiao done · 已开票</div>
+      </div>
+      <div class="fc-kpi" id="inv-kpi-age-tile">
+        <div class="lbl">Oldest pending · 最久待开</div>
+        <div class="val" id="inv-kpi-age">—</div>
+        <div class="sub" id="inv-kpi-age-sub">&nbsp;</div>
+      </div>
+    </div>
     <div id="invoices-list"></div>
   </section>
 
@@ -12522,7 +12552,7 @@ function toggleOrdersLive() {
 // Load the Invoices tab each time it's opened.
 (function () {
   const btn = document.querySelector('.tabs [data-tab="invoices"]');
-  if (btn) btn.addEventListener('click', () => setTimeout(loadInvoices, 50));
+  if (btn) btn.addEventListener('click', () => { setTimeout(loadInvoices, 50); invLoadKpis(true); });
 })();
 
 // ── Unseen-orders badge (red pulsing dot on the Orders tab) ─────────────
@@ -17377,7 +17407,7 @@ async function unissueInvoice(id) {
 // Invoices tab list (when active) or the open order drawer.
 function _invoiceRefreshAfter(id) {
   const sec = document.getElementById('tab-invoices');
-  if (sec && sec.classList.contains('active')) loadInvoices();
+  if (sec && sec.classList.contains('active')) { loadInvoices(); invLoadKpis(true); }
   else if (typeof _OPEN_ORDER !== 'undefined' && _OPEN_ORDER && Number(_OPEN_ORDER.id) === Number(id)) openOrder(id);
 }
 
@@ -17388,6 +17418,57 @@ function invSetFilter(f) {
   INV_FILTER = f;
   document.querySelectorAll('#inv-filter button').forEach(b => b.classList.toggle('active', b.dataset.f === f));
   loadInvoices();
+}
+// ── Invoices KPI strip — fapiao queue summary on the shared fc-* layer.
+// Reuses the same /invoices?status=all payload the list already speaks; the
+// ORDER BY puts every un-issued row first, so even if the 200-row cap clips
+// old issued rows we still see every pending one for the value/age maths.
+let _INV_KPI_AT = 0;
+let _INV_KPI_DATA = null;
+let _INV_KPI_LANG_HOOKED = false;
+async function invLoadKpis(force) {
+  if (!document.getElementById('inv-kpis')) return;
+  if (!force && Date.now() - _INV_KPI_AT < 30000) return;
+  _INV_KPI_AT = Date.now();
+  if (!_INV_KPI_LANG_HOOKED && window.onLangChange) { _INV_KPI_LANG_HOOKED = true; onLangChange(invRenderKpis); }
+  try {
+    const j = await api('/api/retail-admin/invoices?status=all');
+    _INV_KPI_DATA = j;
+    invRenderKpis();
+  } catch (e) {}
+}
+function invRenderKpis() {
+  const j = _INV_KPI_DATA; if (!j) return;
+  const rows = j.data || [];
+  const counts = j.counts || {};
+  const pendingRows = rows.filter(o => o.invoice_status !== 'issued');
+  const pending = counts.requested != null ? counts.requested : pendingRows.length;
+  const issued  = counts.issued != null ? counts.issued : rows.filter(o => o.invoice_status === 'issued').length;
+  const awaitVal = pendingRows.reduce((s, o) => s + Number(o.total || 0), 0);
+  let oldestDays = null, oldestDate = '';
+  for (const o of pendingRows) {
+    const d = String(o.placed_at || '').slice(0, 10);
+    if (!d) continue;
+    const age = Math.floor((Date.now() - new Date(d + 'T00:00:00+08:00').getTime()) / 86400000);
+    if (oldestDays === null || age > oldestDays) { oldestDays = age; oldestDate = d; }
+  }
+  dashCountUp($('#inv-kpi-pending'), pending);
+  dashCountUp($('#inv-kpi-issued'), issued);
+  const valEl = $('#inv-kpi-value'); if (valEl) valEl.textContent = fcMoney(awaitVal);
+  const vsub = $('#inv-kpi-value-sub');
+  if (vsub) vsub.textContent = pendingRows.length
+    ? cuT('across ' + pendingRows.length + (pendingRows.length === 1 ? ' order' : ' orders'), '共 ' + pendingRows.length + ' 单')
+    : cuT('nothing awaiting · 无待开', '无待开');
+  const ageEl = $('#inv-kpi-age'), ageSub = $('#inv-kpi-age-sub'), ageTile = $('#inv-kpi-age-tile');
+  if (oldestDays === null) {
+    if (ageEl) ageEl.textContent = '—';
+    if (ageSub) ageSub.textContent = cuT('queue clear · 已清空', '已清空');
+    if (ageTile) ageTile.classList.remove('alert');
+  } else {
+    if (ageEl) ageEl.textContent = oldestDays + cuT('d', '天');
+    if (ageSub) ageSub.textContent = oldestDate ? cuT('since ' + oldestDate, '自 ' + oldestDate) : ' ';
+    if (ageTile) ageTile.classList.toggle('alert', oldestDays >= 7);
+  }
 }
 async function loadInvoices() {
   const host = document.getElementById('invoices-list');
