@@ -11030,7 +11030,7 @@ function dashFeedRender(events) {
     const pad = n => String(n).padStart(2, '0');
     const tstr = `${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
     const meta = dashFeedMeta(e);
-    return `<div class="db-feed-row${isNew ? ' is-new' : ''}" data-type="${escapeHtml(e.type)}" data-ref-id="${escapeHtml(e.ref_id == null ? '' : e.ref_id)}" onclick="dashFeedClick(this)">
+    return `<div class="db-feed-row${isNew ? ' is-new' : ''}" data-type="${escapeHtml(e.type)}" data-ref-id="${escapeHtml(e.ref_id == null ? '' : e.ref_id)}" onclick="dashFeedClick(this, event)">
       <span class="db-feed-ts">${tstr}</span>
       <span class="db-feed-icon db-fi-${meta.tone || 'muted'}">${meta.icon}</span>
       <span class="db-feed-text">${meta.text}</span>
@@ -11119,7 +11119,11 @@ function dashFeedMeta(e) {
 // intermediate detail card. Order-related events open the floating order
 // drawer over the dashboard (same target the old "Open in Orders" button
 // used); everything else jumps to its owning tab.
-function dashFeedClick(row) {
+function dashFeedClick(row, ev) {
+  // This click opens a drawer — keep it from bubbling to the document-level
+  // click-outside-to-close handler, which would otherwise shut the drawer the
+  // instant it opens.
+  if (ev && ev.stopPropagation) ev.stopPropagation();
   const type = row.getAttribute('data-type');
   const refId = row.getAttribute('data-ref-id');
 
@@ -13157,7 +13161,9 @@ document.addEventListener('click', (e) => {
   // drawer but lives outside it in the DOM — clicks inside the modal, incl.
   // its Close button, must not dismiss the drawer behind it.
   if (e.target.closest('.pu-editor-bg')) return;
-  if (e.target.closest('tr.order-row, tr.cu-row')) return;
+  // Dashboard activity rows open the order drawer on click — that same click
+  // bubbles here, so exempt them or the drawer closes the instant it opens.
+  if (e.target.closest('tr.order-row, tr.cu-row, .db-feed-row')) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.toString().length > 0) return;
   closeDrawer(open[open.length - 1]);
