@@ -13621,7 +13621,7 @@ function renderItemRow(it, opts = {}) {
     ? `<span class="mf-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</span>`
     : '';
   return `
-    <div class="mf-row">
+    <div class="mf-row" data-fk="${it.id}">
       <span class="mf-num">${num}</span>
       ${itemThumb(it)}
       <div class="mf-body">
@@ -13664,17 +13664,46 @@ function renderSortableItems(o) {
 }
 
 function setItemsSort(mode) {
+  if (mode === _ITEMS_SORT_MODE) return;
   _ITEMS_SORT_MODE = mode;
   // Defer the swap: replacing innerHTML synchronously detaches the clicked
   // chip mid-click, so the drawer's click-outside handler sees a detached
   // target and dismisses the drawer. rAF lets the click finish bubbling first.
   requestAnimationFrame(() => {
     const host = document.getElementById('odv-items-sortable');
-    if (host && _OPEN_ORDER) {
-      host.innerHTML = renderSortableItems(_OPEN_ORDER);
-    } else if (_OPEN_ORDER) {
-      renderOpenOrder(_OPEN_ORDER);
+    if (!host || !_OPEN_ORDER) {
+      if (_OPEN_ORDER) renderOpenOrder(_OPEN_ORDER);
+      return;
     }
+    flipReorder(host, () => { host.innerHTML = renderSortableItems(_OPEN_ORDER); });
+  });
+}
+
+// FLIP: rows carry a stable data-fk. Snapshot each row's box, swap the HTML,
+// then play every row from its old box to its new one so the re-sort glides
+// instead of snapping. Honours prefers-reduced-motion.
+function flipReorder(host, swap) {
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) { swap(); return; }
+  const first = new Map();
+  host.querySelectorAll('[data-fk]').forEach(el => first.set(el.dataset.fk, el.getBoundingClientRect()));
+  swap();
+  host.querySelectorAll('[data-fk]').forEach(el => {
+    const a = first.get(el.dataset.fk);
+    if (!a) return;
+    const b = el.getBoundingClientRect();
+    const dx = a.left - b.left, dy = a.top - b.top;
+    if (!dx && !dy) return;
+    el.style.transition = 'none';
+    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    requestAnimationFrame(() => {
+      el.style.transition = 'transform 360ms cubic-bezier(.22,.61,.36,1)';
+      el.style.transform = '';
+      el.addEventListener('transitionend', () => {
+        el.style.transition = '';
+        el.style.transform = '';
+      }, { once: true });
+    });
   });
 }
 
@@ -13707,7 +13736,7 @@ function renderItemsAsGrid(items, showPack = true) {
       : nm;
     const zh = (it.name_cn || it.size)
       ? `<div class="oi-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
-    return `<div class="oi-row">
+    return `<div class="oi-row" data-fk="${it.id}">
       <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
         ${itemThumb(it)}
         <div style="min-width:0">${nameCell}${zh}<div style="margin-top:4px">${itemSkuHtml(it)}</div></div>
@@ -13730,7 +13759,7 @@ function renderItemsAsCards(items, showPack = true) {
       : nm;
     const zh = (it.name_cn || it.size)
       ? `<div class="oic-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
-    return `<div class="oic">
+    return `<div class="oic" data-fk="${it.id}">
       <div class="oic-top">
         <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
           ${itemThumb(it)}
