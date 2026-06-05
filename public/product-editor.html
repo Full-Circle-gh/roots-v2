@@ -302,6 +302,18 @@
   .is-embedded .pe-close-btn,
   .is-embedded #ui-scale-toggle,
   .is-embedded #lang-toggle { display: none; }
+  /* "Back to pages" — only useful when embedded in the backend's single Editor
+     tab (returns to the Mini App Editor's page list). Hidden standalone. */
+  .pe-back-pages { display: none; }
+  .is-embedded .pe-back-pages {
+    display: flex; align-items: center; gap: 6px;
+    width: 100%; margin: 0 0 10px; padding: 7px 9px;
+    background: var(--bg-app); border: 1px solid var(--line);
+    border-radius: var(--r-md); cursor: pointer;
+    font: 600 12px var(--f-sans); color: var(--text-2);
+  }
+  .is-embedded .pe-back-pages:hover { border-color: var(--line-strong); color: var(--text-1); }
+  .is-embedded .pe-back-pages svg { width: 15px; height: 15px; flex: none; }
   .pe-topbar-title { display: flex; align-items: center; gap: var(--s3); min-width: 0; flex: 1; position: relative; }
   #pe-name {
     font-size: 15px; font-weight: 600; color: var(--text-1);
@@ -1413,6 +1425,10 @@
              above "Page" so it reads as "what am I editing", switching in place
              via peSwitchProduct (no reload). Reuses the topbar switcher's data. -->
         <div class="pe-left-group" id="pe-prod-group">
+          <button type="button" class="pe-back-pages" onclick="peExitToPages()" title="Back to the Mini App Editor pages · 返回小程序编辑器页面">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            <span>Pages · 页面</span>
+          </button>
           <div class="pe-left-grouptitle">Product · 产品</div>
           <input id="pe-prod-search" class="pe-prod-search" type="text" autocomplete="off" spellcheck="false"
                  oninput="peRenderProdPicker()" placeholder="Search products… · 搜索产品…">
@@ -1593,6 +1609,19 @@ function toast(msg, kind) {
   _peToastT = setTimeout(() => { el.className = el.className.replace('show', '').trim(); }, 2600);
 }
 
+// Embedded back: return to the Mini App Editor's page list. The backend hosts
+// both editors under one "Editor" tab, so we ask the parent to swap the Mini
+// App Editor section back in (the product editor section just hides). Confirms
+// first if there are unsaved changes.
+function peExitToPages() {
+  if (window.self === window.top) return;
+  if (peIsDirty() && !confirm(cuT(
+    'You have unsaved changes that will be lost. Leave anyway? · 有未保存的更改将会丢失,仍要离开吗?',
+    'You have unsaved changes that will be lost. Leave anyway? · 有未保存的更改将会丢失,仍要离开吗?'))) {
+    return;
+  }
+  window.parent.postMessage({ type: 'fc-open-editor', editor: 'mini-app' }, location.origin);
+}
 // Close the editor tab. Opened via window.open() from retail-admin, so
 // window.close() works; fall back to navigating back if the browser blocks it.
 function peClose() {
