@@ -4651,16 +4651,18 @@
       <!-- Divider — separates the in-app content sections above from the
            external editor launcher below. -->
       <div style="height:1px;background:var(--line);margin:4px 6px;"></div>
-      <!-- Mini App Editor — separate tool (/cms), opens in a new tab. Lives
-           under Content because it edits the mini-app storefront layout. -->
-      <button type="button" onclick="window.open('/cms','_blank','noopener')">
+      <!-- Mini App Editor — opens the unified editor shell (/editor) on its
+           Pages tab, in a new tab. Lives under Content because it edits the
+           mini-app storefront layout. -->
+      <button type="button" onclick="window.open('/editor','_blank','noopener')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="13" y2="10"/></svg>
         Mini App Editor · 小程序编辑器
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;opacity:.55;margin-left:auto"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
       </button>
-      <!-- Product Page Editor — separate tool (/product-editor), opens in a new
-           tab to a product picker, then edits that product's detail-page sections. -->
-      <button type="button" onclick="window.open('/product-editor','_blank','noopener')">
+      <!-- Product Page Editor — opens the unified editor shell (/editor) on its
+           Products tab, in a new tab, to a product picker, then edits that
+           product's detail-page sections. -->
+      <button type="button" onclick="window.open('/editor?tab=products','_blank','noopener')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
         Product Page Editor · 产品页编辑器
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;opacity:.55;margin-left:auto"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
@@ -8942,7 +8944,7 @@
               <h3 style="font-size: 13px; margin-bottom: 4px;">Open the Mini App editor · 打开小程序编辑器</h3>
               <div class="muted" style="font-size: 12px;">All six editable mini-app pages live in /cms. Changes go live on Publish. · 全部 6 个可编辑的小程序页面在 /cms 管理;点击"发布"后生效。</div>
             </div>
-            <a href="/cms" class="btn btn-primary">
+            <a href="/editor" class="btn btn-primary">
               Open editor
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </a>
@@ -10601,7 +10603,7 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
     if (it.openUrl) { window.open(it.openUrl, '_blank', 'noopener'); return; }
     // Live records → open the matching editor / detail drawer.
     if (it.type === 'product') {
-      window.open('/product-editor?id=' + encodeURIComponent(it.pid), '_blank', 'noopener');
+      window.open('/editor?id=' + encodeURIComponent(it.pid), '_blank', 'noopener');
       return;
     }
     if (it.type === 'order') {
@@ -21112,7 +21114,7 @@ function paOpenEdit(id) {
   // here — clicking a product jumps straight to the mini-app page designer in
   // a new tab, skipping the in-page commercial-details/stock form entirely.
   if (CATALOG_MODE === 'upstream') {
-    window.open('/product-editor?id=' + encodeURIComponent(id), '_blank', 'noopener');
+    window.open('/editor?id=' + encodeURIComponent(id), '_blank', 'noopener');
     return;
   }
   // Grid/compact = catalogue-scan mode (editor pane hidden). Clicking a card
@@ -21625,7 +21627,7 @@ function pdGalleryWire() {
 function pdOpenPageDesign() {
   const id = document.getElementById('pd-id').value;
   if (!id) { toast(cuT('Save the product first, then open the Product editor', '请先保存产品,再打开产品页编辑器'), 'err'); return; }
-  window.open('/product-editor?id=' + encodeURIComponent(id), '_blank', 'noopener');
+  window.open('/editor?id=' + encodeURIComponent(id), '_blank', 'noopener');
 }
 // ── Description editor — the Classic (rich-text) editor is the only inline
 // mode; "Product editor" in the mode bar launches the full page designer. ───

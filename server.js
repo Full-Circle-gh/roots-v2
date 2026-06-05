@@ -313,6 +313,18 @@ app.get('/product-editor', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'product-editor.html'));
 });
 
+// Unified editor shell — hosts the Mini App Editor (/cms) and the Product Page
+// Editor (/product-editor) as same-origin iframes behind a tab switch, so staff
+// edit storefront pages and product detail pages in one window. Deep-links:
+//   /editor                → Pages tab (Mini App Editor)
+//   /editor?tab=products   → Products tab (product picker)
+//   /editor?id=123         → Products tab, editing product 123
+// Each iframe self-auths exactly as before; this shell adds no auth of its own.
+app.get('/editor', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'editor.html'));
+});
+
 // Storefront visual CMS editor. Same self-auth pattern; gated by `retail` perm.
 // Served no-cache (revalidate-always) so staff see the latest editor build the
 // moment we deploy — no "I refreshed but the picker still looks old" — without
