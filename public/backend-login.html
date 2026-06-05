@@ -124,17 +124,31 @@
   @keyframes halo{0%{transform:scale(.6); opacity:.6;} 100%{transform:scale(1.8); opacity:0;}}
   .ver{margin-top:12px; font-size:10.5px; letter-spacing:.22em; color:#9a978e;}
 
+  /* ── language toggle (sets the console's default language too) ── */
+  .langtoggle{
+    position:absolute; top:16px; right:16px; z-index:6;
+    background:var(--field); color:var(--muted);
+    border:1px solid var(--line); border-radius:9px;
+    padding:7px 13px; font-family:inherit; font-size:12px; font-weight:600;
+    letter-spacing:.04em; cursor:pointer; line-height:1;
+    transition:border-color .15s, color .15s, background .15s;
+  }
+  .langtoggle:hover{border-color:var(--line-2); color:var(--text);}
+  .langtoggle:focus-visible{outline:none; border-color:var(--tea); box-shadow:0 0 0 3px rgba(107,142,111,.22);}
+
+  /* Pure single-language rendering — show only the active language's copy. */
+  body[data-lang="en"] [data-lang="cn"]{display:none!important;}
+  body[data-lang="cn"] [data-lang="en"]{display:none!important;}
+
   /* ── form panel ── */
   .panel{padding:46px 46px 40px; display:flex; flex-direction:column;}
   .kicker{font-size:11px; letter-spacing:.3em; color:var(--brass); text-transform:uppercase; margin-bottom:14px;}
   .panel h1{margin:0 0 6px; font-size:25px; font-weight:500; letter-spacing:-.01em;}
-  .panel h1 .cn{font-weight:400; color:var(--muted); font-size:21px; margin-left:4px;}
   .panel .greet{margin:0 0 30px; font-size:13.5px; color:var(--faint); line-height:1.5;}
 
   form{display:flex; flex-direction:column; gap:20px;}
   .field{display:flex; flex-direction:column; gap:9px;}
   .field label{font-size:11px; letter-spacing:.16em; color:var(--muted);}
-  .field label .cn{color:var(--faint); letter-spacing:.02em; margin-left:3px;}
   .inputwrap{position:relative; display:flex; align-items:center;}
   .inputwrap .lead{position:absolute; left:15px; color:var(--faint); display:flex; pointer-events:none;}
   input[type=text], input[type=password]{
@@ -172,7 +186,6 @@
     box-shadow:0 1px 0 rgba(255,255,255,.18) inset, 0 12px 26px -14px rgba(176,141,74,.7);
     transition:filter .16s, transform .08s, box-shadow .16s;
   }
-  .submit .cn{font-family:"IBM Plex Sans SC",sans-serif;}
   .submit:hover{filter:brightness(1.05);}
   .submit:active{transform:translateY(1px);}
   .submit:focus-visible{outline:none; box-shadow:0 0 0 3px rgba(176,141,74,.4), 0 12px 26px -14px rgba(176,141,74,.7);}
@@ -224,7 +237,7 @@
   }
 </style>
 </head>
-<body class="theme-paper">
+<body class="theme-paper" data-lang="en">
 
   <div class="bg" aria-hidden="true">
     <div class="glow"></div>
@@ -264,29 +277,32 @@
         </div>
         <div class="wordmark">
           <span class="name">FULL CIRCLE</span>
-          <span class="sub mono">MINI APP BACKEND</span>
+          <span class="sub mono" data-lang="en">MINI APP BACKEND</span>
+          <span class="sub mono" data-lang="cn">小程序后台</span>
         </div>
       </div>
 
       <div class="railrule"></div>
 
-      <p class="lede">The operator console behind your WeChat storefront — <b>orders, catalog, customers, and settlement</b>, managed in one place.</p>
+      <p class="lede" data-lang="en">The operator console behind your WeChat storefront — <b>orders, catalog, customers, and settlement</b>, managed in one place.</p>
+      <p class="lede" data-lang="cn">管理微信门店的操作员控制台 — <b>订单、商品、顾客与结算</b>,一处统管。</p>
 
       <div class="railspace"></div>
 
-      <div class="status mono"><span class="dot"></span> All systems operational · 系统正常</div>
-      <div class="ver mono">OPERATOR CONSOLE · v2.4</div>
+      <div class="status mono"><span class="dot"></span> <span data-lang="en">All systems operational</span><span data-lang="cn">系统正常</span></div>
+      <div class="ver mono"><span data-lang="en">OPERATOR CONSOLE</span><span data-lang="cn">操作员控制台</span> · v2.4</div>
     </aside>
 
     <!-- Sign-in panel -->
     <section class="panel">
-      <div class="kicker mono">Secure sign-in · 安全登录</div>
-      <h1>Welcome back<span class="cn">欢迎回来</span></h1>
-      <p class="greet">Sign in to manage your Mini App Backend.</p>
+      <button type="button" class="langtoggle mono" id="langToggle" title="Switch language · 切换语言">中文</button>
+      <div class="kicker mono"><span data-lang="en">Secure sign-in</span><span data-lang="cn">安全登录</span></div>
+      <h1><span data-lang="en">Welcome back</span><span data-lang="cn">欢迎回来</span></h1>
+      <p class="greet"><span data-lang="en">Sign in to manage your Mini App Backend.</span><span data-lang="cn">登录以管理您的小程序后台。</span></p>
 
       <form id="loginForm" novalidate>
         <div class="field">
-          <label for="username">USERNAME <span class="cn">· 用户名</span></label>
+          <label for="username"><span data-lang="en">USERNAME</span><span data-lang="cn">用户名</span></label>
           <div class="inputwrap">
             <span class="lead">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>
@@ -296,7 +312,7 @@
         </div>
 
         <div class="field">
-          <label for="password">PASSWORD <span class="cn">· 密码</span></label>
+          <label for="password"><span data-lang="en">PASSWORD</span><span data-lang="cn">密码</span></label>
           <div class="inputwrap">
             <span class="lead">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="9.5" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>
@@ -313,22 +329,63 @@
           <span></span>
         </div>
 
-        <button type="submit" class="submit" id="submitBtn">Sign in <span class="cn">· 登录</span></button>
+        <button type="submit" class="submit" id="submitBtn"><span data-lang="en">Sign in</span><span data-lang="cn">登录</span></button>
       </form>
 
-      <div class="divider"><span class="mono">or · 或</span></div>
+      <div class="divider"><span class="mono"><span data-lang="en">or</span><span data-lang="cn">或</span></span></div>
 
       <button type="button" class="wechat" id="wechatBtn" disabled aria-disabled="true">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3C4.9 3 1.6 5.8 1.6 9.2c0 1.9 1.1 3.6 2.7 4.8L3.5 16l2.5-1.3c.9.3 1.9.4 3 .4h.5a5.3 5.3 0 0 1-.2-1.5c0-3.2 3-5.7 6.8-5.7h.5C15.9 5 12.8 3 9 3zM6.4 7.7a.95.95 0 1 1 0 1.9.95.95 0 0 1 0-1.9zm5.2 0a.95.95 0 1 1 0 1.9.95.95 0 0 1 0-1.9z"/><path d="M22.4 14c0-2.8-2.7-5-6-5s-6 2.2-6 5 2.7 5 6 5c.8 0 1.5-.1 2.2-.3l1.9 1-.5-1.6c1.4-.9 2.4-2.3 2.4-4.1zm-7.9-1.1a.8.8 0 1 1 0 1.6.8.8 0 0 1 0-1.6zm3.8 0a.8.8 0 1 1 0 1.6.8.8 0 0 1 0-1.6z"/></svg>
-        Sign in with WeChat <span class="soon">Soon</span>
+        <span data-lang="en">Sign in with WeChat</span><span data-lang="cn">微信登录</span> <span class="soon" data-lang="en">Soon</span><span class="soon" data-lang="cn">即将上线</span>
       </button>
     </section>
 
   </main>
 
 <script>
+  /* Language — the choice made here becomes the console's default after sign-in,
+     because both pages read/write the same localStorage key. */
+  (function () {
+    var LANG_KEY = 'roots-admin-lang';
+    var lang = 'en';
+    try { var s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'cn') lang = s; } catch (e) {}
+
+    function applyLang(l) {
+      lang = l;
+      window.__loginLang = l;
+      document.body.setAttribute('data-lang', l);
+      document.documentElement.setAttribute('lang', l === 'cn' ? 'zh-CN' : 'en');
+
+      var user = document.getElementById('username');
+      if (user) user.setAttribute('placeholder', l === 'cn' ? '操作员' : 'operator');
+
+      var tgl = document.getElementById('langToggle');
+      if (tgl) tgl.textContent = l === 'cn' ? 'EN' : '中文';
+
+      var reveal = document.getElementById('revealBtn');
+      var pw = document.getElementById('password');
+      if (reveal) {
+        var shown = pw && pw.type === 'text';
+        var label = l === 'cn'
+          ? (shown ? '隐藏密码' : '显示密码')
+          : (shown ? 'Hide password' : 'Show password');
+        reveal.setAttribute('aria-label', label);
+        reveal.setAttribute('title', label);
+      }
+
+      try { localStorage.setItem(LANG_KEY, l); } catch (e) {}
+    }
+
+    window.__applyLoginLang = applyLang;
+    applyLang(lang);
+
+    var toggle = document.getElementById('langToggle');
+    if (toggle) toggle.addEventListener('click', function () { applyLang(lang === 'cn' ? 'en' : 'cn'); });
+  })();
+
   /* Auth handler — wired to the real Mini App Backend operator endpoints. */
   (function () {
+    function L(en, cn) { return window.__loginLang === 'cn' ? cn : en; }
     // Already signed in as an operator? Skip straight to the console.
     fetch('/api/backend/me', { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
@@ -352,7 +409,7 @@
       var p = document.getElementById('password').value;
 
       if (!u || !p) {
-        showErr('Enter your username and password · 请输入用户名和密码');
+        showErr(L('Enter your username and password', '请输入用户名和密码'));
         return;
       }
 
@@ -368,11 +425,11 @@
         .then(function (r) { return r.json().catch(function () { return {}; }); })
         .then(function (j) {
           if (j && j.success) { window.location.href = '/retail-admin'; return; }
-          showErr((j && j.error) || 'Incorrect username or password · 用户名或密码错误');
+          showErr((j && j.error) || L('Incorrect username or password', '用户名或密码错误'));
           reset();
         })
         .catch(function () {
-          showErr('Network error — please try again · 网络错误，请重试');
+          showErr(L('Network error — please try again', '网络错误，请重试'));
           reset();
         });
     });
@@ -384,8 +441,9 @@
       reveal.addEventListener('click', function () {
         var show = pw.type === 'password';
         pw.type = show ? 'text' : 'password';
-        reveal.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
-        reveal.setAttribute('title', show ? 'Hide password' : 'Show password');
+        var label = show ? L('Hide password', '隐藏密码') : L('Show password', '显示密码');
+        reveal.setAttribute('aria-label', label);
+        reveal.setAttribute('title', label);
         pw.focus();
       });
     }
