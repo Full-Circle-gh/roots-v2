@@ -513,6 +513,21 @@
      ═══════════════════════════════════════════════════════════════════ */
   main { padding: var(--s6) var(--s6) var(--s7); max-width: min(1440px, 92vw); margin: 0 auto; }
   section { display: none; }
+  /* Embedded editors (Mini App / Product Page) — break out of main's centered
+     padding box to span the full width, and stand the iframe up to fill the
+     viewport below the topbar (56px) + tab nav (~44px). The height divides out
+     the html `zoom` (var --ui-scale) so it doesn't overflow at 110 / 125% text
+     size. The editor inside the iframe skips its own zoom when embedded, so
+     scale isn't applied twice (see is-embedded in cms.html / product-editor.html). */
+  #tab-mini-app-editor, #tab-product-editor {
+    margin: calc(var(--s6) * -1) calc(50% - 50vw) calc(var(--s7) * -1);
+    padding: 0;
+  }
+  .tab-embed-editor .ed-frame {
+    display: block; width: 100%; border: 0;
+    height: calc(100vh / var(--ui-scale, 1) - 100px);
+    background: var(--bg-app);
+  }
   /* Tab switch (Dashboard / Orders / Invoices …) → the new section drifts up
      and fades in on the same zen ease as the drawers, so navigation feels
      alive rather than a hard cut. display:none→block restarts the anim each
@@ -4648,25 +4663,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         Media · 媒体库
       </button>
-      <!-- Divider — separates the in-app content sections above from the
-           external editor launcher below. -->
-      <div style="height:1px;background:var(--line);margin:4px 6px;"></div>
-      <!-- Mini App Editor (/cms) — opens in a new tab. Lives under Content
-           because it edits the mini-app storefront layout. A toggle in its top
-           bar switches over to the Product Page Editor. -->
-      <button type="button" onclick="window.open('/cms','_blank','noopener')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="13" y2="10"/></svg>
-        Mini App Editor · 小程序编辑器
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;opacity:.55;margin-left:auto"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-      </button>
-      <!-- Product Page Editor (/product-editor) — opens in a new tab to a
-           product picker, then edits that product's detail-page sections. A
-           toggle in its top bar switches over to the Mini App Editor. -->
-      <button type="button" onclick="window.open('/product-editor','_blank','noopener')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
-        Product Page Editor · 产品页编辑器
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;opacity:.55;margin-left:auto"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-      </button>
+      <!-- Mini App Editor & Product Page Editor moved out of this dropdown into
+           top-level nav tabs (after Delivery) so they switch in-page. -->
+
     </div>
   </div>
 
@@ -4693,6 +4692,18 @@
   <button data-tab="delivery">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
     Delivery · 配送
+  </button>
+
+  <!-- Editors — embedded in-page (iframe tab sections), NOT new windows. They
+       switch like any other tab. Mini App Editor = storefront pages (/cms);
+       Product Page Editor = per-product PDP (/product-editor). -->
+  <button data-tab="mini-app-editor">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="13" y2="10"/></svg>
+    Mini App Editor · 小程序编辑器
+  </button>
+  <button data-tab="product-editor">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+    Product Page Editor · 产品页编辑器
   </button>
 
   <!-- Auto-refresh dot — pinned right of the tab bar, next to the
@@ -8944,10 +8955,10 @@
               <h3 style="font-size: 13px; margin-bottom: 4px;">Open the Mini App editor · 打开小程序编辑器</h3>
               <div class="muted" style="font-size: 12px;">All six editable mini-app pages live in /cms. Changes go live on Publish. · 全部 6 个可编辑的小程序页面在 /cms 管理;点击"发布"后生效。</div>
             </div>
-            <a href="/cms" class="btn btn-primary">
+            <button type="button" onclick="openMiniAppEditor()" class="btn btn-primary">
               Open editor
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-            </a>
+            </button>
           </div>
           <div class="card" style="display: flex; gap: var(--s4); align-items: center;">
             <div style="flex: 1;">
@@ -9926,6 +9937,17 @@
     </div><!-- /.settings-layout -->
   </section>
 
+  <!-- Embedded editors — the Mini App Editor (/cms) and Product Page Editor
+       (/product-editor) loaded in-page as iframe tab sections. Lazy-loaded on
+       first open (no src until then) so the two big editor apps don't download
+       until used. They self-auth exactly as the standalone pages did. -->
+  <section id="tab-mini-app-editor" class="tab-embed-editor">
+    <iframe id="frame-mini-app-editor" class="ed-frame" title="Mini App Editor · 小程序编辑器" data-src="/cms"></iframe>
+  </section>
+  <section id="tab-product-editor" class="tab-embed-editor">
+    <iframe id="frame-product-editor" class="ed-frame" title="Product Page Editor · 产品页编辑器" data-src="/product-editor"></iframe>
+  </section>
+
 </main>
 
 <aside id="order-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
@@ -10068,6 +10090,26 @@ $$('.tabs [data-tab]').forEach(btn => btn.addEventListener('click', () => {
   $$('.tabs-group').forEach(g => g.classList.toggle('has-active', g.contains(btn)));
   $$('.tabs-group.open').forEach(g => g.classList.remove('open'));
 }));
+// Embedded editors — lazy-load each iframe the first time its tab is opened, so
+// the two big editor apps don't download until needed.
+['mini-app-editor', 'product-editor'].forEach(tab => {
+  const btn = document.querySelector('.tabs [data-tab="' + tab + '"]');
+  const frame = document.getElementById('frame-' + tab);
+  if (btn && frame) btn.addEventListener('click', () => { if (!frame.getAttribute('src')) frame.src = frame.dataset.src; });
+});
+// Switch to the Mini App Editor tab in-page.
+function openMiniAppEditor() {
+  const btn = document.querySelector('.tabs [data-tab="mini-app-editor"]');
+  if (btn) btn.click();
+}
+// Open the Product Page Editor on a specific product, in-page: point its iframe
+// at that product, then switch to the tab. Replaces the old new-tab window.open.
+function openProductEditor(id) {
+  const frame = document.getElementById('frame-product-editor');
+  if (frame) frame.src = '/product-editor?id=' + encodeURIComponent(id);
+  const btn = document.querySelector('.tabs [data-tab="product-editor"]');
+  if (btn) btn.click();
+}
 // Group trigger toggles its popover; only one group open at a time.
 $$('.tabs-group-trigger').forEach(btn => btn.addEventListener('click', (ev) => {
   ev.stopPropagation();
@@ -10603,7 +10645,7 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
     if (it.openUrl) { window.open(it.openUrl, '_blank', 'noopener'); return; }
     // Live records → open the matching editor / detail drawer.
     if (it.type === 'product') {
-      window.open('/product-editor?id=' + encodeURIComponent(it.pid), '_blank', 'noopener');
+      openProductEditor(it.pid);
       return;
     }
     if (it.type === 'order') {
@@ -21114,7 +21156,7 @@ function paOpenEdit(id) {
   // here — clicking a product jumps straight to the mini-app page designer in
   // a new tab, skipping the in-page commercial-details/stock form entirely.
   if (CATALOG_MODE === 'upstream') {
-    window.open('/product-editor?id=' + encodeURIComponent(id), '_blank', 'noopener');
+    openProductEditor(id);
     return;
   }
   // Grid/compact = catalogue-scan mode (editor pane hidden). Clicking a card
@@ -21627,7 +21669,7 @@ function pdGalleryWire() {
 function pdOpenPageDesign() {
   const id = document.getElementById('pd-id').value;
   if (!id) { toast(cuT('Save the product first, then open the Product editor', '请先保存产品,再打开产品页编辑器'), 'err'); return; }
-  window.open('/product-editor?id=' + encodeURIComponent(id), '_blank', 'noopener');
+  openProductEditor(id);
 }
 // ── Description editor — the Classic (rich-text) editor is the only inline
 // mode; "Product editor" in the mode bar launches the full page designer. ───

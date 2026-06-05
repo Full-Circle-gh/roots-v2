@@ -20,11 +20,18 @@
     } catch (e) {
       document.documentElement.setAttribute('data-theme', 'dark');
     }
+    // Embedded as an in-page tab of the backend (iframe)? Mark it so chrome
+    // (toggle, close button) hides and we skip self-zoom — the parent already
+    // applies zoom, so re-applying here would double it.
+    var fcEmbedded = false;
+    try { fcEmbedded = window.self !== window.top; } catch (e) { fcEmbedded = true; }
+    if (fcEmbedded) document.documentElement.classList.add('is-embedded');
     // UI scale (text size) — shared suite-wide preference (roots-admin-ui-scale,
     // set from the backend topbar). Apply pre-paint so the editor matches.
     try {
       var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
       if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
+      if (fcEmbedded) s = 1; // parent iframe already zoomed; avoid compounding
       document.documentElement.style.zoom = String(s);
       // Expose the zoom so viewport-locked heights (#pe-body's 100vh) can
       // divide it back out — otherwise the body overflows and crops at 110/125%.
@@ -285,6 +292,14 @@
     box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
   }
   .pe-brand .fcsw-seg svg { width: 13px; height: 13px; flex-shrink: 0; }
+  /* Embedded as a backend tab (iframe): the parent top nav already provides
+     editor switching + "back", so hide the in-editor toggle, the back arrow,
+     and the Close button (there's no window to close). */
+  .is-embedded .pe-brand .fcsw,
+  .is-embedded .pe-brand .pe-brass-dot,
+  .is-embedded .pe-brand-divider,
+  .is-embedded .pe-back,
+  .is-embedded .pe-close-btn { display: none; }
   .pe-topbar-title { display: flex; align-items: center; gap: var(--s3); min-width: 0; flex: 1; position: relative; }
   #pe-name {
     font-size: 15px; font-weight: 600; color: var(--text-1);
@@ -1359,7 +1374,7 @@
         <button data-lang="cn" onclick="cuSetLang('cn')">中</button>
       </div>
       <span id="pe-save-status"></span>
-      <button class="btn" onclick="peClose()">Close · 关闭</button>
+      <button class="btn pe-close-btn" onclick="peClose()">Close · 关闭</button>
       <button id="pe-save-btn" class="btn btn-primary" onclick="paSaveEdit()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         Save · 保存
@@ -1542,6 +1557,8 @@ function toast(msg, kind) {
 // Close the editor tab. Opened via window.open() from retail-admin, so
 // window.close() works; fall back to navigating back if the browser blocks it.
 function peClose() {
+  // Embedded as a backend tab — nothing to close; the parent owns navigation.
+  if (window.self !== window.top) return;
   window.close();
   // If still here a tick later, the tab wasn't script-opened — go back.
   setTimeout(() => {

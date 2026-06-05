@@ -24,11 +24,18 @@
     } catch (e) {
       document.documentElement.setAttribute('data-theme', 'dark');
     }
+    // Embedded as an in-page tab of the backend (iframe)? Mark it so chrome
+    // (toggle, back link) hides and we skip self-zoom — the parent already
+    // applies zoom, so re-applying here would double it.
+    var fcEmbedded = false;
+    try { fcEmbedded = window.self !== window.top; } catch (e) { fcEmbedded = true; }
+    if (fcEmbedded) document.documentElement.classList.add('is-embedded');
     // UI scale (text size) — shared suite-wide preference (roots-admin-ui-scale,
     // set from the backend topbar). Apply pre-paint so the editor matches.
     try {
       var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
       if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
+      if (fcEmbedded) s = 1; // parent iframe already zoomed; avoid compounding
       document.documentElement.style.zoom = String(s);
       // Also expose as a CSS var so layouts that lock to viewport units
       // (.body uses 100vh - topbar) can compensate at first paint.
@@ -4433,6 +4440,12 @@
     cursor: default;
   }
   .brand .fcsw-seg svg { width: 13px; height: 13px; flex-shrink: 0; }
+  /* Embedded as a backend tab (iframe): the parent top nav already provides
+     editor switching + "back", so hide the in-editor toggle and disable the
+     wordmark-as-back link (the parent IS the backend). */
+  .is-embedded .brand .fcsw { display: none; }
+  .is-embedded .brand .brass-dot { display: none; }
+  .is-embedded .brand-home { pointer-events: none; cursor: default; }
   /* Top-bar controls on the dark chrome ------------------------------- */
   .topbar .who {
     font-family: var(--f-mono);
@@ -6636,6 +6649,9 @@ async function saveDraft() {
 // in-flight edits aren't lost on the way out.
 async function goToBackend(e) {
   if (e) e.preventDefault();
+  // Embedded as a backend tab — the parent IS the backend, so don't navigate
+  // the iframe away from itself.
+  if (window.self !== window.top) return;
   if (state.dirty || state.saving) {
     clearTimeout(saveTimer);
     try { await saveDraft(); } catch {}
