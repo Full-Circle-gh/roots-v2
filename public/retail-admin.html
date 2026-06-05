@@ -13743,7 +13743,7 @@ function renderShipmentCard(o, s) {
     </div>`;
 }
 
-async function openOrder(id) {
+async function openOrder(id, opts = {}) {
   _OPEN_ORDER = null;
   _ORDER_BACK_CUSTOMER = null;
   _ODV_OPEN = false;               // View popover starts closed on a fresh open
@@ -13753,13 +13753,22 @@ async function openOrder(id) {
   // content visible, fade the whole mount out, then render the new order into
   // the hidden mount and fade it back in. A fresh open keeps the old behavior
   // (drawer slide + per-child settle do the entrance) and shows "Loading…".
-  const switching = drawer && drawer.classList.contains('open') && mount.children.length > 0;
+  // `instant` is for re-opening the SAME order after a mutation (e.g. mark-paid):
+  // there's nothing to cross-fade between, so render in place and never touch
+  // od-swapping — that opacity dance is what could otherwise strand the mount
+  // invisible if anything raced the fade.
+  mount.classList.remove('od-swapping');
+  const switching = !opts.instant && drawer && drawer.classList.contains('open') && mount.children.length > 0;
   const fetchP = Promise.all([
     api('/api/retail-admin/orders/' + id),
     ensureTrackingCarriers(),
   ]);
+  const drawerOpen = drawer && drawer.classList.contains('open');
   if (switching) {
     mount.classList.add('od-swapping');          // fade current order out
+  } else if (opts.instant && drawerOpen) {
+    // Re-rendering the same order in place: keep the old content on screen
+    // until the fresh data lands — no "Loading…" flash, no slide.
   } else {
     mount.innerHTML = '<div class="order-card muted">Loading order…</div>';
     openDrawer('#order-drawer');
@@ -14181,7 +14190,7 @@ async function transition(id, status) {
   try {
     await api(`/api/retail-admin/orders/${id}/status`, { method: 'PATCH', body: { status, reason, pay_method } });
     toast(`Order → ${humanStatus(status, _OPEN_ORDER?.fulfillment_type)} · 订单 → ${humanStatus(status, _OPEN_ORDER?.fulfillment_type)}`);
-    openOrder(id);
+    openOrder(id, { instant: true });
     loadOrders();
   } catch (e) {
     toast('Failed · 失败: ' + e.message, 'err');
