@@ -7748,6 +7748,11 @@ router.post('/api/retail-admin/brand/apply', requireRetailAdmin, express.json(),
 // Publish the brand draft live: expand the draft theme into theme.* config
 // and copy the draft Home layout to live.
 router.post('/api/retail-admin/brand/publish', requireRetailAdmin, express.json(), (req, res) => {
+  // Guard: publishing a brand overwrites the LIVE storefront. Require explicit
+  // confirmation so it can never happen by accident / a stray call.
+  if (!req.body || req.body.confirm !== true) {
+    return res.status(400).json({ success: false, error: 'Publishing a brand goes live to shoppers — explicit confirmation required.' });
+  }
   try {
     const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key='cms.draft.brand_theme'").get();
     const theme = row ? brandThemeLib.sanitizeTheme(JSON.parse(row.value_json)) : null;

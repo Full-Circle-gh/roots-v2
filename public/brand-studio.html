@@ -104,7 +104,6 @@
     <div class="blocks" id="blocks"></div>
     <div style="margin-top:16px; display:flex; gap:10px;">
       <button class="ghost" id="applyBtn">Apply as draft</button>
-      <button class="ghost" id="publishBtn">Publish live</button>
       <button class="ghost" id="againBtn">Start over</button>
     </div>
     <div class="status" id="status2"></div>
@@ -206,14 +205,6 @@ $('applyBtn').onclick = async function () {
   setStatus('Saving draft…', 'status2');
   try { await api('/api/retail-admin/brand/apply', { method: 'POST', body: JSON.stringify({ theme: lastResult.theme, layout: lastResult.layout }) });
     setStatus('Saved as a draft — preview it in the Mini App Editor.', 'status2'); }
-  catch (e) { setStatus(humErr(e), 'status2'); }
-};
-$('publishBtn').onclick = async function () {
-  if (!lastResult) return;
-  setStatus('Publishing…', 'status2');
-  try { await api('/api/retail-admin/brand/apply', { method: 'POST', body: JSON.stringify({ theme: lastResult.theme, layout: lastResult.layout }) });
-    await api('/api/retail-admin/brand/publish', { method: 'POST', body: JSON.stringify({}) });
-    setStatus('Published live.', 'status2'); }
   catch (e) { setStatus(humErr(e), 'status2'); }
 };
 $('againBtn').onclick = function () { $('resultCard').classList.add('hidden'); $('formCard').classList.remove('hidden'); $('goBtn').disabled = false; setStatus(''); };
