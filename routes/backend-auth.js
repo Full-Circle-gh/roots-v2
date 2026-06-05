@@ -169,4 +169,15 @@ router.put('/api/backend/password', express.json(), (req, res) => {
   res.json({ success: true });
 });
 
+// Edit own profile. Only the display name is self-editable; username, role and
+// tenant are login identity / admin-assigned and stay read-only.
+router.put('/api/backend/profile', express.json(), (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const name = String((req.body && req.body.display_name) || '').trim();
+  if (!name) return res.status(400).json({ error: 'Name is required · 名称必填' });
+  if (name.length > 60) return res.status(400).json({ error: 'Name is too long · 名称过长' });
+  db.prepare('UPDATE tenant_users SET display_name = ? WHERE id = ?').run(name, req.session.backendUserId);
+  res.json({ success: true, displayName: name });
+});
+
 module.exports = router;
