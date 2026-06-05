@@ -1943,6 +1943,31 @@ function markOrderPaid(orderId) {
     "UPDATE retail_payments SET status = 'success', completed_at = CURRENT_TIMESTAMP WHERE order_id = ? AND status = 'pending'"
   ).run(orderId);
   if (r.changes > 0) {
+    // Re-anchor an Express ("ship ASAP / Earliest X") order's promised earliest
+    // day to the PAYMENT date. That date is a relative promise — an order placed
+    // Sunday but left unpaid until Monday must earliest from Monday, since the
+    // kitchen only starts once it's paid. A fixed calendar/time-slot pick is a
+    // specific chosen day and must NOT move, so we only touch the synth Express
+    // slot (label begins "Earliest "/"最早 "). Language of the stored label is
+    // preserved. No-op when paid on the same day it was placed (same date).
+    try {
+      const ord = tdb().prepare(
+        'SELECT delivery_zone_id, delivery_slot_label FROM retail_orders WHERE id = ?'
+      ).get(orderId);
+      const lbl = String(ord?.delivery_slot_label || '');
+      const isCn = lbl.startsWith('最早 ');
+      if (lbl.startsWith('Earliest ') || isCn) {
+        const zone = ord.delivery_zone_id
+          ? tdb().prepare('SELECT * FROM retail_delivery_zones WHERE id = ?').get(ord.delivery_zone_id)
+          : null;
+        const iso = expressEarliestIso(zone, new Date());
+        const [y, m, d] = iso.split('-').map(Number);
+        tdb().prepare(
+          "UPDATE retail_orders SET scheduled_for = ?, delivery_slot_label = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        ).run(new Date(y, m - 1, d, 0, 0).toISOString(), `${isCn ? '最早' : 'Earliest'} ${iso}`, orderId);
+      }
+    } catch (e) { console.error('[markOrderPaid reanchor]', e); }
+
     if (!isWait) {
       // Commit the soft-reservations: physical stock deducts at this point.
       // Idempotent for callers that re-fire (e.g. wechat retry callbacks).
@@ -8466,8 +8491,13 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   params.push(limit, offset);
 
   const rows = tdb().prepare(sql).all(...params);
+  // JD waybills don't ride the kd100 push pipeline — they sync live from JD's
+  // own trace API whenever JD creds are configured. Surface that so the list
+  // cell can show a green "live" badge instead of "manual" for JD parcels.
+  const jdLiveOn = jd.jdEnabled(integ().jd);
   for (const r of rows) {
     r.item_count = tdb().prepare('SELECT COUNT(*) AS n FROM retail_order_items WHERE order_id = ?').get(r.id).n;
+    r.jd_live = r.tracking_carrier === 'jd' && !!r.tracking_number && jdLiveOn;
   }
   res.json({ success: true, data: rows, meta: { limit, offset } });
 });
@@ -11183,6 +11213,26 @@ function computeBatchNotice(zone, productIds, now) {
 //             requires_surcharge, label_en, label_cn }],
 //   kitchen_open_now,
 // }
+
+// The zone's TRUE earliest fulfillable day (the Express "ship ASAP / Earliest X"
+// date), anchored to `now`. Floored at tomorrow because a day-only Express slot
+// is never "today". Pulled out of computeDeliverySlots so payment finalization
+// can RE-anchor an express order to its PAY date: the express date is a relative
+// promise, so an order placed Sunday but left unpaid until Monday must earliest
+// from Monday (the kitchen only starts once it's paid).
+function expressEarliestIso(zone, now) {
+  let lead = zone && zone.min_lead_days != null ? Number(zone.min_lead_days) : 0;
+  if (!(lead >= 0)) lead = 0;
+  const days = Math.max(1, lead);
+  const t = now || new Date();
+  const startOfDay = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  const d = new Date(startOfDay.getTime() + days * 86400000);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function computeDeliverySlots(zone, now) {
   const cfg = {
     same_day_allowed:      1,
@@ -11379,8 +11429,7 @@ function computeDeliverySlots(zone, now) {
   // Express slot must NOT inherit it, or it reads "Earliest +3 days" even for
   // zones that ship in 1–2 days. Floor at 1 (tomorrow) because a day-only
   // Express slot is never "today" — today is the separate same-day day chip.
-  const expressDays    = Math.max(1, cfg.min_lead_days);
-  const expressDateIso = fmtDateIso(new Date(startOfDay.getTime() + expressDays * 86400000));
+  const expressDateIso = expressEarliestIso(zone, tzNow);
 
   return {
     mode: isDayOnly ? 'day_only' : 'time_slots',
