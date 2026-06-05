@@ -12028,7 +12028,7 @@ async function dashLoad() {
 }
 
 // Manual ↻ refresh — same fetch as dashLoad, but the headline numbers roll up
-// from zero (slow, ambient) and the page fades in slowly, so a click reads as a
+// from zero (slow, ambient) and the page fades in, so a click reads as a
 // deliberate "re-reveal" rather than a silent reload. Seeding _cuVal=0 on the
 // live "Right now / Today" tiles makes them roll too; DASH_FORCE_ROLLUP does the
 // same for the deep-dive KPIs.
@@ -12045,7 +12045,7 @@ function dashRefresh() {
 // Gentle slow fade-in for a dashboard refresh. The old flicker came from
 // rendering the new content at full opacity and THEN snapping it to 0 to fade
 // up. Here we hide the area first, swap the fresh content in while it's
-// invisible, then ease it back over a slow zen fade — one clean fade-in, no
+// invisible, then ease it back on the same fade as the tab switch — one clean fade-in, no
 // appear-snap-fade. Honours prefers-reduced-motion.
 function dashSwapWithFade(render) {
   const els = ['db-bento', 'db-deepdive'].map(id => document.getElementById(id)).filter(Boolean);
@@ -12055,7 +12055,7 @@ function dashSwapWithFade(render) {
   render();
   els.forEach(el => void el.offsetWidth);   // commit opacity:0 + fresh content together
   els.forEach(el => {
-    el.style.transition = 'opacity 5s cubic-bezier(.16, 1, .3, 1)';
+    el.style.transition = 'opacity 1.004s cubic-bezier(.16, 1, .3, 1)';
     el.style.opacity = '1';
     el.addEventListener('transitionend', function done(ev) {
       if (ev.target !== el || ev.propertyName !== 'opacity') return;
