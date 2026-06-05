@@ -4407,6 +4407,32 @@
     color: rgba(232, 229, 220, .60);
     font-weight: 500;
   }
+  /* Editor switch — segmented toggle in the brand lockup that jumps between
+     the Mini App Editor (this page) and the Product Page Editor. Sits on the
+     always-dark chrome, so it uses fixed light-on-dark colours. */
+  .brand .fcsw {
+    display: inline-flex; align-items: center; gap: 2px;
+    padding: 2px; border-radius: 8px;
+    background: rgba(232, 229, 220, .06);
+    border: 1px solid rgba(232, 229, 220, .12);
+  }
+  .brand .fcsw-seg {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--f-mono); font-size: 10px; letter-spacing: .14em;
+    text-transform: uppercase; font-weight: 600;
+    color: rgba(232, 229, 220, .58);
+    background: transparent; border: 1px solid transparent;
+    border-radius: 6px; padding: 5px 9px; cursor: pointer; white-space: nowrap;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .brand button.fcsw-seg:hover { color: var(--chrome-fg); background: rgba(232, 229, 220, .07); }
+  .brand .fcsw-seg.fcsw-on {
+    color: var(--chrome-fg);
+    background: rgba(232, 229, 220, .12);
+    border-color: rgba(232, 229, 220, .14);
+    cursor: default;
+  }
+  .brand .fcsw-seg svg { width: 13px; height: 13px; flex-shrink: 0; }
   /* Top-bar controls on the dark chrome ------------------------------- */
   .topbar .who {
     font-family: var(--f-mono);
@@ -4500,7 +4526,18 @@
       <span class="wordmark">FULL CIRCLE</span>
     </a>
     <span class="brass-dot" aria-hidden="true">·</span>
-    <span class="sub">Mini App Editor</span>
+    <!-- Editor switch — replaces the old static "Mini App Editor" label so both
+         editors live behind one top bar. This page = Mini App (active). -->
+    <div class="fcsw" role="group" aria-label="Editor">
+      <span class="fcsw-seg fcsw-on" aria-current="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="13" y2="10"/></svg>
+        <span class="i18n-en">Mini App</span><span class="i18n-cn">小程序</span>
+      </span>
+      <button class="fcsw-seg" type="button" onclick="fcGotoProductEditor()" data-ti-en="Switch to Product Page Editor" data-ti-cn="切换到产品页编辑器" title="Switch to Product Page Editor">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+        <span class="i18n-en">Product Page</span><span class="i18n-cn">产品页</span>
+      </button>
+    </div>
   </div>
   <!-- PAGE picker stays in the topbar — page-switching is a navigation
        action, not a design knob. The visual pickers (BACKGROUND / TAB BAR)
@@ -6604,6 +6641,15 @@ async function goToBackend(e) {
     try { await saveDraft(); } catch {}
   }
   window.location.href = '/retail-admin';
+}
+// Editor switch — jump to the Product Page Editor, saving the current draft
+// first so nothing is lost (mirrors goToBackend's save-before-leave).
+async function fcGotoProductEditor() {
+  if (state.dirty || state.saving) {
+    clearTimeout(saveTimer);
+    try { await saveDraft(); } catch {}
+  }
+  window.location.href = '/product-editor';
 }
 async function publish() {
   if (state.saving) await new Promise(r => setTimeout(r, 900));

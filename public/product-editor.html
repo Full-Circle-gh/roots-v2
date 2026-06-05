@@ -262,6 +262,29 @@
   .pe-brass-dot { color: var(--brass); font-weight: 700; }
   .pe-brand-name { font-family: var(--f-mono); font-weight: 500; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--text-3); }
   .pe-brand-divider { width: 1px; height: 16px; background: var(--line); }
+  /* Editor switch — segmented toggle that jumps between the Mini App Editor and
+     the Product Page Editor (this page). Theme-following, unlike the CMS chrome. */
+  .pe-brand .fcsw {
+    display: inline-flex; align-items: center; gap: 2px;
+    padding: 2px; border-radius: 8px;
+    background: var(--bg-app); border: 1px solid var(--line);
+  }
+  .pe-brand .fcsw-seg {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em;
+    text-transform: uppercase; font-weight: 600;
+    color: var(--text-3); background: transparent;
+    border: 1px solid transparent; border-radius: 6px;
+    padding: 5px 9px; cursor: pointer; white-space: nowrap;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .pe-brand button.fcsw-seg:hover { color: var(--text-1); }
+  .pe-brand .fcsw-seg.fcsw-on {
+    color: var(--text-1); background: var(--bg-pane);
+    border-color: var(--line-strong); cursor: default;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+  }
+  .pe-brand .fcsw-seg svg { width: 13px; height: 13px; flex-shrink: 0; }
   .pe-topbar-title { display: flex; align-items: center; gap: var(--s3); min-width: 0; flex: 1; position: relative; }
   #pe-name {
     font-size: 15px; font-weight: 600; color: var(--text-1);
@@ -1301,7 +1324,18 @@
       </span>
       <span class="pe-wordmark">FULL CIRCLE</span>
       <span class="pe-brass-dot" aria-hidden="true">·</span>
-      <span class="pe-brand-name">Product Editor · 产品编辑器</span>
+      <!-- Editor switch — replaces the old static "Product Editor" label so both
+           editors live behind one top bar. This page = Product Page (active). -->
+      <div class="fcsw" role="group" aria-label="Editor · 编辑器">
+        <button class="fcsw-seg" type="button" onclick="fcGotoMiniApp()" title="Switch to Mini App Editor · 切换到小程序编辑器">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="13" y2="10"/></svg>
+          Mini App · 小程序
+        </button>
+        <span class="fcsw-seg fcsw-on" aria-current="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+          Product Page · 产品页
+        </span>
+      </div>
       <span class="pe-brand-divider"></span>
     </div>
     <div class="pe-topbar-title">
@@ -1514,6 +1548,14 @@ function peClose() {
     if (document.referrer) location.href = document.referrer;
     else location.href = '/retail-admin';
   }, 120);
+}
+// Editor switch — jump to the Mini App (pages) editor, saving first if the
+// current product has unsaved edits so nothing is lost.
+async function fcGotoMiniApp() {
+  if (typeof peIsDirty === 'function' && peIsDirty()) {
+    try { await paSaveEdit(); } catch {}
+  }
+  window.location.href = '/cms';
 }
 
 // ── Block-type registry — full Roots PDP v1 system. Keep in lock-step with
