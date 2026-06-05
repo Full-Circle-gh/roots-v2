@@ -5343,11 +5343,26 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
 // "Revenue" counts orders that were paid and not refunded/cancelled, i.e.
 // status IN (paid, preparing, dispatched, delivered, awaiting_restock).
 // Refunded + cancelled are reported separately in the funnel.
+//
+// Cash-basis attribution: money/sales panels (headline KPI, trend, payment/
+// delivery/store splits, top products/customers, geography, vouchers/points,
+// composition, new-vs-returning) book an order on the day PAYMENT landed
+// (paid_at), so an order placed yesterday but confirmed paid today counts in
+// today's revenue. paid_at falls back to placed_at for legacy paid orders
+// that predate paid_at tracking. Behaviour/timing panels (gross funnel, demand
+// heatmap, cohorts, checkout abandonment, visits) stay on placed_at — they
+// measure when demand ARRIVES, not when cash settles.
 // ─────────────────────────────────────────────────────────────────────────
 router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const TZ    = '+8 hours';
   const PAID  = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
   const PAIDO = "o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+  // Revenue date = day payment landed (see header note). PDATE for bare-table
+  // queries, PDATEO when the orders table is aliased `o`, PHOUR for the hourly
+  // bucket of a single-day view.
+  const PDATE  = `date(COALESCE(paid_at, placed_at), '${TZ}')`;
+  const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
+  const PHOUR  = `strftime('%H', COALESCE(paid_at, placed_at), '${TZ}')`;
 
   // ── Resolve window (defaults to trailing 30 days, GZ local) ──
   const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
@@ -5369,7 +5384,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COALESCE(AVG(total), 0) AS aov,
            COUNT(DISTINCT customer_id) AS buyers
       FROM retail_orders
-     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?`;
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?`;
   const kpi     = tdb().prepare(kpiSql).get(from, to);
   const kpiPrev = tdb().prepare(kpiSql).get(prevFrom, prevTo);
 
@@ -5397,7 +5412,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     const baseTo   = prevTo;   // the day before `from`
     const bk   = tdb().prepare(kpiSql).get(baseFrom, baseTo);
     const bnew = tdb().prepare(newCustSql).get(baseFrom, baseTo).n;
-    const fo = tdb().prepare(`SELECT MIN(date(placed_at, '${TZ}')) AS d FROM retail_orders WHERE ${PAID}`).get().d;
+    const fo = tdb().prepare(`SELECT MIN(${PDATE}) AS d FROM retail_orders WHERE ${PAID}`).get().d;
     const fc = tdb().prepare(`SELECT MIN(date(created_at, '${TZ}')) AS d FROM retail_customers`).get().d;
     const firstD = [fo, fc].filter(Boolean).sort()[0] || null;
     let days = 0;
@@ -5434,10 +5449,10 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   let trend;
   if (hourly) {
     const o = tdb().prepare(`
-      SELECT CAST(strftime('%H', placed_at, '${TZ}') AS INTEGER) AS b,
+      SELECT CAST(${PHOUR} AS INTEGER) AS b,
              COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
         FROM retail_orders
-       WHERE ${PAID} AND date(placed_at, '${TZ}') = ?
+       WHERE ${PAID} AND ${PDATE} = ?
        GROUP BY b`).all(from);
     const v = tdb().prepare(`
       SELECT CAST(strftime('%H', created_at, '${TZ}') AS INTEGER) AS b,
@@ -5463,10 +5478,10 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     }));
   } else {
     const o = tdb().prepare(`
-      SELECT date(placed_at, '${TZ}') AS b,
+      SELECT ${PDATE} AS b,
              COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
         FROM retail_orders
-       WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+       WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
        GROUP BY b`).all(from, to);
     const v = tdb().prepare(`
       SELECT date(created_at, '${TZ}') AS b,
@@ -5494,7 +5509,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     SELECT COALESCE(payment_method, 'unknown') AS method,
            COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
      GROUP BY method ORDER BY revenue DESC`).all(from, to);
 
   // ── Delivery-mode split ──
@@ -5502,7 +5517,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     SELECT COALESCE(delivery_mode, 'unknown') AS mode,
            COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
      GROUP BY mode ORDER BY orders DESC`).all(from, to);
 
   // ── Fulfilling store + routing reason ──
@@ -5511,12 +5526,12 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COUNT(*) AS orders, COALESCE(SUM(o.total), 0) AS revenue
       FROM retail_orders o
       LEFT JOIN retail_stores s ON s.id = o.store_id
-     WHERE ${PAIDO} AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?
+     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
      GROUP BY o.store_id ORDER BY orders DESC`).all(from, to);
   const routing = tdb().prepare(`
     SELECT COALESCE(routing_reason, 'unknown') AS reason, COUNT(*) AS orders
       FROM retail_orders
-     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
      GROUP BY reason ORDER BY orders DESC`).all(from, to);
 
   // ── Top products (by revenue) ──
@@ -5527,7 +5542,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COUNT(DISTINCT i.order_id) AS orders
       FROM retail_order_items i
       JOIN retail_orders o ON o.id = i.order_id
-     WHERE ${PAIDO} AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?
+     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
      GROUP BY i.product_id ORDER BY revenue DESC LIMIT 15`).all(from, to);
 
   // ── Top customers (by spend in window) ──
@@ -5537,7 +5552,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            MAX(o.placed_at) AS last_order
       FROM retail_orders o
       JOIN retail_customers c ON c.id = o.customer_id
-     WHERE ${PAIDO} AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?
+     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
      GROUP BY o.customer_id ORDER BY revenue DESC LIMIT 15`).all(from, to);
 
   // ── New vs returning buyers (first-ever paid order in window = new) ──
@@ -5545,10 +5560,10 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     SELECT COUNT(DISTINCT o.customer_id) AS buyers,
            COUNT(DISTINCT CASE WHEN fo.first_day BETWEEN ? AND ? THEN o.customer_id END) AS new_buyers
       FROM retail_orders o
-      JOIN (SELECT customer_id, MIN(date(placed_at, '${TZ}')) AS first_day
+      JOIN (SELECT customer_id, MIN(${PDATE}) AS first_day
               FROM retail_orders WHERE ${PAID} GROUP BY customer_id) fo
         ON fo.customer_id = o.customer_id
-     WHERE ${PAIDO} AND date(o.placed_at, '${TZ}') BETWEEN ? AND ?`).get(from, to, from, to);
+     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?`).get(from, to, from, to);
 
   // ── Loyalty-tier distribution (active customer base snapshot) ──
   const tiers = tdb().prepare(`
@@ -5562,7 +5577,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COUNT(*) AS orders, COUNT(DISTINCT customer_id) AS customers,
            COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
        AND address_json IS NOT NULL AND json_extract(address_json, '$.city') IS NOT NULL
      GROUP BY city ORDER BY revenue DESC LIMIT 15`).all(from, to);
   const geoDistricts = tdb().prepare(`
@@ -5570,7 +5585,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            json_extract(address_json, '$.district') AS district,
            COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
        AND address_json IS NOT NULL AND json_extract(address_json, '$.district') IS NOT NULL
      GROUP BY city, district ORDER BY revenue DESC LIMIT 20`).all(from, to);
 
@@ -5580,14 +5595,14 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COALESCE(SUM(voucher_amount), 0) AS discount,
            COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
        AND voucher_code IS NOT NULL AND voucher_code != ''
      GROUP BY voucher_code ORDER BY uses DESC LIMIT 15`).all(from, to);
   const points = tdb().prepare(`
     SELECT COUNT(*) AS orders, COALESCE(SUM(points_used), 0) AS points_used,
            COALESCE(SUM(points_amount), 0) AS points_value
       FROM retail_orders
-     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ? AND points_used > 0`).get(from, to);
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ? AND points_used > 0`).get(from, to);
 
   // ── Traffic: WeChat launch-scene breakdown ──
   const scenes = tdb().prepare(`
@@ -5636,7 +5651,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COALESCE(SUM(points_amount), 0)  AS points_total,
            COALESCE(SUM(total), 0)          AS net_total
       FROM retail_orders
-     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?`).get(from, to);
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?`).get(from, to);
 
   // ── Checkout abandonment (quoted but never paid in the window) ──
   // started   = distinct customers who reached the checkout pricing step
@@ -9583,9 +9598,15 @@ const STATUS_TRANSITIONS = {
   refunded:   { col: null,            prev: ['paid', 'preparing', 'dispatched', 'delivered'] },
 };
 
+// How an operator confirms an off-app payment via the manual "Mark paid"
+// button. Recorded so revenue can be split by real tender (cash vs bank
+// transfer vs a WeChat/Alipay transfer received outside the mini app) instead
+// of all manual payments collapsing into "unknown".
+const OFFLINE_PAY_METHODS = new Set(['cash', 'bank_transfer', 'wechat_offline', 'alipay_offline', 'other']);
+
 router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const { status, reason, staff_note } = req.body || {};
+  const { status, reason, staff_note, pay_method } = req.body || {};
   const def = STATUS_TRANSITIONS[status];
   if (!def) return res.status(400).json({ success: false, error: 'invalid_status' });
 
@@ -9652,6 +9673,12 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   const sets = ['status = ?', 'updated_at = CURRENT_TIMESTAMP'];
   const params = [status];
   if (def.col) { sets.push(`${def.col} = CURRENT_TIMESTAMP`); }
+  // Manual "Mark paid": record HOW it was paid (cash / bank transfer / off-app
+  // WeChat or Alipay / other) so the dashboard can attribute revenue to a real
+  // tender. Overwrites the checkout-chosen method because this reflects how the
+  // money actually arrived. Ignored for any other transition.
+  const offlinePay = status === 'paid' && OFFLINE_PAY_METHODS.has(pay_method) ? pay_method : null;
+  if (offlinePay) { sets.push('payment_method = ?'); params.push(offlinePay); }
   if (status === 'cancelled' && reason) { sets.push('cancelled_reason = ?'); params.push(reason); }
   if (staff_note != null) { sets.push('staff_note = ?'); params.push(staff_note); }
   // The status shortcut completes the refund in one shot (money moved above,
@@ -9669,6 +9696,18 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
 
   // Points side-effects of the transition. Both helpers are idempotent.
   if (status === 'paid') {
+    // Audit row for the off-app payment so it's reconcilable like a gateway
+    // payment (the WeChat/Alipay callbacks write the same shape). Best-effort:
+    // a failed audit write must not undo the already-committed status flip.
+    if (offlinePay) {
+      try {
+        const total = +(tdb().prepare('SELECT total FROM retail_orders WHERE id = ?').get(id)?.total || 0);
+        tdb().prepare(
+          `INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no, completed_at)
+           VALUES (?, ?, ?, 'success', ?, CURRENT_TIMESTAMP)`
+        ).run(id, offlinePay, total, 'MANUAL' + id + '-' + Date.now().toString().slice(-6));
+      } catch (e) { console.error('[manual-pay audit]', e); }
+    }
     try { awardOrderPoints(id); } catch (e) { console.error('[awardOrderPoints]', e); }
     // Admin-side flip to 'paid' commits the soft-reservations into a real
     // physical stock deduction. markOrderPaid() handles this too, but the

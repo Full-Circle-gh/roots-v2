@@ -1098,6 +1098,7 @@
   .db-deepdive > summary::-webkit-details-marker { display: none; }
   .db-deepdive > summary::before { content: "▸"; color: var(--text-3); font-size: 10px; transition: transform .2s ease; display: inline-block; }
   .db-deepdive[open] > summary::before { transform: rotate(90deg); }
+  .db-deepdive-range { font-weight: 500; font-size: 11px; color: var(--text-2); font-variant-numeric: tabular-nums; padding: 2px 8px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--bg-elev-1); white-space: nowrap; }
   .db-deepdive-hint { color: var(--text-3); font-weight: 400; font-size: 11px; margin-left: auto; }
   .db-deepdive-body { padding: 16px; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: var(--s3); }
   .db-deepdive-body .db-kpis { margin: 0; }
@@ -4823,6 +4824,7 @@
     <details class="db-deepdive" id="db-deepdive">
       <summary>
         Deep dive · 详细
+        <span class="db-deepdive-range" id="db-dd-range"></span>
         <span class="db-deepdive-hint">8 KPIs + 12 charts · 历史详情</span>
       </summary>
       <div class="db-deepdive-body">
@@ -9896,8 +9898,12 @@ function paymentBrandHTML(method, size) {
     </svg>`;
     return `<span class="pay-brand pay-brand-alipay${big?' lg':''}">${svg}<span class="lbl">Alipay${big?' · 支付宝':''}</span></span>`;
   }
-  // Unknown / manual / cash / dash — keep as plain text so we don't
-  // invent a brand the operator didn't actually use.
+  // Off-app tender confirmed via "Mark paid" — friendly bilingual label, no
+  // gateway badge (the operator didn't use the in-app gateway).
+  const offline = { cash: 'Cash · 现金', bank_transfer: 'Bank transfer · 银行转账', wechat_offline: 'WeChat off-app · 微信(线下)', alipay_offline: 'Alipay off-app · 支付宝(线下)', other: 'Other · 其他' }[m];
+  if (offline) return `<b>${offline}</b>`;
+  // Unknown / dash — keep as plain text so we don't invent a brand the
+  // operator didn't actually use.
   return `<b>${escapeHtml(method || '—')}</b>`;
 }
 
@@ -11808,8 +11814,28 @@ function bentoSetTile(slot, key) {
   dashRenderAll._bentoWrapped = true;
 })();
 
+// Echo the active range into the deep-dive summary so the timeline stays
+// legible once you've scrolled past the top range bar (read-only — change it
+// up top). Kept in sync on every dashLoad().
+function dashRangeLabel() {
+  const el = document.getElementById('db-dd-range');
+  if (!el) return;
+  const from = $('#db-from').value, to = $('#db-to').value;
+  if (!from || !to) { el.textContent = ''; return; }
+  const active = document.querySelector('#db-range-seg button.active');
+  const key = active ? active.dataset.range : '';
+  const tag = key === 'today' ? 'Today · 今日'
+            : key === '7'  ? '7d'
+            : key === '30' ? '30d'
+            : key === '90' ? '90d'
+            : 'Custom · 自定';
+  const fmt = s => new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  el.textContent = from === to ? `${fmt(from)} · ${tag}` : `${fmt(from)} – ${fmt(to)} · ${tag}`;
+}
+
 async function dashLoad() {
   const from = $('#db-from').value, to = $('#db-to').value;
+  dashRangeLabel();
   $('#db-kpis').innerHTML = '<div class="db-muted">Loading… · 加载中…</div>';
   try {
     const j = await api(`/api/retail-admin/dashboard?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
@@ -12074,7 +12100,7 @@ function dashRenderFunnel() {
 
 function dashRenderSplits() {
   const pay = DASH_DATA.payments || [], del = DASH_DATA.delivery || [];
-  const payLabel = m => ({ wechat: 'WeChat · 微信', alipay: 'Alipay · 支付宝', points: 'Points · 积分', unknown: 'Unknown · 未知' }[m] || m);
+  const payLabel = m => ({ wechat: 'WeChat · 微信', alipay: 'Alipay · 支付宝', points: 'Points · 积分', cash: 'Cash · 现金', bank_transfer: 'Bank transfer · 银行转账', wechat_offline: 'WeChat off-app · 微信(线下)', alipay_offline: 'Alipay off-app · 支付宝(线下)', other: 'Other · 其他', unknown: 'Unknown · 未知' }[m] || m);
   const delLabel = m => ({ standard: 'Standard · 标准', max: 'Max speed · 极速', fixed: 'City · 同城', sameday: 'Same-day · 当日', unknown: 'Unknown · 未知' }[m] || m);
   let html = '<div style="font-family:var(--f-mono);font-size:10px;color:var(--brass);letter-spacing:.18em;text-transform:uppercase;margin-bottom:8px;font-weight:500">PAYMENT · 支付方式</div>';
   html += pay.length ? dashBarList(pay.map(p => ({ k: payLabel(p.method), value: dashNum(p.orders), valueSub: dashMoney(p.revenue), frac: p.revenue }))) : '<div class="db-muted">—</div>';
@@ -13941,15 +13967,39 @@ function renderOpenOrder(o) {
   if (body) body.scrollTop = 0;
 }
 
+// Off-app tender options for the manual "Mark paid" button. value = what the
+// backend stores on the order + in retail_payments; the dashboard payment
+// split shows the matching label. Keep in sync with OFFLINE_PAY_METHODS in
+// routes/retail.js and payLabel() below.
+const PAY_METHOD_CHOICES = [
+  ['cash',           'Cash · 现金'],
+  ['bank_transfer',  'Bank transfer · 银行转账'],
+  ['wechat_offline', 'WeChat (off-app) · 微信(线下)'],
+  ['alipay_offline', 'Alipay (off-app) · 支付宝(线下)'],
+  ['other',          'Other · 其他'],
+];
+function askPayMethod() {
+  const lines = PAY_METHOD_CHOICES.map(([, label], i) => `${i + 1} = ${label}`).join('\n');
+  const ans = prompt(`Paid how? · 如何收款?\n${lines}`, '1');
+  if (ans === null) return null;              // operator cancelled
+  const i = parseInt(String(ans).trim(), 10) - 1;
+  return PAY_METHOD_CHOICES[i] ? PAY_METHOD_CHOICES[i][0] : 'other';
+}
+
 async function transition(id, status) {
   let reason = null;
+  let pay_method = null;
   if (status === 'cancelled' || status === 'refunded') {
     const labelEn = status === 'cancelled' ? 'cancellation' : 'refund';
     const labelCn = status === 'cancelled' ? '取消' : '退款';
     reason = prompt(`Reason for ${labelEn} (optional) · ${labelCn}原因(可选)`) || '';
   }
+  if (status === 'paid') {
+    pay_method = askPayMethod();
+    if (pay_method === null) return;          // cancelled the prompt → abort
+  }
   try {
-    await api(`/api/retail-admin/orders/${id}/status`, { method: 'PATCH', body: { status, reason } });
+    await api(`/api/retail-admin/orders/${id}/status`, { method: 'PATCH', body: { status, reason, pay_method } });
     toast(`Order → ${humanStatus(status, _OPEN_ORDER?.fulfillment_type)} · 订单 → ${humanStatus(status, _OPEN_ORDER?.fulfillment_type)}`);
     openOrder(id);
     loadOrders();
