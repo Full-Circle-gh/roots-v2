@@ -11236,18 +11236,20 @@ async function dashHeroLoadPresence() {
   } catch (e) { /* silent — next tick retries */ }
 }
 
-async function dashHeroLoadToday() {
+async function dashHeroLoadToday(opts) {
   // Trailing-zero local-day in GZ (+8). Server tolerates same-day from/to and
   // returns 24 hourly trend buckets (revenue + orders) plus deltas-vs-yesterday.
   const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  // Manual refresh asks for a slow, zen roll-up; the auto-poller stays snappy.
+  const dur = opts && opts.slow ? 2600 : undefined;
   try {
     const j = await api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}`);
     const data = j.data || {};
     DASH_HERO.todayData = data;   // stashed so a language toggle can repaint without refetching
     const k = data.kpis || {};
-    dashCountUp($('#db-today-rev'), Number(k.revenue || 0), n => '¥' + Math.round(n).toLocaleString());
-    dashCountUp($('#db-today-ord'), Number(k.orders || 0));
-    dashCountUp($('#db-today-new'), Number(k.new_customers || 0));
+    dashCountUp($('#db-today-rev'), Number(k.revenue || 0), n => '¥' + Math.round(n).toLocaleString(), dur);
+    dashCountUp($('#db-today-ord'), Number(k.orders || 0), undefined, dur);
+    dashCountUp($('#db-today-new'), Number(k.new_customers || 0), undefined, dur);
     // Intraday sparklines — revenue (focal, breathing dot) and orders (static
     // dot) each plot their per-hour curve so the day's shape reads at a glance.
     const trend = data.trend || [];
@@ -12113,7 +12115,9 @@ function dashRenderKpis() {
   }).join('');
   // If the fold is already open when fresh data lands, count up now (the open
   // event won't fire again). Otherwise the open handler runs it on reveal.
-  if (document.getElementById('db-deepdive')?.open) dashKpiAnimate(prevVals);
+  // A manual ↻ refresh forces a roll-up from zero (no prev) for the re-reveal.
+  if (document.getElementById('db-deepdive')?.open) dashKpiAnimate(DASH_FORCE_ROLLUP ? null : prevVals);
+  DASH_FORCE_ROLLUP = false;
 }
 
 // Count the KPI headline numbers up from 0 — called on fold-reveal and on a
@@ -12129,7 +12133,7 @@ function dashKpiAnimate(prev) {
     const to = Number(el.dataset.cu) || 0;
     const f = fmts[el.dataset.fmt] || fmts.num;
     el._cuVal = (prev && prev[i] != null && isFinite(prev[i])) ? prev[i] : 0;
-    dashCountUp(el, to, f, 1700);   // slow, ambient roll-up (easeOutQuint settle)
+    dashCountUp(el, to, f, 2600);   // slow, ambient roll-up (easeOutQuint settle)
   });
 }
 
