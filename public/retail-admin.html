@@ -10989,11 +10989,11 @@ function dashInit() {
       void dd.offsetWidth;
       dd.classList.add('dd-open-anim');
       dashKpiAnimate();
-      // Zen reveal — once the fold is open, drift the page down to the KPI
-      // strip (the head of the block, with the headline numbers) with a long
-      // eased glide, not a snap. Landing on the KPIs keeps the section's head
-      // in view rather than overshooting to the first chart below it.
-      const head = dd.querySelector('#db-kpis') || dd.querySelector('.db-deepdive-body .card');
+      // Zen reveal — once the fold is open, drift the page down with a long
+      // eased glide, not a snap. Land on the summary itself (the true head of
+      // the block) so its range chip stays in view; scrolling to the KPI strip
+      // below would push the summary — and the active-range echo — off-screen.
+      const head = dd.querySelector('summary') || dd;
       if (head) requestAnimationFrame(() => dashZenScrollTo(head, { margin: 72 }));
     } else {
       dd.classList.remove('dd-open-anim');
@@ -13527,9 +13527,22 @@ function renderSortChips() {
   </div>`;
 }
 
+// Chips + shipment cards, re-rendered together. Kept in one container so a
+// sort change only swaps this fragment — re-rendering the whole order would
+// tear down any open floating window (tracking popover, etc.).
+function renderSortableItems(o) {
+  return renderSortChips()
+    + (o.shipments || []).map(s => renderShipmentCard(o, s)).join('');
+}
+
 function setItemsSort(mode) {
   _ITEMS_SORT_MODE = mode;
-  if (_OPEN_ORDER) renderOpenOrder(_OPEN_ORDER);
+  const host = document.getElementById('odv-items-sortable');
+  if (host && _OPEN_ORDER) {
+    host.innerHTML = renderSortableItems(_OPEN_ORDER);
+  } else if (_OPEN_ORDER) {
+    renderOpenOrder(_OPEN_ORDER);
+  }
 }
 
 // Items render as a numbered packing manifest (per shipment) by default.
@@ -13953,8 +13966,7 @@ function renderOpenOrder(o) {
             <div class="outside-gz-note">
               <span data-lang-block="en">Outside Guangzhou — </span><span data-lang-block="cn">${escapeHtml(o.shipping_city || '广州以外')} — </span>single ${shipGlyph(o.shipments[0].mode)} ${o.shipments[0].mode === 'air' ? 'air' : 'land'} shipment
             </div>` : ''}
-          ${renderSortChips()}
-          ${(o.shipments || []).map(s => renderShipmentCard(o, s)).join('')}
+          <div id="odv-items-sortable">${renderSortableItems(o)}</div>
         </div>
 
         ${(o.reservations && o.reservations.length) ? `
