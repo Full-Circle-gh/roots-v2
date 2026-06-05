@@ -11992,14 +11992,42 @@ function dashRangeLabel() {
 async function dashLoad() {
   const from = $('#db-from').value, to = $('#db-to').value;
   dashRangeLabel();
-  $('#db-kpis').innerHTML = '<div class="db-muted">Loading… · 加载中…</div>';
+  // Only the cold first load shows "Loading…" — on a refresh we keep the
+  // current numbers on screen until the fresh ones fade in, so there's no
+  // blank-out flick.
+  if (!DASH_DATA) $('#db-kpis').innerHTML = '<div class="db-muted">Loading… · 加载中…</div>';
   try {
     const j = await api(`/api/retail-admin/dashboard?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+    const first = !DASH_DATA;
     DASH_DATA = j.data;
-    dashRenderAll();
+    if (first) dashRenderAll();
+    else dashSwapWithFade(dashRenderAll);
   } catch (e) {
     $('#db-kpis').innerHTML = `<div class="db-muted">Failed to load · 加载失败: ${escapeHtml(e.message)}</div>`;
   }
+}
+
+// Gentle slow fade-in for a dashboard refresh. The old flicker came from
+// rendering the new content at full opacity and THEN snapping it to 0 to fade
+// up. Here we hide the area first, swap the fresh content in while it's
+// invisible, then ease it back over a slow zen fade — one clean fade-in, no
+// appear-snap-fade. Honours prefers-reduced-motion.
+function dashSwapWithFade(render) {
+  const els = ['db-bento', 'db-deepdive'].map(id => document.getElementById(id)).filter(Boolean);
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || !els.length) { render(); return; }
+  els.forEach(el => { el.style.transition = 'none'; el.style.opacity = '0'; });
+  render();
+  els.forEach(el => void el.offsetWidth);   // commit opacity:0 + fresh content together
+  els.forEach(el => {
+    el.style.transition = 'opacity 1.6s cubic-bezier(.16, 1, .3, 1)';
+    el.style.opacity = '1';
+    el.addEventListener('transitionend', function done(ev) {
+      if (ev.target !== el || ev.propertyName !== 'opacity') return;
+      el.style.transition = ''; el.style.opacity = '';
+      el.removeEventListener('transitionend', done);
+    });
+  });
 }
 
 function dashRenderAll() {
