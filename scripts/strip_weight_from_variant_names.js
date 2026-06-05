@@ -10,15 +10,21 @@
  * size twice. The weight is carried separately, so it's safe to strip the
  * trailing weight out of the name.
  *
- * This script finds every product whose name_en or name_cn ENDS WITH its own
- * `weight` value (optionally preceded by separators like space, ·, -, /),
- * and rewrites the name without it.
+ * The duplicate most often survives in HISTORICAL order lines: a product was
+ * later renamed clean (name_cn "杏仁"), but old retail_order_items captured the
+ * bad name at checkout (name_cn "杏仁（小） 265g", size "265g") and still render
+ * it. So this script cleans BOTH tables:
+ *   - products            (against products.weight)
+ *   - retail_order_items  (against retail_order_items.size)
+ * finding any row whose name_en/name_cn ENDS WITH its own size value (optional
+ * separators + number + optional unit like g/kg/ml) and rewriting it without.
  *
  * SAFETY:
  *   - Dry-run by default. Prints every proposed change and writes nothing.
  *   - Pass --apply to actually update rows (wrapped in a transaction).
- *   - Scoped to variant products (variant_group_id IS NOT NULL) by default.
- *     Pass --all to include standalone products too.
+ *   - products scan is scoped to variants (variant_group_id IS NOT NULL) by
+ *     default; pass --all to include standalone products too. Order lines are
+ *     always scanned in full.
  *
  * Usage:
  *   node scripts/strip_weight_from_variant_names.js [dbPath]            # dry-run, variants
@@ -49,24 +55,11 @@ try {
   }
 }
 
-// Be tolerant of schema differences between tenant DBs.
-const cols = new Set(db.prepare('PRAGMA table_info(products)').all().map(c => c.name));
-const hasVariant = cols.has('variant_group_id');
-if (!hasVariant && !all) {
-  console.error(
-    `This DB's products table has no variant_group_id column (${dbPath}).\n` +
-    `It looks like the wrong/old schema. Re-run against the tenant DB, or pass --all to scan every product.`
-  );
-  process.exit(1);
+// Column set for a table (empty if the table doesn't exist).
+function colsOf(table) {
+  try { return new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name)); }
+  catch { return new Set(); }
 }
-
-const where = (hasVariant && !all)
-  ? `WHERE variant_group_id IS NOT NULL AND weight IS NOT NULL AND TRIM(weight) <> ''`
-  : `WHERE weight IS NOT NULL AND TRIM(weight) <> ''`;
-
-const rows = db.prepare(
-  `SELECT id, name_en, name_cn, weight FROM products ${where}`
-).all();
 
 // Escape a string for use inside a RegExp.
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -98,51 +91,86 @@ function strip(name, weight) {
   return cleaned === name ? null : cleaned;
 }
 
-const changes = [];
-for (const r of rows) {
-  const newEn = strip(r.name_en, r.weight);
-  const newCn = strip(r.name_cn, r.weight);
-  if (newEn != null || newCn != null) {
-    changes.push({
-      id: r.id, weight: r.weight,
-      en: { from: r.name_en, to: newEn },
-      cn: { from: r.name_cn, to: newCn },
-    });
+// Scan one table for name_en/name_cn that end with their own size value.
+// `sizeCol` is the column holding the weight/size (products.weight,
+// retail_order_items.size). `scopeSql` is an extra WHERE clause (no leading
+// AND). Returns { changes, scanned } or null if the table/columns are missing.
+function scanTable(table, sizeCol, scopeSql) {
+  const c = colsOf(table);
+  if (!c.has('name_en') || !c.has('name_cn') || !c.has(sizeCol)) return null;
+  const where = `WHERE ${sizeCol} IS NOT NULL AND TRIM(${sizeCol}) <> ''` +
+                (scopeSql ? ` AND ${scopeSql}` : '');
+  const rows = db.prepare(`SELECT id, name_en, name_cn, ${sizeCol} AS sz FROM ${table} ${where}`).all();
+  const changes = [];
+  for (const r of rows) {
+    const newEn = strip(r.name_en, r.sz);
+    const newCn = strip(r.name_cn, r.sz);
+    if (newEn != null || newCn != null) {
+      changes.push({ id: r.id, sz: r.sz, en: { from: r.name_en, to: newEn }, cn: { from: r.name_cn, to: newCn } });
+    }
   }
+  return { changes, scanned: rows.length, touchUpdatedAt: c.has('updated_at') };
 }
 
-console.log(`DB: ${dbPath}`);
-console.log(`Scope: ${(hasVariant && !all) ? 'variants only' : 'all products'}`);
-console.log(`Scanned ${rows.length} product(s); ${changes.length} would change.\n`);
-
-for (const c of changes) {
-  console.log(`#${c.id}  (weight=${c.weight})`);
-  if (c.en.to != null) console.log(`   en: "${c.en.from}"  ->  "${c.en.to}"`);
-  if (c.cn.to != null) console.log(`   cn: "${c.cn.from}"  ->  "${c.cn.to}"`);
+const productsHasVariant = colsOf('products').has('variant_group_id');
+if (!colsOf('products').size) {
+  console.error(`This DB has no products table (${dbPath}). Wrong DB?`);
+  process.exit(1);
 }
 
-if (!changes.length) {
-  console.log('\nNothing to do.');
-  process.exit(0);
+// Two targets:
+//   products          — the master rows (scope to variants unless --all)
+//   retail_order_items — historical order lines that captured a bad name at
+//                        checkout (this is where the live "265g · 265g" bug
+//                        usually survives even after the product was fixed).
+const targets = [
+  {
+    table: 'products', sizeCol: 'weight',
+    scope: (productsHasVariant && !all) ? 'variant_group_id IS NOT NULL' : '',
+    scopeLabel: (productsHasVariant && !all) ? 'variants only' : 'all products',
+  },
+  { table: 'retail_order_items', sizeCol: 'size', scope: '', scopeLabel: 'all order lines' },
+];
+
+console.log(`DB: ${dbPath}\n`);
+
+const plan = []; // { table, sizeCol, touchUpdatedAt, changes }
+for (const t of targets) {
+  const res = scanTable(t.table, t.sizeCol, t.scope);
+  if (!res) { console.log(`${t.table}: (table/columns not present — skipped)\n`); continue; }
+  console.log(`${t.table} [${t.scopeLabel}]: scanned ${res.scanned}, ${res.changes.length} would change.`);
+  for (const c of res.changes) {
+    console.log(`  #${c.id}  (${t.sizeCol}=${c.sz})`);
+    if (c.en.to != null) console.log(`     en: "${c.en.from}"  ->  "${c.en.to}"`);
+    if (c.cn.to != null) console.log(`     cn: "${c.cn.from}"  ->  "${c.cn.to}"`);
+  }
+  console.log('');
+  if (res.changes.length) plan.push({ table: t.table, touchUpdatedAt: res.touchUpdatedAt, changes: res.changes });
 }
+
+const total = plan.reduce((n, p) => n + p.changes.length, 0);
+if (!total) { console.log('Nothing to do.'); process.exit(0); }
 
 if (!apply) {
-  console.log(`\nDry-run only. Re-run with --apply to write these ${changes.length} change(s).`);
+  console.log(`Dry-run only. Re-run with --apply to write these ${total} change(s).`);
   process.exit(0);
 }
 
-const updEn = db.prepare('UPDATE products SET name_en=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
-const updCn = db.prepare('UPDATE products SET name_cn=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
 db.exec('BEGIN');
 try {
-  for (const c of changes) {
-    if (c.en.to != null) updEn.run(c.en.to, c.id);
-    if (c.cn.to != null) updCn.run(c.cn.to, c.id);
+  for (const p of plan) {
+    const ts = p.touchUpdatedAt ? ', updated_at=CURRENT_TIMESTAMP' : '';
+    const updEn = db.prepare(`UPDATE ${p.table} SET name_en=?${ts} WHERE id=?`);
+    const updCn = db.prepare(`UPDATE ${p.table} SET name_cn=?${ts} WHERE id=?`);
+    for (const c of p.changes) {
+      if (c.en.to != null) updEn.run(c.en.to, c.id);
+      if (c.cn.to != null) updCn.run(c.cn.to, c.id);
+    }
   }
   db.exec('COMMIT');
-  console.log(`\nApplied ${changes.length} change(s).`);
+  console.log(`Applied ${total} change(s).`);
 } catch (e) {
   db.exec('ROLLBACK');
-  console.error('\nFailed, rolled back:', e.message);
+  console.error('Failed, rolled back:', e.message);
   process.exit(1);
 }
