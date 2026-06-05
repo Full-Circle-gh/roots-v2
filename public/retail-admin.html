@@ -269,16 +269,18 @@
     background: var(--bg-overlay); backdrop-filter: blur(2px);
     display: flex; align-items: flex-start; justify-content: center;
     padding: 12vh 16px 16px;
+    animation: gsearchBackdrop 360ms cubic-bezier(.16, 1, .3, 1);
   }
+  @keyframes gsearchBackdrop { from { opacity: 0; } to { opacity: 1; } }
   .gsearch-overlay[hidden] { display: none; }
   .gsearch-box {
     width: 100%; max-width: 640px; background: var(--bg-pane);
     border: 1px solid var(--line); border-radius: 14px;
     box-shadow: 0 24px 60px rgba(0,0,0,.45);
     overflow: hidden; display: flex; flex-direction: column;
-    animation: gsearchPop .12s ease;
+    animation: gsearchPop 540ms cubic-bezier(.16, 1, .3, 1);
   }
-  @keyframes gsearchPop { from { transform: translateY(-6px); opacity: .6; } to { transform: none; opacity: 1; } }
+  @keyframes gsearchPop { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
   .gsearch-inputrow {
     display: flex; align-items: center; gap: 10px;
     padding: 14px 16px; border-bottom: 1px solid var(--line); color: var(--text-3);
@@ -412,7 +414,7 @@
     flex-direction: column;
     gap: 1px;
   }
-  .tabs-group.open .tabs-popover { display: flex; }
+  .tabs-group.open .tabs-popover { display: flex; animation: zen-pop-in 540ms cubic-bezier(.16, 1, .3, 1); }
   .tabs-popover button {
     width: 100%;
     padding: 8px 12px;
@@ -1090,7 +1092,14 @@
   }
 
   /* Tile-swap popover. Floats above on click, dismissed by outside-click. */
-  .db-tile-pop { position: fixed; min-width: 220px; max-width: 280px; background: var(--bg-pane); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 6px; z-index: 250; overflow-y: auto; overscroll-behavior: contain; }
+  /* Shared "zen" entrance for every floating window that isn't a drawer or the
+     centered .pu-editor modal — popovers, dropdowns, anchored menus. One slow
+     soft-deceleration beat (the drawer/modal ease) so a window glides open
+     instead of snapping. translateY-only (no scale) so JS that measures a
+     popover's rect right after opening still reads its true width/height. */
+  @keyframes zen-pop-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { @keyframes zen-pop-in { from { opacity: 1; } to { opacity: 1; } } }
+  .db-tile-pop { position: fixed; min-width: 220px; max-width: 280px; background: var(--bg-pane); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 6px; z-index: 250; overflow-y: auto; overscroll-behavior: contain; animation: zen-pop-in 540ms cubic-bezier(.16, 1, .3, 1); }
   .db-tile-pop .db-tile-pop-head { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); padding: 6px 8px; font-family: var(--f-mono); }
   .db-tile-pop button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 6px 8px; border: none; background: transparent; color: var(--text-1); font: inherit; font-size: 12px; cursor: pointer; border-radius: 4px; }
   .db-tile-pop button:hover { background: var(--bg-elev-1); }
@@ -3882,6 +3891,7 @@
     overflow: hidden;
     display: flex; flex-direction: column;
     max-height: 360px;
+    animation: zen-pop-in 540ms cubic-bezier(.16, 1, .3, 1);
   }
   /* `display: flex` above overrides the UA stylesheet's `[hidden] { display:none }`,
      so we have to explicitly hide it ourselves. Without this, setting `hidden=true`
@@ -5224,6 +5234,7 @@
         border-radius: var(--r-lg); box-shadow: var(--sh-3, 0 24px 60px rgba(0,0,0,.5));
         display: flex; flex-direction: column; gap: 12px;
       }
+      .ovp { animation: zen-pop-in 540ms cubic-bezier(.16, 1, .3, 1); }
       .ovp[hidden] { display: none; }
       .ovp-head { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
       .ovp-group { display: flex; flex-direction: column; gap: 6px; }
@@ -6503,6 +6514,15 @@
         .pu-editor-bg[style*="display: flex"],
         .pu-editor-bg.show > .pu-editor,
         .pu-editor-bg[style*="display: flex"] > .pu-editor { animation: none; }
+      }
+      /* Photo lightbox — same window language: backdrop dims in, the image
+         drifts up + scales from 98.5% on the zen ease (it's toggled via inline
+         display:flex, so we key the animation off that like the modals do). */
+      #rv-lightbox[style*="display: flex"] { animation: pu-backdrop-in 360ms cubic-bezier(.16, 1, .3, 1); }
+      #rv-lightbox[style*="display: flex"] > img { animation: pu-modal-in 540ms cubic-bezier(.16, 1, .3, 1); }
+      @media (prefers-reduced-motion: reduce) {
+        #rv-lightbox[style*="display: flex"],
+        #rv-lightbox[style*="display: flex"] > img { animation: none; }
       }
       /* Scroll isolation: when a floating modal or side-drawer is open, lock
          the page behind it so wheel/touch scroll inside the modal doesn't
