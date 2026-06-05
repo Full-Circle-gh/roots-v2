@@ -4695,16 +4695,13 @@
     Delivery · 配送
   </button>
 
-  <!-- Editors — embedded in-page (iframe tab sections), NOT new windows. They
-       switch like any other tab. Mini App Editor = storefront pages (/cms);
-       Product Page Editor = per-product PDP (/product-editor). -->
+  <!-- Editor — one embedded tab (iframe section), NOT a new window. Opens the
+       Mini App Editor (storefront pages, /cms); the Product Page Editor
+       (/product-editor) is reached from inside it via Pages → Products and
+       swaps in under this same tab (see showProductSection / message handler). -->
   <button data-tab="mini-app-editor">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="13" y2="10"/></svg>
-    Mini App Editor · 小程序编辑器
-  </button>
-  <button data-tab="product-editor">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
-    Product Page Editor · 产品页编辑器
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+    Editor · 编辑器
   </button>
 
   <!-- Auto-refresh dot — pinned right of the tab bar, next to the
@@ -10091,36 +10088,47 @@ $$('.tabs [data-tab]').forEach(btn => btn.addEventListener('click', () => {
   $$('.tabs-group').forEach(g => g.classList.toggle('has-active', g.contains(btn)));
   $$('.tabs-group.open').forEach(g => g.classList.remove('open'));
 }));
-// Embedded editors — lazy-load each iframe the first time its tab is opened, so
-// the two big editor apps don't download until needed.
-['mini-app-editor', 'product-editor'].forEach(tab => {
-  const btn = document.querySelector('.tabs [data-tab="' + tab + '"]');
-  const frame = document.getElementById('frame-' + tab);
+// Embedded editor — lazy-load the Mini App Editor iframe the first time the
+// Editor tab is opened, so the big editor app doesn't download until needed.
+(function () {
+  const btn = document.querySelector('.tabs [data-tab="mini-app-editor"]');
+  const frame = document.getElementById('frame-mini-app-editor');
   if (btn && frame) btn.addEventListener('click', () => { if (!frame.getAttribute('src')) frame.src = frame.dataset.src; });
-});
-// Switch to the Mini App Editor tab in-page.
+})();
+// Switch to the Editor tab in-page (shows the Mini App Editor). Re-clicking the
+// already-active tab also returns here from the Product Page Editor.
 function openMiniAppEditor() {
   const btn = document.querySelector('.tabs [data-tab="mini-app-editor"]');
   if (btn) btn.click();
 }
+// Reveal the Product Page Editor under the single Editor tab: keep the Editor
+// tab active, hide the Mini App Editor section, show the product section
+// (lazy-loading its iframe on first reveal).
+function showProductSection() {
+  const frame = document.getElementById('frame-product-editor');
+  if (frame && !frame.getAttribute('src')) frame.src = frame.dataset.src;
+  document.getElementById('tab-mini-app-editor')?.classList.remove('active');
+  document.getElementById('tab-product-editor')?.classList.add('active');
+}
 // Open the Product Page Editor on a specific product, in-page: point its iframe
-// at that product, then switch to the tab. Replaces the old new-tab window.open.
+// at that product, activate the Editor tab, then reveal the product section.
 function openProductEditor(id) {
   const frame = document.getElementById('frame-product-editor');
   if (frame) frame.src = '/product-editor?id=' + encodeURIComponent(id);
-  const btn = document.querySelector('.tabs [data-tab="product-editor"]');
-  if (btn) btn.click();
+  const btn = document.querySelector('.tabs [data-tab="mini-app-editor"]');
+  if (btn) btn.click();   // activate Editor tab (hides every other section)
+  showProductSection();
 }
 // The embedded Mini App Editor posts here when its PAGE dropdown's "Products"
-// entry is chosen — swap to the Product Page Editor tab (lazy-loads the iframe
-// on its first open, then lands on its product picker).
+// entry is chosen — reveal the Product Page Editor under the same Editor tab
+// (lazy-loads its iframe, then lands on its product picker). "mini-app" posts
+// back here to return to the storefront-pages view.
 window.addEventListener('message', (ev) => {
   if (ev.origin !== location.origin) return;
   const d = ev.data;
   if (!d || d.type !== 'fc-open-editor') return;
   if (d.editor === 'product') {
-    const btn = document.querySelector('.tabs [data-tab="product-editor"]');
-    if (btn) btn.click();
+    showProductSection();
   } else if (d.editor === 'mini-app') {
     openMiniAppEditor();
   }
