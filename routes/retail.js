@@ -904,7 +904,7 @@ const SOCIAL_PROOF_PAID =
 // leaving them alone preserves the original "real data only" behaviour.
 const SOCIAL_PROOF_DEFAULTS = Object.freeze({
   bought_count:  { enabled: true, min_today: 2, min_week: 2, min_month: 1, min_all: 2, boost_min: 0, boost_max: 0 },
-  recent_buyers: { enabled: true, window_days: 7, manual: [] },
+  recent_buyers: { enabled: true, window_days: 7, manual: [], visible_secs: 4.5, gap_secs: 5 },
   viewing_now:   { enabled: true, show_in_app: true, ttl_sec: 45, boost_min: 0, boost_max: 0 },
   last_ordered:  { enabled: true, max_hours: 24, fallback_min_minutes: 0, fallback_max_minutes: 0 },
   sold_badge:    { enabled: true, min_units: 3, boost_min: 0, boost_max: 0 },
@@ -1240,6 +1240,13 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
     return res.json({ success: true, data: [] });
   }
   const windowDays = Math.max(1, Math.min(60, Number(cfg.window_days) || 7));
+  // Cadence the mini-app ticker uses, served so operators can retune how often
+  // the toast pops without a republish. Clamped to sane bounds (0.5–60s).
+  const clampSec = (v, d) => Math.max(0.5, Math.min(60, Number(v) || d));
+  const timing = {
+    visible_ms: Math.round(clampSec(cfg.visible_secs, 4.5) * 1000),
+    gap_ms:     Math.round(clampSec(cfg.gap_secs, 5) * 1000),
+  };
   const manualEntries = Array.isArray(cfg.manual) ? cfg.manual : [];
   const now = Date.now();
   // Cache key must include the manual list signature so editing fake entries
@@ -1252,7 +1259,7 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
   const cached = RECENT_BUYERS_CACHE.get(cacheKey);
   if (cached && (now - cached.t < RECENT_BUYERS_TTL_MS)) {
     res.set('Cache-Control', 'public, max-age=30');
-    return res.json({ success: true, data: cached.value });
+    return res.json({ success: true, data: cached.value, timing });
   }
 
   let real = [];
@@ -1313,7 +1320,7 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
 
   RECENT_BUYERS_CACHE.set(cacheKey, { t: now, value: out });
   res.set('Cache-Control', 'public, max-age=30');
-  res.json({ success: true, data: out });
+  res.json({ success: true, data: out, timing });
 });
 
 // ── "N viewing now" presence ────────────────────────────────────────────────

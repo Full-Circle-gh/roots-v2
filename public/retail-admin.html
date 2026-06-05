@@ -4758,7 +4758,7 @@
         <span style="color:var(--text-3)">–</span>
         <input type="date" id="db-to" aria-label="To date">
         <button class="db-btn primary" onclick="dashLoad()">Apply · 应用</button>
-        <button class="db-btn" onclick="dashLoad()" title="Refresh · 刷新">↻</button>
+        <button class="db-btn" onclick="dashRefresh()" title="Refresh · 刷新">↻</button>
       </div>
     </div>
 
@@ -9430,9 +9430,24 @@
                   <span class="muted" style="font-size: 12px;">days · 天</span>
                 </div>
               </div>
+              <div class="field" style="margin: 0;">
+                <label class="stacked">On screen · 显示时长</label>
+                <div class="row" style="gap: 8px; align-items: center;">
+                  <input type="number" min="0.5" max="60" step="0.5" id="cfg-social-rb-visible_secs" style="width: 90px;">
+                  <span class="muted" style="font-size: 12px;">sec · 秒</span>
+                </div>
+              </div>
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Gap between · 间隔</label>
+                <div class="row" style="gap: 8px; align-items: center;">
+                  <input type="number" min="0.5" max="60" step="0.5" id="cfg-social-rb-gap_secs" style="width: 90px;">
+                  <span class="muted" style="font-size: 12px;">sec · 秒</span>
+                </div>
+              </div>
             </div>
             <div class="helper" style="margin-top: 10px; line-height: 1.5;">
-              Shorter window = feed reads "live" but may be empty on quiet days. Longer = always populated but older entries. Default: 7 days. · 时间越短越"实时",但安静期可能为空;越长越饱满但内容更旧。
+              Shorter window = feed reads "live" but may be empty on quiet days. Longer = always populated but older entries. Default: 7 days. · 时间越短越"实时",但安静期可能为空;越长越饱满但内容更旧。<br>
+              "On screen" = how long each toast stays up; "Gap between" = quiet pause before the next one pops. Bigger gap = less often. Defaults: 4.5s on screen, 5s gap. · "显示时长"=每条停留时间;"间隔"=下一条弹出前的安静时间,越大弹得越少。
             </div>
             <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
             <div style="margin-bottom: 8px;">
@@ -10861,6 +10876,9 @@ let ENTITLEMENTS = {};
 // ════════════════════════════════════════════════════════════════
 let DASH_DATA = null;
 let DASH_METRIC = 'revenue';
+// Set by the manual ↻ refresh so the KPI numbers roll up from zero (the
+// dramatic entrance) rather than drifting in place — cleared after one render.
+let DASH_FORCE_ROLLUP = false;
 
 // ── Dashboard View tweaks (per-operator) — Trend chart shape, demand-heatmap
 // shape, headline-number style. Persisted; defaults reproduce the base look.
@@ -12007,6 +12025,21 @@ async function dashLoad() {
   }
 }
 
+// Manual ↻ refresh — same fetch as dashLoad, but the headline numbers roll up
+// from zero (slow, ambient) and the page fades in slowly, so a click reads as a
+// deliberate "re-reveal" rather than a silent reload. Seeding _cuVal=0 on the
+// live "Right now / Today" tiles makes them roll too; DASH_FORCE_ROLLUP does the
+// same for the deep-dive KPIs.
+function dashRefresh() {
+  DASH_FORCE_ROLLUP = true;
+  ['#db-today-rev', '#db-today-ord', '#db-today-new', '#db-live-num'].forEach(sel => {
+    const el = $(sel); if (el) el._cuVal = 0;
+  });
+  dashHeroLoadPresence();
+  dashHeroLoadToday({ slow: true });
+  dashLoad();
+}
+
 // Gentle slow fade-in for a dashboard refresh. The old flicker came from
 // rendering the new content at full opacity and THEN snapping it to 0 to fade
 // up. Here we hide the area first, swap the fresh content in while it's
@@ -12020,7 +12053,7 @@ function dashSwapWithFade(render) {
   render();
   els.forEach(el => void el.offsetWidth);   // commit opacity:0 + fresh content together
   els.forEach(el => {
-    el.style.transition = 'opacity 3s cubic-bezier(.16, 1, .3, 1)';
+    el.style.transition = 'opacity 5s cubic-bezier(.16, 1, .3, 1)';
     el.style.opacity = '1';
     el.addEventListener('transitionend', function done(ev) {
       if (ev.target !== el || ev.propertyName !== 'opacity') return;

@@ -8,8 +8,8 @@
 const api = require('../../utils/api');
 
 const FIRST_MS   = 2500;  // settle delay before the first toast
-const VISIBLE_MS = 4500;  // how long each toast stays up
-const GAP_MS     = 5000;  // quiet gap between toasts
+const VISIBLE_MS = 4500;  // how long each toast stays up (default; server can override)
+const GAP_MS     = 5000;  // quiet gap between toasts (default; server can override)
 
 Component({
   properties: {
@@ -23,6 +23,10 @@ Component({
     idx: 0,
     visible: false,
     dismissed: false,
+    // Cadence, overridable per tenant from the backend (Mini App Backend →
+    // Settings → Social proof → Recent-buyers ticker). Falls back to defaults.
+    visibleMs: VISIBLE_MS,
+    gapMs: GAP_MS,
   },
 
   observers: {
@@ -67,7 +71,12 @@ Component({
         const res = await api.get('/api/retail/social/recent-buyers');
         const items = Array.isArray(res) ? res : (res && res.data) || [];
         if (!items.length || this.data.dismissed) return;
-        this.setData({ items });
+        const t = (res && res.timing) || {};
+        this.setData({
+          items,
+          visibleMs: Number(t.visible_ms) > 0 ? Number(t.visible_ms) : VISIBLE_MS,
+          gapMs:     Number(t.gap_ms)     > 0 ? Number(t.gap_ms)     : GAP_MS,
+        });
         this.queueNext(FIRST_MS);
       } catch (e) {
         // Nice-to-have surface — fail silently, never block the page.
@@ -88,8 +97,8 @@ Component({
         this._timer = setTimeout(() => {
           this.setData({ idx: (this.data.idx + 1) % this.data.items.length });
           this.showCurrent();
-        }, GAP_MS);
-      }, VISIBLE_MS);
+        }, this.data.gapMs);
+      }, this.data.visibleMs);
     },
 
     stop() {
