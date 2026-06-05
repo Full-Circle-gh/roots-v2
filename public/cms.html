@@ -5171,6 +5171,16 @@ function updatePagePickerLabel() {
   });
 }
 
+// Embedded: the backend posts this when the operator clicks "← Pages" inside the
+// Product Page Editor, so we land back here with the PAGE menu already open.
+window.addEventListener('message', (ev) => {
+  if (ev.origin !== location.origin) return;
+  if (ev.data && ev.data.type === 'fc-open-pages') {
+    const menu = document.getElementById('page-menu');
+    if (menu) menu.classList.add('open');
+  }
+});
+
 // ── Theme picker (mini-app page background) ─────────────────────────────
 // Single global setting (not per-page), persisted via PUT
 // /api/retail-admin/config under `theme.page_bg`. Renders a circular

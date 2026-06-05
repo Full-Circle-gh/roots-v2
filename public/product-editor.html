@@ -1620,7 +1620,7 @@ function peExitToPages() {
     'You have unsaved changes that will be lost. Leave anyway? · 有未保存的更改将会丢失,仍要离开吗?'))) {
     return;
   }
-  window.parent.postMessage({ type: 'fc-open-editor', editor: 'mini-app' }, location.origin);
+  window.parent.postMessage({ type: 'fc-open-editor', editor: 'mini-app', openPages: true }, location.origin);
 }
 // Close the editor tab. Opened via window.open() from retail-admin, so
 // window.close() works; fall back to navigating back if the browser blocks it.

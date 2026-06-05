@@ -10131,6 +10131,12 @@ window.addEventListener('message', (ev) => {
     showProductSection();
   } else if (d.editor === 'mini-app') {
     openMiniAppEditor();
+    // Returning from the product editor — pop the Mini App Editor's PAGE menu
+    // open so the operator lands right on the page chooser.
+    if (d.openPages) {
+      const f = document.getElementById('frame-mini-app-editor');
+      if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'fc-open-pages' }, location.origin);
+    }
   }
 });
 // Group trigger toggles its popover; only one group open at a time.
