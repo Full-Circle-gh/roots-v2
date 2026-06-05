@@ -513,14 +513,16 @@
      ═══════════════════════════════════════════════════════════════════ */
   main { padding: var(--s6) var(--s6) var(--s7); max-width: min(1440px, 92vw); margin: 0 auto; }
   section { display: none; }
-  /* Embedded editors (Mini App / Product Page) — break out of main's centered
-     padding box to span the full width, and stand the iframe up to fill the
-     viewport below the topbar (56px) + tab nav (~44px). The height divides out
-     the html `zoom` (var --ui-scale) so it doesn't overflow at 110 / 125% text
-     size. The editor inside the iframe skips its own zoom when embedded, so
-     scale isn't applied twice (see is-embedded in cms.html / product-editor.html). */
+  /* Embedded editors (Mini App / Product Page) — cancel main's padding so the
+     iframe fills its centered column edge-to-edge, and stand it up to fill the
+     viewport below the topbar (56px) + tab nav (~44px). NB: no `vw`/`50vw`
+     breakout here — viewport units don't survive the root `zoom` (text size),
+     so they paint ~10% too wide and crop both panes. Negative margins (in the
+     same scaled px as everything else) avoid that. Height divides out the zoom
+     (var --ui-scale). The editor inside the iframe skips its own zoom when
+     embedded, so scale isn't applied twice (see is-embedded in the editors). */
   #tab-mini-app-editor, #tab-product-editor {
-    margin: calc(var(--s6) * -1) calc(50% - 50vw) calc(var(--s7) * -1);
+    margin: calc(var(--s6) * -1) calc(var(--s6) * -1) calc(var(--s7) * -1);
     padding: 0;
   }
   .tab-embed-editor .ed-frame {
