@@ -13543,7 +13543,7 @@ function renderTrackingCell(o) {
     return '<span class="muted">—</span>';
   }
   const carrier = (o.tracking_carrier || '').toUpperCase();
-  const sync = o.tracking_kd100_subscribed
+  const sync = (o.tracking_kd100_subscribed || o.jd_live)
     ? '<span style="color:#5a8c2a; font-size:10px;">● live</span>'
     : '<span class="muted" style="font-size:10px;">manual</span>';
   return `<div style="font-family: var(--f-mono); font-size: 11px; font-weight: 600;">${escapeHtml(carrier)} ${escapeHtml(o.tracking_number)}</div>
