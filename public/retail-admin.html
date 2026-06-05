@@ -516,7 +516,13 @@
      alive rather than a hard cut. display:none→block restarts the anim each
      time a section becomes active. */
   @keyframes tab-fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-  section.active { display: block; animation: tab-fade-in 1.004s cubic-bezier(.16, 1, .3, 1) both; }
+  /* No fill-forwards: a held `both`/`forwards` animation that touched transform
+     keeps the section as a lingering stacking context, which traps modals
+     (.pu-editor-bg, z 300) *inside* the section so a root-level drawer (z 200)
+     paints on top of them. The end keyframe equals the section's base style
+     (opacity 1, transform none), so dropping the fill changes nothing visually
+     but lets the stacking context dissolve once the entrance settles. */
+  section.active { display: block; animation: tab-fade-in 1.004s cubic-bezier(.16, 1, .3, 1); }
   @media (prefers-reduced-motion: reduce) { section.active { animation: none; } }
 
   h2 {
@@ -3170,65 +3176,50 @@
     box-shadow: -12px 0 32px rgba(0, 0, 0, .35);
     transform: translateX(100%);
     /* Symmetric slide both ways: on close, hold `visibility: visible`
-       for the full slide-out (the 220ms visibility delay) so the panel
+       for the full slide-out (the 253ms visibility delay) so the panel
        glides off-screen instead of vanishing instantly. On open the
-       delay is 0 so it appears immediately and slides in. */
-    transition: transform 220ms cubic-bezier(.22, .61, .36, 1),
-                visibility 0s linear 220ms;
+       delay is 0 so it appears immediately and slides in. Close is the
+       gentle 253ms beat shared by every drawer; open is the slow zen
+       glide set on .open below. */
+    transition: transform 253ms cubic-bezier(.22, .61, .36, 1),
+                visibility 0s linear 253ms;
     z-index: 200;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     visibility: hidden;
   }
+  /* ─── Unified "zen" open for EVERY side-drawer ───
+     One motion language across the whole backend: every drawer glides in on
+     the Mini App Editor's signature soft deceleration (cubic-bezier .16,1,.3,1)
+     over a long beat so it settles rather than snaps. Only the OPEN is slowed —
+     the base .side-drawer rule governs the gentle 253ms slide-out. The inner
+     content (.drawer-body children) drifts up + fades a beat behind the panel,
+     so Orders, Customers, Zones, Media, Pop-ups, Activity all feel identical. */
   .side-drawer.open {
     transform: translateX(0);
     visibility: visible;
-    transition: transform 220ms cubic-bezier(.22, .61, .36, 1),
+    transition: transform 1100ms cubic-bezier(.16, 1, .3, 1),
                 visibility 0s linear 0s;
   }
   .side-drawer.dw-wide { --drawer-vw: 80vw; --drawer-px: 980px; }
   /* Compact peek — the activity drawer holds only a few lines, so it doesn't
      need the full editor width. Narrower panel sized to its content. */
   .side-drawer.dw-compact { --drawer-vw: 32vw; --drawer-px: 420px; min-width: 360px; }
-  /* ─── Order detail: slow "zen" open ───
-     The order window glides in on the Mini App Editor's signature soft
-     deceleration (cubic-bezier .16,1,.3,1) over a longer beat, so it
-     settles rather than snaps. Only the OPEN transition is slowed — the
-     base .side-drawer rule still governs the slide-out, so close keeps the
-     standard 220ms (and the ~240ms content-clear hook stays valid). The
-     inner content drifts up + fades in a beat behind the panel. */
-  #order-drawer.open {
-    transition: transform 1100ms cubic-bezier(.16, 1, .3, 1),
-                visibility 0s linear 0s;
-  }
-  #order-detail-mount > * { opacity: 0; transform: translateY(10px); }
-  #order-drawer.open #order-detail-mount > * {
+  .side-drawer .drawer-body > * { opacity: 0; transform: translateY(10px); }
+  .side-drawer.open .drawer-body > * {
     opacity: 1;
     transform: none;
     transition: opacity 900ms cubic-bezier(.16, 1, .3, 1) 260ms,
                 transform 900ms cubic-bezier(.16, 1, .3, 1) 260ms;
   }
-  /* Switching orders while the drawer is already open: cross-fade the whole
-     mount — old order fades out, new one fades back in on the same zen ease
-     as the drawer slide. JS toggles .od-swapping around the data swap. */
-  #order-detail-mount { transition: opacity 990ms cubic-bezier(.16, 1, .3, 1); }
-  #order-detail-mount.od-swapping { opacity: 0; transition: opacity 396ms cubic-bezier(.16, 1, .3, 1); }
-  /* Customer detail drawer — same zen motion as the Orders drawer above:
-     slow glide-in, inner content drifts up + fades a beat behind, and a
-     cross-fade when switching customers in an already-open drawer. */
-  #cu-drawer.open {
-    transition: transform 1100ms cubic-bezier(.16, 1, .3, 1),
-                visibility 0s linear 0s;
-  }
-  #cu-drawer .drawer-body > * { opacity: 0; transform: translateY(10px); }
-  #cu-drawer.open .drawer-body > * {
-    opacity: 1;
-    transform: none;
-    transition: opacity 900ms cubic-bezier(.16, 1, .3, 1) 260ms,
-                transform 900ms cubic-bezier(.16, 1, .3, 1) 260ms;
-  }
+  /* Switching records while a drawer is already open (Orders / Customers):
+     cross-fade the whole mount — old record fades out, new one fades back in on
+     the same zen ease as the slide. JS toggles .od-swapping / .cu-swapping
+     around the data swap. (#order-detail-mount IS the order drawer's body.) */
+  #order-detail-mount,
   #cu-drawer .drawer-body { transition: opacity 990ms cubic-bezier(.16, 1, .3, 1); }
+  #order-detail-mount.od-swapping,
   #cu-drawer .drawer-body.cu-swapping { opacity: 0; transition: opacity 396ms cubic-bezier(.16, 1, .3, 1); }
   .side-drawer .drawer-head {
     padding: 14px 18px;
@@ -6474,6 +6465,26 @@
         padding: 24px;
       }
       .pu-editor-bg.show { display: flex; }
+      /* Consistent "zen" entrance for every modal — same ease as the drawers
+         and tab fade, so a popup window feels like the same motion language.
+         The backdrop dims in; the card drifts up + scales from 98.5%. Covers
+         both the static modals (.show) and the dynamically-injected ones
+         (inline display:flex). Close stays instant — display toggles off. */
+      @keyframes pu-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes pu-modal-in {
+        from { opacity: 0; transform: translateY(10px) scale(.985); }
+        to   { opacity: 1; transform: none; }
+      }
+      .pu-editor-bg.show,
+      .pu-editor-bg[style*="display: flex"] { animation: pu-backdrop-in 360ms cubic-bezier(.16, 1, .3, 1); }
+      .pu-editor-bg.show > .pu-editor,
+      .pu-editor-bg[style*="display: flex"] > .pu-editor { animation: pu-modal-in 460ms cubic-bezier(.16, 1, .3, 1); }
+      @media (prefers-reduced-motion: reduce) {
+        .pu-editor-bg.show,
+        .pu-editor-bg[style*="display: flex"],
+        .pu-editor-bg.show > .pu-editor,
+        .pu-editor-bg[style*="display: flex"] > .pu-editor { animation: none; }
+      }
       /* Scroll isolation: when a floating modal or side-drawer is open, lock
          the page behind it so wheel/touch scroll inside the modal doesn't
          chain through to the list/page underneath. Covers the static modals
@@ -11969,6 +11980,13 @@ function dashRenderKpis() {
     { lbl: 'Conversion · 转化率',    val: conv,                       num: k.conversion_rate, fmt: 'pct',    delta: null,            sub: 'orders ÷ sessions' },
     { lbl: 'Refund rate · 退款率',   val: (k.refund_rate || 0).toFixed(1) + '%', num: k.refund_rate || 0, fmt: 'pct', delta: null, sub: dashNum(k.refunded_orders) + ' refunded' },
   ];
+  // Snapshot the currently-shown headline values before we blow away the DOM,
+  // so a range change can tween from old → new (a zen drift) instead of the
+  // fold-open reveal's count-from-zero. Cards are a fixed order, so index keys.
+  const prevVals = {};
+  document.querySelectorAll('#db-kpis .val[data-cu]').forEach((el, i) => {
+    prevVals[i] = (el._cuVal != null) ? el._cuVal : Number(el.dataset.cu);
+  });
   $('#db-kpis').innerHTML = cards.map(c => {
     const hasDelta = c.delta !== null && c.delta !== undefined;
     // One foot row per card: delta and/or sub on a single baseline (or a
@@ -11983,19 +12001,23 @@ function dashRenderKpis() {
   }).join('');
   // If the fold is already open when fresh data lands, count up now (the open
   // event won't fire again). Otherwise the open handler runs it on reveal.
-  if (document.getElementById('db-deepdive')?.open) dashKpiAnimate();
+  if (document.getElementById('db-deepdive')?.open) dashKpiAnimate(prevVals);
 }
 
 // Count the KPI headline numbers up from 0 — called on fold-reveal and on a
 // data refresh while open. Seeds _cuVal=0 so dashCountUp tweens from zero
 // rather than snapping (its first-paint shortcut). Respects reduced-motion.
-function dashKpiAnimate() {
+// `prev` (optional) = a map of index → previously-shown value. When supplied
+// (a range change while the fold is open) each number drifts from its old rest
+// to the new one — the zen settle. Without it (fold-open reveal) they roll up
+// from zero for the dramatic entrance.
+function dashKpiAnimate(prev) {
   const fmts = { money: n => dashMoney(n), money2: n => dashMoney(n, 2), pct: n => n.toFixed(1) + '%', num: n => dashNum(Math.round(n)) };
-  document.querySelectorAll('#db-kpis .val[data-cu]').forEach(el => {
+  document.querySelectorAll('#db-kpis .val[data-cu]').forEach((el, i) => {
     const to = Number(el.dataset.cu) || 0;
     const f = fmts[el.dataset.fmt] || fmts.num;
-    el._cuVal = 0;
-    dashCountUp(el, to, f, 1700);   // slow, ambient roll-up on fold open
+    el._cuVal = (prev && prev[i] != null && isFinite(prev[i])) ? prev[i] : 0;
+    dashCountUp(el, to, f, 1700);   // slow, ambient roll-up (easeOutQuint settle)
   });
 }
 
