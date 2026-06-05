@@ -8502,7 +8502,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: rows, meta: { limit, offset } });
 });
 
-router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
+router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare(
     `SELECT o.*, c.nickname, c.avatar_url, c.phone AS customer_phone,
@@ -8523,6 +8523,15 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, (req, res) => {
   }
   if (o.address_json) { try { o.address = JSON.parse(o.address_json); } catch {} }
   delete o.address_json;
+
+  // Pull fresh JD trace before rendering so the backend shows live events on
+  // open — without this the office only ever saw events a customer had already
+  // triggered by opening the order in the mini app. Scoped by the order's own
+  // customer_id; no-op unless this is a dispatched/delivered JD waybill.
+  if (o.customer_id) {
+    try { await syncJdTrackingForCustomer(id, o.customer_id); }
+    catch (e) { console.error('[jd.trace] backend sync failed', e); }
+  }
 
   // Lazy-fill shipments for orders predating the split-shipment feature.
   // This is idempotent — if rows already exist, nothing changes. Pickup
