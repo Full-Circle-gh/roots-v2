@@ -351,6 +351,10 @@
     border-bottom: 2px solid transparent;
     transition: color var(--t-fast) ease, border-color var(--t-fast) ease, background var(--t-fast) ease;
     display: inline-flex; align-items: center; gap: 6px;
+    /* Never wrap a label to a second line: a 2-line nav grows past the 42px the
+       embedded Editor iframe assumes (top:98px), so the nav would paint over the
+       Editor's own topbar (PAGE / save-status pills). Keep every tab single-line. */
+    white-space: nowrap;
   }
   .tabs button:hover { color: var(--text-1); }
   .tabs button.active { color: var(--text-1); border-bottom-color: var(--brass); }
