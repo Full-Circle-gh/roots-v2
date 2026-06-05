@@ -5531,7 +5531,8 @@
       #cu-detail-body .cu-fold > summary::-webkit-details-marker { display: none; }
       #cu-detail-body .cu-fold > summary::marker { content: ''; }
       #cu-detail-body .cu-fold > summary:hover { background: var(--bg-elev-1); }
-      /* Chevron at the start — rotates when section opens. */
+      /* Chevron at the start — rotates when section opens, on the same slow
+         ensō ease as the body so the whole fold moves as one calm gesture. */
       #cu-detail-body .cu-fold > summary::before {
         content: '';
         flex-shrink: 0;
@@ -5540,9 +5541,32 @@
         border-left: 5px solid var(--brass);
         border-top: 4px solid transparent;
         border-bottom: 4px solid transparent;
-        transition: transform var(--t-fast) ease;
+        transition: transform .85s cubic-bezier(.33,1,.68,1);
       }
       #cu-detail-body .cu-fold[open] > summary::before { transform: rotate(90deg); }
+      /* Zen fold: the body breathes open/closed like the dashboard activity
+         feed rather than snapping. ::details-content height-interpolates on
+         the same ensō ease, so we keep native <details> a11y and still get
+         the slow, meditative reveal. (Height keyword interpolation +
+         discrete content-visibility for the close pass.) */
+      #cu-detail-body { interpolate-size: allow-keywords; }
+      #cu-detail-body .cu-fold::details-content {
+        block-size: 0;
+        overflow: clip;
+        opacity: .35;
+        transition:
+          block-size .85s cubic-bezier(.33,1,.68,1),
+          opacity .7s ease,
+          content-visibility .85s allow-discrete;
+      }
+      #cu-detail-body .cu-fold[open]::details-content {
+        block-size: auto;
+        opacity: 1;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #cu-detail-body .cu-fold::details-content,
+        #cu-detail-body .cu-fold > summary::before { transition: none; }
+      }
       /* Summary can host a trailing action button (e.g. Addresses → + Add).
          Push it to the right with auto-margin and stop the tap from toggling
          the accordion (we preventDefault in the inline onclick above). */
@@ -11980,14 +12004,17 @@ function dashRenderAll() {
   dashRenderCohorts();
 }
 
-// Gently fade the dashboard data area in on a (re)load instead of a hard snap.
-// Restart the animation each call by stripping the class before re-adding it.
+// Gently fade the dashboard data area in on the FIRST load only. On a refresh
+// the area is already visible, so re-running an opacity 0→1 animation snaps it
+// to invisible first and reads as a flicker — and the KPIs already drift their
+// values in place, so no whole-area fade is wanted on re-loads.
+let dashFadedIn = false;
 function dashFadeIn() {
+  if (dashFadedIn) return;
+  dashFadedIn = true;
   ['db-bento', 'db-deepdive'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.classList.remove('db-refreshing');
-    void el.offsetWidth;            // reflow so the animation re-triggers
     el.classList.add('db-refreshing');
   });
 }
