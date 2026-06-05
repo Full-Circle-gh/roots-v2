@@ -407,6 +407,13 @@
     vertical-align: -3px;
   }
   .page-menu .item .desc { font-size: 11px; color: var(--text-3); line-height: 1.4; }
+  /* Divider + "Products" entry — products aren't storefront pages, so they sit
+     below a hairline as a hand-off to the Product Page Editor. */
+  .page-menu .menu-sep {
+    height: 1px; background: var(--line); margin: 6px 4px;
+  }
+  .page-menu .item.item-editor .name { display: inline-flex; align-items: center; gap: 7px; }
+  .page-menu .item.item-editor .name svg { width: 14px; height: 14px; color: var(--text-3); flex-shrink: 0; }
 
   /* Theme picker — sibling of page-picker, sets the mini-app page bg. */
   .theme-picker {
@@ -5112,7 +5119,15 @@ function buildPagePicker() {
     <div class="item ${p.id === state.page ? 'current' : ''}" data-id="${p.id}">
       <div class="name">${B(p.name, p.cn)}</div>
       <div class="desc">${B(p.desc, p.desc_cn || p.desc)}</div>
-    </div>`).join('');
+    </div>`).join('') +
+    `<div class="menu-sep"></div>
+    <div class="item item-editor" data-id="__products__">
+      <div class="name">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+        ${B('Products', '产品')}
+      </div>
+      <div class="desc">${B("Edit an individual product's detail page", '编辑单个产品的详情页')}</div>
+    </div>`;
 
   const picker = $('#page-picker');
   picker.addEventListener('click', e => {
@@ -5128,6 +5143,18 @@ function buildPagePicker() {
       e.stopPropagation();
       const newPage = it.dataset.id;
       menu.classList.remove('open');
+      // "Products" hands off to the Product Page Editor rather than switching
+      // a storefront page. Embedded → ask the backend to open that tab; stand-
+      // alone → just navigate there.
+      if (newPage === '__products__') {
+        if (state.dirty || state.saving) { clearTimeout(saveTimer); try { await saveDraft(); } catch {} }
+        if (window.self !== window.top) {
+          window.parent.postMessage({ type: 'fc-open-editor', editor: 'product' }, location.origin);
+        } else {
+          window.location.href = '/product-editor';
+        }
+        return;
+      }
       if (newPage === state.page) return;
       await switchPage(newPage);
     });

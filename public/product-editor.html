@@ -425,6 +425,26 @@
   }
   .pe-badge.pub { background: rgba(107, 142, 111, .14); color: var(--accent-hi); border-color: rgba(107, 142, 111, .35); }
   .pe-badge.draft { background: rgba(176, 141, 74, .14); color: var(--brass); border-color: rgba(176, 141, 74, .35); }
+  /* Left-pane Product picker (the in-editor "which product" section). */
+  .pe-prod-search {
+    width: 100%; margin: 0 0 8px;
+    background: var(--bg-app); border: 1px solid var(--line);
+    border-radius: var(--r-md); padding: 7px 10px;
+    font: 13px var(--f-sans); color: var(--text-1);
+  }
+  .pe-prod-search:focus { outline: none; border-color: var(--line-strong); box-shadow: 0 0 0 3px var(--ring); }
+  .pe-prod-list { max-height: 42vh; overflow-y: auto; }
+  /* Empty canvas state — shown until a product is chosen. */
+  .pe-canvas-empty {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    text-align: center; padding: 24px;
+    background: var(--bg-app); color: var(--text-3);
+  }
+  .pe-canvas-empty[hidden] { display: none; }
+  .pe-canvas-empty svg { width: 40px; height: 40px; color: var(--line-strong); }
+  .pe-canvas-empty-title { font-size: 15px; font-weight: 600; color: var(--text-1); }
+  .pe-canvas-empty-sub { font-size: 12px; line-height: 1.55; max-width: 280px; }
   .pe-topbar-actions { display: flex; align-items: center; gap: var(--s2); flex-shrink: 0; }
   #pe-save-status { font-size: 11px; color: var(--text-3); margin-right: 4px; }
   /* EN / 中 language toggle — mirrors the Mini App Editor's .lang-toggle */
@@ -516,6 +536,7 @@
 
   /* ── Center: phone canvas (the big focal point like CMS) ── */
   .pa-edit-canvas {
+    position: relative;
     background: var(--bg-app);
     background-image:
       radial-gradient(ellipse at top, rgba(107, 142, 111, .04), transparent 55%),
@@ -1388,6 +1409,15 @@
     <!-- LEFT: page settings (card chrome + colophon) + section list -->
     <div class="pa-edit-palette">
       <div class="pe-left-scroll">
+        <!-- PRODUCT picker — choose which product's detail page to edit. Lives
+             above "Page" so it reads as "what am I editing", switching in place
+             via peSwitchProduct (no reload). Reuses the topbar switcher's data. -->
+        <div class="pe-left-group" id="pe-prod-group">
+          <div class="pe-left-grouptitle">Product · 产品</div>
+          <input id="pe-prod-search" class="pe-prod-search" type="text" autocomplete="off" spellcheck="false"
+                 oninput="peRenderProdPicker()" placeholder="Search products… · 搜索产品…">
+          <div id="pe-prod-list" class="pe-switcher-list pe-prod-list" data-no-i18n></div>
+        </div>
         <!-- PAGE settings — occasional, collapsed by default (dot = has content) -->
         <div class="pe-left-group">
           <div class="pe-left-grouptitle">Page · 页面</div>
@@ -1440,6 +1470,13 @@
       </div>
       <div class="pa-prev-frame">
         <div class="pa-prev-screen" id="pa-preview-screen"></div>
+      </div>
+      <!-- Shown when no product is loaded yet (embedded entry from the Mini App
+           Editor's "Products"): the left-pane picker drives selection. -->
+      <div id="pe-canvas-empty" class="pe-canvas-empty" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+        <div class="pe-canvas-empty-title">Pick a product · 选择产品</div>
+        <div class="pe-canvas-empty-sub">Choose a product on the left to edit its detail page. · 在左侧选择一个产品以编辑其详情页。</div>
       </div>
     </div>
 
@@ -2020,8 +2057,10 @@ window._paTemplate = null;      // product's page_template id — which template
 async function peBoot() {
   const id = Number(new URLSearchParams(location.search).get('id'));
   // No ?id — opened as a standalone tool (e.g. from the backend's Content menu).
-  // Show a product picker instead of dead-ending.
-  if (!id) { peShowPicker(); return; }
+  // Embedded in the backend (Pages → Products): keep the editor chrome and use
+  // the left-pane product picker + an empty canvas, so picking a product mounts
+  // it in place. Standalone: show the centered cold-start picker.
+  if (!id) { if (window.self !== window.top) peShowInlinePicker(); else peShowPicker(); return; }
   try {
     // Hydrate from TWO sources:
     //  • the FULL single product (/products/:id) — the only endpoint that
@@ -2126,6 +2165,62 @@ function peRenderPickerList() {
       : '<span class="pe-switcher-item-badge">' + (cuLang() === 'cn' ? '草稿' : 'Draft') + '</span>';
     return '<button type="button" class="pe-switcher-item" data-id="' + p.id +
       '" onclick="location.href=\'/product-editor?id=' + p.id + '\'">' +
+      '<span class="pe-switcher-item-name">' + name + '</span>' + badge + '</button>';
+  }).join('');
+}
+// ── Embedded entry (backend Pages → Products) ──
+// Load the catalog, drop the loading veil, show the empty canvas, and render
+// the left-pane product list. Picking a row mounts that product in place
+// (peSwitchProduct), no reload.
+async function peShowInlinePicker() {
+  try {
+    const res = await fetch('/api/retail-admin/products', { credentials: 'same-origin', cache: 'no-store' });
+    if (res.status === 401 || res.status === 403) { location.href = '/'; return; }
+    const j = await res.json();
+    if (!j.success) throw new Error(j.error || 'load_failed');
+    PA_ALL_PRODUCTS = j.data || [];
+  } catch (e) {
+    peFatal('Failed to load · 加载失败: ' + escapeHtml(e.message));
+    return;
+  }
+  document.getElementById('pe-loading').classList.add('hide');
+  const empty = document.getElementById('pe-canvas-empty'); if (empty) empty.hidden = false;
+  peRenderProdPicker();
+  const s = document.getElementById('pe-prod-search'); if (s) setTimeout(() => s.focus(), 30);
+}
+// Render the always-visible left-pane product list (Product · 产品 group).
+// Mirrors the topbar switcher list but lives in the left rail; the currently
+// edited product is highlighted.
+function peRenderProdPicker() {
+  const list = document.getElementById('pe-prod-list');
+  if (!list) return;
+  const q = (document.getElementById('pe-prod-search')?.value || '').trim().toLowerCase();
+  let rows = _peDedupVariants(PA_ALL_PRODUCTS);
+  if (PA_CURRENT && PA_CURRENT.variant_group_id) {
+    const i = rows.findIndex(p => p.variant_group_id === PA_CURRENT.variant_group_id);
+    if (i >= 0) rows[i] = Object.assign({}, PA_CURRENT, { _variantCount: rows[i]._variantCount });
+  }
+  rows.sort((a, b) => (a.name_en || '').localeCompare(b.name_en || ''));
+  if (q) rows = rows.filter(p =>
+    ((p.name_en || '') + ' ' + (p.name_cn || '') + ' ' + (p.sku || '')).toLowerCase().includes(q));
+  if (!rows.length) {
+    list.innerHTML = '<div class="pe-switcher-empty">' +
+      cuT('No products match. · 没有匹配的产品。', 'No products match. · 没有匹配的产品。') + '</div>';
+    return;
+  }
+  list.innerHTML = rows.map(p => {
+    const cur = PA_CURRENT && p.id === PA_CURRENT.id;
+    const pub = p.is_published === 1;
+    const vcount = p._variantCount > 1
+      ? ' <small>· ' + p._variantCount + cuT(' variants', ' 个规格') + '</small>'
+      : '';
+    const name = escapeHtml(p.name_en || '—') +
+      (p.name_cn ? ' <small>' + escapeHtml(p.name_cn) + '</small>' : '') + vcount;
+    const badge = pub
+      ? '<span class="pe-switcher-item-badge pub">' + cuT('Live', '已上架') + '</span>'
+      : '<span class="pe-switcher-item-badge">' + cuT('Draft', '草稿') + '</span>';
+    return '<button type="button" class="pe-switcher-item' + (cur ? ' current' : '') +
+      '" data-id="' + p.id + '" onclick="peSwitchProduct(' + p.id + ')">' +
       '<span class="pe-switcher-item-name">' + name + '</span>' + badge + '</button>';
   }).join('');
 }
@@ -2572,6 +2667,8 @@ function peMount(p) {
   peInspTab(window._paBlocks.length ? 'block' : 'page');
 
   document.getElementById('pe-loading').classList.add('hide');
+  const _peEmpty = document.getElementById('pe-canvas-empty'); if (_peEmpty) _peEmpty.hidden = true;
+  peRenderProdPicker();   // refresh left-pane list + current highlight
 
   // Default behaviour: if this product has no design yet but the kitchen app
   // already carries both EN + CN descriptions, compose the sections off that

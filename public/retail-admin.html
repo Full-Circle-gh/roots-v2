@@ -10111,6 +10111,20 @@ function openProductEditor(id) {
   const btn = document.querySelector('.tabs [data-tab="product-editor"]');
   if (btn) btn.click();
 }
+// The embedded Mini App Editor posts here when its PAGE dropdown's "Products"
+// entry is chosen — swap to the Product Page Editor tab (lazy-loads the iframe
+// on its first open, then lands on its product picker).
+window.addEventListener('message', (ev) => {
+  if (ev.origin !== location.origin) return;
+  const d = ev.data;
+  if (!d || d.type !== 'fc-open-editor') return;
+  if (d.editor === 'product') {
+    const btn = document.querySelector('.tabs [data-tab="product-editor"]');
+    if (btn) btn.click();
+  } else if (d.editor === 'mini-app') {
+    openMiniAppEditor();
+  }
+});
 // Group trigger toggles its popover; only one group open at a time.
 $$('.tabs-group-trigger').forEach(btn => btn.addEventListener('click', (ev) => {
   ev.stopPropagation();
