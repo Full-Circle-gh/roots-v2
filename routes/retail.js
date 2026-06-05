@@ -8928,10 +8928,16 @@ function loadPrinterPrefs() {
     try { return JSON.parse(r.value_json); } catch { return d; }
   };
   const by_store = get('printer.by_store', {});
+  const oocRaw = get('printer.out_of_city_store_id', null);
+  const ooc = oocRaw != null && /^\d+$/.test(String(oocRaw)) ? parseInt(oocRaw, 10) : null;
   return {
     auto_print: get('printer.auto_print', true),
     shop_name:  get('printer.shop_name', tenantBrandLabel()),
     by_store:   (by_store && typeof by_store === 'object') ? by_store : {},
+    // Orders shipping OUTSIDE Guangzhou always print at this store's printer
+    // (e.g. the Tianhe warehouse that handles all out-of-city fulfilment).
+    // null → fall back to the order's own store routing.
+    out_of_city_store_id: ooc,
   };
 }
 
@@ -8946,6 +8952,29 @@ function printerForStore(storeId, prefs) {
   return null;
 }
 
+// Destination city for an order, read from its saved address. Empty when the
+// order has no address (pickup) — treated as in-city so it routes by store.
+function orderDestCity(order) {
+  try { return JSON.parse(order.address_json || '{}').city || ''; } catch { return ''; }
+}
+
+// Resolve the printer for a paid order. Rule:
+//   • Outside Guangzhou → always the designated out-of-city store's printer
+//     (the warehouse that ships every out-of-town parcel, e.g. Tianhe/977).
+//   • Inside Guangzhou (or pickup) → the order's own fulfilling store printer.
+// Falls back to per-store routing if the out-of-city store has no printer set.
+function printerForOrder(order, prefs) {
+  const city = orderDestCity(order);
+  // Only override when we actually know the destination is a non-GZ city.
+  // No city (pickup / missing address) → in-city, route by the order's store.
+  const outOfGZ = !!city && !isGuangzhou(city);
+  if (outOfGZ && prefs.out_of_city_store_id != null) {
+    const ooc = (prefs.by_store || {})[String(prefs.out_of_city_store_id)];
+    if (ooc && ooc.sn) return ooc;
+  }
+  return printerForStore(order.store_id, prefs);
+}
+
 // Render + print one order to its store's printer. All DB reads are
 // synchronous (tenant DB stays bound); the returned promise covers only the
 // network POST. `pcfg` overrides the resolved store printer (used by tests).
@@ -8955,7 +8984,7 @@ function printOrderById(orderId, prefs, pcfg) {
   const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
   if (!order) return Promise.resolve({ ok: false, msg: 'order_not_found' });
   const p = prefs || loadPrinterPrefs();
-  const printer = pcfg || printerForStore(order.store_id, p);
+  const printer = pcfg || printerForOrder(order, p);
   if (!printer || !printer.sn) return Promise.resolve({ ok: false, msg: 'no_printer_for_store' });
   const items = tdb().prepare('SELECT * FROM retail_order_items WHERE order_id = ? ORDER BY id').all(orderId);
   const shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(orderId);
@@ -8977,12 +9006,21 @@ router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
       sn: cfg.sn || '', template: cfg.template || 'receipt', copies: cfg.copies || 1,
     };
   });
+  // Suggest the Tianhe store as the out-of-city default when nothing is saved
+  // yet, so the warehouse that ships out-of-town parcels is pre-selected.
+  let oocStore = prefs.out_of_city_store_id;
+  if (oocStore == null) {
+    const tianhe = stores.find(s =>
+      /天河|tianhe/i.test(`${s.name_cn || ''} ${s.name_en || ''} ${s.code || ''}`));
+    if (tianhe) oocStore = tianhe.id;
+  }
   res.json({ success: true, data: {
     auto_print: prefs.auto_print,
     shop_name:  prefs.shop_name,
     enabled:    _feie.feieEnabled(integ().feie),
     templates:  _feie.TEMPLATE_IDS,
     stores,
+    out_of_city_store_id: oocStore,
   }});
 });
 
@@ -9012,6 +9050,11 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), (req
         };
       }
       upsert.run('printer.by_store', JSON.stringify(clean), req.user.id);
+    }
+    if (b.out_of_city_store_id !== undefined) {
+      const v = b.out_of_city_store_id;
+      const ooc = (v != null && /^\d+$/.test(String(v))) ? String(parseInt(v, 10)) : null;
+      upsert.run('printer.out_of_city_store_id', JSON.stringify(ooc), req.user.id);
     }
   });
   tx();

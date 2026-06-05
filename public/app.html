@@ -16097,6 +16097,12 @@ async function renderAdmin(tab) {
       <div id="feie-stores" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px">
         <div style="font-size:13px;color:var(--muted)">Loading stores…</div>
       </div>
+      <div style="border-top:1px solid var(--border);margin:4px 0 14px"></div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Out-of-Guangzhou orders · 广州以外订单</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Orders shipping outside Guangzhou always print at this store's printer (the warehouse that ships them). In-Guangzhou orders print at their own store. · 广州以外的订单始终在此门店打印机出单(负责外地发货的门店);广州市内订单仍在各自门店打印。</div>
+      <select id="feie-ooc" style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:14px">
+        <option value="">— Use each order's own store · 按订单所属门店 —</option>
+      </select>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="_savePrinter()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Save all</button>
       </div>
@@ -16255,6 +16261,18 @@ async function loadPrinterPrefs() {
         // Render each store's live print preview from the server renderer.
         stores.forEach(s => _previewStore(s.id));
       }
+      // Out-of-Guangzhou store selector — list every store, preselect saved
+      // (or auto-suggested Tianhe) one.
+      const ooc = document.getElementById('feie-ooc');
+      if (ooc) {
+        const sel = p.out_of_city_store_id;
+        ooc.innerHTML =
+          '<option value="">— Use each order’s own store · 按订单所属门店 —</option>' +
+          stores.map(s => {
+            const name = _esc(s.name_cn || s.name_en || s.code || ('Store ' + s.id));
+            return `<option value="${s.id}" ${String(sel)===String(s.id)?'selected':''}>${name}</option>`;
+          }).join('');
+      }
     }
   } catch (e) { console.warn('[printer] load failed', e); }
 }
@@ -16317,6 +16335,7 @@ async function _savePrinter() {
       auto_print: document.getElementById('feie-auto')?.checked,
       shop_name:  document.getElementById('feie-shop')?.value || '',
       by_store:   _collectPrinterByStore(),
+      out_of_city_store_id: document.getElementById('feie-ooc')?.value || null,
     };
     const r = await fetch('/api/retail-admin/printer', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
