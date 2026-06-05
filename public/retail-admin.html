@@ -10491,12 +10491,20 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
       items.push({ type: 'product', group: 'product', title: name,
         crumb: bits.join(' · '), pid: r.id });
     });
+    // Did this order surface because the query matched its phone (rather than
+    // the order number or recipient name)? If so, show the phone in the
+    // subtitle so the operator sees *why* it came up. Compare on digits only.
+    const qDigits = raw.replace(/\D/g, '');
     ((o && o.data) || []).slice(0, 6).forEach(r => {
       const who = r.recipient_name || r.nickname || '';
-      const bits = [r.status, who].filter(Boolean);
+      const bits = [r.status, who];
+      const phoneDigits = String(r.recipient_phone || '').replace(/\D/g, '');
+      if (qDigits.length >= 3 && phoneDigits && phoneDigits.includes(qDigits)) {
+        bits.push(r.recipient_phone);
+      }
       items.push({ type: 'order', group: 'order',
         title: r.order_no || ('Order #' + r.id),
-        crumb: bits.join(' · '), oid: r.id });
+        crumb: bits.filter(Boolean).join(' · '), oid: r.id });
     });
     ((c && c.data) || []).slice(0, 6).forEach(r => {
       const bits = [r.phone, (r.orders_count != null ? r.orders_count + ' orders' : null)].filter(Boolean);
