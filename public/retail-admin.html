@@ -513,21 +513,20 @@
      ═══════════════════════════════════════════════════════════════════ */
   main { padding: var(--s6) var(--s6) var(--s7); max-width: min(1440px, 92vw); margin: 0 auto; }
   section { display: none; }
-  /* Embedded editors (Mini App / Product Page) — cancel main's padding so the
-     iframe fills its centered column edge-to-edge, and stand it up to fill the
-     viewport below the topbar (56px) + tab nav (~44px). NB: no `vw`/`50vw`
-     breakout here — viewport units don't survive the root `zoom` (text size),
-     so they paint ~10% too wide and crop both panes. Negative margins (in the
-     same scaled px as everything else) avoid that. Height divides out the zoom
-     (var --ui-scale). The editor inside the iframe skips its own zoom when
-     embedded, so scale isn't applied twice (see is-embedded in the editors). */
+  /* Embedded editors (Mini App / Product Page) — pin the iframe to the full
+     viewport below the topbar (56px) + tab nav (~42px) so it uses the whole
+     screen, not main's centered column. position:fixed is zoom-safe: the
+     offsets live in the same scaled px as the (zoomed) topbar + nav, so they
+     line up at any text size — no `vw` math that the root `zoom` would distort
+     (that was cropping both panes). z-index stays under the topbar (10) + nav
+     (9). The editor inside skips its own zoom when embedded, so scale isn't
+     applied twice (see is-embedded in the editors). */
   #tab-mini-app-editor, #tab-product-editor {
-    margin: calc(var(--s6) * -1) calc(var(--s6) * -1) calc(var(--s7) * -1);
-    padding: 0;
+    position: fixed; top: 98px; left: 0; right: 0; bottom: 0;
+    margin: 0; padding: 0; z-index: 1;
   }
   .tab-embed-editor .ed-frame {
-    display: block; width: 100%; border: 0;
-    height: calc(100vh / var(--ui-scale, 1) - 100px);
+    display: block; width: 100%; height: 100%; border: 0;
     background: var(--bg-app);
   }
   /* Tab switch (Dashboard / Orders / Invoices …) → the new section drifts up

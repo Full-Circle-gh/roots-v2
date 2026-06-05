@@ -4440,12 +4440,16 @@
     cursor: default;
   }
   .brand .fcsw-seg svg { width: 13px; height: 13px; flex-shrink: 0; }
-  /* Embedded as a backend tab (iframe): the parent top nav already provides
-     editor switching + "back", so hide the in-editor toggle and disable the
-     wordmark-as-back link (the parent IS the backend). */
-  .is-embedded .brand .fcsw { display: none; }
-  .is-embedded .brand .brass-dot { display: none; }
-  .is-embedded .brand-home { pointer-events: none; cursor: default; }
+  /* Embedded as a backend tab (iframe): the parent backend topbar already
+     carries the brand, account, text-size, theme and language controls, so
+     drop the whole duplicated cluster here and keep only the editor-specific
+     actions (PAGE picker, save status, Revert, Publish). This also shrinks the
+     dark bar down to a slim action strip. */
+  .is-embedded .brand,
+  .is-embedded #who,
+  .is-embedded #ui-scale-toggle,
+  .is-embedded #theme-toggle,
+  .is-embedded #lang-toggle { display: none; }
   /* Top-bar controls on the dark chrome ------------------------------- */
   .topbar .who {
     font-family: var(--f-mono);
