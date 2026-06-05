@@ -26,14 +26,28 @@
  *   node scripts/strip_weight_from_variant_names.js [dbPath] --apply    # write changes
  */
 
-const sqlite = require('node:sqlite');
-
 const args   = process.argv.slice(2);
 const apply  = args.includes('--apply');
 const all    = args.includes('--all');
 const dbPath = args.find(a => !a.startsWith('--')) || 'data/roots.db';
 
-const db = new sqlite.DatabaseSync(dbPath);
+// Open the DB. Prefer better-sqlite3 (what the app ships, works on Node 20);
+// fall back to node:sqlite for newer runtimes that have it built in. Both
+// expose the same prepare().all()/.get()/.run() + exec() surface used below.
+let db;
+try {
+  const Database = require('better-sqlite3');
+  db = new Database(dbPath);
+} catch (e1) {
+  try {
+    const sqlite = require('node:sqlite');
+    db = new sqlite.DatabaseSync(dbPath);
+  } catch (e2) {
+    console.error('No SQLite driver available (tried better-sqlite3 and node:sqlite).');
+    console.error('Run this from the project root so better-sqlite3 resolves.');
+    process.exit(1);
+  }
+}
 
 // Be tolerant of schema differences between tenant DBs.
 const cols = new Set(db.prepare('PRAGMA table_info(products)').all().map(c => c.name));
