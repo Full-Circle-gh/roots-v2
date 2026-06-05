@@ -9981,6 +9981,23 @@ function paymentBrandHTML(method, size) {
   return `<b>${escapeHtml(method || '—')}</b>`;
 }
 
+// The payment row to surface on an order. An order can carry more than one
+// payment row — e.g. a checkout placeholder that stayed 'pending' (the gateway
+// callback never landed) plus the settled row written when staff marked it
+// paid off-app. Prefer the settled one so a paid order never reads "pending".
+function primaryPayment(o) {
+  const list = o?.payments || [];
+  return list.find(p => p.status === 'success')
+      || list.find(p => p.status === 'refunded')
+      || list[list.length - 1]
+      || null;
+}
+// Friendly, bilingual label for a raw payment status.
+function paymentStatusLabel(s) {
+  return { success: 'paid · 已付', pending: 'pending · 待付', created: 'pending · 待付',
+           refunded: 'refunded · 已退', failed: 'failed · 失败' }[s] || (s || '—');
+}
+
 // ── Tab switcher — supports flat tabs AND dropdown groups ──
 // Buttons with data-tab activate a section. Buttons without (the group
 // triggers) just toggle their popover open. The parent .tabs-group gets
@@ -14037,10 +14054,11 @@ function renderOpenOrder(o) {
             <div class="val"><b>${escapeHtml(o.nickname || '—')}</b>${o.customer_id ? ` <span style="color: var(--text-3); font-weight: 600;">›</span>` : ''}</div>
             ${o.customer_id ? `<div class="sub">ID #${o.customer_id}</div>` : ''}
           </div>
+          ${(() => { const _pmt = primaryPayment(o); return `
           <div>
-            <div class="kicker">Payment ${o.payments?.[0]?.transaction_id ? copyChip(o.payments[0].transaction_id, 'Txn ID') : ''}</div>
-            <div class="val">${paymentBrandHTML(o.payment_method, 'lg')} · ${escapeHtml((o.payments?.[0]?.status) || '—')}</div>
-          </div>
+            <div class="kicker">Payment ${_pmt?.transaction_id ? copyChip(_pmt.transaction_id, 'Txn ID') : ''}</div>
+            <div class="val">${paymentBrandHTML(o.payment_method, 'lg')} · ${escapeHtml(paymentStatusLabel(_pmt?.status))}</div>
+          </div>`; })()}
           ${ODV.totalPlacement === 'inline' ? renderOrderTotalInline(o) : ''}
           ${renderShipByTile(o)}
           ${o.store_code ? `<div>

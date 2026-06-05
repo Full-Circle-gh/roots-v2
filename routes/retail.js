@@ -9702,10 +9702,28 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     if (offlinePay) {
       try {
         const total = +(tdb().prepare('SELECT total FROM retail_orders WHERE id = ?').get(id)?.total || 0);
-        tdb().prepare(
-          `INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no, completed_at)
-           VALUES (?, ?, ?, 'success', ?, CURRENT_TIMESTAMP)`
-        ).run(id, offlinePay, total, 'MANUAL' + id + '-' + Date.now().toString().slice(-6));
+        // Checkout may already have left a placeholder payment row (status
+        // 'pending' / 'created') awaiting the gateway callback that never came
+        // — the money arrived off-app instead. Settle that row in place so the
+        // order shows one completed payment, not a stale 'pending' beside a new
+        // 'success'. Only when there's no open row do we insert a fresh one.
+        const open = tdb().prepare(
+          `SELECT id FROM retail_payments
+            WHERE order_id = ? AND status NOT IN ('success', 'refunded')
+            ORDER BY id ASC LIMIT 1`
+        ).get(id);
+        if (open) {
+          tdb().prepare(
+            `UPDATE retail_payments
+                SET method = ?, amount = ?, status = 'success', completed_at = CURRENT_TIMESTAMP
+              WHERE id = ?`
+          ).run(offlinePay, total, open.id);
+        } else {
+          tdb().prepare(
+            `INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no, completed_at)
+             VALUES (?, ?, ?, 'success', ?, CURRENT_TIMESTAMP)`
+          ).run(id, offlinePay, total, 'MANUAL' + id + '-' + Date.now().toString().slice(-6));
+        }
       } catch (e) { console.error('[manual-pay audit]', e); }
     }
     try { awardOrderPoints(id); } catch (e) { console.error('[awardOrderPoints]', e); }
