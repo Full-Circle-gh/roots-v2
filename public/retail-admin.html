@@ -10936,6 +10936,10 @@ function dashZenScrollTo(el, opts) {
   } else {
     target = start + (el.getBoundingClientRect().top - scroller.getBoundingClientRect().top) - margin;
   }
+  // opts.top: glide fully to the scroller's top instead of resting `el` at
+  // `margin` — used when the target is the topmost content (the date bar),
+  // which would otherwise land tucked behind the sticky topbar + tabs.
+  if (opts.top) target = 0;
   const max = scroller.scrollHeight - scroller.clientHeight;
   target = Math.max(0, Math.min(max, target));
   const dist = target - start;
@@ -10992,7 +10996,7 @@ function dashInit() {
     const jumpToRange = (e) => {
       e.preventDefault(); e.stopPropagation();
       const bar = document.querySelector('#tab-dashboard .db-head');
-      if (bar) dashZenScrollTo(bar, { margin: 72 });
+      if (bar) dashZenScrollTo(bar, { top: true });
     };
     ddRange.addEventListener('click', jumpToRange);
     ddRange.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') jumpToRange(e); });
