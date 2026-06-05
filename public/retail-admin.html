@@ -4492,7 +4492,7 @@
   </button>
   <button data-tab="invoices">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="13" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
-    Invoices · 发票
+    Invoices · 发票<span id="invoicesTabBadge" class="tab-badge" aria-label="Unseen invoice requests"></span>
   </button>
   <button data-tab="customers">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -4613,17 +4613,17 @@
   <div class="tabs-group" data-group="inbox">
     <button type="button" class="tabs-group-trigger">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-      Inbox · 收件箱
+      Inbox · 收件箱<span id="inboxTriggerBadge" class="tab-badge" aria-label="Unseen inbox items"></span>
       <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
     <div class="tabs-popover">
       <button data-tab="reviews" data-feat="reviews">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        Reviews · 评价
+        Reviews · 评价<span id="inbox-badge-reviews" class="tab-badge" aria-label="Unseen reviews"></span>
       </button>
       <button data-tab="feedback" data-feat="feedback">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8a2 2 0 0 1 2 2v12l-4-3H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M12 6v3"/><circle cx="12" cy="11.5" r="0.4" fill="currentColor"/></svg>
-        Feedback · 反馈
+        Feedback · 反馈<span id="inbox-badge-feedback" class="tab-badge" aria-label="Unseen feedback"></span>
       </button>
     </div>
   </div>
@@ -10863,6 +10863,47 @@ function dashCountUp(el, to, fmt, dur) {
   el._cuRaf = requestAnimationFrame(step);
 }
 
+// Zen scroll — glide the page so `el` rests near the top of the viewport with
+// a long easeInOutCubic curve. Unlike scrollIntoView({behavior:'smooth'}) this
+// runs slow on purpose (~1.3s) and eases in *and* out, so the deep-dive reveal
+// settles rather than snapping. Walks up to find the real scroll container
+// (window or an overflow:auto pane) so it works wherever the dashboard lives.
+function dashZenScrollTo(el, opts) {
+  opts = opts || {};
+  const dur = opts.dur || 1300;
+  const margin = opts.margin != null ? opts.margin : 24;
+  // Find the nearest scrollable ancestor; fall back to the page scroller.
+  let sc = el.parentElement;
+  while (sc && sc !== document.body) {
+    const oy = getComputedStyle(sc).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && sc.scrollHeight > sc.clientHeight + 1) break;
+    sc = sc.parentElement;
+  }
+  const usesWindow = !sc || sc === document.body || sc === document.documentElement;
+  const scroller = usesWindow ? (document.scrollingElement || document.documentElement) : sc;
+  const start = scroller.scrollTop;
+  let target;
+  if (usesWindow) {
+    target = start + el.getBoundingClientRect().top - margin;
+  } else {
+    target = start + (el.getBoundingClientRect().top - scroller.getBoundingClientRect().top) - margin;
+  }
+  const max = scroller.scrollHeight - scroller.clientHeight;
+  target = Math.max(0, Math.min(max, target));
+  const dist = target - start;
+  if (Math.abs(dist) < 2) return;
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) { scroller.scrollTop = target; return; }
+  const t0 = performance.now();
+  const ease = p => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+  const step = (t) => {
+    const p = Math.min(1, (t - t0) / dur);
+    scroller.scrollTop = start + dist * ease(p);
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 // Set the date inputs from a range key and reload.
 function dashSetRange(key) {
   $$('#db-range-seg button').forEach(b => b.classList.toggle('active', b.dataset.range === key));
@@ -10902,6 +10943,11 @@ function dashInit() {
       void dd.offsetWidth;
       dd.classList.add('dd-open-anim');
       dashKpiAnimate();
+      // Zen reveal — once the fold is open, drift the page down to the first
+      // chart with a long eased glide (not a snap), so the deep dive unfolds
+      // calmly rather than jumping the operator past the reveal animation.
+      const firstChart = dd.querySelector('.db-deepdive-body .card');
+      if (firstChart) requestAnimationFrame(() => dashZenScrollTo(firstChart));
     } else {
       dd.classList.remove('dd-open-anim');
     }
@@ -12402,7 +12448,7 @@ function splitSuggestionBanner(o) {
   const grams = (g) => g >= 1000 ? `${(g/1000).toFixed(1)} kg` : `${g} g`;
   const bucket = (b) => {
     const cls = b.mode === 'air' ? 'air' : 'land';
-    const icon = b.mode === 'air' ? '✈' : '🚚';
+    const icon = shipGlyph(b.mode === 'air' ? 'air' : 'land');
     const labelEn = b.mode === 'air' ? 'Air package' : 'Land package';
     const labelCn = b.mode === 'air' ? '空运包裹' : '陆运包裹';
     return `
@@ -12757,10 +12803,11 @@ function toggleOrdersLive() {
   });
 })();
 
-// Load the Invoices tab each time it's opened.
+// Load the Invoices tab each time it's opened. Also clears the unseen-invoice
+// badge — the operator is about to see the pending requests.
 (function () {
   const btn = document.querySelector('.tabs [data-tab="invoices"]');
-  if (btn) btn.addEventListener('click', () => { setTimeout(loadInvoices, 50); invLoadKpis(true); });
+  if (btn) btn.addEventListener('click', () => { setTimeout(loadInvoices, 50); invLoadKpis(true); _markInvoicesSeenNow(); });
 })();
 
 // ── Unseen-orders badge (red pulsing dot on the Orders tab) ─────────────
@@ -12913,6 +12960,151 @@ async function _pollUnseenOrders() {
   // when the user comes back.
   window.addEventListener('focus', _pollUnseenOrders);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) _pollUnseenOrders(); });
+})();
+
+// ── Unseen-invoice badge (red pulsing dot + chime on the Invoices tab) ──
+// Mirrors the new-order notification: a pending fapiao request should land
+// like a new order. Shares the same chime + sound toggle as orders.
+const INVOICES_LAST_SEEN_KEY = 'roots-v2-invoices-last-seen-at';
+let _INVOICES_UNSEEN_TIMER = null;
+
+function _invoicesLastSeen() {
+  try { return localStorage.getItem(INVOICES_LAST_SEEN_KEY) || ''; }
+  catch { return ''; }
+}
+function _markInvoicesSeenNow() {
+  try { localStorage.setItem(INVOICES_LAST_SEEN_KEY, new Date().toISOString()); }
+  catch {}
+  _paintInvoicesBadge(0);
+}
+function _paintInvoicesBadge(count) {
+  const btn   = document.querySelector('.tabs [data-tab="invoices"]');
+  const badge = document.getElementById('invoicesTabBadge');
+  if (!btn || !badge) return;
+  if (count > 0) {
+    btn.classList.add('has-unseen');
+    badge.textContent = count > 1 ? (count > 99 ? '99+' : String(count)) : '';
+  } else {
+    btn.classList.remove('has-unseen');
+    badge.textContent = '';
+  }
+}
+
+let _invoicesUnseenPrev = null;
+async function _pollUnseenInvoices() {
+  if (document.hidden) return;
+  const invTabActive = document.getElementById('tab-invoices')?.classList.contains('active');
+  if (invTabActive) { _markInvoicesSeenNow(); _invoicesUnseenPrev = 0; return; }
+  try {
+    const since = _invoicesLastSeen();
+    const j = await api('/api/retail-admin/invoices/unseen-count?since=' + encodeURIComponent(since));
+    if (!j?.success) return;
+    const count = j.data?.count || 0;
+    _paintInvoicesBadge(count);
+    if (_invoicesUnseenPrev !== null && count > _invoicesUnseenPrev) _playOrderChime();
+    _invoicesUnseenPrev = count;
+  } catch {
+    // Network / unauthorized — leave the badge alone.
+  }
+}
+
+(function _startUnseenInvoicesPoller() {
+  if (window._unseenInvoicesPollerWired) return;
+  window._unseenInvoicesPollerWired = true;
+  setTimeout(_pollUnseenInvoices, 400);
+  _INVOICES_UNSEEN_TIMER = setInterval(_pollUnseenInvoices, ORDERS_UNSEEN_POLL_MS);
+  window.addEventListener('focus', _pollUnseenInvoices);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) _pollUnseenInvoices(); });
+})();
+
+// ── Unseen-inbox badges (Reviews + Feedback) ───────────────────────────
+// Each Inbox sub-tab gets its own red dot + chime; the Inbox group trigger
+// shows the combined count so it stays visible while the dropdown is collapsed.
+// Reuses the new-order chime + sound toggle. Feature-gated tabs are skipped.
+const _INBOX_CATS = [
+  { tab: 'reviews',  key: 'roots-v2-reviews-last-seen-at',  endpoint: '/api/retail-admin/reviews/unseen-count',  feat: 'feat-reviews',  prev: null, _count: 0 },
+  { tab: 'feedback', key: 'roots-v2-feedback-last-seen-at', endpoint: '/api/retail-admin/feedback/unseen-count', feat: 'feat-feedback', prev: null, _count: 0 },
+];
+
+function _inboxLastSeen(cat) {
+  try { return localStorage.getItem(cat.key) || ''; } catch { return ''; }
+}
+function _markInboxSeenNow(tab) {
+  const cat = _INBOX_CATS.find(c => c.tab === tab);
+  if (!cat) return;
+  try { localStorage.setItem(cat.key, new Date().toISOString()); } catch {}
+  cat._count = 0; cat.prev = 0;
+  _paintInboxBadges();
+}
+function _paintInboxBadges() {
+  let total = 0;
+  for (const cat of _INBOX_CATS) {
+    const count = cat._count || 0;
+    total += count;
+    const btn   = document.querySelector('.tabs [data-tab="' + cat.tab + '"]');
+    const badge = document.getElementById('inbox-badge-' + cat.tab);
+    if (btn && badge) {
+      if (count > 0) {
+        btn.classList.add('has-unseen');
+        badge.textContent = count > 1 ? (count > 99 ? '99+' : String(count)) : '';
+      } else {
+        btn.classList.remove('has-unseen');
+        badge.textContent = '';
+      }
+    }
+  }
+  // Roll the combined count up to the Inbox group trigger so it shows while
+  // the dropdown is closed.
+  const trigger = document.querySelector('.tabs-group[data-group="inbox"] .tabs-group-trigger');
+  const tBadge  = document.getElementById('inboxTriggerBadge');
+  if (trigger && tBadge) {
+    if (total > 0) {
+      trigger.classList.add('has-unseen');
+      tBadge.textContent = total > 1 ? (total > 99 ? '99+' : String(total)) : '';
+    } else {
+      trigger.classList.remove('has-unseen');
+      tBadge.textContent = '';
+    }
+  }
+}
+
+async function _pollUnseenInbox() {
+  if (document.hidden) return;
+  for (const cat of _INBOX_CATS) {
+    // Disabled feature → tab is hidden anyway; keep its count at zero.
+    if (cat.feat && !document.body.classList.contains(cat.feat)) { cat._count = 0; continue; }
+    // On the sub-tab → everything is seen.
+    if (document.getElementById('tab-' + cat.tab)?.classList.contains('active')) {
+      try { localStorage.setItem(cat.key, new Date().toISOString()); } catch {}
+      cat._count = 0; cat.prev = 0; continue;
+    }
+    try {
+      const j = await api(cat.endpoint + '?since=' + encodeURIComponent(_inboxLastSeen(cat)));
+      if (!j?.success) continue;
+      const count = j.data?.count || 0;
+      // Chime only on a genuine increase, not the first poll after load.
+      if (cat.prev !== null && count > cat.prev) _playOrderChime();
+      cat.prev = count;
+      cat._count = count;
+    } catch {
+      // Network / unauthorized — leave this category's badge alone.
+    }
+  }
+  _paintInboxBadges();
+}
+
+(function _startUnseenInboxPoller() {
+  if (window._unseenInboxPollerWired) return;
+  window._unseenInboxPollerWired = true;
+  setTimeout(_pollUnseenInbox, 600);
+  setInterval(_pollUnseenInbox, ORDERS_UNSEEN_POLL_MS);
+  window.addEventListener('focus', _pollUnseenInbox);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) _pollUnseenInbox(); });
+  // Clear a sub-tab's badge as soon as it's opened.
+  _INBOX_CATS.forEach(cat => {
+    const btn = document.querySelector('.tabs [data-tab="' + cat.tab + '"]');
+    if (btn) btn.addEventListener('click', () => _markInboxSeenNow(cat.tab));
+  });
 })();
 
 // "Ship by" — when the customer needs this order shipped/delivered. Pulled
@@ -13688,11 +13880,11 @@ function renderOpenOrder(o) {
           ${_DISMISSED_SPLIT.has(o.id) ? '' : splitSuggestionBanner(o)}
           ${o.outside_guangzhou && (o.shipments?.length > 1) ? `
             <div class="outside-gz-note">
-              ⚠ Destination outside Guangzhou (${escapeHtml(o.shipping_city || 'unknown city')}) — order split into ${o.shipments.length} shipments
+              ⚠ Destination outside Guangzhou<span data-lang-block="cn"> (${escapeHtml(o.shipping_city || 'unknown city')})</span> — order split into ${o.shipments.length} shipments
             </div>` : ''}
           ${o.outside_guangzhou && (o.shipments?.length === 1) ? `
             <div class="outside-gz-note">
-              ${escapeHtml(o.shipping_city || 'Outside Guangzhou')} — single ${o.shipments[0].mode === 'air' ? '✈ air' : o.shipments[0].mode === 'land' ? '🚚 land' : ''} shipment
+              <span data-lang-block="en">Outside Guangzhou — </span><span data-lang-block="cn">${escapeHtml(o.shipping_city || '广州以外')} — </span>single ${shipGlyph(o.shipments[0].mode)} ${o.shipments[0].mode === 'air' ? 'air' : 'land'} shipment
             </div>` : ''}
           ${renderSortChips()}
           ${(o.shipments || []).map(s => renderShipmentCard(o, s)).join('')}

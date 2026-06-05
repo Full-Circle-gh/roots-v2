@@ -7271,6 +7271,19 @@ router.get('/api/retail-admin/feedback', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: rows, meta: { total, limit, offset } });
 });
 
+// Unseen bug reports since the client's last-seen time — red dot + chime on
+// the Inbox › Feedback sub-tab, mirroring the new-order notification.
+router.get('/api/retail-admin/feedback/unseen-count', requireRetailAdmin, (req, res) => {
+  const since = String(req.query.since || '').trim();
+  const sinceSql = since || '1970-01-01T00:00:00.000Z';
+  const row = tdb().prepare(
+    `SELECT COUNT(*) AS n, MAX(created_at) AS latest
+       FROM retail_feedback
+      WHERE datetime(created_at) > datetime(?)`
+  ).get(sinceSql);
+  res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
+});
+
 router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
   const limit  = Math.min(parseInt(req.query.limit  || '50', 10) || 50, 200);
   const offset = Math.max(parseInt(req.query.offset || '0',  10) || 0, 0);
@@ -7330,6 +7343,19 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
     data: rows,
     meta: { total, limit, offset, summary },
   });
+});
+
+// Unseen customer reviews since the client's last-seen time — red dot + chime
+// on the Inbox › Reviews sub-tab, mirroring the new-order notification.
+router.get('/api/retail-admin/reviews/unseen-count', requireRetailAdmin, (req, res) => {
+  const since = String(req.query.since || '').trim();
+  const sinceSql = since || '1970-01-01T00:00:00.000Z';
+  const row = tdb().prepare(
+    `SELECT COUNT(*) AS n, MAX(created_at) AS latest
+       FROM retail_reviews
+      WHERE datetime(created_at) > datetime(?)`
+  ).get(sinceSql);
+  res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
 });
 
 // Staff moderation toggle — currently just is_visible. Keeping the body
@@ -8352,6 +8378,23 @@ router.get('/api/retail-admin/orders/unseen-count', requireRetailAdmin, (req, re
     `SELECT COUNT(*) AS n, MAX(placed_at) AS latest
        FROM retail_orders
       WHERE status NOT IN ('cancelled','pending_payment')
+        AND datetime(placed_at) > datetime(?)`
+  ).get(sinceSql);
+  res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
+});
+
+// Pending fapiao requests not yet seen — powers the red dot + chime on the
+// Invoices tab, mirroring the new-order notification. Counts un-issued invoice
+// requests that arrived (order placed) since the client's last-seen time.
+router.get('/api/retail-admin/invoices/unseen-count', requireRetailAdmin, (req, res) => {
+  const since = String(req.query.since || '').trim();
+  const sinceSql = since || '1970-01-01T00:00:00.000Z';
+  const row = tdb().prepare(
+    `SELECT COUNT(*) AS n, MAX(placed_at) AS latest
+       FROM retail_orders
+      WHERE needs_invoice = 1
+        AND COALESCE(invoice_status, 'requested') <> 'issued'
+        AND status NOT IN ('cancelled','pending_payment')
         AND datetime(placed_at) > datetime(?)`
   ).get(sinceSql);
   res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
