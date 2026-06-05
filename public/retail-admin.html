@@ -10954,9 +10954,29 @@ function dashBarRows(items, opt) {
   }).join('');
 }
 
-// A flat-stroke sparkline stretched full-width via preserveAspectRatio="none"
-// + non-scaling-stroke. opts.dot adds an HTML last-point marker (opts.pulse =
-// the softly breathing variant); without opts the line stays bare and crisp.
+// Catmull-Rom → cubic-bézier path through the points: turns the old straight
+// segments into one flowing curve. Tension is gentle and the Y of each control
+// point is clamped to the box so the curve can't overshoot under the horizontal
+// stretch. Anchor points stay exactly on the data vertices, so the dot/scrub
+// (which key off dashSparkPct) still land on the line.
+let _dashSparkSeq = 0;
+function dashSmoothPath(p, H, pad) {
+  if (p.length < 2) return '';
+  const cy = v => Math.max(pad, Math.min(H - pad, v));
+  let d = `M ${p[0].x.toFixed(1)} ${p[0].y.toFixed(1)}`;
+  for (let i = 0; i < p.length - 1; i++) {
+    const p0 = p[i - 1] || p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p2, t = 0.85;
+    const c1x = p1.x + (p2.x - p0.x) / 6 * t, c1y = cy(p1.y + (p2.y - p0.y) / 6 * t);
+    const c2x = p2.x - (p3.x - p1.x) / 6 * t, c2y = cy(p2.y - (p3.y - p1.y) / 6 * t);
+    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
+// A soft sparkline stretched full-width via preserveAspectRatio="none" +
+// non-scaling-stroke: a smooth Catmull-Rom curve over an ink→transparent
+// vertical wash (vs the old straight line + flat fill). opts.dot adds an HTML
+// last-point marker (opts.pulse = the softly breathing variant).
 function dashSparkline(values, opts) {
   opts = opts || {};
   const vals = (values || []).map(v => Number(v) || 0);
@@ -10975,9 +10995,16 @@ function dashSparkline(values, opts) {
   const span = (max - min) || 1;
   const x = i => pad + (i / (n - 1)) * (W - 2 * pad);
   const y = v => (H - pad) - ((v - min) / span) * (H - 2 * pad);
-  const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
-  const area = `<polygon points="${x(0).toFixed(1)},${(H - pad).toFixed(1)} ${pts.join(' ')} ${x(n - 1).toFixed(1)},${(H - pad).toFixed(1)}" fill="currentColor" opacity="0.1" stroke="none"/>`;
-  const line = `<polyline points="${pts.join(' ')}" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const p = vals.map((v, i) => ({ x: x(i), y: y(v) }));
+  const d = dashSmoothPath(p, H, pad);
+  // Unique gradient id per render so multiple sparklines on one screen never
+  // share/clobber a <defs> id. The wash fades the brand ink down to nothing.
+  const gid = 'dbSparkG' + (++_dashSparkSeq);
+  const defs = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">`
+    + `<stop offset="0" stop-color="currentColor" stop-opacity="0.26"/>`
+    + `<stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>`;
+  const area = `<path d="${d} L ${x(n - 1).toFixed(1)} ${(H - pad).toFixed(1)} L ${x(0).toFixed(1)} ${(H - pad).toFixed(1)} Z" fill="url(#${gid})" stroke="none"/>`;
+  const line = `<path d="${d}" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>`;
   // Last-point marker as an HTML overlay (not an SVG circle): the chart uses
   // preserveAspectRatio="none", which would squash a <circle> into an ellipse.
   // The wrap is position:relative, so percentage offsets land it on the point.
@@ -10986,7 +11013,7 @@ function dashSparkline(values, opts) {
     const p = dashSparkPct(vals, n - 1);
     dot = `<i class="db-spark-dot${opts.pulse ? ' is-breathing' : ''}" style="left:${p.x.toFixed(1)}%;top:${p.y.toFixed(1)}%"></i>`;
   }
-  return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${area}${line}</svg>${dot}`;
+  return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${defs}${area}${line}</svg>${dot}`;
 }
 
 // Period caption ("Last 30 days · 近30天") from the active date-range window —
