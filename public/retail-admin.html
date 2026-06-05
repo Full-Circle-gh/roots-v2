@@ -1098,7 +1098,9 @@
   .db-deepdive > summary::-webkit-details-marker { display: none; }
   .db-deepdive > summary::before { content: "▸"; color: var(--text-3); font-size: 10px; transition: transform .2s ease; display: inline-block; }
   .db-deepdive[open] > summary::before { transform: rotate(90deg); }
-  .db-deepdive-range { font-weight: 500; font-size: 11px; color: var(--text-2); font-variant-numeric: tabular-nums; padding: 2px 8px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--bg-elev-1); white-space: nowrap; }
+  .db-deepdive-range { font-weight: 500; font-size: 11px; color: var(--text-2); font-variant-numeric: tabular-nums; padding: 2px 8px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--bg-elev-1); white-space: nowrap; cursor: pointer; transition: border-color .15s ease, color .15s ease, background-color .15s ease; }
+  .db-deepdive-range:hover { color: var(--text-1); border-color: var(--line); background: var(--bg-pane); }
+  .db-deepdive-range:empty { display: none; }
   .db-deepdive-hint { color: var(--text-3); font-weight: 400; font-size: 11px; margin-left: auto; }
   .db-deepdive-body { padding: 16px; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: var(--s3); }
   .db-deepdive-body .db-kpis { margin: 0; }
@@ -4864,7 +4866,7 @@
     <details class="db-deepdive" id="db-deepdive">
       <summary>
         Deep dive · 详细
-        <span class="db-deepdive-range" id="db-dd-range"></span>
+        <span class="db-deepdive-range" id="db-dd-range" role="button" tabindex="0" title="Change date range · 更改日期"></span>
         <span class="db-deepdive-hint">8 KPIs + 12 charts · 历史详情</span>
       </summary>
       <div class="db-deepdive-body">
@@ -10982,6 +10984,20 @@ function dashInit() {
   // count-up each time the fold opens (gated behind .dd-open-anim so it plays
   // on reveal, not invisibly while collapsed). Removing + re-adding the class
   // with a reflow restarts the CSS animations on the already-rendered cards.
+  // Range chip in the deep-dive summary = a shortcut back up to the date bar.
+  // It lives inside <summary>, so swallow the click (otherwise it'd toggle the
+  // fold) and zen-glide up to the range controls to pick a different date.
+  const ddRange = document.getElementById('db-dd-range');
+  if (ddRange) {
+    const jumpToRange = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const bar = document.querySelector('#tab-dashboard .db-head');
+      if (bar) dashZenScrollTo(bar, { margin: 72 });
+    };
+    ddRange.addEventListener('click', jumpToRange);
+    ddRange.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') jumpToRange(e); });
+  }
+
   const dd = document.getElementById('db-deepdive');
   if (dd) dd.addEventListener('toggle', () => {
     if (dd.open) {
