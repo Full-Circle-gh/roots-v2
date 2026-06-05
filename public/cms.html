@@ -4450,6 +4450,32 @@
   .is-embedded #ui-scale-toggle,
   .is-embedded #theme-toggle,
   .is-embedded #lang-toggle { display: none; }
+  /* …and drop the always-Ink bar background so the strip blends into the
+     canvas (no black bar). Everything stays in place — only the chrome-tinted
+     colours flip to the theme's own surfaces/text so they stay readable on the
+     light canvas. Publish keeps its Brass fill. */
+  .is-embedded .topbar {
+    background: var(--bg-app);
+    border-bottom: 1px solid var(--line);
+  }
+  .is-embedded .topbar .page-picker {
+    background: var(--bg-pane); border-color: var(--line);
+  }
+  .is-embedded .topbar .page-picker:hover {
+    background: var(--bg-elev-2); border-color: var(--line-strong);
+  }
+  .is-embedded .topbar .page-picker > .name { color: var(--text-1); }
+  .is-embedded .topbar .page-picker > .label,
+  .is-embedded .topbar .page-picker > .chev { color: var(--text-3); }
+  .is-embedded .topbar .status-pill {
+    background: var(--bg-pane); border-color: var(--line); color: var(--text-3);
+  }
+  .is-embedded .topbar .btn {
+    color: var(--text-1); border-color: var(--line);
+  }
+  .is-embedded .topbar .btn:hover {
+    background: var(--bg-elev-2); border-color: var(--line-strong);
+  }
   /* Top-bar controls on the dark chrome ------------------------------- */
   .topbar .who {
     font-family: var(--f-mono);
