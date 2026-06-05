@@ -3814,7 +3814,7 @@
        even when a drawer or dialog is open. */
     z-index: 400;
     opacity: 0; pointer-events: none;
-    transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out);
+    transition: opacity 1.4s ease, transform var(--t-med) var(--ease-out);
   }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
   .toast.err  { background: rgba(120, 30, 40, .92); border-color: var(--danger); color: #fff; }
@@ -15594,8 +15594,10 @@ async function loadConfig() {
     $('#cfg-social-bc-min_all').value     = sp_bc.min_all   ?? 2;
     $('#cfg-social-bc-boost_min').value   = sp_bc.boost_min ?? bcBoostLegacy;
     $('#cfg-social-bc-boost_max').value   = sp_bc.boost_max ?? bcBoostLegacy;
-    $('#cfg-social-rb-enabled').checked   = sp_rb.enabled !== false;
-    $('#cfg-social-rb-window_days').value = sp_rb.window_days ?? 7;
+    $('#cfg-social-rb-enabled').checked    = sp_rb.enabled !== false;
+    $('#cfg-social-rb-window_days').value  = sp_rb.window_days ?? 7;
+    $('#cfg-social-rb-visible_secs').value = sp_rb.visible_secs ?? 4.5;
+    $('#cfg-social-rb-gap_secs').value     = sp_rb.gap_secs ?? 5;
     _manualBuyers = Array.isArray(sp_rb.manual) ? sp_rb.manual.map(m => ({
       name:         String(m && m.name || ''),
       product_en:   String(m && m.product_en || ''),
@@ -15718,8 +15720,10 @@ async function saveConfig() {
           boost_max: bcR.max,
         },
         recent_buyers: {
-          enabled:     $('#cfg-social-rb-enabled').checked,
-          window_days: Math.max(1, Math.min(60, Number($('#cfg-social-rb-window_days').value) || 7)),
+          enabled:      $('#cfg-social-rb-enabled').checked,
+          window_days:  Math.max(1, Math.min(60, Number($('#cfg-social-rb-window_days').value) || 7)),
+          visible_secs: Math.max(0.5, Math.min(60, Number($('#cfg-social-rb-visible_secs').value) || 4.5)),
+          gap_secs:     Math.max(0.5, Math.min(60, Number($('#cfg-social-rb-gap_secs').value) || 5)),
           // Drop empty rows so we don't ship blanks to the mini-app feed.
           manual: _manualBuyers
             .map(m => ({
