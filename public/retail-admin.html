@@ -10943,11 +10943,12 @@ function dashInit() {
       void dd.offsetWidth;
       dd.classList.add('dd-open-anim');
       dashKpiAnimate();
-      // Zen reveal — once the fold is open, drift the page down to the first
-      // chart with a long eased glide (not a snap), so the deep dive unfolds
-      // calmly rather than jumping the operator past the reveal animation.
-      const firstChart = dd.querySelector('.db-deepdive-body .card');
-      if (firstChart) requestAnimationFrame(() => dashZenScrollTo(firstChart));
+      // Zen reveal — once the fold is open, drift the page down to the KPI
+      // strip (the head of the block, with the headline numbers) with a long
+      // eased glide, not a snap. Landing on the KPIs keeps the section's head
+      // in view rather than overshooting to the first chart below it.
+      const head = dd.querySelector('#db-kpis') || dd.querySelector('.db-deepdive-body .card');
+      if (head) requestAnimationFrame(() => dashZenScrollTo(head, { margin: 72 }));
     } else {
       dd.classList.remove('dd-open-anim');
     }
