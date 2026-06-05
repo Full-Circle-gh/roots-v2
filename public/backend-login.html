@@ -4,181 +4,155 @@
 <meta charset="utf-8" />
 <title>Full Circle · Sign in</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="theme-color" content="#CCD900" />
+<meta name="theme-color" content="#12161A" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+SC:wght@300;400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  /* Brand fonts — same files the customer mini app loads, served same-origin
-     from /assets/fonts/. Bear Serif's digits are thin/geometric, so Lilita One
-     is mapped over digits + currency to match its chunky caps. */
-  @font-face { font-family: 'Bear Serif';   src: url('/assets/fonts/LilitaOne.ttf')      format('truetype'); unicode-range: U+0024-0026, U+0030-0039, U+00A5; font-display: swap; }
-  @font-face { font-family: 'Bear Serif';   src: url('/assets/fonts/BearSerif.otf')      format('opentype'); font-display: swap; }
-  @font-face { font-family: 'Toni Grotesk'; src: url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display: swap; }
-  @font-face { font-family: 'Aleo';         src: url('/assets/fonts/Aleo-Regular.otf')   format('opentype'); font-display: swap; }
-  @font-face { font-family: 'DF Yuan';      src: url('/assets/fonts/DFYuanW5.ttf')       format('truetype'); font-weight: 500; font-display: swap; }
-  @font-face { font-family: 'DF Yuan';      src: url('/assets/fonts/DFYuanW7.ttf')       format('truetype'); font-weight: 700; font-display: swap; }
-
-  /* Roots customer-brand palette (miniapp/app.wxss) — warm oat paper, ink type,
-     signature lime, with the Full Circle backend wordmark. */
+  /* Full Circle palette — Ink Charcoal canvas, Deeper Paper type, Tea + Brass. */
   :root {
-    --oat:    #F2E7DF;
-    --paper:  #FFFCF7;
-    --ink:    #1a1a17;
-    --lime:   #CCD900;
-    --forest: #365329;
-    --olive:  #6A6E2D;
-    --almond: #C37F4E;
-    --berry:  #E96174;
-    --line:   rgba(26, 26, 23, .12);
-    --line-2: rgba(26, 26, 23, .22);
-    --f-bear: 'Bear Serif',   'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', serif;
-    --f-toni: 'Toni Grotesk', 'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
-    --f-aleo: 'Aleo',         'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', Georgia, serif;
+    --ink:    #12161A;
+    --pane:   #1A1F24;
+    --paper:  #E8E5DC;
+    --muted:  #AEABA2;
+    --faint:  #7d7a72;
+    --line:   rgba(232, 229, 220, .10);
+    --line-2: rgba(232, 229, 220, .16);
+    --tea:    #6B8E6F;
+    --brass:  #B08D4A;
+    --brass-hi: #C29B54;
+    --danger: #e8556a;
+    --f-sans: 'IBM Plex Sans', 'IBM Plex Sans SC', system-ui, sans-serif;
+    --f-mono: 'IBM Plex Mono', ui-monospace, monospace;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
-    background: var(--oat);
-    color: var(--ink);
-    font-family: var(--f-aleo);
-    -webkit-font-smoothing: antialiased;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--f-sans);
     display: flex; align-items: center; justify-content: center;
     padding: 24px;
+    /* faint radial vignette so the card reads as lifted off the canvas */
+    background-image: radial-gradient(120% 80% at 50% 0%, rgba(107,142,111,.06) 0%, transparent 55%);
   }
   .card {
-    width: 100%; max-width: 392px;
-    background: var(--paper);
-    border: 1.5px solid var(--ink);
-    border-radius: 18px;
-    overflow: hidden;
-    box-shadow: 12px 14px 0 rgba(26, 26, 23, .10);
+    width: 100%; max-width: 380px;
+    background: var(--pane);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 32px 28px 28px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
   }
-  /* Lime hero band — the mini app's signature header treatment (me-page hero). */
-  .hero {
-    background: var(--lime);
-    border-bottom: 1.5px solid var(--ink);
-    padding: 30px 30px 26px;
-  }
-  .hero .mark {
-    width: 46px; height: 46px; border-radius: 999px;
-    border: 2.5px solid var(--ink);
-    background: var(--paper);
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .brand .mark {
+    width: 34px; height: 34px; border-radius: 8px;
+    border: 1px solid var(--line-2);
     display: flex; align-items: center; justify-content: center;
-    margin-bottom: 16px;
+    color: var(--paper);
   }
-  .hero .word {
-    font-family: var(--f-bear);
-    font-size: 42px; line-height: .98; letter-spacing: .005em;
-    color: var(--ink);
-    text-transform: capitalize;
+  .brand .word {
+    font-size: 13px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase;
   }
-  .hero .kicker {
-    font-family: var(--f-toni);
-    font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
-    color: var(--forest);
-    margin-top: 12px;
+  .sub {
+    font-family: var(--f-mono); font-size: 10px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--faint); margin: 2px 0 26px;
   }
-  .body { padding: 28px 30px 26px; }
   label {
     display: block;
-    font-family: var(--f-toni); font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
-    color: var(--olive); margin: 0 0 8px;
+    font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 6px;
   }
-  .field { margin-bottom: 18px; }
+  .field { margin-bottom: 16px; }
   input[type=text], input[type=password] {
     width: 100%;
-    background: var(--oat);
-    border: 1.5px solid var(--line-2);
-    border-radius: 10px;
-    color: var(--ink);
-    font-family: var(--f-aleo); font-size: 16px;
-    padding: 13px 14px;
+    background: var(--ink);
+    border: 1px solid var(--line-2);
+    border-radius: 8px;
+    color: var(--paper);
+    font-family: var(--f-sans); font-size: 14px;
+    padding: 11px 13px;
     outline: none;
-    transition: border-color .12s ease, box-shadow .12s ease, background .12s ease;
+    transition: border-color .12s ease, box-shadow .12s ease;
   }
-  input:focus { border-color: var(--ink); background: var(--paper); box-shadow: 0 0 0 3px rgba(204,217,0,.45); }
+  input:focus { border-color: var(--tea); box-shadow: 0 0 0 3px rgba(107,142,111,.25); }
   .err {
     display: none;
-    background: rgba(233,97,116,.12);
-    border: 1.5px solid rgba(233,97,116,.4);
-    color: #b13347;
-    font-size: 13.5px; line-height: 1.45;
-    padding: 10px 13px; border-radius: 10px; margin-bottom: 16px;
+    background: rgba(232,85,106,.12);
+    border: 1px solid rgba(232,85,106,.35);
+    color: #f0a3ae;
+    font-size: 12.5px; line-height: 1.4;
+    padding: 9px 12px; border-radius: 8px; margin-bottom: 14px;
   }
   .err.show { display: block; }
-  button { font-family: var(--f-aleo); cursor: pointer; }
-  /* Primary CTA mirrors the mini app cart checkout button: ink slab, lime type. */
+  button { font-family: var(--f-sans); cursor: pointer; }
   .btn-primary {
     width: 100%;
-    background: var(--ink); color: var(--lime);
-    border: 0; border-radius: 999px;
-    font-family: var(--f-toni); text-transform: uppercase;
-    font-size: 15px; letter-spacing: .1em;
-    padding: 15px; margin-top: 4px;
-    transition: transform .06s ease, opacity .12s ease;
+    background: var(--brass); color: var(--ink);
+    border: 0; border-radius: 8px;
+    font-size: 14px; font-weight: 600;
+    padding: 12px; margin-top: 4px;
+    transition: background .12s ease, transform .06s ease;
   }
-  .btn-primary:hover { opacity: .92; }
+  .btn-primary:hover { background: var(--brass-hi); }
   .btn-primary:active { transform: translateY(1px); }
-  .btn-primary:disabled { opacity: .5; cursor: default; }
+  .btn-primary:disabled { opacity: .55; cursor: default; }
   .divider {
-    display: flex; align-items: center; gap: 14px;
-    font-family: var(--f-toni); text-transform: uppercase; letter-spacing: .18em;
-    color: var(--olive); font-size: 11px;
-    margin: 22px 0 16px;
+    display: flex; align-items: center; gap: 12px;
+    color: var(--faint); font-size: 11px;
+    margin: 20px 0 16px;
   }
-  .divider::before, .divider::after { content: ''; flex: 1; height: 1.5px; background: var(--line); }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
   .btn-wechat {
     width: 100%;
-    background: transparent; color: var(--olive);
-    border: 1.5px solid var(--line-2); border-radius: 999px;
-    font-family: var(--f-toni); text-transform: uppercase;
-    font-size: 13px; letter-spacing: .08em;
-    padding: 13px; display: flex; align-items: center; justify-content: center; gap: 9px;
-    opacity: .65; cursor: not-allowed;
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--line-2); border-radius: 8px;
+    font-size: 13.5px; font-weight: 500;
+    padding: 11px; display: flex; align-items: center; justify-content: center; gap: 9px;
+    opacity: .6; cursor: not-allowed;
   }
   .btn-wechat .soon {
-    font-family: var(--f-toni); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--almond); border: 1.5px solid rgba(195,127,78,.4); border-radius: 6px; padding: 2px 7px;
+    font-family: var(--f-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--brass); border: 1px solid rgba(176,141,74,.3); border-radius: 4px; padding: 2px 6px;
   }
-  .foot { margin-top: 24px; font-size: 12.5px; color: var(--olive); line-height: 1.55; text-align: center; }
-  .foot a { color: var(--forest); }
+  .foot { margin-top: 22px; font-size: 11px; color: var(--faint); line-height: 1.5; text-align: center; }
 </style>
 </head>
 <body>
   <form class="card" id="loginForm" autocomplete="on">
-    <div class="hero">
+    <div class="brand">
       <div class="mark" aria-hidden="true">
-        <svg width="28" height="28" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="10.8" fill="none" stroke="#365329" stroke-width="0.7" stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
-          <circle cx="12" cy="12" r="9" fill="none" stroke="#6A6E2D" stroke-width="0.7" stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
-          <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1" fill="none" stroke="#1a1a17" stroke-width="1.7" stroke-linecap="round"/>
+        <svg width="22" height="22" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.6" stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
+          <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.6" stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
+          <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1" fill="none" stroke="#E8E5DC" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
       </div>
-      <div class="word">Full Circle</div>
-      <div class="kicker">Mini App Backend</div>
+      <span class="word">Full Circle</span>
+    </div>
+    <div class="sub">Mini App Backend</div>
+
+    <div class="err" id="err"></div>
+
+    <div class="field">
+      <label for="username">Username · 用户名</label>
+      <input type="text" id="username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required>
+    </div>
+    <div class="field">
+      <label for="password">Password · 密码</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
     </div>
 
-    <div class="body">
-      <div class="err" id="err"></div>
+    <button type="submit" class="btn-primary" id="submitBtn">Sign in · 登录</button>
 
-      <div class="field">
-        <label for="username">Username · 用户名</label>
-        <input type="text" id="username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required>
-      </div>
-      <div class="field">
-        <label for="password">Password · 密码</label>
-        <input type="password" id="password" name="password" autocomplete="current-password" required>
-      </div>
+    <div class="divider">or · 或</div>
 
-      <button type="submit" class="btn-primary" id="submitBtn">Sign in · 登录</button>
+    <button type="button" class="btn-wechat" id="wechatBtn" disabled title="Coming soon · 即将推出">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 4C4.9 4 2 6.5 2 9.6c0 1.7.9 3.3 2.4 4.3l-.6 1.9 2.2-1.1c.8.2 1.6.4 2.5.4h.5a4.7 4.7 0 0 1-.2-1.4c0-2.8 2.7-5 6-5h.5C14.6 5.7 11.8 4 8.5 4zm-2.4 3.1a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8zm4.8 0a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8z"/><path d="M22 14.3c0-2.5-2.4-4.5-5.4-4.5s-5.4 2-5.4 4.5 2.4 4.5 5.4 4.5c.7 0 1.4-.1 2-.3l1.8.9-.5-1.6c1.3-.8 2.1-2.1 2.1-3.5zm-7.1-1a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5zm3.6 0a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5z"/></svg>
+      Sign in with WeChat <span class="soon">Soon</span>
+    </button>
 
-      <div class="divider">or · 或</div>
-
-      <button type="button" class="btn-wechat" id="wechatBtn" disabled title="Coming soon · 即将推出">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 4C4.9 4 2 6.5 2 9.6c0 1.7.9 3.3 2.4 4.3l-.6 1.9 2.2-1.1c.8.2 1.6.4 2.5.4h.5a4.7 4.7 0 0 1-.2-1.4c0-2.8 2.7-5 6-5h.5C14.6 5.7 11.8 4 8.5 4zm-2.4 3.1a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8zm4.8 0a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8z"/><path d="M22 14.3c0-2.5-2.4-4.5-5.4-4.5s-5.4 2-5.4 4.5 2.4 4.5 5.4 4.5c.7 0 1.4-.1 2-.3l1.8.9-.5-1.6c1.3-.8 2.1-2.1 2.1-3.5zm-7.1-1a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5zm3.6 0a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5z"/></svg>
-        Sign in with WeChat <span class="soon">Soon</span>
-      </button>
-
-      <div class="foot">Mini App Backend operators only.<br>Roots kitchen staff sign in at <a href="/login">the staff portal</a>.</div>
-    </div>
+    <div class="foot">Mini App Backend operators only.<br>Roots kitchen staff sign in at <a href="/login" style="color:var(--muted)">the staff portal</a>.</div>
   </form>
 
 <script>
