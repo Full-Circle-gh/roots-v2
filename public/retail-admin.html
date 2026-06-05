@@ -11278,7 +11278,7 @@ function dashSetDelta(sel, base, cur, days, fmtAvg) {
     el._tip = cuT('no recent baseline', '暂无近期基准');
     return;
   }
-  el._tip = cuT(`vs ${days}-day avg · ${fmtAvg(base.avg)}/day`, `较 ${days} 日均值 · ${fmtAvg(base.avg)}/日`);
+  el._tip = cuT(`vs typical day · ${days}-day avg · ${fmtAvg(base.avg)}/day`, `较日常 · 近 ${days} 日均值 · ${fmtAvg(base.avg)}/日`);
   const r = Math.round(base.delta);
   if (r > 0)      { el.classList.add('is-up');   el.textContent = '▲ ' + r + '%'; }
   else if (r < 0) { el.classList.add('is-down'); el.textContent = '▼ ' + Math.abs(r) + '%'; }
@@ -18118,6 +18118,24 @@ async function copyToClipboard(text, label) {
 function copyKicker(btn, label) {
   const text = btn?.dataset?.copy || '';
   copyToClipboard(text, label);
+  flashCopied(btn);
+}
+// Briefly swap a copy button's label to a gently fading-in "Copied · 已复制",
+// then restore the original. Stores the original markup on the element so
+// repeated clicks always revert to the true label.
+function flashCopied(btn) {
+  if (!btn || btn.classList.contains('copy-mini')) return;
+  if (btn._copiedOrig == null) btn._copiedOrig = btn.innerHTML;
+  if (btn._copiedTimer) clearTimeout(btn._copiedTimer);
+  btn.innerHTML = '<span style="display:inline-block; opacity:0; transition:opacity 1.4s ease">✓ Copied · 已复制</span>';
+  requestAnimationFrame(() => {
+    const span = btn.firstChild;
+    if (span) span.style.opacity = '1';
+  });
+  btn._copiedTimer = setTimeout(() => {
+    btn.innerHTML = btn._copiedOrig;
+    btn._copiedTimer = null;
+  }, 2200);
 }
 const COPY_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 // Build the small copy chip — placed next to a kicker label. `payload` is
