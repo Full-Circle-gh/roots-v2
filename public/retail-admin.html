@@ -2523,6 +2523,46 @@
   .btn-sm { padding: 4px 10px; font-size: 12px; }
   .btn-icon { padding: 7px 8px; }
 
+  /* "Paid how?" off-app tender picker (manual Mark-paid). In-app modal so it
+     reads as part of the backend, not a browser prompt. */
+  .pm-pick-bg {
+    position: fixed; inset: 0; z-index: 1200;
+    background: var(--bg-overlay); backdrop-filter: blur(2px);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+    animation: pmFade var(--t-fast) ease;
+  }
+  @keyframes pmFade { from { opacity: 0; } to { opacity: 1; } }
+  .pm-pick {
+    width: 420px; max-width: 100%;
+    background: var(--bg-pane); border: 1px solid var(--line-strong);
+    border-radius: var(--r-lg); box-shadow: 0 24px 60px rgba(0,0,0,.45);
+    overflow: hidden;
+  }
+  .pm-pick-head { padding: 18px 20px 14px; border-bottom: 1px solid var(--line-soft); }
+  .pm-pick-title { font-size: 14px; font-weight: 600; color: var(--text-1); }
+  .pm-pick-sub { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+  .pm-pick-list { padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .pm-pick-opt {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    padding: 11px 12px; font-size: 13px; font-weight: 500; color: var(--text-1);
+    background: var(--bg-elev-1); border: 1px solid var(--line);
+    border-radius: var(--r-md); cursor: pointer;
+    transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
+  }
+  .pm-pick-opt:hover, .pm-pick-opt:focus-visible {
+    background: var(--bg-elev-2); border-color: var(--brass); outline: none;
+  }
+  .pm-pick-num {
+    flex-shrink: 0; width: 22px; height: 22px; border-radius: var(--r-sm);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--f-mono, monospace); font-size: 11px; color: var(--brass);
+    background: rgba(176,141,74,.12); border: 1px solid rgba(176,141,74,.30);
+  }
+  .pm-pick-foot {
+    padding: 12px 20px 18px; display: flex; justify-content: flex-end;
+    border-top: 1px solid var(--line-soft);
+  }
+
   /* ═══════════════════════════════════════════════════════════════════
      INPUTS
      ═══════════════════════════════════════════════════════════════════ */
@@ -13978,12 +14018,51 @@ const PAY_METHOD_CHOICES = [
   ['alipay_offline', 'Alipay (off-app) · 支付宝(线下)'],
   ['other',          'Other · 其他'],
 ];
+// Styled in-app picker (not the native prompt) so confirming an off-app
+// payment looks like part of the backend. Resolves the chosen method value,
+// or null if the operator cancels (backdrop / Cancel / Esc).
 function askPayMethod() {
-  const lines = PAY_METHOD_CHOICES.map(([, label], i) => `${i + 1} = ${label}`).join('\n');
-  const ans = prompt(`Paid how? · 如何收款?\n${lines}`, '1');
-  if (ans === null) return null;              // operator cancelled
-  const i = parseInt(String(ans).trim(), 10) - 1;
-  return PAY_METHOD_CHOICES[i] ? PAY_METHOD_CHOICES[i][0] : 'other';
+  return new Promise((resolve) => {
+    const bg = document.createElement('div');
+    bg.className = 'pm-pick-bg';
+    bg.innerHTML = `
+      <div class="pm-pick" role="dialog" aria-modal="true" aria-label="Paid how">
+        <div class="pm-pick-head">
+          <div class="pm-pick-title">Paid how? · 如何收款?</div>
+          <div class="pm-pick-sub">Records the real tender so revenue splits correctly. · 记录实际收款方式以便正确统计收入。</div>
+        </div>
+        <div class="pm-pick-list">
+          ${PAY_METHOD_CHOICES.map(([val, label], i) => `
+            <button class="pm-pick-opt" data-val="${val}" data-key="${i + 1}">
+              <span class="pm-pick-num">${i + 1}</span>
+              <span class="pm-pick-lbl">${label}</span>
+            </button>`).join('')}
+        </div>
+        <div class="pm-pick-foot">
+          <button class="btn" data-cancel>Cancel · 取消</button>
+        </div>
+      </div>`;
+    document.body.appendChild(bg);
+
+    let done = false;
+    const finish = (val) => {
+      if (done) return; done = true;
+      document.removeEventListener('keydown', onKey);
+      bg.remove();
+      resolve(val);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') return finish(null);
+      const hit = PAY_METHOD_CHOICES[parseInt(e.key, 10) - 1];
+      if (hit) finish(hit[0]);
+    };
+    bg.addEventListener('mousedown', (e) => { if (e.target === bg) finish(null); });
+    bg.querySelectorAll('.pm-pick-opt').forEach((b) =>
+      b.addEventListener('click', () => finish(b.dataset.val)));
+    bg.querySelector('[data-cancel]').addEventListener('click', () => finish(null));
+    document.addEventListener('keydown', onKey);
+    bg.querySelector('.pm-pick-opt')?.focus();
+  });
 }
 
 async function transition(id, status) {
@@ -13995,7 +14074,7 @@ async function transition(id, status) {
     reason = prompt(`Reason for ${labelEn} (optional) · ${labelCn}原因(可选)`) || '';
   }
   if (status === 'paid') {
-    pay_method = askPayMethod();
+    pay_method = await askPayMethod();
     if (pay_method === null) return;          // cancelled the prompt → abort
   }
   try {
