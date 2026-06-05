@@ -71,15 +71,26 @@ const rows = db.prepare(
 // Escape a string for use inside a RegExp.
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// Optional unit that may trail the weight in a name. The `weight` column is
+// usually a bare number (265) while the name carries the unit ("265g"), so we
+// match the number plus an optional unit suffix.
+const UNIT = '(?:kg|g|ml|l|克|千克|毫升|升|斤|两)?';
+
 // Strip a trailing occurrence of `weight` from `name`, including any
-// separators / whitespace that sit between the real name and the weight.
-// Returns the cleaned name, or null if nothing matched.
+// separators / whitespace before it and an optional unit suffix after it.
+// `weight` may be a number (265) or a string ("265g"). Returns the cleaned
+// name, or null if nothing matched.
 function strip(name, weight) {
-  if (!name) return null;
-  const w = weight.trim();
-  if (!w) return null;
-  // trailing: [optional separators/space] + weight + [optional trailing punctuation/space]
-  const re = new RegExp('[\\s·•・\\-–—/，,]*' + esc(w) + '[\\s）)\\]]*$', 'i');
+  if (name == null || weight == null) return null;
+  const raw = String(weight).trim();
+  if (!raw) return null;
+  // Extract the numeric core ("265" from 265 or "265g"); fall back to the raw
+  // string for non-numeric weights (e.g. a size label like "L").
+  const m = raw.match(/^([\d]+(?:\.[\d]+)?)\s*([a-zA-Z一-鿿]*)$/);
+  const core = m ? m[1] : raw;
+  if (!core) return null;
+  // trailing: [separators] + number + [optional unit] + [optional trailing brackets/space]
+  const re = new RegExp('[\\s·•・\\-–—/，,]*(?<![\\d.])' + esc(core) + '\\s*' + UNIT + '[\\s）)\\]]*$', 'i');
   if (!re.test(name)) return null;
   const cleaned = name.replace(re, '').trim();
   // Don't blank out a name entirely (e.g. a variant literally named "265g").
