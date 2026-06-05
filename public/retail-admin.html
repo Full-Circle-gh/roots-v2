@@ -12020,7 +12020,7 @@ function dashSwapWithFade(render) {
   render();
   els.forEach(el => void el.offsetWidth);   // commit opacity:0 + fresh content together
   els.forEach(el => {
-    el.style.transition = 'opacity 1.6s cubic-bezier(.16, 1, .3, 1)';
+    el.style.transition = 'opacity 3s cubic-bezier(.16, 1, .3, 1)';
     el.style.opacity = '1';
     el.addEventListener('transitionend', function done(ev) {
       if (ev.target !== el || ev.propertyName !== 'opacity') return;
