@@ -54,6 +54,9 @@ Page({
     // string means "use the page-wxss default" (oat). Updated on every
     // onShow + refresh so a publish-then-pull-down sees the new colour.
     themeBg: '',
+    // Brand-theme CSS-variable overrides (palette + fonts), injected at the
+    // page root so app.wxss tokens adopt the tenant brand. '' = un-themed.
+    themeVars: '',
   },
 
   switchLang(e) {
@@ -124,8 +127,12 @@ Page({
     const patch = {};
     if (app.globalData.lang !== this.data.lang) patch.lang = app.globalData.lang;
     if (app.globalData.customer !== this.data.customer) patch.customer = app.globalData.customer || null;
-    const bg = theme.getPageBg(app);
+    const cfg = app.globalData.config || {};
+    const surface = cfg.theme && cfg.theme.palette && cfg.theme.palette.surface;
+    const bg = surface || theme.getPageBg(app);
     if (bg !== this.data.themeBg) patch.themeBg = bg;
+    const tv = theme.buildThemeVars(cfg);
+    if (tv !== this.data.themeVars) patch.themeVars = tv;
     if (Object.keys(patch).length) this.setData(patch);
     const tb = this.getTabBar && this.getTabBar();
     if (tb && tb.setSelected) tb.setSelected('pages/home/home');
@@ -245,7 +252,8 @@ Page({
         // Settings → Brand & theme → Notification strip. Empty string
         // means "use the WXSS default".
         notifColor: (cfg && cfg.theme && cfg.theme.notif_color) || '',
-        themeBg: theme.getPageBg(app),
+        themeBg: (app.globalData.config && app.globalData.config.theme && app.globalData.config.theme.palette && app.globalData.config.theme.palette.surface) || theme.getPageBg(app),
+        themeVars: theme.buildThemeVars(app.globalData.config),
         loading: false,
       });
       // Fire-and-forget top-seller fetches for any blocks that need them.

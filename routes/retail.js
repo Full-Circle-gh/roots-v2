@@ -7690,6 +7690,86 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), (req,
   res.json({ success: true, data: loadConfig() });
 });
 
+// ═══════════════════════════════════════════════════════════════════════
+// AI BRAND STUDIO — generate a per-tenant storefront look (theme + Home
+// layout) and land it as a /cms draft. Engine: lib/brand-designer.js; the
+// single model boundary is lib/model-gateway.js. White-labeled throughout:
+// responses never reveal the model vendor.
+// (readLayout / writeLayout / validateBlocks are hoisted fn declarations.)
+// ═══════════════════════════════════════════════════════════════════════
+const brandDesigner = require('../lib/brand-designer');
+const brandThemeLib = require('../lib/brand-theme');
+const modelGateway  = require('../lib/model-gateway');
+
+// Cheap availability check — no billed call.
+router.get('/api/retail-admin/brand/status', requireRetailAdmin, (req, res) => {
+  res.json({ success: true, data: { available: modelGateway.isConfigured() } });
+});
+
+// Start an async generation job. Body = quiz/upload inputs.
+router.post('/api/retail-admin/brand/generate', requireRetailAdmin, express.json(), (req, res) => {
+  if (!modelGateway.isConfigured()) {
+    return res.status(503).json({ success: false, error: 'The design service is not available right now. Please try again later.' });
+  }
+  const job = brandDesigner.startJob({ db: tdb(), inputs: req.body || {} });
+  logActivity(req.user.id, req.user.username, 'brand_generate', 'storefront_config', null, { job: job.id }, req.ip);
+  res.json({ success: true, data: { job_id: job.id, state: job.state } });
+});
+
+// Poll a generation job.
+router.get('/api/retail-admin/brand/job/:id', requireRetailAdmin, (req, res) => {
+  const job = brandDesigner.getJob(req.params.id);
+  if (!job) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({ success: true, data: brandDesigner.jobPublic(job) });
+});
+
+// Apply a generated result as a /cms DRAFT (theme + Home layout). Preview in
+// /cms before publishing. Body: { theme, layout } from the job result.
+router.post('/api/retail-admin/brand/apply', requireRetailAdmin, express.json(), (req, res) => {
+  const theme  = brandThemeLib.sanitizeTheme(req.body && req.body.theme);
+  const layout = Array.isArray(req.body && req.body.layout) ? req.body.layout : [];
+  const v = validateBlocks(layout);   // authoritative block guard (same as /cms)
+  if (v.error) return res.status(400).json({ success: false, error: v.error, details: v.details || null });
+  try {
+    const by = req.user.id;
+    const tx = tdb().transaction(() => {
+      writeLayout('cms.draft.home_layout', JSON.stringify(layout), by);
+      writeLayout('cms.draft.brand_theme', JSON.stringify(theme), by);
+    });
+    tx();
+  } catch (e) {
+    console.error('[brand/apply]', e);
+    return res.status(500).json({ success: false, error: 'apply_failed' });
+  }
+  logActivity(req.user.id, req.user.username, 'brand_apply', 'storefront_config', null, {}, req.ip);
+  res.json({ success: true, data: { draft: true, page: 'home' } });
+});
+
+// Publish the brand draft live: expand the draft theme into theme.* config
+// and copy the draft Home layout to live.
+router.post('/api/retail-admin/brand/publish', requireRetailAdmin, express.json(), (req, res) => {
+  try {
+    const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key='cms.draft.brand_theme'").get();
+    const theme = row ? brandThemeLib.sanitizeTheme(JSON.parse(row.value_json)) : null;
+    const draftLayout = readLayout('cms.draft.home_layout');
+    const by = req.user.id;
+    const upsert = tdb().prepare(
+      `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+       VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+       ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=CURRENT_TIMESTAMP, updated_by=excluded.updated_by`);
+    const tx = tdb().transaction(() => {
+      if (theme) for (const [k, val] of brandThemeLib.themeToConfigEntries(theme)) upsert.run(k, JSON.stringify(val), by);
+      if (Array.isArray(draftLayout) && draftLayout.length) writeLayout('home.layout', JSON.stringify(draftLayout), by);
+    });
+    tx();
+  } catch (e) {
+    console.error('[brand/publish]', e);
+    return res.status(500).json({ success: false, error: 'publish_failed' });
+  }
+  logActivity(req.user.id, req.user.username, 'brand_publish', 'storefront_config', null, {}, req.ip);
+  res.json({ success: true, data: { published: true } });
+});
+
 // Mini-app surface for a product — controlled by the office from
 // /retail-admin → Products. The kitchen-relevant fields (price, recipe
 // link, stock) stay in /products. Allowed fields:

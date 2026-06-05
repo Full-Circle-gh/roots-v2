@@ -45,4 +45,38 @@ function getPageBg(app) {
   return PAGE_BG_PALETTE[token] || '';
 }
 
-module.exports = { getPageBg, PAGE_BG_PALETTE };
+// CJK fallback tail appended to a brand font so Chinese glyphs always resolve
+// (mirror of lib/brand-theme CJK_TAIL + the stacks in app.wxss).
+const CJK_TAIL = "'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', -apple-system, sans-serif";
+
+/**
+ * Build the CSS-variable override string for a tenant's brand theme, bound at
+ * a page root (`<view style="{{themeVars}}">`) so the hardcoded app.wxss
+ * tokens adopt the brand colours + fonts. Mirror of
+ * lib/brand-theme.themeToCssVars (server). Returns '' when no theme is set, so
+ * un-themed tenants render byte-identically to today.
+ *
+ * Wire-up per page (reference: home):
+ *   const { buildThemeVars } = require('../../utils/theme');
+ *   this.setData({ themeVars: buildThemeVars(app.globalData.config) });
+ *   // wxml:  <view class="page-root" style="{{themeVars}}"> … </view>
+ */
+function buildThemeVars(config) {
+  const t = (config && config.theme) || {};
+  const p = t.palette || {};
+  const f = t.fonts || {};
+  if (!p.primary && !p.surface && !p.ink && !f.display && !f.body) return '';
+  const fam = (font) => (font && font.family) ? `'${String(font.family).replace(/'/g, '')}', ${CJK_TAIL}` : '';
+  const pairs = [];
+  const push = (k, v) => { if (v) pairs.push(k + ':' + v); };
+  push('--oat',    p.surface);
+  push('--ink',    p.ink);
+  push('--forest', p.primary);
+  push('--lime',   p.accent);
+  push('--olive',  p.muted);
+  push('--f-bear', fam(f.display));
+  push('--f-aleo', fam(f.body));
+  return pairs.join(';');
+}
+
+module.exports = { getPageBg, PAGE_BG_PALETTE, buildThemeVars };

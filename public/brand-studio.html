@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Brand Studio</title>
+<style>
+  :root { --ink:#1a1a17; --paper:#FBF8F2; --line:#e7e1d6; --brass:#9a7b3f; --accent:#365329; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--paper); color:var(--ink); }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 28px 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 2px; }
+  .sub { color:#7a7164; font-size: 13px; margin-bottom: 22px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 18px; margin-bottom:16px; }
+  label { display:block; font-weight:600; font-size:13px; margin:12px 0 6px; }
+  textarea, select, input[type=text] { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:9px; font:inherit; background:#fff; }
+  textarea { min-height:64px; resize:vertical; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { border:1px solid var(--line); border-radius:999px; padding:7px 13px; font-size:13px; cursor:pointer; user-select:none; }
+  .chip.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:200px; }
+  button.go { background:var(--accent); color:#fff; border:none; border-radius:10px; padding:13px 20px; font-size:15px; font-weight:600; cursor:pointer; }
+  button.ghost { background:#fff; border:1px solid var(--line); border-radius:10px; padding:11px 16px; font-weight:600; cursor:pointer; }
+  button[disabled] { opacity:.5; cursor:default; }
+  .status { font-size:13px; color:#7a7164; margin-top:12px; min-height:18px; }
+  .swatches { display:flex; gap:10px; flex-wrap:wrap; margin:6px 0 10px; }
+  .sw { width:64px; }
+  .sw .box { height:42px; border-radius:8px; border:1px solid rgba(0,0,0,.08); }
+  .sw .lbl { font-size:11px; color:#7a7164; margin-top:4px; text-align:center; }
+  .meta { font-size:13px; color:#4a463d; }
+  .blocks { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+  .blk { border:1px solid var(--line); border-radius:8px; padding:8px 11px; font-size:13px; display:flex; justify-content:space-between; }
+  .warn { background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; border-radius:8px; padding:8px 11px; font-size:12.5px; margin-top:8px; }
+  .hidden { display:none; }
+  .foot { font-size:11.5px; color:#9a9384; margin-top:20px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AI Brand Studio</h1>
+  <div class="sub">Tell us about your shop and we'll design your storefront — colours, fonts, and layout.</div>
+
+  <div class="card" id="formCard">
+    <label>What's your shop about?</label>
+    <textarea id="about" placeholder="e.g. plant-based bakery with seasonal sourdough"></textarea>
+
+    <div class="row">
+      <div>
+        <label>Who are your shoppers?</label>
+        <select id="audience">
+          <option value="mixed">A mix of both</option>
+          <option value="chinese">Mostly Chinese</option>
+          <option value="international">Mostly international</option>
+        </select>
+      </div>
+      <div>
+        <label>Storefront language</label>
+        <select id="language">
+          <option value="bilingual">Bilingual</option>
+          <option value="en">English</option>
+          <option value="cn">中文</option>
+        </select>
+      </div>
+    </div>
+
+    <label>Pick the words that describe your brand</label>
+    <div class="chips" id="words"></div>
+
+    <div class="row">
+      <div>
+        <label>Colour direction</label>
+        <select id="colourDirection">
+          <option value="">Surprise me</option>
+          <option>Earthy</option><option>Vibrant</option><option>Soft/Pastel</option>
+          <option>Dark/Moody</option><option>Monochrome</option><option>Warm</option><option>Cool</option>
+        </select>
+      </div>
+      <div>
+        <label>Typography feel</label>
+        <select id="typographyFeel">
+          <option value="">Match my vibe</option>
+          <option>Modern sans</option><option>Classic serif</option><option>Friendly rounded</option>
+          <option>Bold display</option><option>Elegant</option>
+        </select>
+      </div>
+    </div>
+
+    <label>Who are your customers?</label>
+    <div class="chips" id="customerType"></div>
+
+    <div style="margin-top:18px;">
+      <button class="go" id="goBtn">Design my brand</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card hidden" id="resultCard">
+    <h1 style="font-size:17px;">Your brand</h1>
+    <div class="swatches" id="swatches"></div>
+    <div class="meta" id="fontsMeta"></div>
+    <div class="meta" id="shapeMeta"></div>
+    <div id="warnings"></div>
+    <div class="blocks" id="blocks"></div>
+    <div style="margin-top:16px; display:flex; gap:10px;">
+      <button class="ghost" id="applyBtn">Apply as draft</button>
+      <button class="ghost" id="publishBtn">Publish live</button>
+      <button class="ghost" id="againBtn">Start over</button>
+    </div>
+    <div class="status" id="status2"></div>
+  </div>
+
+  <div class="foot">Drafts preview in the Mini App Editor before they go live.</div>
+</div>
+
+<script>
+const WORD_OPTS = ['Playful','Premium','Minimal','Bold','Natural','Warm','Modern','Heritage','Quirky','Calm'];
+const CUST_OPTS = ['young-trendy','families','premium-professional','budget-conscious','health-conscious'];
+const sel = new Set(), custSel = new Set();
+
+function chips(host, opts, store) {
+  const el = document.getElementById(host);
+  opts.forEach(function (o) {
+    const c = document.createElement('div');
+    c.className = 'chip'; c.textContent = o;
+    c.onclick = function () { c.classList.toggle('on'); if (store.has(o)) store.delete(o); else store.add(o); };
+    el.appendChild(c);
+  });
+}
+chips('words', WORD_OPTS, sel);
+chips('customerType', CUST_OPTS, custSel);
+
+function $(id) { return document.getElementById(id); }
+function setStatus(t, id) { $(id || 'status').textContent = t || ''; }
+
+async function api(path, opts) {
+  const r = await fetch(path, Object.assign({ credentials: 'include', headers: { 'Content-Type': 'application/json' } }, opts || {}));
+  const body = await r.json().catch(function () { return {}; });
+  if (!r.ok || body.success === false) throw new Error((body && body.error) || ('http_' + r.status));
+  return body.data;
+}
+
+let lastResult = null;
+
+$('goBtn').onclick = async function () {
+  $('goBtn').disabled = true;
+  setStatus('Designing your storefront…');
+  const inputs = {
+    about: $('about').value,
+    audience: $('audience').value,
+    language: $('language').value,
+    words: Array.from(sel),
+    customerType: Array.from(custSel),
+    colourDirection: $('colourDirection').value,
+    typographyFeel: $('typographyFeel').value,
+  };
+  try {
+    const start = await api('/api/retail-admin/brand/generate', { method: 'POST', body: JSON.stringify(inputs) });
+    await poll(start.job_id);
+  } catch (e) {
+    setStatus(humErr(e));
+    $('goBtn').disabled = false;
+  }
+};
+
+function humErr(e) { return (e && e.message && !/anthropic|claude/i.test(e.message)) ? e.message : 'The design service is busy — please try again.'; }
+
+async function poll(jobId) {
+  for (let i = 0; i < 60; i++) {
+    await new Promise(function (r) { setTimeout(r, 2000); });
+    let job;
+    try { job = await api('/api/retail-admin/brand/job/' + jobId); }
+    catch (e) { continue; }
+    if (job.state === 'ready') { render(job.result); return; }
+    if (job.state === 'error') { setStatus(job.error || 'Please try again.'); $('goBtn').disabled = false; return; }
+    setStatus(job.progress || 'Working…');
+  }
+  setStatus('This is taking a while — please try again.');
+  $('goBtn').disabled = false;
+}
+
+function render(result) {
+  lastResult = result;
+  $('formCard').classList.add('hidden');
+  $('resultCard').classList.remove('hidden');
+  const p = result.theme.palette || {};
+  const sw = $('swatches'); sw.innerHTML = '';
+  ['primary','accent','surface','ink','muted'].forEach(function (role) {
+    if (!p[role]) return;
+    const d = document.createElement('div'); d.className = 'sw';
+    d.innerHTML = '<div class="box" style="background:' + p[role] + '"></div><div class="lbl">' + role + '<br>' + p[role] + '</div>';
+    sw.appendChild(d);
+  });
+  const f = result.theme.fonts || {};
+  $('fontsMeta').textContent = 'Fonts — display: ' + ((f.display && f.display.family) || '—') + ' · body: ' + ((f.body && f.body.family) || '—');
+  $('shapeMeta').textContent = 'Shape: ' + ((result.theme.shape && result.theme.shape.radius) || '—') + ' / ' + ((result.theme.shape && result.theme.shape.energy) || '—') + ' · density: ' + (result.theme.density || '—') + ' · audience: ' + (result.theme.audience || '—');
+  const wel = $('warnings'); wel.innerHTML = '';
+  (result.warnings || []).forEach(function (w) { const d = document.createElement('div'); d.className = 'warn'; d.textContent = w.msg || w.code; wel.appendChild(d); });
+  const bl = $('blocks'); bl.innerHTML = '';
+  (result.layout || []).forEach(function (b, i) { const d = document.createElement('div'); d.className = 'blk'; d.innerHTML = '<span>' + (i + 1) + '. ' + b.type + '</span>'; bl.appendChild(d); });
+  setStatus('', 'status2');
+}
+
+$('applyBtn').onclick = async function () {
+  if (!lastResult) return;
+  setStatus('Saving draft…', 'status2');
+  try { await api('/api/retail-admin/brand/apply', { method: 'POST', body: JSON.stringify({ theme: lastResult.theme, layout: lastResult.layout }) });
+    setStatus('Saved as a draft — preview it in the Mini App Editor.', 'status2'); }
+  catch (e) { setStatus(humErr(e), 'status2'); }
+};
+$('publishBtn').onclick = async function () {
+  if (!lastResult) return;
+  setStatus('Publishing…', 'status2');
+  try { await api('/api/retail-admin/brand/apply', { method: 'POST', body: JSON.stringify({ theme: lastResult.theme, layout: lastResult.layout }) });
+    await api('/api/retail-admin/brand/publish', { method: 'POST', body: JSON.stringify({}) });
+    setStatus('Published live.', 'status2'); }
+  catch (e) { setStatus(humErr(e), 'status2'); }
+};
+$('againBtn').onclick = function () { $('resultCard').classList.add('hidden'); $('formCard').classList.remove('hidden'); $('goBtn').disabled = false; setStatus(''); };
+</script>
+</body>
+</html>
