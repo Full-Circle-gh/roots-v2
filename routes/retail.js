@@ -10624,7 +10624,7 @@ const ALLOWED_BLOCK_TYPES = new Set([
   // (auto-binds to the next-ending active flash sale)
   'countdown_timer', 'flash_sale_strip',
   // Promo + trust blocks — completes the original 10-block spec
-  'coupon_block', 'points_widget', 'review_card', 'store_info',
+  'coupon_block', 'points_widget', 'top_up', 'review_card', 'store_info',
   // Voting teaser — links to /pages/voting/voting (polls managed in retail-admin → Voting)
   'voting_block',
   // Affiliate / refer-a-friend card with live invite code + share

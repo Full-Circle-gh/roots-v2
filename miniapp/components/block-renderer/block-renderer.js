@@ -11,7 +11,7 @@ const { BASE } = require('../../utils/api');
 // the page color doesn't leak between the border and the colored panel.
 const FULL_BG_TYPES = [
   'announcement_bar', 'flash_sale_strip', 'coupon_block', 'points_widget',
-  'review_card', 'favorites_block', 'voting_block', 'affiliate_block',
+  'top_up', 'review_card', 'favorites_block', 'voting_block', 'affiliate_block',
   'store_info', 'greeting', 'kitchen_status', 'recipe_story', 'bundle',
   'wecom_contact', 'countdown_timer', 'leaderboard', 'notification_bar',
 ];
@@ -227,6 +227,7 @@ Component({
     // coupon / points / review / store
     coupon: null,
     points: null,
+    topUp: null,
     review: null,
     store: null,
     // affiliate
@@ -935,6 +936,20 @@ Component({
             subtitle: lang.pick(b.subtitle_en, b.subtitle_cn, L),
             ctaLabel: lang.pick(b.cta_label_en, b.cta_label_cn, L),
             ctaTarget: b.cta_target || 'me',
+            btnBg: color(b.btn_color || ''),
+            btnFg: b.btn_color ? btnText(b.btn_color) : '',
+          };
+          break;
+        }
+        case 'top_up': {
+          out.bg = color(b.bg_color || 'forest-kale');
+          out.fg = color(b.fg_color || 'lime-leaf');
+          out.topUp = {
+            kicker:   lang.pick(b.kicker_en, b.kicker_cn, L),
+            title:    lang.pick(b.title_en,  b.title_cn,  L),
+            subtitle: lang.pick(b.subtitle_en, b.subtitle_cn, L),
+            ctaLabel: lang.pick(b.cta_label_en, b.cta_label_cn, L),
+            ctaTarget: b.cta_target || 'topup',
             btnBg: color(b.btn_color || ''),
             btnFg: b.btn_color ? btnText(b.btn_color) : '',
           };
@@ -1865,6 +1880,10 @@ Component({
     },
     onPointsCtaTap() {
       const target = this.data.points?.ctaTarget || 'me';
+      this.triggerEvent('cta', { target });
+    },
+    onTopUpCtaTap() {
+      const target = this.data.topUp?.ctaTarget || 'topup';
       this.triggerEvent('cta', { target });
     },
     onStoreCtaTap(e) {

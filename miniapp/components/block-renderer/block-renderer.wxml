@@ -575,6 +575,18 @@
   <view wx:if="{{points.ctaLabel}}" class="pt-cta" style="background:{{points.btnBg}};color:{{points.btnFg}}" bindtap="onPointsCtaTap">{{points.ctaLabel}}</view>
 </view>
 
+<view wx:elif="{{type === 'top_up' && topUp}}" class="points-blk" style="background:{{bg}};color:{{fg}}">
+  <view class="pt-star">
+    <view class="pt-star-glyph">¥</view>
+  </view>
+  <view class="pt-body">
+    <view wx:if="{{topUp.kicker}}" class="pt-kicker">{{topUp.kicker}}</view>
+    <view wx:if="{{topUp.title}}" class="pt-title">{{topUp.title}}</view>
+    <view wx:if="{{topUp.subtitle}}" class="pt-sub">{{topUp.subtitle}}</view>
+  </view>
+  <view wx:if="{{topUp.ctaLabel}}" class="pt-cta" style="background:{{topUp.btnBg}};color:{{topUp.btnFg}}" bindtap="onTopUpCtaTap">{{topUp.ctaLabel}}</view>
+</view>
+
 <view wx:elif="{{type === 'review_card' && reviews.length}}" class="review-blk review-{{reviewView}}" style="background:{{bg}};color:{{fg}};{{rvVars}}">
   <view wx:if="{{reviewKicker && reviewView !== 'editorial' && reviewView !== 'riso' && reviewView !== 'spotlight'}}" class="rv-kicker">{{reviewKicker}}</view>
 

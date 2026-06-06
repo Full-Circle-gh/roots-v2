@@ -4874,6 +4874,7 @@ const ICONS = {
   flash_sale_strip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
   coupon_block:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v4a2 2 0 0 1 2 2 2 2 0 0 1-2 2v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4a2 2 0 0 1-2-2 2 2 0 0 1 2-2z"/><line x1="9" y1="9" x2="15" y2="15"/><circle cx="9" cy="9" r="0.5" fill="currentColor"/><circle cx="15" cy="15" r="0.5" fill="currentColor"/></svg>',
   points_widget:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="12 7 13.5 10.5 17 11 14.5 13.5 15 17 12 15.3 9 17 9.5 13.5 7 11 10.5 10.5 12 7"/></svg>',
+  top_up:          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2H6"/><circle cx="16.5" cy="13.5" r="1.25" fill="currentColor" stroke="none"/></svg>',
   review_card:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>',
   store_info:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
   voting_block:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
@@ -4921,6 +4922,7 @@ const BLOCK_META = {
   flash_sale_strip: { name: 'Flash sale',       name_cn: '限时秒杀',   desc: 'Live 秒杀 · strip / hero / banner views',   desc_cn: '秒杀:条幅 / 主图 / 横幅视图' },
   coupon_block:     { name: 'Coupon',           name_cn: '优惠券',     desc: '¥ off / % off promo with claim CTA',        desc_cn: '满减 / 折扣促销,带领取按钮' },
   points_widget:    { name: 'Points',           name_cn: '积分',       desc: 'Earn-rate promo · Roots Club',              desc_cn: '赚分促销 · 萌芽会员' },
+  top_up:           { name: 'Top up',            name_cn: '充值',       desc: 'Wallet top-up promo with bonus CTA',        desc_cn: '钱包充值促销 · 带充值按钮' },
   review_card:      { name: 'Review',           name_cn: '评价',       desc: 'Featured customer testimonial',             desc_cn: '精选顾客好评' },
   store_info:       { name: 'Stores',           name_cn: '门店',       desc: 'One or many locations · live open · hours · ETA', desc_cn: '单个或多个门店 · 营业状态 · 营业时间 · 送达时间' },
   voting_block:     { name: 'Voting',           name_cn: '投票',       desc: 'Poll teaser — tap to vote, earn pts',       desc_cn: '投票预告 — 点击投票,赚取积分' },
@@ -5996,6 +5998,7 @@ const DC_FIELDS = {
   flash_sale_strip: { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   coupon_block:     { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   points_widget:    { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
+  top_up:           { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   review_card:      { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
   store_info:       { bg: 'bg_color', fg: 'fg_color' },
   voting_block:     { bg: 'bg_color', fg: 'fg_color', accent: 'accent_color' },
@@ -6980,6 +6983,18 @@ function makeBlock(type) {
         cta_target: 'me',
       };
     }
+    case 'top_up': {
+      return {
+        id, type,
+        kicker_en: 'WALLET', kicker_cn: '钱包',
+        title_en: 'Top up & get a bonus', title_cn: '充值即送赠金',
+        subtitle_en: 'Add balance now, spend it at checkout',
+        subtitle_cn: '立即充值,结账时可用',
+        bg_color: 'forest-kale', fg_color: 'lime-leaf',
+        cta_label_en: 'TOP UP', cta_label_cn: '去充值',
+        cta_target: 'topup',
+      };
+    }
     case 'review_card': {
       return {
         id, type,
@@ -7508,7 +7523,7 @@ function buildDropZone(beforeIdx, isTail = false) {
 // must fill the frame edge-to-edge (mirrors FULL_BG_TYPES in the mini-app).
 const FULL_BG_BLOCK_TYPES = [
   'announcement_bar', 'flash_sale_strip', 'coupon_block', 'points_widget',
-  'review_card', 'favorites_block', 'voting_block', 'affiliate_block',
+  'top_up', 'review_card', 'favorites_block', 'voting_block', 'affiliate_block',
   'store_info', 'greeting', 'kitchen_status', 'recipe_story', 'bundle',
   'wecom_contact', 'countdown_timer', 'leaderboard', 'notification_bar',
 ];
@@ -8436,6 +8451,26 @@ function renderBlockBody(b) {
       d.innerHTML = `
         <div class="pt-star">
           <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="12 3 14.5 9 21 9.5 16.5 13.5 18 20 12 16.5 6 20 7.5 13.5 3 9.5 9.5 9 12 3"/></svg>
+        </div>
+        <div class="pt-body">
+          <div class="pt-kicker">${biLabel(k.en, k.cn)}</div>
+          <div class="pt-ttl">${biLabel(t.en, t.cn)}</div>
+          ${sub ? `<div class="pt-sub">${escapeHtml(sub)}</div>` : ''}
+        </div>
+        ${cta ? `<div class="pt-cta"${btnPreviewStyle(b.btn_color)}>${escapeHtml(cta)}</div>` : ''}`;
+      return d;
+    }
+    case 'top_up': {
+      d.className = 'b-points';
+      d.style.background = brandColorVar(b.bg_color) || 'var(--b-forest)';
+      d.style.color = brandColorVar(b.fg_color) || 'var(--b-lime)';
+      const k = getBi(b, 'kicker');
+      const t = getBi(b, 'title');
+      const sub = pickLang(b.subtitle_en, b.subtitle_cn);
+      const cta = pickLang(b.cta_label_en, b.cta_label_cn);
+      d.innerHTML = `
+        <div class="pt-star">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px"><path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2H6"/><circle cx="16.5" cy="13.5" r="1.25" fill="currentColor" stroke="none"/></svg>
         </div>
         <div class="pt-body">
           <div class="pt-kicker">${biLabel(k.en, k.cn)}</div>
@@ -9756,6 +9791,7 @@ function renderInspector() {
     case 'flash_sale_strip': buildFlashStripForm(body, b); break;
     case 'coupon_block':     buildCouponForm(body, b); break;
     case 'points_widget':    buildPointsForm(body, b); break;
+    case 'top_up':           buildTopUpForm(body, b); break;
     case 'review_card':      buildReviewForm(body, b); break;
     case 'store_info':       buildStoreInfoForm(body, b); break;
     case 'voting_block':     buildVotingForm(body, b); break;
@@ -11113,6 +11149,29 @@ function buildPointsForm(m, b) {
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
   secContent.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. me · membership', '按钮跳转到哪里。例如 me · membership'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'me')));
+
+  secColours.appendChild(field(T('Background colour', '背景颜色'), '',
+    sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+  secColours.appendChild(field(T('Text colour', '文字颜色'), '',
+    sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  secColours.appendChild(field(T('Button colour', '按钮颜色'), T('The colour of the button. The text colour is chosen for you so it stays easy to read.', '按钮的颜色。文字颜色会自动选择,保证清晰易读。'),
+    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
+}
+
+function buildTopUpForm(m, b) {
+  const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
+  const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
+
+  secContent.appendChild(field(T('Small heading', '小标题'), '',
+    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
+  secContent.appendChild(field(T('Title', '标题'), T('The main line — e.g. the top-up offer or bonus.', '主要的一行 — 例如充值优惠或赠金。'),
+    txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
+  secContent.appendChild(field(T('Subtitle', '副标题'), T('Optional — e.g. how the wallet balance can be used.', '可选 — 例如钱包余额如何使用。'),
+    txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
+  secContent.appendChild(field(T('Button text', '按钮文字'), '',
+    txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
+  secContent.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. topup · wallet', '按钮跳转到哪里。例如 topup · wallet'),
+    txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'topup')));
 
   secColours.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
