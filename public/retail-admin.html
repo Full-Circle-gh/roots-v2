@@ -13957,6 +13957,19 @@ function shipGlyph(mode) {
   return open + '<path d="M2.5 6.5h11v8h-11z"/><path d="M13.5 9h4l4 3.5v2h-8z"/><circle cx="6.5" cy="16.5" r="1.6"/><circle cx="17.5" cy="16.5" r="1.6"/></svg>';
 }
 
+// Per-shipment fulfillment pill. 'pending' uses the neutral base pill; the
+// other two reuse the order-status pill colours.
+function shipmentStatePill(s) {
+  const st = s.state || 'pending';
+  const map = {
+    pending:    ['',              'Not shipped · 未发货'],
+    dispatched: ['st-dispatched', 'Dispatched · 已发货'],
+    delivered:  ['st-delivered',  'Delivered · 已送达'],
+  };
+  const [cls, label] = map[st] || map.pending;
+  return `<span class="pill ${cls}"><span class="dot"></span>${label}</span>`;
+}
+
 // Render one shipment block: header pill + items table + tracking row.
 function renderShipmentCard(o, s) {
   const mode = s.mode || 'local';
@@ -13973,14 +13986,53 @@ function renderShipmentCard(o, s) {
   const countLabel = units !== lines
     ? `${lines} line${lines === 1 ? '' : 's'} · ${units} units`
     : `${lines} item${lines === 1 ? '' : 's'}`;
+  const state = s.state || 'pending';
+  // Per-shipment dispatch is offered once the order is paid (or later) and this
+  // parcel hasn't shipped. The order being 'dispatched' doesn't block it — a
+  // partially-shipped order keeps un-shipped parcels actionable.
+  const canDispatch = state === 'pending' &&
+    ['paid', 'preparing', 'dispatched'].includes(o.status) &&
+    o.fulfillment_type !== 'pickup';
+  // "Ship part later" splits this parcel in two. Only meaningful when the
+  // parcel is still pending and holds 2+ lines (must leave one behind).
+  const canSplit = state === 'pending' && lines >= 2;
+  const actions = (canDispatch || canSplit) ? `
+      <div class="row" style="gap:8px; flex-wrap:wrap; margin-top: var(--s3);">
+        ${canDispatch ? `<button class="btn btn-primary btn-sm" onclick="dispatchShipment(${o.id}, ${s.id})">Mark this parcel dispatched · 标记此包裹已发货</button>` : ''}
+        ${canSplit ? `<button class="btn btn-sm" onclick="toggleSplitPanel(${s.id})">Ship part later · 分批发货</button>` : ''}
+      </div>
+      ${canSplit ? renderSplitPanel(o, s) : ''}` : '';
   return `
     <div class="shipment-card mode-${mode}">
       <div class="shipment-head">
         <span class="mode-pill mode-${mode}">${labelMap[mode] || s.label}</span>
         <span class="count">${countLabel}</span>
+        ${shipmentStatePill(s)}
       </div>
       ${renderItemsTable(s.items, true)}
-      ${['dispatched', 'delivered'].includes(o.status) ? renderShipmentTrackingCard(o, s) : ''}
+      ${actions}
+      ${['dispatched', 'delivered'].includes(state) ? renderShipmentTrackingCard(o, s) : ''}
+    </div>`;
+}
+
+// Inline "ship part later" panel — checkbox list of this parcel's items.
+// Hidden until toggled. Submitting moves the checked items into a new
+// "to follow" shipment so the rest can ship now.
+function renderSplitPanel(o, s) {
+  const rows = (s.items || []).map(it => `
+    <label class="row" style="gap:8px; align-items:center; padding:4px 0; cursor:pointer;">
+      <input type="checkbox" class="split-pick-${s.id}" value="${it.id}">
+      <span style="flex:1; min-width:0;">${escapeHtml(it.name_en || it.name_cn || ('#' + it.id))}${it.size ? ` · ${escapeHtml(it.size)}` : ''}</span>
+      <span class="muted" style="font-size:12px;">×${it.qty}</span>
+    </label>`).join('');
+  return `
+    <div id="split-panel-${s.id}" class="split-panel" style="display:none; margin-top: var(--s3); padding: var(--s3); border:1px dashed var(--line); border-radius:8px;">
+      <div class="muted" style="font-size:11px; margin-bottom:6px;">Tick the items that ship <b>later</b> — they move to a new follow-up parcel and the rest stays here to ship now. · 勾选稍后发货的商品,移入新的后补包裹。</div>
+      ${rows}
+      <div class="row" style="gap:8px; margin-top: var(--s3);">
+        <button class="btn btn-primary btn-sm" onclick="submitShipmentSplit(${o.id}, ${s.id})">Move to follow-up parcel · 移入后补包裹</button>
+        <button class="btn btn-sm" onclick="toggleSplitPanel(${s.id})">Cancel · 取消</button>
+      </div>
     </div>`;
 }
 
@@ -14234,8 +14286,14 @@ function renderOrderTotalFooter(o, transitionsHtml) {
 
 function renderOpenOrder(o) {
   const mount = $('#order-detail-mount');
+  const multiParcel = (o.shipments?.length || 0) > 1;
   const transitions = nextStatusFor(o).map(([next, label]) => {
       const cls = (next === 'cancelled' || next === 'refunded') ? 'btn-danger' : 'btn-primary';
+      // With multiple parcels the whole-order dispatch acts as "ship all at
+      // once" — relabel so it's distinct from each parcel's own button.
+      if (next === 'dispatched' && multiParcel && o.fulfillment_type !== 'pickup') {
+        label = 'Mark all dispatched · 全部标记已发货';
+      }
       return `<button class="btn ${cls} btn-sm" onclick="transition(${o.id}, '${next}')">${label}</button>`;
     }).join('');
     mount.innerHTML = `
@@ -14246,6 +14304,7 @@ function renderOpenOrder(o) {
             <div class="title-row">
               <b>${escapeHtml(o.order_no)}</b>
               <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>
+              ${o.fulfillment?.rollup === 'partial' ? `<span class="pill st-preparing"><span class="dot"></span>Partially shipped · 部分发货 (${o.fulfillment.dispatched}/${o.fulfillment.total})</span>` : ''}
               ${refundBadge(o)}
             </div>
             <div class="od-eyebrow">Order placed · 下单于 ${formatDate(o.placed_at)}</div>
@@ -14605,6 +14664,46 @@ async function resubscribeTracking(orderId, shipmentId, ev) {
     });
     toast('Re-subscribed · 已重新订阅');
     openOrder(orderId);
+  } catch {}
+}
+
+// ─── Partial / late fulfillment (per-shipment) ──────────────────────────
+// Mark a single parcel dispatched. The first parcel flips the whole order to
+// dispatched server-side; later parcels just stamp their own state.
+async function dispatchShipment(orderId, shipmentId, ev) {
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/shipments/${shipmentId}/dispatch`,
+      method: 'POST',
+      errLabelEn: 'Dispatch failed', errLabelCn: '发货失败',
+    });
+    toast('Parcel dispatched · 包裹已发货');
+    openOrder(orderId, { instant: true });
+    loadOrders();
+  } catch {}
+}
+
+function toggleSplitPanel(shipmentId) {
+  const el = document.getElementById('split-panel-' + shipmentId);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+// Move the ticked items into a new follow-up parcel.
+async function submitShipmentSplit(orderId, shipmentId, ev) {
+  const picked = Array.from(document.querySelectorAll('.split-pick-' + shipmentId))
+    .filter(cb => cb.checked)
+    .map(cb => parseInt(cb.value, 10));
+  if (!picked.length) { toast('Tick at least one item to ship later · 请至少勾选一项', 'err'); return; }
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/shipments/split`,
+      method: 'POST', body: { item_ids: picked },
+      errLabelEn: 'Split failed', errLabelCn: '拆分失败',
+    });
+    toast('Moved to follow-up parcel · 已移入后补包裹');
+    openOrder(orderId, { instant: true });
   } catch {}
 }
 

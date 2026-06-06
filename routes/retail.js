@@ -3685,6 +3685,34 @@ function ensureShipments(orderId) {
   ).all(orderId);
 }
 
+// Per-shipment fulfillment state, derived purely from the timestamp columns
+// (no stored status column). delivered wins over dispatched wins over pending.
+function shipmentState(s) {
+  if (s.delivered_at)  return 'delivered';
+  if (s.dispatched_at) return 'dispatched';
+  return 'pending';
+}
+
+// Roll the per-shipment states up into one order-level fulfillment summary so
+// the office UI can show "Partially shipped" without inventing a new order
+// status. `rollup`: 'none' (nothing out) | 'partial' (some out, some not) |
+// 'all_dispatched' (every parcel left) | 'all_delivered' (every parcel landed).
+function buildOrderFulfillment(orderId) {
+  const rows = tdb().prepare(
+    `SELECT dispatched_at, delivered_at FROM retail_shipments WHERE order_id = ?`
+  ).all(orderId);
+  const total      = rows.length;
+  const dispatched = rows.filter(r => r.dispatched_at || r.delivered_at).length;
+  const delivered  = rows.filter(r => r.delivered_at).length;
+  let rollup = 'none';
+  if (total > 0) {
+    if (delivered === total)        rollup = 'all_delivered';
+    else if (dispatched === total)  rollup = 'all_dispatched';
+    else if (dispatched > 0)        rollup = 'partial';
+  }
+  return { total, dispatched, delivered, pending: total - dispatched, rollup };
+}
+
 // Build a split-package suggestion for one out-of-GZ order. Compares the
 // current shipment bucketing against the optimal split (Ice + air-only
 // items by air, everything else by land) and reports projected freight
@@ -8652,6 +8680,26 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   // orders ship nothing (collected at the store), so never plan a shipment.
   const shipmentRows = o.fulfillment_type === 'pickup' ? [] : ensureShipments(id);
 
+  // Back-fill per-shipment state for orders dispatched/delivered BEFORE the
+  // partial-fulfillment feature existed: the old whole-order status flip never
+  // stamped individual shipments, so without this they'd show "Not shipped"
+  // and lose their tracking card. Idempotent (COALESCE keeps existing stamps).
+  if (['dispatched', 'delivered'].includes(o.status) && shipmentRows.some(s => !s.dispatched_at)) {
+    tdb().prepare(
+      "UPDATE retail_shipments SET dispatched_at = COALESCE(dispatched_at, ?) WHERE order_id = ?"
+    ).run(o.dispatched_at || o.updated_at || new Date().toISOString(), id);
+    if (o.status === 'delivered') {
+      tdb().prepare(
+        "UPDATE retail_shipments SET delivered_at = COALESCE(delivered_at, ?) WHERE order_id = ?"
+      ).run(o.delivered_at || o.updated_at || new Date().toISOString(), id);
+    }
+    // Re-read so the serialized state reflects the back-fill.
+    for (const s of shipmentRows) {
+      const fresh = tdb().prepare('SELECT dispatched_at, delivered_at FROM retail_shipments WHERE id = ?').get(s.id);
+      if (fresh) { s.dispatched_at = fresh.dispatched_at; s.delivered_at = fresh.delivered_at; }
+    }
+  }
+
   // oi.image_url was never captured at order time (always null on insert),
   // so fall through to the live product photo — same approach as the
   // customer-facing detail endpoint — so the backend can show a thumbnail
@@ -8712,9 +8760,12 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     tracking_synced_at:  s.tracking_synced_at,
     dispatched_at: s.dispatched_at,
     delivered_at:  s.delivered_at,
+    state: shipmentState(s),
     items: o.items.filter(it => it.shipment_id === s.id),
     tracking: buildShipmentTrackingView(s),
   }));
+  // Order-level fulfillment rollup (drives the "Partially shipped" badge).
+  o.fulfillment = buildOrderFulfillment(id);
 
   o.timeline = orderTimeline(o);
   // Keep legacy `o.tracking` populated from the primary shipment so older
@@ -8878,6 +8929,126 @@ router.post('/api/retail-admin/orders/:id/shipment-suggestion/apply',
   });
   tx();
   res.json({ success: true });
+});
+
+// ─── Partial / late fulfillment ────────────────────────────────────────
+// Mark ONE shipment dispatched without requiring the whole order to ship at
+// once. The first parcel that leaves flips the order to 'dispatched' (which
+// also fires the customer "shipped" notification and locks out cancel, via the
+// existing status machine); subsequent parcels just stamp their own
+// dispatched_at. Waybills are attached afterwards through the per-shipment
+// tracking card (PUT /tracking), which is unlocked once the order is dispatched.
+router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const sid = parseInt(req.params.sid, 10);
+  const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  // Only a paid/preparing/dispatched order can have parcels go out. (A
+  // dispatched order may still have un-shipped parcels in the partial case.)
+  if (!['paid', 'preparing', 'dispatched'].includes(o.status)) {
+    return res.status(409).json({ success: false, error: 'not_shippable', status: o.status });
+  }
+  const ship = tdb().prepare('SELECT * FROM retail_shipments WHERE id = ? AND order_id = ?').get(sid, id);
+  if (!ship) return res.status(404).json({ success: false, error: 'shipment_not_found' });
+  if (ship.dispatched_at) {
+    return res.status(409).json({ success: false, error: 'already_dispatched' });
+  }
+
+  tdb().prepare(
+    "UPDATE retail_shipments SET dispatched_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+  ).run(sid);
+
+  // First parcel out → advance the whole order so it's protected from cancel
+  // and the customer hears "on the way". Reuse the order's dispatched_at if a
+  // prior status flip already stamped it.
+  let firstDispatch = false;
+  if (o.status !== 'dispatched') {
+    tdb().prepare(
+      "UPDATE retail_orders SET status = 'dispatched', dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+    ).run(id);
+    firstDispatch = true;
+  }
+
+  logActivity(req.user.id, req.user.username, 'shipment_dispatched', 'retail_order', id,
+    { shipment_id: sid, mode: ship.mode, first: firstDispatch }, req.ip);
+  if (firstDispatch) {
+    try { notifyOrderStatusChange(id, 'dispatched'); } catch (e) { /* best-effort */ }
+  }
+
+  res.json({ success: true, data: { fulfillment: buildOrderFulfillment(id), order_status: 'dispatched' } });
+});
+
+// Pull selected line items out into a NEW "to follow" shipment so the rest of
+// the order can ship now and the held items ship later. Whole-line moves only
+// (no partial-quantity split yet). Items already in a dispatched parcel can't
+// be moved.
+router.post('/api/retail-admin/orders/:id/shipments/split',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const itemIds = Array.isArray(req.body?.item_ids)
+    ? req.body.item_ids.map(n => parseInt(n, 10)).filter(Number.isInteger)
+    : [];
+  if (!itemIds.length) return res.status(400).json({ success: false, error: 'no_items' });
+
+  const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+
+  // Resolve the items + their current shipment. All must belong to this order.
+  const placeholders = itemIds.map(() => '?').join(',');
+  const items = tdb().prepare(
+    `SELECT i.id, i.shipment_id, s.mode AS ship_mode, s.dispatched_at AS ship_dispatched
+       FROM retail_order_items i
+       LEFT JOIN retail_shipments s ON s.id = i.shipment_id
+      WHERE i.order_id = ? AND i.id IN (${placeholders})`
+  ).all(id, ...itemIds);
+  if (items.length !== itemIds.length) {
+    return res.status(400).json({ success: false, error: 'invalid_items' });
+  }
+  if (items.some(it => it.ship_dispatched)) {
+    return res.status(409).json({ success: false, error: 'item_already_dispatched' });
+  }
+
+  // Refuse to empty a source parcel — splitting means leaving something behind
+  // to ship now. Group the move by source shipment and require each source to
+  // retain at least one non-moved item.
+  const movingBySource = new Map();
+  for (const it of items) {
+    movingBySource.set(it.shipment_id, (movingBySource.get(it.shipment_id) || 0) + 1);
+  }
+  for (const [shipId, moving] of movingBySource) {
+    if (!shipId) continue;
+    const total = tdb().prepare(
+      'SELECT COUNT(*) AS n FROM retail_order_items WHERE shipment_id = ?'
+    ).get(shipId).n;
+    if (moving >= total) {
+      return res.status(422).json({ success: false, error: 'would_empty_shipment', shipment_id: shipId });
+    }
+  }
+
+  // Inherit the mode from the moved items' source (so freight routing is sane);
+  // default to 'land' when items had no shipment yet.
+  const mode = items[0].ship_mode || 'land';
+  const label = (mode === 'air' ? 'Air shipment · 空运'
+              : mode === 'local' ? 'Local delivery · 同城配送'
+              : 'Land shipment · 陆运') + ' (to follow · 后补)';
+
+  const tx = tdb().transaction(() => {
+    const r = tdb().prepare(
+      `INSERT INTO retail_shipments (order_id, mode, label, created_at, updated_at)
+       VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    ).run(id, mode, label);
+    const newId = r.lastInsertRowid;
+    const reassign = tdb().prepare('UPDATE retail_order_items SET shipment_id = ? WHERE id = ? AND order_id = ?');
+    for (const it of items) reassign.run(newId, it.id, id);
+    return newId;
+  });
+  const newShipmentId = tx();
+
+  logActivity(req.user.id, req.user.username, 'shipment_split', 'retail_order', id,
+    { new_shipment_id: newShipmentId, item_ids: itemIds, mode }, req.ip);
+
+  res.json({ success: true, data: { new_shipment_id: newShipmentId } });
 });
 
 // ─── Integrations admin (kd100 + JD LOP + Feie credentials) ────────────
@@ -9894,6 +10065,20 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   }
   params.push(id);
   tdb().prepare(`UPDATE retail_orders SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+
+  // Keep per-shipment state in lockstep with whole-order transitions so the
+  // "mark all dispatched" / "mark all delivered" footer buttons don't leave
+  // individual parcels showing "pending" beside a dispatched order. COALESCE
+  // preserves any earlier per-shipment timestamp (a parcel shipped first).
+  if (status === 'dispatched') {
+    tdb().prepare(
+      "UPDATE retail_shipments SET dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE order_id = ?"
+    ).run(id);
+  } else if (status === 'delivered') {
+    tdb().prepare(
+      "UPDATE retail_shipments SET dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE order_id = ?"
+    ).run(id);
+  }
 
   logActivity(req.user.id, req.user.username, 'status_change', 'retail_order', id, { from: o.status, to: status, reason }, req.ip);
 
