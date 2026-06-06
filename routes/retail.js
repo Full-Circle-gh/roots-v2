@@ -9295,21 +9295,39 @@ function orderDestCity(order) {
   try { return JSON.parse(order.address_json || '{}').city || ''; } catch { return ''; }
 }
 
+// The configured out-of-city printer (e.g. Tianhe/977), or null when unset.
+function outOfCityPrinter(prefs) {
+  if (prefs.out_of_city_store_id == null) return null;
+  const ooc = (prefs.by_store || {})[String(prefs.out_of_city_store_id)];
+  return ooc && ooc.sn ? ooc : null;
+}
+
 // Resolve the printer for a paid order. Rule:
 //   • Outside Guangzhou → always the designated out-of-city store's printer
 //     (the warehouse that ships every out-of-town parcel, e.g. Tianhe/977).
 //   • Inside Guangzhou (or pickup) → the order's own fulfilling store printer.
-// Falls back to per-store routing if the out-of-city store has no printer set.
+// Fallback so a paid order ALWAYS prints somewhere: if the resolved store has
+// no printer configured, fall back to the out-of-city printer, then to the
+// only configured printer if exactly one exists.
 function printerForOrder(order, prefs) {
   const city = orderDestCity(order);
   // Only override when we actually know the destination is a non-GZ city.
   // No city (pickup / missing address) → in-city, route by the order's store.
   const outOfGZ = !!city && !isGuangzhou(city);
-  if (outOfGZ && prefs.out_of_city_store_id != null) {
-    const ooc = (prefs.by_store || {})[String(prefs.out_of_city_store_id)];
-    if (ooc && ooc.sn) return ooc;
+  if (outOfGZ) {
+    const ooc = outOfCityPrinter(prefs);
+    if (ooc) return ooc;
   }
-  return printerForStore(order.store_id, prefs);
+  const own = printerForStore(order.store_id, prefs);
+  if (own && own.sn) return own;
+
+  // Fallback chain — never silently drop a paid order's ticket.
+  const ooc = outOfCityPrinter(prefs);
+  if (ooc) return ooc;
+  const map = prefs.by_store || {};
+  const ids = Object.keys(map).filter(k => map[k] && map[k].sn);
+  if (ids.length === 1) return map[ids[0]];
+  return null;
 }
 
 // Render + print one order to its store's printer. All DB reads are
