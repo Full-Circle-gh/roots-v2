@@ -657,20 +657,24 @@ Component({
               })),
               // Truck rail dots (skip the one the truck sits on).
               dots: POS.map((left, i) => ({ left, show: i !== active, color: i < filled ? bright : rail })),
-              // Truck milestone labels.
+              // Truck milestone labels. Lit-ness keys off `filled` (not `active`)
+              // so an unpaid order (filled 0) lights nothing — `active` is
+              // clamped to 0 and can't distinguish unpaid from Paid.
               tkLabels: TRACK.map((s, i) => ({
                 label:   cn ? s.labelCn : s.labelEn,
-                on:      i <= active,
-                current: i === active,
+                on:      i < filled,
+                current: i === filled - 1,
                 align:   i === 0 ? 'left' : i === 3 ? 'right' : 'center',
               })),
-              // Banner progress segments.
+              // Banner progress segments. Same as above: key lit-ness off
+              // `filled` so an unpaid order shows zero filled segments instead
+              // of falsely lighting "Paid" (active clamps -1 → 0).
               segs: TRACK.map((s, i) => ({
                 label:   cn ? s.labelCn : s.labelEn,
                 icon:    s.icon,
-                done:    i < active,
-                current: i === active,
-                on:      i <= active,
+                done:    i < filled - 1,
+                current: i === filled - 1,
+                on:      i < filled,
               })),
               pct,
               markerIcon: TRACK[active].icon,
