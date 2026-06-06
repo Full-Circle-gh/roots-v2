@@ -4731,21 +4731,38 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
   }
   delete o.refund_lines_json;
   o.tracking = buildTrackingView(o);
-  // Multi-package orders: when a parcel is split across two+ shipments and
-  // more than one has a waybill attached, the single legacy `tracking` (the
-  // primary shipment only) would hide the other tracking numbers from the
-  // customer. Surface a per-shipment `shipments[]` so the order page can show
-  // a tracking card for each parcel, with the items that ride in it.
+  // Split orders (2+ parcels): surface a per-parcel `shipments[]` so the
+  // customer sees how their order is being shipped — each parcel's own status
+  // (not shipped / dispatched / delivered) and the items riding in it. Tracking
+  // detail (carrier + waybill + live events) is layered in only when a waybill
+  // has been attached; a dispatched parcel with no waybill still shows its
+  // status. A single-parcel order falls back to the legacy `o.tracking` card.
   try {
-    const tracked = tdb().prepare(
-      `SELECT * FROM retail_shipments WHERE order_id = ? AND tracking_number IS NOT NULL AND tracking_number != '' ORDER BY id ASC`
+    const parcels = tdb().prepare(
+      `SELECT * FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
     ).all(orderId);
-    if (tracked.length > 1) {
-      o.shipments = tracked.map((s, i) => ({
-        ...buildShipmentTrackingView(s),
-        index: i + 1,
-        total: tracked.length,
-      }));
+    if (parcels.length > 1) {
+      o.shipments = parcels.map((s, i) => {
+        const trk = buildShipmentTrackingView(s);   // null when no waybill yet
+        const state = s.delivered_at ? 'delivered' : (s.dispatched_at ? 'dispatched' : 'pending');
+        return {
+          shipment_id:     s.id,
+          mode:            s.mode,
+          index:           i + 1,
+          total:           parcels.length,
+          state,
+          dispatched_at:   s.dispatched_at,
+          delivered_at:    s.delivered_at,
+          has_tracking:    !!trk,
+          carrier_name_en: trk?.carrier_name_en || null,
+          carrier_name_cn: trk?.carrier_name_cn || null,
+          number:          trk?.number || null,
+          status_label_en: trk?.status_label_en || null,
+          status_label_cn: trk?.status_label_cn || null,
+          synced_at:       trk?.synced_at || null,
+          events:          trk?.events || [],
+        };
+      });
     }
   } catch (e) { /* shipments table is optional — fall back to single tracking */ }
   // Items snapshot historical name + price at order time, but image_url

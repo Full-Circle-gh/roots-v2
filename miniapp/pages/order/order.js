@@ -72,6 +72,8 @@ Page({
       trackingLabel: 'SHIPMENT TRACKING',
       trackingNoEvents: 'Waiting for the first update from the carrier.',
       trackingPending: 'Tracking will appear here shortly.',
+      trackingAwaitingNo: 'Shipped — tracking number coming soon.',
+      trackingNotShipped: 'This parcel hasn\'t shipped yet — it will follow shortly.',
       trackingViewLive: 'View full tracking',
       subtotalLabel: 'Subtotal',
       shippingLabel: 'Shipping',
@@ -189,6 +191,8 @@ Page({
         trackingLabel: '物流跟踪',
         trackingNoEvents: '等待承运商首次更新…',
         trackingPending: '物流信息即将更新。',
+        trackingAwaitingNo: '已发货 — 运单号即将更新。',
+        trackingNotShipped: '此包裹尚未发货 — 稍后寄出。',
         trackingViewLive: '查看完整物流',
         subtotalLabel: '小计',
         shippingLabel: '运费',
@@ -295,11 +299,19 @@ Page({
       // number — not just the primary shipment's.
       const shipments = (data.shipments || []).map(s => {
         const latest = (s.events || [])[0] || null;
+        // Per-parcel status — shown even before a waybill is attached, so a
+        // dispatched-but-untracked parcel still reads as "shipped".
+        const stateLabel = L === 'cn'
+          ? { pending: '尚未发货', dispatched: '已发货', delivered: '已送达' }[s.state]
+          : { pending: 'Not shipped yet', dispatched: 'Shipped', delivered: 'Delivered' }[s.state];
         return {
           shipment_id: s.shipment_id,
           label: L === 'cn'
             ? `包裹 ${s.index} / ${s.total}`
             : `Package ${s.index} of ${s.total}`,
+          state: s.state,
+          state_label: stateLabel,
+          has_tracking: !!s.has_tracking,
           carrier_name: L === 'cn' ? s.carrier_name_cn : s.carrier_name_en,
           number: s.number,
           status_label: L === 'cn' ? s.status_label_cn : s.status_label_en,

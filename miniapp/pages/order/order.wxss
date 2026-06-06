@@ -597,6 +597,14 @@
   border-radius: 999rpx;
   background: #3a6817;
 }
+/* Per-parcel state pill — pending reads muted (nothing shipped yet); shipped
+   and delivered keep the green default. */
+.trk-status-pill.trk-state-pending {
+  background: rgba(122, 122, 110, 0.14);
+  border-color: rgba(122, 122, 110, 0.35);
+  color: var(--olive);
+}
+.trk-status-pill.trk-state-pending .trk-status-dot { background: var(--olive); }
 .trk-events {
   position: relative;
   padding-left: 16rpx;
