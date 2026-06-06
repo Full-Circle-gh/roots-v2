@@ -3694,34 +3694,80 @@
     border-radius: 999px;
   }
   /* ── Top up (tier row) ── */
-  .b-topup { padding: 22px; }
-  .b-topup .tu-head { margin-bottom: 14px; }
-  .b-topup .tu-kicker { font: 700 11px var(--bf-gothic); letter-spacing: .12em; color: var(--b-olive); }
-  .b-topup .tu-title { font: 700 22px var(--bf-bear); line-height: 1.08; margin-top: 4px; }
-  .b-topup .tu-hl { background: var(--b-lime); color: var(--b-ink); padding: 0 5px; border-radius: 3px; }
-  .b-topup .tu-row { display: flex; gap: 9px; }
-  .b-topup .tu-card {
-    flex: 1; min-width: 0; position: relative;
-    border: 2px solid var(--b-ink); border-radius: 11px; padding: 11px 10px 12px;
-  }
-  .b-topup .tu-card--cream { background: #FBF7EF; }
+  /* Top up — A card row · B receipt · C hero+strip */
+  .b-topup { padding: 18px 0; border-top: 1.5px solid rgba(26,26,23,.14); border-bottom: 1.5px solid rgba(26,26,23,.14); }
+  .b-topup .tu-head { padding: 0 18px; }
+  .b-topup .tu-kicker { font: 700 11px var(--bf-gothic); letter-spacing: .18em; color: var(--b-olive); }
+  .b-topup .tu-title { font: 700 23px var(--bf-bear); line-height: 1.04; margin-top: 5px; letter-spacing: -.01em; }
+  .b-topup .tu-hl { background: var(--tu-accent, var(--b-lime)); color: var(--b-ink); padding: 0 6px; border-radius: 3px; }
+  /* shared card paint + content */
+  .b-topup .tu-card--cream { background: #FFFCF7; }
   .b-topup .tu-card--amber { background: var(--b-papaya); }
   .b-topup .tu-card--ink   { background: var(--b-ink); color: #fff; }
-  .b-topup .tu-best {
-    position: absolute; top: -10px; right: 10px; transform: rotate(3deg);
-    font: 700 9px var(--bf-gothic); letter-spacing: .05em;
-    background: var(--b-berry); color: #fff; padding: 4px 9px; border-radius: 5px;
-  }
-  .b-topup .tu-num { font: 700 10px var(--bf-gothic); letter-spacing: .04em; color: var(--b-olive); }
-  .b-topup .tu-card--ink .tu-num { color: var(--b-lime); }
-  .b-topup .tu-amt { font: 400 26px var(--bf-gothic); line-height: 1; margin: 5px 0 8px; }
+  .b-topup .tu-num { font: 700 10px var(--bf-gothic); letter-spacing: .06em; color: var(--b-olive); }
+  .b-topup .tu-card--ink .tu-num, .b-topup .tu-hero .tu-num { color: var(--tu-accent, var(--b-lime)); }
+  .b-topup .tu-amt { font: 700 32px var(--bf-bear); line-height: .86; margin-top: 6px; letter-spacing: -.02em; }
   .b-topup .tu-pts {
-    display: inline-block; font: 700 11px var(--bf-gothic); letter-spacing: .04em;
-    background: var(--b-ink); color: var(--b-lime); padding: 4px 9px; border-radius: 5px;
+    display: inline-block; font: 700 12px var(--bf-gothic); letter-spacing: .04em;
+    background: var(--b-ink); color: var(--tu-accent, var(--b-lime)); padding: 4px 9px; border-radius: 4px;
   }
-  .b-topup .tu-card--ink .tu-pts { background: var(--b-lime); color: var(--b-ink); }
-  .b-topup .tu-foot { font: 700 9px var(--bf-gothic); letter-spacing: .02em; color: var(--b-olive); margin-top: 8px; }
-  .b-topup .tu-card--ink .tu-foot { color: rgba(255,255,255,.6); }
+  .b-topup .tu-card--ink .tu-pts, .b-topup .tu-hero .tu-pts { background: var(--tu-accent, var(--b-lime)); color: var(--b-ink); }
+  .b-topup .tu-meta { font: 400 9px var(--bf-toni); letter-spacing: .02em; color: var(--b-olive); white-space: nowrap; }
+  .b-topup .tu-card--ink .tu-meta, .b-topup .tu-hero .tu-meta { color: rgba(255,255,255,.62); }
+  .b-topup .tu-best {
+    position: absolute; top: -9px; right: -5px; transform: rotate(6deg);
+    font: 700 10px var(--bf-gothic); letter-spacing: .04em;
+    background: var(--b-berry); color: #fff; padding: 4px 9px;
+    border: 1.5px solid var(--b-ink); box-shadow: 2px 2px 0 var(--b-ink); white-space: nowrap; z-index: 2;
+  }
+  /* link-out row (A + B) */
+  .b-topup .tu-linkout { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px 0; }
+  .b-topup .tu-sub { font: 400 11px var(--bf-toni); color: rgba(26,26,23,.62); }
+  .b-topup .tu-cta {
+    flex: 0 0 auto; font: 700 14px var(--bf-gothic); letter-spacing: .04em;
+    background: var(--b-ink); color: var(--tu-accent, var(--b-lime)); padding: 10px 18px; border-radius: 3px;
+  }
+  /* A · card row */
+  .b-topup .tu-row { display: flex; overflow-x: auto; padding: 19px 18px 9px; }
+  .b-topup .tu-row .tu-card {
+    flex: 0 0 auto; width: 150px; box-sizing: border-box; position: relative; margin-right: 12px;
+    border: 2px solid var(--b-ink); border-radius: 3px; box-shadow: 3px 3px 0 var(--b-ink); padding: 13px 13px 15px;
+  }
+  .b-topup .tu-row .tu-card:last-child { margin-right: 0; }
+  .b-topup .tu-row .tu-pts, .b-topup .tu-row .tu-meta { margin-top: 11px; }
+  /* B · receipt */
+  .b-topup .tu-receipt { margin: 15px 18px 0; border-top: 2px solid var(--b-ink); border-bottom: 2px solid var(--b-ink); }
+  .b-topup .tu-band { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 14px; }
+  .b-topup .tu-band + .tu-band { border-top: 1.5px dashed rgba(26,26,23,.26); }
+  .b-topup .tu-notch { position: absolute; top: 50%; width: 13px; height: 13px; border-radius: 50%; background: var(--tu-bg, var(--b-oat)); transform: translateY(-50%); }
+  .b-topup .tu-notch--l { left: -6px; }
+  .b-topup .tu-notch--r { right: -6px; }
+  .b-topup .tu-band-l { display: flex; flex-direction: column; }
+  .b-topup .tu-band .tu-amt { font-size: 29px; margin-top: 3px; line-height: .9; }
+  .b-topup .tu-band-r { position: relative; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .b-topup .tu-best--band { top: -23px; right: -2px; }
+  /* C · hero + strip */
+  .b-topup .tu-hero {
+    position: relative; margin: 15px 18px 0; background: var(--b-ink); color: #fff;
+    border: 2px solid var(--b-ink); box-shadow: 4px 4px 0 var(--b-ink); border-radius: 3px; padding: 15px 16px 16px;
+  }
+  .b-topup .tu-best--hero { top: -9px; right: 14px; }
+  .b-topup .tu-hero-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .b-topup .tu-amt--hero { font-size: 48px; line-height: .82; margin-top: 6px; letter-spacing: -.03em; }
+  .b-topup .tu-hero-r { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; padding-top: 4px; }
+  .b-topup .tu-hero-cta {
+    margin-top: 14px; text-align: center; background: var(--tu-accent, var(--b-lime)); color: var(--b-ink);
+    font: 700 15px var(--bf-gothic); letter-spacing: .04em; padding: 11px 0; border-radius: 3px;
+  }
+  .b-topup .tu-strip { display: flex; overflow-x: auto; padding: 13px 18px 2px; }
+  .b-topup .tu-strip .tu-chipcard {
+    flex: 0 0 auto; width: 112px; box-sizing: border-box; margin-right: 10px;
+    border: 2px solid var(--b-ink); border-radius: 3px; padding: 10px 11px 11px;
+  }
+  .b-topup .tu-strip .tu-chipcard:last-child { margin-right: 0; }
+  .b-topup .tu-amt--sm { font-size: 24px; margin-top: 4px; }
+  .b-topup .tu-pts--sm { font-size: 10px; margin-top: 7px; }
+  .b-topup .tu-meta--sm { margin-top: 6px; }
   /* ── Review card / carousel ── */
   .b-review { padding: 20px 22px; }
   .b-review .kicker {
@@ -7015,6 +7061,7 @@ function makeBlock(type) {
     case 'top_up': {
       return {
         id, type,
+        layout: 'a',  // a card-row · b receipt · c hero+strip
         kicker_en: 'WALLET', kicker_cn: '钱包',
         title_en: 'Top up & get', title_cn: '充值即享',
         title_hl_en: 'bonus perks', title_hl_cn: '更多福利',
@@ -8488,33 +8535,73 @@ function renderBlockBody(b) {
       return d;
     }
     case 'top_up': {
-      d.className = 'b-topup';
+      const layout = b.layout || 'a';
+      d.className = 'b-topup b-topup--' + layout;
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
+      const tuAccent = brandColorVar(b.accent_color) || 'var(--b-lime)';
+      d.style.setProperty('--tu-accent', tuAccent);
+      d.style.setProperty('--tu-bg', brandColorVar(b.bg_color) || 'var(--b-oat)');
       const k = getBi(b, 'kicker');
       const t = getBi(b, 'title');
       const hl = getBi(b, 'title_hl');
       // Editor preview uses sample tiers — real tiers pull from
       // /api/retail/topup-packages live in the mini-app.
       const sample = [
-        { amount: '1000', bonus: '50',  pct: '5',  kind: 'cream' },
-        { amount: '2000', bonus: '150', pct: '8',  kind: 'amber' },
-        { amount: '3000', bonus: '300', pct: '10', kind: 'ink', best: true },
+        { no: 'NO.01', amount: '1,000', value: '1,050', bonus: '50',  pct: '5',  kind: 'cream' },
+        { no: 'NO.02', amount: '2,000', value: '2,150', bonus: '150', pct: '8',  kind: 'amber' },
+        { no: 'NO.03', amount: '3,000', value: '3,300', bonus: '300', pct: '10', kind: 'ink', best: true },
       ];
-      const cards = sample.map((s, i) => `
-        <div class="tu-card tu-card--${s.kind}">
-          ${s.best ? `<div class="tu-best">BEST</div>` : ''}
-          <div class="tu-num">NO.0${i + 1}</div>
-          <div class="tu-amt">¥${s.amount}</div>
-          <div class="tu-pts">+${s.bonus} PTS</div>
-          <div class="tu-foot">${s.pct}% BONUS</div>
-        </div>`).join('');
-      d.innerHTML = `
+      const head = `
         <div class="tu-head">
           ${biLabel(k.en, k.cn) ? `<div class="tu-kicker">${biLabel(k.en, k.cn)}</div>` : ''}
           <div class="tu-title">${biLabel(t.en, t.cn)}${(hl.en || hl.cn) ? ` <span class="tu-hl">${biLabel(hl.en, hl.cn)}</span>` : ''}</div>
-        </div>
-        <div class="tu-row">${cards}</div>`;
+        </div>`;
+      const linkout = `
+        <div class="tu-linkout">
+          <span class="tu-sub">Pick a pack in the wallet</span>
+          <span class="tu-cta">Top up now →</span>
+        </div>`;
+      const meta = s => `${s.pct}% BONUS · ≈¥${s.value} VALUE`;
+      if (layout === 'b') {
+        const bands = sample.map(s => `
+          <div class="tu-band tu-card--${s.kind}">
+            <span class="tu-notch tu-notch--l"></span><span class="tu-notch tu-notch--r"></span>
+            <div class="tu-band-l"><div class="tu-num">${s.no}</div><div class="tu-amt">¥${s.amount}</div></div>
+            <div class="tu-band-r">${s.best ? `<div class="tu-best tu-best--band">BEST VALUE</div>` : ''}<div class="tu-pts">+${s.bonus} PTS</div><div class="tu-meta">${meta(s)}</div></div>
+          </div>`).join('');
+        d.innerHTML = head + `<div class="tu-receipt">${bands}</div>` + linkout;
+      } else if (layout === 'c') {
+        const hero = sample[sample.length - 1];
+        const rest = sample.slice(0, sample.length - 1);
+        const strip = rest.map(s => `
+          <div class="tu-chipcard tu-card--${s.kind}">
+            <div class="tu-num">${s.no}</div>
+            <div class="tu-amt tu-amt--sm">¥${s.amount}</div>
+            <div class="tu-pts tu-pts--sm">+${s.bonus} PTS</div>
+            <div class="tu-meta tu-meta--sm">≈¥${s.value} VALUE</div>
+          </div>`).join('');
+        d.innerHTML = head + `
+          <div class="tu-hero">
+            <div class="tu-best tu-best--hero">BEST VALUE</div>
+            <div class="tu-hero-top">
+              <div class="tu-hero-l"><div class="tu-num">${hero.no}</div><div class="tu-amt tu-amt--hero">¥${hero.amount}</div></div>
+              <div class="tu-hero-r"><div class="tu-pts">+${hero.bonus} PTS</div><div class="tu-meta">${meta(hero)}</div></div>
+            </div>
+            <div class="tu-hero-cta">Top up now →</div>
+          </div>
+          <div class="tu-strip">${strip}</div>`;
+      } else {
+        const cards = sample.map(s => `
+          <div class="tu-card tu-card--${s.kind}">
+            ${s.best ? `<div class="tu-best">BEST VALUE</div>` : ''}
+            <div class="tu-num">${s.no}</div>
+            <div class="tu-amt">¥${s.amount}</div>
+            <div class="tu-pts">+${s.bonus} PTS</div>
+            <div class="tu-meta">${meta(s)}</div>
+          </div>`).join('');
+        d.innerHTML = head + `<div class="tu-row">${cards}</div>` + linkout;
+      }
       return d;
     }
     case 'review_card': {
@@ -11196,8 +11283,17 @@ function buildPointsForm(m, b) {
 }
 
 function buildTopUpForm(m, b) {
+  const secLayout  = inspectorSection(m, b.type, 'layout', T('Style & layout', '样式与版式'), { open: true });
   const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
   const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
+
+  secLayout.appendChild(field(T('Layout', '版式'),
+    T('Card row — swipeable tier cards (browsy). Receipt — stacked bands, all visible at a glance. Hero — one big best-value pack with a strip of the rest.', '卡片行 — 可滑动的梯度卡片(易浏览)。小票 — 堆叠条带,一眼看全。主推 — 一个超值大套餐 + 其余小条带。'),
+    sel(b.layout || 'a', [
+      { value: 'a', label: T('Card row — swipeable cards', '卡片行 — 可滑动卡片') },
+      { value: 'b', label: T('Receipt — stacked bands', '小票 — 堆叠条带') },
+      { value: 'c', label: T('Hero — push one best-value pack', '主推 — 突出一个超值套餐') },
+    ], v => updateBlock(b.id, { layout: v }))));
 
   secContent.appendChild(field(T('Small heading', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
@@ -11218,6 +11314,8 @@ function buildTopUpForm(m, b) {
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
   secColours.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+  secColours.appendChild(field(T('Highlight colour', '高亮颜色'), T('Tints the highlighted word, the +PTS chips and the button. Defaults to lime.', '用于高亮词、+积分标签与按钮。默认青柠色。'),
+    sel(b.accent_color || '', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
 }
 
 function buildVotingForm(m, b) {

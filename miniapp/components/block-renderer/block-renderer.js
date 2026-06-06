@@ -954,21 +954,22 @@ Component({
           // shows just the heading.
           const pkgs = Array.isArray(this.properties.topupPackages) ? this.properties.topupPackages : [];
           const entries = pkgs.map((p, idx) => ({ p, idx }));
-          // Row holds 3 cards. With more packages, show the first two plus the
-          // top (last) tier so BEST VALUE always appears.
-          const pick = entries.length > 3
-            ? [entries[0], entries[1], entries[entries.length - 1]]
+          // Every layout survives 2–4 tiers; if more, keep the first three plus
+          // the top (last) tier so BEST VALUE always lands last.
+          const pick = entries.length > 4
+            ? [entries[0], entries[1], entries[2], entries[entries.length - 1]]
             : entries;
-          const lastIdx = entries.length - 1;
+          const n = pick.length;
           const tiers = pick.map(({ p, idx }, i) => {
             const amount = Number(p.amount || 0);
             const bonus  = Number(p.bonus_points || 0);
             const pct    = amount > 0 ? Math.round((bonus / amount) * 100) : 0;
-            const best   = idx === lastIdx && entries.length > 1;
+            const best   = i === n - 1 && n > 1;
             return {
               id: p.id,
               numLabel: 'NO.' + String(idx + 1).padStart(2, '0'),
               amountDisplay: amount.toLocaleString(),
+              valueDisplay: (amount + bonus).toLocaleString(),
               bonus,
               pct,
               best,
@@ -976,10 +977,14 @@ Component({
             };
           });
           out.topUp = {
+            layout:  b.layout || 'a',                 // a card-row · b receipt · c hero+strip
+            accent:  b.accent_color ? color(b.accent_color) : '#CCD900', // lime-leaf
             kicker:  lang.pick(b.kicker_en, b.kicker_cn, L),
             title:   lang.pick(b.title_en,  b.title_cn,  L),
             titleHl: lang.pick(b.title_hl_en, b.title_hl_cn, L),
             tiers,
+            hero:    tiers[n - 1] || null,            // C: the best-value pack, big
+            rest:    tiers.slice(0, Math.max(0, n - 1)), // C: the supporting strip
             ctaTarget: b.cta_target || 'topup',
           };
           break;

@@ -575,26 +575,95 @@
   <view wx:if="{{points.ctaLabel}}" class="pt-cta" style="background:{{points.btnBg}};color:{{points.btnFg}}" bindtap="onPointsCtaTap">{{points.ctaLabel}}</view>
 </view>
 
-<view wx:elif="{{type === 'top_up' && topUp}}" class="topup-blk" style="background:{{bg}};color:{{fg}}">
+<view wx:elif="{{type === 'top_up' && topUp}}" class="topup-blk topup-blk--{{topUp.layout}}" style="background:{{bg}};color:{{fg}};--tu-accent:{{topUp.accent}};--tu-bg:{{bg}}">
   <view class="tu-head">
     <view wx:if="{{topUp.kicker}}" class="tu-kicker">{{topUp.kicker}}</view>
     <view wx:if="{{topUp.title}}" class="tu-title">{{topUp.title}}<text wx:if="{{topUp.titleHl}}" class="tu-hl"> {{topUp.titleHl}}</text></view>
   </view>
-  <view wx:if="{{topUp.tiers.length}}" class="tu-row">
-    <view
-      wx:for="{{topUp.tiers}}"
-      wx:key="id"
-      class="tu-card tu-card--{{item.kind}}"
-      data-target="{{topUp.ctaTarget}}"
-      bindtap="onTopUpCtaTap"
-    >
-      <view wx:if="{{item.best}}" class="tu-best">{{lang === 'cn' ? '最划算' : 'BEST'}}</view>
-      <view class="tu-num">{{item.numLabel}}</view>
-      <view class="tu-amt">¥{{item.amountDisplay}}</view>
-      <view class="tu-pts">+{{item.bonus}} PTS</view>
-      <view class="tu-foot">{{item.pct}}% {{lang === 'cn' ? '赠送' : 'BONUS'}}</view>
+
+  <!-- B · Receipt list — full-bleed stacked bands, perforated dividers -->
+  <block wx:if="{{topUp.layout === 'b'}}">
+    <view wx:if="{{topUp.tiers.length}}" class="tu-receipt">
+      <view
+        wx:for="{{topUp.tiers}}"
+        wx:key="id"
+        class="tu-band tu-card--{{item.kind}}"
+        data-target="{{topUp.ctaTarget}}"
+        bindtap="onTopUpCtaTap"
+      >
+        <view class="tu-notch tu-notch--l"></view>
+        <view class="tu-notch tu-notch--r"></view>
+        <view class="tu-band-l">
+          <view class="tu-num">{{item.numLabel}}</view>
+          <view class="tu-amt">¥{{item.amountDisplay}}</view>
+        </view>
+        <view class="tu-band-r">
+          <view wx:if="{{item.best}}" class="tu-best tu-best--band">{{lang === 'cn' ? '超值首选' : 'BEST VALUE'}}</view>
+          <view class="tu-pts">+{{item.bonus}} {{lang === 'cn' ? '积分' : 'PTS'}}</view>
+          <view class="tu-meta">{{item.pct}}% {{lang === 'cn' ? '加赠' : 'BONUS'}} · ≈¥{{item.valueDisplay}} {{lang === 'cn' ? '价值' : 'VALUE'}}</view>
+        </view>
+      </view>
     </view>
-  </view>
+    <view class="tu-linkout" data-target="{{topUp.ctaTarget}}" bindtap="onTopUpCtaTap">
+      <text class="tu-sub">{{lang === 'cn' ? '在钱包中选择套餐' : 'Pick a pack in the wallet'}}</text>
+      <view class="tu-cta">{{lang === 'cn' ? '立即充值' : 'Top up now'}} →</view>
+    </view>
+  </block>
+
+  <!-- C · Hero tier + strip — push one best-value pack big -->
+  <block wx:elif="{{topUp.layout === 'c'}}">
+    <view wx:if="{{topUp.hero}}" class="tu-hero" data-target="{{topUp.ctaTarget}}" bindtap="onTopUpCtaTap">
+      <view class="tu-best tu-best--hero">{{lang === 'cn' ? '超值首选' : 'BEST VALUE'}}</view>
+      <view class="tu-hero-top">
+        <view class="tu-hero-l">
+          <view class="tu-num">{{topUp.hero.numLabel}}</view>
+          <view class="tu-amt tu-amt--hero">¥{{topUp.hero.amountDisplay}}</view>
+        </view>
+        <view class="tu-hero-r">
+          <view class="tu-pts">+{{topUp.hero.bonus}} {{lang === 'cn' ? '积分' : 'PTS'}}</view>
+          <view class="tu-meta">{{topUp.hero.pct}}% {{lang === 'cn' ? '加赠' : 'BONUS'}} · ≈¥{{topUp.hero.valueDisplay}} {{lang === 'cn' ? '价值' : 'VALUE'}}</view>
+        </view>
+      </view>
+      <view class="tu-hero-cta">{{lang === 'cn' ? '立即充值' : 'Top up now'}} →</view>
+    </view>
+    <scroll-view wx:if="{{topUp.rest.length}}" class="tu-strip" scroll-x enable-flex>
+      <view
+        wx:for="{{topUp.rest}}"
+        wx:key="id"
+        class="tu-chipcard tu-card--{{item.kind}}"
+        data-target="{{topUp.ctaTarget}}"
+        bindtap="onTopUpCtaTap"
+      >
+        <view class="tu-num">{{item.numLabel}}</view>
+        <view class="tu-amt tu-amt--sm">¥{{item.amountDisplay}}</view>
+        <view class="tu-pts tu-pts--sm">+{{item.bonus}} {{lang === 'cn' ? '积分' : 'PTS'}}</view>
+        <view class="tu-meta tu-meta--sm">≈¥{{item.valueDisplay}} {{lang === 'cn' ? '价值' : 'VALUE'}}</view>
+      </view>
+    </scroll-view>
+  </block>
+
+  <!-- A · Card row (default) — swipeable tier cards -->
+  <block wx:else>
+    <scroll-view wx:if="{{topUp.tiers.length}}" class="tu-row" scroll-x enable-flex>
+      <view
+        wx:for="{{topUp.tiers}}"
+        wx:key="id"
+        class="tu-card tu-card--{{item.kind}}"
+        data-target="{{topUp.ctaTarget}}"
+        bindtap="onTopUpCtaTap"
+      >
+        <view wx:if="{{item.best}}" class="tu-best">{{lang === 'cn' ? '超值首选' : 'BEST VALUE'}}</view>
+        <view class="tu-num">{{item.numLabel}}</view>
+        <view class="tu-amt">¥{{item.amountDisplay}}</view>
+        <view class="tu-pts">+{{item.bonus}} {{lang === 'cn' ? '积分' : 'PTS'}}</view>
+        <view class="tu-meta">{{item.pct}}% {{lang === 'cn' ? '加赠' : 'BONUS'}} · ≈¥{{item.valueDisplay}} {{lang === 'cn' ? '价值' : 'VALUE'}}</view>
+      </view>
+    </scroll-view>
+    <view class="tu-linkout" data-target="{{topUp.ctaTarget}}" bindtap="onTopUpCtaTap">
+      <text class="tu-sub">{{lang === 'cn' ? '在钱包中选择套餐' : 'Pick a pack in the wallet'}}</text>
+      <view class="tu-cta">{{lang === 'cn' ? '立即充值' : 'Top up now'}} →</view>
+    </view>
+  </block>
 </view>
 
 <view wx:elif="{{type === 'review_card' && reviews.length}}" class="review-blk review-{{reviewView}}" style="background:{{bg}};color:{{fg}};{{rvVars}}">
