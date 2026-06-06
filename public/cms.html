@@ -3693,6 +3693,35 @@
     background: rgba(255, 255, 255, .92); color: var(--b-ink);
     border-radius: 999px;
   }
+  /* ── Top up (tier row) ── */
+  .b-topup { padding: 22px; }
+  .b-topup .tu-head { margin-bottom: 14px; }
+  .b-topup .tu-kicker { font: 700 11px var(--bf-gothic); letter-spacing: .12em; color: var(--b-olive); }
+  .b-topup .tu-title { font: 700 22px var(--bf-bear); line-height: 1.08; margin-top: 4px; }
+  .b-topup .tu-hl { background: var(--b-lime); color: var(--b-ink); padding: 0 5px; border-radius: 3px; }
+  .b-topup .tu-row { display: flex; gap: 9px; }
+  .b-topup .tu-card {
+    flex: 1; min-width: 0; position: relative;
+    border: 2px solid var(--b-ink); border-radius: 11px; padding: 11px 10px 12px;
+  }
+  .b-topup .tu-card--cream { background: #FBF7EF; }
+  .b-topup .tu-card--amber { background: var(--b-papaya); }
+  .b-topup .tu-card--ink   { background: var(--b-ink); color: #fff; }
+  .b-topup .tu-best {
+    position: absolute; top: -10px; right: 10px; transform: rotate(3deg);
+    font: 700 9px var(--bf-gothic); letter-spacing: .05em;
+    background: var(--b-berry); color: #fff; padding: 4px 9px; border-radius: 5px;
+  }
+  .b-topup .tu-num { font: 700 10px var(--bf-gothic); letter-spacing: .04em; color: var(--b-olive); }
+  .b-topup .tu-card--ink .tu-num { color: var(--b-lime); }
+  .b-topup .tu-amt { font: 400 26px var(--bf-gothic); line-height: 1; margin: 5px 0 8px; }
+  .b-topup .tu-pts {
+    display: inline-block; font: 700 11px var(--bf-gothic); letter-spacing: .04em;
+    background: var(--b-ink); color: var(--b-lime); padding: 4px 9px; border-radius: 5px;
+  }
+  .b-topup .tu-card--ink .tu-pts { background: var(--b-lime); color: var(--b-ink); }
+  .b-topup .tu-foot { font: 700 9px var(--bf-gothic); letter-spacing: .02em; color: var(--b-olive); margin-top: 8px; }
+  .b-topup .tu-card--ink .tu-foot { color: rgba(255,255,255,.6); }
   /* ── Review card / carousel ── */
   .b-review { padding: 20px 22px; }
   .b-review .kicker {
@@ -6987,11 +7016,9 @@ function makeBlock(type) {
       return {
         id, type,
         kicker_en: 'WALLET', kicker_cn: '钱包',
-        title_en: 'Top up & get a bonus', title_cn: '充值即送赠金',
-        subtitle_en: 'Add balance now, spend it at checkout',
-        subtitle_cn: '立即充值,结账时可用',
-        bg_color: 'forest-kale', fg_color: 'lime-leaf',
-        cta_label_en: 'TOP UP', cta_label_cn: '去充值',
+        title_en: 'Top up & get', title_cn: '充值即享',
+        title_hl_en: 'bonus perks', title_hl_cn: '更多福利',
+        bg_color: 'oat-milk', fg_color: 'ink',
         cta_target: 'topup',
       };
     }
@@ -8461,23 +8488,33 @@ function renderBlockBody(b) {
       return d;
     }
     case 'top_up': {
-      d.className = 'b-points';
-      d.style.background = brandColorVar(b.bg_color) || 'var(--b-forest)';
-      d.style.color = brandColorVar(b.fg_color) || 'var(--b-lime)';
+      d.className = 'b-topup';
+      d.style.background = brandColorVar(b.bg_color) || 'var(--b-oat)';
+      d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
       const k = getBi(b, 'kicker');
       const t = getBi(b, 'title');
-      const sub = pickLang(b.subtitle_en, b.subtitle_cn);
-      const cta = pickLang(b.cta_label_en, b.cta_label_cn);
+      const hl = getBi(b, 'title_hl');
+      // Editor preview uses sample tiers — real tiers pull from
+      // /api/retail/topup-packages live in the mini-app.
+      const sample = [
+        { amount: '1000', bonus: '50',  pct: '5',  kind: 'cream' },
+        { amount: '2000', bonus: '150', pct: '8',  kind: 'amber' },
+        { amount: '3000', bonus: '300', pct: '10', kind: 'ink', best: true },
+      ];
+      const cards = sample.map((s, i) => `
+        <div class="tu-card tu-card--${s.kind}">
+          ${s.best ? `<div class="tu-best">BEST</div>` : ''}
+          <div class="tu-num">NO.0${i + 1}</div>
+          <div class="tu-amt">¥${s.amount}</div>
+          <div class="tu-pts">+${s.bonus} PTS</div>
+          <div class="tu-foot">${s.pct}% BONUS</div>
+        </div>`).join('');
       d.innerHTML = `
-        <div class="pt-star">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px"><path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2H6"/><circle cx="16.5" cy="13.5" r="1.25" fill="currentColor" stroke="none"/></svg>
+        <div class="tu-head">
+          ${biLabel(k.en, k.cn) ? `<div class="tu-kicker">${biLabel(k.en, k.cn)}</div>` : ''}
+          <div class="tu-title">${biLabel(t.en, t.cn)}${(hl.en || hl.cn) ? ` <span class="tu-hl">${biLabel(hl.en, hl.cn)}</span>` : ''}</div>
         </div>
-        <div class="pt-body">
-          <div class="pt-kicker">${biLabel(k.en, k.cn)}</div>
-          <div class="pt-ttl">${biLabel(t.en, t.cn)}</div>
-          ${sub ? `<div class="pt-sub">${escapeHtml(sub)}</div>` : ''}
-        </div>
-        ${cta ? `<div class="pt-cta"${btnPreviewStyle(b.btn_color)}>${escapeHtml(cta)}</div>` : ''}`;
+        <div class="tu-row">${cards}</div>`;
       return d;
     }
     case 'review_card': {
@@ -11164,21 +11201,23 @@ function buildTopUpForm(m, b) {
 
   secContent.appendChild(field(T('Small heading', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  secContent.appendChild(field(T('Title', '标题'), T('The main line — e.g. the top-up offer or bonus.', '主要的一行 — 例如充值优惠或赠金。'),
+  secContent.appendChild(field(T('Title', '标题'), T('The main line above the tiers — e.g. "Top up & get".', '梯度上方的主标题 — 例如「充值即享」。'),
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  secContent.appendChild(field(T('Subtitle', '副标题'), T('Optional — e.g. how the wallet balance can be used.', '可选 — 例如钱包余额如何使用。'),
-    txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
-  secContent.appendChild(field(T('Button text', '按钮文字'), '',
-    txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-  secContent.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. topup · wallet', '按钮跳转到哪里。例如 topup · wallet'),
+  secContent.appendChild(field(T('Highlighted word', '高亮词'), T('Optional — shown with a lime highlight at the end of the title. e.g. "bonus perks".', '可选 — 标题末尾的青柠高亮词。例如「更多福利」。'),
+    txtPair(b.title_hl_en, b.title_hl_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_hl_en: en, title_hl_cn: cn }))));
+  secContent.appendChild(field(T('Tap target', '点击跳转'), T('Where a tier card goes. Defaults to the Top-up page so the customer can pay.', '点击梯度卡片跳转到哪里。默认充值页,顾客可直接付款。'),
     txt(b.cta_target, v => updateBlockSilent(b.id, { cta_target: v }), 'topup')));
+
+  const note = document.createElement('div');
+  note.className = 'helper';
+  note.innerHTML = B('<b>Tiers are live</b> — the ¥ amounts, bonus points and BEST tag come from your real top-up packages (Mini App Backend → Top-up). Edit them there; this block always shows the current ones. Signed-out visitors see just the heading.',
+    '<b>梯度为实时数据</b> — ¥ 金额、赠送积分与 BEST 标签均来自你真实的充值套餐(小程序后台 → 充值)。在那里修改即可;本模块始终显示最新套餐。未登录访客仅显示标题。');
+  secContent.appendChild(note);
 
   secColours.appendChild(field(T('Background colour', '背景颜色'), '',
     sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
   secColours.appendChild(field(T('Text colour', '文字颜色'), '',
     sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-  secColours.appendChild(field(T('Button colour', '按钮颜色'), T('The colour of the button. The text colour is chosen for you so it stays easy to read.', '按钮的颜色。文字颜色会自动选择,保证清晰易读。'),
-    sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
 }
 
 function buildVotingForm(m, b) {

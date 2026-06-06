@@ -186,6 +186,10 @@ Component({
     // How many of the customer's orders are still in flight. When >1 the
     // order_tracker surfaces a "N orders in progress →" link to the full list.
     activeOrderCount: { type: Number, value: 0 },
+    // Live top-up packages (amount / bonus_points / title), fetched once by
+    // the host page from /api/retail/topup-packages when the layout has a
+    // top_up block. Auth-gated, so empty for signed-out visitors.
+    topupPackages: { type: Array, value: [] },
   },
 
   data: {
@@ -252,7 +256,7 @@ Component({
   },
 
   observers: {
-    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards, newArrivals, activeOrder, activeOrderCount, notifUnread, notifNoOrderUnread, notifIsFresh, notifNoOrderFresh, notifHasBroadcast': function () {
+    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards, newArrivals, activeOrder, activeOrderCount, topupPackages, notifUnread, notifNoOrderUnread, notifIsFresh, notifNoOrderFresh, notifHasBroadcast': function () {
       this.recompute();
     },
   },
@@ -942,16 +946,41 @@ Component({
           break;
         }
         case 'top_up': {
-          out.bg = color(b.bg_color || 'forest-kale');
-          out.fg = color(b.fg_color || 'lime-leaf');
+          out.bg = color(b.bg_color || 'oat-milk');
+          out.fg = color(b.fg_color || 'ink');
+          // Tiers are live: pulled once by the host page from
+          // /api/retail/topup-packages and threaded in via `topupPackages`.
+          // Auth-gated, so signed-out visitors get an empty array → the WXML
+          // shows just the heading.
+          const pkgs = Array.isArray(this.properties.topupPackages) ? this.properties.topupPackages : [];
+          const entries = pkgs.map((p, idx) => ({ p, idx }));
+          // Row holds 3 cards. With more packages, show the first two plus the
+          // top (last) tier so BEST VALUE always appears.
+          const pick = entries.length > 3
+            ? [entries[0], entries[1], entries[entries.length - 1]]
+            : entries;
+          const lastIdx = entries.length - 1;
+          const tiers = pick.map(({ p, idx }, i) => {
+            const amount = Number(p.amount || 0);
+            const bonus  = Number(p.bonus_points || 0);
+            const pct    = amount > 0 ? Math.round((bonus / amount) * 100) : 0;
+            const best   = idx === lastIdx && entries.length > 1;
+            return {
+              id: p.id,
+              numLabel: 'NO.' + String(idx + 1).padStart(2, '0'),
+              amountDisplay: amount.toLocaleString(),
+              bonus,
+              pct,
+              best,
+              kind: best ? 'ink' : (['cream', 'amber'][i % 2]),
+            };
+          });
           out.topUp = {
-            kicker:   lang.pick(b.kicker_en, b.kicker_cn, L),
-            title:    lang.pick(b.title_en,  b.title_cn,  L),
-            subtitle: lang.pick(b.subtitle_en, b.subtitle_cn, L),
-            ctaLabel: lang.pick(b.cta_label_en, b.cta_label_cn, L),
+            kicker:  lang.pick(b.kicker_en, b.kicker_cn, L),
+            title:   lang.pick(b.title_en,  b.title_cn,  L),
+            titleHl: lang.pick(b.title_hl_en, b.title_hl_cn, L),
+            tiers,
             ctaTarget: b.cta_target || 'topup',
-            btnBg: color(b.btn_color || ''),
-            btnFg: b.btn_color ? btnText(b.btn_color) : '',
           };
           break;
         }
@@ -1882,8 +1911,9 @@ Component({
       const target = this.data.points?.ctaTarget || 'me';
       this.triggerEvent('cta', { target });
     },
-    onTopUpCtaTap() {
-      const target = this.data.topUp?.ctaTarget || 'topup';
+    onTopUpCtaTap(e) {
+      const target = (e && e.currentTarget && e.currentTarget.dataset.target)
+        || this.data.topUp?.ctaTarget || 'topup';
       this.triggerEvent('cta', { target });
     },
     onStoreCtaTap(e) {

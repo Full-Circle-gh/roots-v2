@@ -31,6 +31,9 @@ Page({
     activeOrder: null,
     affiliate: null,
     polls: [],
+    // Live top-up packages — feeds the top_up block's tier row. Auth-gated,
+    // so only fetched when the layout has a top_up block and the user is authed.
+    topupPackages: [],
     customer: null,   // { nickname, points_balance, ... } — feeds greeting block
     favorites: [],    // customer's saved products — feeds favorites_block
     // Unread notification count — surfaced as a small badge inside the
@@ -265,6 +268,8 @@ Page({
       // New-arrivals grids + the order tracker fetch on demand too.
       this._fetchNewArrivalsFor(layout);
       this._fetchActiveOrderFor(layout);
+      // Live top-up tiers for any top_up block.
+      this._fetchTopupPackagesFor(layout);
     } catch (e) {
       console.warn('[home] refresh failed:', e.message);
       this.setData({ loading: false });
@@ -324,6 +329,24 @@ Page({
       }
     }));
     this.setData({ leaderboards: next });
+  },
+
+  // Fetch the live top-up packages once if the layout contains a top_up
+  // block. Auth-gated endpoint, so anonymous viewers keep the empty array
+  // (the block then shows just its heading). Setting topupPackages triggers
+  // the block-renderer observer so the tier row fills in place.
+  async _fetchTopupPackagesFor(layout) {
+    const hasTopUp = (layout || []).some(b => b.type === 'top_up');
+    if (!hasTopUp) return;
+    if (!app?.globalData?.token) return;       // anonymous → heading only
+    if (this.data.topupPackages && this.data.topupPackages.length) return;
+    try {
+      const res = await api.get('/api/retail/topup-packages');
+      const rows = Array.isArray(res) ? res : (res?.data || []);
+      this.setData({ topupPackages: rows });
+    } catch {
+      /* leave empty — block falls back to heading only */
+    }
   },
 
   // Walk the layout for product_grid blocks sourcing from 'new_arrivals',

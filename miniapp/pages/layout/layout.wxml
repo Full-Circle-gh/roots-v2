@@ -24,6 +24,7 @@
     active-order="{{activeOrder}}"
     active-order-count="{{activeOrderCount}}"
     polls="{{polls}}"
+    topup-packages="{{topupPackages}}"
     customer="{{customer}}"
     bind:cta="onCta"
     bind:category="onCategory"

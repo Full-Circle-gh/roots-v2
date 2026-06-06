@@ -575,16 +575,26 @@
   <view wx:if="{{points.ctaLabel}}" class="pt-cta" style="background:{{points.btnBg}};color:{{points.btnFg}}" bindtap="onPointsCtaTap">{{points.ctaLabel}}</view>
 </view>
 
-<view wx:elif="{{type === 'top_up' && topUp}}" class="points-blk" style="background:{{bg}};color:{{fg}}">
-  <view class="pt-star">
-    <view class="pt-star-glyph">¥</view>
+<view wx:elif="{{type === 'top_up' && topUp}}" class="topup-blk" style="background:{{bg}};color:{{fg}}">
+  <view class="tu-head">
+    <view wx:if="{{topUp.kicker}}" class="tu-kicker">{{topUp.kicker}}</view>
+    <view wx:if="{{topUp.title}}" class="tu-title">{{topUp.title}}<text wx:if="{{topUp.titleHl}}" class="tu-hl"> {{topUp.titleHl}}</text></view>
   </view>
-  <view class="pt-body">
-    <view wx:if="{{topUp.kicker}}" class="pt-kicker">{{topUp.kicker}}</view>
-    <view wx:if="{{topUp.title}}" class="pt-title">{{topUp.title}}</view>
-    <view wx:if="{{topUp.subtitle}}" class="pt-sub">{{topUp.subtitle}}</view>
+  <view wx:if="{{topUp.tiers.length}}" class="tu-row">
+    <view
+      wx:for="{{topUp.tiers}}"
+      wx:key="id"
+      class="tu-card tu-card--{{item.kind}}"
+      data-target="{{topUp.ctaTarget}}"
+      bindtap="onTopUpCtaTap"
+    >
+      <view wx:if="{{item.best}}" class="tu-best">{{lang === 'cn' ? '最划算' : 'BEST'}}</view>
+      <view class="tu-num">{{item.numLabel}}</view>
+      <view class="tu-amt">¥{{item.amountDisplay}}</view>
+      <view class="tu-pts">+{{item.bonus}} PTS</view>
+      <view class="tu-foot">{{item.pct}}% {{lang === 'cn' ? '赠送' : 'BONUS'}}</view>
+    </view>
   </view>
-  <view wx:if="{{topUp.ctaLabel}}" class="pt-cta" style="background:{{topUp.btnBg}};color:{{topUp.btnFg}}" bindtap="onTopUpCtaTap">{{topUp.ctaLabel}}</view>
 </view>
 
 <view wx:elif="{{type === 'review_card' && reviews.length}}" class="review-blk review-{{reviewView}}" style="background:{{bg}};color:{{fg}};{{rvVars}}">

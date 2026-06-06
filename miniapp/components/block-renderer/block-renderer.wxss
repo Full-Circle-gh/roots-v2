@@ -1633,6 +1633,92 @@
   border-radius: 999rpx;
 }
 
+/* ── Top up (tier row) ────────────────────────────────────────────────── */
+.topup-blk { padding: 40rpx 36rpx; }
+.tu-head { margin-bottom: 26rpx; }
+.tu-kicker {
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  color: var(--olive);
+}
+.tu-title {
+  font-family: var(--f-bear);
+  font-weight: 700;
+  font-size: calc(40rpx * var(--font-scale));
+  line-height: 1.08;
+  margin-top: 8rpx;
+}
+.tu-hl {
+  background: var(--lime);
+  color: var(--ink);
+  padding: 0 10rpx;
+  border-radius: 6rpx;
+}
+.tu-row { display: flex; gap: 16rpx; }
+.tu-card {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  border: 3rpx solid var(--ink);
+  border-radius: 20rpx;
+  padding: 20rpx 18rpx 22rpx;
+}
+.tu-card--cream { background: #FBF7EF; }
+.tu-card--amber { background: var(--papaya); }
+.tu-card--ink   { background: var(--ink); color: #fff; }
+.tu-best {
+  position: absolute;
+  top: -18rpx;
+  right: 16rpx;
+  transform: rotate(3deg);
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.05em;
+  background: var(--berry);
+  color: #fff;
+  padding: 7rpx 16rpx;
+  border-radius: 8rpx;
+}
+.tu-num {
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(19rpx * var(--font-scale));
+  letter-spacing: 0.04em;
+  color: var(--olive);
+}
+.tu-card--ink .tu-num { color: var(--lime); }
+.tu-amt {
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(52rpx * var(--font-scale));
+  line-height: 1;
+  margin: 10rpx 0 16rpx;
+}
+.tu-pts {
+  display: inline-block;
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.04em;
+  background: var(--ink);
+  color: var(--lime);
+  padding: 7rpx 16rpx;
+  border-radius: 8rpx;
+}
+.tu-card--ink .tu-pts { background: var(--lime); color: var(--ink); }
+.tu-foot {
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(17rpx * var(--font-scale));
+  letter-spacing: 0.02em;
+  color: var(--olive);
+  margin-top: 16rpx;
+}
+.tu-card--ink .tu-foot { color: rgba(255, 255, 255, 0.6); }
+
 /* ── Review card / carousel ───────────────────────────────────────────── */
 .review-blk {
   /* Always paints a bg (defaults to oat-milk = page colour, so it's normally

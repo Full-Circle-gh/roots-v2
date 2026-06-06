@@ -32,6 +32,7 @@
     active-order-count="{{activeOrderCount}}"
     affiliate="{{affiliate}}"
     polls="{{polls}}"
+    topup-packages="{{topupPackages}}"
     customer="{{customer}}"
     favorites="{{favorites}}"
     notif-unread="{{notifUnread}}"

@@ -24,6 +24,7 @@ Page({
     activeOrder: null,
     activeOrderCount: 0,
     polls: [],
+    topupPackages: [],
     customer: null,
     lang: 'en',
     loading: true,
@@ -81,6 +82,7 @@ Page({
       this._fetchLeaderboardsFor(layout);
       this._fetchNewArrivalsFor(layout);
       this._fetchActiveOrderFor(layout);
+      this._fetchTopupPackagesFor(layout);
     } catch (e) {
       console.warn('[layout:' + this.data.page + '] refresh failed:', e.message);
       this.setData({ loading: false });
@@ -137,6 +139,22 @@ Page({
       }
     }));
     this.setData({ leaderboards: next });
+  },
+
+  // Live top-up tiers for any top_up block — see home.js for rationale.
+  // Auth-gated, so anonymous viewers keep the empty array (heading only).
+  async _fetchTopupPackagesFor(layout) {
+    const hasTopUp = (layout || []).some(b => b.type === 'top_up');
+    if (!hasTopUp) return;
+    if (!getApp()?.globalData?.token) return;
+    if (this.data.topupPackages && this.data.topupPackages.length) return;
+    try {
+      const res = await api.get('/api/retail/topup-packages');
+      const rows = Array.isArray(res) ? res : (res?.data || []);
+      this.setData({ topupPackages: rows });
+    } catch {
+      /* leave empty — block falls back to heading only */
+    }
   },
 
   // Newest products per distinct limit — see home.js for rationale.
