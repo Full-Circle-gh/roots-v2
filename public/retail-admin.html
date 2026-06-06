@@ -13713,6 +13713,9 @@ let _OPEN_ORDER = null;
 // customer's id so the order drawer can offer a "back to customer" button.
 // Null when the order was opened any other way (orders list, etc).
 let _ORDER_BACK_CUSTOMER = null;
+// Scroll position of the customer drawer body at the moment we jumped to the
+// order, so "← Back to customer" lands on the exact same Recent-orders row.
+let _ORDER_BACK_CUSTOMER_SCROLL = 0;
 
 function sortOrderItems(items, mode) {
   const arr = [...items];
@@ -19958,7 +19961,7 @@ function cuPage(d) {
   cuLoad();
 }
 
-async function cuOpenDetail(id) {
+async function cuOpenDetail(id, restore = null) {
   _CDV_OPEN = false;               // View popover starts closed on a fresh open
   const drawer = document.getElementById('cu-drawer');
   const body = document.querySelector('#cu-drawer .drawer-body');
@@ -19996,6 +19999,16 @@ async function cuOpenDetail(id) {
   CU_CURRENT = j.data;
   cuRenderDetail();
   if (switching) requestAnimationFrame(() => body.classList.remove('cu-swapping'));  // fade new in
+  // Returning from an order opened via a Recent-orders row: expand that ledger
+  // (it may be collapsed by default) and restore the prior scroll position so
+  // the operator lands on the exact same row they left from.
+  if (restore && body) {
+    if (restore.openRecent) {
+      const fold = body.querySelector('details.cu-fold');   // first fold = Recent orders
+      if (fold) fold.open = true;
+    }
+    requestAnimationFrame(() => { body.scrollTop = restore.scrollTop || 0; });
+  }
 }
 
 // Jump from a customer's Recent-orders row straight to that order. The
@@ -20004,6 +20017,8 @@ async function cuOpenDetail(id) {
 // the list underneath.
 function cuGotoOrder(id) {
   const backId = CU_CURRENT?.customer?.id || null;
+  const body = document.querySelector('#cu-drawer .drawer-body');
+  _ORDER_BACK_CUSTOMER_SCROLL = body ? body.scrollTop : 0;
   closeDrawer('#cu-drawer');
   openOrder(Number(id));
   // openOrder() clears _ORDER_BACK_CUSTOMER synchronously at its start; set it
@@ -20011,12 +20026,14 @@ function cuGotoOrder(id) {
   _ORDER_BACK_CUSTOMER = backId;
 }
 
-// Return from an order opened via a Recent-orders row back to that customer.
+// Return from an order opened via a Recent-orders row back to that customer,
+// landing on the exact same scroll position (and with Recent orders expanded).
 function cuBackToCustomer() {
   const backId = _ORDER_BACK_CUSTOMER;
   if (!backId) return;
+  const scrollTop = _ORDER_BACK_CUSTOMER_SCROLL;
   closeDrawer('#order-drawer');
-  cuOpenDetail(backId);
+  cuOpenDetail(backId, { scrollTop, openRecent: true });
 }
 
 // Jump from an order's Customer tile straight to that customer's detail.
