@@ -5184,7 +5184,10 @@ router.post('/api/retail/orders/:id/invoice-request', requireRetailAuth, express
 router.get('/api/retail/reviews/pending', requireRetailAuth, (req, res) => {
   const rows = tdb().prepare(
     `SELECT oi.product_id, oi.name_en, oi.name_cn,
-            COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
+            NULLIF(oi.image_url, '') AS oi_image_url,
+            NULLIF(p.image_url, '')  AS p_image_url,
+            (p.image_data IS NOT NULL AND p.image_data != '') AS has_image_data,
+            p.updated_at AS p_updated_at,
             oi.qty,
             o.id AS order_id, o.order_no, o.delivered_at
        FROM retail_order_items oi
@@ -5199,7 +5202,33 @@ router.get('/api/retail/reviews/pending', requireRetailAuth, (req, res) => {
             )
       ORDER BY o.delivered_at DESC, oi.id ASC`
   ).all(req.customer.id);
-  res.json({ success: true, data: rows });
+
+  // NEVER ship inline base64 here. When a product's photo lives in
+  // products.image_data (a multi-MB data: URI), a few pending rows push the
+  // JSON past WeChat's ~1MB setData() cap — setData silently fails, so the
+  // list never renders AND `loading` never clears, leaving the page blank
+  // (no items, no empty-state). Mirror the shop-list fix (GET /api/retail/
+  // products): emit a tiny ABSOLUTE URL to the byte-streaming image endpoint
+  // when only base64 exists. Absolute (not /api/...) so the live mini-app
+  // renders it directly without an absUrl() pass it doesn't have yet.
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const data = rows.map(r => {
+    let image_url = r.oi_image_url || r.p_image_url || '';
+    if (!image_url && r.has_image_data) {
+      image_url = `${baseUrl}/api/retail/products/${r.product_id}/image?v=${encodeURIComponent(r.p_updated_at || '')}`;
+    }
+    return {
+      product_id: r.product_id,
+      name_en: r.name_en,
+      name_cn: r.name_cn,
+      image_url,
+      qty: r.qty,
+      order_id: r.order_id,
+      order_no: r.order_no,
+      delivered_at: r.delivered_at,
+    };
+  });
+  res.json({ success: true, data });
 });
 
 // ─── Vouchers / coupons ──────────────────────────────────────────────────
