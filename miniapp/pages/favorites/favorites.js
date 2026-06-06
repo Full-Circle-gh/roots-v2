@@ -7,7 +7,7 @@ const cart = require('../../utils/cart');
 const lang = require('../../utils/lang');
 
 const COPY_EN = {
-  kicker: 'FAVORITES · 收藏夹',
+  kicker: 'FAVORITES',
   title: 'Your saved.',
   itemsWord: 'ITEMS',
   itemWord:  'ITEM',
@@ -23,7 +23,7 @@ const COPY_EN = {
 };
 
 const COPY_CN = {
-  kicker: '收藏夹 · FAVORITES',
+  kicker: '收藏夹',
   title: '我的收藏。',
   itemsWord: '件',
   itemWord:  '件',
@@ -67,7 +67,9 @@ Page({
 
   onShow() {
     const app = getApp();
-    this.setData({ lang: app.globalData.lang || 'en' });
+    const L = app.globalData.lang || 'en';
+    this.setData({ lang: L });
+    wx.setNavigationBarTitle({ title: L === 'cn' ? '收藏夹' : 'Favorites' });
     this.applyLangCopy();
     this.refresh();
   },

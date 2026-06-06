@@ -32,7 +32,7 @@ Page({
     items: [],
     anyUnread: false,
     copy: {
-      kicker: 'NOTIFICATIONS · 通知',
+      kicker: 'NOTIFICATIONS',
       title: 'Your updates.',
       markAll: 'Mark all read',
       emptyTitle: 'No notifications yet.',
@@ -52,7 +52,7 @@ Page({
   applyLangCopy() {
     if (this.data.lang !== 'cn') return;
     this.setData({ copy: {
-      kicker: '通知 · NOTIFICATIONS',
+      kicker: '通知',
       title: '我的消息。',
       markAll: '全部已读',
       emptyTitle: '暂无通知',

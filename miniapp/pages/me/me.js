@@ -11,7 +11,7 @@ const TIER_NAME_EN = { seed: 'Seed', sprout: 'Sprout', root: 'Root', tree: 'Tree
 const TIER_NAME_CN = { seed: '种子', sprout: '幼苗', root: '根', tree: '大树' };
 
 const COPY_EN = {
-  welcomeKicker: 'WELCOME · 欢迎',
+  welcomeKicker: 'WELCOME',
   memberSince: 'MEMBER SINCE',
   memberLvl: 'LVL',
   welcome: 'Hello, you.',
@@ -70,7 +70,7 @@ const COPY_EN = {
 };
 
 const COPY_CN = {
-  welcomeKicker: '欢迎 · WELCOME',
+  welcomeKicker: '欢迎',
   memberSince: '会员自',
   memberLvl: '等级',
   welcome: '你好。',

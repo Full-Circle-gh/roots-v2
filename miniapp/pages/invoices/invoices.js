@@ -11,7 +11,7 @@ Page({
     loading: true,
     invoices: [],
     copy: {
-      kicker: 'INVOICES · 发票',
+      kicker: 'INVOICES',
       title: 'Your invoices.',
       stateIssued: 'Issued',
       stateRequested: 'Processing',
@@ -37,7 +37,7 @@ Page({
   applyLangCopy() {
     if (this.data.lang !== 'cn') return;
     this.setData({ copy: {
-      kicker: '发票 · INVOICES',
+      kicker: '发票',
       title: '我的发票。',
       stateIssued: '已开具',
       stateRequested: '处理中',

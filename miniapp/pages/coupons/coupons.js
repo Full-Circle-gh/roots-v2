@@ -60,10 +60,10 @@ Page({
     all: { active: [], used: [], expired: [] },
     visible: [],
     copy: {
-      kicker: 'COUPONS · 优惠券',
+      kicker: 'COUPONS',
       title: 'Your vouchers.',
       activeWord: 'ACTIVE',
-      redeemPlaceholder: 'Enter a code · 输入优惠码',
+      redeemPlaceholder: 'Enter a code',
       redeem: 'REDEEM',
       redeeming: 'CHECKING…',
       expires: 'EXPIRES',
@@ -94,10 +94,10 @@ Page({
     if (this.data.lang !== 'cn') return;
     this.setData({
       copy: {
-        kicker: '优惠券 · COUPONS',
+        kicker: '优惠券',
         title: '我的优惠券。',
         activeWord: '可用',
-        redeemPlaceholder: '输入优惠码 · Enter a code',
+        redeemPlaceholder: '输入优惠码',
         redeem: '兑换',
         redeeming: '检查中…',
         expires: '有效期至',

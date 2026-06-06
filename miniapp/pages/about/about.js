@@ -91,7 +91,9 @@ Page({
 
   onShow() {
     const app = getApp();
-    this.setData({ lang: app.globalData.lang || 'en' });
+    const L = app.globalData.lang || 'en';
+    this.setData({ lang: L });
+    wx.setNavigationBarTitle({ title: L === 'cn' ? '关于' : 'About' });
     this.refresh();
   },
 

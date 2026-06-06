@@ -71,7 +71,7 @@ Page({
     leaderboardEnabled: false,
     leaderboardLinkLabel: 'View leaderboard',
     copy: {
-      kicker: 'ROOTS CLUB · 会员',
+      kicker: 'ROOTS CLUB',
       title: 'Grow with us.',
       subhead: 'Earn perks on every order. Climb the tree.',
       youAreHere: "YOU'RE HERE",

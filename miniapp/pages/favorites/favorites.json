@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "Favorites · 收藏夹",
+  "navigationBarTitleText": "Favorites",
   "enablePullDownRefresh": true,
   "usingComponents": {
     "cs-button": "/components/cs-button/cs-button",

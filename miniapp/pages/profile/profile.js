@@ -20,7 +20,7 @@ Page({
     showPhone: false,     // toggle on once getPhoneNumber works (needs real AppID)
     lang: 'en',
     copy: {
-      kicker: 'BIND PROFILE · 绑定资料',
+      kicker: 'BIND PROFILE',
       title: 'Hey,\nyou.',
       sub: 'WeChat keeps your nickname, avatar and address private. Tap to pull them in.',
       pickAvatar: 'Pick avatar',
@@ -66,7 +66,7 @@ Page({
     if (this.data.lang !== 'cn') return;
     this.setData({
       copy: {
-        kicker: '绑定资料 · BIND PROFILE',
+        kicker: '绑定资料',
         title: '你好。',
         sub: '微信不会自动告诉我们您的昵称、头像和地址，请点击下方手动绑定。',
         pickAvatar: '选择头像',

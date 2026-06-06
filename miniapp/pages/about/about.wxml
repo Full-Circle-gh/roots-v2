@@ -60,7 +60,7 @@
       <block wx:else>
         What's <text class="hl">in</text>.
         <text class="nl"></text>
-        What's&#160;<text class="strike">out</text>.
+        What's&nbsp;<text class="strike">out</text>.
       </block>
     </view>
 

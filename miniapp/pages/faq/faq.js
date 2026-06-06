@@ -108,13 +108,14 @@ Page({
     csLabelWechat: 'WECHAT',
     csPhone: '',
     csHours: '',
-    csStillStuck: 'STILL STUCK · 仍有疑问',
+    csStillStuck: 'STILL STUCK',
   },
 
   async onLoad() {
     const app = getApp();
     const L = app.globalData.lang || 'en';
     this.setData({ lang: L });
+    wx.setNavigationBarTitle({ title: L === 'cn' ? '帮助' : 'Help' });
     await this.refresh();
   },
 
@@ -177,7 +178,7 @@ Page({
         csPhone: String(cs.phone || '').trim(),
         csHours,
         csLabelWechat,
-        csStillStuck: lang === 'cn' ? '仍有疑问 · STILL STUCK' : 'STILL STUCK · 仍有疑问',
+        csStillStuck: lang === 'cn' ? '仍有疑问' : 'STILL STUCK',
       });
       this.applyFilter();
     } catch (e) {
