@@ -1,7 +1,7 @@
 <view class="page">
   <!-- Header -->
   <view class="header">
-    <view class="kicker f-toni">{{copy.kicker}}<text wx:if="{{lang === 'cn'}}" class="kicker-cn"> · 评价</text></view>
+    <view class="kicker f-toni">{{copy.kicker}}</view>
     <view class="title f-bear">{{copy.title}}</view>
   </view>
 
@@ -19,7 +19,7 @@
 
   <!-- Overall rating -->
   <view class="section">
-    <view class="section-label f-toni">{{copy.overall}}<text wx:if="{{lang === 'cn'}}" class="label-cn"> · 总体</text></view>
+    <view class="section-label f-toni">{{copy.overall}}</view>
     <view class="rating-row">
       <view class="stars">
         <view wx:for="{{[1,2,3,4,5]}}" wx:key="*this"
@@ -32,7 +32,7 @@
 
   <!-- Quick tags -->
   <view class="section">
-    <view class="section-label f-toni">{{copy.tagsLabel}}<text wx:if="{{lang === 'cn'}}" class="label-cn"> · 标签</text></view>
+    <view class="section-label f-toni">{{copy.tagsLabel}}</view>
     <view class="tag-row">
       <view wx:for="{{tags}}" wx:key="id"
             class="tag {{item.on ? 'on' : ''}}"
@@ -47,7 +47,7 @@
   <!-- Tell us more -->
   <view class="section">
     <view class="section-head">
-      <view class="section-label f-toni">{{copy.tellLabel}}<text wx:if="{{lang === 'cn'}}" class="label-cn"> · 说说</text></view>
+      <view class="section-label f-toni">{{copy.tellLabel}}</view>
       <view class="char-count f-toni">{{comment.length}} / 400</view>
     </view>
     <textarea class="comment-input f-aleo" placeholder="{{copy.placeholder}}" maxlength="400" value="{{comment}}" bindinput="onComment"/>
@@ -69,7 +69,7 @@
 <!-- Sticky submit -->
 <view class="submit-bar">
   <view class="submit-meta">
-    <view class="points-sticker f-toni">+10 PTS</view>
+    <view class="points-sticker f-toni">+10 {{lang === 'cn' ? '积分' : 'PTS'}}</view>
     <view class="submit-note f-aleo">{{copy.pointsNote}}</view>
   </view>
   <view class="submit-btn f-gothic {{(!rating || saving) ? 'disabled' : ''}}" bindtap="submit">

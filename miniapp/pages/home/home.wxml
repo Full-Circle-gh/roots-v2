@@ -13,8 +13,8 @@
   </view>
 
   <view wx:elif="{{!layout.length}}" class="empty">
-    <view class="empty-title f-bear">Nothing here yet</view>
-    <view class="empty-sub">Publish a home layout from the Roots admin to get started.</view>
+    <view class="empty-title f-bear">{{lang === 'cn' ? '这里还没有内容' : 'Nothing here yet'}}</view>
+    <view class="empty-sub">{{lang === 'cn' ? '请在 Roots 后台发布首页布局后开始使用。' : 'Publish a home layout from the Roots admin to get started.'}}</view>
   </view>
 
   <block-renderer

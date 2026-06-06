@@ -36,7 +36,7 @@
       data-i="{{index}}"
       bindtap="selectTier"
     >
-      <view wx:if="{{item.best}}" class="tier-best f-gothic">BEST VALUE</view>
+      <view wx:if="{{item.best}}" class="tier-best f-gothic">{{lang === 'cn' ? '最划算' : 'BEST VALUE'}}</view>
 
       <view class="tier-label f-gothic" style="color: {{index === selectedIndex ? accent : 'var(--olive)'}};">
         {{item.numLabel}} · {{item.label}}

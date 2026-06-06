@@ -91,7 +91,7 @@
               class="addr-row" data-id="{{item.id}}" bindtap="selectSaved">
           <view class="dot {{address.id === item.id ? 'on' : ''}}"></view>
           <view class="addr-body">
-            <view class="addr-text"><text class="f-bear">{{item.recipient_name}}</text> · {{item.phone}} <text wx:if="{{item.is_default}}" class="addr-default f-toni">DEFAULT</text></view>
+            <view class="addr-text"><text class="f-bear">{{item.recipient_name}}</text> · {{item.phone}} <text wx:if="{{item.is_default}}" class="addr-default f-toni">{{lang === 'cn' ? '默认' : 'DEFAULT'}}</text></view>
             <view class="addr-text addr-full">{{item.city}}{{item.district ? ' · ' + item.district : ''}}{{item.address ? ' · ' + item.address : ''}}{{item.detail ? ' · ' + item.detail : ''}}</view>
           </view>
         </view>

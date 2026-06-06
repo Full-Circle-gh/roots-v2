@@ -1,7 +1,7 @@
 <view class="page">
   <!-- Header -->
   <view class="head">
-    <view class="kicker f-toni">{{copy.kicker}} <text class="cn f-yuan">· 投票</text></view>
+    <view class="kicker f-toni">{{copy.kicker}}</view>
     <view class="title f-bear">
       <text>{{copy.title1}}</text><text class="title-mark">{{copy.titleVote}}</text><text>{{copy.title2}}</text>
       <text class="title-br">{{copy.title3}}</text>
@@ -22,13 +22,13 @@
         <text class="status-lbl status-lbl-closed f-gothic" wx:else>{{copy.closed}}</text>
       </view>
       <view class="cat-lbl f-toni" wx:if="{{featured.category_en || featured.category_cn}}">
-        <text wx:if="{{featured.category_en}}">{{featured.category_en}}</text>
-        <text wx:if="{{featured.category_cn}}" class="cn f-yuan"> · {{featured.category_cn}}</text>
+        <text wx:if="{{lang === 'cn'}}" class="f-yuan">{{featured.category_cn}}</text>
+        <text wx:else>{{featured.category_en}}</text>
       </view>
     </view>
 
-    <view class="q f-bear">{{featured.question_en}}</view>
-    <view wx:if="{{featured.question_cn}}" class="q-cn f-yuan">{{featured.question_cn}}</view>
+    <view wx:if="{{lang === 'cn'}}" class="q q-cn f-yuan">{{featured.question_cn || featured.question_en}}</view>
+    <view wx:else class="q f-bear">{{featured.question_en}}</view>
     <view wx:if="{{featured.explainer_en || featured.explainer_cn}}" class="explainer f-aleo">
       {{lang === 'cn' && featured.explainer_cn ? featured.explainer_cn : featured.explainer_en}}
     </view>
@@ -44,12 +44,12 @@
         <view class="opt-row">
           <view class="opt-letter f-gothic {{opt.isChosen ? 'on' : ''}}">{{opt.letter}}</view>
           <view class="opt-body">
-            <view class="opt-label f-bear">{{opt.label_en}}</view>
-            <view wx:if="{{opt.label_cn}}" class="opt-cn f-yuan">{{opt.label_cn}}</view>
+            <view wx:if="{{lang === 'cn'}}" class="opt-label opt-cn f-yuan">{{opt.label_cn || opt.label_en}}</view>
+            <view wx:else class="opt-label f-bear">{{opt.label_en}}</view>
           </view>
           <view wx:if="{{featured.showResults}}" class="opt-pct">
             <view class="opt-pct-num f-gothic">{{opt.pctStr}}%</view>
-            <view class="opt-pct-lbl f-toni">{{opt.votesLbl}} VOTES</view>
+            <view class="opt-pct-lbl f-toni">{{opt.votesLbl}} {{lang === 'cn' ? '票' : 'VOTES'}}</view>
           </view>
           <view wx:else class="opt-tick {{opt.isChosen ? 'on' : ''}}">
             <text wx:if="{{opt.isChosen}}" class="opt-check">✓</text>
@@ -66,22 +66,22 @@
         <text wx:if="{{featured.rewardPoints > 0}}"> +{{featured.rewardPoints}} pts.</text>
       </view>
     </view>
-    <view wx:elif="{{featured.isClosed}}" class="closed-note f-toni">{{copy.closed}} · {{copy.votesSoFar ? '' : ''}}</view>
+    <view wx:elif="{{featured.isClosed}}" class="closed-note f-toni">{{copy.closed}}</view>
     <view wx:else class="cta f-gothic {{chosenByPoll[featured.id] ? 'on' : ''}}"
           data-poll-id="{{featured.id}}" bindtap="castVote">
-      <block wx:if="{{chosenByPoll[featured.id]}}">{{copy.castVote}} · +{{featured.rewardPoints}} PTS →</block>
+      <block wx:if="{{chosenByPoll[featured.id]}}">{{copy.castVote}} · +{{featured.rewardPoints}} {{lang === 'cn' ? '积分' : 'PTS'}} →</block>
       <block wx:else>{{copy.pickOne}}</block>
     </view>
 
     <view class="card-foot f-toni">
-      <text>{{featured.totalVotes}} VOTES <text wx:if="{{lang === 'cn'}}" class="cn f-yuan">· 已投</text></text>
+      <text>{{featured.totalVotes}} {{lang === 'cn' ? '票' : 'VOTES'}}</text>
       <text class="share-lnk" bindtap="share">{{copy.share}}</text>
     </view>
   </view>
 
   <!-- Other open polls -->
   <view wx:if="{{otherOpen.length}}" class="section">
-    <view class="sec-head f-toni">{{copy.otherPolls}} <text class="cn f-yuan">· 其他投票</text></view>
+    <view class="sec-head f-toni">{{copy.otherPolls}}</view>
     <view class="sec-list">
       <view wx:for="{{otherOpen}}" wx:key="id" class="op-row {{index === 0 ? 'first' : ''}}"
             data-id="{{item.id}}" bindtap="openOtherPoll">
@@ -91,11 +91,11 @@
         </view>
         <view class="op-body">
           <view class="op-cat f-toni" wx:if="{{item.category_en || item.category_cn}}">
-            <text wx:if="{{item.category_en}}">{{item.category_en}}</text>
-            <text wx:if="{{item.category_cn}}" class="cn f-yuan"> · {{item.category_cn}}</text>
+            <text wx:if="{{lang === 'cn'}}" class="f-yuan">{{item.category_cn}}</text>
+            <text wx:else>{{item.category_en}}</text>
           </view>
-          <view class="op-q f-bear">{{item.question_en}}</view>
-          <view wx:if="{{item.question_cn}}" class="op-q-cn f-yuan">{{item.question_cn}}</view>
+          <view wx:if="{{lang === 'cn'}}" class="op-q op-q-cn f-yuan">{{item.question_cn || item.question_en}}</view>
+          <view wx:else class="op-q f-bear">{{item.question_en}}</view>
         </view>
         <view class="op-arrow f-bear">→</view>
       </view>
@@ -104,13 +104,13 @@
 
   <!-- Past results -->
   <view wx:if="{{closed.length}}" class="section">
-    <view class="sec-head f-toni">{{copy.pastResults}} <text class="cn f-yuan">· 已结束</text></view>
+    <view class="sec-head f-toni">{{copy.pastResults}}</view>
     <view class="sec-list">
       <view wx:for="{{closed}}" wx:key="id" class="pr-row {{index === 0 ? 'first' : ''}}">
         <view class="pr-pill f-gothic">{{copy.closed}}</view>
         <view class="pr-body">
-          <view class="pr-q f-bear">{{item.question_en}}</view>
-          <view wx:if="{{item.question_cn}}" class="pr-q-cn f-yuan">{{item.question_cn}}</view>
+          <view wx:if="{{lang === 'cn'}}" class="pr-q pr-q-cn f-yuan">{{item.question_cn || item.question_en}}</view>
+          <view wx:else class="pr-q f-bear">{{item.question_en}}</view>
           <block wx:for="{{item.options}}" wx:for-item="o" wx:key="id">
             <view wx:if="{{o.isMax}}" class="pr-winner f-aleo">
               {{copy.winnerLbl}}<text class="pr-winner-name f-bear">{{lang === 'cn' && o.label_cn ? o.label_cn : o.label_en}}</text>

@@ -1,6 +1,6 @@
 <view class="page">
   <view class="head">
-    <view class="kicker f-toni">{{lang === 'cn' ? '待评价 · TO REVIEW' : 'TO REVIEW · 待评价'}}</view>
+    <view class="kicker f-toni">{{lang === 'cn' ? '待评价' : 'TO REVIEW'}}</view>
     <view class="title f-bear">{{copy.title}}</view>
     <view class="subtitle f-aleo">{{copy.subtitle}}</view>
   </view>

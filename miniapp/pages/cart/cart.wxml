@@ -10,8 +10,8 @@
   <block wx:if="{{items.length}}">
     <view class="progress-card">
       <view class="progress-text">
-        <text wx:if="{{!unlocked}}">You're <text class="f-bear strong">¥{{remaining}}</text> away from <text class="f-bear strong">free shipping.</text></text>
-        <text wx:else><text class="f-bear strong">Free shipping unlocked.</text></text>
+        <text wx:if="{{!unlocked}}"><block wx:if="{{lang === 'cn'}}">再差 <text class="f-bear strong">¥{{remaining}}</text> 即可<text class="f-bear strong">免运费</text>。</block><block wx:else>You're <text class="f-bear strong">¥{{remaining}}</text> away from <text class="f-bear strong">free shipping.</text></block></text>
+        <text wx:else><text class="f-bear strong">{{lang === 'cn' ? '已享免运费。' : 'Free shipping unlocked.'}}</text></text>
       </view>
       <view class="progress-bar">
         <view class="progress-fill" style="width: {{pct}}%;"></view>
@@ -46,7 +46,7 @@
         <view class="saved-amount f-bear">−¥{{savedTotal}}</view>
       </view>
       <view class="total-row">
-        <view class="f-bear total-label">Total</view>
+        <view class="f-bear total-label">{{lang === 'cn' ? '合计' : 'Total'}}</view>
         <view class="f-bear total-amount">¥{{subtotal}}</view>
       </view>
       <button class="checkout-btn f-toni" bindtap="goCheckout">{{copy.checkout}} →</button>
@@ -55,7 +55,7 @@
 
   <view wx:else class="empty">
     <view class="empty-title f-bear">{{copy.empty}}</view>
-    <button class="empty-btn f-toni" bindtap="goShop">Browse the shop →</button>
+    <button class="empty-btn f-toni" bindtap="goShop">{{lang === 'cn' ? '去逛逛 →' : 'Browse the shop →'}}</button>
   </view>
   <popup-manager page="cart"></popup-manager>
 </view>

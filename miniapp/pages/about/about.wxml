@@ -33,7 +33,7 @@
     <view class="founder-row">
       <view class="founder-photo">
         <image wx:if="{{founderPhoto}}" class="founder-photo-img" src="{{founderPhoto}}" mode="aspectFill"/>
-        <view wx:else class="founder-photo-empty f-toni">PHOTO</view>
+        <view wx:else class="founder-photo-empty f-toni">{{lang === 'cn' ? '照片' : 'PHOTO'}}</view>
       </view>
       <view class="founder-meta">
         <view class="founder-name f-bear">{{lang === 'cn' ? (c.founder_name_cn || c.founder_name_en) : (c.founder_name_en || c.founder_name_cn)}}</view>
@@ -52,9 +52,16 @@
       <text>{{lang === 'cn' ? (c.promise_kicker_cn || c.promise_kicker_en) : c.promise_kicker_en}}</text>
     </view>
     <view class="promise-title f-bear">
-      What's <text class="hl">in</text>.
-      <text class="nl"></text>
-      What's <text class="strike">out</text>.
+      <block wx:if="{{lang === 'cn'}}">
+        留下<text class="hl">该有的</text>。
+        <text class="nl"></text>
+        剔除<text class="strike">多余的</text>。
+      </block>
+      <block wx:else>
+        What's <text class="hl">in</text>.
+        <text class="nl"></text>
+        What's&#160;<text class="strike">out</text>.
+      </block>
     </view>
 
     <view class="promise-grid">

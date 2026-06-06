@@ -1,7 +1,7 @@
 <view class="page">
   <view class="header">
-    <view class="kicker f-toni">{{copy.title}} · 收货地址</view>
-    <view class="title f-bear">Saved spots.</view>
+    <view class="kicker f-toni">{{lang === 'cn' ? '收货地址' : 'ADDRESSES'}}</view>
+    <view class="title f-bear">{{lang === 'cn' ? '我的地址' : 'Saved spots.'}}</view>
   </view>
 
   <!-- ── LIST MODE ── -->

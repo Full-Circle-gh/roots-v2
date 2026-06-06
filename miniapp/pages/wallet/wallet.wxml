@@ -1,7 +1,7 @@
 <view class="page">
   <!-- Page header -->
   <view class="head">
-    <view class="kicker f-toni">{{copy.kicker}} <text class="cn f-yuan">· 余额</text></view>
+    <view class="kicker f-toni">{{copy.kicker}}</view>
     <view class="title f-bear">{{copy.title}}</view>
   </view>
 
@@ -9,16 +9,16 @@
   <view class="tabs">
     <view class="tab tab-wallet {{tab === 'wallet' ? 'active' : ''}}"
           data-tab="wallet" bindtap="switchTab">
-      <view class="tab-lbl f-toni">{{copy.walletLabel}} <text class="cn f-yuan">· 钱包</text></view>
+      <view class="tab-lbl f-toni">{{copy.walletLabel}}</view>
       <view class="tab-val f-bear">¥{{walletBal}}</view>
       <view wx:if="{{tab === 'wallet'}}" class="tab-arrow tab-arrow-ink"></view>
     </view>
     <view class="tab tab-points {{tab === 'points' ? 'active' : ''}}"
           data-tab="points" bindtap="switchTab">
-      <view class="tab-lbl f-toni">{{copy.pointsLabel}} <text class="cn f-yuan">· 积分</text></view>
+      <view class="tab-lbl f-toni">{{copy.pointsLabel}}</view>
       <view class="tab-val-row">
         <text class="tab-val f-bear">{{pointsBal}}</text>
-        <text class="tab-val-unit f-gothic">PTS</text>
+        <text class="tab-val-unit f-gothic">{{lang === 'cn' ? '积分' : 'PTS'}}</text>
       </view>
       <view wx:if="{{tab === 'points'}}" class="tab-arrow tab-arrow-accent"></view>
     </view>
@@ -28,7 +28,7 @@
   <block wx:if="{{tab === 'wallet'}}">
     <view class="bal-card bal-wallet">
       <view class="bal-row">
-        <view class="bal-lbl f-toni">{{copy.available}} <text class="cn f-yuan">· 可用</text></view>
+        <view class="bal-lbl f-toni">{{copy.available}}</view>
         <view class="bal-meta f-toni">{{copy.cardLabel}}</view>
       </view>
       <view class="bal-amt f-bear">¥{{walletBal}}</view>
@@ -40,11 +40,11 @@
 
     <view class="filters">
       <view class="chip {{walletFilter === 'all' ? 'on' : ''}} f-gothic"
-            data-id="all" bindtap="setWalletFilter">{{copy.filterAll}} <text class="cn f-yuan">· 全部</text></view>
+            data-id="all" bindtap="setWalletFilter">{{copy.filterAll}}</view>
       <view class="chip {{walletFilter === 'in' ? 'on' : ''}} f-gothic"
-            data-id="in"  bindtap="setWalletFilter">{{copy.filterIn}} <text class="cn f-yuan">· 入账</text></view>
+            data-id="in"  bindtap="setWalletFilter">{{copy.filterIn}}</view>
       <view class="chip {{walletFilter === 'out' ? 'on' : ''}} f-gothic"
-            data-id="out" bindtap="setWalletFilter">{{copy.filterOut}} <text class="cn f-yuan">· 支出</text></view>
+            data-id="out" bindtap="setWalletFilter">{{copy.filterOut}}</view>
     </view>
 
     <view class="sec-head">
@@ -60,10 +60,9 @@
         </view>
         <view class="pip pip-{{item.type}}"></view>
         <view class="row-body">
-          <view class="row-label f-bear">{{item.label}}</view>
+          <view class="row-label f-bear">{{lang === 'cn' && item.cn ? item.cn : item.label}}</view>
           <view class="row-sub">
-            <text wx:if="{{item.cn}}" class="row-cn f-yuan">{{item.cn}}</text>
-            <text class="row-time f-toni">· {{item.time}}</text>
+            <text class="row-time f-toni">{{item.time}}</text>
             <text wx:if="{{item.bonus}}" class="row-bonus f-gothic">{{item.bonus}}</text>
           </view>
         </view>
@@ -77,7 +76,7 @@
   <block wx:else>
     <view class="bal-card bal-points">
       <view class="bal-row">
-        <view class="bal-lbl f-toni">{{copy.available}} <text class="cn f-yuan">· 可用</text></view>
+        <view class="bal-lbl f-toni">{{copy.available}}</view>
         <view class="bal-meta f-toni">{{copy.neverExp}}</view>
       </view>
       <view class="pts-row">
@@ -93,22 +92,22 @@
 
     <view class="stat-pair">
       <view class="stat-box">
-        <view class="stat-lbl f-toni">{{copy.earned}} <text class="cn f-yuan">· 本月获得</text></view>
+        <view class="stat-lbl f-toni">{{copy.earned}}</view>
         <view class="stat-val pos f-gothic">+{{earnedThisMonth}}</view>
       </view>
       <view class="stat-box">
-        <view class="stat-lbl f-toni">{{copy.redeemed}} <text class="cn f-yuan">· 已兑换</text></view>
+        <view class="stat-lbl f-toni">{{copy.redeemed}}</view>
         <view class="stat-val neg f-gothic">−{{redeemedThisMonth}}</view>
       </view>
     </view>
 
     <view class="filters">
       <view class="chip {{pointsFilter === 'all' ? 'on' : ''}} f-gothic"
-            data-id="all"    bindtap="setPointsFilter">{{copy.filterAll}} <text class="cn f-yuan">· 全部</text></view>
+            data-id="all"    bindtap="setPointsFilter">{{copy.filterAll}}</view>
       <view class="chip {{pointsFilter === 'earn' ? 'on' : ''}} f-gothic"
-            data-id="earn"   bindtap="setPointsFilter">{{copy.filterEarn}} <text class="cn f-yuan">· 获得</text></view>
+            data-id="earn"   bindtap="setPointsFilter">{{copy.filterEarn}}</view>
       <view class="chip {{pointsFilter === 'redeem' ? 'on' : ''}} f-gothic"
-            data-id="redeem" bindtap="setPointsFilter">{{copy.filterRedeem}} <text class="cn f-yuan">· 兑换</text></view>
+            data-id="redeem" bindtap="setPointsFilter">{{copy.filterRedeem}}</view>
     </view>
 
     <view class="sec-head">
@@ -124,10 +123,9 @@
         </view>
         <view class="pip pip-{{item.type}}"></view>
         <view class="row-body">
-          <view class="row-label f-bear">{{item.label}}</view>
+          <view class="row-label f-bear">{{lang === 'cn' && item.cn ? item.cn : item.label}}</view>
           <view class="row-sub">
-            <text wx:if="{{item.cn}}" class="row-cn f-yuan">{{item.cn}}</text>
-            <text class="row-time f-toni">· {{item.time}}</text>
+            <text class="row-time f-toni">{{item.time}}</text>
             <text wx:if="{{item.expiryHint}}" class="row-expiry f-toni {{item.expired ? 'expired' : ''}}">· {{item.expiryHint}}</text>
           </view>
         </view>

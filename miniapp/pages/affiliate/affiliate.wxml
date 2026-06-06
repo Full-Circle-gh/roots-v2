@@ -2,7 +2,7 @@
 
   <!-- Disabled-state notice — admin turned the program off. -->
   <view wx:if="{{!loading && enabled === false}}" class="disabled-card">
-    <view class="kicker f-toni">{{copy.kicker}} <text class="cn f-yuan">· 推广计划</text></view>
+    <view class="kicker f-toni">{{copy.kicker}}</view>
     <view class="title f-bear">{{copy.disabledTitle}}</view>
     <view class="disabled-body f-aleo">{{copy.disabledBody}}</view>
   </view>
@@ -10,7 +10,7 @@
   <block wx:else>
     <!-- Header -->
     <view class="head">
-      <view class="kicker f-toni">{{copy.kicker}} <text class="cn f-yuan">· 推广计划</text></view>
+      <view class="kicker f-toni">{{copy.kicker}}</view>
       <view class="title f-bear">
         {{copy.title1}}
         <view><text class="hl">{{copy.title2}}</text>.</view>
@@ -22,21 +22,21 @@
     <view class="stats">
       <view class="stat">
         <view class="stat-val f-bear">¥{{stats.earned}}</view>
-        <view class="stat-lbl f-toni">{{copy.earned}} <text class="cn f-yuan">· 已赚</text></view>
+        <view class="stat-lbl f-toni">{{copy.earned}}</view>
       </view>
       <view class="stat stat-mid">
         <view class="stat-val f-bear">{{stats.total_invites}}</view>
-        <view class="stat-lbl f-toni">{{copy.invited}} <text class="cn f-yuan">· 邀请</text></view>
+        <view class="stat-lbl f-toni">{{copy.invited}}</view>
       </view>
       <view class="stat">
         <view class="stat-val f-bear">{{stats.converted}}</view>
-        <view class="stat-lbl f-toni">{{copy.joined}} <text class="cn f-yuan">· 加入</text></view>
+        <view class="stat-lbl f-toni">{{copy.joined}}</view>
       </view>
     </view>
 
     <!-- Referral code card -->
     <view class="code-card">
-      <view class="code-lbl f-toni">{{copy.yourCode}} <text class="cn f-yuan">· 邀请码</text></view>
+      <view class="code-lbl f-toni">{{copy.yourCode}}</view>
       <view class="code-row">
         <view class="code f-bear">{{code || '——'}}</view>
         <view class="code-copy f-gothic tap" bindtap="copyCode">{{copy.copy}}</view>
@@ -44,11 +44,9 @@
       <view class="share-row">
         <button class="share share-wechat f-gothic tap" open-type="share">
           <text>{{copy.wechat}}</text>
-          <text class="cn f-yuan">· 微信</text>
         </button>
         <view class="share share-moments f-gothic tap" bindtap="shareTimeline">
           <text>{{copy.moments}}</text>
-          <text class="cn f-yuan">· 朋友圈</text>
         </view>
         <view class="share share-more f-gothic tap" bindtap="showQr">⊞</view>
       </view>
@@ -56,24 +54,21 @@
 
     <!-- How it works -->
     <view class="how">
-      <view class="how-head f-toni">{{copy.how}} <text class="cn f-yuan">· 流程</text></view>
+      <view class="how-head f-toni">{{copy.how}}</view>
       <view class="how-row">
         <view class="how-cell">
           <view class="how-num f-gothic">01</view>
           <view class="how-t f-bear">{{copy.how1}}</view>
-          <view class="how-cn f-yuan">分享</view>
           <view class="how-sub f-aleo">{{copy.how1sub}}</view>
         </view>
         <view class="how-cell">
           <view class="how-num f-gothic">02</view>
           <view class="how-t f-bear">{{copy.how2}}</view>
-          <view class="how-cn f-yuan">下单</view>
           <view class="how-sub f-aleo">{{copy.how2sub}}</view>
         </view>
         <view class="how-cell">
           <view class="how-num f-gothic">03</view>
           <view class="how-t f-bear">{{copy.how3}}</view>
-          <view class="how-cn f-yuan">获奖</view>
           <view class="how-sub f-aleo">{{how3subResolved}}</view>
         </view>
       </view>
@@ -81,7 +76,7 @@
 
     <!-- Apply someone else's code (only if not yet referred + customer is brand-new) -->
     <view wx:if="{{canApply}}" class="apply">
-      <view class="apply-head f-toni">{{copy.applyHead}} <text class="cn f-yuan">· 输入邀请码</text></view>
+      <view class="apply-head f-toni">{{copy.applyHead}}</view>
       <view class="apply-row">
         <input class="apply-input f-bear" placeholder="{{copy.applyPlaceholder}}"
                value="{{applyInput}}" bindinput="onApplyInput" maxlength="32"/>
@@ -90,7 +85,7 @@
       <view wx:if="{{applyError}}" class="apply-err f-aleo">{{applyError}}</view>
     </view>
     <view wx:elif="{{referredBy}}" class="applied">
-      <view class="applied-lbl f-toni">{{copy.referredByLabel}} <text class="cn f-yuan">· 邀请人</text></view>
+      <view class="applied-lbl f-toni">{{copy.referredByLabel}}</view>
       <view class="applied-val f-bear">{{referredBy.nickname || referredBy.code}}</view>
     </view>
 
@@ -106,7 +101,7 @@
           <text wx:else class="avatar-letter f-bear">{{item.initial}}</text>
         </view>
         <view class="inv-body">
-          <view class="inv-name f-bear">{{item.nickname || '微信好友'}}</view>
+          <view class="inv-name f-bear">{{item.nickname || (lang === 'cn' ? '微信好友' : 'WeChat friend')}}</view>
           <view class="inv-date f-toni">{{item.dateLabel}}</view>
         </view>
         <view class="inv-status status-{{item.status}} f-gothic">{{item.statusLabel}}</view>

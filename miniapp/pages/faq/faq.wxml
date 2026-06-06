@@ -2,7 +2,7 @@
 
   <!-- Header -->
   <view class="header">
-    <view class="kicker f-toni">FAQ <text class="kicker-cn">· 常见问题</text></view>
+    <view class="kicker f-toni">{{lang === 'cn' ? '常见问题' : 'FAQ'}}</view>
     <view class="title f-bear">
       <text>{{lang === 'cn' ? '能为您' : 'How can'}} </text><text class="title-hl">{{lang === 'cn' ? '做些什么' : 'we help'}}</text><text>?</text>
     </view>
@@ -17,12 +17,12 @@
     <input
       class="search-input f-aleo"
       value="{{search}}"
-      placeholder="{{lang === 'cn' ? '搜索问题 · Search FAQ' : 'Search FAQ · 搜索问题'}}"
+      placeholder="{{lang === 'cn' ? '搜索问题' : 'Search FAQ'}}"
       placeholder-class="search-ph"
       bindinput="onSearchInput"
       confirm-type="search"
     />
-    <view wx:if="{{search}}" class="search-clear f-aleo" bindtap="clearSearch">clear</view>
+    <view wx:if="{{search}}" class="search-clear f-aleo" bindtap="clearSearch">{{lang === 'cn' ? '清除' : 'clear'}}</view>
   </view>
 
   <!-- Category chips -->
@@ -32,7 +32,7 @@
         class="chip f-gothic {{activeCat === '' ? 'chip-on' : ''}}"
         data-id=""
         bindtap="pickCat"
-      >ALL</view>
+      >{{lang === 'cn' ? '全部' : 'ALL'}}</view>
       <view
         wx:for="{{categories}}"
         wx:key="id"
@@ -41,8 +41,7 @@
         data-id="{{item.id}}"
         bindtap="pickCat"
       >
-        <text>{{item.en}}</text>
-        <text class="chip-cn f-yuan"> · {{item.cn}}</text>
+        <text>{{lang === 'cn' ? item.cn : item.en}}</text>
       </view>
     </view>
   </scroll-view>

@@ -87,7 +87,7 @@
           <view wx:if="{{tracking.scenario.location_label}}" class="trk-banner-sub">{{tracking.scenario.location_label}}</view>
           <view wx:if="{{tracking.scenario.signer}}" class="trk-banner-sub">{{lang === 'cn' ? '签收人:' : 'Signed by '}}{{tracking.scenario.signer}}</view>
           <view wx:if="{{tracking.scenario.pickup_code}}" class="trk-banner-code-wrap">
-            <view class="trk-banner-code-label">{{lang === 'cn' ? '取件码 · TAP TO COPY' : 'PICKUP CODE · TAP TO COPY'}}</view>
+            <view class="trk-banner-code-label">{{lang === 'cn' ? '取件码 · 点击复制' : 'PICKUP CODE · TAP TO COPY'}}</view>
             <view class="trk-banner-code f-gothic">{{tracking.scenario.pickup_code}}</view>
           </view>
           <view wx:if="{{tracking.scenario.scenario === 'no_contact'}}" class="trk-banner-action">
@@ -111,8 +111,8 @@
       </view>
       <!-- Collapsed by default: only the latest event renders. Tapping
            "Show all N events" expands the full list inline. -->
-      <view wx:if="{{trackingEvents.length}}" class="trk-events">
-        <view wx:for="{{trackingEventsVisible}}" wx:key="idx" wx:for-item="ev" wx:for-index="idx" class="trk-event {{idx === 0 ? 'latest' : ''}}">
+      <view wx:if="{{trackingEvents.length}}" class="trk-events {{trackingEventsExpanded ? 'expanded' : 'collapsed'}}">
+        <view wx:for="{{trackingEvents}}" wx:key="idx" wx:for-item="ev" wx:for-index="idx" class="trk-event {{idx === 0 ? 'latest' : 'trk-event-extra'}}">
           <view class="trk-event-dot"></view>
           <view class="trk-event-body">
             <view class="trk-event-line">{{ev.description}}</view>

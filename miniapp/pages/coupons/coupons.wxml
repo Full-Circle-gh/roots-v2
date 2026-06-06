@@ -65,7 +65,6 @@
         <view class="ticket-body">
           <view wx:if="{{item.tag && !item.dimmed}}" class="ticket-tag f-gothic">{{item.tag}}</view>
           <view class="ticket-name f-bear">{{item.name}}</view>
-          <view wx:if="{{item.cn}}" class="ticket-cn f-yuan">{{item.cn}}</view>
 
           <view class="ticket-foot">
             <view>

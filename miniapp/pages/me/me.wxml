@@ -100,7 +100,7 @@
   </view>
 
   <view class="lang-section">
-    <view class="section-title f-toni">{{copy.langLabel}} · 语言</view>
+    <view class="section-title f-toni">{{copy.langLabel}}</view>
     <view class="lang-row">
       <view class="lang-opt {{lang === 'en' ? 'on' : ''}}" data-lang="en" bindtap="switchLang">English</view>
       <view class="lang-opt {{lang === 'cn' ? 'on' : ''}}" data-lang="cn" bindtap="switchLang">中文</view>

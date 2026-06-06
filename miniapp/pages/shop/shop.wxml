@@ -20,8 +20,8 @@
   </block>
   <block wx:else>
     <view class="header">
-      <view class="kicker f-toni">SHOP · 商品</view>
-      <view class="title f-bear">The garden.</view>
+      <view class="kicker f-toni">{{lang === 'cn' ? '商品' : 'SHOP'}}</view>
+      <view class="title f-bear">{{lang === 'cn' ? '生鲜花园' : 'The garden.'}}</view>
     </view>
   </block>
 
