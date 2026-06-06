@@ -14137,6 +14137,13 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('click', (e) => {
   const open = document.querySelectorAll('.side-drawer.dw-dismiss.open');
   if (!open.length) return;
+  // A self-removing overlay (e.g. the "Paid how?" pay-method picker) deletes
+  // itself on click, then that same click keeps bubbling here with a target
+  // that's already detached from the DOM. closest() on a detached node can't
+  // see the modal it lived in, so it would read as an outside-click and wrongly
+  // close the drawer — wiping the order body during the mark-paid re-render.
+  // A detached target is never a real outside-click, so bail.
+  if (!e.target.isConnected) return;
   if (e.target.closest('.side-drawer')) return;
   // A `.pu-editor-bg` modal (Edit / Adjust / Address) layers on top of the
   // drawer but lives outside it in the DOM — clicks inside the modal, incl.
