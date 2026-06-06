@@ -14022,7 +14022,7 @@ function renderSplitPanel(o, s) {
   const rows = (s.items || []).map(it => `
     <label class="row" style="gap:8px; align-items:center; padding:4px 0; cursor:pointer;">
       <input type="checkbox" class="split-pick-${s.id}" value="${it.id}">
-      <span style="flex:1; min-width:0;">${escapeHtml(it.name_en || it.name_cn || ('#' + it.id))}${it.size ? ` · ${escapeHtml(it.size)}` : ''}</span>
+      <span style="flex:1; min-width:0;">${escapeHtml(it.name_en || it.name_cn || ('#' + it.id))}${it.size ? ` · ${escapeHtml(it.size)}` : ''}${it.sku ? ` <span class="item-sku">${escapeHtml(it.sku)}</span>` : ''}</span>
       <span class="muted" style="font-size:12px;">×${it.qty}</span>
     </label>`).join('');
   return `
@@ -14057,26 +14057,32 @@ async function openOrder(id, opts = {}) {
     ensureTrackingCarriers(),
   ]);
   const drawerOpen = drawer && drawer.classList.contains('open');
-  if (switching) {
-    mount.classList.add('od-swapping');          // fade current order out
-  } else if (opts.instant && drawerOpen) {
-    // Re-rendering the same order in place: keep the old content on screen
-    // until the fresh data lands — no "Loading…" flash, no slide.
-  } else {
-    mount.innerHTML = '<div class="order-card muted">Loading order…</div>';
-    openDrawer('#order-drawer');
+  if (!switching) {
+    if (opts.instant && drawerOpen) {
+      // Re-rendering the same order in place: keep the old content on screen
+      // until the fresh data lands — no "Loading…" flash, no slide.
+    } else {
+      mount.innerHTML = '<div class="order-card muted">Loading order…</div>';
+      openDrawer('#order-drawer');
+    }
   }
+  // When switching, we deliberately do NOT fade out up-front. The old code
+  // added .od-swapping immediately, then awaited max(fetch, 396ms) with the
+  // mount already invisible — so a slow fetch stranded the drawer on a blank,
+  // faded panel for the entire network round-trip (the "stuck, takes longer
+  // than usual" stutter). Instead: keep the current order fully visible while
+  // we fetch, then run a bounded 396ms cross-fade once the data is in hand.
   try {
-    // When switching, wait for the fade-out (396ms) and the data together so
-    // the new order lands into a fully-faded, hidden mount — a clean cross-fade
-    // with no "Loading…" flash between the two orders.
-    const settled = switching
-      ? await Promise.all([fetchP, new Promise(r => setTimeout(r, 396))])
-      : [await fetchP];
-    const o = settled[0][0].data;
+    const o = (await fetchP)[0].data;
     _OPEN_ORDER = o;
-    renderOpenOrder(o);
-    if (switching) requestAnimationFrame(() => mount.classList.remove('od-swapping'));  // fade new in
+    if (switching) {
+      mount.classList.add('od-swapping');                       // fade old out (396ms)
+      await new Promise(r => setTimeout(r, 396));
+      renderOpenOrder(o);                                       // swap into hidden mount
+      requestAnimationFrame(() => mount.classList.remove('od-swapping'));  // fade new in
+    } else {
+      renderOpenOrder(o);
+    }
     // The GET above stamped seen_at server-side (shared across staff). Clear
     // this row's unread treatment immediately so it doesn't wait for the next
     // poll; a later list rebuild reflects the server seen_at and stays cleared.
