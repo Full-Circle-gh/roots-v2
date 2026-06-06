@@ -4780,8 +4780,43 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
         .map(it => ({ name_en: it.name_en, name_cn: it.name_cn, qty: it.qty }));
     });
   }
+  o.fulfillment = buildCustomerFulfillment(orderId, o.items);
   o.timeline = orderTimeline(o);
   return o;
+}
+
+// Partial-shipment summary for the customer — "X of Y items shipped, the rest
+// to follow". Only meaningful for a genuinely split order (2+ parcels) that is
+// mid-fulfillment: some parcels have left, some haven't. Single-parcel orders,
+// orders with nothing shipped yet, and fully-dispatched orders all return null
+// (no "rest to follow" story to tell). A parcel counts as shipped once it has a
+// dispatched_at or delivered_at stamp (set by the Phase-1 per-parcel dispatch).
+function buildCustomerFulfillment(orderId, items) {
+  let ships;
+  try {
+    ships = tdb().prepare(
+      `SELECT id, dispatched_at, delivered_at FROM retail_shipments WHERE order_id = ?`
+    ).all(orderId);
+  } catch { return null; }
+  if (!ships || ships.length < 2) return null;
+  const shippedIds = new Set(
+    ships.filter(s => s.dispatched_at || s.delivered_at).map(s => s.id)
+  );
+  if (shippedIds.size === 0 || shippedIds.size === ships.length) return null;
+  let itemsShipped = 0, itemsTotal = 0;
+  for (const it of (items || [])) {
+    const q = Number(it.qty) || 0;
+    itemsTotal += q;
+    if (shippedIds.has(it.shipment_id)) itemsShipped += q;
+  }
+  return {
+    partial: true,
+    parcels_total: ships.length,
+    parcels_shipped: shippedIds.size,
+    items_total: itemsTotal,
+    items_shipped: itemsShipped,
+    items_to_follow: itemsTotal - itemsShipped,
+  };
 }
 
 // 6-step timeline the order tracking screen renders. Active step = first

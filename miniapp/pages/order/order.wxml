@@ -32,6 +32,16 @@
       </view>
     </view>
 
+    <!-- Partial shipment — some parcels are out, the rest still to follow.
+         Shows regardless of whether the shipped parcel carries a waybill. -->
+    <view wx:if="{{partialShip}}" class="partial-banner">
+      <view class="partial-icon">📦</view>
+      <view class="partial-body">
+        <view class="partial-line f-bear">{{partialShip.line}}</view>
+        <view class="partial-sub muted">{{partialShip.sub}}</view>
+      </view>
+    </view>
+
     <!-- Split-package tracking — one card per parcel so the customer sees
          every waybill, not just the primary shipment's. -->
     <view wx:if="{{shipments.length > 1}}" class="section tracking-section">

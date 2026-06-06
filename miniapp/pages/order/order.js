@@ -42,6 +42,7 @@ Page({
     timeline: [],
     tracking: null,
     shipments: [],
+    partialShip: null,           // {line, sub} when some-but-not-all parcels shipped
     trackingEvents: [],
     trackingEventsVisible: [],   // computed: 1 latest by default, all when expanded
     trackingEventsExpanded: false,
@@ -360,6 +361,20 @@ Page({
         };
       }
 
+      // Partial shipment — "X of Y items shipped, the rest to follow". The
+      // server only returns fulfillment.partial for a split order that's
+      // mid-flight (some parcels out, some not), so a single banner reads it.
+      const f = data.fulfillment;
+      let partialShip = null;
+      if (f && f.partial) {
+        const left = f.items_to_follow;
+        partialShip = L === 'cn'
+          ? { line: `已发货 ${f.items_shipped}/${f.items_total} 件商品`,
+              sub:  `还有 ${left} 件稍后寄出` }
+          : { line: `${f.items_shipped} of ${f.items_total} items shipped`,
+              sub:  `${left} ${left === 1 ? 'item is' : 'items are'} still to follow` };
+      }
+
       // Pickup orders collect at a store instead of shipping to an address.
       // Build a "Collect at <store>" location string from the store fields
       // carried in address_json (parsed server-side into data.address), and
@@ -382,6 +397,7 @@ Page({
         timeline,
         tracking,
         shipments,
+        partialShip,
         trackingEvents,
         trackingEventsVisible,
         refundView,

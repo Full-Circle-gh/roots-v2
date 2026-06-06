@@ -227,6 +227,32 @@
 }
 
 /* Refund banners */
+/* Partial-shipment notice — "X of Y items shipped, rest to follow" */
+.partial-banner {
+  margin: 32rpx 44rpx 0;
+  padding: 22rpx 26rpx;
+  border-radius: 4rpx;
+  border-left: 8rpx solid var(--corn);
+  background: rgba(242, 202, 108, 0.18);
+  display: flex;
+  align-items: flex-start;
+  gap: 18rpx;
+}
+.partial-banner .partial-icon {
+  font-size: calc(34rpx * var(--font-scale));
+  line-height: 1.2;
+}
+.partial-banner .partial-body { flex: 1; min-width: 0; }
+.partial-banner .partial-line {
+  font-size: calc(28rpx * var(--font-scale));
+  color: var(--ink);
+}
+.partial-banner .partial-sub {
+  font-size: calc(22rpx * var(--font-scale));
+  margin-top: 4rpx;
+  line-height: 1.4;
+}
+
 .refund-banner {
   margin: 32rpx 44rpx 0;
   padding: 24rpx 28rpx;
@@ -597,11 +623,12 @@
    drives max-height + opacity transitions instead of an instant DOM swap. */
 .trk-event-extra {
   overflow: hidden;
-  transition: max-height 0.5s ease, opacity 0.45s ease,
-              padding-bottom 0.5s ease;
+  transition: max-height 0.5s ease, min-height 0.5s ease,
+              opacity 0.45s ease, padding-bottom 0.5s ease;
 }
 .trk-events.collapsed .trk-event-extra {
   max-height: 0;
+  min-height: 0;
   opacity: 0;
   padding-bottom: 0;
 }
