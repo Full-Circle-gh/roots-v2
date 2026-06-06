@@ -332,16 +332,15 @@ Page({
   },
 
   // Fetch the live top-up packages once if the layout contains a top_up
-  // block. Auth-gated endpoint, so anonymous viewers keep the empty array
-  // (the block then shows just its heading). Setting topupPackages triggers
-  // the block-renderer observer so the tier row fills in place.
+  // block. Public storefront endpoint (no auth) so signed-out visitors see
+  // the tier row too. Setting topupPackages triggers the block-renderer
+  // observer so the tier row fills in place.
   async _fetchTopupPackagesFor(layout) {
     const hasTopUp = (layout || []).some(b => b.type === 'top_up');
     if (!hasTopUp) return;
-    if (!app?.globalData?.token) return;       // anonymous → heading only
     if (this.data.topupPackages && this.data.topupPackages.length) return;
     try {
-      const res = await api.get('/api/retail/topup-packages');
+      const res = await api.get('/api/retail/storefront/topup-packages');
       const rows = Array.isArray(res) ? res : (res?.data || []);
       this.setData({ topupPackages: rows });
     } catch {

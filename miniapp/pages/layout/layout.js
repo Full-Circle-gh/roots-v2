@@ -142,14 +142,13 @@ Page({
   },
 
   // Live top-up tiers for any top_up block — see home.js for rationale.
-  // Auth-gated, so anonymous viewers keep the empty array (heading only).
+  // Public storefront endpoint (no auth) so signed-out visitors see tiers too.
   async _fetchTopupPackagesFor(layout) {
     const hasTopUp = (layout || []).some(b => b.type === 'top_up');
     if (!hasTopUp) return;
-    if (!getApp()?.globalData?.token) return;
     if (this.data.topupPackages && this.data.topupPackages.length) return;
     try {
-      const res = await api.get('/api/retail/topup-packages');
+      const res = await api.get('/api/retail/storefront/topup-packages');
       const rows = Array.isArray(res) ? res : (res?.data || []);
       this.setData({ topupPackages: rows });
     } catch {

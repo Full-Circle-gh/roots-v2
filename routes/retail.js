@@ -12510,6 +12510,19 @@ router.get('/api/retail/topup-packages', requireRetailAuth, (req, res) => {
   res.json({ success: true, data: rows });
 });
 
+// Public storefront variant — no auth, so the home page top_up block can show
+// its tier row to signed-out visitors too. Marketing-safe fields only
+// (amount / bonus / title); the auth-gated route above stays the one used for
+// actually paying. Mirrors /api/retail/storefront/leaderboard.
+router.get('/api/retail/storefront/topup-packages', (req, res) => {
+  const rows = tdb().prepare(
+    `SELECT id, amount, bonus_points, title_en, title_cn
+       FROM retail_topup_packages WHERE is_active = 1
+      ORDER BY sort_order ASC, amount ASC`
+  ).all();
+  res.json({ success: true, data: rows });
+});
+
 // POST /api/retail/topup/create
 // Initiates a top-up payment. In DEV mode immediately marks success +
 // credits wallet + awards bonus points (mirrors the existing
