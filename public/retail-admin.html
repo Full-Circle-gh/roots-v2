@@ -4771,7 +4771,10 @@
 
     /* "View" popover trigger → ⋯ kebab pinned top-right of the app-bar. */
     #order-drawer .order-head .ovp-wrap {
-      position: absolute; top: 8px; right: 6px; margin: 0; z-index: 8;
+      /* !important beats the inline margin-right:40px on the popover wrap —
+         otherwise that margin drags the absolutely-pinned kebab ~40px left
+         into the status pill, making them collide. */
+      position: absolute; top: 8px; right: 6px; margin: 0 !important; z-index: 8;
     }
     #order-drawer .order-head .ovp-wrap #odv-btn {
       width: 36px; height: 36px; padding: 0; min-width: 0;
