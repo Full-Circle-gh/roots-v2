@@ -4794,6 +4794,21 @@
     #order-drawer .resv-table th:nth-child(n+5),
     #order-drawer .resv-table td:nth-child(n+5) { display: none; }
 
+    /* Items · TABLE view: the desktop 5-col grid (1fr 64 80 84 auto) is wider
+       than a phone, so it overflowed right (clipping the Total header) and
+       starved the Item column — the qty chip rode over the thumbnail and the
+       CN name wrapped one glyph per line. Drop Unit + Pack on mobile, leaving
+       a clean Item / Qty / Total table that fits the width. */
+    #order-drawer .oi-grid .oi-th,
+    #order-drawer .oi-grid .oi-row {
+      grid-template-columns: 1fr auto auto;
+      gap: var(--s2); padding-left: var(--s3); padding-right: var(--s3);
+    }
+    #order-drawer .oi-grid .oi-th span:nth-child(3),
+    #order-drawer .oi-grid .oi-th span:nth-child(5),
+    #order-drawer .oi-grid .oi-row .oi-r,
+    #order-drawer .oi-grid .oi-row .oi-packs { display: none; }
+
     /* Hide the desktop table + the dense toolbar on phones — keep only the
        search box (Phase 2 makes it claim the full row). */
     #tab-orders .table-wrap { display: none; }
