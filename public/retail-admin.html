@@ -5096,17 +5096,17 @@
 
     .rm-cucard {
       position: relative; z-index: 1;
-      display: flex; align-items: center; gap: 13px;
       background: var(--bg-pane);
       border: 1px solid var(--line-soft);
       border-radius: var(--r-lg);
-      padding: 13px 14px;
       transition: transform .26s cubic-bezier(.16, 1, .3, 1);
-      -webkit-tap-highlight-color: transparent; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
       touch-action: pan-y;
     }
     .rm-cucard.swiped { transform: translateX(-176px); }
-    .rm-cucard:active { background: var(--bg-elev-1); }
+    /* header row (the tappable summary; tapping toggles the inline peek) */
+    .rm-cu-head { display: flex; align-items: center; gap: 13px; padding: 13px 14px; cursor: pointer; border-radius: var(--r-lg); }
+    .rm-cu-head:active { background: var(--bg-elev-1); }
 
     .rm-cu-av {
       flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%;
@@ -5127,8 +5127,29 @@
     .rm-cu-stat .big { font: 600 15px var(--f-mono); color: var(--text-1); font-variant-numeric: tabular-nums; }
     .rm-cu-stat .k { display: block; font: 10px var(--f-mono); letter-spacing: .06em; color: var(--text-4); margin-top: 1px; }
 
-    .rm-cu-chev { flex: 0 0 auto; color: var(--text-4); display: flex; }
+    .rm-cu-chev { flex: 0 0 auto; color: var(--text-4); display: flex; transition: transform .26s; }
     .rm-cu-chev svg { width: 18px; height: 18px; }
+    .rm-cucard.open .rm-cu-chev { transform: rotate(90deg); }
+
+    /* ── inline profile peek (Combined: tap a card to expand in place; the
+       tristat reads from the list row, no extra fetch — Full profile opens the
+       existing drawer for the deep view) ── */
+    .rm-cu-exp { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .28s ease; }
+    .rm-cucard.open .rm-cu-exp { grid-template-rows: 1fr; }
+    .rm-cu-exp > .inner { overflow: hidden; }
+    .rm-cu-exp-pad { padding: 13px 14px 14px; border-top: 1px dashed var(--line-soft); }
+    .rm-cu-tri { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 9px; margin-bottom: 12px; }
+    .rm-cu-tri > div { background: var(--bg-elev-1); border-radius: 12px; padding: 11px 8px; text-align: center; }
+    .rm-cu-tri b { display: block; font: 600 18px var(--f-sans); color: var(--text-1); font-variant-numeric: tabular-nums; }
+    .rm-cu-tri span { display: block; font: 500 9px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin-top: 3px; }
+    .rm-cu-exp-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .rm-cu-exp-actions button {
+      border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-1);
+      border-radius: 11px; padding: 12px; font: 500 13.5px var(--f-sans); cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .rm-cu-exp-actions button:active { background: var(--bg-elev-1); }
+    .rm-cu-exp-actions button.primary { background: var(--brass, #B08D4A); color: #fff; border-color: var(--brass, #B08D4A); }
 
     .rm-cu-empty { text-align: center; color: var(--text-3); padding: 44px 20px; font-size: 13.5px; }
   }
@@ -26779,6 +26800,7 @@ window.onLangChange(function () {
 (function () {
   var WRAP_ID = 'rm-cu-cards';
   var SWIPE_W = 176;            // two 88px action lanes
+  var LAST = [];                // last rendered rows, for the inline peek lookup
 
   function el(id) { return document.getElementById(id); }
   function esc(s) { return (typeof escapeHtml === 'function') ? escapeHtml(s) : String(s == null ? '' : s); }
@@ -26799,6 +26821,7 @@ window.onLangChange(function () {
   window.rmRenderCustomerCards = function (data, errMsg) {
     var wrap = el(WRAP_ID);
     if (!wrap) return;
+    LAST = data || [];
     if (errMsg) { wrap.innerHTML = '<div class="rm-cu-empty">Couldn’t load customers · ' + esc(errMsg) + '</div>'; return; }
     if (!data || !data.length) { wrap.innerHTML = '<div class="rm-cu-empty">No customers match this filter.</div>'; return; }
 
@@ -26827,22 +26850,46 @@ window.onLangChange(function () {
       html +=
         '<div class="rm-cucard-wrap">' + actions +
           '<div class="rm-cucard" data-id="' + c.id + '">' +
-            av +
-            '<div class="rm-cu-body">' +
-              '<div class="rm-cu-name' + (guest ? ' guest' : '') + '">' +
-                '<span class="nm">' + esc(name) + '</span>' +
-                '<span class="cu-pill tier-' + esc(tier) + '">' + esc(tier) + '</span>' +
-                (blocked ? '<span class="cu-pill blocked">Blocked</span>' : '') +
+            '<div class="rm-cu-head">' +
+              av +
+              '<div class="rm-cu-body">' +
+                '<div class="rm-cu-name' + (guest ? ' guest' : '') + '">' +
+                  '<span class="nm">' + esc(name) + '</span>' +
+                  '<span class="cu-pill tier-' + esc(tier) + '">' + esc(tier) + '</span>' +
+                  (blocked ? '<span class="cu-pill blocked">Blocked</span>' : '') +
+                '</div>' +
+                '<div class="rm-cu-meta">' + meta + '</div>' +
               '</div>' +
-              '<div class="rm-cu-meta">' + meta + '</div>' +
+              '<div class="rm-cu-stat"><span class="big">' + esc(st.big) + '</span><span class="k">' + st.k + '</span></div>' +
+              '<span class="rm-cu-chev">' + ICON_CHEV + '</span>' +
             '</div>' +
-            '<div class="rm-cu-stat"><span class="big">' + esc(st.big) + '</span><span class="k">' + st.k + '</span></div>' +
-            '<span class="rm-cu-chev">' + ICON_CHEV + '</span>' +
+            '<div class="rm-cu-exp"><div class="inner"><div class="rm-cu-exp-pad" data-exp></div></div></div>' +
           '</div>' +
         '</div>';
     }
     wrap.innerHTML = html;
   };
+
+  function findRow(id) { for (var i = 0; i < LAST.length; i++) { if (+LAST[i].id === id) return LAST[i]; } return null; }
+
+  // Fill the inline peek (Combined): a 3-stat strip read straight from the list
+  // row + two buttons — Full profile opens the existing drawer, Adjust reuses
+  // the wired stepper flow. No extra fetch.
+  function fillPeek(card) {
+    var id = +card.getAttribute('data-id'), c = findRow(id);
+    var pad = card.querySelector('[data-exp]'); if (!c || !pad) return;
+    var wallet = Number(c.balance || 0), pts = Number(c.points_balance || 0), ord = Number(c.orders_count || 0);
+    pad.innerHTML =
+      '<div class="rm-cu-tri">' +
+        '<div><b>' + ord + '</b><span>Orders · 订单</span></div>' +
+        '<div><b>' + pts + '</b><span>Points · 积分</span></div>' +
+        '<div><b>¥' + esc(money(wallet)) + '</b><span>Wallet · 钱包</span></div>' +
+      '</div>' +
+      '<div class="rm-cu-exp-actions">' +
+        '<button type="button" data-full data-id="' + id + '">Full profile · 资料</button>' +
+        '<button type="button" class="primary" data-peekadjust data-id="' + id + '">Adjust points · 调整</button>' +
+      '</div>';
+  }
 
   // Swipe quick-actions open the full-screen drawer first (loads CU_CURRENT),
   // then fire the existing wired flow — the amount stepper + block-reason
@@ -26911,11 +26958,19 @@ window.onLangChange(function () {
       else rmCuAdjust(id);
       return;
     }
-    var card = e.target.closest('.rm-cucard');
-    if (!card || justSwiped) return;
+    // Inline-peek buttons: Full profile → drawer; Adjust → wired stepper flow.
+    var full = e.target.closest('[data-full]');
+    if (full) { var fid = +full.getAttribute('data-id'); if (fid && typeof cuOpenDetail === 'function') cuOpenDetail(fid); return; }
+    var padj = e.target.closest('[data-peekadjust]');
+    if (padj) { rmCuAdjust(+padj.getAttribute('data-id')); return; }
+    // Tap the header row → toggle the inline peek (Combined: keep the book in view).
+    var head = e.target.closest('.rm-cu-head');
+    if (!head || justSwiped) return;
+    var card = head.closest('.rm-cucard');
     if (card.classList.contains('swiped')) { card.classList.remove('swiped'); card.style.transform = ''; return; }
-    var id2 = +card.getAttribute('data-id');
-    if (id2 && typeof cuOpenDetail === 'function') cuOpenDetail(id2);
+    var open = !card.classList.contains('open');
+    card.classList.toggle('open', open);
+    if (open) fillPeek(card);
   }
 
   function bind() {
