@@ -4817,13 +4817,13 @@
     #order-drawer .oi-grid .oi-row .oi-r,
     #order-drawer .oi-grid .oi-row .oi-packs { display: none; }
 
-    /* Hide the desktop table + the dense toolbar on phones — keep only the
-       search box (Phase 2 makes it claim the full row). */
+    /* Hide the desktop table + the whole dense toolbar on phones. The topbar
+       power-search (the magnifier / Ctrl-K) already finds orders live by #,
+       recipient name or phone and jumps straight into them, so the in-list
+       search box + store filter + refresh button were all redundant on the
+       narrow mobile layout — drop the entire row. */
     #tab-orders .table-wrap { display: none; }
-    #tab-orders > .row > #orders-store,
-    #tab-orders > .row > button,
-    #tab-orders > .row > .ovp-wrap { display: none; }
-    #tab-orders > .row { margin-bottom: var(--s3); gap: 8px; }
+    #tab-orders > .row { display: none; }
 
     /* Pin the status-filter bar directly under the topbar at ALL scroll
        positions. In source order the KPI rail sits BETWEEN the topbar and the
