@@ -4626,8 +4626,14 @@
     }
     @keyframes rmFade { from { opacity: 0; } to { opacity: 1; } }
     .rm-sheet-panel {
-      position: absolute; left: 0; right: 0; bottom: 0;
-      max-height: 82vh; overflow-y: auto;
+      /* Fixed (not absolute) so bottom:0 anchors to the visual viewport like
+         #rm-bottomnav does. With position:absolute it anchored to the fixed
+         container's inset:0 = the LAYOUT viewport, whose bottom sits below the
+         fold (under the mobile address bar) — so the sheet's lower half slid
+         off-screen and it looked like it "didn't come up". dvh keeps the cap
+         honest on browsers with a dynamic toolbar. */
+      position: fixed; left: 0; right: 0; bottom: 0;
+      max-height: 82vh; max-height: 82dvh; overflow-y: auto;
       background: var(--bg-pane);
       border-radius: 18px 18px 0 0;
       border-top: 1px solid var(--line);
@@ -5148,12 +5154,14 @@
     #tab-dashboard #db-deepdive { display: none; }
     #rm-dash { display: block; }
 
-    .rm-dh-title { padding: 2px 2px 0; }
+    /* Compact one-line header — eyebrow + title share a baseline row so the
+       dashboard's front door (period chips + live hero) sits higher. */
+    .rm-dh-title { display: flex; align-items: baseline; gap: 8px; padding: 0 2px; }
     .rm-dh-title .eyebrow { font: 500 10px/1 var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--brass); }
-    .rm-dh-title h2 { margin: 4px 0 0; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+    .rm-dh-title h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
 
     /* period chips */
-    .rm-dh-periods { display: flex; gap: 7px; margin: 12px 0 4px; }
+    .rm-dh-periods { display: flex; gap: 7px; margin: 8px 0 4px; }
     .rm-dh-periods button {
       flex: 1; height: 36px; border-radius: 10px;
       border: 1px solid var(--line-soft); background: var(--bg-pane);
@@ -6187,12 +6195,6 @@
          + dense toolbar are hidden on phones via CSS; desktop is untouched.
          Built to match design bundle: mobile/orders-a.html + fc-mobile.css. -->
     <!-- Variant B blend — phone-only Sort toolbar (raises a bottom sheet). -->
-    <div id="rm-mob-tools">
-      <button type="button" class="rm-sort-btn" onclick="rmOpenSortSheet()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 4 7 20"/><polyline points="3 8 7 4 11 8"/><polyline points="17 20 17 4"/><polyline points="13 16 17 20 21 16"/></svg>
-        <span class="cur">Sort:</span> <span id="rm-sort-cur">Newest</span>
-      </button>
-    </div>
     <div id="rm-orders-cards" aria-live="polite"></div>
   </section>
 
@@ -26558,7 +26560,7 @@ window.onLangChange(function () {
       '<span class="arrow">' + IC.chevron + '</span></button>') : '';
 
     wrap.innerHTML =
-      '<div class="rm-dh-title"><div class="eyebrow">Full Circle</div><h2>Dashboard · 概览</h2></div>' +
+      '<div class="rm-dh-title"><div class="eyebrow">Mini App</div><h2>Dashboard · 概览</h2></div>' +
       '<div class="rm-dh-periods">' + chips + '</div>' +
       hero +
       '<div class="rm-dh-grid">' + tiles + ops + prodTile + '</div>';
