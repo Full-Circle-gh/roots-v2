@@ -24538,6 +24538,51 @@ window.onLangChange(function () {
     .rm-sheet-ctl { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 12px; }
     .rm-sheet-ctl button { flex: 1; justify-content: center; }
   }
+
+  /* ════════════════════════════════════════════════════════════════════
+     MOBILE DAILY-OPS (Phase 2) — make the five operator screens
+     (Dashboard, Orders, Invoices, Customers, Products) thumb-friendly.
+     Everything ADDITIVE and ≤720px-only; the desktop layout is never
+     touched. Companion to the Phase 1 shell above.
+     See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  @media (max-width: 720px) {
+    /* ── KPI strips → a tidy 2-up grid. The desktop auto-fit/minmax can
+       leave a lone orphan tile stretched full-width on a narrow phone;
+       a fixed 2-col grid reads cleanly. Trim the headline a touch so the
+       figures don't overflow their cell. ── */
+    .fc-kpis, .db-kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .fc-kpi .val { font-size: 26px; }
+    .db-kpi .val { font-size: 24px; }
+
+    /* ── Wide tables (Orders, Customers, ledgers) scroll sideways instead
+       of clipping — the wrap is overflow:hidden on desktop. Momentum
+       scroll on iOS; a min-width keeps columns legible rather than
+       crushed. ── */
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table-wrap > table { min-width: 560px; }
+
+    /* ── Comfortable tap targets for the controls operators hit all day. ── */
+    .btn { min-height: 38px; }
+    .btn-sm { min-height: 32px; }
+    .status-chip { padding: 9px 14px; font-size: 13px; }
+    th, td { padding: 12px 14px; }
+
+    /* Toolbar search fields claim the full row; the filters/buttons wrap
+       onto the next line (the toolbars are already flex-wrap). */
+    .row > input[type=text],
+    .pa-toolbar input[type=text],
+    #cu-q, #pa-search { flex: 1 1 100%; min-width: 0; }
+
+    /* Stop iOS Safari from auto-zooming the page when a sub-16px field is
+       focused — keeps the web-view from jumping on every tap into a box. */
+    input, select, textarea { font-size: 16px; }
+
+    /* Drawer footer actions stack to full width so they're easy to thumb. */
+    .side-drawer .drawer-foot { flex-wrap: wrap; gap: 8px; }
+    .side-drawer .drawer-foot > .btn,
+    .side-drawer .drawer-foot > button { flex: 1 1 auto; }
+  }
 </style>
 
 <!-- ─── MOBILE SHELL (Phase 1) — bottom tab bar + More sheet ───
