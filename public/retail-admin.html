@@ -5251,6 +5251,55 @@
     .rm-dh-trend { height: 120px; color: var(--accent); }
     .rm-dh-trend .db-spark { width: 100%; height: 100%; display: block; }
     .rm-dh-heatscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    /* ── Combined design: swipeable KPI carousel + inline accordion ──
+       Layered over the Variant-A hero. The carousel scans secondary KPIs
+       (each card opens a .rm-sheet breakdown); the accordion expands report
+       sections in place (bodies cloned from the same desktop chart nodes).
+       Built to match design bundle: mobile/dashboard-combined.html. */
+    .rm-dh-hint { display: flex; align-items: center; gap: 8px; margin: 12px 2px 2px; font-size: 11.5px; color: var(--text-3); }
+    .rm-dh-carousel {
+      display: flex; gap: 11px; overflow-x: auto; margin: 8px -2px 0; padding: 0 2px 6px;
+      scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+    }
+    .rm-dh-carousel::-webkit-scrollbar { display: none; }
+    .rm-dh-kpi {
+      flex: 0 0 165px; scroll-snap-align: start; text-align: left; color: inherit;
+      background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 16px;
+      padding: 15px; cursor: pointer; transition: transform .08s; -webkit-tap-highlight-color: transparent;
+    }
+    .rm-dh-kpi:active { transform: scale(.98); }
+    .rm-dh-kpi .lab { font: 500 9.5px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); }
+    .rm-dh-kpi .val { font: 600 26px var(--f-sans); letter-spacing: -.02em; margin-top: 4px; color: var(--text-1); font-variant-numeric: tabular-nums; }
+    .rm-dh-kpi .delta { font: 500 11px var(--f-mono); margin-top: 4px; }
+    .rm-dh-kpi .delta.up { color: var(--tea-deep, #3f6b46); }
+    .rm-dh-kpi .delta.down { color: var(--danger, #b1483a); }
+    .rm-dh-kpi .spk { display: block; margin-top: 11px; height: 30px; color: var(--accent); }
+    .rm-dh-kpi .spk .db-spark { width: 100%; height: 100%; display: block; }
+    .rm-dh-dots { display: flex; gap: 5px; justify-content: center; padding: 2px 0 4px; }
+    .rm-dh-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--line); transition: width .2s, background .2s; }
+    .rm-dh-dots i.on { background: var(--brass); width: 16px; border-radius: 3px; }
+
+    .rm-dh-acc { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+    .rm-dh-ai { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 15px; overflow: hidden; }
+    .rm-dh-ai-head {
+      display: flex; align-items: center; gap: 12px; width: 100%; padding: 15px;
+      border: 0; background: transparent; cursor: pointer; text-align: left; color: inherit;
+      font-family: inherit; -webkit-tap-highlight-color: transparent;
+    }
+    .rm-dh-ai-head .ic { width: 32px; height: 32px; border-radius: 10px; background: var(--bg-elev-1); display: flex; align-items: center; justify-content: center; color: var(--brass); flex: none; }
+    .rm-dh-ai-head .ic svg { width: 17px; height: 17px; }
+    .rm-dh-ai-head .tx { flex: 1; min-width: 0; }
+    .rm-dh-ai-head .t { font: 600 14.5px var(--f-sans); color: var(--text-1); display: block; }
+    .rm-dh-ai-head .hv { font: 600 15px var(--f-sans); color: var(--text-1); margin-right: 4px; font-variant-numeric: tabular-nums; }
+    .rm-dh-ai-head .hv.brass { color: var(--brass); }
+    .rm-dh-ai-head .chev { color: var(--text-3); transition: transform .26s; display: flex; flex: none; }
+    .rm-dh-ai-head .chev svg { width: 18px; height: 18px; }
+    .rm-dh-ai.open .rm-dh-ai-head .chev { transform: rotate(90deg); }
+    .rm-dh-ai-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s ease; }
+    .rm-dh-ai.open .rm-dh-ai-body { grid-template-rows: 1fr; }
+    .rm-dh-ai-body > .inner { overflow: hidden; }
+    .rm-dh-ai-pad { padding: 0 14px 16px; }
   }
 
   /* ════════════════════════════════════════════════════════════════════
@@ -26506,6 +26555,23 @@ window.onLangChange(function () {
       '<span class="lab">' + lab + '</span><span class="val">' + val + '</span><span class="spk">' + spk + '</span></button>';
   }
 
+  // ── Combined design pieces: carousel KPI card + accordion section ──
+  function kcard(sheet, lab, valHtml, delta, sparkMetric) {
+    var dl = (delta == null) ? '' :
+      '<div class="delta ' + (delta >= 0 ? 'up' : 'down') + '">' + (delta >= 0 ? '▲' : '▼') + ' ' + Math.abs(delta).toFixed(1) + '%</div>';
+    return '<button class="rm-dh-kpi" data-sheet="' + sheet + '">' +
+      '<div class="lab">' + lab + '</div><div class="val">' + valHtml + '</div>' + dl +
+      '<div class="spk">' + spark(trendVals(sparkMetric)) + '</div></button>';
+  }
+  function accItem(s) {
+    return '<div class="rm-dh-ai' + (s.open ? ' open' : '') + '" data-acc="' + s.id + '">' +
+      '<button class="rm-dh-ai-head"><span class="ic">' + (IC[s.ic] || '') + '</span>' +
+        '<span class="tx"><span class="t">' + s.t + '</span></span>' +
+        (s.v ? '<span class="hv ' + (s.vc || '') + '">' + s.v + '</span>' : '') +
+        '<span class="chev">' + IC.chevron + '</span></button>' +
+      '<div class="rm-dh-ai-body"><div class="inner"><div class="rm-dh-ai-pad">' + s.body + '</div></div></div></div>';
+  }
+
   window.rmRenderDash = function () {
     var wrap = el('rm-dash');
     if (!wrap || typeof DASH_DATA === 'undefined' || !DASH_DATA) return;
@@ -26513,7 +26579,6 @@ window.onLangChange(function () {
     var rng = activeRange();
     var convNull = (k.conversion_rate == null);
     var conv = convNull ? '—' : (k.conversion_rate.toFixed(1) + '%');
-    var convCell = function (key) { return convNull ? '—' : cu(key, k.conversion_rate, 'pct', conv); };
     var live = (el('db-live-num') || {}).textContent; if (!live || live === '—') live = '0';
 
     var chips = PERIODS.map(function (p) {
@@ -26524,46 +26589,45 @@ window.onLangChange(function () {
     var deltaHtml = (dr == null) ? '' :
       '<span class="rm-dh-delta ' + (dr >= 0 ? 'up' : 'down') + '">' + (dr >= 0 ? '▲' : '▼') + ' ' + Math.abs(dr).toFixed(1) + '%</span>';
 
+    // Slim live hero (from A) — headline + liveness; the KPIs move to the carousel.
     var hero =
       '<div class="rm-dh-hero">' +
         '<div class="rm-dh-live"><span class="d"></span> Right now · ' + esc(live) + ' viewing</div>' +
         '<div class="rm-dh-big">' + cu('hero-rev', k.revenue, 'rev', money(k.revenue)) + '</div>' +
         '<div class="rm-dh-cap">Revenue · ' + esc(RNG_LABEL[rng] || rng) + ' ' + deltaHtml + '</div>' +
-        '<div class="rm-dh-mini">' +
-          mini(cu('hero-ord', k.orders, 'int', num(k.orders)), 'Orders · 订单') +
-          mini(cu('hero-aov', k.aov, 'aov', money(k.aov, 2)), 'Avg order · 客单') +
-          mini(cu('hero-new', k.new_customers, 'plus', '+' + num(k.new_customers)), 'New cust. · 新客') +
-          mini(convCell('hero-conv'), 'Conv. · 转化') +
-        '</div>' +
       '</div>';
 
-    var tiles =
-      tile('sales', 'sales', 'Sales · 销售', cu('t-rev', k.revenue, 'rev', money(k.revenue)), spark(trendVals('revenue'))) +
-      tile('orders', 'orders', 'Orders · 订单', cu('t-ord', k.orders, 'int', num(k.orders)), spark(trendVals('orders'))) +
-      tile('customers', 'customers', 'New cust. · 新客', cu('t-new', k.new_customers, 'plus', '+' + num(k.new_customers)), spark(trendVals('new_customers'))) +
-      tile('traffic', 'conv', 'Conversion · 转化', convCell('t-conv'), spark(trendVals('orders')));
+    // Swipeable KPI carousel (from C) — each card opens a breakdown sheet (from B).
+    var carousel =
+      kcard('orders', 'Orders · 订单', cu('c-ord', k.orders, 'int', num(k.orders)), d.orders, 'orders') +
+      kcard('sales', 'Avg order · 客单', cu('c-aov', k.aov, 'aov', money(k.aov, 2)), d.aov, 'revenue') +
+      kcard('traffic', 'Conversion · 转化', (convNull ? '—' : cu('c-conv', k.conversion_rate, 'pct', conv)), null, 'orders') +
+      kcard('traffic', 'Refund rate · 退款率', ((k.refund_rate || 0).toFixed(1) + '%'), null, 'orders') +
+      kcard('traffic', 'Visits · 访问', cu('c-vis', k.visits, 'int', num(k.visits)), d.visits, 'visits') +
+      kcard('customers', 'New cust. · 新客', cu('c-new', k.new_customers, 'plus', '+' + num(k.new_customers)), d.new_customers, 'new_customers');
+    var dots = '<i class="on"></i><i></i><i></i><i></i><i></i><i></i>';
 
-    // Wide "operations" tile — in-flight orders that still need a hand, summed
-    // from the live status funnel (no extra data).
-    var f = DASH_DATA.funnel || {};
-    var attn = ['pending_payment', 'awaiting_restock', 'preparing', 'dispatched'].reduce(function (s, key) {
-      return s + ((f[key] && f[key].n) || 0);
-    }, 0);
-    var ops = '<button class="rm-dh-tile wide alarm" data-r="ops"><span class="l"><span class="ic">' + IC.ops + '</span>' +
-      '<span class="tx"><span class="lab">Operations · 运营</span><span class="val">' + cu('ops-attn', attn, 'int', num(attn)) + ' need attention · 待处理</span></span></span>' +
-      (attn > 0 ? '<span class="rm-dh-badge">Action · 处理</span>' : '<span class="arrow">' + IC.chevron + '</span>') + '</button>';
-
-    // Wide "top product" tile — the period's best seller.
-    var tp = (DASH_DATA.topProducts || [])[0];
-    var prodTile = tp ? ('<button class="rm-dh-tile wide" data-r="catalog"><span class="l"><span class="ic">' + IC.products + '</span>' +
-      '<span class="tx"><span class="lab">Top product · 热销</span><span class="val">' + esc(tp.name_en || tp.name_cn || '—') + '</span></span></span>' +
-      '<span class="arrow">' + IC.chevron + '</span></button>') : '';
+    // Inline accordion report sections (from C) — bodies cloned from the same
+    // desktop chart nodes dashRenderAll already populated (no extra fetch).
+    var SECS = [
+      { id: 'trend', ic: 'sales', t: 'Revenue trend · 营收趋势', v: money(k.revenue), vc: 'brass', open: true, body: '<div class="rm-dh-trend">' + spark(trendVals('revenue')) + '</div>' },
+      { id: 'status', ic: 'orders', t: 'Order status · 订单状态', v: num(k.orders), open: true, body: clone('db-funnel') },
+      { id: 'payment', ic: 'orders', t: 'Payment & delivery · 支付配送', v: '', open: false, body: clone('db-splits') },
+      { id: 'products', ic: 'products', t: 'Top products · 热销', v: '', open: false, body: clone('db-products') },
+      { id: 'customers', ic: 'customers', t: 'Top customers · 客户榜', v: '', open: false, body: clone('db-customers') },
+      { id: 'tiers', ic: 'customers', t: 'Customer tiers · 等级分布', v: '', open: false, body: clone('db-tiers') },
+      { id: 'geo', ic: 'sales', t: 'By city · 地域分布', v: '', open: false, body: clone('db-geo') }
+    ];
+    var acc = SECS.map(accItem).join('');
 
     wrap.innerHTML =
       '<div class="rm-dh-title"><h2>Dashboard · 概览</h2></div>' +
       '<div class="rm-dh-periods">' + chips + '</div>' +
       hero +
-      '<div class="rm-dh-grid">' + tiles + ops + prodTile + '</div>';
+      '<div class="rm-dh-hint">Swipe the stats · tap any for the full breakdown · 滑动查看</div>' +
+      '<div class="rm-dh-carousel">' + carousel + '</div>' +
+      '<div class="rm-dh-dots">' + dots + '</div>' +
+      '<div class="rm-dh-acc">' + acc + '</div>';
     animateNums(wrap);   // roll the headline figures up (desktop dashCountUp)
   };
 
@@ -26631,6 +26695,38 @@ window.onLangChange(function () {
     if (c) c.innerHTML = '<span class="d"></span> Right now · ' + esc(String(n)) + ' viewing';
   };
 
+  // ── breakdown sheet (Combined design) — reuses the shared .rm-sheet styling;
+  //    a card in the KPI carousel opens the same REPORTS body the push used. ──
+  function ensureDhSheet() {
+    if (el('rm-dh-scrim')) return;
+    var scrim = document.createElement('div');
+    scrim.className = 'rm-sheet-scrim'; scrim.id = 'rm-dh-scrim';
+    var sheet = document.createElement('div');
+    sheet.className = 'rm-sheet'; sheet.id = 'rm-dh-sheet';
+    sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true');
+    sheet.innerHTML =
+      '<div class="rm-sheet-grip"><span></span></div>' +
+      '<div class="rm-sheet-head"><h3 id="rm-dh-sheet-title"></h3><button class="rm-sheet-close" id="rm-dh-sheet-x" aria-label="Close · 关闭">✕</button></div>' +
+      '<div class="rm-sheet-body" id="rm-dh-sheet-body"></div>';
+    document.body.appendChild(scrim); document.body.appendChild(sheet);
+    scrim.addEventListener('click', closeDhSheet);
+    el('rm-dh-sheet-x').addEventListener('click', closeDhSheet);
+  }
+  function openMetricSheet(key) {
+    var rep = REPORTS[key]; if (!rep) return;
+    ensureDhSheet();
+    el('rm-dh-sheet-title').textContent = rep.title.replace(/&amp;/g, '&');
+    var body = el('rm-dh-sheet-body'); body.innerHTML = rep.body(); body.scrollTop = 0;
+    el('rm-dh-scrim').classList.add('show'); el('rm-dh-sheet').classList.add('show');
+    document.documentElement.classList.add('rm-noscroll');
+  }
+  function closeDhSheet() {
+    var s = el('rm-dh-sheet'), sc = el('rm-dh-scrim'); if (!s) return;
+    s.classList.remove('show'); sc.classList.remove('show');
+    document.documentElement.classList.remove('rm-noscroll');
+  }
+  window.rmDashCloseSheet = closeDhSheet;
+
   function bind() {
     var wrap = el('rm-dash');
     if (wrap && !wrap._rmBound) {
@@ -26638,9 +26734,18 @@ window.onLangChange(function () {
       wrap.addEventListener('click', function (e) {
         var chip = e.target.closest('.rm-dh-periods button');
         if (chip) { if (typeof dashSetRange === 'function') dashSetRange(chip.dataset.r); return; }
-        var t = e.target.closest('.rm-dh-tile');
-        if (t) openReport(t.dataset.r);
+        var kc = e.target.closest('.rm-dh-kpi');
+        if (kc) { openMetricSheet(kc.dataset.sheet); return; }
+        var head = e.target.closest('.rm-dh-ai-head');
+        if (head) { head.closest('.rm-dh-ai').classList.toggle('open'); return; }
       });
+      // KPI carousel: the dot pager follows the horizontal scroll position.
+      wrap.addEventListener('scroll', function (e) {
+        var car = e.target.closest && e.target.closest('.rm-dh-carousel'); if (!car) return;
+        var i = Math.round(car.scrollLeft / 176);  // card 165 + gap 11
+        var dots = wrap.querySelectorAll('.rm-dh-dots i');
+        for (var j = 0; j < dots.length; j++) dots[j].classList.toggle('on', j === i);
+      }, true);
     }
     var panel = el('rm-dash-report');
     if (panel && !panel._rmBound) {
@@ -26652,7 +26757,7 @@ window.onLangChange(function () {
   // Switching tabs hides #tab-dashboard (and the fixed report with it), but the
   // scroll-lock would linger — release it on any nav tap.
   document.addEventListener('click', function (e) {
-    if (e.target.closest && e.target.closest('#rm-bottomnav [data-go], .rm-sheet-list [data-go]')) closeReport();
+    if (e.target.closest && e.target.closest('#rm-bottomnav [data-go], .rm-sheet-list [data-go]')) { closeReport(); closeDhSheet(); }
   }, true);
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
