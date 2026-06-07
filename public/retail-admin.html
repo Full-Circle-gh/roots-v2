@@ -3242,9 +3242,9 @@
      the same zen ease as the slide. JS toggles .od-swapping / .cu-swapping
      around the data swap. (#order-detail-mount IS the order drawer's body.) */
   #order-detail-mount,
-  #cu-drawer .drawer-body { transition: opacity 990ms cubic-bezier(.16, 1, .3, 1); }
+  #cu-drawer .drawer-body { transition: opacity 792ms cubic-bezier(.16, 1, .3, 1); }
   #order-detail-mount.od-swapping,
-  #cu-drawer .drawer-body.cu-swapping { opacity: 0; transition: opacity 396ms cubic-bezier(.16, 1, .3, 1); }
+  #cu-drawer .drawer-body.cu-swapping { opacity: 0; transition: opacity 317ms cubic-bezier(.16, 1, .3, 1); }
   .side-drawer .drawer-head {
     padding: 14px 18px;
     display: flex; align-items: center; justify-content: space-between;
@@ -14079,8 +14079,8 @@ async function openOrder(id, opts = {}) {
     const o = (await fetchP)[0].data;
     _OPEN_ORDER = o;
     if (switching) {
-      mount.classList.add('od-swapping');                       // fade old out (396ms)
-      await new Promise(r => setTimeout(r, 396));
+      mount.classList.add('od-swapping');                       // fade old out (317ms)
+      await new Promise(r => setTimeout(r, 317));
       renderOpenOrder(o);                                       // swap into hidden mount
       requestAnimationFrame(() => mount.classList.remove('od-swapping'));  // fade new in
     } else {
@@ -19980,11 +19980,11 @@ async function cuOpenDetail(id, restore = null) {
   }
   let j;
   try {
-    // When switching, wait for the fade-out (396ms) and the data together so
+    // When switching, wait for the fade-out (317ms) and the data together so
     // the new customer lands into a fully-faded, hidden body — a clean
     // cross-fade with no "Loading…" flash between the two records.
     j = switching
-      ? (await Promise.all([fetchP, new Promise(r => setTimeout(r, 396))]))[0]
+      ? (await Promise.all([fetchP, new Promise(r => setTimeout(r, 317))]))[0]
       : await fetchP;
   } catch (e) {
     $('#cu-detail-body').innerHTML = '<div class="muted">Network error. · 网络错误。</div>';
