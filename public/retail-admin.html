@@ -3065,7 +3065,7 @@
     letter-spacing: .04em;
     border: 1px solid;
   }
-  .pill .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-4); }
   .pill.pub { background: rgba(107, 142, 111, .12); color: var(--accent); border-color: rgba(107, 142, 111, .30); }
   .pill.pub .dot { background: var(--accent); }
   .pill.draft { background: var(--bg-elev-1); color: var(--text-3); border-color: var(--line); }
@@ -4760,10 +4760,14 @@
       min-height: 52px;
     }
     #order-drawer .order-head > div:first-child { min-width: 0; flex: 1; }
-    #order-drawer .order-head .title-row { margin-bottom: 0; flex-wrap: nowrap; }
+    #order-drawer .order-head .title-row { margin-bottom: 0; flex-wrap: nowrap; min-width: 0; }
     #order-drawer .order-head .title-row b {
+      flex: 0 1 auto; min-width: 0;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+    /* Status pill keeps its full width — only the order# ellipsizes — so the
+       pill never bleeds past the right pad into the ⋯ kebab. */
+    #order-drawer .order-head .title-row .pill { flex: 0 0 auto; }
 
     /* "View" popover trigger → ⋯ kebab pinned top-right of the app-bar. */
     #order-drawer .order-head .ovp-wrap {
