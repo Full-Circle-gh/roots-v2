@@ -4984,6 +4984,13 @@
       color: var(--text-2); font: 500 13px var(--f-sans); cursor: pointer; -webkit-tap-highlight-color: transparent; }
     .rm-oc-full svg { width: 16px; height: 16px; }
     .rm-oc-full:active { background: var(--bg-elev-1); }
+    .rm-oc-items { background: var(--bg-elev-1); border: 1px solid var(--line-soft); border-radius: 11px; padding: 2px 12px; margin-bottom: 12px; }
+    .rm-oc-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-soft); font-size: 13.5px; color: var(--text-1); }
+    .rm-oc-item:first-child { border-top: 0; }
+    .rm-oc-item .nm { flex: 1; min-width: 0; }
+    .rm-oc-item .q { font: 12px var(--f-mono); color: var(--text-3); flex: 0 0 auto; }
+    .rm-oc-item .a { font-weight: 600; min-width: 54px; text-align: right; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+    .rm-oc-loading { color: var(--text-3); font-size: 13px; padding: 12px 2px; }
 
     .rm-oc-empty { text-align: center; color: var(--text-3); padding: 44px 20px; font-size: 13.5px; }
   }
@@ -26440,6 +26447,7 @@ window.onLangChange(function () {
         }
         await api('/api/retail-admin/orders/' + id + '/status', { method: 'PATCH', body: { status: to, reason: null, pay_method: pay_method } });
         if (typeof humanStatus === 'function' && typeof toast === 'function') toast('Order → ' + humanStatus(to));
+        peekCache = {};   // status/items changed → drop cached peek data
         if (typeof loadOrders === 'function') loadOrders();   // re-renders cards + table
       } catch (e) {
         if (typeof toast === 'function') toast('Failed · ' + e.message, 'err');
@@ -26447,26 +26455,63 @@ window.onLangChange(function () {
     })();
   }
 
-  // Fill the inline peek (Combined): a compact summary from the list row + an
-  // action row (Advance / Call) and "Open full details" → the existing drawer.
-  function fillPeek(card) {
-    var id = card.getAttribute('data-id'), o = null;
-    for (var i = 0; i < lastData.length; i++) { if (String(lastData[i].id) === String(id)) { o = lastData[i]; break; } }
-    var pad = card.querySelector('[data-oexp]'); if (!o || !pad) return;
+  // Inline peek (Combined) — matches the mockup: Ship to / Address / Payment /
+  // Ship by + the line items + Advance/Call + "Full detail & manage". Address,
+  // payment and items aren't on the list row, so the full order is fetched on
+  // first expand (cached per id; cleared on advance).
+  var peekCache = {};
+  var ICON_CHEV_R = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+  function payLabel(m) {
+    m = String(m || '').toLowerCase();
+    if (m.indexOf('wechat') >= 0 || m === 'wxpay' || m === 'wx') return 'WeChat';
+    if (m.indexOf('ali') >= 0) return 'Alipay';
+    if (m.indexOf('balance') >= 0 || m.indexOf('wallet') >= 0) return 'Wallet';
+    if (m.indexOf('cash') >= 0) return 'Cash';
+    return m ? (m.charAt(0).toUpperCase() + m.slice(1)) : '—';
+  }
+  function peekItemsHTML(o) {
+    var rows = '';
+    (o.shipments || []).forEach(function (s) {
+      (s.items || []).forEach(function (it) {
+        var nm = it.name_en || it.name_cn || ('#' + it.id);
+        rows += '<div class="rm-oc-item"><span class="nm">' + esc(nm) + '</span><span class="q">×' + (it.qty || 0) + '</span><span class="a">¥' + money(it.line_total) + '</span></div>';
+      });
+    });
+    return rows ? '<div class="rm-oc-items">' + rows + '</div>' : '';
+  }
+  function peekHTML(o) {
     var fwd = forwardAction(o), sb = shipBy(o), phone = o.recipient_phone || '';
+    var shipByTxt = (sb.text || 'ASAP') + (o.scheduled_for ? ' · Booked' : '');
+    var addr = (o.fulfillment_type === 'pickup')
+      ? ('Pickup · ' + esc((o.address && o.address.store_name_en) || o.store_name_en || o.store_code || 'store'))
+      : esc(o.address_full || '—');
     var dl = '<dl class="rm-oc-dl">' +
       '<dt>Ship to</dt><dd>' + esc(o.recipient_name || o.nickname || '—') + (phone ? ' · ' + esc(phone) : '') + '</dd>' +
-      '<dt>When</dt><dd>' + (sb.text ? esc(sb.text) : 'ASAP') + '</dd>' +
-      (o.store_code ? '<dt>Store</dt><dd>' + esc(o.store_name_en || o.store_code) + '</dd>' : '') +
+      '<dt>Address</dt><dd>' + addr + '</dd>' +
+      '<dt>Payment</dt><dd>' + esc(payLabel(o.payment_method)) + '</dd>' +
+      '<dt>Ship by</dt><dd>' + esc(shipByTxt) + '</dd>' +
       '</dl>';
     var acts = (fwd || phone)
       ? '<div class="rm-oc-acts">' +
-          (fwd ? '<button type="button" class="rm-pbtn adv" data-pact="advance" data-id="' + o.id + '" data-to="' + fwd[0] + '">' + ICON_ADV + esc(en(fwd[1])) + '</button>' : '') +
+          (fwd ? '<button type="button" class="rm-pbtn adv" data-pact="advance" data-id="' + o.id + '" data-to="' + fwd[0] + '">' + esc(en(fwd[1])) + '</button>' : '') +
           (phone ? '<button type="button" class="rm-pbtn call" data-pact="call" data-phone="' + esc(phone) + '" aria-label="Call">' + ICON_CALL + '</button>' : '') +
         '</div>'
       : '';
-    pad.innerHTML = dl + acts +
-      '<button type="button" class="rm-oc-full" data-pact="open" data-id="' + o.id + '">' + ICON_OPEN + ' Open full details · 详情</button>';
+    return dl + peekItemsHTML(o) + acts +
+      '<button type="button" class="rm-oc-full" data-pact="open" data-id="' + o.id + '">Full detail &amp; manage · 详情管理 ' + ICON_CHEV_R + '</button>';
+  }
+  function fillPeek(card) {
+    var id = card.getAttribute('data-id');
+    var pad = card.querySelector('[data-oexp]'); if (!pad) return;
+    if (peekCache[id]) { pad.innerHTML = peekHTML(peekCache[id]); return; }
+    pad.innerHTML = '<div class="rm-oc-loading">Loading… · 加载中…</div>';
+    if (typeof api !== 'function') return;
+    api('/api/retail-admin/orders/' + id).then(function (r) {
+      peekCache[id] = r.data;
+      if (card.classList.contains('open')) pad.innerHTML = peekHTML(r.data);
+    }).catch(function (e) {
+      pad.innerHTML = '<div class="rm-oc-loading">Couldn’t load · ' + esc(e.message) + '</div>';
+    });
   }
 
   // ── Tap-to-open + swipe-left interaction (event-delegated; survives re-render) ──
