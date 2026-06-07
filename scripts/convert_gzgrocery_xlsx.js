@@ -168,36 +168,69 @@ function pct(s) {
   return isFinite(n) ? n / 100 : 0;
 }
 
+// ── Build a column-index map from the header row by matching header
+// labels. Sheets come in two layouts: an older one without a dedicated
+// SKU column and a newer one that inserts "SKU" at index 1, shifting
+// every later column right by one. Mapping by name handles both.
+// The Qty header is sometimes blank in the old layout, so when it's not
+// found we fall back to the column right after "gzgrocery Price".
+function mapColumns(headerRow) {
+  const norm = s => String(s || '').trim().toLowerCase();
+  const find = (...labels) => {
+    for (let i = 0; i < headerRow.length; i++) {
+      const h = norm(headerRow[i]);
+      if (labels.some(l => h === l || h.startsWith(l))) return i;
+    }
+    return -1;
+  };
+  const map = {
+    name_en:    find('product name'),
+    name_cn:    find('名称'),
+    price_orig: find('price (gv'),
+    discount:   find('discount'),
+    price:      find('gzgrocery price'),
+    qty:        find('qty'),
+    subtotal:   find('subtotal'),
+  };
+  if (map.qty < 0 && map.price >= 0) map.qty = map.price + 1;
+  return map;
+}
+
 // ── Parse one workbook → array of sale rows.
 function parseWorkbook(filePath) {
   const wb = XLSX.readFile(filePath);
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
   const sales = [];
-  let headerSeen = false;
+  let cols = null;
   for (const row of rows) {
     const a = String(row[0] || '').trim();
-    const b = String(row[1] || '').trim();
-    // Skip the header row (Product Name / 名称).
-    if (!headerSeen) {
-      if (a === 'Product Name' || b === '名称') { headerSeen = true; continue; }
+    // Detect + map the header row, then skip it.
+    if (!cols) {
+      const joined = row.map(c => String(c || '').trim()).join('|');
+      if (a === 'Product Name' || /(^|\|)名称(\||$)/.test(joined)) {
+        cols = mapColumns(row);
+        continue;
+      }
     }
+    if (!cols) continue;  // rows before the header (titles, etc.)
+    const cn = String(row[cols.name_cn] ?? '').trim();
+    const en = String(row[cols.name_en] ?? '').trim();
     // Skip total / blank lines.
-    if (!a && !b) continue;
-    if (b === 'Total' || a === 'Total') continue;
-    const qtyRaw = row[5];
-    const qty = parseFloat(qtyRaw);
+    if (!en && !cn) continue;
+    if (cn === 'Total' || en === 'Total') continue;
+    const qty = parseFloat(row[cols.qty]);
     if (!isFinite(qty) || qty <= 0) continue;
-    const sku = extractSku(b);
+    const sku = extractSku(cn);
     if (!sku) continue;
-    const priceOrig = money(row[2]);
-    const discount  = pct(row[3]);
-    const price     = money(row[4]);
-    const subtotal  = money(row[7]);
+    const priceOrig = money(row[cols.price_orig]);
+    const discount  = pct(row[cols.discount]);
+    const price     = money(row[cols.price]);
+    const subtotal  = money(row[cols.subtotal]);
     sales.push({
       sku,
-      name_en: a || null,
-      name_cn: b.replace(/^GVF?\s*/, '').replace(/^P-\d+\s*/, '').replace(/^\d+-\d+\s*/, '').trim() || null,
+      name_en: en || null,
+      name_cn: cn.replace(/^GVF?\s*/, '').replace(/^P-\d+\s*/, '').replace(/^\d+-\d+\s*/, '').trim() || null,
       price,
       price_orig: priceOrig,
       discount,
@@ -265,9 +298,21 @@ if (DRY) {
   process.exit(0);
 }
 
-// Merge into existing config, replacing the periods array.
+// Merge into existing config: replace any prior period with the same
+// date range (from|to), add new ranges, keep the rest. This makes it
+// safe to point the converter at a single month's folder without wiping
+// the full history — matching the idempotent contract in the header.
 const existing = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-existing.periods = periods;
+const merged = new Map();
+for (const p of (existing.periods || [])) merged.set(p.from + '|' + p.to, p);
+let replaced = 0, added = 0;
+for (const p of periods) {
+  const key = p.from + '|' + p.to;
+  if (merged.has(key)) replaced++; else added++;
+  merged.set(key, p);
+}
+existing.periods = [...merged.values()].sort((a, b) => a.from.localeCompare(b.from));
 fs.writeFileSync(CONFIG_PATH, JSON.stringify(existing, null, 2));
-console.log(`\n✅ Wrote ${periods.length} period(s) to ${CONFIG_PATH}`);
+console.log(`\n✅ Merged ${periods.length} parsed period(s) into ${CONFIG_PATH}`);
+console.log(`   ${added} new range(s), ${replaced} replaced; ${existing.periods.length} total now.`);
 console.log(`   Other config keys preserved: master_renames, sku_aliases, new_variants, …`);

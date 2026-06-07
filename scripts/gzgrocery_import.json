@@ -39490,6 +39490,3399 @@
           "subtotal": 43.2
         }
       ]
+    },
+    {
+      "from": "2026-05-01",
+      "to": "2026-05-04",
+      "midpoint": "2026-05-02",
+      "sales": [
+        {
+          "sku": "1-10",
+          "name_en": "Creamy Hummus Served",
+          "name_cn": "中东鹰嘴豆泥（冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "1-30",
+          "name_en": "Tzatziki",
+          "name_cn": "莳萝柠檬酸奶酱（冷藏）",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "1-90",
+          "name_en": "Classic Sour Cream",
+          "name_cn": "-1-90经典酸奶油（冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "1-100",
+          "name_en": "Blueberries Chia Jam",
+          "name_cn": "蓝莓奇亚籽果酱 125g （冷藏）",
+          "price": 31.2,
+          "price_orig": 39,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 31.2
+        },
+        {
+          "sku": "1-110",
+          "name_en": "GoVegan！Strawberry Lemon Jam",
+          "name_cn": "柠檬草莓酱 220g  （冷藏）",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "1-130",
+          "name_en": "Medium Size Probiotic Coconut Yogurt - Plain Flavor",
+          "name_cn": "大椰益生菌200ml（中） （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-140",
+          "name_en": "Big Size Probiotic Coconut Yogurt - Plain Flavor",
+          "name_cn": "纯素椰子酸奶（大）500g （冷藏）",
+          "price": 66.4,
+          "price_orig": 83,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 132.8
+        },
+        {
+          "sku": "1-160",
+          "name_en": "Medium Size Probiotic Coconut Yogurt - Vanilla Flavor",
+          "name_cn": "纯素椰子酸奶-香草味200g （冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 38.4
+        },
+        {
+          "sku": "1-220",
+          "name_en": "Onion Pickles",
+          "name_cn": "腌洋葱 （冷藏）",
+          "price": 24,
+          "price_orig": 30,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 48
+        },
+        {
+          "sku": "1-250",
+          "name_en": "Pitted Kalamata & Green Olives Mix",
+          "name_cn": "去核混合橄榄300g (冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "1-260",
+          "name_en": "Energy Cubes",
+          "name_cn": "能量棒（小）60g （冷藏）",
+          "price": 16,
+          "price_orig": 20,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 16
+        },
+        {
+          "sku": "1-290",
+          "name_en": "Cooked Mix Color Quinoa",
+          "name_cn": "现食藜麦 （冷藏）",
+          "price": 9.1,
+          "price_orig": 13,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 9.1
+        },
+        {
+          "sku": "1-300",
+          "name_en": "Quinoa Salad",
+          "name_cn": "藜麦沙拉 300g （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 4,
+          "subtotal": 140.8
+        },
+        {
+          "sku": "1-310",
+          "name_en": "Govegan! The Ultimate Beet Salad",
+          "name_cn": "甜菜头沙拉+1-310D 酱（冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 38.4
+        },
+        {
+          "sku": "1-330",
+          "name_en": "Tabbouleh Bowl",
+          "name_cn": "甜宝绿盒 +1-330D酱(冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 105.6
+        },
+        {
+          "sku": "1-370",
+          "name_en": "Govegan! Roasted Pumpkin Soup",
+          "name_cn": "香烤南瓜汤 330g (冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 5,
+          "subtotal": 108
+        },
+        {
+          "sku": "1-380",
+          "name_en": "Sweet Potato Cauliflower Curry",
+          "name_cn": "花椰菜红薯红咖喱（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 105.6
+        },
+        {
+          "sku": "1-400",
+          "name_en": "Govegan! Creamy White Bean Soup with Kale",
+          "name_cn": "意式白豆甘蓝汤 冷藏+1-400D小香料（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-420",
+          "name_en": "Govegan! Falafel Wrap With Creamy Hummus",
+          "name_cn": "法拉飞卷（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "2-180",
+          "name_en": "Cleanse Up",
+          "name_cn": "青力果汁（冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 43.2
+        },
+        {
+          "sku": "3-80",
+          "name_en": "Tempeh (Frozen)",
+          "name_cn": "纯味天贝（冷冻）",
+          "price": 24.8,
+          "price_orig": 31,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 74.4
+        },
+        {
+          "sku": "3-160",
+          "name_en": "Frozen OMG mushroom burger pattie",
+          "name_cn": "蘑菇汉堡肉饼450g（冷冻）",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "3-170",
+          "name_en": "Guacamole",
+          "name_cn": "墨西哥牛油果泥 （冷冻）",
+          "price": 39.2,
+          "price_orig": 49,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 39.2
+        },
+        {
+          "sku": "3-190",
+          "name_en": "Frozen Cheese Cake (Gluten Free)",
+          "name_cn": "素士力架 140g （冷冻）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "3-240",
+          "name_en": "Nuts & Seeds Bread (No Flour Gluten Free)",
+          "name_cn": "大口果仁包（无麸质） 440g冷冻",
+          "price": 42.4,
+          "price_orig": 53,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 42.4
+        },
+        {
+          "sku": "2-280",
+          "name_en": "Nour Dates",
+          "name_cn": "椰枣 240g（冷藏）",
+          "price": 25.6,
+          "price_orig": 32,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 51.2
+        },
+        {
+          "sku": "2-290",
+          "name_en": "Medjool Dates (Jumbo Size)",
+          "name_cn": "帝王椰枣 430g（冷藏）",
+          "price": 73.6,
+          "price_orig": 92,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 73.6
+        },
+        {
+          "sku": "4-80",
+          "name_en": "Black Beans",
+          "name_cn": "黑豆",
+          "price": 16.8,
+          "price_orig": 21,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 33.6
+        },
+        {
+          "sku": "4-110",
+          "name_en": "Chickpeas Flour (Gluten Free)",
+          "name_cn": "鹰嘴豆粉 500g",
+          "price": 28.8,
+          "price_orig": 36,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 57.6
+        },
+        {
+          "sku": "4-150",
+          "name_en": "Chopped Almonds ( Raw, Unsalted )",
+          "name_cn": "杏仁片（小） 170g",
+          "price": 27.2,
+          "price_orig": 34,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 27.2
+        },
+        {
+          "sku": "4-220",
+          "name_en": "Organic Dry Cranberries Unsweetened",
+          "name_cn": "蔓越莓 150g",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 91.2
+        },
+        {
+          "sku": "4-240",
+          "name_en": "Chunky Granola",
+          "name_cn": "谷物脆 150g",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "4-270",
+          "name_en": "100% Whole Wheat Crackers",
+          "name_cn": "全麦饼干 90g",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 43.2
+        },
+        {
+          "sku": "4-360",
+          "name_en": "Anti Inflammatory Granola (Gluten Free)",
+          "name_cn": "荞麦版格兰诺拉麦片 190g",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "4-370",
+          "name_en": "USDA Organic All Natural Cacao Powder",
+          "name_cn": "可可粉",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "4-380",
+          "name_en": "USDA Organic, Non GMO, Maca Powder",
+          "name_cn": "有机麦咖粉",
+          "price": 32.3,
+          "price_orig": 43,
+          "discount": 0.25,
+          "qty": 1,
+          "subtotal": 32.3
+        },
+        {
+          "sku": "4-460",
+          "name_en": "USDA Organic Turmeric",
+          "name_cn": "姜黄粉 120g",
+          "price": 34.3,
+          "price_orig": 49,
+          "discount": 0.3,
+          "qty": 2,
+          "subtotal": 68.6
+        },
+        {
+          "sku": "4-480",
+          "name_en": "USDA Organic, Non GMO, Hemp Protein Powder (16 Servings)",
+          "name_cn": "火麻蛋白粉 500g",
+          "price": 114.1,
+          "price_orig": 163,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 114.1
+        },
+        {
+          "sku": "4-490",
+          "name_en": "USDA Organic, Non GMO, Pea Protein Powder (22 servings)",
+          "name_cn": "豌豆蛋白粉 680g",
+          "price": 113.4,
+          "price_orig": 162,
+          "discount": 0.3,
+          "qty": 3,
+          "subtotal": 340.2
+        },
+        {
+          "sku": "4-530",
+          "name_en": "Prebiotic Fiber",
+          "name_cn": "益生元菊粉 100g",
+          "price": 44.8,
+          "price_orig": 64,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 44.8
+        },
+        {
+          "sku": "4-550",
+          "name_en": "Nutritional Yeast",
+          "name_cn": "营养酵母 65g",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "4-590",
+          "name_en": "USDA Organic Garlic Powder",
+          "name_cn": "有机大蒜粉120g",
+          "price": 24.8,
+          "price_orig": 31,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 24.8
+        },
+        {
+          "sku": "4-600",
+          "name_en": "USDA Organic Onion Powder",
+          "name_cn": "有机洋葱粉 120g",
+          "price": 24.8,
+          "price_orig": 31,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 24.8
+        },
+        {
+          "sku": "4-690",
+          "name_en": "Govegan! A Bit Salty Peanut Butter (With Crunchy Peanuts Inside)",
+          "name_cn": "咸味粗粒花生酱 430g",
+          "price": 56.8,
+          "price_orig": 71,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 56.8
+        },
+        {
+          "sku": "5-160",
+          "name_en": "Foaming Hand Soap - Lemongrass",
+          "name_cn": "柠檬草精油泡沫洗手液 500ml",
+          "price": 53.3,
+          "price_orig": 71,
+          "discount": 0.25,
+          "qty": 1,
+          "subtotal": 53.3
+        },
+        {
+          "sku": "5-170",
+          "name_en": "Foaming Hand Soap - Mint",
+          "name_cn": "薄荷精油泡沫洗手液 500ml",
+          "price": 53.3,
+          "price_orig": 71,
+          "discount": 0.25,
+          "qty": 2,
+          "subtotal": 106.5
+        }
+      ]
+    },
+    {
+      "from": "2026-05-05",
+      "to": "2026-05-08",
+      "midpoint": "2026-05-06",
+      "sales": [
+        {
+          "sku": "1-10",
+          "name_en": "Creamy Hummus Served",
+          "name_cn": "中东鹰嘴豆泥（冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "1-30",
+          "name_en": "Tzatziki",
+          "name_cn": "莳萝柠檬酸奶酱（冷藏）",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "1-50",
+          "name_en": "Chickpeas Salad",
+          "name_cn": "鹰嘴豆沙拉 230g （冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "1-70",
+          "name_en": "GoVegan! Garlic Dill Sour Cream",
+          "name_cn": "蒜香莳萝酸奶酪220g",
+          "price": 33.6,
+          "price_orig": 42,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 33.6
+        },
+        {
+          "sku": "1-80",
+          "name_en": "GoVegan! OliveN'Cream",
+          "name_cn": "橄榄酸奶酪 220g",
+          "price": 33.6,
+          "price_orig": 42,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 33.6
+        },
+        {
+          "sku": "1-160",
+          "name_en": "Medium Size Probiotic Coconut Yogurt - Vanilla Flavor",
+          "name_cn": "纯素椰子酸奶-香草味200g （冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 38.4
+        },
+        {
+          "sku": "1-190",
+          "name_en": "Medium Size Probiotic Coconut Yogurt - Peach Flavor",
+          "name_cn": "纯素椰子酸奶-桃子味（中）200g (冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 38.4
+        },
+        {
+          "sku": "1-250",
+          "name_en": "Pitted Kalamata & Green Olives Mix",
+          "name_cn": "去核混合橄榄300g (冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "1-300",
+          "name_en": "Quinoa Salad",
+          "name_cn": "藜麦沙拉 300g （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 105.6
+        },
+        {
+          "sku": "1-310",
+          "name_en": "Govegan! The Ultimate Beet Salad",
+          "name_cn": "甜菜头沙拉+1-310D 酱（冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 76.8
+        },
+        {
+          "sku": "1-330",
+          "name_en": "Tabbouleh Bowl",
+          "name_cn": "甜宝绿盒 +1-330D酱(冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-400",
+          "name_en": "Govegan! Creamy White Bean Soup with Kale",
+          "name_cn": "意式白豆甘蓝汤 冷藏+1-400D小香料（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 70.4
+        },
+        {
+          "sku": "1-420",
+          "name_en": "Govegan! Falafel Wrap With Creamy Hummus",
+          "name_cn": "法拉飞卷（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 105.6
+        },
+        {
+          "sku": "1-440",
+          "name_en": "Govegan! Pesto Wrap",
+          "name_cn": "纯素罗勒鸡肉卷 （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "2-170",
+          "name_en": "Fresh Carrot Ginger Juice + Prebiotic Fibers (Inulin)",
+          "name_cn": "姜红卜汁 (冷藏）",
+          "price": 18.4,
+          "price_orig": 23,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 36.8
+        },
+        {
+          "sku": "3-20",
+          "name_en": "Chocolate Hemp Protein Bites (gluten free)",
+          "name_cn": "可可球球 5个（冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "3-40",
+          "name_en": "Baked Falafel (Fresh-Frozen)",
+          "name_cn": "法拉飞小饼（非油炸版，6块) （冷冻）",
+          "price": 39.8,
+          "price_orig": 53,
+          "discount": 0.25,
+          "qty": 2,
+          "subtotal": 79.5
+        },
+        {
+          "sku": "3-145",
+          "name_en": "Seitan",
+          "name_cn": "素肉排（冷冻）",
+          "price": 28,
+          "price_orig": 35,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 28
+        },
+        {
+          "sku": "2-330",
+          "name_en": "Big Size Walnuts ( unsalted, raw )",
+          "name_cn": "核桃（大）280g",
+          "price": 44.8,
+          "price_orig": 56,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 44.8
+        },
+        {
+          "sku": "2-390",
+          "name_en": "Pumpkin Seeds (unsalted, raw)",
+          "name_cn": "南瓜子（小） 280g",
+          "price": 24.8,
+          "price_orig": 31,
+          "discount": 0.2,
+          "qty": 4,
+          "subtotal": 99.2
+        },
+        {
+          "sku": "2-400",
+          "name_en": "All Natural Almond Butter ( Classic )",
+          "name_cn": "杏仁酱 150g",
+          "price": 40,
+          "price_orig": 50,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 80
+        },
+        {
+          "sku": "4-20",
+          "name_en": "Brown Rice (Long Grain)",
+          "name_cn": "糙米",
+          "price": 18.4,
+          "price_orig": 23,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 18.4
+        },
+        {
+          "sku": "4-190",
+          "name_en": "Organic Sunflower Seed (unsalted, raw)",
+          "name_cn": "葵瓜子（小） 260g",
+          "price": 23.2,
+          "price_orig": 29,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 69.6
+        },
+        {
+          "sku": "4-210",
+          "name_en": "Dehydrated Sweet Mango",
+          "name_cn": "芒果干 120g  （冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 21.6
+        },
+        {
+          "sku": "4-230",
+          "name_en": "Unsweetened Organic Dry Raisins",
+          "name_cn": "葡萄干 280g",
+          "price": 28.8,
+          "price_orig": 36,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 28.8
+        },
+        {
+          "sku": "4-270",
+          "name_en": "100% Whole Wheat Crackers",
+          "name_cn": "全麦饼干 90g",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 21.6
+        },
+        {
+          "sku": "4-290",
+          "name_en": "Dehydrated Coconut Flakes",
+          "name_cn": "椰子片",
+          "price": 18.4,
+          "price_orig": 23,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 18.4
+        },
+        {
+          "sku": "4-350",
+          "name_en": "Soft Dehydrated Apples",
+          "name_cn": "脱水苹果干 90g",
+          "price": 14.4,
+          "price_orig": 18,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 14.4
+        },
+        {
+          "sku": "4-680",
+          "name_en": "All Natural Peanut Butter",
+          "name_cn": "花生酱 430g",
+          "price": 45.5,
+          "price_orig": 65,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 45.5
+        },
+        {
+          "sku": "4-690",
+          "name_en": "Govegan! A Bit Salty Peanut Butter (With Crunchy Peanuts Inside)",
+          "name_cn": "咸味粗粒花生酱 430g",
+          "price": 56.8,
+          "price_orig": 71,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 56.8
+        },
+        {
+          "sku": "5-90",
+          "name_en": "Laundry Liquid",
+          "name_cn": "浓缩洗衣液 1L",
+          "price": 65.3,
+          "price_orig": 87,
+          "discount": 0.25,
+          "qty": 1,
+          "subtotal": 65.3
+        }
+      ]
+    },
+    {
+      "from": "2026-05-09",
+      "to": "2026-05-12",
+      "midpoint": "2026-05-10",
+      "sales": [
+        {
+          "sku": "1-10",
+          "name_en": "Creamy Hummus Served",
+          "name_cn": "中东鹰嘴豆泥（冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "1-30",
+          "name_en": "Tzatziki",
+          "name_cn": "莳萝柠檬酸奶酱（冷藏）",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "1-40",
+          "name_en": "Labneh (Probiotic sour cream)",
+          "name_cn": "拿芭纳酱220g（冷藏）",
+          "price": 45.6,
+          "price_orig": 57,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 45.6
+        },
+        {
+          "sku": "1-50",
+          "name_en": "Chickpeas Salad",
+          "name_cn": "鹰嘴豆沙拉 230g （冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "1-80",
+          "name_en": "GoVegan! OliveN'Cream",
+          "name_cn": "橄榄酸奶酪 220g",
+          "price": 33.6,
+          "price_orig": 42,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 33.6
+        },
+        {
+          "sku": "1-90",
+          "name_en": "Classic Sour Cream",
+          "name_cn": "-1-90经典酸奶油（冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "1-130",
+          "name_en": "Medium Size Probiotic Coconut Yogurt - Plain Flavor",
+          "name_cn": "大椰益生菌200ml（中） （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-140",
+          "name_en": "Big Size Probiotic Coconut Yogurt - Plain Flavor",
+          "name_cn": "纯素椰子酸奶（大）500g （冷藏）",
+          "price": 66.4,
+          "price_orig": 83,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 66.4
+        },
+        {
+          "sku": "1-150",
+          "name_en": "Probiotic Coconut Yogurt - Vanilla Flavor",
+          "name_cn": "纯素椰子酸奶-香草味100g （冷藏）",
+          "price": 23.2,
+          "price_orig": 29,
+          "discount": 0.2,
+          "qty": 4,
+          "subtotal": 92.8
+        },
+        {
+          "sku": "1-160",
+          "name_en": "Medium Size Probiotic Coconut Yogurt - Vanilla Flavor",
+          "name_cn": "纯素椰子酸奶-香草味200g （冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 76.8
+        },
+        {
+          "sku": "1-210",
+          "name_en": "GoVegan! Strawberry coco parfait",
+          "name_cn": "草莓椰椰巴菲 100g",
+          "price": 24,
+          "price_orig": 30,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 48
+        },
+        {
+          "sku": "1-211",
+          "name_en": "MEDJOOL BOATS",
+          "name_cn": "椰枣小船  (冷藏）",
+          "price": 28,
+          "price_orig": 35,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 56
+        },
+        {
+          "sku": "1-220",
+          "name_en": "Onion Pickles",
+          "name_cn": "腌洋葱 （冷藏）",
+          "price": 24,
+          "price_orig": 30,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 24
+        },
+        {
+          "sku": "1-250",
+          "name_en": "Pitted Kalamata & Green Olives Mix",
+          "name_cn": "去核混合橄榄300g (冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 91.2
+        },
+        {
+          "sku": "1-290",
+          "name_en": "Cooked Mix Color Quinoa",
+          "name_cn": "现食藜麦 （冷藏）",
+          "price": 9.1,
+          "price_orig": 13,
+          "discount": 0.3,
+          "qty": 2,
+          "subtotal": 18.2
+        },
+        {
+          "sku": "1-300",
+          "name_en": "Quinoa Salad",
+          "name_cn": "藜麦沙拉 300g （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 4,
+          "subtotal": 140.8
+        },
+        {
+          "sku": "1-310",
+          "name_en": "Govegan! The Ultimate Beet Salad",
+          "name_cn": "甜菜头沙拉+1-310D 酱（冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 38.4
+        },
+        {
+          "sku": "1-330",
+          "name_en": "Tabbouleh Bowl",
+          "name_cn": "甜宝绿盒 +1-330D酱(冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 70.4
+        },
+        {
+          "sku": "1-370",
+          "name_en": "Govegan! Roasted Pumpkin Soup",
+          "name_cn": "香烤南瓜汤 330g (冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 21.6
+        },
+        {
+          "sku": "1-380",
+          "name_en": "Sweet Potato Cauliflower Curry",
+          "name_cn": "花椰菜红薯红咖喱（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 70.4
+        },
+        {
+          "sku": "1-420",
+          "name_en": "Govegan! Falafel Wrap With Creamy Hummus",
+          "name_cn": "法拉飞卷（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 70.4
+        },
+        {
+          "sku": "1-440",
+          "name_en": "Govegan! Pesto Wrap",
+          "name_cn": "纯素罗勒鸡肉卷 （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 70.4
+        },
+        {
+          "sku": "2-130",
+          "name_en": "Govegan！Kombucha (AKA Booch) -Mango Kombucha",
+          "name_cn": "芒果味康普茶 1000ml，（冷藏）（有另搭瓶塞）",
+          "price": 69.6,
+          "price_orig": 87,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 69.6
+        },
+        {
+          "sku": "2-180",
+          "name_en": "Cleanse Up",
+          "name_cn": "青力果汁（冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 21.6
+        },
+        {
+          "sku": "3-10",
+          "name_en": "Mango protein bites ( gluten free )",
+          "name_cn": "芒果球球 5个 (冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "3-20",
+          "name_en": "Chocolate Hemp Protein Bites (gluten free)",
+          "name_cn": "可可球球 5个（冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "3-40",
+          "name_en": "Baked Falafel (Fresh-Frozen)",
+          "name_cn": "法拉飞小饼（非油炸版，6块) （冷冻）",
+          "price": 39.8,
+          "price_orig": 53,
+          "discount": 0.25,
+          "qty": 1,
+          "subtotal": 39.8
+        },
+        {
+          "sku": "3-60",
+          "name_en": "Frozen Ground Meat",
+          "name_cn": "素肉碎/素香百搭 （冷冻）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "3-100",
+          "name_en": "Black Beans  Tempeh",
+          "name_cn": "黑豆天贝（冷冻）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "3-110",
+          "name_en": "Mix Beans Tempeh",
+          "name_cn": "杂豆天贝（冷冻）",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "3-145",
+          "name_en": "Seitan",
+          "name_cn": "素肉排（冷冻）",
+          "price": 28,
+          "price_orig": 35,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 28
+        },
+        {
+          "sku": "3-170",
+          "name_en": "Guacamole",
+          "name_cn": "墨西哥牛油果泥 （冷冻）",
+          "price": 39.2,
+          "price_orig": 49,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 39.2
+        },
+        {
+          "sku": "3-240",
+          "name_en": "Nuts & Seeds Bread (No Flour Gluten Free)",
+          "name_cn": "大口果仁包（无麸质） 440g冷冻",
+          "price": 42.4,
+          "price_orig": 53,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 42.4
+        },
+        {
+          "sku": "2-200",
+          "name_en": "USDA Organic Goji Berries",
+          "name_cn": "枸杞 200g",
+          "price": 37.6,
+          "price_orig": 47,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 37.6
+        },
+        {
+          "sku": "2-230",
+          "name_en": "Dehydrated Dragon Fruit (Pitaya)",
+          "name_cn": "火龙果干 120g  （冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 21.6
+        },
+        {
+          "sku": "2-310",
+          "name_en": "Organic Raw Cacao Nibs",
+          "name_cn": "有机可可粒 128g",
+          "price": 68,
+          "price_orig": 85,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 68
+        },
+        {
+          "sku": "2-390",
+          "name_en": "Pumpkin Seeds (unsalted, raw)",
+          "name_cn": "南瓜子（小） 280g",
+          "price": 24.8,
+          "price_orig": 31,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 24.8
+        },
+        {
+          "sku": "2-400",
+          "name_en": "All Natural Almond Butter ( Classic )",
+          "name_cn": "杏仁酱 150g",
+          "price": 40,
+          "price_orig": 50,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 40
+        },
+        {
+          "sku": "4-80",
+          "name_en": "Black Beans",
+          "name_cn": "黑豆",
+          "price": 16.8,
+          "price_orig": 21,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 16.8
+        },
+        {
+          "sku": "4-160",
+          "name_en": "Organic Chia Seeds",
+          "name_cn": "奇亚籽（小） 290g",
+          "price": 44.8,
+          "price_orig": 56,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 44.8
+        },
+        {
+          "sku": "4-210",
+          "name_en": "Dehydrated Sweet Mango",
+          "name_cn": "芒果干 120g  （冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 21.6
+        },
+        {
+          "sku": "4-220",
+          "name_en": "Organic Dry Cranberries Unsweetened",
+          "name_cn": "蔓越莓 150g",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "4-230",
+          "name_en": "Unsweetened Organic Dry Raisins",
+          "name_cn": "葡萄干 280g",
+          "price": 28.8,
+          "price_orig": 36,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 57.6
+        },
+        {
+          "sku": "4-240",
+          "name_en": "Chunky Granola",
+          "name_cn": "谷物脆 150g",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 68.8
+        },
+        {
+          "sku": "4-270",
+          "name_en": "100% Whole Wheat Crackers",
+          "name_cn": "全麦饼干 90g",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 43.2
+        },
+        {
+          "sku": "4-290",
+          "name_en": "Dehydrated Coconut Flakes",
+          "name_cn": "椰子片",
+          "price": 18.4,
+          "price_orig": 23,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 18.4
+        },
+        {
+          "sku": "4-320",
+          "name_en": "Unsweetened Dry Blueberries",
+          "name_cn": "无糖蓝莓干（小） 150g",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "4-360",
+          "name_en": "Anti Inflammatory Granola (Gluten Free)",
+          "name_cn": "荞麦版格兰诺拉麦片 190g",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 103.2
+        },
+        {
+          "sku": "4-620",
+          "name_en": "UDSA Organic Non GMO Soy Powder",
+          "name_cn": "有机非转基因大豆蛋白粉",
+          "price": 68.8,
+          "price_orig": 86,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 68.8
+        },
+        {
+          "sku": "4-670",
+          "name_en": "All Natural Peanut Butter",
+          "name_cn": "花生酱（小）240g",
+          "price": 33.6,
+          "price_orig": 42,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 33.6
+        },
+        {
+          "sku": "4-680",
+          "name_en": "All Natural Peanut Butter",
+          "name_cn": "花生酱 430g",
+          "price": 45.5,
+          "price_orig": 65,
+          "discount": 0.3,
+          "qty": 2,
+          "subtotal": 91
+        },
+        {
+          "sku": "4-690",
+          "name_en": "Govegan! A Bit Salty Peanut Butter (With Crunchy Peanuts Inside)",
+          "name_cn": "咸味粗粒花生酱 430g",
+          "price": 56.8,
+          "price_orig": 71,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 56.8
+        }
+      ]
+    },
+    {
+      "from": "2026-05-13",
+      "to": "2026-05-14",
+      "midpoint": "2026-05-13",
+      "sales": [
+        {
+          "sku": "1-10",
+          "name_en": "Creamy Hummus Served",
+          "name_cn": "中东鹰嘴豆泥（冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "1-40",
+          "name_en": "Labneh (Probiotic sour cream)",
+          "name_cn": "拿芭纳酱220g（冷藏）",
+          "price": 45.6,
+          "price_orig": 57,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 45.6
+        },
+        {
+          "sku": "1-100",
+          "name_en": "Blueberries Chia Jam",
+          "name_cn": "蓝莓奇亚籽果酱 125g （冷藏）",
+          "price": 31.2,
+          "price_orig": 39,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 31.2
+        },
+        {
+          "sku": "1-160",
+          "name_en": "Medium Size Probiotic Coconut Yogurt - Vanilla Flavor",
+          "name_cn": "纯素椰子酸奶-香草味200g （冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 38.4
+        },
+        {
+          "sku": "1-180",
+          "name_en": "Probiotic Coconut Yogurt -Peach Flavor",
+          "name_cn": "纯素椰子酸奶-桃子味（小）100g (冷藏）",
+          "price": 23.2,
+          "price_orig": 29,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 23.2
+        },
+        {
+          "sku": "1-210",
+          "name_en": "GoVegan! Strawberry coco parfait",
+          "name_cn": "草莓椰椰巴菲 100g",
+          "price": 24,
+          "price_orig": 30,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 48
+        },
+        {
+          "sku": "1-211",
+          "name_en": "MEDJOOL BOATS",
+          "name_cn": "椰枣小船  (冷藏）",
+          "price": 28,
+          "price_orig": 35,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 56
+        },
+        {
+          "sku": "1-250",
+          "name_en": "Pitted Kalamata & Green Olives Mix",
+          "name_cn": "去核混合橄榄300g (冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "1-300",
+          "name_en": "Quinoa Salad",
+          "name_cn": "藜麦沙拉 300g （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 70.4
+        },
+        {
+          "sku": "1-310",
+          "name_en": "Govegan! The Ultimate Beet Salad",
+          "name_cn": "甜菜头沙拉+1-310D 酱（冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 115.2
+        },
+        {
+          "sku": "1-330",
+          "name_en": "Tabbouleh Bowl",
+          "name_cn": "甜宝绿盒 +1-330D酱(冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 105.6
+        },
+        {
+          "sku": "1-460",
+          "name_en": "Govegan! Red Lentil Soup",
+          "name_cn": "红扁豆汤550g",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "3-20",
+          "name_en": "Chocolate Hemp Protein Bites (gluten free)",
+          "name_cn": "可可球球 5个（冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "3-240",
+          "name_en": "Nuts & Seeds Bread (No Flour Gluten Free)",
+          "name_cn": "大口果仁包（无麸质） 440g冷冻",
+          "price": 42.4,
+          "price_orig": 53,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 42.4
+        },
+        {
+          "sku": "3-250",
+          "name_en": "Frozen Whole Wheat Bread",
+          "name_cn": "冷冻全麦黑麦面包（冷冻）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "2-280",
+          "name_en": "Nour Dates",
+          "name_cn": "椰枣 240g（冷藏）",
+          "price": 25.6,
+          "price_orig": 32,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 51.2
+        },
+        {
+          "sku": "2-330",
+          "name_en": "Big Size Walnuts ( unsalted, raw )",
+          "name_cn": "核桃（大）280g",
+          "price": 44.8,
+          "price_orig": 56,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 134.4
+        },
+        {
+          "sku": "2-390",
+          "name_en": "Pumpkin Seeds (unsalted, raw)",
+          "name_cn": "南瓜子（小） 280g",
+          "price": 24.8,
+          "price_orig": 31,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 74.4
+        },
+        {
+          "sku": "4-60",
+          "name_en": "Red Lentils",
+          "name_cn": "红扁豆 600g",
+          "price": 20.8,
+          "price_orig": 26,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 20.8
+        },
+        {
+          "sku": "4-160",
+          "name_en": "Organic Chia Seeds",
+          "name_cn": "奇亚籽（小） 290g",
+          "price": 44.8,
+          "price_orig": 56,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 89.6
+        },
+        {
+          "sku": "4-190",
+          "name_en": "Organic Sunflower Seed (unsalted, raw)",
+          "name_cn": "葵瓜子（小） 260g",
+          "price": 23.2,
+          "price_orig": 29,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 23.2
+        },
+        {
+          "sku": "4-240",
+          "name_en": "Chunky Granola",
+          "name_cn": "谷物脆 150g",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 68.8
+        },
+        {
+          "sku": "4-270",
+          "name_en": "100% Whole Wheat Crackers",
+          "name_cn": "全麦饼干 90g",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 8,
+          "subtotal": 172.8
+        },
+        {
+          "sku": "4-320",
+          "name_en": "Unsweetened Dry Blueberries",
+          "name_cn": "无糖蓝莓干（小） 150g",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 91.2
+        },
+        {
+          "sku": "4-350",
+          "name_en": "Soft Dehydrated Apples",
+          "name_cn": "脱水苹果干 90g",
+          "price": 14.4,
+          "price_orig": 18,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 43.2
+        },
+        {
+          "sku": "4-360",
+          "name_en": "Anti Inflammatory Granola (Gluten Free)",
+          "name_cn": "荞麦版格兰诺拉麦片 190g",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "4-590",
+          "name_en": "USDA Organic Garlic Powder",
+          "name_cn": "有机大蒜粉120g",
+          "price": 24.8,
+          "price_orig": 31,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 24.8
+        },
+        {
+          "sku": "4-680",
+          "name_en": "All Natural Peanut Butter",
+          "name_cn": "花生酱 430g",
+          "price": 45.5,
+          "price_orig": 65,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 45.5
+        },
+        {
+          "sku": "4-690",
+          "name_en": "Govegan! A Bit Salty Peanut Butter (With Crunchy Peanuts Inside)",
+          "name_cn": "咸味粗粒花生酱 430g",
+          "price": 56.8,
+          "price_orig": 71,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 56.8
+        },
+        {
+          "sku": "5-50",
+          "name_en": "Laundry Powder",
+          "name_cn": "植物矿物源洗衣粉 1kg",
+          "price": 40.5,
+          "price_orig": 54,
+          "discount": 0.25,
+          "qty": 1,
+          "subtotal": 40.5
+        },
+        {
+          "sku": "5-110",
+          "name_en": "Multi Purpose Spray",
+          "name_cn": "多功能喷雾清洁液 500ml",
+          "price": 42.8,
+          "price_orig": 57,
+          "discount": 0.25,
+          "qty": 1,
+          "subtotal": 42.8
+        }
+      ]
+    },
+    {
+      "from": "2026-05-16",
+      "to": "2026-05-19",
+      "midpoint": "2026-05-17",
+      "sales": [
+        {
+          "sku": "1-10",
+          "name_en": "Creamy Hummus Served",
+          "name_cn": "中东鹰嘴豆泥（冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 4,
+          "subtotal": 121.6
+        },
+        {
+          "sku": "1-30",
+          "name_en": "Tzatziki",
+          "name_cn": "莳萝柠檬酸奶酱（冷藏）",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 5,
+          "subtotal": 172
+        },
+        {
+          "sku": "1-50",
+          "name_en": "Chickpeas Salad",
+          "name_cn": "鹰嘴豆沙拉 230g （冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "1-70",
+          "name_en": "GoVegan! Garlic Dill Sour Cream",
+          "name_cn": "蒜香莳萝酸奶酪220g",
+          "price": 33.6,
+          "price_orig": 42,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 33.6
+        },
+        {
+          "sku": "1-80",
+          "name_en": "GoVegan! OliveN'Cream",
+          "name_cn": "橄榄酸奶酪 220g",
+          "price": 33.6,
+          "price_orig": 42,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 33.6
+        },
+        {
+          "sku": "1-140",
+          "name_en": "Big Size Probiotic Coconut Yogurt - Plain Flavor",
+          "name_cn": "纯素椰子酸奶（大）500g （冷藏）",
+          "price": 66.4,
+          "price_orig": 83,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 66.4
+        },
+        {
+          "sku": "1-150",
+          "name_en": "Probiotic Coconut Yogurt - Vanilla Flavor",
+          "name_cn": "纯素椰子酸奶-香草味100g （冷藏）",
+          "price": 23.2,
+          "price_orig": 29,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 23.2
+        },
+        {
+          "sku": "1-160",
+          "name_en": "Medium Size Probiotic Coconut Yogurt - Vanilla Flavor",
+          "name_cn": "纯素椰子酸奶-香草味200g （冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 38.4
+        },
+        {
+          "sku": "1-211",
+          "name_en": "MEDJOOL BOATS",
+          "name_cn": "椰枣小船  (冷藏）",
+          "price": 28,
+          "price_orig": 35,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 28
+        },
+        {
+          "sku": "1-220",
+          "name_en": "Onion Pickles",
+          "name_cn": "腌洋葱 （冷藏）",
+          "price": 24,
+          "price_orig": 30,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 24
+        },
+        {
+          "sku": "1-240",
+          "name_en": "Good Old Fashioned Harrisa Paste",
+          "name_cn": "哈辣酱 235g （冷藏）",
+          "price": 28,
+          "price_orig": 35,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 28
+        },
+        {
+          "sku": "1-250",
+          "name_en": "Pitted Kalamata & Green Olives Mix",
+          "name_cn": "去核混合橄榄300g (冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 4,
+          "subtotal": 121.6
+        },
+        {
+          "sku": "1-300",
+          "name_en": "Quinoa Salad",
+          "name_cn": "藜麦沙拉 300g （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-320",
+          "name_en": "Govegan! Thai Buckwheat Noodles",
+          "name_cn": "泰式冷面沙拉 冷藏+1-320D 酱（冷藏）",
+          "price": 30.8,
+          "price_orig": 44,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 30.8
+        },
+        {
+          "sku": "1-330",
+          "name_en": "Tabbouleh Bowl",
+          "name_cn": "甜宝绿盒 +1-330D酱(冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-370",
+          "name_en": "Govegan! Roasted Pumpkin Soup",
+          "name_cn": "香烤南瓜汤 330g (冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 21.6
+        },
+        {
+          "sku": "1-380",
+          "name_en": "Sweet Potato Cauliflower Curry",
+          "name_cn": "花椰菜红薯红咖喱（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-400",
+          "name_en": "Govegan! Creamy White Bean Soup with Kale",
+          "name_cn": "意式白豆甘蓝汤 冷藏+1-400D小香料（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-440",
+          "name_en": "Govegan! Pesto Wrap",
+          "name_cn": "纯素罗勒鸡肉卷 （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 70.4
+        },
+        {
+          "sku": "2-80",
+          "name_en": "Kombucha (AKA Booch) - Passion Fruit",
+          "name_cn": "百香果康普茶（小）300ml （冷藏）",
+          "price": 23.2,
+          "price_orig": 29,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 46.4
+        },
+        {
+          "sku": "2-100",
+          "name_en": "Kombucha (AKA Booch) - Mix Berries",
+          "name_cn": "混合莓康普茶（小）300ml （冷藏）",
+          "price": 23.2,
+          "price_orig": 29,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 69.6
+        },
+        {
+          "sku": "2-120",
+          "name_en": "Govegan！Kombucha (AKA Booch) -Mango Kombucha",
+          "name_cn": "芒果味康普茶 300ml，（冷藏）",
+          "price": 23.2,
+          "price_orig": 29,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 46.4
+        },
+        {
+          "sku": "2-170",
+          "name_en": "Fresh Carrot Ginger Juice + Prebiotic Fibers (Inulin)",
+          "name_cn": "姜红卜汁 (冷藏）",
+          "price": 18.4,
+          "price_orig": 23,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 18.4
+        },
+        {
+          "sku": "2-180",
+          "name_en": "Cleanse Up",
+          "name_cn": "青力果汁（冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 21.6
+        },
+        {
+          "sku": "3-10",
+          "name_en": "Mango protein bites ( gluten free )",
+          "name_cn": "芒果球球 5个 (冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "3-20",
+          "name_en": "Chocolate Hemp Protein Bites (gluten free)",
+          "name_cn": "可可球球 5个（冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "3-30",
+          "name_en": "Premium Nutella Bars",
+          "name_cn": "巧克力榛棒（冷藏）",
+          "price": 37.6,
+          "price_orig": 47,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 75.2
+        },
+        {
+          "sku": "3-80",
+          "name_en": "Tempeh (Frozen)",
+          "name_cn": "纯味天贝（冷冻）",
+          "price": 24.8,
+          "price_orig": 31,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 24.8
+        },
+        {
+          "sku": "3-145",
+          "name_en": "Seitan",
+          "name_cn": "素肉排（冷冻）",
+          "price": 28,
+          "price_orig": 35,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 56
+        },
+        {
+          "sku": "3-160",
+          "name_en": "Frozen OMG mushroom burger pattie",
+          "name_cn": "蘑菇汉堡肉饼450g（冷冻）",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "3-170",
+          "name_en": "Guacamole",
+          "name_cn": "墨西哥牛油果泥 （冷冻）",
+          "price": 39.2,
+          "price_orig": 49,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 39.2
+        },
+        {
+          "sku": "3-200",
+          "name_en": "Frozen Lemon Bars",
+          "name_cn": "清新夏日柠檬棒 120g（冷冻）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "3-251",
+          "name_en": "Frozen Whole Wheat Pita Bread",
+          "name_cn": "全麦皮塔饼 冷冻",
+          "price": 36,
+          "price_orig": 45,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 36
+        },
+        {
+          "sku": "2-220",
+          "name_en": "Sun-Dried Apricots",
+          "name_cn": "阳光晒干杏脯 250g",
+          "price": 23.2,
+          "price_orig": 29,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 23.2
+        },
+        {
+          "sku": "2-250",
+          "name_en": "Dehydrated Chinese Banana",
+          "name_cn": "芭蕉干120g （冷藏）",
+          "price": 17.6,
+          "price_orig": 22,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 17.6
+        },
+        {
+          "sku": "2-330",
+          "name_en": "Big Size Walnuts ( unsalted, raw )",
+          "name_cn": "核桃（大）280g",
+          "price": 44.8,
+          "price_orig": 56,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 44.8
+        },
+        {
+          "sku": "4-40",
+          "name_en": "Old Fashioned Oats",
+          "name_cn": "传统快熟燕麦",
+          "price": 13.6,
+          "price_orig": 17,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 27.2
+        },
+        {
+          "sku": "4-160",
+          "name_en": "Organic Chia Seeds",
+          "name_cn": "奇亚籽（小） 290g",
+          "price": 44.8,
+          "price_orig": 56,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 44.8
+        },
+        {
+          "sku": "4-210",
+          "name_en": "Dehydrated Sweet Mango",
+          "name_cn": "芒果干 120g  （冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 43.2
+        },
+        {
+          "sku": "4-270",
+          "name_en": "100% Whole Wheat Crackers",
+          "name_cn": "全麦饼干 90g",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 4,
+          "subtotal": 86.4
+        },
+        {
+          "sku": "4-360",
+          "name_en": "Anti Inflammatory Granola (Gluten Free)",
+          "name_cn": "荞麦版格兰诺拉麦片 190g",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 68.8
+        },
+        {
+          "sku": "4-620",
+          "name_en": "UDSA Organic Non GMO Soy Powder",
+          "name_cn": "有机非转基因大豆蛋白粉",
+          "price": 68.8,
+          "price_orig": 86,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 68.8
+        },
+        {
+          "sku": "4-680",
+          "name_en": "All Natural Peanut Butter",
+          "name_cn": "花生酱 430g",
+          "price": 45.5,
+          "price_orig": 65,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 45.5
+        },
+        {
+          "sku": "4-690",
+          "name_en": "Govegan! A Bit Salty Peanut Butter (With Crunchy Peanuts Inside)",
+          "name_cn": "咸味粗粒花生酱 430g",
+          "price": 56.8,
+          "price_orig": 71,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 56.8
+        },
+        {
+          "sku": "5-110",
+          "name_en": "Multi Purpose Spray",
+          "name_cn": "多功能喷雾清洁液 500ml",
+          "price": 42.8,
+          "price_orig": 57,
+          "discount": 0.25,
+          "qty": 1,
+          "subtotal": 42.8
+        },
+        {
+          "sku": "5-160",
+          "name_en": "Foaming Hand Soap - Lemongrass",
+          "name_cn": "柠檬草精油泡沫洗手液 500ml",
+          "price": 53.3,
+          "price_orig": 71,
+          "discount": 0.25,
+          "qty": 1,
+          "subtotal": 53.3
+        },
+        {
+          "sku": "5-180",
+          "name_en": "Foaming Hand Soap - Lavender",
+          "name_cn": "薰衣草精油泡沫洗手液 500ml",
+          "price": 53.3,
+          "price_orig": 71,
+          "discount": 0.25,
+          "qty": 1,
+          "subtotal": 53.3
+        }
+      ]
+    },
+    {
+      "from": "2026-05-20",
+      "to": "2026-05-22",
+      "midpoint": "2026-05-21",
+      "sales": [
+        {
+          "sku": "1-50",
+          "name_en": "Chickpeas Salad",
+          "name_cn": "鹰嘴豆沙拉 230g （冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "1-70",
+          "name_en": "GoVegan! Garlic Dill Sour Cream",
+          "name_cn": "蒜香莳萝酸奶酪220g",
+          "price": 33.6,
+          "price_orig": 42,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 33.6
+        },
+        {
+          "sku": "1-80",
+          "name_en": "GoVegan! OliveN'Cream",
+          "name_cn": "橄榄酸奶酪 220g",
+          "price": 33.6,
+          "price_orig": 42,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 33.6
+        },
+        {
+          "sku": "1-220",
+          "name_en": "Onion Pickles",
+          "name_cn": "腌洋葱 （冷藏）",
+          "price": 24,
+          "price_orig": 30,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 24
+        },
+        {
+          "sku": "1-225",
+          "name_en": "Spicy Green Chili Dip – Zhoug",
+          "name_cn": "辣味青椒酱",
+          "price": 33.6,
+          "price_orig": 42,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 33.6
+        },
+        {
+          "sku": "1-250",
+          "name_en": "Pitted Kalamata & Green Olives Mix",
+          "name_cn": "去核混合橄榄300g (冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "1-300",
+          "name_en": "Quinoa Salad",
+          "name_cn": "藜麦沙拉 300g （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 70.4
+        },
+        {
+          "sku": "1-310",
+          "name_en": "Govegan! The Ultimate Beet Salad",
+          "name_cn": "甜菜头沙拉+1-310D 酱（冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 76.8
+        },
+        {
+          "sku": "1-380",
+          "name_en": "Sweet Potato Cauliflower Curry",
+          "name_cn": "花椰菜红薯红咖喱（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-410",
+          "name_en": "Tofu Banh Mi Wrap",
+          "name_cn": "越式豆腐卷（无五辛）（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 70.4
+        },
+        {
+          "sku": "1-420",
+          "name_en": "Govegan! Falafel Wrap With Creamy Hummus",
+          "name_cn": "法拉飞卷（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 105.6
+        },
+        {
+          "sku": "1-460",
+          "name_en": "Govegan! Red Lentil Soup",
+          "name_cn": "红扁豆汤550g",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "2-170",
+          "name_en": "Fresh Carrot Ginger Juice + Prebiotic Fibers (Inulin)",
+          "name_cn": "姜红卜汁 (冷藏）",
+          "price": 18.4,
+          "price_orig": 23,
+          "discount": 0.2,
+          "qty": 4,
+          "subtotal": 73.6
+        },
+        {
+          "sku": "3-170",
+          "name_en": "Guacamole",
+          "name_cn": "墨西哥牛油果泥 （冷冻）",
+          "price": 39.2,
+          "price_orig": 49,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 78.4
+        },
+        {
+          "sku": "3-190",
+          "name_en": "Frozen Cheese Cake (Gluten Free)",
+          "name_cn": "素士力架 140g （冷冻）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "2-200",
+          "name_en": "USDA Organic Goji Berries",
+          "name_cn": "枸杞 200g",
+          "price": 37.6,
+          "price_orig": 47,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 37.6
+        },
+        {
+          "sku": "2-230",
+          "name_en": "Dehydrated Dragon Fruit (Pitaya)",
+          "name_cn": "火龙果干 120g  （冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 43.2
+        },
+        {
+          "sku": "2-390",
+          "name_en": "Pumpkin Seeds (unsalted, raw)",
+          "name_cn": "南瓜子（小） 280g",
+          "price": 24.8,
+          "price_orig": 31,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 24.8
+        },
+        {
+          "sku": "4-20",
+          "name_en": "Brown Rice (Long Grain)",
+          "name_cn": "糙米",
+          "price": 18.4,
+          "price_orig": 23,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 36.8
+        },
+        {
+          "sku": "4-40",
+          "name_en": "Old Fashioned Oats",
+          "name_cn": "传统快熟燕麦",
+          "price": 13.6,
+          "price_orig": 17,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 13.6
+        },
+        {
+          "sku": "4-80",
+          "name_en": "Black Beans",
+          "name_cn": "黑豆",
+          "price": 16.8,
+          "price_orig": 21,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 16.8
+        },
+        {
+          "sku": "4-160",
+          "name_en": "Organic Chia Seeds",
+          "name_cn": "奇亚籽（小） 290g",
+          "price": 44.8,
+          "price_orig": 56,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 44.8
+        },
+        {
+          "sku": "4-240",
+          "name_en": "Chunky Granola",
+          "name_cn": "谷物脆 150g",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "4-270",
+          "name_en": "100% Whole Wheat Crackers",
+          "name_cn": "全麦饼干 90g",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 7,
+          "subtotal": 151.2
+        },
+        {
+          "sku": "4-350",
+          "name_en": "Soft Dehydrated Apples",
+          "name_cn": "脱水苹果干 90g",
+          "price": 14.4,
+          "price_orig": 18,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 14.4
+        },
+        {
+          "sku": "4-381",
+          "name_en": "Creatine Monohydrate",
+          "name_cn": "水肌酸",
+          "price": 77.6,
+          "price_orig": 97,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 77.6
+        },
+        {
+          "sku": "4-470",
+          "name_en": "USDA Organic, Non GMO, Raw Spirulina Powder",
+          "name_cn": "螺旋藻粉 130g",
+          "price": 34.3,
+          "price_orig": 49,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 34.3
+        },
+        {
+          "sku": "4-550",
+          "name_en": "Nutritional Yeast",
+          "name_cn": "营养酵母 65g",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "4-680",
+          "name_en": "All Natural Peanut Butter",
+          "name_cn": "花生酱 430g",
+          "price": 45.5,
+          "price_orig": 65,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 45.5
+        },
+        {
+          "sku": "5-130",
+          "name_en": "Dish Soap",
+          "name_cn": "西柚精油洗碗液 500ml",
+          "price": 40.5,
+          "price_orig": 54,
+          "discount": 0.25,
+          "qty": 1,
+          "subtotal": 40.5
+        }
+      ]
+    },
+    {
+      "from": "2026-05-23",
+      "to": "2026-05-26",
+      "midpoint": "2026-05-24",
+      "sales": [
+        {
+          "sku": "1-20",
+          "name_en": "Arugula Basil Pesto",
+          "name_cn": "阿古拉酱 150g （冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "1-40",
+          "name_en": "Labneh (Probiotic sour cream)",
+          "name_cn": "拿芭纳酱220g（冷藏）",
+          "price": 45.6,
+          "price_orig": 57,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 45.6
+        },
+        {
+          "sku": "1-70",
+          "name_en": "GoVegan! Garlic Dill Sour Cream",
+          "name_cn": "蒜香莳萝酸奶酪220g",
+          "price": 33.6,
+          "price_orig": 42,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 67.2
+        },
+        {
+          "sku": "1-130",
+          "name_en": "Medium Size Probiotic Coconut Yogurt - Plain Flavor",
+          "name_cn": "大椰益生菌200ml（中） （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-140",
+          "name_en": "Big Size Probiotic Coconut Yogurt - Plain Flavor",
+          "name_cn": "纯素椰子酸奶（大）500g （冷藏）",
+          "price": 66.4,
+          "price_orig": 83,
+          "discount": 0.2,
+          "qty": 4,
+          "subtotal": 265.6
+        },
+        {
+          "sku": "1-150",
+          "name_en": "Probiotic Coconut Yogurt - Vanilla Flavor",
+          "name_cn": "纯素椰子酸奶-香草味100g （冷藏）",
+          "price": 23.2,
+          "price_orig": 29,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 23.2
+        },
+        {
+          "sku": "1-190",
+          "name_en": "Medium Size Probiotic Coconut Yogurt - Peach Flavor",
+          "name_cn": "纯素椰子酸奶-桃子味（中）200g (冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 38.4
+        },
+        {
+          "sku": "1-260",
+          "name_en": "Energy Cubes",
+          "name_cn": "能量棒（小）60g （冷藏）",
+          "price": 16,
+          "price_orig": 20,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 16
+        },
+        {
+          "sku": "1-270",
+          "name_en": "Energy Cubes Big Size",
+          "name_cn": "花生奇亚能量块（大）200g (冷藏）",
+          "price": 49.6,
+          "price_orig": 62,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 49.6
+        },
+        {
+          "sku": "1-300",
+          "name_en": "Quinoa Salad",
+          "name_cn": "藜麦沙拉 300g （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-310",
+          "name_en": "Govegan! The Ultimate Beet Salad",
+          "name_cn": "甜菜头沙拉+1-310D 酱（冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 76.8
+        },
+        {
+          "sku": "1-320",
+          "name_en": "Govegan! Thai Buckwheat Noodles",
+          "name_cn": "泰式冷面沙拉 冷藏+1-320D 酱（冷藏）",
+          "price": 30.8,
+          "price_orig": 44,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 30.8
+        },
+        {
+          "sku": "1-330",
+          "name_en": "Tabbouleh Bowl",
+          "name_cn": "甜宝绿盒 +1-330D酱(冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-380",
+          "name_en": "Sweet Potato Cauliflower Curry",
+          "name_cn": "花椰菜红薯红咖喱（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 105.6
+        },
+        {
+          "sku": "1-400",
+          "name_en": "Govegan! Creamy White Bean Soup with Kale",
+          "name_cn": "意式白豆甘蓝汤 冷藏+1-400D小香料（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-410",
+          "name_en": "Tofu Banh Mi Wrap",
+          "name_cn": "越式豆腐卷（无五辛）（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-420",
+          "name_en": "Govegan! Falafel Wrap With Creamy Hummus",
+          "name_cn": "法拉飞卷（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 105.6
+        },
+        {
+          "sku": "1-440",
+          "name_en": "Govegan! Pesto Wrap",
+          "name_cn": "纯素罗勒鸡肉卷 （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 70.4
+        },
+        {
+          "sku": "2-170",
+          "name_en": "Fresh Carrot Ginger Juice + Prebiotic Fibers (Inulin)",
+          "name_cn": "姜红卜汁 (冷藏）",
+          "price": 18.4,
+          "price_orig": 23,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 18.4
+        },
+        {
+          "sku": "3-10",
+          "name_en": "Mango protein bites ( gluten free )",
+          "name_cn": "芒果球球 5个 (冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "3-30",
+          "name_en": "Premium Nutella Bars",
+          "name_cn": "巧克力榛棒（冷藏）",
+          "price": 37.6,
+          "price_orig": 47,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 37.6
+        },
+        {
+          "sku": "3-60",
+          "name_en": "Frozen Ground Meat",
+          "name_cn": "素肉碎/素香百搭 （冷冻）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "3-145",
+          "name_en": "Seitan",
+          "name_cn": "素肉排（冷冻）",
+          "price": 28,
+          "price_orig": 35,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 56
+        },
+        {
+          "sku": "3-251",
+          "name_en": "Frozen Whole Wheat Pita Bread",
+          "name_cn": "全麦皮塔饼 冷冻",
+          "price": 36,
+          "price_orig": 45,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 36
+        },
+        {
+          "sku": "2-250",
+          "name_en": "Dehydrated Chinese Banana",
+          "name_cn": "芭蕉干120g （冷藏）",
+          "price": 17.6,
+          "price_orig": 22,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 17.6
+        },
+        {
+          "sku": "2-280",
+          "name_en": "Nour Dates",
+          "name_cn": "椰枣 240g（冷藏）",
+          "price": 25.6,
+          "price_orig": 32,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 51.2
+        },
+        {
+          "sku": "4-80",
+          "name_en": "Black Beans",
+          "name_cn": "黑豆",
+          "price": 16.8,
+          "price_orig": 21,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 16.8
+        },
+        {
+          "sku": "4-220",
+          "name_en": "Organic Dry Cranberries Unsweetened",
+          "name_cn": "蔓越莓 150g",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "4-230",
+          "name_en": "Unsweetened Organic Dry Raisins",
+          "name_cn": "葡萄干 280g",
+          "price": 28.8,
+          "price_orig": 36,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 28.8
+        },
+        {
+          "sku": "4-240",
+          "name_en": "Chunky Granola",
+          "name_cn": "谷物脆 150g",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "4-270",
+          "name_en": "100% Whole Wheat Crackers",
+          "name_cn": "全麦饼干 90g",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 64.8
+        },
+        {
+          "sku": "4-300",
+          "name_en": "Smokey Parmesan",
+          "name_cn": "纯素奶酪粉 120g",
+          "price": 28,
+          "price_orig": 35,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 28
+        },
+        {
+          "sku": "4-320",
+          "name_en": "Unsweetened Dry Blueberries",
+          "name_cn": "无糖蓝莓干（小） 150g",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "4-360",
+          "name_en": "Anti Inflammatory Granola (Gluten Free)",
+          "name_cn": "荞麦版格兰诺拉麦片 190g",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 103.2
+        },
+        {
+          "sku": "4-490",
+          "name_en": "USDA Organic, Non GMO, Pea Protein Powder (22 servings)",
+          "name_cn": "豌豆蛋白粉 680g",
+          "price": 113.4,
+          "price_orig": 162,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 113.4
+        },
+        {
+          "sku": "4-620",
+          "name_en": "UDSA Organic Non GMO Soy Powder",
+          "name_cn": "有机非转基因大豆蛋白粉",
+          "price": 68.8,
+          "price_orig": 86,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 137.6
+        },
+        {
+          "sku": "4-680",
+          "name_en": "All Natural Peanut Butter",
+          "name_cn": "花生酱 430g",
+          "price": 45.5,
+          "price_orig": 65,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 45.5
+        },
+        {
+          "sku": "5-50",
+          "name_en": "Laundry Powder",
+          "name_cn": "植物矿物源洗衣粉 1kg",
+          "price": 40.5,
+          "price_orig": 54,
+          "discount": 0.25,
+          "qty": 2,
+          "subtotal": 81
+        },
+        {
+          "sku": "5-170",
+          "name_en": "Foaming Hand Soap - Mint",
+          "name_cn": "薄荷精油泡沫洗手液 500ml",
+          "price": 53.3,
+          "price_orig": 71,
+          "discount": 0.25,
+          "qty": 1,
+          "subtotal": 53.3
+        }
+      ]
+    },
+    {
+      "from": "2026-05-27",
+      "to": "2026-05-29",
+      "midpoint": "2026-05-28",
+      "sales": [
+        {
+          "sku": "1-10",
+          "name_en": "Creamy Hummus Served",
+          "name_cn": "中东鹰嘴豆泥（冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 3,
+          "subtotal": 91.2
+        },
+        {
+          "sku": "1-20",
+          "name_en": "Arugula Basil Pesto",
+          "name_cn": "阿古拉酱 150g （冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "1-50",
+          "name_en": "Chickpeas Salad",
+          "name_cn": "鹰嘴豆沙拉 230g （冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "1-80",
+          "name_en": "GoVegan! OliveN'Cream",
+          "name_cn": "橄榄酸奶酪 220g",
+          "price": 33.6,
+          "price_orig": 42,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 33.6
+        },
+        {
+          "sku": "1-90",
+          "name_en": "Classic Sour Cream",
+          "name_cn": "-1-90经典酸奶油（冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "1-140",
+          "name_en": "Big Size Probiotic Coconut Yogurt - Plain Flavor",
+          "name_cn": "纯素椰子酸奶（大）500g （冷藏）",
+          "price": 66.4,
+          "price_orig": 83,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 132.8
+        },
+        {
+          "sku": "1-211",
+          "name_en": "MEDJOOL BOATS",
+          "name_cn": "椰枣小船  (冷藏）",
+          "price": 28,
+          "price_orig": 35,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 28
+        },
+        {
+          "sku": "1-220",
+          "name_en": "Onion Pickles",
+          "name_cn": "腌洋葱 （冷藏）",
+          "price": 24,
+          "price_orig": 30,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 24
+        },
+        {
+          "sku": "1-250",
+          "name_en": "Pitted Kalamata & Green Olives Mix",
+          "name_cn": "去核混合橄榄300g (冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "1-280",
+          "name_en": "Cooked Brown Rice",
+          "name_cn": "现食糙米饭（冷藏）",
+          "price": 7.7,
+          "price_orig": 11,
+          "discount": 0.3,
+          "qty": 2,
+          "subtotal": 15.4
+        },
+        {
+          "sku": "1-370",
+          "name_en": "Govegan! Roasted Pumpkin Soup",
+          "name_cn": "香烤南瓜汤 330g (冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 21.6
+        },
+        {
+          "sku": "1-460",
+          "name_en": "Govegan! Red Lentil Soup",
+          "name_cn": "红扁豆汤550g",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "2-80",
+          "name_en": "Kombucha (AKA Booch) - Passion Fruit",
+          "name_cn": "百香果康普茶（小）300ml （冷藏）",
+          "price": 23.2,
+          "price_orig": 29,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 23.2
+        },
+        {
+          "sku": "2-120",
+          "name_en": "Govegan！Kombucha (AKA Booch) -Mango Kombucha",
+          "name_cn": "芒果味康普茶 300ml，（冷藏）",
+          "price": 23.2,
+          "price_orig": 29,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 23.2
+        },
+        {
+          "sku": "3-10",
+          "name_en": "Mango protein bites ( gluten free )",
+          "name_cn": "芒果球球 5个 (冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "3-30",
+          "name_en": "Premium Nutella Bars",
+          "name_cn": "巧克力榛棒（冷藏）",
+          "price": 37.6,
+          "price_orig": 47,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 37.6
+        },
+        {
+          "sku": "3-80",
+          "name_en": "Tempeh (Frozen)",
+          "name_cn": "纯味天贝（冷冻）",
+          "price": 24.8,
+          "price_orig": 31,
+          "discount": 0.2,
+          "qty": 5,
+          "subtotal": 124
+        },
+        {
+          "sku": "3-120",
+          "name_en": "GoVegan! Edamame Tempeh",
+          "name_cn": "-3-120毛豆天贝（冷冻）",
+          "price": 34.4,
+          "price_orig": 43,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 34.4
+        },
+        {
+          "sku": "3-145",
+          "name_en": "Seitan",
+          "name_cn": "素肉排（冷冻）",
+          "price": 28,
+          "price_orig": 35,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 28
+        },
+        {
+          "sku": "4-100",
+          "name_en": "Govegan! Fermented Tofu (Oil Free)",
+          "name_cn": "素腐乳 260g （无油）",
+          "price": 28.5,
+          "price_orig": 38,
+          "discount": 0.25,
+          "qty": 1,
+          "subtotal": 28.5
+        },
+        {
+          "sku": "4-150",
+          "name_en": "Chopped Almonds ( Raw, Unsalted )",
+          "name_cn": "杏仁片（小） 170g",
+          "price": 27.2,
+          "price_orig": 34,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 27.2
+        },
+        {
+          "sku": "4-210",
+          "name_en": "Dehydrated Sweet Mango",
+          "name_cn": "芒果干 120g  （冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 21.6
+        },
+        {
+          "sku": "4-280",
+          "name_en": "USDA Organic Golden Flaxseed",
+          "name_cn": "有机金亚麻籽",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "4-620",
+          "name_en": "UDSA Organic Non GMO Soy Powder",
+          "name_cn": "有机非转基因大豆蛋白粉",
+          "price": 68.8,
+          "price_orig": 86,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 68.8
+        },
+        {
+          "sku": "4-680",
+          "name_en": "All Natural Peanut Butter",
+          "name_cn": "花生酱 430g",
+          "price": 45.5,
+          "price_orig": 65,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 45.5
+        }
+      ]
+    },
+    {
+      "from": "2026-05-30",
+      "to": "2026-05-31",
+      "midpoint": "2026-05-30",
+      "sales": [
+        {
+          "sku": "1-140",
+          "name_en": "Big Size Probiotic Coconut Yogurt - Plain Flavor",
+          "name_cn": "纯素椰子酸奶（大）500g （冷藏）",
+          "price": 66.4,
+          "price_orig": 83,
+          "discount": 0.2,
+          "qty": 4,
+          "subtotal": 265.6
+        },
+        {
+          "sku": "1-250",
+          "name_en": "Pitted Kalamata & Green Olives Mix",
+          "name_cn": "去核混合橄榄300g (冷藏）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 60.8
+        },
+        {
+          "sku": "1-280",
+          "name_en": "Cooked Brown Rice",
+          "name_cn": "现食糙米饭（冷藏）",
+          "price": 7.7,
+          "price_orig": 11,
+          "discount": 0.3,
+          "qty": 2,
+          "subtotal": 15.4
+        },
+        {
+          "sku": "1-300",
+          "name_en": "Quinoa Salad",
+          "name_cn": "藜麦沙拉 300g （冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 35.2
+        },
+        {
+          "sku": "1-310",
+          "name_en": "Govegan! The Ultimate Beet Salad",
+          "name_cn": "甜菜头沙拉+1-310D 酱（冷藏）",
+          "price": 38.4,
+          "price_orig": 48,
+          "discount": 0.2,
+          "qty": 6,
+          "subtotal": 230.4
+        },
+        {
+          "sku": "1-320",
+          "name_en": "Govegan! Thai Buckwheat Noodles",
+          "name_cn": "泰式冷面沙拉 冷藏+1-320D 酱（冷藏）",
+          "price": 30.8,
+          "price_orig": 44,
+          "discount": 0.3,
+          "qty": 1,
+          "subtotal": 30.8
+        },
+        {
+          "sku": "1-330",
+          "name_en": "Tabbouleh Bowl",
+          "name_cn": "甜宝绿盒 +1-330D酱(冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 70.4
+        },
+        {
+          "sku": "1-360",
+          "name_en": "Govegan! Chinese Herbal Soup",
+          "name_cn": "药膳汤 （冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 21.6
+        },
+        {
+          "sku": "1-370",
+          "name_en": "Govegan! Roasted Pumpkin Soup",
+          "name_cn": "香烤南瓜汤 330g (冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 43.2
+        },
+        {
+          "sku": "1-380",
+          "name_en": "Sweet Potato Cauliflower Curry",
+          "name_cn": "花椰菜红薯红咖喱（冷藏）",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 70.4
+        },
+        {
+          "sku": "1-460",
+          "name_en": "Govegan! Red Lentil Soup",
+          "name_cn": "红扁豆汤550g",
+          "price": 35.2,
+          "price_orig": 44,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 70.4
+        },
+        {
+          "sku": "2-90",
+          "name_en": "Kombucha (AKA Booch) - Passion Fruit",
+          "name_cn": "百香果康普茶（大）1000ml （冷藏）（有另搭瓶塞）",
+          "price": 69.6,
+          "price_orig": 87,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 69.6
+        },
+        {
+          "sku": "2-180",
+          "name_en": "Cleanse Up",
+          "name_cn": "青力果汁（冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 21.6
+        },
+        {
+          "sku": "3-40",
+          "name_en": "Baked Falafel (Fresh-Frozen)",
+          "name_cn": "法拉飞小饼（非油炸版，6块) （冷冻）",
+          "price": 39.8,
+          "price_orig": 53,
+          "discount": 0.25,
+          "qty": 2,
+          "subtotal": 79.5
+        },
+        {
+          "sku": "2-200",
+          "name_en": "USDA Organic Goji Berries",
+          "name_cn": "枸杞 200g",
+          "price": 37.6,
+          "price_orig": 47,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 37.6
+        },
+        {
+          "sku": "2-250",
+          "name_en": "Dehydrated Chinese Banana",
+          "name_cn": "芭蕉干120g （冷藏）",
+          "price": 17.6,
+          "price_orig": 22,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 17.6
+        },
+        {
+          "sku": "2-340",
+          "name_en": "Almonds ( Unsalted , Raw )",
+          "name_cn": "杏仁（小） 265g",
+          "price": 29.6,
+          "price_orig": 37,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 59.2
+        },
+        {
+          "sku": "2-390",
+          "name_en": "Pumpkin Seeds (unsalted, raw)",
+          "name_cn": "南瓜子（小） 280g",
+          "price": 24.8,
+          "price_orig": 31,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 24.8
+        },
+        {
+          "sku": "4-40",
+          "name_en": "Old Fashioned Oats",
+          "name_cn": "传统快熟燕麦",
+          "price": 13.6,
+          "price_orig": 17,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 13.6
+        },
+        {
+          "sku": "4-70",
+          "name_en": "Chickpeas",
+          "name_cn": "鹰嘴豆 590g",
+          "price": 23.2,
+          "price_orig": 29,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 23.2
+        },
+        {
+          "sku": "4-160",
+          "name_en": "Organic Chia Seeds",
+          "name_cn": "奇亚籽（小） 290g",
+          "price": 44.8,
+          "price_orig": 56,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 44.8
+        },
+        {
+          "sku": "4-180",
+          "name_en": "Hemp Seed",
+          "name_cn": "火麻仁（小） 260g",
+          "price": 32,
+          "price_orig": 40,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 32
+        },
+        {
+          "sku": "4-210",
+          "name_en": "Dehydrated Sweet Mango",
+          "name_cn": "芒果干 120g  （冷藏）",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 2,
+          "subtotal": 43.2
+        },
+        {
+          "sku": "4-220",
+          "name_en": "Organic Dry Cranberries Unsweetened",
+          "name_cn": "蔓越莓 150g",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "4-230",
+          "name_en": "Unsweetened Organic Dry Raisins",
+          "name_cn": "葡萄干 280g",
+          "price": 28.8,
+          "price_orig": 36,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 28.8
+        },
+        {
+          "sku": "4-270",
+          "name_en": "100% Whole Wheat Crackers",
+          "name_cn": "全麦饼干 90g",
+          "price": 21.6,
+          "price_orig": 27,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 21.6
+        },
+        {
+          "sku": "4-271",
+          "name_en": "Superseed Crackers (Gluten Free)",
+          "name_cn": "超级种子饼干",
+          "price": 26.4,
+          "price_orig": 33,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 26.4
+        },
+        {
+          "sku": "4-381",
+          "name_en": "Creatine Monohydrate",
+          "name_cn": "水肌酸",
+          "price": 77.6,
+          "price_orig": 97,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 77.6
+        },
+        {
+          "sku": "4-620",
+          "name_en": "UDSA Organic Non GMO Soy Powder",
+          "name_cn": "有机非转基因大豆蛋白粉",
+          "price": 68.8,
+          "price_orig": 86,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 68.8
+        },
+        {
+          "sku": "4-650",
+          "name_en": "Hulled Sesame Tahini",
+          "name_cn": "中东芝麻酱（去皮）",
+          "price": 30.4,
+          "price_orig": 38,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 30.4
+        },
+        {
+          "sku": "4-690",
+          "name_en": "Govegan! A Bit Salty Peanut Butter (With Crunchy Peanuts Inside)",
+          "name_cn": "咸味粗粒花生酱 430g",
+          "price": 56.8,
+          "price_orig": 71,
+          "discount": 0.2,
+          "qty": 1,
+          "subtotal": 56.8
+        },
+        {
+          "sku": "5-170",
+          "name_en": "Foaming Hand Soap - Mint",
+          "name_cn": "薄荷精油泡沫洗手液 500ml",
+          "price": 53.3,
+          "price_orig": 71,
+          "discount": 0.25,
+          "qty": 1,
+          "subtotal": 53.3
+        }
+      ]
     }
   ],
   "dissolve_groups": [
