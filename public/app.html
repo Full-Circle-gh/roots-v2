@@ -16227,11 +16227,15 @@ async function loadPrinterPrefs() {
         box.innerHTML = '<div style="font-size:13px;color:var(--muted)">No active stores. Add stores under Admin → Markets first. · 暂无门店,请先在「市场」添加门店。</div>';
       } else {
         box.innerHTML = stores.map(s => {
-          const name = _esc(s.name_cn || s.name_en || s.code || ('Store ' + s.id));
+          const nameCn = _esc(s.name_cn || '');
+          const nameEn = _esc(s.name_en || '');
+          const primary = nameCn || nameEn || _esc(s.code || ('Store ' + s.id));
+          const secondary = (nameCn && nameEn) ? nameEn : '';
+          const codeTag = s.code ? ` <span style="font-weight:600;font-size:11px;color:var(--muted)">#${_esc(s.code)}</span>` : '';
           const opts = _FEIE_TEMPLATES.map(t => `<option value="${t.id}" ${s.template===t.id?'selected':''}>${t.label}</option>`).join('');
           return `
           <div data-store="${s.id}" style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--gray)">
-            <div style="font-weight:600;font-size:13px;margin-bottom:8px">🏪 ${name}</div>
+            <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:var(--dk)">🏪 ${primary}${secondary ? ` <span style="font-weight:600;font-size:12px;color:var(--muted)">${secondary}</span>` : ''}${codeTag}</div>
             <div style="display:grid;grid-template-columns:2fr 1.4fr 0.8fr;gap:10px;align-items:end">
               <div>
                 <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:3px">Printer SN · 编号</label>
