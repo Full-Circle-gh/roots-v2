@@ -3240,6 +3240,20 @@
     transition: opacity 900ms cubic-bezier(.16, 1, .3, 1) 260ms,
                 transform 900ms cubic-bezier(.16, 1, .3, 1) 260ms;
   }
+  /* Orders renders its detail as DIRECT children of .drawer-body (#order-detail-mount
+     IS the body), so the zen fade-up above animates the real content. The customer
+     drawer nests its content one level deeper, inside the persistent #cu-drawer-actions
+     / #cu-detail-body wrappers — so the rule above only ever faded those wrappers (once,
+     on open) while the detail injected after the fetch popped in with no fade. Mirror the
+     same entrance on that injected content so the customer window fades in identically. */
+  #cu-drawer-actions > *, #cu-detail-body > * { opacity: 0; transform: translateY(10px); }
+  .side-drawer.open #cu-drawer-actions > *,
+  .side-drawer.open #cu-detail-body > * {
+    opacity: 1;
+    transform: none;
+    transition: opacity 900ms cubic-bezier(.16, 1, .3, 1) 260ms,
+                transform 900ms cubic-bezier(.16, 1, .3, 1) 260ms;
+  }
   /* Switching records while a drawer is already open (Orders / Customers):
      cross-fade the whole mount — old record fades out, new one fades back in on
      the same zen ease as the slide. JS toggles .od-swapping / .cu-swapping
