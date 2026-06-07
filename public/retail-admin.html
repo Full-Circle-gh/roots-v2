@@ -4555,6 +4555,33 @@
   .rm-sheet { display: none; }
   html.rm-noscroll { overflow: hidden; }
 
+  /* ════════════════════════════════════════════════════════════════════
+     PORTRAIT LOCK — a phone held in landscape gets a "rotate upright"
+     cover instead of the desktop layout. The mobile shell is width-gated
+     at ≤720px (portrait); a landscape phone's width jumps past that and
+     the page would fall back to the desktop layout, which is meaningless
+     on a phone mini-app. This blocks that on phone-sized devices ONLY:
+     coarse pointer (touch) + a short viewport (≤520px tall) in landscape
+     — excluding tablets (taller in landscape) and desktop browsers (fine
+     pointer). Companion fix lives in the WeChat wrapper as
+     pageOrientation:"portrait"; this overlay is the in-page safety net.
+     See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  #rm-rotate-lock { display: none; }
+  @media (orientation: landscape) and (max-height: 520px) and (pointer: coarse) {
+    #rm-rotate-lock {
+      display: flex; position: fixed; inset: 0; z-index: 100001;
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; padding: 24px;
+      background: var(--bg-app); color: var(--text-1); text-align: center;
+    }
+    #rm-rotate-lock svg { width: 54px; height: 54px; color: var(--brass); }
+    #rm-rotate-lock .rl-ttl { font-size: 16px; font-weight: 700; line-height: 1.3; }
+    #rm-rotate-lock .rl-sub {
+      font-size: 13px; color: var(--text-3); max-width: 280px; line-height: 1.5;
+    }
+  }
+
   @media (max-width: 720px) {
     /* Desktop horizontal tab bar → replaced by the bottom bar. */
     .tabs { display: none !important; }
@@ -5440,6 +5467,15 @@
      applyFeatureGates() then removes the class for any feature an operator (or
      the platform) has turned off. -->
 <body class="feat-membership feat-affiliate feat-reviews feat-feedback feat-socialProof">
+
+<!-- Portrait lock — covers the screen when a phone is held landscape so the
+     desktop layout never shows on the mobile app. CSS-gated to phone-sized
+     touch devices in landscape only (see #rm-rotate-lock in the head). -->
+<div id="rm-rotate-lock" aria-hidden="true">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3a9 9 0 0 1 8 8"/><polyline points="21 7 21 11 17 11"/><rect x="3" y="7" width="10" height="14" rx="2"/></svg>
+  <div class="rl-ttl">Rotate your phone upright</div>
+  <div class="rl-sub">请竖屏使用 · This app works in portrait only</div>
+</div>
 
 <!-- Mobile bottom tab bar (position:fixed, ≤720px). Kept high in the body so
      it paints in the first pass — placing it after the app's heavy scripts
