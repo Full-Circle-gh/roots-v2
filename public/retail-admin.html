@@ -10014,6 +10014,12 @@
   <button type="button" class="drawer-close" onclick="closeDrawer('#order-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
   </button>
+  <!-- Phone-only back affordance — replaces the floating × with a left-side
+       chevron in the sticky order-head bar (matches the mobile mockup). Hidden
+       on desktop via CSS; same close action as the ×. -->
+  <button type="button" class="drawer-back" onclick="closeDrawer('#order-drawer')" title="Back · 返回" aria-label="Back">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
   <div class="drawer-body" id="order-detail-mount"></div>
 </aside>
 
@@ -14458,7 +14464,7 @@ function renderOpenOrder(o) {
             <!-- nowrap on every header so the bilingual EN · 中文 labels
                  don't wrap mid-word ("STATUS · 状 / 态", "EXPIRES · / 到期")
                  when the drawer is narrow. table-wrap is overflow-x:auto. -->
-            <table style="--th-nowrap:1;">
+            <table class="resv-table" style="--th-nowrap:1;">
               <thead><tr>
                 <th style="white-space:nowrap;">Product · 产品</th>
                 <th class="numeric" style="white-space:nowrap;">Qty · 数量</th>
@@ -14624,7 +14630,7 @@ function printReceiptTile(o) {
     <div class="kicker">Receipt · 小票</div>
     <div class="val" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
       ${badge}
-      <button class="btn btn-sm" id="reprint-${o.id}" onclick="reprintOrder(${o.id})">🖨 Reprint · 补打小票</button>
+      <button class="btn btn-sm" id="reprint-${o.id}" onclick="reprintOrder(${o.id})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Reprint · 补打小票</button>
     </div>
   </div>`;
 }
@@ -25037,6 +25043,7 @@ window.onLangChange(function () {
     .rm-dh-live .d { width: 7px; height: 7px; border-radius: 50%; background: var(--accent, #6B8E6F); box-shadow: 0 0 0 0 rgba(107, 142, 111, .6); animation: rmDhPulse 2s infinite; }
     @keyframes rmDhPulse { 0% { box-shadow: 0 0 0 0 rgba(107, 142, 111, .5); } 70% { box-shadow: 0 0 0 7px rgba(107, 142, 111, 0); } 100% { box-shadow: 0 0 0 0 rgba(107, 142, 111, 0); } }
     .rm-dh-big { font: 600 42px var(--f-sans); letter-spacing: -.03em; margin: 10px 0 2px; font-variant-numeric: tabular-nums; }
+    .rm-cu { font-variant-numeric: tabular-nums; }
     .rm-dh-cap { font-size: 12px; color: #B9B3A4; display: flex; align-items: center; gap: 8px; }
     .rm-dh-cap .rm-dh-delta.up { color: #9FC6A3; }
     .rm-dh-cap .rm-dh-delta.down { color: #D9A38A; }
@@ -25604,6 +25611,36 @@ window.onLangChange(function () {
   function activeRange() { var b = document.querySelector('#db-range-seg button.active'); return b ? b.dataset.range : '30'; }
   function trendVals(metric) { var t = (typeof DASH_DATA !== 'undefined' && DASH_DATA && DASH_DATA.trend) || []; return t.map(function (p) { return Number(p[metric] || 0); }); }
 
+  // ── count-up: the headline numbers roll up like the desktop dashboard ──
+  // Each animatable figure is rendered as a marker span carrying its raw
+  // target + a formatter key; after the wholesale innerHTML rebuild we tween
+  // them via the desktop's dashCountUp. A per-key cache makes the first paint
+  // roll from 0 → value while later refreshes leave unchanged numbers at rest
+  // (only a genuinely changed value, e.g. a range switch, re-rolls).
+  var CU_FMT = {
+    rev:  function (n) { return money(Math.round(n)); },
+    aov:  function (n) { return money(n, 2); },
+    int:  function (n) { return num(Math.round(n)); },
+    plus: function (n) { return '+' + num(Math.round(n)); },
+    pct:  function (n) { return n.toFixed(1) + '%'; }
+  };
+  var rmCuPrev = {};
+  function cu(key, to, f, fallback) {
+    return '<span class="rm-cu" data-k="' + key + '" data-to="' + (Number(to) || 0) + '" data-f="' + f + '">' + fallback + '</span>';
+  }
+  function animateNums(scope) {
+    if (!scope || typeof dashCountUp !== 'function') return;
+    var nodes = scope.querySelectorAll('.rm-cu');
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i], key = n.getAttribute('data-k');
+      var to = Number(n.getAttribute('data-to')) || 0;
+      var f = CU_FMT[n.getAttribute('data-f')] || CU_FMT.int;
+      n._cuVal = (rmCuPrev[key] != null) ? rmCuPrev[key] : 0;
+      rmCuPrev[key] = to;
+      dashCountUp(n, to, f, 1000);
+    }
+  }
+
   var IC = {
     sales: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
     orders: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>',
@@ -25625,7 +25662,9 @@ window.onLangChange(function () {
     if (!wrap || typeof DASH_DATA === 'undefined' || !DASH_DATA) return;
     var k = DASH_DATA.kpis || {}, d = DASH_DATA.deltas || {};
     var rng = activeRange();
-    var conv = (k.conversion_rate == null) ? '—' : (k.conversion_rate.toFixed(1) + '%');
+    var convNull = (k.conversion_rate == null);
+    var conv = convNull ? '—' : (k.conversion_rate.toFixed(1) + '%');
+    var convCell = function (key) { return convNull ? '—' : cu(key, k.conversion_rate, 'pct', conv); };
     var live = (el('db-live-num') || {}).textContent; if (!live || live === '—') live = '0';
 
     var chips = PERIODS.map(function (p) {
@@ -25639,21 +25678,21 @@ window.onLangChange(function () {
     var hero =
       '<div class="rm-dh-hero">' +
         '<div class="rm-dh-live"><span class="d"></span> Right now · ' + esc(live) + ' viewing</div>' +
-        '<div class="rm-dh-big">' + money(k.revenue) + '</div>' +
+        '<div class="rm-dh-big">' + cu('hero-rev', k.revenue, 'rev', money(k.revenue)) + '</div>' +
         '<div class="rm-dh-cap">Revenue · ' + esc(RNG_LABEL[rng] || rng) + ' ' + deltaHtml + '</div>' +
         '<div class="rm-dh-mini">' +
-          mini(num(k.orders), 'Orders · 订单') +
-          mini(money(k.aov, 2), 'Avg order · 客单') +
-          mini('+' + num(k.new_customers), 'New cust. · 新客') +
-          mini(conv, 'Conv. · 转化') +
+          mini(cu('hero-ord', k.orders, 'int', num(k.orders)), 'Orders · 订单') +
+          mini(cu('hero-aov', k.aov, 'aov', money(k.aov, 2)), 'Avg order · 客单') +
+          mini(cu('hero-new', k.new_customers, 'plus', '+' + num(k.new_customers)), 'New cust. · 新客') +
+          mini(convCell('hero-conv'), 'Conv. · 转化') +
         '</div>' +
       '</div>';
 
     var tiles =
-      tile('sales', 'sales', 'Sales · 销售', money(k.revenue), spark(trendVals('revenue'))) +
-      tile('orders', 'orders', 'Orders · 订单', num(k.orders), spark(trendVals('orders'))) +
-      tile('customers', 'customers', 'New cust. · 新客', '+' + num(k.new_customers), spark(trendVals('new_customers'))) +
-      tile('traffic', 'conv', 'Conversion · 转化', conv, spark(trendVals('orders')));
+      tile('sales', 'sales', 'Sales · 销售', cu('t-rev', k.revenue, 'rev', money(k.revenue)), spark(trendVals('revenue'))) +
+      tile('orders', 'orders', 'Orders · 订单', cu('t-ord', k.orders, 'int', num(k.orders)), spark(trendVals('orders'))) +
+      tile('customers', 'customers', 'New cust. · 新客', cu('t-new', k.new_customers, 'plus', '+' + num(k.new_customers)), spark(trendVals('new_customers'))) +
+      tile('traffic', 'conv', 'Conversion · 转化', convCell('t-conv'), spark(trendVals('orders')));
 
     // Wide "operations" tile — in-flight orders that still need a hand, summed
     // from the live status funnel (no extra data).
@@ -25662,7 +25701,7 @@ window.onLangChange(function () {
       return s + ((f[key] && f[key].n) || 0);
     }, 0);
     var ops = '<button class="rm-dh-tile wide alarm" data-r="ops"><span class="l"><span class="ic">' + IC.ops + '</span>' +
-      '<span class="tx"><span class="lab">Operations · 运营</span><span class="val">' + num(attn) + ' need attention · 待处理</span></span></span>' +
+      '<span class="tx"><span class="lab">Operations · 运营</span><span class="val">' + cu('ops-attn', attn, 'int', num(attn)) + ' need attention · 待处理</span></span></span>' +
       (attn > 0 ? '<span class="rm-dh-badge">Action · 处理</span>' : '<span class="arrow">' + IC.chevron + '</span>') + '</button>';
 
     // Wide "top product" tile — the period's best seller.
@@ -25676,6 +25715,7 @@ window.onLangChange(function () {
       '<div class="rm-dh-periods">' + chips + '</div>' +
       hero +
       '<div class="rm-dh-grid">' + tiles + ops + prodTile + '</div>';
+    animateNums(wrap);   // roll the headline figures up (desktop dashCountUp)
   };
 
   // ── reports (full-screen push bodies) ──
