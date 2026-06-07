@@ -4756,6 +4756,7 @@
       padding: 12px 50px 12px 44px;
       background: var(--bg-pane);
       border-bottom: 1px solid var(--line);
+      box-shadow: 0 8px 14px -12px rgba(0, 0, 0, .45);
       min-height: 52px;
     }
     #order-drawer .order-head > div:first-child { min-width: 0; flex: 1; }
@@ -26128,6 +26129,38 @@ window.onLangChange(function () {
     document.querySelectorAll('.tabs [data-tab="config"]'),
     function (b) { b.addEventListener('click', closePanel); }
   );
+})();
+</script>
+
+<script>
+/* ── Auto-fresh shell ──────────────────────────────────────────────────
+   The operator admin is a single long-lived page, so a deploy doesn't show
+   up until the HTML is re-fetched — and on a flaky mobile network the user
+   kept having to hard-refresh. This compares this page's build signature
+   (the HTML's ETag / Last-Modified, served with Cache-Control:no-cache) when
+   the tab regains focus, and reloads ONCE if the server has a newer copy.
+   Network-only (cache:'no-store') so it sees past any HTTP/SW cache; any
+   failure (offline / VPN stall) is swallowed and simply skips the reload. */
+(function autoFreshShell() {
+  var baseSig = null, checking = false;
+  function sig() {
+    return fetch(location.pathname + location.search, { method: 'HEAD', cache: 'no-store' })
+      .then(function (r) { return r.headers.get('etag') || r.headers.get('last-modified') || null; })
+      .catch(function () { return null; });
+  }
+  sig().then(function (s) { baseSig = s; });
+  function check() {
+    if (checking || document.hidden) return;
+    checking = true;
+    sig().then(function (s) {
+      if (s) {
+        if (!baseSig) baseSig = s;
+        else if (s !== baseSig) { location.reload(); return; }
+      }
+    }).finally(function () { checking = false; });
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
+  window.addEventListener('focus', check);
 })();
 </script>
 
