@@ -4614,9 +4614,11 @@
     }
     #rm-bottomnav .rm-dot.on { display: block; }
 
-    /* ── "More" bottom-sheet ── */
-    .rm-sheet { display: block; position: fixed; inset: 0; z-index: 70; }
-    .rm-sheet[hidden] { display: none; }
+    /* ── "More" bottom-sheet ── (scoped to #rm-more-sheet so this does not
+       leak `inset:0`/`top:0` onto the newer shared Sort/Manage sheet, which
+       is bottom-anchored via its own `.rm-sheet` rule further down) */
+    #rm-more-sheet.rm-sheet { display: block; position: fixed; inset: 0; z-index: 70; }
+    #rm-more-sheet.rm-sheet[hidden] { display: none; }
     .rm-sheet-backdrop {
       position: absolute; inset: 0;
       background: var(--bg-overlay, rgba(0, 0, 0, .45));
