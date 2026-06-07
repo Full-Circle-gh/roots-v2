@@ -4541,6 +4541,36 @@
      the platform) has turned off. -->
 <body class="feat-membership feat-affiliate feat-reviews feat-feedback feat-socialProof">
 
+<!-- Mobile bottom tab bar (position:fixed, ≤720px). Kept high in the body so
+     it paints in the first pass — placing it after the app's heavy scripts
+     made it pop in a beat after the dashboard. DOM order is irrelevant to its
+     fixed placement; JS wires it via getElementById at runtime. -->
+<nav id="rm-bottomnav" aria-label="Navigation · 导航">
+  <button type="button" data-go="dashboard" aria-label="Dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+    <span class="rm-lab">Home · 概览</span>
+  </button>
+  <button type="button" data-go="orders" aria-label="Orders">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+    <span class="rm-lab">Orders · 订单</span>
+    <span class="rm-badge" id="rm-badge-orders" aria-hidden="true"></span>
+  </button>
+  <button type="button" data-go="invoices" aria-label="Invoices">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="13" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+    <span class="rm-lab">Invoices · 发票</span>
+    <span class="rm-badge" id="rm-badge-invoices" aria-hidden="true"></span>
+  </button>
+  <button type="button" data-go="products" aria-label="Products">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18l-2 14H5L3 3z"/><circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/><path d="M8 7h8"/></svg>
+    <span class="rm-lab">Products · 产品</span>
+  </button>
+  <button type="button" data-go="__more__" aria-label="More">
+    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+    <span class="rm-lab">More · 更多</span>
+    <span class="rm-dot" id="rm-more-dot" aria-hidden="true"></span>
+  </button>
+</nav>
+
 <div class="topbar">
   <div class="brand">
     <div class="brand-mark">
@@ -25221,32 +25251,6 @@ window.onLangChange(function () {
      Shown only on phones (CSS-gated ≤720px). Each control reuses the
      existing desktop [data-tab] buttons; the JS below wires the taps,
      active-state and badge mirroring. -->
-<nav id="rm-bottomnav" aria-label="Navigation · 导航">
-  <button type="button" data-go="dashboard" aria-label="Dashboard">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
-    <span class="rm-lab">Home · 概览</span>
-  </button>
-  <button type="button" data-go="orders" aria-label="Orders">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
-    <span class="rm-lab">Orders · 订单</span>
-    <span class="rm-badge" id="rm-badge-orders" aria-hidden="true"></span>
-  </button>
-  <button type="button" data-go="invoices" aria-label="Invoices">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="13" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
-    <span class="rm-lab">Invoices · 发票</span>
-    <span class="rm-badge" id="rm-badge-invoices" aria-hidden="true"></span>
-  </button>
-  <button type="button" data-go="products" aria-label="Products">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18l-2 14H5L3 3z"/><circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/><path d="M8 7h8"/></svg>
-    <span class="rm-lab">Products · 产品</span>
-  </button>
-  <button type="button" data-go="__more__" aria-label="More">
-    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
-    <span class="rm-lab">More · 更多</span>
-    <span class="rm-dot" id="rm-more-dot" aria-hidden="true"></span>
-  </button>
-</nav>
-
 <div id="rm-more-sheet" class="rm-sheet" hidden>
   <div class="rm-sheet-backdrop"></div>
   <div class="rm-sheet-panel" role="dialog" aria-modal="true" aria-label="More · 更多">
