@@ -4963,6 +4963,28 @@
     .rm-oc-hint svg { width: 14px; height: 14px; flex: 0 0 auto; }
     .rm-oc-hint.done { color: var(--text-3); font-weight: 500; }
 
+    /* ── Combined: inline peek — tap a card to expand a quick summary + actions
+       in place; "Open full details" still launches the existing drawer. ── */
+    .rm-oc-exp { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .28s ease; }
+    .rm-ocard.open .rm-oc-exp { grid-template-rows: 1fr; }
+    .rm-oc-exp > .inner { overflow: hidden; }
+    .rm-oc-exp-pad { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line-soft); }
+    .rm-oc-dl { display: grid; grid-template-columns: auto 1fr; gap: 7px 12px; align-items: baseline; margin-bottom: 12px; }
+    .rm-oc-dl dt { font: 600 9.5px var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
+    .rm-oc-dl dd { margin: 0; font-size: 13px; color: var(--text-1); text-align: right; }
+    .rm-oc-acts { display: flex; gap: 8px; }
+    .rm-oc-acts .rm-pbtn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
+      height: 44px; border: 0; border-radius: 11px; cursor: pointer; font: 600 13.5px var(--f-sans);
+      -webkit-tap-highlight-color: transparent; }
+    .rm-oc-acts .rm-pbtn svg { width: 17px; height: 17px; }
+    .rm-oc-acts .rm-pbtn.adv { background: linear-gradient(180deg, var(--brass-hi, #C29B54), var(--brass, #B08D4A)); color: var(--brass-ink, #1A140A); }
+    .rm-oc-acts .rm-pbtn.call { flex: 0 0 auto; width: 52px; background: var(--bg-elev-1); color: var(--text-1); }
+    .rm-oc-full { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%;
+      margin-top: 9px; padding: 11px; border: 1px solid var(--line); background: transparent; border-radius: 11px;
+      color: var(--text-2); font: 500 13px var(--f-sans); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .rm-oc-full svg { width: 16px; height: 16px; }
+    .rm-oc-full:active { background: var(--bg-elev-1); }
+
     .rm-oc-empty { text-align: center; color: var(--text-3); padding: 44px 20px; font-size: 13.5px; }
   }
 
@@ -26396,6 +26418,7 @@ window.onLangChange(function () {
               '<button type="button" class="rm-oc-more" data-more="' + o.id + '" aria-label="Manage order">' + ICON_MORE + '</button>' +
             '</div>' +
             hint +
+            '<div class="rm-oc-exp"><div class="inner"><div class="rm-oc-exp-pad" data-oexp></div></div></div>' +
           '</div>' +
         '</div>';
     }
@@ -26422,6 +26445,28 @@ window.onLangChange(function () {
         if (typeof toast === 'function') toast('Failed · ' + e.message, 'err');
       }
     })();
+  }
+
+  // Fill the inline peek (Combined): a compact summary from the list row + an
+  // action row (Advance / Call) and "Open full details" → the existing drawer.
+  function fillPeek(card) {
+    var id = card.getAttribute('data-id'), o = null;
+    for (var i = 0; i < lastData.length; i++) { if (String(lastData[i].id) === String(id)) { o = lastData[i]; break; } }
+    var pad = card.querySelector('[data-oexp]'); if (!o || !pad) return;
+    var fwd = forwardAction(o), sb = shipBy(o), phone = o.recipient_phone || '';
+    var dl = '<dl class="rm-oc-dl">' +
+      '<dt>Ship to</dt><dd>' + esc(o.recipient_name || o.nickname || '—') + (phone ? ' · ' + esc(phone) : '') + '</dd>' +
+      '<dt>When</dt><dd>' + (sb.text ? esc(sb.text) : 'ASAP') + '</dd>' +
+      (o.store_code ? '<dt>Store</dt><dd>' + esc(o.store_name_en || o.store_code) + '</dd>' : '') +
+      '</dl>';
+    var acts = (fwd || phone)
+      ? '<div class="rm-oc-acts">' +
+          (fwd ? '<button type="button" class="rm-pbtn adv" data-pact="advance" data-id="' + o.id + '" data-to="' + fwd[0] + '">' + ICON_ADV + esc(en(fwd[1])) + '</button>' : '') +
+          (phone ? '<button type="button" class="rm-pbtn call" data-pact="call" data-phone="' + esc(phone) + '" aria-label="Call">' + ICON_CALL + '</button>' : '') +
+        '</div>'
+      : '';
+    pad.innerHTML = dl + acts +
+      '<button type="button" class="rm-oc-full" data-pact="open" data-id="' + o.id + '">' + ICON_OPEN + ' Open full details · 详情</button>';
   }
 
   // ── Tap-to-open + swipe-left interaction (event-delegated; survives re-render) ──
@@ -26480,11 +26525,23 @@ window.onLangChange(function () {
       }
       return;
     }
+    // Inline-peek buttons: Advance / Call run in place; Open → the full drawer.
+    var pact = e.target.closest('[data-pact]');
+    if (pact) {
+      e.stopPropagation();
+      var pa = pact.getAttribute('data-pact');
+      if (pa === 'advance') rmAdvance(+pact.getAttribute('data-id'), pact.getAttribute('data-to'));
+      else if (pa === 'call') { var pph = pact.getAttribute('data-phone'); if (pph) window.location.href = 'tel:' + pph; }
+      else if (pa === 'open') { var poid = +pact.getAttribute('data-id'); if (poid && typeof openOrder === 'function') openOrder(poid); }
+      return;
+    }
+    // Tap the card → toggle the inline peek (Combined: keep the queue in view).
     var card = e.target.closest('.rm-ocard');
     if (!card || justSwiped) return;
     if (card.classList.contains('swiped')) { card.classList.remove('swiped'); card.style.transform = ''; return; }
-    var id = +card.getAttribute('data-id');
-    if (id && typeof openOrder === 'function') openOrder(id);
+    var open = !card.classList.contains('open');
+    card.classList.toggle('open', open);
+    if (open) fillPeek(card);
   }
 
   // ── Variant B blend: shared bottom sheet (Sort + Manage) ──
