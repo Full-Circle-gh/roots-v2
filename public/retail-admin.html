@@ -8368,6 +8368,30 @@
     </div>
   </aside>
 
+  <!-- ─── MOBILE DELIVERY hub editor panels (Variant A "settings hub"). Phone-only
+       full-screen push screens, opened by rmDlvOpenEditor / rmDlvOpenZones. Kept as
+       SIBLINGS of #tab-delivery so the hub's "hide every desktop child" rule never
+       touches them. Bodies are built in JS from the live desktop inputs / _zones;
+       Save writes the values back and calls the existing save fn. -->
+  <section id="rm-dlv-editor" class="rm-dlv-panel" aria-hidden="true">
+    <div class="rm-dlv-nav">
+      <button type="button" class="back" onclick="rmDlvCloseEditor()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
+      <span class="ttl" id="rm-dlv-ed-title"></span>
+      <span class="sp"></span>
+    </div>
+    <div class="rm-dlv-scroll" id="rm-dlv-ed-body"></div>
+    <div class="rm-dlv-savebar"><button type="button" class="btn btn-primary" onclick="rmDlvSaveEditor()">Save · 保存</button></div>
+  </section>
+
+  <section id="rm-dlv-zones" class="rm-dlv-panel" aria-hidden="true">
+    <div class="rm-dlv-nav">
+      <button type="button" class="back" onclick="rmDlvCloseZones()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
+      <span class="ttl">Zones · 配送区</span>
+      <button type="button" class="back" style="justify-content:flex-end" onclick="rmDlvCloseZones(); openZoneDrawer();">Add · 添加</button>
+    </div>
+    <div class="rm-dlv-scroll" id="rm-dlv-zones-body"></div>
+  </section>
+
   <!-- Apply-to-others overlay — opens on top of the zone drawer. Pushes the
        current drawer-form values to a selection of other zones in one go.
        (Base .pu-editor-bg already sits above the drawer; no override needed.) -->
@@ -18208,6 +18232,7 @@ async function loadDeliveryZones() {
   _zones = r?.data || [];
   renderZoneTable();
   dzRenderKpis(true);
+  if (typeof rmDlvRenderHub === 'function') rmDlvRenderHub();
 }
 
 async function saveHolidayMode() {
@@ -18360,6 +18385,10 @@ function dzRenderKpis(animate) {
   if (oSub) oSub.textContent = off > 0 ? cuT("won't match addresses", '地址将无法匹配') : cuT('all live', '全部启用');
   const oTile = document.getElementById('dz-kpi-off-tile');
   if (oTile) oTile.classList.toggle('alert', off > 0);
+  // Keep the mobile hub's zone count + any open zone list in sync with the
+  // same signal the desktop KPI strip uses (load, is_active toggle, add/del).
+  if (typeof rmDlvRenderHub === 'function') rmDlvRenderHub();
+  if (typeof rmDlvRenderZones === 'function' && document.getElementById('rm-dlv-zones')?.classList.contains('open')) rmDlvRenderZones();
 }
 
 function renderZoneTable() {
@@ -18953,6 +18982,257 @@ async function saveDeliveryFees() {
     if (status) status.textContent = '';
     toast('Save failed · 保存失败: '+e.message, 'err');
   }
+}
+
+// ════════════════════════════════════════════════════════════════
+// MOBILE DELIVERY — Variant A "settings hub" (phone ≤720px)
+// ════════════════════════════════════════════════════════════════
+// Renders the desktop delivery surface as an iOS-Settings-style hub of
+// grouped value rows, each read straight from the live desktop inputs /
+// _zones. Tapping a row pushes a focused full-screen editor prefilled from
+// those same inputs; Save writes the values back and calls the EXISTING save
+// fn (saveDeliveryFees / saveHolidayMode / …). Zones reuse openZoneDrawer +
+// updateZone. No new fetch, no backend change. Desktop is untouched.
+
+function rmDlvIcon(name) {
+  const I = {
+    pin:  '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/>',
+    tag:  '<path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><circle cx="7" cy="7" r="1.4"/>',
+    truck:'<path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2"/><circle cx="18.5" cy="18.5" r="2"/>',
+    bolt: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+    box:  '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.27 6.96 8.73 5.05 8.73-5.05"/><path d="M12 22.08V12"/>',
+    clock:'<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>',
+    sun:  '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    repeat:'<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
+    globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z"/>',
+    home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',
+    chev: '<polyline points="9 18 15 12 9 6"/>',
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${I[name] || ''}</svg>`;
+}
+
+// Editor specs — id = desktop input id; kind drives the control. Save copies
+// each control back to its desktop input, then calls the existing save fn.
+const RM_DLV_EDITORS = {
+  fees: {
+    title: 'Fees · 费用', save: 'saveDeliveryFees',
+    fields: [
+      { id: 'cfg-fees-freeShippingThreshold', kind: 'yen', label: 'Free-shipping threshold · 包邮门槛', hint: 'Subtotal that unlocks free standard delivery. 0 = always free. A zone’s own Free-over overrides this. · 达此金额标准配送免运;0 = 始终免运。配送区自设值优先。' },
+      { id: 'cfg-fees-standardShipping', kind: 'yen', label: 'Standard shipping fee · 标准运费' },
+      { id: 'cfg-fees-sameDayDelivery', kind: 'yen', label: 'Same-day delivery fee · 当日达运费' },
+      { id: 'cfg-fees-pickupPackingFee', kind: 'yen', label: 'Store pickup packing fee · 自提包装费' },
+      { kind: 'time2', ids: ['cfg-pickup-open', 'cfg-pickup-close'], label: 'Store pickup hours · 到店自提时间' },
+    ],
+  },
+  holiday: {
+    title: 'Holiday mode · 假期模式', save: 'saveHolidayMode',
+    fields: [
+      { id: 'dlv-holiday-mode', kind: 'toggle', label: 'Holiday mode · 假期模式', hint: 'When on, same-day delivery is hidden and the message below shows at checkout. Orders are still accepted. · 开启后隐藏当日达并在结账页显示下方提示,订单仍可接收。' },
+      { id: 'dlv-holiday-msg-en', kind: 'textarea', label: 'Message (English) · 英文消息' },
+      { id: 'dlv-holiday-msg-cn', kind: 'textarea', label: '消息(中文)· Message (Chinese)' },
+    ],
+  },
+  batch: {
+    title: 'Batch schedule · 现做排期', save: 'saveBatchSchedule',
+    fields: [
+      { id: 'batch-enabled', kind: 'toggle', label: 'Fresh batch schedule · 分批现做', hint: 'Only affects outside-Guangzhou orders holding a batch-made item. · 仅影响含「分批现做」商品的广州以外订单。' },
+      { id: 'batch-anchor', kind: 'date', label: 'A batch day · 某个制作日' },
+      { id: 'batch-interval', kind: 'numsm', unit: 'days · 天', label: 'Make every · 每隔' },
+      { id: 'batch-skip', kind: 'textarea', mono: true, label: 'Skip these dates · 跳过这些日期', ph: '2026-07-14\n2026-07-16' },
+      { id: 'batch-msg-en', kind: 'textarea', label: 'Checkout notice — English · 结账提示(英文)' },
+      { id: 'batch-msg-cn', kind: 'textarea', label: '结账提示(中文)· Checkout notice — Chinese' },
+    ],
+  },
+  default: {
+    title: 'Rest of China · 其他地区', save: 'saveDefaultZone',
+    fields: [
+      { id: 'dlv-default-enabled', kind: 'toggle', label: 'Default delivery on · 启用默认配送', hint: 'A flat fee for any mainland address not covered by a zone. Off = unmatched addresses can’t check out. · 未被任何配送区覆盖的大陆地址的统一运费;关闭则无匹配地址无法结账。' },
+      { id: 'dlv-default-fee', kind: 'yen', label: 'Flat fee · 统一运费' },
+      { id: 'dlv-default-free', kind: 'yen', label: 'Free over · 满额免运', ph: '329' },
+      { kind: 'frow2', children: [
+        { id: 'dlv-default-pack', kind: 'yensm', label: 'Packing / item · 每件包装费' },
+        { id: 'dlv-default-pack-cap', kind: 'yensm', label: 'Packing cap · 包装费上限', ph: '—' },
+      ] },
+      { id: 'dlv-default-lead', kind: 'numsm', unit: 'days · 天', label: 'Lead time · 备货天数' },
+    ],
+  },
+  kitchen: {
+    title: 'Kitchen address · 厨房地址', save: 'saveDeliveryDefaults',
+    fields: [
+      { id: 'dlv-kitchen-address', kind: 'text', label: 'Kitchen address (customer-facing) · 厨房地址(顾客可见)', ph: '广州市天河区 (Roots Kitchen)', hint: 'Shown on checkout when a customer’s address matches no zone, so they know where you ship from. Not used for distance. · 当顾客地址不匹配任何配送区时在结账页显示。不用于距离计算。' },
+    ],
+  },
+};
+
+const _rmGv = (id) => { const el = document.getElementById(id); return el ? (el.value ?? '') : ''; };
+const _rmGc = (id) => { const el = document.getElementById(id); return !!(el && el.checked); };
+
+function rmDlvFieldHtml(f) {
+  const lab = `<label class="rm-flab">${f.label}</label>`;
+  const hint = f.hint ? `<p class="rm-fhint">${f.hint}</p>` : '';
+  const eid = 'rmed_' + f.id;
+  if (f.kind === 'frow2') {
+    return `<div class="rm-frow2">${f.children.map(c => `<div>${rmDlvFieldHtml(c)}</div>`).join('')}</div>`;
+  }
+  if (f.kind === 'toggle') {
+    const on = _rmGc(f.id);
+    return `<div class="rm-rowtoggle"><span>${f.label}</span>` +
+      `<button type="button" id="${eid}" class="rm-switch${on ? ' on' : ''}" aria-pressed="${on}" onclick="this.classList.toggle('on'); this.setAttribute('aria-pressed', this.classList.contains('on'));"></button></div>${hint}`;
+  }
+  if (f.kind === 'textarea') {
+    const st = f.mono ? ' style="font-family:var(--f-mono); font-size:13px;"' : '';
+    return `${lab}<textarea id="${eid}" class="rm-dlv-ta"${st} placeholder="${escapeHtml(f.ph || '')}">${escapeHtml(_rmGv(f.id))}</textarea>${hint}`;
+  }
+  if (f.kind === 'time2') {
+    return `${lab}<div class="rm-timefield">` +
+      `<input type="time" id="rmed_${f.ids[0]}" value="${escapeHtml(_rmGv(f.ids[0]))}">` +
+      `<input type="time" id="rmed_${f.ids[1]}" value="${escapeHtml(_rmGv(f.ids[1]))}"></div>${hint}`;
+  }
+  if (f.kind === 'yen') {
+    return `${lab}<div class="rm-numfield"><span class="u">¥</span>` +
+      `<input type="number" inputmode="decimal" id="${eid}" value="${escapeHtml(_rmGv(f.id))}" placeholder="${escapeHtml(f.ph || '')}"></div>${hint}`;
+  }
+  if (f.kind === 'yensm') {
+    return `${lab}<div class="rm-smallnum"><span class="u">¥</span>` +
+      `<input type="number" inputmode="decimal" id="${eid}" value="${escapeHtml(_rmGv(f.id))}" placeholder="${escapeHtml(f.ph || '')}"></div>${hint}`;
+  }
+  if (f.kind === 'numsm') {
+    return `${lab}<div class="rm-smallnum">` +
+      `<input type="number" inputmode="numeric" id="${eid}" value="${escapeHtml(_rmGv(f.id))}">` +
+      `<span class="u">${f.unit || ''}</span></div>${hint}`;
+  }
+  if (f.kind === 'date') {
+    return `${lab}<div class="rm-smallnum"><input type="date" id="${eid}" value="${escapeHtml(_rmGv(f.id))}" style="font-size:16px;"></div>${hint}`;
+  }
+  // text
+  return `${lab}<div class="rm-smallnum"><input type="text" id="${eid}" value="${escapeHtml(_rmGv(f.id))}" placeholder="${escapeHtml(f.ph || '')}" style="font-size:16px;"></div>${hint}`;
+}
+
+let _rmDlvEdKey = null;
+function rmDlvOpenEditor(key) {
+  const spec = RM_DLV_EDITORS[key];
+  if (!spec) return;
+  _rmDlvEdKey = key;
+  const t = document.getElementById('rm-dlv-ed-title');
+  if (t) t.textContent = spec.title;
+  const body = document.getElementById('rm-dlv-ed-body');
+  if (body) body.innerHTML = '<div class="rm-edcard">' + spec.fields.map(rmDlvFieldHtml).join('') + '</div>';
+  const p = document.getElementById('rm-dlv-editor');
+  if (p) { p.classList.add('open'); p.setAttribute('aria-hidden', 'false'); }
+}
+function rmDlvCloseEditor() {
+  const p = document.getElementById('rm-dlv-editor');
+  if (p) { p.classList.remove('open'); p.setAttribute('aria-hidden', 'true'); }
+}
+function rmDlvSaveEditor() {
+  const spec = RM_DLV_EDITORS[_rmDlvEdKey];
+  if (!spec) return;
+  const writeBack = (f) => {
+    if (f.kind === 'frow2') { f.children.forEach(writeBack); return; }
+    if (f.kind === 'toggle') {
+      const btn = document.getElementById('rmed_' + f.id);
+      const cb = document.getElementById(f.id);
+      if (btn && cb) { cb.checked = btn.classList.contains('on'); cb.dispatchEvent(new Event('change')); }
+      return;
+    }
+    if (f.kind === 'time2') {
+      f.ids.forEach(id => { const s = document.getElementById('rmed_' + id), d = document.getElementById(id); if (s && d) d.value = s.value; });
+      return;
+    }
+    const s = document.getElementById('rmed_' + f.id), d = document.getElementById(f.id);
+    if (s && d) d.value = s.value;
+  };
+  spec.fields.forEach(writeBack);
+  const fn = window[spec.save];
+  if (typeof fn === 'function') fn();
+  rmDlvRenderHub();
+  rmDlvCloseEditor();
+}
+
+function rmDlvRenderHub() {
+  const host = document.getElementById('rm-dlv-hub');
+  if (!host) return;
+  const yen = (id) => { const v = _rmGv(id); return v === '' ? '—' : '¥' + v; };
+  const zones = Array.isArray(window._zones) ? window._zones : (typeof _zones !== 'undefined' ? _zones : []);
+  const active = zones.filter(z => z.is_active).length;
+  const pill = (on) => `<span class="rm-pill-status ${on ? 'on' : 'off'}">${on ? 'ON · 开' : 'OFF · 关'}</span>`;
+  const grouplab = (t) => `<div class="rm-dlv-grouplab">${t}<span class="ln"></span></div>`;
+  const row = (icon, t, s, right, onclick) =>
+    `<button type="button" class="rm-setrow" onclick="${onclick}">` +
+      `<span class="rm-dlv-ic">${rmDlvIcon(icon)}</span>` +
+      `<span class="tx"><span class="t">${t}</span>${s ? `<span class="s">${s}</span>` : ''}</span>` +
+      `${right || ''}<span class="chev">${rmDlvIcon('chev')}</span></button>`;
+  const val = (v, brass) => `<span class="val${brass ? ' brass' : ''}">${v}</span>`;
+  const holidayOn = _rmGc('dlv-holiday-mode');
+  const batchOn = _rmGc('batch-enabled');
+  const defOn = _rmGc('dlv-default-enabled');
+  const addr = _rmGv('dlv-kitchen-address');
+  host.innerHTML =
+    grouplab('Coverage · 配送区') +
+    '<div class="rm-dlv-group">' +
+      row('pin', 'Delivery zones · 配送区', 'Areas, pricing &amp; scheduling · 区域、定价与时间', val(active + ' active · 启用'), 'rmDlvOpenZones()') +
+    '</div>' +
+    grouplab('Fees · 费用') +
+    '<div class="rm-dlv-group">' +
+      row('tag', 'Free-shipping threshold · 包邮门槛', '', val(yen('cfg-fees-freeShippingThreshold'), true), "rmDlvOpenEditor('fees')") +
+      row('truck', 'Standard shipping · 标准运费', '', val(yen('cfg-fees-standardShipping')), "rmDlvOpenEditor('fees')") +
+      row('bolt', 'Same-day delivery · 当日达', '', val(yen('cfg-fees-sameDayDelivery')), "rmDlvOpenEditor('fees')") +
+      row('box', 'Pickup packing · 自提包装', '', val(yen('cfg-fees-pickupPackingFee')), "rmDlvOpenEditor('fees')") +
+      row('clock', 'Pickup hours · 自提时间', '', val((_rmGv('cfg-pickup-open') || '—') + '–' + (_rmGv('cfg-pickup-close') || '—')), "rmDlvOpenEditor('fees')") +
+    '</div>' +
+    grouplab('Schedule &amp; closures · 排期与休假') +
+    '<div class="rm-dlv-group">' +
+      row('sun', 'Holiday mode · 假期模式', 'Pause same-day, show a banner · 暂停当日达并显示横幅', pill(holidayOn), "rmDlvOpenEditor('holiday')") +
+      row('repeat', 'Fresh batch schedule · 现做排期', 'Outside-GZ batch-made items · 广州以外现做商品', pill(batchOn), "rmDlvOpenEditor('batch')") +
+    '</div>' +
+    grouplab('Defaults · 默认') +
+    '<div class="rm-dlv-group">' +
+      row('globe', 'Rest of China · 其他地区', defOn ? ('Flat ' + yen('dlv-default-fee') + ' · 统一运费') : 'Off — unmatched addresses blocked · 关闭', pill(defOn), "rmDlvOpenEditor('default')") +
+      row('home', 'Kitchen address · 厨房地址', addr ? escapeHtml(addr) : 'Not set · 未设置', '', "rmDlvOpenEditor('kitchen')") +
+    '</div>';
+}
+
+function rmDlvOpenZones() {
+  rmDlvRenderZones();
+  const p = document.getElementById('rm-dlv-zones');
+  if (p) { p.classList.add('open'); p.setAttribute('aria-hidden', 'false'); }
+}
+function rmDlvCloseZones() {
+  const p = document.getElementById('rm-dlv-zones');
+  if (p) { p.classList.remove('open'); p.setAttribute('aria-hidden', 'true'); }
+}
+function rmDlvZoneView(v) {
+  if (typeof setZoneView === 'function') setZoneView(v);
+  rmDlvRenderZones();
+}
+function rmDlvRenderZones() {
+  const host = document.getElementById('rm-dlv-zones-body');
+  if (!host) return;
+  const zones = Array.isArray(window._zones) ? window._zones : (typeof _zones !== 'undefined' ? _zones : []);
+  const view = (typeof _zoneView !== 'undefined' && _zoneView) ? _zoneView : 'pricing';
+  const seg = '<div class="rm-zoneseg">' +
+    `<button type="button" class="${view === 'pricing' ? 'on' : ''}" onclick="rmDlvZoneView('pricing')">Pricing · 定价</button>` +
+    `<button type="button" class="${view === 'scheduling' ? 'on' : ''}" onclick="rmDlvZoneView('scheduling')">Scheduling · 时间</button></div>`;
+  if (!zones.length) { host.innerHTML = seg + '<div class="rm-zempty">No zones yet — tap Add. · 暂无配送区,点「添加」。</div>'; return; }
+  const groups = (typeof groupZonesByProvince === 'function') ? groupZonesByProvince(zones) : [{ en: '', cn: '', rows: zones }];
+  const code = (z) => z.zone_type === 'gz_district' ? 'GZ' : (z.is_province_wide ? 'PROV' : 'CITY');
+  const feeHtml = (z) => {
+    if (view === 'pricing') {
+      const free = z.free_threshold == null ? 'default · 默认' : '免 ¥' + z.free_threshold;
+      return `<div class="b">¥${z.base_fee ?? 0}</div><div class="f">${free}</div>`;
+    }
+    const mode = z.day_only ? 'Day · 按日' : 'Slots · 时段';
+    return `<div class="b">${mode}</div><div class="f">${(z.min_lead_days ?? 0)}–${(z.max_lead_days ?? 14)}d</div>`;
+  };
+  const zlabel = (z) => (typeof zoneLabel === 'function') ? zoneLabel(z) : (z.name_cn || z.match_city || '');
+  const rowHtml = (z) =>
+    `<button type="button" class="rm-zrow" style="${z.is_active ? '' : 'opacity:.5'}" onclick="rmDlvCloseZones(); openZoneDrawer(${z.id});">` +
+      `<span class="code">${code(z)}</span>` +
+      `<span class="nm"><span class="n">${escapeHtml(zlabel(z) || '—')}</span>${z.name_en ? `<span class="m">${escapeHtml(z.name_en)}</span>` : ''}</span>` +
+      `<span class="fee">${feeHtml(z)}</span></button>`;
+  host.innerHTML = seg + groups.map(g =>
+    `<div class="rm-zglab"><span class="g">${escapeHtml(g.en || g.cn || '')}</span><span class="c">${g.rows.length}</span></div>` +
+    `<div class="rm-zlist">${g.rows.map(rowHtml).join('')}</div>`).join('');
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -25454,6 +25734,204 @@ window.onLangChange(function () {
     .live-preview-frame iframe { border-radius: 0; }
   }
 
+  /* ════════════════════════════════════════════════════════════════════
+     MOBILE DELIVERY REDESIGN — Variant A "settings hub".
+     Phone-only (≤720px). The desktop delivery surface (KPI strip aside) is
+     hidden; the SAME live inputs/zones render as an iOS-Settings-style hub
+     of grouped value rows (#rm-dlv-hub, fed by rmDlvRenderHub). Tap a value
+     row → a full-screen editor pushes in (#rm-dlv-editor) prefilled FROM the
+     desktop inputs; Save writes them back + calls the existing save fn.
+     Zones row → a zone list (#rm-dlv-zones) built from the live zone data;
+     tap a zone → the existing zone drawer (openZoneDrawer, full-screen on
+     phone); the per-zone switch calls updateZone. Theme-aware (app tokens).
+     Desktop untouched. Sibling of the Orders/Customers/Dashboard redesigns.
+     Built to match design bundle: mobile/delivery-a.html + fc-delivery.css.
+     ════════════════════════════════════════════════════════════════════ */
+  #rm-dlv-hub { display: none; }
+  /* Desktop: keep the hub and both push-panels out of the flow. Class selectors
+     (matching specificity) so the ≤720px rules below win by source order. */
+  .rm-dlv-panel { display: none; }
+  @media (max-width: 720px) {
+    /* Hide every desktop delivery child except the KPI strip and the hub.
+       Inputs stay in the DOM (display:none) so the hub can read/write them. */
+    #tab-delivery > *:not(#dz-kpis):not(#rm-dlv-hub) { display: none !important; }
+    #rm-dlv-hub { display: block; }
+
+    /* KPI strip → horizontal snap rail. */
+    #dz-kpis {
+      display: flex; grid-template-columns: none;
+      gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x proximity; padding-bottom: 6px; margin-bottom: var(--s3);
+    }
+    #dz-kpis::-webkit-scrollbar { display: none; }
+    #dz-kpis > .fc-kpi { flex: 0 0 116px; min-width: 116px; scroll-snap-align: start; }
+
+    /* ── Settings groups ── */
+    .rm-dlv-grouplab {
+      display: flex; align-items: center; gap: 8px;
+      font: 500 10px var(--f-mono); letter-spacing: .18em; text-transform: uppercase;
+      color: var(--brass, #B08D4A); margin: 20px 4px 9px;
+    }
+    .rm-dlv-grouplab .ln { flex: 1; height: 1px; background: var(--line); }
+    .rm-dlv-group {
+      background: var(--bg-pane); border: 1px solid var(--line-soft);
+      border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-1, none);
+    }
+    .rm-setrow {
+      display: flex; align-items: center; gap: 13px; width: 100%;
+      padding: 15px; border: 0; background: transparent; cursor: pointer;
+      font: inherit; text-align: left; color: var(--text-1);
+      border-top: 1px solid var(--line-soft);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .rm-setrow:first-child { border-top: 0; }
+    .rm-setrow:active { background: var(--bg-elev-1); }
+    .rm-dlv-ic {
+      width: 34px; height: 34px; border-radius: 10px; flex: 0 0 auto;
+      background: var(--bg-sunk, var(--bg-elev-1)); color: var(--brass, #B08D4A);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .rm-dlv-ic svg { width: 18px; height: 18px; }
+    .rm-setrow .tx { flex: 1; min-width: 0; }
+    .rm-setrow .t { font-size: 15px; font-weight: 500; display: block; }
+    .rm-setrow .s {
+      font-size: 12px; color: var(--text-3); margin-top: 1px; display: block;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .rm-setrow .val { font: 14px var(--f-mono); color: var(--text-1); white-space: nowrap; }
+    .rm-setrow .val.brass { color: var(--brass, #B08D4A); font-weight: 500; }
+    .rm-setrow .chev { color: var(--text-4); flex: 0 0 auto; display: flex; }
+    .rm-setrow .chev svg { width: 18px; height: 18px; }
+
+    .rm-pill-status {
+      font: 500 10px var(--f-mono); letter-spacing: .1em; text-transform: uppercase;
+      padding: 3px 8px; border-radius: 6px;
+    }
+    .rm-pill-status.on  { background: var(--accent-wash, rgba(107,142,111,.16)); color: var(--accent-deep, #3f6b46); }
+    .rm-pill-status.off { background: var(--bg-elev-1); color: var(--text-3); }
+
+    /* Toggle switch (on the row, no push). */
+    .rm-switch {
+      width: 46px; height: 28px; border-radius: 999px; flex: 0 0 auto;
+      background: var(--line-strong, var(--line)); position: relative; border: 0;
+      cursor: pointer; transition: background .2s;
+    }
+    .rm-switch.on { background: var(--accent, #6B8E6F); }
+    .rm-switch::after {
+      content: ""; position: absolute; top: 3px; left: 3px;
+      width: 22px; height: 22px; border-radius: 50%; background: #fff;
+      transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3);
+    }
+    .rm-switch.on::after { transform: translateX(18px); }
+
+    /* ── Full-screen push editor panels ── */
+    .rm-dlv-panel {
+      position: fixed; inset: 0; z-index: 70;
+      background: var(--bg-app); display: flex; flex-direction: column;
+      transform: translateX(100%); transition: transform .3s cubic-bezier(.16, 1, .3, 1);
+      visibility: hidden;
+    }
+    .rm-dlv-panel.open { transform: translateX(0); visibility: visible; }
+    .rm-dlv-nav {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+      padding: 14px 16px; border-bottom: 1px solid var(--line-soft);
+      background: var(--bg-pane);
+    }
+    .rm-dlv-nav .back {
+      display: flex; align-items: center; gap: 4px; border: 0; background: transparent;
+      color: var(--brass, #B08D4A); font: 500 15px var(--f-sans); cursor: pointer; padding: 4px 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .rm-dlv-nav .back svg { width: 20px; height: 20px; }
+    .rm-dlv-nav .ttl { flex: 1; text-align: center; font-size: 16px; font-weight: 600; color: var(--text-1); }
+    .rm-dlv-nav .sp { width: 56px; flex: 0 0 auto; }
+    .rm-dlv-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 18px 16px 120px; }
+
+    .rm-edcard {
+      background: var(--bg-pane); border: 1px solid var(--line-soft);
+      border-radius: var(--r-lg); padding: 16px; box-shadow: var(--shadow-1, none);
+    }
+    .rm-flab {
+      display: block; font: 500 10px var(--f-mono); letter-spacing: .12em; text-transform: uppercase;
+      color: var(--text-3); margin: 16px 2px 8px;
+    }
+    .rm-flab:first-child { margin-top: 0; }
+    .rm-numfield {
+      display: flex; align-items: center; gap: 2px; height: 60px; padding: 0 16px;
+      border: 1px solid var(--line); border-radius: 13px; background: var(--bg-app);
+    }
+    .rm-numfield .u { font: 22px var(--f-mono); color: var(--text-4); }
+    .rm-numfield input {
+      flex: 1; width: 100%; border: 0; outline: 0; background: transparent;
+      font: 600 30px var(--f-sans); color: var(--text-1);
+    }
+    .rm-fhint { font-size: 12.5px; line-height: 1.55; color: var(--text-3); margin: 12px 2px 0; }
+    .rm-frow2 { display: flex; gap: 10px; } .rm-frow2 > div { flex: 1; }
+    .rm-smallnum {
+      display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 12px;
+      border: 1px solid var(--line); border-radius: 11px; background: var(--bg-app);
+    }
+    .rm-smallnum .u { font: 15px var(--f-mono); color: var(--text-4); }
+    .rm-smallnum input {
+      flex: 1; width: 100%; border: 0; outline: 0; background: transparent;
+      font: 600 18px var(--f-sans); color: var(--text-1);
+    }
+    .rm-timefield { display: flex; gap: 10px; }
+    .rm-timefield input {
+      flex: 1; height: 54px; text-align: center; border: 1px solid var(--line);
+      border-radius: 11px; background: var(--bg-app); color: var(--text-1);
+      font: 600 20px var(--f-mono); outline: 0;
+    }
+    .rm-dlv-ta {
+      width: 100%; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-app);
+      padding: 13px 14px; font: 14px var(--f-sans); line-height: 1.5; color: var(--text-1);
+      resize: none; min-height: 84px; outline: 0;
+    }
+    .rm-rowtoggle {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      font-size: 16px; font-weight: 600; color: var(--text-1);
+    }
+
+    /* Save bar pinned to the panel bottom. */
+    .rm-dlv-savebar {
+      position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;
+      padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 18px));
+      background: linear-gradient(180deg, transparent, var(--bg-app) 24%);
+    }
+    .rm-dlv-savebar .btn { width: 100%; padding: 15px; }
+
+    /* ── Zone list panel ── */
+    .rm-zoneseg { display: flex; gap: 7px; padding: 4px 0 10px; }
+    .rm-zoneseg button {
+      flex: 1; height: 36px; border-radius: 10px; cursor: pointer;
+      border: 1px solid var(--line); background: var(--bg-pane);
+      color: var(--text-3); font: 500 13.5px var(--f-sans);
+    }
+    .rm-zoneseg button.on { background: var(--text-1); color: var(--bg-pane); border-color: var(--text-1); }
+    .rm-zglab { display: flex; align-items: center; justify-content: space-between; padding: 14px 4px 8px; }
+    .rm-zglab .g { font-size: 15px; font-weight: 600; color: var(--text-1); }
+    .rm-zglab .c { font: 11px var(--f-mono); color: var(--text-4); }
+    .rm-zlist { display: flex; flex-direction: column; gap: 9px; }
+    .rm-zrow {
+      display: flex; align-items: center; gap: 12px; width: 100%; cursor: pointer; text-align: left;
+      background: var(--bg-pane); border: 1px solid var(--line-soft);
+      border-radius: 13px; padding: 12px 13px; box-shadow: var(--shadow-1, none);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .rm-zrow:active { background: var(--bg-elev-1); }
+    .rm-zrow .code {
+      flex: 0 0 auto; font: 9px var(--f-mono); letter-spacing: .06em;
+      color: var(--accent-deep, #3f6b46); background: var(--accent-wash, rgba(107,142,111,.16));
+      border-radius: 5px; padding: 3px 6px;
+    }
+    .rm-zrow .nm { flex: 1; min-width: 0; }
+    .rm-zrow .nm .n { font-size: 15px; font-weight: 600; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rm-zrow .nm .m { font: 11px var(--f-mono); color: var(--text-4); margin-top: 1px; }
+    .rm-zrow .fee { text-align: right; flex: 0 0 auto; }
+    .rm-zrow .fee .b { font-size: 14px; font-weight: 600; color: var(--text-1); }
+    .rm-zrow .fee .f { font: 10.5px var(--f-mono); color: var(--text-4); }
+    .rm-zempty { text-align: center; color: var(--text-3); padding: 36px 20px; font-size: 13.5px; }
+  }
 </style>
 
 <!-- ─── MOBILE SHELL (Phase 1) — bottom tab bar + More sheet ───
