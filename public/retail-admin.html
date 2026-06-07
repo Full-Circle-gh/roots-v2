@@ -4617,30 +4617,25 @@
     /* ── "More" bottom-sheet ── (scoped to #rm-more-sheet so this does not
        leak `inset:0`/`top:0` onto the newer shared Sort/Manage sheet, which
        is bottom-anchored via its own `.rm-sheet` rule further down) */
-    /* Pin to the VISUAL viewport, not the layout viewport. When the sheet opens
-       it locks scroll (html.rm-noscroll → overflow:hidden), which makes mobile
-       Chrome re-expand the URL bar; a `bottom:0` fixed panel then anchors to the
-       layout-viewport bottom, which sits below the fold → the sheet's body slides
-       off-screen and only the grip peeks up. Instead: size the container to the
-       dynamic viewport (100dvh, tracks the toolbar) and bottom-align the panel
-       with flexbox, so the sheet always rests on the visible bottom edge. */
-    #rm-more-sheet.rm-sheet {
-      display: flex; flex-direction: column; justify-content: flex-end;
-      position: fixed; top: 0; left: 0; right: 0;
-      height: 100vh; height: 100dvh; z-index: 70;
-    }
+    /* Mirror the proven Sort/Manage sheet (.rm-sheet @ ~5015): the panel is a
+       TOP-LEVEL `position:fixed; bottom:0` element and the backdrop is a separate
+       fixed sibling — NOT a fixed panel nested inside a fixed full-screen box.
+       That nesting was the bug: under the open-time scroll lock (overflow:hidden),
+       the nested panel anchored to the layout-viewport bottom (below the fold), so
+       the sheet slid off-screen and only the grip peeked up. `display:contents`
+       dissolves the wrapper so its children position against the viewport directly,
+       exactly like #rm-bottomnav and the Sort sheet (both of which sit correctly on
+       the visible bottom edge). */
+    #rm-more-sheet.rm-sheet { display: contents; }
     #rm-more-sheet.rm-sheet[hidden] { display: none; }
     .rm-sheet-backdrop {
-      position: absolute; inset: 0;
+      position: fixed; inset: 0; z-index: 70;
       background: var(--bg-overlay, rgba(0, 0, 0, .45));
       animation: rmFade 240ms ease;
     }
     @keyframes rmFade { from { opacity: 0; } to { opacity: 1; } }
     .rm-sheet-panel {
-      /* In normal flow as the sole flex child → flex-end pins it to the bottom of
-         the 100dvh container (the visible viewport). z-index lifts it over the
-         absolute backdrop. */
-      position: relative; z-index: 1; width: 100%;
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 71;
       max-height: 82vh; max-height: 82dvh; overflow-y: auto;
       background: var(--bg-pane);
       border-radius: 18px 18px 0 0;
