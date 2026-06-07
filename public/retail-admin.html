@@ -3322,6 +3322,9 @@
     transform: scale(1.05);
   }
   .side-drawer .drawer-close svg { width: 16px; height: 16px; }
+  /* Mobile-only back chevron in the drawer app-bar; hidden on desktop where the
+     floating round × is used instead. */
+  .side-drawer .drawer-back { display: none; }
   @media (max-width: 720px) {
     .side-drawer { width: calc(100vw / var(--ui-scale, 1)); min-width: 0; border-left: 0; }
     .side-drawer.dw-wide { width: calc(100vw / var(--ui-scale, 1)); }
@@ -4715,16 +4718,66 @@
        reclaims a little width. */
     .side-drawer .drawer-body { overflow-x: hidden; padding-left: var(--s4); padding-right: var(--s4); }
 
-    /* Order-detail desktop power-controls clutter the phone-width drawer and
-       crowd the floating × (the "View" display-options popover) or read as a
-       cramped extra row (the "Sort items" chips). Both are desktop-only
-       affordances absent from the mobile mockup — hide on phones so the detail
-       reads clean. The default sort + default display still apply. */
-    #order-drawer .order-head .ovp-wrap { display: none; }
+    /* Order-detail header → mobile app-bar matching the mockup:
+       ‹ R260607000002  •Paid              •••
+       Left back-chevron replaces the floating ×; the order number + status pill
+       sit on one sticky line; the "View" display-options popover collapses to a
+       ⋯ kebab on the right. The "Sort items" chips (desktop-only) stay hidden. */
+    #order-drawer .drawer-close { display: none; }
     #order-drawer .sort-chips { display: none; }
-    /* Give the order number room now that View is gone (it was sharing the row
-       via justify-content:space-between). */
-    #order-drawer .order-head { display: block; }
+    #order-drawer .od-eyebrow { display: none; }
+
+    /* Back chevron — left side of the app-bar (sibling of .drawer-body, fixed to
+       the drawer top so it stays put while the body scrolls). */
+    #order-drawer .drawer-back {
+      display: inline-flex; align-items: center; justify-content: center;
+      position: absolute; top: 12px; left: 6px; z-index: 8;
+      width: 36px; height: 36px; padding: 0;
+      background: transparent; border: 0; border-radius: 999px;
+      color: var(--text-1); cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #order-drawer .drawer-back svg { width: 22px; height: 22px; }
+    #order-drawer .drawer-back:active { background: var(--bg-elev-1); }
+
+    /* Sticky single-line app-bar. Full-bleed by cancelling the drawer-body pad;
+       left pad clears the chevron, right pad clears the ⋯ kebab. */
+    #order-drawer .order-head {
+      display: flex; align-items: center; justify-content: flex-start;
+      position: sticky; top: 0; z-index: 7;
+      margin: 0 calc(-1 * var(--s4)) var(--s4);
+      padding: 12px 50px 12px 44px;
+      background: var(--bg-pane);
+      border-bottom: 1px solid var(--line);
+      min-height: 52px;
+    }
+    #order-drawer .order-head > div:first-child { min-width: 0; flex: 1; }
+    #order-drawer .order-head .title-row { margin-bottom: 0; flex-wrap: nowrap; }
+    #order-drawer .order-head .title-row b {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    /* "View" popover trigger → ⋯ kebab pinned top-right of the app-bar. */
+    #order-drawer .order-head .ovp-wrap {
+      position: absolute; top: 8px; right: 6px; margin: 0; z-index: 8;
+    }
+    #order-drawer .order-head .ovp-wrap #odv-btn {
+      width: 36px; height: 36px; padding: 0; min-width: 0;
+      border: 0; background: transparent; color: var(--text-1);
+      font-size: 0; border-radius: 999px;
+    }
+    #order-drawer .order-head .ovp-wrap #odv-btn svg { display: none; }
+    #order-drawer .order-head .ovp-wrap #odv-btn::after {
+      content: "\22EF"; font-size: 22px; line-height: 1; color: var(--text-1);
+    }
+    #order-drawer .order-head .ovp-wrap #odv-btn:active { background: var(--bg-elev-1); }
+
+    /* Stock Reservations: drop the secondary columns (Expires / Committed /
+       Released) on phones so the 4 core columns — Product, Qty, Channel, Status
+       — fit without the side-scroll that was clipping the "committed" pill. */
+    #order-drawer .resv-table { min-width: 0; }
+    #order-drawer .resv-table th:nth-child(n+5),
+    #order-drawer .resv-table td:nth-child(n+5) { display: none; }
 
     /* Hide the desktop table + the dense toolbar on phones — keep only the
        search box (Phase 2 makes it claim the full row). */
