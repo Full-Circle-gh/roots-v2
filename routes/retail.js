@@ -10142,9 +10142,19 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       });
     }
     const pay = tdb().prepare(
-      "SELECT out_trade_no, amount FROM retail_payments WHERE order_id = ? AND status IN ('success','refunded') ORDER BY id DESC LIMIT 1"
+      "SELECT out_trade_no, amount, method FROM retail_payments WHERE order_id = ? AND status IN ('success','refunded') ORDER BY id DESC LIMIT 1"
     ).get(id);
-    if (pay?.out_trade_no) {
+    // Only orders actually paid through the WeChat gateway can be refunded
+    // through it. Off-app payments (cash / bank transfer / WeChat or Alipay
+    // off-app / other) hold no money at WeChat and carry a synthetic
+    // `MANUAL…` out_trade_no, so firing wechatPayRefund() against it would
+    // throw and abort the whole transition — leaving the status stuck. For
+    // those the operator returns the money themselves; we just flip the status.
+    const isOnlineWechatPay =
+      pay?.out_trade_no &&
+      !OFFLINE_PAY_METHODS.has(pay.method) &&
+      !String(pay.out_trade_no).startsWith('MANUAL');
+    if (isOnlineWechatPay) {
       // Atomically claim the refund (→ 'paying') so a double-click or a second
       // operator can't each fire a real WeChat refund. Only the request that
       // wins this transition proceeds; on failure we revert to the prior state.
