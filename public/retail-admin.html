@@ -4535,7 +4535,7 @@
     </div>
     <span class="brand-name">Full Circle</span>
     <span class="divider"></span>
-    <span class="sub">Mini App Backend</span>
+    <span class="sub">Mini App Admin</span>
   </div>
   <div class="grow"></div>
   <button class="topbar-link gsearch-trigger" id="gsearch-trigger" type="button" onclick="openCmdSearch()" title="Search anything · 搜索任何设置 (Ctrl K)" aria-label="Search">
@@ -14493,6 +14493,54 @@ function askPayMethod() {
   });
 }
 
+// Branded replacement for window.prompt() when collecting one optional reason
+// (cancellation / refund). Resolves to the typed string, or null if the staff
+// member dismisses (ESC / backdrop / Cancel) so callers can abort. Submitting
+// an empty textarea resolves to '' (reason is optional).
+function askReason(opts) {
+  return new Promise((resolve) => {
+    const bg = document.createElement('div');
+    bg.className = 'pu-editor-bg';
+    bg.style.display = 'flex';
+    bg.innerHTML = `
+      <div class="pu-editor" style="width: 460px; max-width: 92vw;" role="dialog" aria-modal="true">
+        <div class="pu-editor-head">
+          <div>
+            <h3 style="margin: 0; font-size: 14px;">${opts.titleEn} · ${opts.titleCn}</h3>
+            <div class="muted" style="font-size: 11px; margin-top: 2px;">${opts.subEn} · ${opts.subCn}</div>
+          </div>
+          <button class="btn" data-cancel>Close · 关闭</button>
+        </div>
+        <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display: block;">
+          <div class="field" style="margin-bottom: 14px;">
+            <label class="stacked">${opts.labelEn} · ${opts.labelCn}</label>
+            <textarea id="ar-reason" rows="3" style="width: 100%;" placeholder="${opts.phEn} · ${opts.phCn}"></textarea>
+          </div>
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button class="btn" data-cancel>Cancel · 取消</button>
+            <button class="btn btn-primary" data-submit>${opts.submitEn} · ${opts.submitCn}</button>
+          </div>
+        </div>
+      </div>`;
+    mountFloatingPuModal(bg);
+
+    let done = false;
+    const finish = (val) => {
+      if (done) return; done = true;
+      document.removeEventListener('keydown', onKey);
+      bg.remove();
+      resolve(val);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') finish(null); };
+    bg.addEventListener('mousedown', (e) => { if (e.target === bg) finish(null); });
+    bg.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => finish(null)));
+    bg.querySelector('[data-submit]').addEventListener('click', () => finish(bg.querySelector('#ar-reason').value || ''));
+    document.addEventListener('keydown', onKey);
+    const ta = bg.querySelector('#ar-reason');
+    if (ta) setTimeout(() => ta.focus(), 30);
+  });
+}
+
 // Receipt-print status tile in the order drawer. Hidden for orders that
 // can't have a receipt (unpaid / cancelled / refunded). Shows the last
 // auto-print outcome (printed / failed / not yet) plus a one-click reprint.
@@ -14534,9 +14582,18 @@ async function transition(id, status) {
   let reason = null;
   let pay_method = null;
   if (status === 'cancelled' || status === 'refunded') {
-    const labelEn = status === 'cancelled' ? 'cancellation' : 'refund';
-    const labelCn = status === 'cancelled' ? '取消' : '退款';
-    reason = prompt(`Reason for ${labelEn} (optional) · ${labelCn}原因(可选)`) || '';
+    const isCancel = status === 'cancelled';
+    reason = await askReason({
+      titleEn: isCancel ? 'Cancel order' : 'Refund order',
+      titleCn: isCancel ? '取消订单' : '退款订单',
+      subEn: 'Recorded on the order for your records.',
+      subCn: '将记录在订单中以备查询。',
+      labelEn: isCancel ? 'Reason for cancellation (optional)' : 'Reason for refund (optional)',
+      labelCn: isCancel ? '取消原因(可选)' : '退款原因(可选)',
+      phEn: 'Optional', phCn: '可选',
+      submitEn: isCancel ? 'Cancel order' : 'Refund', submitCn: isCancel ? '确认取消' : '确认退款',
+    });
+    if (reason === null) return;  // dismissed → abort
   }
   if (status === 'paid') {
     pay_method = await askPayMethod();
