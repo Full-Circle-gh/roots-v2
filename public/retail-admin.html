@@ -4568,8 +4568,14 @@
     .topbar { padding: 0 14px; gap: 8px; }
     .brand .sub, .brand .divider { display: none; }
 
-    /* Reserve room so the fixed bar never covers the last row of content. */
-    main { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+    /* Full-bleed on phones: the desktop `max-width:min(1440px,92vw)` cap + the
+       24px side padding stacked to ~39px gutters, squeezing the dashboard to
+       ~80% width. Drop the cap and use the prototype's 16px side gutters so the
+       content fills the screen. Bottom padding reserves room for the fixed bar. */
+    main {
+      max-width: 100%; margin: 0;
+      padding: var(--s5) 16px calc(74px + env(safe-area-inset-bottom));
+    }
 
     /* ── Fixed bottom tab bar ── */
     #rm-bottomnav {
