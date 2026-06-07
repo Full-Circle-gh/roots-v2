@@ -112,7 +112,7 @@ const loginLimiter = rateLimit({
 });
 
 router.post('/api/backend/login', loginLimiter, express.json(), (req, res) => {
-  const { username, password } = req.body || {};
+  const { username, password, remember } = req.body || {};
   if (!username || !password) return res.json({ success: false, error: 'Enter username and password · 请输入用户名和密码' });
   const u = db.prepare('SELECT * FROM tenant_users WHERE username = ? AND is_active = 1').get(String(username).trim().toLowerCase());
   if (!u || !bcrypt.compareSync(password, u.password)) {
@@ -125,6 +125,9 @@ router.post('/api/backend/login', loginLimiter, express.json(), (req, res) => {
   db.prepare('UPDATE tenant_users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(u.id);
   req.session.backendUserId = u.id;
   req.session.tenantId = u.tenant_id;
+  // "Keep me signed in" — extend this operator's cookie to 30 days; otherwise
+  // it stays at the global 8-hour default (lost when the browser closes the gap).
+  req.session.cookie.maxAge = remember ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
   res.json({
     success: true,
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role,

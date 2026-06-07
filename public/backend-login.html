@@ -168,6 +168,22 @@
   .reveal:hover{color:var(--muted); background:rgba(127,124,114,.12);}
   .reveal:focus-visible{outline:none; color:var(--tea); box-shadow:0 0 0 2px rgba(107,142,111,.35);}
 
+  /* ── remember me ── */
+  .remember{display:flex; align-items:center; gap:10px; margin-top:-4px; cursor:pointer; user-select:none;}
+  .remember input{position:absolute; opacity:0; width:0; height:0; pointer-events:none;}
+  .remember .box{
+    width:18px; height:18px; flex:none; border-radius:5px;
+    border:1px solid var(--line-2); background:var(--field);
+    display:flex; align-items:center; justify-content:center;
+    transition:border-color .15s, background .15s, box-shadow .15s;
+  }
+  .remember .box svg{opacity:0; transform:scale(.6); transition:opacity .14s, transform .14s; color:#1A140A;}
+  .remember:hover .box{border-color:var(--brass);}
+  .remember input:focus-visible + .box{outline:none; border-color:var(--tea); box-shadow:0 0 0 3px rgba(107,142,111,.22);}
+  .remember input:checked + .box{background:linear-gradient(180deg, var(--brass-hi), var(--brass)); border-color:var(--brass);}
+  .remember input:checked + .box svg{opacity:1; transform:none;}
+  .remember .txt{font-size:13px; color:var(--muted); line-height:1;}
+
   .err{
     display:none; align-items:center; gap:9px;
     font-size:12.5px; color:var(--danger); line-height:1.4;
@@ -324,6 +340,14 @@
           </div>
         </div>
 
+        <label class="remember" for="remember">
+          <input type="checkbox" id="remember" name="remember" />
+          <span class="box">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>
+          </span>
+          <span class="txt"><span data-lang="en">Keep me signed in for 30 days</span><span data-lang="cn">30 天内保持登录</span></span>
+        </label>
+
         <div class="err" id="err" role="alert">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.2v.2"/></svg>
           <span></span>
@@ -407,6 +431,7 @@
 
       var u = document.getElementById('username').value.trim();
       var p = document.getElementById('password').value;
+      var remember = document.getElementById('remember').checked;
 
       if (!u || !p) {
         showErr(L('Enter your username and password', '请输入用户名和密码'));
@@ -420,7 +445,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ username: u, password: p })
+        body: JSON.stringify({ username: u, password: p, remember: remember })
       })
         .then(function (r) { return r.json().catch(function () { return {}; }); })
         .then(function (j) {
