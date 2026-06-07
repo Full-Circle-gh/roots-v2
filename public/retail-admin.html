@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" id="meta-theme-color" content="#12161A">
 <title>Full Circle · Mini App Backend</title>
 <script>
@@ -24430,7 +24430,296 @@ window.onLangChange(function () {
     }
     .live-preview-frame iframe { border-radius: 0; }
   }
+
+  /* ════════════════════════════════════════════════════════════════════
+     MOBILE SHELL (Phase 1) — operator mini-app web-view.
+     Everything here is ADDITIVE and scoped to phones (≤720px). The desktop
+     layout is never altered: the horizontal tab bar is hidden and a fixed
+     bottom tab bar + a "More" bottom-sheet take over navigation. The bottom
+     bar reuses the existing desktop [data-tab] buttons, so all section
+     switching, badges and lazy iframe loads keep working unchanged.
+     See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  #rm-bottomnav { display: none; }
+  .rm-sheet { display: none; }
+  html.rm-noscroll { overflow: hidden; }
+
+  @media (max-width: 720px) {
+    /* Desktop horizontal tab bar → replaced by the bottom bar. */
+    .tabs { display: none !important; }
+
+    /* Slim the topbar: keep the brand mark + search; the text-size, theme
+       and language controls move into the More sheet. */
+    .topbar .who,
+    #ui-scale-toggle,
+    #theme-toggle,
+    #lang-toggle { display: none !important; }
+    .topbar { padding: 0 14px; gap: 8px; }
+    .brand .sub, .brand .divider { display: none; }
+
+    /* Reserve room so the fixed bar never covers the last row of content. */
+    main { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+
+    /* ── Fixed bottom tab bar ── */
+    #rm-bottomnav {
+      display: flex;
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+      background: var(--bg-pane);
+      border-top: 1px solid var(--line-soft);
+      padding-bottom: env(safe-area-inset-bottom);
+      box-shadow: 0 -2px 16px rgba(0, 0, 0, .18);
+    }
+    #rm-bottomnav button {
+      flex: 1 1 0; min-width: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 3px; padding: 8px 2px 7px;
+      background: none; border: 0; cursor: pointer;
+      color: var(--text-3); font: inherit; position: relative;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #rm-bottomnav button svg { width: 22px; height: 22px; }
+    #rm-bottomnav .rm-lab {
+      font-size: 10px; line-height: 1; letter-spacing: .01em;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #rm-bottomnav button.active { color: var(--brass); }
+    #rm-bottomnav .rm-badge {
+      position: absolute; top: 4px; left: calc(50% + 5px);
+      min-width: 16px; height: 16px; padding: 0 4px;
+      border-radius: 9px; background: #dc2626; color: #fff;
+      font-size: 10px; font-weight: 800; line-height: 16px; text-align: center;
+      display: none;
+    }
+    #rm-bottomnav .rm-badge.on { display: block; }
+    #rm-bottomnav .rm-dot {
+      position: absolute; top: 7px; left: calc(50% + 8px);
+      width: 8px; height: 8px; border-radius: 50%; background: #dc2626; display: none;
+    }
+    #rm-bottomnav .rm-dot.on { display: block; }
+
+    /* ── "More" bottom-sheet ── */
+    .rm-sheet { display: block; position: fixed; inset: 0; z-index: 70; }
+    .rm-sheet[hidden] { display: none; }
+    .rm-sheet-backdrop {
+      position: absolute; inset: 0;
+      background: var(--bg-overlay, rgba(0, 0, 0, .45));
+      animation: rmFade 240ms ease;
+    }
+    @keyframes rmFade { from { opacity: 0; } to { opacity: 1; } }
+    .rm-sheet-panel {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      max-height: 82vh; overflow-y: auto;
+      background: var(--bg-pane);
+      border-radius: 18px 18px 0 0;
+      border-top: 1px solid var(--line);
+      padding: 8px 12px calc(16px + env(safe-area-inset-bottom));
+      animation: rmSheetUp 300ms cubic-bezier(.16, 1, .3, 1);
+    }
+    @keyframes rmSheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .rm-sheet-grip {
+      width: 38px; height: 4px; border-radius: 4px;
+      background: var(--line-strong); margin: 6px auto 14px;
+    }
+    .rm-sheet-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .rm-sheet-list button {
+      display: flex; align-items: center; gap: 10px;
+      padding: 13px 12px; border: 1px solid var(--line-soft);
+      border-radius: var(--r-md); background: var(--bg-elev-1);
+      color: var(--text-1); font: inherit; font-size: 13px;
+      text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .rm-sheet-list button svg { width: 18px; height: 18px; flex: 0 0 auto; color: var(--text-2); }
+    .rm-sheet-list button.active { border-color: var(--brass); color: var(--brass); }
+    .rm-sheet-list button.active svg { color: var(--brass); }
+    .rm-sheet-sec {
+      grid-column: 1 / -1; font-size: 11px; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--text-3); margin: 12px 2px 2px;
+    }
+    .rm-sheet-ctl { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 12px; }
+    .rm-sheet-ctl button { flex: 1; justify-content: center; }
+  }
 </style>
+
+<!-- ─── MOBILE SHELL (Phase 1) — bottom tab bar + More sheet ───
+     Shown only on phones (CSS-gated ≤720px). Each control reuses the
+     existing desktop [data-tab] buttons; the JS below wires the taps,
+     active-state and badge mirroring. -->
+<nav id="rm-bottomnav" aria-label="Navigation · 导航">
+  <button type="button" data-go="dashboard" aria-label="Dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+    <span class="rm-lab">Home · 概览</span>
+  </button>
+  <button type="button" data-go="orders" aria-label="Orders">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+    <span class="rm-lab">Orders · 订单</span>
+    <span class="rm-badge" id="rm-badge-orders" aria-hidden="true"></span>
+  </button>
+  <button type="button" data-go="invoices" aria-label="Invoices">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="13" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+    <span class="rm-lab">Invoices · 发票</span>
+    <span class="rm-badge" id="rm-badge-invoices" aria-hidden="true"></span>
+  </button>
+  <button type="button" data-go="products" aria-label="Products">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18l-2 14H5L3 3z"/><circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/><path d="M8 7h8"/></svg>
+    <span class="rm-lab">Products · 产品</span>
+  </button>
+  <button type="button" data-go="__more__" aria-label="More">
+    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+    <span class="rm-lab">More · 更多</span>
+    <span class="rm-dot" id="rm-more-dot" aria-hidden="true"></span>
+  </button>
+</nav>
+
+<div id="rm-more-sheet" class="rm-sheet" hidden>
+  <div class="rm-sheet-backdrop"></div>
+  <div class="rm-sheet-panel" role="dialog" aria-modal="true" aria-label="More · 更多">
+    <div class="rm-sheet-grip"></div>
+    <div class="rm-sheet-list" id="rm-more-list"></div>
+  </div>
+</div>
+
+<script>
+/* Mobile shell wiring (Phase 1). Reuses the desktop [data-tab] buttons for
+   all section switching, badges and lazy iframe loads — this only handles
+   taps, active-state and badge mirroring. Scoped to phones via CSS. */
+(function () {
+  var body = document.body;
+  try {
+    var qp = new URLSearchParams(location.search);
+    if (qp.get('wx') === '1') body.classList.add('rm-wx');
+  } catch (e) {}
+
+  var nav = document.getElementById('rm-bottomnav');
+  var sheet = document.getElementById('rm-more-sheet');
+  if (!nav || !sheet) return;
+
+  var PRIMARY = { dashboard: 1, orders: 1, invoices: 1, products: 1 };
+  function deskBtn(tab) { return document.querySelector('.tabs [data-tab="' + tab + '"]'); }
+
+  function closeMore() {
+    sheet.setAttribute('hidden', '');
+    document.documentElement.classList.remove('rm-noscroll');
+  }
+  function openMore() {
+    buildMore();
+    sheet.removeAttribute('hidden');
+    document.documentElement.classList.add('rm-noscroll');
+  }
+
+  function ctlBtn(label, fn) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.addEventListener('click', fn);
+    return b;
+  }
+
+  // Build the More sheet fresh on each open: picks up feature-gating, the
+  // current language and any tabs added later — fully in sync with the
+  // desktop nav, no hardcoded list.
+  function buildMore() {
+    var list = document.getElementById('rm-more-list');
+    if (!list) return;
+    list.innerHTML = '';
+    var lastGroup = '';
+    var btns = document.querySelectorAll('.tabs [data-tab]');
+    for (var i = 0; i < btns.length; i++) {
+      var src = btns[i];
+      var tab = src.getAttribute('data-tab');
+      if (PRIMARY[tab]) continue;
+      var feat = src.getAttribute('data-feat');
+      if (feat && !body.classList.contains('feat-' + feat)) continue;
+      var grp = src.closest('.tabs-group');
+      var gkey = grp ? (grp.getAttribute('data-group') || '') : '';
+      if (gkey && gkey !== lastGroup) {
+        var trig = grp.querySelector('.tabs-group-trigger');
+        var h = document.createElement('div');
+        h.className = 'rm-sheet-sec';
+        h.textContent = trig ? trig.textContent.replace(/\s+/g, ' ').trim() : gkey;
+        list.appendChild(h);
+        lastGroup = gkey;
+      } else if (!gkey) {
+        lastGroup = '';
+      }
+      var row = document.createElement('button');
+      row.type = 'button';
+      row.setAttribute('data-go', tab);
+      var ico = src.querySelector('svg');
+      if (ico) row.appendChild(ico.cloneNode(true));
+      var lab = document.createElement('span');
+      lab.textContent = (src.textContent || '').replace(/\s+/g, ' ').trim();
+      row.appendChild(lab);
+      if (src.classList.contains('active')) row.classList.add('active');
+      (function (s) {
+        row.addEventListener('click', function () { s.click(); closeMore(); });
+      })(src);
+      list.appendChild(row);
+    }
+    var ctl = document.createElement('div');
+    ctl.className = 'rm-sheet-ctl';
+    ctl.appendChild(ctlBtn('Text size · 字号', function () { if (window.cuCycleUiScale) cuCycleUiScale(); }));
+    ctl.appendChild(ctlBtn('Theme · 主题', function () { if (window.cuToggleTheme) cuToggleTheme(); }));
+    ctl.appendChild(ctlBtn('Language · 语言', function () { if (window.cuToggleLang) cuToggleLang(); }));
+    list.appendChild(ctl);
+  }
+
+  nav.querySelectorAll('[data-go]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var go = b.getAttribute('data-go');
+      if (go === '__more__') { openMore(); return; }
+      var d = deskBtn(go);
+      if (d) d.click();
+      closeMore();
+    });
+  });
+  var bd = sheet.querySelector('.rm-sheet-backdrop');
+  if (bd) bd.addEventListener('click', closeMore);
+
+  function syncNav() {
+    var active = document.querySelector('.tabs [data-tab].active');
+    var tab = active ? active.getAttribute('data-tab') : 'dashboard';
+    var primaryMatch = false;
+    nav.querySelectorAll('[data-go]').forEach(function (b) {
+      var go = b.getAttribute('data-go');
+      if (go === '__more__') return;
+      var on = go === tab;
+      if (on) primaryMatch = true;
+      b.classList.toggle('active', on);
+    });
+    var moreBtn = nav.querySelector('[data-go="__more__"]');
+    if (moreBtn) moreBtn.classList.toggle('active', !primaryMatch);
+  }
+
+  function syncBadges() {
+    [['orders', 'rm-badge-orders', 'ordersTabBadge'], ['invoices', 'rm-badge-invoices', 'invoicesTabBadge']].forEach(function (m) {
+      var src = deskBtn(m[0]);
+      var dst = document.getElementById(m[1]);
+      if (!src || !dst) return;
+      var srcBadge = document.getElementById(m[2]);
+      dst.textContent = srcBadge ? (srcBadge.textContent || '').trim() : '';
+      dst.classList.toggle('on', src.classList.contains('has-unseen'));
+    });
+    var dot = document.getElementById('rm-more-dot');
+    if (dot) {
+      var any = false;
+      document.querySelectorAll('.tabs [data-tab].has-unseen').forEach(function (b) {
+        if (!PRIMARY[b.getAttribute('data-tab')]) any = true;
+      });
+      if (document.querySelector('.tabs .tabs-group-trigger.has-unseen')) any = true;
+      dot.classList.toggle('on', any);
+    }
+  }
+
+  var tabsEl = document.querySelector('.tabs');
+  if (tabsEl) {
+    new MutationObserver(function () { syncNav(); syncBadges(); })
+      .observe(tabsEl, { subtree: true, attributes: true, attributeFilter: ['class'], childList: true, characterData: true });
+  }
+  if (window.onLangChange) window.onLangChange(function () { if (!sheet.hasAttribute('hidden')) buildMore(); });
+  syncNav();
+  syncBadges();
+})();
+</script>
 
 </body>
 </html>
