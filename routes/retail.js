@@ -110,6 +110,40 @@ function requireRetailAdmin(req, res, next) {
   });
 }
 
+// ── Catalog ownership lock (server-side enforcement) ──────────────────────
+// The Mini App Backend product editor is shared by two kinds of tenant:
+//   'self'     — catalog is mastered HERE; full CRUD is allowed.
+//   'upstream' — catalog is mastered by an EXTERNAL system (e.g. Roots' kitchen
+//                app, which writes the same `products` table via /api/products).
+//                In this mode the source-owned/core fields are READ-ONLY in this
+//                backend and whole-product operations (create/delete/duplicate/
+//                variant-grouping) are blocked — only retail *merchandising*
+//                fields stay editable. The front-end already hides these via CSS
+//                (body.catalog-upstream …); this is the matching API guard so
+//                the lock can't be bypassed by calling the endpoint directly.
+//
+// req.tenant is set on the backend-operator path. The legacy kitchen path has no
+// req.tenant but always operates on Roots (#1 = upstream), so fall back to the
+// tenants row for the active tenant id; default to 'self' on any error.
+function catalogMode(req) {
+  try {
+    if (req && req.tenant && req.tenant.product_catalog_mode) return req.tenant.product_catalog_mode;
+    const tid = currentTenantId() || ROOTS_TENANT_ID;
+    const row = db.prepare('SELECT product_catalog_mode FROM tenants WHERE id = ?').get(tid);
+    return (row && row.product_catalog_mode) || 'self';
+  } catch (e) { return 'self'; }
+}
+
+// Source-owned CORE fields an `upstream` tenant must not mutate from this
+// backend. Everything NOT in this set (is_published, description_blocks/
+// use_block_design/page_template, tagline_*, keywords_*, nutrition, tags,
+// colophon_*, storefront photos `images`/`image_data`/`image_url`,
+// `description_en`/`description_cn`, ship_modes, flash_*) stays retail-editable.
+const UPSTREAM_LOCKED_FIELDS = new Set([
+  'name_en', 'name_cn', 'sku', 'sell_price', 'compare_at_price',
+  'weight', 'category', 'top_category', 'subcategory', 'stock_qty',
+]);
+
 // In-memory multer for image uploads — files small enough to base64 inline.
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -7902,6 +7936,16 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   const sets = [];
   const params = [];
   const body = req.body || {};
+  // upstream mode: silently drop source-owned core fields so a merchandising
+  // edit in the same request still saves (the UI hides core inputs, but a
+  // direct API call could include them). Track whether we dropped any so a
+  // body that was ALL-locked returns a clear 423 instead of a vague 400.
+  let strippedLocked = false;
+  if (catalogMode(req) === 'upstream') {
+    for (const k of UPSTREAM_LOCKED_FIELDS) {
+      if (k in body) { delete body[k]; strippedLocked = true; }
+    }
+  }
   if ('is_published' in body) { sets.push('is_published = ?'); params.push(body.is_published ? 1 : 0); }
   for (const k of ['keywords_en', 'keywords_cn', 'tagline_en', 'tagline_cn',
                    'colophon_character', 'colophon_tagline_en', 'colophon_tagline_cn',
@@ -8001,7 +8045,10 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     // mapping + any legacy reader still read products.category.
     sets.push('category = ?'); params.push(norm.top);
   }
-  if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
+  if (!sets.length) {
+    return res.status(strippedLocked ? 423 : 400)
+      .json({ success: false, error: strippedLocked ? 'catalog_locked' : 'no_fields' });
+  }
 
   sets.push('updated_at = CURRENT_TIMESTAMP');
   params.push(id);
@@ -8083,10 +8130,16 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
 // Create a product straight from the Mini App Backend product page. Standalone
 // path (no kitchen needed): name + the basic commercial fields, is_active=1.
 router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (req, res) => {
+  // upstream tenants don't author products here — they arrive from the master.
+  if (catalogMode(req) === 'upstream') return res.status(423).json({ success: false, error: 'catalog_locked' });
   const b = req.body || {};
   const name_en = (b.name_en || '').trim();
   const name_cn = (b.name_cn || '').trim();
   if (!name_en && !name_cn) return res.status(400).json({ success: false, error: 'name_required' });
+  // SKU is the catalog/sync match key — required + unique on the self-mode
+  // create path (it's already a UNIQUE column → a clash returns 409 below).
+  const sku = (b.sku || '').trim();
+  if (!sku) return res.status(400).json({ success: false, error: 'sku_required' });
   const ship = [...new Set(String(b.ship_modes || 'air,land').split(',').map(s => s.trim().toLowerCase()).filter(m => m === 'air' || m === 'land'))];
   // Gallery (max 8); primary image_data mirrors the first photo.
   const gallery = (Array.isArray(b.images) ? b.images : []).filter(s => typeof s === 'string' && s).slice(0, 8);
@@ -8104,7 +8157,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       name_en || name_cn, name_cn || null,
-      (b.sku || '').trim() || null, cat2.top,
+      sku, cat2.top,
       cat2.top, cat2.sub, (b.weight || '').trim() || null,
       Math.max(0, parseFloat(b.sell_price) || 0),
       (() => { const v = parseFloat(b.compare_at_price); return Number.isFinite(v) && v > 0 ? v : null; })(),
@@ -8134,6 +8187,8 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
 
 // Soft-delete a product from the Mini App Backend (hide from shop + lists).
 router.delete('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
+  // upstream tenants can't remove master products from this backend.
+  if (catalogMode(req) === 'upstream') return res.status(423).json({ success: false, error: 'catalog_locked' });
   const id = parseInt(req.params.id, 10);
   const existing = tdb().prepare('SELECT id, name_en FROM products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
@@ -8150,6 +8205,8 @@ router.delete('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) =
 // owned by the source, if it doesn't have one yet) with the given label —
 // the smooth path for "same product, different size".
 router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, express.json(), (req, res) => {
+  // Duplicating creates a NEW product — a core authoring op upstream can't do.
+  if (catalogMode(req) === 'upstream') return res.status(423).json({ success: false, error: 'catalog_locked' });
   const id = parseInt(req.params.id, 10);
   const src = tdb().prepare(
     `SELECT name_en, name_cn, category, weight, sell_price, compare_at_price,
@@ -8570,6 +8627,8 @@ router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, 
 // the group_id. Reconciles: relabel/add listed members, drop any current member
 // not listed, and disband (clear all) when fewer than 2 remain.
 router.put('/api/retail-admin/products/:id/variants', requireRetailAdmin, express.json(), (req, res) => {
+  // Variant grouping is product structure — mastered upstream, not editable here.
+  if (catalogMode(req) === 'upstream') return res.status(423).json({ success: false, error: 'catalog_locked' });
   const id = parseInt(req.params.id, 10);
   const self = tdb().prepare('SELECT id, variant_group_id, variant_label FROM products WHERE id = ?').get(id);
   if (!self) return res.status(404).json({ success: false, error: 'not_found' });

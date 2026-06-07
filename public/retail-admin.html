@@ -21960,11 +21960,19 @@ async function pdSave() {
   if (_pdGalleryDirty) body.images = _pdGallery;  // gallery drives image_data (first = main)
   if (id && BU_ID === Number(id)) body.bundle = buBody();  // buy-together bundle (null clears)
   if (!body.name_en && !body.name_cn) { alert('A name is required · 需要填写名称'); return; }
+  // New products need a SKU — it's the catalog/sync match key (server enforces).
+  if (!id && !body.sku) { alert('A SKU is required · 需要填写货号'); return; }
   try {
     const url = id ? '/api/retail-admin/products/' + id : '/api/retail-admin/products';
     const r = await fetch(url, { method: id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const j = await r.json();
-    if (!j.success) throw new Error(j.error === 'sku_taken' ? 'That SKU is already in use · 该货号已被占用' : (j.error || 'save_failed'));
+    if (!j.success) {
+      const msg = j.error === 'sku_taken'     ? 'That SKU is already in use · 该货号已被占用'
+                : j.error === 'sku_required'   ? 'A SKU is required · 需要填写货号'
+                : j.error === 'catalog_locked' ? 'This catalog is managed by the upstream system · 该商品目录由上游系统管理'
+                : (j.error || 'save_failed');
+      throw new Error(msg);
+    }
     if (id) {
       const i = PA_PRODUCTS.findIndex(x => x.id === Number(id));
       if (i >= 0) PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...j.data };
