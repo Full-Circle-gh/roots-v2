@@ -5199,9 +5199,13 @@
     #rm-dash-report {
       display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 80;
       background: var(--bg-app); transform: translateX(100%);
-      transition: transform .3s cubic-bezier(.3, .7, .2, 1);
+      /* visibility:hidden at rest so the panel can't flash at the right edge if
+         the transform animates on first paint; the delayed visibility flip keeps
+         it on-screen through the .3s slide-out when closing. */
+      visibility: hidden;
+      transition: transform .3s cubic-bezier(.3, .7, .2, 1), visibility 0s linear .3s;
     }
-    #rm-dash-report.show { transform: none; }
+    #rm-dash-report.show { transform: none; visibility: visible; transition: transform .3s cubic-bezier(.3, .7, .2, 1); }
     @media (prefers-reduced-motion: reduce) { #rm-dash-report { transition: none; } }
     .rm-dh-rnav {
       flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px;
