@@ -10250,6 +10250,21 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     try { inventory.commitOrderReservations(id, { actorUserId: req.user.id }); }
     catch (e) { console.error('[inventory.commit (admin)]', e); }
     try { creditReferralReward(id); } catch (e) { console.error('[creditReferralReward]', e); }
+    // Auto-print the bill, same as the gateway callbacks do inside
+    // markOrderPaid(). This admin path bypasses markOrderPaid(), so without
+    // this an off-app "Mark paid" order would never reach the store printer.
+    // Best-effort + fire-and-forget so a slow/offline printer never delays
+    // the response. Guarded to genuine pending→paid transitions only.
+    if (o.status !== 'paid') {
+      try {
+        const pp = loadPrinterPrefs();
+        if (pp.auto_print && _feie.feieEnabled(integ().feie)) {
+          printOrderById(id, pp)
+            .then(r => { if (!r.ok) console.warn('[feie print]', id, r.msg); })
+            .catch(e => console.warn('[feie print]', e.message));
+        }
+      } catch (e) { console.warn('[feie print setup]', e.message); }
+    }
   }
   // Stock side-effects of cancel / refund. cancelled before payment just
   // releases the active reservation; refund of a paid order reverses
