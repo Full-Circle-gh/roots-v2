@@ -24,6 +24,7 @@ data/roots-pre-*.db*
 /design_index.html
 /design_bundle/
 /design-brief-mini-app-backend.md
+/.design-tmp/
 
 # Stray redirect/scratch output
 /8000
