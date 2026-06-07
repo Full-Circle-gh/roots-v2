@@ -4775,6 +4775,15 @@
       </div>
     </div>
 
+    <!-- ── Mobile dashboard (Variant A — full-screen push) ──
+         Phone-only (≤720px). Rendered from the SAME live DASH_DATA the desktop
+         bento/deep-dive use (rmRenderDash, called at the end of dashRenderAll)
+         as a dark live hero + a grid of report tiles. Tap a tile → the
+         #rm-dash-report full-screen push below. The desktop bento + deep-dive
+         are hidden on phones via CSS; desktop is untouched.
+         Built to match design bundle: mobile/dashboard-a.html + fc-dash.css. -->
+    <div id="rm-dash" aria-live="polite"></div>
+
     <!-- Phase 3 bento — hero (live + today + activity) on the left
          spanning 3 cols × 2 rows; 6 swappable tiles fill the rest above
          the fold. Tile picks persist per-operator to localStorage
@@ -5034,6 +5043,18 @@
         <button class="btn btn-primary" id="db-drawer-open" style="display:none">Open ↗</button>
       </div>
     </aside>
+
+    <!-- Mobile dashboard report — full-screen push surface (Variant A).
+         Phone-only. Filled by openDashReport from the live DASH_DATA
+         aggregates (the same numbers the desktop charts use). Kept inside
+         #tab-dashboard so it hides with the tab automatically. -->
+    <section id="rm-dash-report" aria-hidden="true" aria-label="Report · 报表">
+      <div class="rm-dh-rnav">
+        <button type="button" class="rm-dh-back" aria-label="Back · 返回"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <span class="rm-dh-rtitle"></span>
+      </div>
+      <div class="rm-dh-rbody"></div>
+    </section>
   </section>
 
   <!-- ─── INVOICES ─── -->
@@ -5643,7 +5664,17 @@
           <div class="sub" id="cu-kpi-blocked-sub">&nbsp;</div>
         </div>
       </div>
-      <div class="row" style="margin-bottom: var(--s4)">
+      <!-- Phone-only tier filter — sticky chip row mirroring the Orders status
+           chips. Drives the existing #cu-tier <select> + cuLoad so there's one
+           filter source of truth. Hidden on desktop (the <select> is shown). -->
+      <div id="cu-mob-tiers" aria-label="Filter by tier">
+        <button type="button" class="cu-tchip on" data-v=""       onclick="cuMobTier(this,'')">All</button>
+        <button type="button" class="cu-tchip"    data-v="seed"   onclick="cuMobTier(this,'seed')">Seed</button>
+        <button type="button" class="cu-tchip"    data-v="sprout" onclick="cuMobTier(this,'sprout')">Sprout</button>
+        <button type="button" class="cu-tchip"    data-v="root"   onclick="cuMobTier(this,'root')">Root</button>
+        <button type="button" class="cu-tchip"    data-v="tree"   onclick="cuMobTier(this,'tree')">Tree</button>
+      </div>
+      <div class="row" id="cu-toolbar" style="margin-bottom: var(--s4)">
         <input type="text" id="cu-q" placeholder="Search name, phone, openid, or order #…" oninput="cuSearchDebounced()" style="flex: 1; min-width: 240px">
         <select id="cu-tier" onchange="cuLoad()">
           <option value="">All tiers · 全部等级</option>
@@ -5713,7 +5744,18 @@
           <tbody><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
         </table>
       </div>
-      <div class="row" style="margin-top: var(--s3); justify-content: space-between;">
+
+      <!-- ── Mobile customer cards (Variant A — full-screen-push backbone) ──
+           Phone-only (≤720px). Rendered from the SAME live customer rows the
+           desktop #cu-table uses (rmRenderCustomerCards, fed by cuLoad). Tap a
+           card → existing full-screen customer drawer (cuOpenDetail). Swipe a
+           card left → Adjust / Block (the Variant C blend) — both open the
+           drawer then fire the existing wired flow. Desktop table + dense
+           toolbar are hidden on phones via CSS; desktop is untouched.
+           Built to match design bundle: mobile/customers-a.html + fc-cust.css. -->
+      <div id="rm-cu-cards" aria-live="polite"></div>
+
+      <div class="row" id="cu-pager" style="margin-top: var(--s3); justify-content: space-between;">
         <div class="muted" id="cu-total" style="font-size: 12px;"></div>
         <div class="row" style="gap: 8px;">
           <button class="btn btn-sm" onclick="cuPage(-1)" id="cu-prev">‹ Prev</button>
@@ -7024,6 +7066,12 @@
         <div class="sub" id="dz-kpi-off-sub">&nbsp;</div>
       </div>
     </div>
+
+    <!-- Mobile Delivery hub (Variant A "settings hub"). Phone-only (≤720px):
+         the dense desktop cards/table below are CSS-hidden and this renders
+         the SAME live config as grouped value rows. Populated by rmDlvRenderHub
+         (reads the desktop inputs / _zones, saves through the existing save fns). -->
+    <div id="rm-dlv-hub"></div>
 
     <div class="card" style="margin-bottom: var(--s4);">
       <h3 class="fc-sec" style="margin-bottom: 12px;">Global defaults · 全局默认</h3>
@@ -11332,6 +11380,8 @@ async function dashHeroLoadPresence() {
     const d = j.data || {};
     const num = $('#db-live-num'); const ring = $('#db-live-ring'); const sub = $('#db-live-sub');
     if (num) { dashCountUp(num, Number(d.viewing || 0)); num.classList.toggle('live-on', !!d.viewing); }
+    if (window.rmDashSetLive) rmDashSetLive(Number(d.viewing || 0));   // mirror into the mobile hero
+
     if (ring) ring.classList.toggle('live', !!d.viewing);
     if (sub) {
       const v = d.viewing || 0;
@@ -12190,6 +12240,7 @@ function dashRenderAll() {
   dashRenderTraffic();
   dashRenderComposition();
   dashRenderCohorts();
+  if (window.rmRenderDash) rmRenderDash();   // mobile Variant A hero + tiles (≤720px)
 }
 
 function dashRenderKpis() {
@@ -24809,6 +24860,231 @@ window.onLangChange(function () {
 
     .rm-oc-empty { text-align: center; color: var(--text-3); padding: 44px 20px; font-size: 13.5px; }
   }
+
+  /* ════════════════════════════════════════════════════════════════════
+     MOBILE CUSTOMERS REDESIGN — Variant A "full-screen push" backbone.
+     Phone-only (≤720px). The desktop customer TABLE + dense toolbar + pager
+     are hidden; the SAME live customer rows render as tap-friendly cards
+     (#rm-cu-cards, fed by rmRenderCustomerCards). Tap a card → the existing
+     full-screen customer drawer (cuOpenDetail). Swipe a card left → Adjust /
+     Block (the Variant C blend; both open the drawer then fire the wired
+     flow). KPI strip → horizontal rail; tier filter → sticky chip row.
+     Theme-aware (reuses app tokens). Desktop is untouched.
+     Built to match design bundle: mobile/customers-a.html + fc-cust.css.
+     See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  #rm-cu-cards { display: none; }
+  #cu-mob-tiers { display: none; }
+  @media (max-width: 720px) {
+    /* Hide the desktop table, pager and the dense toolbar controls — keep only
+       the search box (which claims the full row) and the Include-blocked toggle.
+       Sort/Refresh/View are desktop-only affordances absent from the mockup. */
+    #tab-customers .table-wrap { display: none; }
+    #cu-pager { display: none; }
+    #cu-toolbar > #cu-tier,
+    #cu-toolbar > #cu-sort,
+    #cu-toolbar > button,
+    #cu-toolbar > .ovp-wrap { display: none; }
+    #cu-toolbar { margin-bottom: var(--s3); gap: 8px; }
+    #cu-q { width: 100%; }
+
+    /* KPI strip → horizontal snap rail (override the Phase 2 2-up grid). */
+    #cu-kpis {
+      display: flex; grid-template-columns: none;
+      gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x proximity; padding-bottom: 6px;
+    }
+    #cu-kpis::-webkit-scrollbar { display: none; }
+    #cu-kpis > .fc-kpi { flex: 0 0 47%; min-width: 150px; scroll-snap-align: start; }
+
+    /* Tier filter → sticky single-row chip scroller, always reachable. */
+    #cu-mob-tiers {
+      display: flex; gap: 8px; flex-wrap: nowrap;
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+      position: sticky; top: 56px; z-index: 6;
+      padding: 8px 0; margin-bottom: 4px; background: var(--bg-app);
+      scroll-snap-type: x proximity;
+    }
+    #cu-mob-tiers::-webkit-scrollbar { display: none; }
+    .cu-tchip {
+      flex: 0 0 auto; scroll-snap-align: start;
+      height: 34px; padding: 0 15px; border-radius: 999px;
+      border: 1px solid var(--line); background: var(--bg-pane);
+      color: var(--text-2); font: 500 13px var(--f-sans); cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .cu-tchip.on { background: var(--text-1); color: var(--bg-pane); border-color: var(--text-1); }
+
+    /* ── Card list ── */
+    #rm-cu-cards { display: block; }
+    .rm-cucard-wrap {
+      position: relative; margin-bottom: 10px;
+      border-radius: var(--r-lg); overflow: hidden;
+    }
+    /* Swipe-revealed action lane (sits behind the card). */
+    .rm-cucard-actions { position: absolute; inset: 0; display: flex; justify-content: flex-end; }
+    .rm-cucard-actions button {
+      border: 0; cursor: pointer; width: 88px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 5px; font: 600 12px var(--f-sans);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .rm-cucard-actions svg { width: 20px; height: 20px; }
+    .rm-cu-adjust { background: linear-gradient(180deg, var(--brass-hi, #C29B54), var(--brass, #B08D4A)); color: var(--brass-ink, #1A140A); }
+    .rm-cu-block  { background: var(--danger, #E8556A); color: #fff; }
+    .rm-cu-block.is-unblock { background: var(--accent, #6B8E6F); }
+
+    .rm-cucard {
+      position: relative; z-index: 1;
+      display: flex; align-items: center; gap: 13px;
+      background: var(--bg-pane);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--r-lg);
+      padding: 13px 14px;
+      transition: transform .26s cubic-bezier(.16, 1, .3, 1);
+      -webkit-tap-highlight-color: transparent; cursor: pointer;
+      touch-action: pan-y;
+    }
+    .rm-cucard.swiped { transform: translateX(-176px); }
+    .rm-cucard:active { background: var(--bg-elev-1); }
+
+    .rm-cu-av {
+      flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font: 600 18px var(--f-sans);
+      background: var(--text-1); color: var(--bg-pane);
+    }
+    .rm-cu-av.guest { background: rgba(127,122,114,.14); color: var(--text-3); }
+    .rm-cu-av.guest svg { width: 20px; height: 20px; }
+
+    .rm-cu-body { flex: 1; min-width: 0; }
+    .rm-cu-name { display: flex; align-items: center; gap: 8px; font-size: 15.5px; font-weight: 600; color: var(--text-1); }
+    .rm-cu-name .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rm-cu-name.guest .nm { color: var(--text-3); font-weight: 500; font-style: italic; }
+    .rm-cu-meta { font: 11.5px var(--f-mono); color: var(--text-3); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .rm-cu-stat { flex: 0 0 auto; text-align: right; }
+    .rm-cu-stat .big { font: 600 15px var(--f-mono); color: var(--text-1); font-variant-numeric: tabular-nums; }
+    .rm-cu-stat .k { display: block; font: 10px var(--f-mono); letter-spacing: .06em; color: var(--text-4); margin-top: 1px; }
+
+    .rm-cu-chev { flex: 0 0 auto; color: var(--text-4); display: flex; }
+    .rm-cu-chev svg { width: 18px; height: 18px; }
+
+    .rm-cu-empty { text-align: center; color: var(--text-3); padding: 44px 20px; font-size: 13.5px; }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     MOBILE DASHBOARD REDESIGN — Variant A "full-screen push".
+     Phone-only (≤720px). The desktop bento + deep-dive are hidden; the SAME
+     live DASH_DATA renders as a dark live hero + a grid of report tiles
+     (#rm-dash, fed by rmRenderDash from dashRenderAll). Tap a tile → a
+     full-screen report pushes in (#rm-dash-report), its body built from the
+     same aggregates the desktop charts use (cloned/reformatted — no second
+     fetch, no backend change). Period chips drive dashSetRange. Theme-aware;
+     desktop untouched. Sibling of the Orders redesign.
+     Built to match design bundle: mobile/dashboard-a.html.
+     See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  #rm-dash { display: none; }
+  #rm-dash-report { display: none; }
+  @media (max-width: 720px) {
+    /* Desktop dashboard surfaces off; the mobile view replaces them. */
+    #tab-dashboard .db-head,
+    #tab-dashboard #db-bento,
+    #tab-dashboard #db-deepdive { display: none; }
+    #rm-dash { display: block; }
+
+    .rm-dh-title { padding: 2px 2px 0; }
+    .rm-dh-title .eyebrow { font: 500 10px/1 var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--brass); }
+    .rm-dh-title h2 { margin: 4px 0 0; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+
+    /* period chips */
+    .rm-dh-periods { display: flex; gap: 7px; margin: 12px 0 4px; }
+    .rm-dh-periods button {
+      flex: 1; height: 36px; border-radius: 10px;
+      border: 1px solid var(--line-soft); background: var(--bg-pane);
+      color: var(--text-3); font: 500 13px var(--f-sans); cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .rm-dh-periods button.active { background: var(--text-1); color: var(--bg-pane); border-color: var(--text-1); }
+
+    /* dark live hero (always dark, like the desktop #db-hero) */
+    .rm-dh-hero {
+      margin: 8px 0 4px; padding: 16px; border-radius: 18px; color: #F2EFE7;
+      background: linear-gradient(160deg, #15130E, #221C12);
+      box-shadow: 0 18px 40px -24px rgba(40, 34, 20, .7);
+    }
+    .rm-dh-live { display: flex; align-items: center; gap: 7px; font: 500 10px var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: #C7B27E; }
+    .rm-dh-live .d { width: 7px; height: 7px; border-radius: 50%; background: var(--accent, #6B8E6F); box-shadow: 0 0 0 0 rgba(107, 142, 111, .6); animation: rmDhPulse 2s infinite; }
+    @keyframes rmDhPulse { 0% { box-shadow: 0 0 0 0 rgba(107, 142, 111, .5); } 70% { box-shadow: 0 0 0 7px rgba(107, 142, 111, 0); } 100% { box-shadow: 0 0 0 0 rgba(107, 142, 111, 0); } }
+    .rm-dh-big { font: 600 42px var(--f-sans); letter-spacing: -.03em; margin: 10px 0 2px; font-variant-numeric: tabular-nums; }
+    .rm-dh-cap { font-size: 12px; color: #B9B3A4; display: flex; align-items: center; gap: 8px; }
+    .rm-dh-cap .rm-dh-delta.up { color: #9FC6A3; }
+    .rm-dh-cap .rm-dh-delta.down { color: #D9A38A; }
+    .rm-dh-mini { display: flex; gap: 18px; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, .12); }
+    .rm-dh-mini .m { min-width: 0; }
+    .rm-dh-mini .v { font: 600 18px var(--f-sans); font-variant-numeric: tabular-nums; }
+    .rm-dh-mini .k { font: 500 9px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: #9C9684; margin-top: 2px; }
+
+    /* report tile grid */
+    .rm-dh-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .rm-dh-tile {
+      text-align: left; background: var(--bg-pane); border: 1px solid var(--line-soft);
+      border-radius: 16px; padding: 14px; cursor: pointer; min-height: 116px;
+      display: flex; flex-direction: column; transition: transform .08s;
+      -webkit-tap-highlight-color: transparent; color: inherit;
+    }
+    .rm-dh-tile:active { transform: scale(.98); }
+    .rm-dh-tile .ic { width: 32px; height: 32px; border-radius: 9px; background: var(--bg-elev-1); display: flex; align-items: center; justify-content: center; color: var(--brass); margin-bottom: auto; flex: none; }
+    .rm-dh-tile .ic svg { width: 17px; height: 17px; }
+    .rm-dh-tile .lab { font: 500 9.5px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); margin-top: 12px; }
+    .rm-dh-tile .val { font: 600 22px var(--f-sans); letter-spacing: -.02em; margin-top: 3px; color: var(--text-1); font-variant-numeric: tabular-nums; }
+    .rm-dh-tile .spk { margin-top: 8px; height: 26px; color: var(--accent); }
+    .rm-dh-tile .spk .db-spark { width: 100%; height: 100%; display: block; }
+
+    .rm-dh-tile.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; min-height: 0; }
+    .rm-dh-tile.wide .l { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .rm-dh-tile.wide .ic { margin: 0; }
+    .rm-dh-tile.wide .tx { min-width: 0; display: flex; flex-direction: column; }
+    .rm-dh-tile.wide .lab { margin: 0; }
+    .rm-dh-tile.wide .val { margin: 2px 0 0; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rm-dh-tile.alarm .ic { background: var(--warn-wash, rgba(176, 141, 74, .16)); }
+    .rm-dh-badge { flex: none; font: 600 11px var(--f-sans); color: var(--brass); background: var(--warn-wash, rgba(176, 141, 74, .16)); padding: 4px 10px; border-radius: 999px; }
+    .rm-dh-tile.wide .arrow { color: var(--text-3); flex: none; display: flex; }
+    .rm-dh-tile.wide .arrow svg { width: 18px; height: 18px; }
+    .rm-dh-empty { text-align: center; color: var(--text-3); padding: 30px 16px; font-size: 13px; }
+
+    /* ── full-screen report (push). Lives inside #tab-dashboard, so it hides
+       automatically when another tab becomes active (section{display:none}). ── */
+    #rm-dash-report {
+      display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 80;
+      background: var(--bg-app); transform: translateX(100%);
+      transition: transform .3s cubic-bezier(.3, .7, .2, 1);
+    }
+    #rm-dash-report.show { transform: none; }
+    @media (prefers-reduced-motion: reduce) { #rm-dash-report { transition: none; } }
+    .rm-dh-rnav {
+      flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px;
+      padding-top: env(safe-area-inset-top); min-height: 54px;
+      background: var(--bg-pane); border-bottom: 1px solid var(--line-soft);
+    }
+    .rm-dh-back { width: 42px; height: 42px; border: 0; border-radius: 11px; background: transparent; color: var(--text-1); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .rm-dh-back:active { background: var(--bg-elev-1); }
+    .rm-dh-back svg { width: 22px; height: 22px; }
+    .rm-dh-rtitle { font: 600 16px var(--f-sans); color: var(--text-1); }
+    .rm-dh-rbody { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 16px calc(30px + env(safe-area-inset-bottom)); }
+
+    .rm-dh-block { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 14px; padding: 15px; margin-bottom: 14px; }
+    .rm-dh-block > .h { font: 500 10px var(--f-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--brass); margin-bottom: 12px; }
+    .rm-dh-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .rm-dh-stat { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 12px; padding: 12px 13px; }
+    .rm-dh-stat .lbl { font-size: 11px; color: var(--text-3); }
+    .rm-dh-stat .v { font: 600 20px var(--f-sans); color: var(--text-1); margin-top: 3px; font-variant-numeric: tabular-nums; }
+    .rm-dh-stat .v.brass { color: var(--brass); }
+    .rm-dh-trend { height: 120px; color: var(--accent); }
+    .rm-dh-trend .db-spark { width: 100%; height: 100%; display: block; }
+    .rm-dh-heatscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  }
 </style>
 
 <!-- ─── MOBILE SHELL (Phase 1) — bottom tab bar + More sheet ───
@@ -25186,6 +25462,200 @@ window.onLangChange(function () {
     c.addEventListener('touchcancel', onEnd);
     c.addEventListener('click', onClick);
   }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
+  else bind();
+})();
+</script>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   MOBILE DASHBOARD — Variant A (full-screen push). Renders the SAME live
+   DASH_DATA the desktop bento/deep-dive use as a dark live hero + a grid of
+   report tiles on phones (≤720px). Tap a tile → a full-screen report pushes
+   in (#rm-dash-report), its body built from the same aggregates — the
+   complex charts (status/payment/heatmap/composition/tiers/customers/geo/
+   scenes/products) are cloned straight from the desktop nodes dashRenderAll
+   already populated; the headline KPIs + trend sparkline are reformatted via
+   dashMoney/dashNum/dashSparkline. Period chips reuse dashSetRange (which
+   reloads + re-renders). No backend change; desktop untouched (the surfaces
+   are display:none above 720px). See memory: feature_operator_mobile_miniapp. */
+(function () {
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return (typeof escapeHtml === 'function') ? escapeHtml(s) : String(s == null ? '' : s); }
+  function money(n, dp) { return (typeof dashMoney === 'function') ? dashMoney(n, dp) : ('¥' + Number(n || 0)); }
+  function num(n) { return (typeof dashNum === 'function') ? dashNum(n) : String(n || 0); }
+  function spark(vals) { return (typeof dashSparkline === 'function') ? dashSparkline((vals || []).map(Number)) : ''; }
+  // Reuse the desktop-rendered chart node's markup (always populated by
+  // dashRenderAll, even while hidden). Falls back to a calm placeholder.
+  function clone(id) { var n = el(id); var h = n ? n.innerHTML : ''; return h || '<div class="rm-dh-empty">No data · 暂无</div>'; }
+
+  var PERIODS = [['today', 'Today'], ['7', '7d'], ['30', '30d'], ['90', '90d']];
+  var RNG_LABEL = { today: 'today · 今日', '7': '7d', '30': '30d', '90': '90d' };
+  function activeRange() { var b = document.querySelector('#db-range-seg button.active'); return b ? b.dataset.range : '30'; }
+  function trendVals(metric) { var t = (typeof DASH_DATA !== 'undefined' && DASH_DATA && DASH_DATA.trend) || []; return t.map(function (p) { return Number(p[metric] || 0); }); }
+
+  var IC = {
+    sales: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+    orders: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>',
+    customers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    conv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+    products: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18l-2 14H5L3 3z"/><circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/><path d="M8 7h8"/></svg>',
+    ops: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>',
+    chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'
+  };
+
+  function mini(v, k) { return '<div class="m"><div class="v">' + v + '</div><div class="k">' + k + '</div></div>'; }
+  function tile(r, ic, lab, val, spk) {
+    return '<button class="rm-dh-tile" data-r="' + r + '"><span class="ic">' + (IC[ic] || '') + '</span>' +
+      '<span class="lab">' + lab + '</span><span class="val">' + val + '</span><span class="spk">' + spk + '</span></button>';
+  }
+
+  window.rmRenderDash = function () {
+    var wrap = el('rm-dash');
+    if (!wrap || typeof DASH_DATA === 'undefined' || !DASH_DATA) return;
+    var k = DASH_DATA.kpis || {}, d = DASH_DATA.deltas || {};
+    var rng = activeRange();
+    var conv = (k.conversion_rate == null) ? '—' : (k.conversion_rate.toFixed(1) + '%');
+    var live = (el('db-live-num') || {}).textContent; if (!live || live === '—') live = '0';
+
+    var chips = PERIODS.map(function (p) {
+      return '<button data-r="' + p[0] + '"' + (p[0] === rng ? ' class="active"' : '') + '>' + p[1] + '</button>';
+    }).join('');
+
+    var dr = d.revenue;
+    var deltaHtml = (dr == null) ? '' :
+      '<span class="rm-dh-delta ' + (dr >= 0 ? 'up' : 'down') + '">' + (dr >= 0 ? '▲' : '▼') + ' ' + Math.abs(dr).toFixed(1) + '%</span>';
+
+    var hero =
+      '<div class="rm-dh-hero">' +
+        '<div class="rm-dh-live"><span class="d"></span> Right now · ' + esc(live) + ' viewing</div>' +
+        '<div class="rm-dh-big">' + money(k.revenue) + '</div>' +
+        '<div class="rm-dh-cap">Revenue · ' + esc(RNG_LABEL[rng] || rng) + ' ' + deltaHtml + '</div>' +
+        '<div class="rm-dh-mini">' +
+          mini(num(k.orders), 'Orders · 订单') +
+          mini(money(k.aov, 2), 'Avg order · 客单') +
+          mini('+' + num(k.new_customers), 'New cust. · 新客') +
+          mini(conv, 'Conv. · 转化') +
+        '</div>' +
+      '</div>';
+
+    var tiles =
+      tile('sales', 'sales', 'Sales · 销售', money(k.revenue), spark(trendVals('revenue'))) +
+      tile('orders', 'orders', 'Orders · 订单', num(k.orders), spark(trendVals('orders'))) +
+      tile('customers', 'customers', 'New cust. · 新客', '+' + num(k.new_customers), spark(trendVals('new_customers'))) +
+      tile('traffic', 'conv', 'Conversion · 转化', conv, spark(trendVals('orders')));
+
+    // Wide "operations" tile — in-flight orders that still need a hand, summed
+    // from the live status funnel (no extra data).
+    var f = DASH_DATA.funnel || {};
+    var attn = ['pending_payment', 'awaiting_restock', 'preparing', 'dispatched'].reduce(function (s, key) {
+      return s + ((f[key] && f[key].n) || 0);
+    }, 0);
+    var ops = '<button class="rm-dh-tile wide alarm" data-r="ops"><span class="l"><span class="ic">' + IC.ops + '</span>' +
+      '<span class="tx"><span class="lab">Operations · 运营</span><span class="val">' + num(attn) + ' need attention · 待处理</span></span></span>' +
+      (attn > 0 ? '<span class="rm-dh-badge">Action · 处理</span>' : '<span class="arrow">' + IC.chevron + '</span>') + '</button>';
+
+    // Wide "top product" tile — the period's best seller.
+    var tp = (DASH_DATA.topProducts || [])[0];
+    var prodTile = tp ? ('<button class="rm-dh-tile wide" data-r="catalog"><span class="l"><span class="ic">' + IC.products + '</span>' +
+      '<span class="tx"><span class="lab">Top product · 热销</span><span class="val">' + esc(tp.name_en || tp.name_cn || '—') + '</span></span></span>' +
+      '<span class="arrow">' + IC.chevron + '</span></button>') : '';
+
+    wrap.innerHTML =
+      '<div class="rm-dh-title"><div class="eyebrow">Full Circle</div><h2>Dashboard · 概览</h2></div>' +
+      '<div class="rm-dh-periods">' + chips + '</div>' +
+      hero +
+      '<div class="rm-dh-grid">' + tiles + ops + prodTile + '</div>';
+  };
+
+  // ── reports (full-screen push bodies) ──
+  function block(h, inner) { return '<div class="rm-dh-block"><div class="h">' + h + '</div>' + inner + '</div>'; }
+  function kpis(items) {
+    return '<div class="rm-dh-kpis">' + items.map(function (x) {
+      return '<div class="rm-dh-stat"><div class="lbl">' + x[0] + '</div><div class="v ' + (x[2] || '') + '">' + x[1] + '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  var REPORTS = {
+    sales: { title: 'Sales · 销售', body: function () {
+      var k = DASH_DATA.kpis || {}, c = (k.conversion_rate == null) ? '—' : (k.conversion_rate.toFixed(1) + '%');
+      return kpis([['Revenue · 营收', money(k.revenue), 'brass'], ['Avg order · 客单价', money(k.aov, 2), ''], ['Orders · 订单', num(k.orders), ''], ['Conversion · 转化', c, '']]) +
+        block('Revenue trend · 营收趋势', '<div class="rm-dh-trend">' + spark(trendVals('revenue')) + '</div>') +
+        block('Revenue composition · 收入构成', clone('db-composition'));
+    } },
+    orders: { title: 'Orders · 订单', body: function () {
+      return block('Order status · 订单状态', clone('db-funnel')) +
+        block('Payment &amp; delivery · 支付与配送', clone('db-splits')) +
+        block('When orders land · 下单时段', '<div class="rm-dh-heatscroll">' + clone('db-heatmap') + '</div>');
+    } },
+    customers: { title: 'Customers · 客户', body: function () {
+      var nvr = DASH_DATA.new_vs_returning || {}, k = DASH_DATA.kpis || {};
+      return kpis([['Buyers · 买家', num(nvr.buyers), ''], ['New · 新客', num(nvr.new_buyers), 'brass'], ['Returning · 回头', num(nvr.returning_buyers), ''], ['New (period) · 期内新客', num(k.new_customers), '']]) +
+        block('Tier distribution · 等级分布', clone('db-tiers')) +
+        block('Top customers · 客户榜', clone('db-customers')) +
+        block('By city · 地域分布', clone('db-geo'));
+    } },
+    traffic: { title: 'Conversion · 转化', body: function () {
+      var k = DASH_DATA.kpis || {}, c = (k.conversion_rate == null) ? '—' : (k.conversion_rate.toFixed(1) + '%');
+      return kpis([['Visits · 访问', num(k.visits), ''], ['Sessions · 会话', num(k.sessions), ''], ['Conversion · 转化', c, 'brass'], ['Refund rate · 退款率', (k.refund_rate || 0).toFixed(1) + '%', '']]) +
+        block('Traffic &amp; entry scenes · 流量与场景', clone('db-traffic'));
+    } },
+    ops: { title: 'Operations · 运营', body: function () {
+      return block('Order pipeline · 订单流水', clone('db-funnel'));
+    } },
+    catalog: { title: 'Top products · 热销', body: function () {
+      return block('Best sellers · 热销榜', clone('db-products'));
+    } }
+  };
+
+  function openReport(r) {
+    var rep = REPORTS[r], panel = el('rm-dash-report');
+    if (!rep || !panel) return;
+    panel.querySelector('.rm-dh-rtitle').textContent = rep.title.replace(/&amp;/g, '&');
+    var body = panel.querySelector('.rm-dh-rbody');
+    body.innerHTML = rep.body();
+    body.scrollTop = 0;
+    panel.classList.add('show');
+    panel.setAttribute('aria-hidden', 'false');
+    document.documentElement.classList.add('rm-noscroll');
+  }
+  function closeReport() {
+    var panel = el('rm-dash-report'); if (!panel) return;
+    panel.classList.remove('show');
+    panel.setAttribute('aria-hidden', 'true');
+    document.documentElement.classList.remove('rm-noscroll');
+  }
+
+  // Mirror the live presence count into the mobile hero as the poller ticks.
+  window.rmDashSetLive = function (n) {
+    var c = document.querySelector('#rm-dash .rm-dh-live');
+    if (c) c.innerHTML = '<span class="d"></span> Right now · ' + esc(String(n)) + ' viewing';
+  };
+
+  function bind() {
+    var wrap = el('rm-dash');
+    if (wrap && !wrap._rmBound) {
+      wrap._rmBound = true;
+      wrap.addEventListener('click', function (e) {
+        var chip = e.target.closest('.rm-dh-periods button');
+        if (chip) { if (typeof dashSetRange === 'function') dashSetRange(chip.dataset.r); return; }
+        var t = e.target.closest('.rm-dh-tile');
+        if (t) openReport(t.dataset.r);
+      });
+    }
+    var panel = el('rm-dash-report');
+    if (panel && !panel._rmBound) {
+      panel._rmBound = true;
+      var back = panel.querySelector('.rm-dh-back');
+      if (back) back.addEventListener('click', closeReport);
+    }
+  }
+  // Switching tabs hides #tab-dashboard (and the fixed report with it), but the
+  // scroll-lock would linger — release it on any nav tap.
+  document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('#rm-bottomnav [data-go], .rm-sheet-list [data-go]')) closeReport();
+  }, true);
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
   else bind();
