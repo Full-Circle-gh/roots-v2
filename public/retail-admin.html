@@ -4795,6 +4795,18 @@
     #tab-orders > .row > .ovp-wrap { display: none; }
     #tab-orders > .row { margin-bottom: var(--s3); gap: 8px; }
 
+    /* Pin the status-filter bar directly under the topbar at ALL scroll
+       positions. In source order the KPI rail sits BETWEEN the topbar and the
+       chips, so until you scrolled past the KPIs the sticky chips floated
+       detached in the middle (the "disconnect" from the Online Store bar).
+       Make the orders section a flex column and pull the chips to the front
+       (order:-1) so they're the first thing under the topbar and the KPIs /
+       search / cards all scroll underneath them. The desktop page title is
+       redundant on phones (the bottom nav already labels the tab) — hide it. */
+    #tab-orders.active { display: flex; flex-direction: column; }
+    #tab-orders > h2 { display: none; }
+    #tab-orders > #orders-status-chips { order: -1; }
+
     /* KPI strip → horizontal snap rail (override the Phase 2 2-up grid). */
     #ord-kpis {
       display: flex; grid-template-columns: none;
