@@ -24704,6 +24704,15 @@ window.onLangChange(function () {
      ════════════════════════════════════════════════════════════════════ */
   #rm-orders-cards { display: none; }
   @media (max-width: 720px) {
+    /* The order/customer detail drawers host the desktop layout. drawer-body
+       has overflow-y:auto, which makes overflow-x COMPUTE to auto — so a wide
+       child (e.g. an items/reservations .table-wrap forced to min-width:560px
+       by the Phase 2 rule) turns the whole panel into a sideways scroller and
+       clips the left edge. Clip horizontal overflow here; inner tables still
+       scroll within their own .table-wrap (overflow-x:auto). Tighter padding
+       reclaims a little width. */
+    .side-drawer .drawer-body { overflow-x: hidden; padding-left: var(--s4); padding-right: var(--s4); }
+
     /* Hide the desktop table + the dense toolbar on phones — keep only the
        search box (Phase 2 makes it claim the full row). */
     #tab-orders .table-wrap { display: none; }
