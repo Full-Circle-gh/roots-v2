@@ -19239,6 +19239,9 @@ function rmDlvRenderHub() {
   const zones = Array.isArray(window._zones) ? window._zones : (typeof _zones !== 'undefined' ? _zones : []);
   const active = zones.filter(z => z.is_active).length;
   const pill = (on) => `<span class="rm-pill-status ${on ? 'on' : 'off'}">${on ? 'ON · 开' : 'OFF · 关'}</span>`;
+  // Combined: an instant on/off switch right on the row (flip mid-rush without
+  // opening the editor); tapping the rest of the row still opens it for config.
+  const toggle = (on, key) => `<span class="rm-switch rm-dlv-tgl ${on ? 'on' : ''}" data-dlv-toggle="${key}" role="switch" aria-checked="${on}" tabindex="0"></span>`;
   const grouplab = (t) => `<div class="rm-dlv-grouplab">${t}<span class="ln"></span></div>`;
   const row = (icon, t, s, right, onclick) =>
     `<button type="button" class="rm-setrow" onclick="${onclick}">` +
@@ -19265,14 +19268,38 @@ function rmDlvRenderHub() {
     '</div>' +
     grouplab('Schedule &amp; closures · 排期与休假') +
     '<div class="rm-dlv-group">' +
-      row('sun', 'Holiday mode · 假期模式', 'Pause same-day, show a banner · 暂停当日达并显示横幅', pill(holidayOn), "rmDlvOpenEditor('holiday')") +
+      row('sun', 'Holiday mode · 假期模式', 'Pause same-day, show a banner · 暂停当日达并显示横幅', toggle(holidayOn, 'holiday'), "rmDlvOpenEditor('holiday')") +
       row('repeat', 'Fresh batch schedule · 现做排期', 'Outside-GZ batch-made items · 广州以外现做商品', pill(batchOn), "rmDlvOpenEditor('batch')") +
     '</div>' +
     grouplab('Defaults · 默认') +
     '<div class="rm-dlv-group">' +
-      row('globe', 'Rest of China · 其他地区', defOn ? ('Flat ' + yen('dlv-default-fee') + ' · 统一运费') : 'Off — unmatched addresses blocked · 关闭', pill(defOn), "rmDlvOpenEditor('default')") +
+      row('globe', 'Rest of China · 其他地区', defOn ? ('Flat ' + yen('dlv-default-fee') + ' · 统一运费') : 'Off — unmatched addresses blocked · 关闭', toggle(defOn, 'default'), "rmDlvOpenEditor('default')") +
       row('home', 'Kitchen address · 厨房地址', addr ? escapeHtml(addr) : 'Not set · 未设置', '', "rmDlvOpenEditor('kitchen')") +
     '</div>';
+
+  // Bind the instant switches once (capture phase, so a tap on the switch flips
+  // + saves and never reaches the row button's open-editor onclick).
+  if (!host._rmTglBound) {
+    host._rmTglBound = true;
+    host.addEventListener('click', function (e) {
+      var sw = e.target.closest('[data-dlv-toggle]');
+      if (sw) { e.stopPropagation(); e.preventDefault(); rmDlvInstantToggle(sw.getAttribute('data-dlv-toggle')); }
+    }, true);
+  }
+}
+
+// Flip Holiday / Rest-of-China instantly: toggle the (hidden) desktop control
+// the existing save reads, persist via its save fn, then re-render the hub.
+async function rmDlvInstantToggle(key) {
+  var cb, save;
+  if (key === 'holiday') { cb = document.getElementById('dlv-holiday-mode'); save = saveHolidayMode; }
+  else if (key === 'default') { cb = document.getElementById('dlv-default-enabled'); save = saveDefaultZone; }
+  else return;
+  if (!cb || typeof save !== 'function') return;
+  cb.checked = !cb.checked;
+  var sw = document.querySelector('#rm-dlv-hub [data-dlv-toggle="' + key + '"]');
+  if (sw) { sw.classList.toggle('on', cb.checked); sw.setAttribute('aria-checked', String(cb.checked)); }
+  try { await save(); } finally { if (typeof rmDlvRenderHub === 'function') rmDlvRenderHub(); }
 }
 
 function rmDlvOpenZones() {
@@ -25906,6 +25933,8 @@ window.onLangChange(function () {
       transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3);
     }
     .rm-switch.on::after { transform: translateX(18px); }
+    /* instant switch sitting in a hub row, just left of the chevron */
+    .rm-setrow .rm-dlv-tgl { margin-right: 6px; }
 
     /* ── Full-screen push editor panels ── */
     .rm-dlv-panel {
