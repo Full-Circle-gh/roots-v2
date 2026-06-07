@@ -9981,26 +9981,34 @@ async function _prodHeroUpload(productId) {
 
 const PROD_GALLERY_MAX = 8;
 
-// Thumbnail strip under the hero image. Shows the secondary photos (index ≥ 1)
-// — the primary already fills the big cell above — each with a ★ "make primary"
-// and × "remove" affordance, plus a "+ add" tile while there's room. Hidden
-// entirely when there are no photos at all (the empty big cell is the upload
-// target in that case, so a lone "+ add" tile would be redundant).
+// Thumbnail strip under the hero image. Lists every photo — the primary (index 0)
+// gets a ★ badge instead of the "make primary" click, the rest get a "make primary"
+// affordance — and all of them carry a × "remove" control so the main picture can
+// be deleted too, even when it's the only photo. Plus a "+ add" tile while there's
+// room. Hidden entirely when there are no photos at all (the empty big cell is the
+// upload target in that case, so a lone "+ add" tile would be redundant).
 function _renderProdGalleryStrip(p, gallery) {
   const count = gallery.length;
   const canAdd = count < PROD_GALLERY_MAX;
   if (count === 0) return '';
-  const thumb = (src, idx) => `<div style="position:relative;width:46px;height:46px;flex:0 0 auto;border-radius:6px;overflow:hidden;border:1px solid var(--border)">
-      <img src="${esc(src)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;cursor:pointer" onclick="_prodGallerySetPrimary(${p.id},${idx})" title="Make primary · 设为主图">
-      <button onclick="event.stopPropagation();_prodGalleryRemove(${p.id},${idx})" title="Remove · 删除"
+  const thumb = (src, idx) => {
+    const isPrimary = idx === 0;
+    const imgClick = isPrimary ? '' : ` onclick="_prodGallerySetPrimary(${p.id},${idx})"`;
+    const imgTitle = isPrimary ? 'Main photo · 主图' : 'Make primary · 设为主图';
+    const star = isPrimary ? `<span title="Main photo · 主图"
+        style="position:absolute;bottom:1px;left:1px;line-height:1;font-size:11px;text-shadow:0 0 2px rgba(0,0,0,.7)">★</span>` : '';
+    return `<div style="position:relative;width:46px;height:46px;flex:0 0 auto;border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+      <img src="${esc(src)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;cursor:pointer"${imgClick} title="${imgTitle}">
+      ${star}<button onclick="event.stopPropagation();_prodGalleryRemove(${p.id},${idx})" title="Remove · 删除"
         style="position:absolute;top:1px;right:1px;width:15px;height:15px;line-height:13px;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:11px;cursor:pointer">×</button>
     </div>`;
+  };
   const addTile = canAdd ? `<div onclick="_prodGalleryAdd(${p.id})" title="Upload photos · 上传图片"
       style="width:46px;height:46px;flex:0 0 auto;border-radius:6px;border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:20px;cursor:pointer">+</div>` : '';
   const libTile = canAdd ? `<div onclick="_prodGalleryAddLibrary(${p.id})" title="Add from media library · 从媒体库添加"
       style="width:46px;height:46px;flex:0 0 auto;border-radius:6px;border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:18px;cursor:pointer">🖼</div>` : '';
-  // Skip index 0 (the primary, shown above); list the rest as removable thumbs.
-  const thumbs = gallery.slice(1).map((src, i) => thumb(src, i + 1)).join('');
+  // List every photo, primary first, each removable.
+  const thumbs = gallery.map((src, i) => thumb(src, i)).join('');
   return `<div style="display:flex;gap:6px;padding:8px;overflow-x:auto;align-items:center;background:var(--gray);border-top:1px solid var(--border)">
       ${thumbs}${addTile}${libTile}
     </div>`;
