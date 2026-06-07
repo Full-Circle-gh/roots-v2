@@ -14164,7 +14164,8 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('.pu-editor-bg')) return;
   // Dashboard activity rows open the order drawer on click — that same click
   // bubbles here, so exempt them or the drawer closes the instant it opens.
-  if (e.target.closest('tr.order-row, tr.cu-row, .db-feed-row')) return;
+  // .rm-ocard = the mobile order cards (Variant A), which also openOrder() on tap.
+  if (e.target.closest('tr.order-row, tr.cu-row, .db-feed-row, .rm-ocard')) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.toString().length > 0) return;
   closeDrawer(open[open.length - 1]);
