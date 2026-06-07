@@ -4803,11 +4803,19 @@
     #ord-kpis::-webkit-scrollbar { display: none; }
     #ord-kpis > .fc-kpi { flex: 0 0 47%; min-width: 150px; scroll-snap-align: start; }
 
-    /* Status chips → sticky single-row scroller, always reachable. */
+    /* Status chips → sticky single-row scroller, always reachable. Render it as
+       a SOLID filter bar (not the page bg) with a divider + drop shadow so
+       cards visibly scroll UNDER it; with bg-app it was invisible and content
+       bled through around the pills, reading as a broken float. Full-bleed to
+       the screen edges (cancel main's horizontal padding) so the bar spans the
+       whole width like the topbar above it. */
     #orders-status-chips {
       flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
-      position: sticky; top: 56px; z-index: 6;
-      padding: 8px 0; background: var(--bg-app);
+      position: sticky; top: 56px; z-index: 8;
+      margin-left: calc(-1 * var(--s6)); margin-right: calc(-1 * var(--s6));
+      padding: 10px var(--s6); background: var(--bg-pane);
+      border-bottom: 1px solid var(--line);
+      box-shadow: 0 8px 14px -12px rgba(0, 0, 0, .45);
       scroll-snap-type: x proximity;
     }
     #orders-status-chips::-webkit-scrollbar { display: none; }
