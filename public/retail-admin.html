@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" id="meta-theme-color" content="#12161A">
-<title>Full Circle · Mini App Backend</title>
+<title>Full Circle · Mini App Admin</title>
 <script>
   // Apply theme BEFORE first paint to prevent flash. Reads saved choice
   // first; otherwise honours the OS preference. Toggle logic lives at the
@@ -5313,6 +5313,15 @@
         <tbody><tr><td colspan="10" class="muted">Loading · 加载中…</td></tr></tbody>
       </table>
     </div>
+
+    <!-- ── Mobile order cards (Variant A — full-screen-push backbone) ──
+         Phone-only (≤720px). Rendered from the SAME live order data the
+         desktop #orders-table uses (rmRenderOrderCards, fed by loadOrders).
+         Tap a card → existing full-screen order drawer (openOrder). Swipe a
+         card left → Advance / Call (the Variant C blend). The desktop table
+         + dense toolbar are hidden on phones via CSS; desktop is untouched.
+         Built to match design bundle: mobile/orders-a.html + fc-mobile.css. -->
+    <div id="rm-orders-cards" aria-live="polite"></div>
   </section>
 
   <!-- ─── CUSTOMERS ─── -->
@@ -13009,6 +13018,7 @@ async function loadOrders(opts = {}) {
     } catch (e) {
       if (!silent && myReq === _ORDERS_REQ_ID) {
         tbody.innerHTML = `<tr><td colspan="10" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
+        if (window.rmRenderOrderCards) rmRenderOrderCards(null, e.message);
       }
       return;
     }
@@ -13052,6 +13062,7 @@ async function loadOrders(opts = {}) {
         </div>
       </td></tr>`;
       _ORDERS_SEEN_IDS = new Set();
+      if (window.rmRenderOrderCards) rmRenderOrderCards([]);
       return;
     }
 
@@ -13086,6 +13097,7 @@ async function loadOrders(opts = {}) {
       </tr>`;
     }).join('');
     ordTweaksApply();
+    if (window.rmRenderOrderCards) rmRenderOrderCards(j.data);
 
     _ORDERS_SEEN_IDS = newIds;
 
@@ -24678,6 +24690,106 @@ window.onLangChange(function () {
     .side-drawer .drawer-foot > .btn,
     .side-drawer .drawer-foot > button { flex: 1 1 auto; }
   }
+
+  /* ════════════════════════════════════════════════════════════════════
+     MOBILE ORDERS REDESIGN — Variant A "full-screen push" backbone.
+     Phone-only (≤720px). The desktop orders TABLE + dense toolbar are
+     hidden; the SAME live order data renders as tap-friendly cards
+     (#rm-orders-cards, fed by rmRenderOrderCards). Tap a card → the
+     existing full-screen order drawer (openOrder). Swipe a card left →
+     Advance / Call (the Variant C blend). KPI strip → horizontal rail;
+     status chips → sticky single-row filter. Theme-aware (reuses app
+     tokens so dark/light + View>theme still work). Desktop is untouched.
+     Built to match design bundle: mobile/orders-a.html + fc-mobile.css.
+     See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  #rm-orders-cards { display: none; }
+  @media (max-width: 720px) {
+    /* Hide the desktop table + the dense toolbar on phones — keep only the
+       search box (Phase 2 makes it claim the full row). */
+    #tab-orders .table-wrap { display: none; }
+    #tab-orders > .row > #orders-store,
+    #tab-orders > .row > button,
+    #tab-orders > .row > .ovp-wrap { display: none; }
+    #tab-orders > .row { margin-bottom: var(--s3); gap: 8px; }
+
+    /* KPI strip → horizontal snap rail (override the Phase 2 2-up grid). */
+    #ord-kpis {
+      display: flex; grid-template-columns: none;
+      gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x proximity; padding-bottom: 6px;
+    }
+    #ord-kpis::-webkit-scrollbar { display: none; }
+    #ord-kpis > .fc-kpi { flex: 0 0 47%; min-width: 150px; scroll-snap-align: start; }
+
+    /* Status chips → sticky single-row scroller, always reachable. */
+    #orders-status-chips {
+      flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      position: sticky; top: 56px; z-index: 6;
+      padding: 8px 0; background: var(--bg-app);
+      scroll-snap-type: x proximity;
+    }
+    #orders-status-chips::-webkit-scrollbar { display: none; }
+    #orders-status-chips > .status-chip { flex: 0 0 auto; scroll-snap-align: start; }
+
+    /* ── Card list ── */
+    #rm-orders-cards { display: block; }
+    .rm-ocard-wrap {
+      position: relative; margin-bottom: 10px;
+      border-radius: var(--r-lg); overflow: hidden;
+    }
+    /* Swipe-revealed action lane (sits behind the card). */
+    .rm-ocard-actions { position: absolute; inset: 0; display: flex; justify-content: flex-end; }
+    .rm-ocard-actions button {
+      border: 0; cursor: pointer; width: 88px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 5px; font: 600 12px var(--f-sans);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .rm-ocard-actions svg { width: 20px; height: 20px; }
+    .rm-act-advance { background: linear-gradient(180deg, var(--brass-hi, #C29B54), var(--brass, #B08D4A)); color: var(--brass-ink, #1A140A); }
+    .rm-act-call    { background: var(--accent, #6B8E6F); color: #fff; }
+
+    .rm-ocard {
+      position: relative; z-index: 1;
+      background: var(--bg-pane);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--r-lg);
+      padding: 13px 14px;
+      transition: transform .26s cubic-bezier(.16, 1, .3, 1);
+      -webkit-tap-highlight-color: transparent; cursor: pointer;
+      touch-action: pan-y;
+    }
+    .rm-ocard.swiped { transform: translateX(-176px); }
+    .rm-ocard:active { background: var(--bg-elev-1); }
+
+    .rm-oc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .rm-oc-no { font: 600 13px var(--f-mono); color: var(--text-1); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+    .rm-oc-new { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 5px;
+      background: var(--brass, #B08D4A); color: #fff; font: 700 9px var(--f-mono); letter-spacing: .06em; vertical-align: 1px; }
+
+    .rm-oc-mid { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 9px; }
+    .rm-oc-cust { min-width: 0; }
+    .rm-oc-name { font-size: 15px; font-weight: 600; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rm-oc-phone { font: 12px var(--f-mono); color: var(--text-3); margin-top: 2px; }
+    .rm-oc-total { font: 700 17px var(--f-mono); color: var(--text-1); white-space: nowrap; }
+
+    .rm-oc-foot { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11.5px; color: var(--text-3); }
+    .rm-oc-foot .sep { opacity: .5; }
+    .rm-oc-foot .shipby { margin-left: auto; white-space: nowrap; }
+    .rm-oc-foot .shipby.late { color: var(--danger); font-weight: 600; }
+
+    .rm-oc-hint {
+      display: flex; align-items: center; gap: 6px;
+      margin-top: 11px; padding-top: 10px;
+      border-top: 1px solid var(--line-soft);
+      font-size: 12.5px; font-weight: 600; color: var(--brass, #B08D4A);
+    }
+    .rm-oc-hint svg { width: 14px; height: 14px; flex: 0 0 auto; }
+    .rm-oc-hint.done { color: var(--text-3); font-weight: 500; }
+
+    .rm-oc-empty { text-align: center; color: var(--text-3); padding: 44px 20px; font-size: 13.5px; }
+  }
 </style>
 
 <!-- ─── MOBILE SHELL (Phase 1) — bottom tab bar + More sheet ───
@@ -24858,6 +24970,206 @@ window.onLangChange(function () {
   if (window.onLangChange) window.onLangChange(function () { if (!sheet.hasAttribute('hidden')) buildMore(); });
   syncNav();
   syncBadges();
+})();
+</script>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   MOBILE ORDERS — Variant A backbone (full-screen push) + Variant C blend.
+   Renders the SAME live order data loadOrders fetched as tap-friendly cards
+   on phones (≤720px). Tap a card → existing full-screen order drawer
+   (openOrder). Swipe a card left → Advance / Call. Reuses the app's global
+   helpers (humanStatus / fmt / formatDate / escapeHtml / nextStatusFor /
+   askPayMethod / api / openOrder / toast / loadOrders) — no backend change,
+   desktop untouched (container is display:none above 720px).
+   See memory: feature_operator_mobile_miniapp. */
+(function () {
+  var WRAP_ID = 'rm-orders-cards';
+  var SWIPE_W = 176;            // two 88px action lanes
+
+  function el(id) { return document.getElementById(id); }
+  function en(label) { return String(label || '').split(' · ')[0].trim(); }
+  function esc(s) { return (typeof escapeHtml === 'function') ? escapeHtml(s) : String(s == null ? '' : s); }
+  function money(n) { return (typeof fmt === 'function') ? fmt(n) : Number(n || 0).toFixed(2); }
+  function hstatus(o) { return (typeof humanStatus === 'function') ? humanStatus(o.status, o.fulfillment_type) : o.status; }
+
+  // The primary forward transition (skip cancel/refund) — null at terminal states.
+  var FORWARD = { paid: 1, preparing: 1, dispatched: 1, delivered: 1 };
+  function forwardAction(o) {
+    if (typeof nextStatusFor !== 'function') return null;
+    var tr = nextStatusFor(o) || [];
+    for (var i = 0; i < tr.length; i++) { if (FORWARD[tr[i][0]]) return tr[i]; }
+    return null;
+  }
+
+  function shipBy(o) {
+    if (o.fulfillment_type === 'pickup') {
+      var l = (typeof humanizeSlotLabel === 'function' ? humanizeSlotLabel(o.delivery_slot_label) : '') || 'ASAP';
+      return { text: 'Pickup · ' + l, late: false };
+    }
+    if (!o.scheduled_for) return { text: 'ASAP', late: false };
+    var dt = new Date(String(o.scheduled_for).replace(' ', 'T') + 'Z');
+    if (isNaN(dt.getTime())) return { text: '', late: false };
+    var actionable = (o.status === 'paid' || o.status === 'preparing');
+    var lbl = (typeof humanizeSlotLabel === 'function' && humanizeSlotLabel(o.delivery_slot_label))
+      || (typeof fmtSlotShort === 'function' ? fmtSlotShort(dt) : '');
+    return { text: lbl, late: actionable && dt.getTime() < Date.now() };
+  }
+
+  var ICON_ADV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+  var ICON_CALL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
+  var ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+  window.rmRenderOrderCards = function (data, errMsg) {
+    var wrap = el(WRAP_ID);
+    if (!wrap) return;
+    if (errMsg) { wrap.innerHTML = '<div class="rm-oc-empty">Couldn’t load orders · ' + esc(errMsg) + '</div>'; return; }
+    if (!data || !data.length) { wrap.innerHTML = '<div class="rm-oc-empty">No orders match this filter.</div>'; return; }
+
+    var html = '';
+    for (var i = 0; i < data.length; i++) {
+      var o = data[i];
+      var fwd = forwardAction(o);
+      var phone = o.recipient_phone || '';
+      var sb = shipBy(o);
+      var items = o.item_count || 0;
+
+      var hint = fwd
+        ? '<div class="rm-oc-hint">' + ICON_ADV + esc(en(fwd[1])) + '</div>'
+        : (o.status === 'delivered'
+            ? '<div class="rm-oc-hint done">' + ICON_CHECK + 'Completed — no action needed</div>'
+            : '');
+
+      var swipeable = !!(fwd || phone);
+      var actions = swipeable
+        ? '<div class="rm-ocard-actions">'
+          + (fwd ? '<button type="button" class="rm-act-advance" data-act="advance" data-id="' + o.id + '" data-to="' + fwd[0] + '">' + ICON_ADV + 'Advance</button>' : '')
+          + (phone ? '<button type="button" class="rm-act-call" data-act="call" data-phone="' + esc(phone) + '">' + ICON_CALL + 'Call</button>' : '')
+          + '</div>'
+        : '';
+
+      html +=
+        '<div class="rm-ocard-wrap">' + actions +
+          '<div class="rm-ocard' + (swipeable ? '' : ' no-swipe') + '" data-id="' + o.id + '">' +
+            '<div class="rm-oc-top">' +
+              '<span class="rm-oc-no">' + (!o.seen_at ? '<span class="rm-oc-new">NEW</span>' : '') + esc(o.order_no) + '</span>' +
+              '<span class="pill st-' + o.status + '"><span class="dot"></span>' + esc(hstatus(o)) + '</span>' +
+            '</div>' +
+            '<div class="rm-oc-mid">' +
+              '<div class="rm-oc-cust">' +
+                '<div class="rm-oc-name">' + esc(o.nickname || o.recipient_name || '—') + '</div>' +
+                (phone ? '<div class="rm-oc-phone">' + esc(phone) + '</div>' : '') +
+              '</div>' +
+              '<div class="rm-oc-total">¥' + money(o.total) + '</div>' +
+            '</div>' +
+            '<div class="rm-oc-foot">' +
+              '<span>' + items + (items === 1 ? ' item' : ' items') + '</span>' +
+              (o.store_code ? '<span class="sep">·</span><span>' + esc(o.store_name_en || o.store_code) + '</span>' : '') +
+              (sb.text ? '<span class="shipby' + (sb.late ? ' late' : '') + '">' + esc(sb.text) + '</span>' : '') +
+            '</div>' +
+            hint +
+          '</div>' +
+        '</div>';
+    }
+    wrap.innerHTML = html;
+  };
+
+  // Advance status from the swipe lane WITHOUT opening the detail drawer —
+  // keeps the operator in the list for fast queue triage. Mirrors the
+  // forward path of transition() (only 'paid' needs the pay-method prompt;
+  // forward steps never need a cancel/refund reason).
+  function rmAdvance(id, to) {
+    if (typeof api !== 'function') return;
+    (async function () {
+      try {
+        var pay_method = null;
+        if (to === 'paid' && typeof askPayMethod === 'function') {
+          pay_method = await askPayMethod();
+          if (pay_method === null) return;   // dismissed
+        }
+        await api('/api/retail-admin/orders/' + id + '/status', { method: 'PATCH', body: { status: to, reason: null, pay_method: pay_method } });
+        if (typeof humanStatus === 'function' && typeof toast === 'function') toast('Order → ' + humanStatus(to));
+        if (typeof loadOrders === 'function') loadOrders();   // re-renders cards + table
+      } catch (e) {
+        if (typeof toast === 'function') toast('Failed · ' + e.message, 'err');
+      }
+    })();
+  }
+
+  // ── Tap-to-open + swipe-left interaction (event-delegated; survives re-render) ──
+  var st = null, justSwiped = false;
+
+  function closeOthers(except) {
+    var c = el(WRAP_ID); if (!c) return;
+    c.querySelectorAll('.rm-ocard.swiped').forEach(function (card) {
+      if (card !== except) { card.classList.remove('swiped'); card.style.transform = ''; }
+    });
+  }
+
+  function onStart(e) {
+    var card = e.target.closest('.rm-ocard');
+    if (!card || card.classList.contains('no-swipe')) { st = null; return; }
+    var t = e.touches[0];
+    st = { card: card, x0: t.clientX, y0: t.clientY, base: card.classList.contains('swiped') ? -SWIPE_W : 0, horiz: false, moved: false, cur: 0 };
+  }
+  function onMove(e) {
+    if (!st) return;
+    var t = e.touches[0], dx = t.clientX - st.x0, dy = t.clientY - st.y0;
+    if (!st.horiz) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      if (Math.abs(dx) <= Math.abs(dy)) { st = null; return; }   // vertical → let the page scroll
+      st.horiz = true;
+    }
+    st.moved = true;
+    e.preventDefault();
+    st.cur = Math.max(-SWIPE_W, Math.min(0, st.base + dx));
+    st.card.style.transform = 'translateX(' + st.cur + 'px)';
+  }
+  function onEnd() {
+    if (!st) return;
+    if (st.moved && st.horiz) {
+      var open = st.cur < -SWIPE_W / 2;
+      st.card.classList.toggle('swiped', open);
+      st.card.style.transform = open ? 'translateX(-' + SWIPE_W + 'px)' : '';
+      if (open) closeOthers(st.card);
+      justSwiped = true;
+      setTimeout(function () { justSwiped = false; }, 350);
+    }
+    st = null;
+  }
+
+  function onClick(e) {
+    var btn = e.target.closest('.rm-ocard-actions button');
+    if (btn) {
+      e.stopPropagation();
+      if (btn.getAttribute('data-act') === 'call') {
+        var ph = btn.getAttribute('data-phone');
+        if (ph) window.location.href = 'tel:' + ph;
+      } else {
+        rmAdvance(+btn.getAttribute('data-id'), btn.getAttribute('data-to'));
+      }
+      return;
+    }
+    var card = e.target.closest('.rm-ocard');
+    if (!card || justSwiped) return;
+    if (card.classList.contains('swiped')) { card.classList.remove('swiped'); card.style.transform = ''; return; }
+    var id = +card.getAttribute('data-id');
+    if (id && typeof openOrder === 'function') openOrder(id);
+  }
+
+  function bind() {
+    var c = el(WRAP_ID);
+    if (!c || c._rmBound) return;
+    c._rmBound = true;
+    c.addEventListener('touchstart', onStart, { passive: true });
+    c.addEventListener('touchmove', onMove, { passive: false });
+    c.addEventListener('touchend', onEnd);
+    c.addEventListener('touchcancel', onEnd);
+    c.addEventListener('click', onClick);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
+  else bind();
 })();
 </script>
 
