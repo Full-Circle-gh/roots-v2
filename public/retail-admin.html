@@ -4916,6 +4916,91 @@
   }
 
   /* ════════════════════════════════════════════════════════════════════
+     MOBILE ORDERS — Variant B blend: bottom sheets. Two phone-only entry
+     points layered on top of the A backbone + C swipe without disturbing
+     them: (1) a Sort button (#rm-mob-tools) above the card list, and (2) a
+     ⋯ Manage button on every card. Both raise the shared bottom sheet
+     (.rm-sheet, created once in <body> by the mobile-orders script). The
+     desktop triggers are display:none; the sheet overlay is only ever opened
+     from these phone-only buttons. See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  #rm-mob-tools { display: none; }
+  .rm-oc-more { display: none; }
+  @media (max-width: 720px) {
+    /* Sort toolbar — right-aligned above the cards; scrolls under the sticky chips. */
+    #rm-mob-tools { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+    .rm-sort-btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      height: 38px; padding: 0 14px; border-radius: 999px;
+      border: 1px solid var(--line); background: var(--bg-pane);
+      color: var(--text-1); font: 500 13px var(--f-sans); cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .rm-sort-btn svg { width: 16px; height: 16px; }
+    .rm-sort-btn .cur { color: var(--text-3); }
+    .rm-sort-btn:active { background: var(--bg-elev-1); }
+
+    /* ⋯ Manage button on each card foot (right-aligned, doesn't block tap/swipe). */
+    .rm-oc-foot .rm-oc-meta {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+      flex: 1 1 auto; min-width: 0;
+    }
+    .rm-oc-more {
+      display: inline-flex; align-items: center; justify-content: center;
+      flex: 0 0 auto; margin-left: auto;
+      width: 30px; height: 30px; padding: 0; border-radius: 999px;
+      border: 1px solid var(--line-soft); background: var(--bg-pane);
+      color: var(--text-2); cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .rm-oc-more svg { width: 18px; height: 18px; }
+    .rm-oc-more:active { background: var(--bg-elev-1); }
+  }
+
+  /* Shared bottom sheet (Sort + Manage). Created once in <body>; hidden until
+     .show. Fixed/full-bleed; only opened from the phone-only triggers above. */
+  .rm-sheet-scrim {
+    position: fixed; inset: 0; z-index: 1200;
+    background: rgba(0, 0, 0, .42); opacity: 0; pointer-events: none;
+    transition: opacity .26s;
+  }
+  .rm-sheet-scrim.show { opacity: 1; pointer-events: auto; }
+  .rm-sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 1201;
+    background: var(--bg-pane); border-radius: 20px 20px 0 0;
+    box-shadow: 0 -18px 40px -16px rgba(0, 0, 0, .5);
+    transform: translateY(100%);
+    transition: transform .3s cubic-bezier(.3, .8, .25, 1);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+    max-height: 80vh; display: flex; flex-direction: column;
+  }
+  .rm-sheet.show { transform: translateY(0); }
+  .rm-sheet-grip { display: flex; justify-content: center; padding: 9px 0 3px; }
+  .rm-sheet-grip span { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
+  .rm-sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 6px 18px 10px; }
+  .rm-sheet-head h3 { margin: 0; font: 600 16px var(--f-sans); color: var(--text-1); }
+  .rm-sheet-head .sub { font: 12px var(--f-mono); color: var(--text-3); margin-top: 2px; }
+  .rm-sheet-close { width: 32px; height: 32px; flex: 0 0 auto; border: 0; border-radius: 9px; background: var(--bg-elev-1); color: var(--text-1); cursor: pointer; font-size: 16px; line-height: 1; }
+  .rm-sheet-body { overflow-y: auto; padding: 2px 12px 10px; }
+  .rm-sheet-row {
+    display: flex; align-items: center; gap: 13px; width: 100%;
+    padding: 14px 10px; border: 0; background: transparent;
+    border-bottom: 1px solid var(--line-soft); cursor: pointer;
+    font: 500 15px var(--f-sans); color: var(--text-1); text-align: left;
+  }
+  .rm-sheet-row:last-child { border-bottom: 0; }
+  .rm-sheet-row:active { background: var(--bg-elev-1); }
+  .rm-sheet-row .ri {
+    width: 36px; height: 36px; flex: 0 0 auto; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg-elev-1); color: var(--text-2);
+  }
+  .rm-sheet-row .ri svg { width: 19px; height: 19px; }
+  .rm-sheet-row.primary .ri { background: var(--brass, #B08D4A); color: #fff; }
+  .rm-sheet-row .sub { display: block; font: 400 12px var(--f-sans); color: var(--text-3); margin-top: 1px; }
+  .rm-sheet-row .rcheck { margin-left: auto; color: var(--brass, #B08D4A); display: inline-flex; }
+  .rm-sheet-row .rcheck svg { width: 18px; height: 18px; }
+
+  /* ════════════════════════════════════════════════════════════════════
      MOBILE CUSTOMERS REDESIGN — Variant A "full-screen push" backbone.
      Phone-only (≤720px). The desktop customer TABLE + dense toolbar + pager
      are hidden; the SAME live customer rows render as tap-friendly cards
@@ -6082,6 +6167,13 @@
          card left → Advance / Call (the Variant C blend). The desktop table
          + dense toolbar are hidden on phones via CSS; desktop is untouched.
          Built to match design bundle: mobile/orders-a.html + fc-mobile.css. -->
+    <!-- Variant B blend — phone-only Sort toolbar (raises a bottom sheet). -->
+    <div id="rm-mob-tools">
+      <button type="button" class="rm-sort-btn" onclick="rmOpenSortSheet()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 4 7 20"/><polyline points="3 8 7 4 11 8"/><polyline points="17 20 17 4"/><polyline points="13 16 17 20 21 16"/></svg>
+        <span class="cur">Sort:</span> <span id="rm-sort-cur">Newest</span>
+      </button>
+    </div>
     <div id="rm-orders-cards" aria-live="polite"></div>
   </section>
 
@@ -25555,13 +25647,52 @@ window.onLangChange(function () {
   var ICON_ADV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
   var ICON_CALL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
   var ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  var ICON_MORE = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>';
+  var ICON_SORT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 4 7 20"/><polyline points="3 8 7 4 11 8"/><polyline points="17 20 17 4"/><polyline points="13 16 17 20 21 16"/></svg>';
+  var ICON_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+
+  // Variant B blend state: keep the last rendered (filtered) list so the Sort
+  // sheet can re-order it client-side and the Manage sheet can look orders up.
+  var lastData = [], lastErr = null, sortKey = 'newest';
+  var SORTS = [
+    ['newest', 'Newest first'],
+    ['oldest', 'Oldest first'],
+    ['total', 'Total · high to low'],
+    ['shipby', 'Ship by · soonest']
+  ];
+  function shipTime(o) {
+    if (!o.scheduled_for) return 0;            // ASAP / unscheduled → most urgent
+    var t = Date.parse(String(o.scheduled_for).replace(' ', 'T') + 'Z');
+    return isNaN(t) ? Infinity : t;
+  }
+  function applySort(arr) {
+    var a = arr.slice();
+    if (sortKey === 'oldest')      a.sort(function (x, y) { return (x.id || 0) - (y.id || 0); });
+    else if (sortKey === 'total')  a.sort(function (x, y) { return Number(y.total || 0) - Number(x.total || 0); });
+    else if (sortKey === 'shipby') a.sort(function (x, y) { return shipTime(x) - shipTime(y); });
+    else                           a.sort(function (x, y) { return (y.id || 0) - (x.id || 0); });  // newest
+    return a;
+  }
+  function syncSortBtn() {
+    var cur = el('rm-sort-cur'); if (!cur) return;
+    for (var i = 0; i < SORTS.length; i++) { if (SORTS[i][0] === sortKey) { cur.textContent = SORTS[i][1].split(' · ')[0]; return; } }
+    cur.textContent = 'Newest';
+  }
 
   window.rmRenderOrderCards = function (data, errMsg) {
+    lastData = data || [];
+    lastErr = errMsg || null;
+    paint();
+    syncSortBtn();
+  };
+
+  function paint() {
     var wrap = el(WRAP_ID);
     if (!wrap) return;
-    if (errMsg) { wrap.innerHTML = '<div class="rm-oc-empty">Couldn’t load orders · ' + esc(errMsg) + '</div>'; return; }
-    if (!data || !data.length) { wrap.innerHTML = '<div class="rm-oc-empty">No orders match this filter.</div>'; return; }
+    if (lastErr) { wrap.innerHTML = '<div class="rm-oc-empty">Couldn’t load orders · ' + esc(lastErr) + '</div>'; return; }
+    if (!lastData.length) { wrap.innerHTML = '<div class="rm-oc-empty">No orders match this filter.</div>'; return; }
 
+    var data = applySort(lastData);
     var html = '';
     for (var i = 0; i < data.length; i++) {
       var o = data[i];
@@ -25599,16 +25730,19 @@ window.onLangChange(function () {
               '<div class="rm-oc-total">¥' + money(o.total) + '</div>' +
             '</div>' +
             '<div class="rm-oc-foot">' +
-              '<span>' + items + (items === 1 ? ' item' : ' items') + '</span>' +
-              (o.store_code ? '<span class="sep">·</span><span>' + esc(o.store_name_en || o.store_code) + '</span>' : '') +
-              (sb.text ? '<span class="sep">·</span><span class="shipby' + (sb.late ? ' late' : '') + '">' + esc(sb.text) + '</span>' : '') +
+              '<span class="rm-oc-meta">' +
+                '<span>' + items + (items === 1 ? ' item' : ' items') + '</span>' +
+                (o.store_code ? '<span class="sep">·</span><span>' + esc(o.store_name_en || o.store_code) + '</span>' : '') +
+                (sb.text ? '<span class="sep">·</span><span class="shipby' + (sb.late ? ' late' : '') + '">' + esc(sb.text) + '</span>' : '') +
+              '</span>' +
+              '<button type="button" class="rm-oc-more" data-more="' + o.id + '" aria-label="Manage order">' + ICON_MORE + '</button>' +
             '</div>' +
             hint +
           '</div>' +
         '</div>';
     }
     wrap.innerHTML = html;
-  };
+  }
 
   // Advance status from the swipe lane WITHOUT opening the detail drawer —
   // keeps the operator in the list for fast queue triage. Mirrors the
@@ -25675,6 +25809,8 @@ window.onLangChange(function () {
   }
 
   function onClick(e) {
+    var more = e.target.closest('.rm-oc-more');
+    if (more) { e.stopPropagation(); rmOpenManageSheet(more.getAttribute('data-more')); return; }
     var btn = e.target.closest('.rm-ocard-actions button');
     if (btn) {
       e.stopPropagation();
@@ -25691,6 +25827,93 @@ window.onLangChange(function () {
     if (card.classList.contains('swiped')) { card.classList.remove('swiped'); card.style.transform = ''; return; }
     var id = +card.getAttribute('data-id');
     if (id && typeof openOrder === 'function') openOrder(id);
+  }
+
+  // ── Variant B blend: shared bottom sheet (Sort + Manage) ──
+  var scrim = null, sheet = null, sheetBody = null, sheetTitle = null, sheetSub = null;
+  function ensureSheet() {
+    if (scrim) return;
+    scrim = document.createElement('div');
+    scrim.className = 'rm-sheet-scrim';
+    sheet = document.createElement('div');
+    sheet.className = 'rm-sheet';
+    sheet.innerHTML =
+      '<div class="rm-sheet-grip"><span></span></div>' +
+      '<div class="rm-sheet-head"><div><h3></h3><div class="sub"></div></div>' +
+      '<button type="button" class="rm-sheet-close" aria-label="Close">✕</button></div>' +
+      '<div class="rm-sheet-body"></div>';
+    document.body.appendChild(scrim);
+    document.body.appendChild(sheet);
+    sheetTitle = sheet.querySelector('h3');
+    sheetSub = sheet.querySelector('.sub');
+    sheetBody = sheet.querySelector('.rm-sheet-body');
+    scrim.addEventListener('click', closeSheet);
+    sheet.querySelector('.rm-sheet-close').addEventListener('click', closeSheet);
+    sheetBody.addEventListener('click', onSheetClick);
+  }
+  function openSheet() {
+    ensureSheet();
+    scrim.classList.add('show');
+    // next frame so the translateY transition runs from the hidden state
+    requestAnimationFrame(function () { sheet.classList.add('show'); });
+  }
+  function closeSheet() {
+    if (!sheet) return;
+    sheet.classList.remove('show');
+    scrim.classList.remove('show');
+  }
+
+  function rmOpenSortSheet() {
+    ensureSheet();
+    sheetTitle.textContent = 'Sort orders';
+    sheetSub.textContent = '';
+    var rows = '';
+    for (var i = 0; i < SORTS.length; i++) {
+      var on = SORTS[i][0] === sortKey;
+      rows += '<button type="button" class="rm-sheet-row" data-sort="' + SORTS[i][0] + '">' +
+        '<span class="ri">' + ICON_SORT + '</span><span>' + SORTS[i][1] + '</span>' +
+        (on ? '<span class="rcheck">' + ICON_CHECK + '</span>' : '') + '</button>';
+    }
+    sheetBody.innerHTML = rows;
+    openSheet();
+  }
+  window.rmOpenSortSheet = rmOpenSortSheet;
+
+  function rmOpenManageSheet(id) {
+    var o = null;
+    for (var i = 0; i < lastData.length; i++) { if (String(lastData[i].id) === String(id)) { o = lastData[i]; break; } }
+    if (!o) return;
+    ensureSheet();
+    sheetTitle.textContent = 'Manage order';
+    sheetSub.textContent = o.order_no || '';
+    var fwd = forwardAction(o);
+    var phone = o.recipient_phone || '';
+    var rows = '';
+    if (fwd) rows += '<button type="button" class="rm-sheet-row primary" data-do="advance" data-id="' + o.id + '" data-to="' + fwd[0] + '">' +
+      '<span class="ri">' + ICON_ADV + '</span><span>' + esc(en(fwd[1])) + '<span class="sub">Move forward without opening</span></span></button>';
+    if (phone) rows += '<button type="button" class="rm-sheet-row" data-do="call" data-phone="' + esc(phone) + '">' +
+      '<span class="ri">' + ICON_CALL + '</span><span>Call customer<span class="sub">' + esc(phone) + '</span></span></button>';
+    rows += '<button type="button" class="rm-sheet-row" data-do="open" data-id="' + o.id + '">' +
+      '<span class="ri">' + ICON_OPEN + '</span><span>Open full details</span></button>';
+    sheetBody.innerHTML = rows;
+    openSheet();
+  }
+
+  function onSheetClick(e) {
+    var row = e.target.closest('.rm-sheet-row');
+    if (!row) return;
+    if (row.hasAttribute('data-sort')) {
+      sortKey = row.getAttribute('data-sort');
+      syncSortBtn();
+      paint();
+      closeSheet();
+      return;
+    }
+    var act = row.getAttribute('data-do');
+    closeSheet();
+    if (act === 'advance') rmAdvance(+row.getAttribute('data-id'), row.getAttribute('data-to'));
+    else if (act === 'call') { var ph = row.getAttribute('data-phone'); if (ph) window.location.href = 'tel:' + ph; }
+    else if (act === 'open') { var oid = +row.getAttribute('data-id'); if (oid && typeof openOrder === 'function') openOrder(oid); }
   }
 
   function bind() {
