@@ -4534,6 +4534,599 @@
     overflow: hidden;
   }
   .ml-preview img { max-width: 100%; max-height: 320px; object-fit: contain; display: block; }
+
+  /* ── Mobile shell + dashboard CSS — relocated into the head stylesheet so the
+     fixed bottom tab bar paints in the first render pass. Previously this lived
+     in a trailing <style> ~20k lines down, so on slow links the bar appeared a
+     beat after the (head-styled) dashboard. ── */
+  /* ════════════════════════════════════════════════════════════════════
+     MOBILE SHELL (Phase 1) — operator mini-app web-view.
+     Everything here is ADDITIVE and scoped to phones (≤720px). The desktop
+     layout is never altered: the horizontal tab bar is hidden and a fixed
+     bottom tab bar + a "More" bottom-sheet take over navigation. The bottom
+     bar reuses the existing desktop [data-tab] buttons, so all section
+     switching, badges and lazy iframe loads keep working unchanged.
+     See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  #rm-bottomnav { display: none; }
+  .rm-sheet { display: none; }
+  html.rm-noscroll { overflow: hidden; }
+
+  @media (max-width: 720px) {
+    /* Desktop horizontal tab bar → replaced by the bottom bar. */
+    .tabs { display: none !important; }
+
+    /* Slim the topbar: keep the brand mark + search; the text-size, theme
+       and language controls move into the More sheet. */
+    .topbar .who,
+    #ui-scale-toggle,
+    #theme-toggle,
+    #lang-toggle { display: none !important; }
+    .topbar { padding: 0 14px; gap: 8px; }
+    .brand .sub, .brand .divider { display: none; }
+
+    /* Reserve room so the fixed bar never covers the last row of content. */
+    main { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+
+    /* ── Fixed bottom tab bar ── */
+    #rm-bottomnav {
+      display: flex;
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+      background: var(--bg-pane);
+      border-top: 1px solid var(--line-soft);
+      padding-bottom: env(safe-area-inset-bottom);
+      box-shadow: 0 -2px 16px rgba(0, 0, 0, .18);
+    }
+    #rm-bottomnav button {
+      flex: 1 1 0; min-width: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 3px; padding: 8px 2px 7px;
+      background: none; border: 0; cursor: pointer;
+      color: var(--text-3); font: inherit; position: relative;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #rm-bottomnav button svg { width: 22px; height: 22px; }
+    #rm-bottomnav .rm-lab {
+      font-size: 10px; line-height: 1; letter-spacing: .01em;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #rm-bottomnav button.active { color: var(--brass); }
+    #rm-bottomnav .rm-badge {
+      position: absolute; top: 4px; left: calc(50% + 5px);
+      min-width: 16px; height: 16px; padding: 0 4px;
+      border-radius: 9px; background: #dc2626; color: #fff;
+      font-size: 10px; font-weight: 800; line-height: 16px; text-align: center;
+      display: none;
+    }
+    #rm-bottomnav .rm-badge.on { display: block; }
+    #rm-bottomnav .rm-dot {
+      position: absolute; top: 7px; left: calc(50% + 8px);
+      width: 8px; height: 8px; border-radius: 50%; background: #dc2626; display: none;
+    }
+    #rm-bottomnav .rm-dot.on { display: block; }
+
+    /* ── "More" bottom-sheet ── */
+    .rm-sheet { display: block; position: fixed; inset: 0; z-index: 70; }
+    .rm-sheet[hidden] { display: none; }
+    .rm-sheet-backdrop {
+      position: absolute; inset: 0;
+      background: var(--bg-overlay, rgba(0, 0, 0, .45));
+      animation: rmFade 240ms ease;
+    }
+    @keyframes rmFade { from { opacity: 0; } to { opacity: 1; } }
+    .rm-sheet-panel {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      max-height: 82vh; overflow-y: auto;
+      background: var(--bg-pane);
+      border-radius: 18px 18px 0 0;
+      border-top: 1px solid var(--line);
+      padding: 8px 12px calc(16px + env(safe-area-inset-bottom));
+      animation: rmSheetUp 300ms cubic-bezier(.16, 1, .3, 1);
+    }
+    @keyframes rmSheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .rm-sheet-grip {
+      width: 38px; height: 4px; border-radius: 4px;
+      background: var(--line-strong); margin: 6px auto 14px;
+    }
+    .rm-sheet-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .rm-sheet-list button {
+      display: flex; align-items: center; gap: 10px;
+      padding: 13px 12px; border: 1px solid var(--line-soft);
+      border-radius: var(--r-md); background: var(--bg-elev-1);
+      color: var(--text-1); font: inherit; font-size: 13px;
+      text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .rm-sheet-list button svg { width: 18px; height: 18px; flex: 0 0 auto; color: var(--text-2); }
+    .rm-sheet-list button.active { border-color: var(--brass); color: var(--brass); }
+    .rm-sheet-list button.active svg { color: var(--brass); }
+    .rm-sheet-sec {
+      grid-column: 1 / -1; font-size: 11px; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--text-3); margin: 12px 2px 2px;
+    }
+    .rm-sheet-ctl { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 12px; }
+    .rm-sheet-ctl button { flex: 1; justify-content: center; }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     MOBILE DAILY-OPS (Phase 2) — make the five operator screens
+     (Dashboard, Orders, Invoices, Customers, Products) thumb-friendly.
+     Everything ADDITIVE and ≤720px-only; the desktop layout is never
+     touched. Companion to the Phase 1 shell above.
+     See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  @media (max-width: 720px) {
+    /* ── KPI strips → a tidy 2-up grid. The desktop auto-fit/minmax can
+       leave a lone orphan tile stretched full-width on a narrow phone;
+       a fixed 2-col grid reads cleanly. Trim the headline a touch so the
+       figures don't overflow their cell. ── */
+    .fc-kpis, .db-kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .fc-kpi .val { font-size: 26px; }
+    .db-kpi .val { font-size: 24px; }
+
+    /* ── Wide tables (Orders, Customers, ledgers) scroll sideways instead
+       of clipping — the wrap is overflow:hidden on desktop. Momentum
+       scroll on iOS; a min-width keeps columns legible rather than
+       crushed. ── */
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table-wrap > table { min-width: 560px; }
+
+    /* ── Comfortable tap targets for the controls operators hit all day. ── */
+    .btn { min-height: 38px; }
+    .btn-sm { min-height: 32px; }
+    .status-chip { padding: 9px 14px; font-size: 13px; }
+    th, td { padding: 12px 14px; }
+
+    /* Toolbar search fields claim the full row; the filters/buttons wrap
+       onto the next line (the toolbars are already flex-wrap). */
+    .row > input[type=text],
+    .pa-toolbar input[type=text],
+    #cu-q, #pa-search { flex: 1 1 100%; min-width: 0; }
+
+    /* Stop iOS Safari from auto-zooming the page when a sub-16px field is
+       focused — keeps the web-view from jumping on every tap into a box. */
+    input, select, textarea { font-size: 16px; }
+
+    /* Drawer footer actions stack to full width so they're easy to thumb. */
+    .side-drawer .drawer-foot { flex-wrap: wrap; gap: 8px; }
+    .side-drawer .drawer-foot > .btn,
+    .side-drawer .drawer-foot > button { flex: 1 1 auto; }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     MOBILE ORDERS REDESIGN — Variant A "full-screen push" backbone.
+     Phone-only (≤720px). The desktop orders TABLE + dense toolbar are
+     hidden; the SAME live order data renders as tap-friendly cards
+     (#rm-orders-cards, fed by rmRenderOrderCards). Tap a card → the
+     existing full-screen order drawer (openOrder). Swipe a card left →
+     Advance / Call (the Variant C blend). KPI strip → horizontal rail;
+     status chips → sticky single-row filter. Theme-aware (reuses app
+     tokens so dark/light + View>theme still work). Desktop is untouched.
+     Built to match design bundle: mobile/orders-a.html + fc-mobile.css.
+     See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  #rm-orders-cards { display: none; }
+  @media (max-width: 720px) {
+    /* The order/customer detail drawers host the desktop layout. drawer-body
+       has overflow-y:auto, which makes overflow-x COMPUTE to auto — so a wide
+       child (e.g. an items/reservations .table-wrap forced to min-width:560px
+       by the Phase 2 rule) turns the whole panel into a sideways scroller and
+       clips the left edge. Clip horizontal overflow here; inner tables still
+       scroll within their own .table-wrap (overflow-x:auto). Tighter padding
+       reclaims a little width. */
+    .side-drawer .drawer-body { overflow-x: hidden; padding-left: var(--s4); padding-right: var(--s4); }
+
+    /* Order-detail desktop power-controls clutter the phone-width drawer and
+       crowd the floating × (the "View" display-options popover) or read as a
+       cramped extra row (the "Sort items" chips). Both are desktop-only
+       affordances absent from the mobile mockup — hide on phones so the detail
+       reads clean. The default sort + default display still apply. */
+    #order-drawer .order-head .ovp-wrap { display: none; }
+    #order-drawer .sort-chips { display: none; }
+    /* Give the order number room now that View is gone (it was sharing the row
+       via justify-content:space-between). */
+    #order-drawer .order-head { display: block; }
+
+    /* Hide the desktop table + the dense toolbar on phones — keep only the
+       search box (Phase 2 makes it claim the full row). */
+    #tab-orders .table-wrap { display: none; }
+    #tab-orders > .row > #orders-store,
+    #tab-orders > .row > button,
+    #tab-orders > .row > .ovp-wrap { display: none; }
+    #tab-orders > .row { margin-bottom: var(--s3); gap: 8px; }
+
+    /* KPI strip → horizontal snap rail (override the Phase 2 2-up grid). */
+    #ord-kpis {
+      display: flex; grid-template-columns: none;
+      gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x proximity; padding-bottom: 6px;
+    }
+    #ord-kpis::-webkit-scrollbar { display: none; }
+    #ord-kpis > .fc-kpi { flex: 0 0 47%; min-width: 150px; scroll-snap-align: start; }
+
+    /* Status chips → sticky single-row scroller, always reachable. */
+    #orders-status-chips {
+      flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      position: sticky; top: 56px; z-index: 6;
+      padding: 8px 0; background: var(--bg-app);
+      scroll-snap-type: x proximity;
+    }
+    #orders-status-chips::-webkit-scrollbar { display: none; }
+    #orders-status-chips > .status-chip { flex: 0 0 auto; scroll-snap-align: start; }
+
+    /* ── Card list ── */
+    #rm-orders-cards { display: block; }
+    .rm-ocard-wrap {
+      position: relative; margin-bottom: 10px;
+      border-radius: var(--r-lg); overflow: hidden;
+    }
+    /* Swipe-revealed action lane (sits behind the card). */
+    .rm-ocard-actions { position: absolute; inset: 0; display: flex; justify-content: flex-end; }
+    .rm-ocard-actions button {
+      border: 0; cursor: pointer; width: 88px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 5px; font: 600 12px var(--f-sans);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .rm-ocard-actions svg { width: 20px; height: 20px; }
+    .rm-act-advance { background: linear-gradient(180deg, var(--brass-hi, #C29B54), var(--brass, #B08D4A)); color: var(--brass-ink, #1A140A); }
+    .rm-act-call    { background: var(--accent, #6B8E6F); color: #fff; }
+
+    .rm-ocard {
+      position: relative; z-index: 1;
+      background: var(--bg-pane);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--r-lg);
+      padding: 13px 14px;
+      transition: transform .26s cubic-bezier(.16, 1, .3, 1);
+      -webkit-tap-highlight-color: transparent; cursor: pointer;
+      touch-action: pan-y;
+    }
+    .rm-ocard.swiped { transform: translateX(-176px); }
+    .rm-ocard:active { background: var(--bg-elev-1); }
+
+    .rm-oc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .rm-oc-no { font: 600 13px var(--f-mono); color: var(--text-1); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+    .rm-oc-new { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 5px;
+      background: var(--brass, #B08D4A); color: #fff; font: 700 9px var(--f-mono); letter-spacing: .06em; vertical-align: 1px; }
+
+    .rm-oc-mid { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 9px; }
+    .rm-oc-cust { min-width: 0; }
+    .rm-oc-name { font-size: 15px; font-weight: 600; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rm-oc-phone { font: 12px var(--f-mono); color: var(--text-3); margin-top: 2px; }
+    .rm-oc-total { font: 700 17px var(--f-mono); color: var(--text-1); white-space: nowrap; }
+
+    .rm-oc-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 11.5px; color: var(--text-3); }
+    .rm-oc-foot .sep { opacity: .5; }
+    .rm-oc-foot .shipby { white-space: nowrap; }
+    .rm-oc-foot .shipby.late { color: var(--danger); font-weight: 600; }
+
+    .rm-oc-hint {
+      display: flex; align-items: center; gap: 6px;
+      margin-top: 11px; padding-top: 10px;
+      border-top: 1px solid var(--line-soft);
+      font-size: 12.5px; font-weight: 600; color: var(--brass, #B08D4A);
+    }
+    .rm-oc-hint svg { width: 14px; height: 14px; flex: 0 0 auto; }
+    .rm-oc-hint.done { color: var(--text-3); font-weight: 500; }
+
+    .rm-oc-empty { text-align: center; color: var(--text-3); padding: 44px 20px; font-size: 13.5px; }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     MOBILE CUSTOMERS REDESIGN — Variant A "full-screen push" backbone.
+     Phone-only (≤720px). The desktop customer TABLE + dense toolbar + pager
+     are hidden; the SAME live customer rows render as tap-friendly cards
+     (#rm-cu-cards, fed by rmRenderCustomerCards). Tap a card → the existing
+     full-screen customer drawer (cuOpenDetail). Swipe a card left → Adjust /
+     Block (the Variant C blend; both open the drawer then fire the wired
+     flow). KPI strip → horizontal rail; tier filter → sticky chip row.
+     Theme-aware (reuses app tokens). Desktop is untouched.
+     Built to match design bundle: mobile/customers-a.html + fc-cust.css.
+     See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  #rm-cu-cards { display: none; }
+  #cu-mob-tiers { display: none; }
+  @media (max-width: 720px) {
+    /* Hide the desktop table, pager and the dense toolbar controls — keep only
+       the search box (which claims the full row) and the Include-blocked toggle.
+       Sort/Refresh/View are desktop-only affordances absent from the mockup. */
+    #tab-customers .table-wrap { display: none; }
+    #cu-pager { display: none; }
+    #cu-toolbar > #cu-tier,
+    #cu-toolbar > #cu-sort,
+    #cu-toolbar > button,
+    #cu-toolbar > .ovp-wrap { display: none; }
+    #cu-toolbar { margin-bottom: var(--s3); gap: 8px; }
+    #cu-q { width: 100%; }
+
+    /* KPI strip → horizontal snap rail (override the Phase 2 2-up grid). */
+    #cu-kpis {
+      display: flex; grid-template-columns: none;
+      gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x proximity; padding-bottom: 6px;
+    }
+    #cu-kpis::-webkit-scrollbar { display: none; }
+    #cu-kpis > .fc-kpi { flex: 0 0 47%; min-width: 150px; scroll-snap-align: start; }
+
+    /* Tier filter → sticky single-row chip scroller, always reachable. */
+    #cu-mob-tiers {
+      display: flex; gap: 8px; flex-wrap: nowrap;
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+      position: sticky; top: 56px; z-index: 6;
+      padding: 8px 0; margin-bottom: 4px; background: var(--bg-app);
+      scroll-snap-type: x proximity;
+    }
+    #cu-mob-tiers::-webkit-scrollbar { display: none; }
+    .cu-tchip {
+      flex: 0 0 auto; scroll-snap-align: start;
+      height: 34px; padding: 0 15px; border-radius: 999px;
+      border: 1px solid var(--line); background: var(--bg-pane);
+      color: var(--text-2); font: 500 13px var(--f-sans); cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .cu-tchip.on { background: var(--text-1); color: var(--bg-pane); border-color: var(--text-1); }
+
+    /* ── Card list ── */
+    #rm-cu-cards { display: block; }
+    .rm-cucard-wrap {
+      position: relative; margin-bottom: 10px;
+      border-radius: var(--r-lg); overflow: hidden;
+    }
+    /* Swipe-revealed action lane (sits behind the card). */
+    .rm-cucard-actions { position: absolute; inset: 0; display: flex; justify-content: flex-end; }
+    .rm-cucard-actions button {
+      border: 0; cursor: pointer; width: 88px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 5px; font: 600 12px var(--f-sans);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .rm-cucard-actions svg { width: 20px; height: 20px; }
+    .rm-cu-adjust { background: linear-gradient(180deg, var(--brass-hi, #C29B54), var(--brass, #B08D4A)); color: var(--brass-ink, #1A140A); }
+    .rm-cu-block  { background: var(--danger, #E8556A); color: #fff; }
+    .rm-cu-block.is-unblock { background: var(--accent, #6B8E6F); }
+
+    .rm-cucard {
+      position: relative; z-index: 1;
+      display: flex; align-items: center; gap: 13px;
+      background: var(--bg-pane);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--r-lg);
+      padding: 13px 14px;
+      transition: transform .26s cubic-bezier(.16, 1, .3, 1);
+      -webkit-tap-highlight-color: transparent; cursor: pointer;
+      touch-action: pan-y;
+    }
+    .rm-cucard.swiped { transform: translateX(-176px); }
+    .rm-cucard:active { background: var(--bg-elev-1); }
+
+    .rm-cu-av {
+      flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font: 600 18px var(--f-sans);
+      background: var(--text-1); color: var(--bg-pane);
+    }
+    .rm-cu-av.guest { background: rgba(127,122,114,.14); color: var(--text-3); }
+    .rm-cu-av.guest svg { width: 20px; height: 20px; }
+
+    .rm-cu-body { flex: 1; min-width: 0; }
+    .rm-cu-name { display: flex; align-items: center; gap: 8px; font-size: 15.5px; font-weight: 600; color: var(--text-1); }
+    .rm-cu-name .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rm-cu-name.guest .nm { color: var(--text-3); font-weight: 500; font-style: italic; }
+    .rm-cu-meta { font: 11.5px var(--f-mono); color: var(--text-3); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .rm-cu-stat { flex: 0 0 auto; text-align: right; }
+    .rm-cu-stat .big { font: 600 15px var(--f-mono); color: var(--text-1); font-variant-numeric: tabular-nums; }
+    .rm-cu-stat .k { display: block; font: 10px var(--f-mono); letter-spacing: .06em; color: var(--text-4); margin-top: 1px; }
+
+    .rm-cu-chev { flex: 0 0 auto; color: var(--text-4); display: flex; }
+    .rm-cu-chev svg { width: 18px; height: 18px; }
+
+    .rm-cu-empty { text-align: center; color: var(--text-3); padding: 44px 20px; font-size: 13.5px; }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     MOBILE DASHBOARD REDESIGN — Variant A "full-screen push".
+     Phone-only (≤720px). The desktop bento + deep-dive are hidden; the SAME
+     live DASH_DATA renders as a dark live hero + a grid of report tiles
+     (#rm-dash, fed by rmRenderDash from dashRenderAll). Tap a tile → a
+     full-screen report pushes in (#rm-dash-report), its body built from the
+     same aggregates the desktop charts use (cloned/reformatted — no second
+     fetch, no backend change). Period chips drive dashSetRange. Theme-aware;
+     desktop untouched. Sibling of the Orders redesign.
+     Built to match design bundle: mobile/dashboard-a.html.
+     See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  #rm-dash { display: none; }
+  #rm-dash-report { display: none; }
+  @media (max-width: 720px) {
+    /* Desktop dashboard surfaces off; the mobile view replaces them. */
+    #tab-dashboard .db-head,
+    #tab-dashboard #db-bento,
+    #tab-dashboard #db-deepdive { display: none; }
+    #rm-dash { display: block; }
+
+    .rm-dh-title { padding: 2px 2px 0; }
+    .rm-dh-title .eyebrow { font: 500 10px/1 var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--brass); }
+    .rm-dh-title h2 { margin: 4px 0 0; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+
+    /* period chips */
+    .rm-dh-periods { display: flex; gap: 7px; margin: 12px 0 4px; }
+    .rm-dh-periods button {
+      flex: 1; height: 36px; border-radius: 10px;
+      border: 1px solid var(--line-soft); background: var(--bg-pane);
+      color: var(--text-3); font: 500 13px var(--f-sans); cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .rm-dh-periods button.active { background: var(--text-1); color: var(--bg-pane); border-color: var(--text-1); }
+
+    /* dark live hero (always dark, like the desktop #db-hero) */
+    .rm-dh-hero {
+      margin: 8px 0 4px; padding: 16px; border-radius: 18px; color: #F2EFE7;
+      background: linear-gradient(160deg, #15130E, #221C12);
+      box-shadow: 0 18px 40px -24px rgba(40, 34, 20, .7);
+    }
+    .rm-dh-live { display: flex; align-items: center; gap: 7px; font: 500 10px var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: #C7B27E; }
+    .rm-dh-live .d { width: 7px; height: 7px; border-radius: 50%; background: var(--accent, #6B8E6F); box-shadow: 0 0 0 0 rgba(107, 142, 111, .6); animation: rmDhPulse 2s infinite; }
+    @keyframes rmDhPulse { 0% { box-shadow: 0 0 0 0 rgba(107, 142, 111, .5); } 70% { box-shadow: 0 0 0 7px rgba(107, 142, 111, 0); } 100% { box-shadow: 0 0 0 0 rgba(107, 142, 111, 0); } }
+    .rm-dh-big { font: 600 42px var(--f-sans); letter-spacing: -.03em; margin: 10px 0 2px; font-variant-numeric: tabular-nums; }
+    .rm-cu { font-variant-numeric: tabular-nums; }
+    .rm-dh-cap { font-size: 12px; color: #B9B3A4; display: flex; align-items: center; gap: 8px; }
+    .rm-dh-cap .rm-dh-delta.up { color: #9FC6A3; }
+    .rm-dh-cap .rm-dh-delta.down { color: #D9A38A; }
+    .rm-dh-mini { display: flex; gap: 18px; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, .12); }
+    .rm-dh-mini .m { min-width: 0; }
+    .rm-dh-mini .v { font: 600 18px var(--f-sans); font-variant-numeric: tabular-nums; }
+    .rm-dh-mini .k { font: 500 9px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: #9C9684; margin-top: 2px; }
+
+    /* report tile grid */
+    .rm-dh-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .rm-dh-tile {
+      text-align: left; background: var(--bg-pane); border: 1px solid var(--line-soft);
+      border-radius: 16px; padding: 14px; cursor: pointer; min-height: 116px;
+      display: flex; flex-direction: column; transition: transform .08s;
+      -webkit-tap-highlight-color: transparent; color: inherit;
+    }
+    .rm-dh-tile:active { transform: scale(.98); }
+    .rm-dh-tile .ic { width: 32px; height: 32px; border-radius: 9px; background: var(--bg-elev-1); display: flex; align-items: center; justify-content: center; color: var(--brass); margin-bottom: auto; flex: none; }
+    .rm-dh-tile .ic svg { width: 17px; height: 17px; }
+    .rm-dh-tile .lab { font: 500 9.5px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); margin-top: 12px; }
+    .rm-dh-tile .val { font: 600 22px var(--f-sans); letter-spacing: -.02em; margin-top: 3px; color: var(--text-1); font-variant-numeric: tabular-nums; }
+    .rm-dh-tile .spk { margin-top: 8px; height: 26px; color: var(--accent); }
+    .rm-dh-tile .spk .db-spark { width: 100%; height: 100%; display: block; }
+
+    .rm-dh-tile.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; min-height: 0; }
+    .rm-dh-tile.wide .l { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .rm-dh-tile.wide .ic { margin: 0; }
+    .rm-dh-tile.wide .tx { min-width: 0; display: flex; flex-direction: column; }
+    .rm-dh-tile.wide .lab { margin: 0; }
+    .rm-dh-tile.wide .val { margin: 2px 0 0; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rm-dh-tile.alarm .ic { background: var(--warn-wash, rgba(176, 141, 74, .16)); }
+    .rm-dh-badge { flex: none; font: 600 11px var(--f-sans); color: var(--brass); background: var(--warn-wash, rgba(176, 141, 74, .16)); padding: 4px 10px; border-radius: 999px; }
+    .rm-dh-tile.wide .arrow { color: var(--text-3); flex: none; display: flex; }
+    .rm-dh-tile.wide .arrow svg { width: 18px; height: 18px; }
+    .rm-dh-empty { text-align: center; color: var(--text-3); padding: 30px 16px; font-size: 13px; }
+
+    /* ── full-screen report (push). Lives inside #tab-dashboard, so it hides
+       automatically when another tab becomes active (section{display:none}). ── */
+    #rm-dash-report {
+      display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 80;
+      background: var(--bg-app); transform: translateX(100%);
+      transition: transform .3s cubic-bezier(.3, .7, .2, 1);
+    }
+    #rm-dash-report.show { transform: none; }
+    @media (prefers-reduced-motion: reduce) { #rm-dash-report { transition: none; } }
+    .rm-dh-rnav {
+      flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px;
+      padding-top: env(safe-area-inset-top); min-height: 54px;
+      background: var(--bg-pane); border-bottom: 1px solid var(--line-soft);
+    }
+    .rm-dh-back { width: 42px; height: 42px; border: 0; border-radius: 11px; background: transparent; color: var(--text-1); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .rm-dh-back:active { background: var(--bg-elev-1); }
+    .rm-dh-back svg { width: 22px; height: 22px; }
+    .rm-dh-rtitle { font: 600 16px var(--f-sans); color: var(--text-1); }
+    .rm-dh-rbody { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 16px calc(30px + env(safe-area-inset-bottom)); }
+
+    .rm-dh-block { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 14px; padding: 15px; margin-bottom: 14px; }
+    .rm-dh-block > .h { font: 500 10px var(--f-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--brass); margin-bottom: 12px; }
+    .rm-dh-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .rm-dh-stat { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 12px; padding: 12px 13px; }
+    .rm-dh-stat .lbl { font-size: 11px; color: var(--text-3); }
+    .rm-dh-stat .v { font: 600 20px var(--f-sans); color: var(--text-1); margin-top: 3px; font-variant-numeric: tabular-nums; }
+    .rm-dh-stat .v.brass { color: var(--brass); }
+    .rm-dh-trend { height: 120px; color: var(--accent); }
+    .rm-dh-trend .db-spark { width: 100%; height: 100%; display: block; }
+    .rm-dh-heatscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     MOBILE SETTINGS REDESIGN — Variant A "settings hub" (iOS-Settings depth).
+     Phone-only (≤720px). On desktop the settings sidebar (#settings-nav) and
+     body (.settings-body, which holds every .sub-panel + the shared save bar)
+     sit side-by-side. On phones the sidebar becomes a full-width tappable hub
+     list, and the body becomes a full-screen push-over panel with its own back
+     header and a pinned save bar — one control surface per screen. Reuses the
+     SAME live controls (accent grid, notification strip, language, mascots,
+     footer) and the existing #settings-nav sub-switcher JS; only the flow
+     changes. Theme-aware; desktop untouched. Sibling of the Orders / Dashboard
+     / Customers redesigns. Built to match design bundle: mobile/settings-a.html
+     + fc-settings.css. See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  .rm-set-hubhead, .rm-set-pnav { display: none; }
+  @media (max-width: 720px) {
+    /* layout → single column; the body overlays as a push panel */
+    #tab-config .settings-layout { display: block; position: relative; }
+
+    /* hub head */
+    #tab-config .rm-set-hubhead { display: block; padding: 2px 2px 14px; }
+    #tab-config .rm-set-hubhead .eyebrow { font: 500 10px/1 var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--brass); }
+    #tab-config .rm-set-hubhead h2 { margin: 5px 0 0; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+
+    /* nav → iOS-style settings list */
+    #tab-config #settings-nav {
+      position: static; top: auto; padding: 0; gap: 0;
+      background: transparent; border: 0; border-radius: var(--r-lg); overflow: hidden;
+    }
+    #tab-config #settings-nav button {
+      background: var(--bg-pane); border: 1px solid var(--line); border-top: 0;
+      border-radius: 0; padding: 14px; gap: 13px; font-size: 15px; color: var(--text-1);
+    }
+    #tab-config #settings-nav button:first-child { border-top: 1px solid var(--line); border-radius: var(--r-lg) var(--r-lg) 0 0; }
+    #tab-config #settings-nav button:last-child { border-radius: 0 0 var(--r-lg) var(--r-lg); }
+    #tab-config #settings-nav button.active { background: var(--bg-pane); box-shadow: none; }
+    #tab-config #settings-nav button svg {
+      width: 34px; height: 34px; padding: 8px; box-sizing: border-box; flex: none;
+      background: var(--bg-elev-1); border-radius: 10px; color: var(--brass);
+    }
+    #tab-config #settings-nav button.active svg { color: var(--brass); }
+    /* trailing chevron */
+    #tab-config #settings-nav button::after {
+      content: ""; width: 8px; height: 8px; margin-left: auto; flex: none;
+      border-right: 2px solid var(--text-3); border-top: 2px solid var(--text-3);
+      transform: rotate(45deg);
+    }
+
+    /* body → full-screen push panel (lives inside #tab-config, so it auto-hides
+       on tab switch via section{display:none}) */
+    #tab-config .settings-body {
+      position: fixed; inset: 0; z-index: 80; background: var(--bg-app);
+      display: flex; flex-direction: column; padding: 0;
+      transform: translateX(100%);
+      transition: transform .3s cubic-bezier(.3, .7, .2, 1);
+    }
+    #tab-config .settings-body.rm-open { transform: none; }
+    @media (prefers-reduced-motion: reduce) { #tab-config .settings-body { transition: none; } }
+
+    /* back header */
+    #tab-config .rm-set-pnav {
+      flex: none; display: flex; align-items: center; gap: 4px;
+      height: 52px; padding: 0 8px;
+      background: var(--bg-pane); border-bottom: 1px solid var(--line);
+    }
+    #tab-config .rm-set-back {
+      width: 40px; height: 40px; border: 0; background: transparent; color: var(--text-1);
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+      border-radius: 10px; -webkit-tap-highlight-color: transparent;
+    }
+    #tab-config .rm-set-back:active { background: var(--bg-elev-1); }
+    #tab-config .rm-set-back svg { width: 22px; height: 22px; }
+    #tab-config .rm-set-title { font: 600 16px var(--f-sans); color: var(--text-1); }
+
+    /* the active panel scrolls between the back header and the pinned save bar */
+    #tab-config .settings-body > .sub-panel {
+      flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+      padding: 14px 16px 28px;
+    }
+    #tab-config .sub-panel > h2:first-child { display: none; }
+    #tab-config .group-card { padding: var(--s4); }
+
+    /* shared save bar → flat pinned footer of the push panel */
+    #tab-config .settings-body > .save-bar {
+      position: static; flex: none; margin: 0; background: var(--bg-pane);
+      border-top: 1px solid var(--line);
+      padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
+    }
+    #tab-config .settings-body > .save-bar .btn { flex: 1; justify-content: center; }
+  }
 </style>
 </head>
 <!-- Features default to ON so nothing flashes hidden before loadConfig() runs;
@@ -24657,594 +25250,6 @@ window.onLangChange(function () {
     .live-preview-frame iframe { border-radius: 0; }
   }
 
-  /* ════════════════════════════════════════════════════════════════════
-     MOBILE SHELL (Phase 1) — operator mini-app web-view.
-     Everything here is ADDITIVE and scoped to phones (≤720px). The desktop
-     layout is never altered: the horizontal tab bar is hidden and a fixed
-     bottom tab bar + a "More" bottom-sheet take over navigation. The bottom
-     bar reuses the existing desktop [data-tab] buttons, so all section
-     switching, badges and lazy iframe loads keep working unchanged.
-     See memory: feature_operator_mobile_miniapp.
-     ════════════════════════════════════════════════════════════════════ */
-  #rm-bottomnav { display: none; }
-  .rm-sheet { display: none; }
-  html.rm-noscroll { overflow: hidden; }
-
-  @media (max-width: 720px) {
-    /* Desktop horizontal tab bar → replaced by the bottom bar. */
-    .tabs { display: none !important; }
-
-    /* Slim the topbar: keep the brand mark + search; the text-size, theme
-       and language controls move into the More sheet. */
-    .topbar .who,
-    #ui-scale-toggle,
-    #theme-toggle,
-    #lang-toggle { display: none !important; }
-    .topbar { padding: 0 14px; gap: 8px; }
-    .brand .sub, .brand .divider { display: none; }
-
-    /* Reserve room so the fixed bar never covers the last row of content. */
-    main { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
-
-    /* ── Fixed bottom tab bar ── */
-    #rm-bottomnav {
-      display: flex;
-      position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
-      background: var(--bg-pane);
-      border-top: 1px solid var(--line-soft);
-      padding-bottom: env(safe-area-inset-bottom);
-      box-shadow: 0 -2px 16px rgba(0, 0, 0, .18);
-    }
-    #rm-bottomnav button {
-      flex: 1 1 0; min-width: 0;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 3px; padding: 8px 2px 7px;
-      background: none; border: 0; cursor: pointer;
-      color: var(--text-3); font: inherit; position: relative;
-      -webkit-tap-highlight-color: transparent;
-    }
-    #rm-bottomnav button svg { width: 22px; height: 22px; }
-    #rm-bottomnav .rm-lab {
-      font-size: 10px; line-height: 1; letter-spacing: .01em;
-      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    #rm-bottomnav button.active { color: var(--brass); }
-    #rm-bottomnav .rm-badge {
-      position: absolute; top: 4px; left: calc(50% + 5px);
-      min-width: 16px; height: 16px; padding: 0 4px;
-      border-radius: 9px; background: #dc2626; color: #fff;
-      font-size: 10px; font-weight: 800; line-height: 16px; text-align: center;
-      display: none;
-    }
-    #rm-bottomnav .rm-badge.on { display: block; }
-    #rm-bottomnav .rm-dot {
-      position: absolute; top: 7px; left: calc(50% + 8px);
-      width: 8px; height: 8px; border-radius: 50%; background: #dc2626; display: none;
-    }
-    #rm-bottomnav .rm-dot.on { display: block; }
-
-    /* ── "More" bottom-sheet ── */
-    .rm-sheet { display: block; position: fixed; inset: 0; z-index: 70; }
-    .rm-sheet[hidden] { display: none; }
-    .rm-sheet-backdrop {
-      position: absolute; inset: 0;
-      background: var(--bg-overlay, rgba(0, 0, 0, .45));
-      animation: rmFade 240ms ease;
-    }
-    @keyframes rmFade { from { opacity: 0; } to { opacity: 1; } }
-    .rm-sheet-panel {
-      position: absolute; left: 0; right: 0; bottom: 0;
-      max-height: 82vh; overflow-y: auto;
-      background: var(--bg-pane);
-      border-radius: 18px 18px 0 0;
-      border-top: 1px solid var(--line);
-      padding: 8px 12px calc(16px + env(safe-area-inset-bottom));
-      animation: rmSheetUp 300ms cubic-bezier(.16, 1, .3, 1);
-    }
-    @keyframes rmSheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-    .rm-sheet-grip {
-      width: 38px; height: 4px; border-radius: 4px;
-      background: var(--line-strong); margin: 6px auto 14px;
-    }
-    .rm-sheet-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-    .rm-sheet-list button {
-      display: flex; align-items: center; gap: 10px;
-      padding: 13px 12px; border: 1px solid var(--line-soft);
-      border-radius: var(--r-md); background: var(--bg-elev-1);
-      color: var(--text-1); font: inherit; font-size: 13px;
-      text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
-    }
-    .rm-sheet-list button svg { width: 18px; height: 18px; flex: 0 0 auto; color: var(--text-2); }
-    .rm-sheet-list button.active { border-color: var(--brass); color: var(--brass); }
-    .rm-sheet-list button.active svg { color: var(--brass); }
-    .rm-sheet-sec {
-      grid-column: 1 / -1; font-size: 11px; letter-spacing: .08em;
-      text-transform: uppercase; color: var(--text-3); margin: 12px 2px 2px;
-    }
-    .rm-sheet-ctl { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 12px; }
-    .rm-sheet-ctl button { flex: 1; justify-content: center; }
-  }
-
-  /* ════════════════════════════════════════════════════════════════════
-     MOBILE DAILY-OPS (Phase 2) — make the five operator screens
-     (Dashboard, Orders, Invoices, Customers, Products) thumb-friendly.
-     Everything ADDITIVE and ≤720px-only; the desktop layout is never
-     touched. Companion to the Phase 1 shell above.
-     See memory: feature_operator_mobile_miniapp.
-     ════════════════════════════════════════════════════════════════════ */
-  @media (max-width: 720px) {
-    /* ── KPI strips → a tidy 2-up grid. The desktop auto-fit/minmax can
-       leave a lone orphan tile stretched full-width on a narrow phone;
-       a fixed 2-col grid reads cleanly. Trim the headline a touch so the
-       figures don't overflow their cell. ── */
-    .fc-kpis, .db-kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
-    .fc-kpi .val { font-size: 26px; }
-    .db-kpi .val { font-size: 24px; }
-
-    /* ── Wide tables (Orders, Customers, ledgers) scroll sideways instead
-       of clipping — the wrap is overflow:hidden on desktop. Momentum
-       scroll on iOS; a min-width keeps columns legible rather than
-       crushed. ── */
-    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .table-wrap > table { min-width: 560px; }
-
-    /* ── Comfortable tap targets for the controls operators hit all day. ── */
-    .btn { min-height: 38px; }
-    .btn-sm { min-height: 32px; }
-    .status-chip { padding: 9px 14px; font-size: 13px; }
-    th, td { padding: 12px 14px; }
-
-    /* Toolbar search fields claim the full row; the filters/buttons wrap
-       onto the next line (the toolbars are already flex-wrap). */
-    .row > input[type=text],
-    .pa-toolbar input[type=text],
-    #cu-q, #pa-search { flex: 1 1 100%; min-width: 0; }
-
-    /* Stop iOS Safari from auto-zooming the page when a sub-16px field is
-       focused — keeps the web-view from jumping on every tap into a box. */
-    input, select, textarea { font-size: 16px; }
-
-    /* Drawer footer actions stack to full width so they're easy to thumb. */
-    .side-drawer .drawer-foot { flex-wrap: wrap; gap: 8px; }
-    .side-drawer .drawer-foot > .btn,
-    .side-drawer .drawer-foot > button { flex: 1 1 auto; }
-  }
-
-  /* ════════════════════════════════════════════════════════════════════
-     MOBILE ORDERS REDESIGN — Variant A "full-screen push" backbone.
-     Phone-only (≤720px). The desktop orders TABLE + dense toolbar are
-     hidden; the SAME live order data renders as tap-friendly cards
-     (#rm-orders-cards, fed by rmRenderOrderCards). Tap a card → the
-     existing full-screen order drawer (openOrder). Swipe a card left →
-     Advance / Call (the Variant C blend). KPI strip → horizontal rail;
-     status chips → sticky single-row filter. Theme-aware (reuses app
-     tokens so dark/light + View>theme still work). Desktop is untouched.
-     Built to match design bundle: mobile/orders-a.html + fc-mobile.css.
-     See memory: feature_operator_mobile_miniapp.
-     ════════════════════════════════════════════════════════════════════ */
-  #rm-orders-cards { display: none; }
-  @media (max-width: 720px) {
-    /* The order/customer detail drawers host the desktop layout. drawer-body
-       has overflow-y:auto, which makes overflow-x COMPUTE to auto — so a wide
-       child (e.g. an items/reservations .table-wrap forced to min-width:560px
-       by the Phase 2 rule) turns the whole panel into a sideways scroller and
-       clips the left edge. Clip horizontal overflow here; inner tables still
-       scroll within their own .table-wrap (overflow-x:auto). Tighter padding
-       reclaims a little width. */
-    .side-drawer .drawer-body { overflow-x: hidden; padding-left: var(--s4); padding-right: var(--s4); }
-
-    /* Order-detail desktop power-controls clutter the phone-width drawer and
-       crowd the floating × (the "View" display-options popover) or read as a
-       cramped extra row (the "Sort items" chips). Both are desktop-only
-       affordances absent from the mobile mockup — hide on phones so the detail
-       reads clean. The default sort + default display still apply. */
-    #order-drawer .order-head .ovp-wrap { display: none; }
-    #order-drawer .sort-chips { display: none; }
-    /* Give the order number room now that View is gone (it was sharing the row
-       via justify-content:space-between). */
-    #order-drawer .order-head { display: block; }
-
-    /* Hide the desktop table + the dense toolbar on phones — keep only the
-       search box (Phase 2 makes it claim the full row). */
-    #tab-orders .table-wrap { display: none; }
-    #tab-orders > .row > #orders-store,
-    #tab-orders > .row > button,
-    #tab-orders > .row > .ovp-wrap { display: none; }
-    #tab-orders > .row { margin-bottom: var(--s3); gap: 8px; }
-
-    /* KPI strip → horizontal snap rail (override the Phase 2 2-up grid). */
-    #ord-kpis {
-      display: flex; grid-template-columns: none;
-      gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch;
-      scroll-snap-type: x proximity; padding-bottom: 6px;
-    }
-    #ord-kpis::-webkit-scrollbar { display: none; }
-    #ord-kpis > .fc-kpi { flex: 0 0 47%; min-width: 150px; scroll-snap-align: start; }
-
-    /* Status chips → sticky single-row scroller, always reachable. */
-    #orders-status-chips {
-      flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
-      position: sticky; top: 56px; z-index: 6;
-      padding: 8px 0; background: var(--bg-app);
-      scroll-snap-type: x proximity;
-    }
-    #orders-status-chips::-webkit-scrollbar { display: none; }
-    #orders-status-chips > .status-chip { flex: 0 0 auto; scroll-snap-align: start; }
-
-    /* ── Card list ── */
-    #rm-orders-cards { display: block; }
-    .rm-ocard-wrap {
-      position: relative; margin-bottom: 10px;
-      border-radius: var(--r-lg); overflow: hidden;
-    }
-    /* Swipe-revealed action lane (sits behind the card). */
-    .rm-ocard-actions { position: absolute; inset: 0; display: flex; justify-content: flex-end; }
-    .rm-ocard-actions button {
-      border: 0; cursor: pointer; width: 88px;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 5px; font: 600 12px var(--f-sans);
-      -webkit-tap-highlight-color: transparent;
-    }
-    .rm-ocard-actions svg { width: 20px; height: 20px; }
-    .rm-act-advance { background: linear-gradient(180deg, var(--brass-hi, #C29B54), var(--brass, #B08D4A)); color: var(--brass-ink, #1A140A); }
-    .rm-act-call    { background: var(--accent, #6B8E6F); color: #fff; }
-
-    .rm-ocard {
-      position: relative; z-index: 1;
-      background: var(--bg-pane);
-      border: 1px solid var(--line-soft);
-      border-radius: var(--r-lg);
-      padding: 13px 14px;
-      transition: transform .26s cubic-bezier(.16, 1, .3, 1);
-      -webkit-tap-highlight-color: transparent; cursor: pointer;
-      touch-action: pan-y;
-    }
-    .rm-ocard.swiped { transform: translateX(-176px); }
-    .rm-ocard:active { background: var(--bg-elev-1); }
-
-    .rm-oc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .rm-oc-no { font: 600 13px var(--f-mono); color: var(--text-1); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
-    .rm-oc-new { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 5px;
-      background: var(--brass, #B08D4A); color: #fff; font: 700 9px var(--f-mono); letter-spacing: .06em; vertical-align: 1px; }
-
-    .rm-oc-mid { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 9px; }
-    .rm-oc-cust { min-width: 0; }
-    .rm-oc-name { font-size: 15px; font-weight: 600; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rm-oc-phone { font: 12px var(--f-mono); color: var(--text-3); margin-top: 2px; }
-    .rm-oc-total { font: 700 17px var(--f-mono); color: var(--text-1); white-space: nowrap; }
-
-    .rm-oc-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 11.5px; color: var(--text-3); }
-    .rm-oc-foot .sep { opacity: .5; }
-    .rm-oc-foot .shipby { white-space: nowrap; }
-    .rm-oc-foot .shipby.late { color: var(--danger); font-weight: 600; }
-
-    .rm-oc-hint {
-      display: flex; align-items: center; gap: 6px;
-      margin-top: 11px; padding-top: 10px;
-      border-top: 1px solid var(--line-soft);
-      font-size: 12.5px; font-weight: 600; color: var(--brass, #B08D4A);
-    }
-    .rm-oc-hint svg { width: 14px; height: 14px; flex: 0 0 auto; }
-    .rm-oc-hint.done { color: var(--text-3); font-weight: 500; }
-
-    .rm-oc-empty { text-align: center; color: var(--text-3); padding: 44px 20px; font-size: 13.5px; }
-  }
-
-  /* ════════════════════════════════════════════════════════════════════
-     MOBILE CUSTOMERS REDESIGN — Variant A "full-screen push" backbone.
-     Phone-only (≤720px). The desktop customer TABLE + dense toolbar + pager
-     are hidden; the SAME live customer rows render as tap-friendly cards
-     (#rm-cu-cards, fed by rmRenderCustomerCards). Tap a card → the existing
-     full-screen customer drawer (cuOpenDetail). Swipe a card left → Adjust /
-     Block (the Variant C blend; both open the drawer then fire the wired
-     flow). KPI strip → horizontal rail; tier filter → sticky chip row.
-     Theme-aware (reuses app tokens). Desktop is untouched.
-     Built to match design bundle: mobile/customers-a.html + fc-cust.css.
-     See memory: feature_operator_mobile_miniapp.
-     ════════════════════════════════════════════════════════════════════ */
-  #rm-cu-cards { display: none; }
-  #cu-mob-tiers { display: none; }
-  @media (max-width: 720px) {
-    /* Hide the desktop table, pager and the dense toolbar controls — keep only
-       the search box (which claims the full row) and the Include-blocked toggle.
-       Sort/Refresh/View are desktop-only affordances absent from the mockup. */
-    #tab-customers .table-wrap { display: none; }
-    #cu-pager { display: none; }
-    #cu-toolbar > #cu-tier,
-    #cu-toolbar > #cu-sort,
-    #cu-toolbar > button,
-    #cu-toolbar > .ovp-wrap { display: none; }
-    #cu-toolbar { margin-bottom: var(--s3); gap: 8px; }
-    #cu-q { width: 100%; }
-
-    /* KPI strip → horizontal snap rail (override the Phase 2 2-up grid). */
-    #cu-kpis {
-      display: flex; grid-template-columns: none;
-      gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch;
-      scroll-snap-type: x proximity; padding-bottom: 6px;
-    }
-    #cu-kpis::-webkit-scrollbar { display: none; }
-    #cu-kpis > .fc-kpi { flex: 0 0 47%; min-width: 150px; scroll-snap-align: start; }
-
-    /* Tier filter → sticky single-row chip scroller, always reachable. */
-    #cu-mob-tiers {
-      display: flex; gap: 8px; flex-wrap: nowrap;
-      overflow-x: auto; -webkit-overflow-scrolling: touch;
-      position: sticky; top: 56px; z-index: 6;
-      padding: 8px 0; margin-bottom: 4px; background: var(--bg-app);
-      scroll-snap-type: x proximity;
-    }
-    #cu-mob-tiers::-webkit-scrollbar { display: none; }
-    .cu-tchip {
-      flex: 0 0 auto; scroll-snap-align: start;
-      height: 34px; padding: 0 15px; border-radius: 999px;
-      border: 1px solid var(--line); background: var(--bg-pane);
-      color: var(--text-2); font: 500 13px var(--f-sans); cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .cu-tchip.on { background: var(--text-1); color: var(--bg-pane); border-color: var(--text-1); }
-
-    /* ── Card list ── */
-    #rm-cu-cards { display: block; }
-    .rm-cucard-wrap {
-      position: relative; margin-bottom: 10px;
-      border-radius: var(--r-lg); overflow: hidden;
-    }
-    /* Swipe-revealed action lane (sits behind the card). */
-    .rm-cucard-actions { position: absolute; inset: 0; display: flex; justify-content: flex-end; }
-    .rm-cucard-actions button {
-      border: 0; cursor: pointer; width: 88px;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 5px; font: 600 12px var(--f-sans);
-      -webkit-tap-highlight-color: transparent;
-    }
-    .rm-cucard-actions svg { width: 20px; height: 20px; }
-    .rm-cu-adjust { background: linear-gradient(180deg, var(--brass-hi, #C29B54), var(--brass, #B08D4A)); color: var(--brass-ink, #1A140A); }
-    .rm-cu-block  { background: var(--danger, #E8556A); color: #fff; }
-    .rm-cu-block.is-unblock { background: var(--accent, #6B8E6F); }
-
-    .rm-cucard {
-      position: relative; z-index: 1;
-      display: flex; align-items: center; gap: 13px;
-      background: var(--bg-pane);
-      border: 1px solid var(--line-soft);
-      border-radius: var(--r-lg);
-      padding: 13px 14px;
-      transition: transform .26s cubic-bezier(.16, 1, .3, 1);
-      -webkit-tap-highlight-color: transparent; cursor: pointer;
-      touch-action: pan-y;
-    }
-    .rm-cucard.swiped { transform: translateX(-176px); }
-    .rm-cucard:active { background: var(--bg-elev-1); }
-
-    .rm-cu-av {
-      flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font: 600 18px var(--f-sans);
-      background: var(--text-1); color: var(--bg-pane);
-    }
-    .rm-cu-av.guest { background: rgba(127,122,114,.14); color: var(--text-3); }
-    .rm-cu-av.guest svg { width: 20px; height: 20px; }
-
-    .rm-cu-body { flex: 1; min-width: 0; }
-    .rm-cu-name { display: flex; align-items: center; gap: 8px; font-size: 15.5px; font-weight: 600; color: var(--text-1); }
-    .rm-cu-name .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rm-cu-name.guest .nm { color: var(--text-3); font-weight: 500; font-style: italic; }
-    .rm-cu-meta { font: 11.5px var(--f-mono); color: var(--text-3); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-    .rm-cu-stat { flex: 0 0 auto; text-align: right; }
-    .rm-cu-stat .big { font: 600 15px var(--f-mono); color: var(--text-1); font-variant-numeric: tabular-nums; }
-    .rm-cu-stat .k { display: block; font: 10px var(--f-mono); letter-spacing: .06em; color: var(--text-4); margin-top: 1px; }
-
-    .rm-cu-chev { flex: 0 0 auto; color: var(--text-4); display: flex; }
-    .rm-cu-chev svg { width: 18px; height: 18px; }
-
-    .rm-cu-empty { text-align: center; color: var(--text-3); padding: 44px 20px; font-size: 13.5px; }
-  }
-
-  /* ════════════════════════════════════════════════════════════════════
-     MOBILE DASHBOARD REDESIGN — Variant A "full-screen push".
-     Phone-only (≤720px). The desktop bento + deep-dive are hidden; the SAME
-     live DASH_DATA renders as a dark live hero + a grid of report tiles
-     (#rm-dash, fed by rmRenderDash from dashRenderAll). Tap a tile → a
-     full-screen report pushes in (#rm-dash-report), its body built from the
-     same aggregates the desktop charts use (cloned/reformatted — no second
-     fetch, no backend change). Period chips drive dashSetRange. Theme-aware;
-     desktop untouched. Sibling of the Orders redesign.
-     Built to match design bundle: mobile/dashboard-a.html.
-     See memory: feature_operator_mobile_miniapp.
-     ════════════════════════════════════════════════════════════════════ */
-  #rm-dash { display: none; }
-  #rm-dash-report { display: none; }
-  @media (max-width: 720px) {
-    /* Desktop dashboard surfaces off; the mobile view replaces them. */
-    #tab-dashboard .db-head,
-    #tab-dashboard #db-bento,
-    #tab-dashboard #db-deepdive { display: none; }
-    #rm-dash { display: block; }
-
-    .rm-dh-title { padding: 2px 2px 0; }
-    .rm-dh-title .eyebrow { font: 500 10px/1 var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--brass); }
-    .rm-dh-title h2 { margin: 4px 0 0; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
-
-    /* period chips */
-    .rm-dh-periods { display: flex; gap: 7px; margin: 12px 0 4px; }
-    .rm-dh-periods button {
-      flex: 1; height: 36px; border-radius: 10px;
-      border: 1px solid var(--line-soft); background: var(--bg-pane);
-      color: var(--text-3); font: 500 13px var(--f-sans); cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .rm-dh-periods button.active { background: var(--text-1); color: var(--bg-pane); border-color: var(--text-1); }
-
-    /* dark live hero (always dark, like the desktop #db-hero) */
-    .rm-dh-hero {
-      margin: 8px 0 4px; padding: 16px; border-radius: 18px; color: #F2EFE7;
-      background: linear-gradient(160deg, #15130E, #221C12);
-      box-shadow: 0 18px 40px -24px rgba(40, 34, 20, .7);
-    }
-    .rm-dh-live { display: flex; align-items: center; gap: 7px; font: 500 10px var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: #C7B27E; }
-    .rm-dh-live .d { width: 7px; height: 7px; border-radius: 50%; background: var(--accent, #6B8E6F); box-shadow: 0 0 0 0 rgba(107, 142, 111, .6); animation: rmDhPulse 2s infinite; }
-    @keyframes rmDhPulse { 0% { box-shadow: 0 0 0 0 rgba(107, 142, 111, .5); } 70% { box-shadow: 0 0 0 7px rgba(107, 142, 111, 0); } 100% { box-shadow: 0 0 0 0 rgba(107, 142, 111, 0); } }
-    .rm-dh-big { font: 600 42px var(--f-sans); letter-spacing: -.03em; margin: 10px 0 2px; font-variant-numeric: tabular-nums; }
-    .rm-cu { font-variant-numeric: tabular-nums; }
-    .rm-dh-cap { font-size: 12px; color: #B9B3A4; display: flex; align-items: center; gap: 8px; }
-    .rm-dh-cap .rm-dh-delta.up { color: #9FC6A3; }
-    .rm-dh-cap .rm-dh-delta.down { color: #D9A38A; }
-    .rm-dh-mini { display: flex; gap: 18px; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, .12); }
-    .rm-dh-mini .m { min-width: 0; }
-    .rm-dh-mini .v { font: 600 18px var(--f-sans); font-variant-numeric: tabular-nums; }
-    .rm-dh-mini .k { font: 500 9px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: #9C9684; margin-top: 2px; }
-
-    /* report tile grid */
-    .rm-dh-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
-    .rm-dh-tile {
-      text-align: left; background: var(--bg-pane); border: 1px solid var(--line-soft);
-      border-radius: 16px; padding: 14px; cursor: pointer; min-height: 116px;
-      display: flex; flex-direction: column; transition: transform .08s;
-      -webkit-tap-highlight-color: transparent; color: inherit;
-    }
-    .rm-dh-tile:active { transform: scale(.98); }
-    .rm-dh-tile .ic { width: 32px; height: 32px; border-radius: 9px; background: var(--bg-elev-1); display: flex; align-items: center; justify-content: center; color: var(--brass); margin-bottom: auto; flex: none; }
-    .rm-dh-tile .ic svg { width: 17px; height: 17px; }
-    .rm-dh-tile .lab { font: 500 9.5px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); margin-top: 12px; }
-    .rm-dh-tile .val { font: 600 22px var(--f-sans); letter-spacing: -.02em; margin-top: 3px; color: var(--text-1); font-variant-numeric: tabular-nums; }
-    .rm-dh-tile .spk { margin-top: 8px; height: 26px; color: var(--accent); }
-    .rm-dh-tile .spk .db-spark { width: 100%; height: 100%; display: block; }
-
-    .rm-dh-tile.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; min-height: 0; }
-    .rm-dh-tile.wide .l { display: flex; align-items: center; gap: 12px; min-width: 0; }
-    .rm-dh-tile.wide .ic { margin: 0; }
-    .rm-dh-tile.wide .tx { min-width: 0; display: flex; flex-direction: column; }
-    .rm-dh-tile.wide .lab { margin: 0; }
-    .rm-dh-tile.wide .val { margin: 2px 0 0; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rm-dh-tile.alarm .ic { background: var(--warn-wash, rgba(176, 141, 74, .16)); }
-    .rm-dh-badge { flex: none; font: 600 11px var(--f-sans); color: var(--brass); background: var(--warn-wash, rgba(176, 141, 74, .16)); padding: 4px 10px; border-radius: 999px; }
-    .rm-dh-tile.wide .arrow { color: var(--text-3); flex: none; display: flex; }
-    .rm-dh-tile.wide .arrow svg { width: 18px; height: 18px; }
-    .rm-dh-empty { text-align: center; color: var(--text-3); padding: 30px 16px; font-size: 13px; }
-
-    /* ── full-screen report (push). Lives inside #tab-dashboard, so it hides
-       automatically when another tab becomes active (section{display:none}). ── */
-    #rm-dash-report {
-      display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 80;
-      background: var(--bg-app); transform: translateX(100%);
-      transition: transform .3s cubic-bezier(.3, .7, .2, 1);
-    }
-    #rm-dash-report.show { transform: none; }
-    @media (prefers-reduced-motion: reduce) { #rm-dash-report { transition: none; } }
-    .rm-dh-rnav {
-      flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px;
-      padding-top: env(safe-area-inset-top); min-height: 54px;
-      background: var(--bg-pane); border-bottom: 1px solid var(--line-soft);
-    }
-    .rm-dh-back { width: 42px; height: 42px; border: 0; border-radius: 11px; background: transparent; color: var(--text-1); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-    .rm-dh-back:active { background: var(--bg-elev-1); }
-    .rm-dh-back svg { width: 22px; height: 22px; }
-    .rm-dh-rtitle { font: 600 16px var(--f-sans); color: var(--text-1); }
-    .rm-dh-rbody { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 16px calc(30px + env(safe-area-inset-bottom)); }
-
-    .rm-dh-block { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 14px; padding: 15px; margin-bottom: 14px; }
-    .rm-dh-block > .h { font: 500 10px var(--f-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--brass); margin-bottom: 12px; }
-    .rm-dh-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
-    .rm-dh-stat { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 12px; padding: 12px 13px; }
-    .rm-dh-stat .lbl { font-size: 11px; color: var(--text-3); }
-    .rm-dh-stat .v { font: 600 20px var(--f-sans); color: var(--text-1); margin-top: 3px; font-variant-numeric: tabular-nums; }
-    .rm-dh-stat .v.brass { color: var(--brass); }
-    .rm-dh-trend { height: 120px; color: var(--accent); }
-    .rm-dh-trend .db-spark { width: 100%; height: 100%; display: block; }
-    .rm-dh-heatscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  }
-
-  /* ════════════════════════════════════════════════════════════════════
-     MOBILE SETTINGS REDESIGN — Variant A "settings hub" (iOS-Settings depth).
-     Phone-only (≤720px). On desktop the settings sidebar (#settings-nav) and
-     body (.settings-body, which holds every .sub-panel + the shared save bar)
-     sit side-by-side. On phones the sidebar becomes a full-width tappable hub
-     list, and the body becomes a full-screen push-over panel with its own back
-     header and a pinned save bar — one control surface per screen. Reuses the
-     SAME live controls (accent grid, notification strip, language, mascots,
-     footer) and the existing #settings-nav sub-switcher JS; only the flow
-     changes. Theme-aware; desktop untouched. Sibling of the Orders / Dashboard
-     / Customers redesigns. Built to match design bundle: mobile/settings-a.html
-     + fc-settings.css. See memory: feature_operator_mobile_miniapp.
-     ════════════════════════════════════════════════════════════════════ */
-  .rm-set-hubhead, .rm-set-pnav { display: none; }
-  @media (max-width: 720px) {
-    /* layout → single column; the body overlays as a push panel */
-    #tab-config .settings-layout { display: block; position: relative; }
-
-    /* hub head */
-    #tab-config .rm-set-hubhead { display: block; padding: 2px 2px 14px; }
-    #tab-config .rm-set-hubhead .eyebrow { font: 500 10px/1 var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--brass); }
-    #tab-config .rm-set-hubhead h2 { margin: 5px 0 0; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
-
-    /* nav → iOS-style settings list */
-    #tab-config #settings-nav {
-      position: static; top: auto; padding: 0; gap: 0;
-      background: transparent; border: 0; border-radius: var(--r-lg); overflow: hidden;
-    }
-    #tab-config #settings-nav button {
-      background: var(--bg-pane); border: 1px solid var(--line); border-top: 0;
-      border-radius: 0; padding: 14px; gap: 13px; font-size: 15px; color: var(--text-1);
-    }
-    #tab-config #settings-nav button:first-child { border-top: 1px solid var(--line); border-radius: var(--r-lg) var(--r-lg) 0 0; }
-    #tab-config #settings-nav button:last-child { border-radius: 0 0 var(--r-lg) var(--r-lg); }
-    #tab-config #settings-nav button.active { background: var(--bg-pane); box-shadow: none; }
-    #tab-config #settings-nav button svg {
-      width: 34px; height: 34px; padding: 8px; box-sizing: border-box; flex: none;
-      background: var(--bg-elev-1); border-radius: 10px; color: var(--brass);
-    }
-    #tab-config #settings-nav button.active svg { color: var(--brass); }
-    /* trailing chevron */
-    #tab-config #settings-nav button::after {
-      content: ""; width: 8px; height: 8px; margin-left: auto; flex: none;
-      border-right: 2px solid var(--text-3); border-top: 2px solid var(--text-3);
-      transform: rotate(45deg);
-    }
-
-    /* body → full-screen push panel (lives inside #tab-config, so it auto-hides
-       on tab switch via section{display:none}) */
-    #tab-config .settings-body {
-      position: fixed; inset: 0; z-index: 80; background: var(--bg-app);
-      display: flex; flex-direction: column; padding: 0;
-      transform: translateX(100%);
-      transition: transform .3s cubic-bezier(.3, .7, .2, 1);
-    }
-    #tab-config .settings-body.rm-open { transform: none; }
-    @media (prefers-reduced-motion: reduce) { #tab-config .settings-body { transition: none; } }
-
-    /* back header */
-    #tab-config .rm-set-pnav {
-      flex: none; display: flex; align-items: center; gap: 4px;
-      height: 52px; padding: 0 8px;
-      background: var(--bg-pane); border-bottom: 1px solid var(--line);
-    }
-    #tab-config .rm-set-back {
-      width: 40px; height: 40px; border: 0; background: transparent; color: var(--text-1);
-      display: flex; align-items: center; justify-content: center; cursor: pointer;
-      border-radius: 10px; -webkit-tap-highlight-color: transparent;
-    }
-    #tab-config .rm-set-back:active { background: var(--bg-elev-1); }
-    #tab-config .rm-set-back svg { width: 22px; height: 22px; }
-    #tab-config .rm-set-title { font: 600 16px var(--f-sans); color: var(--text-1); }
-
-    /* the active panel scrolls between the back header and the pinned save bar */
-    #tab-config .settings-body > .sub-panel {
-      flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
-      padding: 14px 16px 28px;
-    }
-    #tab-config .sub-panel > h2:first-child { display: none; }
-    #tab-config .group-card { padding: var(--s4); }
-
-    /* shared save bar → flat pinned footer of the push panel */
-    #tab-config .settings-body > .save-bar {
-      position: static; flex: none; margin: 0; background: var(--bg-pane);
-      border-top: 1px solid var(--line);
-      padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
-    }
-    #tab-config .settings-body > .save-bar .btn { flex: 1; justify-content: center; }
-  }
 </style>
 
 <!-- ─── MOBILE SHELL (Phase 1) — bottom tab bar + More sheet ───
