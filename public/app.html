@@ -20963,20 +20963,33 @@ async function _salesRenderGzgrocery(body) {
   const fmt = n => '¥' + Math.round(n||0).toLocaleString('en-US');
   const t = data.totals;
 
-  // Revenue trend — line + area chart with crosshair tooltip. Bars don't scale
-  // past ~25 periods; the line reads cleanly even at 100+. Rich hover card
-  // replaces the cramped per-bar labels.
-  const maxRev = Math.max(...data.periods.map(p => p.revenue), 1);
-  const peakIdx = data.periods.reduce((bi, p, i, arr) => p.revenue > arr[bi].revenue ? i : bi, 0);
-  const avgRev  = data.periods.reduce((s, p) => s + p.revenue, 0) / Math.max(1, data.periods.length);
+  // Revenue trend — line + area chart with crosshair tooltip. Aggregated by
+  // calendar month (delivery windows roll up into the month of their start
+  // date), so the trend reads as months not raw periods. Rich hover card.
+  const months = (() => {
+    const m = new Map();
+    for (const p of data.periods) {
+      const mo = (p.from || '').slice(0, 7);
+      if (!mo) continue;
+      let row = m.get(mo);
+      if (!row) { row = { month: mo, revenue: 0, units: 0, rows: 0 }; m.set(mo, row); }
+      row.revenue += p.revenue || 0;
+      row.units   += p.units   || 0;
+      row.rows    += p.rows    || 0;
+    }
+    return [...m.values()].sort((a, b) => a.month.localeCompare(b.month));
+  })();
+  const maxRev = Math.max(...months.map(p => p.revenue), 1);
+  const peakIdx = months.reduce((bi, p, i, arr) => p.revenue > arr[bi].revenue ? i : bi, 0);
+  const avgRev  = months.reduce((s, p) => s + p.revenue, 0) / Math.max(1, months.length);
   const periodChart = (() => {
-    const n = data.periods.length;
+    const n = months.length;
     if (!n) return '';
     const W = 1100, H = 280, padL = 60, padR = 24, padT = 28, padB = 48;
     const cW = W - padL - padR, cH = H - padT - padB;
     const xAt = i => padL + (cW * (i + 0.5)) / n;
     const yAt = v => padT + cH - (v / maxRev) * cH;
-    const pts = data.periods.map((p, i) => [xAt(i), yAt(p.revenue)]);
+    const pts = months.map((p, i) => [xAt(i), yAt(p.revenue)]);
     const linePath = pts.map((pt, i) => (i === 0 ? 'M' : 'L') + pt[0].toFixed(1) + ',' + pt[1].toFixed(1)).join(' ');
     const areaPath = linePath + ` L${pts[n-1][0].toFixed(1)},${(padT+cH).toFixed(1)} L${pts[0][0].toFixed(1)},${(padT+cH).toFixed(1)} Z`;
     // Y grid (5 lines)
@@ -20986,16 +20999,15 @@ async function _salesRenderGzgrocery(body) {
       return `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#eee8d8" stroke-dasharray="2 4"/>
               <text x="${padL-8}" y="${y+4}" font-size="10" fill="#888" text-anchor="end">¥${Math.round(v).toLocaleString()}</text>`;
     }).join('');
-    // Month boundary markers (cleaner than per-period dates)
+    // One label per month point. Thin the labels if the window is wide so
+    // they don't collide (show every k-th, always the first + last).
     const monthMarks = (() => {
-      const seen = new Set();
-      return data.periods.map((p, i) => {
-        const mo = (p.from || '').slice(0, 7);
-        if (!mo || seen.has(mo)) return '';
-        seen.add(mo);
+      const step = Math.ceil(n / 14);
+      return months.map((p, i) => {
+        if (i % step !== 0 && i !== n - 1) return '';
         const x = xAt(i);
         return `<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT+cH}" stroke="#f5f0dc" stroke-width="1"/>
-                <text x="${x}" y="${padT+cH+18}" font-size="10" fill="#999" text-anchor="middle">${mo}</text>`;
+                <text x="${x}" y="${padT+cH+18}" font-size="10" fill="#999" text-anchor="middle">${p.month}</text>`;
       }).join('');
     })();
     // Average reference line
@@ -21009,9 +21021,9 @@ async function _salesRenderGzgrocery(body) {
     // Stash points + geometry for the hover handler
     window._gzChartData = {
       W, H, padL, padR, padT, cH,
-      points: data.periods.map((p, i) => ({
+      points: months.map((p, i) => ({
         x: pts[i][0], y: pts[i][1],
-        from: p.from, to: p.to,
+        label: p.month,
         revenue: p.revenue, units: p.units, rows: p.rows,
       })),
     };
@@ -21058,8 +21070,8 @@ async function _salesRenderGzgrocery(body) {
     <!-- Period bars -->
     <div class="card" style="margin-bottom:14px">
       <div class="card-header">
-        <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Revenue by Period · 各周期收入</div>
-        <div style="margin-left:auto;font-size:11px;color:var(--muted)">${data.periods.length} delivery window${data.periods.length===1?'':'s'}</div>
+        <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Revenue by Month · 各月收入</div>
+        <div style="margin-left:auto;font-size:11px;color:var(--muted)">${months.length} month${months.length===1?'':'s'}</div>
       </div>
       <div style="padding:10px 14px">${periodChart}</div>
     </div>
@@ -21186,7 +21198,7 @@ function _gzChartMove(ev, svg) {
   if (dot)   { dot.setAttribute('cx', p.x); dot.setAttribute('cy', p.y); dot.style.display = ''; }
   if (!tip) return;
   const fmtY = n => '¥' + Math.round(n||0).toLocaleString('en-US');
-  // Compare to previous period for delta context.
+  // Compare to previous month for delta context.
   const prev = near > 0 ? d.points[near-1] : null;
   let deltaHtml = '';
   if (prev) {
@@ -21198,7 +21210,7 @@ function _gzChartMove(ev, svg) {
   }
   tip.innerHTML = `
     <div style="font-weight:800;font-size:15px;color:#C37F4E;margin-bottom:2px">${fmtY(p.revenue)}</div>
-    <div style="color:#888;font-size:10.5px;margin-bottom:6px">${p.from || '—'} → ${p.to || '—'}</div>
+    <div style="color:#888;font-size:10.5px;margin-bottom:6px">${p.label || p.from || '—'}</div>
     <div style="display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:11px">
       <span style="color:#888">Units 数量</span><span style="font-weight:700;text-align:right;color:#333">${Math.round(p.units).toLocaleString()}</span>
     </div>
