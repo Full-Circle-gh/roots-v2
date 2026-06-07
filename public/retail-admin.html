@@ -4617,7 +4617,18 @@
     /* ── "More" bottom-sheet ── (scoped to #rm-more-sheet so this does not
        leak `inset:0`/`top:0` onto the newer shared Sort/Manage sheet, which
        is bottom-anchored via its own `.rm-sheet` rule further down) */
-    #rm-more-sheet.rm-sheet { display: block; position: fixed; inset: 0; z-index: 70; }
+    /* Pin to the VISUAL viewport, not the layout viewport. When the sheet opens
+       it locks scroll (html.rm-noscroll → overflow:hidden), which makes mobile
+       Chrome re-expand the URL bar; a `bottom:0` fixed panel then anchors to the
+       layout-viewport bottom, which sits below the fold → the sheet's body slides
+       off-screen and only the grip peeks up. Instead: size the container to the
+       dynamic viewport (100dvh, tracks the toolbar) and bottom-align the panel
+       with flexbox, so the sheet always rests on the visible bottom edge. */
+    #rm-more-sheet.rm-sheet {
+      display: flex; flex-direction: column; justify-content: flex-end;
+      position: fixed; top: 0; left: 0; right: 0;
+      height: 100vh; height: 100dvh; z-index: 70;
+    }
     #rm-more-sheet.rm-sheet[hidden] { display: none; }
     .rm-sheet-backdrop {
       position: absolute; inset: 0;
@@ -4626,13 +4637,10 @@
     }
     @keyframes rmFade { from { opacity: 0; } to { opacity: 1; } }
     .rm-sheet-panel {
-      /* Fixed (not absolute) so bottom:0 anchors to the visual viewport like
-         #rm-bottomnav does. With position:absolute it anchored to the fixed
-         container's inset:0 = the LAYOUT viewport, whose bottom sits below the
-         fold (under the mobile address bar) — so the sheet's lower half slid
-         off-screen and it looked like it "didn't come up". dvh keeps the cap
-         honest on browsers with a dynamic toolbar. */
-      position: fixed; left: 0; right: 0; bottom: 0;
+      /* In normal flow as the sole flex child → flex-end pins it to the bottom of
+         the 100dvh container (the visible viewport). z-index lifts it over the
+         absolute backdrop. */
+      position: relative; z-index: 1; width: 100%;
       max-height: 82vh; max-height: 82dvh; overflow-y: auto;
       background: var(--bg-pane);
       border-radius: 18px 18px 0 0;
