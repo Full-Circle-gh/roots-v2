@@ -4882,9 +4882,6 @@
     #ord-kpis::-webkit-scrollbar { display: none; }
     #ord-kpis > .fc-kpi { flex: 0 0 47%; min-width: 150px; scroll-snap-align: start; }
 
-    /* Phone-only: reveal the swipe dots under the scrollable KPI strips. */
-    .fc-kpi-dots { display: flex; }
-
     /* Status chips → sticky single-row scroller, always reachable. Render it as
        a SOLID filter bar (not the page bg) with a divider + drop shadow so
        cards visibly scroll UNDER it; with bg-app it was invisible and content
@@ -5378,6 +5375,9 @@
     .fc-kpi-dots { display: none; gap: 5px; justify-content: center; padding: 0 0 10px; margin-top: -4px; }
     .fc-kpi-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--line); transition: width .2s, background .2s; }
     .fc-kpi-dots i.on { background: var(--brass); width: 16px; border-radius: 3px; }
+    /* Phone-only: reveal the swipe dots under the scrollable KPI strips. Must
+       come AFTER the display:none default above so it wins on equal specificity. */
+    @media (max-width: 720px) { .fc-kpi-dots { display: flex; } }
 
     .rm-dh-acc { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
     .rm-dh-ai { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 15px; overflow: hidden; }
