@@ -15092,8 +15092,10 @@ document.addEventListener('click', (e) => {
   // Dashboard activity rows open the order drawer on click — that same click
   // bubbles here, so exempt them or the drawer closes the instant it opens.
   // .rm-ocard / .rm-cucard = the mobile order/customer cards (Variant A), which
-  // also open their detail drawer on tap.
-  if (e.target.closest('tr.order-row, tr.cu-row, .db-feed-row, .rm-ocard, .rm-cucard')) return;
+  // also open their detail drawer on tap. .rm-sheet = the shared mobile
+  // Sort/Manage bottom sheet, whose "Open full details" row opens the order
+  // drawer — without this the opening tap bubbles here and closes it instantly.
+  if (e.target.closest('tr.order-row, tr.cu-row, .db-feed-row, .rm-ocard, .rm-cucard, .rm-sheet')) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.toString().length > 0) return;
   closeDrawer(open[open.length - 1]);
