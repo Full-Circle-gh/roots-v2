@@ -197,6 +197,9 @@
     -moz-osx-font-smoothing: grayscale;
   }
   button { font: inherit; }
+  /* Brand the native form controls — the default browser blue clashes with the
+     Ink/Brass/Tea palette. Tea Green matches the "on/live" switches. */
+  input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   ::selection { background: var(--ring); color: var(--text-1); }
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -14215,8 +14218,9 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('.pu-editor-bg')) return;
   // Dashboard activity rows open the order drawer on click — that same click
   // bubbles here, so exempt them or the drawer closes the instant it opens.
-  // .rm-ocard = the mobile order cards (Variant A), which also openOrder() on tap.
-  if (e.target.closest('tr.order-row, tr.cu-row, .db-feed-row, .rm-ocard')) return;
+  // .rm-ocard / .rm-cucard = the mobile order/customer cards (Variant A), which
+  // also open their detail drawer on tap.
+  if (e.target.closest('tr.order-row, tr.cu-row, .db-feed-row, .rm-ocard, .rm-cucard')) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.toString().length > 0) return;
   closeDrawer(open[open.length - 1]);
