@@ -20076,10 +20076,12 @@ async function cuLoad() {
     j = await res.json();
   } catch (e) {
     tbody.innerHTML = '<tr><td colspan="8" class="muted">Network error.</td></tr>';
+    if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Network error');
     return;
   }
   if (!j.success) {
     tbody.innerHTML = '<tr><td colspan="8" class="muted">Failed to load.</td></tr>';
+    if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Failed to load');
     return;
   }
   CU_TOTAL = j.total || 0;
@@ -20110,6 +20112,19 @@ async function cuLoad() {
   $('#cu-prev').disabled = CU_PAGE <= 1;
   $('#cu-next').disabled = CU_PAGE >= pages;
   cuViewApply();  // keep the View-tweak classes on #cu-table after each render
+  if (window.rmRenderCustomerCards) rmRenderCustomerCards(rows);  // phone card list (same data)
+}
+
+// Phone tier-chip filter — drives the existing #cu-tier <select> + cuLoad so
+// there's a single filter source of truth (the chip row is CSS-shown only on
+// phones; the <select> is shown on desktop).
+function cuMobTier(btn, v) {
+  const sel = document.getElementById('cu-tier');
+  if (sel) sel.value = v;
+  const bar = document.getElementById('cu-mob-tiers');
+  if (bar) bar.querySelectorAll('.cu-tchip').forEach(b => b.classList.toggle('on', b === btn));
+  CU_PAGE = 1;
+  cuLoad();
 }
 
 function cuPage(d) {
@@ -25085,6 +25100,96 @@ window.onLangChange(function () {
     .rm-dh-trend .db-spark { width: 100%; height: 100%; display: block; }
     .rm-dh-heatscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   }
+
+  /* ════════════════════════════════════════════════════════════════════
+     MOBILE SETTINGS REDESIGN — Variant A "settings hub" (iOS-Settings depth).
+     Phone-only (≤720px). On desktop the settings sidebar (#settings-nav) and
+     body (.settings-body, which holds every .sub-panel + the shared save bar)
+     sit side-by-side. On phones the sidebar becomes a full-width tappable hub
+     list, and the body becomes a full-screen push-over panel with its own back
+     header and a pinned save bar — one control surface per screen. Reuses the
+     SAME live controls (accent grid, notification strip, language, mascots,
+     footer) and the existing #settings-nav sub-switcher JS; only the flow
+     changes. Theme-aware; desktop untouched. Sibling of the Orders / Dashboard
+     / Customers redesigns. Built to match design bundle: mobile/settings-a.html
+     + fc-settings.css. See memory: feature_operator_mobile_miniapp.
+     ════════════════════════════════════════════════════════════════════ */
+  .rm-set-hubhead, .rm-set-pnav { display: none; }
+  @media (max-width: 720px) {
+    /* layout → single column; the body overlays as a push panel */
+    #tab-config .settings-layout { display: block; position: relative; }
+
+    /* hub head */
+    #tab-config .rm-set-hubhead { display: block; padding: 2px 2px 14px; }
+    #tab-config .rm-set-hubhead .eyebrow { font: 500 10px/1 var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--brass); }
+    #tab-config .rm-set-hubhead h2 { margin: 5px 0 0; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+
+    /* nav → iOS-style settings list */
+    #tab-config #settings-nav {
+      position: static; top: auto; padding: 0; gap: 0;
+      background: transparent; border: 0; border-radius: var(--r-lg); overflow: hidden;
+    }
+    #tab-config #settings-nav button {
+      background: var(--bg-pane); border: 1px solid var(--line); border-top: 0;
+      border-radius: 0; padding: 14px; gap: 13px; font-size: 15px; color: var(--text-1);
+    }
+    #tab-config #settings-nav button:first-child { border-top: 1px solid var(--line); border-radius: var(--r-lg) var(--r-lg) 0 0; }
+    #tab-config #settings-nav button:last-child { border-radius: 0 0 var(--r-lg) var(--r-lg); }
+    #tab-config #settings-nav button.active { background: var(--bg-pane); box-shadow: none; }
+    #tab-config #settings-nav button svg {
+      width: 34px; height: 34px; padding: 8px; box-sizing: border-box; flex: none;
+      background: var(--bg-elev-1); border-radius: 10px; color: var(--brass);
+    }
+    #tab-config #settings-nav button.active svg { color: var(--brass); }
+    /* trailing chevron */
+    #tab-config #settings-nav button::after {
+      content: ""; width: 8px; height: 8px; margin-left: auto; flex: none;
+      border-right: 2px solid var(--text-3); border-top: 2px solid var(--text-3);
+      transform: rotate(45deg);
+    }
+
+    /* body → full-screen push panel (lives inside #tab-config, so it auto-hides
+       on tab switch via section{display:none}) */
+    #tab-config .settings-body {
+      position: fixed; inset: 0; z-index: 80; background: var(--bg-app);
+      display: flex; flex-direction: column; padding: 0;
+      transform: translateX(100%);
+      transition: transform .3s cubic-bezier(.3, .7, .2, 1);
+    }
+    #tab-config .settings-body.rm-open { transform: none; }
+    @media (prefers-reduced-motion: reduce) { #tab-config .settings-body { transition: none; } }
+
+    /* back header */
+    #tab-config .rm-set-pnav {
+      flex: none; display: flex; align-items: center; gap: 4px;
+      height: 52px; padding: 0 8px;
+      background: var(--bg-pane); border-bottom: 1px solid var(--line);
+    }
+    #tab-config .rm-set-back {
+      width: 40px; height: 40px; border: 0; background: transparent; color: var(--text-1);
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+      border-radius: 10px; -webkit-tap-highlight-color: transparent;
+    }
+    #tab-config .rm-set-back:active { background: var(--bg-elev-1); }
+    #tab-config .rm-set-back svg { width: 22px; height: 22px; }
+    #tab-config .rm-set-title { font: 600 16px var(--f-sans); color: var(--text-1); }
+
+    /* the active panel scrolls between the back header and the pinned save bar */
+    #tab-config .settings-body > .sub-panel {
+      flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+      padding: 14px 16px 28px;
+    }
+    #tab-config .sub-panel > h2:first-child { display: none; }
+    #tab-config .group-card { padding: var(--s4); }
+
+    /* shared save bar → flat pinned footer of the push panel */
+    #tab-config .settings-body > .save-bar {
+      position: static; flex: none; margin: 0; background: var(--bg-pane);
+      border-top: 1px solid var(--line);
+      padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
+    }
+    #tab-config .settings-body > .save-bar .btn { flex: 1; justify-content: center; }
+  }
 </style>
 
 <!-- ─── MOBILE SHELL (Phase 1) — bottom tab bar + More sheet ───
@@ -25659,6 +25764,235 @@ window.onLangChange(function () {
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
   else bind();
+})();
+</script>
+
+<script>
+/* ── Mobile customer cards (Variant A — full-screen-push backbone) ──
+   Phone-only (#rm-cu-cards is display:none above 720px). Renders the SAME
+   live customer rows the desktop #cu-table uses (rmRenderCustomerCards, fed
+   by cuLoad). Tap a card → existing full-screen customer drawer
+   (cuOpenDetail). Swipe a card left → Adjust / Block: both open the drawer
+   (which loads CU_CURRENT) then fire the existing wired flow (cuOpenAdjust /
+   cuToggleBlock) — so the amount stepper + block-reason prompt are reused as
+   is. Leans on the app's global helpers (escapeHtml / fmt / cuOpenDetail /
+   cuOpenAdjust / cuToggleBlock); no backend change, desktop untouched.
+   See memory: feature_operator_mobile_miniapp. */
+(function () {
+  var WRAP_ID = 'rm-cu-cards';
+  var SWIPE_W = 176;            // two 88px action lanes
+
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return (typeof escapeHtml === 'function') ? escapeHtml(s) : String(s == null ? '' : s); }
+  function money(n) { return (typeof fmt === 'function') ? fmt(n) : Number(n || 0).toFixed(2); }
+
+  var ICON_ADJ   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+  var ICON_BLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/></svg>';
+  var ICON_CHEV  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+  var ICON_GUEST = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>';
+
+  function primaryStat(c) {
+    var bal = Number(c.balance || 0), pts = Number(c.points_balance || 0), ord = Number(c.orders_count || 0);
+    if (bal > 0) return { big: '¥' + money(bal), k: 'wallet' };
+    if (pts > 0) return { big: String(pts), k: 'points' };
+    return { big: String(ord), k: ord === 1 ? 'order' : 'orders' };
+  }
+
+  window.rmRenderCustomerCards = function (data, errMsg) {
+    var wrap = el(WRAP_ID);
+    if (!wrap) return;
+    if (errMsg) { wrap.innerHTML = '<div class="rm-cu-empty">Couldn’t load customers · ' + esc(errMsg) + '</div>'; return; }
+    if (!data || !data.length) { wrap.innerHTML = '<div class="rm-cu-empty">No customers match this filter.</div>'; return; }
+
+    var html = '';
+    for (var i = 0; i < data.length; i++) {
+      var c = data[i];
+      var guest = !c.nickname;
+      var name = guest ? 'Guest' : c.nickname;
+      var tier = c.tier_key || 'seed';
+      var date = String(c.last_login_at || '').slice(0, 10);
+      var meta = (c.phone ? esc(c.phone) : 'no phone') + ' · ' + (c.orders_count || 0)
+        + ((c.orders_count || 0) === 1 ? ' order' : ' orders') + (date ? ' · ' + date : '');
+      var st = primaryStat(c);
+      var blocked = !!c.is_blocked;
+
+      var av = guest
+        ? '<span class="rm-cu-av guest">' + ICON_GUEST + '</span>'
+        : '<span class="rm-cu-av">' + esc(name.charAt(0).toUpperCase()) + '</span>';
+
+      var actions =
+        '<div class="rm-cucard-actions">' +
+          '<button type="button" class="rm-cu-adjust" data-act="adjust" data-id="' + c.id + '">' + ICON_ADJ + 'Adjust</button>' +
+          '<button type="button" class="rm-cu-block' + (blocked ? ' is-unblock' : '') + '" data-act="block" data-id="' + c.id + '">' + ICON_BLOCK + (blocked ? 'Unblock' : 'Block') + '</button>' +
+        '</div>';
+
+      html +=
+        '<div class="rm-cucard-wrap">' + actions +
+          '<div class="rm-cucard" data-id="' + c.id + '">' +
+            av +
+            '<div class="rm-cu-body">' +
+              '<div class="rm-cu-name' + (guest ? ' guest' : '') + '">' +
+                '<span class="nm">' + esc(name) + '</span>' +
+                '<span class="cu-pill tier-' + esc(tier) + '">' + esc(tier) + '</span>' +
+                (blocked ? '<span class="cu-pill blocked">Blocked</span>' : '') +
+              '</div>' +
+              '<div class="rm-cu-meta">' + meta + '</div>' +
+            '</div>' +
+            '<div class="rm-cu-stat"><span class="big">' + esc(st.big) + '</span><span class="k">' + st.k + '</span></div>' +
+            '<span class="rm-cu-chev">' + ICON_CHEV + '</span>' +
+          '</div>' +
+        '</div>';
+    }
+    wrap.innerHTML = html;
+  };
+
+  // Swipe quick-actions open the full-screen drawer first (loads CU_CURRENT),
+  // then fire the existing wired flow — the amount stepper + block-reason
+  // prompt are reused exactly as on desktop.
+  function rmCuAdjust(id) {
+    if (typeof cuOpenDetail !== 'function') return;
+    Promise.resolve(cuOpenDetail(id)).then(function () {
+      if (typeof cuOpenAdjust === 'function') cuOpenAdjust('points');
+    });
+  }
+  function rmCuBlock(id) {
+    if (typeof cuOpenDetail !== 'function') return;
+    Promise.resolve(cuOpenDetail(id)).then(function () {
+      if (typeof cuToggleBlock === 'function') cuToggleBlock();
+    });
+  }
+
+  // ── Tap-to-open + swipe-left interaction (event-delegated; survives re-render) ──
+  var st = null, justSwiped = false;
+
+  function closeOthers(except) {
+    var c = el(WRAP_ID); if (!c) return;
+    c.querySelectorAll('.rm-cucard.swiped').forEach(function (card) {
+      if (card !== except) { card.classList.remove('swiped'); card.style.transform = ''; }
+    });
+  }
+
+  function onStart(e) {
+    var card = e.target.closest('.rm-cucard');
+    if (!card) { st = null; return; }
+    var t = e.touches[0];
+    st = { card: card, x0: t.clientX, y0: t.clientY, base: card.classList.contains('swiped') ? -SWIPE_W : 0, horiz: false, moved: false, cur: 0 };
+  }
+  function onMove(e) {
+    if (!st) return;
+    var t = e.touches[0], dx = t.clientX - st.x0, dy = t.clientY - st.y0;
+    if (!st.horiz) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      if (Math.abs(dx) <= Math.abs(dy)) { st = null; return; }   // vertical → let the page scroll
+      st.horiz = true;
+    }
+    st.moved = true;
+    e.preventDefault();
+    st.cur = Math.max(-SWIPE_W, Math.min(0, st.base + dx));
+    st.card.style.transform = 'translateX(' + st.cur + 'px)';
+  }
+  function onEnd() {
+    if (!st) return;
+    if (st.moved && st.horiz) {
+      var open = st.cur < -SWIPE_W / 2;
+      st.card.classList.toggle('swiped', open);
+      st.card.style.transform = open ? 'translateX(-' + SWIPE_W + 'px)' : '';
+      if (open) closeOthers(st.card);
+      justSwiped = true;
+      setTimeout(function () { justSwiped = false; }, 350);
+    }
+    st = null;
+  }
+
+  function onClick(e) {
+    var btn = e.target.closest('.rm-cucard-actions button');
+    if (btn) {
+      e.stopPropagation();
+      var id = +btn.getAttribute('data-id');
+      if (btn.getAttribute('data-act') === 'block') rmCuBlock(id);
+      else rmCuAdjust(id);
+      return;
+    }
+    var card = e.target.closest('.rm-cucard');
+    if (!card || justSwiped) return;
+    if (card.classList.contains('swiped')) { card.classList.remove('swiped'); card.style.transform = ''; return; }
+    var id2 = +card.getAttribute('data-id');
+    if (id2 && typeof cuOpenDetail === 'function') cuOpenDetail(id2);
+  }
+
+  function bind() {
+    var c = el(WRAP_ID);
+    if (!c || c._rmBound) return;
+    c._rmBound = true;
+    c.addEventListener('touchstart', onStart, { passive: true });
+    c.addEventListener('touchmove', onMove, { passive: false });
+    c.addEventListener('touchend', onEnd);
+    c.addEventListener('touchcancel', onEnd);
+    c.addEventListener('click', onClick);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
+  else bind();
+})();
+</script>
+
+<!-- ─── MOBILE SETTINGS REDESIGN — Variant A "settings hub" wiring ───
+     Phone-only behaviour (the CSS above is ≤720px-gated; on desktop these
+     injected nodes are display:none and the class toggles are visual no-ops,
+     so the desktop settings page is untouched). Turns the existing settings
+     sidebar into an iOS-style hub: tapping a section pushes its panel in;
+     the back button returns to the list. Reuses the existing #settings-nav
+     sub-switcher (a separate listener) to activate the right .sub-panel. -->
+<script>
+(function () {
+  var layout = document.querySelector('#tab-config .settings-layout');
+  if (!layout) return;
+  var nav = document.getElementById('settings-nav');
+  var body = layout.querySelector('.settings-body');
+  if (!nav || !body) return;
+
+  // Hub head (mobile-only; CSS hides it on desktop and drops it from the grid).
+  if (!layout.querySelector('.rm-set-hubhead')) {
+    var hh = document.createElement('div');
+    hh.className = 'rm-set-hubhead';
+    hh.innerHTML = '<div class="eyebrow">Mini App Backend</div><h2>Settings · 设置</h2>';
+    layout.insertBefore(hh, nav);
+  }
+
+  // Back header pinned to the top of the push panel.
+  var pnav = body.querySelector('.rm-set-pnav');
+  if (!pnav) {
+    pnav = document.createElement('div');
+    pnav.className = 'rm-set-pnav';
+    pnav.innerHTML =
+      '<button type="button" class="rm-set-back" aria-label="Back · 返回">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>' +
+      '</button><span class="rm-set-title"></span>';
+    body.insertBefore(pnav, body.firstChild);
+  }
+  var titleEl = pnav.querySelector('.rm-set-title');
+
+  function openPanel() {
+    var active = body.querySelector('.sub-panel.active');
+    var h2 = active && active.querySelector('h2');
+    titleEl.textContent = h2 ? h2.textContent.trim() : 'Settings';
+    body.classList.add('rm-open');
+  }
+  function closePanel() { body.classList.remove('rm-open'); }
+
+  // A hub-row tap opens the push panel. The existing per-button switcher runs
+  // first (it activates the matching .sub-panel); this delegated listener fires
+  // after, on bubble, so the freshly-activated panel is the one we title + show.
+  nav.addEventListener('click', function (e) {
+    if (e.target.closest('button[data-sub]')) openPanel();
+  });
+  pnav.querySelector('.rm-set-back').addEventListener('click', closePanel);
+
+  // Entering the Settings tab should always land on the hub, not a stale panel.
+  Array.prototype.forEach.call(
+    document.querySelectorAll('.tabs [data-tab="config"]'),
+    function (b) { b.addEventListener('click', closePanel); }
+  );
 })();
 </script>
 
