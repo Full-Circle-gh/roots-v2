@@ -2031,18 +2031,9 @@ function markOrderPaid(orderId) {
       }
     } catch (e) { console.warn('[markOrderPaid push]', e.message); }
 
-    // Auto-print to the store's Feie cloud printer. Best-effort: all DB
-    // reads happen synchronously inside printOrderById (tenant context is
-    // still bound here); the network POST to Feieyun is fired without
-    // awaiting so a slow/offline printer never delays the order.
-    try {
-      const pp = loadPrinterPrefs();
-      if (pp.auto_print && _feie.feieEnabled(integ().feie)) {
-        printOrderById(orderId, pp)
-          .then(r => { if (!r.ok) console.warn('[feie print]', orderId, r.msg); })
-          .catch(e => console.warn('[feie print]', e.message));
-      }
-    } catch (e) { console.warn('[feie print setup]', e.message); }
+    // Auto-print to the store's Feie cloud printer. Best-effort + fire-and-
+    // forget (records the outcome on the order); see autoPrintOrder.
+    autoPrintOrder(orderId);
   }
 }
 
@@ -9407,6 +9398,46 @@ function printOrderById(orderId, prefs, pcfg) {
   return _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, fc);
 }
 
+// Persist the auto-print outcome on the order so the backend can show whether a
+// slip printed and offer a reprint. `db` is captured by the caller BEFORE the
+// async print resolves — the network POST settles after the request's tenant
+// context may be gone, so we can't rely on the ambient tdb() here.
+function recordPrintResult(db, orderId, result) {
+  const ok = !!(result && result.ok);
+  const err = ok ? null : String((result && result.msg) || 'print_failed').slice(0, 200);
+  try {
+    db.prepare(
+      `UPDATE retail_orders
+          SET print_status = ?,
+              print_error  = ?,
+              printed_at   = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE printed_at END
+        WHERE id = ?`
+    ).run(ok ? 'printed' : 'failed', err, ok ? 1 : 0, orderId);
+  } catch (e) { console.warn('[feie print record]', e.message); }
+}
+
+// Fire the store's auto-print for a paid order and record the outcome. Shared by
+// the gateway-callback path (markOrderPaid) and the manual off-app "Mark paid".
+// Best-effort + fire-and-forget so a slow/offline printer never delays the
+// response; logs BOTH success and failure so a dropped slip is never silent.
+function autoPrintOrder(orderId) {
+  const db = tdb();   // capture synchronously — the async callback may lose the ALS scope
+  try {
+    const pp = loadPrinterPrefs();
+    if (!pp.auto_print || !_feie.feieEnabled(integ().feie)) return;
+    printOrderById(orderId, pp)
+      .then(r => {
+        if (r.ok) console.log('[feie print]', orderId, 'ok');
+        else console.warn('[feie print]', orderId, r.msg);
+        recordPrintResult(db, orderId, r);
+      })
+      .catch(e => {
+        console.warn('[feie print]', orderId, e.message);
+        recordPrintResult(db, orderId, { ok: false, msg: e.message });
+      });
+  } catch (e) { console.warn('[feie print setup]', e.message); }
+}
+
 router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
   const prefs = loadPrinterPrefs();
   // Join active stores with their saved printer config so the UI can render
@@ -9552,6 +9583,26 @@ router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, re
   }
   if (r.ok) return res.json({ ok: true });
   res.json({ ok: false, error: r.msg || 'print_failed' });
+});
+
+// Reprint ONE order's slip to its resolved store printer, on demand from the
+// order drawer. Records the outcome on the order so the drawer reflects it.
+// Returns success:true with ok=false on a print failure (the request itself
+// succeeded) so the UI can show the reason rather than a generic error.
+router.post('/api/retail-admin/orders/:id/print', requireRetailAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
+  if (!tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id)) {
+    return res.status(404).json({ success: false, error: 'not_found' });
+  }
+  if (!_feie.feieEnabled(integ().feie)) return res.json({ success: true, ok: false, error: 'not_configured' });
+  const db = tdb();
+  let r;
+  try { r = await printOrderById(id, loadPrinterPrefs()); }
+  catch (e) { r = { ok: false, msg: e.message }; }
+  recordPrintResult(db, id, r);
+  logActivity(req.user.id, req.user.username, 'order_reprint', 'retail_order', id, { ok: r.ok, msg: r.ok ? null : (r.msg || null) }, req.ip);
+  res.json({ success: true, ok: r.ok, error: r.ok ? null : (r.msg || 'print_failed') });
 });
 
 // Sanity-check kd100 connectivity. Reads the freshly-saved credentials
@@ -10263,18 +10314,9 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // Auto-print the bill, same as the gateway callbacks do inside
     // markOrderPaid(). This admin path bypasses markOrderPaid(), so without
     // this an off-app "Mark paid" order would never reach the store printer.
-    // Best-effort + fire-and-forget so a slow/offline printer never delays
-    // the response. Guarded to genuine pending→paid transitions only.
-    if (o.status !== 'paid') {
-      try {
-        const pp = loadPrinterPrefs();
-        if (pp.auto_print && _feie.feieEnabled(integ().feie)) {
-          printOrderById(id, pp)
-            .then(r => { if (!r.ok) console.warn('[feie print]', id, r.msg); })
-            .catch(e => console.warn('[feie print]', e.message));
-        }
-      } catch (e) { console.warn('[feie print setup]', e.message); }
-    }
+    // Guarded to genuine pending→paid transitions so re-saving a paid order
+    // doesn't reprint.
+    if (o.status !== 'paid') autoPrintOrder(id);
   }
   // Stock side-effects of cancel / refund. cancelled before payment just
   // releases the active reservation; refund of a paid order reverses

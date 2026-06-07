@@ -2347,6 +2347,14 @@ addColumn('products', 'is_batch_made', 'INTEGER DEFAULT 0');
 addColumn('retail_orders', 'promised_ship_date',     'TEXT');
 addColumn('retail_orders', 'promised_delivery_date', 'TEXT');
 
+// Cloud-printer (Feie) auto-print outcome, so the backend can show whether a
+// slip actually printed and offer a one-click reprint instead of the operator
+// guessing. null = never attempted; 'printed' = Feieyun accepted the job;
+// 'failed' = no printer resolved / Feieyun rejected / network error.
+addColumn('retail_orders', 'print_status', 'TEXT');
+addColumn('retail_orders', 'printed_at',   'DATETIME');
+addColumn('retail_orders', 'print_error',  'TEXT');
+
 // Snapshot the packing flags on each order item so later product edits
 // don't rewrite what the warehouse was instructed to do.
 addColumn('retail_order_items', 'ship_modes',     'TEXT');

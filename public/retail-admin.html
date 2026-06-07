@@ -14365,6 +14365,7 @@ function renderOpenOrder(o) {
             <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
             <div class="sub">${escapeHtml(o.store_name_cn || '')}${routingNote(o.routing_reason) ? ' · ' + routingNote(o.routing_reason) : ''}${(o.channel && o.channel.toLowerCase() !== 'wechat') ? ' · ' + escapeHtml(o.channel) : ''}</div>
           </div>` : ''}
+          ${printReceiptTile(o)}
           ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}
           ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;">🍴 Cutlery requested · 需要餐具</span></div>` : ''}
           ${o.needs_invoice ? renderInvoiceBlock(o) : ''}
@@ -14490,6 +14491,43 @@ function askPayMethod() {
     document.addEventListener('keydown', onKey);
     bg.querySelector('.pm-pick-opt')?.focus();
   });
+}
+
+// Receipt-print status tile in the order drawer. Hidden for orders that
+// can't have a receipt (unpaid / cancelled / refunded). Shows the last
+// auto-print outcome (printed / failed / not yet) plus a one-click reprint.
+function printReceiptTile(o) {
+  if (['pending_payment', 'cancelled', 'refunded'].includes(o.status)) return '';
+  let badge;
+  if (o.print_status === 'printed') {
+    badge = `<span class="sub" style="color:var(--text-3); font-weight:700;">✓ Printed · 已打印${o.printed_at ? ' ' + formatDate(o.printed_at) : ''}</span>`;
+  } else if (o.print_status === 'failed') {
+    badge = `<span class="pill danger" title="${escapeAttr(o.print_error || '')}"><span class="dot"></span>Print failed · 打印失败</span>`;
+  } else {
+    badge = `<span class="sub" style="color:var(--text-3); font-weight:700;">Not printed yet · 尚未打印</span>`;
+  }
+  return `<div class="full">
+    <div class="kicker">Receipt · 小票</div>
+    <div class="val" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      ${badge}
+      <button class="btn btn-sm" id="reprint-${o.id}" onclick="reprintOrder(${o.id})">🖨 Reprint · 补打小票</button>
+    </div>
+  </div>`;
+}
+
+async function reprintOrder(id) {
+  const btn = document.getElementById('reprint-' + id);
+  if (btn) { btn.disabled = true; btn.style.opacity = '.5'; }
+  try {
+    const r = await api(`/api/retail-admin/orders/${id}/print`, { method: 'POST' });
+    if (r.ok) toast('Receipt sent to printer · 小票已发送');
+    else toast('Print failed · 打印失败: ' + (r.error || 'unknown'), 'err');
+  } catch (e) {
+    toast('Print failed · 打印失败: ' + e.message, 'err');
+  } finally {
+    openOrder(id, { instant: true });
+    loadOrders();
+  }
 }
 
 async function transition(id, status) {
