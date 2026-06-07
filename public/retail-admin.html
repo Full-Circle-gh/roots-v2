@@ -24713,6 +24713,17 @@ window.onLangChange(function () {
        reclaims a little width. */
     .side-drawer .drawer-body { overflow-x: hidden; padding-left: var(--s4); padding-right: var(--s4); }
 
+    /* Order-detail desktop power-controls clutter the phone-width drawer and
+       crowd the floating × (the "View" display-options popover) or read as a
+       cramped extra row (the "Sort items" chips). Both are desktop-only
+       affordances absent from the mobile mockup — hide on phones so the detail
+       reads clean. The default sort + default display still apply. */
+    #order-drawer .order-head .ovp-wrap { display: none; }
+    #order-drawer .sort-chips { display: none; }
+    /* Give the order number room now that View is gone (it was sharing the row
+       via justify-content:space-between). */
+    #order-drawer .order-head { display: block; }
+
     /* Hide the desktop table + the dense toolbar on phones — keep only the
        search box (Phase 2 makes it claim the full row). */
     #tab-orders .table-wrap { display: none; }
@@ -24782,9 +24793,9 @@ window.onLangChange(function () {
     .rm-oc-phone { font: 12px var(--f-mono); color: var(--text-3); margin-top: 2px; }
     .rm-oc-total { font: 700 17px var(--f-mono); color: var(--text-1); white-space: nowrap; }
 
-    .rm-oc-foot { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11.5px; color: var(--text-3); }
+    .rm-oc-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 11.5px; color: var(--text-3); }
     .rm-oc-foot .sep { opacity: .5; }
-    .rm-oc-foot .shipby { margin-left: auto; white-space: nowrap; }
+    .rm-oc-foot .shipby { white-space: nowrap; }
     .rm-oc-foot .shipby.late { color: var(--danger); font-weight: 600; }
 
     .rm-oc-hint {
@@ -25073,7 +25084,7 @@ window.onLangChange(function () {
             '<div class="rm-oc-foot">' +
               '<span>' + items + (items === 1 ? ' item' : ' items') + '</span>' +
               (o.store_code ? '<span class="sep">·</span><span>' + esc(o.store_name_en || o.store_code) + '</span>' : '') +
-              (sb.text ? '<span class="shipby' + (sb.late ? ' late' : '') + '">' + esc(sb.text) + '</span>' : '') +
+              (sb.text ? '<span class="sep">·</span><span class="shipby' + (sb.late ? ' late' : '') + '">' + esc(sb.text) + '</span>' : '') +
             '</div>' +
             hint +
           '</div>' +
