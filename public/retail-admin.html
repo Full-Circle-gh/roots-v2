@@ -4882,6 +4882,9 @@
     #ord-kpis::-webkit-scrollbar { display: none; }
     #ord-kpis > .fc-kpi { flex: 0 0 47%; min-width: 150px; scroll-snap-align: start; }
 
+    /* Phone-only: reveal the swipe dots under the scrollable KPI strips. */
+    .fc-kpi-dots { display: flex; }
+
     /* Status chips → sticky single-row scroller, always reachable. Render it as
        a SOLID filter bar (not the page bg) with a divider + drop shadow so
        cards visibly scroll UNDER it; with bg-app it was invisible and content
@@ -5368,6 +5371,13 @@
     .rm-dh-dots { display: flex; gap: 5px; justify-content: center; padding: 2px 0 4px; }
     .rm-dh-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--line); transition: width .2s, background .2s; }
     .rm-dh-dots i.on { background: var(--brass); width: 16px; border-radius: 3px; }
+
+    /* Swipe-dot pager for the Orders / Customers KPI strips. Hidden by default —
+       on desktop those strips are a full grid (no overflow); the mobile rule
+       below (in the max-width:720px block) flips it on. Mirrors .rm-dh-dots. */
+    .fc-kpi-dots { display: none; gap: 5px; justify-content: center; padding: 0 0 10px; margin-top: -4px; }
+    .fc-kpi-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--line); transition: width .2s, background .2s; }
+    .fc-kpi-dots i.on { background: var(--brass); width: 16px; border-radius: 3px; }
 
     .rm-dh-acc { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
     .rm-dh-ai { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 15px; overflow: hidden; }
@@ -6151,6 +6161,8 @@
         <div class="fc-kpi-foot"><span class="fc-delta is-flat" id="ord-kpi-new-d" onmouseenter="fcDeltaHover(event)" onmouseleave="fcDeltaLeave(event)">—</span></div>
       </div>
     </div>
+    <!-- Swipe-dot pager (phone only) — signals the KPI strip scrolls sideways. -->
+    <div class="fc-kpi-dots" id="ord-kpi-dots" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i></div>
 
     <!-- Status chip strip — click to filter, auto-loads -->
     <div class="status-chips" id="orders-status-chips" style="margin-bottom: var(--s3)">
@@ -6685,6 +6697,8 @@
           <div class="sub" id="cu-kpi-blocked-sub">&nbsp;</div>
         </div>
       </div>
+      <!-- Swipe-dot pager (phone only) — signals the KPI strip scrolls sideways. -->
+      <div class="fc-kpi-dots" id="cu-kpi-dots" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i></div>
       <!-- Phone-only tier filter — sticky chip row mirroring the Orders status
            chips. Drives the existing #cu-tier <select> + cuLoad so there's one
            filter source of truth. Hidden on desktop (the <select> is shown). -->
@@ -26983,6 +26997,35 @@ window.onLangChange(function () {
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
   else bind();
+})();
+</script>
+
+<script>
+/* KPI rail pagers — drive the swipe dots under the Orders & Customers KPI
+   strips (phone only; on desktop the strip is a full grid with no overflow).
+   The active dot tracks scroll position proportionally so the first dot lights
+   at the start and the last at the end of the rail. Mirrors the dashboard
+   carousel's dot pager. */
+(function () {
+  function wire(railId, dotsId) {
+    var rail = document.getElementById(railId), dots = document.getElementById(dotsId);
+    if (!rail || !dots) return;
+    var pips = dots.querySelectorAll('i');
+    if (!pips.length) return;
+    var ticking = false;
+    function update() {
+      ticking = false;
+      var max = rail.scrollWidth - rail.clientWidth;
+      var i = (max <= 1) ? 0 : Math.round(rail.scrollLeft / max * (pips.length - 1));
+      for (var j = 0; j < pips.length; j++) pips[j].classList.toggle('on', j === i);
+    }
+    rail.addEventListener('scroll', function () {
+      if (!ticking) { ticking = true; requestAnimationFrame(update); }
+    }, { passive: true });
+  }
+  function init() { wire('ord-kpis', 'ord-kpi-dots'); wire('cu-kpis', 'cu-kpi-dots'); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();
 </script>
 
