@@ -5701,15 +5701,32 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      GROUP BY reason ORDER BY orders DESC`).all(from, to);
 
   // ── Top products (by revenue) ──
+  // image_url snapshotted on the order item is usually NULL, so resolve the
+  // photo from the live product (same fallback chain as the funnel/order-item
+  // endpoints): order-item snapshot -> product.image_url -> byte-stream URL
+  // when only base64 exists. Relative URL is fine — the admin renders on-host
+  // and /api/retail/products/:id/image is public.
   const topProducts = tdb().prepare(`
-    SELECT i.product_id, i.name_en, i.name_cn, i.image_url, i.sku,
+    SELECT i.product_id, i.name_en, i.name_cn, i.image_url AS oi_image_url, i.sku,
+           p.image_url AS p_image_url, p.updated_at AS p_updated_at,
+           ${hasImageFallbackSql('p')} AS has_image,
            COALESCE(SUM(i.qty), 0) AS units,
            COALESCE(SUM(i.line_total), 0) AS revenue,
            COUNT(DISTINCT i.order_id) AS orders
       FROM retail_order_items i
       JOIN retail_orders o ON o.id = i.order_id
+      LEFT JOIN products p ON p.id = i.product_id
      WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
-     GROUP BY i.product_id ORDER BY revenue DESC LIMIT 15`).all(from, to);
+     GROUP BY i.product_id ORDER BY revenue DESC LIMIT 15`).all(from, to).map(r => {
+    let image_url = r.oi_image_url || r.p_image_url || '';
+    if (!image_url && r.has_image) {
+      image_url = `/api/retail/products/${r.product_id}/image?v=${encodeURIComponent(r.p_updated_at || '')}`;
+    }
+    return {
+      product_id: r.product_id, name_en: r.name_en, name_cn: r.name_cn,
+      sku: r.sku, image_url, units: r.units, revenue: r.revenue, orders: r.orders,
+    };
+  });
 
   // ── Top customers (by spend in window) ──
   const topCustomers = tdb().prepare(`
