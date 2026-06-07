@@ -4855,8 +4855,15 @@
     #orders-status-chips {
       flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
       position: sticky; top: 56px; z-index: 8;
-      margin-left: calc(-1 * var(--s6)); margin-right: calc(-1 * var(--s6));
-      padding: 10px var(--s6); background: var(--bg-pane);
+      /* Full-bleed to the screen edges: cancel main's 16px gutter EXACTLY. The
+         old -24px (--s6) over-pulled 8px past the edge, crowding the "All" chip
+         against the left (and nudging the row off-screen). Re-pad so the first
+         chip sits a touch inside the gutter; scroll-padding keeps that inset
+         when the row snaps back to the start. */
+      margin-left: -16px; margin-right: -16px;
+      padding: 10px 16px; padding-left: var(--s6);
+      scroll-padding-left: var(--s6);
+      background: var(--bg-pane);
       border-bottom: 1px solid var(--line);
       box-shadow: 0 8px 14px -12px rgba(0, 0, 0, .45);
       scroll-snap-type: x proximity;
