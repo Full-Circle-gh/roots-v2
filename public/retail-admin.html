@@ -3306,9 +3306,9 @@
   }
   .side-drawer .drawer-close svg { width: 16px; height: 16px; }
   @media (max-width: 720px) {
-    .side-drawer { width: 100vw; min-width: 0; border-left: 0; }
-    .side-drawer.dw-wide { width: 100vw; }
-    .side-drawer.dw-compact { width: 100vw; min-width: 0; }
+    .side-drawer { width: calc(100vw / var(--ui-scale, 1)); min-width: 0; border-left: 0; }
+    .side-drawer.dw-wide { width: calc(100vw / var(--ui-scale, 1)); }
+    .side-drawer.dw-compact { width: calc(100vw / var(--ui-scale, 1)); min-width: 0; }
   }
   .prod-link {
     color: inherit;
