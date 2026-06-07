@@ -4727,11 +4727,18 @@
     #order-drawer .sort-chips { display: none; }
     #order-drawer .od-eyebrow { display: none; }
 
+    /* Kill the scroll-container's top padding (orders only) so the sticky
+       app-bar pins flush to the very top of the drawer — otherwise the bar
+       sticks BELOW the padding, leaving a gap where scrolled content (the
+       ¥total banner) peeks through and pushing the order# below the chevron. */
+    #order-detail-mount { padding-top: 0; }
+
     /* Back chevron — left side of the app-bar (sibling of .drawer-body, fixed to
-       the drawer top so it stays put while the body scrolls). */
+       the drawer top so it stays put while the body scrolls). Vertically
+       centered against the 52px bar: (52-36)/2 = 8px. */
     #order-drawer .drawer-back {
       display: inline-flex; align-items: center; justify-content: center;
-      position: absolute; top: 12px; left: 6px; z-index: 8;
+      position: absolute; top: 8px; left: 6px; z-index: 8;
       width: 36px; height: 36px; padding: 0;
       background: transparent; border: 0; border-radius: 999px;
       color: var(--text-1); cursor: pointer;
