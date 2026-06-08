@@ -1431,6 +1431,12 @@
     overflow: hidden;
     transition: height .4s cubic-bezier(.4, 0, .2, 1);
   }
+  /* Closing has no content-reveal or zen-scroll riding behind it, so a .4s
+     collapse felt abrupt next to the open. Let it ease shut more slowly. */
+  .db-deepdive.dd-anim.dd-closing .db-deepdive-body {
+    transition-duration: .62s;
+    transition-timing-function: cubic-bezier(.33, 0, .25, 1);
+  }
 
   /* ── Bars come alive: every magnitude bar inside a mobile report card sweeps
      out from the left when its card mounts or unfolds — on dashboard refresh
@@ -12792,7 +12798,7 @@ function dashInit() {
           if (settled) return; settled = true;
           if (close) dd.open = false;
           ddBody.style.height = '';
-          dd.classList.remove('dd-anim');
+          dd.classList.remove('dd-anim', 'dd-closing');
           ddAnimating = false;
           if (!close) ddZenToHead();   // page is now full height → glide into view
         };
@@ -12801,7 +12807,7 @@ function dashInit() {
           ddBody.removeEventListener('transitionend', done);
           cleanup();
         });
-        setTimeout(cleanup, 500);   // safety net if transitionend never fires
+        setTimeout(cleanup, 800);   // safety net (> the .62s close tween)
       };
       if (!dd.open) {
         dd.open = true;                          // render body so we can measure
@@ -12811,6 +12817,7 @@ function dashInit() {
         ddBody.style.height = full + 'px';       // → ease open
         finish(false);
       } else {
+        dd.classList.add('dd-closing');          // slower, gentler collapse
         const full = ddBody.offsetHeight;
         ddBody.style.height = full + 'px';
         void ddBody.offsetWidth;                 // commit the start height
