@@ -1366,7 +1366,7 @@
   #rm-dash .rm-dh-trend .db-spark-line { animation-duration: 1.5s; }   /* the big chart draws a touch slower */
   #rm-dash .rm-dh-trend .db-spark-area { animation-duration: 1.5s; }
   /* The "you-are-here" dot waits for the line to arrive, then fades/scales in. */
-  #rm-dash .rm-dh-trend .db-spark-dot { animation: dbSparkDotIn .45s ease both; animation-delay: 1.35s; }
+  #rm-dash .rm-dh-trend .db-spark-dot { animation: dbSparkDotIn .45s ease backwards; animation-delay: 1.35s; }
   @keyframes dbSparkAreaFade { from { opacity: 0; } to { opacity: 1; } }
   @keyframes dbSparkDotIn { from { opacity: 0; transform: scale(.2); } to { opacity: 1; transform: scale(1); } }
   @media (prefers-reduced-motion: reduce) {
@@ -5425,7 +5425,9 @@
     .rm-dh-stat .lbl { font-size: 11px; color: var(--text-3); }
     .rm-dh-stat .v { font: 600 20px var(--f-sans); color: var(--text-1); margin-top: 3px; font-variant-numeric: tabular-nums; }
     .rm-dh-stat .v.brass { color: var(--brass); }
-    .rm-dh-trend { position: relative; height: 120px; color: var(--accent); touch-action: none; cursor: crosshair; }
+    .rm-dh-trend { position: relative; height: 120px; color: var(--accent); touch-action: pan-y; cursor: crosshair; }
+    /* Faint cue while a long-press reading is active. */
+    .rm-dh-trend.is-reading { background: color-mix(in srgb, var(--accent) 5%, transparent); border-radius: 8px; }
     .rm-dh-trend .db-spark { width: 100%; height: 100%; display: block; }
     .rm-dh-heatscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
@@ -27080,26 +27082,61 @@ window.onLangChange(function () {
   }
   // The inline Revenue-trend charts render as a flat curve; on their own they
   // can't be read. Wire each .rm-dh-trend into the shared sparkline-scrub system
-  // (dot + tip) so a tap/drag — or hover on desktop — reveals that point's date
-  // and revenue. Touch is bridged onto dashSparkMove/Leave (which expect a mouse
-  // event), and the reading lingers briefly after the finger lifts so a single
-  // tap actually leaves the value on screen. ────────────────────────────────
-  var _trendTipTimer = null;
+  // (dot + tip) so it reveals each point's date + revenue. On desktop that's
+  // hover; on touch it's PRESS-AND-HOLD — a plain tap or a scroll-swipe that
+  // starts on the chart must NOT trigger it (that fought the page scroll), so we
+  // only engage after the finger has held still for a moment. Once engaged, you
+  // can slide along the line to scrub; the reading lingers briefly on release.
+  var _trendTipTimer = null;     // fade-out timer after the finger lifts
+  var _lpTimer = null;           // long-press arming timer
+  var _lpActive = false;         // are we currently scrubbing via touch?
+  var _lpStart = null;           // touch origin, to tell a hold from a scroll
+  var LP_DELAY = 280, LP_SLOP = 8;
   function trendLabels() {
     var t = (typeof DASH_DATA !== 'undefined' && DASH_DATA && DASH_DATA.trend) || [];
     return t.map(function (p) { return String(p.bucket || ''); });
   }
-  function sparkTouch(e) {
+  function sparkTouchStart(e) {
     if (!e.touches || !e.touches[0]) return;
-    e.preventDefault();  // scrubbing the chart shouldn't scroll the page
+    var w = e.currentTarget, t = e.touches[0];
+    _lpStart = { x: t.clientX, y: t.clientY };
+    _lpActive = false;
     if (_trendTipTimer) { clearTimeout(_trendTipTimer); _trendTipTimer = null; }
+    if (_lpTimer) clearTimeout(_lpTimer);
+    // Arm: if the finger is still here and hasn't wandered after LP_DELAY, the
+    // intent is "read", not "scroll" — engage the scrub and nudge a haptic.
+    _lpTimer = setTimeout(function () {
+      _lpActive = true;
+      w.classList.add('is-reading');
+      if (navigator.vibrate) { try { navigator.vibrate(12); } catch (err) {} }
+      if (typeof dashSparkMove === 'function')
+        dashSparkMove({ currentTarget: w, clientX: _lpStart.x });
+    }, LP_DELAY);
+  }
+  function sparkTouchMove(e) {
+    if (!e.touches || !e.touches[0]) return;
+    var t = e.touches[0];
+    if (!_lpActive) {
+      // Still arming: any real movement means the user is scrolling — disarm and
+      // let the page scroll normally (we never called preventDefault).
+      if (_lpStart && (Math.abs(t.clientX - _lpStart.x) > LP_SLOP || Math.abs(t.clientY - _lpStart.y) > LP_SLOP)) {
+        if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
+      }
+      return;
+    }
+    // Engaged: track the finger along the line and hold the page still.
+    e.preventDefault();
     if (typeof dashSparkMove === 'function')
-      dashSparkMove({ currentTarget: e.currentTarget, clientX: e.touches[0].clientX });
+      dashSparkMove({ currentTarget: e.currentTarget, clientX: t.clientX });
   }
   function sparkTouchEnd(e) {
     var w = e.currentTarget;
+    if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
+    if (!_lpActive) return;   // was a tap or a scroll — nothing was shown
+    _lpActive = false;
     if (_trendTipTimer) clearTimeout(_trendTipTimer);
     _trendTipTimer = setTimeout(function () {
+      w.classList.remove('is-reading');
       if (typeof dashSparkLeave === 'function') dashSparkLeave({ currentTarget: w });
     }, 2200);
   }
@@ -27113,8 +27150,8 @@ window.onLangChange(function () {
       dashRenderSpark(w, trendVals('revenue'), trendLabels(), money);
       w.addEventListener('mousemove', dashSparkMove);
       w.addEventListener('mouseleave', dashSparkLeave);
-      w.addEventListener('touchstart', sparkTouch, { passive: false });
-      w.addEventListener('touchmove', sparkTouch, { passive: false });
+      w.addEventListener('touchstart', sparkTouchStart, { passive: true });
+      w.addEventListener('touchmove', sparkTouchMove, { passive: false });
       w.addEventListener('touchend', sparkTouchEnd);
       w.addEventListener('touchcancel', sparkTouchEnd);
     }
