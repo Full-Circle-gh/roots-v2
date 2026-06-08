@@ -6941,16 +6941,16 @@
           </div>
           <div class="row" style="gap: var(--s3);">
             <div class="field" style="flex: 1; min-width: 140px;">
-              <label class="stacked">Province · 省份</label>
-              <input type="text" id="cu-addr-province" placeholder="广东省">
-            </div>
-            <div class="field" style="flex: 1; min-width: 140px;">
               <label class="stacked">City · 城市</label>
-              <input type="text" id="cu-addr-city" placeholder="广州市">
+              <select id="cu-addr-city" onchange="cuAddrCityChanged()"><option value="">— Select city · 选择城市 —</option></select>
             </div>
             <div class="field" style="flex: 1; min-width: 140px;">
               <label class="stacked">District · 区/县</label>
-              <input type="text" id="cu-addr-district" placeholder="天河区">
+              <select id="cu-addr-district"><option value="">— Select district · 选择区/县 —</option></select>
+            </div>
+            <div class="field" style="flex: 1; min-width: 140px;">
+              <label class="stacked">Province · 省份</label>
+              <input type="text" id="cu-addr-province" readonly placeholder="—" title="Auto-filled from the city · 由城市自动填充" style="background: var(--bg-elev-1); color: var(--text-2);">
             </div>
           </div>
           <div class="field">
@@ -16609,17 +16609,17 @@ async function loadVouchers() {
         ? labelBits.join(' · ')
         : '<span class="muted">—</span>';
       const publicBadge = v.is_public
-        ? '<span class="pill pub" style="margin-left: 6px; font-size: 10px;">PUBLIC</span>'
+        ? '<span class="pill pub" style="font-size: 10px;">PUBLIC</span>'
         : '';
       const autoBadge = v.auto_grant_signup
-        ? '<span class="pill info" style="margin-left: 6px; font-size: 10px;" title="Auto-granted to every new signup">AUTO</span>'
+        ? '<span class="pill info" style="font-size: 10px;" title="Auto-granted to every new signup">AUTO</span>'
         : '';
       const grantBadge = v.grant_count
-        ? `<span class="pill info" style="margin-left: 6px; font-size: 10px;">GRANTED ${v.grant_used_count || 0}/${v.grant_count}</span>`
+        ? `<span class="pill info" style="font-size: 10px;">GRANTED ${v.grant_used_count || 0}/${v.grant_count}</span>`
         : '';
       return `
       <tr data-id="${v.id}">
-        <td><span style="font-family: var(--f-mono); font-weight: 700">${escapeHtml(v.code)}</span>${publicBadge}${autoBadge}${grantBadge}</td>
+        <td><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;"><span style="font-family: var(--f-mono); font-weight: 700">${escapeHtml(v.code)}</span>${publicBadge}${autoBadge}${grantBadge}</div></td>
         <td style="font-size: 12px;">${label}</td>
         <td class="muted">${v.type === 'fixed_amount' ? '¥ off' : v.type === 'percent' ? '% off' : 'Free ship'}</td>
         <td class="numeric">${v.type === 'percent' ? v.value + '%' : (v.type === 'free_shipping' ? '—' : '¥' + fmt(v.value))}</td>
@@ -20029,6 +20029,13 @@ function invoiceAccountingText(o) {
 function renderInvoiceBlock(o) {
   const isCompany = invoiceIsCompany(o);
   const issued = o.invoice_status === 'issued';
+  // Line icons matching the backend's Feather/Lucide set (stroke=currentColor) —
+  // replaces the old color emoji so the fapiao block fits the Full Circle chrome.
+  const ico = (p) => `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 5px;">${p}</svg>`;
+  const icoReceipt = ico('<path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1-2-1z"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="13" y2="13"/>');
+  const icoClipboard = ico('<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>');
+  const icoFile = ico('<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>');
+  const icoClip = ico('<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>');
   const row = (label, val, mono) => `<span style="color: var(--text-3);">${label}</span><span style="color: var(--text-1); font-weight: 600;${mono ? ' font-variant-numeric: tabular-nums;' : ''}">${escapeHtml(val || '—')}</span>`;
   const badge = `<span style="font-weight: 700; font-size: 11px; padding: 2px 9px; border-radius: 99px; ${issued ? 'background: var(--success); color: #fff;' : 'background: var(--bg-elev-2); color: var(--text-2); border: 1px solid var(--line);'}">${issued ? 'Issued · 已开' : 'Requested · 待开'}</span>`;
   const inS = 'background: var(--bg-input); border: 1px solid var(--line); color: var(--text-1); border-radius: var(--r-md); padding: 6px 9px; font-size: 12px; font-family: inherit;';
@@ -20036,7 +20043,7 @@ function renderInvoiceBlock(o) {
     ? `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px;">
         ${o.invoice_number ? `<div style="margin-bottom: 4px;"><span style="color: var(--text-3);">发票号码 No.</span> <b>${escapeHtml(o.invoice_number)}</b></div>` : ''}
         <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-          ${o.invoice_file_url ? `<a href="${escapeAttr(o.invoice_file_url)}" target="_blank" rel="noopener" class="db-btn primary" style="text-decoration: none;">📄 View fapiao · 查看发票</a>` : '<span style="color: var(--text-3);">No file attached · 未附文件</span>'}
+          ${o.invoice_file_url ? `<a href="${escapeAttr(o.invoice_file_url)}" target="_blank" rel="noopener" class="db-btn primary" style="text-decoration: none;">${icoFile}View fapiao · 查看发票</a>` : '<span style="color: var(--text-3);">No file attached · 未附文件</span>'}
           <span style="color: var(--text-3);">${o.invoice_issued_at ? 'Issued ' + escapeHtml(String(o.invoice_issued_at).slice(0, 10)) : ''}</span>
           <a href="#" onclick="event.preventDefault(); unissueInvoice(${o.id})" style="color: var(--text-3); font-size: 11px;">edit · 修改</a>
         </div>
@@ -20045,13 +20052,13 @@ function renderInvoiceBlock(o) {
         <input id="inv-url-${o.id}" placeholder="Fapiao link 发票链接 (or attach PDF)" style="${inS} flex: 1; min-width: 180px;">
         <input id="inv-no-${o.id}" placeholder="发票号码 (optional)" style="${inS} width: 140px;">
         <input id="inv-pdf-${o.id}" type="file" accept="application/pdf,image/*" style="display: none;" onchange="uploadInvoicePdf(${o.id}, this)">
-        <button type="button" class="db-btn" onclick="document.getElementById('inv-pdf-${o.id}').click()">📎 PDF / 图片</button>
+        <button type="button" class="db-btn" onclick="document.getElementById('inv-pdf-${o.id}').click()">${icoClip}PDF / 图片</button>
         <button type="button" class="db-btn primary" onclick="markInvoiceIssued(${o.id})">Mark issued · 标记已开</button>
       </div>`;
   return `<div class="full" style="background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px;">
     <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
-      <span style="font-weight: 700; color: var(--text-1); font-size: 13px;">🧾 Invoice · 发票 ${badge}<span style="font-weight: 600; color: var(--text-3); font-size: 11px; margin-left: 6px;">${isCompany ? '企业 Company' : '个人 Personal'}</span></span>
-      <button type="button" class="db-btn" data-copy="${escapeAttr(invoiceAccountingText(o))}" onclick="event.stopPropagation(); copyKicker(this, 'Invoice info · 开票信息')">📋 Copy for accounting · 复制开票信息</button>
+      <span style="font-weight: 700; color: var(--text-1); font-size: 13px;">${icoReceipt}Invoice · 发票 ${badge}<span style="font-weight: 600; color: var(--text-3); font-size: 11px; margin-left: 6px;">${isCompany ? '企业 Company' : '个人 Personal'}</span></span>
+      <button type="button" class="db-btn" data-copy="${escapeAttr(invoiceAccountingText(o))}" onclick="event.stopPropagation(); copyKicker(this, 'Invoice info · 开票信息')">${icoClipboard}Copy for accounting · 复制开票信息</button>
     </div>
     <div style="display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 12px;">
       ${row('抬头 Title', o.invoice_title)}
@@ -22214,21 +22221,84 @@ async function cuSaveAdjust() {
 }
 
 let CU_ADDR_EDIT_ID = null;  // null when adding a new address
-function cuOpenAddrModal(addrId) {
+
+// Fill the City <select> from the shared china-regions catalogue, grouped by
+// province (a 省→市→区 cascade like the storefront's address picker). Native
+// <select>s render as scroll wheels on mobile, matching the front-end feel.
+function cuAddrPopulateCities(selectedCityCn) {
+  const sel = $('#cu-addr-city'); if (!sel) return;
+  const byProv = new Map();
+  for (const c of (_regions.cities || [])) {
+    const p = c.province_cn || 'Other';
+    if (!byProv.has(p)) byProv.set(p, []);
+    byProv.get(p).push(c);
+  }
+  let html = '<option value="">— Select city · 选择城市 —</option>';
+  for (const [prov, list] of byProv) {
+    const provEn = list[0].province_en || '';
+    html += `<optgroup label="${escapeAttr(prov + (provEn ? ' · ' + provEn : ''))}">`;
+    for (const c of list) {
+      html += `<option value="${escapeAttr(c.name_cn)}">${escapeHtml(c.name_cn + (c.name_en ? ' · ' + c.name_en : ''))}</option>`;
+    }
+    html += '</optgroup>';
+  }
+  sel.innerHTML = html;
+  // Keep a legacy/hand-entered city selectable even if it's not in the catalogue.
+  if (selectedCityCn && ![...sel.options].some(o => o.value === selectedCityCn)) {
+    sel.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(selectedCityCn)}">${escapeHtml(selectedCityCn)}</option>`);
+  }
+  sel.value = selectedCityCn || '';
+}
+
+// Load the district list for the chosen city into the District <select>.
+async function cuAddrLoadDistricts(cityCn, selectedDistrictCn) {
+  const sel = $('#cu-addr-district'); if (!sel) return;
+  if (!cityCn) { sel.innerHTML = '<option value="">— Select district · 选择区/县 —</option>'; return; }
+  sel.innerHTML = '<option value="">Loading… · 加载中…</option>';
+  let list = [];
+  try {
+    const r = await fetch('/api/retail/districts?city=' + encodeURIComponent(cityCn), { credentials: 'same-origin' });
+    const j = await r.json();
+    list = (j && j.data) || [];
+  } catch (e) { /* fall through to empty */ }
+  let html = '<option value="">— Select district · 选择区/县 —</option>';
+  for (const d of list) html += `<option value="${escapeAttr(d.name_cn)}">${escapeHtml(d.name_cn + (d.name_en ? ' · ' + d.name_en : ''))}</option>`;
+  sel.innerHTML = html;
+  if (selectedDistrictCn) {
+    if (![...sel.options].some(o => o.value === selectedDistrictCn)) {
+      sel.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(selectedDistrictCn)}">${escapeHtml(selectedDistrictCn)}</option>`);
+    }
+    sel.value = selectedDistrictCn;
+  }
+}
+
+// City picked → auto-fill the (read-only) province + reload the district list.
+function cuAddrCityChanged() {
+  const cityCn = $('#cu-addr-city').value;
+  const c = _regions.byCn.get(cityCn);
+  $('#cu-addr-province').value = c ? (c.province_cn || '') : '';
+  cuAddrLoadDistricts(cityCn, null);
+}
+
+async function cuOpenAddrModal(addrId) {
   if (!CU_CURRENT?.customer) return;
   CU_ADDR_EDIT_ID = addrId;
   const a = addrId ? (CU_CURRENT.addresses || []).find(x => x.id === addrId) : null;
   $('#cu-addr-title').textContent      = a ? 'Edit address · 编辑地址' : 'Add address · 新建地址';
   $('#cu-addr-recipient').value        = a ? (a.recipient_name || '') : '';
   $('#cu-addr-phone').value            = a ? (a.phone          || '') : (CU_CURRENT.customer.phone || '');
-  $('#cu-addr-province').value         = a ? (a.province       || '') : '';
-  $('#cu-addr-city').value             = a ? (a.city           || '') : '';
-  $('#cu-addr-district').value         = a ? (a.district       || '') : '';
   $('#cu-addr-address').value          = a ? (a.address        || '') : '';
   $('#cu-addr-detail').value           = a ? (a.detail         || '') : '';
   $('#cu-addr-postal').value           = a ? (a.postal_code    || '') : '';
   $('#cu-addr-default').checked        = a ? !!a.is_default            : false;
   $('#cu-addr-bg').classList.add('show');
+  // City→district cascade (province auto-fills from the city).
+  const cityCn = a ? (a.city || '') : '';
+  await loadChinaRegions();
+  cuAddrPopulateCities(cityCn);
+  const c = _regions.byCn.get(cityCn);
+  $('#cu-addr-province').value = a ? (a.province || (c ? c.province_cn : '') || '') : '';
+  await cuAddrLoadDistricts(cityCn, a ? (a.district || '') : '');
 }
 function cuCloseAddrModal() { $('#cu-addr-bg').classList.remove('show'); }
 
