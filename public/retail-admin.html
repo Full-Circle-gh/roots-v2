@@ -27258,7 +27258,7 @@ window.onLangChange(function () {
     var rep = REPORTS[key]; if (!rep) return;
     ensureDhSheet();
     el('rm-dh-sheet-title').textContent = rep.title.replace(/&amp;/g, '&');
-    var body = el('rm-dh-sheet-body'); body.innerHTML = rep.body(); wireTrendSparks(body); body.scrollTop = 0;
+    var body = el('rm-dh-sheet-body'); body.innerHTML = rep.body(); wireTrendSparks(body); sweepBars(body); body.scrollTop = 0;
     el('rm-dh-scrim').classList.add('show'); el('rm-dh-sheet').classList.add('show');
     document.documentElement.classList.add('rm-noscroll');
   }
