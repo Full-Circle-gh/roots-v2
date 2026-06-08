@@ -1353,6 +1353,27 @@
     .rm-barsweep .db-track > span, .rm-barsweep .has-bar::before { animation: none; }
   }
 
+  /* ── EKG draw-on: on the mobile dashboard the sparklines + revenue trend
+     trace themselves in left→right like a heart monitor, the area wash fades up
+     behind the moving line, and the end-dot pops once the line lands. Fires on
+     every (re)render since rmRenderDash rebuilds the SVGs — i.e. on refresh and
+     range switches. pathLength="1" normalises the dash math to any series. ── */
+  #rm-dash .db-spark-line {
+    stroke-dasharray: 1;
+    animation: db-line-draw 1.15s cubic-bezier(.4,.1,.2,1) both;
+  }
+  #rm-dash .db-spark-area { animation: dbSparkAreaFade 1.15s ease both; }
+  #rm-dash .rm-dh-trend .db-spark-line { animation-duration: 1.5s; }   /* the big chart draws a touch slower */
+  #rm-dash .rm-dh-trend .db-spark-area { animation-duration: 1.5s; }
+  /* The "you-are-here" dot waits for the line to arrive, then fades/scales in. */
+  #rm-dash .rm-dh-trend .db-spark-dot { animation: dbSparkDotIn .45s ease both; animation-delay: 1.35s; }
+  @keyframes dbSparkAreaFade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes dbSparkDotIn { from { opacity: 0; transform: scale(.2); } to { opacity: 1; transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) {
+    #rm-dash .db-spark-line, #rm-dash .db-spark-area,
+    #rm-dash .rm-dh-trend .db-spark-dot { animation: none; }
+  }
+
   /* ═══════════════════════════════════════════════════════════════════
      PRODUCTS TAB — mini-app product surface editor
      ═══════════════════════════════════════════════════════════════════ */
@@ -7492,6 +7513,13 @@
     </div>
 
     <h2>Active coupons · 启用中的优惠券</h2>
+    <style>
+      /* Keep each column title on one line and sitting on a common baseline,
+         so headers read as a clean aligned row instead of wrapping raggedly
+         ("MIN ¥" orphaning the ¥, single-line headers floating up). The table
+         already scrolls horizontally, so the extra width is fine. */
+      #vouchers-table th { white-space: nowrap; vertical-align: bottom; }
+    </style>
     <div class="table-wrap">
       <table id="vouchers-table">
         <thead><tr>
@@ -12309,8 +12337,8 @@ function dashSparkline(values, opts) {
   const defs = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">`
     + `<stop offset="0" stop-color="currentColor" stop-opacity="0.26"/>`
     + `<stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>`;
-  const area = `<path d="${d} L ${x(n - 1).toFixed(1)} ${(H - pad).toFixed(1)} L ${x(0).toFixed(1)} ${(H - pad).toFixed(1)} Z" fill="url(#${gid})" stroke="none"/>`;
-  const line = `<path d="${d}" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const area = `<path class="db-spark-area" d="${d} L ${x(n - 1).toFixed(1)} ${(H - pad).toFixed(1)} L ${x(0).toFixed(1)} ${(H - pad).toFixed(1)} Z" fill="url(#${gid})" stroke="none"/>`;
+  const line = `<path class="db-spark-line" pathLength="1" d="${d}" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>`;
   // Last-point marker as an HTML overlay (not an SVG circle): the chart uses
   // preserveAspectRatio="none", which would squash a <circle> into an ellipse.
   // The wrap is position:relative, so percentage offsets land it on the point.
