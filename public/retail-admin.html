@@ -4736,6 +4736,11 @@
        crushed. ── */
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .table-wrap > table { min-width: 560px; }
+    /* Empty state: drop the 560px floor and the column header so the centered
+       placeholder fills the viewport instead of sitting off-screen in a wide,
+       horizontally-scrolling table. */
+    .table-wrap > table.is-empty { min-width: 0; }
+    .table-wrap > table.is-empty thead { display: none; }
 
     /* ── Comfortable tap targets for the controls operators hit all day. ── */
     .btn { min-height: 38px; }
@@ -21364,14 +21369,17 @@ const FS_STATE_PILL = {
 };
 
 async function fsLoadList() {
+  const table = $('#fs-table');
   const tbody = $('#fs-table tbody');
   tbody.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
   try {
     const { data } = await api('/api/retail-admin/flash-sales');
     if (!data.length) {
+      if (table) table.classList.add('is-empty');
       tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="icon">${ICONS.empty}</div><h3>No flash sales yet</h3><p class="muted">Set one up above to start a flash-sale event. · 请在上方设置以开启秒杀活动。</p></div></td></tr>`;
       return;
     }
+    if (table) table.classList.remove('is-empty');
     tbody.innerHTML = data.map(p => {
       const name = [p.name_en, p.name_cn].filter(Boolean).join(' · ') || ('#' + p.id);
       const sku = p.sku ? ` <span class="muted" style="font-size: 11px;">[${escapeHtml(p.sku)}]</span>` : '';
@@ -21392,6 +21400,7 @@ async function fsLoadList() {
       </tr>`;
     }).join('');
   } catch (e) {
+    if (table) table.classList.add('is-empty');
     tbody.innerHTML = `<tr><td colspan="7" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
   }
 }
