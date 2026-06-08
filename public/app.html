@@ -8155,15 +8155,15 @@ function _paintProductsPage() {
       </div>
     </div>
     <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
-      <input type="text" id="prodSearch" placeholder="🔍 Search name, SKU... · 搜索名称/编号" oninput="_prodPage=1;filterProducts()"
+      <input type="text" id="prodSearch" placeholder="🔍 Search name, SKU... · 搜索名称/编号" oninput="_prodPage=1;filterProducts()" value="${esc(_prodSearchTerm)}"
         style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:240px;max-width:100%;flex:1 1 200px;min-width:140px;outline:none">
       <select id="prodCatFilter" onchange="_prodPage=1;filterProducts()" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none">
         <option value="">All Categories 全部分类</option>
-        ${cats.map(c=>`<option value="${esc(c)}">${esc(catLabel(c))}</option>`).join('')}
+        ${cats.map(c=>`<option value="${esc(c)}"${c===_prodCatFilterVal?' selected':''}>${esc(catLabel(c))}</option>`).join('')}
       </select>
       <select id="prodStatusFilter" onchange="_prodPage=1;filterProducts()" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none">
         <option value="">All Status 全部状态</option>
-        ${statuses.map(s=>`<option value="${s}">${statusLabel(s, PRODUCT_STATUS_CN)}</option>`).join('')}
+        ${statuses.map(s=>`<option value="${s}"${s===_prodStatusFilterVal?' selected':''}>${statusLabel(s, PRODUCT_STATUS_CN)}</option>`).join('')}
       </select>
       <select id="prodSortSel" onchange="_setProdSortFromDropdown(this.value)" title="Sort by · 排序" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none">
         ${_prodSortOptions().map(o => `<option value="${o[0]}"${(`${_prodSortKey}:${_prodSortDir}` === o[0] || (!_prodSortKey && !o[0])) ? ' selected' : ''}>${o[1]}</option>`).join('')}
@@ -9172,6 +9172,15 @@ function _prodPager(total, pages, start, shown) {
 // that flips this, so no select element to keep in sync.
 let _prodOnlyNoSku = false;
 
+// Search / category / status filters. These are <select>/<input> elements
+// that get rebuilt fresh every time _paintProductsPage() runs (e.g. on "Back"
+// from a product editor), so their DOM value alone wouldn't survive the round
+// trip. We mirror them into module state: filterProducts() writes here on every
+// change, and _paintProductsPage() restores them so the chosen category sticks.
+let _prodSearchTerm   = '';
+let _prodCatFilterVal = '';
+let _prodStatusFilterVal = '';
+
 // Mini-app publish filter — three-state cycle on the 🛍 chip:
 //   ''     → show all
 //   'pub'  → show only is_published=1
@@ -9455,6 +9464,11 @@ function filterProducts() {
   const q = (document.getElementById('prodSearch')?.value||'').toLowerCase();
   const cat = document.getElementById('prodCatFilter')?.value||'';
   const status = document.getElementById('prodStatusFilter')?.value||'';
+  // Mirror into module state so the filters survive a page repaint (e.g. on
+  // "Back" from a product editor, which rebuilds these elements from scratch).
+  _prodSearchTerm = document.getElementById('prodSearch')?.value || '';
+  _prodCatFilterVal = cat;
+  _prodStatusFilterVal = status;
   const matchFn = p => {
     const mQ = !q||(p.name_en||'').toLowerCase().includes(q)||(p.name_cn||'').toLowerCase().includes(q)||(p.sku||'').toLowerCase().includes(q);
     const mC = !cat||p.category===cat;
@@ -11936,6 +11950,18 @@ async function pdWriteClipboard(text, successMsg) {
 }
 
 async function showProductForm(id) {
+  // Paint the overlay immediately with a spinner so clicking a product feels
+  // instant. The full record (with base64 image/label data) can take a beat to
+  // fetch; without this the user stares at the unchanged list until it lands.
+  // mkOverlay() below reuses the same id, so it swaps this placeholder for the
+  // real form once the data is ready.
+  const _loadingBox = mkOverlay('prodFormOverlay').querySelector('.overlay-box');
+  _loadingBox.style.maxWidth = '720px';
+  _loadingBox.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:64px 20px;color:var(--muted)">
+      <div style="width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--dk);border-radius:50%;animation:spin .8s linear infinite"></div>
+      <div style="font-size:13px;font-weight:600">Loading… 加载中</div>
+    </div>`;
   let prod = null;
   if (id) {
     const r = await fetch('/api/products/'+id);
