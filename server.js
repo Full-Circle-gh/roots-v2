@@ -262,29 +262,14 @@ app.get('/backend/billing', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'backend-billing.html'));
 });
 
-// Main app - serves the SPA shell
-const { requireAuth } = require('./middleware/auth');
-app.get('/', requireAuth, (req, res) => {
-  // Auto-route POS-only users to the cashier shell so they don't see a
-  // permission-empty admin SPA. Admins still go to the full app from /.
-  // (They can hit /pos directly to test the cashier flow.)
-  const db = require('./database');
-  const perms = db.prepare('SELECT * FROM permissions WHERE user_id = ?').get(req.user.id) || {};
-  const isAdmin = req.user.role === 'admin';
-  const hasPos  = !!perms.pos;
-  // Module flags that grant access to the main SPA. Mirrors the MODULES
-  // list in app.html; if any are true, give them the SPA.
-  const SPA_PERMS = ['dashboard','recipes','ingredients','products','purchases','finance','sales','kitchen','waste','restock','alerts','suppliers','retail'];
-  const hasAnySpa = SPA_PERMS.some(k => perms[k]);
-  if (!isAdmin && hasPos && !hasAnySpa) {
-    return res.redirect('/pos');
-  }
-  res.set('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'app.html'));
-});
+// Subdomain that serves the online-store backend (Mini App Backend /
+// retail-admin) at its root instead of the kitchen SPA. food.* / app.* / the
+// bare domain all keep serving the kitchen app.
+const STORE_HOST = 'store.rootskitchenchina.com';
 
-// Storefront / retail admin shell. Page self-auths via /api/auth/me.
-app.get('/retail-admin', (req, res) => {
+// Serve the Mini App Backend (retail-admin) shell. Page self-auths via
+// /api/auth/me. Shared by the /retail-admin path and the store.* subdomain root.
+function serveRetailAdmin(req, res) {
   // Access gate: a Mini App Backend operator whose tenant is suspended (set by
   // the billing lifecycle job for non-payment) is sent to Billing to pay,
   // rather than into a backend whose APIs would 401. Kitchen users and
@@ -300,7 +285,39 @@ app.get('/retail-admin', (req, res) => {
   }
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'retail-admin.html'));
+}
+
+// Main app - serves the SPA shell
+const { requireAuth } = require('./middleware/auth');
+app.get('/', (req, res) => {
+  // Online-store subdomain lands directly on the Mini App Backend, not the
+  // kitchen SPA. It self-auths, so we skip requireAuth for that host.
+  if ((req.hostname || '').toLowerCase() === STORE_HOST) {
+    return serveRetailAdmin(req, res);
+  }
+  // Everything else (food.* / app.* / bare domain) → kitchen app, auth-gated.
+  requireAuth(req, res, () => {
+    // Auto-route POS-only users to the cashier shell so they don't see a
+    // permission-empty admin SPA. Admins still go to the full app from /.
+    // (They can hit /pos directly to test the cashier flow.)
+    const db = require('./database');
+    const perms = db.prepare('SELECT * FROM permissions WHERE user_id = ?').get(req.user.id) || {};
+    const isAdmin = req.user.role === 'admin';
+    const hasPos  = !!perms.pos;
+    // Module flags that grant access to the main SPA. Mirrors the MODULES
+    // list in app.html; if any are true, give them the SPA.
+    const SPA_PERMS = ['dashboard','recipes','ingredients','products','purchases','finance','sales','kitchen','waste','restock','alerts','suppliers','retail'];
+    const hasAnySpa = SPA_PERMS.some(k => perms[k]);
+    if (!isAdmin && hasPos && !hasAnySpa) {
+      return res.redirect('/pos');
+    }
+    res.set('Cache-Control', 'no-cache');
+    res.sendFile(path.join(__dirname, 'public', 'app.html'));
+  });
 });
+
+// Storefront / retail admin shell. Page self-auths via /api/auth/me.
+app.get('/retail-admin', serveRetailAdmin);
 
 // Full-page product block editor — opened in a new tab from the
 // retail-admin Products grid (window.open('/product-editor?id=…')). Same
