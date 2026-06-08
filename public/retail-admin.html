@@ -1372,25 +1372,20 @@
     .rm-barsweep .db-list > .db-row:first-child { animation: none; }
   }
 
-  /* ── EKG draw-on: on the mobile dashboard the sparklines + revenue trend
-     trace themselves in left→right like a heart monitor, the area wash fades up
-     behind the moving line, and the end-dot pops once the line lands. Fires on
-     every (re)render since rmRenderDash rebuilds the SVGs — i.e. on refresh and
-     range switches. pathLength="1" normalises the dash math to any series. ── */
-  #rm-dash .db-spark-line {
-    stroke-dasharray: 1;
-    animation: db-line-draw 1.15s cubic-bezier(.4,.1,.2,1) both;
-  }
-  #rm-dash .db-spark-area { animation: dbSparkAreaFade 1.15s ease both; }
-  #rm-dash .rm-dh-trend .db-spark-line { animation-duration: 1.5s; }   /* the big chart draws a touch slower */
-  #rm-dash .rm-dh-trend .db-spark-area { animation-duration: 1.5s; }
-  /* The "you-are-here" dot waits for the line to arrive, then fades/scales in. */
+  /* ── EKG reveal: on the mobile dashboard the sparklines + revenue trend wipe
+     in left→right like a heart monitor — the whole curve (line + area wash) is
+     uncovered by an animating clip, so the line is ALWAYS fully drawn and can
+     never look broken (an earlier stroke-dash approach left dotted gaps once the
+     non-scaling stroke + stretched viewBox defeated pathLength). Fires on every
+     (re)render since rmRenderDash rebuilds the SVGs — on refresh + range switch.
+     The end-dot waits for the wipe to arrive, then fades/scales in. ───────── */
+  #rm-dash .db-spark { animation: dbSparkWipe 1.15s cubic-bezier(.4,.1,.2,1) both; }
+  #rm-dash .rm-dh-trend .db-spark { animation-duration: 1.5s; }   /* the big chart reveals a touch slower */
   #rm-dash .rm-dh-trend .db-spark-dot { animation: dbSparkDotIn .45s ease backwards; animation-delay: 1.35s; }
-  @keyframes dbSparkAreaFade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes dbSparkWipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
   @keyframes dbSparkDotIn { from { opacity: 0; transform: scale(.2); } to { opacity: 1; transform: scale(1); } }
   @media (prefers-reduced-motion: reduce) {
-    #rm-dash .db-spark-line, #rm-dash .db-spark-area,
-    #rm-dash .rm-dh-trend .db-spark-dot { animation: none; }
+    #rm-dash .db-spark, #rm-dash .rm-dh-trend .db-spark-dot { animation: none; }
   }
 
   /* ═══════════════════════════════════════════════════════════════════
