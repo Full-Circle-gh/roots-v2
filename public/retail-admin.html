@@ -5048,7 +5048,7 @@
     .rm-oc-go .shipby { font: 600 13px var(--f-sans); color: var(--text-2); }
     .rm-oc-go .shipby.act { color: var(--brass, #B08D4A); }
     .rm-oc-go .shipby.late { color: var(--danger); }
-    .rm-oc-go .rm-oc-chev { display: flex; color: var(--text-3); transition: transform .26s; }
+    .rm-oc-go .rm-oc-chev { display: flex; color: var(--text-3); transition: transform .5s cubic-bezier(.22,.61,.36,1); }
     .rm-oc-go .rm-oc-chev svg { width: 16px; height: 16px; }
     .rm-ocard.open .rm-oc-go .rm-oc-chev { transform: rotate(90deg); }
 
@@ -5071,7 +5071,7 @@
 
     /* ── Combined: inline peek — tap a card to expand a quick summary + actions
        in place; "Open full details" still launches the existing drawer. ── */
-    .rm-oc-exp { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .28s ease; }
+    .rm-oc-exp { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .55s cubic-bezier(.22,.61,.36,1); }
     .rm-ocard.open .rm-oc-exp { grid-template-rows: 1fr; }
     .rm-oc-exp > .inner { overflow: hidden; }
     .rm-oc-exp-pad { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line-soft); }
@@ -5297,14 +5297,14 @@
     .rm-cu-stat .big { font: 600 15px var(--f-mono); color: var(--text-1); font-variant-numeric: tabular-nums; }
     .rm-cu-stat .k { display: block; font: 10px var(--f-mono); letter-spacing: .06em; color: var(--text-4); margin-top: 1px; }
 
-    .rm-cu-chev { flex: 0 0 auto; color: var(--text-4); display: flex; transition: transform .26s; }
+    .rm-cu-chev { flex: 0 0 auto; color: var(--text-4); display: flex; transition: transform .5s cubic-bezier(.22,.61,.36,1); }
     .rm-cu-chev svg { width: 18px; height: 18px; }
     .rm-cucard.open .rm-cu-chev { transform: rotate(90deg); }
 
     /* ── inline profile peek (Combined: tap a card to expand in place; the
        tristat reads from the list row, no extra fetch — Full profile opens the
        existing drawer for the deep view) ── */
-    .rm-cu-exp { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .28s ease; }
+    .rm-cu-exp { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .55s cubic-bezier(.22,.61,.36,1); }
     .rm-cucard.open .rm-cu-exp { grid-template-rows: 1fr; }
     .rm-cu-exp > .inner { overflow: hidden; }
     .rm-cu-exp-pad { padding: 13px 14px 14px; border-top: 1px dashed var(--line-soft); }
