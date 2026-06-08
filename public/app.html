@@ -11659,24 +11659,34 @@ async function viewProduct(id) {
   // re-render would refetch server truth and wipe the unsaved changes still
   // sitting in the DOM. (Flush clears the queue first, so it re-renders fine.)
   if (!_pdAutosave && _pdQueue.length && Number(id) === _pdCurrentPid()) return;
-  // Paint an instant skeleton so clicking a row feels immediate — the full
-  // record (with base64 image/label data) can take a beat to land. Pull the
-  // name from the in-memory list row so the header reads right away; the real
-  // view below replaces this once the fetch resolves.
+  // Delayed skeleton: leave the current screen (usually the list) in place and
+  // only show a spinner if the fetch is genuinely slow (>250ms). A fast/cached
+  // load swaps straight to the product with no spinner flash — so quick opens
+  // feel instant, while slow opens still get visible feedback. The header pulls
+  // the name from the in-memory list row so it reads right away when it appears.
   const _stub = (_products || []).find(x => Number(x.id) === Number(id));
   const _stubName = _stub ? (_stub.name_en || _stub.name_cn || '') : '';
-  document.getElementById('main').innerHTML = `
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
-      <button class="btn btn-secondary btn-sm" onclick="renderProducts()">← Back 返回</button>
-      ${_stubName ? `<span style="font-weight:800;font-size:16px">${esc(_stubName)}</span>` : ''}
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:80px 20px;color:var(--muted)">
-      <div style="width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--dk);border-radius:50%;animation:spin .8s linear infinite"></div>
-      <div style="font-size:13px;font-weight:600">Loading… 加载中</div>
-    </div>`;
+  const _spinTimer = setTimeout(() => {
+    const main = document.getElementById('main');
+    if (!main) return;
+    main.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <button class="btn btn-secondary btn-sm" onclick="renderProducts()">← Back 返回</button>
+        ${_stubName ? `<span style="font-weight:800;font-size:16px">${esc(_stubName)}</span>` : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:80px 20px;color:var(--muted)">
+        <div style="width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--dk);border-radius:50%;animation:spin .8s linear infinite"></div>
+        <div style="font-size:13px;font-weight:600">Loading… 加载中</div>
+      </div>`;
+  }, 250);
   // Run the product fetch and the recipe-cache warm-up in parallel so the
   // inline recipe picker is populated on first paint without doubling the wait.
-  const [ctx] = await Promise.all([_loadProductCtx(id), _ensureRecipesLoaded(), _pdEnsureCatTree()]);
+  let ctx;
+  try {
+    [ctx] = await Promise.all([_loadProductCtx(id), _ensureRecipesLoaded(), _pdEnsureCatTree()]);
+  } finally {
+    clearTimeout(_spinTimer); // data's here (or errored) — don't flash the spinner now
+  }
   if (!ctx) return;
   // Bento grid: hero pinned at top, then three cards on row 1 (Stock, Sizes,
   // Recipe & Diet), Description (2-col) + Notes on row 2, then collapsed
