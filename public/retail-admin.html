@@ -13590,6 +13590,14 @@ function cuBarTip(e) {
     `<div class="r"><span>${cuT('Revenue', '营收')}</span><b>¥${escapeHtml(rev)}</b></div>`;
   tip.style.display = 'block';
   fcPlaceTip(tip, col.getBoundingClientRect());
+  // On touch devices onmouseleave never fires, so the tooltip would stick to
+  // the screen while you scroll the drawer past the chart. Dismiss it on any
+  // scroll (capture:true catches the drawer body's inner scroll) or touchmove.
+  if (!cuBarTip._dismissWired) {
+    document.addEventListener('scroll', cuBarTipHide, true);
+    document.addEventListener('touchmove', cuBarTipHide, { passive: true });
+    cuBarTip._dismissWired = true;
+  }
 }
 function cuBarTipHide() {
   const tip = document.getElementById('cu-bar-tip');
