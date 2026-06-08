@@ -6548,6 +6548,9 @@
       .cu-detail-pairs { display: grid; grid-template-columns: 55fr 45fr; gap: var(--s6); align-items: start; }
       @media (max-width: 720px) {
         .cu-detail-pairs { grid-template-columns: 1fr; }
+        /* The display-options "View" popover isn't wanted in the phone customer
+           drawer — hide it (desktop keeps it). */
+        .cdv-view-wrap { display: none; }
         /* Top items is a slim 3-col table (Item/Qty/Spend) — let it fit the phone
            width instead of inheriting the global 560px min-width, which pushed the
            Spend column off-screen and cropped the row. */
@@ -21665,7 +21668,7 @@ function cdvBtn(key, val, label) {
 }
 function renderCustomerViewPopover() {
   return `
-    <div class="ovp-wrap" style="margin-left: auto;">
+    <div class="ovp-wrap cdv-view-wrap" style="margin-left: auto;">
       <button class="btn btn-sm" id="cdv-btn" onclick="cdvToggle()" aria-haspopup="true" title="Display options · 显示选项">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h7M4 18h10"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
         View · 视图
