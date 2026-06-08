@@ -26543,7 +26543,10 @@ window.onLangChange(function () {
     ctl.className = 'rm-sheet-ctl';
     ctl.appendChild(ctlBtn('Text size · 字号', function () { if (window.cuCycleUiScale) cuCycleUiScale(); }));
     ctl.appendChild(ctlBtn('Theme · 主题', function () { if (window.cuToggleTheme) cuToggleTheme(); }));
-    ctl.appendChild(ctlBtn('Language · 语言', function () { if (window.cuToggleLang) cuToggleLang(); }));
+    // Always bilingual (note: " / " not " · ", so the i18n runtime never strips
+    // it to one language) — the control that switches language must stay legible
+    // to a user currently stuck in the language they can't read.
+    ctl.appendChild(ctlBtn('EN / 中文', function () { if (window.cuToggleLang) cuToggleLang(); }));
     list.appendChild(ctl);
   }
 
