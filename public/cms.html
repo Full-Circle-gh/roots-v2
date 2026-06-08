@@ -13803,6 +13803,11 @@ document.addEventListener('keydown', (e) => {
   }
   .fc-preview-embed .phone-content { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .fc-preview-embed .phone-tabs { flex: 0 0 auto; }
+  /* The real phone already has its own status bar + notch — drop the
+     simulated iPhone notch and "9:41" status row so the preview isn't
+     wearing a second set of chrome. (Desktop keeps them.) */
+  .fc-preview-embed .phone::before,
+  .fc-preview-embed .phone-status { display: none !important; }
   /* Roomier bottom gap so the last block clears the shell's bottom bar. */
   .fc-preview-embed .phone-content::after { content: ''; display: block; height: 12px; }
 </style>
