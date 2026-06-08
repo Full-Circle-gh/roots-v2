@@ -1422,6 +1422,16 @@
     .db-deepdive:not([open]) > summary::before { animation: none; }
   }
 
+  /* Symmetric open/close — a native <details> snaps open and shut, so closing
+     felt instant while opening looked slow (the content reveal). dashInit's
+     summary-click handler drives the fold's body height both ways; this is the
+     transition that envelope rides. Scoped to .dd-anim so it's live only mid-
+     animation and never fights normal layout or the per-card reveal. */
+  .db-deepdive.dd-anim .db-deepdive-body {
+    overflow: hidden;
+    transition: height .4s cubic-bezier(.4, 0, .2, 1);
+  }
+
   /* ── Bars come alive: every magnitude bar inside a mobile report card sweeps
      out from the left when its card mounts or unfolds — on dashboard refresh
      (default-open sections), on each accordion unfold, and in the report
@@ -12733,22 +12743,74 @@ function dashInit() {
   }
 
   const dd = document.getElementById('db-deepdive');
-  if (dd) dd.addEventListener('toggle', () => {
-    if (dd.open) {
-      dd.classList.remove('dd-open-anim');
-      void dd.offsetWidth;
-      dd.classList.add('dd-open-anim');
-      dashKpiAnimate();
-      // Zen reveal — once the fold is open, drift the page down with a long
-      // eased glide, not a snap. Land on the summary itself (the true head of
-      // the block) so its range chip stays in view; scrolling to the KPI strip
-      // below would push the summary — and the active-range echo — off-screen.
-      const head = dd.querySelector('summary') || dd;
-      if (head) requestAnimationFrame(() => dashZenScrollTo(head, { margin: 72 }));
-    } else {
-      dd.classList.remove('dd-open-anim');
-    }
-  });
+  if (dd) {
+    // Content reveal — fires whichever way the open attribute flips (native
+    // toggle, or our height-driven open/close below). On open: replay the
+    // fade-up / count-up and zen-glide up to the summary. On close: just drop
+    // the reveal class. Stays independent of the height envelope.
+    dd.addEventListener('toggle', () => {
+      if (dd.open) {
+        dd.classList.remove('dd-open-anim');
+        void dd.offsetWidth;
+        dd.classList.add('dd-open-anim');
+        dashKpiAnimate();
+        // Zen reveal — drift the page down on a long eased glide, not a snap.
+        // Land on the summary (the true head) so its range chip stays in view.
+        const head = dd.querySelector('summary') || dd;
+        if (head) requestAnimationFrame(() => dashZenScrollTo(head, { margin: 72 }));
+      } else {
+        dd.classList.remove('dd-open-anim');
+      }
+    });
+
+    // Symmetric height envelope — a native <details> snaps open/shut, so we
+    // intercept the summary click and ease the body height both ways. The
+    // open attribute is flipped at the right edge of each tween (open up
+    // front so the body renders to measure; close only once it's collapsed),
+    // which lets the toggle handler above run the reveal in step. Reduced
+    // motion (or a missing body) falls back to the native instant toggle.
+    const ddBody = dd.querySelector('.db-deepdive-body');
+    const ddSummary = dd.querySelector('summary');
+    const ddReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let ddAnimating = false;
+    if (ddSummary && ddBody) ddSummary.addEventListener('click', (e) => {
+      if (ddReduce) return;          // let the browser toggle instantly
+      e.preventDefault();            // we own the toggle from here
+      if (ddAnimating) return;       // ignore clicks mid-tween
+      ddAnimating = true;
+      dd.classList.add('dd-anim');
+      const finish = (close) => {
+        let settled = false;
+        const cleanup = () => {
+          if (settled) return; settled = true;
+          if (close) dd.open = false;
+          ddBody.style.height = '';
+          dd.classList.remove('dd-anim');
+          ddAnimating = false;
+        };
+        ddBody.addEventListener('transitionend', function done(ev) {
+          if (ev.propertyName !== 'height') return;
+          ddBody.removeEventListener('transitionend', done);
+          cleanup();
+        });
+        setTimeout(cleanup, 500);   // safety net if transitionend never fires
+      };
+      if (!dd.open) {
+        dd.open = true;                          // render body so we can measure
+        const full = ddBody.offsetHeight;
+        ddBody.style.height = '0px';
+        void ddBody.offsetWidth;                 // commit the start height
+        ddBody.style.height = full + 'px';       // → ease open
+        finish(false);
+      } else {
+        const full = ddBody.offsetHeight;
+        ddBody.style.height = full + 'px';
+        void ddBody.offsetWidth;                 // commit the start height
+        ddBody.style.height = '0px';             // → ease closed
+        finish(true);
+      }
+    });
+  }
   dashSetRange('30');  // default window + initial load
   dashHeroInit();      // right-now hero (phase 2): polling + drawer wiring
   bentoInit();         // bento tiles (phase 3): layout + /ops polling
