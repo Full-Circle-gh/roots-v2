@@ -6576,6 +6576,13 @@
         /* The display-options "View" popover isn't wanted in the phone customer
            drawer — hide it (desktop keeps it). */
         .cdv-view-wrap { display: none; }
+        /* Address modal: stack every field full-width so it fits one phone
+           window. The .row fields carry desktop min-widths (140–200px) that
+           otherwise refuse to shrink and force horizontal scrolling. */
+        #cu-addr-bg .row { flex-wrap: wrap; }
+        #cu-addr-bg .row > .field { flex: 1 1 100% !important; min-width: 0 !important; }
+        #cu-addr-bg .field input,
+        #cu-addr-bg .field select { width: 100%; box-sizing: border-box; }
         /* Swap the floating round × (doesn't fit the mobile header) for a
            left-side back chevron, matching the order drawer. The action row
            drops below the chevron so it sits on its own line top-left. */
