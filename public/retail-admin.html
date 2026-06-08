@@ -1396,30 +1396,30 @@
     .db-deepdive.dd-open-anim .db-cohort-curve .line { animation: none; }
   }
 
-  /* Closed Deep dive — a calm "come look inside" invitation. The bar breathes
-     a soft brass glow in and out on a slow loop, and the ▸ chevron gives one
-     gentle nudge near the end of each cycle (periodic motion reads less needy
-     than a constant pulse). Stops the instant it's opened, and forever once
-     it's been opened at least once (.dd-seen, set + persisted in JS). Honours
-     prefers-reduced-motion. */
+  /* Closed Deep dive — a calm "come look inside" invitation. While the fold is
+     closed the bar breathes a brass glow in and out, its border warms to brass
+     at the peak, and the ▸ chevron gives one gentle nudge + brass flush near
+     the end of each cycle (periodic motion reads less needy than a constant
+     pulse). The :not([open]) selector self-cancels the moment it's opened and
+     resumes when closed again. Honours prefers-reduced-motion. */
   @keyframes db-dd-breathe {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(176, 141, 74, 0); }
-    50%      { box-shadow: 0 5px 20px -8px rgba(176, 141, 74, .30); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(176, 141, 74, 0);   border-color: var(--line-soft); }
+    50%      { box-shadow: 0 4px 22px -4px rgba(176, 141, 74, .55); border-color: rgba(176, 141, 74, .55); }
   }
   @keyframes db-dd-nudge {
-    0%, 80%, 100% { transform: translateX(0); }
-    88%           { transform: translateX(3px); }
-    94%           { transform: translateX(0); }
+    0%, 78%, 100% { transform: translateX(0); color: var(--text-3); }
+    86%           { transform: translateX(4px); color: var(--brass); }
+    93%           { transform: translateX(0); color: var(--text-3); }
   }
-  .db-deepdive:not([open]):not(.dd-seen) {
-    animation: db-dd-breathe 5.5s ease-in-out infinite;
+  .db-deepdive:not([open]) {
+    animation: db-dd-breathe 4.5s ease-in-out infinite;
   }
-  .db-deepdive:not([open]):not(.dd-seen) > summary::before {
-    animation: db-dd-nudge 5.5s ease-in-out infinite;
+  .db-deepdive:not([open]) > summary::before {
+    animation: db-dd-nudge 4.5s ease-in-out infinite;
   }
   @media (prefers-reduced-motion: reduce) {
-    .db-deepdive:not([open]):not(.dd-seen),
-    .db-deepdive:not([open]):not(.dd-seen) > summary::before { animation: none; }
+    .db-deepdive:not([open]),
+    .db-deepdive:not([open]) > summary::before { animation: none; }
   }
 
   /* ── Bars come alive: every magnitude bar inside a mobile report card sweeps
@@ -12733,13 +12733,8 @@ function dashInit() {
   }
 
   const dd = document.getElementById('db-deepdive');
-  // Once the operator has ever opened the fold, retire the ambient "breathe +
-  // chevron nudge" invitation — it's done its job and shouldn't keep nagging.
-  try { if (localStorage.getItem('db-dd-seen') === '1') dd && dd.classList.add('dd-seen'); } catch (e) {}
   if (dd) dd.addEventListener('toggle', () => {
     if (dd.open) {
-      dd.classList.add('dd-seen');
-      try { localStorage.setItem('db-dd-seen', '1'); } catch (e) {}
       dd.classList.remove('dd-open-anim');
       void dd.offsetWidth;
       dd.classList.add('dd-open-anim');
