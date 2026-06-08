@@ -87,6 +87,28 @@ app.use(session({
   }
 }));
 
+// ── Canonical host ──────────────────────────────────────────────────────────
+// The kitchen app lives only at food.rootskitchenchina.com. The bare domain,
+// www, and the legacy app.* host bounce human page requests there.
+// We deliberately DON'T redirect machine traffic that can't follow a 302 and is
+// pinned to rootskitchenchina.com: WeChat/Alipay payment callbacks + the native
+// mini-program's API base (/api/*), its brand fonts loaded via downloadFile
+// (/assets/*), the in-WeChat web-view tracking page (/track…), and the ACME
+// renewal challenge (/.well-known/*). store.* is untouched (own subdomain).
+const KITCHEN_HOST = 'food.rootskitchenchina.com';
+const LEGACY_KITCHEN_HOSTS = new Set([
+  'rootskitchenchina.com',
+  'www.rootskitchenchina.com',
+  'app.rootskitchenchina.com',
+]);
+app.use((req, res, next) => {
+  if (!LEGACY_KITCHEN_HOSTS.has((req.hostname || '').toLowerCase())) return next();
+  const p = req.path;
+  if (p.startsWith('/api/') || p.startsWith('/assets/') ||
+      p.startsWith('/track') || p.startsWith('/.well-known/')) return next();
+  return res.redirect(302, 'https://' + KITCHEN_HOST + req.originalUrl);
+});
+
 // Static files
 app.use('/assets', express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
