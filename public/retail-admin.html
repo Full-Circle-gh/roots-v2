@@ -5973,6 +5973,16 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         Media · 媒体库
       </button>
+      <!-- Legal pages + FAQ moved here from Settings (2026-06-08) so all published
+           mini-app content lives in one place. -->
+      <button data-tab="legal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h6"/></svg>
+        Legal pages · 法律条款
+      </button>
+      <button data-tab="faq">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        FAQ &amp; help · 常见问题
+      </button>
       <!-- Mini App Editor & Product Page Editor moved out of this dropdown into
            top-level nav tabs (after Delivery) so they switch in-page. -->
 
@@ -8590,6 +8600,38 @@
             </div>
           </div>
 
+          <!-- MINIMUM ORDER — moved here from Settings → Checkout & fees (2026-06-08)
+               so every cart-level money rule lives in one place. Saves with the fee
+               keys above via saveDeliveryFees → fees.minOrder. -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Minimum order · 起送金额</h3>
+              <div class="muted">Blocks checkout below this subtotal. Set to <b>0</b> to disable. When triggered, the Pay button is disabled and shows "Order minimum ¥X — add ¥Y more". · 低于该小计时阻止结算;设为 0 关闭。</div>
+            </div>
+            <div class="illus-row">
+              <div class="mini-phone">
+                <div class="mp-notch"></div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 6px; background: var(--accent); border-radius: 1px"></div>
+                <div class="ms-tile" style="left: 4px; top: 22px; right: 4px; height: 12px"></div>
+                <div class="ms-tile" style="left: 4px; top: 38px; right: 4px; height: 12px"></div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 56px; padding: 3px 4px; background: rgba(232,85,106,.14); border: 1px solid var(--danger); border-radius: 3px;">
+                  <div style="font-size: 7px; color: var(--danger); font-weight: 600">Order min ¥<span id="pv-min-order">50</span></div>
+                  <div style="font-size: 6px; color: var(--text-2); margin-top: 1px">Add ¥18 more</div>
+                </div>
+                <div style="position: absolute; left: 4px; right: 4px; bottom: 4px; height: 14px; background: #56544f; border-radius: 3px; opacity: .55"></div>
+              </div>
+              <div class="ctrl">
+                <div class="field" style="margin: 0;">
+                  <label class="stacked">Minimum subtotal · 起送金额</label>
+                  <span class="yen-input"><input type="number" id="cfg-fees-minOrder"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px;">
+                  Useful to avoid loss-making tiny orders, or leave at 0 if you want trial customers to buy one item.
+                </div>
+              </div>
+            </div>
+          </div>
+
     <div class="row" style="gap: 12px; margin-bottom: var(--s4);">
       <button class="btn btn-primary" onclick="saveDeliveryFees()">Save fees · 保存费用</button>
       <span id="dlv-fees-status" style="font-size: 12px; align-self: center;"></span>
@@ -10036,10 +10078,6 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18l-2 13H5L3 7z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg>
           Shop tab
         </button>
-        <button data-sub="checkout">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg>
-          Checkout &amp; fees
-        </button>
         <button data-sub="push">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0v5l2 3H4l2-3V8z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
           Push notifications
@@ -10051,14 +10089,6 @@
         <button data-sub="cs">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
           Customer service
-        </button>
-        <button data-sub="legal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h6"/></svg>
-          Legal pages
-        </button>
-        <button data-sub="faq">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          FAQ &amp; help centre
         </button>
       </aside>
 
@@ -10615,45 +10645,6 @@
           </div>
         </div>
 
-        <!-- ────── CHECKOUT ────── -->
-        <div class="sub-panel" id="sub-checkout">
-          <h2>Checkout &amp; fees · 结算与费用</h2>
-
-          <!-- Shipping fees, the free-shipping threshold, the pickup packing fee, and
-               pickup hours now live in the Delivery tab (single home, consolidated
-               2026-06-02). This panel keeps only the cart-level checkout gate below. -->
-
-          <!-- MIN ORDER -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Minimum order · 起送金额</h3>
-              <div class="muted">Blocks checkout below this subtotal. Set to <b>0</b> to disable. When triggered, the Pay button is disabled and shows "Order minimum ¥X — add ¥Y more".</div>
-            </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 6px; background: var(--accent); border-radius: 1px"></div>
-                <div class="ms-tile" style="left: 4px; top: 22px; right: 4px; height: 12px"></div>
-                <div class="ms-tile" style="left: 4px; top: 38px; right: 4px; height: 12px"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 56px; padding: 3px 4px; background: rgba(232,85,106,.14); border: 1px solid var(--danger); border-radius: 3px;">
-                  <div style="font-size: 7px; color: var(--danger); font-weight: 600">Order min ¥<span id="pv-min-order">50</span></div>
-                  <div style="font-size: 6px; color: var(--text-2); margin-top: 1px">Add ¥18 more</div>
-                </div>
-                <div style="position: absolute; left: 4px; right: 4px; bottom: 4px; height: 14px; background: #56544f; border-radius: 3px; opacity: .55"></div>
-              </div>
-              <div class="ctrl">
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Minimum subtotal · 起送金额</label>
-                  <span class="yen-input"><input type="number" id="cfg-fees-minOrder"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px;">
-                  Useful to avoid loss-making tiny orders, or leave at 0 if you want trial customers to buy one item.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- (Tab-bar design lives in the CMS / mini-app editor — open /cms
              and use the "TAB BAR" picker in the topbar.) -->
 
@@ -11151,141 +11142,6 @@
           </div>
         </div>
 
-        <!-- ────── LEGAL ────── -->
-        <div class="sub-panel" id="sub-legal">
-          <h2>Legal pages · 法律条款</h2>
-
-          <!-- PRIVACY -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Privacy policy · 隐私政策</h3>
-              <div class="muted">Required by WeChat for any mini-program that collects user info (we do — phone, address, openid). Linked from the Me tab and shown on first-launch onboarding. The customer's WeChat language picks EN or 中.</div>
-            </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 8px; background: var(--bg-elev-2); border-radius: 1px; display: flex; align-items: center; justify-content: center; font-size: 6px; color: var(--text-2); font-weight: 600">Privacy</div>
-                <div class="ms-row" style="top: 24px"></div>
-                <div class="ms-row" style="top: 30px"></div>
-                <div class="ms-row" style="top: 36px; right: 30%"></div>
-                <div class="ms-row" style="top: 48px"></div>
-                <div class="ms-row" style="top: 54px"></div>
-                <div class="ms-row" style="top: 60px; right: 20%"></div>
-                <div class="ms-row" style="top: 72px"></div>
-                <div class="ms-row" style="top: 78px"></div>
-                <div class="ms-row" style="top: 84px; right: 40%"></div>
-                <div class="ms-row" style="top: 96px"></div>
-                <div class="ms-row" style="top: 102px"></div>
-                <div class="ms-tab"><span></span><span></span><span></span><span class="active"></span></div>
-              </div>
-              <div class="ctrl">
-                <div class="field">
-                  <label class="stacked">English body · 英文正文</label>
-                  <textarea id="cfg-legal-privacy-en" placeholder="What we collect, why, how we store it, how to delete it. One paragraph per double-newline."
-                            style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
-                </div>
-                <div class="field" style="margin-bottom: 0">
-                  <label class="stacked">中文正文</label>
-                  <textarea id="cfg-legal-privacy-cn" placeholder="收集的信息、用途、储存方式、删除方式。每段用双行分隔。"
-                            style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- TERMS -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Terms of service · 服务条款</h3>
-              <div class="muted">Rules of using the mini-app — order policy, refund/return rules, food-safety disclaimers, delivery limits. Shown alongside Privacy in the Me tab and during onboarding. · 小程序使用规则 — 下单政策、退款/退货规则、食品安全声明、配送限制;与隐私政策一起在"我的"页与首次进入时展示。</div>
-            </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 8px; background: var(--bg-elev-2); border-radius: 1px; display: flex; align-items: center; justify-content: center; font-size: 6px; color: var(--text-2); font-weight: 600">Terms</div>
-                <div style="position: absolute; left: 4px; top: 24px; font-size: 6px; color: var(--text-2); font-weight: 600">1. Orders</div>
-                <div class="ms-row" style="top: 32px"></div>
-                <div class="ms-row" style="top: 38px; right: 30%"></div>
-                <div style="position: absolute; left: 4px; top: 48px; font-size: 6px; color: var(--text-2); font-weight: 600">2. Refunds</div>
-                <div class="ms-row" style="top: 56px"></div>
-                <div class="ms-row" style="top: 62px"></div>
-                <div class="ms-row" style="top: 68px; right: 25%"></div>
-                <div style="position: absolute; left: 4px; top: 78px; font-size: 6px; color: var(--text-2); font-weight: 600">3. Delivery</div>
-                <div class="ms-row" style="top: 86px"></div>
-                <div class="ms-row" style="top: 92px; right: 40%"></div>
-                <div class="ms-tab"><span></span><span></span><span></span><span class="active"></span></div>
-              </div>
-              <div class="ctrl">
-                <div class="field">
-                  <label class="stacked">English body · 英文正文</label>
-                  <textarea id="cfg-legal-terms-en" placeholder="Order policy, refunds, food-safety. One paragraph per double-newline; sections start with a numbered heading on its own line."
-                            style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
-                </div>
-                <div class="field" style="margin-bottom: 0">
-                  <label class="stacked">中文正文</label>
-                  <textarea id="cfg-legal-terms-cn" placeholder="订单规则、退款、食品安全。每段用双行分隔。"
-                            style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ────── FAQ / HELP CENTRE ────── -->
-        <div class="sub-panel" id="sub-faq">
-          <h2>FAQ &amp; help centre · 常见问题与帮助中心</h2>
-          <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
-            Powers the <b>Me → Help &amp; FAQ</b> screen in the mini app. Each question stores both EN and 中文 — the customer's language picks one. Changes appear in the mini app within ~60s (config cache TTL).
-            The contact bar at the bottom of the FAQ screen reuses the WeChat customer-service settings above and the optional phone number — set those in the Customer service panel.
-          </div>
-
-          <!-- Categories -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Categories · 分类</h3>
-              <div class="muted">The colour-coded chips at the top of the FAQ screen. Customers tap one to filter the question list. <b>id</b> is the slug stored in each question — change it only if no questions reference it yet.</div>
-            </div>
-            <div class="table-wrap" style="margin-bottom: 12px;">
-              <table id="faq-cats-table">
-                <thead><tr>
-                  <th style="width: 140px;">id</th>
-                  <th>English label · 英文名称</th>
-                  <th>中文标签</th>
-                  <th style="width: 140px;">Colour · 颜色</th>
-                  <th style="width: 60px;"></th>
-                </tr></thead>
-                <tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
-              </table>
-            </div>
-            <div class="row" style="gap: 12px;">
-              <button class="btn" onclick="addFaqCategory()">+ Add category</button>
-            </div>
-          </div>
-
-          <!-- Questions -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Questions &amp; answers · 问题与答案</h3>
-              <div class="muted">Each card holds one Q+A in both languages. Pick a category so the chip and filter behaviour line up. The order here is the order customers see. · 每张卡片是一个 Q&amp;A,双语录入;选择分类以匹配筛选标签;此处顺序即顾客看到的顺序。</div>
-            </div>
-            <div id="faq-qs-list" style="display: flex; flex-direction: column; gap: 12px;">
-              <div class="muted" style="padding: 16px 0;">Loading… · 加载中…</div>
-            </div>
-            <div class="row" style="gap: 12px; margin-top: 12px;">
-              <button class="btn" onclick="addFaqQuestion()">+ Add question</button>
-              <button class="btn" onclick="loadFaq()" style="margin-left: auto;">Reset (reload from server) · 重置(从服务端重新加载)</button>
-            </div>
-          </div>
-
-          <div class="row" style="gap: 12px; margin-top: var(--s4);">
-            <button class="btn btn-primary" onclick="saveFaq()">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-              Save FAQ
-            </button>
-            <span id="faq-status" style="font-size: 12px; align-self: center;"></span>
-          </div>
-        </div>
-
         <!-- ────── FEATURES ────── -->
         <!-- Per-tenant feature switches. Rows are rendered by renderFeaturesPanel()
              from the operator's entitlements, so this panel only ever lists the
@@ -11317,6 +11173,151 @@
 
       </div><!-- /.settings-body -->
     </div><!-- /.settings-layout -->
+  </section>
+
+  <!-- ─── LEGAL PAGES ─── (moved out of Settings into the Content group 2026-06-08;
+       same cfg-legal-* fields, now saved by its own saveLegal() partial PUT). -->
+  <section id="tab-legal">
+    <h2>Legal pages · 法律条款</h2>
+
+    <!-- PRIVACY -->
+    <div class="group-card">
+      <div class="group-card-head">
+        <h3>Privacy policy · 隐私政策</h3>
+        <div class="muted">Required by WeChat for any mini-program that collects user info (we do — phone, address, openid). Linked from the Me tab and shown on first-launch onboarding. The customer's WeChat language picks EN or 中.</div>
+      </div>
+      <div class="illus-row">
+        <div class="mini-phone">
+          <div class="mp-notch"></div>
+          <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 8px; background: var(--bg-elev-2); border-radius: 1px; display: flex; align-items: center; justify-content: center; font-size: 6px; color: var(--text-2); font-weight: 600">Privacy</div>
+          <div class="ms-row" style="top: 24px"></div>
+          <div class="ms-row" style="top: 30px"></div>
+          <div class="ms-row" style="top: 36px; right: 30%"></div>
+          <div class="ms-row" style="top: 48px"></div>
+          <div class="ms-row" style="top: 54px"></div>
+          <div class="ms-row" style="top: 60px; right: 20%"></div>
+          <div class="ms-row" style="top: 72px"></div>
+          <div class="ms-row" style="top: 78px"></div>
+          <div class="ms-row" style="top: 84px; right: 40%"></div>
+          <div class="ms-row" style="top: 96px"></div>
+          <div class="ms-row" style="top: 102px"></div>
+          <div class="ms-tab"><span></span><span></span><span></span><span class="active"></span></div>
+        </div>
+        <div class="ctrl">
+          <div class="field">
+            <label class="stacked">English body · 英文正文</label>
+            <textarea id="cfg-legal-privacy-en" placeholder="What we collect, why, how we store it, how to delete it. One paragraph per double-newline."
+                      style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
+          </div>
+          <div class="field" style="margin-bottom: 0">
+            <label class="stacked">中文正文</label>
+            <textarea id="cfg-legal-privacy-cn" placeholder="收集的信息、用途、储存方式、删除方式。每段用双行分隔。"
+                      style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TERMS -->
+    <div class="group-card">
+      <div class="group-card-head">
+        <h3>Terms of service · 服务条款</h3>
+        <div class="muted">Rules of using the mini-app — order policy, refund/return rules, food-safety disclaimers, delivery limits. Shown alongside Privacy in the Me tab and during onboarding. · 小程序使用规则 — 下单政策、退款/退货规则、食品安全声明、配送限制;与隐私政策一起在"我的"页与首次进入时展示。</div>
+      </div>
+      <div class="illus-row">
+        <div class="mini-phone">
+          <div class="mp-notch"></div>
+          <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 8px; background: var(--bg-elev-2); border-radius: 1px; display: flex; align-items: center; justify-content: center; font-size: 6px; color: var(--text-2); font-weight: 600">Terms</div>
+          <div style="position: absolute; left: 4px; top: 24px; font-size: 6px; color: var(--text-2); font-weight: 600">1. Orders</div>
+          <div class="ms-row" style="top: 32px"></div>
+          <div class="ms-row" style="top: 38px; right: 30%"></div>
+          <div style="position: absolute; left: 4px; top: 48px; font-size: 6px; color: var(--text-2); font-weight: 600">2. Refunds</div>
+          <div class="ms-row" style="top: 56px"></div>
+          <div class="ms-row" style="top: 62px"></div>
+          <div class="ms-row" style="top: 68px; right: 25%"></div>
+          <div style="position: absolute; left: 4px; top: 78px; font-size: 6px; color: var(--text-2); font-weight: 600">3. Delivery</div>
+          <div class="ms-row" style="top: 86px"></div>
+          <div class="ms-row" style="top: 92px; right: 40%"></div>
+          <div class="ms-tab"><span></span><span></span><span></span><span class="active"></span></div>
+        </div>
+        <div class="ctrl">
+          <div class="field">
+            <label class="stacked">English body · 英文正文</label>
+            <textarea id="cfg-legal-terms-en" placeholder="Order policy, refunds, food-safety. One paragraph per double-newline; sections start with a numbered heading on its own line."
+                      style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
+          </div>
+          <div class="field" style="margin-bottom: 0">
+            <label class="stacked">中文正文</label>
+            <textarea id="cfg-legal-terms-cn" placeholder="订单规则、退款、食品安全。每段用双行分隔。"
+                      style="width: 100%; min-height: 160px; font-family: monospace; font-size: 12px;"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row" style="gap: 12px; margin-top: var(--s4);">
+      <button class="btn btn-primary" onclick="saveLegal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save legal pages · 保存法律条款
+      </button>
+      <span id="legal-status" style="font-size: 12px; align-self: center;"></span>
+    </div>
+  </section>
+
+  <!-- ─── FAQ & HELP CENTRE ─── (moved out of Settings into the Content group
+       2026-06-08; keeps its own loadFaq()/saveFaq()). -->
+  <section id="tab-faq">
+    <h2>FAQ &amp; help centre · 常见问题与帮助中心</h2>
+    <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
+      Powers the <b>Me → Help &amp; FAQ</b> screen in the mini app. Each question stores both EN and 中文 — the customer's language picks one. Changes appear in the mini app within ~60s (config cache TTL).
+      The contact bar at the bottom of the FAQ screen reuses the WeChat customer-service settings (Settings → Customer service) and the optional phone number set there.
+    </div>
+
+    <!-- Categories -->
+    <div class="group-card">
+      <div class="group-card-head">
+        <h3>Categories · 分类</h3>
+        <div class="muted">The colour-coded chips at the top of the FAQ screen. Customers tap one to filter the question list. <b>id</b> is the slug stored in each question — change it only if no questions reference it yet.</div>
+      </div>
+      <div class="table-wrap" style="margin-bottom: 12px;">
+        <table id="faq-cats-table">
+          <thead><tr>
+            <th style="width: 140px;">id</th>
+            <th>English label · 英文名称</th>
+            <th>中文标签</th>
+            <th style="width: 140px;">Colour · 颜色</th>
+            <th style="width: 60px;"></th>
+          </tr></thead>
+          <tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="row" style="gap: 12px;">
+        <button class="btn" onclick="addFaqCategory()">+ Add category</button>
+      </div>
+    </div>
+
+    <!-- Questions -->
+    <div class="group-card">
+      <div class="group-card-head">
+        <h3>Questions &amp; answers · 问题与答案</h3>
+        <div class="muted">Each card holds one Q+A in both languages. Pick a category so the chip and filter behaviour line up. The order here is the order customers see. · 每张卡片是一个 Q&amp;A,双语录入;选择分类以匹配筛选标签;此处顺序即顾客看到的顺序。</div>
+      </div>
+      <div id="faq-qs-list" style="display: flex; flex-direction: column; gap: 12px;">
+        <div class="muted" style="padding: 16px 0;">Loading… · 加载中…</div>
+      </div>
+      <div class="row" style="gap: 12px; margin-top: 12px;">
+        <button class="btn" onclick="addFaqQuestion()">+ Add question</button>
+        <button class="btn" onclick="loadFaq()" style="margin-left: auto;">Reset (reload from server) · 重置(从服务端重新加载)</button>
+      </div>
+    </div>
+
+    <div class="row" style="gap: 12px; margin-top: var(--s4);">
+      <button class="btn btn-primary" onclick="saveFaq()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save FAQ
+      </button>
+      <span id="faq-status" style="font-size: 12px; align-self: center;"></span>
+    </div>
   </section>
 
   <!-- Embedded editors — the Mini App Editor (/cms) and Product Page Editor
@@ -11804,7 +11805,6 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
     'delivery':    'shipping holiday batch fresh zones same-day district cutoff lead time 配送 节假日 现做 区域 当天',
     'brand':       'logo colour color theme accent font palette dark light wordmark 品牌 主题 颜色 字体 标志',
     'shop':        'category grid sort filter 商店 分类',
-    'checkout':    'fee fees tax shipping minimum order payment surcharge 结账 费用 税 最低',
     'push':        'notification alert message subscribe 推送 通知',
     'social proof': 'bought count viewers recent buyers ticker 社交 人气 销量',
     'customer service': 'cs contact whatsapp wechat hours support chat 客服 联系',
@@ -17595,10 +17595,8 @@ async function saveConfig() {
       if (/^#[0-9a-fA-F]{6}$/.test(custom)) return custom.toUpperCase();
       return $('#cfg-theme-notifColor').value;
     })(),
-    // Shipping fees, free-shipping threshold, pickup packing fee, and pickup window
-    // moved to the Delivery tab (saveDeliveryFees, 2026-06-02). This panel now owns
-    // only the minimum-order checkout gate.
-    'fees.minOrder':               Number($('#cfg-fees-minOrder').value) || 0,
+    // Fees — shipping, free-shipping threshold, pickup packing/hours, and the
+    // minimum-order gate — all live in the Delivery tab now (saveDeliveryFees).
     'shop.layout':                 $('#cfg-shop-layout').value,
     'shop.defaultSort':            $('#cfg-shop-defaultSort').value,
     'shop.showSort':               $('#cfg-shop-showSort').checked,
@@ -17630,12 +17628,8 @@ async function saveConfig() {
     'customer_service.fab_icon_emoji': $('#cfg-cs-fab_icon_emoji').value.trim(),
     'customer_service.fab_side':       $('#cfg-cs-fab_side').value,
     'customer_service.fab_bottom':     parseInt($('#cfg-cs-fab_bottom').value, 10) || 220,
-    'legal.privacy.body_en': $('#cfg-legal-privacy-en').value,
-    'legal.privacy.body_cn': $('#cfg-legal-privacy-cn').value,
-    'legal.terms.body_en':   $('#cfg-legal-terms-en').value,
-    'legal.terms.body_cn':   $('#cfg-legal-terms-cn').value,
-    'legal.privacy.updated_at': new Date().toISOString().slice(0, 10),
-    'legal.terms.updated_at':   new Date().toISOString().slice(0, 10),
+    // Legal pages moved to the Content group (Content → Legal pages) and save on
+    // their own button via saveLegal() — no longer ride along here (2026-06-08).
     // Mini-app footer (Me page) — single nested object under brand.me_footer.
     'brand.me_footer': {
       wordmark_image: _footerWordmarkData || null,
@@ -19634,6 +19628,9 @@ async function saveDeliveryFees() {
     'fees.standardShipping':       Number($('#cfg-fees-standardShipping').value) || 0,
     'fees.sameDayDelivery':        Number($('#cfg-fees-sameDayDelivery').value) || 0,
     'fees.pickupPackingFee':       Number($('#cfg-fees-pickupPackingFee').value) || 0,
+    // Minimum-order checkout gate — moved here from Settings → Checkout & fees so
+    // it saves alongside the other cart money rules (2026-06-08).
+    'fees.minOrder':               Number($('#cfg-fees-minOrder').value) || 0,
     'pickup.window':               {
       open:  $('#cfg-pickup-open').value  || '10:00',
       close: $('#cfg-pickup-close').value || '20:00',
@@ -21226,6 +21223,31 @@ function moveFaqQ(i, dir) {
   if (j < 0 || j >= FAQ_QS.length) return;
   const tmp = FAQ_QS[i]; FAQ_QS[i] = FAQ_QS[j]; FAQ_QS[j] = tmp;
   renderFaqQs();
+}
+
+// Legal pages live in the Content group (moved out of Settings 2026-06-08). They
+// save on their own button via a partial config PUT, mirroring the keys that used
+// to ride along in saveConfig().
+async function saveLegal() {
+  const status = $('#legal-status');
+  if (status) { status.textContent = 'Saving… · 保存中…'; status.style.color = ''; }
+  const today = new Date().toISOString().slice(0, 10);
+  const body = {
+    'legal.privacy.body_en': $('#cfg-legal-privacy-en').value,
+    'legal.privacy.body_cn': $('#cfg-legal-privacy-cn').value,
+    'legal.terms.body_en':   $('#cfg-legal-terms-en').value,
+    'legal.terms.body_cn':   $('#cfg-legal-terms-cn').value,
+    'legal.privacy.updated_at': today,
+    'legal.terms.updated_at':   today,
+  };
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body });
+    if (status) { status.innerHTML = '<span class="ok">Saved ✓ · 已保存</span>'; }
+    toast('Saved · 已保存');
+  } catch (e) {
+    if (status) { status.textContent = 'Save failed · 保存失败'; status.style.color = 'var(--danger)'; }
+    toast('Save failed · 保存失败: ' + e.message, 'err');
+  }
 }
 
 async function saveFaq() {
