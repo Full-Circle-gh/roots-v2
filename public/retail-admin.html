@@ -12744,20 +12744,31 @@ function dashInit() {
 
   const dd = document.getElementById('db-deepdive');
   if (dd) {
+    const ddBody = dd.querySelector('.db-deepdive-body');
+    const ddSummary = dd.querySelector('summary');
+    const ddReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let ddAnimating = false;
+
+    // Zen reveal — drift the page down so the summary sits near the top and the
+    // freshly-revealed charts come into view. Next frame so it measures against
+    // the (by now) expanded layout, not a collapsed one.
+    const ddZenToHead = () => {
+      const head = ddSummary || dd;
+      if (head) requestAnimationFrame(() => dashZenScrollTo(head, { margin: 72 }));
+    };
+
     // Content reveal — fires whichever way the open attribute flips (native
     // toggle, or our height-driven open/close below). On open: replay the
-    // fade-up / count-up and zen-glide up to the summary. On close: just drop
-    // the reveal class. Stays independent of the height envelope.
+    // fade-up / count-up. The scroll waits for the height tween to finish (see
+    // finish()) so it targets the full-height page; on the native / reduced-
+    // motion path there's no tween, so it's safe to scroll right away.
     dd.addEventListener('toggle', () => {
       if (dd.open) {
         dd.classList.remove('dd-open-anim');
         void dd.offsetWidth;
         dd.classList.add('dd-open-anim');
         dashKpiAnimate();
-        // Zen reveal — drift the page down on a long eased glide, not a snap.
-        // Land on the summary (the true head) so its range chip stays in view.
-        const head = dd.querySelector('summary') || dd;
-        if (head) requestAnimationFrame(() => dashZenScrollTo(head, { margin: 72 }));
+        if (!ddAnimating) ddZenToHead();
       } else {
         dd.classList.remove('dd-open-anim');
       }
@@ -12769,10 +12780,6 @@ function dashInit() {
     // front so the body renders to measure; close only once it's collapsed),
     // which lets the toggle handler above run the reveal in step. Reduced
     // motion (or a missing body) falls back to the native instant toggle.
-    const ddBody = dd.querySelector('.db-deepdive-body');
-    const ddSummary = dd.querySelector('summary');
-    const ddReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let ddAnimating = false;
     if (ddSummary && ddBody) ddSummary.addEventListener('click', (e) => {
       if (ddReduce) return;          // let the browser toggle instantly
       e.preventDefault();            // we own the toggle from here
@@ -12787,6 +12794,7 @@ function dashInit() {
           ddBody.style.height = '';
           dd.classList.remove('dd-anim');
           ddAnimating = false;
+          if (!close) ddZenToHead();   // page is now full height → glide into view
         };
         ddBody.addEventListener('transitionend', function done(ev) {
           if (ev.propertyName !== 'height') return;
