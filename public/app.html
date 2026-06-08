@@ -9895,7 +9895,7 @@ async function _pdFlushQueue() {
       if (bad) throw new Error('save failed');
     }
     _pdSetStatus('saved');
-    if (pid != null) await viewProduct(pid);   // re-render from server truth
+    if (pid != null) await _pdRerenderIfActive(pid);   // re-render from server truth (only if still here)
   } catch (e) {
     // Re-hold the un-sent jobs so nothing is silently dropped.
     _pdQueue = jobs.concat(_pdQueue);
@@ -9932,6 +9932,16 @@ function _pdCurrentPid() {
   const pill = document.getElementById('pd-save-status');
   const pid = pill && pill.dataset.pid;
   return pid != null && pid !== '' ? Number(pid) : null;
+}
+
+// Re-render the product detail ONLY if the operator is still viewing that
+// product. Saves are async — a field's blur-save can resolve AFTER the user
+// has clicked Back, and a bare viewProduct() then would paint the detail over
+// the product list ("clicking Back jumps right back into the product"). The
+// save-status pill exists only on the detail page, so a missing/mismatched pid
+// means we've navigated away → skip the repaint.
+async function _pdRerenderIfActive(pid) {
+  if (_pdCurrentPid() === Number(pid)) await viewProduct(pid);
 }
 
 // Sync the toggle label + Save button to the current mode / queue depth.
@@ -9985,7 +9995,7 @@ async function _prodHeroUpload(productId) {
       const res = await r.json();
       if (!res.success) throw new Error(res.error || 'save failed');
       toast('✅ Photo uploaded · 图片已上传', 'success');
-      await viewProduct(productId);
+      await _pdRerenderIfActive(productId);
     } catch (e) {
       toast('Upload failed · 上传失败: ' + e.message, 'error');
     }
@@ -10038,7 +10048,7 @@ async function _prodGallerySave(productId, images) {
     });
     const res = await r.json();
     if (!res.success) throw new Error(res.error || 'save failed');
-    await viewProduct(productId);
+    await _pdRerenderIfActive(productId);
   } catch (e) {
     toast('Save failed · 保存失败: ' + e.message, 'error');
   }
@@ -10147,7 +10157,7 @@ async function _prodHeroPickLibrary(productId) {
       const res = await r.json();
       if (!res.success) throw new Error(res.error || 'save failed');
       toast('✅ Photo added from library · 已从媒体库添加图片', 'success');
-      await viewProduct(productId);
+      await _pdRerenderIfActive(productId);
     } catch (e) {
       toast('Failed · 失败: ' + e.message, 'error');
     }
@@ -10340,7 +10350,7 @@ async function iedSelectChange(el) {
   const val   = el.value || null;
   try {
     await iedSaveField(pid, field, val);
-    await viewProduct(pid);
+    await _pdRerenderIfActive(pid);
     toast('✅ Saved · 已保存', 'success');
   } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'error'); }
 }
@@ -10945,7 +10955,7 @@ async function _prodLabelUpload(productId) {
     try {
       await iedSaveField(productId, 'label_data', data);
       toast('✅ Label uploaded · 标签已上传', 'success');
-      await viewProduct(productId);
+      await _pdRerenderIfActive(productId);
     } catch (e) { toast('Upload failed · 上传失败: ' + e.message, 'error'); }
   };
   input.click();
@@ -10956,7 +10966,7 @@ async function _prodLabelClear(productId) {
   try {
     await iedSaveField(productId, 'label_data', null);
     toast('✅ Label removed · 已移除', 'success');
-    await viewProduct(productId);
+    await _pdRerenderIfActive(productId);
   } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'error'); }
 }
 
@@ -10984,7 +10994,7 @@ async function iedShipChange(el) {
   try {
     await iedSaveField(pid, 'ship_modes', val);
     // Re-render so the chip outlines/colours catch up with the new state.
-    await viewProduct(pid);
+    await _pdRerenderIfActive(pid);
   } catch (e) { el.checked = !el.checked; toast('Save failed · 保存失败: ' + e.message, 'error'); }
 }
 
@@ -11251,8 +11261,9 @@ async function iedClick(el) {
     try {
       await iedSaveField(pid, field, newValue);
       // Re-render the whole page so derived bits (status pill colour, formatted
-      // price, etc.) recompute from the server's truth.
-      await viewProduct(pid);
+      // price, etc.) recompute from the server's truth — but only if the
+      // operator hasn't navigated away while the save was in flight.
+      await _pdRerenderIfActive(pid);
       toast('✅ Saved · 已保存', 'success');
     } catch (e) {
       toast('Save failed · 保存失败: ' + e.message, 'error');
