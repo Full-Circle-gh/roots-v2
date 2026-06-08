@@ -30,6 +30,14 @@
     var fcEmbedded = false;
     try { fcEmbedded = window.self !== window.top; } catch (e) { fcEmbedded = true; }
     if (fcEmbedded) document.documentElement.classList.add('is-embedded');
+    // Preview-only embed (?embed=preview): the mobile editor shell hosts this
+    // page as a chrome-less, faithful live preview it drives via postMessage.
+    // Marked pre-paint so the editor chrome never flashes before it's hidden.
+    try {
+      if (new URLSearchParams(location.search).get('embed') === 'preview') {
+        document.documentElement.classList.add('fc-preview-embed');
+      }
+    } catch (e) {}
     // UI scale (text size) — shared suite-wide preference (roots-admin-ui-scale,
     // set from the backend topbar). Apply pre-paint so the editor matches.
     try {
@@ -13564,6 +13572,86 @@ document.addEventListener('keydown', (e) => {
   const d = document.getElementById('live-preview-drawer');
   if (d && d.classList.contains('open')) _lpClose();
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// MOBILE PREVIEW BRIDGE
+// Active ONLY in ?embed=preview. Lets the phone editor shell
+// (cms-mobile.html) drive THIS page as a faithful live preview over
+// postMessage — it sends commands (add/move/edit/save/publish/…), we run
+// the editor's own existing functions and report state back. Additive:
+// when the flag is absent this whole block returns immediately, so the
+// desktop editor is untouched.
+// ═══════════════════════════════════════════════════════════════════════
+(function () {
+  if (new URLSearchParams(location.search).get('embed') !== 'preview') return;
+
+  const TAG = 'fc-preview';
+  const POST = (msg) => { try { window.parent.postMessage(Object.assign({ __fc: TAG }, msg), '*'); } catch (e) {} };
+
+  const outline = () => (state.draft || []).map(b => {
+    const m = BLOCK_META[b.type] || { name: b.type, name_cn: b.type };
+    return { id: b.id, type: b.type, name: m.name, name_cn: m.name_cn };
+  });
+  const palette = () => Object.entries(BLOCK_META)
+    .filter(([, m]) => !m.hidden)
+    .map(([type, m]) => ({ type, name: m.name, name_cn: m.name_cn, desc: m.desc, desc_cn: m.desc_cn }));
+  const selectedBlock = () => (state.selectedId == null
+    ? null
+    : (state.draft.find(b => b.id === state.selectedId) || null));
+
+  const postState = () => POST({
+    evt: 'state', page: state.page, lang: state.lang, dirty: !!state.dirty,
+    saving: !!state.saving, blocks: outline(), selectedId: state.selectedId,
+  });
+  const postSelected = () => POST({ evt: 'selected', block: selectedBlock() });
+  const postReady = () => {
+    POST({
+      evt: 'ready',
+      pages: PAGES.map(p => ({ id: p.id, name: p.name, cn: p.cn })),
+      page: state.page, lang: state.lang, palette: palette(),
+    });
+    postState();
+    postSelected();
+  };
+
+  // Notify the shell on every change. render()/renderPreview() run after
+  // every mutation, and setDirty() runs on save-state changes — hook both.
+  let _postT = null;
+  const schedulePost = () => { clearTimeout(_postT); _postT = setTimeout(() => { postState(); postSelected(); }, 0); };
+  const _origRenderPreview = renderPreview;
+  renderPreview = function () { const r = _origRenderPreview.apply(this, arguments); schedulePost(); return r; };
+  const _origSetDirty = setDirty;
+  setDirty = function () { const r = _origSetDirty.apply(this, arguments); schedulePost(); return r; };
+
+  window.addEventListener('message', async (e) => {
+    const d = e.data;
+    if (!d || d.__fc !== TAG || !d.cmd) return;
+    try {
+      switch (d.cmd) {
+        case 'hello':      postReady(); break;
+        case 'select':     selectBlock(d.id); postSelected(); break;
+        case 'deselect':   selectBlock(null); break;
+        case 'add':        insertBlock(d.blockType, typeof d.at === 'number' ? d.at : state.draft.length); break;
+        case 'move':       { const i = state.draft.findIndex(b => b.id === d.id); if (i >= 0) moveBlock(i, d.delta); break; }
+        case 'duplicate':  duplicateBlock(d.id); break;
+        case 'delete':     deleteBlock(d.id); break;            // self-confirms
+        case 'patch':      updateBlockSilent(d.id, d.patch || {}); break;
+        case 'switchPage': await switchPage(d.page); postReady(); break;
+        case 'setLang':    if (d.lang && d.lang !== state.lang) cmsToggleLang(); break;
+        case 'save':       saveDraft(); break;
+        case 'publish':    publish(); break;                    // self-confirms
+        case 'revert':     revertDraft(); break;                // self-confirms
+        case 'getSelected':postSelected(); break;
+        case 'getState':   postState(); break;
+      }
+    } catch (err) { POST({ evt: 'error', message: String(err && err.message || err) }); }
+  });
+
+  // Announce readiness both ways: the shell may be listening before we load,
+  // or we may finish first. It also re-sends 'hello' on its end.
+  if (document.readyState === 'complete') postReady();
+  else window.addEventListener('load', postReady);
+})();
 </script>
 
 <!-- Live Preview drawer — phone-frame iframe of /storefront -->
@@ -13684,6 +13772,39 @@ document.addEventListener('keydown', (e) => {
     }
     .lp-frame iframe { border-radius: 0; }
   }
+</style>
+
+<!-- ═══════════════ MOBILE PREVIEW EMBED ═══════════════
+     Only active when ?embed=preview added .fc-preview-embed to <html> (see
+     the head bootstrap). Hides ALL editor chrome and lets the live phone
+     preview fill the iframe, so the mobile editor shell (cms-mobile.html)
+     can show the real, faithful storefront preview and drive it via
+     postMessage. Desktop (no flag) is completely unaffected. -->
+<style>
+  .fc-preview-embed body { overflow: hidden; background: var(--bg-app); }
+  .fc-preview-embed .topbar,
+  .fc-preview-embed .pane.left,
+  .fc-preview-embed .pane.right,
+  .fc-preview-embed .canvas-meta,
+  .fc-preview-embed .tweaks-pop,
+  .fc-preview-embed .link-status,
+  .fc-preview-embed .preview-menu,
+  .fc-preview-embed #floating-toolbar,
+  .fc-preview-embed .toast,
+  .fc-preview-embed .phone-preview-bg,
+  .fc-preview-embed #live-preview-drawer,
+  .fc-preview-embed .lp-drawer { display: none !important; }
+  .fc-preview-embed .body { height: 100vh; height: 100dvh; padding: 0; margin: 0; display: block; }
+  .fc-preview-embed .canvas { padding: 0; margin: 0; display: block; height: 100%; overflow: hidden; background: transparent; }
+  .fc-preview-embed .phone {
+    width: 100% !important; max-width: none !important; height: 100% !important;
+    margin: 0 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+    display: flex !important; flex-direction: column;
+  }
+  .fc-preview-embed .phone-content { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .fc-preview-embed .phone-tabs { flex: 0 0 auto; }
+  /* Roomier bottom gap so the last block clears the shell's bottom bar. */
+  .fc-preview-embed .phone-content::after { content: ''; display: block; height: 12px; }
 </style>
 
 </body>

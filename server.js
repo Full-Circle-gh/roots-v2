@@ -376,7 +376,15 @@ app.get('/product-editor', (req, res) => {
 // re-downloading the whole shell when nothing changed (server answers 304).
 app.get('/cms', (req, res) => {
   res.set('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'cms.html'));
+  // Phones get the touch-first mobile editor; everything else gets the full
+  // desktop editor. `?desktop=1` forces desktop (used by the mobile shell's
+  // embedded preview iframe and the "Open on desktop" link). WeChat's in-app
+  // browser reports as MicroMessenger, so it counts as mobile.
+  const ua = req.get('user-agent') || '';
+  const isMobile = /Android|iPhone|iPod|Windows Phone|Mobile|MicroMessenger/i.test(ua);
+  const wantsDesktop = req.query.desktop === '1';
+  const file = (isMobile && !wantsDesktop) ? 'cms-mobile.html' : 'cms.html';
+  res.sendFile(path.join(__dirname, 'public', file));
 });
 
 // Public storefront preview — renders the LIVE home.layout in a phone

@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Mini App Editor · Mobile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   Full Circle backend tokens — same palette as cms.html so the phone
+   editor reads as the SAME editor, narrowed for a phone.
+   ═══════════════════════════════════════════════════════════════════ */
+:root[data-theme="light"]{
+  --bg-app:#E8E5DC; --bg-canvas:#E1DDD2; --bg-pane:#E8E5DC;
+  --bg-elev-1:#FFFFFF; --bg-elev-2:#F2EFE6; --bg-input:#FFFFFF;
+  --bg-overlay:rgba(18,22,26,.48);
+  --line-soft:rgba(18,22,26,.06); --line:rgba(18,22,26,.10); --line-strong:rgba(18,22,26,.18);
+  --text-1:#12161A; --text-2:rgba(18,22,26,.72); --text-3:rgba(18,22,26,.50); --text-4:rgba(18,22,26,.34);
+  --accent:#6B8E6F; --accent-hi:#5E7E62; --accent-ink:#FFFFFF;
+  --brass:#B08D4A; --brass-hi:#9D7C3F;
+  --accent-soft:rgba(107,142,111,.12); --brass-soft:rgba(176,141,74,.14);
+  --danger:#C2536A; --danger-soft:rgba(194,83,106,.12);
+  --shadow-sheet:0 -18px 50px -12px rgba(18,22,26,.30);
+  --shadow-pop:0 10px 28px -8px rgba(18,22,26,.34);
+}
+:root[data-theme="dark"]{
+  --bg-app:#12161A; --bg-canvas:#171B20; --bg-pane:#161A1F;
+  --bg-elev-1:#1F252B; --bg-elev-2:#283038; --bg-input:#12161A;
+  --bg-overlay:rgba(8,10,12,.66);
+  --line-soft:rgba(232,229,220,.06); --line:rgba(232,229,220,.10); --line-strong:rgba(232,229,220,.16);
+  --text-1:#E8E5DC; --text-2:rgba(232,229,220,.72); --text-3:rgba(232,229,220,.50); --text-4:rgba(232,229,220,.34);
+  --accent:#6B8E6F; --accent-hi:#7BA07F; --accent-ink:#12161A;
+  --brass:#B08D4A; --brass-hi:#C29B54;
+  --accent-soft:rgba(107,142,111,.16); --brass-soft:rgba(176,141,74,.18);
+  --danger:#E8556A; --danger-soft:rgba(232,85,106,.14);
+  --shadow-sheet:0 -18px 50px -12px rgba(0,0,0,.55);
+  --shadow-pop:0 10px 28px -8px rgba(0,0,0,.6);
+}
+:root{
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;
+  --r-sm:4px;--r-md:6px;--r-lg:10px;--r-xl:14px;
+  --f-sans:'IBM Plex Sans',system-ui,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,monospace;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --topbar-h:52px; --bottom-h:64px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;}
+body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); overflow:hidden;}
+[hidden]{display:none !important;}
+/* i18n: paired spans; the lang toggle sets <html data-cms-lang> */
+[data-cms-lang="en"] .i18n-cn{display:none !important;}
+[data-cms-lang="cn"] .i18n-en{display:none !important;}
+
+/* real phone: fill the actual screen (dvh handles in-app browser chrome) */
+.device{position:relative; width:100%; height:100vh; height:100dvh; background:var(--bg-app); overflow:hidden;}
+/* desktop: show inside a centered phone frame for previewing the editor */
+@media (min-width:480px){
+  body{ background:#26211a; display:flex; align-items:center; justify-content:center; height:100vh; }
+  .device{ max-width:420px; height:880px; border-radius:30px;
+    border:1px solid rgba(255,255,255,.08); box-shadow:0 40px 120px -20px rgba(0,0,0,.7); overflow:hidden; }
+}
+.app{position:absolute;inset:0;display:flex;flex-direction:column;}
+
+/* ── gate / loading ─────────────────────────────────────────────── */
+.gate{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;padding:40px;text-align:center;color:var(--text-2);background:var(--bg-app);z-index:80;}
+.gate .spin{width:30px;height:30px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);
+  animation:spin 1s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.gate h2{margin:0;font:600 17px var(--f-sans);color:var(--text-1);}
+.gate p{margin:0;font:400 13px var(--f-sans);max-width:280px;line-height:1.5;}
+.gate code{font-family:var(--f-mono);background:var(--bg-elev-2);padding:1px 6px;border-radius:4px;}
+.gate a{color:var(--accent);font-weight:600;text-decoration:none;}
+
+/* ── topbar ─────────────────────────────────────────────────────── */
+.topbar{height:var(--topbar-h); flex:0 0 auto; z-index:30; display:flex; align-items:center; gap:8px;
+  padding:0 8px 0 12px; background:var(--bg-pane); border-bottom:1px solid var(--line-soft);}
+.brand{display:flex;align-items:center;}
+.brand .logo{width:26px;height:26px;border-radius:var(--r-md);background:var(--accent);color:var(--accent-ink);
+  display:grid;place-items:center;font-weight:700;font-size:14px;}
+.page-picker{display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg-elev-1);
+  border:1px solid var(--line);border-radius:var(--r-md);font-size:13px;cursor:pointer;min-width:0;}
+.page-picker .lbl{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--text-3);}
+.page-picker .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;}
+.page-picker svg{width:12px;height:12px;color:var(--text-3);flex:0 0 auto;}
+.grow{margin-left:auto;}
+.dirty{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-3);font-weight:500;}
+.dirty .dot{width:7px;height:7px;border-radius:50%;background:var(--brass);box-shadow:0 0 0 3px var(--brass-soft);}
+.dirty.clean{display:none;}
+.icon-btn{height:34px;min-width:34px;padding:0 8px;display:grid;place-items:center;border-radius:var(--r-md);
+  border:1px solid transparent;background:transparent;color:var(--text-2);cursor:pointer;font:600 13px var(--f-sans);}
+.icon-btn:active{background:var(--bg-elev-2);}
+.icon-btn svg{width:18px;height:18px;}
+.tb-publish{height:34px;padding:0 13px;border-radius:var(--r-md);border:1px solid var(--brass);background:var(--brass);
+  color:#fff;font:600 13px var(--f-sans);cursor:pointer;display:flex;align-items:center;gap:6px;}
+.tb-publish svg{width:15px;height:15px;}
+.tb-publish:active{background:var(--brass-hi);}
+
+/* dropdown menus (page + more) */
+.menu{position:absolute;top:calc(var(--topbar-h) - 2px);z-index:45;background:var(--bg-elev-1);
+  border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-pop);padding:6px;min-width:190px;
+  opacity:0;visibility:hidden;transform:translateY(-6px);transition:opacity .16s,transform .16s,visibility .16s;}
+.menu.on{opacity:1;visibility:visible;transform:translateY(0);}
+.menu.page-menu{left:46px;}
+.menu.more-menu{right:8px;}
+.menu button{width:100%;display:flex;align-items:flex-start;gap:9px;text-align:left;border:0;background:transparent;
+  color:var(--text-1);padding:9px 10px;border-radius:var(--r-md);cursor:pointer;font:500 13px var(--f-sans);}
+.menu button:active{background:var(--bg-elev-2);}
+.menu button.on{background:var(--accent-soft);}
+.menu button svg{width:16px;height:16px;color:var(--text-3);flex:0 0 auto;margin-top:1px;}
+.menu .mi-tx{min-width:0;}
+.menu .mi-tx .t{font-weight:600;font-size:13px;}
+.menu .mi-tx .s{font-size:11px;color:var(--text-3);line-height:1.35;margin-top:1px;}
+.menu .sep{height:1px;background:var(--line-soft);margin:5px 4px;}
+.menu button.danger .t{color:var(--danger);}
+
+/* ── view toggle ────────────────────────────────────────────────── */
+.viewtoggle{flex:0 0 auto; z-index:20; display:flex; gap:8px; padding:8px var(--s4);
+  background:var(--bg-app); border-bottom:1px solid var(--line-soft);}
+.seg{flex:1;display:flex;background:var(--bg-elev-2);border-radius:var(--r-md);padding:3px;border:1px solid var(--line-soft);}
+.seg button{flex:1;border:0;background:transparent;color:var(--text-3);font:600 12.5px var(--f-sans);padding:7px 0;
+  border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;}
+.seg button svg{width:14px;height:14px;}
+.seg button[aria-selected="true"]{background:var(--bg-elev-1);color:var(--text-1);box-shadow:0 1px 2px rgba(18,22,26,.10);}
+
+/* ── stage ──────────────────────────────────────────────────────── */
+.stage{flex:1;position:relative;overflow:hidden;background:var(--bg-canvas);}
+.pv{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg-app);}
+.stage.mode-outline .pv{visibility:hidden;}
+
+/* outline */
+.outline{position:absolute;inset:0;overflow-y:auto;padding:14px 14px calc(var(--bottom-h) + 20px);display:none;}
+.stage.mode-outline .outline{display:block;}
+.ol-hint{font:400 12px var(--f-sans);color:var(--text-3);margin:2px 4px 12px;line-height:1.5;}
+.ol-ins{height:18px;display:flex;align-items:center;justify-content:center;position:relative;}
+.ol-ins::before{content:'';position:absolute;left:8px;right:8px;height:2px;
+  background:repeating-linear-gradient(90deg,var(--accent) 0 7px,transparent 7px 13px);opacity:.35;}
+.ol-ins button{position:relative;width:22px;height:22px;border-radius:50%;border:0;background:var(--accent);color:#fff;
+  font-size:15px;line-height:1;cursor:pointer;box-shadow:var(--shadow-pop);display:grid;place-items:center;}
+.ol-row{display:flex;align-items:center;gap:10px;background:var(--bg-elev-1);border:1px solid var(--line-soft);
+  border-radius:var(--r-lg);padding:11px 12px;}
+.ol-row.sel{box-shadow:0 0 0 2px var(--accent);}
+.ol-ico{width:30px;height:30px;border-radius:8px;background:var(--accent-soft);color:var(--accent);
+  display:grid;place-items:center;flex:0 0 auto;font:700 12px var(--f-sans);}
+.ol-tx{flex:1;min-width:0;}
+.ol-tx .n{font:600 13.5px var(--f-sans);color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ol-tx .t{font:400 11px var(--f-sans);color:var(--text-3);}
+.ol-act{display:flex;gap:2px;flex:0 0 auto;}
+.ol-act button{width:30px;height:30px;border:0;background:transparent;color:var(--text-3);border-radius:7px;
+  display:grid;place-items:center;cursor:pointer;}
+.ol-act button:active{background:var(--bg-elev-2);color:var(--text-1);}
+.ol-act button svg{width:16px;height:16px;}
+.ol-empty{text-align:center;color:var(--text-3);padding:40px 20px;font:400 13px var(--f-sans);}
+
+/* ── contextual action bar (when a block is selected in Preview) ─── */
+.actbar{position:absolute;left:50%;bottom:14px;transform:translateX(-50%) translateY(8px);z-index:18;
+  display:none;align-items:center;gap:1px;background:var(--bg-elev-1);border:1px solid var(--line);
+  border-radius:12px;box-shadow:var(--shadow-pop);padding:4px;opacity:0;transition:opacity .16s,transform .16s;}
+.stage:not(.mode-outline) .actbar.on{display:flex;opacity:1;transform:translateX(-50%) translateY(0);}
+.actbar button{display:flex;align-items:center;gap:5px;border:0;background:transparent;color:var(--text-2);
+  font:600 12px var(--f-sans);padding:8px 10px;border-radius:8px;cursor:pointer;}
+.actbar button.primary{background:var(--accent);color:#fff;}
+.actbar button.danger{color:var(--danger);}
+.actbar button:active{background:var(--bg-elev-2);}
+.actbar button.primary:active{background:var(--accent-hi);}
+.actbar button svg{width:15px;height:15px;}
+.actbar .sep{width:1px;height:18px;background:var(--line);margin:0 2px;}
+
+/* ── bottom bar ─────────────────────────────────────────────────── */
+.bottombar{flex:0 0 auto;z-index:30;height:var(--bottom-h);display:flex;align-items:center;gap:10px;
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:var(--bg-pane);
+  border-top:1px solid var(--line-soft);box-shadow:0 -8px 24px -16px rgba(18,22,26,.3);}
+.bb{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;height:44px;border-radius:var(--r-lg);
+  font:600 13.5px var(--f-sans);cursor:pointer;border:1px solid var(--line);background:var(--bg-elev-1);color:var(--text-1);}
+.bb svg{width:17px;height:17px;}
+.bb:active{transform:scale(.98);}
+.bb.add{background:var(--accent);color:#fff;border-color:var(--accent);}
+.bb.save{flex:0 0 auto;width:50px;background:var(--bg-elev-1);color:var(--text-3);border-color:var(--line);}
+.bb.save.dirty{background:var(--brass);color:#fff;border-color:var(--brass);}
+
+/* ── sheets ─────────────────────────────────────────────────────── */
+.backdrop{position:absolute;inset:0;z-index:40;background:var(--bg-overlay);opacity:0;visibility:hidden;
+  transition:opacity .25s var(--ease),visibility .25s;backdrop-filter:blur(1.5px);}
+.backdrop.on{opacity:1;visibility:visible;}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:50;background:var(--bg-pane);border-radius:20px 20px 0 0;
+  box-shadow:var(--shadow-sheet);transform:translateY(101%);visibility:hidden;
+  transition:transform .32s var(--ease),visibility .32s var(--ease);display:flex;flex-direction:column;max-height:90%;}
+.sheet.on{transform:translateY(0);visibility:visible;}
+.grab{padding:9px 0 4px;display:flex;justify-content:center;flex:0 0 auto;}
+.grab i{width:38px;height:4px;border-radius:3px;background:var(--line-strong);display:block;}
+.sheet-head{display:flex;align-items:center;gap:10px;padding:4px 16px 12px;flex:0 0 auto;border-bottom:1px solid var(--line-soft);}
+.sheet-head h3{margin:0;font:600 16px var(--f-sans);}
+.sheet-head .sub{font:400 12px var(--f-sans);color:var(--text-3);}
+.sheet-head .x{margin-left:auto;width:30px;height:30px;border:0;background:var(--bg-elev-2);border-radius:50%;
+  color:var(--text-2);display:grid;place-items:center;cursor:pointer;}
+.sheet-head .x svg{width:16px;height:16px;}
+.sheet-body{overflow-y:auto;padding:14px 16px 22px;}
+
+/* add grid */
+.add-where{display:flex;align-items:center;gap:7px;font:500 12px var(--f-sans);color:var(--text-3);
+  margin-bottom:12px;padding:9px 11px;background:var(--accent-soft);border-radius:var(--r-md);}
+.add-where b{color:var(--accent);}
+.add-where svg{width:15px;height:15px;flex:0 0 auto;color:var(--accent);}
+.add-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.add-card{display:flex;flex-direction:column;gap:8px;padding:13px;background:var(--bg-elev-1);
+  border:1px solid var(--line-soft);border-radius:var(--r-lg);cursor:pointer;text-align:left;
+  transition:transform .12s var(--ease),box-shadow .12s,border-color .12s;}
+.add-card:active{transform:scale(.97);border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);}
+.add-card .ico{width:36px;height:36px;border-radius:9px;background:var(--accent-soft);color:var(--accent);
+  display:grid;place-items:center;font:700 13px var(--f-sans);}
+.add-card .n{font:600 13px var(--f-sans);color:var(--text-1);}
+.add-card .d{font:400 10.5px var(--f-sans);color:var(--text-3);line-height:1.35;}
+
+/* edit fields */
+.fld{margin-bottom:14px;}
+.fld label{display:block;font:600 11px var(--f-sans);letter-spacing:.04em;text-transform:uppercase;
+  color:var(--text-3);margin-bottom:6px;}
+.fld input,.fld textarea{width:100%;background:var(--bg-input);border:1px solid var(--line);border-radius:var(--r-md);
+  padding:11px 12px;font:400 14px var(--f-sans);color:var(--text-1);resize:none;}
+.fld input:focus,.fld textarea:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+.desk-note{display:flex;align-items:center;gap:9px;margin-top:6px;padding:12px;border-radius:var(--r-lg);
+  background:var(--brass-soft);border:1px dashed var(--brass);}
+.desk-note svg{width:18px;height:18px;color:var(--brass-hi);flex:0 0 auto;}
+.desk-note div{font:400 12px var(--f-sans);color:var(--text-2);line-height:1.4;}
+.desk-note b{color:var(--text-1);font-weight:600;}
+.desk-note a{color:var(--brass-hi);font-weight:600;text-decoration:none;}
+.edit-foot{display:flex;gap:10px;padding:12px 16px calc(14px + env(safe-area-inset-bottom));
+  border-top:1px solid var(--line-soft);flex:0 0 auto;}
+.edit-foot button{flex:1;height:44px;border-radius:var(--r-lg);font:600 14px var(--f-sans);cursor:pointer;}
+.edit-foot .done{background:var(--accent);color:#fff;border:0;}
+.edit-foot .gh{background:transparent;border:1px solid var(--line);color:var(--text-2);}
+
+/* design sheet */
+.dgroup{margin-bottom:18px;}
+.dgroup>.t{font:600 11px var(--f-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);margin-bottom:9px;}
+.swatches{display:flex;gap:10px;flex-wrap:wrap;}
+.sw{width:40px;height:40px;border-radius:11px;cursor:pointer;border:2px solid transparent;position:relative;
+  box-shadow:inset 0 0 0 1px var(--line);}
+.sw.on{border-color:var(--text-1);}
+.sw.on::after{content:'✓';position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:15px;
+  text-shadow:0 1px 3px rgba(0,0,0,.55);}
+.sw.none{background:repeating-conic-gradient(var(--bg-elev-2) 0 25%, #fff 0 50%) 0 0/14px 14px;}
+
+/* toast */
+.toast{position:absolute;left:50%;bottom:calc(var(--bottom-h) + 20px);transform:translateX(-50%) translateY(12px);
+  z-index:60;background:var(--text-1);color:var(--bg-app);font:600 12.5px var(--f-sans);padding:10px 16px;
+  border-radius:999px;opacity:0;visibility:hidden;transition:all .25s var(--ease);box-shadow:var(--shadow-pop);
+  display:flex;align-items:center;gap:7px;white-space:nowrap;max-width:90%;}
+.toast svg{width:15px;height:15px;color:var(--accent-hi);flex:0 0 auto;}
+.toast.on{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0);}
+.toast.err svg{color:var(--danger);}
+</style>
+</head>
+<body>
+<div class="device">
+  <div class="app" id="app" hidden>
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <div class="brand"><span class="logo">F</span></div>
+      <button class="page-picker" id="page-picker" onclick="toggleMenu('page')">
+        <span class="lbl"><span class="i18n-en">Page</span><span class="i18n-cn">页面</span></span>
+        <span class="nm" id="page-name">Home</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <span class="grow"></span>
+      <div class="dirty clean" id="dirty"><span class="dot"></span><span class="i18n-en">Unsaved</span><span class="i18n-cn">未保存</span></div>
+      <button class="icon-btn" id="lang-btn" onclick="toggleLang()" title="Language">中文</button>
+      <button class="icon-btn" onclick="toggleMenu('more')" title="More">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+      </button>
+      <button class="tb-publish" onclick="doPublish()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12l5 5L20 7"/></svg>
+        <span class="i18n-en">Publish</span><span class="i18n-cn">发布</span>
+      </button>
+    </div>
+
+    <!-- VIEW TOGGLE -->
+    <div class="viewtoggle">
+      <div class="seg" role="tablist">
+        <button role="tab" aria-selected="true" onclick="setView('preview',this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M9 18h6"/></svg><span class="i18n-en">Preview</span><span class="i18n-cn">预览</span></button>
+        <button role="tab" aria-selected="false" onclick="setView('outline',this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span class="i18n-en">Outline</span><span class="i18n-cn">大纲</span></button>
+      </div>
+    </div>
+
+    <!-- STAGE -->
+    <div class="stage" id="stage">
+      <iframe class="pv" id="pv" title="Live preview"></iframe>
+      <div class="outline" id="outline">
+        <p class="ol-hint"><span class="i18n-en">Tap a block to edit it · use ↑ ↓ to reorder · tap ＋ to insert. Switch to Preview to see it live.</span><span class="i18n-cn">点选模块进行编辑 · 用 ↑ ↓ 调整顺序 · 点 ＋ 插入。切换到预览查看实时效果。</span></p>
+        <div id="ol-list"></div>
+      </div>
+      <!-- contextual action bar -->
+      <div class="actbar" id="actbar">
+        <button class="primary" onclick="actEdit()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="i18n-en">Edit</span><span class="i18n-cn">编辑</span></button>
+        <span class="sep"></span>
+        <button onclick="actMove(-1)" title="Up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg></button>
+        <button onclick="actMove(1)" title="Down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button onclick="actDup()" title="Duplicate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        <button class="danger" onclick="actDel()" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+      </div>
+    </div>
+
+    <!-- BOTTOM BAR -->
+    <div class="bottombar">
+      <button class="bb add" onclick="openAdd(null)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg><span class="i18n-en">Add block</span><span class="i18n-cn">添加模块</span></button>
+      <button class="bb" onclick="openDesign()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="6.5" cy="11.5" r="2.5"/><circle cx="17.5" cy="14.5" r="2.5"/><circle cx="9" cy="18" r="2.5"/></svg><span class="i18n-en">Design</span><span class="i18n-cn">设计</span></button>
+      <button class="bb save" id="save-btn" onclick="doSave()" title="Save draft">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button>
+    </div>
+
+    <!-- MENUS -->
+    <div class="menu page-menu" id="menu-page"></div>
+    <div class="menu more-menu" id="menu-more">
+      <button onclick="closeMenus();doRevert()" class="danger">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+        <span class="mi-tx"><span class="t"><span class="i18n-en">Revert draft</span><span class="i18n-cn">还原草稿</span></span><span class="s"><span class="i18n-en">Discard, reload published</span><span class="i18n-cn">放弃并重新加载已发布版本</span></span></span></button>
+      <button onclick="closeMenus();toggleTheme()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>
+        <span class="mi-tx"><span class="t"><span class="i18n-en">Light / Dark</span><span class="i18n-cn">浅色 / 深色</span></span></span></button>
+      <div class="sep"></div>
+      <button onclick="window.location.href='/cms?desktop=1'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        <span class="mi-tx"><span class="t"><span class="i18n-en">Open on desktop</span><span class="i18n-cn">在电脑上打开</span></span><span class="s"><span class="i18n-en">Full editor for fine-tuning</span><span class="i18n-cn">完整编辑器,用于精细调整</span></span></span></button>
+    </div>
+
+    <!-- SHEETS -->
+    <div class="backdrop" id="backdrop" onclick="closeSheet()"></div>
+
+    <!-- ADD -->
+    <div class="sheet" id="sheet-add">
+      <div class="grab"><i></i></div>
+      <div class="sheet-head">
+        <div><h3><span class="i18n-en">Add a block</span><span class="i18n-cn">添加模块</span></h3><div class="sub"><span class="i18n-en">Tap to drop it in</span><span class="i18n-cn">点击即可加入</span></div></div>
+        <button class="x" onclick="closeSheet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div class="sheet-body">
+        <div class="add-where" id="add-where"></div>
+        <div class="add-grid" id="add-grid"></div>
+      </div>
+    </div>
+
+    <!-- EDIT -->
+    <div class="sheet" id="sheet-edit">
+      <div class="grab"><i></i></div>
+      <div class="sheet-head">
+        <div><h3 id="edit-title">Edit block</h3><div class="sub"><span class="i18n-en">Live — changes show in the preview</span><span class="i18n-cn">实时 — 更改即时显示在预览中</span></div></div>
+        <button class="x" onclick="closeSheet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div class="sheet-body" id="edit-body"></div>
+      <div class="edit-foot">
+        <button class="done" onclick="closeSheet()"><span class="i18n-en">Done</span><span class="i18n-cn">完成</span></button>
+      </div>
+    </div>
+
+    <!-- DESIGN -->
+    <div class="sheet" id="sheet-design">
+      <div class="grab"><i></i></div>
+      <div class="sheet-head">
+        <div><h3><span class="i18n-en">Design</span><span class="i18n-cn">设计</span></h3><div class="sub"><span class="i18n-en">Page background</span><span class="i18n-cn">页面背景</span></div></div>
+        <button class="x" onclick="closeSheet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div class="sheet-body">
+        <div class="dgroup">
+          <div class="t"><span class="i18n-en">Page background</span><span class="i18n-cn">页面背景</span></div>
+          <div class="swatches" id="bg-swatches"></div>
+        </div>
+        <div class="desk-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          <div><b><span class="i18n-en">Tab bar, fonts &amp; per-block colours</span><span class="i18n-cn">标签栏、字体与各模块配色</span></b> <span class="i18n-en">are tuned on desktop.</span><span class="i18n-cn">请在电脑上调整。</span> <a href="/cms?desktop=1"><span class="i18n-en">Open on a computer ↗</span><span class="i18n-cn">在电脑上打开 ↗</span></a></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <!-- GATE (auth / loading) -->
+  <div class="gate" id="gate">
+    <div class="spin" id="gate-spin"></div>
+    <h2 id="gate-title">Loading…</h2>
+    <p id="gate-msg"></p>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   Mini App Editor — Mobile shell. Drives the REAL editor (cms.html) in a
+   chrome-less iframe (?embed=preview) via postMessage, and talks to the
+   same /api/retail-admin/cms/* backend the desktop editor uses.
+   ════════════════════════════════════════════════════════════════════ */
+const TAG = 'fc-preview';
+const LANG_KEY = 'roots-admin-lang';
+const $ = (s) => document.querySelector(s);
+
+const M = {
+  ready: false,
+  pages: [], page: 'home', pageName: 'Home',
+  palette: [],            // [{type,name,name_cn,desc,desc_cn}]
+  blocks: [],             // outline [{id,type,name,name_cn}]
+  selectedId: null,
+  selectedBlock: null,    // full block object (for edit sheet)
+  dirty: false,
+  lang: 'en',
+  insertAt: null,
+  editId: null,
+};
+
+/* ── i18n chrome ──────────────────────────────────────────────────── */
+function cuT(en, cn) { return M.lang === 'cn' ? cn : en; }
+function applyLang() {
+  document.documentElement.setAttribute('data-cms-lang', M.lang);
+  $('#lang-btn').textContent = M.lang === 'cn' ? 'EN' : '中文';
+}
+function toggleLang() {
+  M.lang = M.lang === 'cn' ? 'en' : 'cn';
+  try { localStorage.setItem(LANG_KEY, M.lang); } catch (e) {}
+  applyLang();
+  send('setLang', { lang: M.lang });
+  if (M.editId != null) renderEdit();   // re-label open edit sheet
+}
+function toggleTheme() {
+  const d = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.documentElement.setAttribute('data-theme', d ? 'light' : 'dark');
+}
+
+/* ── messaging to the embedded preview ────────────────────────────── */
+function pv() { return $('#pv').contentWindow; }
+function send(cmd, extra) {
+  try { pv().postMessage(Object.assign({ __fc: TAG, cmd }, extra || {}), '*'); } catch (e) {}
+}
+window.addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.__fc !== TAG || !d.evt) return;
+  if (d.evt === 'ready') {
+    M.ready = true;
+    M.pages = d.pages || [];
+    M.palette = d.palette || [];
+    if (d.page) M.page = d.page;
+    if (d.lang) { M.lang = d.lang; try { localStorage.setItem(LANG_KEY, M.lang); } catch (e2) {} applyLang(); }
+    buildPageMenu();
+    updatePageName();
+  } else if (d.evt === 'state') {
+    M.page = d.page; M.lang = d.lang;
+    M.blocks = d.blocks || [];
+    M.selectedId = d.selectedId;
+    M.dirty = !!d.dirty;
+    applyLang();
+    updatePageName();
+    updateDirty();
+    renderOutline();
+    updateActbar();
+  } else if (d.evt === 'selected') {
+    M.selectedBlock = d.block || null;
+    M.selectedId = M.selectedBlock ? M.selectedBlock.id : null;
+    updateActbar();
+    if (M.editId != null) {
+      if (M.selectedBlock && M.selectedBlock.id === M.editId) renderEdit();
+    }
+  } else if (d.evt === 'error') {
+    toast(d.message || 'Something went wrong', true);
+  }
+});
+
+/* ── boot: auth, then mount the preview iframe ────────────────────── */
+(async function boot() {
+  try { M.lang = (localStorage.getItem(LANG_KEY) === 'cn') ? 'cn' : 'en'; } catch (e) {}
+  applyLang();
+  try {
+    const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.json());
+    if (!me || !me.user) { gateLogin(); return; }
+    const u = me.user;
+    if (u.role !== 'admin' && !((u.permissions || {}).retail)) { gateNoPerm(); return; }
+  } catch (e) { gateError(e); return; }
+
+  // Auth OK — show the editor, mount the real preview.
+  $('#gate').hidden = true;
+  $('#app').hidden = false;
+  const f = $('#pv');
+  f.addEventListener('load', () => send('hello'));
+  f.src = '/cms?embed=preview&desktop=1';
+  buildBgSwatches();
+})();
+
+function gateLogin() {
+  $('#gate-spin').hidden = true;
+  $('#gate-title').textContent = cuT('Please sign in', '请先登录');
+  $('#gate-msg').innerHTML = cuT('Your session has expired. ', '登录已过期。') +
+    '<a href="/login">' + cuT('Sign in', '登录') + '</a>';
+}
+function gateNoPerm() {
+  $('#gate-spin').hidden = true;
+  $('#gate-title').textContent = cuT('No retail permission', '没有零售权限');
+  $('#gate-msg').innerHTML = cuT('Ask an admin to grant you the ', '请管理员授予你 ') + '<code>retail</code>' + cuT(' permission.', ' 权限。');
+}
+function gateError(e) {
+  $('#gate-spin').hidden = true;
+  $('#gate-title').textContent = cuT('Could not load', '加载失败');
+  $('#gate-msg').textContent = String((e && e.message) || e);
+}
+
+/* ── topbar: page menu + name + dirty ─────────────────────────────── */
+function updatePageName() {
+  const p = M.pages.find(x => x.id === M.page);
+  $('#page-name').textContent = p ? (M.lang === 'cn' ? p.cn : p.name) : M.page;
+}
+function buildPageMenu() {
+  const host = $('#menu-page'); host.innerHTML = '';
+  M.pages.forEach(p => {
+    const b = document.createElement('button');
+    if (p.id === M.page) b.className = 'on';
+    b.innerHTML = '<span class="mi-tx"><span class="t">' + esc(M.lang === 'cn' ? p.cn : p.name) + '</span></span>';
+    b.onclick = () => { closeMenus(); if (p.id !== M.page) send('switchPage', { page: p.id }); };
+    host.appendChild(b);
+  });
+}
+function updateDirty() {
+  $('#dirty').classList.toggle('clean', !M.dirty);
+  $('#save-btn').classList.toggle('dirty', M.dirty);
+}
+
+/* ── menus ────────────────────────────────────────────────────────── */
+let openMenu = null;
+function toggleMenu(which) {
+  if (which === 'page') buildPageMenu();
+  const el = which === 'page' ? $('#menu-page') : $('#menu-more');
+  const wasOpen = el.classList.contains('on');
+  closeMenus();
+  if (!wasOpen) { el.classList.add('on'); openMenu = el; }
+}
+function closeMenus() { ['#menu-page', '#menu-more'].forEach(s => $(s).classList.remove('on')); openMenu = null; }
+document.addEventListener('click', (e) => {
+  if (openMenu && !e.target.closest('.menu') && !e.target.closest('.page-picker') && !e.target.closest('.icon-btn')) closeMenus();
+});
+
+/* ── view toggle ──────────────────────────────────────────────────── */
+function setView(v, btn) {
+  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-selected', 'false'));
+  btn.setAttribute('aria-selected', 'true');
+  $('#stage').classList.toggle('mode-outline', v === 'outline');
+}
+
+/* ── outline ──────────────────────────────────────────────────────── */
+function blockMeta(type) { return M.palette.find(p => p.type === type) || { name: type, name_cn: type }; }
+function ico2(type) { const m = blockMeta(type); return (m.name || type).slice(0, 2).toUpperCase(); }
+function renderOutline() {
+  const host = $('#ol-list'); host.innerHTML = '';
+  if (!M.blocks.length) {
+    host.innerHTML = '<div class="ol-empty">' + cuT('No blocks yet — tap “Add block”.', '还没有模块 — 点「添加模块」。') + '</div>';
+    return;
+  }
+  M.blocks.forEach((b, i) => {
+    host.appendChild(insRow(i));
+    const m = blockMeta(b.type);
+    const row = document.createElement('div');
+    row.className = 'ol-row' + (b.id === M.selectedId ? ' sel' : '');
+    row.innerHTML =
+      '<span class="ol-ico">' + esc(ico2(b.type)) + '</span>' +
+      '<span class="ol-tx"><span class="n">' + esc(M.lang === 'cn' ? m.name_cn : m.name) + '</span><span class="t">' + esc(b.type) + '</span></span>' +
+      '<span class="ol-act">' +
+        '<button data-a="up" title="Up">' + SV('m18 15-6-6-6 6') + '</button>' +
+        '<button data-a="down" title="Down">' + SV('m6 9 6 6 6-6') + '</button>' +
+        '<button data-a="edit" title="Edit">' + SV('M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z') + '</button>' +
+      '</span>';
+    row.querySelector('.ol-tx').onclick = () => { send('select', { id: b.id }); };
+    row.querySelector('[data-a="up"]').onclick = (e) => { e.stopPropagation(); send('move', { id: b.id, delta: -1 }); };
+    row.querySelector('[data-a="down"]').onclick = (e) => { e.stopPropagation(); send('move', { id: b.id, delta: 1 }); };
+    row.querySelector('[data-a="edit"]').onclick = (e) => { e.stopPropagation(); send('select', { id: b.id }); openEdit(b.id); };
+    host.appendChild(row);
+  });
+  host.appendChild(insRow(M.blocks.length));
+}
+function insRow(i) {
+  const d = document.createElement('div');
+  d.className = 'ol-ins';
+  d.innerHTML = '<button>+</button>';
+  d.querySelector('button').onclick = (e) => { e.stopPropagation(); openAdd(i); };
+  return d;
+}
+
+/* ── contextual action bar (Preview mode) ─────────────────────────── */
+function updateActbar() {
+  $('#actbar').classList.toggle('on', M.selectedId != null);
+}
+function actEdit() { if (M.selectedId != null) openEdit(M.selectedId); }
+function actMove(delta) { if (M.selectedId != null) send('move', { id: M.selectedId, delta }); }
+function actDup() { if (M.selectedId != null) send('duplicate', { id: M.selectedId }); }
+function actDel() { if (M.selectedId != null) send('delete', { id: M.selectedId }); }
+
+/* ── ADD sheet ────────────────────────────────────────────────────── */
+function openAdd(at) {
+  // at = index to insert before; null → after selected, else end.
+  if (at === null) {
+    if (M.selectedId != null) { const i = M.blocks.findIndex(b => b.id === M.selectedId); at = i >= 0 ? i + 1 : M.blocks.length; }
+    else at = M.blocks.length;
+  }
+  M.insertAt = at;
+  const after = at > 0 ? blockMeta((M.blocks[at - 1] || {}).type) : null;
+  const where = $('#add-where');
+  const ins = SV('M12 3v12m0 0 4-4m-4 4-4-4M5 21h14');
+  where.innerHTML = ins + '<span>' + (
+    at >= M.blocks.length ? cuT('Adding to the <b>bottom</b>', '添加到<b>底部</b>')
+    : after ? cuT('Inserting after <b>' + esc(after.name) + '</b>', '插入到 <b>' + esc(after.name_cn) + '</b> 之后')
+    : cuT('Inserting at the <b>top</b>', '插入到<b>顶部</b>')
+  ) + '</span>';
+  const g = $('#add-grid'); g.innerHTML = '';
+  M.palette.forEach(c => {
+    const card = document.createElement('button');
+    card.className = 'add-card';
+    card.innerHTML = '<span class="ico">' + esc((c.name || c.type).slice(0, 2).toUpperCase()) + '</span>' +
+      '<span class="n">' + esc(M.lang === 'cn' ? c.name_cn : c.name) + '</span>' +
+      '<span class="d">' + esc(M.lang === 'cn' ? (c.desc_cn || '') : (c.desc || '')) + '</span>';
+    card.onclick = () => { send('add', { blockType: c.type, at: M.insertAt }); closeSheet(); toast(cuT('Added', '已添加')); };
+    g.appendChild(card);
+  });
+  openSheet('add');
+}
+
+/* ── curated quick-edit fields per block type ─────────────────────── */
+const F = {
+  announcement_bar: [['text_en', 'Banner text', '横幅文字', 1], ['text_cn', 'Banner text (中文)', '横幅文字(中文)', 1]],
+  hero_banner:      [['headline_en', 'Headline', '标题'], ['headline_cn', 'Headline (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题', 1], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)', 1]],
+  category_tabs:    [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)']],
+  product_grid:     [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)']],
+  featured_item:    [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)']],
+  greeting:         [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
+  countdown_timer:  [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['ends_at', 'Ends at', '结束时间', 0, 'datetime-local']],
+  flash_sale_strip: [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
+  coupon_block:     [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['code', 'Coupon code', '优惠码'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
+  points_widget:    [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
+  top_up:           [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)']],
+  voting_block:     [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
+  affiliate_block:  [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
+  recipe_story:     [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)'], ['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['body_en', 'Body', '正文', 1], ['body_cn', 'Body (中文)', '正文(中文)', 1]],
+  bundle:           [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
+  wecom_contact:    [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)'], ['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
+  favorites_block:  [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)']],
+  leaderboard:      [['title_en', 'Title', '标题'], ['title_cn', 'Title (中文)', '标题(中文)'], ['subtitle_en', 'Subtitle', '副标题'], ['subtitle_cn', 'Subtitle (中文)', '副标题(中文)']],
+  store_info:       [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)']],
+  review_card:      [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)']],
+  video_banner:     [['cta_label_en', 'Button label', '按钮文字'], ['cta_label_cn', 'Button label (中文)', '按钮文字(中文)']],
+  order_tracker:    [['empty_text_en', 'Empty text', '无订单文字'], ['empty_text_cn', 'Empty text (中文)', '无订单文字(中文)']],
+  notification_bar: [['kicker_en', 'Kicker', '小标题'], ['kicker_cn', 'Kicker (中文)', '小标题(中文)']],
+};
+
+/* ── EDIT sheet ───────────────────────────────────────────────────── */
+function openEdit(id) {
+  M.editId = id;
+  send('getSelected', { id });          // ask for fresh field values
+  renderEdit();
+  openSheet('edit');
+}
+function renderEdit() {
+  const id = M.editId; if (id == null) return;
+  const blk = (M.selectedBlock && M.selectedBlock.id === id) ? M.selectedBlock : null;
+  const type = blk ? blk.type : ((M.blocks.find(b => b.id === id) || {}).type);
+  const m = blockMeta(type);
+  $('#edit-title').textContent = M.lang === 'cn' ? m.name_cn : m.name;
+  const body = $('#edit-body'); body.innerHTML = '';
+  const fields = F[type];
+  if (!blk) {
+    body.innerHTML = '<div style="font:400 13px var(--f-sans);color:var(--text-3);padding:8px 0">' + cuT('Loading…', '加载中…') + '</div>';
+  } else if (fields && fields.length) {
+    fields.forEach(f => {
+      const k = f[0], label = M.lang === 'cn' ? f[2] : f[1], ml = f[3], inputType = f[4] || 'text';
+      const wrap = document.createElement('div'); wrap.className = 'fld';
+      const val = blk[k] == null ? '' : String(blk[k]);
+      const ctrl = ml
+        ? '<textarea rows="2" data-k="' + esc(k) + '">' + esc(val) + '</textarea>'
+        : '<input type="' + esc(inputType) + '" data-k="' + esc(k) + '" value="' + esc(val) + '">';
+      wrap.innerHTML = '<label>' + esc(label) + '</label>' + ctrl;
+      const input = wrap.querySelector('[data-k]');
+      input.addEventListener('input', () => { send('patch', { id, patch: { [k]: input.value } }); });
+      body.appendChild(wrap);
+    });
+  } else {
+    body.innerHTML = '<div style="font:400 13px var(--f-sans);color:var(--text-3);line-height:1.5;margin-bottom:6px">' +
+      cuT('This block has no quick text fields — arrange it here, then fine-tune its details on desktop.', '此模块没有快速文字字段 — 在此排版,详情请在电脑上微调。') + '</div>';
+  }
+  body.insertAdjacentHTML('beforeend',
+    '<div class="desk-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>' +
+    '<div>' + cuT('<b>Images, colours &amp; advanced options</b> for this block are tuned on desktop. ', '此模块的<b>图片、配色与高级选项</b>请在电脑上调整。') +
+    '<a href="/cms?desktop=1">' + cuT('Open on a computer ↗', '在电脑上打开 ↗') + '</a></div></div>');
+}
+
+/* ── DESIGN sheet (page background) ───────────────────────────────── */
+const BG_TOKENS = [
+  { token: null,          hex: '' ,        none: true },
+  { token: 'oat-milk',    hex: '#F2E7DF' },
+  { token: 'white',       hex: '#FFFFFF' },
+  { token: 'forest-kale', hex: '#365329' },
+  { token: 'lime-leaf',   hex: '#CCD900' },
+  { token: 'pink-guava',  hex: '#F4B8CB' },
+  { token: 'ink',         hex: '#1a1a17' },
+];
+let CURRENT_BG = '';
+function buildBgSwatches() {
+  const host = $('#bg-swatches'); host.innerHTML = '';
+  BG_TOKENS.forEach(b => {
+    const s = document.createElement('div');
+    s.className = 'sw' + (b.none ? ' none' : '');
+    if (!b.none) s.style.background = b.hex;
+    s.title = b.none ? cuT('Default', '默认') : b.token;
+    s.onclick = () => setBg(b.token, s);
+    s.dataset.token = b.token == null ? '' : b.token;
+    host.appendChild(s);
+  });
+  markBg();
+}
+function markBg() {
+  document.querySelectorAll('#bg-swatches .sw').forEach(s => s.classList.toggle('on', (s.dataset.token || '') === (CURRENT_BG || '')));
+}
+async function openDesign() {
+  try {
+    const cfg = await fetch('/api/retail-admin/config', { credentials: 'same-origin' }).then(r => r.json());
+    CURRENT_BG = (cfg && cfg.data && cfg.data.theme && cfg.data.theme.page_bg) || '';
+  } catch (e) { CURRENT_BG = ''; }
+  markBg();
+  openSheet('design');
+}
+async function setBg(token, el) {
+  CURRENT_BG = token || '';
+  markBg();
+  try {
+    await fetch('/api/retail-admin/config', {
+      method: 'PUT', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 'theme.page_bg': token || null }),
+    });
+    toast(cuT('Background saved', '背景已保存'));
+    // Reflect live in the preview by reloading the embedded editor.
+    reloadPreview();
+  } catch (e) { toast(cuT('Could not save', '保存失败'), true); }
+}
+function reloadPreview() {
+  const f = $('#pv');
+  f.addEventListener('load', () => send('hello'), { once: true });
+  f.src = '/cms?embed=preview&desktop=1&t=' + Date.now();
+}
+
+/* ── save / publish / revert ──────────────────────────────────────── */
+function doSave() { send('save'); toast(cuT('Saving…', '保存中…')); }
+function doPublish() { closeMenus(); send('publish'); }     // iframe shows the confirm
+function doRevert() { send('revert'); }                     // iframe shows the confirm
+
+/* ── sheets ───────────────────────────────────────────────────────── */
+function openSheet(id) {
+  ['add', 'edit', 'design'].forEach(s => $('#sheet-' + s).classList.remove('on'));
+  $('#backdrop').classList.add('on');
+  $('#sheet-' + id).classList.add('on');
+}
+function closeSheet() {
+  ['add', 'edit', 'design'].forEach(s => $('#sheet-' + s).classList.remove('on'));
+  $('#backdrop').classList.remove('on');
+  M.editId = null;
+}
+
+/* ── toast ────────────────────────────────────────────────────────── */
+let toastT;
+function toast(msg, err) {
+  const t = $('#toast');
+  t.innerHTML = SV('M20 6 9 17l-5-5') + esc(msg);
+  t.classList.toggle('err', !!err);
+  t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1700);
+}
+
+/* ── tiny helpers ─────────────────────────────────────────────────── */
+function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function SV(d) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + d.split(' M').map((seg, i) => '<path d="' + (i ? 'M' : '') + seg + '"/>').join('') + '</svg>'; }
+</script>
+</body>
+</html>
