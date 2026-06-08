@@ -5375,7 +5375,7 @@
     .rm-dh-stat .lbl { font-size: 11px; color: var(--text-3); }
     .rm-dh-stat .v { font: 600 20px var(--f-sans); color: var(--text-1); margin-top: 3px; font-variant-numeric: tabular-nums; }
     .rm-dh-stat .v.brass { color: var(--brass); }
-    .rm-dh-trend { height: 120px; color: var(--accent); }
+    .rm-dh-trend { position: relative; height: 120px; color: var(--accent); touch-action: none; cursor: crosshair; }
     .rm-dh-trend .db-spark { width: 100%; height: 100%; display: block; }
     .rm-dh-heatscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
@@ -26913,6 +26913,47 @@ window.onLangChange(function () {
       '<div class="lab">' + lab + '</div><div class="val">' + valHtml + '</div>' + dl +
       '<div class="spk">' + spark(trendVals(sparkMetric)) + '</div></button>';
   }
+  // The inline Revenue-trend charts render as a flat curve; on their own they
+  // can't be read. Wire each .rm-dh-trend into the shared sparkline-scrub system
+  // (dot + tip) so a tap/drag — or hover on desktop — reveals that point's date
+  // and revenue. Touch is bridged onto dashSparkMove/Leave (which expect a mouse
+  // event), and the reading lingers briefly after the finger lifts so a single
+  // tap actually leaves the value on screen. ────────────────────────────────
+  var _trendTipTimer = null;
+  function trendLabels() {
+    var t = (typeof DASH_DATA !== 'undefined' && DASH_DATA && DASH_DATA.trend) || [];
+    return t.map(function (p) { return String(p.bucket || ''); });
+  }
+  function sparkTouch(e) {
+    if (!e.touches || !e.touches[0]) return;
+    e.preventDefault();  // scrubbing the chart shouldn't scroll the page
+    if (_trendTipTimer) { clearTimeout(_trendTipTimer); _trendTipTimer = null; }
+    if (typeof dashSparkMove === 'function')
+      dashSparkMove({ currentTarget: e.currentTarget, clientX: e.touches[0].clientX });
+  }
+  function sparkTouchEnd(e) {
+    var w = e.currentTarget;
+    if (_trendTipTimer) clearTimeout(_trendTipTimer);
+    _trendTipTimer = setTimeout(function () {
+      if (typeof dashSparkLeave === 'function') dashSparkLeave({ currentTarget: w });
+    }, 2200);
+  }
+  function wireTrendSparks(root) {
+    if (!root || typeof dashRenderSpark !== 'function') return;
+    var nodes = root.querySelectorAll('.rm-dh-trend'), i, w;
+    for (i = 0; i < nodes.length; i++) {
+      w = nodes[i];
+      if (w._trendWired) continue;
+      w._trendWired = true;
+      dashRenderSpark(w, trendVals('revenue'), trendLabels(), money);
+      w.addEventListener('mousemove', dashSparkMove);
+      w.addEventListener('mouseleave', dashSparkLeave);
+      w.addEventListener('touchstart', sparkTouch, { passive: false });
+      w.addEventListener('touchmove', sparkTouch, { passive: false });
+      w.addEventListener('touchend', sparkTouchEnd);
+      w.addEventListener('touchcancel', sparkTouchEnd);
+    }
+  }
   function accItem(s) {
     return '<div class="rm-dh-ai' + (s.open ? ' open' : '') + '" data-acc="' + s.id + '">' +
       '<button class="rm-dh-ai-head"><span class="ic">' + (IC[s.ic] || '') + '</span>' +
@@ -26979,6 +27020,7 @@ window.onLangChange(function () {
       '<div class="rm-dh-dots">' + dots + '</div>' +
       '<div class="rm-dh-acc">' + acc + '</div>';
     animateNums(wrap);   // roll the headline figures up (desktop dashCountUp)
+    wireTrendSparks(wrap);  // make the inline Revenue-trend chart tappable
   };
 
   // ── reports (full-screen push bodies) ──
@@ -27027,6 +27069,7 @@ window.onLangChange(function () {
     panel.querySelector('.rm-dh-rtitle').textContent = rep.title.replace(/&amp;/g, '&');
     var body = panel.querySelector('.rm-dh-rbody');
     body.innerHTML = rep.body();
+    wireTrendSparks(body);
     body.scrollTop = 0;
     panel.classList.add('show');
     panel.setAttribute('aria-hidden', 'false');
@@ -27066,7 +27109,7 @@ window.onLangChange(function () {
     var rep = REPORTS[key]; if (!rep) return;
     ensureDhSheet();
     el('rm-dh-sheet-title').textContent = rep.title.replace(/&amp;/g, '&');
-    var body = el('rm-dh-sheet-body'); body.innerHTML = rep.body(); body.scrollTop = 0;
+    var body = el('rm-dh-sheet-body'); body.innerHTML = rep.body(); wireTrendSparks(body); body.scrollTop = 0;
     el('rm-dh-scrim').classList.add('show'); el('rm-dh-sheet').classList.add('show');
     document.documentElement.classList.add('rm-noscroll');
   }
