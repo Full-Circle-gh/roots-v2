@@ -195,6 +195,22 @@
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Disable accidental text selection across the backend UI. On mobile a
+       long-press used to select stray text (e.g. a stat number) which pops up
+       Android Chrome's "Tap to see search results" Google bar. Inputs and
+       anything explicitly marked selectable opt back in below. */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  /* Re-enable selection where it's genuinely useful: form fields and any
+     element that deliberately sets user-select: text (e.g. the openid). */
+  input, textarea, [contenteditable], [contenteditable] *,
+  [style*="user-select: text"], [style*="user-select:text"] {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    user-select: text;
   }
   button { font: inherit; }
   /* Brand the native form controls — the default browser blue clashes with the
