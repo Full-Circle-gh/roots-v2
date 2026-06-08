@@ -5009,7 +5009,10 @@
     .rm-oc-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-soft); font-size: 13.5px; color: var(--text-1); }
     .rm-oc-item:first-child { border-top: 0; }
     .rm-oc-item .nm { flex: 1; min-width: 0; }
+    .rm-oc-item .nm .sku { display: block; margin-top: 2px; font: 11px var(--f-mono); color: var(--text-3); letter-spacing: .02em; }
     .rm-oc-item .q { font: 12px var(--f-mono); color: var(--text-3); flex: 0 0 auto; }
+    /* >1 unit — bold + brass so a multi-unit line can't be shipped short. */
+    .rm-oc-item .q.qty-multi { font-weight: 700; color: var(--brass); }
     .rm-oc-item .a { font-weight: 600; min-width: 54px; text-align: right; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
     .rm-oc-loading { color: var(--text-3); font-size: 13px; padding: 12px 2px; }
 
@@ -5144,7 +5147,13 @@
       display: flex; gap: 8px; flex-wrap: nowrap;
       overflow-x: auto; -webkit-overflow-scrolling: touch;
       position: sticky; top: 0; z-index: 6;
-      padding: 8px 0; margin-bottom: 4px; background: var(--bg-app);
+      /* Solid bar (full-bleed + divider + shadow) so cards visibly scroll UNDER
+         it; with bg-app it was see-through and content bled around the chips. */
+      margin-left: -16px; margin-right: -16px;
+      padding: 10px 16px; margin-bottom: 4px;
+      background: var(--bg-pane);
+      border-bottom: 1px solid var(--line);
+      box-shadow: 0 8px 14px -12px rgba(0, 0, 0, .45);
       scroll-snap-type: x proximity;
     }
     #cu-mob-tiers::-webkit-scrollbar { display: none; }
@@ -26513,7 +26522,9 @@ window.onLangChange(function () {
     (o.shipments || []).forEach(function (s) {
       (s.items || []).forEach(function (it) {
         var nm = it.name_en || it.name_cn || ('#' + it.id);
-        rows += '<div class="rm-oc-item"><span class="nm">' + esc(nm) + '</span><span class="q">×' + (it.qty || 0) + '</span><span class="a">¥' + money(it.line_total) + '</span></div>';
+        var sku = it.sku ? '<span class="sku">' + esc(it.sku) + '</span>' : '';
+        var multi = Number(it.qty) > 1 ? ' qty-multi' : '';
+        rows += '<div class="rm-oc-item"><span class="nm">' + esc(nm) + sku + '</span><span class="q' + multi + '">×' + (it.qty || 0) + '</span><span class="a">¥' + money(it.line_total) + '</span></div>';
       });
     });
     return rows ? '<div class="rm-oc-items">' + rows + '</div>' : '';
