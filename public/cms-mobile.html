@@ -91,11 +91,16 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
 .page-picker .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;}
 .page-picker svg{width:12px;height:12px;color:var(--text-3);flex:0 0 auto;}
 .grow{margin-left:auto;}
-.dirty{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-3);font-weight:500;}
-.dirty .dot{width:7px;height:7px;border-radius:50%;background:var(--brass);box-shadow:0 0 0 3px var(--brass-soft);}
+.dirty{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-3);font-weight:500;
+  flex:0 0 auto;white-space:nowrap;}
+/* dot-only on the phone — the bottom Save button already turns amber when
+   dirty, and the word was getting clipped in the crowded topbar. */
+.dirty span:not(.dot){display:none;}
+.dirty .dot{width:8px;height:8px;border-radius:50%;background:var(--brass);box-shadow:0 0 0 3px var(--brass-soft);}
 .dirty.clean{display:none;}
 .icon-btn{height:34px;min-width:34px;padding:0 8px;display:grid;place-items:center;border-radius:var(--r-md);
-  border:1px solid transparent;background:transparent;color:var(--text-2);cursor:pointer;font:600 13px var(--f-sans);}
+  border:1px solid transparent;background:transparent;color:var(--text-2);cursor:pointer;font:600 13px var(--f-sans);
+  white-space:nowrap;flex:0 0 auto;}
 .icon-btn:active{background:var(--bg-elev-2);}
 .icon-btn svg{width:18px;height:18px;}
 .tb-publish{height:34px;padding:0 13px;border-radius:var(--r-md);border:1px solid var(--brass);background:var(--brass);
