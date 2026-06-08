@@ -4770,6 +4770,19 @@
     /* Desktop horizontal tab bar → replaced by the bottom bar. */
     .tabs { display: none !important; }
 
+    /* Embedded editors on phones: the base rule pins them at top:98px (desktop
+       topbar 56 + top tab-nav 42) with bottom:0. On mobile the tab-nav is at the
+       BOTTOM, so 98px up top was dead empty space, and bottom:0 hid the editor's
+       own bottom bar (Add / Design / Save) behind the bottom nav. Go full-bleed
+       from the top down to just above the bottom nav, and lift z-index above the
+       (now-redundant) global topbar so the focused editor owns the screen. The
+       bottom nav (z:60) stays tappable above the editor's lifted bottom edge. */
+    #tab-mini-app-editor, #tab-product-editor {
+      top: 0;
+      bottom: calc(52px + env(safe-area-inset-bottom));
+      z-index: 50;
+    }
+
     /* Topbar stays slim on phones: brand mark + search + account avatar.
        Text-size / theme / language live in the mobile More sheet (and now also
        in the avatar dropdown); the old loose topbar toggles were removed. */
