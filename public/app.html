@@ -8159,7 +8159,7 @@ function _paintProductsPage() {
         style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:240px;max-width:100%;flex:1 1 200px;min-width:140px;outline:none">
       <select id="prodCatFilter" onchange="_prodPage=1;filterProducts()" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none">
         <option value="">All Categories 全部分类</option>
-        ${cats.map(c=>`<option value="${c}">${c}</option>`).join('')}
+        ${cats.map(c=>`<option value="${esc(c)}">${esc(catLabel(c))}</option>`).join('')}
       </select>
       <select id="prodStatusFilter" onchange="_prodPage=1;filterProducts()" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none">
         <option value="">All Status 全部状态</option>
@@ -8249,7 +8249,7 @@ const PROD_LIST_COLS = {
   },
   category: {
     en:'Category', cn:'分类', sortKey:'category',
-    cell: p => `<td><span style="background:var(--gray);padding:2px 8px;border-radius:8px;font-size:11px;display:inline-block;line-height:1.4;max-width:100%">${esc(p.category||'—')}</span></td>`,
+    cell: p => `<td><span style="background:var(--gray);padding:2px 8px;border-radius:8px;font-size:11px;display:inline-block;line-height:1.4;max-width:100%">${p.category?esc(catLabel(p.category)):'—'}</span></td>`,
   },
   recipe: {
     en:'Recipe', cn:'关联食谱', sortKey:'recipe_name',
@@ -8525,7 +8525,7 @@ function _renderProdCompact(prods) {
           <td style="text-align:center">${p.image_data ? `<img src="${esc(p.image_data)}" style="width:24px;height:24px;border-radius:4px;object-fit:cover">` : `<span style="font-size:14px">${p.category?getCategoryEmoji(p.category):'🛍'}</span>`}</td>
           <td style="font-family:monospace;color:var(--muted);font-size:11px">${_skuCell(p, { small:true })}</td>
           <td style="font-weight:600">${esc(p.name_en||'')}${p.name_cn?` <span style="color:var(--muted);font-weight:400">${esc(p.name_cn)}</span>`:''}${variantChip}</td>
-          <td style="color:var(--muted);font-size:11px">${esc(p.category||'—')}</td>
+          <td style="color:var(--muted);font-size:11px">${p.category?esc(catLabel(p.category)):'—'}</td>
           <td style="text-align:right;font-weight:${lowStock?700:500};color:${lowStock?'#dc2626':'var(--text)'}">${p.stock_qty ?? 0}</td>
           <td style="text-align:right;font-weight:600;white-space:nowrap">${priceTxt}</td>
           <td>${getStatusBadge(p.status)}</td>
@@ -8548,7 +8548,7 @@ function _renderProdByCategory(prods) {
   return sortedKeys.map(cat => `
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">
       <div style="background:var(--gray);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)">
-        <div style="font-weight:800;font-size:14px">${getCategoryEmoji(cat)} ${esc(cat)}</div>
+        <div style="font-weight:800;font-size:14px">${getCategoryEmoji(cat)} ${esc(catLabel(cat))}</div>
         <div style="font-size:11px;color:var(--muted)">${groups.get(cat).length} item${groups.get(cat).length===1?'':'s'}</div>
       </div>
       <div class="prod-grid" style="padding:14px">
@@ -9089,7 +9089,7 @@ function productRow(p) {
     <td style="font-family:monospace;font-size:11px;color:var(--muted)">${_skuCell(p)}</td>
     <td style="font-weight:600;cursor:pointer" onclick="viewProduct(${p.id})">${p.name_en}${p.is_published === 1 ? ` <span title="Published in mini-app shop · 已上架小程序" style="display:inline-block;background:rgba(204,217,0,.18);color:#3a4400;border:1px solid rgba(204,217,0,.4);padding:1px 6px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:.04em;vertical-align:1px;white-space:nowrap;margin-left:6px">🛍 SHOP</span>` : ''}</td>
     <td style="color:var(--muted)">${p.name_cn||'—'}</td>
-    <td><span style="background:var(--gray);padding:2px 8px;border-radius:8px;font-size:11px;display:inline-block;line-height:1.4;max-width:100%">${p.category||'—'}</span></td>
+    <td><span style="background:var(--gray);padding:2px 8px;border-radius:8px;font-size:11px;display:inline-block;line-height:1.4;max-width:100%">${p.category?esc(catLabel(p.category)):'—'}</span></td>
     <td style="font-size:12px;color:var(--muted)">${p.recipe_name?'📖 '+p.recipe_name:'—'}</td>
     <td style="text-align:right;font-weight:600">¥${parseFloat(p.sell_price||0).toFixed(2)}</td>
     <td>${productStatusPill(p.status||'Active', statusLabel(p.status||'Active', PRODUCT_STATUS_CN))}</td>
@@ -13305,7 +13305,7 @@ async function _renderProductTrash() {
               ${p.sku ? `<div style="font-family:monospace;font-size:10px;color:var(--muted);margin-top:2px">${esc(p.sku)}</div>` : ''}
             </td>
             <td style="font-size:12px">${p.variant_label ? `<span style="background:rgba(204,217,0,.15);color:#6d7a2a;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">🎨 ${esc(p.variant_label)}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
-            <td style="font-size:12px;color:var(--muted)">${esc(p.category||'—')}</td>
+            <td style="font-size:12px;color:var(--muted)">${p.category?esc(catLabel(p.category)):'—'}</td>
             <td style="text-align:right;font-weight:600">¥${parseFloat(p.sell_price||0).toFixed(2)}</td>
             <td style="font-size:11px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums">${esc(_fmtDateTime(p.updated_at))||'—'}</td>
             <td style="white-space:nowrap;text-align:center">
@@ -13649,6 +13649,30 @@ function invoiceStatusLabel(s) {
 }
 const PRODUCT_STATUS_CN = { 'Active':'在售', 'Inactive':'停售', 'Seasonal':'季节性', 'Coming Soon':'即将上市' };
 function statusLabel(s, dict) { const cn = dict?.[s]; return cn ? `${s} ${cn}` : s; }
+// Chinese labels for the legacy free-form `products.category` field. Keyed by
+// the EXACT English value stored on the product. catLabel() renders the
+// bilingual "EN · CN" form so the runtime language toggle (cuToggleLang) shows
+// only the Chinese half in CN mode — same mechanism as statusLabel above.
+// Unknown categories fall back to English untouched. Fullwidth ＆ / （）match
+// the source data; align CN with lib/category-tree.js where the names overlap.
+const PRODUCT_CATEGORY_CN = {
+  'Beverages':'饮料', 'Bites':'能量球', 'Bread':'面包', 'Cacao':'可可',
+  'Coffee ＆ Tea':'咖啡 ＆ 茶', 'Cooked Grains':'熟谷物', 'Cosmetics':'彩妆',
+  'Crackers':'脆饼', 'Creamery':'植物乳品', 'Dairy Alternatives':'乳制品替代',
+  'Flavor Topping':'风味调味', 'Flours':'面粉', 'Frozen':'冷冻', 'Fruits':'水果',
+  'Gelato':'意式冰淇淋', 'Grains ＆ Pasta':'谷物 ＆ 意面', 'Granola':'燕麦脆',
+  'GrassRoots Cheese Alternatives':'植物芝士', 'House Care':'家居清洁',
+  'Jams':'果酱', 'Juices':'果汁', 'Kombucha':'康普茶', 'Legumes':'豆类',
+  'Meals':'正餐', 'Nut Butters':'坚果酱', 'Nuts ＆ Seeds':'坚果 ＆ 籽',
+  'Oils':'食用油', 'Other Beverages':'其他饮料', 'Other Supplements':'其他补充剂',
+  'Others':'其他', 'Personal Care':'个人护理', 'Pickles':'腌渍',
+  'Plants Powders':'植物粉', 'Protein Powders':'蛋白粉', 'Protein Rich':'高蛋白',
+  'Salads ＆ Bowls':'沙拉 ＆ 谷物碗', 'Soups ＆ Stews':'汤品 ＆ 炖菜',
+  'Sour Creams':'酸奶油', 'Spices':'香料', 'Spicy':'辣味',
+  'Spreads ＆ Dips':'抹酱 ＆ 蘸酱', 'Wines （Vegan Certified）':'葡萄酒（纯素认证）',
+  'Wraps ＆ Sandwiches':'卷饼 ＆ 三明治', 'Yogurts':'酸奶',
+};
+function catLabel(c) { if (!c) return c; const cn = PRODUCT_CATEGORY_CN[c]; return cn ? `${c} · ${cn}` : c; }
 // Legacy colour map — kept for places that still split on `|`. New code
 // should call poStatusPill() below, which renders a unified `.pill.*`
 // span. Once every caller migrates, this map can be deleted.
@@ -24130,7 +24154,7 @@ function _alertStockRows(rows, isOut) {
     <tbody>${rows.map(p => `<tr style="cursor:pointer" onclick="navigate('products');setTimeout(()=>viewProduct(${p.id}),200)">
       <td><strong>${esc(p.name_en||'—')}</strong>${p.name_cn?`<div style="font-size:11px;color:var(--muted)">${esc(p.name_cn)}</div>`:''}</td>
       <td style="font-family:monospace;font-size:11px;color:var(--muted)">${esc(p.sku||'—')}</td>
-      <td style="font-size:11px;color:var(--muted)">${esc(p.category||'—')}</td>
+      <td style="font-size:11px;color:var(--muted)">${p.category?esc(catLabel(p.category)):'—'}</td>
       <td style="text-align:right;font-weight:800;color:${isOut?'#dc2626':'#b85c00'};font-size:14px">${p.stock_qty||0}</td>
       <td style="text-align:right">${p.sell_price?'¥'+parseFloat(p.sell_price).toFixed(2):'—'}</td>
       <td style="text-align:right"><span style="font-size:11px;color:var(--muted)">→</span></td>
