@@ -22357,12 +22357,14 @@ async function cuOpenAddrModal(addrId) {
   $('#cu-addr-postal').value           = a ? (a.postal_code    || '') : '';
   $('#cu-addr-default').checked        = a ? !!a.is_default            : false;
   $('#cu-addr-bg').classList.add('show');
-  // City→district cascade (province auto-fills from the city).
+  // Province→city→district cascade. Derive the province from the saved city
+  // when an older address only stored city/district.
   const cityCn = a ? (a.city || '') : '';
   await loadChinaRegions();
-  cuAddrPopulateCities(cityCn);
   const c = _regions.byCn.get(cityCn);
-  $('#cu-addr-province').value = a ? (a.province || (c ? c.province_cn : '') || '') : '';
+  const provinceCn = a ? (a.province || (c ? c.province_cn : '') || '') : '';
+  cuAddrPopulateProvinces(provinceCn);
+  cuAddrPopulateCities(provinceCn, cityCn);
   await cuAddrLoadDistricts(cityCn, a ? (a.district || '') : '');
 }
 function cuCloseAddrModal() { $('#cu-addr-bg').classList.remove('show'); }
