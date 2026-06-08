@@ -13808,8 +13808,13 @@ document.addEventListener('keydown', (e) => {
      wearing a second set of chrome. (Desktop keeps them.) */
   .fc-preview-embed .phone::before,
   .fc-preview-embed .phone-status { display: none !important; }
-  /* Roomier bottom gap so the last block clears the shell's bottom bar. */
-  .fc-preview-embed .phone-content::after { content: ''; display: block; height: 12px; }
+  /* Bottom scroll room so the LAST block can be scrolled fully clear of the
+     mobile shell's floating action toolbar (Edit / ↑ ↓ ⧉ 🗑), which floats over
+     the bottom ~60px of this preview when a block is selected. Without it the
+     final block stays jammed under the toolbar and reads as "can't scroll to the
+     end of the page". ~88px clears the toolbar + a breath of gap. */
+  .fc-preview-embed .phone-content { scroll-padding-bottom: 88px; }
+  .fc-preview-embed .phone-content::after { content: ''; display: block; height: 88px; }
 </style>
 
 </body>
