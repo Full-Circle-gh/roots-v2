@@ -48,7 +48,8 @@
 </style>
 </head>
 <body>
-  <form class="card" id="signupForm" autocomplete="on">
+  <!-- Provisioning form — shown only to admins / when BACKEND_SIGNUP_OPEN=1. -->
+  <form class="card" id="signupForm" autocomplete="on" style="display:none">
     <div class="brand">
       <div class="mark" aria-hidden="true">
         <svg width="22" height="22" viewBox="0 0 24 24">
@@ -61,7 +62,6 @@
     </div>
     <div class="sub">Create your backend · 创建后台</div>
 
-    <div class="closed" id="closedNote" style="display:none">Signups are invite-only right now. · 目前为邀请制注册。</div>
     <div class="msg" id="msg"></div>
 
     <div class="field">
@@ -88,20 +88,60 @@
     <div class="foot">Already have an account? <a href="/backend/login">Sign in</a> · 已有账户?<a href="/backend/login">登录</a></div>
   </form>
 
+  <!-- Waitlist / request-access form — the public default while signups are
+       invite-only. Captures the lead; provisions nothing. -->
+  <form class="card" id="waitForm" autocomplete="on" style="display:none">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.6" stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
+          <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.6" stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
+          <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1" fill="none" stroke="#E8E5DC" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="word">Full Circle</span>
+    </div>
+    <div class="sub">Request access · 申请开通</div>
+
+    <div class="closed">We're onboarding new stores by invitation. Leave your details and we'll be in touch. · 我们正以邀请制开通新店铺,请留下您的信息,我们会尽快与您联系。</div>
+    <div class="msg" id="waitMsg"></div>
+
+    <div class="field">
+      <label for="w_company">Company · 公司名称</label>
+      <input type="text" id="w_company" name="company" required>
+    </div>
+    <div class="field">
+      <label for="w_name">Your name · 您的姓名</label>
+      <input type="text" id="w_name" name="contact_name">
+    </div>
+    <div class="field">
+      <label for="w_contact">Email or phone · 邮箱或电话</label>
+      <input type="text" id="w_contact" name="contact" autocapitalize="off" autocorrect="off" spellcheck="false" required>
+    </div>
+    <div class="field">
+      <label for="w_note">Anything we should know? · 备注(选填)</label>
+      <input type="text" id="w_note" name="note">
+    </div>
+
+    <button type="submit" class="btn-primary" id="waitBtn">Request access · 提交申请</button>
+
+    <div class="foot">Already have an account? <a href="/backend/login">Sign in</a> · 已有账户?<a href="/backend/login">登录</a></div>
+  </form>
+
 <script>
 (function () {
   const $ = s => document.querySelector(s);
   const errEl = $('#msg'), btn = $('#submitBtn');
   function show(msg, kind) { errEl.textContent = msg; errEl.className = 'msg show ' + kind; }
+  function showWait(msg, kind) { const el = $('#waitMsg'); el.textContent = msg; el.className = 'msg show ' + kind; }
 
-  // Reflect whether signup is open. If closed (and not an admin), disable the form.
+  // Whoever can actually provision (kitchen admin, or BACKEND_SIGNUP_OPEN=1) gets
+  // the real provisioning form; everyone else gets the waitlist form. Public
+  // self-provisioning stays closed until tenant data isolation is cut over.
   fetch('/api/backend/signup/status', { credentials: 'same-origin' }).then(r => r.json()).then(s => {
-    if (!s.open && !s.canProvision) {
-      $('#closedNote').style.display = 'block';
-      btn.disabled = true;
-      ['company','owner_name','username','password'].forEach(id => { const el = $('#' + id); if (el) el.disabled = true; });
-    }
-  }).catch(() => {});
+    if (s.open || s.canProvision) { $('#signupForm').style.display = ''; }
+    else { $('#waitForm').style.display = ''; }
+  }).catch(() => { $('#waitForm').style.display = ''; });
 
   $('#signupForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -127,6 +167,35 @@
       show(j.error || 'Could not create backend · 创建失败', 'err');
     } catch (e) { show('Network error — please try again · 网络错误,请重试', 'err'); }
     btn.disabled = false; btn.textContent = 'Create backend · 创建后台';
+  });
+
+  // ── Waitlist submit → capture the lead (provisions nothing) ──
+  const waitBtn = $('#waitBtn');
+  $('#waitForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('#waitMsg').classList.remove('show');
+    const body = {
+      company: $('#w_company').value.trim(),
+      contact_name: $('#w_name').value.trim(),
+      contact: $('#w_contact').value.trim(),
+      note: $('#w_note').value.trim(),
+    };
+    if (!body.company || !body.contact) { showWait('Add your company and an email or phone · 请填写公司及邮箱或电话', 'err'); return; }
+    waitBtn.disabled = true; waitBtn.textContent = 'Sending… · 提交中…';
+    try {
+      const j = await fetch('/api/backend/signup/request', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify(body),
+      }).then(r => r.json());
+      if (j.success) {
+        showWait('Thanks — we’ve got your request and will reach out soon. · 已收到您的申请,我们会尽快联系您。', 'ok');
+        $('#waitForm').reset();
+        waitBtn.disabled = true; waitBtn.textContent = 'Request received · 申请已提交';
+        return;
+      }
+      showWait(j.error || 'Could not send request · 提交失败', 'err');
+    } catch (e) { showWait('Network error — please try again · 网络错误,请重试', 'err'); }
+    waitBtn.disabled = false; waitBtn.textContent = 'Request access · 提交申请';
   });
 })();
 </script>

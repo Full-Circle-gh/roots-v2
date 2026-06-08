@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Full Circle — Mini App Backend · Team · 团队</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#E8E5DC" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --ink:#12161A; --canvas:#E8E5DC; --card:#FFFFFF; --sunk:#F4F2EB;
+    --text:#12161A; --muted:#5f5d55; --faint:#8f8c83;
+    --brass:#B08D4A; --brass-hi:#C29B54;
+    --tea:#6B8E6F; --tea-deep:#3f6b46;
+    --danger:#e8556a; --danger-deep:#b23a4d;
+    --line:rgba(18,22,26,.10); --line-2:rgba(18,22,26,.16); --field:#FFFFFF;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:radial-gradient(120% 78% at 50% -8%, #F2EFE7 0%, #E8E5DC 52%, #E2DED3 100%);
+    background-attachment:fixed; color:var(--text);
+    font-family:"IBM Plex Sans","IBM Plex Sans SC",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100%; padding:34px 20px 56px; position:relative; overflow-x:hidden;
+  }
+  .mono{font-family:"IBM Plex Mono",monospace;}
+  .cn{font-family:"IBM Plex Sans SC","IBM Plex Sans",sans-serif;}
+  html[data-lang=en] .cn, html[data-lang=en] .sep{display:none;}
+  html[data-lang=cn] .en, html[data-lang=cn] .sep{display:none;}
+
+  .bg{position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden;}
+  .bg .glow{position:absolute; width:780px; height:780px; border-radius:50%;
+    top:-360px; left:50%; transform:translateX(-50%);
+    background:radial-gradient(circle at center, rgba(176,141,74,.10), rgba(176,141,74,0) 62%);}
+
+  .shell{position:relative; z-index:2; width:100%; max-width:560px;}
+
+  .topbar{display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 2px 22px;}
+  .back{display:inline-block; font-size:13px; color:var(--muted); text-decoration:none; transition:color .15s;}
+  .back:hover{color:var(--tea-deep);}
+  .langtoggle{flex:none; cursor:pointer; border:none; background:transparent;
+    font-family:inherit; font-size:13px; font-weight:600; letter-spacing:.02em;
+    color:var(--muted); padding:2px 4px; transition:color .15s;}
+  .langtoggle:hover{color:var(--tea-deep);}
+
+  .head{margin:0 2px 24px; display:flex; align-items:flex-end; justify-content:space-between; gap:16px;}
+  .brand{display:flex; align-items:center; gap:13px;}
+  .mark{width:46px; height:46px; flex:none; border-radius:12px;
+    background:radial-gradient(120% 120% at 30% 25%, #FFFFFF, #F1EFE8);
+    border:1px solid var(--line-2); display:flex; align-items:center; justify-content:center;
+    box-shadow:0 1px 0 rgba(255,255,255,.9) inset, 0 10px 22px -16px rgba(40,34,20,.5); color:var(--ink);}
+  .word{font-size:19px; font-weight:600; letter-spacing:.22em; line-height:1; color:var(--ink);}
+  .eyebrow{margin:15px 0 0 1px; font-size:11px; letter-spacing:.34em; text-transform:uppercase; color:var(--faint);}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:24px 24px 26px; margin-bottom:16px;
+    box-shadow:0 1px 2px rgba(40,34,20,.04), 0 22px 46px -34px rgba(40,34,20,.40);}
+  .card h2{margin:0 0 4px; font-size:17px; font-weight:600; letter-spacing:-.01em; color:var(--ink);}
+  .card h2 .cn{font-weight:400; color:var(--muted); font-size:15px; margin-left:3px;}
+  .lead{margin:0 0 18px; font-size:13px; line-height:1.55; color:var(--muted);}
+
+  /* member list */
+  .members{display:flex; flex-direction:column; gap:2px;}
+  .member{display:flex; align-items:center; gap:13px; padding:11px 8px; border-radius:11px; transition:background .15s;}
+  .member:hover{background:var(--sunk);}
+  .member.inactive{opacity:.55;}
+  .m-circle{width:40px; height:40px; flex:none; border-radius:50%; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--tea); color:#fff; font-size:15px; font-weight:600; text-transform:uppercase; user-select:none;}
+  .m-circle img{width:100%; height:100%; object-fit:cover; display:block;}
+  .m-main{flex:1; min-width:0;}
+  .m-name{font-size:14.5px; font-weight:600; color:var(--ink); display:flex; align-items:center; gap:8px;}
+  .m-name .you{font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--tea-deep);
+    background:rgba(107,142,111,.14); border-radius:99px; padding:2px 7px; font-weight:600;}
+  .m-sub{margin-top:2px; font-size:12px; color:var(--faint); font-family:"IBM Plex Mono",monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .role-badge{font-size:10px; letter-spacing:.06em; text-transform:uppercase; font-weight:600;
+    border-radius:99px; padding:3px 9px; white-space:nowrap;}
+  .role-owner{color:#7a5f24; background:rgba(176,141,74,.16);}
+  .role-admin{color:var(--tea-deep); background:rgba(107,142,111,.14);}
+  .role-staff{color:var(--muted); background:rgba(18,22,26,.06);}
+  .m-edit{flex:none; cursor:pointer; background:transparent; border:1px solid var(--line-2);
+    border-radius:9px; padding:7px 13px; font-family:inherit; font-size:12.5px; color:var(--ink); transition:border-color .15s, color .15s;}
+  .m-edit:hover{border-color:var(--tea); color:var(--tea-deep);}
+  .empty{padding:20px 8px; font-size:13px; color:var(--faint); text-align:center;}
+
+  /* field primitives */
+  .flabel{display:block; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin:0 0 8px;}
+  .flabel .cn{letter-spacing:.04em; color:var(--faint); margin-left:3px; text-transform:none;}
+  input[type=text], input[type=password], select{
+    width:100%; background:var(--field); color:var(--text);
+    border:1px solid var(--line-2); border-radius:11px;
+    padding:13px 14px; font-size:15px; font-family:inherit;
+    transition:border-color .16s, box-shadow .16s;}
+  select{appearance:none; cursor:pointer;}
+  input::placeholder{color:#b6b2a8;}
+  input:hover, select:hover{border-color:rgba(18,22,26,.24);}
+  input:focus, select:focus{outline:none; border-color:var(--tea); box-shadow:0 0 0 3px rgba(107,142,111,.20);}
+  .field{margin-bottom:14px;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  @media (max-width:480px){ .grid2{grid-template-columns:1fr;} }
+
+  .btn-brass{margin-top:6px; width:100%; border:none; cursor:pointer;
+    background:linear-gradient(180deg, var(--brass-hi), var(--brass));
+    color:#1A140A; font-family:inherit; font-size:15px; font-weight:600; letter-spacing:.02em;
+    padding:14px; border-radius:12px; position:relative;
+    box-shadow:0 1px 0 rgba(255,255,255,.28) inset, 0 12px 26px -14px rgba(176,141,74,.7);
+    transition:filter .16s, transform .08s;}
+  .btn-brass .cn{font-family:"IBM Plex Sans SC",sans-serif;}
+  .btn-brass:hover{filter:brightness(1.05);} .btn-brass:active{transform:translateY(1px);}
+  .btn-brass:disabled{cursor:default; opacity:.8;}
+  .btn-line{display:flex; align-items:center; justify-content:center; gap:7px; width:100%; cursor:pointer;
+    background:#fff; color:var(--ink); border:1px solid var(--line-2); border-radius:12px;
+    padding:12px; font-family:inherit; font-size:13.5px; font-weight:500; transition:border-color .15s, color .15s, background .15s;}
+  .btn-line:hover{border-color:rgba(18,22,26,.3); background:var(--sunk);}
+  .btn-line.danger{color:var(--danger-deep);}
+  .btn-line.danger:hover{border-color:rgba(232,85,106,.45); background:rgba(232,85,106,.05);}
+
+  .msg{display:none; align-items:center; gap:8px; font-size:12.5px; line-height:1.4; border-radius:10px; padding:10px 12px; margin-top:12px;}
+  .msg.show{display:flex;}
+  .msg.ok{color:var(--tea-deep); background:rgba(107,142,111,.12); border:1px solid rgba(107,142,111,.32);}
+  .msg.err{color:var(--danger-deep); background:rgba(232,85,106,.10); border:1px solid rgba(232,85,106,.30);}
+  .msg::before{content:""; width:6px; height:6px; border-radius:50%; flex:none; background:currentColor; opacity:.7;}
+
+  .loading{color:transparent !important; pointer-events:none;}
+  .loading::after{content:""; position:absolute; top:50%; left:50%; width:16px; height:16px; margin:-8px 0 0 -8px;
+    border:2px solid rgba(26,20,10,.3); border-top-color:#1A140A; border-radius:50%; animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* edit modal */
+  .scrim{position:fixed; inset:0; z-index:50; background:rgba(18,22,26,.42); backdrop-filter:blur(2px);
+    display:none; align-items:center; justify-content:center; padding:20px;}
+  .scrim.show{display:flex;}
+  .modal{width:100%; max-width:400px; background:var(--card); border:1px solid var(--line);
+    border-radius:16px; padding:24px; box-shadow:0 30px 60px -30px rgba(40,34,20,.6);}
+  .modal h3{margin:0 0 16px; font-size:16px; font-weight:600; display:flex; align-items:center; gap:11px;}
+  .modal h3 .m-circle{width:34px; height:34px; font-size:13px;}
+  .toggle-row{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-top:1px solid var(--line); margin-top:6px;}
+  .toggle-row .lab{font-size:13.5px; color:var(--ink);}
+  .toggle-row .sub{font-size:11.5px; color:var(--faint); margin-top:2px;}
+  .modal-actions{display:flex; gap:10px; margin-top:18px;}
+  .modal-actions .btn-line{flex:1;}
+
+  .foot{margin:18px 2px 0; font-size:10.5px; letter-spacing:.22em; color:var(--faint); text-align:center;}
+</style>
+</head>
+<body>
+
+  <div class="bg" aria-hidden="true"><div class="glow"></div></div>
+
+  <main class="shell">
+    <div class="topbar">
+      <a class="back" href="/retail-admin"><span class="en">← Back to backend</span><span class="cn">← 返回后台</span></a>
+      <button type="button" id="langToggle" class="langtoggle">中文</button>
+    </div>
+
+    <header class="head">
+      <div class="brand">
+        <span class="mark" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.6" stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
+            <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.6" stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
+            <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span class="word">Full Circle</span>
+      </div>
+      <div class="eyebrow mono"><span class="en">Team</span><span class="cn">团队</span></div>
+    </header>
+
+    <!-- Member list -->
+    <section class="card">
+      <h2><span class="en">Team members</span><span class="sep"> · </span><span class="cn">团队成员</span></h2>
+      <p class="lead"><span class="en">Everyone here can sign in to this store's backend. Roles are labels for now — every operator has full access.</span><span class="cn">以下成员均可登录本店后台。角色目前仅作标识 — 每位操作员都拥有完整权限。</span></p>
+      <div class="members" id="members"><div class="empty"><span class="en">Loading…</span><span class="cn">加载中…</span></div></div>
+    </section>
+
+    <!-- Invite -->
+    <section class="card">
+      <h2><span class="en">Invite a teammate</span><span class="sep"> · </span><span class="cn">邀请成员</span></h2>
+      <p class="lead"><span class="en">Create a sign-in for a colleague. Share the username and password with them directly.</span><span class="cn">为同事创建一个登录账户，并将用户名和密码直接告知对方。</span></p>
+      <form id="inviteForm" novalidate>
+        <div class="grid2">
+          <div class="field">
+            <label class="flabel" for="iName"><span class="en">Display name</span><span class="sep"> · </span><span class="cn">显示名称</span></label>
+            <input id="iName" type="text" autocomplete="off" spellcheck="false" placeholder="Jane Lee" />
+          </div>
+          <div class="field">
+            <label class="flabel" for="iRole"><span class="en">Role</span><span class="sep"> · </span><span class="cn">角色</span></label>
+            <select id="iRole">
+              <option value="staff">Staff · 员工</option>
+              <option value="admin">Admin · 管理员</option>
+              <option value="owner">Owner · 负责人</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label class="flabel" for="iUser"><span class="en">Username</span><span class="sep"> · </span><span class="cn">用户名</span></label>
+            <input id="iUser" type="text" autocomplete="off" spellcheck="false" placeholder="jane" />
+          </div>
+          <div class="field">
+            <label class="flabel" for="iPass"><span class="en">Temp password</span><span class="sep"> · </span><span class="cn">初始密码</span></label>
+            <input id="iPass" type="text" autocomplete="off" spellcheck="false" placeholder="min 10 chars" />
+          </div>
+        </div>
+        <div class="msg" id="inviteMsg" role="status"><span></span></div>
+        <button type="submit" id="inviteBtn" class="btn-brass"><span class="en">Add teammate</span><span class="cn">添加成员</span></button>
+      </form>
+    </section>
+
+    <div class="foot mono">OPERATOR CONSOLE · TEAM</div>
+  </main>
+
+  <!-- Edit member modal -->
+  <div class="scrim" id="editScrim">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editTitle">
+      <h3 id="editTitle"><span class="m-circle" id="editCircle" aria-hidden="true"></span><span id="editName">—</span></h3>
+
+      <div class="field">
+        <label class="flabel" for="eName"><span class="en">Display name</span><span class="sep"> · </span><span class="cn">显示名称</span></label>
+        <input id="eName" type="text" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="field">
+        <label class="flabel" for="eRole"><span class="en">Role</span><span class="sep"> · </span><span class="cn">角色</span></label>
+        <select id="eRole">
+          <option value="staff">Staff · 员工</option>
+          <option value="admin">Admin · 管理员</option>
+          <option value="owner">Owner · 负责人</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="flabel" for="ePass"><span class="en">Reset password</span><span class="sep"> · </span><span class="cn">重置密码</span></label>
+        <input id="ePass" type="text" autocomplete="off" spellcheck="false" placeholder="leave blank to keep · 留空则不变" />
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="lab"><span class="en">Active</span><span class="cn">启用</span></div>
+          <div class="sub"><span class="en">Inactive operators can't sign in.</span><span class="cn">停用的操作员无法登录。</span></div>
+        </div>
+        <button type="button" id="eActive" class="btn-line" style="width:auto; padding:8px 16px;">—</button>
+      </div>
+
+      <div class="msg" id="editMsg" role="status"><span></span></div>
+      <div class="modal-actions">
+        <button type="button" id="editCancel" class="btn-line"><span class="en">Cancel</span><span class="cn">取消</span></button>
+        <button type="button" id="editSave" class="btn-brass" style="margin-top:0;"><span class="en">Save</span><span class="cn">保存</span></button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  /* Team controller — list/invite/edit operators in this tenant. Mirrors the
+     backend-account language + message patterns. */
+  var LANG_KEY = 'roots-admin-lang';
+  var lang = 'en';
+  try { var s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'cn') lang = s; } catch (e) {}
+  function L(en, cn){ return lang === 'cn' ? cn : en; }
+
+  var TEAM = [];
+  var SELF_ID = null;
+  var editing = null;
+  var eActiveVal = true;
+
+  var membersEl = document.getElementById('members');
+  var inviteForm = document.getElementById('inviteForm');
+  var inviteBtn  = document.getElementById('inviteBtn');
+  var inviteMsg  = document.getElementById('inviteMsg');
+
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function (c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function setMsg(el, kind, text){ el.classList.remove('ok','err','show'); el.querySelector('span').textContent = text || ''; if (kind) el.classList.add(kind, 'show'); }
+
+  function initials(u){
+    var src = String((u.displayName || u.username) || '').trim();
+    if (!src) return '?';
+    if (/^[\x00-\x7F]+$/.test(src)) {
+      var p = src.split(/\s+/).filter(Boolean);
+      return ((p[0] ? p[0][0] : '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase() || '?';
+    }
+    return Array.from(src)[0];
+  }
+  function circleHtml(u, cls){
+    if (u.avatarUrl) return '<span class="m-circle ' + (cls || '') + '"><img src="' + esc(u.avatarUrl) + '" alt=""></span>';
+    return '<span class="m-circle ' + (cls || '') + '">' + esc(initials(u)) + '</span>';
+  }
+  function roleLabel(role){ return L({owner:'Owner',admin:'Admin',staff:'Staff'}[role] || role, {owner:'负责人',admin:'管理员',staff:'员工'}[role] || role); }
+
+  function render(){
+    if (!TEAM.length) { membersEl.innerHTML = '<div class="empty">' + L('No team members yet.', '暂无团队成员。') + '</div>'; return; }
+    membersEl.innerHTML = TEAM.map(function (u){
+      var sub = '@' + esc(u.username) + (u.lastLogin ? '' : ' · ' + L('never signed in', '从未登录'));
+      return '<div class="member' + (u.isActive ? '' : ' inactive') + '">' +
+        circleHtml(u) +
+        '<div class="m-main">' +
+          '<div class="m-name">' + esc(u.displayName || u.username) +
+            (u.isSelf ? '<span class="you">' + L('You', '你') + '</span>' : '') +
+            (u.isActive ? '' : '<span class="role-badge role-staff">' + L('Inactive', '已停用') + '</span>') +
+          '</div>' +
+          '<div class="m-sub">' + sub + '</div>' +
+        '</div>' +
+        '<span class="role-badge role-' + esc(u.role) + '">' + esc(roleLabel(u.role)) + '</span>' +
+        '<button class="m-edit" data-id="' + u.id + '">' + L('Edit', '编辑') + '</button>' +
+      '</div>';
+    }).join('');
+    Array.prototype.forEach.call(membersEl.querySelectorAll('.m-edit'), function (b){
+      b.addEventListener('click', function (){ openEdit(Number(b.getAttribute('data-id'))); });
+    });
+  }
+
+  function load(){
+    fetch('/api/backend/team', { credentials: 'same-origin' })
+      .then(function (r){ if (r.status === 401) { location.replace('/backend/login'); throw 0; } return r.json(); })
+      .then(function (j){ TEAM = (j && j.team) || []; var me = TEAM.filter(function (u){ return u.isSelf; })[0]; if (me) SELF_ID = me.id; render(); })
+      .catch(function (){});
+  }
+
+  /* ── Invite ── */
+  inviteForm.addEventListener('submit', function (e){
+    e.preventDefault();
+    setMsg(inviteMsg, null, '');
+    var username = document.getElementById('iUser').value.trim().toLowerCase();
+    var display_name = document.getElementById('iName').value.trim();
+    var role = document.getElementById('iRole').value;
+    var password = document.getElementById('iPass').value;
+    if (!username) { setMsg(inviteMsg, 'err', L('Enter a username', '请输入用户名')); return; }
+    if (password.length < 10) { setMsg(inviteMsg, 'err', L('Password must be at least 10 characters', '密码至少 10 位')); return; }
+    inviteBtn.disabled = true; inviteBtn.classList.add('loading');
+    fetch('/api/backend/team', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({ username: username, display_name: display_name, role: role, password: password })
+    })
+      .then(function (r){ return r.json().catch(function (){ return {}; }).then(function (d){ return { ok: r.ok, data: d }; }); })
+      .then(function (res){
+        inviteBtn.disabled = false; inviteBtn.classList.remove('loading');
+        if (res.ok && res.data && res.data.success) {
+          inviteForm.reset();
+          setMsg(inviteMsg, 'ok', L('Teammate added', '已添加成员'));
+          load();
+        } else {
+          setMsg(inviteMsg, 'err', (res.data && res.data.error) || L('Couldn’t add teammate', '无法添加成员'));
+        }
+      })
+      .catch(function (){ inviteBtn.disabled = false; inviteBtn.classList.remove('loading'); setMsg(inviteMsg, 'err', L('Network error — please try again', '网络错误，请重试')); });
+  });
+
+  /* ── Edit modal ── */
+  var scrim = document.getElementById('editScrim');
+  var editCircle = document.getElementById('editCircle');
+  var editNameEl = document.getElementById('editName');
+  var eName = document.getElementById('eName');
+  var eRole = document.getElementById('eRole');
+  var ePass = document.getElementById('ePass');
+  var eActive = document.getElementById('eActive');
+  var editMsg = document.getElementById('editMsg');
+
+  function paintActiveBtn(){
+    eActive.textContent = eActiveVal ? L('On', '开') : L('Off', '关');
+    eActive.classList.toggle('danger', !eActiveVal);
+  }
+  function openEdit(id){
+    editing = TEAM.filter(function (u){ return u.id === id; })[0];
+    if (!editing) return;
+    setMsg(editMsg, null, '');
+    document.getElementById('editTitle').innerHTML = circleHtml(editing, '') + '<span id="editName">' + esc(editing.displayName || editing.username) + '</span>';
+    eName.value = editing.displayName || '';
+    eRole.value = editing.role;
+    ePass.value = '';
+    eActiveVal = !!editing.isActive;
+    // Self-protections (server enforces too): can't deactivate self; an owner can't drop own owner role.
+    eActive.disabled = editing.isSelf;
+    eActive.style.opacity = editing.isSelf ? '.5' : '1';
+    paintActiveBtn();
+    scrim.classList.add('show');
+  }
+  function closeEdit(){ scrim.classList.remove('show'); editing = null; }
+
+  eActive.addEventListener('click', function (){ if (eActive.disabled) return; eActiveVal = !eActiveVal; paintActiveBtn(); });
+  document.getElementById('editCancel').addEventListener('click', closeEdit);
+  scrim.addEventListener('mousedown', function (e){ if (e.target === scrim) closeEdit(); });
+
+  document.getElementById('editSave').addEventListener('click', function (){
+    if (!editing) return;
+    setMsg(editMsg, null, '');
+    var saveBtn = this;
+    var body = { display_name: eName.value.trim(), role: eRole.value, is_active: eActiveVal };
+    saveBtn.disabled = true; saveBtn.classList.add('loading');
+    var pw = ePass.value;
+
+    fetch('/api/backend/team/' + editing.id, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify(body)
+    })
+      .then(function (r){ return r.json().catch(function (){ return {}; }).then(function (d){ return { ok: r.ok, data: d }; }); })
+      .then(function (res){
+        if (!(res.ok && res.data && res.data.success)) { throw new Error((res.data && res.data.error) || L('Couldn’t save', '保存失败')); }
+        if (pw && pw.length) {
+          if (pw.length < 10) throw new Error(L('Password must be at least 10 characters', '密码至少 10 位'));
+          return fetch('/api/backend/team/' + editing.id + '/password', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+            body: JSON.stringify({ new_password: pw })
+          }).then(function (r){ return r.json().catch(function (){ return {}; }).then(function (d){ if (!(r.ok && d.success)) throw new Error(d.error || L('Couldn’t reset password', '无法重置密码')); }); });
+        }
+      })
+      .then(function (){
+        saveBtn.disabled = false; saveBtn.classList.remove('loading');
+        closeEdit(); load();
+      })
+      .catch(function (err){
+        saveBtn.disabled = false; saveBtn.classList.remove('loading');
+        setMsg(editMsg, 'err', (err && err.message) || L('Couldn’t save', '保存失败'));
+      });
+  });
+
+  /* ── Language ── */
+  function applyLang(){
+    document.documentElement.setAttribute('data-lang', lang);
+    var tg = document.getElementById('langToggle');
+    if (tg) tg.textContent = lang === 'cn' ? 'EN' : '中文';
+    render();
+    if (editing) { paintActiveBtn(); }
+  }
+  document.getElementById('langToggle').addEventListener('click', function (){
+    lang = lang === 'cn' ? 'en' : 'cn';
+    try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
+    applyLang();
+  });
+  document.addEventListener('keydown', function (e){ if (e.key === 'Escape' && scrim.classList.contains('show')) closeEdit(); });
+
+  applyLang();
+  load();
+})();
+</script>
+
+</body>
+</html>

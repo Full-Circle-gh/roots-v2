@@ -122,6 +122,19 @@
     box-shadow:0 0 0 3px rgba(107,142,111,.20);
   }
 
+  /* operator: profile photo (the topbar circle) */
+  .avatarrow{display:flex; align-items:center; gap:16px; margin:4px 0 4px;}
+  .avatar-circle{
+    width:64px; height:64px; flex:none; border-radius:50%; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--tea); color:#fff; font-size:24px; font-weight:600;
+    text-transform:uppercase; user-select:none;
+    border:1px solid var(--line-2);
+  }
+  .avatar-circle img{width:100%; height:100%; object-fit:cover; display:block;}
+  .avatar-actions{display:flex; flex-wrap:wrap; gap:9px;}
+  .avatar-actions .btn-ghost{padding:0 15px; height:38px; display:inline-flex; align-items:center;}
+
   /* operator: editable name */
   .namebar{margin:18px 0 20px;}
   .nameedit{display:flex; gap:9px; align-items:stretch;}
@@ -286,6 +299,17 @@
       <section class="card">
         <h2><span class="en">Operator</span><span class="sep"> · </span><span class="cn">操作员</span></h2>
 
+        <!-- Profile photo — the Google-style circle shown in the backend topbar. -->
+        <div class="avatarrow">
+          <span class="avatar-circle" id="avatarCircle" aria-hidden="true"></span>
+          <div class="avatar-actions">
+            <button type="button" id="avatarPick" class="btn-ghost"><span class="en">Change photo</span><span class="cn">更换照片</span></button>
+            <button type="button" id="avatarClear" class="btn-ghost" hidden><span class="en">Remove</span><span class="cn">移除</span></button>
+            <input type="file" id="avatarFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+          </div>
+        </div>
+        <div class="msg" id="avatarMsg" role="status"><span></span></div>
+
         <form id="nameForm" class="namebar" novalidate>
           <label class="flabel" for="nameInput"><span class="en">Name</span><span class="sep"> · </span><span class="cn">姓名</span></label>
           <div class="nameedit">
@@ -378,6 +402,33 @@
     var pwForm     = document.getElementById('pwForm');
     var pwBtn      = document.getElementById('pwBtn');
     var msg        = document.getElementById('msg');
+    var avatarCircle = document.getElementById('avatarCircle');
+    var avatarPick   = document.getElementById('avatarPick');
+    var avatarClear  = document.getElementById('avatarClear');
+    var avatarFile   = document.getElementById('avatarFile');
+    var avatarMsg    = document.getElementById('avatarMsg');
+
+    function initials(u){
+      var s = String((u && (u.displayName || u.username)) || '').trim();
+      if (!s) return '?';
+      if (/^[\x00-\x7F]+$/.test(s)) {
+        var p = s.split(/\s+/).filter(Boolean);
+        return ((p[0] ? p[0][0] : '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase() || '?';
+      }
+      return Array.from(s)[0];
+    }
+    function renderAvatar(u){
+      if (u && u.avatarUrl) {
+        avatarCircle.innerHTML = '';
+        var img = document.createElement('img');
+        img.src = u.avatarUrl; img.alt = '';
+        avatarCircle.appendChild(img);
+        avatarClear.hidden = false;
+      } else {
+        avatarCircle.textContent = initials(u || {});
+        avatarClear.hidden = true;
+      }
+    }
 
     function esc(s){
       return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
@@ -421,6 +472,7 @@
         [L('Role', '角色'),       u.role],
         [L('Company', '公司'),    tenant.brand || tenant.name]
       ]);
+      renderAvatar(u);
       applyTenant(tenant);
       if (u.mustChangePassword || u.defaultPassword) { defaultWarn.classList.add('show'); }
     }
@@ -465,6 +517,59 @@
           nameBtn.disabled = false; nameBtn.classList.remove('loading');
           setMsg(nameMsg, 'err', L('Network error — please try again', '网络错误，请重试'));
         });
+    });
+
+    /* ── Avatar: pick → downscale to a 256px square → PUT /api/backend/avatar ── */
+    function saveAvatar(dataUrl){
+      avatarPick.disabled = true; avatarPick.classList.add('loading');
+      setMsg(avatarMsg, null, '');
+      fetch('/api/backend/avatar', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ avatar: dataUrl })   // null clears it
+      })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          avatarPick.disabled = false; avatarPick.classList.remove('loading');
+          if (res.ok && res.data && res.data.success) {
+            if (lastUser) { lastUser.avatarUrl = res.data.avatarUrl || null; renderAvatar(lastUser); }
+            setMsg(avatarMsg, 'ok', dataUrl ? L('Photo updated', '照片已更新') : L('Photo removed', '照片已移除'));
+          } else {
+            setMsg(avatarMsg, 'err', (res.data && res.data.error) || L('Couldn’t save photo', '无法保存照片'));
+          }
+        })
+        .catch(function () {
+          avatarPick.disabled = false; avatarPick.classList.remove('loading');
+          setMsg(avatarMsg, 'err', L('Network error — please try again', '网络错误，请重试'));
+        });
+    }
+    avatarPick.addEventListener('click', function () { avatarFile.click(); });
+    avatarClear.addEventListener('click', function () { saveAvatar(null); });
+    avatarFile.addEventListener('change', function () {
+      var file = avatarFile.files && avatarFile.files[0];
+      avatarFile.value = '';                       // allow re-picking the same file
+      if (!file) return;
+      if (!/^image\//.test(file.type)) { setMsg(avatarMsg, 'err', L('Please choose an image file', '请选择图片文件')); return; }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          // Cover-crop to a centered 256px square, re-encode as JPEG (small).
+          var S = 256;
+          var canvas = document.createElement('canvas');
+          canvas.width = S; canvas.height = S;
+          var ctx = canvas.getContext('2d');
+          var scale = Math.max(S / img.width, S / img.height);
+          var w = img.width * scale, h = img.height * scale;
+          ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+          saveAvatar(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.onerror = function () { setMsg(avatarMsg, 'err', L('Couldn’t read that image', '无法读取该图片')); };
+        img.src = reader.result;
+      };
+      reader.onerror = function () { setMsg(avatarMsg, 'err', L('Couldn’t read that file', '无法读取该文件')); };
+      reader.readAsDataURL(file);
     });
 
     /* ── Change password → PUT /api/backend/password ── */

@@ -13,6 +13,33 @@ const router = express.Router();
 
 const SIGNUP_OPEN = () => process.env.BACKEND_SIGNUP_OPEN === '1';
 
+// Public company self-signup is intentionally NOT open: business data is not yet
+// tenant-scoped (see backend-auth.js / tenant-db.js), so an unvetted tenant could
+// share another's data. Until TENANT_DATA_ISOLATION is cut over, the public
+// /backend/signup page is a WAITLIST: it captures the lead here and provisions
+// nothing. The platform owner reviews requests in saas-admin and provisions by
+// hand. When isolation lands, flip BACKEND_SIGNUP_OPEN=1 to auto-provision.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tenant_signup_requests (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    company      TEXT NOT NULL,
+    contact_name TEXT,
+    contact      TEXT,                              -- email or phone, free text
+    note         TEXT,
+    status       TEXT NOT NULL DEFAULT 'new',       -- new | contacted | provisioned | declined
+    ip           TEXT,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+// Same kitchen-admin gate saas-admin uses — the leads list is platform-owner only.
+function requireSaasAdmin(req, res, next) {
+  if (!req.session?.userId) return res.status(401).json({ error: 'Admin login required · 需要管理员登录' });
+  const u = db.prepare('SELECT role FROM users WHERE id = ? AND is_active = 1').get(req.session.userId);
+  if (!u || u.role !== 'admin') return res.status(403).json({ error: 'Admin only · 仅限管理员' });
+  next();
+}
+
 const signupLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
@@ -45,6 +72,49 @@ router.post('/api/backend/signup', signupLimiter, express.json(), (req, res) => 
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }
+});
+
+// ── Waitlist capture (PUBLIC) ────────────────────────────────────────────
+// Open to anyone; rate-limited. Stores the lead and provisions nothing.
+const requestLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests from this IP, try later · 请求过于频繁,请稍后再试' },
+});
+
+router.post('/api/backend/signup/request', requestLimiter, express.json(), (req, res) => {
+  const b = req.body || {};
+  const company = String(b.company || '').trim();
+  const contactName = String(b.contact_name || '').trim();
+  const contact = String(b.contact || '').trim();
+  const note = String(b.note || '').trim();
+  if (!company) return res.status(400).json({ success: false, error: 'Company name required · 公司名称必填' });
+  if (!contact) return res.status(400).json({ success: false, error: 'An email or phone is required · 请留下邮箱或电话' });
+  if (company.length > 120 || contactName.length > 80 || contact.length > 120 || note.length > 600) {
+    return res.status(400).json({ success: false, error: 'One of the fields is too long · 某个字段过长' });
+  }
+  const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
+  db.prepare('INSERT INTO tenant_signup_requests (company, contact_name, contact, note, ip) VALUES (?,?,?,?,?)')
+    .run(company, contactName || null, contact, note || null, ip || null);
+  console.log('[signup-request] new lead — ' + company + ' (' + contact + ')');
+  res.json({ success: true });
+});
+
+// ── Leads list + status (platform owner / kitchen admin only) ────────────
+router.get('/api/backend/signup/requests', requireSaasAdmin, (req, res) => {
+  const rows = db.prepare('SELECT * FROM tenant_signup_requests ORDER BY (status = \'new\') DESC, created_at DESC').all();
+  res.json({ success: true, requests: rows });
+});
+
+router.post('/api/backend/signup/requests/:id/status', requireSaasAdmin, express.json(), (req, res) => {
+  const allowed = ['new', 'contacted', 'provisioned', 'declined'];
+  const status = String((req.body && req.body.status) || '').trim();
+  if (!allowed.includes(status)) return res.status(400).json({ success: false, error: 'Unknown status · 未知状态' });
+  const r = db.prepare('UPDATE tenant_signup_requests SET status = ? WHERE id = ?').run(status, Number(req.params.id));
+  if (!r.changes) return res.status(404).json({ success: false, error: 'Request not found · 未找到请求' });
+  res.json({ success: true });
 });
 
 module.exports = router;

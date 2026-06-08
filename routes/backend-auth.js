@@ -62,6 +62,12 @@ try { db.exec("ALTER TABLE tenants ADD COLUMN product_catalog_mode TEXT NOT NULL
 // full self-serve control via storefront_config `features.*`.
 try { db.exec('ALTER TABLE tenants ADD COLUMN features_json TEXT'); } catch (e) { /* already added */ }
 
+// Operator avatar (Google-style profile circle). Stored as a small data-URL
+// (client downscales before upload); null = fall back to an initials monogram.
+// Consistent with how customer avatars + other images live in SQLite today; the
+// planned OSS migration will sweep these up with the rest.
+try { db.exec('ALTER TABLE tenant_users ADD COLUMN avatar_url TEXT'); } catch (e) { /* already added */ }
+
 // ── Seed Roots as tenant #1 + an owner operator (mirrors auth.js seedUsers) ──
 function seedBackend() {
   let roots = db.prepare("SELECT id FROM tenants ORDER BY id ASC LIMIT 1").get();
@@ -130,7 +136,7 @@ router.post('/api/backend/login', loginLimiter, express.json(), (req, res) => {
   req.session.cookie.maxAge = remember ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
   res.json({
     success: true,
-    user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role,
+    user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role, avatarUrl: u.avatar_url || null,
             tenant: { id: tenant.id, name: tenant.name, brand: tenant.brand_name,
                       catalogMode: tenant.product_catalog_mode || 'self',
                       entitlements: features.entitlements(tenant.features_json) } },
@@ -144,11 +150,11 @@ router.post('/api/backend/logout', (req, res) => {
 
 router.get('/api/backend/me', (req, res) => {
   if (!req.session || !req.session.backendUserId) return res.json({ user: null });
-  const u = db.prepare('SELECT id, tenant_id, username, display_name, role, last_login FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+  const u = db.prepare('SELECT id, tenant_id, username, display_name, role, last_login, avatar_url FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
   if (!u) return res.json({ user: null });
   const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
   res.json({
-    user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role, lastLogin: u.last_login,
+    user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role, lastLogin: u.last_login, avatarUrl: u.avatar_url || null,
             tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status, catalogMode: tenant.product_catalog_mode || 'self', entitlements: features.entitlements(tenant.features_json) } : null },
   });
 });
@@ -181,6 +187,29 @@ router.put('/api/backend/profile', express.json(), (req, res) => {
   if (name.length > 60) return res.status(400).json({ error: 'Name is too long · 名称过长' });
   db.prepare('UPDATE tenant_users SET display_name = ? WHERE id = ?').run(name, req.session.backendUserId);
   res.json({ success: true, displayName: name });
+});
+
+// Set / clear own avatar (the Google-style profile circle). The client downscales
+// to a small square data-URL before posting; we still cap the payload server-side
+// so a hand-crafted request can't bloat the row. Pass avatar:null (or '') to clear
+// back to the initials monogram. Larger JSON body limit just for this route.
+router.put('/api/backend/avatar', express.json({ limit: '1mb' }), (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  let avatar = req.body && req.body.avatar;
+  if (avatar === null || avatar === undefined || avatar === '') {
+    db.prepare('UPDATE tenant_users SET avatar_url = NULL WHERE id = ?').run(req.session.backendUserId);
+    return res.json({ success: true, avatarUrl: null });
+  }
+  avatar = String(avatar);
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(avatar)) {
+    return res.status(400).json({ error: 'Unsupported image format · 不支持的图片格式' });
+  }
+  // ~700KB ceiling on the data-URL (the client targets a 256px square, well under).
+  if (avatar.length > 700 * 1024) {
+    return res.status(413).json({ error: 'Image is too large — please use a smaller photo · 图片过大，请使用更小的照片' });
+  }
+  db.prepare('UPDATE tenant_users SET avatar_url = ? WHERE id = ?').run(avatar, req.session.backendUserId);
+  res.json({ success: true, avatarUrl: avatar });
 });
 
 module.exports = router;

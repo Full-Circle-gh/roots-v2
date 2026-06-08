@@ -272,6 +272,62 @@
   }
   .topbar-link:hover { background: var(--bg-elev-1); color: var(--text-1); }
 
+  /* ── Account widget — Google-style profile circle + dropdown ───────────── */
+  .acct { position: relative; flex: none; }
+  .acct-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0; border: none; background: transparent; cursor: pointer;
+    border-radius: 50%; line-height: 0;
+  }
+  .acct-circle {
+    width: 28px; height: 28px; flex: none; border-radius: 50%; overflow: hidden;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--accent); color: #fff;
+    font-size: 11px; font-weight: 600; letter-spacing: .02em;
+    text-transform: uppercase; user-select: none;
+    box-shadow: 0 0 0 1px var(--line) inset;
+    transition: box-shadow var(--t-fast) ease;
+  }
+  .acct-circle img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .acct-btn:hover .acct-circle,
+  .acct-btn:focus-visible .acct-circle,
+  .acct-btn[aria-expanded="true"] .acct-circle { box-shadow: 0 0 0 2px var(--accent); }
+  .acct-btn:focus-visible { outline: none; }
+  .acct-circle-lg { width: 40px; height: 40px; font-size: 15px; }
+
+  .acct-menu {
+    position: absolute; top: calc(100% + 8px); right: 0;
+    min-width: 232px; z-index: 250;
+    background: var(--bg-pane); border: 1px solid var(--line);
+    border-radius: var(--r-lg); padding: 6px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
+    animation: zen-pop-in 220ms cubic-bezier(.16, 1, .3, 1);
+  }
+  .acct-menu[hidden] { display: none; }
+  .acct-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 10px; }
+  .acct-meta { min-width: 0; }
+  .acct-name {
+    font-size: 13px; font-weight: 600; color: var(--text-1);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;
+  }
+  .acct-role {
+    font-size: 11px; color: var(--text-3); font-family: var(--f-mono);
+    letter-spacing: .02em; margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;
+  }
+  .acct-sep { height: 1px; background: var(--line); margin: 4px 0; }
+  .acct-item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 9px 10px; border: none; background: transparent; cursor: pointer;
+    border-radius: var(--r-md); text-align: left; text-decoration: none;
+    font-size: 13px; color: var(--text-2); font-family: inherit;
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .acct-item svg { width: 16px; height: 16px; flex: none; opacity: .8; }
+  .acct-item:hover { background: var(--bg-elev-1); color: var(--text-1); }
+  .acct-danger { color: var(--danger); }
+  .acct-danger:hover { background: rgba(232, 85, 106, .1); color: var(--danger); }
+
   /* ── Command-search trigger (topbar pill) ── */
   .gsearch-trigger {
     display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
@@ -1331,6 +1387,32 @@
     .db-deepdive.dd-open-anim .db-track > span,
     .db-deepdive.dd-open-anim .db-chart .line,
     .db-deepdive.dd-open-anim .db-cohort-curve .line { animation: none; }
+  }
+
+  /* Closed Deep dive — a calm "come look inside" invitation. The bar breathes
+     a soft brass glow in and out on a slow loop, and the ▸ chevron gives one
+     gentle nudge near the end of each cycle (periodic motion reads less needy
+     than a constant pulse). Stops the instant it's opened, and forever once
+     it's been opened at least once (.dd-seen, set + persisted in JS). Honours
+     prefers-reduced-motion. */
+  @keyframes db-dd-breathe {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(176, 141, 74, 0); }
+    50%      { box-shadow: 0 5px 20px -8px rgba(176, 141, 74, .30); }
+  }
+  @keyframes db-dd-nudge {
+    0%, 80%, 100% { transform: translateX(0); }
+    88%           { transform: translateX(3px); }
+    94%           { transform: translateX(0); }
+  }
+  .db-deepdive:not([open]):not(.dd-seen) {
+    animation: db-dd-breathe 5.5s ease-in-out infinite;
+  }
+  .db-deepdive:not([open]):not(.dd-seen) > summary::before {
+    animation: db-dd-nudge 5.5s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .db-deepdive:not([open]):not(.dd-seen),
+    .db-deepdive:not([open]):not(.dd-seen) > summary::before { animation: none; }
   }
 
   /* ── Bars come alive: every magnitude bar inside a mobile report card sweeps
@@ -5679,7 +5761,34 @@
     <span class="gsearch-label">Search · 搜索</span>
     <span class="gsearch-kbd">Ctrl K</span>
   </button>
-  <span class="who" id="who"></span>
+  <div class="acct" id="acct" style="display:none;">
+    <button class="acct-btn" id="acctBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Account · 账户" aria-label="Account · 账户">
+      <span class="acct-circle" id="acctCircle" aria-hidden="true"></span>
+    </button>
+    <div class="acct-menu" id="acctMenu" role="menu" hidden>
+      <div class="acct-head">
+        <span class="acct-circle acct-circle-lg" id="acctCircleLg" aria-hidden="true"></span>
+        <div class="acct-meta">
+          <div class="acct-name" id="acctName">—</div>
+          <div class="acct-role" id="acctRoleLine"></div>
+        </div>
+      </div>
+      <div class="acct-sep"></div>
+      <a class="acct-item" href="/backend/account" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg>
+        <span>Account · 账户</span>
+      </a>
+      <a class="acct-item" href="/backend/team" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.9-3 3.2-4.5 6-4.5S14.1 17 15 20"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6"/><path d="M18.5 20c-.5-2-1.6-3.3-3.2-4"/></svg>
+        <span>Manage team · 团队管理</span>
+      </a>
+      <div class="acct-sep"></div>
+      <button class="acct-item acct-danger" id="acctSignout" type="button" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>Sign out · 退出登录</span>
+      </button>
+    </div>
+  </div>
   <button class="topbar-link" id="ui-scale-toggle" type="button" onclick="cuCycleUiScale()" title="Text size · 字号" style="border:none;background:transparent;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
     <span style="font-weight:700;line-height:1;"><span style="font-size:16px;">A</span><span style="font-size:10px;">A</span></span>
     <span class="ui-scale-val" style="font-size:11px;font-weight:600;letter-spacing:.02em;">110%</span>
@@ -12201,17 +12310,10 @@ let ENTITLEMENTS = {};
     // a missing key means entitled. loadConfig() combines this with the
     // operator's own on/off preferences before showing each feature.
     ENTITLEMENTS = (u.tenant && u.tenant.entitlements) || {};
-    // Operator name links to the backend account page (change password / sign
+    // Google-style profile circle + dropdown (avatar · account · team · sign
     // out). Every authenticated operator has full backend access — the backend
-    // realm has no per-module permission gate.
-    const whoEl = $('#who');
-    whoEl.innerHTML = '';
-    const a = document.createElement('a');
-    a.href = '/backend/account';
-    a.textContent = (u.displayName || u.username) + ' · ' + (u.role || '');
-    a.title = 'Account · 账户';
-    a.style.cssText = 'color:inherit;text-decoration:none;border-bottom:1px dotted currentColor;opacity:.85';
-    whoEl.appendChild(a);
+    // realm has no per-module permission gate; role here is identity, not a gate.
+    initAcctMenu(u);
   } catch (e) { location.href = '/backend/login'; return; }
   dashInit();          // landing tab — set up date range + first load
   loadOrders();
@@ -12226,6 +12328,85 @@ let ENTITLEMENTS = {};
   loadRctiers();        // Loyalty & Wallet → Membership tier ladder (Roots Club)
   loadFaq();
 })();
+
+// ── Account menu — Google-style profile circle + dropdown ────────────────
+// Avatar (uploaded photo, or initials monogram fallback) in the topbar; click
+// opens a menu with the operator's identity, Account, Manage team, Sign out.
+let ACCT_USER = null;
+function acctInitials(u) {
+  const src = String(u.displayName || u.username || '').trim();
+  if (!src) return '?';
+  if (/^[\x00-\x7F]+$/.test(src)) {            // Latin → up to two word-initials
+    const parts = src.split(/\s+/).filter(Boolean);
+    const ini = (parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '');
+    return ini.toUpperCase() || '?';
+  }
+  return Array.from(src)[0];                    // CJK / other → first glyph
+}
+function acctRoleLabel(role) {
+  return cuT(
+    ({ owner: 'Owner', admin: 'Admin', staff: 'Staff' })[role] || (role || 'Operator'),
+    ({ owner: '负责人', admin: '管理员', staff: '员工' })[role] || (role || '操作员')
+  );
+}
+function acctRenderCircle(el, u) {
+  if (!el) return;
+  if (u.avatarUrl) {
+    el.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = u.avatarUrl; img.alt = '';
+    img.onerror = () => { el.textContent = acctInitials(u); };
+    el.appendChild(img);
+  } else {
+    el.textContent = acctInitials(u);
+  }
+}
+function acctRenderMeta() {
+  const u = ACCT_USER; if (!u) return;
+  acctRenderCircle($('#acctCircle'), u);
+  acctRenderCircle($('#acctCircleLg'), u);
+  const nameEl = $('#acctName');
+  if (nameEl) nameEl.textContent = u.displayName || u.username || '—';
+  const roleEl = $('#acctRoleLine');
+  if (roleEl) {
+    const company = (u.tenant && (u.tenant.brand || u.tenant.name)) || '';
+    roleEl.textContent = acctRoleLabel(u.role) + (company ? ' · ' + company : '');
+  }
+}
+function initAcctMenu(u) {
+  ACCT_USER = u;
+  const wrap = $('#acct'), btn = $('#acctBtn'), menu = $('#acctMenu');
+  if (!wrap || !btn || !menu) return;
+  wrap.style.display = '';
+  acctRenderMeta();
+  if (window.onLangChange) window.onLangChange(() => acctRenderMeta());
+
+  const close = () => {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', onOutside);
+    document.removeEventListener('keydown', onKey);
+  };
+  const open = () => {
+    if (!menu.hidden) return;
+    menu.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    setTimeout(() => {
+      document.addEventListener('mousedown', onOutside);
+      document.addEventListener('keydown', onKey);
+    }, 0);
+  };
+  function onOutside(e) { if (!wrap.contains(e.target)) close(); }
+  function onKey(e) { if (e.key === 'Escape') { close(); btn.focus(); } }
+
+  btn.addEventListener('click', () => { menu.hidden ? open() : close(); });
+  const signout = $('#acctSignout');
+  if (signout) signout.addEventListener('click', () => {
+    fetch('/api/backend/logout', { method: 'POST', credentials: 'same-origin' })
+      .finally(() => { location.href = '/backend/login'; });
+  });
+}
 
 // ════════════════════════════════════════════════════════════════
 // DASHBOARD — channel analytics overview (reads /api/retail-admin/dashboard,
@@ -12502,8 +12683,13 @@ function dashInit() {
   }
 
   const dd = document.getElementById('db-deepdive');
+  // Once the operator has ever opened the fold, retire the ambient "breathe +
+  // chevron nudge" invitation — it's done its job and shouldn't keep nagging.
+  try { if (localStorage.getItem('db-dd-seen') === '1') dd && dd.classList.add('dd-seen'); } catch (e) {}
   if (dd) dd.addEventListener('toggle', () => {
     if (dd.open) {
+      dd.classList.add('dd-seen');
+      try { localStorage.setItem('db-dd-seen', '1'); } catch (e) {}
       dd.classList.remove('dd-open-anim');
       void dd.offsetWidth;
       dd.classList.add('dd-open-anim');

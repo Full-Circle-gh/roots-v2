@@ -188,6 +188,7 @@ app.use('/api', (req, res, next) => {
 // Routes
 app.use(require('./routes/auth'));
 app.use(require('./routes/backend-auth'));   // Mini App Backend operator realm (separate from kitchen auth)
+app.use(require('./routes/backend-team'));   // Mini App Backend team management (operators within a tenant)
 app.use(require('./routes/billing'));        // Mini App Backend billing control plane (plans / subscriptions / invoices)
 app.use(require('./routes/billing-pay'));    // Mini App Backend billing payments & lifecycle (select-plan / checkout / mark-paid)
 app.use(require('./routes/backend-signup')); // Mini App Backend tenant signup / provisioning (gated in Phase 2)
@@ -259,6 +260,14 @@ app.get('/backend/account', (req, res) => {
   if (!req.session?.backendUserId) return res.redirect('/backend/login');
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'backend-account.html'));
+});
+
+// Mini App Backend team — manage operators within the tenant (invite / role /
+// deactivate / reset password). Reached from the topbar profile menu.
+app.get('/backend/team', (req, res) => {
+  if (!req.session?.backendUserId) return res.redirect('/backend/login');
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'backend-team.html'));
 });
 
 // SaaS-admin console — platform owner only (a kitchen `admin` session).

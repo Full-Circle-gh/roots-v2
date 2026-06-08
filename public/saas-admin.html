@@ -126,6 +126,19 @@
         <tbody id="rows"><tr><td colspan="8" class="empty">Loading… · 加载中…</td></tr></tbody>
       </table>
     </div>
+
+    <div class="bar" style="margin-top:30px;">
+      <h1>Signup requests · 申请开通 <span class="zh mono" id="reqCount"></span></h1>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>Company · 公司</th><th>Contact · 联系</th><th>Note · 备注</th>
+          <th class="mono">When · 时间</th><th>Status · 状态</th>
+        </tr></thead>
+        <tbody id="reqRows"><tr><td colspan="5" class="empty">Loading… · 加载中…</td></tr></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- New / brand / detail modals -->
@@ -444,7 +457,35 @@
     });
   }
 
+  // ── Signup requests (waitlist leads) ──
+  const REQ_STATUS = { new:'New · 新', contacted:'Contacted · 已联系', provisioned:'Provisioned · 已开通', declined:'Declined · 已婉拒' };
+  function loadRequests() {
+    api('/api/backend/signup/requests').then(j => {
+      if (!j || !j.success) return;
+      const rows = j.requests || [];
+      const open = rows.filter(r => r.status === 'new').length;
+      $('#reqCount').textContent = open ? open + ' new' : rows.length;
+      if (!rows.length) { $('#reqRows').innerHTML = '<tr><td colspan="5" class="empty">No requests yet. · 暂无申请。</td></tr>'; return; }
+      $('#reqRows').innerHTML = rows.map(r => {
+        const opts = Object.keys(REQ_STATUS).map(k => '<option value="'+k+'"'+(k===r.status?' selected':'')+'>'+esc(REQ_STATUS[k])+'</option>').join('');
+        return '<tr'+(r.status==='new'?' style="font-weight:500"':'')+'>' +
+          '<td class="co">'+esc(r.company)+'</td>' +
+          '<td>'+esc(r.contact)+(r.contact_name?' <span class="zh">('+esc(r.contact_name)+')</span>':'')+'</td>' +
+          '<td>'+(r.note?esc(r.note):'<span class="zh">—</span>')+'</td>' +
+          '<td class="mono">'+fdate(r.created_at)+'</td>' +
+          '<td><select class="req-st" data-id="'+r.id+'" style="background:var(--ink);color:var(--paper);border:1px solid var(--line-2);border-radius:6px;padding:4px 6px;font-family:inherit;font-size:12px;">'+opts+'</select></td>' +
+        '</tr>';
+      }).join('');
+      document.querySelectorAll('.req-st').forEach(sel => sel.addEventListener('change', () => {
+        api('/api/backend/signup/requests/'+sel.getAttribute('data-id')+'/status', {
+          method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ status: sel.value })
+        }).then(j => { toast(j && j.success ? 'Updated · 已更新' : (j && j.error) || 'Failed'); loadRequests(); });
+      }));
+    }).catch(()=>{});
+  }
+
   load();
+  loadRequests();
 })();
 </script>
 </body>
