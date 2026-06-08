@@ -5482,10 +5482,10 @@
     .rm-dh-ai-head .t { font: 600 14.5px var(--f-sans); color: var(--text-1); display: block; }
     .rm-dh-ai-head .hv { font: 600 15px var(--f-sans); color: var(--text-1); margin-right: 4px; font-variant-numeric: tabular-nums; }
     .rm-dh-ai-head .hv.brass { color: var(--brass); }
-    .rm-dh-ai-head .chev { color: var(--text-3); transition: transform .26s; display: flex; flex: none; }
+    .rm-dh-ai-head .chev { color: var(--text-3); transition: transform .5s cubic-bezier(.22,.61,.36,1); display: flex; flex: none; }
     .rm-dh-ai-head .chev svg { width: 18px; height: 18px; }
     .rm-dh-ai.open .rm-dh-ai-head .chev { transform: rotate(90deg); }
-    .rm-dh-ai-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s ease; }
+    .rm-dh-ai-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .55s cubic-bezier(.22,.61,.36,1); }
     .rm-dh-ai.open .rm-dh-ai-body { grid-template-rows: 1fr; }
     .rm-dh-ai-body > .inner { overflow: hidden; }
     .rm-dh-ai-pad { padding: 0 14px 16px; }
@@ -7521,6 +7521,10 @@
          ("MIN ¥" orphaning the ¥, single-line headers floating up). The table
          already scrolls horizontally, so the extra width is fine. */
       #vouchers-table th { white-space: nowrap; vertical-align: bottom; }
+      /* Keep cell values on one line too — "% off" / "¥ off" and the expiry
+         dates were breaking mid-value. The code column's badge stack still
+         wraps on its own (it's a flex-wrap container, unaffected by this). */
+      #vouchers-table td { white-space: nowrap; }
     </style>
     <div class="table-wrap">
       <table id="vouchers-table">
@@ -14963,6 +14967,16 @@ function formatDate(iso) {
   return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
 }
 
+// Date-only normalizer for fields like coupon expiry, where values may be
+// stored in mixed formats ("2026-06-09", "2026/10/6"). Always renders a
+// padded YYYY-MM-DD; falls back to the raw first-10 chars if unparseable.
+function formatDateOnly(v) {
+  if (!v) return '—';
+  const m = String(v).match(/(\d{4})\D(\d{1,2})\D(\d{1,2})/);
+  if (!m) return String(v).slice(0, 10);
+  return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+}
+
 // Status transition button labels — bilingual per the EN · 中文 admin rule
 // (project_roots_v2_bilingual_admin). Shown inside each order row's action
 // column AND inside the open-order drawer's footer transition buttons.
@@ -16702,7 +16716,7 @@ async function loadVouchers() {
         <td class="numeric">${v.type === 'percent' ? v.value + '%' : (v.type === 'free_shipping' ? '—' : '¥' + fmt(v.value))}</td>
         <td class="numeric muted">${v.min_subtotal ? '¥' + fmt(v.min_subtotal) : '—'}</td>
         <td class="numeric">${v.used_count}${v.max_uses != null ? ' / ' + v.max_uses : ''}</td>
-        <td class="muted">${v.expires_at ? v.expires_at.slice(0, 10) : '—'}</td>
+        <td class="muted">${formatDateOnly(v.expires_at)}</td>
         <td><span class="pill ${v.is_active ? 'pub' : 'draft'}"><span class="dot"></span>${v.is_active ? 'Active' : 'Inactive'}</span></td>
         <td style="white-space: nowrap;">
           <button class="btn btn-sm" onclick='openGrantModal(${v.id}, ${JSON.stringify(v.code)})'>Grant · 发放</button>
