@@ -15992,7 +15992,7 @@ async function submitBulkTracking() {
             <td class="muted" style="font-size:11px;">${x.auto_dispatched ? 'auto-dispatched · 自动发货' : ''}</td>
           </tr>`).join('')}</tbody>
       </table>`;
-    toast(`Bulk · 批量: ${ok}/${r.results.length} saved · 已保存`, ok ? 'ok' : 'err');
+    toast(`Bulk: ${ok}/${r.results.length} saved · 批量: ${ok}/${r.results.length} 已保存`, ok ? 'ok' : 'err');
     loadOrders();
   } catch (e) {
     toast('Failed · 失败: ' + e.message, 'err');
@@ -20097,7 +20097,7 @@ function renderInvoiceBlock(o) {
 async function markInvoiceIssued(id) {
   const url = (document.getElementById('inv-url-' + id)?.value || '').trim();
   const number = (document.getElementById('inv-no-' + id)?.value || '').trim();
-  if (!url && !number) { toast('Add a fapiao link/PDF or 发票号码 · 请填写发票链接或号码', 'err'); return; }
+  if (!url && !number) { toast('Add a fapiao link/PDF or invoice number · 请填写发票链接或号码', 'err'); return; }
   try {
     await api('/api/retail-admin/orders/' + id + '/invoice', { method: 'PUT', body: { action: 'issue', file_url: url, number } });
     toast('Invoice marked issued · 已标记开票');
