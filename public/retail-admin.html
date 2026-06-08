@@ -27098,13 +27098,6 @@ window.onLangChange(function () {
   var ICON_CHEV  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
   var ICON_GUEST = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>';
 
-  function primaryStat(c) {
-    var bal = Number(c.balance || 0), pts = Number(c.points_balance || 0), ord = Number(c.orders_count || 0);
-    if (bal > 0) return { big: '¥' + money(bal), k: 'wallet' };
-    if (pts > 0) return { big: String(pts), k: 'points' };
-    return { big: String(ord), k: ord === 1 ? 'order' : 'orders' };
-  }
-
   window.rmRenderCustomerCards = function (data, errMsg) {
     var wrap = el(WRAP_ID);
     if (!wrap) return;
@@ -27119,9 +27112,11 @@ window.onLangChange(function () {
       var name = guest ? 'Guest' : c.nickname;
       var tier = c.tier_key || 'seed';
       var date = String(c.last_login_at || '').slice(0, 10);
-      var meta = (c.phone ? esc(c.phone) : 'no phone') + ' · ' + (c.orders_count || 0)
-        + ((c.orders_count || 0) === 1 ? ' order' : ' orders') + (date ? ' · ' + date : '');
-      var st = primaryStat(c);
+      var pts = Number(c.points_balance || 0);
+      var ord = Number(c.orders_count || 0);
+      // Meta line shows points; the right-hand stat shows the order count.
+      var meta = (c.phone ? esc(c.phone) : 'no phone') + ' · ' + pts
+        + (pts === 1 ? ' point' : ' points') + (date ? ' · ' + date : '');
       var blocked = !!c.is_blocked;
 
       var av = guest
@@ -27147,7 +27142,7 @@ window.onLangChange(function () {
                 '</div>' +
                 '<div class="rm-cu-meta">' + meta + '</div>' +
               '</div>' +
-              '<div class="rm-cu-stat"><span class="big">' + esc(st.big) + '</span><span class="k">' + st.k + '</span></div>' +
+              '<div class="rm-cu-stat"><span class="big">' + ord + '</span><span class="k">' + (ord === 1 ? 'order' : 'orders') + '</span></div>' +
               '<span class="rm-cu-chev">' + ICON_CHEV + '</span>' +
             '</div>' +
             '<div class="rm-cu-exp"><div class="inner"><div class="rm-cu-exp-pad" data-exp></div></div></div>' +
