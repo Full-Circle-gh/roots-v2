@@ -6547,7 +6547,11 @@
 
       .cu-detail-pairs { display: grid; grid-template-columns: 55fr 45fr; gap: var(--s6); align-items: start; }
       @media (max-width: 720px) {
-        .cu-detail-pairs { grid-template-columns: 1fr; }
+        /* minmax(0,1fr) lets the single column shrink below its content's
+           intrinsic width — without it the Top items table's min-content forces
+           the whole track (and the address cards in it) wider than the viewport,
+           cropping the Spend column and the address Edit/Delete buttons. */
+        .cu-detail-pairs { grid-template-columns: minmax(0, 1fr); }
         /* The display-options "View" popover isn't wanted in the phone customer
            drawer — hide it (desktop keeps it). */
         .cdv-view-wrap { display: none; }
@@ -6569,7 +6573,7 @@
         /* Top items is a slim 3-col table (Item/Qty/Spend) — let it fit the phone
            width instead of inheriting the global 560px min-width, which pushed the
            Spend column off-screen and cropped the row. */
-        .cu-detail-pairs .table-wrap > table { min-width: 0; }
+        .cu-detail-pairs .table-wrap > table { min-width: 0; width: 100%; }
       }
       .cu-openid { font-family: var(--f-mono); font-size: 11px; color: var(--text-4); letter-spacing: .02em; user-select: text; }
 
