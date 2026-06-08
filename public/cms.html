@@ -13643,6 +13643,7 @@ document.addEventListener('keydown', (e) => {
         case 'revert':     revertDraft(); break;                // self-confirms
         case 'getSelected':postSelected(); break;
         case 'getState':   postState(); break;
+        case 'setPageBg':  applyThemeBgToPreview(d.token || ''); break;  // live, no reload
       }
     } catch (err) { POST({ evt: 'error', message: String(err && err.message || err) }); }
   });

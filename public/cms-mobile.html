@@ -745,14 +745,10 @@ async function setBg(token, el) {
       body: JSON.stringify({ 'theme.page_bg': token || null }),
     });
     toast(cuT('Background saved', '背景已保存'));
-    // Reflect live in the preview by reloading the embedded editor.
-    reloadPreview();
+    // Apply live in the preview WITHOUT reloading — a reload threw the user
+    // back to the top of the page on every colour tap.
+    send('setPageBg', { token: token || '' });
   } catch (e) { toast(cuT('Could not save', '保存失败'), true); }
-}
-function reloadPreview() {
-  const f = $('#pv');
-  f.addEventListener('load', () => send('hello'), { once: true });
-  f.src = '/cms?embed=preview&desktop=1&t=' + Date.now();
 }
 
 /* ── save / publish / revert ──────────────────────────────────────── */
