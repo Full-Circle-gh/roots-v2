@@ -14702,6 +14702,13 @@ function routingNote(reason) {
 // Full-size "Ship by" tile shown in the order-detail card grid. Mirrors the
 // urgency colour scheme of the list-row cell but with more context (date,
 // mode, surcharge note).
+// "Ship by" is a future deadline — once an order has shipped or closed it
+// reads wrong, so relabel it as the timing the customer originally requested.
+function shipByKicker(o) {
+  const done = (o.status === 'dispatched' || o.status === 'delivered'
+    || o.status === 'cancelled' || o.status === 'refunded');
+  return done ? 'Requested timing · 要求时间' : 'Ship by · 截止发货';
+}
 function renderShipByTile(o) {
   const actionable = (o.status === 'paid' || o.status === 'preparing');
   // Fresh batch-made order (outside-GZ): the kitchen must make a new batch on
@@ -14725,7 +14732,7 @@ function renderShipByTile(o) {
   const mode = deliveryModeNote(o.delivery_mode);
   if (isAsap) {
     return `<div>
-      <div class="kicker">Ship by</div>
+      <div class="kicker">${shipByKicker(o)}</div>
       <div class="val"><b style="color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">ASAP / Right away</b></div>
       <div class="sub">No slot picked${mode ? ' · ' + mode : ''}</div>
       ${batchSub}
@@ -14752,7 +14759,7 @@ function renderShipByTile(o) {
   const surcharge = (Number(o.same_day_surcharge_fee) || 0) > 0
     ? ` · <span style="color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} same-day surcharge</span>` : '';
   return `<div>
-    <div class="kicker">Ship by · 截止发货</div>
+    <div class="kicker">${shipByKicker(o)}</div>
     <div class="val"><b style="color: ${color};">${escapeHtml(label)}</b>${urgencyLabel ? ` <span style="font-size: 11px; color: ${color}; font-weight: 600;">· ${urgencyLabel}</span>` : ''}</div>
     <div class="sub">${mode}${surcharge}</div>
     ${batchSub}
