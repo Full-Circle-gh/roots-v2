@@ -184,6 +184,10 @@
   :root[data-theme="light"] .cu-pill.blocked        { background: rgba(232, 85, 106, .16);  border-color: rgba(232, 85, 106, .32); color: #a01f33; }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  /* Kill the browser's default mobile tap-flash (a translucent rectangle that
+     reads as a "glow/blob" behind rounded controls). Every control already has
+     its own :active feedback, so this only removes the stray overlay. */
+  * { -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
   /* Reserve the scrollbar gutter so locking page scroll (when a modal/drawer
      is open) doesn't shift the layout sideways. */
