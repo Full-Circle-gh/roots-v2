@@ -4781,6 +4781,11 @@
        ¥total banner) peeks through and pushing the order# below the chevron. */
     #order-detail-mount { padding-top: 0; }
 
+    /* The in-card "← Back to customer" button is redundant on phones — the
+       app-bar back chevron already routes back to the customer (orderDrawerBack).
+       Hide it here; desktop keeps it since it has no phone-style chevron. */
+    .order-back-cust { display: none; }
+
     /* Back chevron — left side of the app-bar (sibling of .drawer-body, fixed to
        the drawer top so it stays put while the body scrolls). Vertically
        centered against the 52px bar: (52-36)/2 = 8px. */
@@ -11096,7 +11101,7 @@
   <!-- Phone-only back affordance — replaces the floating × with a left-side
        chevron in the sticky order-head bar (matches the mobile mockup). Hidden
        on desktop via CSS; same close action as the ×. -->
-  <button type="button" class="drawer-back" onclick="closeDrawer('#order-drawer')" title="Back · 返回" aria-label="Back">
+  <button type="button" class="drawer-back" onclick="orderDrawerBack()" title="Back · 返回" aria-label="Back">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
   </button>
   <div class="drawer-body" id="order-detail-mount"></div>
@@ -15474,7 +15479,7 @@ function renderOpenOrder(o) {
     }).join('');
     mount.innerHTML = `
       <div class="order-card odd-${ODV.density}">
-        ${_ORDER_BACK_CUSTOMER ? `<button class="btn btn-sm" style="margin-bottom: var(--s3);" onclick="cuBackToCustomer()">← Back to customer · 返回顾客</button>` : ''}
+        ${_ORDER_BACK_CUSTOMER ? `<button class="btn btn-sm order-back-cust" style="margin-bottom: var(--s3);" onclick="cuBackToCustomer()">← Back to customer · 返回顾客</button>` : ''}
         <div class="order-head">
           <div>
             <div class="title-row">
@@ -21587,6 +21592,15 @@ function cuBackToCustomer() {
   const scrollTop = _ORDER_BACK_CUSTOMER_SCROLL;
   closeDrawer('#order-drawer');
   cuOpenDetail(backId, { scrollTop, openRecent: true });
+}
+
+// Mobile order-drawer back chevron. When we arrived here from a customer
+// (so the redundant in-card "← Back to customer" button is hidden on phones),
+// the chevron should return to that customer's detail rather than just closing
+// to the order list; otherwise it's a plain close.
+function orderDrawerBack() {
+  if (_ORDER_BACK_CUSTOMER) { cuBackToCustomer(); return; }
+  closeDrawer('#order-drawer');
 }
 
 // Jump from an order's Customer tile straight to that customer's detail.
