@@ -15615,9 +15615,7 @@ function renderOpenOrder(o) {
 
         ${ODV.totalPlacement === 'footer'
           ? renderOrderTotalFooter(o, transitions)
-          : `<div class="transitions">
-          ${transitions || '<span class="muted" style="font-size: 12px;">No further transitions available. · 暂无可执行的状态变更。</span>'}
-        </div>`}
+          : (transitions ? `<div class="transitions">${transitions}</div>` : '')}
       </div>`;
   // Drawer body manages its own scroll position; reset to top on each
   // render so re-renders after a transition don't leave it mid-scroll.
