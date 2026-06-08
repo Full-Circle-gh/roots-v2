@@ -11648,6 +11648,21 @@ async function viewProduct(id) {
   // re-render would refetch server truth and wipe the unsaved changes still
   // sitting in the DOM. (Flush clears the queue first, so it re-renders fine.)
   if (!_pdAutosave && _pdQueue.length && Number(id) === _pdCurrentPid()) return;
+  // Paint an instant skeleton so clicking a row feels immediate — the full
+  // record (with base64 image/label data) can take a beat to land. Pull the
+  // name from the in-memory list row so the header reads right away; the real
+  // view below replaces this once the fetch resolves.
+  const _stub = (_products || []).find(x => Number(x.id) === Number(id));
+  const _stubName = _stub ? (_stub.name_en || _stub.name_cn || '') : '';
+  document.getElementById('main').innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+      <button class="btn btn-secondary btn-sm" onclick="renderProducts()">← Back 返回</button>
+      ${_stubName ? `<span style="font-weight:800;font-size:16px">${esc(_stubName)}</span>` : ''}
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:80px 20px;color:var(--muted)">
+      <div style="width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--dk);border-radius:50%;animation:spin .8s linear infinite"></div>
+      <div style="font-size:13px;font-weight:600">Loading… 加载中</div>
+    </div>`;
   // Run the product fetch and the recipe-cache warm-up in parallel so the
   // inline recipe picker is populated on first paint without doubling the wait.
   const [ctx] = await Promise.all([_loadProductCtx(id), _ensureRecipesLoaded(), _pdEnsureCatTree()]);
