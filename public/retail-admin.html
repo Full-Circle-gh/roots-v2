@@ -27111,12 +27111,11 @@ window.onLangChange(function () {
       var guest = !c.nickname;
       var name = guest ? 'Guest' : c.nickname;
       var tier = c.tier_key || 'seed';
-      var date = String(c.last_login_at || '').slice(0, 10);
       var pts = Number(c.points_balance || 0);
       var ord = Number(c.orders_count || 0);
-      // Meta line shows points; the right-hand stat shows the order count.
+      // Meta line shows phone + points; the right-hand stat shows the order count.
       var meta = (c.phone ? esc(c.phone) : 'no phone') + ' · ' + pts
-        + (pts === 1 ? ' point' : ' points') + (date ? ' · ' + date : '');
+        + (pts === 1 ? ' point' : ' points');
       var blocked = !!c.is_blocked;
 
       var av = guest
