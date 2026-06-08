@@ -26370,10 +26370,13 @@ window.onLangChange(function () {
     return null;
   }
 
+  // A shipped/closed order has no live deadline — relabel "Ship by" to the
+  // timing the customer originally requested. (Matches renderShipByTile.)
+  function shipByDone(o) {
+    return o.status === 'dispatched' || o.status === 'delivered'
+        || o.status === 'cancelled' || o.status === 'refunded';
+  }
   function shipBy(o) {
-    // Closed orders won't ship — drop the deadline so a dead order never wears
-    // the same "ASAP / urgent" signal an active one does.
-    if (o.status === 'cancelled' || o.status === 'refunded') return { text: '', late: false };
     if (o.fulfillment_type === 'pickup') {
       var l = (typeof humanizeSlotLabel === 'function' ? humanizeSlotLabel(o.delivery_slot_label) : '') || 'ASAP';
       return { text: 'Pickup · ' + l, late: false };
@@ -26478,7 +26481,7 @@ window.onLangChange(function () {
                 (o.store_code ? '<span class="sep">·</span><span>' + esc(o.store_name_en || o.store_code) + '</span>' : '') +
               '</span>' +
               '<span class="rm-oc-go">' +
-                (sb.text ? '<span class="shipby' + (sb.late ? ' late' : (fwd ? ' act' : '')) + '">' + esc(sb.text) + '</span>' : '') +
+                (sb.text && o.status !== 'cancelled' && o.status !== 'refunded' ? '<span class="shipby' + (sb.late ? ' late' : (fwd ? ' act' : '')) + '">' + esc(sb.text) + '</span>' : '') +
                 '<span class="rm-oc-chev">' + ICON_CHEV_R + '</span>' +
               '</span>' +
             '</div>' +
@@ -26541,6 +26544,7 @@ window.onLangChange(function () {
   }
   function peekHTML(o) {
     var fwd = forwardAction(o), sb = shipBy(o), phone = o.recipient_phone || '';
+    var shipByLbl = shipByDone(o) ? 'Requested timing' : 'Ship by';
     var shipByTxt = (sb.text || '—') + (sb.text && o.scheduled_for ? ' · Booked' : '');
     var addr = (o.fulfillment_type === 'pickup')
       ? ('Pickup · ' + esc((o.address && o.address.store_name_en) || o.store_name_en || o.store_code || 'store'))
@@ -26551,7 +26555,7 @@ window.onLangChange(function () {
       '<dt>Ship to' + (copyAll ? ' ' + copyChip(copyAll, 'Shipping info') : '') + '</dt><dd>' + esc(shipName || '—') + (phone ? ' · ' + esc(phone) : '') + '</dd>' +
       '<dt>Address</dt><dd>' + addr + '</dd>' +
       '<dt>Payment</dt><dd>' + esc(payLabel(o.payment_method)) + '</dd>' +
-      '<dt>Ship by</dt><dd>' + esc(shipByTxt) + '</dd>' +
+      '<dt>' + shipByLbl + '</dt><dd>' + esc(shipByTxt) + '</dd>' +
       '</dl>';
     var acts = (fwd || phone)
       ? '<div class="rm-oc-acts">' +
