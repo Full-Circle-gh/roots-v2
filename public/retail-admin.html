@@ -1329,6 +1329,30 @@
     .db-deepdive.dd-open-anim .db-cohort-curve .line { animation: none; }
   }
 
+  /* ── Bars come alive: every magnitude bar inside a mobile report card sweeps
+     out from the left when its card mounts or unfolds — on dashboard refresh
+     (default-open sections), on each accordion unfold, and in the report
+     push/sheet screens. The .rm-barsweep trigger is (re)applied by JS so the
+     sweep replays on every open. Covers both bar markups: the .db-track fill
+     spans (Order status, Payment & delivery) and the --mag ::before bars (Top
+     products / customers / tiers). Rows cascade via a small per-row stagger. */
+  .rm-barsweep .db-track > span,
+  .rm-barsweep .has-bar::before {
+    transform-origin: left center;
+    animation: db-bar-grow .7s cubic-bezier(.22,.61,.36,1) both;
+  }
+  .rm-barsweep .db-bar-row:nth-child(1) .db-track > span, .rm-barsweep .has-bar:nth-child(1)::before { animation-delay: .03s; }
+  .rm-barsweep .db-bar-row:nth-child(2) .db-track > span, .rm-barsweep .has-bar:nth-child(2)::before { animation-delay: .09s; }
+  .rm-barsweep .db-bar-row:nth-child(3) .db-track > span, .rm-barsweep .has-bar:nth-child(3)::before { animation-delay: .15s; }
+  .rm-barsweep .db-bar-row:nth-child(4) .db-track > span, .rm-barsweep .has-bar:nth-child(4)::before { animation-delay: .21s; }
+  .rm-barsweep .db-bar-row:nth-child(5) .db-track > span, .rm-barsweep .has-bar:nth-child(5)::before { animation-delay: .27s; }
+  .rm-barsweep .db-bar-row:nth-child(6) .db-track > span, .rm-barsweep .has-bar:nth-child(6)::before { animation-delay: .33s; }
+  .rm-barsweep .db-bar-row:nth-child(7) .db-track > span, .rm-barsweep .has-bar:nth-child(7)::before { animation-delay: .39s; }
+  .rm-barsweep .db-bar-row:nth-child(n+8) .db-track > span, .rm-barsweep .has-bar:nth-child(n+8)::before { animation-delay: .45s; }
+  @media (prefers-reduced-motion: reduce) {
+    .rm-barsweep .db-track > span, .rm-barsweep .has-bar::before { animation: none; }
+  }
+
   /* ═══════════════════════════════════════════════════════════════════
      PRODUCTS TAB — mini-app product surface editor
      ═══════════════════════════════════════════════════════════════════ */
@@ -6953,16 +6977,16 @@
           </div>
           <div class="row" style="gap: var(--s3);">
             <div class="field" style="flex: 1; min-width: 140px;">
+              <label class="stacked">Province · 省份</label>
+              <select id="cu-addr-province" onchange="cuAddrProvinceChanged()"><option value="">— Select province · 选择省份 —</option></select>
+            </div>
+            <div class="field" style="flex: 1; min-width: 140px;">
               <label class="stacked">City · 城市</label>
               <select id="cu-addr-city" onchange="cuAddrCityChanged()"><option value="">— Select city · 选择城市 —</option></select>
             </div>
             <div class="field" style="flex: 1; min-width: 140px;">
               <label class="stacked">District · 区/县</label>
               <select id="cu-addr-district"><option value="">— Select district · 选择区/县 —</option></select>
-            </div>
-            <div class="field" style="flex: 1; min-width: 140px;">
-              <label class="stacked">Province · 省份</label>
-              <input type="text" id="cu-addr-province" readonly placeholder="—" title="Auto-filled from the city · 由城市自动填充" style="background: var(--bg-elev-1); color: var(--text-2);">
             </div>
           </div>
           <div class="field">
@@ -22249,25 +22273,36 @@ async function cuSaveAdjust() {
 
 let CU_ADDR_EDIT_ID = null;  // null when adding a new address
 
-// Fill the City <select> from the shared china-regions catalogue, grouped by
-// province (a 省→市→区 cascade like the storefront's address picker). Native
-// <select>s render as scroll wheels on mobile, matching the front-end feel.
-function cuAddrPopulateCities(selectedCityCn) {
-  const sel = $('#cu-addr-city'); if (!sel) return;
-  const byProv = new Map();
+// 省→市→区 cascade (like the storefront's address picker). Three short
+// dependent <select>s — Province filters City filters District — instead of one
+// 337-city list. Native selects render as scroll wheels on mobile.
+
+// Fill the Province <select> with the unique provinces from the catalogue.
+function cuAddrPopulateProvinces(selectedProvinceCn) {
+  const sel = $('#cu-addr-province'); if (!sel) return;
+  const seen = new Map();   // province_cn → province_en (first seen)
   for (const c of (_regions.cities || [])) {
-    const p = c.province_cn || 'Other';
-    if (!byProv.has(p)) byProv.set(p, []);
-    byProv.get(p).push(c);
+    const p = c.province_cn || '';
+    if (p && !seen.has(p)) seen.set(p, c.province_en || '');
   }
+  let html = '<option value="">— Select province · 选择省份 —</option>';
+  for (const [p, en] of seen) {
+    html += `<option value="${escapeAttr(p)}">${escapeHtml(p + (en ? ' · ' + en : ''))}</option>`;
+  }
+  sel.innerHTML = html;
+  if (selectedProvinceCn && ![...sel.options].some(o => o.value === selectedProvinceCn)) {
+    sel.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(selectedProvinceCn)}">${escapeHtml(selectedProvinceCn)}</option>`);
+  }
+  sel.value = selectedProvinceCn || '';
+}
+
+// Fill the City <select> with the cities in the chosen province only.
+function cuAddrPopulateCities(provinceCn, selectedCityCn) {
+  const sel = $('#cu-addr-city'); if (!sel) return;
+  const list = (_regions.cities || []).filter(c => (c.province_cn || '') === provinceCn);
   let html = '<option value="">— Select city · 选择城市 —</option>';
-  for (const [prov, list] of byProv) {
-    const provEn = list[0].province_en || '';
-    html += `<optgroup label="${escapeAttr(prov + (provEn ? ' · ' + provEn : ''))}">`;
-    for (const c of list) {
-      html += `<option value="${escapeAttr(c.name_cn)}">${escapeHtml(c.name_cn + (c.name_en ? ' · ' + c.name_en : ''))}</option>`;
-    }
-    html += '</optgroup>';
+  for (const c of list) {
+    html += `<option value="${escapeAttr(c.name_cn)}">${escapeHtml(c.name_cn + (c.name_en ? ' · ' + c.name_en : ''))}</option>`;
   }
   sel.innerHTML = html;
   // Keep a legacy/hand-entered city selectable even if it's not in the catalogue.
@@ -22299,12 +22334,15 @@ async function cuAddrLoadDistricts(cityCn, selectedDistrictCn) {
   }
 }
 
-// City picked → auto-fill the (read-only) province + reload the district list.
+// Province picked → narrow the city list + reset district.
+function cuAddrProvinceChanged() {
+  cuAddrPopulateCities($('#cu-addr-province').value, '');
+  $('#cu-addr-district').innerHTML = '<option value="">— Select district · 选择区/县 —</option>';
+}
+
+// City picked → reload the district list for that city.
 function cuAddrCityChanged() {
-  const cityCn = $('#cu-addr-city').value;
-  const c = _regions.byCn.get(cityCn);
-  $('#cu-addr-province').value = c ? (c.province_cn || '') : '';
-  cuAddrLoadDistricts(cityCn, null);
+  cuAddrLoadDistricts($('#cu-addr-city').value, null);
 }
 
 async function cuOpenAddrModal(addrId) {
@@ -27051,6 +27089,16 @@ window.onLangChange(function () {
       w.addEventListener('touchcancel', sparkTouchEnd);
     }
   }
+  // Replay the bar-fill sweep inside `scope`. Removing the class + forcing a
+  // reflow before re-adding restarts the CSS animation even on the same DOM
+  // (accordion bodies persist across opens), so bars fill from empty every time
+  // a section is unfolded — not just on first render.
+  function sweepBars(scope) {
+    if (!scope) return;
+    scope.classList.remove('rm-barsweep');
+    void scope.offsetWidth;  // force reflow so the re-added animation restarts
+    scope.classList.add('rm-barsweep');
+  }
   function accItem(s) {
     return '<div class="rm-dh-ai' + (s.open ? ' open' : '') + '" data-acc="' + s.id + '">' +
       '<button class="rm-dh-ai-head"><span class="ic">' + (IC[s.ic] || '') + '</span>' +
@@ -27118,6 +27166,9 @@ window.onLangChange(function () {
       '<div class="rm-dh-acc">' + acc + '</div>';
     animateNums(wrap);   // roll the headline figures up (desktop dashCountUp)
     wireTrendSparks(wrap);  // make the inline Revenue-trend chart tappable
+    // Sweep the bars in the default-open sections so they fill on refresh.
+    var openSecs = wrap.querySelectorAll('.rm-dh-ai.open');
+    for (var oi = 0; oi < openSecs.length; oi++) sweepBars(openSecs[oi]);
   };
 
   // ── reports (full-screen push bodies) ──
@@ -27167,6 +27218,7 @@ window.onLangChange(function () {
     var body = panel.querySelector('.rm-dh-rbody');
     body.innerHTML = rep.body();
     wireTrendSparks(body);
+    sweepBars(body);
     body.scrollTop = 0;
     panel.classList.add('show');
     panel.setAttribute('aria-hidden', 'false');
@@ -27227,7 +27279,12 @@ window.onLangChange(function () {
         var kc = e.target.closest('.rm-dh-kpi');
         if (kc) { openMetricSheet(kc.dataset.sheet); return; }
         var head = e.target.closest('.rm-dh-ai-head');
-        if (head) { head.closest('.rm-dh-ai').classList.toggle('open'); return; }
+        if (head) {
+          var sec = head.closest('.rm-dh-ai');
+          var opened = sec.classList.toggle('open');
+          if (opened) sweepBars(sec);  // fill the bars as the section unfolds
+          return;
+        }
       });
       // KPI carousel: the dot pager follows the horizontal scroll position.
       wrap.addEventListener('scroll', function (e) {
