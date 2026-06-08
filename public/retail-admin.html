@@ -26364,6 +26364,9 @@ window.onLangChange(function () {
   }
 
   function shipBy(o) {
+    // Closed orders won't ship — drop the deadline so a dead order never wears
+    // the same "ASAP / urgent" signal an active one does.
+    if (o.status === 'cancelled' || o.status === 'refunded') return { text: '', late: false };
     if (o.fulfillment_type === 'pickup') {
       var l = (typeof humanizeSlotLabel === 'function' ? humanizeSlotLabel(o.delivery_slot_label) : '') || 'ASAP';
       return { text: 'Pickup · ' + l, late: false };
@@ -26531,7 +26534,7 @@ window.onLangChange(function () {
   }
   function peekHTML(o) {
     var fwd = forwardAction(o), sb = shipBy(o), phone = o.recipient_phone || '';
-    var shipByTxt = (sb.text || 'ASAP') + (o.scheduled_for ? ' · Booked' : '');
+    var shipByTxt = (sb.text || '—') + (sb.text && o.scheduled_for ? ' · Booked' : '');
     var addr = (o.fulfillment_type === 'pickup')
       ? ('Pickup · ' + esc((o.address && o.address.store_name_en) || o.store_name_en || o.store_code || 'store'))
       : esc(o.address_full || '—');
