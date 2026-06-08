@@ -6551,6 +6551,21 @@
         /* The display-options "View" popover isn't wanted in the phone customer
            drawer — hide it (desktop keeps it). */
         .cdv-view-wrap { display: none; }
+        /* Swap the floating round × (doesn't fit the mobile header) for a
+           left-side back chevron, matching the order drawer. The action row
+           drops below the chevron so it sits on its own line top-left. */
+        #cu-drawer .drawer-close { display: none; }
+        #cu-drawer .drawer-back {
+          display: inline-flex; align-items: center; justify-content: center;
+          position: absolute; top: 8px; left: 6px; z-index: 8;
+          width: 36px; height: 36px; padding: 0;
+          background: transparent; border: 0; border-radius: 999px;
+          color: var(--text-1); cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+        #cu-drawer .drawer-back svg { width: 22px; height: 22px; }
+        #cu-drawer .drawer-back:active { background: var(--bg-elev-1); }
+        #cu-drawer #cu-drawer-actions { padding-right: 0 !important; padding-top: 40px; }
         /* Top items is a slim 3-col table (Item/Qty/Spend) — let it fit the phone
            width instead of inheriting the global 560px min-width, which pushed the
            Spend column off-screen and cropped the row. */
@@ -11115,9 +11130,16 @@
   <button type="button" class="drawer-close" onclick="closeDrawer('#cu-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
   </button>
+  <!-- Phone-only back affordance — left-side chevron replacing the floating ×
+       (which doesn't fit the mobile header), matching the order drawer. Hidden
+       on desktop via CSS; same close action as the ×. -->
+  <button type="button" class="drawer-back" onclick="closeDrawer('#cu-drawer')" title="Back · 返回" aria-label="Back">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
   <div class="drawer-body">
     <!-- padding-right reserves room for the floating close ✕ (32px @ right:14px)
-         so the right-aligned "View" button doesn't slide under it. -->
+         so the right-aligned "View" button doesn't slide under it (desktop only;
+         on phones the × is swapped for a left chevron — see mobile CSS). -->
     <div id="cu-drawer-actions" class="row" style="margin-bottom: var(--s4); gap: 8px; flex-wrap: wrap; padding-right: 40px;"></div>
     <div id="cu-detail-body"></div>
   </div>
