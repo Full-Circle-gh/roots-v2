@@ -5119,17 +5119,11 @@
   #rm-cu-cards { display: none; }
   #cu-mob-tiers { display: none; }
   @media (max-width: 720px) {
-    /* Hide the desktop table, pager and the dense toolbar controls — keep only
-       the search box (which claims the full row) and the Include-blocked toggle.
-       Sort/Refresh/View are desktop-only affordances absent from the mockup. */
+    /* Hide the desktop table, pager and the whole filter/search toolbar on
+       phones — the search row and tier chips aren't wanted in the mobile view. */
     #tab-customers .table-wrap { display: none; }
     #cu-pager { display: none; }
-    #cu-toolbar > #cu-tier,
-    #cu-toolbar > #cu-sort,
-    #cu-toolbar > button,
-    #cu-toolbar > .ovp-wrap { display: none; }
-    #cu-toolbar { margin-bottom: var(--s3); gap: 8px; }
-    #cu-q { width: 100%; }
+    #cu-toolbar { display: none; }
 
     /* KPI strip → horizontal snap rail (override the Phase 2 2-up grid). */
     #cu-kpis {
@@ -5144,7 +5138,7 @@
        top:0 (not 56px) now that the brand bar scrolls away on phones, so it sits
        flush at the top instead of floating with a gap above it. */
     #cu-mob-tiers {
-      display: flex; gap: 8px; flex-wrap: nowrap;
+      display: none; gap: 8px; flex-wrap: nowrap;
       overflow-x: auto; -webkit-overflow-scrolling: touch;
       position: sticky; top: 0; z-index: 6;
       /* Solid bar (full-bleed + divider + shadow) so cards visibly scroll UNDER
