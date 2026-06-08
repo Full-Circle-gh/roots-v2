@@ -4592,7 +4592,11 @@
     #ui-scale-toggle,
     #theme-toggle,
     #lang-toggle { display: none !important; }
-    .topbar { padding: 0 14px; gap: 8px; }
+    /* On phones the brand bar scrolls away (position:static, not sticky) so the
+       per-tab filter bar below can pin to the very top (top:0) and BE the sticky
+       header — otherwise the filter bar floated 56px down with an empty gap above
+       it once the brand bar scrolled off, reading as "not attached to anything". */
+    .topbar { padding: 0 14px; gap: 8px; position: static; }
     .brand .sub, .brand .divider { display: none; }
 
     /* Full-bleed on phones: the desktop `max-width:min(1440px,92vw)` cap + the
@@ -4890,7 +4894,7 @@
        whole width like the topbar above it. */
     #orders-status-chips {
       flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
-      position: sticky; top: 56px; z-index: 8;
+      position: sticky; top: 0; z-index: 8;
       /* Full-bleed to the screen edges: cancel main's 16px gutter EXACTLY. The
          old -24px (--s6) over-pulled 8px past the edge, crowding the "All" chip
          against the left (and nudging the row off-screen). Re-pad so the first
@@ -4964,11 +4968,19 @@
     .rm-ocard.open .rm-oc-go .rm-oc-chev { transform: rotate(90deg); }
 
     .rm-oc-hint {
-      display: flex; align-items: center; gap: 6px;
+      display: flex; align-items: center; gap: 6px; width: 100%;
       margin-top: 11px; padding-top: 10px;
       border-top: 1px solid var(--line-soft);
       font-size: 12.5px; font-weight: 600; color: var(--brass, #B08D4A);
     }
+    /* When it's the forward-action quick button: strip native chrome, keep look. */
+    button.rm-oc-hint {
+      background: none; border: 0; border-top: 1px solid var(--line-soft);
+      font-family: inherit; text-align: left; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: opacity .12s, color .12s;
+    }
+    button.rm-oc-hint:active { opacity: .55; }
     .rm-oc-hint svg { width: 14px; height: 14px; flex: 0 0 auto; }
     .rm-oc-hint.done { color: var(--text-3); font-weight: 500; }
 
@@ -5125,11 +5137,13 @@
     #cu-kpis::-webkit-scrollbar { display: none; }
     #cu-kpis > .fc-kpi { flex: 0 0 47%; min-width: 150px; scroll-snap-align: start; }
 
-    /* Tier filter → sticky single-row chip scroller, always reachable. */
+    /* Tier filter → sticky single-row chip scroller, always reachable. Pins to
+       top:0 (not 56px) now that the brand bar scrolls away on phones, so it sits
+       flush at the top instead of floating with a gap above it. */
     #cu-mob-tiers {
       display: flex; gap: 8px; flex-wrap: nowrap;
       overflow-x: auto; -webkit-overflow-scrolling: touch;
-      position: sticky; top: 56px; z-index: 6;
+      position: sticky; top: 0; z-index: 6;
       padding: 8px 0; margin-bottom: 4px; background: var(--bg-app);
       scroll-snap-type: x proximity;
     }
@@ -26412,7 +26426,7 @@ window.onLangChange(function () {
       var items = o.item_count || 0;
 
       var hint = fwd
-        ? '<div class="rm-oc-hint">' + ICON_ADV + esc(en(fwd[1])) + '</div>'
+        ? '<button type="button" class="rm-oc-hint" data-hintact data-id="' + o.id + '" data-to="' + fwd[0] + '">' + ICON_ADV + esc(en(fwd[1])) + '</button>'
         : (o.status === 'delivered'
             ? '<div class="rm-oc-hint done">' + ICON_CHECK + 'Completed — no action needed</div>'
             : '');
@@ -26510,8 +26524,10 @@ window.onLangChange(function () {
     var addr = (o.fulfillment_type === 'pickup')
       ? ('Pickup · ' + esc((o.address && o.address.store_name_en) || o.store_name_en || o.store_code || 'store'))
       : esc(o.address_full || '—');
+    var shipName = o.recipient_name || o.nickname || '';
+    var copyAll = [shipName, phone, (o.fulfillment_type === 'pickup' ? '' : (o.address_full || ''))].filter(Boolean).join('\n');
     var dl = '<dl class="rm-oc-dl">' +
-      '<dt>Ship to</dt><dd>' + esc(o.recipient_name || o.nickname || '—') + (phone ? ' · ' + esc(phone) : '') + '</dd>' +
+      '<dt>Ship to' + (copyAll ? ' ' + copyChip(copyAll, 'Shipping info') : '') + '</dt><dd>' + esc(shipName || '—') + (phone ? ' · ' + esc(phone) : '') + '</dd>' +
       '<dt>Address</dt><dd>' + addr + '</dd>' +
       '<dt>Payment</dt><dd>' + esc(payLabel(o.payment_method)) + '</dd>' +
       '<dt>Ship by</dt><dd>' + esc(shipByTxt) + '</dd>' +
@@ -26603,6 +26619,15 @@ window.onLangChange(function () {
       if (pa === 'advance') rmAdvance(+pact.getAttribute('data-id'), pact.getAttribute('data-to'));
       else if (pa === 'call') { var pph = pact.getAttribute('data-phone'); if (pph) window.location.href = 'tel:' + pph; }
       else if (pa === 'open') { var poid = +pact.getAttribute('data-id'); if (poid && typeof openOrder === 'function') openOrder(poid); }
+      return;
+    }
+    // The "> Mark dispatched" footer is a one-tap quick action: advance the
+    // order in place (same path as the swipe-reveal Advance button) WITHOUT
+    // opening the peek — most operators never discover the swipe gesture.
+    var hintBtn = e.target.closest('[data-hintact]');
+    if (hintBtn) {
+      e.stopPropagation();
+      rmAdvance(+hintBtn.getAttribute('data-id'), hintBtn.getAttribute('data-to'));
       return;
     }
     // Tap the card → toggle the inline peek (Combined: keep the queue in view).
