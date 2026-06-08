@@ -316,8 +316,17 @@ app.get('/', (req, res) => {
   });
 });
 
-// Storefront / retail admin shell. Page self-auths via /api/auth/me.
-app.get('/retail-admin', serveRetailAdmin);
+// /retail-admin is retired as a standalone URL — the online-store backend now
+// lives at store.rootskitchenchina.com. Every hit (old bookmarks, the
+// post-login redirect, in-app back-links, deep links like ?tab=orders) bounces
+// to the store root, carrying the query string. On the store host this is a
+// same-origin redirect, so the session cookie is preserved; serveRetailAdmin
+// still backs the store host's / and re-applies the suspended-tenant gate.
+app.get('/retail-admin', (req, res) => {
+  const i = req.originalUrl.indexOf('?');
+  const qs = i === -1 ? '' : req.originalUrl.slice(i);
+  res.redirect(302, 'https://' + STORE_HOST + '/' + qs);
+});
 
 // Full-page product block editor — opened in a new tab from the
 // retail-admin Products grid (window.open('/product-editor?id=…')). Same
