@@ -9028,6 +9028,18 @@
 
     <!-- Cached datalist used by the drawer city search -->
     <datalist id="china-cities-datalist"></datalist>
+
+    <!-- ── Guangzhou same-day: excluded districts ── (moved here from
+         Settings → Operations 2026-06-09 — it tunes the Guangzhou same-day
+         delivery fallback, so it lives with Delivery. IDs unchanged; rendered
+         by _loadGzExcludedDistricts on init.) -->
+    <div class="card" style="margin-bottom: var(--s4);">
+      <h3 class="fc-sec" style="margin-bottom: 4px;">Guangzhou delivery zones · 广州配送区 — excluded districts · 排除区</h3>
+      <div class="muted" style="font-size: 11px; margin-bottom: 12px; line-height: 1.6;">The 5-option in-stock fallback (cancel item / replace / ship farther / wait / cancel order) only shows for <b>广州市 right-away orders</b> in districts NOT listed here. Excluded districts (and non-Guangzhou) keep the simple yes/no fallback. · 仅广州市 + 立即配送 + 不在排除清单内的区才看 5 选项弹窗。</div>
+      <div class="muted" style="font-size: 11px; margin-bottom: 8px;">Tap a district to exclude it. · 点击区名将其加入排除列表。</div>
+      <div id="gz-excl-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+      <div id="gz-excl-summary" class="muted" style="font-size:12px"></div>
+    </div>
   </section>
 
   <!-- Zone edit / add drawer (slide-in side drawer) -->
@@ -10888,17 +10900,6 @@
             <div class="muted" style="font-size:11px;margin-top:10px">New addresses + stores geocode automatically on save. This only matters for first-time setup, after a quota reset, or after changing a store's street address outside the form. · 新地址自动同步;此按钮仅用于初始化或批量补全。</div>
           </div>
 
-          <!-- ── Guangzhou delivery: excluded districts ── -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Guangzhou delivery zones · 广州配送区 — excluded districts · 排除区</h3>
-              <div class="muted">The 5-option in-stock fallback (cancel item / replace / ship farther / wait / cancel order) only shows for <b>广州市 right-away orders</b> in districts NOT listed here. Excluded districts (and non-Guangzhou) keep the simple yes/no fallback. · 仅广州市 + 立即配送 + 不在排除清单内的区才看 5 选项弹窗。</div>
-            </div>
-            <div class="muted" style="font-size:11px;margin-bottom:8px">Tap a district to exclude it. · 点击区名将其加入排除列表。</div>
-            <div id="gz-excl-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
-            <div id="gz-excl-summary" class="muted" style="font-size:12px"></div>
-          </div>
-
           <!-- ── Shipping: 快递100 tracking push ── -->
           <div class="group-card">
             <div class="group-card-head">
@@ -11867,7 +11868,6 @@ function loadOpsPanel() {
   loadIntegrationsStatus();
   loadShippingIntegrations();
   loadPrinterPrefs();
-  _loadGzExcludedDistricts();
 }
 
 // ── Shipping integrations: kd100 + JD LOP + Feie credentials & status chips ──
@@ -12804,6 +12804,7 @@ let ENTITLEMENTS = {};
   loadVouchers();
   loadPopups();
   loadDeliveryZones();
+  _loadGzExcludedDistricts();  // GZ same-day excluded-districts chips (now on the Delivery tab)
   loadTopup();
   loadPointsSettings(); // Loyalty & Wallet → Membership & points (earn rate, point value, expiry)
   loadRctiers();        // Loyalty & Wallet → Membership tier ladder (Roots Club)
