@@ -10950,22 +10950,22 @@
               <div class="muted">Connect carriers so Orders can stream live tracking into the customer mini app and push waybills to JD. Set up either or both — they work independently. · 物流集成:轨迹回传与一键推单,两者可单独或同时配置。</div>
             </div>
             <div class="dz-subtabs" role="tablist" style="margin-bottom:18px">
-              <button type="button" class="dz-subtab active" id="logtab-kd100" onclick="_logTab('kd100')"><span id="kd100-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>快递100 · Tracking</button>
-              <button type="button" class="dz-subtab" id="logtab-jd" onclick="_logTab('jd')"><span id="jd-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>京东物流 · JD</button>
+              <button type="button" class="dz-subtab active" id="logtab-kd100" onclick="_logTab('kd100')"><span id="kd100-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>Kuaidi100 tracking · 快递100</button>
+              <button type="button" class="dz-subtab" id="logtab-jd" onclick="_logTab('jd')"><span id="jd-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>JD Logistics · 京东物流</button>
             </div>
 
             <!-- 快递100 tracking push -->
             <div id="logpanel-kd100">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>快递100 tracking push · 轨迹订阅</strong> <span id="kd100-chip"></span></div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>Kuaidi100 tracking push · 快递100轨迹订阅</strong> <span id="kd100-chip"></span></div>
               <div class="muted" style="margin-bottom:14px">Free subscribe-push API aggregating live tracking from every Chinese carrier (JD, SF, YTO, ZTO…). Paste a waybill on a shipped order and live updates flow into the customer's mini app. Sign up at <a href="https://api.kuaidi100.com" target="_blank" style="color:var(--accent)">api.kuaidi100.com</a>. · 免费物流轨迹订阅,适配全部国内快递。</div>
               <div class="ops-grid">
                 <div>
-                  <label class="field-label">客户编号 · Customer ID</label>
+                  <label class="field-label">Customer ID · 客户编号</label>
                   <input type="text" id="kd100-customer" style="font-family:monospace" placeholder="e.g. ABCD1234">
                 </div>
                 <div>
-                  <label class="field-label">授权 Key</label>
-                  <input type="password" id="kd100-key" placeholder="paste 授权 key">
+                  <label class="field-label">Authorization key · 授权 Key</label>
+                  <input type="password" id="kd100-key" data-ph-en="paste authorization key" data-ph-cn="粘贴授权 Key" placeholder="paste authorization key">
                 </div>
                 <div style="grid-column:1/-1">
                   <label class="field-label">Callback URL · 回调地址</label>
@@ -10986,7 +10986,7 @@
 
             <!-- 京东物流 LOP direct waybill -->
             <div id="logpanel-jd" style="display:none">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>京东物流 LOP direct waybill · 直连推单</strong> <span id="jd-chip"></span></div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>JD Logistics LOP direct waybill · 京东物流直连推单</strong> <span id="jd-chip"></span></div>
               <div class="muted" style="margin-bottom:14px">Direct integration with 京东物流开放平台 (<a href="https://lop.jd.com" target="_blank" style="color:var(--accent)">lop.jd.com</a>). Once configured, Orders gains a <b>"Push to JD"</b> bulk action — paid orders push to JD and waybill numbers flow back automatically. Request LOP API access from your JD account manager. · 京东物流直连,一键推单、运单号自动回传。</div>
               <div class="ops-grid">
                 <div>
@@ -11024,17 +11024,17 @@
           <!-- ── Fulfillment: 飞鹅 cloud printer ── -->
           <div class="group-card">
             <div class="group-card-head">
-              <h3>Receipt printing · 出单 — 飞鹅 cloud printer <span id="feie-chip"></span></h3>
-              <div class="muted">Auto-prints a ticket at the store the moment an order is paid — no PC needed, the printer also voice-announces it. Bind the printer in the 飞鹅 app, then get your <b>USERKEY</b> from a developer app at <a href="https://www.feieyun.com" target="_blank" style="color:var(--accent)">feieyun.com</a>. · 付款后自动在门店打印小票并语音播报。</div>
+              <h3>Receipt printing — Feie cloud printer · 飞鹅云打印出单 <span id="feie-chip"></span></h3>
+              <div class="muted">Auto-prints a ticket at the store the moment an order is paid — no PC needed, the printer also voice-announces it. Bind the printer in the Feie app, then get your <b>USERKEY</b> from a developer app at <a href="https://www.feieyun.com" target="_blank" style="color:var(--accent)">feieyun.com</a>. · 付款后自动在门店打印小票并语音播报。</div>
             </div>
-            <div class="muted" style="font-size:11px;margin-bottom:12px;background:var(--bg-elev-1);border-radius:6px;padding:8px 10px">⚠ The <b>USERKEY</b> is from your feieyun.com developer console — <em>not</em> the 密钥/KEY on the device label. One account holds all printers; each store's <b>SN</b> (编号) is set per-store below.</div>
+            <div class="muted" style="font-size:11px;margin-bottom:12px;background:var(--bg-elev-1);border-radius:6px;padding:8px 10px">⚠ The <b>USERKEY</b> is from your feieyun.com developer console — <em>not</em> the secret/KEY on the device label. One account holds all printers; each store's <b>SN</b> is set per-store below.</div>
             <div class="ops-grid">
               <div>
                 <label class="field-label">Account · 账号 (USER)</label>
                 <input type="text" id="feie-user" style="font-family:monospace" placeholder="feieyun login phone/email">
               </div>
               <div>
-                <label class="field-label">USERKEY · UKEY</label>
+                <label class="field-label">USERKEY · 用户密钥 (UKEY)</label>
                 <input type="password" id="feie-ukey" placeholder="paste USERKEY from dev console">
               </div>
               <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px">
