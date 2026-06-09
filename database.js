@@ -2559,6 +2559,29 @@ try {
   }
 } catch (e) { console.error('[migration seed_default_store_v1]', e); }
 
+// Seed the second retail store (Yuexiu — 越秀店). The online store now runs
+// independent stock across BOTH Guangzhou locations (Tianhe + Yuexiu). We add
+// only the store row: the inventory grid lists every active store and shows a
+// missing stock row as an editable 0 (PATCH upserts on first edit), so we don't
+// pre-seed 269 zero rows — Yuexiu starts un-counted and the operator enters its
+// real stock. Tianhe keeps sort_order 0 (preferred for routing); Yuexiu is 1.
+// lat/lng left NULL — the address-level seed geocodes via the admin backfill /
+// next address edit. One-shot via _migrations so admin edits stick.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_yuexiu_store_v1');
+  if (!ran) {
+    const existing = db.prepare("SELECT id FROM retail_stores WHERE code = ?").get('yuexiu');
+    if (!existing) {
+      const info = db.prepare(`
+        INSERT INTO retail_stores (code, name_en, name_cn, address, city, district, sort_order, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+      `).run('yuexiu', 'Roots Kitchen — Yuexiu', 'Roots 厨房 · 越秀店', '广州市越秀区', '广州', '越秀区', 1);
+      console.log(`[migration] seed_yuexiu_store_v1: created Yuexiu store id=${info.lastInsertRowid}`);
+    }
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_yuexiu_store_v1');
+  }
+} catch (e) { console.error('[migration seed_yuexiu_store_v1]', e); }
+
 // Backfill: any active product without a stock row in *any* store gets
 // one in the default store using its legacy stock_qty. Runs once via the
 // _migrations marker so existing per-store rows are never overwritten.
