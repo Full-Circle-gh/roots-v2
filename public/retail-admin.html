@@ -1610,6 +1610,15 @@
   #pd-editor .pd-sec-h, #pd-editor .pd-card-h { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); margin: 0; }
   #pd-editor .pd-pub { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; }
   #pd-editor .pd-pub input { width: 16px; height: 16px; }
+  /* Autosave status pill in the editor foot. Replaces the old manual Save
+     button — edits persist on their own; this just reports state. */
+  .pd-save-status { font: 500 12px var(--f-sans); color: var(--text-3); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: color .2s; }
+  .pd-save-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .55; }
+  .pd-save-status.is-saving { color: var(--brass); }
+  .pd-save-status.is-saved  { color: var(--ok, #5a8a5e); }
+  .pd-save-status.is-dirty  { color: var(--text-3); }
+  .pd-save-status.is-hint   { color: var(--brass); }
+  .pd-save-status.is-error  { color: var(--danger, #b65656); }
 
   /* Products page split view: list on the left, editor docked on the right.
      The editor used to open in a centered .pu-editor-bg overlay; now it lives
@@ -1638,6 +1647,13 @@
      whole page scrolls through it instead, so the edit form isn't squeezed into
      a short box. */
   .pa-split-editor #pd-editor { width: auto; height: auto; max-width: 100%; max-height: none; }
+  /* Docked editor scrolls WITH the page, not as its own pane. The base
+     .pu-editor-body is overflow-y:auto + overscroll-behavior:contain (for the
+     modal shell); inside the split that turns the white form area into a
+     scroll trap — wheeling over it does nothing because it's a (non-scrolling)
+     scroll container that swallows the chain. Make it overflow:visible so the
+     wheel falls through to the page. */
+  .pa-split-editor #pd-editor .pu-editor-body { overflow: visible; overscroll-behavior: auto; }
   /* Empty state shown in the editor pane when no product is selected. */
   .pd-empty { background: var(--bg-pane); border: 1px dashed var(--line-soft); border-radius: 12px; padding: 56px 24px; text-align: center; color: var(--text-3); font-family: var(--f-sans); }
   .pd-empty .pd-empty-h { font-size: 13px; color: var(--text-2); margin: 0 0 6px; font-weight: 500; }
@@ -7542,9 +7558,9 @@
             <button class="btn" id="pd-dup-btn" type="button" onclick="pdDuplicate(false)" title="Make a copy as a new product · 复制为新产品">⧉ Duplicate · 复制</button>
             <button class="btn" id="pd-delete-btn" type="button" onclick="pdDelete()" style="color:var(--danger);border-color:rgba(182,86,86,.4);">Delete · 删除</button>
           </div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn" onclick="pdRevert()" title="Throw away unsaved edits and reload the saved version · 放弃未保存的修改,重新加载已保存版本">Discard changes · 撤销</button>
-            <button class="btn btn-primary" onclick="pdSave()">Save · 保存</button>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <span id="pd-save-status" class="pd-save-status" aria-live="polite"></span>
+            <button class="btn" onclick="pdRevert()" title="Undo every change since you opened this product, back to its last-saved version · 还原到打开时的已保存版本">↺ Revert to last save · 还原</button>
           </div>
         </div>
       </div>
@@ -23181,7 +23197,7 @@ function pdOpen(id) {
   if (p) {
     fetch('/api/retail-admin/products/' + p.id + '/images', { credentials: 'same-origin' })
       .then(r => r.json())
-      .then(j => { if (j && j.success && Array.isArray(j.images)) { _pdGallery = j.images.slice(); _pdGalleryInherited = !!j.inherited; pdRenderGallery(); } })
+      .then(j => { if (j && j.success && Array.isArray(j.images)) { _pdGallery = j.images.slice(); _pdGalleryInherited = !!j.inherited; pdRenderGallery(); if (_pdOpenBaseline) _pdOpenBaseline.gallery = _pdGallery.slice(); } })
       .catch(() => {});
   }
   pdLoadCatTree().then(() => {
@@ -23198,6 +23214,13 @@ function pdOpen(id) {
   _pdSelectedId = p ? p.id : null;
   pdShowDocked();
   paApplyRowSelection();
+  // Autosave: reset the engine for the freshly-loaded product and capture the
+  // "as-opened" baseline (updated again once async images arrive) so Revert can
+  // roll the whole session back.
+  pdWireAutosave();
+  clearTimeout(_pdAutoTimer); _pdSaving = false; _pdPendingResave = false;
+  _pdOpenBaseline = pdSnapshot();
+  pdSetStatus(p ? 'saved' : 'hint', p ? cuT('All changes saved', '已自动保存') : cuT('Add a name & SKU to start autosaving', '填写名称和货号后自动保存'));
 }
 // Docked editor visibility — pdShowDocked reveals the editor in the right
 // column; pdClose hides it back to the empty-state placeholder.
@@ -23234,11 +23257,20 @@ function pdClose() {
   document.body.classList.remove('pd-rte-fs-lock');
   paApplyRowSelection();
 }
-// Discard unsaved typing: reload the editor from the on-disk product. PA_PRODUCTS
-// is the post-save cache, so re-opening the same id resets every form field.
+// Revert to last save: roll the form back to the snapshot captured when this
+// product was opened, then autosave that restored state so it's the live version
+// again. Undoes a whole editing session's worth of autosaves in one step.
 function pdRevert() {
-  if (_pdSelectedId != null) pdOpen(_pdSelectedId);
-  else pdClose();
+  if (_pdSelectedId == null) { pdClose(); return; }
+  if (!confirm(cuT('Revert to the last-saved version? This undoes every change since you opened this product.',
+                   '还原到上次保存的版本?这将撤销自打开此产品以来的所有修改。'))) return;
+  if (_pdOpenBaseline) {
+    pdApplySnapshot(_pdOpenBaseline);
+    clearTimeout(_pdAutoTimer);
+    pdAutoSaveNow();   // persist the rolled-back state immediately
+  } else {
+    pdOpen(_pdSelectedId);
+  }
 }
 // Expand mode: hide the left list so the editor fills the page width.
 function pdSyncFullscreenBtn(on) {
@@ -23553,14 +23585,14 @@ function pdAddPhotos(e) {
   if (!pending) { e.target.value = ''; return; }
   take.forEach(f => {
     const rd = new FileReader();
-    rd.onload = () => { _pdGallery.push(rd.result); _pdGalleryDirty = true; _pdGalleryInherited = false; if (--pending === 0) pdRenderGallery(); };
+    rd.onload = () => { _pdGallery.push(rd.result); _pdGalleryDirty = true; _pdGalleryInherited = false; if (--pending === 0) { pdRenderGallery(); pdScheduleAutosave(); } };
     rd.readAsDataURL(f);
   });
   e.target.value = '';
 }
 function pdRemovePhoto(i) {
   if (i < 0 || i >= _pdGallery.length) return;
-  _pdGallery.splice(i, 1); _pdGalleryDirty = true; _pdGalleryInherited = false; pdRenderGallery();
+  _pdGallery.splice(i, 1); _pdGalleryDirty = true; _pdGalleryInherited = false; pdRenderGallery(); pdScheduleAutosave();
 }
 // Delegated drag-reorder + remove. Wired once on the container.
 function pdGalleryWire() {
@@ -23592,7 +23624,7 @@ function pdGalleryWire() {
     if (Number.isFinite(to) && to !== _pdDragFrom) {
       const [moved] = _pdGallery.splice(_pdDragFrom, 1);
       _pdGallery.splice(to, 0, moved);
-      _pdGalleryDirty = true; _pdGalleryInherited = false; pdRenderGallery();
+      _pdGalleryDirty = true; _pdGalleryInherited = false; pdRenderGallery(); pdScheduleAutosave();
     }
     _pdDragFrom = null;
   });
@@ -23706,7 +23738,16 @@ function pdRteFullscreen() {
 function pdPlainToHtml(t) { return escapeHtml(String(t || '')).replace(/\n/g, '<br>'); }
 // A visually-empty rich box (just <br>/&nbsp;) saves as '' rather than junk markup.
 function pdRteClean(html) { const d = document.createElement('div'); d.innerHTML = html || ''; return (d.innerText || '').trim() ? (html || '').trim() : ''; }
-async function pdSave() {
+// ── Autosave engine ────────────────────────────────────────────────────────
+// The editor has no manual Save button: edits persist on a short debounce.
+// pdCollectBody() reads the form; pdSaveCore() does the network write (shared by
+// autosave); pdScheduleAutosave() debounces; the foot shows live status.
+let _pdAutoTimer = null;      // debounce handle
+let _pdSaving = false;        // a save request is in flight
+let _pdPendingResave = false; // an edit landed mid-save → save again when it returns
+let _pdOpenBaseline = null;   // form snapshot captured when the product was opened (Revert target)
+
+function pdCollectBody() {
   const id = document.getElementById('pd-id').value;
   const g = el => (document.getElementById(el) && document.getElementById(el).value || '').trim();
   const ckd = el => { const n = document.getElementById(el); return n && n.checked ? 1 : 0; };
@@ -23715,9 +23756,6 @@ async function pdSave() {
   if (document.getElementById('pd-ship-land').checked) modes.push('land');
   // Description: always the cleaned HTML from the Classic (rich) boxes;
   // description_format='rich' tells the mini-app to render it via <rich-text>.
-  const descFormat = 'rich';
-  const descEn = pdRteClean(document.getElementById('pd-rte-en').innerHTML);
-  const descCn = pdRteClean(document.getElementById('pd-rte-cn').innerHTML);
   const body = {
     name_en: g('pd-name-en'), name_cn: g('pd-name-cn'),
     sku: g('pd-sku'), weight: g('pd-weight'),
@@ -23729,47 +23767,145 @@ async function pdSave() {
     free_of: g('pd-free-of'), barcode: g('pd-barcode'), notes: g('pd-notes'),
     is_market: ckd('pd-is-market'), is_restock_only: ckd('pd-is-restock-only'), is_batch_made: ckd('pd-is-batch-made'),
     ship_modes: modes.join(',') || 'air,land',
-    description_en: descEn, description_cn: descCn, description_format: descFormat,
+    description_en: pdRteClean(document.getElementById('pd-rte-en').innerHTML),
+    description_cn: pdRteClean(document.getElementById('pd-rte-cn').innerHTML),
+    description_format: 'rich',
     is_published: document.getElementById('pd-published').checked ? 1 : 0,
   };
   if (_pdGalleryDirty) body.images = _pdGallery;  // gallery drives image_data (first = main)
   if (id && BU_ID === Number(id)) body.bundle = buBody();  // buy-together bundle (null clears)
-  if (!body.name_en && !body.name_cn) { alert('A name is required · 需要填写名称'); return; }
-  // New products need a SKU — it's the catalog/sync match key (server enforces).
-  if (!id && !body.sku) { alert('A SKU is required · 需要填写货号'); return; }
+  return { id, body };
+}
+
+// Core write shared by autosave. reload=false keeps the operator's caret + field
+// values exactly where they are (we don't re-open the editor mid-typing); we just
+// merge the server's canonical row into PA_PRODUCTS and refresh the list. Returns
+// true on success. Throws are surfaced via the returned false + status pill.
+async function pdSaveCore() {
+  const { id, body } = pdCollectBody();
+  const url = id ? '/api/retail-admin/products/' + id : '/api/retail-admin/products';
+  const r = await fetch(url, { method: id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (!j.success) {
+    const msg = j.error === 'sku_taken'     ? 'That SKU is already in use · 该货号已被占用'
+              : j.error === 'sku_required'   ? 'A SKU is required · 需要填写货号'
+              : j.error === 'catalog_locked' ? 'This catalog is managed by the upstream system · 该商品目录由上游系统管理'
+              : (j.error || 'save_failed');
+    throw new Error(msg);
+  }
+  if (id) {
+    const i = PA_PRODUCTS.findIndex(x => x.id === Number(id));
+    if (i >= 0) PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...j.data };
+  } else if (j.data) {
+    // Brand-new product just got its id — promote the editor to edit-mode so the
+    // next autosave PATCHes instead of creating a second product.
+    PA_PRODUCTS.unshift(j.data);
+    document.getElementById('pd-id').value = j.data.id;
+    _pdSelectedId = j.data.id;
+    document.getElementById('pd-dup-btn').style.display = '';
+    document.getElementById('pd-delete-btn').style.display = '';
+    vaLoad(j.data.id); buLoad(j.data.id);
+  }
+  // Variant rows live in this same editor — fold their labels/grouping into the
+  // same write. Only when a real group is loaded (>=2 members) so an ordinary
+  // save never clears a group as a side effect.
+  const sid = id ? Number(id) : (j.data && j.data.id);
+  if (sid != null && VA_ID === sid && (VA_MEMBERS.length >= 2 || VA_HAD_GROUP)) {
+    await vaPersist(); await vaPersistSiblings();
+  }
+  _pdGalleryDirty = false;  // images are now persisted; don't resend until changed again
+  paRender();               // list names/badges refresh (doesn't touch editor focus)
+  paApplyRowSelection();
+  return true;
+}
+
+function pdSetStatus(state, msg) {
+  const el = document.getElementById('pd-save-status');
+  if (!el) return;
+  el.className = 'pd-save-status' + (state ? ' is-' + state : '');
+  const label = msg || (
+    state === 'saving' ? cuT('Saving…', '保存中…')
+  : state === 'saved'  ? cuT('All changes saved', '已自动保存')
+  : state === 'dirty'  ? cuT('Saving…', '保存中…')
+  : state === 'error'  ? cuT('Save failed — retrying on next edit', '保存失败 — 修改后重试')
+  : '');
+  el.textContent = label;
+}
+
+// Debounced trigger — wired to every input/change inside the editor.
+function pdScheduleAutosave() {
+  pdSetStatus('dirty');
+  clearTimeout(_pdAutoTimer);
+  _pdAutoTimer = setTimeout(pdAutoSaveNow, 800);
+}
+
+async function pdAutoSaveNow() {
+  if (_pdSaving) { _pdPendingResave = true; return; }  // coalesce — save again when current returns
+  const g = el => (document.getElementById(el) && document.getElementById(el).value || '').trim();
+  const id = document.getElementById('pd-id').value;
+  // Soft validation — never alert during autosave; just hold and hint until the
+  // minimums the server requires are present.
+  if (!g('pd-name-en') && !g('pd-name-cn')) { pdSetStatus('hint', cuT('Add a name to start autosaving', '填写名称后自动保存')); return; }
+  if (!id && !g('pd-sku'))                   { pdSetStatus('hint', cuT('Add a SKU to start autosaving', '填写货号后自动保存')); return; }
+  _pdSaving = true; pdSetStatus('saving');
   try {
-    const url = id ? '/api/retail-admin/products/' + id : '/api/retail-admin/products';
-    const r = await fetch(url, { method: id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const j = await r.json();
-    if (!j.success) {
-      const msg = j.error === 'sku_taken'     ? 'That SKU is already in use · 该货号已被占用'
-                : j.error === 'sku_required'   ? 'A SKU is required · 需要填写货号'
-                : j.error === 'catalog_locked' ? 'This catalog is managed by the upstream system · 该商品目录由上游系统管理'
-                : (j.error || 'save_failed');
-      throw new Error(msg);
-    }
-    if (id) {
-      const i = PA_PRODUCTS.findIndex(x => x.id === Number(id));
-      if (i >= 0) PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...j.data };
-    } else if (j.data) {
-      PA_PRODUCTS.unshift(j.data);
-    }
-    // The variant rows live in this same editor — fold their labels/grouping
-    // into this one Save so the operator never has to hit a second button.
-    // Only when a real group is loaded (>=2 members) so we never clear a group
-    // as a side effect of an ordinary product save.
-    if (id && VA_ID === Number(id) && (VA_MEMBERS.length >= 2 || VA_HAD_GROUP)) {
-      try { await vaPersist(); await vaPersistSiblings(); }
-      catch (e) { alert('Variants not saved · 规格未保存: ' + e.message); return; }
-    }
-    // Stay on the just-saved product: refresh the list (so name/badges update)
-    // and reload the editor with the fresh row, keeping the row highlighted.
-    // For a brand-new product, j.data carries the assigned id.
-    const savedId = id ? Number(id) : (j.data && j.data.id);
-    paRender();
-    if (savedId != null) pdOpen(savedId);
-    toast(cuT('Saved', '已保存'));
-  } catch (e) { alert('Save failed · 保存失败: ' + e.message); }
+    await pdSaveCore();
+    pdSetStatus('saved');
+  } catch (e) {
+    pdSetStatus('error', cuT('Save failed: ', '保存失败:') + e.message);
+  } finally {
+    _pdSaving = false;
+    if (_pdPendingResave) { _pdPendingResave = false; pdScheduleAutosave(); }
+  }
+}
+
+// Wire the editor once: any input/change inside it schedules an autosave.
+// Programmatic loads (pdOpen sets .value / .innerHTML directly) don't fire these
+// events, so loading a product never triggers a spurious save.
+function pdWireAutosave() {
+  const ed = document.getElementById('pd-editor');
+  if (!ed || ed._autosaveWired) return;
+  ed._autosaveWired = true;
+  const onEdit = e => {
+    const t = e.target;
+    if (!t || !t.closest) return;
+    if (t.id === 'pd-img-file') return;  // file picker handled via gallery mutations
+    if (t.closest('input, select, textarea, [contenteditable], .pd-rte')) pdScheduleAutosave();
+  };
+  ed.addEventListener('input', onEdit);
+  ed.addEventListener('change', onEdit);
+}
+
+// Snapshot / restore the editable form state. Used to capture the "as-opened"
+// baseline so Revert can roll back a whole editing session.
+function pdSnapshot() {
+  const g = el => { const n = document.getElementById(el); return n ? n.value : ''; };
+  const ck = el => { const n = document.getElementById(el); return !!(n && n.checked); };
+  return {
+    name_en: g('pd-name-en'), name_cn: g('pd-name-cn'), price: g('pd-price'), compare: g('pd-compare'),
+    sku: g('pd-sku'), weight: g('pd-weight'), status: g('pd-status'), free_of: g('pd-free-of'),
+    barcode: g('pd-barcode'), notes: g('pd-notes'), badge: g('pd-badge'),
+    top: g('pd-top-category'), sub: g('pd-subcategory'),
+    is_market: ck('pd-is-market'), is_batch: ck('pd-is-batch-made'), is_restock: ck('pd-is-restock-only'),
+    air: ck('pd-ship-air'), land: ck('pd-ship-land'), published: ck('pd-published'),
+    desc_en: document.getElementById('pd-rte-en').innerHTML, desc_cn: document.getElementById('pd-rte-cn').innerHTML,
+    gallery: _pdGallery.slice(),
+  };
+}
+function pdApplySnapshot(s) {
+  if (!s) return;
+  const set = (el, v) => { const n = document.getElementById(el); if (n) n.value = v; };
+  const ck  = (el, v) => { const n = document.getElementById(el); if (n) n.checked = v; };
+  set('pd-name-en', s.name_en); set('pd-name-cn', s.name_cn); set('pd-price', s.price); set('pd-compare', s.compare);
+  set('pd-sku', s.sku); set('pd-weight', s.weight); set('pd-status', s.status); set('pd-free-of', s.free_of);
+  set('pd-barcode', s.barcode); set('pd-notes', s.notes); set('pd-badge', s.badge);
+  ck('pd-is-market', s.is_market); ck('pd-is-batch-made', s.is_batch); ck('pd-is-restock-only', s.is_restock);
+  ck('pd-ship-air', s.air); ck('pd-ship-land', s.land); ck('pd-published', s.published);
+  document.getElementById('pd-rte-en').innerHTML = s.desc_en;
+  document.getElementById('pd-rte-cn').innerHTML = s.desc_cn;
+  // Categories: refill the selects from the loaded tree, then restore the picks.
+  pdFillTopCats(s.top); pdFillSubCats(s.top, s.sub);
+  _pdGallery = (s.gallery || []).slice(); _pdGalleryDirty = true; pdRenderGallery();
 }
 // Duplicate a product. asVariant=true also joins the copy to the source's
 // variant group and prompts for the new variant label. Opens the copy so the
