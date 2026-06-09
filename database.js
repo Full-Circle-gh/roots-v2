@@ -2886,4 +2886,85 @@ try {
   db.prepare('CREATE INDEX IF NOT EXISTS idx_store_products_kitchen_id ON store_products(kitchen_product_id)').run();
 } catch (e) { console.error('[store_products] schema migration failed:', e); }
 
+// ─────────────────────────────────────────────────────────────────────────
+// STORE_PRODUCTS seed + FK repoint (one-time, mainDb only, atomic). Forks the
+// live catalog into store_products and repoints the store-OWNED tables' product
+// foreign keys at it, so the store can create its own products (with no kitchen
+// counterpart) without violating REFERENCES products(id). Kitchen-owned tables
+// (market_stock, market_stock_ledger, miniapp_order_lines, sales_entries,
+// sale_addons, waste_entries, restock_items) keep pointing at products.
+//
+// Seed set = published products UNION every product referenced by a store-owned
+// table — the union half is load-bearing: seeding only the published set would
+// orphan historical order lines on now-unpublished products and the FK repoint
+// would fail. Ids are preserved so existing retail_* rows resolve unchanged.
+//
+// The repoint reads each table's LIVE CREATE from sqlite_master (so ALTER-added
+// columns like tags_json/restock_target come along), swaps only `REFERENCES
+// products(` → `REFERENCES store_products(`, and rebuilds via a temp table that
+// is renamed into place (never renaming the ORIGINAL — that would rewrite the
+// FK in dependents like retail_product_option_choices). Wrapped in one
+// transaction with foreign_keys OFF; a per-table foreign_key_check failure
+// rolls the whole thing back and leaves prod untouched.
+// ─────────────────────────────────────────────────────────────────────────
+try {
+  const done = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('store_products_seed_fk_v1');
+  const haveStore = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='store_products'").get();
+  if (!done && haveStore) {
+    const STORE_OWNED = [
+      'retail_order_items', 'retail_product_options', 'retail_reviews',
+      'retail_store_stock', 'retail_stock_reservations', 'retail_stock_ledger',
+      'retail_product_substitutes', 'retail_customer_favorites',
+    ];
+    const rebuildFk = (t) => {
+      const trow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(t);
+      if (!trow) return; // not present on a fresh DB — nothing to repoint
+      const idxSqls = db.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL").all(t).map(r => r.sql);
+      const createSql = trow.sql.replace(/REFERENCES\s+products\s*\(/gi, 'REFERENCES store_products(');
+      const tmp = `_fk_tmp_${t}`;
+      const tmpSql = createSql.replace(new RegExp(`(CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?["\`']?)${t}(["\`']?)`, 'i'), `$1${tmp}$2`);
+      if (tmpSql === createSql) throw new Error(`[store_products] could not rename CREATE for ${t}`);
+      db.exec(tmpSql);
+      db.exec(`INSERT INTO ${tmp} SELECT * FROM ${t}`);
+      db.exec(`DROP TABLE ${t}`);
+      db.exec(`ALTER TABLE ${tmp} RENAME TO ${t}`);
+      for (const s of idxSqls) db.exec(s);
+    };
+    db.pragma('foreign_keys = OFF');
+    db.pragma('legacy_alter_table = ON');
+    try {
+      db.transaction(() => {
+        // 1) Seed (preserve id, record the kitchen link).
+        const colList = db.pragma('table_info(products)').map(c => c.name).join(', ');
+        db.exec(`
+          INSERT INTO store_products (${colList}, kitchen_product_id, source_sku, source)
+          SELECT ${colList}, id, sku, 'fork' FROM products
+          WHERE is_published = 1 OR id IN (
+            SELECT product_id FROM retail_order_items WHERE product_id IS NOT NULL
+            UNION SELECT product_id FROM retail_product_options
+            UNION SELECT product_id FROM retail_reviews
+            UNION SELECT product_id FROM retail_store_stock
+            UNION SELECT product_id FROM retail_stock_reservations
+            UNION SELECT product_id FROM retail_stock_ledger
+            UNION SELECT product_id FROM retail_product_substitutes
+            UNION SELECT substitute_product_id FROM retail_product_substitutes
+            UNION SELECT product_id FROM retail_customer_favorites
+          )`);
+        // 2) Repoint store-owned FKs at store_products.
+        for (const t of STORE_OWNED) rebuildFk(t);
+        // 3) Verify only the rebuilt tables — a violation rolls everything back.
+        for (const t of STORE_OWNED) {
+          const issues = db.pragma(`foreign_key_check(${t})`);
+          if (issues.length) throw new Error(`[store_products] FK check failed for ${t}: ${JSON.stringify(issues).slice(0, 300)}`);
+        }
+        db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('store_products_seed_fk_v1');
+      })();
+      console.log('[store_products] seeded + FK repoint complete:', db.prepare('SELECT COUNT(*) n FROM store_products').get().n, 'rows');
+    } finally {
+      db.pragma('legacy_alter_table = OFF');
+      db.pragma('foreign_keys = ON');
+    }
+  }
+} catch (e) { console.error('[store_products] seed/FK migration failed (left untouched):', e); }
+
 module.exports = db;
