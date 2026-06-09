@@ -4410,6 +4410,54 @@
     background: var(--bg-pane);
   }
 
+  /* ═══════════════════════════════════════════════════════════════════
+     THEME & BRAND MODAL — storefront look-and-feel controls (accent,
+     notification colour, language, mascots, mini-app footer, Me-page menu).
+     Ported from the Mini App Backend's old Settings → Brand & theme panel so
+     global design is edited inside the design tool. Everything is scoped under
+     #tb-modal so the generic class names (.opt, .group-card, .ms-*) can't leak
+     into the rest of the editor. Tokens match retail-admin 1:1.
+     ═══════════════════════════════════════════════════════════════════ */
+  #tb-modal[hidden] { display: none; }
+  #tb-modal .modal { max-width: 760px; }
+  #tb-modal .group-card {
+    background: var(--bg-pane);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: var(--s5);
+    margin-bottom: var(--s3);
+  }
+  #tb-modal .group-card:last-child { margin-bottom: 0; }
+  #tb-modal .group-card-head { margin-bottom: var(--s4); }
+  #tb-modal .group-card-head h3 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+  #tb-modal .group-card-head .muted { font-size: 12px; line-height: 1.55; color: var(--text-3); }
+  #tb-modal .opt-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
+  #tb-modal .opt {
+    display: flex; flex-direction: column;
+    background: var(--bg-elev-1);
+    border: 1.5px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: 8px; cursor: pointer;
+    transition: border-color 120ms, background 120ms, transform 120ms;
+    user-select: none;
+  }
+  #tb-modal .opt:hover { border-color: var(--line-strong); background: var(--bg-elev-2); }
+  #tb-modal .opt.active { border-color: var(--accent); background: rgba(107,142,111,.06); box-shadow: 0 0 0 3px var(--ring); }
+  #tb-modal .opt.active .opt-screen { transform: translateY(-1px); }
+  #tb-modal .opt-screen { position: relative; height: 96px; background: #0f0f12; border-radius: 6px; margin-bottom: 6px; overflow: hidden; transition: transform 120ms; }
+  #tb-modal .opt-label { font-size: 11px; font-weight: 600; color: var(--text-1); text-align: center; }
+  #tb-modal .opt-sub { font-size: 10px; color: var(--text-3); text-align: center; margin-top: 2px; line-height: 1.4; }
+  #tb-modal .ms-bar  { position: absolute; left: 4px; right: 4px; top: 4px; height: 8px; border-radius: 2px; }
+  #tb-modal .ms-hero { position: absolute; left: 4px; right: 4px; top: 16px; height: 22px; background: linear-gradient(135deg, #4a5d2e, #2c3a1d); border-radius: 3px; }
+  #tb-modal .ms-row  { position: absolute; left: 4px; right: 4px; height: 4px; background: #2a2a30; border-radius: 1px; }
+  #tb-modal .ms-tab  { position: absolute; bottom: 0; left: 0; right: 0; height: 16px; background: #f5f0e1; display: flex; align-items: center; justify-content: space-around; padding: 0 4px; }
+  #tb-modal .ms-tab span { width: 6px; height: 6px; background: #56544f; border-radius: 1px; }
+  #tb-modal .ms-tab span.active { background: var(--accent); }
+  #tb-modal .picker-source { display: none; }
+  #tb-modal label.stacked { display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
+  #tb-modal .field { margin-bottom: var(--s4); }
+  #tb-modal .pd-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
   .media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
   .media-tile {
     aspect-ratio: 1;
@@ -4745,6 +4793,15 @@
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           <div class="theme-menu design-check-menu" id="design-check-menu"></div>
         </div>
+        <!-- THEME & BRAND — opens a modal (not a dropdown) hosting the storefront
+             look-and-feel controls moved out of the Mini App Backend Settings:
+             accent, notification colour, language, mascots, footer & Me-page menu. -->
+        <div class="theme-picker" id="brand-picker" role="button" tabindex="0"
+             data-ti-en="Accent, notification colour, mascots, footer & menu" data-ti-cn="主色、通知条颜色、吉祥物、页脚与菜单" title="Theme & brand">
+          <span class="swatch" id="brand-picker-swatch" aria-hidden="true" style="background:linear-gradient(135deg,#ccd900,#c43a6a)"></span>
+          <span class="label"><span class="i18n-en">THEME &amp; BRAND</span><span class="i18n-cn">主题品牌</span></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
       </div>
     </div>
     <div class="pane-section">
@@ -4930,6 +4987,300 @@
   </div>
 </div>
 
+<!-- ─── THEME & BRAND MODAL ───
+     Storefront look-and-feel, moved here from the Mini App Backend's
+     Settings → Brand & theme panel so global design lives in the design tool.
+     Each control saves immediately to PUT /api/retail-admin/config (the same
+     keys the mini-app reads) — no Publish step, matching the Background and
+     Tab-bar pickers. IDs mirror the old Settings markup so the ported logic is
+     unchanged. -->
+<div class="modal-bg" id="tb-modal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <div class="title"><span class="i18n-en">Theme &amp; brand</span><span class="i18n-cn">主题与品牌</span></div>
+      <button class="btn btn-icon btn-ghost" id="tb-close" aria-label="Close" title="Close">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Accent colour -->
+      <div class="group-card">
+        <div class="group-card-head">
+          <h3>Accent colour · 主色调</h3>
+          <div class="muted">Paints the announcement bar at the top of every page, the active tab indicator, primary buttons (Add to cart, Pay), and category-chip highlights. Click a swatch to pick. · 用于公告条、当前标签、主按钮(加入购物车、支付)以及分类标签高亮。点击色块选择。</div>
+        </div>
+        <select id="cfg-theme-accent" class="picker-source">
+          <option value="lime-leaf">Lime leaf · 青柠叶</option>
+          <option value="forest-kale">Forest kale · 森林羽衣甘蓝</option>
+          <option value="carrot-blaze">Carrot blaze · 胡萝卜橙</option>
+          <option value="berry-punch">Berry punch · 莓果红</option>
+          <option value="papaya-glow">Papaya glow · 木瓜光</option>
+          <option value="pea-sprout">Pea sprout · 豌豆苗绿</option>
+        </select>
+        <div class="opt-grid">
+          <div class="opt" data-target="cfg-theme-accent" data-value="lime-leaf">
+            <div class="opt-screen">
+              <div class="ms-bar" style="background: #ccd900"></div>
+              <div class="ms-hero"></div>
+              <div style="position: absolute; left: 4px; right: 4px; bottom: 22px; height: 12px; background: #ccd900; border-radius: 2px"></div>
+              <div class="ms-tab"><span class="active" style="background:#ccd900"></span><span></span><span></span><span></span></div>
+            </div>
+            <div class="opt-label">Lime leaf</div>
+            <div class="opt-sub">Default brand</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-accent" data-value="forest-kale">
+            <div class="opt-screen">
+              <div class="ms-bar" style="background: #3a5a30"></div>
+              <div class="ms-hero"></div>
+              <div style="position: absolute; left: 4px; right: 4px; bottom: 22px; height: 12px; background: #3a5a30; border-radius: 2px"></div>
+              <div class="ms-tab"><span class="active" style="background:#3a5a30"></span><span></span><span></span><span></span></div>
+            </div>
+            <div class="opt-label">Forest kale</div>
+            <div class="opt-sub">Deep green</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-accent" data-value="carrot-blaze">
+            <div class="opt-screen">
+              <div class="ms-bar" style="background: #e87a3a"></div>
+              <div class="ms-hero"></div>
+              <div style="position: absolute; left: 4px; right: 4px; bottom: 22px; height: 12px; background: #e87a3a; border-radius: 2px"></div>
+              <div class="ms-tab"><span class="active" style="background:#e87a3a"></span><span></span><span></span><span></span></div>
+            </div>
+            <div class="opt-label">Carrot blaze</div>
+            <div class="opt-sub">Warm orange</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-accent" data-value="berry-punch">
+            <div class="opt-screen">
+              <div class="ms-bar" style="background: #c43a6a"></div>
+              <div class="ms-hero"></div>
+              <div style="position: absolute; left: 4px; right: 4px; bottom: 22px; height: 12px; background: #c43a6a; border-radius: 2px"></div>
+              <div class="ms-tab"><span class="active" style="background:#c43a6a"></span><span></span><span></span><span></span></div>
+            </div>
+            <div class="opt-label">Berry punch</div>
+            <div class="opt-sub">Pink-magenta</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-accent" data-value="papaya-glow">
+            <div class="opt-screen">
+              <div class="ms-bar" style="background: #f0a050"></div>
+              <div class="ms-hero"></div>
+              <div style="position: absolute; left: 4px; right: 4px; bottom: 22px; height: 12px; background: #f0a050; border-radius: 2px"></div>
+              <div class="ms-tab"><span class="active" style="background:#f0a050"></span><span></span><span></span><span></span></div>
+            </div>
+            <div class="opt-label">Papaya glow</div>
+            <div class="opt-sub">Soft peach</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-accent" data-value="pea-sprout">
+            <div class="opt-screen">
+              <div class="ms-bar" style="background: #a8c75a"></div>
+              <div class="ms-hero"></div>
+              <div style="position: absolute; left: 4px; right: 4px; bottom: 22px; height: 12px; background: #a8c75a; border-radius: 2px"></div>
+              <div class="ms-tab"><span class="active" style="background:#a8c75a"></span><span></span><span></span><span></span></div>
+            </div>
+            <div class="opt-label">Pea sprout</div>
+            <div class="opt-sub">Pastel green</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notification strip color -->
+      <div class="group-card">
+        <div class="group-card-head">
+          <h3>Notification strip · 通知条颜色</h3>
+          <div class="muted">The slim strip across the top of the greeting card on Home that surfaces unread updates ("📣 N new updates · Tap to view"). Pick a brand-aligned preset or paste a custom hex. · 首页问候卡顶部的小通知条颜色。</div>
+        </div>
+        <select id="cfg-theme-notifColor" class="picker-source">
+          <option value="#C43A6A">Berry · 莓果红</option>
+          <option value="#3A5A30">Forest · 森林绿</option>
+          <option value="#E87A3A">Carrot · 胡萝卜橙</option>
+          <option value="#F0A050">Papaya · 木瓜橙</option>
+          <option value="#CCD900">Lime · 青柠</option>
+          <option value="#1a1a17">Ink · 墨黑</option>
+        </select>
+        <div class="opt-grid" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));">
+          <div class="opt" data-target="cfg-theme-notifColor" data-value="#C43A6A">
+            <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #C43A6A; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
+            <div class="opt-label">Berry</div>
+            <div class="opt-sub">Default</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-notifColor" data-value="#3A5A30">
+            <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #3A5A30; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
+            <div class="opt-label">Forest</div>
+            <div class="opt-sub">Deep green</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-notifColor" data-value="#E87A3A">
+            <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #E87A3A; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
+            <div class="opt-label">Carrot</div>
+            <div class="opt-sub">Warm orange</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-notifColor" data-value="#F0A050">
+            <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #F0A050; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
+            <div class="opt-label">Papaya</div>
+            <div class="opt-sub">Soft peach</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-notifColor" data-value="#CCD900">
+            <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #CCD900; color: #1a1a17; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
+            <div class="opt-label">Lime</div>
+            <div class="opt-sub">Brand accent</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-notifColor" data-value="#1a1a17">
+            <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #1a1a17; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
+            <div class="opt-label">Ink</div>
+            <div class="opt-sub">High contrast</div>
+          </div>
+        </div>
+        <div style="margin-top: 14px; display: flex; align-items: center; gap: 10px;">
+          <label class="muted" style="font-size: 12px;">Custom hex · 自定义</label>
+          <input id="cfg-theme-notifColorCustom" type="text" maxlength="7" placeholder="#C43A6A" style="width: 110px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; font-family: var(--f-mono); font-size: 13px;">
+          <span id="cfg-theme-notifColorSwatch" style="display: inline-block; width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line); background: #C43A6A;"></span>
+        </div>
+      </div>
+
+      <!-- Language -->
+      <div class="group-card">
+        <div class="group-card-head">
+          <h3>Language · 语言</h3>
+          <div class="muted">Bilingual shows EN + 中 stacked on product cards and page headers, plus a toggle pill so customers can hide one. Single-language hides the toggle entirely and renders only that locale.</div>
+        </div>
+        <select id="cfg-theme-language" class="picker-source">
+          <option value="bilingual">Bilingual · 双语</option>
+          <option value="en">English only · 仅英文</option>
+          <option value="cn">中文 only</option>
+        </select>
+        <div class="opt-grid" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));">
+          <div class="opt" data-target="cfg-theme-language" data-value="bilingual">
+            <div class="opt-screen" style="display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 8px">
+              <div style="font-size: 11px; color: var(--text-1); font-weight: 600">Almond Cookie</div>
+              <div style="font-size: 11px; color: var(--text-2)">杏仁曲奇</div>
+              <div style="margin-top: 6px; display: inline-flex; gap: 2px; align-self: flex-start; background: #1a1a1f; padding: 2px; border-radius: 4px">
+                <span style="font-size: 8px; padding: 1px 4px; background: var(--accent); color: #16161a; border-radius: 2px">EN</span>
+                <span style="font-size: 8px; padding: 1px 4px; color: var(--text-3)">中</span>
+              </div>
+            </div>
+            <div class="opt-label">Bilingual</div>
+            <div class="opt-sub">EN + 中, toggle shown</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-language" data-value="en">
+            <div class="opt-screen" style="display: flex; flex-direction: column; justify-content: center; padding: 8px">
+              <div style="font-size: 13px; color: var(--text-1); font-weight: 600">Almond Cookie</div>
+              <div style="font-size: 10px; color: var(--text-3); margin-top: 4px">No toggle</div>
+            </div>
+            <div class="opt-label">English only</div>
+            <div class="opt-sub">Hides 中文</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-language" data-value="cn">
+            <div class="opt-screen" style="display: flex; flex-direction: column; justify-content: center; padding: 8px">
+              <div style="font-size: 13px; color: var(--text-1); font-weight: 600">杏仁曲奇</div>
+              <div style="font-size: 10px; color: var(--text-3); margin-top: 4px">不显示切换</div>
+            </div>
+            <div class="opt-label">中文 only</div>
+            <div class="opt-sub">Hides English</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- IP characters -->
+      <div class="group-card">
+        <div class="group-card-head">
+          <h3>IP characters (mascots) · IP 形象(吉祥物)</h3>
+          <div class="muted">The Roots cast — Carrot, Pea-pod, Mushroom — appear as decorative stickers on Home and the empty-cart screen. Pick how loud they should be, or hide them for a cleaner look. · Roots 角色(胡萝卜、豌豆、蘑菇等)会以装饰贴纸出现在首页与空购物车页;可选择展示强度,或隐藏以追求简洁。</div>
+        </div>
+        <select id="cfg-theme-ipIntensity" class="picker-source">
+          <option value="soft">Soft · 柔和</option>
+          <option value="bold">Bold · 醒目</option>
+          <option value="none">Hidden · 隐藏</option>
+        </select>
+        <div class="opt-grid" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));">
+          <div class="opt" data-target="cfg-theme-ipIntensity" data-value="soft">
+            <div class="opt-screen">
+              <div class="ms-bar" style="background: var(--accent)"></div>
+              <div class="ms-hero"></div>
+              <svg style="position: absolute; right: 4px; bottom: 18px; width: 20px; height: 20px; opacity: .4" viewBox="0 0 24 24" fill="#e87a3a">
+                <ellipse cx="12" cy="14" rx="6" ry="8"/><path d="M12 6 L10 2 L14 2 Z" fill="#3a5a30"/>
+              </svg>
+              <div class="ms-tab"><span class="active"></span><span></span><span></span><span></span></div>
+            </div>
+            <div class="opt-label">Soft</div>
+            <div class="opt-sub">Faint, corner only</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-ipIntensity" data-value="bold">
+            <div class="opt-screen">
+              <div class="ms-bar" style="background: var(--accent)"></div>
+              <div class="ms-hero"></div>
+              <svg style="position: absolute; right: 2px; bottom: 16px; width: 32px; height: 32px" viewBox="0 0 24 24" fill="#e87a3a">
+                <ellipse cx="12" cy="14" rx="6" ry="8"/><path d="M12 6 L10 2 L14 2 Z" fill="#3a5a30"/>
+              </svg>
+              <svg style="position: absolute; left: 4px; top: 40px; width: 18px; height: 18px" viewBox="0 0 24 24" fill="#a8c75a">
+                <circle cx="12" cy="14" r="6"/>
+              </svg>
+              <div class="ms-tab"><span class="active"></span><span></span><span></span><span></span></div>
+            </div>
+            <div class="opt-label">Bold</div>
+            <div class="opt-sub">Larger, multiple spots</div>
+          </div>
+          <div class="opt" data-target="cfg-theme-ipIntensity" data-value="none">
+            <div class="opt-screen">
+              <div class="ms-bar" style="background: var(--accent)"></div>
+              <div class="ms-hero"></div>
+              <div class="ms-row" style="top: 44px"></div>
+              <div class="ms-row" style="top: 52px; right: 40%"></div>
+              <div class="ms-tab"><span class="active"></span><span></span><span></span><span></span></div>
+            </div>
+            <div class="opt-label">Hidden</div>
+            <div class="opt-sub">Clean, no mascots</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mini-app footer (Me page bottom) — stored under brand.me_footer. -->
+      <div class="group-card">
+        <div class="group-card-head">
+          <h3>Mini-app footer · 小程序页脚</h3>
+          <div class="muted">Brand mark, tagline and credit line shown at the bottom of the customer's <b>Me</b> page. Changes save automatically. · 顾客「我的」页面底部的品牌标识、宣传短语和落款。更改自动保存。</div>
+        </div>
+
+        <div class="field">
+          <label class="stacked">Wordmark image · 品牌标识图</label>
+          <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
+            <div id="cfg-footer-wordmark-preview"
+                 style="width:160px; height:96px; display:flex; align-items:center; justify-content:center; background:var(--bg-elev-1); border:1px dashed var(--line); border-radius:6px;">
+              <span style="color:var(--text-3); font-size:11px;">No image · 无图片</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <input type="file" id="cfg-footer-wordmark-file" accept="image/*">
+              <button type="button" class="btn" id="cfg-footer-wordmark-clear" style="align-self:flex-start;">Clear · 清除</button>
+            </div>
+          </div>
+          <div class="muted" style="margin-top:6px;">PNG or SVG with transparent background recommended. Sized ~180×106 in the footer. · 推荐 PNG 或 SVG,背景透明。页脚显示约 180×106。</div>
+        </div>
+
+        <div class="field">
+          <label class="stacked">Wordmark text fallback · 文字备用</label>
+          <input type="text" id="cfg-footer-wordmark-text" placeholder="Full Circle">
+          <div class="muted">Shown only when no image is uploaded. Default · 默认: Full Circle.</div>
+        </div>
+
+        <div class="pd-row2">
+          <div class="field"><label class="stacked">Tagline EN · 宣传语(英文)</label><input type="text" id="cfg-footer-tagline-en" placeholder="Clarity with code"></div>
+          <div class="field"><label class="stacked">Tagline CN · 宣传语(中文)</label><input type="text" id="cfg-footer-tagline-cn" placeholder="用代码,带来清晰"></div>
+        </div>
+        <div class="pd-row2">
+          <div class="field"><label class="stacked">Credit line EN · 落款(英文)</label><input type="text" id="cfg-footer-credit-en" placeholder="Powered by Full Circle"></div>
+          <div class="field"><label class="stacked">Credit line CN · 落款(中文)</label><input type="text" id="cfg-footer-credit-cn" placeholder="由 Full Circle 提供技术支持"></div>
+        </div>
+      </div>
+
+      <!-- Me page menu — reorder + show/hide the customer's Me-page rows.
+           Stored under me_page.rows; saves automatically on each change. -->
+      <div class="group-card">
+        <div class="group-card-head">
+          <h3>Me page menu · 「我的」页菜单</h3>
+          <div class="muted">Reorder or hide the rows customers see on their <b>Me</b> page. Use ↑ ↓ to reorder; untick to hide. Changes save automatically. · 调整顾客「我的」页面菜单行的顺序或隐藏。用 ↑ ↓ 排序,取消勾选即隐藏。更改自动保存。</div>
+        </div>
+        <ul id="me-rows-list" style="list-style:none; margin:0; padding:0; border:1px solid var(--line); border-radius:6px; overflow:hidden;"></ul>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <script>
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -5093,6 +5444,7 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
   buildThemePicker();
   buildTabBarPicker();
   buildDesignCheckPicker();
+  initThemeBrand();
   buildLangToggle();
   buildResolutionPicker();
   try {
@@ -5387,6 +5739,227 @@ async function buildThemePicker() {
   });
   render();
   updateSwatchIcon();
+}
+
+// ── Theme & brand (storefront look-and-feel) ───────────────────────────────
+// Moved out of the Mini App Backend's Settings → Brand & theme panel so global
+// design lives in the design tool. Opens the #tb-modal. Each control writes ONE
+// storefront_config key via PUT /api/retail-admin/config — the same keys the
+// mini-app reads — and saves immediately (no Publish step), matching the
+// Background / Tab-bar pickers. The modal markup + control IDs are a 1:1 port of
+// the old Settings panel, so the read shape the mini-app consumes is unchanged.
+function initThemeBrand() {
+  const modal   = $('#tb-modal');
+  const trigger = $('#brand-picker');
+  if (!modal || !trigger) return;
+
+  let footerData = null;   // base64 wordmark data URL, held between pick + save
+  let meRows = [];         // [{ id, enabled }] working copy, in display order
+  let meSaveT = null;
+
+  // Me-page rows — IDs MUST match ROW_DEFS in miniapp/pages/me/me.js.
+  const ME_ROW_DEFS = [
+    { id: 'notif',      label: 'Notifications · 通知' },
+    { id: 'addresses',  label: 'Delivery addresses · 收货地址' },
+    { id: 'wallet',     label: 'Wallet & points · 钱包积分' },
+    { id: 'topup',      label: 'Top up · 充值' },
+    { id: 'affiliate',  label: 'Refer a friend · 推广计划' },
+    { id: 'coupons',    label: 'Coupons · 优惠券' },
+    { id: 'invoices',   label: 'Invoices · 我的发票' },
+    { id: 'favorites',  label: 'Favorites · 收藏夹' },
+    { id: 'membership', label: 'Membership · 会员' },
+    { id: 'voting',     label: 'Your say · 投票' },
+    { id: 'about',      label: 'About · 关于我们' },
+    { id: 'faq',        label: 'Help & FAQ · 帮助中心' },
+    { id: 'bug',        label: 'Found a bug? · 报告问题' },
+    { id: 'tour',       label: 'Take the tour · 查看教程' },
+  ];
+
+  // PUT one config key. Returns true on success.
+  async function putKey(key, value, okMsg) {
+    try {
+      await api('/api/retail-admin/config', { method: 'PUT', body: { [key]: value } });
+      if (okMsg) toast(okMsg);
+      return true;
+    } catch (e) {
+      toast(T('Save failed', '保存失败') + ': ' + (e.message || ''), 'err');
+      return false;
+    }
+  }
+
+  // Reflect each hidden <select>'s value onto its visual .opt cards.
+  function syncOpts() {
+    modal.querySelectorAll('.opt[data-target]').forEach(opt => {
+      const sel = document.getElementById(opt.dataset.target);
+      opt.classList.toggle('active', !!sel && sel.value === opt.dataset.value);
+    });
+  }
+
+  // Visual card → hidden select (generic, mirrors retail-admin's opt-grid).
+  modal.addEventListener('click', e => {
+    const opt = e.target.closest('.opt[data-target]');
+    if (!opt || !modal.contains(opt)) return;
+    const sel = document.getElementById(opt.dataset.target);
+    if (!sel) return;
+    sel.value = opt.dataset.value;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  // Per-control immediate save.
+  $('#cfg-theme-accent').addEventListener('change', e => {
+    syncOpts(); putKey('theme.accent', e.target.value, T('Accent saved', '主色已保存'));
+  });
+  $('#cfg-theme-language').addEventListener('change', e => {
+    syncOpts(); putKey('theme.language', e.target.value, T('Language saved', '语言已保存'));
+  });
+  $('#cfg-theme-ipIntensity').addEventListener('change', e => {
+    syncOpts(); putKey('theme.ipIntensity', e.target.value, T('Mascots saved', '吉祥物已保存'));
+  });
+
+  // Notification strip colour — a valid custom hex wins over the preset.
+  const notifSel    = $('#cfg-theme-notifColor');
+  const notifCustom = $('#cfg-theme-notifColorCustom');
+  const notifSwatch = $('#cfg-theme-notifColorSwatch');
+  const isHex = v => /^#[0-9a-fA-F]{6}$/.test((v || '').trim());
+  function effectiveNotif() {
+    const custom = (notifCustom.value || '').trim();
+    return isHex(custom) ? custom.toUpperCase() : notifSel.value;
+  }
+  function paintNotifSwatch() { notifSwatch.style.background = effectiveNotif(); }
+  function clearNotifOpts() {
+    modal.querySelectorAll('.opt[data-target="cfg-theme-notifColor"]').forEach(o => o.classList.remove('active'));
+  }
+  function saveNotif() { paintNotifSwatch(); putKey('theme.notif_color', effectiveNotif(), T('Notification colour saved', '通知条颜色已保存')); }
+  notifSel.addEventListener('change', () => {
+    notifCustom.value = '';   // choosing a preset clears any stale custom hex
+    syncOpts(); saveNotif();
+  });
+  notifCustom.addEventListener('input', () => {
+    paintNotifSwatch();
+    if (isHex(notifCustom.value)) clearNotifOpts(); else syncOpts();
+  });
+  notifCustom.addEventListener('change', saveNotif);   // save on blur / Enter
+
+  // Mini-app footer — base64 image buffer + auto-save on any field change.
+  function setFooterPreview(dataUrl) {
+    const el = $('#cfg-footer-wordmark-preview');
+    if (!el) return;
+    el.innerHTML = dataUrl
+      ? '<img src="' + dataUrl + '" style="max-width:100%; max-height:100%; object-fit:contain;">'
+      : '<span style="color:var(--text-3); font-size:11px;">No image · 无图片</span>';
+  }
+  function saveFooter(okMsg) {
+    return putKey('brand.me_footer', {
+      wordmark_image: footerData || null,
+      wordmark_text:  ($('#cfg-footer-wordmark-text').value || '').trim() || null,
+      tagline_en:     ($('#cfg-footer-tagline-en').value    || '').trim() || null,
+      tagline_cn:     ($('#cfg-footer-tagline-cn').value    || '').trim() || null,
+      credit_en:      ($('#cfg-footer-credit-en').value     || '').trim() || null,
+      credit_cn:      ($('#cfg-footer-credit-cn').value     || '').trim() || null,
+    }, okMsg);
+  }
+  ['cfg-footer-wordmark-text', 'cfg-footer-tagline-en', 'cfg-footer-tagline-cn', 'cfg-footer-credit-en', 'cfg-footer-credit-cn']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => saveFooter(T('Footer saved', '页脚已保存'))); });
+  $('#cfg-footer-wordmark-file').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (!f.type || !f.type.startsWith('image/')) { toast(T('Image only', '仅支持图片'), 'err'); e.target.value = ''; return; }
+    const r = new FileReader();
+    r.onload = ev => { footerData = ev.target.result; setFooterPreview(footerData); saveFooter(T('Footer saved', '页脚已保存')); };
+    r.readAsDataURL(f);
+  });
+  $('#cfg-footer-wordmark-clear').addEventListener('click', () => {
+    footerData = null; setFooterPreview(null);
+    const fi = $('#cfg-footer-wordmark-file'); if (fi) fi.value = '';
+    saveFooter(T('Footer saved', '页脚已保存'));
+  });
+
+  // Me-page menu — hydrate / render / reorder; debounced auto-save.
+  function hydrateMeRows(savedRows) {
+    const saved = Array.isArray(savedRows) ? savedRows : [];
+    const known = new Set(ME_ROW_DEFS.map(d => d.id));
+    const seen = new Set();
+    const out = [];
+    for (const r of saved) {
+      if (!r || !known.has(r.id) || seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push({ id: r.id, enabled: r.enabled !== false });
+    }
+    for (const d of ME_ROW_DEFS) if (!seen.has(d.id)) out.push({ id: d.id, enabled: true });
+    meRows = out;
+  }
+  function queueMeSave() {
+    if (meSaveT) clearTimeout(meSaveT);
+    meSaveT = setTimeout(() => {
+      putKey('me_page.rows', meRows.map(r => ({ id: r.id, enabled: !!r.enabled })), T('Menu saved', '菜单已保存'));
+    }, 400);
+  }
+  function renderMeRows() {
+    const ul = $('#me-rows-list');
+    if (!ul) return;
+    const labelOf = id => (ME_ROW_DEFS.find(d => d.id === id) || {}).label || id;
+    ul.innerHTML = meRows.map((r, i) => `
+      <li style="display:flex; align-items:center; justify-content:space-between; gap:10px;
+          padding:9px 12px; border-bottom:1px solid var(--line); ${r.enabled ? '' : 'opacity:.5;'}">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; flex:1; min-width:0;">
+          <input type="checkbox" class="me-row-cb" data-i="${i}" ${r.enabled ? 'checked' : ''}>
+          <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${labelOf(r.id)}</span>
+        </label>
+        <span style="display:flex; gap:4px; flex-shrink:0;">
+          <button type="button" class="btn me-row-up"   data-i="${i}" ${i === 0 ? 'disabled' : ''} style="padding:2px 9px;">↑</button>
+          <button type="button" class="btn me-row-down" data-i="${i}" ${i === meRows.length - 1 ? 'disabled' : ''} style="padding:2px 9px;">↓</button>
+        </span>
+      </li>`).join('');
+    ul.querySelectorAll('.me-row-cb').forEach(cb => cb.onchange = e => {
+      meRows[+e.target.dataset.i].enabled = e.target.checked;
+      renderMeRows(); queueMeSave();
+    });
+    ul.querySelectorAll('.me-row-up').forEach(b => b.onclick = e => {
+      const i = +e.currentTarget.dataset.i;
+      if (i > 0) { [meRows[i - 1], meRows[i]] = [meRows[i], meRows[i - 1]]; renderMeRows(); queueMeSave(); }
+    });
+    ul.querySelectorAll('.me-row-down').forEach(b => b.onclick = e => {
+      const i = +e.currentTarget.dataset.i;
+      if (i < meRows.length - 1) { [meRows[i + 1], meRows[i]] = [meRows[i], meRows[i + 1]]; renderMeRows(); queueMeSave(); }
+    });
+  }
+
+  // Hydrate every control from the live config, then show the modal.
+  async function open() {
+    try {
+      const { data: c } = await api('/api/retail-admin/config');
+      $('#cfg-theme-accent').value      = (c.theme && c.theme.accent)      || 'lime-leaf';
+      $('#cfg-theme-language').value    = (c.theme && c.theme.language)    || 'bilingual';
+      $('#cfg-theme-ipIntensity').value = (c.theme && c.theme.ipIntensity) || 'soft';
+      const nc = ((c.theme && c.theme.notif_color) || '#C43A6A').toUpperCase();
+      const presets = Array.from(notifSel.options).map(o => o.value.toUpperCase());
+      if (presets.includes(nc)) { notifSel.value = nc; notifCustom.value = ''; }
+      else { notifCustom.value = nc; }
+      paintNotifSwatch();
+      const mef = (c.brand && c.brand.me_footer) || {};
+      footerData = mef.wordmark_image || null;
+      setFooterPreview(footerData);
+      $('#cfg-footer-wordmark-text').value = mef.wordmark_text || '';
+      $('#cfg-footer-tagline-en').value    = mef.tagline_en    || '';
+      $('#cfg-footer-tagline-cn').value    = mef.tagline_cn    || '';
+      $('#cfg-footer-credit-en').value     = mef.credit_en     || '';
+      $('#cfg-footer-credit-cn').value     = mef.credit_cn     || '';
+      hydrateMeRows(c.me_page && c.me_page.rows);
+      renderMeRows();
+      syncOpts();
+      if (notifCustom.value) clearNotifOpts();   // custom hex → no preset highlighted
+    } catch (e) {
+      toast(T('Load failed', '加载失败') + ': ' + (e.message || ''), 'err');
+    }
+    modal.hidden = false;
+  }
+  function close() { modal.hidden = true; }
+
+  trigger.addEventListener('click', open);
+  trigger.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  $('#tb-close').addEventListener('click', close);
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) close(); });
 }
 
 // Live-apply the configured bg to the phone preview so the author sees

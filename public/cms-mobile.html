@@ -374,7 +374,7 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
     <div class="sheet" id="sheet-design">
       <div class="grab"><i></i></div>
       <div class="sheet-head">
-        <div><h3><span class="i18n-en">Design</span><span class="i18n-cn">设计</span></h3><div class="sub"><span class="i18n-en">Page background</span><span class="i18n-cn">页面背景</span></div></div>
+        <div><h3><span class="i18n-en">Design</span><span class="i18n-cn">设计</span></h3><div class="sub"><span class="i18n-en">Theme &amp; brand</span><span class="i18n-cn">主题与品牌</span></div></div>
         <button class="x" onclick="closeSheet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="sheet-body">
@@ -382,6 +382,63 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
           <div class="t"><span class="i18n-en">Page background</span><span class="i18n-cn">页面背景</span></div>
           <div class="swatches" id="bg-swatches"></div>
         </div>
+
+        <!-- Storefront look-and-feel, moved here from the Mini App Backend
+             Settings → Brand & theme. Each control saves immediately to
+             PUT /api/retail-admin/config (same keys the mini-app reads). -->
+        <div class="dgroup">
+          <div class="t"><span class="i18n-en">Accent colour</span><span class="i18n-cn">主色调</span></div>
+          <div class="swatches" id="tb-accent-sw"></div>
+        </div>
+        <div class="dgroup">
+          <div class="t"><span class="i18n-en">Notification strip</span><span class="i18n-cn">通知条颜色</span></div>
+          <div class="swatches" id="tb-notif-sw"></div>
+          <div class="fld" style="margin-top:10px;margin-bottom:0;">
+            <label><span class="i18n-en">Custom hex</span><span class="i18n-cn">自定义</span></label>
+            <input type="text" id="tb-notif-custom" maxlength="7" placeholder="#C43A6A" autocapitalize="off" autocorrect="off" spellcheck="false">
+          </div>
+        </div>
+        <div class="dgroup">
+          <div class="t"><span class="i18n-en">Language</span><span class="i18n-cn">语言</span></div>
+          <div class="seg" id="tb-lang">
+            <button type="button" data-val="bilingual" aria-selected="false"><span class="i18n-en">Bilingual</span><span class="i18n-cn">双语</span></button>
+            <button type="button" data-val="en" aria-selected="false">EN</button>
+            <button type="button" data-val="cn" aria-selected="false">中</button>
+          </div>
+        </div>
+        <div class="dgroup">
+          <div class="t"><span class="i18n-en">Mascots</span><span class="i18n-cn">吉祥物</span></div>
+          <div class="seg" id="tb-ip">
+            <button type="button" data-val="soft" aria-selected="false"><span class="i18n-en">Soft</span><span class="i18n-cn">柔和</span></button>
+            <button type="button" data-val="bold" aria-selected="false"><span class="i18n-en">Bold</span><span class="i18n-cn">醒目</span></button>
+            <button type="button" data-val="none" aria-selected="false"><span class="i18n-en">Hidden</span><span class="i18n-cn">隐藏</span></button>
+          </div>
+        </div>
+        <div class="dgroup">
+          <div class="t"><span class="i18n-en">Mini-app footer</span><span class="i18n-cn">小程序页脚</span></div>
+          <div class="fld">
+            <label><span class="i18n-en">Wordmark image</span><span class="i18n-cn">品牌标识图</span></label>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+              <div id="tb-footer-prev" style="width:120px;height:72px;display:flex;align-items:center;justify-content:center;background:var(--bg-elev-1);border:1px dashed var(--line);border-radius:8px;">
+                <span style="color:var(--text-3);font-size:11px;"><span class="i18n-en">No image</span><span class="i18n-cn">无图片</span></span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <input type="file" id="tb-footer-file" accept="image/*">
+                <button type="button" id="tb-footer-clear" style="align-self:flex-start;padding:7px 12px;border:1px solid var(--line);background:var(--bg-elev-2);color:var(--text-2);border-radius:8px;font:600 12px var(--f-sans);"><span class="i18n-en">Clear</span><span class="i18n-cn">清除</span></button>
+              </div>
+            </div>
+          </div>
+          <div class="fld"><label><span class="i18n-en">Wordmark text fallback</span><span class="i18n-cn">文字备用</span></label><input type="text" id="tb-footer-text" placeholder="Full Circle"></div>
+          <div class="fld"><label><span class="i18n-en">Tagline EN</span><span class="i18n-cn">宣传语(英文)</span></label><input type="text" id="tb-footer-tag-en" placeholder="Clarity with code"></div>
+          <div class="fld"><label><span class="i18n-en">Tagline CN</span><span class="i18n-cn">宣传语(中文)</span></label><input type="text" id="tb-footer-tag-cn" placeholder="用代码,带来清晰"></div>
+          <div class="fld"><label><span class="i18n-en">Credit line EN</span><span class="i18n-cn">落款(英文)</span></label><input type="text" id="tb-footer-cred-en" placeholder="Powered by Full Circle"></div>
+          <div class="fld" style="margin-bottom:0;"><label><span class="i18n-en">Credit line CN</span><span class="i18n-cn">落款(中文)</span></label><input type="text" id="tb-footer-cred-cn" placeholder="由 Full Circle 提供技术支持"></div>
+        </div>
+        <div class="dgroup">
+          <div class="t"><span class="i18n-en">Me page menu</span><span class="i18n-cn">「我的」页菜单</span></div>
+          <ul id="tb-me-rows" style="list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;"></ul>
+        </div>
+
         <div class="desk-note">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           <div><b><span class="i18n-en">Tab bar, fonts &amp; per-block colours</span><span class="i18n-cn">标签栏、字体与各模块配色</span></b> <span class="i18n-en">are tuned on desktop.</span><span class="i18n-cn">请在电脑上调整。</span> <a href="/cms?desktop=1"><span class="i18n-en">Open on a computer ↗</span><span class="i18n-cn">在电脑上打开 ↗</span></a></div>
@@ -497,6 +554,7 @@ window.addEventListener('message', (e) => {
   f.addEventListener('load', () => send('hello'));
   f.src = '/cms?embed=preview&desktop=1';
   buildBgSwatches();
+  tbInit();
 })();
 
 function gateLogin() {
@@ -728,11 +786,14 @@ function markBg() {
   document.querySelectorAll('#bg-swatches .sw').forEach(s => s.classList.toggle('on', (s.dataset.token || '') === (CURRENT_BG || '')));
 }
 async function openDesign() {
+  let data = null;
   try {
     const cfg = await fetch('/api/retail-admin/config', { credentials: 'same-origin' }).then(r => r.json());
-    CURRENT_BG = (cfg && cfg.data && cfg.data.theme && cfg.data.theme.page_bg) || '';
+    data = cfg && cfg.data;
+    CURRENT_BG = (data && data.theme && data.theme.page_bg) || '';
   } catch (e) { CURRENT_BG = ''; }
   markBg();
+  tbHydrate(data);
   openSheet('design');
 }
 async function setBg(token, el) {
@@ -749,6 +810,205 @@ async function setBg(token, el) {
     // back to the top of the page on every colour tap.
     send('setPageBg', { token: token || '' });
   } catch (e) { toast(cuT('Could not save', '保存失败'), true); }
+}
+
+/* ── THEME & BRAND controls (inside the Design sheet) ─────────────────
+   Storefront look-and-feel moved out of the Mini App Backend Settings →
+   Brand & theme. Each control writes ONE storefront_config key via PUT
+   /api/retail-admin/config — the same keys the desktop editor + mini-app
+   use — and saves immediately. Hydrated from config when the sheet opens. */
+const TB_ACCENTS = [
+  { token: 'lime-leaf',    hex: '#CCD900' },
+  { token: 'forest-kale',  hex: '#365329' },
+  { token: 'carrot-blaze', hex: '#E87A3A' },
+  { token: 'berry-punch',  hex: '#C43A6A' },
+  { token: 'papaya-glow',  hex: '#F0A050' },
+  { token: 'pea-sprout',   hex: '#A8C75A' },
+];
+const TB_NOTIFS = ['#C43A6A', '#3A5A30', '#E87A3A', '#F0A050', '#CCD900', '#1A1A17'];
+// IDs MUST match ROW_DEFS in miniapp/pages/me/me.js.
+const TB_ME_DEFS = [
+  { id: 'notif',      label: 'Notifications · 通知' },
+  { id: 'addresses',  label: 'Delivery addresses · 收货地址' },
+  { id: 'wallet',     label: 'Wallet & points · 钱包积分' },
+  { id: 'topup',      label: 'Top up · 充值' },
+  { id: 'affiliate',  label: 'Refer a friend · 推广计划' },
+  { id: 'coupons',    label: 'Coupons · 优惠券' },
+  { id: 'invoices',   label: 'Invoices · 我的发票' },
+  { id: 'favorites',  label: 'Favorites · 收藏夹' },
+  { id: 'membership', label: 'Membership · 会员' },
+  { id: 'voting',     label: 'Your say · 投票' },
+  { id: 'about',      label: 'About · 关于我们' },
+  { id: 'faq',        label: 'Help & FAQ · 帮助中心' },
+  { id: 'bug',        label: 'Found a bug? · 报告问题' },
+  { id: 'tour',       label: 'Take the tour · 查看教程' },
+];
+const TB = { accent: 'lime-leaf', notif: '#C43A6A', footerImg: null, meRows: [] };
+let tbMeSaveT = null;
+const tbHex = v => /^#[0-9a-fA-F]{6}$/.test((v || '').trim());
+
+async function tbPut(key, value, okMsg) {
+  try {
+    const r = await fetch('/api/retail-admin/config', {
+      method: 'PUT', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [key]: value }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (okMsg) toast(okMsg);
+    return true;
+  } catch (e) { toast(cuT('Could not save', '保存失败'), true); return false; }
+}
+
+function tbMarkAccent() {
+  document.querySelectorAll('#tb-accent-sw .sw').forEach(s => s.classList.toggle('on', s.dataset.token === TB.accent));
+}
+function tbMarkNotif() {
+  document.querySelectorAll('#tb-notif-sw .sw').forEach(s => s.classList.toggle('on', s.dataset.hex === (TB.notif || '').toUpperCase()));
+}
+function tbMarkSeg(id, val) {
+  const seg = $('#' + id); if (!seg) return;
+  seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-selected', b.dataset.val === val ? 'true' : 'false'));
+}
+function tbSetFooterPreview(url) {
+  const el = $('#tb-footer-prev'); if (!el) return;
+  el.innerHTML = url
+    ? '<img src="' + url + '" style="max-width:100%;max-height:100%;object-fit:contain;">'
+    : '<span style="color:var(--text-3);font-size:11px;">' + cuT('No image', '无图片') + '</span>';
+}
+function tbSaveFooter(okMsg) {
+  return tbPut('brand.me_footer', {
+    wordmark_image: TB.footerImg || null,
+    wordmark_text: (($('#tb-footer-text').value) || '').trim() || null,
+    tagline_en:    (($('#tb-footer-tag-en').value) || '').trim() || null,
+    tagline_cn:    (($('#tb-footer-tag-cn').value) || '').trim() || null,
+    credit_en:     (($('#tb-footer-cred-en').value) || '').trim() || null,
+    credit_cn:     (($('#tb-footer-cred-cn').value) || '').trim() || null,
+  }, okMsg);
+}
+
+// Me-page menu — hydrate / render / reorder; debounced auto-save.
+function tbHydrateMe(savedRows) {
+  const saved = Array.isArray(savedRows) ? savedRows : [];
+  const known = new Set(TB_ME_DEFS.map(d => d.id));
+  const seen = new Set(); const out = [];
+  for (const r of saved) {
+    if (!r || !known.has(r.id) || seen.has(r.id)) continue;
+    seen.add(r.id); out.push({ id: r.id, enabled: r.enabled !== false });
+  }
+  for (const d of TB_ME_DEFS) if (!seen.has(d.id)) out.push({ id: d.id, enabled: true });
+  TB.meRows = out;
+}
+function tbQueueMeSave() {
+  if (tbMeSaveT) clearTimeout(tbMeSaveT);
+  tbMeSaveT = setTimeout(() => {
+    tbPut('me_page.rows', TB.meRows.map(r => ({ id: r.id, enabled: !!r.enabled })), cuT('Menu saved', '菜单已保存'));
+  }, 400);
+}
+function tbRenderMe() {
+  const ul = $('#tb-me-rows'); if (!ul) return;
+  const labelOf = id => (TB_ME_DEFS.find(d => d.id === id) || {}).label || id;
+  ul.innerHTML = TB.meRows.map((r, i) => `
+    <li style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);${r.enabled ? '' : 'opacity:.5;'}">
+      <label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+        <input type="checkbox" class="tb-me-cb" data-i="${i}" ${r.enabled ? 'checked' : ''}>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;">${labelOf(r.id)}</span>
+      </label>
+      <button type="button" class="tb-me-up"   data-i="${i}" ${i === 0 ? 'disabled' : ''} style="padding:4px 10px;border:1px solid var(--line);background:var(--bg-elev-2);color:var(--text-1);border-radius:7px;">↑</button>
+      <button type="button" class="tb-me-down" data-i="${i}" ${i === TB.meRows.length - 1 ? 'disabled' : ''} style="padding:4px 10px;border:1px solid var(--line);background:var(--bg-elev-2);color:var(--text-1);border-radius:7px;">↓</button>
+    </li>`).join('');
+  ul.querySelectorAll('.tb-me-cb').forEach(cb => cb.onchange = e => { TB.meRows[+e.target.dataset.i].enabled = e.target.checked; tbRenderMe(); tbQueueMeSave(); });
+  ul.querySelectorAll('.tb-me-up').forEach(b => b.onclick = e => { const i = +e.currentTarget.dataset.i; if (i > 0) { [TB.meRows[i - 1], TB.meRows[i]] = [TB.meRows[i], TB.meRows[i - 1]]; tbRenderMe(); tbQueueMeSave(); } });
+  ul.querySelectorAll('.tb-me-down').forEach(b => b.onclick = e => { const i = +e.currentTarget.dataset.i; if (i < TB.meRows.length - 1) { [TB.meRows[i + 1], TB.meRows[i]] = [TB.meRows[i], TB.meRows[i + 1]]; tbRenderMe(); tbQueueMeSave(); } });
+}
+
+// Build swatches + wire listeners once at boot.
+function tbInit() {
+  const accHost = $('#tb-accent-sw');
+  if (accHost) {
+    accHost.innerHTML = '';
+    TB_ACCENTS.forEach(a => {
+      const s = document.createElement('div');
+      s.className = 'sw'; s.style.background = a.hex; s.dataset.token = a.token; s.title = a.token;
+      s.onclick = () => { TB.accent = a.token; tbMarkAccent(); tbPut('theme.accent', a.token, cuT('Accent saved', '主色已保存')); };
+      accHost.appendChild(s);
+    });
+  }
+  const notifHost = $('#tb-notif-sw');
+  if (notifHost) {
+    notifHost.innerHTML = '';
+    TB_NOTIFS.forEach(hex => {
+      const s = document.createElement('div');
+      s.className = 'sw'; s.style.background = hex; s.dataset.hex = hex.toUpperCase();
+      s.onclick = () => {
+        TB.notif = hex.toUpperCase();
+        const ci = $('#tb-notif-custom'); if (ci) ci.value = '';
+        tbMarkNotif();
+        tbPut('theme.notif_color', TB.notif, cuT('Notification colour saved', '通知条颜色已保存'));
+      };
+      notifHost.appendChild(s);
+    });
+  }
+  const custom = $('#tb-notif-custom');
+  if (custom) {
+    custom.addEventListener('input', () => {
+      if (tbHex(custom.value)) document.querySelectorAll('#tb-notif-sw .sw').forEach(s => s.classList.remove('on'));
+      else tbMarkNotif();
+    });
+    custom.addEventListener('change', () => {
+      if (tbHex(custom.value)) { TB.notif = custom.value.trim().toUpperCase(); tbPut('theme.notif_color', TB.notif, cuT('Notification colour saved', '通知条颜色已保存')); }
+    });
+  }
+  // Language + mascots segmented controls.
+  [['tb-lang', 'theme.language', cuT('Language saved', '语言已保存')],
+   ['tb-ip', 'theme.ipIntensity', cuT('Mascots saved', '吉祥物已保存')]].forEach(pair => {
+    const seg = $('#' + pair[0]); if (!seg) return;
+    seg.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      tbMarkSeg(pair[0], b.dataset.val); tbPut(pair[1], b.dataset.val, pair[2]);
+    }));
+  });
+  // Footer — auto-save on any field change / image pick / clear.
+  ['tb-footer-text', 'tb-footer-tag-en', 'tb-footer-tag-cn', 'tb-footer-cred-en', 'tb-footer-cred-cn']
+    .forEach(id => { const el = $('#' + id); if (el) el.addEventListener('change', () => tbSaveFooter(cuT('Footer saved', '页脚已保存'))); });
+  const file = $('#tb-footer-file');
+  if (file) file.addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (!f.type || !f.type.startsWith('image/')) { toast(cuT('Image only', '仅支持图片'), true); e.target.value = ''; return; }
+    const rd = new FileReader();
+    rd.onload = ev => { TB.footerImg = ev.target.result; tbSetFooterPreview(TB.footerImg); tbSaveFooter(cuT('Footer saved', '页脚已保存')); };
+    rd.readAsDataURL(f);
+  });
+  const clr = $('#tb-footer-clear');
+  if (clr) clr.addEventListener('click', () => {
+    TB.footerImg = null; tbSetFooterPreview(null);
+    if (file) file.value = '';
+    tbSaveFooter(cuT('Footer saved', '页脚已保存'));
+  });
+}
+
+// Hydrate every TB control from the live config blob (called by openDesign).
+function tbHydrate(data) {
+  const c = data || {};
+  TB.accent = (c.theme && c.theme.accent) || 'lime-leaf';
+  tbMarkAccent();
+  const nc = ((c.theme && c.theme.notif_color) || '#C43A6A').toUpperCase();
+  const presets = TB_NOTIFS.map(h => h.toUpperCase());
+  const custom = $('#tb-notif-custom');
+  if (presets.includes(nc)) { TB.notif = nc; if (custom) custom.value = ''; tbMarkNotif(); }
+  else { TB.notif = nc; if (custom) custom.value = nc; document.querySelectorAll('#tb-notif-sw .sw').forEach(s => s.classList.remove('on')); }
+  tbMarkSeg('tb-lang', (c.theme && c.theme.language) || 'bilingual');
+  tbMarkSeg('tb-ip', (c.theme && c.theme.ipIntensity) || 'soft');
+  const mef = (c.brand && c.brand.me_footer) || {};
+  TB.footerImg = mef.wordmark_image || null;
+  tbSetFooterPreview(TB.footerImg);
+  if ($('#tb-footer-text'))    $('#tb-footer-text').value    = mef.wordmark_text || '';
+  if ($('#tb-footer-tag-en'))  $('#tb-footer-tag-en').value  = mef.tagline_en || '';
+  if ($('#tb-footer-tag-cn'))  $('#tb-footer-tag-cn').value  = mef.tagline_cn || '';
+  if ($('#tb-footer-cred-en')) $('#tb-footer-cred-en').value = mef.credit_en || '';
+  if ($('#tb-footer-cred-cn')) $('#tb-footer-cred-cn').value = mef.credit_cn || '';
+  tbHydrateMe(c.me_page && c.me_page.rows);
+  tbRenderMe();
 }
 
 /* ── save / publish / revert ──────────────────────────────────────── */

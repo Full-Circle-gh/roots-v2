@@ -10165,7 +10165,7 @@
       <div class="settings-body">
 
         <!-- ────── SHOP ────── -->
-        <div class="sub-panel" id="sub-shop">
+        <div class="sub-panel active" id="sub-shop">
           <h2>Shop tab · 商城页</h2>
 
           <!-- LAYOUT picker -->
@@ -11916,27 +11916,10 @@ function applyVisualPreviews() {
   // owns the bottom-bar theme + icon design + colour overrides.)
 }
 
-// Live update for the notif-strip custom hex field: drives the swatch
-// chip next to it, plus clears the preset select when the user has typed
-// their own colour so the save handler picks the custom value.
-function onNotifHexInput(raw) {
-  const v = String(raw || '').trim();
-  if (/^#[0-9a-fA-F]{6}$/.test(v)) {
-    $('#cfg-theme-notifColorSwatch').style.background = v;
-    // Sync preset highlight off if custom value doesn't match any preset.
-    const sel = $('#cfg-theme-notifColor');
-    const presets = Array.from(sel.options).map(o => o.value.toUpperCase());
-    if (!presets.includes(v.toUpperCase())) {
-      document.querySelectorAll('.opt[data-target="cfg-theme-notifColor"]').forEach(t => t.classList.remove('active'));
-    }
-  }
-}
+// (Notification-strip custom-hex handler moved to the Mini App Editor /cms 2026-06-09.)
 
-// ── Sub-panel visual picker (Accent / Language / IP / Shop layout) ──
-const PICKER_TARGETS = [
-  'cfg-theme-accent', 'cfg-theme-language', 'cfg-theme-ipIntensity',
-  'cfg-theme-notifColor', 'cfg-shop-layout'
-];
+// ── Sub-panel visual picker (Shop layout; Brand & theme pickers moved to /cms) ──
+const PICKER_TARGETS = ['cfg-shop-layout'];
 document.addEventListener('click', e => {
   const opt = e.target.closest('.opt[data-target]');
   if (!opt) return;
@@ -12009,13 +11992,6 @@ function applyFeePreviews() {
 
 document.addEventListener('change', e => {
   const id = e.target.id;
-  if (id === 'cfg-theme-accent') applyVisualPreviews();
-  if (id === 'cfg-theme-notifColor') {
-    // Picking a preset wins over a previously-typed custom hex — clear it
-    // and refresh the swatch so the chosen colour is unambiguous.
-    $('#cfg-theme-notifColorCustom').value = '';
-    $('#cfg-theme-notifColorSwatch').style.background = e.target.value;
-  }
   if (PICKER_TARGETS.includes(id)) syncAllPickers();
   if (id?.startsWith('cfg-shop-')) { applyShopFiltersPreview(); applySortPreview(); }
   if (id?.startsWith('cfg-fees-')) applyFeePreviews();
@@ -17288,19 +17264,7 @@ async function loadConfig() {
     $('#cfg-legal-privacy-cn').value = c.legal?.privacy?.body_cn || '';
     $('#cfg-legal-terms-en').value   = c.legal?.terms?.body_en   || '';
     $('#cfg-legal-terms-cn').value   = c.legal?.terms?.body_cn   || '';
-    // Mini-app footer (Me page bottom): wordmark image (held in
-    // _footerWordmarkData), wordmark-text fallback, tagline + credit per lang.
-    const mef = c.brand?.me_footer || {};
-    _footerWordmarkData = mef.wordmark_image || null;
-    setFooterPreview(_footerWordmarkData);
-    $('#cfg-footer-wordmark-text').value = mef.wordmark_text || '';
-    $('#cfg-footer-tagline-en').value    = mef.tagline_en    || '';
-    $('#cfg-footer-tagline-cn').value    = mef.tagline_cn    || '';
-    $('#cfg-footer-credit-en').value     = mef.credit_en     || '';
-    $('#cfg-footer-credit-cn').value     = mef.credit_cn     || '';
-    // Me page menu — hydrate the reorder/visibility list from me_page.rows.
-    hydrateMeRows(c.me_page && c.me_page.rows);
-    renderMeRows();
+    // Mini-app footer + Me-page menu moved to the Mini App Editor (/cms) 2026-06-09.
     // Social-proof widgets — five sub-objects under social_proof. Defaults
     // mirror the server-side fallbacks in routes/retail.js getSocialConfig().
     const sp = c.social_proof || {};
@@ -17362,15 +17326,8 @@ async function saveConfig() {
   const status = $('#cfg-status');
   status.textContent = 'Saving…';
   const body = {
-    'theme.accent':                $('#cfg-theme-accent').value,
-    'theme.language':              $('#cfg-theme-language').value,
-    'theme.ipIntensity':           $('#cfg-theme-ipIntensity').value,
-    'theme.notif_color':           (function () {
-      // Custom hex wins if set + valid; otherwise the preset dropdown value.
-      const custom = ($('#cfg-theme-notifColorCustom').value || '').trim();
-      if (/^#[0-9a-fA-F]{6}$/.test(custom)) return custom.toUpperCase();
-      return $('#cfg-theme-notifColor').value;
-    })(),
+    // Brand & theme (accent / notification colour / language / mascots) moved to
+    // the Mini App Editor (/cms) 2026-06-09 — it writes those keys to config itself.
     // Fees — shipping, free-shipping threshold, pickup packing/hours, and the
     // minimum-order gate — all live in the Delivery tab now (saveDeliveryFees).
     'shop.layout':                 $('#cfg-shop-layout').value,
@@ -17406,17 +17363,7 @@ async function saveConfig() {
     'customer_service.fab_bottom':     parseInt($('#cfg-cs-fab_bottom').value, 10) || 220,
     // Legal pages moved to the Content group (Content → Legal pages) and save on
     // their own button via saveLegal() — no longer ride along here (2026-06-08).
-    // Mini-app footer (Me page) — single nested object under brand.me_footer.
-    'brand.me_footer': {
-      wordmark_image: _footerWordmarkData || null,
-      wordmark_text:  ($('#cfg-footer-wordmark-text').value || '').trim() || null,
-      tagline_en:     ($('#cfg-footer-tagline-en').value    || '').trim() || null,
-      tagline_cn:     ($('#cfg-footer-tagline-cn').value    || '').trim() || null,
-      credit_en:      ($('#cfg-footer-credit-en').value     || '').trim() || null,
-      credit_cn:      ($('#cfg-footer-credit-cn').value     || '').trim() || null,
-    },
-    // Me page menu order + visibility (array of { id, enabled }).
-    'me_page.rows': _meRows.map(r => ({ id: r.id, enabled: !!r.enabled })),
+    // Mini-app footer + Me-page menu moved to the Mini App Editor (/cms) 2026-06-09.
     // Social proof — single nested blob so storefront_config holds one row,
     // matching the shape getSocialConfig() in routes/retail.js expects.
     'social_proof': (() => {
@@ -17489,88 +17436,9 @@ async function saveConfig() {
   }
 }
 
-// ════════════════════════════════════════════════════════════════
-// MINI-APP FOOTER (Me page) — tenant-editable wordmark / tagline /
-// credit. Stored under storefront_config['brand.me_footer']; rendered
-// by miniapp/pages/me/me.wxml via app.globalData.config.brand.me_footer.
-// Load + save are folded into loadConfig() / saveConfig() so these fields
-// move through the main "Save settings" button with every other setting —
-// just the wordmark-image upload + clear handlers live here, because they
-// manage a side-channel base64 buffer between picker → save.
-// ════════════════════════════════════════════════════════════════
-let _footerWordmarkData = null;  // base64 data URL held between upload + save
-
-// ════════════════════════════════════════════════════════════════
-// ME PAGE MENU — operator-controlled row order + visibility.
-// Stored under storefront_config['me_page.rows'] (array of { id, enabled });
-// the mini-app reads it via /api/retail/config and renders it in
-// miniapp/pages/me/me.js → buildRows(). Hydrate + serialise are folded into
-// loadConfig() / saveConfig() so they ride the main "Save settings" button.
-// IDs here MUST match ROW_DEFS in miniapp/pages/me/me.js.
-// ════════════════════════════════════════════════════════════════
-const ME_ROW_DEFS = [
-  { id: 'notif',      label: 'Notifications · 通知' },
-  { id: 'addresses',  label: 'Delivery addresses · 收货地址' },
-  { id: 'wallet',     label: 'Wallet & points · 钱包积分' },
-  { id: 'topup',      label: 'Top up · 充值' },
-  { id: 'affiliate',  label: 'Refer a friend · 推广计划' },
-  { id: 'coupons',    label: 'Coupons · 优惠券' },
-  { id: 'invoices',   label: 'Invoices · 我的发票' },
-  { id: 'favorites',  label: 'Favorites · 收藏夹' },
-  { id: 'membership', label: 'Membership · 会员' },
-  { id: 'voting',     label: 'Your say · 投票' },
-  { id: 'about',      label: 'About · 关于我们' },
-  { id: 'faq',        label: 'Help & FAQ · 帮助中心' },
-  { id: 'bug',        label: 'Found a bug? · 报告问题' },
-  { id: 'tour',       label: 'Take the tour · 查看教程' },
-];
-let _meRows = [];  // working copy: [{ id, enabled }] in display order
-
-// Build the working list from saved config, keeping saved order/visibility and
-// appending any newly shipped rows (absent from older saved configs) as shown.
-function hydrateMeRows(savedRows) {
-  const saved = Array.isArray(savedRows) ? savedRows : [];
-  const known = new Set(ME_ROW_DEFS.map(d => d.id));
-  const seen = new Set();
-  const out = [];
-  for (const r of saved) {
-    if (!r || !known.has(r.id) || seen.has(r.id)) continue;
-    seen.add(r.id);
-    out.push({ id: r.id, enabled: r.enabled !== false });
-  }
-  for (const d of ME_ROW_DEFS) if (!seen.has(d.id)) out.push({ id: d.id, enabled: true });
-  _meRows = out;
-}
-
-function renderMeRows() {
-  const ul = $('#me-rows-list');
-  if (!ul) return;
-  const labelOf = id => (ME_ROW_DEFS.find(d => d.id === id) || {}).label || id;
-  ul.innerHTML = _meRows.map((r, i) => `
-    <li style="display:flex; align-items:center; justify-content:space-between; gap:10px;
-        padding:9px 12px; border-bottom:1px solid var(--line); ${r.enabled ? '' : 'opacity:.5;'}">
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; flex:1; min-width:0;">
-        <input type="checkbox" class="me-row-cb" data-i="${i}" ${r.enabled ? 'checked' : ''}>
-        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${labelOf(r.id)}</span>
-      </label>
-      <span style="display:flex; gap:4px; flex-shrink:0;">
-        <button type="button" class="btn me-row-up"   data-i="${i}" ${i === 0 ? 'disabled' : ''} style="padding:2px 9px;">↑</button>
-        <button type="button" class="btn me-row-down" data-i="${i}" ${i === _meRows.length - 1 ? 'disabled' : ''} style="padding:2px 9px;">↓</button>
-      </span>
-    </li>`).join('');
-  ul.querySelectorAll('.me-row-cb').forEach(cb => cb.onchange = e => {
-    _meRows[+e.target.dataset.i].enabled = e.target.checked;
-    renderMeRows();
-  });
-  ul.querySelectorAll('.me-row-up').forEach(b => b.onclick = e => {
-    const i = +e.currentTarget.dataset.i;
-    if (i > 0) { [_meRows[i - 1], _meRows[i]] = [_meRows[i], _meRows[i - 1]]; renderMeRows(); }
-  });
-  ul.querySelectorAll('.me-row-down').forEach(b => b.onclick = e => {
-    const i = +e.currentTarget.dataset.i;
-    if (i < _meRows.length - 1) { [_meRows[i + 1], _meRows[i]] = [_meRows[i], _meRows[i + 1]]; renderMeRows(); }
-  });
-}
+// Mini-app footer + Me-page menu (brand.me_footer / me_page.rows) moved to the
+// Mini App Editor (/cms) 2026-06-09 — load/save + the wordmark upload buffer and
+// the row-reorder list now live there. Kept here only as a pointer.
 
 // ════════════════════════════════════════════════════════════════
 // SOCIAL PROOF — manual fake-buyers list (recent-buyers ticker card)
@@ -17638,34 +17506,7 @@ document.addEventListener('input', e => {
 });
 
 
-function setFooterPreview(dataUrl) {
-  const el = document.getElementById('cfg-footer-wordmark-preview');
-  if (!el) return;
-  el.innerHTML = dataUrl
-    ? '<img src="' + dataUrl + '" style="max-width:100%; max-height:100%; object-fit:contain;">'
-    : '<span style="color:var(--text-3); font-size:11px;">No image · 无图片</span>';
-}
-
-// File picker → base64 data URL. Held in memory until the operator clicks
-// the main Save settings button; saveConfig() reads _footerWordmarkData
-// and ships it inside the brand.me_footer write.
-document.addEventListener('change', e => {
-  if (e.target && e.target.id === 'cfg-footer-wordmark-file') {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    if (!f.type || !f.type.startsWith('image/')) { toast('Image only · 仅支持图片', 'err'); e.target.value = ''; return; }
-    const r = new FileReader();
-    r.onload = ev => { _footerWordmarkData = ev.target.result; setFooterPreview(_footerWordmarkData); };
-    r.readAsDataURL(f);
-  }
-});
-document.addEventListener('click', e => {
-  if (e.target && e.target.id === 'cfg-footer-wordmark-clear') {
-    _footerWordmarkData = null;
-    setFooterPreview(null);
-    const fi = document.getElementById('cfg-footer-wordmark-file'); if (fi) fi.value = '';
-  }
-});
+// Mini-app footer wordmark upload/clear handlers moved to the Mini App Editor (/cms) 2026-06-09.
 
 // ════════════════════════════════════════════════════════════════
 // SHOP CATEGORIES — list, drag-and-drop reorder, rename, add, delete
