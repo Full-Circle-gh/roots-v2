@@ -1634,6 +1634,17 @@ function peClose() {
     else location.href = '/retail-admin';
   }, 120);
 }
+// Auth/session lost on a backend fetch. Standalone: reload the shell here.
+// Embedded in the backend's Editor tab (iframe): navigating THIS iframe to the
+// shell ('/') would load the whole ONLINE STORE backend *inside* the editor
+// pane — a second topbar + tab nav stacked under the real one (the "doubled
+// header" bug). Bounce the TOP window instead so the parent re-auths once.
+function peAuthBail() {
+  try {
+    if (window.self !== window.top) { window.top.location.href = '/'; return; }
+  } catch (e) { /* cross-origin top (shouldn't happen, same origin) — fall through */ }
+  location.href = '/';
+}
 // Editor switch — jump to the Mini App (pages) editor, saving first if the
 // current product has unsaved edits so nothing is lost.
 async function fcGotoMiniApp() {
@@ -2103,7 +2114,7 @@ async function peBoot() {
       fetch('/api/retail-admin/products/' + id, { credentials: 'same-origin', cache: 'no-store' }),
       fetch('/api/retail-admin/products',       { credentials: 'same-origin', cache: 'no-store' }),
     ]);
-    if (fullRes.status === 401 || fullRes.status === 403) { location.href = '/'; return; }
+    if (fullRes.status === 401 || fullRes.status === 403) { peAuthBail(); return; }
     const jFull = await fullRes.json();
     if (!jFull.success) {
       if (fullRes.status === 404) { peFatal('Product #' + id + ' not found · 未找到产品'); return; }
@@ -2124,7 +2135,7 @@ async function peShowPicker() {
   el.innerHTML = '<div class="pe-picker">Loading… · 加载中…</div>';
   try {
     const res = await fetch('/api/retail-admin/products', { credentials: 'same-origin', cache: 'no-store' });
-    if (res.status === 401 || res.status === 403) { location.href = '/'; return; }
+    if (res.status === 401 || res.status === 403) { peAuthBail(); return; }
     const j = await res.json();
     if (!j.success) throw new Error(j.error || 'load_failed');
     PA_ALL_PRODUCTS = j.data || [];
@@ -2204,7 +2215,7 @@ function peRenderPickerList() {
 async function peShowInlinePicker() {
   try {
     const res = await fetch('/api/retail-admin/products', { credentials: 'same-origin', cache: 'no-store' });
-    if (res.status === 401 || res.status === 403) { location.href = '/'; return; }
+    if (res.status === 401 || res.status === 403) { peAuthBail(); return; }
     const j = await res.json();
     if (!j.success) throw new Error(j.error || 'load_failed');
     PA_ALL_PRODUCTS = j.data || [];
@@ -2356,7 +2367,7 @@ async function peSwitchProduct(id) {
   // the saved sections.
   try {
     const r = await fetch('/api/retail-admin/products/' + id, { credentials: 'same-origin', cache: 'no-store' });
-    if (r.status === 401 || r.status === 403) { location.href = '/'; return; }
+    if (r.status === 401 || r.status === 403) { peAuthBail(); return; }
     const j = await r.json();
     if (j && j.success && j.data) {
       try { history.replaceState(null, '', '?id=' + id); } catch (e) {}
@@ -2479,7 +2490,7 @@ async function peSmartDivide() {
           : {},
       }),
     });
-    if (r.status === 401 || r.status === 403) { location.href = '/'; return; }
+    if (r.status === 401 || r.status === 403) { peAuthBail(); return; }
     const j = await r.json().catch(() => ({}));
     if (r.status === 503) {
       prog.done(false, cuT('AI is not configured yet · AI 尚未配置', 'AI 尚未配置'));
@@ -2595,7 +2606,7 @@ async function peAutoFillFromKitchen(p) {
         product: { id: p.id, name_en: p.name_en, name_cn: p.name_cn, category: p.category },
       }),
     });
-    if (r.status === 401 || r.status === 403) { location.href = '/'; return; }
+    if (r.status === 401 || r.status === 403) { peAuthBail(); return; }
     const j = await r.json().catch(() => ({}));
     // Convenience step, not a required one — fail quietly (AI off, error, etc.).
     if (!r.ok || !j.success) return;
@@ -3095,7 +3106,7 @@ async function paSaveEdit() {
       credentials: 'same-origin',
       body: JSON.stringify(body),
     });
-    if (r.status === 401 || r.status === 403) { location.href = '/'; return; }
+    if (r.status === 401 || r.status === 403) { peAuthBail(); return; }
     const j = await r.json();
     if (!j.success) throw new Error(j.error || 'save_failed');
     PA_CURRENT = { ...PA_CURRENT, ...j.data };
