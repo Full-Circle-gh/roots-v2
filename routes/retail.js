@@ -8008,7 +8008,8 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     sets.push('description_format = ?'); params.push(body.description_format === 'rich' ? 'rich' : 'plain');
   }
   const richDesc = body.description_format === 'rich';
-  for (const k of ['name_cn', 'sku', 'category', 'weight', 'description_en', 'description_cn', 'image_data', 'image_url']) {
+  for (const k of ['name_cn', 'sku', 'category', 'weight', 'description_en', 'description_cn', 'image_data', 'image_url',
+                   'barcode', 'free_of', 'notes']) {
     if (k in body) {
       let val = (body[k] == null || body[k] === '') ? null : body[k];
       // Sanitise formatted description HTML; plain descriptions stored as-is.
@@ -8038,6 +8039,13 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   if ('bundle' in body) { sets.push('bundle = ?'); params.push(sanitizeBundle(body.bundle)); }
   if ('tags' in body) { sets.push('tags = ?'); params.push(sanitizeProductBadge(body.tags)); }
   if ('is_batch_made' in body) { sets.push('is_batch_made = ?'); params.push(body.is_batch_made ? 1 : 0); }
+  // Kitchen-parity flags brought over so the store editor is a full superset.
+  if ('is_market' in body) { sets.push('is_market = ?'); params.push(body.is_market ? 1 : 0); }
+  if ('is_restock_only' in body) { sets.push('is_restock_only = ?'); params.push(body.is_restock_only ? 1 : 0); }
+  if ('status' in body) {
+    const ST = ['Active', 'Inactive', 'Seasonal', 'Coming Soon'];
+    sets.push('status = ?'); params.push(ST.includes(body.status) ? body.status : 'Active');
+  }
   // Storefront 2-level category. Validated as a pair against the live tree; a
   // partial edit (only top, or only sub) merges with the current row so the
   // sub is checked under the right top.
@@ -8075,6 +8083,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
+            status, barcode, free_of, notes, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
             is_batch_made, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
@@ -8113,6 +8122,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
+            status, barcode, free_of, notes, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
             variant_group_id, variant_label, variant_sort,
             is_batch_made, page_template,
@@ -8156,13 +8166,17 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   const descEn = descFormat === 'rich' ? sanitizeRichHtml(b.description_en) : ((b.description_en || '').trim() || null);
   const descCn = descFormat === 'rich' ? sanitizeRichHtml(b.description_cn) : ((b.description_cn || '').trim() || null);
   const cat2 = normalizeCategoryPair(b.top_category, b.subcategory, tdb());
+  const ST = ['Active', 'Inactive', 'Seasonal', 'Coming Soon'];
+  const status = ST.includes(b.status) ? b.status : 'Active';
   let info;
   try {
     info = tdb().prepare(
       `INSERT INTO store_products
          (name_en, name_cn, sku, category, top_category, subcategory, weight, sell_price, compare_at_price, stock_qty, ship_modes,
-          description_en, description_cn, description_format, image_data, images, tags, is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+          description_en, description_cn, description_format, image_data, images, tags,
+          status, barcode, free_of, notes, is_market, is_restock_only,
+          is_published, is_active, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       name_en || name_cn, name_cn || null,
       sku, cat2.top,
@@ -8173,6 +8187,8 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
       ship.length ? ship.join(',') : 'air,land',
       descEn, descCn, descFormat,
       primaryImg, gallery.length ? JSON.stringify(gallery) : null, sanitizeProductBadge(b.tags),
+      status, (b.barcode || '').trim() || null, (b.free_of || '').trim() || null, (b.notes || '').trim() || null,
+      b.is_market ? 1 : 0, b.is_restock_only ? 1 : 0,
       b.is_published ? 1 : 0
     );
   } catch (e) {
@@ -8184,6 +8200,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
+            status, barcode, free_of, notes, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, tags,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ?`
@@ -8191,6 +8208,22 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   row.description_blocks = null;
   row.nutrition = null;
   res.json({ success: true, data: row });
+});
+
+// Per-store physical stock for one product — drives the product editor's
+// read-only "stock per location" summary (Tianhe / Yuexiu). The real per-store
+// control lives in the Inventory grid; this is just a glance + a deep link.
+router.get('/api/retail-admin/products/:id/store-stocks', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const rows = tdb().prepare(`
+    SELECT rs.id AS store_id, rs.code, rs.name_en, rs.name_cn,
+           COALESCE(ss.physical_qty, 0) AS physical_qty
+      FROM retail_stores rs
+      LEFT JOIN retail_store_stock ss ON ss.store_id = rs.id AND ss.product_id = ?
+     WHERE rs.is_active = 1
+     ORDER BY rs.sort_order ASC, rs.id ASC
+  `).all(id);
+  res.json({ success: true, data: rows });
 });
 
 // Soft-delete a product from the Mini App Backend (hide from shop + lists).
@@ -8261,6 +8294,7 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
+            status, barcode, free_of, notes, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
             variant_group_id, variant_label,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
@@ -8504,6 +8538,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                       stock_qty
                     ) AS effective_stock,
                     is_published, sort_order, updated_at,
+                    status, barcode, free_of, notes, is_market, is_restock_only,
                     description_en, description_cn, description_format,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
                     nutrition, bundle, tags,
