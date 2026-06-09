@@ -23207,10 +23207,18 @@ function pdLoadStoreStocks(id) {
   if (id == null) { box.className = 'muted'; box.textContent = cuT('Set per-location stock after saving', '保存后按门店设置库存'); return; }
   box.className = '';
   box.textContent = '…';
+  let _httpStatus = 0;
   fetch('/api/retail-admin/products/' + id + '/store-stocks', { credentials: 'same-origin' })
-    .then(r => r.json())
+    .then(r => { _httpStatus = r.status; return r.json().catch(() => null); })
     .then(j => {
-      if (!j || !j.success || !Array.isArray(j.data) || !j.data.length) { box.className = 'muted'; box.textContent = '—'; return; }
+      if (!j || !j.success || !Array.isArray(j.data)) {
+        box.className = 'muted';
+        box.textContent = (_httpStatus && _httpStatus !== 200)
+          ? 'Couldn’t load stock · 无法加载库存 (HTTP ' + _httpStatus + ')'
+          : 'Couldn’t load stock · 无法加载库存';
+        return;
+      }
+      if (!j.data.length) { box.className = 'muted'; box.textContent = cuT('No store locations configured · 未配置门店', '未配置门店 · No store locations configured'); return; }
       box.className = '';
       const rows = j.data.map(s => {
         const nm = (_lang === 'cn' ? (s.name_cn || s.name_en) : (s.name_en || s.code)) || s.code;
@@ -23226,7 +23234,7 @@ function pdLoadStoreStocks(id) {
           'onclick="pdSaveStoreStocks()">' + cuT('Save stock', '保存库存') + '</button>' +
         '<span id="pd-store-stocks-msg" class="muted" style="margin-left:10px;font-size:12px;"></span></div>';
     })
-    .catch(() => { box.className = 'muted'; box.textContent = '—'; });
+    .catch(() => { box.className = 'muted'; box.textContent = 'Couldn’t load stock · 无法加载库存 (network)'; });
 }
 // Persist any changed per-store quantities. Each changed row is PATCHed
 // independently (set physical_qty); the endpoint routes through adjustStock so
