@@ -8672,20 +8672,25 @@ router.put('/api/retail-admin/products/:id/variants', requireRetailAdmin, expres
 
 // Retail orders queue — list + detail + status transitions.
 // Lightweight unseen-order counter for the Orders tab notification dot.
-// Counts orders placed strictly after `since` (ISO 8601 from the client's
-// localStorage "last viewed Orders tab" timestamp). Excludes cancelled and
-// pending_payment so the dot only fires for actionable new orders.
+// Counts only orders still in their just-placed, un-actioned state
+// (`paid` / `awaiting_restock`) placed strictly after `since` (ISO 8601 from
+// the client's localStorage "last viewed Orders tab" timestamp). Keying off
+// the *status* — a server-side fact shared by every device — is what makes the
+// dot clear everywhere the instant an order is handled: the moment anyone
+// advances it (preparing / dispatched / delivered / cancelled / refunded) on
+// mobile OR PC, it drops out of this count, so the next poll clears the dot on
+// all devices. (The `since` window still suppresses backlog on a fresh login.)
 // Returns the most-recent placed_at too so the client can advance its
 // pointer atomically after marking-as-seen.
 router.get('/api/retail-admin/orders/unseen-count', requireRetailAdmin, (req, res) => {
   const since = String(req.query.since || '').trim();
   // SQLite datetime() tolerates ISO strings; default to "epoch" when missing
-  // so a fresh client sees a count of every non-cancelled order.
+  // so a fresh client sees a count of every un-actioned new order.
   const sinceSql = since || '1970-01-01T00:00:00.000Z';
   const row = tdb().prepare(
     `SELECT COUNT(*) AS n, MAX(placed_at) AS latest
        FROM retail_orders
-      WHERE status NOT IN ('cancelled','pending_payment')
+      WHERE status IN ('paid','awaiting_restock')
         AND datetime(placed_at) > datetime(?)`
   ).get(sinceSql);
   res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
