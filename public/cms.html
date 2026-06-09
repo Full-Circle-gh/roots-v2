@@ -5415,6 +5415,16 @@ function toast(msg, kind = 'ok') {
 }
 function uid() { return 'b' + Math.random().toString(36).slice(2, 9); }
 
+// Auth/session lost. Standalone: go to /login here. Embedded in the Mini App
+// Backend's Editor tab (iframe): navigating THIS iframe to /login would load the
+// login page *inside* the editor pane (chrome stacked under the real backend).
+// Bounce the TOP window instead so the parent re-auths once.
+function cmsAuthBail() {
+  try {
+    if (window.self !== window.top) { window.top.location.href = '/login'; return; }
+  } catch (e) { /* cross-origin top (same origin in practice) — fall through */ }
+  location.href = '/login';
+}
 async function api(path, opts = {}) {
   const headers = { ...(opts.headers || {}) };
   if (opts.body && typeof opts.body !== 'string') {
@@ -5422,7 +5432,7 @@ async function api(path, opts = {}) {
     opts.body = JSON.stringify(opts.body);
   }
   const r = await fetch(path, { credentials: 'same-origin', ...opts, headers });
-  if (r.status === 401) { location.href = '/login'; throw new Error('401'); }
+  if (r.status === 401) { cmsAuthBail(); throw new Error('401'); }
   const j = await r.json();
   if (!j.success) throw new Error(j.error || 'request_failed');
   return j;
@@ -5453,7 +5463,7 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
   buildResolutionPicker();
   try {
     const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.json());
-    if (!me?.user) { location.href = '/login'; return; }
+    if (!me?.user) { cmsAuthBail(); return; }
     const u = me.user;
     $('#who').textContent = (u.displayName || u.display_name || u.username) + ' · ' + (u.role || '');
     if (u.role !== 'admin' && !(u.permissions || {}).retail) {
@@ -13493,7 +13503,7 @@ async function uploadImage(file) {
   setStatusText({ en: 'Uploading…', cn: '上传中…' }, 'saving');
   try {
     const r = await fetch('/api/retail-admin/cms/media', { method: 'POST', credentials: 'same-origin', body: fd });
-    if (r.status === 401) { location.href = '/login'; return null; }
+    if (r.status === 401) { cmsAuthBail(); return null; }
     const j = await r.json();
     if (!j.success) {
       const msg = j.error === 'too_large' ? 'Image too large (5MB max)'
@@ -13578,7 +13588,7 @@ async function uploadVideo(file) {
   setStatusText({ en: 'Uploading…', cn: '上传中…' }, 'saving');
   try {
     const r = await fetch('/api/retail-admin/cms/media/video', { method: 'POST', credentials: 'same-origin', body: fd });
-    if (r.status === 401) { location.href = '/login'; return null; }
+    if (r.status === 401) { cmsAuthBail(); return null; }
     const j = await r.json();
     if (!j.success) {
       const msg = j.error === 'too_large' ? 'Video too large (20MB max)'
