@@ -509,23 +509,9 @@
     </view>
   </view>
 
-  <!-- Fallback-routing notice. Shown when /quote flagged the nearest
-       store as out of stock. Tapping Place Order then opens either the
-       simple yes/no modal or the 5-option modal depending on `fallbackGate`. -->
-  <view wx:if="{{needsFallback}}" class="fallback-warning">
-    <view class="fallback-warning__icon">🚚</view>
-    <view class="fallback-warning__body">
-      <view class="fallback-warning__title">
-        {{ lang === 'cn' ? '部分商品缺货' : 'Some items out of stock' }}
-      </view>
-      <view class="fallback-warning__sub">
-        {{ lang === 'cn'
-          ? ('就近门店 ' + nearestStoreName + ' 暂时缺货 · 下单时选择处理方式')
-          : (nearestStoreName + ' is out — choose how to handle when placing order') }}
-      </view>
-    </view>
-    <view wx:if="{{acceptedFallback}}" class="fallback-warning__check">✓</view>
-  </view>
+  <!-- Fallback-routing notice removed by request: the out-of-stock notice no
+       longer shows on the checkout screen. The handling modal still opens on
+       Place Order (driven by `needsFallback`/`fallbackGate`) when items are out. -->
 
   </block><!-- /isBound -->
 
