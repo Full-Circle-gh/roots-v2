@@ -24660,23 +24660,13 @@ async function pdToggleBlockDesign() {
   const btn = document.getElementById('pd-blockdesign-toggle');
   if (btn) btn.style.opacity = '.6';
   try {
-    const r = await fetch('/api/retail-admin/products/' + id, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ use_block_design: next }),
-    });
-    const j = await r.json();
-    if (!j.success) throw new Error(j.error || 'save_failed');
-    _pdUseBlockDesign = !!next;
-    const i = PA_PRODUCTS.findIndex(x => x.id === Number(id));
-    if (i >= 0) PA_PRODUCTS[i].use_block_design = next;
-    pdRenderBlockDesignToggle();
+    await pdSaveBlockFlag(id, next);
     if (next) {
       // Turning the design ON only matters once blocks exist — the storefront
       // needs both the flag AND a non-empty block stack, else it falls back to
-      // the classic description. So jump straight into the Product editor to
-      // build (or auto-compose) that block description.
-      toast(cuT('Opening the Product editor to design the description…', '正在打开产品页编辑器设计描述…'), 'ok');
-      openProductEditor(id);
+      // the classic description. Build that block description in place (popup),
+      // so flipping the switch alone is enough — no navigating away.
+      await pdAutoComposeBlocks(id, btn);
     } else {
       toast(cuT('Storefront will use the classic description', '店铺将显示经典描述'), 'ok');
     }
@@ -24684,6 +24674,170 @@ async function pdToggleBlockDesign() {
     toast(cuT('Save failed', '保存失败') + ' · ' + (e.message || e), 'err');
   } finally {
     if (btn) btn.style.opacity = '';
+  }
+}
+// PATCH just the use_block_design flag + keep the toggle / list cache in sync.
+async function pdSaveBlockFlag(id, val) {
+  const r = await fetch('/api/retail-admin/products/' + id, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ use_block_design: val }),
+  });
+  const j = await r.json();
+  if (!j.success) throw new Error(j.error || 'save_failed');
+  _pdUseBlockDesign = !!val;
+  const i = PA_PRODUCTS.findIndex(x => x.id === Number(id));
+  if (i >= 0) PA_PRODUCTS[i].use_block_design = val;
+  pdRenderBlockDesignToggle();
+}
+// Flip the flag back OFF — safety net when a fresh turn-on can't produce blocks,
+// so the storefront never strands on an empty designed page (falls to classic).
+async function pdDesignOff(id) { try { await pdSaveBlockFlag(id, 0); } catch {} }
+// Strip description HTML down to plain text for the AI agent.
+function pdStripToText(html) {
+  let s = String(html == null ? '' : html);
+  if (!s.trim()) return '';
+  s = s.replace(/<\s*(br|\/p|\/div|\/li|\/h[1-6])\s*>/gi, '\n').replace(/<[^>]+>/g, '');
+  const ta = document.createElement('textarea'); ta.innerHTML = s;
+  return ta.value.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n')
+    .split('\n').map(l => l.trim()).join('\n').trim();
+}
+// Blocking progress overlay for the AI page-build. A single AI call gives no
+// real percentage, so the bar creeps toward 90% then snaps to 100% when done.
+function pdComposeProgress() {
+  document.getElementById('pdComposeOv')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'pdComposeOv';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(20,24,16,.55);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center';
+  ov.innerHTML = `
+    <div style="background:var(--bg-pane,#fff);border:1px solid var(--line,#e6e0d2);border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.3);padding:22px 24px 20px;width:min(92vw,360px);font-family:var(--f-sans,inherit)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <div style="width:22px;height:22px;flex:none;border:3px solid rgba(107,142,111,.22);border-top-color:#6B8E6F;border-radius:50%;animation:db-ring-spin .8s linear infinite"></div>
+        <div style="font-weight:700;font-size:15px;color:var(--text-1,#1a2314);line-height:1.3">${cuT('Building your product page', '正在生成商品页')}</div>
+      </div>
+      <div style="height:8px;border-radius:999px;background:var(--bg-elev-1,#e9e9e3);overflow:hidden">
+        <div data-bar style="height:100%;width:6%;border-radius:999px;background:linear-gradient(90deg,#6B8E6F,var(--brass,#B08D4A));transition:width .4s ease"></div>
+      </div>
+      <div data-msg style="margin-top:12px;font-size:12px;color:var(--text-3,#7d7a72);line-height:1.4;min-height:1.4em">${cuT('Reading your description…', '正在读取描述…')}</div>
+    </div>`;
+  document.body.appendChild(ov);
+  const bar = ov.querySelector('[data-bar]');
+  const msg = ov.querySelector('[data-msg]');
+  const stages = [
+    cuT('Reading your description…', '正在读取描述…'),
+    cuT('Writing the sections…', '正在编排板块…'),
+    cuT('Laying out the page…', '正在排版…'),
+    cuT('Almost done…', '即将完成…'),
+  ];
+  let pct = 6, si = 0;
+  const tick = setInterval(() => {
+    pct = Math.min(90, pct + (90 - pct) * 0.12 + 1);
+    bar.style.width = pct.toFixed(1) + '%';
+    const nx = Math.min(stages.length - 1, Math.floor(pct / 24));
+    if (nx !== si) { si = nx; msg.textContent = stages[si]; }
+  }, 450);
+  return {
+    done(ok, text) {
+      clearInterval(tick);
+      bar.style.width = '100%';
+      bar.style.background = ok ? 'linear-gradient(90deg,#6B8E6F,#7BA07F)' : 'linear-gradient(90deg,#e8556a,#ef9a9a)';
+      if (text) msg.textContent = text;
+      setTimeout(() => ov.remove(), ok ? 900 : 1400);
+    },
+  };
+}
+// Build description_blocks from the editor's EN/CN description when the design is
+// switched ON. Fresh products seed automatically; one that already has sections
+// gets a confirm to REBUILD (replacing them). Mirrors the kitchen app's
+// iedAutoComposeBlocks + product-editor's compose flow (same /api/ai/compose-
+// blocks endpoint). Any miss flips the flag back off for a fresh product so the
+// storefront never lands on an empty designed page.
+async function pdAutoComposeBlocks(id, btn) {
+  const row = PA_PRODUCTS.find(x => x.id === Number(id)) || {};
+  let blocks = row.description_blocks;
+  if (typeof blocks === 'string') { try { blocks = JSON.parse(blocks); } catch { blocks = null; } }
+  const hasBlocks = Array.isArray(blocks) && blocks.length > 0;
+  const revertFresh = () => hasBlocks ? Promise.resolve() : pdDesignOff(id);
+  // Already designed: don't silently keep the old sections — offer a rebuild.
+  if (hasBlocks) {
+    const ok = confirm(cuT(
+      'This product already has ' + blocks.length + ' designed section(s).\n\nRebuild them from the current description? This replaces the existing sections.',
+      '该商品已有 ' + blocks.length + ' 个板块。\n\n要根据当前描述重新生成吗?这将替换现有板块。'));
+    if (!ok) { toast(cuT('Kept the existing design — open the Product editor to edit it', '已保留现有设计,可在产品页编辑器中编辑'), 'ok'); return; }
+  }
+  // Read the description straight from the editor (cleaned HTML → plain text).
+  const textEn = pdStripToText(pdRteClean(document.getElementById('pd-rte-en').innerHTML));
+  const textCn = pdStripToText(pdRteClean(document.getElementById('pd-rte-cn').innerHTML));
+  if (!textEn && !textCn) {
+    await revertFresh();
+    toast(cuT('Add a description first, then turn on the design', '请先填写描述,再开启设计'), 'err');
+    return;
+  }
+  // Only one language needed — the AI drafts the other in the brand voice.
+  const translate = !(textEn && textCn);
+  const prog = pdComposeProgress();
+  try {
+    const r = await fetch('/api/ai/compose-blocks', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({
+        text_en: textEn, text_cn: textCn, translate,
+        product: { id: Number(id), name_en: row.name_en, name_cn: row.name_cn, category: row.top_category || row.category },
+      }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 503) {
+      await revertFresh(); prog.done(false, cuT('AI is not configured yet', 'AI 尚未配置'));
+      toast(cuT('AI is not configured yet — open the Product editor to design it by hand', 'AI 尚未配置,可在产品页编辑器中手动设计'), 'err');
+      return;
+    }
+    if (!r.ok || !j.success) {
+      await revertFresh(); prog.done(false, cuT("Couldn't build", '生成失败'));
+      toast(j.error || cuT("Couldn't build the design — open the Product editor to design it by hand", '生成失败,可在产品页编辑器中手动设计'), 'err');
+      return;
+    }
+    const all = (j.blocks || []).filter(b => b && b.type);
+    // Nutrition lives in its own column, not in description_blocks — route it out.
+    const nutriBlock = all.find(b => b.type === 'nutrition_facts');
+    const composed = all.filter(b => b.type !== 'nutrition_facts')
+      .map((b, i) => ({ ...b, id: b.id || ('b' + Date.now().toString(36) + i) }));
+    if (!composed.length) {
+      await revertFresh(); prog.done(false, cuT("Couldn't build", '生成失败'));
+      toast(cuT("Couldn't build sections from this description — add more detail and try again", '未能从描述生成板块,补充内容后重试'), 'err');
+      return;
+    }
+    // Persist blocks (+ nutrition) and keep the flag on, in one PATCH.
+    const body = { description_blocks: composed, use_block_design: 1 };
+    if (nutriBlock) {
+      const nutrition = {
+        basis_en: nutriBlock.basis_en || '', basis_cn: nutriBlock.basis_cn || '',
+        rows: Array.isArray(nutriBlock.rows)
+          ? nutriBlock.rows.map(rr => ({ label_en: rr.label_en || '', label_cn: rr.label_cn || '', value: rr.value || '' }))
+          : [],
+      };
+      if (nutrition.basis_en || nutrition.basis_cn || nutrition.rows.length) body.nutrition = nutrition;
+    }
+    const sr = await fetch('/api/retail-admin/products/' + id, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const sj = await sr.json().catch(() => ({}));
+    if (!sr.ok || !sj.success) {
+      await revertFresh(); prog.done(false, cuT("Couldn't save", '保存失败'));
+      toast(cuT("Built the design but couldn't save it — try again", '已生成但保存失败,请重试'), 'err');
+      return;
+    }
+    const i2 = PA_PRODUCTS.findIndex(x => x.id === Number(id));
+    if (i2 >= 0) PA_PRODUCTS[i2] = { ...PA_PRODUCTS[i2], ...(sj.data || {}), description_blocks: composed, use_block_design: 1 };
+    _pdUseBlockDesign = true; pdRenderBlockDesignToggle();
+    prog.done(true, cuT('Built ✓', '已生成 ✓'));
+    toast(cuT('Built ' + composed.length + ' section' + (composed.length === 1 ? '' : 's') + ' — open the Product editor to review ✓',
+              '已生成 ' + composed.length + ' 个板块,可在产品页编辑器中查看 ✓'), 'ok');
+    if (translate) {
+      toast(!textCn
+        ? cuT('Wrote the 中文 for you in the brand voice — review it in the Product editor', '已按品牌语气替你撰写中文,请在产品页编辑器中校对')
+        : cuT('Wrote the English for you in the brand voice — review it in the Product editor', '已按品牌语气替你撰写英文,请在产品页编辑器中校对'), 'ok');
+    }
+  } catch (e) {
+    await revertFresh(); prog.done(false, cuT("Couldn't build", '生成失败'));
+    toast(cuT("Couldn't build the design — open the Product editor to design it by hand", '生成失败,可在产品页编辑器中手动设计'), 'err');
   }
 }
 // ── Description editor — the Classic (rich-text) editor is the only inline
