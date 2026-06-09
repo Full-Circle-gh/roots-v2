@@ -1770,6 +1770,13 @@
     color: #fff; font-size: 9px; letter-spacing: .04em; text-align: center; padding: 2px 0;
   }
   .pd-var-head { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); margin-bottom: 6px; }
+  /* Variants is collapsed by default (a single-option product needs no table);
+     this header is the open/close toggle. Caret + label + a summary chip so the
+     operator sees the state ("Single option" / "N variants") without expanding. */
+  .pd-var-toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; padding: 4px 0; cursor: pointer; text-align: left; }
+  .pd-var-toggle .pd-var-caret { color: var(--text-4); font-size: 10px; width: 10px; transition: transform .12s ease; }
+  .pd-var-toggle .pd-var-summary { font-size: 11px; color: var(--text-3); font-family: var(--f-sans); letter-spacing: 0; text-transform: none; }
+  .pd-var-toggle:hover .pd-var-summary { color: var(--text-2); }
   /* Sizes table — every size of a product on one inline-editable row
      (name · sku · price · stock · show), so the operator never has to open a
      size just to set its stock. The size you opened is read-only here (edit it
@@ -24212,6 +24219,16 @@ function pdOnTopCatChange() {
 // row is a number input that writes back via the per-store adjust endpoint
 // (PATCH /stores/:storeId/stock/:productId), so a ledger row is recorded.
 // New (unsaved) products show a hint — stock needs a product id to attach to.
+// Keep the read-only stock shown on the variants "self" row in step with the
+// per-store panel — that number is the Tianhe + Yuexiu total, so it must move
+// whenever the per-store inputs do (load or save). No-op if the variants editor
+// is on a different product or not yet populated.
+function vaSyncSelfStock(total) {
+  const selfV = (VA_MEMBERS || []).find(v => v.self);
+  if (!selfV) return;
+  selfV.stock = total;
+  if (document.getElementById('pd-variants')) vaRender();
+}
 function pdLoadStoreStocks(id) {
   const box = document.getElementById('pd-store-stocks');
   if (!box) return;
@@ -24243,6 +24260,10 @@ function pdLoadStoreStocks(id) {
         '<div style="margin-top:8px;"><button type="button" id="pd-store-stocks-save" class="btn small" ' +
           'onclick="pdSaveStoreStocks()">' + cuT('Save stock', '保存库存') + '</button>' +
         '<span id="pd-store-stocks-msg" class="muted" style="margin-left:10px;font-size:12px;"></span></div>';
+      // Mirror the live per-store total onto the variants self row.
+      if (String(box.dataset.productId) === String(VA_ID)) {
+        vaSyncSelfStock(j.data.reduce((s, st) => s + (st.physical_qty || 0), 0));
+      }
     })
     .catch(() => { box.className = 'muted'; box.textContent = cuT('Couldn’t load stock', '无法加载库存'); });
 }
@@ -24278,6 +24299,10 @@ async function pdSaveStoreStocks() {
   if (btn) btn.disabled = false;
   if (fail) { toast('Some stock updates failed · 部分库存更新失败', 'err'); if (msg) msg.textContent = ''; }
   else { toast('Stock updated · 库存已更新'); if (msg) msg.textContent = 'Saved · 已保存'; }
+  // Reflect the new per-store total on the variants self row right away.
+  if (String(id) === String(VA_ID)) {
+    vaSyncSelfStock(inputs.reduce((s, i) => s + (parseInt(i.value, 10) || 0), 0));
+  }
 }
 function pdOpen(id) {
   const p = id != null ? (PA_PRODUCTS || []).find(x => x.id === id) : null;
@@ -24430,7 +24455,7 @@ function paApplyRowSelection() {
 // product (own stock/price); this only sets variant_group_id + variant_label,
 // via /api/retail-admin/products/:id/variants. Same model as the customer
 // switcher + the staff grouping.
-let VA_ID = null, VA_MEMBERS = [], VA_HAD_GROUP = false;
+let VA_ID = null, VA_MEMBERS = [], VA_HAD_GROUP = false, VA_OPEN = false;
 function _vaName(p) { return (p.name_en || '—') + (p.name_cn ? ' · ' + p.name_cn : ''); }
 async function vaLoad(id) {
   const box = document.getElementById('pd-variants'); if (!box) return;
@@ -24446,16 +24471,34 @@ async function vaLoad(id) {
     const j = await api('/api/retail-admin/products/' + id + '/variants');
     const members = (j.data && j.data.members) || [];
     VA_HAD_GROUP = !!(j.data && j.data.group_id);
-    const self = { id, label: p.variant_label || '', name: _vaName(p), sku: p.sku || '', size: p.size || '', price: p.sell_price, stock: p.stock_qty, published: p.is_published, self: true };
+    // Stock shown on the self row = the live per-store total (Tianhe + Yuexiu),
+    // not the legacy flat stock_qty (which per-store edits never touch). Falls
+    // back to stock_qty only if no per-store sum is known yet.
+    const self = { id, label: p.variant_label || '', name: _vaName(p), sku: p.sku || '', size: p.size || '', price: p.sell_price, stock: (p.effective_stock != null ? p.effective_stock : p.stock_qty), published: p.is_published, self: true };
     VA_MEMBERS = members.length
       ? members.map(m => ({ id: m.id, label: m.variant_label || '', name: _vaName(m), sku: m.sku || '', size: m.size || '', price: m.price, stock: m.stock, published: m.is_published, self: m.id === id }))
       : [self];
     if (!VA_MEMBERS.some(v => v.self)) VA_MEMBERS.unshift(self);
   } catch { VA_MEMBERS = [{ id, label: p.variant_label || '', name: _vaName(p), self: true }]; }
+  // Open by default only when there's something to show (real sibling variants);
+  // a single-option product starts collapsed so the editor isn't cluttered.
+  VA_OPEN = VA_MEMBERS.length > 1;
   if (VA_ID === id) vaRender();   // ignore if the editor moved on
 }
+function vaToggle() { VA_OPEN = !VA_OPEN; vaRender(); }
 function vaRender() {
   const box = document.getElementById('pd-variants'); if (!box || VA_ID == null) return;
+  // Collapsible header (open/close toggle). Summary tells the operator the state
+  // without expanding: "Single option" vs "N variants".
+  const hasReal = VA_MEMBERS.length > 1;
+  const summary = hasReal
+    ? cuT(VA_MEMBERS.length + ' variants', VA_MEMBERS.length + ' 个规格')
+    : cuT('Single option · tap to add', '单一规格 · 点击添加');
+  const toggle = `<button type="button" class="pd-var-toggle" onclick="vaToggle()" aria-expanded="${VA_OPEN ? 'true' : 'false'}">` +
+    `<span class="pd-var-caret">${VA_OPEN ? '▾' : '▸'}</span>` +
+    `<span class="pd-var-head" style="margin:0">${cuT('Variants', '规格')}</span>` +
+    `<span class="pd-var-summary">${summary}</span></button>`;
+  if (!VA_OPEN) { box.innerHTML = toggle; return; }
   const head = `<div class="va-row va-row-head"><span></span><span>${cuT('Name', '名称')}</span>` +
     `<span>${cuT('SKU', '货号')}</span>` +
     `<span class="va-num">¥</span><span class="va-num">${cuT('Stock', '库存')}</span>` +
@@ -24487,8 +24530,8 @@ function vaRender() {
       `<button type="button" class="va-x" title="${cuT('Delete this variant', '删除此规格')}" onclick="vaRemove(${v.id})">✕</button></div>`;
   }).join('');
   box.innerHTML =
-    `<div class="pd-var-head">${cuT('Variants', '规格')}</div>` +
-    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT('Sell this product in several variants. Each has its own name, SKU, price & stock. Drag ⠿ to set the order shoppers see.', '以多种规格出售本产品。每种规格有独立的名称、货号、价格与库存。拖动 ⠿ 可调整顾客看到的顺序。')}</div>` +
+    toggle +
+    `<div class="helper" style="font-size:11px;margin-bottom:2px;margin-top:6px">${cuT('Sell this product in several variants. Each has its own name, SKU, price & stock. Drag ⠿ to set the order shoppers see.', '以多种规格出售本产品。每种规格有独立的名称、货号、价格与库存。拖动 ⠿ 可调整顾客看到的顺序。')}</div>` +
     `<div class="va-table">${head}${rows}</div>` +
     `<div class="va-actions">` +
       `<button type="button" class="btn btn-sm" onclick="vaAddSize()">${cuT('+ Add variant', '+ 新增规格')}</button>` +
@@ -24574,6 +24617,7 @@ async function vaAddSize() {
     const d = j.data; if (!d) throw new Error('add_failed');
     if (Array.isArray(PA_PRODUCTS)) PA_PRODUCTS.unshift(d);
     VA_MEMBERS.push({ id: d.id, label: d.variant_label || '', name: _vaName(d), sku: d.sku || '', size: d.size || '', price: d.sell_price, stock: d.stock_qty, published: d.is_published, self: false });
+    VA_OPEN = true;
     vaRender();
     const last = document.querySelector('#pd-variants .va-row:last-child .va-label'); if (last) last.focus();
     toast(cuT('Variant added — set its name, SKU, price & stock, then Save.', '已添加规格 — 设置名称、货号、价格、库存后保存。'));
