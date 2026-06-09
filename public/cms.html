@@ -10472,7 +10472,7 @@ function renderInspector() {
   }
   const b = findBlock(state.selectedId);
   if (!b) {
-    if (window.__fcPreviewEmbed) state.designFields = [];
+    if (window.__fcPreviewEmbed) { state.designFields = []; state.designVariants = []; }
     mount.innerHTML = `
       <div class="empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -10564,6 +10564,26 @@ function renderInspector() {
       };
     });
     __fcColorRegBuf = null;
+    // Design / layout variants — the "which look" selectors. They all live in
+    // the 'layout' section (key is language-independent), so capture every
+    // native <select> there. Skip the universal corner-radius control. Driving
+    // them = set .value + dispatch 'change' (reuses sel()'s own listener), so no
+    // per-call-site wiring and no duplicated option lists.
+    state.designVariants = [];
+    body.querySelectorAll('.insp-sec[data-sec-key="layout"] select').forEach(selEl => {
+      const opts = Array.from(selEl.options);
+      if (opts.length < 2) return;
+      const vals = opts.map(o => o.value);
+      if (vals.every(v => v === 'sharp' || v === 'subtle' || v === 'bold')) return;  // corner radius
+      const fieldEl = selEl.closest('.field');
+      const lblEl = fieldEl ? fieldEl.querySelector(':scope > label') : null;
+      state.designVariants.push({
+        label: lblEl ? lblEl.textContent.trim() : '',
+        value: selEl.value,
+        options: opts.map(o => ({ value: o.value, label: o.textContent.trim() })),
+        el: selEl,
+      });
+    });
   }
   const dz = document.createElement('div');
   dz.className = 'danger-zone';
@@ -10651,6 +10671,7 @@ function inspectorSection(body, blockType, key, title, { open = false } = {}) {
   const isOpen = (mapKey in inspectorOpen) ? inspectorOpen[mapKey] : false;
   const sec = document.createElement('div');
   sec.className = 'insp-sec' + (isOpen ? ' open' : '');
+  sec.dataset.secKey = key;   // stable, language-independent (mobile reads 'layout')
   const head = document.createElement('button');
   head.type = 'button';
   head.className = 'insp-sec-head';
@@ -14247,6 +14268,9 @@ document.addEventListener('keydown', (e) => {
       blockType: b ? b.type : null,
       name: b ? (meta.name || b.type) : null,
       name_cn: b ? (meta.name_cn || b.type) : null,
+      variants: (state.designVariants || []).map((v, i) => ({
+        i, label: v.label, value: v.value, options: v.options,
+      })),
       fields: (state.designFields || []).map((f, i) => ({
         i, label: f.label, section: f.section, value: f.value, swatches: f.swatches,
       })),
@@ -14297,6 +14321,12 @@ document.addEventListener('keydown', (e) => {
           const f = (state.designFields || [])[d.i];
           if (f && typeof f.onChange === 'function') f.onChange(d.value == null ? '' : d.value);
           postDesign();   // re-sync the sheet after the inspector rebuilds
+          break;
+        }
+        case 'setVariant': {                                    // change a block's design
+          const v = (state.designVariants || [])[d.i];
+          if (v && v.el) { v.el.value = d.value; v.el.dispatchEvent(new Event('change')); }
+          postDesign();   // re-sync: a new look may reveal/hide sub-options
           break;
         }
         case 'setPageBg':  applyThemeBgToPreview(d.token || ''); break;  // live, no reload

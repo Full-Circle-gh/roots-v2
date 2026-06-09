@@ -271,6 +271,18 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
   border:1px solid var(--line);border-radius:var(--r-md);margin-bottom:18px;line-height:1.45;}
 .design-hint svg{width:24px;height:24px;color:var(--text-3);opacity:.7;}
 .design-sep{height:1px;background:var(--line);margin:0 0 18px;}
+/* design / layout variant chips (the "which look" switcher) */
+.vrow{margin-bottom:14px;}
+.vrow:last-child{margin-bottom:0;}
+.vlabel{font:500 13px var(--f-sans);color:var(--text-2);margin-bottom:8px;}
+.vchips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;}
+.vchips::-webkit-scrollbar{display:none;}
+.vchip{flex:0 0 auto;border:1.5px solid var(--line);background:var(--bg-elev-1);color:var(--text-2);
+  font:600 13px var(--f-sans);padding:9px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;
+  transition:transform .1s var(--ease),border-color .1s,background .1s,color .1s;}
+.vchip:active{transform:scale(.95);}
+.vchip.on{background:var(--accent);border-color:var(--accent);color:#fff;}
 
 /* toast */
 .toast{position:absolute;left:50%;bottom:calc(var(--bottom-h) + 20px);transform:translateX(-50%) translateY(12px);
@@ -852,7 +864,7 @@ function renderDesignBlock() {
     host.innerHTML =
       '<div class="design-hint">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>' +
-        '<div>' + cuT('Tap a block to change its colours.', '点选一个模块来更改它的配色。') + '</div>' +
+        '<div>' + cuT('Tap a block to change its design & colours.', '点选一个模块来更改它的设计与配色。') + '</div>' +
       '</div>' +
       '<div class="design-sep"></div>';
     return;
@@ -862,7 +874,7 @@ function renderDesignBlock() {
   if (!d || d.blockId !== M.selectedId) {
     host.innerHTML =
       '<div class="design-hint">' +
-        '<div>' + cuT('Loading colours…', '正在加载配色…') + '</div>' +
+        '<div>' + cuT('Loading…', '加载中…') + '</div>' +
       '</div>' +
       '<div class="design-sep"></div>';
     return;
@@ -871,18 +883,34 @@ function renderDesignBlock() {
     '<div class="design-blockhead">' +
       '<div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="6.5" cy="11.5" r="2.5"/><circle cx="17.5" cy="14.5" r="2.5"/><circle cx="9" cy="18" r="2.5"/></svg></div>' +
       '<div><div class="nm">' + esc(cuT(d.name, d.name_cn) || d.blockType) + '</div>' +
-        '<div class="sb">' + cuT('Colours for this block', '该模块的配色') + '</div></div>' +
+        '<div class="sb">' + cuT('Design & colours for this block', '该模块的设计与配色') + '</div></div>' +
     '</div>';
 
+  const variants = d.variants || [];
   const fields = d.fields || [];
-  if (!fields.length) {
-    html +=
-      '<div class="design-hint">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8h.01M11 12h1v4h1"/></svg>' +
-        '<div>' + cuT('This block has no colour options.', '此模块没有可调配色。') + '</div>' +
-      '</div>';
-  } else {
-    // Group by the inspector section heading, preserving first-seen order.
+
+  // ── Design / layout — the "which look" switcher (chips). Tapping one swaps
+  //    the block's design; the live preview morphs instantly. ──────────────
+  if (variants.length) {
+    html += '<div class="csec"><div class="t">' + cuT('Design', '版式') + '</div>';
+    variants.forEach(v => {
+      html += '<div class="vrow">';
+      if (v.label) html += '<div class="vlabel">' + esc(v.label) + '</div>';
+      html += '<div class="vchips">';
+      (v.options || []).forEach(o => {
+        const on = String(o.value) === String(v.value) ? ' on' : '';
+        // Chip shows the short name; the dash-separated description is the tooltip.
+        const short = String(o.label || o.value).split(/\s[—–-]\s/)[0].trim();
+        html += '<button class="vchip' + on + '" data-i="' + v.i + '" data-v="' + esc(o.value) + '"' +
+          ' title="' + esc(o.label) + '">' + esc(short) + '</button>';
+      });
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
+
+  // ── Colours — grouped by the inspector section heading (first-seen order). ─
+  if (fields.length) {
     const order = [];
     const groups = {};
     fields.forEach(f => {
@@ -909,9 +937,29 @@ function renderDesignBlock() {
       html += '</div>';
     });
   }
+
+  // Nothing adjustable on this block.
+  if (!variants.length && !fields.length) {
+    html +=
+      '<div class="design-hint">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8h.01M11 12h1v4h1"/></svg>' +
+        '<div>' + cuT('This block has no design options.', '此模块没有可调设计。') + '</div>' +
+      '</div>';
+  }
+
   html += '<div class="design-sep"></div>';
   host.innerHTML = html;
 
+  // Design swap — drive the real desktop <select> via the bridge.
+  host.querySelectorAll('.vchip[data-i]').forEach(ch => {
+    ch.addEventListener('click', () => {
+      const i = parseInt(ch.dataset.i, 10);
+      const v = ch.dataset.v;
+      const vv = (M.design.variants || [])[i];
+      if (vv) { vv.value = v; renderDesignBlock(); }   // optimistic
+      send('setVariant', { i, value: v });
+    });
+  });
   host.querySelectorAll('.sw[data-i]').forEach(sw => {
     sw.addEventListener('click', () => {
       const i = parseInt(sw.dataset.i, 10);
