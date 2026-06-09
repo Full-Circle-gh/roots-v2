@@ -829,7 +829,7 @@ function buildBgSwatches() {
     s.className = 'sw' + (b.none ? ' none' : '');
     if (!b.none) s.style.background = b.hex;
     s.title = b.none ? cuT('Default', '默认') : b.token;
-    s.onclick = () => setBg(b.token, s);
+    s.onclick = () => { setBg(b.token, s); closeSheet(); };
     s.dataset.token = b.token == null ? '' : b.token;
     host.appendChild(s);
   });
@@ -958,6 +958,9 @@ function renderDesignBlock() {
       const vv = (M.design.variants || [])[i];
       if (vv) { vv.value = v; renderDesignBlock(); }   // optimistic
       send('setVariant', { i, value: v });
+      // Pick made → dismiss so the live preview is visible. Preview-stage is the
+      // one exception: it's a preview-only toggle, so keep the sheet open to flip.
+      if (!isPreviewVariant(vv)) closeSheet();
     });
   });
   host.querySelectorAll('.sw[data-i]').forEach(sw => {
@@ -968,8 +971,16 @@ function renderDesignBlock() {
       const f = (M.design.fields || [])[i];
       if (f) { f.value = v; renderDesignBlock(); }
       send('setColor', { i, value: v });
+      closeSheet();   // colour picked → dismiss so the result is visible
     });
   });
+}
+
+// Preview-stage is a preview-only control (pick a step to see how each order
+// state looks) — tapping it should NOT close the Design sheet.
+function isPreviewVariant(v) {
+  const l = (v && v.label || '').trim();
+  return l === 'Preview stage' || l === '预览阶段';
 }
 
 // Theme & brand lives in its own sheet, opened from the ⋯ menu.
