@@ -8500,7 +8500,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                       (SELECT SUM(rss.physical_qty)
                          FROM retail_store_stock rss
                          JOIN retail_stores      rs ON rs.id = rss.store_id
-                        WHERE rss.product_id = products.id AND rs.is_active = 1),
+                        WHERE rss.product_id = p.id AND rs.is_active = 1),
                       stock_qty
                     ) AS effective_stock,
                     is_published, sort_order, updated_at,
@@ -8510,9 +8510,9 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     variant_group_id, variant_label, variant_sort,
                     is_batch_made,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
-                    ${hasImageFallbackSql('products')} AS has_image_data,
+                    ${hasImageFallbackSql('p')} AS has_image_data,
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks
-               FROM store_products WHERE COALESCE(is_active, 1) = 1`;
+               FROM store_products p WHERE COALESCE(is_active, 1) = 1`;
   const params = [];
   if (q) {
     sql += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)';
