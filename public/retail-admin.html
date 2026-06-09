@@ -7508,7 +7508,7 @@
                   </select></div>
               </div>
               <div class="field"><label class="stacked">Stock by location · 各门店库存</label>
-                <div id="pd-store-stocks" class="muted" style="font-size:13px;line-height:1.7;">—</div>
+                <div id="pd-store-stocks" style="font-size:13px;line-height:1.7;">—</div>
               </div>
             </section>
             <section class="pd-card">
@@ -23145,24 +23145,71 @@ function pdOnTopCatChange() {
   pdFillSubCats(document.getElementById('pd-top-category').value, '');
 }
 
-// Read-only "stock by location" summary in the product editor. The store now
-// holds independent stock per location (Tianhe / Yuexiu); this shows the live
-// per-store physical_qty. (Editing per-store stock is a separate surface.)
+// Editable "stock by location" panel in the product editor. The store holds
+// independent stock per location (Tianhe / Yuexiu) in retail_store_stock; each
+// row is a number input that writes back via the per-store adjust endpoint
+// (PATCH /stores/:storeId/stock/:productId), so a ledger row is recorded.
+// New (unsaved) products show a hint — stock needs a product id to attach to.
 function pdLoadStoreStocks(id) {
   const box = document.getElementById('pd-store-stocks');
   if (!box) return;
-  if (id == null) { box.textContent = cuT('Set per-location stock after saving', '保存后按门店设置库存'); return; }
+  box.dataset.productId = (id == null ? '' : String(id));
+  if (id == null) { box.className = 'muted'; box.textContent = cuT('Set per-location stock after saving', '保存后按门店设置库存'); return; }
+  box.className = '';
   box.textContent = '…';
   fetch('/api/retail-admin/products/' + id + '/store-stocks', { credentials: 'same-origin' })
     .then(r => r.json())
     .then(j => {
-      if (!j || !j.success || !Array.isArray(j.data) || !j.data.length) { box.textContent = '—'; return; }
-      box.innerHTML = j.data.map(s => {
+      if (!j || !j.success || !Array.isArray(j.data) || !j.data.length) { box.className = 'muted'; box.textContent = '—'; return; }
+      box.className = '';
+      const rows = j.data.map(s => {
         const nm = (_lang === 'cn' ? (s.name_cn || s.name_en) : (s.name_en || s.code)) || s.code;
-        return '<span style="display:inline-block;margin-right:16px;"><b style="color:var(--text-1);">' + escapeHtml(nm) + '</b>: ' + (s.physical_qty || 0) + '</span>';
+        const qty = s.physical_qty || 0;
+        return '<div style="display:flex;align-items:center;gap:10px;margin:4px 0;">' +
+                 '<b style="color:var(--text-1);min-width:96px;">' + escapeHtml(nm) + '</b>' +
+                 '<input type="number" min="0" step="1" value="' + qty + '" data-orig="' + qty + '" data-store-id="' + s.store_id + '" ' +
+                   'style="width:96px;padding:6px 8px;border:1px solid var(--line,#d8d2c4);border-radius:8px;font-size:13px;">' +
+               '</div>';
       }).join('');
+      box.innerHTML = rows +
+        '<div style="margin-top:8px;"><button type="button" id="pd-store-stocks-save" class="btn small" ' +
+          'onclick="pdSaveStoreStocks()">' + cuT('Save stock', '保存库存') + '</button>' +
+        '<span id="pd-store-stocks-msg" class="muted" style="margin-left:10px;font-size:12px;"></span></div>';
     })
-    .catch(() => { box.textContent = '—'; });
+    .catch(() => { box.className = 'muted'; box.textContent = '—'; });
+}
+// Persist any changed per-store quantities. Each changed row is PATCHed
+// independently (set physical_qty); the endpoint routes through adjustStock so
+// every change lands in retail_stock_ledger. Untouched rows are skipped.
+async function pdSaveStoreStocks() {
+  const box = document.getElementById('pd-store-stocks');
+  if (!box) return;
+  const id = box.dataset.productId;
+  if (!id) return;
+  const msg = document.getElementById('pd-store-stocks-msg');
+  const inputs = Array.from(box.querySelectorAll('input[data-store-id]'));
+  const changed = inputs.filter(i => String(i.value) !== String(i.dataset.orig));
+  if (!changed.length) { if (msg) msg.textContent = 'No changes · 无改动'; return; }
+  const btn = document.getElementById('pd-store-stocks-save');
+  if (btn) btn.disabled = true;
+  if (msg) msg.textContent = cuT('Saving…', '保存中…');
+  let ok = 0, fail = 0;
+  for (const inp of changed) {
+    const qty = Math.max(0, parseInt(inp.value, 10) || 0);
+    try {
+      const r = await fetch('/api/retail-admin/stores/' + inp.dataset.storeId + '/stock/' + id, {
+        method: 'PATCH', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ physical_qty: qty, reason: 'manual' }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j && j.success !== false) { inp.value = qty; inp.dataset.orig = String(qty); ok++; }
+      else { fail++; }
+    } catch (e) { fail++; }
+  }
+  if (btn) btn.disabled = false;
+  if (fail) { toast('Some stock updates failed · 部分库存更新失败', 'err'); if (msg) msg.textContent = ''; }
+  else { toast('Stock updated · 库存已更新'); if (msg) msg.textContent = 'Saved · 已保存'; }
 }
 function pdOpen(id) {
   const p = id != null ? (PA_PRODUCTS || []).find(x => x.id === id) : null;

@@ -224,9 +224,12 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
   const product = db.prepare('SELECT id FROM store_products WHERE id = ?').get(productId);
   if (!product) return res.status(404).json({ success: false, error: 'product_not_found' });
 
-  // Store-scoped access. Admin is always allowed; everyone else must be
+  // Store-scoped access. A Mini App Backend operator (req.backendUser) has
+  // already passed the tenant gate in requireRetailAdmin and manages all of the
+  // tenant's stores, so the kitchen "assigned store" restriction doesn't apply.
+  // For kitchen sessions: admin is always allowed; everyone else must be
   // assigned to this specific store.
-  if (req.user.role !== 'admin') {
+  if (!req.backendUser && req.user.role !== 'admin') {
     const u = db.prepare('SELECT retail_store_id FROM users WHERE id = ?').get(req.user.id);
     if (!u || u.retail_store_id !== storeId) {
       return res.status(403).json({ success: false, error: 'store_not_assigned' });
