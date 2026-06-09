@@ -586,7 +586,7 @@ LANGUAGES: Only Chinese copy is provided. Fill the _cn fields from it, then WRIT
 LANGUAGES: Only Chinese copy is provided. Fill the _cn fields and leave every _en field as an empty string (""). Do not invent English — the operator will write it.`;
 }
 
-router.post('/api/ai/compose-blocks', requireAuth, requirePermission('retail', 'products'), express.json(), async (req, res) => {
+const composeBlocksHandler = async (req, res) => {
   const _provider = pickProvider();
   if (!providerKey(_provider)) {
     return res.status(503).json({
@@ -668,7 +668,16 @@ router.post('/api/ai/compose-blocks', requireAuth, requirePermission('retail', '
     if (e.status)            return res.status(502).json({ error: e.message });
     res.status(500).json({ error: e.message });
   }
-});
+};
+// Kitchen App realm — staff authed via req.session.userId + the `retail` perm.
+router.post('/api/ai/compose-blocks', requireAuth, requirePermission('retail', 'products'), express.json(), composeBlocksHandler);
+// Mini App Backend realm — operators carry req.backendUser (req.session.backendUserId),
+// NOT req.session.userId, so the kitchen-authed route above 401s "Not authenticated"
+// for them. requireRetailAdmin accepts both realms and shims req.user from the tenant
+// operator, so the shared handler's logActivity(req.user.id, …) still works. Lets the
+// store product editor's "🎨 Design" auto-compose run for backend operators.
+const { requireRetailAdmin } = require('./retail');
+router.post('/api/retail-admin/ai/compose-blocks', requireRetailAdmin, express.json(), composeBlocksHandler);
 
 // ─────────────────────────────────────────────────────────────────────
 // SPROUT · 苗 — Conversational agent with read-only DB tools.

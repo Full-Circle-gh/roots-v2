@@ -24777,7 +24777,7 @@ async function pdAutoComposeBlocks(id, btn) {
   const translate = !(textEn && textCn);
   const prog = pdComposeProgress();
   try {
-    const r = await fetch('/api/ai/compose-blocks', {
+    const r = await fetch('/api/retail-admin/ai/compose-blocks', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
       body: JSON.stringify({
         text_en: textEn, text_cn: textCn, translate,
