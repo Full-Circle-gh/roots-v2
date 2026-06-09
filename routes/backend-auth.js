@@ -100,6 +100,20 @@ try {
   }
 } catch (e) { console.error('[backend-auth] catalog-mode migration', e); }
 
+// One-time: flip Roots (#1) to 'self'. The store catalog was forked into its
+// own store_products table (the kitchen `products` table no longer drives the
+// shop), so the Mini App Backend now OWNS the store catalog + per-store stock.
+// 'self' lifts the upstream API locks and drops the catalog-upstream CSS, so
+// the in-page product editor (create/edit/delete + full field set) goes live.
+// Runs after the upstream migration above; a later admin change is preserved.
+try {
+  const done = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('tenant_catalog_mode_roots_self_v1');
+  if (!done) {
+    db.prepare("UPDATE tenants SET product_catalog_mode = 'self' WHERE id = 1").run();
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('tenant_catalog_mode_roots_self_v1');
+  }
+} catch (e) { console.error('[backend-auth] catalog-mode self migration', e); }
+
 // Boot-time nag if the seeded operator still holds the public default password.
 try {
   const owner = db.prepare("SELECT password FROM tenant_users WHERE username = 'owner' ORDER BY id ASC LIMIT 1").get();

@@ -7466,13 +7466,25 @@
             </label>
             <section class="pd-card">
               <div class="pd-card-h">Pricing · 价格</div>
-              <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
+              <div class="pd-row2">
+                <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
+                <div class="field"><label class="stacked">Was price · 划线价 <span class="muted" style="font-weight:400;">(optional)</span></label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="strike-through"></div>
+              </div>
             </section>
             <section class="pd-card">
-              <div class="pd-card-h">Inventory · 库存</div>
+              <div class="pd-card-h">Stock &amp; status · 库存与状态</div>
               <div class="pd-row2">
-                <div class="field"><label class="stacked">Stock · 库存</label><input type="number" id="pd-stock" min="0" step="1"></div>
-                <div class="field"><label class="stacked">SKU · 货号</label><input type="text" id="pd-sku" placeholder="optional · 可选"></div>
+                <div class="field"><label class="stacked">SKU · 货号</label><input type="text" id="pd-sku" placeholder="required · 必填"></div>
+                <div class="field"><label class="stacked">Status · 状态</label>
+                  <select id="pd-status">
+                    <option value="Active">Active · 在售</option>
+                    <option value="Inactive">Inactive · 停售</option>
+                    <option value="Seasonal">Seasonal · 季节性</option>
+                    <option value="Coming Soon">Coming Soon · 即将上架</option>
+                  </select></div>
+              </div>
+              <div class="field"><label class="stacked">Stock by location · 各门店库存</label>
+                <div id="pd-store-stocks" class="muted" style="font-size:13px;line-height:1.7;">—</div>
               </div>
             </section>
             <section class="pd-card">
@@ -7491,6 +7503,7 @@
                 </select>
               </div>
               <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
+              <div class="field"><label class="stacked">Free of (allergens) · 不含 <span class="muted" style="font-weight:400;">(comma-separated)</span></label><input type="text" id="pd-free-of" placeholder="gluten, nuts, soy"></div>
               <div class="field">
                 <label class="stacked">Shipping · 配送方式</label>
                 <div style="display:flex;gap:16px;align-items:center;padding-top:4px;">
@@ -7499,6 +7512,21 @@
                 </div>
               </div>
             </section>
+            <details class="pd-card" style="padding:0;">
+              <summary style="padding:10px 12px;cursor:pointer;font-weight:600;font-size:13px;">Advanced · 高级</summary>
+              <div style="padding:0 12px 12px;">
+                <div class="field"><label class="stacked">Barcode · 条码</label><input type="text" id="pd-barcode" placeholder="EAN / scan code"></div>
+                <div class="field">
+                  <label class="stacked">Flags · 标记</label>
+                  <div style="display:flex;flex-direction:column;gap:7px;padding-top:4px;">
+                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-market" style="width:15px;height:15px;"> Sold at markets · 市集销售</label>
+                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-batch-made" style="width:15px;height:15px;"> Made fresh in batches · 分批现做</label>
+                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-restock-only" style="width:15px;height:15px;"> Restock-only, internal · 仅内部补货</label>
+                  </div>
+                </div>
+                <div class="field"><label class="stacked">Internal notes · 内部备注</label><textarea id="pd-notes" rows="2" style="width:100%;resize:vertical;font:inherit;padding:6px 8px;"></textarea></div>
+              </div>
+            </details>
           </aside>
         </div>
         <div class="pu-editor-foot" style="justify-content:space-between;">
@@ -23562,14 +23590,38 @@ function pdOnTopCatChange() {
   pdFillSubCats(document.getElementById('pd-top-category').value, '');
 }
 
+// Read-only "stock by location" summary in the product editor. The store now
+// holds independent stock per location (Tianhe / Yuexiu); this shows the live
+// per-store physical_qty. (Editing per-store stock is a separate surface.)
+function pdLoadStoreStocks(id) {
+  const box = document.getElementById('pd-store-stocks');
+  if (!box) return;
+  if (id == null) { box.textContent = cuT('Set per-location stock after saving', '保存后按门店设置库存'); return; }
+  box.textContent = '…';
+  fetch('/api/retail-admin/products/' + id + '/store-stocks', { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(j => {
+      if (!j || !j.success || !Array.isArray(j.data) || !j.data.length) { box.textContent = '—'; return; }
+      box.innerHTML = j.data.map(s => {
+        const nm = (_lang === 'cn' ? (s.name_cn || s.name_en) : (s.name_en || s.code)) || s.code;
+        return '<span style="display:inline-block;margin-right:16px;"><b style="color:var(--text-1);">' + escapeHtml(nm) + '</b>: ' + (s.physical_qty || 0) + '</span>';
+      }).join('');
+    })
+    .catch(() => { box.textContent = '—'; });
+}
 function pdOpen(id) {
   const p = id != null ? (PA_PRODUCTS || []).find(x => x.id === id) : null;
   const set = (el, v) => { const n = document.getElementById(el); if (n) n.value = (v == null ? '' : v); };
   document.getElementById('pd-id').value = p ? p.id : '';
   document.getElementById('pd-title').textContent = p ? (p.name_en || p.name_cn || 'Product · 产品') : 'New product · 新增产品';
   set('pd-name-en', p && p.name_en); set('pd-name-cn', p && p.name_cn);
-  set('pd-price', p ? p.sell_price : ''); set('pd-stock', p ? (p.stock_qty != null ? p.stock_qty : 0) : '');
+  set('pd-price', p ? p.sell_price : ''); set('pd-compare', p && p.compare_at_price);
   set('pd-sku', p && p.sku); set('pd-weight', p && p.size);
+  set('pd-status', p ? (p.status || 'Active') : 'Active');
+  set('pd-free-of', p && p.free_of); set('pd-barcode', p && p.barcode); set('pd-notes', p && p.notes);
+  const ck = (el, v) => { const n = document.getElementById(el); if (n) n.checked = !!v; };
+  ck('pd-is-market', p && p.is_market === 1); ck('pd-is-batch-made', p && p.is_batch_made === 1); ck('pd-is-restock-only', p && p.is_restock_only === 1);
+  pdLoadStoreStocks(p ? p.id : null);
   set('pd-badge', p ? pdBadgeOf(p.tags) : '');
   // Description is always the Classic (rich-text) editor now. A legacy plain
   // row is promoted to HTML so old text still shows formatted; on next save it
@@ -24110,6 +24162,7 @@ function pdRteClean(html) { const d = document.createElement('div'); d.innerHTML
 async function pdSave() {
   const id = document.getElementById('pd-id').value;
   const g = el => (document.getElementById(el) && document.getElementById(el).value || '').trim();
+  const ckd = el => { const n = document.getElementById(el); return n && n.checked ? 1 : 0; };
   const modes = [];
   if (document.getElementById('pd-ship-air').checked)  modes.push('air');
   if (document.getElementById('pd-ship-land').checked) modes.push('land');
@@ -24124,7 +24177,10 @@ async function pdSave() {
     top_category: g('pd-top-category'), subcategory: g('pd-subcategory'),
     tags: g('pd-badge'),
     sell_price: parseFloat(g('pd-price')) || 0,
-    stock_qty: parseInt(g('pd-stock'), 10) || 0,
+    compare_at_price: parseFloat(g('pd-compare')) || 0,
+    status: g('pd-status') || 'Active',
+    free_of: g('pd-free-of'), barcode: g('pd-barcode'), notes: g('pd-notes'),
+    is_market: ckd('pd-is-market'), is_restock_only: ckd('pd-is-restock-only'), is_batch_made: ckd('pd-is-batch-made'),
     ship_modes: modes.join(',') || 'air,land',
     description_en: descEn, description_cn: descCn, description_format: descFormat,
     is_published: document.getElementById('pd-published').checked ? 1 : 0,
