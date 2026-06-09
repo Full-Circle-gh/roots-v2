@@ -1618,7 +1618,10 @@
      hits Expand on the editor or switches to grid/compact catalogue scan. */
   .pa-split { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
   .pa-split-list { min-width: 0; }
-  .pa-split-editor { min-width: 0; position: sticky; top: 12px; }
+  /* The editor flows at full height and the whole page scrolls (one scroll, not
+     a pane-within-a-page). Deliberately NOT sticky: a sticky sidebar taller
+     than the viewport pins its top and hides its bottom. */
+  .pa-split-editor { min-width: 0; }
   @media (max-width: 1024px) { .pa-split { grid-template-columns: 1fr; } .pa-split-editor { position: static; } }
   /* Catalogue-scan mode: grid/compact view hides the editor so the list takes
      the full page width — same flow as before. List view → split. */
@@ -1630,43 +1633,13 @@
   /* Selected row highlight — picks out the product currently loaded in the
      docked editor so the operator never loses their place after a save. */
   .pa-row.is-selected { border-color: var(--brass); background: var(--bg-elev-1); }
-  /* Docked editor: drop the modal sizing (centered 1180×90vh) and let it fill
-     the right column instead. The body still scrolls internally. */
-  .pa-split-editor #pd-editor { width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 32px); }
+  /* Docked editor: drop the modal sizing (centered 1180×90vh) and let it grow
+     to its content in the right column. No max-height → no internal scroll; the
+     whole page scrolls through it instead, so the edit form isn't squeezed into
+     a short box. */
+  .pa-split-editor #pd-editor { width: auto; height: auto; max-width: 100%; max-height: none; }
   /* Empty state shown in the editor pane when no product is selected. */
   .pd-empty { background: var(--bg-pane); border: 1px dashed var(--line-soft); border-radius: 12px; padding: 56px 24px; text-align: center; color: var(--text-3); font-family: var(--f-sans); }
-
-  /* ── Products workspace = app-shell (desktop ≥1025px). Pin the whole
-     workspace to fill the screen below the header (topbar 56 + tab nav 42 =
-     98px) so the PAGE never scrolls — the list and the editor each scroll
-     inside their OWN column. Using position:fixed (top:98px;bottom:0) instead
-     of 100vh math keeps it zoom-safe, the same trick the embedded editors use.
-     ≤1024px the split is single-column, so we keep normal page flow there. ── */
-  @media (min-width: 1025px) {
-    .pa-workspace {
-      position: fixed; top: 98px; left: 0; right: 0; bottom: 0; z-index: 1;
-      max-width: min(1440px, 92vw); margin: 0 auto;
-      padding: var(--s5) var(--s6) var(--s4);
-      display: flex; flex-direction: column;
-      overflow: hidden;
-    }
-    /* h2 / helper / KPIs / toolbar keep their natural height; the split fills
-       the rest, and min-height:0 lets its columns shrink so they can scroll. */
-    .pa-workspace > .pa-split {
-      flex: 1 1 auto; min-height: 0; margin: 0;
-      grid-template-rows: minmax(0, 1fr); align-items: stretch;
-    }
-    /* Two independent scrollers — the wheel moves whatever is under the cursor;
-       overscroll-behavior:contain stops any bounce to the (non-scrolling) page. */
-    .pa-workspace .pa-split-list   { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-    .pa-workspace .pa-split-editor { min-height: 0; overflow: hidden; position: static; top: auto; }
-    .pa-workspace .pa-split-editor #pd-editor { height: 100%; max-height: none; }
-    /* Pager (Showing / Prev · Next) stays pinned while the product list scrolls. */
-    .pa-workspace .pa-split-list > #pa-pager {
-      position: sticky; top: 0; z-index: 2;
-      background: var(--bg-app); margin: 0 0 var(--s3); padding-bottom: var(--s2);
-    }
-  }
   .pd-empty .pd-empty-h { font-size: 13px; color: var(--text-2); margin: 0 0 6px; font-weight: 500; }
   .pd-empty .pd-empty-sub { font-size: 12px; color: var(--text-4); margin: 0; }
 
@@ -7308,12 +7281,6 @@
 
   <!-- ─── PRODUCTS ─── -->
   <section id="tab-products">
-    <!-- Workspace shell — pinned to fill the screen below the header so the page
-         itself never scrolls; the list and the editor each scroll inside their
-         own column (desktop). The #pa-edit-bg modal below is deliberately kept
-         OUTSIDE this wrapper: position:fixed makes .pa-workspace a stacking
-         context, which would otherwise trap the modal behind the topbar. -->
-    <div class="pa-workspace">
     <h2>Products · 产品</h2>
     <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
       Mini-app product surface — <b>Designer Sections</b>, keywords, tagline.
@@ -7583,7 +7550,6 @@
       </div>
       </div><!-- /#pd-bg pa-split-editor -->
     </div><!-- /#pa-split -->
-    </div><!-- /.pa-workspace -->
 
     <!-- ── Designer Sections editor modal — split-pane (forms + live preview) ── -->
     <div id="pa-edit-bg" class="pu-editor-bg">
@@ -23246,6 +23212,14 @@ function pdShowDocked() {
   if (split) split.classList.remove('pa-split-listonly');
   if (empty) empty.style.display = 'none';
   if (ed)    ed.style.display = '';
+  // With the whole page scrolling (no internal editor scroll), picking a
+  // product low in a long list would render the editor above the fold. Bring
+  // its top just under the sticky header (98px) — but only if it's meaningfully
+  // out of view, so clicking through items near the top doesn't jump around.
+  if (ed) {
+    const targetY = Math.max(0, window.scrollY + ed.getBoundingClientRect().top - 110);
+    if (Math.abs(targetY - window.scrollY) > 40) window.scrollTo({ top: targetY, behavior: 'smooth' });
+  }
 }
 function pdClose() {
   // Deselect — the editor returns to the empty-state placeholder. (Closing the
