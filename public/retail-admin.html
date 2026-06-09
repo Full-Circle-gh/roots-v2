@@ -1585,7 +1585,7 @@
   }
   .pa-list-rich .pa-row, .pa-rowhead {
     display: grid;
-    grid-template-columns: 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 88px 96px auto;
+    grid-template-columns: 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px 64px;
     align-items: center; gap: var(--s3);
   }
   .pa-list-rich .pa-row {
@@ -1624,6 +1624,44 @@
   .pa-stock.is-low .pa-stock-dot { background: var(--warn); }
   .pa-stock.is-out { color: var(--danger); font-weight: 600; }
   .pa-stock.is-out .pa-stock-dot { background: var(--danger); }
+  /* Editable per-store stock — shown in the Stock column when a single store is
+     picked in the switcher. Sits in the same 104px cell as the read-only pill. */
+  .pa-stock-input {
+    width: 72px; padding: 5px 8px; text-align: right;
+    font-variant-numeric: tabular-nums; font-size: 13px;
+    border: 1px solid var(--line); border-radius: 7px;
+    background: var(--bg-elev-1); color: var(--text-1);
+    font-family: var(--f-sans);
+  }
+  .pa-stock-input:focus { outline: none; border-color: var(--brass, #B08D57); }
+  .pa-stock-input.is-saved { border-color: #6B8E6F; background: rgba(107,142,111,.10); }
+  .pa-stock-input.is-err   { border-color: var(--danger); background: rgba(200,60,60,.08); }
+  .pa-stock-input::-webkit-outer-spin-button,
+  .pa-stock-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  /* Variant family in store mode: the per-store total isn't inline-editable
+     (each size has its own count) — show it quiet with a lock affordance. */
+  .pa-stock-locked { color: var(--text-3); cursor: default; }
+
+  /* Store switcher — "All · 全部 | Tianhe | Yuexiu" above the overview table.
+     Picks which store's stock the Stock column shows/edits. */
+  .pa-store-seg {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin: 0 0 var(--s3); font-family: var(--f-sans);
+  }
+  .pa-store-seg .pa-store-lbl {
+    font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--text-4); font-weight: 600;
+  }
+  .pa-store-seg .pa-store-btns { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  .pa-store-seg .pa-store-btn {
+    padding: 6px 12px; font-size: 12px; border: none; cursor: pointer;
+    background: var(--bg-elev-1); color: var(--text-2);
+    border-left: 1px solid var(--line); font-family: var(--f-sans);
+  }
+  .pa-store-seg .pa-store-btn:first-child { border-left: none; }
+  .pa-store-seg .pa-store-btn.active { background: var(--brass, #B08D57); color: #fff; }
+  .pa-store-seg .pa-store-hint { font-size: 11px; color: var(--text-4); }
+
   /* In the rich table the dup button shares the status cell — reveal on hover. */
   .pa-list-rich .pa-dup-row { margin-left: 4px; }
 
@@ -7522,6 +7560,11 @@
         </div>
       </div>
     </div>
+
+    <!-- Store switcher — only shown when the tenant runs 2+ stores. Picks which
+         store's stock the Stock column shows; "All" = read-only combined total.
+         Populated by paRenderStoreSeg(); hidden by default. -->
+    <div id="pa-store-seg" class="pa-store-seg" style="display:none"></div>
 
     <!-- ── Products page: list on the left, docked editor on the right. The
          list (pager + grid + empty) and the editor live side-by-side in one
@@ -23277,6 +23320,15 @@ document.querySelector('[data-tab="customers"]').addEventListener('click', () =>
 let PA_LOADED = false;
 let PA_PRODUCTS = [];   // server response
 let PA_CURRENT = null;  // currently open product (when modal is showing)
+// Per-store stock for the overview table. With 2+ stores the Stock column can
+// edit ONE store at a time (picked via the switcher); 'all' = read-only sum.
+//   PA_STORES — [{id, code, name_en, name_cn}] active stores
+//   PA_STORE  — 'all' | storeId(number), the store the Stock column edits
+//   PA_STOCK  — productId -> { storeId(number): physical_qty }  (from /inventory/grid)
+let PA_STORES = [];
+let PA_STORE  = (() => { try { const v = localStorage.getItem('pa-store'); return v && v !== 'all' ? (parseInt(v, 10) || 'all') : 'all'; } catch { return 'all'; } })();
+let PA_STOCK  = {};
+let PA_STOCK_LOADED = false;
 // Product layout: 'grid' (rich cards) | 'compact' (denser) | 'list' (one row
 // each). Separate from the "View" display-tweaks popover; persisted per-browser.
 let PA_VIEW = (() => { try { const v = localStorage.getItem('pa-view'); return (v === 'grid' || v === 'compact' || v === 'list') ? v : 'list'; } catch { return 'list'; } })();
@@ -23572,8 +23624,113 @@ async function paLoad() {
     pdLoadCatTree().then(paFillCatFilter);   // re-label bilingually once the tree lands
     paRender();
     paRenderKpis(true);   // animated count-up once on load
+    paLoadStoreStock();   // per-store stock + store list (drives the switcher)
   } catch (e) {
     grid.innerHTML = `<div class="err" style="grid-column:1/-1;text-align:center;padding:40px">Failed to load products: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ── Per-store stock ───────────────────────────────────────────────────────
+// One fetch of the inventory grid gives us BOTH the active store list (for the
+// switcher) and every product's physical_qty per store (so the Stock column can
+// show/edit a single store's count). Upstream-catalog tenants don't manage stock
+// here, so skip the whole thing for them.
+async function paLoadStoreStock() {
+  if (CATALOG_MODE === 'upstream') return;
+  try {
+    const res = await fetch('/api/retail-admin/inventory/grid');
+    const j = await res.json();
+    if (!j.success) throw new Error(j.error || 'load_failed');
+    PA_STORES = (j.data && j.data.stores) || [];
+    PA_STOCK = {};
+    ((j.data && j.data.products) || []).forEach(p => {
+      const m = {};
+      (p.stocks || []).forEach(s => { m[s.store_id] = Number(s.physical_qty) || 0; });
+      PA_STOCK[p.product_id] = m;
+    });
+    PA_STOCK_LOADED = true;
+    // A remembered store that no longer exists falls back to "All".
+    if (PA_STORE !== 'all' && !PA_STORES.some(s => s.id === PA_STORE)) PA_STORE = 'all';
+    paRenderStoreSeg();
+    paRender();   // stock cells now know per-store counts
+  } catch (e) {
+    PA_STOCK_LOADED = false;   // leave the column on the read-only combined total
+  }
+}
+
+// Switcher bar: "STORE  [All · 全部 | Tianhe | Yuexiu]". Only meaningful with 2+
+// stores — a single-store tenant just sees the plain total, so hide it.
+function paRenderStoreSeg() {
+  const bar = document.getElementById('pa-store-seg');
+  if (!bar) return;
+  // Only the overview table (list view, editor closed) has an editable Stock
+  // column — hide the switcher everywhere else so it can't imply it does nothing.
+  const overview = PA_VIEW === 'list' && !_paEditorOpen;
+  if (CATALOG_MODE === 'upstream' || PA_STORES.length < 2 || !overview) { bar.style.display = 'none'; return; }
+  const btn = (key, label) =>
+    `<button type="button" class="pa-store-btn${PA_STORE === key ? ' active' : ''}" onclick="paSetStore(${key === 'all' ? "'all'" : key})">${label}</button>`;
+  const btns = [btn('all', cuT('All', '全部'))]
+    .concat(PA_STORES.map(s => btn(s.id, escapeHtml(cuT(s.name_en || s.code, s.name_cn || s.name_en || s.code)))))
+    .join('');
+  const hint = PA_STORE === 'all'
+    ? cuT('Combined stock across all stores — pick a store to edit its counts.',
+          '所有门店库存合计 — 选择某门店即可编辑该店库存。')
+    : cuT('Editing this store’s stock. Variant families show the store total — open them to set each size.',
+          '正在编辑该门店库存。多规格产品显示门店合计 — 打开后可分别设置各规格。');
+  bar.innerHTML =
+    `<span class="pa-store-lbl">${cuT('Stock for', '库存门店')}</span>` +
+    `<span class="pa-store-btns">${btns}</span>` +
+    `<span class="pa-store-hint">${hint}</span>`;
+  bar.style.display = 'flex';
+}
+
+function paSetStore(key) {
+  PA_STORE = key;
+  try { localStorage.setItem('pa-store', String(key)); } catch {}
+  paRenderStoreSeg();
+  paRender();
+}
+
+// Display name for a store id, in the active language.
+function _paStoreName(storeId) {
+  const s = PA_STORES.find(x => x.id === storeId);
+  return s ? cuT(s.name_en || s.code, s.name_cn || s.name_en || s.code) : '';
+}
+
+// Per-store stock for one product (number, default 0).
+function _paStoreQty(productId, storeId) {
+  const m = PA_STOCK[productId];
+  return m ? (Number(m[storeId]) || 0) : 0;
+}
+
+// Save an edited per-store count. Writes via the inventory PATCH endpoint (which
+// records a ledger row), then keeps the local maps + effective_stock in sync so
+// the KPI tiles and grid badges stay honest without a full reload.
+async function paSaveStoreStock(productId, storeId, raw, el) {
+  const qty = Math.max(0, parseInt(raw, 10) || 0);
+  el.classList.remove('is-saved', 'is-err');
+  el.disabled = true;
+  try {
+    const res = await fetch(`/api/retail-admin/stores/${storeId}/stock/${productId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ physical_qty: qty }),
+    });
+    const j = await res.json();
+    if (!j.success) throw new Error(j.error || 'save_failed');
+    if (!PA_STOCK[productId]) PA_STOCK[productId] = {};
+    PA_STOCK[productId][storeId] = qty;
+    el.value = qty;
+    el.classList.add('is-saved');
+    setTimeout(() => el.classList.remove('is-saved'), 1200);
+    // Refresh this product's combined stock so OOS/low badges + KPIs follow.
+    const p = (PA_PRODUCTS || []).find(x => x.id === productId);
+    if (p) p.effective_stock = Object.values(PA_STOCK[productId] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+    paRenderKpis(false);
+  } catch (e) {
+    el.classList.add('is-err');
+    toast(cuT('Couldn’t save stock — ', '库存保存失败 — ') + e.message, 'err');
+  } finally {
+    el.disabled = false;
   }
 }
 
@@ -23619,6 +23776,15 @@ function _paPills(p) {
     ${pub ? '' : '<span class="pa-pill pa-pill-draft" title="Not published in mini-app · 未在小程序上架">Draft</span>'}`;
 }
 
+// Overview table status cell — just the Draft pill. The Designed/Plain "has page
+// design" marker is deliberately omitted here: this list is for scanning stock /
+// price / category, and the design state lives in the editor + grid views.
+function _paDraftPill(p) {
+  return p.is_published === 1
+    ? ''
+    : '<span class="pa-pill pa-pill-draft" title="Not published in mini-app · 未在小程序上架">Draft</span>';
+}
+
 // ── Overview list (full-width "products on the go" table) cell helpers ──
 // A unit is either a lone product or a collapsed variant family; prices and
 // stock fold across the family's members so the row reflects the whole product.
@@ -23641,7 +23807,22 @@ function _paPriceCell(u) {
 }
 // Stock badge: green = healthy, brass = low (≤5), red = out (0). The number is
 // the family's effective stock; an unpublished product still shows its count.
+// When a single store is picked in the switcher the cell shows THAT store's
+// count — an editable input for a lone product, a read-only total for a variant
+// family (each size has its own count, set by opening the product).
 function _paStockCell(u) {
+  if (PA_STORE !== 'all' && PA_STOCK_LOADED) {
+    if (u.group) {
+      const q = u.members.reduce((s, m) => s + _paStoreQty(m.id, PA_STORE), 0);
+      const c = q <= 0 ? 'is-out' : (q <= 5 ? 'is-low' : '');
+      return `<span class="pa-stock pa-stock-locked ${c}" title="${cuT('Open the product to set each size’s stock', '打开产品以分别设置各规格库存')}"><span class="pa-stock-dot"></span>${q <= 0 ? cuT('Out', '缺货') : q}</span>`;
+    }
+    const q = _paStoreQty(u.p.id, PA_STORE);
+    return `<input class="pa-stock-input" type="number" min="0" inputmode="numeric" value="${q}"`
+      + ` aria-label="${cuT('Stock', '库存')}" onclick="event.stopPropagation()"`
+      + ` onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"`
+      + ` onchange="event.stopPropagation(); paSaveStoreStock(${u.p.id}, ${PA_STORE}, this.value, this)">`;
+  }
   const qty = _paUnitStock(u);
   const cls = qty <= 0 ? 'is-out' : (qty <= 5 ? 'is-low' : '');
   const label = qty <= 0 ? cuT('Out', '缺货') : String(qty);
@@ -23773,6 +23954,7 @@ function paRender() {
   const filter = document.getElementById('pa-filter').value;
 
   paRenderKpis(false);   // keep the health strip in sync (no re-animation)
+  paRenderStoreSeg();    // show/hide the per-store switcher for the current view
 
   let rows = PA_PRODUCTS;
   if (q) {
@@ -23832,7 +24014,7 @@ function paRender() {
         <span>${cuT('Product', '产品')}</span>
         <span>${cuT('Category', '分类')}</span>
         <span>SKU</span>
-        <span>${cuT('Stock', '库存')}</span>
+        <span>${(PA_STORE !== 'all' && PA_STOCK_LOADED) ? escapeHtml(cuT('Stock · ', '库存 · ') + _paStoreName(PA_STORE)) : cuT('Stock', '库存')}</span>
         <span class="pa-col-price">${cuT('Price', '价格')}</span>
         <span></span>
       </div>` : '';
@@ -23854,7 +24036,7 @@ function paRender() {
           <div class="pa-col-sku">${sku}</div>
           <div class="pa-col-stock">${_paStockCell(u)}</div>
           ${_paPriceCell(u)}
-          <div class="pa-row-pills">${_paPills(p)}<button class="pa-dup-row" type="button" title="Duplicate · 复制" onclick="event.stopPropagation(); paDuplicate(${p.id})">⧉</button></div>
+          <div class="pa-row-pills">${_paDraftPill(p)}<button class="pa-dup-row" type="button" title="Duplicate · 复制" onclick="event.stopPropagation(); paDuplicate(${p.id})">⧉</button></div>
         </div>`;
       }
       const meta = u.group
