@@ -319,10 +319,7 @@ router.put('/api/admin/users/:userId/retail-store', requireAuth, (req, res, next
 // Lightweight read for the Admin → Integrations panel. Reports whether
 // the Tencent Maps key is configured + how many stores / customer
 // addresses still need coordinates.
-router.get('/api/retail-admin/inventory/geocode-status', requireAuth, (req, res, next) => {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'admin_only' });
-  next();
-}, (req, res) => {
+router.get('/api/retail-admin/inventory/geocode-status', requireRetailAdmin, (req, res) => {
   const storeTotal = db.prepare('SELECT COUNT(*) AS n FROM retail_stores WHERE is_active = 1').get().n;
   const storeMissing = db.prepare('SELECT COUNT(*) AS n FROM retail_stores WHERE is_active = 1 AND (lat IS NULL OR lng IS NULL)').get().n;
   const addrTotal = db.prepare('SELECT COUNT(*) AS n FROM retail_customer_addresses').get().n;
@@ -341,10 +338,7 @@ router.get('/api/retail-admin/inventory/geocode-status', requireAuth, (req, res,
 // Admin-only one-shot. Geocodes every store + every customer address that
 // doesn't yet have lat/lng. Idempotent — safe to re-run. Useful after
 // setting TENCENT_MAPS_KEY for the first time. Returns counts.
-router.post('/api/retail-admin/inventory/geocode-backfill', requireAuth, (req, res, next) => {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'admin_only' });
-  next();
-}, async (req, res) => {
+router.post('/api/retail-admin/inventory/geocode-backfill', requireRetailAdmin, async (req, res) => {
   if (!geocode.configured()) return res.status(400).json({ success: false, error: 'tencent_maps_key_missing' });
 
   const stores = db.prepare('SELECT id, address, city, district FROM retail_stores WHERE is_active = 1 AND (lat IS NULL OR lng IS NULL)').all();
