@@ -1830,14 +1830,24 @@
   body.ent-affiliate:not(.feat-affiliate)     .tabs [data-feat="affiliate"],
   body.ent-reviews:not(.feat-reviews)         .tabs [data-feat="reviews"],
   body.ent-feedback:not(.feat-feedback)       .tabs [data-feat="feedback"],
-  body.ent-socialProof:not(.feat-socialProof) #settings-nav [data-feat="socialProof"] { opacity: .5; }
+  body.ent-socialProof:not(.feat-socialProof) .tabs [data-feat="socialProof"] { opacity: .5; }
   body.ent-membership:not(.feat-membership) .tabs [data-feat="membership"]::after,
   body.ent-affiliate:not(.feat-affiliate)   .tabs [data-feat="affiliate"]::after,
   body.ent-reviews:not(.feat-reviews)       .tabs [data-feat="reviews"]::after,
-  body.ent-feedback:not(.feat-feedback)     .tabs [data-feat="feedback"]::after {
+  body.ent-feedback:not(.feat-feedback)     .tabs [data-feat="feedback"]::after,
+  body.ent-socialProof:not(.feat-socialProof) .tabs [data-feat="socialProof"]::after {
     content: "OFF"; margin-left: 6px; font: 700 9px/1.4 var(--f-mono, monospace);
     letter-spacing: .06em; padding: 2px 5px; border-radius: 6px;
     background: var(--bg-elev-2); color: var(--text-3); border: 1px solid var(--line);
+  }
+  /* In a dropdown popover the row is full-width, so the pill rides the row's
+     right edge (kept clear of the menu border by the button's own padding)
+     instead of trailing the label, where it ran into the border and clipped. */
+  body.ent-membership:not(.feat-membership) .tabs-popover [data-feat="membership"]::after,
+  body.ent-affiliate:not(.feat-affiliate)   .tabs-popover [data-feat="affiliate"]::after,
+  body.ent-reviews:not(.feat-reviews)       .tabs-popover [data-feat="reviews"]::after,
+  body.ent-feedback:not(.feat-feedback)     .tabs-popover [data-feat="feedback"]::after {
+    margin-left: auto; position: static;
   }
   /* 3 — entitled but off: inside the feature's own page, hide the real config and
      show the enable card. .feat-bar (the switch) + .feat-off are spared. */
@@ -1846,12 +1856,12 @@
   body.ent-affiliate:not(.feat-affiliate)     #tab-affiliate  > :not(.feat-bar):not(.feat-off),
   body.ent-reviews:not(.feat-reviews)         #tab-reviews    > :not(.feat-bar):not(.feat-off),
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   > :not(.feat-bar):not(.feat-off),
-  body.ent-socialProof:not(.feat-socialProof) #sub-social     > :not(.feat-bar):not(.feat-off) { display: none !important; }
+  body.ent-socialProof:not(.feat-socialProof) #tab-social     > :not(.feat-bar):not(.feat-off) { display: none !important; }
   body.ent-membership:not(.feat-membership)   #tab-membership .feat-off,
   body.ent-affiliate:not(.feat-affiliate)     #tab-affiliate  .feat-off,
   body.ent-reviews:not(.feat-reviews)         #tab-reviews    .feat-off,
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   .feat-off,
-  body.ent-socialProof:not(.feat-socialProof) #sub-social     .feat-off { display: block; }
+  body.ent-socialProof:not(.feat-socialProof) #tab-social     .feat-off { display: block; }
   /* feature on/off bar + enable card (mounted at the top of each feature page) */
   .feat-bar { display: flex; align-items: center; justify-content: space-between;
     gap: 16px; padding: 12px 16px; margin-bottom: var(--s4);
@@ -5987,6 +5997,10 @@
       <button data-tab="broadcasts">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l15-7v16L3 13v-2z"/><path d="M11 19a2 2 0 0 1-4 0v-4"/><path d="M18 8a4 4 0 0 1 0 8"/></svg>
         Broadcasts · 广播
+      </button>
+      <button data-tab="social" data-feat="socialProof">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Social proof · 社交证明
       </button>
     </div>
   </div>
@@ -10172,10 +10186,6 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0v5l2 3H4l2-3V8z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
           Push notifications
         </button>
-        <button data-sub="social" data-feat="socialProof">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Social proof
-        </button>
         <button data-sub="cs">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
           Customer service
@@ -10529,13 +10539,205 @@
           </div>
         </div>
 
-        <!-- ────── SOCIAL PROOF ────── -->
-        <!-- Five live engagement widgets on the mini-app. Each card has an
-             enable toggle + tuning fields; values write to storefront_config
-             under the `social_proof` key and are read by routes/retail.js
-             (getSocialConfig). Defaults match the original hardcoded constants
-             so flipping a switch is the only thing that changes behaviour. -->
-        <div class="sub-panel" id="sub-social" data-feat="socialProof">
+        <!-- ────── CUSTOMER SERVICE ────── -->
+        <div class="sub-panel" id="sub-cs">
+          <h2>Customer service · 客户服务</h2>
+          <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
+            Shows a chat-bubble button on the Me tab, checkout, and order pages. Tapping opens a chat with your team.
+            WeCom (企业微信) is the preferred mode — customers get a live conversation with a staff agent.
+          </div>
+
+          <!-- Mode -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>How customers reach you · 顾客联系方式</h3>
+              <div class="muted">Three options. WeCom is best for ongoing conversations. WeChat 客服 is the lightweight built-in. QR code is the fallback when neither is set up yet.</div>
+            </div>
+            <select id="cfg-cs-mode" style="width:100%;max-width:460px;padding:10px 12px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
+              <option value="off">Off — hide the button entirely · 关闭 — 完全隐藏按钮</option>
+              <option value="wecom">WeCom (企业微信) — recommended</option>
+              <option value="kf">WeChat 客服 — public-account customer service</option>
+              <option value="qr">QR code — show a scannable image</option>
+            </select>
+            <div class="muted" style="margin-top: 8px; font-size: 12px; line-height: 1.5;">
+              <b>WeCom:</b> Sign in at <a href="https://work.weixin.qq.com" target="_blank" rel="noopener">work.weixin.qq.com</a> →
+              客户联系 → 客服 → add a 客服账号 → bind your mini-program AppID → copy the corp ID and the open URL below.<br>
+              <b>WeChat 客服:</b> A 公众号客服 account linked to the mini-program AppID. No setup beyond linking.<br>
+              <b>QR code:</b> Upload a personal-WeChat or staff-WeCom QR. Tapping the button shows the image; customers long-press to add.
+            </div>
+          </div>
+
+          <!-- WeCom fields -->
+          <div class="group-card" id="cs-wecom-fields">
+            <div class="group-card-head">
+              <h3>WeCom credentials · 企业微信凭证</h3>
+              <div class="muted">Both values come from your WeCom 客服 admin page after you bind the mini-program AppID. The mini-app calls <code>wx.openCustomerServiceChat({ corpId, url })</code> with these.</div>
+            </div>
+            <div class="field">
+              <label class="stacked">Corp ID (企业ID)</label>
+              <input type="text" id="cfg-cs-corp_id" placeholder="ww1234abcd567890ef" style="width: 100%; font-family: monospace;">
+            </div>
+            <div class="field" style="margin-bottom: 0">
+              <label class="stacked">Service URL (客服链接)</label>
+              <input type="text" id="cfg-cs-url" placeholder="https://work.weixin.qq.com/kfid/kfc..." style="width: 100%; font-family: monospace;">
+            </div>
+          </div>
+
+          <!-- QR fallback -->
+          <div class="group-card" id="cs-qr-fields">
+            <div class="group-card-head">
+              <h3>QR code image · 二维码图片</h3>
+              <div class="muted">Upload the scannable code. PNG/JPG, ideally square ≥600×600. · 上传可扫码图片,PNG/JPG,建议方形 ≥600×600。</div>
+            </div>
+            <div class="field" style="margin: 0;">
+              <input type="file" id="cfg-cs-qr-file" accept="image/*">
+              <div id="cfg-cs-qr-preview" style="margin-top: 12px;"></div>
+              <input type="hidden" id="cfg-cs-qr_image_url">
+            </div>
+          </div>
+
+          <!-- Labels + hours -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Button label &amp; hours · 按钮文案与营业时间</h3>
+              <div class="muted">Both languages — customers see one. Hours shown beneath the button on the Me tab; leave blank to hide. · 两种语言都填,顾客看到其中一种;营业时间显示在"我的"页按钮下方,留空则隐藏。</div>
+            </div>
+            <div class="row" style="gap: var(--s3);">
+              <div class="field" style="flex: 1;">
+                <label class="stacked">EN label</label>
+                <input type="text" id="cfg-cs-label_en" placeholder="Help" style="width: 100%;">
+              </div>
+              <div class="field" style="flex: 1;">
+                <label class="stacked">中文 label</label>
+                <input type="text" id="cfg-cs-label_cn" placeholder="联系客服" style="width: 100%;">
+              </div>
+            </div>
+            <div class="row" style="gap: var(--s3); margin-top: var(--s3);">
+              <div class="field" style="flex: 1;">
+                <label class="stacked">EN hours line</label>
+                <input type="text" id="cfg-cs-hours_en" placeholder="Mon–Sat · 9am–6pm" style="width: 100%;">
+              </div>
+              <div class="field" style="flex: 1;">
+                <label class="stacked">中文营业时间</label>
+                <input type="text" id="cfg-cs-hours_cn" placeholder="周一至周六 · 9:00–18:00" style="width: 100%;">
+              </div>
+            </div>
+            <div class="field" style="margin-top: var(--s3); margin-bottom: 0;">
+              <label class="stacked">Phone number (optional) · 电话(可选)</label>
+              <input type="text" id="cfg-cs-phone" placeholder="+86 20 1234 5678" style="width: 100%; font-family: monospace;">
+              <div class="muted" style="font-size: 11px; margin-top: 6px;">Shown as the <b>Call</b> button on the FAQ help screen. Leave blank to hide.</div>
+            </div>
+          </div>
+
+          <!-- Placement -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Where to show · 显示位置</h3>
+              <div class="muted">Pick which pages show the floating chat bubble. The look below applies to every page you tick. · 选择哪些页面显示悬浮客服按钮;下方样式将应用于所有勾选的页面。</div>
+            </div>
+            <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
+              <input type="checkbox" id="cfg-cs-show_me"> Me tab
+            </label>
+            <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
+              <input type="checkbox" id="cfg-cs-show_home"> Home tab
+            </label>
+            <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
+              <input type="checkbox" id="cfg-cs-show_product"> Product detail
+            </label>
+            <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
+              <input type="checkbox" id="cfg-cs-show_checkout"> Checkout
+            </label>
+            <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
+              <input type="checkbox" id="cfg-cs-show_order"> Order detail
+            </label>
+          </div>
+
+          <!-- Floating-bubble appearance -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Floating bubble look · 悬浮按钮样式</h3>
+              <div class="muted">Style the round chat bubble — size, shape, colour, icon and where it sits. Applies on every page you enabled above. · 自定义悬浮客服按钮的大小、形状、颜色、图标与位置;应用于以上所有已开启的页面。</div>
+            </div>
+            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-start;">
+              <div style="flex: 1; min-width: 160px;">
+                <label class="muted" style="display:block; margin-bottom:4px;">Size · 大小</label>
+                <select id="cfg-cs-fab_size" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
+                  <option value="sm">Small · 小</option>
+                  <option value="md">Medium · 中</option>
+                  <option value="lg">Large · 大</option>
+                </select>
+              </div>
+              <div style="flex: 1; min-width: 160px;">
+                <label class="muted" style="display:block; margin-bottom:4px;">Shape · 形状</label>
+                <select id="cfg-cs-fab_shape" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
+                  <option value="circle">Circle · 圆形</option>
+                  <option value="rounded">Rounded square · 圆角方形</option>
+                  <option value="pill">Pill + label · 胶囊带文字</option>
+                </select>
+              </div>
+            </div>
+            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-top: 12px;">
+              <div style="flex: 1; min-width: 160px;">
+                <label class="muted" style="display:block; margin-bottom:4px;">Icon · 图标</label>
+                <select id="cfg-cs-fab_icon" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
+                  <option value="dots">Dots ••• · 圆点</option>
+                  <option value="bubble">Chat bubble 💬 · 对话气泡</option>
+                  <option value="question">Question ? · 问号</option>
+                  <option value="headset">Headset 🎧 · 耳麦</option>
+                  <option value="custom">Custom emoji · 自定义表情</option>
+                </select>
+              </div>
+              <div style="flex: 1; min-width: 160px;" id="cs-fab-emoji-wrap">
+                <label class="muted" style="display:block; margin-bottom:4px;">Custom emoji · 自定义</label>
+                <input type="text" id="cfg-cs-fab_icon_emoji" placeholder="🌱" maxlength="4" style="width:100%;text-align:center;font-size:18px;">
+              </div>
+            </div>
+            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-top: 12px;">
+              <div style="min-width: 120px;">
+                <label class="muted" style="display:block; margin-bottom:4px;">Colour · 颜色</label>
+                <div class="row" style="gap: 8px; align-items: center;">
+                  <input type="color" id="cfg-cs-fab_color" value="#365329" style="width:48px;height:38px;padding:0;border:1px solid #d8d2c4;border-radius:8px;background:#fff;cursor:pointer;">
+                  <span class="cs-swatch" data-color="#365329" title="Forest green" style="width:24px;height:24px;border-radius:6px;background:#365329;cursor:pointer;border:1px solid rgba(0,0,0,.1);"></span>
+                  <span class="cs-swatch" data-color="#E8DCCB" title="Oat" style="width:24px;height:24px;border-radius:6px;background:#E8DCCB;cursor:pointer;border:1px solid rgba(0,0,0,.1);"></span>
+                  <span class="cs-swatch" data-color="#C2674A" title="Terracotta" style="width:24px;height:24px;border-radius:6px;background:#C2674A;cursor:pointer;border:1px solid rgba(0,0,0,.1);"></span>
+                </div>
+              </div>
+              <div style="flex: 1; min-width: 130px;">
+                <label class="muted" style="display:block; margin-bottom:4px;">Side · 位置</label>
+                <select id="cfg-cs-fab_side" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
+                  <option value="right">Right · 右</option>
+                  <option value="left">Left · 左</option>
+                </select>
+              </div>
+              <div style="flex: 1; min-width: 130px;">
+                <label class="muted" style="display:block; margin-bottom:4px;">Height off bottom (rpx) · 距底高度</label>
+                <input type="number" id="cfg-cs-fab_bottom" placeholder="220" min="0" max="800" style="width:100%;">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ────── shared save bar ────── -->
+        <div class="save-bar">
+          <button class="btn btn-primary" onclick="saveConfig()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Save settings
+          </button>
+          <span id="cfg-status" style="font-size: 12px;"></span>
+        </div>
+
+      </div><!-- /.settings-body -->
+    </div><!-- /.settings-layout -->
+  </section>
+
+  <!-- ────── SOCIAL PROOF ────── (moved out of Settings into the Marketing
+       group 2026-06-09; same cfg-social-* fields, now saved by its own
+       saveSocialProof() partial PUT. A top-level feature tab like membership /
+       reviews, so its on/off switch (mountFeatureControls) + gates work the
+       same way.) Five live engagement widgets on the mini-app; each card has an
+       enable toggle + tuning fields writing to storefront_config.social_proof,
+       read by routes/retail.js (getSocialConfig). -->
+  <section id="tab-social" data-feat="socialProof">
           <h2>Social proof · 社交证明</h2>
           <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
             Five live engagement widgets that surface real customer activity in the mini app. Toggle any of them off to hide the widget instantly across all customers (no WeChat republish needed). Tuning numbers control how aggressive each one is. · 五个实时社交证明组件,可即时开启/关闭和调整阈值。
@@ -10752,197 +10954,15 @@
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- ────── CUSTOMER SERVICE ────── -->
-        <div class="sub-panel" id="sub-cs">
-          <h2>Customer service · 客户服务</h2>
-          <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
-            Shows a chat-bubble button on the Me tab, checkout, and order pages. Tapping opens a chat with your team.
-            WeCom (企业微信) is the preferred mode — customers get a live conversation with a staff agent.
-          </div>
-
-          <!-- Mode -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>How customers reach you · 顾客联系方式</h3>
-              <div class="muted">Three options. WeCom is best for ongoing conversations. WeChat 客服 is the lightweight built-in. QR code is the fallback when neither is set up yet.</div>
-            </div>
-            <select id="cfg-cs-mode" style="width:100%;max-width:460px;padding:10px 12px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
-              <option value="off">Off — hide the button entirely · 关闭 — 完全隐藏按钮</option>
-              <option value="wecom">WeCom (企业微信) — recommended</option>
-              <option value="kf">WeChat 客服 — public-account customer service</option>
-              <option value="qr">QR code — show a scannable image</option>
-            </select>
-            <div class="muted" style="margin-top: 8px; font-size: 12px; line-height: 1.5;">
-              <b>WeCom:</b> Sign in at <a href="https://work.weixin.qq.com" target="_blank" rel="noopener">work.weixin.qq.com</a> →
-              客户联系 → 客服 → add a 客服账号 → bind your mini-program AppID → copy the corp ID and the open URL below.<br>
-              <b>WeChat 客服:</b> A 公众号客服 account linked to the mini-program AppID. No setup beyond linking.<br>
-              <b>QR code:</b> Upload a personal-WeChat or staff-WeCom QR. Tapping the button shows the image; customers long-press to add.
-            </div>
-          </div>
-
-          <!-- WeCom fields -->
-          <div class="group-card" id="cs-wecom-fields">
-            <div class="group-card-head">
-              <h3>WeCom credentials · 企业微信凭证</h3>
-              <div class="muted">Both values come from your WeCom 客服 admin page after you bind the mini-program AppID. The mini-app calls <code>wx.openCustomerServiceChat({ corpId, url })</code> with these.</div>
-            </div>
-            <div class="field">
-              <label class="stacked">Corp ID (企业ID)</label>
-              <input type="text" id="cfg-cs-corp_id" placeholder="ww1234abcd567890ef" style="width: 100%; font-family: monospace;">
-            </div>
-            <div class="field" style="margin-bottom: 0">
-              <label class="stacked">Service URL (客服链接)</label>
-              <input type="text" id="cfg-cs-url" placeholder="https://work.weixin.qq.com/kfid/kfc..." style="width: 100%; font-family: monospace;">
-            </div>
-          </div>
-
-          <!-- QR fallback -->
-          <div class="group-card" id="cs-qr-fields">
-            <div class="group-card-head">
-              <h3>QR code image · 二维码图片</h3>
-              <div class="muted">Upload the scannable code. PNG/JPG, ideally square ≥600×600. · 上传可扫码图片,PNG/JPG,建议方形 ≥600×600。</div>
-            </div>
-            <div class="field" style="margin: 0;">
-              <input type="file" id="cfg-cs-qr-file" accept="image/*">
-              <div id="cfg-cs-qr-preview" style="margin-top: 12px;"></div>
-              <input type="hidden" id="cfg-cs-qr_image_url">
-            </div>
-          </div>
-
-          <!-- Labels + hours -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Button label &amp; hours · 按钮文案与营业时间</h3>
-              <div class="muted">Both languages — customers see one. Hours shown beneath the button on the Me tab; leave blank to hide. · 两种语言都填,顾客看到其中一种;营业时间显示在"我的"页按钮下方,留空则隐藏。</div>
-            </div>
-            <div class="row" style="gap: var(--s3);">
-              <div class="field" style="flex: 1;">
-                <label class="stacked">EN label</label>
-                <input type="text" id="cfg-cs-label_en" placeholder="Help" style="width: 100%;">
-              </div>
-              <div class="field" style="flex: 1;">
-                <label class="stacked">中文 label</label>
-                <input type="text" id="cfg-cs-label_cn" placeholder="联系客服" style="width: 100%;">
-              </div>
-            </div>
-            <div class="row" style="gap: var(--s3); margin-top: var(--s3);">
-              <div class="field" style="flex: 1;">
-                <label class="stacked">EN hours line</label>
-                <input type="text" id="cfg-cs-hours_en" placeholder="Mon–Sat · 9am–6pm" style="width: 100%;">
-              </div>
-              <div class="field" style="flex: 1;">
-                <label class="stacked">中文营业时间</label>
-                <input type="text" id="cfg-cs-hours_cn" placeholder="周一至周六 · 9:00–18:00" style="width: 100%;">
-              </div>
-            </div>
-            <div class="field" style="margin-top: var(--s3); margin-bottom: 0;">
-              <label class="stacked">Phone number (optional) · 电话(可选)</label>
-              <input type="text" id="cfg-cs-phone" placeholder="+86 20 1234 5678" style="width: 100%; font-family: monospace;">
-              <div class="muted" style="font-size: 11px; margin-top: 6px;">Shown as the <b>Call</b> button on the FAQ help screen. Leave blank to hide.</div>
-            </div>
-          </div>
-
-          <!-- Placement -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Where to show · 显示位置</h3>
-              <div class="muted">Pick which pages show the floating chat bubble. The look below applies to every page you tick. · 选择哪些页面显示悬浮客服按钮;下方样式将应用于所有勾选的页面。</div>
-            </div>
-            <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_me"> Me tab
-            </label>
-            <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_home"> Home tab
-            </label>
-            <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_product"> Product detail
-            </label>
-            <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_checkout"> Checkout
-            </label>
-            <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_order"> Order detail
-            </label>
-          </div>
-
-          <!-- Floating-bubble appearance -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Floating bubble look · 悬浮按钮样式</h3>
-              <div class="muted">Style the round chat bubble — size, shape, colour, icon and where it sits. Applies on every page you enabled above. · 自定义悬浮客服按钮的大小、形状、颜色、图标与位置;应用于以上所有已开启的页面。</div>
-            </div>
-            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-start;">
-              <div style="flex: 1; min-width: 160px;">
-                <label class="muted" style="display:block; margin-bottom:4px;">Size · 大小</label>
-                <select id="cfg-cs-fab_size" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
-                  <option value="sm">Small · 小</option>
-                  <option value="md">Medium · 中</option>
-                  <option value="lg">Large · 大</option>
-                </select>
-              </div>
-              <div style="flex: 1; min-width: 160px;">
-                <label class="muted" style="display:block; margin-bottom:4px;">Shape · 形状</label>
-                <select id="cfg-cs-fab_shape" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
-                  <option value="circle">Circle · 圆形</option>
-                  <option value="rounded">Rounded square · 圆角方形</option>
-                  <option value="pill">Pill + label · 胶囊带文字</option>
-                </select>
-              </div>
-            </div>
-            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-top: 12px;">
-              <div style="flex: 1; min-width: 160px;">
-                <label class="muted" style="display:block; margin-bottom:4px;">Icon · 图标</label>
-                <select id="cfg-cs-fab_icon" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
-                  <option value="dots">Dots ••• · 圆点</option>
-                  <option value="bubble">Chat bubble 💬 · 对话气泡</option>
-                  <option value="question">Question ? · 问号</option>
-                  <option value="headset">Headset 🎧 · 耳麦</option>
-                  <option value="custom">Custom emoji · 自定义表情</option>
-                </select>
-              </div>
-              <div style="flex: 1; min-width: 160px;" id="cs-fab-emoji-wrap">
-                <label class="muted" style="display:block; margin-bottom:4px;">Custom emoji · 自定义</label>
-                <input type="text" id="cfg-cs-fab_icon_emoji" placeholder="🌱" maxlength="4" style="width:100%;text-align:center;font-size:18px;">
-              </div>
-            </div>
-            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-start; margin-top: 12px;">
-              <div style="min-width: 120px;">
-                <label class="muted" style="display:block; margin-bottom:4px;">Colour · 颜色</label>
-                <div class="row" style="gap: 8px; align-items: center;">
-                  <input type="color" id="cfg-cs-fab_color" value="#365329" style="width:48px;height:38px;padding:0;border:1px solid #d8d2c4;border-radius:8px;background:#fff;cursor:pointer;">
-                  <span class="cs-swatch" data-color="#365329" title="Forest green" style="width:24px;height:24px;border-radius:6px;background:#365329;cursor:pointer;border:1px solid rgba(0,0,0,.1);"></span>
-                  <span class="cs-swatch" data-color="#E8DCCB" title="Oat" style="width:24px;height:24px;border-radius:6px;background:#E8DCCB;cursor:pointer;border:1px solid rgba(0,0,0,.1);"></span>
-                  <span class="cs-swatch" data-color="#C2674A" title="Terracotta" style="width:24px;height:24px;border-radius:6px;background:#C2674A;cursor:pointer;border:1px solid rgba(0,0,0,.1);"></span>
-                </div>
-              </div>
-              <div style="flex: 1; min-width: 130px;">
-                <label class="muted" style="display:block; margin-bottom:4px;">Side · 位置</label>
-                <select id="cfg-cs-fab_side" style="width:100%;padding:9px 11px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
-                  <option value="right">Right · 右</option>
-                  <option value="left">Left · 左</option>
-                </select>
-              </div>
-              <div style="flex: 1; min-width: 130px;">
-                <label class="muted" style="display:block; margin-bottom:4px;">Height off bottom (rpx) · 距底高度</label>
-                <input type="number" id="cfg-cs-fab_bottom" placeholder="220" min="0" max="800" style="width:100%;">
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ────── shared save bar ────── -->
-        <div class="save-bar">
-          <button class="btn btn-primary" onclick="saveConfig()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            Save settings
-          </button>
-          <span id="cfg-status" style="font-size: 12px;"></span>
-        </div>
-
-      </div><!-- /.settings-body -->
-    </div><!-- /.settings-layout -->
+    <!-- ────── save bar ────── -->
+    <div class="save-bar">
+      <button class="btn btn-primary" onclick="saveSocialProof()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save · 保存
+      </button>
+      <span id="social-status" style="font-size: 12px;"></span>
+    </div>
   </section>
 
   <!-- ─── LEGAL PAGES ─── (moved out of Settings into the Content group 2026-06-08;
