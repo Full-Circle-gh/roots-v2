@@ -1706,6 +1706,9 @@
   .pd-desc-modebar { display: inline-flex; gap: 4px; margin-left: 10px; vertical-align: middle; }
   .pd-mode-btn { font-size: 11px; padding: 3px 10px; border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-2); border-radius: 6px; cursor: pointer; font-weight: 500; }
   .pd-mode-btn.active { background: var(--brass, #B08D4A); color: #fff; border-color: var(--brass, #B08D4A); }
+  /* The "🎨 Design" switch reads as a toggle — green when on, not brass, so it's
+     not confused with the always-on Classic tab. */
+  .pd-blockdesign-toggle.active { background: #1f9d55; border-color: #1f9d55; color: #fff; }
   .pd-desc-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   @media (max-width: 760px) { .pd-desc-cols { grid-template-columns: 1fr; } }
   .pd-desc-lang { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin-bottom: 4px; font-family: var(--f-mono); }
@@ -7496,6 +7499,7 @@
               <span class="pd-desc-modebar">
                 <button type="button" class="pd-mode-btn active" data-mode="classic" onclick="pdDescMode()" title="Edit the description here with the rich-text toolbar · 在此用富文本工具栏编辑描述">Classic · 经典</button>
                 <button type="button" class="pd-mode-btn" onclick="pdOpenPageDesign()" title="Open the full Product Page Editor in a new tab · 在新标签页打开整页编辑器">Product editor · 产品页编辑器 ↗</button>
+                <button type="button" id="pd-blockdesign-toggle" class="pd-mode-btn pd-blockdesign-toggle" onclick="pdToggleBlockDesign()" title="When on, the storefront product page shows the Product editor design instead of this classic description · 开启后,店铺商品页将显示产品页设计而非经典描述">🎨 Design: Off · 关</button>
               </span>
             </label>
             <!-- Classic editor — rich-text toolbar + English | 中文 side by side -->
@@ -23344,6 +23348,8 @@ function pdOpen(id) {
   document.getElementById('pd-rte-en').innerHTML = wasRich ? (p.description_en || '') : pdPlainToHtml(p && p.description_en);
   document.getElementById('pd-rte-cn').innerHTML = wasRich ? (p.description_cn || '') : pdPlainToHtml(p && p.description_cn);
   pdApplyDescMode();
+  _pdUseBlockDesign = !!(p && p.use_block_design === 1);
+  pdRenderBlockDesignToggle();
   const modes = String((p && p.ship_modes) || 'air,land').toLowerCase();
   document.getElementById('pd-ship-air').checked  = !p || modes.includes('air');
   document.getElementById('pd-ship-land').checked = !p || modes.includes('land');
@@ -23716,6 +23722,93 @@ function buBody() {
     voucher: (BU.voucher || '').trim(),
   };
 }
+// ── Image optimisation (resize) ─────────────────────────────────────────────
+// Gallery photos are base64-stored in store_products.image_data, so a raw
+// 4–10MB phone JPEG would bloat the DB and slow the storefront. Mirror the
+// kitchen app's pipeline: decode (EXIF-corrected), downscale to 1440px on the
+// long edge, re-encode JPEG q0.88. Files already small pass through untouched.
+// Returns { dataURL, originalBytes, finalBytes, resized }.
+async function pdResizeImage(file, opts = {}) {
+  const maxLong          = opts.maxLong          || 1800;
+  const quality          = opts.quality          || 0.90;
+  const passThroughBelow = opts.passThroughBelow || (600 * 1024);
+  const forceJpeg        = opts.format === 'jpeg';   // always emit JPEG, flattening any transparency
+  const originalBytes    = file.size;
+  const readAsDataURL = (blob) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+  // Fast path — already small enough (and not a non-JPEG we must convert).
+  if (originalBytes <= passThroughBelow && !(forceJpeg && file.type !== 'image/jpeg')) {
+    return { dataURL: await readAsDataURL(file), originalBytes, finalBytes: originalBytes, resized: false };
+  }
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch (e) {
+    // Fallback: <img> doesn't apply EXIF, but the photo will at least load.
+    const url = URL.createObjectURL(file);
+    bitmap = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload  = () => resolve(img);
+      img.onerror = () => reject(new Error('decode failed'));
+      img.src = url;
+    });
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  const srcW = bitmap.width || bitmap.naturalWidth;
+  const srcH = bitmap.height || bitmap.naturalHeight;
+  const longest = Math.max(srcW, srcH);
+  const scale = longest > maxLong ? (maxLong / longest) : 1;
+  const w = Math.round(srcW * scale);
+  const h = Math.round(srcH * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const outType = forceJpeg ? 'image/jpeg' : ((file.type === 'image/png') ? 'image/png' : 'image/jpeg');
+  if (outType === 'image/jpeg') {
+    // JPEG has no alpha — paint white so transparent PNG areas flatten to white.
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+  }
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  if (bitmap.close) try { bitmap.close(); } catch {}
+  const outQ = outType === 'image/jpeg' ? quality : undefined;
+  const blob = await new Promise(res => canvas.toBlob(res, outType, outQ));
+  if (!blob) throw new Error('toBlob failed');
+  return { dataURL: await readAsDataURL(blob), originalBytes, finalBytes: blob.size, resized: true };
+}
+function pdFmtBytes(b) {
+  if (b == null) return '?';
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return Math.round(b / 1024) + ' KB';
+  return (b / (1024 * 1024)).toFixed(1) + ' MB';
+}
+// Wrapper: hard upper bound + a toast when shrinkage happens. Returns the final
+// dataURL, or null on failure / over-cap.
+async function pdHandleImageUpload(file, opts = {}) {
+  const hardCapMB = opts.hardCapMB || 25;
+  if (file.size > hardCapMB * 1024 * 1024) {
+    toast(`Image too huge (max ${hardCapMB}MB) · 图片过大,上限 ${hardCapMB}MB`, 'err');
+    return null;
+  }
+  try {
+    const r = await pdResizeImage(file, opts);
+    if (r.resized) toast(`📐 Optimized ${pdFmtBytes(r.originalBytes)} → ${pdFmtBytes(r.finalBytes)} · 已优化`, 'ok');
+    return r.dataURL;
+  } catch (e) {
+    console.warn('[pd image upload] failed', e);
+    toast(cuT('Failed to process image', '图片处理失败') + ': ' + (e.message || e), 'err');
+    return null;
+  }
+}
+// Product-photo preset: 1440px long edge stays crisp at full phone width on 3×
+// screens; JPEG q0.88 is artefact-free; forcing JPEG stops heavy PNGs shipping
+// as-is. A typical 2–5MB upload lands around 300–600KB.
+const PD_IMG_OPTS = { maxLong: 1440, quality: 0.88, format: 'jpeg', passThroughBelow: 200 * 1024 };
+
 // ── Product photo gallery (editor) ──────────────────────────────────────────
 const PD_MAX_PHOTOS = 8;
 function pdRenderGallery() {
@@ -23735,19 +23828,21 @@ function pdRenderGallery() {
       <button type="button" class="pd-thumb-x" title="Remove · 移除" data-rm="${i}">×</button>
     </div>`).join('');
 }
-function pdAddPhotos(e) {
+async function pdAddPhotos(e) {
   const files = Array.from((e.target && e.target.files) || []);
   const room = PD_MAX_PHOTOS - _pdGallery.length;
-  const take = files.slice(0, Math.max(0, room));
   if (room <= 0) { toast(cuT('Up to 8 photos', '最多 8 张图片'), 'err'); e.target.value = ''; return; }
-  let pending = take.length;
-  if (!pending) { e.target.value = ''; return; }
-  take.forEach(f => {
-    const rd = new FileReader();
-    rd.onload = () => { _pdGallery.push(rd.result); _pdGalleryDirty = true; _pdGalleryInherited = false; if (--pending === 0) { pdRenderGallery(); pdScheduleAutosave(); } };
-    rd.readAsDataURL(f);
-  });
+  const take = files.slice(0, Math.max(0, room));
   e.target.value = '';
+  if (!take.length) return;
+  // Resize/optimise each photo before it hits image_data (base64-stored). Phone
+  // cameras emit 4–10MB JPEGs; raw they'd bloat the DB and slow the storefront.
+  let added = false;
+  for (const f of take) {
+    const dataURL = await pdHandleImageUpload(f, PD_IMG_OPTS);
+    if (dataURL) { _pdGallery.push(dataURL); _pdGalleryDirty = true; _pdGalleryInherited = false; added = true; }
+  }
+  if (added) { pdRenderGallery(); pdScheduleAutosave(); }
 }
 function pdRemovePhoto(i) {
   if (i < 0 || i >= _pdGallery.length) return;
@@ -23794,6 +23889,44 @@ function pdOpenPageDesign() {
   const id = document.getElementById('pd-id').value;
   if (!id) { toast(cuT('Save the product first, then open the Product editor', '请先保存产品,再打开产品页编辑器'), 'err'); return; }
   openProductEditor(id);
+}
+// "🎨 Design" switch — the per-product `use_block_design` flag. ON makes the
+// storefront product page render the Product-editor block design; OFF renders
+// the classic EN/CN description above. Mirrors the kitchen app's toggle. Saved
+// with a dedicated PATCH (not folded into the autosave body) so an autosave
+// never clobbers a value just changed in the Product editor.
+let _pdUseBlockDesign = false;
+function pdRenderBlockDesignToggle() {
+  const btn = document.getElementById('pd-blockdesign-toggle');
+  if (!btn) return;
+  btn.classList.toggle('active', _pdUseBlockDesign);
+  btn.textContent = _pdUseBlockDesign ? '🎨 Design: On · 开' : '🎨 Design: Off · 关';
+}
+async function pdToggleBlockDesign() {
+  const id = document.getElementById('pd-id').value;
+  if (!id) { toast(cuT('Save the product first, then turn on the design', '请先保存产品,再开启设计'), 'err'); return; }
+  const next = _pdUseBlockDesign ? 0 : 1;
+  const btn = document.getElementById('pd-blockdesign-toggle');
+  if (btn) btn.style.opacity = '.6';
+  try {
+    const r = await fetch('/api/retail-admin/products/' + id, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ use_block_design: next }),
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'save_failed');
+    _pdUseBlockDesign = !!next;
+    const i = PA_PRODUCTS.findIndex(x => x.id === Number(id));
+    if (i >= 0) PA_PRODUCTS[i].use_block_design = next;
+    pdRenderBlockDesignToggle();
+    toast(next
+      ? cuT('Storefront will use the Product editor design', '店铺将显示产品页设计')
+      : cuT('Storefront will use the classic description', '店铺将显示经典描述'), 'ok');
+  } catch (e) {
+    toast(cuT('Save failed', '保存失败') + ' · ' + (e.message || e), 'err');
+  } finally {
+    if (btn) btn.style.opacity = '';
+  }
 }
 // ── Description editor — the Classic (rich-text) editor is the only inline
 // mode; "Product editor" in the mode bar launches the full page designer. ───
