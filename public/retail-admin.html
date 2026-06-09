@@ -1781,21 +1781,63 @@
      useless panel. */
   body.catalog-upstream .pa-split { grid-template-columns: 1fr !important; }
   body.catalog-upstream .pa-split-editor { display: none !important; }
-  /* Per-tenant feature gating. A feature is shown only when its body class is
-     present (set in applyFeatureGates: entitled AND operator-enabled). Anything
-     tagged data-feat="<key>" is hidden when feat-<key> is absent — nav buttons,
-     content tabs and settings sub-panels alike. Defaults keep every feature on,
-     so a section disappears only when an operator (or the platform) turns it off. */
-  body:not(.feat-membership)  [data-feat="membership"],
-  body:not(.feat-affiliate)   [data-feat="affiliate"],
-  body:not(.feat-reviews)     [data-feat="reviews"],
-  body:not(.feat-feedback)    [data-feat="feedback"],
-  body:not(.feat-socialProof) [data-feat="socialProof"] { display: none !important; }
-  /* The Inbox nav group holds ONLY Reviews + Feedback (both feature-gated), so
-     hide the whole group trigger when BOTH are off — otherwise it'd open an
-     empty dropdown. (Marketing/Loyalty/Content each keep always-on items, so
-     they never go empty.) */
-  body:not(.feat-reviews):not(.feat-feedback) .tabs-group[data-group="inbox"] { display: none !important; }
+  /* Per-tenant feature gating — Option B: "off" never hides a feature, it dims it.
+     Two body flags per feature: ent-<key> = platform-entitled (hard ceiling) and
+     feat-<key> = entitled AND operator-enabled (set in applyFeatureGates).
+       • not entitled  → element removed entirely (no dead switches)
+       • entitled, off → nav entry stays but dims + shows an "Off" pill; the
+                         feature's own page hides its config and shows an enable
+                         card; the on/off switch (.feat-bar) stays live
+       • entitled, on  → everything normal
+     The switch lives on each feature's own page (.feat-bar, injected by
+     mountFeatureControls()) so a feature is managed in ONE place. */
+  /* 1 — not entitled: hide every tagged element. */
+  body:not(.ent-membership)  [data-feat="membership"],
+  body:not(.ent-affiliate)   [data-feat="affiliate"],
+  body:not(.ent-reviews)     [data-feat="reviews"],
+  body:not(.ent-feedback)    [data-feat="feedback"],
+  body:not(.ent-socialProof) [data-feat="socialProof"] { display: none !important; }
+  /* Inbox group holds ONLY Reviews + Feedback — hide it only when NEITHER is
+     entitled (off items just dim inside it, so the group still has something). */
+  body:not(.ent-reviews):not(.ent-feedback) .tabs-group[data-group="inbox"] { display: none !important; }
+  /* 2 — entitled but off: dim the nav entry + append an "Off" pill. */
+  body.ent-membership:not(.feat-membership)   .tabs [data-feat="membership"],
+  body.ent-affiliate:not(.feat-affiliate)     .tabs [data-feat="affiliate"],
+  body.ent-reviews:not(.feat-reviews)         .tabs [data-feat="reviews"],
+  body.ent-feedback:not(.feat-feedback)       .tabs [data-feat="feedback"],
+  body.ent-socialProof:not(.feat-socialProof) #settings-nav [data-feat="socialProof"] { opacity: .5; }
+  body.ent-membership:not(.feat-membership) .tabs [data-feat="membership"]::after,
+  body.ent-affiliate:not(.feat-affiliate)   .tabs [data-feat="affiliate"]::after,
+  body.ent-reviews:not(.feat-reviews)       .tabs [data-feat="reviews"]::after,
+  body.ent-feedback:not(.feat-feedback)     .tabs [data-feat="feedback"]::after {
+    content: "OFF"; margin-left: 6px; font: 700 9px/1.4 var(--f-mono, monospace);
+    letter-spacing: .06em; padding: 2px 5px; border-radius: 6px;
+    background: var(--bg-elev-2); color: var(--text-3); border: 1px solid var(--line);
+  }
+  /* 3 — entitled but off: inside the feature's own page, hide the real config and
+     show the enable card. .feat-bar (the switch) + .feat-off are spared. */
+  .feat-off { display: none; }
+  body.ent-membership:not(.feat-membership)   #tab-membership > :not(.feat-bar):not(.feat-off),
+  body.ent-affiliate:not(.feat-affiliate)     #tab-affiliate  > :not(.feat-bar):not(.feat-off),
+  body.ent-reviews:not(.feat-reviews)         #tab-reviews    > :not(.feat-bar):not(.feat-off),
+  body.ent-feedback:not(.feat-feedback)       #tab-feedback   > :not(.feat-bar):not(.feat-off),
+  body.ent-socialProof:not(.feat-socialProof) #sub-social     > :not(.feat-bar):not(.feat-off) { display: none !important; }
+  body.ent-membership:not(.feat-membership)   #tab-membership .feat-off,
+  body.ent-affiliate:not(.feat-affiliate)     #tab-affiliate  .feat-off,
+  body.ent-reviews:not(.feat-reviews)         #tab-reviews    .feat-off,
+  body.ent-feedback:not(.feat-feedback)       #tab-feedback   .feat-off,
+  body.ent-socialProof:not(.feat-socialProof) #sub-social     .feat-off { display: block; }
+  /* feature on/off bar + enable card (mounted at the top of each feature page) */
+  .feat-bar { display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; padding: 12px 16px; margin-bottom: var(--s4);
+    background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: var(--r-lg, 10px); }
+  .feat-bar-t { font-weight: 600; font-size: 13px; }
+  .feat-bar-d { font-size: 11px; color: var(--text-3); margin-top: 2px; max-width: 60ch; }
+  .feat-bar-state { font-size: 12px; color: var(--text-2); min-width: 30px; }
+  .feat-off { padding: 30px 22px; text-align: center;
+    background: var(--bg-elev-1); border: 1px dashed var(--line); border-radius: var(--r-lg, 10px); }
+  .feat-off h3 { font-size: 15px; margin: 0 0 6px; }
+  .feat-off p { font-size: 12px; color: var(--text-3); margin: 0 auto 16px; max-width: 46ch; line-height: 1.5; }
   .pa-dup-row {
     flex: none; width: 28px; height: 28px; padding: 0;
     border: 1px solid var(--line); border-radius: 6px;
@@ -10066,10 +10108,6 @@
     <div class="settings-layout">
       <!-- ───────── sidebar nav ───────── -->
       <aside class="settings-nav" id="settings-nav">
-        <button data-sub="features">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-          Features
-        </button>
         <button data-sub="theme" class="active">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg>
           Brand &amp; theme
@@ -11142,26 +11180,6 @@
           </div>
         </div>
 
-        <!-- ────── FEATURES ────── -->
-        <!-- Per-tenant feature switches. Rows are rendered by renderFeaturesPanel()
-             from the operator's entitlements, so this panel only ever lists the
-             features this tenant is allowed to use. Saving writes features.<key>
-             booleans to storefront_config and re-applies the gates live. -->
-        <div class="sub-panel" id="sub-features">
-          <h2>Features · 功能</h2>
-          <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
-            Turn optional sections of your backend on or off. Switching a feature off hides its tab and settings here, so your team only sees the tools you actually use. Changes apply instantly. · 开启或关闭后台的可选功能模块;关闭后将隐藏对应的标签页与设置,即时生效。
-          </div>
-          <div id="features-list"></div>
-          <div class="row" style="gap: 12px; margin-top: var(--s4);">
-            <button class="btn btn-primary" onclick="saveFeatures()">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-              Save features · 保存功能
-            </button>
-            <span id="features-status" style="font-size: 12px; align-self: center;"></span>
-          </div>
-        </div>
-
         <!-- ────── shared save bar ────── -->
         <div class="save-bar">
           <button class="btn btn-primary" onclick="saveConfig()">
@@ -11810,7 +11828,6 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
     'customer service': 'cs contact whatsapp wechat hours support chat 客服 联系',
     'legal':       'terms privacy policy refund 条款 隐私 政策',
     'faq':         'help questions support 常见问题 帮助',
-    'features':    'toggle enable disable modules 功能 开关',
   };
 
   // SVG icons keyed by destination so results echo the chrome.
@@ -12317,6 +12334,17 @@ let ENTITLEMENTS = {};
     // realm has no per-module permission gate; role here is identity, not a gate.
     initAcctMenu(u);
   } catch (e) { location.href = '/backend/login'; return; }
+  // Phase 1 — feature controls. ent-<key> = platform entitlement; the per-feature
+  // on/off switch lives on each feature's own page (Option B: off dims the nav
+  // instead of hiding it), injected by mountFeatureControls(). We seed feat-<key>
+  // to its catalog default up front so the nav doesn't flash an "Off" state before
+  // loadConfig()'s applyFeatureGates() applies the operator's real preference.
+  for (const f of FEATURE_CATALOG) {
+    const ent = ENTITLEMENTS[f.key] !== false;
+    document.body.classList.toggle('ent-' + f.key, ent);
+    document.body.classList.toggle('feat-' + f.key, ent && f.def);
+  }
+  mountFeatureControls();
   dashInit();          // landing tab — set up date range + first load
   loadOrders();
   loadConfig();        // also hydrates the Mini-app footer fields
@@ -17398,43 +17426,69 @@ function applyFeatureGates(cfg) {
     document.body.classList.toggle('feat-' + f.key, featureEnabled(cfg, f));
   }
 }
-// Render one toggle row per ENTITLED feature into the Features settings panel.
-// Features the platform hasn't entitled are simply omitted (no dead switches).
-function renderFeaturesPanel(cfg) {
-  const box = $('#features-list');
-  if (!box) return;
-  box.innerHTML = '';
+// ── Phase 1: each feature owns its on/off switch on its own page (Option B). ──
+// Where each toggleable feature's switch + "off" card mount.
+const FEATURE_HOMES = {
+  membership:  '#tab-membership',
+  affiliate:   '#tab-affiliate',
+  reviews:     '#tab-reviews',
+  feedback:    '#tab-feedback',
+  socialProof: '#sub-social',
+};
+let _cfgCache = {};
+// Inject an on/off bar + an "off / enable" card at the top of each feature's home
+// section. Built from FEATURE_CATALOG so the bilingual copy lives in one place.
+// Idempotent (guarded) so a re-run never duplicates.
+function mountFeatureControls() {
   for (const f of FEATURE_CATALOG) {
-    if (ENTITLEMENTS[f.key] === false) continue;
-    const pref = cfg?.features?.[f.key];
-    const on = pref === undefined ? f.def : !!pref;
-    const card = document.createElement('div');
-    card.className = 'group-card';
-    card.innerHTML =
-      '<div class="group-card-head">' +
-        '<h3>' + f.en + ' · ' + f.cn + '</h3>' +
-        '<div class="muted">' + f.desc + '</div>' +
-      '</div>' +
-      '<label class="ckbox" style="margin-top:8px;">' +
-        '<input type="checkbox" data-feat-key="' + f.key + '"' + (on ? ' checked' : '') + '>' +
-        '<span>Enabled · 启用</span>' +
-      '</label>';
-    box.appendChild(card);
+    if (ENTITLEMENTS[f.key] === false) continue;   // not entitled → no controls
+    const host = document.querySelector(FEATURE_HOMES[f.key]);
+    if (!host || host.querySelector(':scope > .feat-bar')) continue;
+    const bar = document.createElement('div');
+    bar.className = 'feat-bar';
+    bar.innerHTML =
+      '<div><div class="feat-bar-t">' + f.en + ' · ' + f.cn + '</div>' +
+      '<div class="feat-bar-d">' + f.desc + '</div></div>' +
+      '<label class="fc-switch"><input type="checkbox" data-feat-toggle="' + f.key + '">' +
+      '<span class="fc-switch-track"></span>' +
+      '<span class="feat-bar-state" data-feat-state="' + f.key + '"></span></label>';
+    const off = document.createElement('div');
+    off.className = 'feat-off';
+    off.innerHTML =
+      '<h3>' + f.en + ' is off · ' + f.cn + '已关闭</h3>' +
+      '<p>Customers don\'t see this while it\'s off. Turn it on to set it up. · 关闭期间顾客看不到此功能,开启后即可配置。</p>' +
+      '<button class="btn btn-primary" data-feat-enable="' + f.key + '">Turn on · 开启</button>';
+    host.insertBefore(off, host.firstChild);
+    host.insertBefore(bar, host.firstChild);
+    bar.querySelector('input').addEventListener('change', e => setFeatureEnabled(f.key, e.target.checked));
+    off.querySelector('button').addEventListener('click', () => setFeatureEnabled(f.key, true));
+  }
+  syncFeatureToggles();
+}
+// Reflect the live on/off state (body.feat-<key>) onto every feature switch + label.
+function syncFeatureToggles() {
+  for (const f of FEATURE_CATALOG) {
+    const on = document.body.classList.contains('feat-' + f.key);
+    document.querySelectorAll('[data-feat-toggle="' + f.key + '"]').forEach(i => { i.checked = on; });
+    document.querySelectorAll('[data-feat-state="' + f.key + '"]').forEach(s => {
+      s.textContent = on ? 'On · 开' : 'Off · 关';
+    });
   }
 }
-async function saveFeatures() {
-  const status = $('#features-status');
-  if (status) { status.textContent = 'Saving… · 保存中…'; status.style.color = ''; }
-  const body = {};
-  $$('#features-list input[data-feat-key]').forEach(inp => {
-    body['features.' + inp.dataset.featKey] = inp.checked;
-  });
+// Persist a feature's on/off (features.<key>), re-apply the gates live, keep every
+// switch in sync. Customer-facing visibility is server-driven by the same flag, so
+// this only changes what the operator sees here.
+async function setFeatureEnabled(key, on) {
   try {
-    const { data: c } = await api('/api/retail-admin/config', { method: 'PUT', body });
+    const { data: c } = await api('/api/retail-admin/config', { method: 'PUT', body: { ['features.' + key]: !!on } });
+    _cfgCache = c;
     applyFeatureGates(c);
-    if (status) { status.innerHTML = '<span class="ok">Saved ✓ · 已保存</span>'; }
+    syncFeatureToggles();
+    toast(on ? 'Turned on · 已开启' : 'Turned off · 已关闭');
   } catch (e) {
-    if (status) { status.textContent = 'Save failed · 保存失败'; status.style.color = 'var(--danger)'; }
+    applyFeatureGates(_cfgCache);   // revert the optimistic switch flip
+    syncFeatureToggles();
+    toast('Save failed · 保存失败: ' + (e.message || ''), 'err');
   }
 }
 
@@ -17442,7 +17496,8 @@ async function loadConfig() {
   try {
     const { data: c } = await api('/api/retail-admin/config');
     applyFeatureGates(c);
-    renderFeaturesPanel(c);
+    _cfgCache = c;
+    syncFeatureToggles();
     $('#cfg-theme-accent').value         = c.theme?.accent || 'lime-leaf';
     $('#cfg-theme-language').value       = c.theme?.language || 'bilingual';
     $('#cfg-theme-ipIntensity').value    = c.theme?.ipIntensity || 'soft';
