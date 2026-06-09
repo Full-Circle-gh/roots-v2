@@ -314,7 +314,13 @@ function serveRetailAdmin(req, res) {
       if (tenant && tenant.status !== 'active') return res.redirect('/backend/billing?suspended=1');
     } catch (e) { /* tables not ready — fail open to the page's own auth */ }
   }
-  res.set('Cache-Control', 'no-cache');
+  // no-STORE (not just no-cache): an intermediary caching proxy/VPN ignores
+  // no-cache and will serve a stale shell — which pins the operator's browser
+  // to old JavaScript even across reloads (exactly the /api caching footgun,
+  // see the no-store block above). The backend shell is low-traffic and must
+  // always be fresh, so forbid storing it anywhere.
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'retail-admin.html'));
 }
 
