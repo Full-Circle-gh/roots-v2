@@ -1573,7 +1573,59 @@
   .pa-row-name { font-size: 13px; font-weight: 500; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pa-row-sub  { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pa-row-sub .pa-row-meta { font-family: var(--f-mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; }
-  .pa-row-pills { display: flex; gap: 4px; flex-shrink: 0; }
+  .pa-row-pills { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
+
+  /* ── Overview table (.pa-list-rich) — the full-width "products on the go"
+     landing list. One product per row laid out as real columns: photo · name ·
+     category · SKU · stock · price · status. Shown only when the editor is
+     closed; opening a product collapses back to the compact .pa-row above. */
+  .pa-list-rich {
+    gap: 0;
+    border: 1px solid var(--line-soft); border-radius: var(--r-md); overflow: hidden;
+  }
+  .pa-list-rich .pa-row, .pa-rowhead {
+    display: grid;
+    grid-template-columns: 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 88px 96px auto;
+    align-items: center; gap: var(--s3);
+  }
+  .pa-list-rich .pa-row {
+    border: none; border-bottom: 1px solid var(--line-soft); border-radius: 0;
+    padding: 8px 14px; transform: none;
+  }
+  .pa-list-rich .pa-row:hover { transform: none; background: var(--bg-elev-1); border-color: var(--line-soft); }
+  .pa-list-rich .pa-row:last-child { border-bottom: none; }
+  .pa-list-rich .pa-row.is-selected { background: var(--bg-elev-1); }
+  .pa-rowhead {
+    padding: 9px 14px; background: var(--bg-elev-1);
+    border-bottom: 1px solid var(--line);
+    font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-4); font-weight: 600;
+  }
+  .pa-col-cat {
+    font-size: 12px; color: var(--text-2);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pa-col-sku {
+    font-family: var(--f-mono); font-size: 11px; color: var(--text-4); letter-spacing: .03em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pa-col-muted { color: var(--text-4); }
+  .pa-col-price {
+    font-variant-numeric: tabular-nums; font-size: 13px; color: var(--text-1);
+    justify-self: end; white-space: nowrap;
+  }
+  .pa-col-stock { font-size: 12px; }
+  /* Stock pill — green healthy · brass low (≤5) · red out (0). */
+  .pa-stock {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-variant-numeric: tabular-nums; color: var(--text-2);
+  }
+  .pa-stock-dot { width: 7px; height: 7px; border-radius: 50%; background: #6B8E6F; flex: none; }
+  .pa-stock.is-low .pa-stock-dot { background: var(--warn); }
+  .pa-stock.is-out { color: var(--danger); font-weight: 600; }
+  .pa-stock.is-out .pa-stock-dot { background: var(--danger); }
+  /* In the rich table the dup button shares the status cell — reveal on hover. */
+  .pa-list-rich .pa-dup-row { margin-left: 4px; }
 
   /* Variants ("sizes") — sits in the main column between name and description,
      so the most-edited control is reachable without scrolling past the long
@@ -7394,11 +7446,11 @@
   <section id="tab-products">
     <h2>Products · 产品</h2>
     <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      Mini-app product surface — <b>Designer Sections</b>, keywords, tagline.
-      Master data (price, stock, recipe, allergens) is edited in the kitchen Products page.
+      Your product catalogue at a glance — photo, category, SKU, stock and price in one scannable list.
+      Search or filter by category, and click any product to open it.
     </p>
     <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      小程序产品页编辑入口：「设计板块」、关键词、宣传短句。后厨主数据在后厨 Products 页面编辑。
+      产品目录总览——图片、分类、SKU、库存与价格一览无遗。可按名称搜索或按分类筛选,点击任意产品即可打开编辑。
     </p>
 
     <!-- Catalogue health — shared fc-* KPI strip, computed in-browser from the
@@ -10800,6 +10852,166 @@
           </div>
         </div>
 
+        <!-- ────── OPERATIONS ────── (integrations moved here from the kitchen
+             app 2026-06-09 so the online store is self-contained. The data layer
+             was already on /api/retail-admin/*; only the UI moved. Grouped as
+             "Operations" — the bundle that would later delegate to a central
+             multi-channel system via an ownership-mode flag, kept deliberately
+             separate from the channel settings (Shop / Push / CS) above. ) -->
+        <div class="sub-panel" id="sub-ops">
+          <h2>Operations · 运营</h2>
+
+          <!-- Ownership banner. This store self-manages operations today; the
+               whole section is built so it can later be handed to a central
+               system that runs every sales channel (just flip ownership). -->
+          <div class="group-card" style="border-left:3px solid var(--accent)">
+            <div class="group-card-head"><h3>Ownership · 归属</h3></div>
+            <div style="margin-bottom:10px">
+              <span style="background:var(--accent);color:var(--accent-ink);padding:3px 11px;border-radius:99px;font-size:12px;font-weight:700">● Self-managed · 本店自管</span>
+            </div>
+            <div class="muted" style="font-size:12px;line-height:1.6">
+              This online store controls its own shipping, printing and order routing below. If you later connect to a central system that runs all your sales channels (mini-app, Meituan, markets, wholesale…), these operations can be handed up to it — the store stays one channel and the settings here become read-only. · 本商店目前自行管理配送、打印与派单。日后接入统一管理所有销售渠道的中台后,这些运营设置可交由中台托管,本店作为其中一个渠道,此处变为只读。
+            </div>
+          </div>
+
+          <!-- ── Order routing: Tencent Maps ── -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Order routing · 派单 — Tencent Maps · 腾讯地图</h3>
+              <div class="muted">Geocodes store + customer addresses so paid orders route to the geographically closest store (GPS distance), not just by district name. Set <code>TENCENT_MAPS_KEY</code> in <code>/root/roots-v2/.env</code>; free key at <a href="https://lbs.qq.com" target="_blank" style="color:var(--accent)">lbs.qq.com</a>. · 地址保存时自动转经纬度,按 GPS 距离选最近门店。</div>
+            </div>
+            <div id="integrations-status" class="muted" style="font-size:13px;padding:14px 16px;background:var(--bg-elev-1);border-radius:8px;margin-bottom:14px">Loading status…</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn" onclick="loadIntegrationsStatus()">↻ Refresh status</button>
+              <button class="btn btn-primary" onclick="_geocodeBackfill()">🗺 Geocode all stores &amp; addresses now</button>
+            </div>
+            <div class="muted" style="font-size:11px;margin-top:10px">New addresses + stores geocode automatically on save. This only matters for first-time setup, after a quota reset, or after changing a store's street address outside the form. · 新地址自动同步;此按钮仅用于初始化或批量补全。</div>
+          </div>
+
+          <!-- ── Guangzhou delivery: excluded districts ── -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Guangzhou delivery zones · 广州配送区 — excluded districts · 排除区</h3>
+              <div class="muted">The 5-option in-stock fallback (cancel item / replace / ship farther / wait / cancel order) only shows for <b>广州市 right-away orders</b> in districts NOT listed here. Excluded districts (and non-Guangzhou) keep the simple yes/no fallback. · 仅广州市 + 立即配送 + 不在排除清单内的区才看 5 选项弹窗。</div>
+            </div>
+            <div class="muted" style="font-size:11px;margin-bottom:8px">Tap a district to exclude it. · 点击区名将其加入排除列表。</div>
+            <div id="gz-excl-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+            <div id="gz-excl-summary" class="muted" style="font-size:12px"></div>
+          </div>
+
+          <!-- ── Shipping: 快递100 tracking push ── -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Shipping · 物流 — 快递100 tracking push <span id="kd100-chip"></span></h3>
+              <div class="muted">Free subscribe-push API aggregating live tracking from every Chinese carrier (JD, SF, YTO, ZTO…). Paste a waybill on a shipped order and live updates flow into the customer's mini app. Sign up at <a href="https://api.kuaidi100.com" target="_blank" style="color:var(--accent)">api.kuaidi100.com</a>. · 免费物流轨迹订阅,适配全部国内快递。</div>
+            </div>
+            <div class="ops-grid">
+              <div>
+                <label class="field-label">客户编号 · Customer ID</label>
+                <input type="text" id="kd100-customer" style="font-family:monospace" placeholder="e.g. ABCD1234">
+              </div>
+              <div>
+                <label class="field-label">授权 Key</label>
+                <input type="password" id="kd100-key" placeholder="paste 授权 key">
+              </div>
+              <div style="grid-column:1/-1">
+                <label class="field-label">Callback URL · 回调地址</label>
+                <input type="text" id="kd100-callback" style="font-family:monospace" value="https://rootskitchenchina.com/api/retail/tracking/kd100/callback">
+                <div class="muted" style="font-size:11px;margin-top:4px">Whitelist this in your kd100 dashboard. Webhook fires on every event update.</div>
+              </div>
+              <div style="grid-column:1/-1">
+                <label class="field-label">Callback secret · 回调密钥</label>
+                <input type="password" id="kd100-secret" placeholder="random string — do not rotate">
+                <div class="muted" style="font-size:11px;margin-top:4px">Verifies pushes came from a request we made. Set once and leave alone.</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="_saveIntegration('kd100')">💾 Save</button>
+              <button class="btn" onclick="_testKd100()">⚡ Save &amp; test</button>
+            </div>
+          </div>
+
+          <!-- ── Shipping: 京东物流 LOP waybill push ── -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Shipping · 物流 — 京东物流 LOP direct waybill <span id="jd-chip"></span></h3>
+              <div class="muted">Direct integration with 京东物流开放平台 (<a href="https://lop.jd.com" target="_blank" style="color:var(--accent)">lop.jd.com</a>). Once configured, Orders gains a <b>"Push to JD"</b> bulk action — paid orders push to JD and waybill numbers flow back automatically. Request LOP API access from your JD account manager. · 京东物流直连,一键推单、运单号自动回传。</div>
+            </div>
+            <div class="ops-grid">
+              <div>
+                <label class="field-label">app_key</label>
+                <input type="text" id="jd-app_key" style="font-family:monospace" placeholder="from lop.jd.com app">
+              </div>
+              <div>
+                <label class="field-label">app_secret</label>
+                <input type="password" id="jd-app_secret" placeholder="paste app_secret">
+              </div>
+              <div style="grid-column:1/-1">
+                <label class="field-label">access_token</label>
+                <input type="password" id="jd-access_token" placeholder="OAuth token">
+              </div>
+              <div>
+                <label class="field-label">customer_code · 商家编码</label>
+                <input type="text" id="jd-customer_code" style="font-family:monospace" placeholder="from jdl.com 商家后台">
+              </div>
+              <div>
+                <label class="field-label">API environment</label>
+                <select id="jd-env">
+                  <option value="production">production</option>
+                  <option value="sandbox">sandbox</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="_saveIntegration('jd')">💾 Save</button>
+              <button class="btn" onclick="_testJd()">⚡ Save &amp; ping JD</button>
+            </div>
+            <div class="muted" style="font-size:11px;margin-top:10px">After saving, full waybill push needs a one-time field-set confirmation against your JD merchant config — tell your developer once credentials are saved.</div>
+          </div>
+
+          <!-- ── Fulfillment: 飞鹅 cloud printer ── -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Receipt printing · 出单 — 飞鹅 cloud printer <span id="feie-chip"></span></h3>
+              <div class="muted">Auto-prints a ticket at the store the moment an order is paid — no PC needed, the printer also voice-announces it. Bind the printer in the 飞鹅 app, then get your <b>USERKEY</b> from a developer app at <a href="https://www.feieyun.com" target="_blank" style="color:var(--accent)">feieyun.com</a>. · 付款后自动在门店打印小票并语音播报。</div>
+            </div>
+            <div class="muted" style="font-size:11px;margin-bottom:12px;background:var(--bg-elev-1);border-radius:6px;padding:8px 10px">⚠ The <b>USERKEY</b> is from your feieyun.com developer console — <em>not</em> the 密钥/KEY on the device label. One account holds all printers; each store's <b>SN</b> (编号) is set per-store below.</div>
+            <div class="ops-grid">
+              <div>
+                <label class="field-label">Account · 账号 (USER)</label>
+                <input type="text" id="feie-user" style="font-family:monospace" placeholder="feieyun login phone/email">
+              </div>
+              <div>
+                <label class="field-label">USERKEY · UKEY</label>
+                <input type="password" id="feie-ukey" placeholder="paste USERKEY from dev console">
+              </div>
+              <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px">
+                <input type="checkbox" id="feie-auto" style="width:18px;height:18px">
+                <label for="feie-auto" style="font-size:13px;color:var(--text-1)">Auto-print every paid order at its store · 付款后在对应门店自动打印</label>
+              </div>
+              <div style="grid-column:1/-1">
+                <label class="field-label">Receipt header · 小票抬头</label>
+                <input type="text" id="feie-shop" maxlength="40" placeholder="shop name shown at top of receipt">
+              </div>
+            </div>
+            <div style="border-top:1px solid var(--line);margin:4px 0 14px"></div>
+            <div class="field-label">Printers by store · 各门店打印机</div>
+            <div class="muted" style="font-size:12px;margin-bottom:10px">Each store prints its own orders. Leave a store's SN blank if it has no printer. · 每个门店打印自己的订单,没有打印机的门店留空。</div>
+            <div id="feie-stores" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px">
+              <div class="muted" style="font-size:13px">Loading stores…</div>
+            </div>
+            <div style="border-top:1px solid var(--line);margin:4px 0 14px"></div>
+            <div class="field-label">Out-of-Guangzhou orders · 广州以外订单</div>
+            <div class="muted" style="font-size:12px;margin-bottom:8px">Orders shipping outside Guangzhou always print at this store's printer (the warehouse that ships them). In-Guangzhou orders print at their own store. · 广州以外的订单始终在此门店出单;市内订单仍在各自门店打印。</div>
+            <select id="feie-ooc" style="margin-bottom:14px">
+              <option value="">— Use each order's own store · 按订单所属门店 —</option>
+            </select>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="_savePrinter()">💾 Save all</button>
+            </div>
+          </div>
+        </div>
+
         <!-- ────── shared save bar ────── -->
         <div class="save-bar">
           <button class="btn btn-primary" onclick="saveConfig()">
@@ -11633,10 +11845,418 @@ window.addEventListener('beforeunload', (e) => {
 // ── Settings sub-nav switcher ──
 $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
   $$('#settings-nav button').forEach(b => b.classList.toggle('active', b === btn));
-  $$('.sub-panel').forEach(p => p.classList.toggle('active', p.id === 'sub-' + btn.dataset.sub));
+  const sub = btn.dataset.sub;
+  $$('.sub-panel').forEach(p => p.classList.toggle('active', p.id === 'sub-' + sub));
+  // The shared "Save settings" bar drives saveConfig() (Shop/Push/CS only). The
+  // Operations panel has its own per-card saves, so hide the shared bar there.
+  const _saveBar = document.querySelector('.settings-body > .save-bar');
+  if (_saveBar) _saveBar.style.display = (sub === 'ops') ? 'none' : '';
+  // Lazy-load the Operations panel's live data each time it is opened.
+  if (sub === 'ops') loadOpsPanel();
   // Scroll the settings body to top within the page
   window.scrollTo({ top: document.querySelector('.tabs').offsetTop - 8, behavior: 'smooth' });
 }));
+
+// ═══════════════════════════════════════════════════════════════════════
+// OPERATIONS PANEL (Settings → Operations)
+// Integrations moved here from the kitchen app 2026-06-09. The data layer was
+// already on /api/retail-admin/*; these functions just drive the UI now. They
+// were adapted to this app's theme tokens (--text-1/3, --line, --bg-elev-1).
+// ═══════════════════════════════════════════════════════════════════════
+function loadOpsPanel() {
+  loadIntegrationsStatus();
+  loadShippingIntegrations();
+  loadPrinterPrefs();
+  _loadGzExcludedDistricts();
+}
+
+// ── Shipping integrations: kd100 + JD LOP + Feie credentials & status chips ──
+async function loadShippingIntegrations() {
+  try {
+    const r = await fetch('/api/retail-admin/integrations');
+    if (!r.ok) return;
+    const j = await r.json();
+    const k = j.data?.kd100 || {};
+    const d = j.data?.jd || {};
+    const kCust = document.getElementById('kd100-customer');
+    const kKey  = document.getElementById('kd100-key');
+    const kCb   = document.getElementById('kd100-callback');
+    const kSec  = document.getElementById('kd100-secret');
+    if (kCust) kCust.value = k.customer || '';
+    if (kKey)  kKey.placeholder      = k.key_masked    ? `${k.key_masked} · leave blank to keep` : 'paste 授权 key';
+    if (kCb && k.callback) kCb.value = k.callback;
+    if (kSec) kSec.placeholder       = k.secret_masked ? `${k.secret_masked} · leave blank to keep` : 'random string — do not rotate';
+    const kChip = document.getElementById('kd100-chip');
+    if (kChip) kChip.innerHTML = k.enabled
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED</span>';
+
+    const jAk = document.getElementById('jd-app_key');
+    const jAs = document.getElementById('jd-app_secret');
+    const jAt = document.getElementById('jd-access_token');
+    const jCc = document.getElementById('jd-customer_code');
+    const jEv = document.getElementById('jd-env');
+    if (jAk) jAk.value = d.app_key || '';
+    if (jAs) jAs.placeholder = d.app_secret_masked   ? `${d.app_secret_masked} · leave blank to keep`   : 'paste app_secret';
+    if (jAt) jAt.placeholder = d.access_token_masked ? `${d.access_token_masked} · leave blank to keep` : 'paste access_token';
+    if (jCc) jCc.value = d.customer_code || '';
+    if (jEv) jEv.value = d.env || 'production';
+    const jChip = document.getElementById('jd-chip');
+    if (jChip) jChip.innerHTML = d.enabled
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
+      : '<span style="background:#fef3c7;color:#92400e;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">⏳ PENDING JD ACCOUNT</span>';
+
+    const f = j.data?.feie || {};
+    const fUser = document.getElementById('feie-user');
+    const fUkey = document.getElementById('feie-ukey');
+    if (fUser) fUser.value = f.user || '';
+    if (fUkey) fUkey.placeholder = f.ukey_masked ? `${f.ukey_masked} · leave blank to keep` : 'paste USERKEY from dev console';
+    const fChip = document.getElementById('feie-chip');
+    if (fChip) fChip.innerHTML = f.enabled
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED</span>';
+  } catch (e) { console.warn('[integrations] load failed', e); }
+}
+
+// Printer behaviour prefs + one row per store (SN + template + copies).
+const _FEIE_TEMPLATES = [
+  { id: 'receipt', label: 'Customer receipt · 顾客小票' },
+  { id: 'packing', label: 'Packing slip · 配货单' },
+  { id: 'compact', label: 'Compact · 精简' },
+];
+
+async function loadPrinterPrefs() {
+  try {
+    const r = await fetch('/api/retail-admin/printer');
+    if (!r.ok) return;
+    const p = (await r.json()).data || {};
+    const auto = document.getElementById('feie-auto');
+    const shop = document.getElementById('feie-shop');
+    if (auto) auto.checked = p.auto_print !== false;
+    if (shop) shop.value = p.shop_name || '';
+
+    const box = document.getElementById('feie-stores');
+    if (box) {
+      const stores = p.stores || [];
+      if (!stores.length) {
+        box.innerHTML = '<div style="font-size:13px;color:var(--text-3)">No active stores. Add stores under Stores first. · 暂无门店,请先添加门店。</div>';
+      } else {
+        box.innerHTML = stores.map(s => {
+          const nameCn = escapeHtml(s.name_cn || '');
+          const nameEn = escapeHtml(s.name_en || '');
+          const primary = nameCn || nameEn || escapeHtml(s.code || ('Store ' + s.id));
+          const secondary = (nameCn && nameEn) ? nameEn : '';
+          const codeTag = s.code ? ` <span style="font-weight:600;font-size:11px;color:var(--text-3)">#${escapeHtml(s.code)}</span>` : '';
+          const opts = _FEIE_TEMPLATES.map(t => `<option value="${t.id}" ${s.template===t.id?'selected':''}>${t.label}</option>`).join('');
+          return `
+          <div data-store="${s.id}" style="border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg-elev-1)">
+            <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:var(--text-1)">🏪 ${primary}${secondary ? ` <span style="font-weight:600;font-size:12px;color:var(--text-3)">${secondary}</span>` : ''}${codeTag}</div>
+            <div style="display:grid;grid-template-columns:2fr 1.4fr 0.8fr;gap:10px;align-items:end">
+              <div>
+                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:3px">Printer SN · 编号</label>
+                <input type="text" class="feie-store-sn" value="${escapeHtml(s.sn)}" style="width:100%;font-family:monospace;font-size:12px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-input);color:var(--text-1)" placeholder="e.g. 550540977">
+              </div>
+              <div>
+                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:3px">Template · 模板</label>
+                <select class="feie-store-tpl" onchange="_previewStore(${s.id})" style="width:100%;font-size:12px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-input);color:var(--text-1)">${opts}</select>
+              </div>
+              <div>
+                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:3px">Copies · 份数</label>
+                <input type="number" class="feie-store-copies" min="1" max="5" value="${Number(s.copies)||1}" style="width:100%;font-size:12px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-input);color:var(--text-1)">
+              </div>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+              <div style="flex:0 0 auto">
+                <div style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);margin-bottom:5px">Print preview · 打印预览</div>
+                <div id="feie-prev-${s.id}" class="feie-prev"><div style="color:var(--text-3);font-size:12px">Loading preview…</div></div>
+              </div>
+              <div style="flex:1 1 160px;min-width:140px">
+                <button class="btn" style="font-size:12px;padding:5px 12px" onclick="_testPrinter(${s.id})">🖨 Save &amp; test this store</button>
+                <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.5">The preview shows your latest order in this template (or sample data if none yet). Change the template above to compare. · 预览即真实打印效果</div>
+              </div>
+            </div>
+          </div>`;
+        }).join('');
+        stores.forEach(s => _previewStore(s.id));
+      }
+      const ooc = document.getElementById('feie-ooc');
+      if (ooc) {
+        const sel = p.out_of_city_store_id;
+        ooc.innerHTML =
+          '<option value="">— Use each order’s own store · 按订单所属门店 —</option>' +
+          stores.map(s => {
+            const name = escapeHtml(s.name_cn || s.name_en || s.code || ('Store ' + s.id));
+            return `<option value="${s.id}" ${String(sel)===String(s.id)?'selected':''}>${name}</option>`;
+          }).join('');
+      }
+    }
+  } catch (e) { console.warn('[printer] load failed', e); }
+}
+
+// Faux 58mm thermal-paper render of Feieyun markup so the operator sees roughly
+// how the slip prints. Tags wrap a whole line: <CB> center+enlarge · <B> enlarge
+// · <L> double-height · <BOLD> bold · <C> center
+function _renderThermal(content) {
+  const lines = String(content == null ? '' : content).replace(/\s+$/, '').split('\n');
+  return lines.map(line => {
+    let cls = '', inner = line;
+    const m = line.match(/^<(CB|B|L|BOLD|C)>([\s\S]*)<\/\1>$/);
+    if (m) {
+      inner = m[2];
+      cls = ({ CB:'tc tbig', B:'tbig', L:'ttall', BOLD:'tbold', C:'tc' })[m[1]] || '';
+    }
+    inner = inner.replace(/<\/?(CB|B|L|BOLD|C)>/g, '');
+    if (inner === '') return '<div class="tln"> </div>';
+    return `<div class="tln ${cls}">${escapeHtml(inner)}</div>`;
+  }).join('');
+}
+
+async function _previewStore(storeId) {
+  const box = document.getElementById('feie-prev-' + storeId);
+  if (!box) return;
+  const row = document.querySelector('#feie-stores [data-store="' + storeId + '"]');
+  const tpl = row?.querySelector('.feie-store-tpl')?.value || 'receipt';
+  try {
+    const r = await fetch('/api/retail-admin/printer/preview?store_id=' + storeId + '&template=' + encodeURIComponent(tpl));
+    const j = await r.json();
+    if (!j.ok) { box.innerHTML = '<div style="color:var(--text-3);font-size:12px">No preview available</div>'; return; }
+    box.innerHTML =
+      `<div class="thermal">${_renderThermal(j.content)}</div>` +
+      `<div style="font-size:11px;color:var(--text-3);margin-top:6px;text-align:center;max-width:230px">${
+        j.sample ? 'Sample data · 示例数据' : 'Your latest order · 最近订单'}</div>`;
+  } catch { box.innerHTML = '<div style="color:var(--text-3);font-size:12px">Preview failed</div>'; }
+}
+
+function _collectPrinterByStore() {
+  const by_store = {};
+  document.querySelectorAll('#feie-stores [data-store]').forEach(row => {
+    const id = row.getAttribute('data-store');
+    by_store[id] = {
+      sn:       row.querySelector('.feie-store-sn')?.value.trim() || '',
+      template: row.querySelector('.feie-store-tpl')?.value || 'receipt',
+      copies:   parseInt(row.querySelector('.feie-store-copies')?.value, 10) || 1,
+    };
+  });
+  return by_store;
+}
+
+async function _savePrinter() {
+  await _saveIntegration('feie');
+  try {
+    const body = {
+      auto_print: document.getElementById('feie-auto')?.checked,
+      shop_name:  document.getElementById('feie-shop')?.value || '',
+      by_store:   _collectPrinterByStore(),
+      out_of_city_store_id: document.getElementById('feie-ooc')?.value || null,
+    };
+    const r = await fetch('/api/retail-admin/printer', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    toast('✅ Printer settings saved · 已保存', 'success');
+    loadPrinterPrefs();
+  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+async function _testPrinter(storeId) {
+  await _savePrinter();
+  try {
+    const r = await fetch('/api/retail-admin/printer/test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store_id: storeId }),
+    });
+    const j = await r.json();
+    if (j.ok) toast('🖨 Test sent — check that store\'s printer · 已发送', 'success');
+    else      toast('Print failed: ' + (j.error || 'unknown'), 'error');
+  } catch (e) { toast('Test failed: ' + e.message, 'error'); }
+}
+
+async function _saveIntegration(svc) {
+  // Empty string for password fields = "keep current" (backend treats undefined
+  // as keep, null/"" as clear).
+  const v = (id) => document.getElementById(id)?.value;
+  const payload = {};
+  if (svc === 'kd100') {
+    payload.kd100 = {
+      customer: v('kd100-customer').trim() || null,
+      key:      v('kd100-key') || undefined,
+      callback: v('kd100-callback').trim() || null,
+      secret:   v('kd100-secret') || undefined,
+    };
+  } else if (svc === 'jd') {
+    payload.jd = {
+      app_key:       v('jd-app_key').trim() || null,
+      app_secret:    v('jd-app_secret') || undefined,
+      access_token:  v('jd-access_token') || undefined,
+      customer_code: v('jd-customer_code').trim() || null,
+      env:           v('jd-env') || 'production',
+    };
+  } else if (svc === 'feie') {
+    payload.feie = {
+      user: v('feie-user').trim() || null,
+      ukey: v('feie-ukey') || undefined,
+    };
+  }
+  try {
+    const r = await fetch('/api/retail-admin/integrations', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'save failed');
+    toast(`✅ Saved ${svc} · 已保存`, 'success');
+    if (svc === 'kd100') { document.getElementById('kd100-key').value = ''; document.getElementById('kd100-secret').value = ''; }
+    if (svc === 'jd')    { document.getElementById('jd-app_secret').value = ''; document.getElementById('jd-access_token').value = ''; }
+    if (svc === 'feie')  { document.getElementById('feie-ukey').value = ''; }
+    loadShippingIntegrations();
+  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+async function _testKd100() {
+  await _saveIntegration('kd100');
+  try {
+    const r = await fetch('/api/retail-admin/integrations/kd100/test', { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) toast('✅ 快递100 reachable · auth OK', 'success');
+    else      toast('快递100 test failed: ' + (j.error || 'unknown'), 'error');
+  } catch (e) { toast('Test failed: ' + e.message, 'error'); }
+}
+
+async function _testJd() {
+  await _saveIntegration('jd');
+  try {
+    const r = await fetch('/api/retail-admin/integrations/jd/test', { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) {
+      toast('✅ JD reachable · auth OK', 'success');
+      if (j.note && /customercode|商家编码/i.test(j.note)) toast('Next: enter CUSTOMER_CODE (商家编码) to enable waybill push · 还需填写商家编码', 'info');
+    } else toast('JD ping failed: ' + (j.error || 'unknown'), 'error');
+  } catch (e) { toast('Test failed: ' + e.message, 'error'); }
+}
+
+async function _geocodeBackfill() {
+  if (!confirm('Geocode all stores + customer addresses now? Uses your Tencent Maps quota. · 现在为所有门店与客户地址重新定位?将消耗腾讯地图配额。')) return;
+  try {
+    toast('Geocoding…', 'info');
+    const r = await fetch('/api/retail-admin/inventory/geocode-backfill', { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok || j.success === false) {
+      const err = j.error || ('HTTP ' + r.status);
+      toast(err === 'tencent_maps_key_missing'
+        ? 'Set TENCENT_MAPS_KEY in /root/roots-v2/.env first · 请先在 /root/roots-v2/.env 配置 TENCENT_MAPS_KEY'
+        : 'Failed: ' + err, 'error');
+      return;
+    }
+    const d = j.data || {};
+    toast(`✅ Geocoded ${d.stores_geocoded}/${d.stores_total} stores · ${d.addresses_geocoded}/${d.addresses_total} addresses`, 'success');
+    loadIntegrationsStatus();
+  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+// ── GZ-express excluded districts ──
+// All 11 official Guangzhou districts as a multi-select. Clicking a chip toggles
+// it between "included" (5-option modal eligible) and "excluded" (legacy yes/no
+// modal). Saves on every click; caches the current list in _gzExclSet.
+const GZ_DISTRICTS = [
+  { code: '越秀区', en: 'Yuexiu' },
+  { code: '海珠区', en: 'Haizhu' },
+  { code: '荔湾区', en: 'Liwan' },
+  { code: '天河区', en: 'Tianhe' },
+  { code: '白云区', en: 'Baiyun' },
+  { code: '黄埔区', en: 'Huangpu' },
+  { code: '番禺区', en: 'Panyu' },
+  { code: '花都区', en: 'Huadu' },
+  { code: '南沙区', en: 'Nansha' },
+  { code: '从化区', en: 'Conghua' },
+  { code: '增城区', en: 'Zengcheng' },
+];
+let _gzExclSet = new Set();
+async function _loadGzExcludedDistricts() {
+  try {
+    const r = await fetch('/api/retail-admin/config/gz-excluded-districts');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    _gzExclSet = new Set(j.data || []);
+    _paintGzExclChips();
+  } catch (e) {
+    toast('Failed to load: ' + e.message, 'error');
+  }
+}
+function _paintGzExclChips() {
+  const wrap = document.getElementById('gz-excl-chips');
+  if (!wrap) return;
+  wrap.innerHTML = GZ_DISTRICTS.map(d => {
+    const on = _gzExclSet.has(d.code);
+    return `<button onclick="_toggleGzExclDistrict('${d.code}')" style="
+      display:inline-flex;align-items:center;gap:6px;
+      padding:7px 14px;border-radius:99px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;
+      border:1.5px solid ${on ? '#dc2626' : 'var(--line)'};
+      background:${on ? 'rgba(220,38,38,.08)' : 'var(--bg-elev-1)'};
+      color:${on ? '#dc2626' : 'var(--text-1)'};
+      transition:all .12s;
+    ">${on ? '🚫' : '✓'} ${d.code} · ${d.en}</button>`;
+  }).join('');
+  const summary = document.getElementById('gz-excl-summary');
+  if (summary) {
+    const n = _gzExclSet.size;
+    summary.textContent = n === 0
+      ? 'All 11 districts get the 5-option modal. · 全部 11 区使用 5 选项弹窗。'
+      : `${n} district${n === 1 ? '' : 's'} excluded · ${n} 个区已排除${ n === GZ_DISTRICTS.length ? ' (no district gets the 5-option modal)' : ''}`;
+  }
+}
+async function _toggleGzExclDistrict(code) {
+  if (_gzExclSet.has(code)) _gzExclSet.delete(code);
+  else                       _gzExclSet.add(code);
+  _paintGzExclChips();
+  const districts = Array.from(_gzExclSet);
+  try {
+    const r = await fetch('/api/retail-admin/config/gz-excluded-districts', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ districts }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    toast('Saved · 已保存', 'success');
+  } catch (e) {
+    if (districts.includes(code)) _gzExclSet.delete(code); else _gzExclSet.add(code);
+    _paintGzExclChips();
+    toast('Failed: ' + e.message, 'error');
+  }
+}
+
+// ── Order routing status — Tencent Maps key + geocode counts ──
+async function loadIntegrationsStatus() {
+  const box = document.getElementById('integrations-status');
+  if (!box) return;
+  box.innerHTML = 'Loading…';
+  try {
+    const r = await fetch('/api/retail-admin/inventory/geocode-status');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const d = j.data || {};
+    const cfg = d.tencent_maps_configured;
+    const s = d.stores || { total: 0, missing: 0, geocoded: 0 };
+    const a = d.addresses || { total: 0, missing: 0, geocoded: 0 };
+    const keyChip = cfg
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ KEY CONFIGURED</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ KEY MISSING</span>';
+    const pct = (got, tot) => tot === 0 ? '—' : `${got}/${tot}`;
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <strong style="color:var(--text-1)">Tencent Maps</strong>
+        ${keyChip}
+      </div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:12px">
+        <span style="color:var(--text-3)">Stores geocoded</span>
+        <span><strong>${pct(s.geocoded, s.total)}</strong>${s.missing ? ` · <span style="color:#b85c00">${s.missing} missing GPS</span>` : ''}</span>
+        <span style="color:var(--text-3)">Addresses geocoded</span>
+        <span><strong>${pct(a.geocoded, a.total)}</strong>${a.missing ? ` · <span style="color:#b85c00">${a.missing} missing GPS</span>` : ''}</span>
+      </div>
+      ${!cfg ? '<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px">⚠ Add <code>TENCENT_MAPS_KEY=...</code> to <code>/root/roots-v2/.env</code> and restart pm2 to enable geocoding.</div>' : ''}
+    `;
+  } catch (e) {
+    box.innerHTML = `<span style="color:var(--danger)">Failed to load status · 加载状态失败: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
 
 // ═══════════════════════════════════════════════════════════════════════
 // COMMAND SEARCH PALETTE
@@ -23171,14 +23791,49 @@ function paRender() {
   // editor's ⤢ button — and wins over listonly when both apply.
   const _paSplit = document.getElementById('pa-split');
   if (_paSplit && !_paSplit.classList.contains('pa-split-editonly')) {
-    _paSplit.classList.toggle('pa-split-listonly', PA_VIEW !== 'list');
+    // Full width whenever the editor is closed — grid/compact scan AND the new
+    // list-view "overview" table both span the page. Opening a product (or "+
+    // Add product" from any view) docks the editor and splits the row.
+    _paSplit.classList.toggle('pa-split-listonly', !_paEditorOpen);
   }
 
   if (PA_VIEW === 'list') {
-    grid.className = 'pa-list';
-    grid.innerHTML = pageUnits.map(u => {
+    // Overview = full-width landing table (nothing open) with rich columns for
+    // scanning the catalogue; Docked = narrow list beside the editor, kept to a
+    // compact name + pills row so it fits the 380px pane.
+    const overview = !_paEditorOpen;
+    grid.className = overview ? 'pa-list pa-list-rich' : 'pa-list';
+    const head = (overview && pageUnits.length) ? `
+      <div class="pa-rowhead" aria-hidden="true">
+        <span></span>
+        <span>${cuT('Product', '产品')}</span>
+        <span>${cuT('Category', '分类')}</span>
+        <span>SKU</span>
+        <span>${cuT('Stock', '库存')}</span>
+        <span class="pa-col-price">${cuT('Price', '价格')}</span>
+        <span></span>
+      </div>` : '';
+    grid.innerHTML = head + pageUnits.map(u => {
       const p = u.p;
       const img  = p.image_data || p.image_url || '';
+      if (overview) {
+        const sku = u.group
+          ? `${u.members.length} ${cuT('sizes', '规格')}`
+          : escapeHtml(p.sku || '—');
+        return `
+        <div class="pa-row" onclick="paOpenEdit(${p.id})">
+          <div class="pa-row-img">${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : PA_ICON_BROKEN}</div>
+          <div class="pa-row-main">
+            <div class="pa-row-name">${escapeHtml(p.name_en || '—')}</div>
+            ${p.name_cn ? `<div class="pa-row-sub">${escapeHtml(p.name_cn)}</div>` : ''}
+          </div>
+          <div class="pa-col-cat">${_paCatCell(u)}</div>
+          <div class="pa-col-sku">${sku}</div>
+          <div class="pa-col-stock">${_paStockCell(u)}</div>
+          ${_paPriceCell(u)}
+          <div class="pa-row-pills">${_paPills(p)}<button class="pa-dup-row" type="button" title="Duplicate · 复制" onclick="event.stopPropagation(); paDuplicate(${p.id})">⧉</button></div>
+        </div>`;
+      }
       const meta = u.group
         ? `${u.members.length} ${cuT('sizes', '规格')} · ${u.members.map(_paVariantTag).join(' · ')}`
         : [p.sku, p.size].filter(Boolean).map(escapeHtml).join(' · ');
@@ -23482,9 +24137,13 @@ function pdShowDocked() {
   const empty = document.getElementById('pd-empty');
   const ed    = document.getElementById('pd-editor');
   const split = document.getElementById('pa-split');
+  _paEditorOpen = true;
   if (split) split.classList.remove('pa-split-listonly');
   if (empty) empty.style.display = 'none';
   if (ed)    ed.style.display = '';
+  // Repaint the list into its compact docked form (it shares the row with the
+  // now-visible editor) before measuring the editor's position for the scroll.
+  paRender();
   // With the whole page scrolling (no internal editor scroll), picking a
   // product low in a long list would render the editor above the fold. Bring
   // its top just under the sticky header (98px) — but only if it's meaningfully
@@ -23498,6 +24157,7 @@ function pdClose() {
   // Deselect — the editor returns to the empty-state placeholder. (Closing the
   // editor doesn't close the page; the list stays put.)
   _pdSelectedId = null;
+  _paEditorOpen = false;
   const empty = document.getElementById('pd-empty');
   const ed    = document.getElementById('pd-editor');
   if (ed)    ed.style.display = 'none';
@@ -23505,7 +24165,8 @@ function pdClose() {
   _pdGallery = []; _pdGalleryDirty = false;
   const ri = document.getElementById('pd-desc-rich'); if (ri) ri.classList.remove('pd-rte-fs');
   document.body.classList.remove('pd-rte-fs-lock');
-  paApplyRowSelection();
+  // Re-expand the list back into the full-width overview table.
+  paRender();
 }
 // Revert to last save: roll the form back to the snapshot captured when this
 // product was opened, then autosave that restored state so it's the live version
@@ -23536,6 +24197,11 @@ function pdToggleFullscreen() {
 // Currently-selected product id (the one loaded in the docked editor). Used to
 // paint the row highlight and to power Discard / post-save reload.
 let _pdSelectedId = null;
+// True whenever the in-page editor is docked open (an existing product OR a
+// brand-new unsaved one, where _pdSelectedId is still null). Drives the list's
+// overview↔docked layout: editor closed = full-width overview table; editor
+// open = narrow compact list beside the form.
+let _paEditorOpen = false;
 function paApplyRowSelection() {
   const grid = document.getElementById('pa-grid');
   if (!grid) return;
@@ -26682,6 +27348,9 @@ function popOutLivePreview() {
 window.onLangChange(function () {
   // Re-render dashboard tiles so product names switch language immediately.
   if (typeof bentoRenderAll === 'function') { try { bentoRenderAll(); } catch (e) {} }
+  // Re-render the products list so its cuT() labels (overview table header,
+  // variant "sizes" meta) follow the toggle without needing a search/filter.
+  if (typeof paRender === 'function') { try { paRender(); } catch (e) {} }
   // Leaderboard enabled pill
   if (typeof lbUpdateEnabledPill === 'function') lbUpdateEnabledPill();
   // Flash sale form labels — re-set based on whether an edit is in progress
