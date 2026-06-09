@@ -10900,74 +10900,82 @@
             <div class="muted" style="font-size:11px;margin-top:10px">New addresses + stores geocode automatically on save. This only matters for first-time setup, after a quota reset, or after changing a store's street address outside the form. · 新地址自动同步;此按钮仅用于初始化或批量补全。</div>
           </div>
 
-          <!-- ── Shipping: 快递100 tracking push ── -->
+          <!-- ── Logistics integration: 快递100 tracking + 京东物流 LOP waybill ── -->
           <div class="group-card">
             <div class="group-card-head">
-              <h3>Shipping · 物流 — 快递100 tracking push <span id="kd100-chip"></span></h3>
-              <div class="muted">Free subscribe-push API aggregating live tracking from every Chinese carrier (JD, SF, YTO, ZTO…). Paste a waybill on a shipped order and live updates flow into the customer's mini app. Sign up at <a href="https://api.kuaidi100.com" target="_blank" style="color:var(--accent)">api.kuaidi100.com</a>. · 免费物流轨迹订阅,适配全部国内快递。</div>
+              <h3>Logistics integration · 物流集成</h3>
+              <div class="muted">Connect carriers so Orders can stream live tracking into the customer mini app and push waybills to JD. Set up either or both — they work independently. · 物流集成:轨迹回传与一键推单,两者可单独或同时配置。</div>
             </div>
-            <div class="ops-grid">
-              <div>
-                <label class="field-label">客户编号 · Customer ID</label>
-                <input type="text" id="kd100-customer" style="font-family:monospace" placeholder="e.g. ABCD1234">
-              </div>
-              <div>
-                <label class="field-label">授权 Key</label>
-                <input type="password" id="kd100-key" placeholder="paste 授权 key">
-              </div>
-              <div style="grid-column:1/-1">
-                <label class="field-label">Callback URL · 回调地址</label>
-                <input type="text" id="kd100-callback" style="font-family:monospace" value="https://rootskitchenchina.com/api/retail/tracking/kd100/callback">
-                <div class="muted" style="font-size:11px;margin-top:4px">Whitelist this in your kd100 dashboard. Webhook fires on every event update.</div>
-              </div>
-              <div style="grid-column:1/-1">
-                <label class="field-label">Callback secret · 回调密钥</label>
-                <input type="password" id="kd100-secret" placeholder="random string — do not rotate">
-                <div class="muted" style="font-size:11px;margin-top:4px">Verifies pushes came from a request we made. Set once and leave alone.</div>
-              </div>
+            <div class="dz-subtabs" role="tablist" style="margin-bottom:18px">
+              <button type="button" class="dz-subtab active" id="logtab-kd100" onclick="_logTab('kd100')"><span id="kd100-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>快递100 · Tracking</button>
+              <button type="button" class="dz-subtab" id="logtab-jd" onclick="_logTab('jd')"><span id="jd-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>京东物流 · JD</button>
             </div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap">
-              <button class="btn btn-primary" onclick="_saveIntegration('kd100')">💾 Save</button>
-              <button class="btn" onclick="_testKd100()">⚡ Save &amp; test</button>
-            </div>
-          </div>
 
-          <!-- ── Shipping: 京东物流 LOP waybill push ── -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Shipping · 物流 — 京东物流 LOP direct waybill <span id="jd-chip"></span></h3>
-              <div class="muted">Direct integration with 京东物流开放平台 (<a href="https://lop.jd.com" target="_blank" style="color:var(--accent)">lop.jd.com</a>). Once configured, Orders gains a <b>"Push to JD"</b> bulk action — paid orders push to JD and waybill numbers flow back automatically. Request LOP API access from your JD account manager. · 京东物流直连,一键推单、运单号自动回传。</div>
-            </div>
-            <div class="ops-grid">
-              <div>
-                <label class="field-label">app_key</label>
-                <input type="text" id="jd-app_key" style="font-family:monospace" placeholder="from lop.jd.com app">
+            <!-- 快递100 tracking push -->
+            <div id="logpanel-kd100">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>快递100 tracking push · 轨迹订阅</strong> <span id="kd100-chip"></span></div>
+              <div class="muted" style="margin-bottom:14px">Free subscribe-push API aggregating live tracking from every Chinese carrier (JD, SF, YTO, ZTO…). Paste a waybill on a shipped order and live updates flow into the customer's mini app. Sign up at <a href="https://api.kuaidi100.com" target="_blank" style="color:var(--accent)">api.kuaidi100.com</a>. · 免费物流轨迹订阅,适配全部国内快递。</div>
+              <div class="ops-grid">
+                <div>
+                  <label class="field-label">客户编号 · Customer ID</label>
+                  <input type="text" id="kd100-customer" style="font-family:monospace" placeholder="e.g. ABCD1234">
+                </div>
+                <div>
+                  <label class="field-label">授权 Key</label>
+                  <input type="password" id="kd100-key" placeholder="paste 授权 key">
+                </div>
+                <div style="grid-column:1/-1">
+                  <label class="field-label">Callback URL · 回调地址</label>
+                  <input type="text" id="kd100-callback" style="font-family:monospace" value="https://rootskitchenchina.com/api/retail/tracking/kd100/callback">
+                  <div class="muted" style="font-size:11px;margin-top:4px">Whitelist this in your kd100 dashboard. Webhook fires on every event update.</div>
+                </div>
+                <div style="grid-column:1/-1">
+                  <label class="field-label">Callback secret · 回调密钥</label>
+                  <input type="password" id="kd100-secret" placeholder="random string — do not rotate">
+                  <div class="muted" style="font-size:11px;margin-top:4px">Verifies pushes came from a request we made. Set once and leave alone.</div>
+                </div>
               </div>
-              <div>
-                <label class="field-label">app_secret</label>
-                <input type="password" id="jd-app_secret" placeholder="paste app_secret">
-              </div>
-              <div style="grid-column:1/-1">
-                <label class="field-label">access_token</label>
-                <input type="password" id="jd-access_token" placeholder="OAuth token">
-              </div>
-              <div>
-                <label class="field-label">customer_code · 商家编码</label>
-                <input type="text" id="jd-customer_code" style="font-family:monospace" placeholder="from jdl.com 商家后台">
-              </div>
-              <div>
-                <label class="field-label">API environment</label>
-                <select id="jd-env">
-                  <option value="production">production</option>
-                  <option value="sandbox">sandbox</option>
-                </select>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn btn-primary" onclick="_saveIntegration('kd100')">💾 Save</button>
+                <button class="btn" onclick="_testKd100()">⚡ Save &amp; test</button>
               </div>
             </div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap">
-              <button class="btn btn-primary" onclick="_saveIntegration('jd')">💾 Save</button>
-              <button class="btn" onclick="_testJd()">⚡ Save &amp; ping JD</button>
+
+            <!-- 京东物流 LOP direct waybill -->
+            <div id="logpanel-jd" style="display:none">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>京东物流 LOP direct waybill · 直连推单</strong> <span id="jd-chip"></span></div>
+              <div class="muted" style="margin-bottom:14px">Direct integration with 京东物流开放平台 (<a href="https://lop.jd.com" target="_blank" style="color:var(--accent)">lop.jd.com</a>). Once configured, Orders gains a <b>"Push to JD"</b> bulk action — paid orders push to JD and waybill numbers flow back automatically. Request LOP API access from your JD account manager. · 京东物流直连,一键推单、运单号自动回传。</div>
+              <div class="ops-grid">
+                <div>
+                  <label class="field-label">app_key</label>
+                  <input type="text" id="jd-app_key" style="font-family:monospace" placeholder="from lop.jd.com app">
+                </div>
+                <div>
+                  <label class="field-label">app_secret</label>
+                  <input type="password" id="jd-app_secret" placeholder="paste app_secret">
+                </div>
+                <div style="grid-column:1/-1">
+                  <label class="field-label">access_token</label>
+                  <input type="password" id="jd-access_token" placeholder="OAuth token">
+                </div>
+                <div>
+                  <label class="field-label">customer_code · 商家编码</label>
+                  <input type="text" id="jd-customer_code" style="font-family:monospace" placeholder="from jdl.com 商家后台">
+                </div>
+                <div>
+                  <label class="field-label">API environment</label>
+                  <select id="jd-env">
+                    <option value="production">production</option>
+                    <option value="sandbox">sandbox</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn btn-primary" onclick="_saveIntegration('jd')">💾 Save</button>
+                <button class="btn" onclick="_testJd()">⚡ Save &amp; ping JD</button>
+              </div>
+              <div class="muted" style="font-size:11px;margin-top:10px">After saving, full waybill push needs a one-time field-set confirmation against your JD merchant config — tell your developer once credentials are saved.</div>
             </div>
-            <div class="muted" style="font-size:11px;margin-top:10px">After saving, full waybill push needs a one-time field-set confirmation against your JD merchant config — tell your developer once credentials are saved.</div>
           </div>
 
           <!-- ── Fulfillment: 飞鹅 cloud printer ── -->
@@ -11890,6 +11898,8 @@ async function loadShippingIntegrations() {
     if (kChip) kChip.innerHTML = k.enabled
       ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
       : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED</span>';
+    const kDot = document.getElementById('kd100-dot');
+    if (kDot) kDot.style.background = k.enabled ? '#10b981' : 'var(--text-3)';
 
     const jAk = document.getElementById('jd-app_key');
     const jAs = document.getElementById('jd-app_secret');
@@ -11905,6 +11915,8 @@ async function loadShippingIntegrations() {
     if (jChip) jChip.innerHTML = d.enabled
       ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
       : '<span style="background:#fef3c7;color:#92400e;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">⏳ PENDING JD ACCOUNT</span>';
+    const jDot = document.getElementById('jd-dot');
+    if (jDot) jDot.style.background = d.enabled ? '#10b981' : '#f59e0b';
 
     const f = j.data?.feie || {};
     const fUser = document.getElementById('feie-user');
@@ -11916,6 +11928,16 @@ async function loadShippingIntegrations() {
       ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
       : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED</span>';
   } catch (e) { console.warn('[integrations] load failed', e); }
+}
+
+// Logistics card: toggle between the 快递100 and 京东物流 panels (both stay configurable).
+function _logTab(which) {
+  ['kd100', 'jd'].forEach(k => {
+    const panel = document.getElementById('logpanel-' + k);
+    const tab   = document.getElementById('logtab-' + k);
+    if (panel) panel.style.display = (k === which) ? '' : 'none';
+    if (tab)   tab.classList.toggle('active', k === which);
+  });
 }
 
 // Printer behaviour prefs + one row per store (SN + template + copies).
