@@ -7715,7 +7715,14 @@
                 </select>
               </div>
               <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
-              <div class="field"><label class="stacked">Free of (allergens) · 不含 <span class="muted" style="font-weight:400;">(comma-separated)</span></label><input type="text" id="pd-free-of" placeholder="gluten, nuts, soy"></div>
+              <div class="field"><label class="stacked">Free of (allergens) · 不含 <span class="muted" style="font-weight:400;">(tick what applies)</span></label>
+                <div id="pd-free-of" data-freeof-group="1" style="display:flex;flex-wrap:wrap;gap:10px 16px;padding-top:4px;">
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="nuts" style="width:15px;height:15px;"> 🥜 Nuts · 无坚果</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="soy" style="width:15px;height:15px;"> 🌱 Soy · 无大豆</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="gluten" style="width:15px;height:15px;"> 🌾 Gluten · 无麸质</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="5 spice" style="width:15px;height:15px;"> 🫙 5 Spice · 无五香</label>
+                </div>
+              </div>
               <div class="field">
                 <label class="stacked">Shipping · 配送方式</label>
                 <div style="display:flex;gap:16px;align-items:center;padding-top:4px;">
@@ -24281,7 +24288,7 @@ function pdOpen(id) {
   set('pd-price', p ? p.sell_price : ''); set('pd-compare', p && p.compare_at_price);
   set('pd-sku', p && p.sku); set('pd-weight', p && p.size);
   set('pd-status', p ? (p.status || 'Active') : 'Active');
-  set('pd-free-of', p && p.free_of); set('pd-barcode', p && p.barcode); set('pd-notes', p && p.notes);
+  pdFreeOfSet(p && p.free_of); set('pd-barcode', p && p.barcode); set('pd-notes', p && p.notes);
   const ck = (el, v) => { const n = document.getElementById(el); if (n) n.checked = !!v; };
   ck('pd-is-market', p && p.is_market === 1); ck('pd-is-batch-made', p && p.is_batch_made === 1); ck('pd-is-restock-only', p && p.is_restock_only === 1);
   pdLoadStoreStocks(p ? p.id : null);
@@ -25166,6 +25173,24 @@ function pdRteFullscreen() {
   document.body.classList.toggle('pd-rte-fs-lock', on);
 }
 function pdPlainToHtml(t) { return escapeHtml(String(t || '')).replace(/\n/g, '<br>'); }
+// Free-of allergen claims — checkbox group, persisted as a comma-separated
+// string. Any stored token not covered by a checkbox (legacy/custom values)
+// is preserved in _pdFreeOfExtra so saving never silently drops it.
+let _pdFreeOfExtra = [];
+function pdFreeOfSet(str) {
+  const group = document.getElementById('pd-free-of'); if (!group) return;
+  const boxes = [...group.querySelectorAll('input[data-freeof-id]')];
+  const known = new Map(boxes.map(b => [b.dataset.freeofId.toLowerCase(), b]));
+  const toks = String(str || '').split(',').map(s => s.trim()).filter(Boolean);
+  boxes.forEach(b => { b.checked = false; });
+  _pdFreeOfExtra = [];
+  toks.forEach(t => { const b = known.get(t.toLowerCase()); if (b) b.checked = true; else _pdFreeOfExtra.push(t); });
+}
+function pdFreeOfGet() {
+  const group = document.getElementById('pd-free-of'); if (!group) return '';
+  const checked = [...group.querySelectorAll('input[data-freeof-id]:checked')].map(b => b.dataset.freeofId);
+  return [...checked, ..._pdFreeOfExtra].join(', ');
+}
 // A visually-empty rich box (just <br>/&nbsp;) saves as '' rather than junk markup.
 function pdRteClean(html) { const d = document.createElement('div'); d.innerHTML = html || ''; return (d.innerText || '').trim() ? (html || '').trim() : ''; }
 // ── Autosave engine ────────────────────────────────────────────────────────
@@ -25194,7 +25219,7 @@ function pdCollectBody() {
     sell_price: parseFloat(g('pd-price')) || 0,
     compare_at_price: parseFloat(g('pd-compare')) || 0,
     status: g('pd-status') || 'Active',
-    free_of: g('pd-free-of'), barcode: g('pd-barcode'), notes: g('pd-notes'),
+    free_of: pdFreeOfGet(), barcode: g('pd-barcode'), notes: g('pd-notes'),
     is_market: ckd('pd-is-market'), is_restock_only: ckd('pd-is-restock-only'), is_batch_made: ckd('pd-is-batch-made'),
     ship_modes: modes.join(',') || 'air,land',
     description_en: pdRteClean(document.getElementById('pd-rte-en').innerHTML),
@@ -25313,7 +25338,7 @@ function pdSnapshot() {
   const ck = el => { const n = document.getElementById(el); return !!(n && n.checked); };
   return {
     name_en: g('pd-name-en'), name_cn: g('pd-name-cn'), price: g('pd-price'), compare: g('pd-compare'),
-    sku: g('pd-sku'), weight: g('pd-weight'), status: g('pd-status'), free_of: g('pd-free-of'),
+    sku: g('pd-sku'), weight: g('pd-weight'), status: g('pd-status'), free_of: pdFreeOfGet(),
     barcode: g('pd-barcode'), notes: g('pd-notes'), badge: g('pd-badge'),
     top: g('pd-top-category'), sub: g('pd-subcategory'),
     is_market: ck('pd-is-market'), is_batch: ck('pd-is-batch-made'), is_restock: ck('pd-is-restock-only'),
@@ -25327,7 +25352,7 @@ function pdApplySnapshot(s) {
   const set = (el, v) => { const n = document.getElementById(el); if (n) n.value = v; };
   const ck  = (el, v) => { const n = document.getElementById(el); if (n) n.checked = v; };
   set('pd-name-en', s.name_en); set('pd-name-cn', s.name_cn); set('pd-price', s.price); set('pd-compare', s.compare);
-  set('pd-sku', s.sku); set('pd-weight', s.weight); set('pd-status', s.status); set('pd-free-of', s.free_of);
+  set('pd-sku', s.sku); set('pd-weight', s.weight); set('pd-status', s.status); pdFreeOfSet(s.free_of);
   set('pd-barcode', s.barcode); set('pd-notes', s.notes); set('pd-badge', s.badge);
   ck('pd-is-market', s.is_market); ck('pd-is-batch-made', s.is_batch); ck('pd-is-restock-only', s.is_restock);
   ck('pd-ship-air', s.air); ck('pd-ship-land', s.land); ck('pd-published', s.published);
