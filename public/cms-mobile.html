@@ -329,6 +329,10 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
     <!-- MENUS -->
     <div class="menu page-menu" id="menu-page"></div>
     <div class="menu more-menu" id="menu-more">
+      <button onclick="closeMenus();openTheme()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22a10 10 0 1 1 0-20 8 8 0 0 1 0 16h-1.5a1.5 1.5 0 0 0-1 2.6A2 2 0 0 1 12 22Z"/><circle cx="7.5" cy="10.5" r="1.2" fill="currentColor"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor"/><circle cx="16.5" cy="10.5" r="1.2" fill="currentColor"/></svg>
+        <span class="mi-tx"><span class="t"><span class="i18n-en">Theme &amp; brand</span><span class="i18n-cn">主题与品牌</span></span><span class="s"><span class="i18n-en">Accent, mascots, footer, Me menu</span><span class="i18n-cn">主色、吉祥物、页脚、我的菜单</span></span></span></button>
+      <div class="sep"></div>
       <button onclick="closeMenus();doRevert()" class="danger">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
         <span class="mi-tx"><span class="t"><span class="i18n-en">Revert draft</span><span class="i18n-cn">还原草稿</span></span><span class="s"><span class="i18n-en">Discard, reload published</span><span class="i18n-cn">放弃并重新加载已发布版本</span></span></span></button>
@@ -374,7 +378,7 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
     <div class="sheet" id="sheet-design">
       <div class="grab"><i></i></div>
       <div class="sheet-head">
-        <div><h3><span class="i18n-en">Design</span><span class="i18n-cn">设计</span></h3><div class="sub"><span class="i18n-en">Theme &amp; brand</span><span class="i18n-cn">主题与品牌</span></div></div>
+        <div><h3><span class="i18n-en">Design</span><span class="i18n-cn">设计</span></h3><div class="sub"><span class="i18n-en">Page background</span><span class="i18n-cn">页面背景</span></div></div>
         <button class="x" onclick="closeSheet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="sheet-body">
@@ -382,7 +386,21 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
           <div class="t"><span class="i18n-en">Page background</span><span class="i18n-cn">页面背景</span></div>
           <div class="swatches" id="bg-swatches"></div>
         </div>
+        <div class="desk-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          <div><b><span class="i18n-en">Tab bar, fonts &amp; per-block colours</span><span class="i18n-cn">标签栏、字体与各模块配色</span></b> <span class="i18n-en">are tuned on desktop.</span><span class="i18n-cn">请在电脑上调整。</span> <a href="/cms?desktop=1"><span class="i18n-en">Open on a computer ↗</span><span class="i18n-cn">在电脑上打开 ↗</span></a></div>
+        </div>
+      </div>
+    </div>
 
+    <!-- THEME & BRAND (opened from the ⋯ menu) -->
+    <div class="sheet" id="sheet-theme">
+      <div class="grab"><i></i></div>
+      <div class="sheet-head">
+        <div><h3><span class="i18n-en">Theme &amp; brand</span><span class="i18n-cn">主题与品牌</span></h3><div class="sub"><span class="i18n-en">Storefront look &amp; feel</span><span class="i18n-cn">店面外观风格</span></div></div>
+        <button class="x" onclick="closeSheet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div class="sheet-body">
         <!-- Storefront look-and-feel, moved here from the Mini App Backend
              Settings → Brand & theme. Each control saves immediately to
              PUT /api/retail-admin/config (same keys the mini-app reads). -->
@@ -437,11 +455,6 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
         <div class="dgroup">
           <div class="t"><span class="i18n-en">Me page menu</span><span class="i18n-cn">「我的」页菜单</span></div>
           <ul id="tb-me-rows" style="list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;"></ul>
-        </div>
-
-        <div class="desk-note">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-          <div><b><span class="i18n-en">Tab bar, fonts &amp; per-block colours</span><span class="i18n-cn">标签栏、字体与各模块配色</span></b> <span class="i18n-en">are tuned on desktop.</span><span class="i18n-cn">请在电脑上调整。</span> <a href="/cms?desktop=1"><span class="i18n-en">Open on a computer ↗</span><span class="i18n-cn">在电脑上打开 ↗</span></a></div>
         </div>
       </div>
     </div>
@@ -793,8 +806,18 @@ async function openDesign() {
     CURRENT_BG = (data && data.theme && data.theme.page_bg) || '';
   } catch (e) { CURRENT_BG = ''; }
   markBg();
-  tbHydrate(data);
   openSheet('design');
+}
+
+// Theme & brand lives in its own sheet, opened from the ⋯ menu.
+async function openTheme() {
+  let data = null;
+  try {
+    const cfg = await fetch('/api/retail-admin/config', { credentials: 'same-origin' }).then(r => r.json());
+    data = cfg && cfg.data;
+  } catch (e) { data = null; }
+  tbHydrate(data);
+  openSheet('theme');
 }
 async function setBg(token, el) {
   CURRENT_BG = token || '';
@@ -1018,12 +1041,12 @@ function doRevert() { send('revert'); }                     // iframe shows the 
 
 /* ── sheets ───────────────────────────────────────────────────────── */
 function openSheet(id) {
-  ['add', 'edit', 'design'].forEach(s => $('#sheet-' + s).classList.remove('on'));
+  ['add', 'edit', 'design', 'theme'].forEach(s => $('#sheet-' + s).classList.remove('on'));
   $('#backdrop').classList.add('on');
   $('#sheet-' + id).classList.add('on');
 }
 function closeSheet() {
-  ['add', 'edit', 'design'].forEach(s => $('#sheet-' + s).classList.remove('on'));
+  ['add', 'edit', 'design', 'theme'].forEach(s => $('#sheet-' + s).classList.remove('on'));
   $('#backdrop').classList.remove('on');
   M.editId = null;
 }
