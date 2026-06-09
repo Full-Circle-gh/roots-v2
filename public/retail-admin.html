@@ -488,6 +488,10 @@
      direct tabs; popover drops below + uses .tabs-popover-item styling. */
   .tabs-group { position: relative; display: inline-flex; }
   .tabs-group.has-active > .tabs-group-trigger { color: var(--text-1); border-bottom-color: var(--brass); }
+  /* While the popover is open it drops to top:100% — right under the trigger's
+     brass underline, leaving a stray gold line floating above the menu. Hide
+     the underline while open; the active item inside the popover marks state. */
+  .tabs-group.open > .tabs-group-trigger { border-bottom-color: transparent; }
   .tabs-chev { width: 10px !important; height: 10px !important; opacity: .7; margin-left: 2px; transition: transform var(--t-fast) ease; }
   .tabs-group.open .tabs-chev { transform: rotate(180deg); }
   .tabs-popover {
