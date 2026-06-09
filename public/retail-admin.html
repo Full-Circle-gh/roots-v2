@@ -13604,12 +13604,17 @@ function bentoRenderSlot(slot, key) {
 
 // ── Tile swap popover ─────────────────────────────────────────────────────
 function bentoMenuOpen(buttonEl, slot) {
+  // Toggle: a second click on the same tile's ⋯ closes the open popover.
+  const existingPop = document.getElementById('db-tile-pop');
+  const wasOpenForThisSlot = existingPop && existingPop.dataset.slot === slot;
   bentoMenuClose();
+  if (wasOpenForThisSlot) return;
   const layout = bentoLoadLayout();
   const currentKey = layout[BENTO_SLOTS.indexOf(slot)];
   const pop = document.createElement('div');
   pop.className = 'db-tile-pop';
   pop.id = 'db-tile-pop';
+  pop.dataset.slot = slot;
   const items = Object.entries(BENTO_CATALOGUE).map(([k, entry]) => {
     const active = k === currentKey ? ' active' : '';
     return `<button type="button" class="${active.trim()}" onclick="bentoSetTile('${slot}','${k}')">
@@ -13650,6 +13655,8 @@ function bentoMenuClose() {
   document.removeEventListener('mousedown', bentoMenuOutside);
 }
 function bentoMenuOutside(e) {
+  // Ignore clicks on a ⋯ button — its own onclick handles open/close (toggle).
+  if (e.target.closest && e.target.closest('.db-tile-menu')) return;
   if (!e.target.closest || !e.target.closest('.db-tile-pop')) bentoMenuClose();
 }
 function bentoSetTile(slot, key) {
