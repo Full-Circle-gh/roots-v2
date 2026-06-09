@@ -253,6 +253,25 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
   text-shadow:0 1px 3px rgba(0,0,0,.55);}
 .sw.none{background:repeating-conic-gradient(var(--bg-elev-2) 0 25%, #fff 0 50%) 0 0/14px 14px;}
 
+/* per-block design (colours of the selected block) */
+.design-blockhead{display:flex;align-items:center;gap:9px;margin-bottom:14px;}
+.design-blockhead .ic{width:30px;height:30px;border-radius:8px;background:var(--accent-soft);color:var(--accent);
+  display:grid;place-items:center;flex:0 0 auto;}
+.design-blockhead .ic svg{width:17px;height:17px;}
+.design-blockhead .nm{font:600 14px var(--f-sans);color:var(--text-1);}
+.design-blockhead .sb{font:400 11px var(--f-sans);color:var(--text-3);margin-top:1px;}
+.csec{margin-bottom:16px;}
+.csec>.t{font:600 11px var(--f-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);margin:0 0 10px;}
+.cfield{margin-bottom:14px;}
+.cfield:last-child{margin-bottom:0;}
+.cflabel{font:500 13px var(--f-sans);color:var(--text-2);margin-bottom:8px;}
+.cfield .sw{width:34px;height:34px;border-radius:9px;}
+.design-hint{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;
+  color:var(--text-3);font:400 13px var(--f-sans);padding:22px 16px;background:var(--bg-elev-1);
+  border:1px solid var(--line);border-radius:var(--r-md);margin-bottom:18px;line-height:1.45;}
+.design-hint svg{width:24px;height:24px;color:var(--text-3);opacity:.7;}
+.design-sep{height:1px;background:var(--line);margin:0 0 18px;}
+
 /* toast */
 .toast{position:absolute;left:50%;bottom:calc(var(--bottom-h) + 20px);transform:translateX(-50%) translateY(12px);
   z-index:60;background:var(--text-1);color:var(--bg-app);font:600 12.5px var(--f-sans);padding:10px 16px;
@@ -378,17 +397,21 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
     <div class="sheet" id="sheet-design">
       <div class="grab"><i></i></div>
       <div class="sheet-head">
-        <div><h3><span class="i18n-en">Design</span><span class="i18n-cn">设计</span></h3><div class="sub"><span class="i18n-en">Page background</span><span class="i18n-cn">页面背景</span></div></div>
+        <div><h3><span class="i18n-en">Design</span><span class="i18n-cn">设计</span></h3><div class="sub"><span class="i18n-en">Colours &amp; background</span><span class="i18n-cn">配色与背景</span></div></div>
         <button class="x" onclick="closeSheet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="sheet-body">
+        <!-- Per-block colours — filled by renderDesignBlock() from the bridge's
+             'design' payload, which mirrors the desktop inspector's live colour
+             controls for the selected block. -->
+        <div id="design-block"></div>
         <div class="dgroup">
           <div class="t"><span class="i18n-en">Page background</span><span class="i18n-cn">页面背景</span></div>
           <div class="swatches" id="bg-swatches"></div>
         </div>
         <div class="desk-note">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-          <div><b><span class="i18n-en">Tab bar, fonts &amp; per-block colours</span><span class="i18n-cn">标签栏、字体与各模块配色</span></b> <span class="i18n-en">are tuned on desktop.</span><span class="i18n-cn">请在电脑上调整。</span> <a href="/cms?desktop=1"><span class="i18n-en">Open on a computer ↗</span><span class="i18n-cn">在电脑上打开 ↗</span></a></div>
+          <div><b><span class="i18n-en">Tab bar &amp; fonts</span><span class="i18n-cn">标签栏与字体</span></b> <span class="i18n-en">are tuned on desktop.</span><span class="i18n-cn">请在电脑上调整。</span> <a href="/cms?desktop=1"><span class="i18n-en">Open on a computer ↗</span><span class="i18n-cn">在电脑上打开 ↗</span></a></div>
         </div>
       </div>
     </div>
@@ -491,6 +514,8 @@ const M = {
   lang: 'en',
   insertAt: null,
   editId: null,
+  sheet: null,            // which bottom sheet is open ('add'|'edit'|'design'|'theme')
+  design: null,           // last 'design' payload from the bridge (per-block colours)
 };
 
 /* ── i18n chrome ──────────────────────────────────────────────────── */
@@ -544,6 +569,9 @@ window.addEventListener('message', (e) => {
     if (M.editId != null) {
       if (M.selectedBlock && M.selectedBlock.id === M.editId) renderEdit();
     }
+  } else if (d.evt === 'design') {
+    M.design = d;
+    if (M.sheet === 'design') renderDesignBlock();
   } else if (d.evt === 'error') {
     toast(d.message || 'Something went wrong', true);
   }
@@ -806,7 +834,94 @@ async function openDesign() {
     CURRENT_BG = (data && data.theme && data.theme.page_bg) || '';
   } catch (e) { CURRENT_BG = ''; }
   markBg();
+  renderDesignBlock();
+  if (M.selectedId != null) send('getDesign');   // pull fresh per-block colours
   openSheet('design');
+}
+
+/* ── per-block colours — mirrors the desktop inspector's live colour controls
+   for the selected block (streamed via the bridge's 'design' event). Tapping a
+   swatch drives the very same desktop onChange, so palettes/sentinels/defaults
+   stay perfectly in sync with the PC editor. ────────────────────────────── */
+function renderDesignBlock() {
+  const host = $('#design-block');
+  if (!host) return;
+  const d = M.design;
+  // No block chosen yet → nudge the user to pick one.
+  if (M.selectedId == null) {
+    host.innerHTML =
+      '<div class="design-hint">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>' +
+        '<div>' + cuT('Tap a block to change its colours.', '点选一个模块来更改它的配色。') + '</div>' +
+      '</div>' +
+      '<div class="design-sep"></div>';
+    return;
+  }
+  // A block is selected but the matching colour payload hasn't arrived yet
+  // (or is stale from a previous block) → brief loading state.
+  if (!d || d.blockId !== M.selectedId) {
+    host.innerHTML =
+      '<div class="design-hint">' +
+        '<div>' + cuT('Loading colours…', '正在加载配色…') + '</div>' +
+      '</div>' +
+      '<div class="design-sep"></div>';
+    return;
+  }
+  let html =
+    '<div class="design-blockhead">' +
+      '<div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="6.5" cy="11.5" r="2.5"/><circle cx="17.5" cy="14.5" r="2.5"/><circle cx="9" cy="18" r="2.5"/></svg></div>' +
+      '<div><div class="nm">' + esc(cuT(d.name, d.name_cn) || d.blockType) + '</div>' +
+        '<div class="sb">' + cuT('Colours for this block', '该模块的配色') + '</div></div>' +
+    '</div>';
+
+  const fields = d.fields || [];
+  if (!fields.length) {
+    html +=
+      '<div class="design-hint">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8h.01M11 12h1v4h1"/></svg>' +
+        '<div>' + cuT('This block has no colour options.', '此模块没有可调配色。') + '</div>' +
+      '</div>';
+  } else {
+    // Group by the inspector section heading, preserving first-seen order.
+    const order = [];
+    const groups = {};
+    fields.forEach(f => {
+      const key = f.section || '';
+      if (!(key in groups)) { groups[key] = []; order.push(key); }
+      groups[key].push(f);
+    });
+    order.forEach(key => {
+      html += '<div class="csec">';
+      if (key) html += '<div class="t">' + esc(key) + '</div>';
+      groups[key].forEach(f => {
+        html += '<div class="cfield">';
+        if (f.label) html += '<div class="cflabel">' + esc(f.label) + '</div>';
+        html += '<div class="swatches">';
+        (f.swatches || []).forEach(s => {
+          const on = String(s.value) === String(f.value) ? ' on' : '';
+          const none = s.hex ? '' : ' none';
+          const style = s.hex ? ' style="background:' + esc(s.hex) + '"' : '';
+          html += '<div class="sw' + none + on + '" title="' + esc(s.label) + '"' +
+            ' data-i="' + f.i + '" data-v="' + esc(s.value) + '"' + style + '></div>';
+        });
+        html += '</div></div>';
+      });
+      html += '</div>';
+    });
+  }
+  html += '<div class="design-sep"></div>';
+  host.innerHTML = html;
+
+  host.querySelectorAll('.sw[data-i]').forEach(sw => {
+    sw.addEventListener('click', () => {
+      const i = parseInt(sw.dataset.i, 10);
+      const v = sw.dataset.v;
+      // Optimistic: reflect the pick immediately, then drive the real control.
+      const f = (M.design.fields || [])[i];
+      if (f) { f.value = v; renderDesignBlock(); }
+      send('setColor', { i, value: v });
+    });
+  });
 }
 
 // Theme & brand lives in its own sheet, opened from the ⋯ menu.
@@ -1044,11 +1159,13 @@ function openSheet(id) {
   ['add', 'edit', 'design', 'theme'].forEach(s => $('#sheet-' + s).classList.remove('on'));
   $('#backdrop').classList.add('on');
   $('#sheet-' + id).classList.add('on');
+  M.sheet = id;
 }
 function closeSheet() {
   ['add', 'edit', 'design', 'theme'].forEach(s => $('#sheet-' + s).classList.remove('on'));
   $('#backdrop').classList.remove('on');
   M.editId = null;
+  M.sheet = null;
 }
 
 /* ── toast ────────────────────────────────────────────────────────── */

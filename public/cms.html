@@ -36,6 +36,10 @@
     try {
       if (new URLSearchParams(location.search).get('embed') === 'preview') {
         document.documentElement.classList.add('fc-preview-embed');
+        // The mobile shell drives per-block colour editing through this page.
+        // This flag tells colorSelect() to register each live colour control so
+        // the embed bridge can stream them to the shell (see __fcColorRegBuf).
+        window.__fcPreviewEmbed = true;
       }
     } catch (e) {}
     // UI scale (text size) — shared suite-wide preference (roots-admin-ui-scale,
@@ -10468,6 +10472,7 @@ function renderInspector() {
   }
   const b = findBlock(state.selectedId);
   if (!b) {
+    if (window.__fcPreviewEmbed) state.designFields = [];
     mount.innerHTML = `
       <div class="empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -10475,6 +10480,10 @@ function renderInspector() {
       </div>`;
     return;
   }
+  // Mobile preview embed: start collecting this block's colour controls. Each
+  // colorSelect() below pushes into the buffer; we snapshot it into
+  // state.designFields after empty sections are pruned (see below).
+  if (window.__fcPreviewEmbed) __fcColorRegBuf = [];
   mount.innerHTML = `
     <div class="inspector-head">
       <div class="type-row">
@@ -10520,6 +10529,42 @@ function renderInspector() {
     const inner = s.querySelector('.insp-sec-body');
     if (!inner || inner.children.length === 0) s.remove();
   });
+  // Mobile preview embed: snapshot the colour controls that survived pruning
+  // (a control inside a removed empty/conditional section is no longer in the
+  // DOM). Derive each one's label + section heading from the live DOM so the
+  // phone shows exactly what desktop shows. The real onChange is kept so a tap
+  // on the phone runs the identical update path.
+  if (window.__fcPreviewEmbed) {
+    state.designFields = (__fcColorRegBuf || []).filter(r => r.el && r.el.isConnected).map(r => {
+      // Prefer an inline label sitting right before the control (e.g. the
+      // per-category colour rows label each picker with the category name).
+      // Otherwise fall back to the enclosing .field's <label>.
+      let label = '';
+      const prev = r.el.previousElementSibling;
+      if (prev && prev.tagName !== 'LABEL' && prev.textContent.trim()) {
+        label = prev.textContent.trim();
+      }
+      if (!label) {
+        const fieldEl = r.el.closest('.field');
+        const lblEl = fieldEl ? fieldEl.querySelector(':scope > label') : null;
+        label = lblEl ? lblEl.textContent.trim() : '';
+      }
+      const secEl = r.el.closest('.insp-sec');
+      const secTtl = secEl ? secEl.querySelector('.insp-sec-title') : null;
+      return {
+        label: label,
+        section: secTtl ? secTtl.textContent.trim() : '',
+        value: r.value == null ? '' : String(r.value),
+        swatches: (r.options || []).map(o => ({
+          value: String(o.value),
+          label: splitT(o.label),
+          hex: dcResolveHex(o.value) || null,
+        })),
+        onChange: r.onChange,
+      };
+    });
+    __fcColorRegBuf = null;
+  }
   const dz = document.createElement('div');
   dz.className = 'danger-zone';
   const btn = document.createElement('button');
@@ -10763,6 +10808,14 @@ function sel(value, options, onChange) {
   return el;
 }
 
+// Per-render registry of the colour controls in the inspector. Populated by
+// colorSelect() ONLY in the mobile preview embed (window.__fcPreviewEmbed), and
+// reset at the top of renderInspector(). The embed bridge turns this into
+// state.designFields → streams it to the mobile shell so per-block colours can
+// be edited on a phone, driving these very same onChange handlers. null when
+// not collecting, so stray colorSelect() calls elsewhere are ignored.
+let __fcColorRegBuf = null;
+
 // Custom colour picker — a trigger showing the current swatch + name, opening
 // a popover list where every option shows its colour chip beside the label.
 // Returns one node so existing field() wrapping + appendChild callers are
@@ -10808,6 +10861,10 @@ function colorSelect(value, options, onChange) {
   menu.querySelectorAll('.cs-opt').forEach(btn => {
     btn.addEventListener('click', () => { close(); onChange(btn.dataset.v); });
   });
+  // Mobile preview embed: register this live control so the bridge can mirror
+  // it on the phone. We keep the real onChange so a tap on the phone drives the
+  // exact same update path (palette, sentinels, defaults all stay in sync).
+  if (__fcColorRegBuf) __fcColorRegBuf.push({ el: wrap, value, options, onChange });
   return wrap;
 }
 
@@ -14177,6 +14234,24 @@ document.addEventListener('keydown', (e) => {
     saving: !!state.saving, blocks: outline(), selectedId: state.selectedId,
   });
   const postSelected = () => POST({ evt: 'selected', block: selectedBlock() });
+  // Per-block colour controls for the mobile Design sheet. state.designFields is
+  // rebuilt by renderInspector() on every render (preview embed only); we strip
+  // the live onChange refs (not serialisable) and index each field so the shell
+  // can echo a tap back via { cmd:'setColor', i }.
+  const postDesign = () => {
+    const b = selectedBlock();
+    const meta = b ? (BLOCK_META[b.type] || {}) : {};
+    POST({
+      evt: 'design',
+      blockId: b ? b.id : null,
+      blockType: b ? b.type : null,
+      name: b ? (meta.name || b.type) : null,
+      name_cn: b ? (meta.name_cn || b.type) : null,
+      fields: (state.designFields || []).map((f, i) => ({
+        i, label: f.label, section: f.section, value: f.value, swatches: f.swatches,
+      })),
+    });
+  };
   const postReady = () => {
     POST({
       evt: 'ready',
@@ -14185,12 +14260,13 @@ document.addEventListener('keydown', (e) => {
     });
     postState();
     postSelected();
+    postDesign();
   };
 
   // Notify the shell on every change. render()/renderPreview() run after
   // every mutation, and setDirty() runs on save-state changes — hook both.
   let _postT = null;
-  const schedulePost = () => { clearTimeout(_postT); _postT = setTimeout(() => { postState(); postSelected(); }, 0); };
+  const schedulePost = () => { clearTimeout(_postT); _postT = setTimeout(() => { postState(); postSelected(); postDesign(); }, 0); };
   const _origRenderPreview = renderPreview;
   renderPreview = function () { const r = _origRenderPreview.apply(this, arguments); schedulePost(); return r; };
   const _origSetDirty = setDirty;
@@ -14216,6 +14292,13 @@ document.addEventListener('keydown', (e) => {
         case 'revert':     revertDraft(); break;                // self-confirms
         case 'getSelected':postSelected(); break;
         case 'getState':   postState(); break;
+        case 'getDesign':  postDesign(); break;                 // per-block colours
+        case 'setColor':   {                                    // tap on the phone
+          const f = (state.designFields || [])[d.i];
+          if (f && typeof f.onChange === 'function') f.onChange(d.value == null ? '' : d.value);
+          postDesign();   // re-sync the sheet after the inspector rebuilds
+          break;
+        }
         case 'setPageBg':  applyThemeBgToPreview(d.token || ''); break;  // live, no reload
       }
     } catch (err) { POST({ evt: 'error', message: String(err && err.message || err) }); }
