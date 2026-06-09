@@ -1860,7 +1860,8 @@
   body.ent-reviews:not(.feat-reviews)       .tabs-popover [data-feat="reviews"],
   body.ent-feedback:not(.feat-feedback)     .tabs-popover [data-feat="feedback"],
   body.ent-socialProof:not(.feat-socialProof) .tabs-popover [data-feat="socialProof"],
-  body.lb-off .tabs-popover button[data-tab="leaderboard"] { padding-right: 48px; }
+  body.lb-off .tabs-popover button[data-tab="leaderboard"],
+  body.vot-open .tabs-popover button[data-tab="voting"] { padding-right: 56px; }
   /* Leaderboard isn't entitlement-gated (it has its own enable toggle on its
      page), but its nav row gets the same OFF pill when disabled — driven by
      body.lb-off. Dim only when it's NOT the current tab, since you sit on this
@@ -1874,6 +1875,18 @@
     padding: 3px 5px; border-radius: 6px;
     display: inline-flex; align-items: center;
     background: var(--bg-elev-2); color: var(--text-3); border: 1px solid var(--line);
+  }
+  /* Voting nav row gets an OPEN pill (same mechanic as Leaderboard's OFF, but a
+     live/positive tint) whenever at least one poll is currently open — driven by
+     body.vot-open. Just a status badge, so no dimming. */
+  body.vot-open .tabs-popover [data-tab="voting"]::after {
+    content: "OPEN"; width: auto; height: auto;
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    font: 700 9px/1 var(--f-mono, monospace); letter-spacing: .06em;
+    padding: 3px 5px; border-radius: 6px;
+    display: inline-flex; align-items: center;
+    background: var(--brass-soft, var(--bg-elev-2)); color: var(--brass, var(--text-2));
+    border: 1px solid var(--brass, var(--line));
   }
   /* 3 — entitled but off: inside the feature's own page, hide the real config and
      show the enable card. .feat-bar (the switch) + .feat-off are spared. */
@@ -12132,6 +12145,7 @@ let ENTITLEMENTS = {};
   loadRctiers();        // Loyalty & Wallet → Membership tier ladder (Roots Club)
   loadFaq();
   lbInitNavState();     // seed the Leaderboard nav OFF pill (lazy form loads later)
+  votInitNavState();    // seed the Voting nav OPEN pill (lazy list loads later)
 })();
 
 // ── Account menu — Google-style profile circle + dropdown ────────────────
@@ -25810,10 +25824,28 @@ function pollStatusPill(status) {
   return `<span class="vot-stat ${status}">${status}</span>`;
 }
 
+// Mirror "any poll currently open" onto the Voting nav row as an OPEN pill,
+// the same way body.lb-off drives Leaderboard's OFF pill.
+function votUpdateNavState() {
+  const anyOpen = (_pollsCache || []).some(p => p.status === 'open');
+  document.body.classList.toggle('vot-open', anyOpen);
+}
+// Seed the nav OPEN pill at startup so it reflects reality before the operator
+// ever opens the Voting tab (the full list lazy-loads on first tab open).
+async function votInitNavState() {
+  try {
+    const r = await fetch('/api/retail-admin/polls', { credentials: 'same-origin' });
+    const b = await r.json();
+    const polls = (b && (b.data || b)) || [];
+    document.body.classList.toggle('vot-open', Array.isArray(polls) && polls.some(p => p.status === 'open'));
+  } catch (e) { /* leave nav as-is if the probe fails */ }
+}
+
 async function loadPolls() {
   try {
     const r = await api('/api/retail-admin/polls');
     _pollsCache = r.data || [];
+    votUpdateNavState();
     renderPollList();
   } catch (e) {
     $('#vot-list').innerHTML = `<div class="muted" style="color: #c64242;">Failed to load · 加载失败: ${escapeHtml(e.message)}</div>`;
