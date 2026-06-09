@@ -1080,7 +1080,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS retail_orders (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     order_no            TEXT UNIQUE NOT NULL,    -- public-facing, e.g. R2026051601234
-    customer_id         INTEGER NOT NULL,
+    customer_id         INTEGER,                 -- nullable so ON DELETE SET NULL keeps the order (financial record) if a customer is ever removed
     -- Workflow
     status              TEXT NOT NULL DEFAULT 'pending_payment',
       -- pending_payment | paid | preparing | dispatched | delivered | cancelled | refunded
@@ -1115,7 +1115,7 @@ db.exec(`
     delivered_at        DATETIME,
     cancelled_at        DATETIME,
     updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (customer_id) REFERENCES retail_customers(id)
+    FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE SET NULL
   );
   CREATE INDEX IF NOT EXISTS idx_retail_orders_customer ON retail_orders(customer_id);
   CREATE INDEX IF NOT EXISTS idx_retail_orders_status   ON retail_orders(status);
@@ -2989,5 +2989,61 @@ try {
     }
   }
 } catch (e) { console.error('[store_products] seed/FK migration failed (left untouched):', e); }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Repair orphaned retail_customers child rows + harden the retail_orders FK.
+// A historical out-of-band hard-delete of a few customers (bypassing FK
+// enforcement) left dangling rows that PRAGMA foreign_key_check flags:
+// retail_orders (no on-delete rule → orphaned), and retail_customer_vouchers /
+// retail_points_transactions / retail_topup_transactions (already ON DELETE
+// CASCADE, so their orphans only exist because the delete skipped FK checks).
+// Fix: rebuild retail_orders to ON DELETE SET NULL (an order is a financial
+// record — keep it, drop the dead customer link) and NULL its orphans; for the
+// CASCADE tables, DELETE the orphans (what CASCADE intended). Guarded + atomic;
+// a residual foreign_key_check failure rolls the whole thing back.
+// ─────────────────────────────────────────────────────────────────────────
+try {
+  const done = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('fix_orphan_customer_fks_v1');
+  if (!done) {
+    const ordFk = db.pragma('foreign_key_list(retail_orders)').find(f => f.from === 'customer_id' && f.table === 'retail_customers');
+    const needsRebuild = ordFk && ordFk.on_delete !== 'SET NULL';
+    db.pragma('foreign_keys = OFF');
+    db.pragma('legacy_alter_table = ON');
+    try {
+      db.transaction(() => {
+        if (needsRebuild) {
+          // Rebuild retail_orders: customer_id nullable + ON DELETE SET NULL.
+          // Read the LIVE schema (so ALTER-added columns come along), swap only
+          // the customer_id NOT NULL + its FK rule, rebuild via a temp table.
+          const trow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='retail_orders'").get();
+          const idxSqls = db.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='retail_orders' AND sql IS NOT NULL").all().map(r => r.sql);
+          const createSql = trow.sql
+            .replace(/customer_id(\s+)INTEGER\s+NOT\s+NULL/i, 'customer_id$1INTEGER')
+            .replace(/REFERENCES\s+retail_customers\s*\(\s*id\s*\)(?!\s+ON\s+DELETE)/i, 'REFERENCES retail_customers(id) ON DELETE SET NULL');
+          const tmpSql = createSql.replace(/(CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`']?)retail_orders(["`']?)/i, '$1_fk_tmp_retail_orders$2');
+          if (tmpSql === createSql) throw new Error('[fix_orphan_customer_fks_v1] could not rename CREATE for retail_orders');
+          db.exec(tmpSql);
+          db.exec('INSERT INTO _fk_tmp_retail_orders SELECT * FROM retail_orders');
+          db.exec('DROP TABLE retail_orders');
+          db.exec('ALTER TABLE _fk_tmp_retail_orders RENAME TO retail_orders');
+          for (const s of idxSqls) db.exec(s);
+        }
+        // Orders: preserve the record, null the dead link.
+        db.exec("UPDATE retail_orders SET customer_id = NULL WHERE customer_id IS NOT NULL AND customer_id NOT IN (SELECT id FROM retail_customers)");
+        // CASCADE tables: purge orphans (the customer is gone).
+        db.exec("DELETE FROM retail_customer_vouchers   WHERE customer_id NOT IN (SELECT id FROM retail_customers)");
+        db.exec("DELETE FROM retail_points_transactions WHERE customer_id NOT IN (SELECT id FROM retail_customers)");
+        db.exec("DELETE FROM retail_topup_transactions  WHERE customer_id NOT IN (SELECT id FROM retail_customers)");
+        const bad = db.pragma('foreign_key_check');
+        if (bad.length) throw new Error('[fix_orphan_customer_fks_v1] residual FK violations: ' + JSON.stringify(bad).slice(0, 300));
+        db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('fix_orphan_customer_fks_v1');
+      })();
+      console.log('[fix_orphan_customer_fks_v1] orphan customer FKs repaired');
+    } finally {
+      db.pragma('legacy_alter_table = OFF');
+      db.pragma('foreign_keys = ON');
+    }
+  }
+} catch (e) { console.error('[fix_orphan_customer_fks_v1] failed (left untouched):', e); }
 
 module.exports = db;
