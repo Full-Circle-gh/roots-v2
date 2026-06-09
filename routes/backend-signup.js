@@ -96,9 +96,30 @@ router.post('/api/backend/signup/request', requestLimiter, express.json(), (req,
     return res.status(400).json({ success: false, error: 'One of the fields is too long · 某个字段过长' });
   }
   const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
-  db.prepare('INSERT INTO tenant_signup_requests (company, contact_name, contact, note, ip) VALUES (?,?,?,?,?)')
+  const ins = db.prepare('INSERT INTO tenant_signup_requests (company, contact_name, contact, note, ip) VALUES (?,?,?,?,?)')
     .run(company, contactName || null, contact, note || null, ip || null);
   console.log('[signup-request] new lead — ' + company + ' (' + contact + ')');
+
+  // Ping the platform owner(s) so a lead doesn't sit unseen in saas-admin.
+  // Same web-push fan-out the feedback inbox uses; audience = kitchen admins,
+  // exactly who requireSaasAdmin lets view the leads list. Lazy require so a
+  // circular pull can never deadlock; failures must not break the response.
+  try {
+    let push = null;
+    try { push = require('./push'); } catch {}
+    if (push) {
+      const admins = db.prepare("SELECT id FROM users WHERE is_active = 1 AND role = 'admin'").all();
+      if (admins.length) {
+        push.sendPushToUsers(admins.map(u => u.id), {
+          title: '📨 New signup request · 新开通申请',
+          body: company + (contact ? ' — ' + contact : ''),
+          url: '/saas-admin',
+          tag: 'fc-signup-' + ins.lastInsertRowid,
+        });
+      }
+    }
+  } catch (e) { console.warn('[signup-request] push fan-out failed:', e.message); }
+
   res.json({ success: true });
 });
 
