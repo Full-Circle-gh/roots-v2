@@ -24461,12 +24461,16 @@ function vaRender() {
     const grip = `<span class="va-drag" draggable="true" ondragstart="vaDragStart(event, ${i})" title="${cuT('Drag to reorder', '拖动以排序')}">⠿</span>`;
     const label = `<input class="va-label" type="text" value="${escapeAttr(v.label)}" placeholder="${cuT('e.g. 500g', '如 500克')}" title="${escapeAttr(v.name)}" oninput="vaLabel(${v.id}, this.value)">`;
     if (v.self) {
+      // The opened product. Its quick fields are editable here too, mirrored into
+      // the main form inputs above so the normal Save persists them (see
+      // vaSelfField). Stock stays read-only — it's set in the per-location panel
+      // below; a flat field here would clash with the per-store ledger.
       return rowOpen + grip + label +
-        `<span class="va-ro" style="text-align:left">${v.sku ? escapeHtml(v.sku) : '—'}</span>` +
-        `<span class="va-ro">${price === '' ? '—' : price.toFixed(2)}</span>` +
-        `<span class="va-ro va-stk">${stock === '' ? '—' : escapeHtml(String(stock))}</span>` +
-        `<span class="va-ro" style="text-align:center">${v.published === 0 ? '—' : '✓'}</span>` +
-        `<span class="va-self" title="${cuT('The variant you’re editing in the form above — set its name, SKU, price & stock there.', '你正在上方表单中编辑的规格 — 名称、货号、价格、库存在那里设置。')}">●</span></div>`;
+        `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaSelfField('sku', this.value)">` +
+        `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaSelfField('price', this.value)">` +
+        `<span class="va-ro va-stk" title="${cuT('Set this product’s stock in “Stock by location” below.', '在下方「按门店库存」中设置本产品库存。')}">${stock === '' ? '—' : escapeHtml(String(stock))}</span>` +
+        `<span class="va-show"><input type="checkbox" ${v.published === 0 ? '' : 'checked'} title="${cuT('Show this variant in the shop', '在店面显示此规格')}" onchange="vaSelfField('published', this.checked ? 1 : 0)"></span>` +
+        `<span class="va-self" title="${cuT('This is the main product. Its name, photos & details are edited in the form above; the quick fields here stay in sync.', '这是主产品。名称、图片和详情在上方表单中编辑;此处的快捷字段保持同步。')}">●</span></div>`;
     }
     return rowOpen + grip + label +
       `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaField(${v.id}, 'sku', this.value)">` +
@@ -24484,6 +24488,23 @@ function vaRender() {
     `</div>`;
 }
 function vaLabel(id, val) { const v = VA_MEMBERS.find(x => x.id === id); if (v) v.label = val; }
+// The opened ("self") product's quick fields mirror straight into the main form
+// inputs above, so the normal Save persists them — no separate write, and the
+// form stays in sync. Stock is intentionally not here: it's set in the
+// per-location panel below.
+function vaSelfField(key, val) {
+  const v = VA_MEMBERS.find(x => x.self); if (!v) return;
+  if (key === 'sku') {
+    v.sku = val;
+    const f = document.getElementById('pd-sku'); if (f) f.value = val;
+  } else if (key === 'price') {
+    v.price = (val === '' ? '' : Math.max(0, parseFloat(val) || 0));
+    const f = document.getElementById('pd-price'); if (f) f.value = val;
+  } else if (key === 'published') {
+    v.published = val ? 1 : 0;
+    const f = document.getElementById('pd-published'); if (f) f.checked = !!val;
+  }
+}
 // Inline edit of a sibling size's commercial fields. Mutates the model only
 // (no re-render, so the input keeps focus); persisted by the main Save.
 function vaField(id, key, val) {
