@@ -2837,4 +2837,53 @@ if (RETENTION_DAYS > 0) {
   } catch (e) { /* best-effort */ }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// STORE_PRODUCTS — the online store's OWN product catalog, forked from the
+// kitchen `products` table so storefront product management is a fully
+// independent entity: its own SKU namespace, its own per-store stock, its own
+// merchandising. The kitchen app keeps editing `products`; the store edits
+// `store_products`; the two no longer affect each other. `kitchen_product_id`
+// / `source_sku` keep a link so a future one-way "pull from kitchen" sync can
+// re-integrate the two (the sync job itself is NOT built yet).
+//
+// Built with FULL column parity to `products` so every kitchen field (sku,
+// status, price, weight, barcode, …) AND every mini-app field (keywords,
+// tagline, nutrition, description_blocks, flash_*, …) carries over. The shape
+// is DERIVED from `products` at boot so the two schemas never drift: mirror
+// the column list, then backfill any column `products` later gains. The only
+// dropped constraint is the inline FK to recipes(id) — the store has no
+// recipes (allergens live in the editable `free_of` column instead). mainDb
+// only: this whole file runs against roots.db; tenant DBs get their schema
+// cloned separately by lib/tenant-db.js.
+// ─────────────────────────────────────────────────────────────────────────
+try {
+  const pcols = db.pragma('table_info(products)'); // [{name,type,notnull,dflt_value,pk}, …]
+  const haveStore = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='store_products'").get();
+  if (!haveStore) {
+    const defs = pcols.map(c => {
+      if (c.pk) return `${c.name} INTEGER PRIMARY KEY AUTOINCREMENT`;
+      let d = `${c.name} ${c.type || 'TEXT'}`;
+      if (c.notnull) d += ' NOT NULL';
+      if (c.dflt_value !== null && c.dflt_value !== undefined) d += ` DEFAULT ${c.dflt_value}`;
+      return d;
+    });
+    // Store-only link columns for the future kitchen↔store integration.
+    defs.push('kitchen_product_id INTEGER');  // source products.id at fork time
+    defs.push('source_sku TEXT');             // SKU at fork time (stable match key)
+    defs.push('synced_at DATETIME');          // reserved: last pull-from-kitchen
+    defs.push("source TEXT DEFAULT 'fork'");  // 'fork' | (future) 'sync'
+    db.exec(`CREATE TABLE store_products (\n  ${defs.join(',\n  ')}\n)`);
+  }
+  // Parity backfill — if `products` later gains a column, mirror it here so the
+  // two schemas never drift (idempotent; addColumn swallows duplicate columns).
+  const spcols = new Set(db.pragma('table_info(store_products)').map(c => c.name));
+  for (const c of pcols) if (!spcols.has(c.name)) addColumn('store_products', c.name, c.type || 'TEXT');
+  // Own indexes — store_products has its OWN sku namespace (independent of the
+  // kitchen's), mirroring the products indexes the storefront relies on.
+  db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_store_products_sku ON store_products(sku)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_store_products_variant_group ON store_products(variant_group_id)').run();
+  db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_store_products_barcode ON store_products(barcode) WHERE barcode IS NOT NULL').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_store_products_kitchen_id ON store_products(kitchen_product_id)').run();
+} catch (e) { console.error('[store_products] schema migration failed:', e); }
+
 module.exports = db;
