@@ -1841,16 +1841,26 @@
     display: inline-flex; align-items: center; align-self: center;
     background: var(--bg-elev-2); color: var(--text-3); border: 1px solid var(--line);
   }
-  /* In a dropdown popover the row is full-width, so the pill rides the row's
-     right edge (kept clear of the menu border by the button's own padding)
-     instead of trailing the label, where it ran into the border and clipped. */
+  /* In a dropdown popover the row is full-width, so the pill is pinned to the
+     row's right edge and vertically centred the same way the active brass-bar
+     ::after is (absolute + top:50% + translateY) — flex centring wasn't holding
+     here, so mirror the proven approach. Kept clear of the menu border. */
   body.ent-membership:not(.feat-membership) .tabs-popover [data-feat="membership"]::after,
   body.ent-affiliate:not(.feat-affiliate)   .tabs-popover [data-feat="affiliate"]::after,
   body.ent-reviews:not(.feat-reviews)       .tabs-popover [data-feat="reviews"]::after,
   body.ent-feedback:not(.feat-feedback)     .tabs-popover [data-feat="feedback"]::after,
   body.ent-socialProof:not(.feat-socialProof) .tabs-popover [data-feat="socialProof"]::after {
-    margin-left: auto; position: static;
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    margin-left: 0;
   }
+  /* Pill is out of flow, so reserve right padding on the off row to keep a long
+     label from sliding under it. */
+  body.ent-membership:not(.feat-membership) .tabs-popover [data-feat="membership"],
+  body.ent-affiliate:not(.feat-affiliate)   .tabs-popover [data-feat="affiliate"],
+  body.ent-reviews:not(.feat-reviews)       .tabs-popover [data-feat="reviews"],
+  body.ent-feedback:not(.feat-feedback)     .tabs-popover [data-feat="feedback"],
+  body.ent-socialProof:not(.feat-socialProof) .tabs-popover [data-feat="socialProof"],
+  body.lb-off .tabs-popover button[data-tab="leaderboard"] { padding-right: 48px; }
   /* Leaderboard isn't entitlement-gated (it has its own enable toggle on its
      page), but its nav row gets the same OFF pill when disabled — driven by
      body.lb-off. Dim only when it's NOT the current tab, since you sit on this
@@ -1858,10 +1868,11 @@
      brass-bar ::after when you're viewing the row while it's off. */
   body.lb-off .tabs-popover button[data-tab="leaderboard"]:not(.active) { opacity: .5; }
   body.lb-off .tabs-popover [data-tab="leaderboard"]::after {
-    content: "OFF"; position: static; width: auto; height: auto; margin-left: auto;
+    content: "OFF"; width: auto; height: auto;
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
     font: 700 9px/1 var(--f-mono, monospace); letter-spacing: .06em;
     padding: 3px 5px; border-radius: 6px;
-    display: inline-flex; align-items: center; align-self: center;
+    display: inline-flex; align-items: center;
     background: var(--bg-elev-2); color: var(--text-3); border: 1px solid var(--line);
   }
   /* 3 — entitled but off: inside the feature's own page, hide the real config and
@@ -9467,7 +9478,7 @@
               <div class="muted">When off, the mini-app menu entry stays hidden and the API returns 404. · 关闭后,小程序入口隐藏,接口返回 404。</div>
             </div>
             <label class="switch">
-              <input type="checkbox" id="lb-enabled" onchange="updateLeaderboardPreview()"/>
+              <input type="checkbox" id="lb-enabled" onchange="lbToggleEnabled()"/>
               <span class="slider"></span>
             </label>
           </div>
@@ -25742,6 +25753,14 @@ function lbRenderPreview() {
   lbUpdateEnabledPill();
 }
 function updateLeaderboardPreview() { lbRenderPreview(); }
+
+// The Visibility switch is the master on/off — flipping it must persist
+// immediately (the rest of the form still saves via the Save button). Without
+// this, a flip was preview-only and reverted to the stored value on refresh.
+async function lbToggleEnabled() {
+  lbRenderPreview();          // reflect the new state in the pill + preview now
+  await saveLeaderboardConfig();
+}
 
 async function saveLeaderboardConfig() {
   const body = lbReadForm();
