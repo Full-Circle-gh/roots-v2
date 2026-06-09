@@ -1846,8 +1846,21 @@
   body.ent-membership:not(.feat-membership) .tabs-popover [data-feat="membership"]::after,
   body.ent-affiliate:not(.feat-affiliate)   .tabs-popover [data-feat="affiliate"]::after,
   body.ent-reviews:not(.feat-reviews)       .tabs-popover [data-feat="reviews"]::after,
-  body.ent-feedback:not(.feat-feedback)     .tabs-popover [data-feat="feedback"]::after {
+  body.ent-feedback:not(.feat-feedback)     .tabs-popover [data-feat="feedback"]::after,
+  body.ent-socialProof:not(.feat-socialProof) .tabs-popover [data-feat="socialProof"]::after {
     margin-left: auto; position: static;
+  }
+  /* Leaderboard isn't entitlement-gated (it has its own enable toggle on its
+     page), but its nav row gets the same OFF pill when disabled — driven by
+     body.lb-off. Dim only when it's NOT the current tab, since you sit on this
+     row to turn it on. Fully self-contained so it also wins over the active
+     brass-bar ::after when you're viewing the row while it's off. */
+  body.lb-off .tabs-popover button[data-tab="leaderboard"]:not(.active) { opacity: .5; }
+  body.lb-off .tabs-popover [data-tab="leaderboard"]::after {
+    content: "OFF"; position: static; width: auto; height: auto; margin-left: auto;
+    font: 700 9px/1.4 var(--f-mono, monospace); letter-spacing: .06em;
+    padding: 2px 5px; border-radius: 6px;
+    background: var(--bg-elev-2); color: var(--text-3); border: 1px solid var(--line);
   }
   /* 3 — entitled but off: inside the feature's own page, hide the real config and
      show the enable card. .feat-bar (the switch) + .feat-off are spared. */
@@ -12105,6 +12118,7 @@ let ENTITLEMENTS = {};
   loadPointsSettings(); // Loyalty & Wallet → Membership & points (earn rate, point value, expiry)
   loadRctiers();        // Loyalty & Wallet → Membership tier ladder (Roots Club)
   loadFaq();
+  lbInitNavState();     // seed the Leaderboard nav OFF pill (lazy form loads later)
 })();
 
 // ── Account menu — Google-style profile circle + dropdown ────────────────
@@ -25615,6 +25629,19 @@ function lbUpdateEnabledPill() {
   pill.classList.toggle('on', on);
   pill.classList.toggle('off', !on);
   pill.textContent = cuT(on ? 'Live' : 'Off', on ? '开启' : '关闭');
+  // Mirror the state onto the nav row's OFF pill — but only once the real
+  // config has loaded, so the default-unchecked checkbox doesn't flag it off.
+  if (LB_LOADED) document.body.classList.toggle('lb-off', !on);
+}
+// Seed the nav OFF pill at startup. The full leaderboard config (form + preview)
+// lazy-loads on first tab open; this is just the lightweight enabled flag so the
+// nav reflects reality before the operator ever visits the tab.
+async function lbInitNavState() {
+  try {
+    const r = await fetch('/api/retail-admin/leaderboard/config', { credentials: 'same-origin' });
+    const b = await r.json();
+    if (b && b.success && b.data) document.body.classList.toggle('lb-off', !b.data.enabled);
+  } catch (e) { /* leave nav as-is if the probe fails */ }
 }
 async function lbLoadPreview() {
   try {
