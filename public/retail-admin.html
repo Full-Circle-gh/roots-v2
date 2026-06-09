@@ -4431,6 +4431,34 @@
   .sub-panel.active { display: block; }
   .sub-panel > h2:first-child { margin-top: 0; }
 
+  /* ── Operations panel (Settings → Operations). Integrations moved here from
+     the kitchen app 2026-06-09; self-contained styles so it themes natively. ── */
+  #sub-ops input[type=password] {
+    font: 13px var(--f-sans); padding: 8px 10px; background: var(--bg-input);
+    border: 1px solid var(--line); color: var(--text-1); border-radius: var(--r-md);
+    outline: none; min-width: 0;
+  }
+  #sub-ops input[type=password]:focus { border-color: var(--accent); }
+  #sub-ops input[type=text], #sub-ops input[type=password],
+  #sub-ops select, #sub-ops textarea { width: 100%; }
+  #sub-ops .field-label {
+    font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--text-3); display: block; margin-bottom: 4px;
+  }
+  #sub-ops .ops-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  #sub-ops code { background: var(--bg-elev-1); padding: 1px 5px; border-radius: 4px; }
+  /* Faux 58mm thermal-paper receipt preview (always paper-white in both themes). */
+  .feie-prev { display: inline-block; }
+  .thermal {
+    font-family: ui-monospace, Menlo, monospace; background: #fff; color: #111;
+    width: 230px; padding: 10px 12px; border-radius: 3px; font-size: 11px; line-height: 1.5;
+    box-shadow: 0 1px 6px rgba(0,0,0,.18);
+  }
+  .thermal .tln { white-space: pre-wrap; word-break: break-word; }
+  .thermal .tc { text-align: center; }
+  .thermal .tbold, .thermal .ttall { font-weight: 700; }
+  .thermal .tbig { font-weight: 700; font-size: 13px; }
+
   /* Visual mockup card — phone-shaped illustration above each panel */
   .visual {
     display: flex; gap: var(--s5);
@@ -7401,11 +7429,8 @@
 
     <div class="pa-toolbar">
       <input id="pa-search" type="text" data-ph-en="Search by name, SKU…" data-ph-cn="按名称、SKU 搜索…" placeholder="Search by name, SKU…">
-      <select id="pa-filter">
-        <option value="all">All products · 全部</option>
-        <option value="authored">Designed · 已设计</option>
-        <option value="undesigned">Not designed · 未设计</option>
-        <option value="published">Published only · 仅上架</option>
+      <select id="pa-filter" title="Filter by category · 按分类筛选">
+        <option value="all">All categories · 全部分类</option>
       </select>
       <div id="pa-count" class="pa-count"></div>
       <button class="btn btn-primary" id="pa-add-btn" type="button" onclick="pdOpen(null)" style="white-space:nowrap;">＋ Add product · 新增产品</button>
@@ -10243,6 +10268,10 @@
         <button data-sub="cs">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
           Customer service
+        </button>
+        <button data-sub="ops">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"/><path d="M12 2v3M12 19v3M22 12h-3M5 12H2M19.07 4.93l-2.12 2.12M7.05 16.95l-2.12 2.12M19.07 19.07l-2.12-2.12M7.05 7.05 4.93 4.93"/></svg>
+          Operations
         </button>
       </aside>
 
@@ -22607,7 +22636,7 @@ let PA_PRODUCTS = [];   // server response
 let PA_CURRENT = null;  // currently open product (when modal is showing)
 // Product layout: 'grid' (rich cards) | 'compact' (denser) | 'list' (one row
 // each). Separate from the "View" display-tweaks popover; persisted per-browser.
-let PA_VIEW = (() => { try { const v = localStorage.getItem('pa-view'); return (v === 'compact' || v === 'list') ? v : 'grid'; } catch { return 'grid'; } })();
+let PA_VIEW = (() => { try { const v = localStorage.getItem('pa-view'); return (v === 'grid' || v === 'compact' || v === 'list') ? v : 'list'; } catch { return 'list'; } })();
 function paSetView(v) {
   PA_VIEW = (v === 'compact' || v === 'list') ? v : 'grid';
   try { localStorage.setItem('pa-view', PA_VIEW); } catch {}
@@ -22896,11 +22925,34 @@ async function paLoad() {
     const j = await res.json();
     if (!j.success) throw new Error(j.error || 'load_failed');
     PA_PRODUCTS = j.data || [];
+    paFillCatFilter();                       // category options from the catalogue
+    pdLoadCatTree().then(paFillCatFilter);   // re-label bilingually once the tree lands
     paRender();
     paRenderKpis(true);   // animated count-up once on load
   } catch (e) {
     grid.innerHTML = `<div class="err" style="grid-column:1/-1;text-align:center;padding:40px">Failed to load products: ${escapeHtml(e.message)}</div>`;
   }
+}
+
+// Populate the toolbar category filter from the distinct storefront top
+// categories present in the catalogue (falling back to the legacy kitchen
+// category string). Bilingual labels come from the canonical category tree
+// when it's loaded. Idempotent — preserves the operator's current pick.
+function paFillCatFilter() {
+  const sel = document.getElementById('pa-filter');
+  if (!sel) return;
+  const cur = sel.value || 'all';
+  const cnOf = {};
+  (PA_CAT_TREE || []).forEach(t => { if (t && t.name) cnOf[t.name] = t.name_cn || ''; });
+  const cats = [...new Set(PA_PRODUCTS
+    .map(p => (p.top_category || p.category || '').trim())
+    .filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  sel.innerHTML = '<option value="all">All categories · 全部分类</option>' +
+    cats.map(c => {
+      const cn = cnOf[c] ? ' · ' + escapeHtml(cnOf[c]) : '';
+      return `<option value="${escapeAttr(c)}">${escapeHtml(c)}${cn}</option>`;
+    }).join('');
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
 }
 
 // "Has designer sections?" The catalogue list now sends a lightweight
@@ -22922,6 +22974,39 @@ function _paPills(p) {
       ? `<span class="pa-pill pa-pill-designed" title="Designer sections authored · 已配置设计板块">${PA_ICON_SPARKLE}Designed</span>`
       : `<span class="pa-pill pa-pill-plain" title="No designer sections yet · 尚未配置设计板块">Plain</span>`}
     ${pub ? '' : '<span class="pa-pill pa-pill-draft" title="Not published in mini-app · 未在小程序上架">Draft</span>'}`;
+}
+
+// ── Overview list (full-width "products on the go" table) cell helpers ──
+// A unit is either a lone product or a collapsed variant family; prices and
+// stock fold across the family's members so the row reflects the whole product.
+function _paUnitPrices(u) {
+  const ps = (u.group ? u.members : [u.p])
+    .map(m => Number(m.sell_price)).filter(v => v > 0);
+  return ps.length ? { min: Math.min(...ps), max: Math.max(...ps) } : null;
+}
+function _paUnitStock(u) {
+  // effective_stock = per-store physical sum (falls back to legacy stock_qty),
+  // computed server-side. Sum across variant siblings for the family total.
+  return (u.group ? u.members : [u.p])
+    .reduce((s, m) => s + (Number(m.effective_stock) || 0), 0);
+}
+function _paPriceCell(u) {
+  const pr = _paUnitPrices(u);
+  if (!pr) return '<span class="pa-col-price pa-col-muted">—</span>';
+  const body = pr.min === pr.max ? `¥${fmt(pr.min)}` : `¥${fmt(pr.min)}–${fmt(pr.max)}`;
+  return `<span class="pa-col-price">${body}</span>`;
+}
+// Stock badge: green = healthy, brass = low (≤5), red = out (0). The number is
+// the family's effective stock; an unpublished product still shows its count.
+function _paStockCell(u) {
+  const qty = _paUnitStock(u);
+  const cls = qty <= 0 ? 'is-out' : (qty <= 5 ? 'is-low' : '');
+  const label = qty <= 0 ? cuT('Out', '缺货') : String(qty);
+  return `<span class="pa-stock ${cls}"><span class="pa-stock-dot"></span>${label}</span>`;
+}
+function _paCatCell(u) {
+  const c = (u.p.top_category || u.p.category || '').trim();
+  return c ? escapeHtml(c) : '<span class="pa-col-muted">—</span>';
 }
 
 // Variant siblings (same variant_group_id) are ONE product in different sizes,
@@ -23054,9 +23139,9 @@ function paRender() {
       (p.sku || '').toLowerCase().includes(q)
     );
   }
-  if (filter === 'authored')   rows = rows.filter(_paHasBlocks);
-  if (filter === 'undesigned') rows = rows.filter(p => !_paHasBlocks(p));
-  if (filter === 'published')  rows = rows.filter(p => p.is_published === 1);
+  if (filter && filter !== 'all') {
+    rows = rows.filter(p => (p.top_category || p.category || '').trim() === filter);
+  }
 
   count.textContent = `${rows.length} of ${PA_PRODUCTS.length} · 共 ${PA_PRODUCTS.length} 件,显示 ${rows.length} 件`;
 
@@ -23919,9 +24004,16 @@ async function pdToggleBlockDesign() {
     const i = PA_PRODUCTS.findIndex(x => x.id === Number(id));
     if (i >= 0) PA_PRODUCTS[i].use_block_design = next;
     pdRenderBlockDesignToggle();
-    toast(next
-      ? cuT('Storefront will use the Product editor design', '店铺将显示产品页设计')
-      : cuT('Storefront will use the classic description', '店铺将显示经典描述'), 'ok');
+    if (next) {
+      // Turning the design ON only matters once blocks exist — the storefront
+      // needs both the flag AND a non-empty block stack, else it falls back to
+      // the classic description. So jump straight into the Product editor to
+      // build (or auto-compose) that block description.
+      toast(cuT('Opening the Product editor to design the description…', '正在打开产品页编辑器设计描述…'), 'ok');
+      openProductEditor(id);
+    } else {
+      toast(cuT('Storefront will use the classic description', '店铺将显示经典描述'), 'ok');
+    }
   } catch (e) {
     toast(cuT('Save failed', '保存失败') + ' · ' + (e.message || e), 'err');
   } finally {
