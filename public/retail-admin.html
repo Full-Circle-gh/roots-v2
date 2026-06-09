@@ -7571,7 +7571,7 @@
                     <option value="Coming Soon">Coming Soon · 即将上架</option>
                   </select></div>
               </div>
-              <div class="field"><label class="stacked">Stock by location · 各门店库存 <span style="color:#b4503a;font-weight:700;">[v4]</span></label>
+              <div class="field"><label class="stacked">Stock by location · 各门店库存</label>
                 <div id="pd-store-stocks" style="font-size:13px;line-height:1.7;">—</div>
               </div>
             </section>
@@ -23263,28 +23263,19 @@ function pdLoadStoreStocks(id) {
   if (id == null) { box.className = 'muted'; box.textContent = cuT('Set per-location stock after saving', '保存后按门店设置库存'); return; }
   box.className = '';
   box.textContent = '…';
-  let _meta = { status: 0, url: '', redirected: false, type: '' };
-  const _url = '/api/retail-admin/products/' + id + '/store-stocks';
-  fetch(_url, { credentials: 'same-origin' })
-    .then(r => { _meta = { status: r.status, url: r.url, redirected: r.redirected, type: r.type }; return r.text(); })
-    .then(text => {
-      let j = null; try { j = JSON.parse(text); } catch (e) {}
-      if (!j || !j.success || !Array.isArray(j.data)) {
-        box.className = 'muted';
-        // Verbose diagnostic so we can see exactly what came back. The snippet
-        // reveals an HTML login page, a redirect to another origin, etc.
-        const snip = (text || '').replace(/\s+/g, ' ').trim().slice(0, 80);
-        box.innerHTML = '<span style="color:#b4503a;">Couldn’t load stock · 无法加载库存</span>' +
-          '<br><span style="font-size:11px;color:var(--text-3,#888);">status=' + _meta.status +
-          ' type=' + escapeHtml(_meta.type) + (_meta.redirected ? ' REDIRECTED' : '') +
-          '<br>url=' + escapeHtml((_meta.url || _url)) +
-          '<br>body=' + escapeHtml(snip) + '</span>';
-        return;
+  fetch('/api/retail-admin/products/' + id + '/store-stocks', { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(j => {
+      if (!j || !j.success || !Array.isArray(j.data) || !j.data.length) {
+        box.className = 'muted'; box.textContent = cuT('No stock info yet', '暂无库存信息'); return;
       }
-      if (!j.data.length) { box.className = 'muted'; box.textContent = cuT('No store locations configured · 未配置门店', '未配置门店 · No store locations configured'); return; }
       box.className = '';
+      // NOTE: use cuT() for language, NOT the raw `_lang` global — `_lang` is
+      // scoped inside the i18n module closure and is NOT visible here. Reading
+      // it threw a ReferenceError that the .catch swallowed into a misleading
+      // "couldn't load stock" (the original read-only summary had this bug too).
       const rows = j.data.map(s => {
-        const nm = (_lang === 'cn' ? (s.name_cn || s.name_en) : (s.name_en || s.code)) || s.code;
+        const nm = cuT(s.name_en || s.code, s.name_cn || s.name_en) || s.code;
         const qty = s.physical_qty || 0;
         return '<div style="display:flex;align-items:center;gap:10px;margin:4px 0;">' +
                  '<b style="color:var(--text-1);min-width:96px;">' + escapeHtml(nm) + '</b>' +
@@ -23297,7 +23288,7 @@ function pdLoadStoreStocks(id) {
           'onclick="pdSaveStoreStocks()">' + cuT('Save stock', '保存库存') + '</button>' +
         '<span id="pd-store-stocks-msg" class="muted" style="margin-left:10px;font-size:12px;"></span></div>';
     })
-    .catch(() => { box.className = 'muted'; box.textContent = 'Couldn’t load stock · 无法加载库存 (network)'; });
+    .catch(() => { box.className = 'muted'; box.textContent = cuT('Couldn’t load stock', '无法加载库存'); });
 }
 // Persist any changed per-store quantities. Each changed row is PATCHed
 // independently (set physical_qty); the endpoint routes through adjustStock so
