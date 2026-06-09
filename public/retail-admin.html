@@ -17188,7 +17188,7 @@ const FEATURE_HOMES = {
   affiliate:   '#tab-affiliate',
   reviews:     '#tab-reviews',
   feedback:    '#tab-feedback',
-  socialProof: '#sub-social',
+  socialProof: '#tab-social',
 };
 let _cfgCache = {};
 // Inject an on/off bar + an "off / enable" card at the top of each feature's home
@@ -17405,68 +17405,8 @@ async function saveConfig() {
     // Legal pages moved to the Content group (Content → Legal pages) and save on
     // their own button via saveLegal() — no longer ride along here (2026-06-08).
     // Mini-app footer + Me-page menu moved to the Mini App Editor (/cms) 2026-06-09.
-    // Social proof — single nested blob so storefront_config holds one row,
-    // matching the shape getSocialConfig() in routes/retail.js expects.
-    'social_proof': (() => {
-      // Helper: clamp + auto-swap so a max < min input doesn't ship garbage.
-      // Operators who type a single number into "min" and leave "max" at 0
-      // would otherwise save a degenerate range; swap fixes that silently.
-      const range = (minId, maxId, lo = 0, hi = Number.MAX_SAFE_INTEGER) => {
-        let mn = Math.max(lo, Math.min(hi, Number($('#' + minId).value) || 0));
-        let mx = Math.max(lo, Math.min(hi, Number($('#' + maxId).value) || 0));
-        if (mx < mn) [mn, mx] = [mx, mn];
-        return { min: mn, max: mx };
-      };
-      const bcR = range('cfg-social-bc-boost_min', 'cfg-social-bc-boost_max');
-      const vnR = range('cfg-social-vn-boost_min', 'cfg-social-vn-boost_max');
-      const sbR = range('cfg-social-sb-boost_min', 'cfg-social-sb-boost_max');
-      const loR = range('cfg-social-lo-fallback_min_minutes', 'cfg-social-lo-fallback_max_minutes', 0, 1440);
-      return {
-        bought_count: {
-          enabled:   $('#cfg-social-bc-enabled').checked,
-          min_today: Math.max(1, Number($('#cfg-social-bc-min_today').value) || 2),
-          min_week:  Math.max(1, Number($('#cfg-social-bc-min_week').value)  || 2),
-          min_month: Math.max(1, Number($('#cfg-social-bc-min_month').value) || 1),
-          min_all:   Math.max(1, Number($('#cfg-social-bc-min_all').value)   || 2),
-          boost_min: bcR.min,
-          boost_max: bcR.max,
-        },
-        recent_buyers: {
-          enabled:      $('#cfg-social-rb-enabled').checked,
-          window_days:  Math.max(1, Math.min(60, Number($('#cfg-social-rb-window_days').value) || 7)),
-          visible_secs: Math.max(0.5, Math.min(60, Number($('#cfg-social-rb-visible_secs').value) || 4.5)),
-          gap_secs:     Math.max(0.5, Math.min(60, Number($('#cfg-social-rb-gap_secs').value) || 5)),
-          // Drop empty rows so we don't ship blanks to the mini-app feed.
-          manual: _manualBuyers
-            .map(m => ({
-              name:        String(m.name || '').trim().slice(0, 40),
-              product_en:  String(m.product_en || '').trim().slice(0, 80),
-              product_cn:  String(m.product_cn || '').trim().slice(0, 80),
-              minutes_ago: Math.max(0, Math.min(60 * 24 * 60, Number(m.minutes_ago) || 0)),
-            }))
-            .filter(m => m.name && (m.product_en || m.product_cn)),
-        },
-        viewing_now: {
-          enabled:     $('#cfg-social-vn-enabled').checked,
-          show_in_app: $('#cfg-social-vn-show_in_app').checked,
-          ttl_sec:   Math.max(5, Math.min(600, Number($('#cfg-social-vn-ttl_sec').value) || 45)),
-          boost_min: vnR.min,
-          boost_max: vnR.max,
-        },
-        last_ordered: {
-          enabled:              $('#cfg-social-lo-enabled').checked,
-          max_hours:            Math.max(1, Math.min(720, Number($('#cfg-social-lo-max_hours').value) || 24)),
-          fallback_min_minutes: loR.min,
-          fallback_max_minutes: loR.max,
-        },
-        sold_badge: {
-          enabled:   $('#cfg-social-sb-enabled').checked,
-          min_units: Math.max(1, Number($('#cfg-social-sb-min_units').value) || 3),
-          boost_min: sbR.min,
-          boost_max: sbR.max,
-        },
-      };
-    })(),
+    // Social proof moved to the Marketing group 2026-06-09 — it saves on its own
+    // button via saveSocialProof() (partial PUT) and no longer rides along here.
   };
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
@@ -17474,6 +17414,82 @@ async function saveConfig() {
     toast('Settings saved · 设置已保存');
   } catch (e) {
     status.innerHTML = '<span class="err">Failed · 失败: ' + e.message + '</span>';
+  }
+}
+
+// ── Social proof — own partial save (moved to the Marketing group 2026-06-09). ──
+// Reads the same cfg-social-* fields and writes a single nested social_proof blob,
+// matching the shape getSocialConfig() in routes/retail.js expects.
+function buildSocialProof() {
+  // Helper: clamp + auto-swap so a max < min input doesn't ship garbage.
+  // Operators who type a single number into "min" and leave "max" at 0 would
+  // otherwise save a degenerate range; swap fixes that silently.
+  const range = (minId, maxId, lo = 0, hi = Number.MAX_SAFE_INTEGER) => {
+    let mn = Math.max(lo, Math.min(hi, Number($('#' + minId).value) || 0));
+    let mx = Math.max(lo, Math.min(hi, Number($('#' + maxId).value) || 0));
+    if (mx < mn) [mn, mx] = [mx, mn];
+    return { min: mn, max: mx };
+  };
+  const bcR = range('cfg-social-bc-boost_min', 'cfg-social-bc-boost_max');
+  const vnR = range('cfg-social-vn-boost_min', 'cfg-social-vn-boost_max');
+  const sbR = range('cfg-social-sb-boost_min', 'cfg-social-sb-boost_max');
+  const loR = range('cfg-social-lo-fallback_min_minutes', 'cfg-social-lo-fallback_max_minutes', 0, 1440);
+  return {
+    bought_count: {
+      enabled:   $('#cfg-social-bc-enabled').checked,
+      min_today: Math.max(1, Number($('#cfg-social-bc-min_today').value) || 2),
+      min_week:  Math.max(1, Number($('#cfg-social-bc-min_week').value)  || 2),
+      min_month: Math.max(1, Number($('#cfg-social-bc-min_month').value) || 1),
+      min_all:   Math.max(1, Number($('#cfg-social-bc-min_all').value)   || 2),
+      boost_min: bcR.min,
+      boost_max: bcR.max,
+    },
+    recent_buyers: {
+      enabled:      $('#cfg-social-rb-enabled').checked,
+      window_days:  Math.max(1, Math.min(60, Number($('#cfg-social-rb-window_days').value) || 7)),
+      visible_secs: Math.max(0.5, Math.min(60, Number($('#cfg-social-rb-visible_secs').value) || 4.5)),
+      gap_secs:     Math.max(0.5, Math.min(60, Number($('#cfg-social-rb-gap_secs').value) || 5)),
+      // Drop empty rows so we don't ship blanks to the mini-app feed.
+      manual: _manualBuyers
+        .map(m => ({
+          name:        String(m.name || '').trim().slice(0, 40),
+          product_en:  String(m.product_en || '').trim().slice(0, 80),
+          product_cn:  String(m.product_cn || '').trim().slice(0, 80),
+          minutes_ago: Math.max(0, Math.min(60 * 24 * 60, Number(m.minutes_ago) || 0)),
+        }))
+        .filter(m => m.name && (m.product_en || m.product_cn)),
+    },
+    viewing_now: {
+      enabled:     $('#cfg-social-vn-enabled').checked,
+      show_in_app: $('#cfg-social-vn-show_in_app').checked,
+      ttl_sec:   Math.max(5, Math.min(600, Number($('#cfg-social-vn-ttl_sec').value) || 45)),
+      boost_min: vnR.min,
+      boost_max: vnR.max,
+    },
+    last_ordered: {
+      enabled:              $('#cfg-social-lo-enabled').checked,
+      max_hours:            Math.max(1, Math.min(720, Number($('#cfg-social-lo-max_hours').value) || 24)),
+      fallback_min_minutes: loR.min,
+      fallback_max_minutes: loR.max,
+    },
+    sold_badge: {
+      enabled:   $('#cfg-social-sb-enabled').checked,
+      min_units: Math.max(1, Number($('#cfg-social-sb-min_units').value) || 3),
+      boost_min: sbR.min,
+      boost_max: sbR.max,
+    },
+  };
+}
+async function saveSocialProof() {
+  const status = $('#social-status');
+  if (status) { status.textContent = 'Saving… · 保存中…'; status.style.color = ''; }
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body: { 'social_proof': buildSocialProof() } });
+    if (status) status.innerHTML = '<span class="ok">Saved ✓ · 已保存</span>';
+    toast('Saved · 已保存');
+  } catch (e) {
+    if (status) { status.textContent = 'Save failed · 保存失败'; status.style.color = 'var(--danger)'; }
+    toast('Save failed · 保存失败: ' + e.message, 'err');
   }
 }
 
