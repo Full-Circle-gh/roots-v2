@@ -139,7 +139,7 @@ router.get('/api/retail-admin/inventory/grid', requireInventoryRead, (req, res) 
   const products = db.prepare(`
     SELECT id AS product_id, name_en, name_cn, sku, retail_price, weight,
            COALESCE(is_published, 0) AS is_published
-      FROM products
+      FROM store_products
      WHERE COALESCE(is_active, 1) = 1${extraWhere}
      ORDER BY is_published DESC, name_en COLLATE NOCASE
   `).all();
@@ -195,7 +195,7 @@ router.get('/api/retail-admin/stores/:id/stock', requireInventoryRead, (req, res
            s.wechat_quota,
            s.meituan_quota,
            s.updated_at
-      FROM products p
+      FROM store_products p
       LEFT JOIN retail_store_stock s ON s.product_id = p.id AND s.store_id = ?
      WHERE COALESCE(p.is_active, 1) = 1${extraWhere}
      ORDER BY p.is_published DESC, p.name_en COLLATE NOCASE
@@ -221,7 +221,7 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
   const storeId   = parseInt(req.params.storeId, 10);
   const productId = parseInt(req.params.productId, 10);
   if (!inventory.getStore(storeId)) return res.status(404).json({ success: false, error: 'store_not_found' });
-  const product = db.prepare('SELECT id FROM products WHERE id = ?').get(productId);
+  const product = db.prepare('SELECT id FROM store_products WHERE id = ?').get(productId);
   if (!product) return res.status(404).json({ success: false, error: 'product_not_found' });
 
   // Store-scoped access. Admin is always allowed; everyone else must be
@@ -271,7 +271,7 @@ router.get('/api/retail-admin/stores/:id/reservations', requireRetailAdmin, (req
     SELECT r.id, r.product_id, p.name_en, p.name_cn, r.order_id, r.qty, r.channel, r.status,
            r.expires_at, r.created_at, r.committed_at, r.released_at
       FROM retail_stock_reservations r
-      LEFT JOIN products p ON p.id = r.product_id
+      LEFT JOIN store_products p ON p.id = r.product_id
      WHERE r.store_id = ? AND r.status = ?
      ORDER BY r.created_at DESC LIMIT 200
   `).all(id, status);
@@ -288,7 +288,7 @@ router.get('/api/retail-admin/stores/:id/ledger', requireRetailAdmin, (req, res)
     SELECT l.id, l.product_id, p.name_en, p.name_cn, l.delta, l.reason, l.ref_table, l.ref_id,
            l.balance_after, l.actor_user_id, u.username AS actor, l.channel, l.note, l.created_at
       FROM retail_stock_ledger l
-      LEFT JOIN products p ON p.id = l.product_id
+      LEFT JOIN store_products p ON p.id = l.product_id
       LEFT JOIN users u ON u.id = l.actor_user_id
      WHERE ${where.join(' AND ')}
      ORDER BY l.created_at DESC LIMIT 200
@@ -376,7 +376,7 @@ router.get('/api/retail-admin/products/:productId/substitutes', requireRetailAdm
     SELECT s.substitute_product_id AS product_id, s.sort_order,
            p.name_en, p.name_cn, p.sku, p.sell_price, p.image_data, p.category
       FROM retail_product_substitutes s
-      JOIN products p ON p.id = s.substitute_product_id
+      JOIN store_products p ON p.id = s.substitute_product_id
      WHERE s.product_id = ?
      ORDER BY s.sort_order ASC, p.name_en COLLATE NOCASE
   `).all(productId);

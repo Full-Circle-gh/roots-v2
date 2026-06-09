@@ -348,18 +348,18 @@ router.put('/api/retail-admin/category-tree', requireRetailAdmin, express.json({
     const tx = db.transaction(() => {
       // Top renames via a per-id sentinel so chained/swapped names can't collide.
       for (const r of topRenames) {
-        db.prepare("UPDATE products SET top_category = ? WHERE top_category = ?").run('\u0000T' + r.id, r.oldName);
+        db.prepare("UPDATE store_products SET top_category = ? WHERE top_category = ?").run('\u0000T' + r.id, r.oldName);
       }
       for (const r of topRenames) {
-        const info = db.prepare("UPDATE products SET top_category = ? WHERE top_category = ?").run(r.newName, '\u0000T' + r.id);
+        const info = db.prepare("UPDATE store_products SET top_category = ? WHERE top_category = ?").run(r.newName, '\u0000T' + r.id);
         migrated += info.changes;
       }
       // Sub renames scoped by the (now-new) parent top name, same sentinel trick.
       for (const r of subRenames) {
-        db.prepare("UPDATE products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run('\u0000S' + r.id, r.parentNewName, r.oldName);
+        db.prepare("UPDATE store_products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run('\u0000S' + r.id, r.parentNewName, r.oldName);
       }
       for (const r of subRenames) {
-        const info = db.prepare("UPDATE products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run(r.newName, r.parentNewName, '\u0000S' + r.id);
+        const info = db.prepare("UPDATE store_products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run(r.newName, r.parentNewName, '\u0000S' + r.id);
         migrated += info.changes;
       }
       upsert.run(JSON.stringify(incoming), (req.user && req.user.id) || null);
@@ -617,7 +617,7 @@ function resolveBundle(jsonStr) {
   const rows = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, weight AS size, sell_price AS price, stock_qty AS stock,
             image_data, image_url
-       FROM products
+       FROM store_products
       WHERE id IN (${ph}) AND is_published = 1 AND COALESCE(is_active, 1) = 1`
   ).all(...ids);
   const byId = new Map(rows.map(r => [r.id, r]));
@@ -642,7 +642,7 @@ function hasImageFallbackSql(alias) {
     (${alias}.image_data IS NOT NULL AND ${alias}.image_data != '')
     OR (${alias}.image_url IS NOT NULL AND ${alias}.image_url != '')
     OR (${alias}.variant_group_id IS NOT NULL AND EXISTS(
-         SELECT 1 FROM products vsib
+         SELECT 1 FROM store_products vsib
           WHERE vsib.variant_group_id = ${alias}.variant_group_id
             AND COALESCE(vsib.is_active, 1) = 1
             AND ((vsib.image_data IS NOT NULL AND vsib.image_data != '')
@@ -653,13 +653,13 @@ function hasImageFallbackSql(alias) {
 // sibling fallback for variants. Returns null when neither this row nor any
 // sibling has one. Used by the two /image byte-streaming endpoints.
 function resolveProductImage(id) {
-  const row = tdb().prepare('SELECT image_data, image_url, variant_group_id FROM products WHERE id = ?').get(id);
+  const row = tdb().prepare('SELECT image_data, image_url, variant_group_id FROM store_products WHERE id = ?').get(id);
   if (!row) return null;
   if (row.image_data) return row.image_data;
   if (row.image_url)  return row.image_url;
   if (!row.variant_group_id) return null;
   const sib = tdb().prepare(
-    `SELECT image_data, image_url FROM products
+    `SELECT image_data, image_url FROM store_products
       WHERE variant_group_id = ? AND COALESCE(is_active, 1) = 1
         AND ((image_data IS NOT NULL AND image_data != '')
           OR (image_url IS NOT NULL AND image_url != ''))
@@ -674,7 +674,7 @@ router.get('/api/retail/products', (req, res) => {
   const limit  = Math.min(parseInt(req.query.limit  || '50', 10) || 50, 500);
   const offset = Math.max(parseInt(req.query.offset || '0',  10) || 0, 0);
 
-  let sql = `SELECT ${RETAIL_PRODUCT_COLS}, p.updated_at, ${hasImageFallbackSql('p')} AS has_group_image FROM products p
+  let sql = `SELECT ${RETAIL_PRODUCT_COLS}, p.updated_at, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
              WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`;
   const params = [];
   if (q) {
@@ -724,7 +724,7 @@ router.get('/api/retail/products', (req, res) => {
     delete r.updated_at;
   }
   attachSoldCounts(rows);
-  const total = tdb().prepare(`SELECT COUNT(*) AS n FROM products p
+  const total = tdb().prepare(`SELECT COUNT(*) AS n FROM store_products p
                             WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
                             ${q ? 'AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)' : ''}
                             ${category ? 'AND p.category = ?' : ''}`)
@@ -747,7 +747,7 @@ router.get('/api/retail/products/:id/image', (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).end();
   const gate = tdb().prepare(
-    `SELECT id FROM products
+    `SELECT id FROM store_products
       WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
   ).get(id);
   // Variant with no photo of its own falls back to a sibling's (resolveProductImage).
@@ -867,7 +867,7 @@ router.get('/api/retail/products/top', (req, res) => {
   if (candidateIds.length) {
     const placeholders = candidateIds.map(() => '?').join(',');
     products = tdb().prepare(
-      `SELECT ${RETAIL_PRODUCT_COLS}, p.updated_at, ${hasImageFallbackSql('p')} AS has_group_image FROM products p
+      `SELECT ${RETAIL_PRODUCT_COLS}, p.updated_at, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
         WHERE p.id IN (${placeholders})
           AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`
     ).all(...candidateIds);
@@ -1129,7 +1129,7 @@ router.get('/api/retail/products/:id', (req, res) => {
   if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
 
   const product = flashsales.decorateProduct(hydrateNutrition(tdb().prepare(
-    `SELECT ${RETAIL_PRODUCT_COLS}, ${hasImageFallbackSql('p')} AS has_group_image FROM products p
+    `SELECT ${RETAIL_PRODUCT_COLS}, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
      WHERE p.id = ? AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`
   ).get(id)));
   if (!product) return res.status(404).json({ success: false, error: 'not_found' });
@@ -1151,7 +1151,7 @@ router.get('/api/retail/products/:id', (req, res) => {
 
   // Photo gallery — extra images beyond the primary. Fetched here (detail
   // only) so the shop-list payload stays small. [0] mirrors image_data.
-  const imgRow = tdb().prepare('SELECT images FROM products WHERE id = ?').get(id);
+  const imgRow = tdb().prepare('SELECT images FROM store_products WHERE id = ?').get(id);
   product.images = parseJsonArray(imgRow && imgRow.images);
 
   // Review summary — avg rating + count + 3 most recent visible reviews.
@@ -1220,7 +1220,7 @@ router.get('/api/retail/products/:id', (req, res) => {
                   WHERE rss.product_id = p.id AND rs.is_active = 1),
                 p.stock_qty
               ) AS stock
-         FROM products p
+         FROM store_products p
         WHERE p.variant_group_id = ? AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
         ORDER BY COALESCE(p.variant_sort, 0), COALESCE(p.variant_label, p.name_en), p.id`
     ).all(product.variant_group_id).map(v => {
@@ -1236,7 +1236,7 @@ router.get('/api/retail/products/:id', (req, res) => {
   }
 
   // "Buy together" bundle — resolved to item cards (each its own product/stock).
-  const bundleRow = tdb().prepare('SELECT bundle FROM products WHERE id = ?').get(id);
+  const bundleRow = tdb().prepare('SELECT bundle FROM store_products WHERE id = ?').get(id);
   product.bundle = resolveBundle(bundleRow && bundleRow.bundle);
 
   product.social_proof = socialProofForProduct(id);
@@ -1444,7 +1444,7 @@ router.get('/api/retail/flash-sales', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit || '12', 10) || 12, 50);
   const now = Date.now();
   const rows = tdb().prepare(
-    `SELECT ${RETAIL_PRODUCT_COLS} FROM products p
+    `SELECT ${RETAIL_PRODUCT_COLS} FROM store_products p
       WHERE p.is_published = 1
         AND COALESCE(p.is_active, 1) = 1
         AND p.flash_price IS NOT NULL
@@ -4039,7 +4039,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
               flash_price, flash_starts_at, flash_ends_at,
               flash_stock_limit, flash_sold,
               ship_modes, needs_ice_pack
-         FROM products
+         FROM store_products
         WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
     if (!p) return res.status(400).json({ success: false, error: 'product_unavailable', product_id: pid });
@@ -4157,7 +4157,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
         const sub = tdb().prepare(
           `SELECT id, name_en, name_cn, sku, weight AS size, sell_price AS price, image_data,
                   ship_modes, needs_ice_pack
-             FROM products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
+             FROM store_products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
         ).get(subId);
         if (!sub) return res.status(400).json({ success: false, error: 'substitute_not_available', product_id: subId });
         const av = inventory.getAvailable(a.nearest.store.id, subId, 'wechat');
@@ -4563,7 +4563,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     // unit, so we roll back. Items with no stock cap still increment so
     // analytics + admin UI can show how many sold during the window.
     const bumpCapped = tdb().prepare(
-      `UPDATE products
+      `UPDATE store_products
           SET flash_sold = COALESCE(flash_sold, 0) + ?
         WHERE id = ?
           AND flash_price IS NOT NULL
@@ -4800,7 +4800,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
             COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json, oi.shipment_id
        FROM retail_order_items oi
-  LEFT JOIN products p ON p.id = oi.product_id
+  LEFT JOIN store_products p ON p.id = oi.product_id
       WHERE oi.order_id = ? ORDER BY oi.id ASC`
   ).all(orderId).map(it => {
     if (it.options_json) { try { it.options = JSON.parse(it.options_json); } catch {} }
@@ -5138,7 +5138,7 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
                 COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
                 ROW_NUMBER() OVER (PARTITION BY oi.order_id ORDER BY oi.id ASC) AS rn
            FROM retail_order_items oi
-      LEFT JOIN products p ON p.id = oi.product_id
+      LEFT JOIN store_products p ON p.id = oi.product_id
           WHERE oi.order_id IN (${ph})
        ) WHERE rn <= 3
          ORDER BY order_id, rn`
@@ -5297,7 +5297,7 @@ router.get('/api/retail/reviews/pending', requireRetailAuth, (req, res) => {
             o.id AS order_id, o.order_no, o.delivered_at
        FROM retail_order_items oi
        JOIN retail_orders o ON o.id = oi.order_id
-  LEFT JOIN products p      ON p.id = oi.product_id
+  LEFT JOIN store_products p      ON p.id = oi.product_id
       WHERE o.customer_id = ? AND o.status = 'delivered'
         AND NOT EXISTS (
               SELECT 1 FROM retail_reviews r
@@ -5715,7 +5715,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COUNT(DISTINCT i.order_id) AS orders
       FROM retail_order_items i
       JOIN retail_orders o ON o.id = i.order_id
-      LEFT JOIN products p ON p.id = i.product_id
+      LEFT JOIN store_products p ON p.id = i.product_id
      WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
      GROUP BY i.product_id ORDER BY revenue DESC LIMIT 15`).all(from, to).map(r => {
     let image_url = r.oi_image_url || r.p_image_url || '';
@@ -5875,7 +5875,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
        ORDER BY customers DESC, qty DESC LIMIT 10`).all(from, to, from, to);
     const products = prods.filter((p) => p.product_id).map((p) => {
       const meta = tdb().prepare(
-        'SELECT name_en, name_cn, image_url, sku FROM products WHERE id = ?'
+        'SELECT name_en, name_cn, image_url, sku FROM store_products WHERE id = ?'
       ).get(p.product_id) || {};
       return {
         product_id: p.product_id, qty: p.qty, customers: p.customers,
@@ -6077,7 +6077,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
     // existing alerts.js definition (>0 AND <=5, Active products only).
     const low = tdb().prepare(`
       SELECT id, name_en, name_cn, sku, stock_qty, updated_at
-        FROM products
+        FROM store_products
        WHERE COALESCE(stock_qty,0) > 0 AND COALESCE(stock_qty,0) <= 5
          AND status = 'Active' AND COALESCE(is_active,1) = 1
          AND updated_at >= ?
@@ -6172,7 +6172,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
     // Active product. More urgent: the item is now unbuyable.
     const oos = tdb().prepare(`
       SELECT id, name_en, name_cn, sku, updated_at
-        FROM products
+        FROM store_products
        WHERE COALESCE(stock_qty,0) = 0
          AND status = 'Active' AND COALESCE(is_active,1) = 1
          AND updated_at >= ?
@@ -6209,13 +6209,13 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
 
   try {
     const lowCount = tdb().prepare(`
-      SELECT COUNT(*) AS n FROM products
+      SELECT COUNT(*) AS n FROM store_products
        WHERE COALESCE(stock_qty,0) > 0 AND COALESCE(stock_qty,0) <= 5
          AND status = 'Active' AND COALESCE(is_active,1) = 1
     `).get().n;
     const lowItems = tdb().prepare(`
       SELECT id, name_en, name_cn, sku, stock_qty
-        FROM products
+        FROM store_products
        WHERE COALESCE(stock_qty,0) > 0 AND COALESCE(stock_qty,0) <= 5
          AND status = 'Active' AND COALESCE(is_active,1) = 1
        ORDER BY stock_qty ASC, name_en LIMIT ?
@@ -7512,7 +7512,7 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
             c.avatar_url AS customer_avatar,
             o.order_no AS order_no
        FROM retail_reviews r
-  LEFT JOIN products         p ON p.id = r.product_id
+  LEFT JOIN store_products         p ON p.id = r.product_id
   LEFT JOIN retail_customers c ON c.id = r.customer_id
   LEFT JOIN retail_orders    o ON o.id = r.order_id
        ${whereSql}
@@ -7938,7 +7938,7 @@ router.post('/api/retail-admin/brand/publish', requireRetailAdmin, express.json(
 // Any field absent from the body is left untouched.
 router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare('SELECT id, name_en FROM products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
+  const existing = tdb().prepare('SELECT id, name_en FROM store_products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
 
   const sets = [];
@@ -8042,7 +8042,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // partial edit (only top, or only sub) merges with the current row so the
   // sub is checked under the right top.
   if ('top_category' in body || 'subcategory' in body) {
-    const cur = tdb().prepare('SELECT top_category, subcategory FROM products WHERE id = ?').get(id) || {};
+    const cur = tdb().prepare('SELECT top_category, subcategory FROM store_products WHERE id = ?').get(id) || {};
     const top = 'top_category' in body ? body.top_category : cur.top_category;
     const sub = 'subcategory'  in body ? body.subcategory  : cur.subcategory;
     const norm = normalizeCategoryPair(top, sub, tdb());
@@ -8061,7 +8061,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   sets.push('updated_at = CURRENT_TIMESTAMP');
   params.push(id);
   try {
-    tdb().prepare(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+    tdb().prepare(`UPDATE store_products SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   } catch (e) {
     if (String(e.message || '').includes('UNIQUE')) return res.status(409).json({ success: false, error: 'sku_taken' });
     throw e;
@@ -8078,7 +8078,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
             is_batch_made, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
-       FROM products WHERE id = ?`
+       FROM store_products WHERE id = ?`
   ).get(id);
   if (row && typeof row.description_blocks === 'string' && row.description_blocks) {
     try { row.description_blocks = JSON.parse(row.description_blocks); } catch { row.description_blocks = null; }
@@ -8117,7 +8117,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
             variant_group_id, variant_label, variant_sort,
             is_batch_made, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
-       FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1`
+       FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
   ).get(id);
   if (!row) return res.status(404).json({ success: false, error: 'not_found' });
   if (typeof row.description_blocks === 'string' && row.description_blocks) {
@@ -8159,7 +8159,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   let info;
   try {
     info = tdb().prepare(
-      `INSERT INTO products
+      `INSERT INTO store_products
          (name_en, name_cn, sku, category, top_category, subcategory, weight, sell_price, compare_at_price, stock_qty, ship_modes,
           description_en, description_cn, description_format, image_data, images, tags, is_published, is_active, created_at, updated_at)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
@@ -8186,7 +8186,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, tags,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
-       FROM products WHERE id = ?`
+       FROM store_products WHERE id = ?`
   ).get(id);
   row.description_blocks = null;
   row.nutrition = null;
@@ -8198,9 +8198,9 @@ router.delete('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) =
   // upstream tenants can't remove master products from this backend.
   if (catalogMode(req) === 'upstream') return res.status(423).json({ success: false, error: 'catalog_locked' });
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare('SELECT id, name_en FROM products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
+  const existing = tdb().prepare('SELECT id, name_en FROM store_products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
-  tdb().prepare('UPDATE products SET is_active = 0, is_published = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  tdb().prepare('UPDATE store_products SET is_active = 0, is_published = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
   logActivity(req.user.id, req.user.username, 'delete', 'product_retail', id, { name: existing.name_en }, req.ip);
   res.json({ success: true });
 });
@@ -8222,7 +8222,7 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
             keywords_en, keywords_cn, tagline_en, tagline_cn, free_of, tags, nutrition,
             description_blocks, colophon_character, colophon_tagline_en, colophon_tagline_cn,
             variant_group_id, sort_order
-       FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1`
+       FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
   ).get(id);
   if (!src) return res.status(404).json({ success: false, error: 'not_found' });
 
@@ -8235,11 +8235,11 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
       // Ensure the source belongs to a group (owner = source id) so the copy joins it.
       groupId = src.variant_group_id || id;
       if (!src.variant_group_id) {
-        tdb().prepare('UPDATE products SET variant_group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(groupId, id);
+        tdb().prepare('UPDATE store_products SET variant_group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(groupId, id);
       }
     }
     const info = tdb().prepare(
-      `INSERT INTO products
+      `INSERT INTO store_products
          (name_en, name_cn, sku, category, weight, sell_price, compare_at_price, stock_qty, ship_modes,
           description_en, description_cn, description_format, image_data, images,
           keywords_en, keywords_cn, tagline_en, tagline_cn, free_of, tags, nutrition,
@@ -8264,7 +8264,7 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
             variant_group_id, variant_label,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
-       FROM products WHERE id = ?`
+       FROM store_products WHERE id = ?`
   ).get(newId);
   if (row && typeof row.description_blocks === 'string' && row.description_blocks) {
     try { row.description_blocks = JSON.parse(row.description_blocks); } catch { row.description_blocks = null; }
@@ -8289,7 +8289,7 @@ router.get('/api/retail-admin/flash-sales', requireRetailAdmin, (req, res) => {
             p.sell_price, p.image_url, p.image_data, p.is_published,
             p.flash_price, p.flash_starts_at, p.flash_ends_at,
             p.flash_stock_limit, p.flash_sold
-       FROM products p
+       FROM store_products p
       WHERE COALESCE(p.is_active, 1) = 1
         AND p.flash_price IS NOT NULL
       ORDER BY p.flash_ends_at ASC NULLS LAST, p.id ASC`
@@ -8312,7 +8312,7 @@ router.get('/api/retail-admin/flash-sales', requireRetailAdmin, (req, res) => {
 
 router.put('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare('SELECT id, name_en, flash_price, flash_starts_at, flash_ends_at FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1').get(id);
+  const existing = tdb().prepare('SELECT id, name_en, flash_price, flash_starts_at, flash_ends_at FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
 
   const body = req.body || {};
@@ -8345,7 +8345,7 @@ router.put('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, expr
   const resetNeeded = windowChanged || priceChanged;
 
   tdb().prepare(
-    `UPDATE products
+    `UPDATE store_products
         SET flash_price       = ?,
             flash_starts_at   = ?,
             flash_ends_at     = ?,
@@ -8361,17 +8361,17 @@ router.put('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, expr
   const fresh = tdb().prepare(
     `SELECT id, name_en, flash_price, flash_starts_at, flash_ends_at,
             flash_stock_limit, flash_sold
-       FROM products WHERE id = ?`
+       FROM store_products WHERE id = ?`
   ).get(id);
   res.json({ success: true, data: fresh });
 });
 
 router.delete('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare('SELECT id, name_en FROM products WHERE id = ? AND COALESCE(is_active, 1) = 1').get(id);
+  const existing = tdb().prepare('SELECT id, name_en FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
   tdb().prepare(
-    `UPDATE products
+    `UPDATE store_products
         SET flash_price = NULL, flash_starts_at = NULL, flash_ends_at = NULL,
             flash_stock_limit = NULL, flash_sold = 0,
             updated_at = CURRENT_TIMESTAMP
@@ -8389,7 +8389,7 @@ router.delete('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, (
 router.get('/api/retail-admin/categories', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(`
     SELECT c.id, c.name, c.sort_order,
-      (SELECT COUNT(*) FROM products p
+      (SELECT COUNT(*) FROM store_products p
         WHERE p.category = c.name AND COALESCE(p.is_active, 1) = 1) AS usage_count
     FROM categories c
     WHERE c.kind = 'product'
@@ -8433,7 +8433,7 @@ router.patch('/api/retail-admin/categories/:id', requireRetailAdmin, express.jso
     tdb().transaction(() => {
       tdb().prepare("UPDATE categories SET name = ? WHERE id = ?").run(name, id);
       // Propagate the rename to products that referenced the old name.
-      tdb().prepare("UPDATE products SET category = ? WHERE category = ?").run(name, existing.name);
+      tdb().prepare("UPDATE store_products SET category = ? WHERE category = ?").run(name, existing.name);
     })();
     logActivity(req.user.id, req.user.username, 'update', 'category', id,
                 { kind: 'product', from: existing.name, to: name }, req.ip);
@@ -8464,7 +8464,7 @@ router.delete('/api/retail-admin/categories/:id', requireRetailAdmin, (req, res)
   const id = parseInt(req.params.id, 10);
   const existing = tdb().prepare("SELECT id, name FROM categories WHERE id = ? AND kind = 'product'").get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
-  const usage = tdb().prepare("SELECT COUNT(*) AS n FROM products WHERE category = ? AND COALESCE(is_active, 1) = 1").get(existing.name).n;
+  const usage = tdb().prepare("SELECT COUNT(*) AS n FROM store_products WHERE category = ? AND COALESCE(is_active, 1) = 1").get(existing.name).n;
   if (usage > 0) return res.status(409).json({ success: false, error: 'in_use', usage_count: usage });
   tdb().prepare('DELETE FROM categories WHERE id = ?').run(id);
   logActivity(req.user.id, req.user.username, 'delete', 'category', id, { kind: 'product', name: existing.name }, req.ip);
@@ -8512,7 +8512,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
                     ${hasImageFallbackSql('products')} AS has_image_data,
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks
-               FROM products WHERE COALESCE(is_active, 1) = 1`;
+               FROM store_products WHERE COALESCE(is_active, 1) = 1`;
   const params = [];
   if (q) {
     sql += ' AND (name_en LIKE ? OR name_cn LIKE ? OR sku LIKE ?)';
@@ -8578,7 +8578,7 @@ router.get('/api/retail-admin/products/:id/image', requireRetailAdmin, (req, res
 // separate from the product list so list payloads stay light.
 router.get('/api/retail-admin/products/:id/images', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const row = tdb().prepare('SELECT images, image_data, image_url, variant_group_id FROM products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
+  const row = tdb().prepare('SELECT images, image_data, image_url, variant_group_id FROM store_products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
   if (!row) return res.status(404).json({ success: false, error: 'not_found' });
   let images = parseJsonArray(row.images);
   if (!images.length) { const primary = row.image_data || row.image_url; if (primary) images = [primary]; }
@@ -8590,7 +8590,7 @@ router.get('/api/retail-admin/products/:id/images', requireRetailAdmin, (req, re
   let inherited = false;
   if (!images.length && row.variant_group_id) {
     const sib = tdb().prepare(
-      `SELECT images, image_data, image_url FROM products
+      `SELECT images, image_data, image_url FROM store_products
         WHERE variant_group_id = ? AND id != ? AND COALESCE(is_active, 1) = 1
           AND (
             (images IS NOT NULL AND images != '' AND images != '[]')
@@ -8615,14 +8615,14 @@ router.get('/api/retail-admin/products/:id/images', requireRetailAdmin, (req, re
 // group under the retail-admin session.
 router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const p = tdb().prepare('SELECT id, variant_group_id FROM products WHERE id = ?').get(id);
+  const p = tdb().prepare('SELECT id, variant_group_id FROM store_products WHERE id = ?').get(id);
   if (!p) return res.status(404).json({ success: false, error: 'not_found' });
   let members = [];
   if (p.variant_group_id) {
     members = tdb().prepare(
       `SELECT id, name_en, name_cn, sku, variant_label, weight AS size, sell_price AS price,
               stock_qty AS stock, image_data, image_url, is_published
-         FROM products
+         FROM store_products
         WHERE variant_group_id = ? AND COALESCE(is_active, 1) = 1
         ORDER BY COALESCE(variant_sort, 0), COALESCE(variant_label, name_en), id`
     ).all(p.variant_group_id);
@@ -8638,7 +8638,7 @@ router.put('/api/retail-admin/products/:id/variants', requireRetailAdmin, expres
   // Variant grouping is product structure — mastered upstream, not editable here.
   if (catalogMode(req) === 'upstream') return res.status(423).json({ success: false, error: 'catalog_locked' });
   const id = parseInt(req.params.id, 10);
-  const self = tdb().prepare('SELECT id, variant_group_id, variant_label FROM products WHERE id = ?').get(id);
+  const self = tdb().prepare('SELECT id, variant_group_id, variant_label FROM store_products WHERE id = ?').get(id);
   if (!self) return res.status(404).json({ success: false, error: 'not_found' });
   const raw = Array.isArray(req.body?.members) ? req.body.members : [];
   const byId = new Map();
@@ -8653,16 +8653,16 @@ router.put('/api/retail-admin/products/:id/variants', requireRetailAdmin, expres
   try {
     const count = tdb().transaction(() => {
       if (desired.length < 2) {
-        if (prevGid) tdb().prepare('UPDATE products SET variant_group_id=NULL, variant_label=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=?').run(prevGid);
-        tdb().prepare('UPDATE products SET variant_group_id=NULL, variant_label=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
+        if (prevGid) tdb().prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=?').run(prevGid);
+        tdb().prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
         return 0;
       }
       if (prevGid) {
         const keep = desired.map(([mid]) => mid);
         const ph = keep.map(() => '?').join(',');
-        tdb().prepare(`UPDATE products SET variant_group_id=NULL, variant_label=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=? AND id NOT IN (${ph})`).run(prevGid, ...keep);
+        tdb().prepare(`UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=? AND id NOT IN (${ph})`).run(prevGid, ...keep);
       }
-      const upd = tdb().prepare('UPDATE products SET variant_group_id=?, variant_label=?, variant_sort=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
+      const upd = tdb().prepare('UPDATE store_products SET variant_group_id=?, variant_label=?, variant_sort=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
       desired.forEach(([mid, label], idx) => upd.run(groupId, label, idx, mid));
       return desired.length;
     })();
@@ -8835,7 +8835,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
             oi.qty, oi.unit_price, oi.line_total, oi.options_json,
             oi.ship_modes, oi.needs_ice_pack, oi.shipment_id
        FROM retail_order_items oi
-  LEFT JOIN products p ON p.id = oi.product_id
+  LEFT JOIN store_products p ON p.id = oi.product_id
       WHERE oi.order_id = ? ORDER BY oi.id ASC`
   ).all(id).map(it => {
     if (it.options_json) { try { it.options = JSON.parse(it.options_json); } catch {} }
@@ -8857,7 +8857,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
             r.expires_at, r.created_at, r.committed_at, r.released_at,
             p.name_en AS product_name_en, p.name_cn AS product_name_cn
        FROM retail_stock_reservations r
-       LEFT JOIN products p ON p.id = r.product_id
+       LEFT JOIN store_products p ON p.id = r.product_id
       WHERE r.order_id = ? ORDER BY r.id ASC`
   ).all(id);
 
@@ -11395,9 +11395,9 @@ router.get('/api/retail-admin/media/usage', requireRetailAdmin, (req, res) => {
   const re = /\/api\/retail\/media\/(\d+)/g;
   const sources = [];
   try { sources.push(...tdb().prepare(`SELECT value_json AS txt FROM storefront_config`).all()); } catch {}
-  try { sources.push(...tdb().prepare(`SELECT image_url AS txt FROM products WHERE image_url LIKE '%/api/retail/media/%'`).all()); } catch {}
-  try { sources.push(...tdb().prepare(`SELECT label_url AS txt FROM products WHERE label_url LIKE '%/api/retail/media/%'`).all()); } catch {}
-  try { sources.push(...tdb().prepare(`SELECT description_blocks AS txt FROM products WHERE description_blocks LIKE '%/api/retail/media/%'`).all()); } catch {}
+  try { sources.push(...tdb().prepare(`SELECT image_url AS txt FROM store_products WHERE image_url LIKE '%/api/retail/media/%'`).all()); } catch {}
+  try { sources.push(...tdb().prepare(`SELECT label_url AS txt FROM store_products WHERE label_url LIKE '%/api/retail/media/%'`).all()); } catch {}
+  try { sources.push(...tdb().prepare(`SELECT description_blocks AS txt FROM store_products WHERE description_blocks LIKE '%/api/retail/media/%'`).all()); } catch {}
   for (const { txt } of sources) {
     if (!txt) continue;
     let m;
@@ -11723,7 +11723,7 @@ function cartHasBatchItem(productIds) {
   if (!ids.length) return false;
   const ph = ids.map(() => '?').join(',');
   const row = tdb().prepare(
-    `SELECT 1 FROM products WHERE id IN (${ph}) AND COALESCE(is_batch_made, 0) = 1 LIMIT 1`
+    `SELECT 1 FROM store_products WHERE id IN (${ph}) AND COALESCE(is_batch_made, 0) = 1 LIMIT 1`
   ).get(...ids);
   return !!row;
 }
@@ -12169,7 +12169,7 @@ function priceCart(items, customerId) {
       `SELECT id, sell_price AS price,
               flash_price, flash_starts_at, flash_ends_at,
               flash_stock_limit, flash_sold
-         FROM products
+         FROM store_products
         WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
     if (!p) return { error: 'product_unavailable', subtotal: 0, totalQty: 0 };
@@ -13566,7 +13566,7 @@ router.get('/api/retail/favorites', requireRetailAuth, (req, res) => {
   const rows = tdb().prepare(
     `SELECT ${RETAIL_PRODUCT_COLS}, f.created_at AS favorited_at
        FROM retail_customer_favorites f
-       JOIN products p ON p.id = f.product_id
+       JOIN store_products p ON p.id = f.product_id
       WHERE f.customer_id = ?
         AND p.is_published = 1
         AND COALESCE(p.is_active, 1) = 1
@@ -13590,7 +13590,7 @@ router.get('/api/retail/favorites/ids', requireRetailAuth, (req, res) => {
 router.post('/api/retail/favorites/:productId', requireRetailAuth, (req, res) => {
   const productId = parseInt(req.params.productId, 10);
   if (!productId) return res.status(400).json({ success: false, error: 'bad_request' });
-  const prod = tdb().prepare('SELECT id FROM products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1').get(productId);
+  const prod = tdb().prepare('SELECT id FROM store_products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1').get(productId);
   if (!prod) return res.status(404).json({ success: false, error: 'product_not_found' });
   try {
     tdb().prepare(
