@@ -245,6 +245,7 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
 /* design sheet */
 .dgroup{margin-bottom:18px;}
 .dgroup>.t{font:600 11px var(--f-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);margin-bottom:9px;}
+.dgroup>.hint{font:400 12px var(--f-sans);color:var(--text-3);line-height:1.45;margin:-3px 0 10px;}
 .swatches{display:flex;gap:10px;flex-wrap:wrap;}
 .sw{width:40px;height:40px;border-radius:11px;cursor:pointer;border:2px solid transparent;position:relative;
   box-shadow:inset 0 0 0 1px var(--line);}
@@ -418,7 +419,8 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
              controls for the selected block. -->
         <div id="design-block"></div>
         <div class="dgroup">
-          <div class="t"><span class="i18n-en">Page background</span><span class="i18n-cn">页面背景</span></div>
+          <div class="t"><span class="i18n-en">Whole-page background</span><span class="i18n-cn">整页背景</span></div>
+          <div class="hint"><span class="i18n-en">Sits behind every block. To colour just one block, use its <b>Card background</b> above.</span><span class="i18n-cn">位于所有模块的后面。若只想给某个模块上色,请用上方该模块的<b>卡片背景</b>。</span></div>
           <div class="swatches" id="bg-swatches"></div>
         </div>
         <div class="desk-note">
