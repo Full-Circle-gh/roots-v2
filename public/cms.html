@@ -14513,10 +14513,16 @@ document.addEventListener('keydown', (e) => {
     margin: 0 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
     display: block !important; overflow: visible !important;
   }
-  .fc-preview-embed .phone-content { overflow: visible; }
-  /* Keep the bottom tab bar pinned to the bottom of the iframe viewport while
-     the content scrolls under it, matching the live mini-app. */
-  .fc-preview-embed .phone-tabs { position: sticky; bottom: 0; z-index: 5; }
+  /* Kill the desktop padding-bottom:86px (it existed only to clear the ABSOLUTE
+     82px tab bar; here the tab bar is in-flow/sticky, so that padding is just a
+     dead gap above it). The small ::after spacer below is the only bottom room
+     we keep — enough to lift the last block clear of the floating action bar. */
+  .fc-preview-embed .phone-content { overflow: visible; padding-bottom: 0; }
+  /* Keep the tab bar pinned to the bottom of the iframe viewport while content
+     scrolls under it, matching the live mini-app. Drop the 24px home-indicator
+     safe-area reserve — the real phone already shows its own home indicator —
+     so the bar isn't needlessly tall in the preview. */
+  .fc-preview-embed .phone-tabs { position: sticky; bottom: 0; z-index: 5; height: auto; padding: 8px 0 10px; }
   /* The real phone already has its own status bar + notch — drop the
      simulated iPhone notch and "9:41" status row so the preview isn't
      wearing a second set of chrome. (Desktop keeps them.) */
@@ -14527,8 +14533,8 @@ document.addEventListener('keydown', (e) => {
      the bottom ~60px of this preview when a block is selected. Without it the
      final block stays jammed under the toolbar and reads as "can't scroll to the
      end of the page". ~88px clears the toolbar + a breath of gap. */
-  .fc-preview-embed body { scroll-padding-bottom: 88px; }
-  .fc-preview-embed .phone-content::after { content: ''; display: block; height: 88px; }
+  .fc-preview-embed body { scroll-padding-bottom: 48px; }
+  .fc-preview-embed .phone-content::after { content: ''; display: block; height: 48px; }
 </style>
 
 </body>
