@@ -24,6 +24,7 @@ Page({
     localOnlyBlock: false,   // true when the cart has a Guangzhou-only item but the address is outside GZ
     localOnlyNames: [],      // display names of those offending items (for the banner + modal)
     localOnlyPopup: false,   // drives the custom "Guangzhou delivery only" popup (one flag → can't stack)
+    localOnlyItems: [],      // [{ name, image }] shown in the popup, matched to the cart for thumbnails
     localOnlyTitle: '',      // computed title for that popup (removed / emptied / blocked variants)
     localOnlyBody: '',       // computed body copy for that popup (avoids an apostrophe literal in WXML)
     localOnlyCta: '',        // computed CTA label for that popup
@@ -1079,7 +1080,10 @@ Page({
         // pop the modal once so it can't be missed. The inline banner stays
         // put afterwards as a persistent reminder, and re-quotes (slot
         // changes) only refresh the banner — they don't re-pop.
-        if (data.batch_notice && !this.data.batchNoticeSeen) {
+        // Don't auto-pop over the Guangzhou-only popup — that flow re-quotes
+        // right after opening its own popup, and we don't want two stacked.
+        // The batch banner stays put, so it's reachable once they dismiss it.
+        if (data.batch_notice && !this.data.batchNoticeSeen && !this.data.localOnlyPopup) {
           this.setData({ batchNoticePopup: true, batchNoticeSeen: true });
         }
         // Day-only mode: configure the three-option picker (Express / Today /
@@ -1735,35 +1739,47 @@ Page({
   // empty (can't identify the items) we fall back to the explainer + block so
   // nothing is removed blindly and the customer can fix it manually.
   autoRemoveLocalOnly(products) {
+    const L = this.data.lang;
     const list = Array.isArray(products) ? products : [];
     if (!list.length) {
       this.setData({ localOnlyBlock: true, localOnlyNames: [], quoting: false });
       this.showLocalOnlyModal();
       return;
     }
+    // Match each offending product to its live cart row for a thumbnail BEFORE
+    // we remove it (afterwards it's gone from the cart). Mirrors the batch
+    // popup's item-thumbnail matching.
+    const cartItems = cart.get().items || [];
+    const imgById = {};
+    for (const ci of cartItems) {
+      if (ci.product_id != null && !imgById[ci.product_id]) imgById[ci.product_id] = ci.image || '';
+    }
     const ids   = new Set(list.map(p => p.id));
-    const names = list.map(p => lang.pick(p.name_en, p.name_cn, this.data.lang)).filter(Boolean);
+    const items = list
+      .map(p => ({ name: lang.pick(p.name_en, p.name_cn, L), image: imgById[p.id] || '' }))
+      .filter(x => x.name);
+    const names = items.map(x => x.name);
     // Drop every cart line whose product is Guangzhou-only (all option variants).
     let removed = 0;
-    cart.get().items
+    cartItems
       .filter(it => ids.has(it.product_id))
       .forEach(it => { cart.remove(it.key); removed++; });
     // Couldn't match anything in the cart → don't loop; explain + block instead.
     if (!removed) {
       this.setData({ localOnlyBlock: true, localOnlyNames: names, quoting: false });
-      this.showLocalOnlyModal(names);
+      this.showLocalOnlyPopup('blocked', items);
       return;
     }
     this.setData({ localOnlyBlock: false, localOnlyNames: [] });
     // Everything was Guangzhou-only → cart is now empty; nowhere to check out.
     // The styled popup's CTA sends them back to browse (localOnlyBrowse).
     if (!cart.get().items.length) {
-      this.showLocalOnlyPopup('emptied', names);
+      this.showLocalOnlyPopup('emptied', items);
       return;
     }
     // Tell them what we removed (styled popup, not a native alert so it can't
     // stack on top of the explainer), then re-quote the trimmed cart.
-    this.showLocalOnlyPopup('removed', names);
+    this.showLocalOnlyPopup('removed', items);
     this.refreshQuote();
   },
 
@@ -1779,10 +1795,11 @@ Page({
   // Copy is computed here (not inline in WXML) to match the data-driven
   // batch-notice popup — the English strings carry apostrophes ("can't"), which
   // don't survive as literals inside {{ }}.
-  showLocalOnlyPopup(mode, names) {
+  showLocalOnlyPopup(mode, items) {
     const cn = this.data.lang === 'cn';
-    const list = (names && names.length ? names : this.data.localOnlyNames) || [];
-    const nameText = list.length ? (cn ? list.join('、') : list.join(', ')) : '';
+    const list = (Array.isArray(items) && items.length ? items : this.data.localOnlyItems) || [];
+    const names = list.map(x => x.name).filter(Boolean);
+    const nameText = names.length ? (cn ? names.join('、') : names.join(', ')) : '';
     let title, body, cta, browse = false;
     if (mode === 'emptied') {
       title = cn ? '已移除仅广州商品' : 'Guangzhou-only items removed';
@@ -1805,19 +1822,25 @@ Page({
       cta = cn ? '我知道了' : 'OK';
     }
     this.setData({
-      localOnlyNames: list,
+      localOnlyItems: list,
       localOnlyTitle: title,
       localOnlyBody: body,
       localOnlyCta: cta,
       localOnlyBrowse: browse,
       localOnlyPopup: true,
+      // Never stack with the "Made fresh" popup — the local-only result takes
+      // priority; the batch notice stays available via its inline banner.
+      batchNoticePopup: false,
     });
   },
 
   // Back-compat thin wrapper — existing callers (place-order guard, submit
-  // backstop) all want the "blocked" explainer.
+  // backstop) want the "blocked" explainer. They pass display names (strings);
+  // wrap them as {name, image} so the popup renders consistently (no cart
+  // thumbnail available on these paths, so it falls back to the pin icon).
   showLocalOnlyModal(names) {
-    this.showLocalOnlyPopup('blocked', names);
+    const src = (names && names.length ? names : this.data.localOnlyNames) || [];
+    this.showLocalOnlyPopup('blocked', src.map(n => ({ name: n, image: '' })));
   },
 
   closeLocalOnly() {

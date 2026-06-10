@@ -930,11 +930,13 @@
       <view class="bn-kicker bn-kicker--warn f-toni">{{ lang === 'cn' ? '配送范围' : 'DELIVERY AREA' }}</view>
       <view class="bn-title f-bear">{{localOnlyTitle}}</view>
 
-      <!-- The specific Guangzhou-only items this refers to -->
-      <view wx:if="{{localOnlyNames.length}}" class="bn-items bn-items--warn">
-        <view wx:for="{{localOnlyNames}}" wx:key="*this" class="bn-item">
-          <view class="bn-item-img bn-item-img--ph bn-item-img--warn">📍</view>
-          <view class="bn-item-name">{{item}}</view>
+      <!-- The specific Guangzhou-only items this refers to — product photo when
+           we have one (matched from the cart), pin icon only as a fallback. -->
+      <view wx:if="{{localOnlyItems.length}}" class="bn-items bn-items--warn">
+        <view wx:for="{{localOnlyItems}}" wx:key="name" class="bn-item">
+          <image wx:if="{{item.image}}" class="bn-item-img" src="{{item.image}}" mode="aspectFill"/>
+          <view wx:else class="bn-item-img bn-item-img--ph bn-item-img--warn">📍</view>
+          <view class="bn-item-name">{{item.name}}</view>
         </view>
       </view>
 
