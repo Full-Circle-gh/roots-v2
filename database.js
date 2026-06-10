@@ -2087,6 +2087,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_migr_unclaimed ON retail_migration_credits(phone) WHERE claimed_at IS NULL;
 `);
 
+// ─── Phone-less migration credits (manual / operator-credited) ─────────────
+// OUT1N customers who hold balance/points but have NO phone on file (WeChat-
+// only) — and no openid we can obtain — so the phone-claim path can't reach
+// them. Preserved here as the canonical record; an operator credits them by
+// hand (existing points-adjust / wallet-adjust on the customer) when the
+// customer is identified, then stamps credited_at. Keyed by OUT1N uid.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_migration_unmatched (
+    uid                 TEXT PRIMARY KEY,        -- OUT1N User ID
+    name                TEXT,                    -- OUT1N display name (21/120 have one)
+    balance             REAL NOT NULL DEFAULT 0,
+    points              INTEGER NOT NULL DEFAULT 0,
+    credited_at         DATETIME,                -- NULL = outstanding
+    credited_customer_id INTEGER,                -- retail_customers.id once credited
+    note                TEXT,
+    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 // Order-level columns for the new fee model. Each added idempotently so
 // existing DBs migrate cleanly without dropping data.
 addColumn('retail_orders', 'packing_fee',      'REAL DEFAULT 0');
