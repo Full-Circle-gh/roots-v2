@@ -17028,11 +17028,13 @@ async function _invRenderStores(stores) {
           <input type="text" id="inv-new-city" placeholder="广州" style="width:120px"></div>
         <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">District</label>
           <input type="text" id="inv-new-district" placeholder="天河区" style="width:120px"></div>
+        <div style="flex:1;min-width:260px"><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">Street address · 详细地址</label>
+          <input type="text" id="inv-new-address" placeholder="新塘大街3号新塘科创园2栋" style="width:100%"></div>
         <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">Priority</label>
           <input type="number" id="inv-new-sort" value="0" style="width:80px"></div>
         <button class="btn btn-primary" onclick="_invCreateStore()">+ Create store</button>
       </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:10px">Stores are routed to in priority order (lower = preferred); the matching delivery zone's <i>preferred store</i> wins first when set.</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px">Stores are routed to in priority order (lower = preferred); the matching delivery zone's <i>preferred store</i> wins first when set. The <b>street address</b> sets the store's GPS location used for nearest-store routing — keep it accurate.</div>
     </div>
 
     <div class="data-table-wrap">
@@ -17051,7 +17053,13 @@ async function _invRenderStores(stores) {
                 <div>${_invEsc(s.name_en || '')}</div>
                 <div style="font-size:11px;color:var(--muted);margin-top:2px">${_invEsc(s.name_cn || '')}</div>
               </td>
-              <td>${_invEsc([s.city, s.district].filter(Boolean).join(' · ')) || '<span style="color:var(--muted)">—</span>'}</td>
+              <td>
+                <div>${_invEsc([s.city, s.district].filter(Boolean).join(' · ')) || '<span style="color:var(--muted)">—</span>'}</div>
+                ${s.address ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${_invEsc(s.address)}</div>` : ''}
+                <div style="font-size:11px;margin-top:2px">${(s.lat != null && s.lng != null)
+                  ? '<span style="color:#16a34a">📍 GPS located</span>'
+                  : '<span style="color:#dc2626">⚠ no GPS — set a street address</span>'}</div>
+              </td>
               <td style="text-align:right"><input type="number" value="${s.sort_order || 0}" style="width:70px;text-align:right" onchange="_invPatchStoreField(${s.id}, { sort_order: +this.value })"></td>
               <td style="text-align:center"><input type="checkbox" ${s.is_active ? 'checked' : ''} onchange="_invPatchStoreField(${s.id}, { is_active: this.checked })"></td>
               <td style="font-family:var(--font-mono, monospace);font-size:11px">${_invEsc(s.meituan_account_id || '—')}</td>
@@ -17071,6 +17079,7 @@ async function _invCreateStore() {
     name_cn:    document.getElementById('inv-new-cn').value.trim(),
     city:       document.getElementById('inv-new-city').value.trim(),
     district:   document.getElementById('inv-new-district').value.trim(),
+    address:    document.getElementById('inv-new-address').value.trim(),
     sort_order: +document.getElementById('inv-new-sort').value || 0,
   };
   if (!body.code) return toast('Code required · 请填写编号', 'error');
@@ -17108,8 +17117,9 @@ async function _invEditStore(id) {
     const nameCn = prompt('Name (CN):', s.name_cn || ''); if (nameCn == null) return;
     const city = prompt('City (e.g. 广州):', s.city || ''); if (city == null) return;
     const district = prompt('District (e.g. 天河区):', s.district || ''); if (district == null) return;
+    const address = prompt('Street address · 详细地址 (sets the store GPS for routing):', s.address || ''); if (address == null) return;
     const meituan = prompt('Meituan account id (blank for none):', s.meituan_account_id || ''); if (meituan == null) return;
-    await _invPatchStoreField(id, { name_en: nameEn, name_cn: nameCn, city, district, meituan_account_id: meituan || null });
+    await _invPatchStoreField(id, { name_en: nameEn, name_cn: nameCn, city, district, address, meituan_account_id: meituan || null });
     renderInventory();
   } catch (e) { toast(e.message, 'error'); }
 }
