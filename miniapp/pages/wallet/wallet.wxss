@@ -6,6 +6,40 @@
   padding: 0 0 80rpx;
 }
 
+/* Returning-customer phone-bind card (migration restore CTA) */
+.bind-card {
+  margin: 32rpx 44rpx 0;
+  border: 3rpx solid var(--ink);
+  background: #FFFCF7;
+  padding: 32rpx 32rpx 36rpx;
+}
+.bind-card .bind-title {
+  font-size: calc(38rpx * var(--font-scale));
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.bind-card .bind-desc {
+  font-size: calc(24rpx * var(--font-scale));
+  line-height: 1.4;
+  color: var(--olive);
+  margin-top: 12rpx;
+}
+.bind-card .bind-btn {
+  margin-top: 28rpx;
+  background: var(--ink);
+  color: var(--oat);
+  border: none;
+  border-radius: 0;
+  font-size: calc(26rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 22rpx 0;
+  line-height: 1.1;
+}
+.bind-card .bind-btn::after { border: none; }
+.bind-card .bind-btn[disabled] { opacity: 0.6; }
+
 /* Header */
 .head {
   padding: 40rpx 44rpx 16rpx;

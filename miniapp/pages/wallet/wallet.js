@@ -61,6 +61,12 @@ const COPY = {
     withdrawSoon: 'Withdrawals via customer service for now.',
     redeemSoon:   'Apply points at checkout.',
     earnExplain:  'Earn 1 point per ¥100 spent. Plus bonus points on every top-up.',
+    bindTitle:    'Returning customer?',
+    bindDesc:     'Bind your phone to restore the balance & points from your account.',
+    bindBtn:      'Restore my balance',
+    bindDenied:   'Phone access needed to restore',
+    bindFailed:   "Couldn't verify your phone — please try again",
+    bindDone:     'Restored',
   },
   cn: {
     navTitle:     '钱包与积分',
@@ -89,6 +95,12 @@ const COPY = {
     withdrawSoon: '如需提现请联系客服。',
     redeemSoon:   '请在结算页面使用积分。',
     earnExplain:  '每消费 ¥100 累计 1 积分,充值另送奖励。',
+    bindTitle:    '老顾客?',
+    bindDesc:     '绑定手机号,恢复你账户的余额和积分。',
+    bindBtn:      '恢复我的余额',
+    bindDenied:   '需要手机号授权才能恢复',
+    bindFailed:   '无法验证手机号,请重试',
+    bindDone:     '已恢复',
   },
 };
 
@@ -110,6 +122,11 @@ Page({
     redeemedThisMonth: 0,
     monthLabel: '',
     showEarn: false,
+    // True when the logged-in customer has no phone on file → show the
+    // "restore from previous store" getPhoneNumber prompt. Binding a phone
+    // silently applies any pending OUT1N migration credit server-side.
+    needPhone: false,
+    binding: false,
   },
 
   onShow() {
@@ -151,6 +168,7 @@ Page({
         next.walletBal  = Number(cust.balance || 0).toFixed(2);
         next.pointsBal  = cust.points_balance || 0;
         next.pointsCash = (next.pointsBal * 0.1).toFixed(1);
+        next.needPhone  = !cust.phone;
       }
 
       // Wallet history — only credit-style topup transactions for now.
@@ -305,6 +323,33 @@ Page({
       showCancel: false,
       confirmText: this.data.lang === 'cn' ? '好的' : 'OK',
     });
+  },
+
+  // WeChat phone-bind for returning OUT1N customers. The <button
+  // open-type="getPhoneNumber"> hands us a one-time `code`; the backend
+  // exchanges it, stores the number, and silently applies any pending
+  // migration credit. On success we just refresh — the restored balance/points
+  // appear and the prompt disappears (no celebratory popup, by design).
+  async onGetPhone(e) {
+    const d = e && e.detail;
+    const code = d && d.code;
+    if (!code) {
+      // User dismissed the WeChat phone-authorization sheet.
+      wx.showToast({ title: this.data.copy.bindDenied, icon: 'none' });
+      return;
+    }
+    if (this.data.binding) return;
+    this.setData({ binding: true });
+    try {
+      await api.post('/api/retail/phone', { code });
+      wx.showToast({ title: this.data.copy.bindDone, icon: 'success' });
+      await this.refresh();
+    } catch (err) {
+      console.warn('[wallet] phone bind failed:', err.message);
+      wx.showToast({ title: this.data.copy.bindFailed, icon: 'none' });
+    } finally {
+      this.setData({ binding: false });
+    }
   },
 
   openHowEarn() {

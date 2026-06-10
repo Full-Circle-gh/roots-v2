@@ -24,6 +24,20 @@
     </view>
   </view>
 
+  <!-- Returning-customer phone bind. Shown only when the customer has no phone
+       on file. Tapping the WeChat getPhoneNumber button hands the backend a
+       code; it stores the number and silently restores any migrated
+       balance/points, then the card disappears on refresh. -->
+  <view wx:if="{{needPhone}}" class="bind-card">
+    <view class="bind-title f-bear">{{copy.bindTitle}}</view>
+    <view class="bind-desc f-toni">{{copy.bindDesc}}</view>
+    <button class="bind-btn f-gothic"
+            open-type="getPhoneNumber"
+            bindgetphonenumber="onGetPhone"
+            loading="{{binding}}"
+            disabled="{{binding}}">{{copy.bindBtn}}</button>
+  </view>
+
   <!-- WALLET PANE -->
   <block wx:if="{{tab === 'wallet'}}">
     <view class="bal-card bal-wallet">

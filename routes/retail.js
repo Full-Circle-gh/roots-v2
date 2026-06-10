@@ -8114,6 +8114,46 @@ router.patch('/api/retail/customer', requireRetailAuth, express.json(), (req, re
   res.json({ success: true, data: publicCustomer(fresh) });
 });
 
+// Bind a WeChat phone number captured via <button open-type="getPhoneNumber">.
+// The button hands the mini-app a one-time `code`; we exchange it server-side
+// for the real number, store it, and SILENTLY apply any pending OUT1N
+// migration credit for that number (balance/points just appear). Response
+// carries the refreshed customer so the UI re-renders the new balances.
+router.post('/api/retail/phone', requireRetailAuth, express.json(), async (req, res) => {
+  const code = req.body && req.body.code ? String(req.body.code) : '';
+  if (!code) return res.status(400).json({ success: false, error: 'code_required' });
+
+  let token;
+  try { token = await getWeChatAccessToken(); }
+  catch (e) { console.error('[retail/phone] token:', e.message); }
+  if (!token) return res.status(503).json({ success: false, error: 'no_access_token' });
+
+  let phone;
+  try {
+    const resp = await fetch(
+      `https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=${token}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) }
+    );
+    const j = await resp.json();
+    if (j.errcode !== 0 || !j.phone_info) {
+      console.warn('[retail/phone] exchange failed:', j.errcode, j.errmsg);
+      return res.status(502).json({ success: false, error: 'phone_exchange_failed' });
+    }
+    phone = String(j.phone_info.purePhoneNumber || j.phone_info.phoneNumber || '')
+      .replace(/\s+/g, '').slice(0, 20);
+  } catch (e) {
+    console.error('[retail/phone] exchange:', e.message);
+    return res.status(502).json({ success: false, error: 'phone_exchange_failed' });
+  }
+  if (!phone) return res.status(502).json({ success: false, error: 'phone_exchange_failed' });
+
+  tdb().prepare('UPDATE retail_customers SET phone = ? WHERE id = ?').run(phone, req.customer.id);
+  try { claimMigrationCredit(req.customer.id); }
+  catch (e) { console.warn('[retail/phone] migration claim failed:', e.message); }
+  const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(req.customer.id);
+  res.json({ success: true, data: publicCustomer(fresh) });
+});
+
 // Customer-facing avatar upload. Body is JSON: { data: "data:image/...;base64,..." }.
 // Reason: wx.uploadFile has its own AppID whitelist that customers can't
 // control on the legacy preview AppID — sending base64 over wx.request
