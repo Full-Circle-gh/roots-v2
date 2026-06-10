@@ -12014,11 +12014,6 @@ function batchItemsInCart(productIds) {
   ).all(...ids);
 }
 
-// True when any of the given product ids is flagged is_batch_made.
-function cartHasBatchItem(productIds) {
-  return batchItemsInCart(productIds).length > 0;
-}
-
 // The customer-facing "made fresh for you" notice for an order holding a
 // batch-made item, or null when it doesn't apply. Two zone families get it:
 //   • Outside-GZ cities (zone_type 'city') — the shipping leg is always a real
