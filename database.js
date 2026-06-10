@@ -2490,6 +2490,10 @@ addColumn('retail_orders', 'invoice_status',    'TEXT');      // null/'requested
 addColumn('retail_orders', 'invoice_file_url',  'TEXT');      // pasted link OR /api/retail/media/<id> (uploaded PDF)
 addColumn('retail_orders', 'invoice_number',    'TEXT');      // 发票号码
 addColumn('retail_orders', 'invoice_issued_at', 'DATETIME');
+// Staff "ship it on time" reminder (see lib/delivery-reminders.js). Stamped the
+// moment the one-and-only delivery reminder Web Push is fired for this order, so
+// it never re-fires. NULL = not yet reminded / not eligible.
+addColumn('retail_orders', 'reminder_ship_sent_at', 'DATETIME');
 // Item-level: when this row is a substitute, point back to the original
 // product the customer was trying to buy. Lets us show "replaces X" on
 // receipts and analytics.

@@ -508,6 +508,15 @@ app.listen(PORT, () => {
       getTenantCreds: tenantCreds.getTenantCreds,
     });
   } catch (e) { console.warn('[kd100.sweeper] start failed:', e.message); }
+  // Delivery "ship it on time" reminder sweeper. Pushes retail operators 30 min
+  // before a chosen time-window opens, or at 10:00 on the day of a date-only
+  // delivery. Runs every 60s; fires once per order. No-op when push is off.
+  try {
+    require('./lib/delivery-reminders').startDeliveryReminderSweeper({
+      mainDb:      require('./database'),
+      getTenantDb: tenantDb.getTenantDb,
+    });
+  } catch (e) { console.warn('[ship.reminder] start failed:', e.message); }
   // Secrets-at-rest health (Platform readiness ⑩). A non-Roots tenant's creds
   // are AES-256-GCM encrypted under TENANT_SECRET_KEY; if that key is missing
   // on a box that already has tenants, none of their secrets can be decrypted

@@ -14508,7 +14508,13 @@ document.addEventListener('keydown', (e) => {
     margin: 0 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
     display: flex !important; flex-direction: column;
   }
-  .fc-preview-embed .phone-content { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  /* min-height:0 is the crux: a flex child defaults to min-height:auto, which
+     refuses to shrink below its CONTENT height. Without it, .phone-content grows
+     to the full block stack, overflows .phone (height:100%), and the excess is
+     clipped by .canvas (overflow:hidden) — so the page can't scroll past the
+     last on-screen block. Pinning min-height:0 caps it at the iframe's real
+     height so the overflow becomes an internal scroll instead of clipped. */
+  .fc-preview-embed .phone-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .fc-preview-embed .phone-tabs { flex: 0 0 auto; }
   /* The real phone already has its own status bar + notch — drop the
      simulated iPhone notch and "9:41" status row so the preview isn't
