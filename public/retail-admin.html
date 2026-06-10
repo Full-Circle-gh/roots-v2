@@ -12,12 +12,12 @@
   (function () {
     try {
       var saved = localStorage.getItem('retail-admin-theme');
-      var theme = saved === 'light' || saved === 'dark'
-        ? saved
-        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      // Default to light unless the operator has explicitly chosen a theme.
+      // Never auto-darken from the OS preference — dark is opt-in only.
+      var theme = saved === 'light' || saved === 'dark' ? saved : 'light';
       document.documentElement.setAttribute('data-theme', theme);
     } catch (e) {
-      document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.setAttribute('data-theme', 'light');
     }
     // UI scale (text size) — apply BEFORE first paint too, so the backend
     // doesn't visibly resize after load. Default 110%. Toggle: cuCycleUiScale.
