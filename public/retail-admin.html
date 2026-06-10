@@ -1803,22 +1803,11 @@
      hits Expand on the editor or switches to grid/compact catalogue scan. */
   .pa-split { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
   .pa-split-list { min-width: 0; }
-  /* Master-detail: while the editor is docked beside it, the list is the pinned
-     "master" pane — it sticks in the viewport and scrolls inside ITSELF, so the
-     page height tracks the EDITOR, not the list. Without this an un-capped list
-     outgrows a short editor and leaves a dead gap running down the editor
-     column. Scoped to true split mode on wide screens; list-only / editor-only
-     and the <=1024px single-column stack keep the normal one-page scroll.
-     top:64px clears the 56px sticky topbar; vh ÷ --ui-scale tracks the real
-     viewport under the Aa zoom. */
-  @media (min-width: 1025px) {
-    .pa-split:not(.pa-split-listonly):not(.pa-split-editonly) .pa-split-list {
-      position: sticky; top: 64px;
-      max-height: calc(100vh / var(--ui-scale, 1) - 80px);
-      overflow-y: auto; overscroll-behavior: contain;
-    }
-  }
-  /* The editor flows at full height and the whole page scrolls through it. */
+  /* The editor flows at full height and the whole page scrolls (one scroll, not
+     a pane-within-a-page). While the editor is docked the list is capped to 18
+     rows (see PA_DOCK_PAGE_SIZE in paRender) so it ends near the editor's bottom
+     edge — no dead gap, no separate scroll. The overview list (editor closed)
+     uses the operator's "Per page" choice instead. */
   .pa-split-editor { min-width: 0; }
   @media (max-width: 1024px) { .pa-split { grid-template-columns: 1fr; } .pa-split-editor { position: static; } }
   /* Catalogue-scan mode: grid/compact view hides the editor so the list takes
@@ -24073,11 +24062,14 @@ function _paStatusMatch(p) {
 // ── Catalogue pagination — caps how many cards render at once so the grid
 // paints fast even with the full 200+ catalogue. Page size persists; any
 // search / filter / view change resets to page 1.
-// Operator-adjustable via the pager's "Per page" selector (50/100/200/All).
-// The docked list no longer needs a tight cap to match the editor height — in
-// split mode the list pane scrolls inside itself (see .pa-split-list sticky
-// rule), so a long list never runs past the editor's bottom edge.
+// Two pagination modes:
+//   • Overview (editor closed)  → operator-adjustable via the pager's "Per page"
+//     selector (50/100/200/All); PA_PAGE_SIZE holds the choice.
+//   • Docked (editor open)      → fixed PA_DOCK_PAGE_SIZE rows so the list ends
+//     near the editor's bottom edge — no dead gap, no separate scroll. The
+//     "Per page" selector is hidden in this mode.
 let PA_PAGE_SIZE = 50;
+const PA_DOCK_PAGE_SIZE = 18;
 let PA_PAGE = 1;
 function paSetPageSize(v) {
   PA_PAGE_SIZE = (v === 'all') ? 'all' : parseInt(v, 10);
@@ -24092,7 +24084,7 @@ function paSetPage(n) {
   paRender();
 }
 // Pager bar: "showing X–Y of Z", page-size selector, prev/next.
-function _paPagerHtml(total, pages, start, shown) {
+function _paPagerHtml(total, pages, start, shown, showSizeSel) {
   const from = total === 0 ? 0 : start + 1;
   const to   = start + shown;
   const btn = (label, page, dis) =>
@@ -24104,12 +24096,15 @@ function _paPagerHtml(total, pages, start, shown) {
   const prev = `<span data-lang-block="en">‹ Prev</span><span data-lang-block="cn">‹ 上一页</span>`;
   const next = `<span data-lang-block="en">Next ›</span><span data-lang-block="cn">下一页 ›</span>`;
   const sizeOpt = (v, lbl) => `<option value="${v}" ${String(PA_PAGE_SIZE) === String(v) ? 'selected' : ''}>${lbl}</option>`;
-  const sizeSel = `<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-family:var(--f-sans)" class="muted">
+  // The "Per page" selector is overview-only: when the editor is docked the page
+  // size is fixed at 18 (PA_DOCK_PAGE_SIZE), so showing a selector that does
+  // nothing would mislead. showSizeSel is false in that mode.
+  const sizeSel = showSizeSel ? `<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-family:var(--f-sans)" class="muted">
         <span data-lang-block="en">Per page</span><span data-lang-block="cn">每页</span>
         <select onchange="paSetPageSize(this.value)" style="font-family:var(--f-sans);font-size:12px">
           ${sizeOpt(50, '50')}${sizeOpt(100, '100')}${sizeOpt(200, '200')}${sizeOpt('all', cuT('All', '全部'))}
         </select>
-      </label>`;
+      </label>` : '';
   return `<span class="muted" style="font-size:12px;font-family:var(--f-sans)"><span data-lang-block="en">Showing <b>${from}–${to}</b> of <b>${total}</b></span><span data-lang-block="cn">显示 <b>${from}–${to}</b> / 共 <b>${total}</b></span></span>
     <div style="display:flex;align-items:center;gap:12px">
       ${sizeSel}
@@ -25010,8 +25005,11 @@ function paRender() {
   PA_ORDERED_UNIT_IDS = units.map(u => (u && u.p ? u.p.id : null)).filter(x => x != null);
   PA_FILTERED_IDS = rows.map(p => p.id);
   empty.style.display = total ? 'none' : 'block';
-  const paged = !reorderActive && PA_PAGE_SIZE !== 'all' && total > 0;
-  const size  = paged ? PA_PAGE_SIZE : total;
+  // Docked editor → fixed 18-row pages (list ends near the editor's bottom edge,
+  // no dead gap / extra scroll). Overview → operator's "Per page" choice.
+  const effSize = _paEditorOpen ? PA_DOCK_PAGE_SIZE : PA_PAGE_SIZE;
+  const paged = !reorderActive && effSize !== 'all' && total > 0;
+  const size  = paged ? effSize : total;
   const pages = paged ? Math.max(1, Math.ceil(total / size)) : 1;
   if (PA_PAGE > pages) PA_PAGE = pages;
   if (PA_PAGE < 1) PA_PAGE = 1;
@@ -25025,7 +25023,7 @@ function paRender() {
   if (pager) {
     pager.innerHTML = reorderActive
       ? (total ? `<div class="pa-reorder-hint">${PA_ICON_GRIP}${cuT('Drag the grip to set the order products show on the store page', '拖动手柄调整商品在门店页的显示顺序')}</div>` : '')
-      : (total ? _paPagerHtml(total, pages, start, pageUnits.length) : '');
+      : (total ? _paPagerHtml(total, pages, start, pageUnits.length, !_paEditorOpen) : '');
   }
 
   // Reflect the active layout in the toolbar segmented control.
@@ -25461,7 +25459,9 @@ async function pdSaveNext() {
   if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
   try { await pdAutoSaveNow(); } catch (e) {}
   if (btn) { btn.disabled = false; btn.style.opacity = ''; }
-  if (PA_PAGE_SIZE !== 'all') PA_PAGE = Math.floor((idx + 1) / PA_PAGE_SIZE) + 1;
+  // Editor is open here, so pages are the fixed docked size (18), not the
+  // overview "Per page" choice — keep the page math in lock-step with paRender.
+  PA_PAGE = Math.floor((idx + 1) / PA_DOCK_PAGE_SIZE) + 1;
   pdOpen(nextId);
 }
 function pdOpen(id) {
@@ -25542,6 +25542,14 @@ function pdShowDocked() {
   if (split) split.classList.remove('pa-split-listonly');
   if (empty) empty.style.display = 'none';
   if (ed)    ed.style.display = '';
+  // The docked list pages by 18 while the overview pages by 50/100/200/All, so
+  // the product just clicked from a long overview page may fall on a different
+  // 18-row page. Jump to the page that holds it (using the full ordered unit
+  // list from the prior render) so its row stays visible beside the editor.
+  if (_pdSelectedId != null) {
+    const idx = PA_ORDERED_UNIT_IDS.indexOf(_pdSelectedId);
+    if (idx >= 0) PA_PAGE = Math.floor(idx / PA_DOCK_PAGE_SIZE) + 1;
+  }
   // Repaint the list into its compact docked form (it shares the row with the
   // now-visible editor) before measuring the editor's position for the scroll.
   paRender();
@@ -26610,7 +26618,13 @@ function pdCollectBody() {
 // merge the server's canonical row into PA_PRODUCTS and refresh the list. Returns
 // true on success. Throws are surfaced via the returned false + status pill.
 async function pdSaveCore() {
-  const { id, body } = pdCollectBody();
+  // Reading the form into a payload runs before any network call. It should never
+  // fail, but if a browser quirk makes it throw, tag it so the cause is obvious
+  // (a bare DOM error like "The string did not match the expected pattern" is
+  // otherwise impossible to place).
+  let id, body;
+  try { ({ id, body } = pdCollectBody()); }
+  catch (e) { throw new Error('Couldn’t read the form · 读取表单失败: ' + (e && e.message || e)); }
   const url = id ? '/api/retail-admin/products/' + id : '/api/retail-admin/products';
   const r = await fetch(url, { method: id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json();
@@ -26621,29 +26635,46 @@ async function pdSaveCore() {
               : (j.error || 'save_failed');
     throw new Error(msg);
   }
-  if (id) {
-    const i = PA_PRODUCTS.findIndex(x => x.id === Number(id));
-    if (i >= 0) PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...j.data };
-  } else if (j.data) {
-    // Brand-new product just got its id — promote the editor to edit-mode so the
-    // next autosave PATCHes instead of creating a second product.
-    PA_PRODUCTS.unshift(j.data);
-    document.getElementById('pd-id').value = j.data.id;
-    _pdSelectedId = j.data.id;
-    document.getElementById('pd-dup-btn').style.display = '';
-    document.getElementById('pd-delete-btn').style.display = '';
-    vaLoad(j.data.id); buLoad(j.data.id);
-  }
+  // ── The server write SUCCEEDED past this point. ────────────────────────────
+  // Everything below is local UI refresh. A failure here (e.g. a browser-
+  // specific DOM quirk) must NOT be reported as "Save failed" — the product is
+  // already saved on the server, and telling the operator otherwise (with a
+  // Revert button) risks them discarding work that actually persisted.
+  let uiError = null;
+  try {
+    if (id) {
+      const i = PA_PRODUCTS.findIndex(x => x.id === Number(id));
+      if (i >= 0) PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...j.data };
+    } else if (j.data) {
+      // Brand-new product just got its id — promote the editor to edit-mode so the
+      // next autosave PATCHes instead of creating a second product.
+      PA_PRODUCTS.unshift(j.data);
+      document.getElementById('pd-id').value = j.data.id;
+      _pdSelectedId = j.data.id;
+      document.getElementById('pd-dup-btn').style.display = '';
+      document.getElementById('pd-delete-btn').style.display = '';
+      vaLoad(j.data.id); buLoad(j.data.id);
+    }
+  } catch (e) { uiError = e; }
+
   // Variant rows live in this same editor — fold their labels/grouping into the
   // same write. Only when a real group is loaded (>=2 members) so an ordinary
-  // save never clears a group as a side effect.
+  // save never clears a group as a side effect. This is a genuine server write,
+  // so it stays fatal (a failure here really IS a save failure).
   const sid = id ? Number(id) : (j.data && j.data.id);
   if (sid != null && VA_ID === sid && (VA_MEMBERS.length >= 2 || VA_HAD_GROUP)) {
     await vaPersist(); await vaPersistSiblings();
   }
+
   _pdGalleryDirty = false;  // images are now persisted; don't resend until changed again
-  paRender();               // list names/badges refresh (doesn't touch editor focus)
-  paApplyRowSelection();
+  try {
+    paRender();               // list names/badges refresh (doesn't touch editor focus)
+    paApplyRowSelection();
+  } catch (e) { uiError = uiError || e; }
+
+  // Saved fine — but surface the swallowed refresh error to the console so a real
+  // UI bug can still be found, without ever lying to the operator about the save.
+  if (uiError) console.error('[pdSaveCore] product saved on server; post-save UI refresh failed:', uiError);
   return true;
 }
 
