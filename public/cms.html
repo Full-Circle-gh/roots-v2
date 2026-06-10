@@ -13455,16 +13455,24 @@ function imgPicker(currentUrl, onSet) {
 // avoid a needless generational recompression.
 const MAX_UPLOAD_DIM = 1600;   // longest side, device px — plenty for retina phones
 const UPLOAD_QUALITY  = 0.9;   // high-def; visually lossless for photos
+function fmtSize(bytes) {
+  return bytes >= 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(1) + ' MB'
+                              : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+}
+// Returns { file, info } — info is non-null only when the image was actually
+// resized, carrying the original vs resized dimensions + byte sizes so the
+// caller can show the before → after to the author.
 async function prepareImageForUpload(file) {
   try {
-    if (!file || !file.type || !file.type.startsWith('image/')) return file;
-    if (file.type === 'image/gif' || file.type === 'image/svg+xml') return file;
+    if (!file || !file.type || !file.type.startsWith('image/')) return { file, info: null };
+    if (file.type === 'image/gif' || file.type === 'image/svg+xml') return { file, info: null };
     const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => null);
-    if (!bmp) return file;
+    if (!bmp) return { file, info: null };
     const longest = Math.max(bmp.width, bmp.height);
-    if (longest <= MAX_UPLOAD_DIM && file.size <= 1.5 * 1024 * 1024) { bmp.close && bmp.close(); return file; }
+    if (longest <= MAX_UPLOAD_DIM && file.size <= 1.5 * 1024 * 1024) { bmp.close && bmp.close(); return { file, info: null }; }
     const scale = Math.min(1, MAX_UPLOAD_DIM / longest);
     const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+    const origW = bmp.width, origH = bmp.height;
     const canvas = document.createElement('canvas');
     canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext('2d');
@@ -13475,15 +13483,22 @@ async function prepareImageForUpload(file) {
     const hasAlpha = file.type === 'image/png' || file.type === 'image/webp';
     const outType = hasAlpha ? 'image/webp' : 'image/jpeg';
     const blob = await new Promise(res => canvas.toBlob(res, outType, UPLOAD_QUALITY));
-    if (!blob || blob.size >= file.size) return file;  // recompression didn't help → keep original
+    if (!blob || blob.size >= file.size) return { file, info: null };  // recompression didn't help → keep original
     const ext = outType === 'image/webp' ? 'webp' : 'jpg';
     const base = (file.name || 'image').replace(/\.[^.]+$/, '');
-    return new File([blob], `${base}.${ext}`, { type: outType });
-  } catch { return file; }
+    const out = new File([blob], `${base}.${ext}`, { type: outType });
+    return { file: out, info: { origW, origH, w, h, origBytes: file.size, bytes: out.size } };
+  } catch { return { file, info: null }; }
 }
 
 async function uploadImage(file) {
-  file = await prepareImageForUpload(file);
+  const { file: prepared, info } = await prepareImageForUpload(file);
+  file = prepared;
+  if (info) {
+    const en = `Resized ${info.origW}×${info.origH} (${fmtSize(info.origBytes)}) → ${info.w}×${info.h} (${fmtSize(info.bytes)})`;
+    const cn = `已压缩 ${info.origW}×${info.origH}(${fmtSize(info.origBytes)})→ ${info.w}×${info.h}(${fmtSize(info.bytes)})`;
+    toast(T(en, cn), 'ok');
+  }
   const fd = new FormData(); fd.append('file', file);
   setStatusText({ en: 'Uploading…', cn: '上传中…' }, 'saving');
   try {
