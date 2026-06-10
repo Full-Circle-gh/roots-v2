@@ -202,6 +202,14 @@
     </view>
     </block>
 
+    <block wx:elif="{{localOnlyBlock}}">
+    <view class="zone-error">
+      <view class="ze-title f-bear">{{lang === 'cn' ? '部分商品仅广州可配送' : 'Some items only deliver in Guangzhou'}}</view>
+      <view wx:if="{{localOnlyNames.length}}" class="ze-sub muted">{{lang === 'cn' ? '仅广州：' : 'Guangzhou only: '}}{{localOnlyNames}}</view>
+      <view class="ze-sub muted">{{lang === 'cn' ? '请移除这些商品，或切换到广州的收货地址。' : 'Remove them, or switch to a Guangzhou address.'}}</view>
+    </view>
+    </block>
+
     <block wx:else>
       <!-- Holiday-mode banner — orders accepted, future ship dates only -->
       <view wx:if="{{scheduling.holiday_mode}}" class="holiday-banner">
@@ -485,7 +493,7 @@
       <view class="bd-label">{{lang === 'cn' ? '自提' : 'Pickup'}}</view>
       <view class="bd-val f-bear">{{copy.free}}</view>
     </view>
-    <view wx:elif="{{!zoneError}}" class="bd-row">
+    <view wx:elif="{{!zoneError && !localOnlyBlock}}" class="bd-row">
       <view class="bd-label">{{lang === 'cn' ? '配送费' : 'Delivery'}}</view>
       <view class="bd-val f-bear">{{(freeShipping && !voucherDiscount) || voucherFreeShip ? copy.free : '¥' + deliveryFee}}</view>
     </view>
@@ -531,11 +539,11 @@
          tap-target view is strictly simpler and visually stable.
          Disabled state is a class — placeOrder() also no-ops on disabled
          so a stray tap can't fire. -->
-    <view class="place-btn f-toni {{!isBound ? 'place-btn--bind' : ''}} {{(placing || (isBound && zoneError)) ? 'place-btn--disabled' : ''}}"
+    <view class="place-btn f-toni {{!isBound ? 'place-btn--bind' : ''}} {{(placing || (isBound && (zoneError || localOnlyBlock))) ? 'place-btn--disabled' : ''}}"
           hover-class="place-btn--pressed"
           hover-stay-time="80"
           bindtap="placeOrder"
-          aria-disabled="{{!!(placing || (isBound && zoneError))}}">
+          aria-disabled="{{!!(placing || (isBound && (zoneError || localOnlyBlock)))}}">
       {{placing ? '...' : (isBound ? copy.placeOrder : copy.placeOrderBind)}}
     </view>
   </view>

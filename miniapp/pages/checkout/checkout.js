@@ -21,6 +21,8 @@ Page({
     zone: null,              // { name_cn, name_en, supports_max, max_fee, ... } from /quote
     zoneError: '',           // 'no_zone_match' | '' — populated when the address isn't covered
     kitchenAddress: '',      // shown in the no-zone-match message
+    localOnlyBlock: false,   // true when the cart has a Guangzhou-only item but the address is outside GZ
+    localOnlyNames: [],      // display names of those offending items (for the banner + modal)
     quoting: false,          // suppresses spam-clicks while a quote is in flight
     total: 0,
     voucherCode: '',         // applied code (uppercase)
@@ -921,6 +923,9 @@ Page({
     return api.post('/api/retail/checkout/quote', body)
       .then(resp => {
         const data = resp?.data || resp || {};
+        // A successful quote means the address can receive this cart — clear any
+        // prior "Guangzhou only" block.
+        if (this.data.localOnlyBlock) this.setData({ localOnlyBlock: false, localOnlyNames: [] });
         // The endpoint returns { success: false, error: 'no_zone_match', data } when
         // no zone matches. api.js may surface that as a thrown error OR as a
         // resolved value depending on the helper — defensively handle both.
@@ -1075,7 +1080,26 @@ Page({
       })
       .catch(err => {
         const code = err?.message || '';
-        if (code === 'no_zone_match' || code === 'max_not_offered') {
+        if (code === 'local_only_outside_gz') {
+          // Cart has a Guangzhou-only item but the address is outside GZ — the
+          // order can't ship. Block + name the offending items so the customer
+          // knows exactly what to remove (or switch to a GZ address).
+          const L = this.data.lang;
+          const names = ((err.body && err.body.data && err.body.data.products) || [])
+            .map(p => lang.pick(p.name_en, p.name_cn, L))
+            .filter(Boolean);
+          this.setData({
+            zone: null,
+            zoneError: '',
+            localOnlyBlock: true,
+            localOnlyNames: names,
+            deliveryFee: '0.00',
+            packingFee: '0.00',
+            freeShipping: false,
+            total: subtotal.toFixed(2),
+            quoting: false,
+          });
+        } else if (code === 'no_zone_match' || code === 'max_not_offered') {
           this.setData({
             zone: null,
             zoneError: code,
@@ -1646,6 +1670,12 @@ Page({
       });
       return;
     }
+    // Guangzhou-only item in a cart bound outside GZ — can't ship. Spell out
+    // which items so the customer can remove them or switch to a GZ address.
+    if (this.data.isBound && this.data.localOnlyBlock) {
+      this.showLocalOnlyModal();
+      return;
+    }
     // Bind-on-action: if the customer hit Place Order without binding their
     // WeChat profile (deep-linked past cart's gate), route them to bind
     // first. onShow will resume the checkout flow on their return.
@@ -1688,6 +1718,22 @@ Page({
       }
     }
     return this.submitOrder({ accept_fallback: !!this.data.acceptedFallback });
+  },
+
+  // "Guangzhou only" explainer modal. `names` overrides the stored list (used
+  // by the submit-time backstop when /orders rejects without a prior quote).
+  showLocalOnlyModal(names) {
+    const cn = this.data.lang === 'cn';
+    const list = (names && names.length ? names : this.data.localOnlyNames) || [];
+    const items = list.length ? (cn ? '：' + list.join('、') : ': ' + list.join(', ')) : '';
+    wx.showModal({
+      title: cn ? '仅广州可配送' : 'Guangzhou delivery only',
+      content: cn
+        ? `这些商品只支持广州同城配送${items},无法寄往广州以外。请移除这些商品,或切换到广州的收货地址。`
+        : `These items only deliver within Guangzhou${items} — they can't ship outside the city. Please remove them, or switch to a Guangzhou address.`,
+      showCancel: false,
+      confirmText: cn ? '我知道了' : 'OK',
+    });
   },
 
   // The actual order POST + payment flow. Extracted from placeOrder so the
@@ -1966,6 +2012,17 @@ Page({
           icon: 'none',
           duration: 2800,
         });
+        return;
+      }
+      // Guangzhou-only backstop: if the order POST refuses (e.g. the quote was
+      // skipped or stale), explain it with the same modal + remember the block.
+      if (e?.message === 'local_only_outside_gz') {
+        const L = this.data.lang;
+        const names = ((e.body && e.body.products) || [])
+          .map(p => lang.pick(p.name_en, p.name_cn, L))
+          .filter(Boolean);
+        this.setData({ placing: false, localOnlyBlock: true, localOnlyNames: names });
+        this.showLocalOnlyModal(names);
         return;
       }
       const friendly = {
