@@ -337,6 +337,26 @@ function _resolveBlock(b, L) {
     };
   }
 
+  if (t === 'nutrition_facts') {
+    const PARENT = ['energy', 'total fat', 'fat', 'carbohydrate', 'carbohydrates', '能量', '脂肪', '总脂肪', '碳水化合物'];
+    const CHILD  = ['saturated', 'saturated fat', 'unsaturated', 'unsaturated fat', 'sugars', '饱和脂肪', '不饱和脂肪', '糖'];
+    const classify = (label) => {
+      const k = String(label || '').trim().toLowerCase();
+      if (PARENT.includes(k)) return 'parent';
+      if (CHILD.includes(k))  return 'child';
+      return 'normal';
+    };
+    const rows = (Array.isArray(b.rows) ? b.rows : [])
+      .map(r => ({
+        label: _pick(r.label_en, r.label_cn, L),
+        value: r.value || '',
+        kind:  classify((r.label_en || '').trim() || (r.label_cn || '').trim()),
+      }))
+      .filter(r => r.label || r.value);
+    if (!rows.length) return { type: '_skip' };
+    return { type: t, basis: _pick(b.basis_en, b.basis_cn, L) || '', rows, title: (L === 'cn' ? '营养成分' : 'Nutrition') };
+  }
+
   return { type: '_skip' };
 }
 

@@ -227,5 +227,21 @@
       </view>
     </block>
 
+    <!-- +7 · NUTRITION FACTS (attached, inside the design) -->
+    <block wx:elif="{{item.type === 'nutrition_facts'}}">
+      <view class="pb-nutrition">
+        <view class="pb-nut-card">
+          <view class="pb-nut-top">
+            <text class="pb-nut-ttl">{{item.title}}</text>
+            <text wx:if="{{item.basis}}" class="pb-nut-basis">{{item.basis}}</text>
+          </view>
+          <view wx:for="{{item.rows}}" wx:for-item="nr" wx:key="label" class="pb-nrow {{nr.kind === 'parent' ? 'bold' : ''}} {{nr.kind === 'child' ? 'child' : ''}}">
+            <text class="pb-nrow-l">{{nr.label}}</text>
+            <text class="pb-nrow-r">{{nr.value}}</text>
+          </view>
+        </view>
+      </view>
+    </block>
+
   </view>
 </view>

@@ -728,6 +728,23 @@
 .pb-tpl-quiet_minimal .pb-recipe,
 .pb-tpl-quiet_minimal .pb-faq { padding: 0 16rpx !important; }
 
+/* +7 · NUTRITION FACTS — attached inline in the design stack (mirrors the old
+   standalone nut-card panel, scoped to this component). */
+.pb-nutrition { margin-top: 16rpx; }
+.pb-nut-card { border: 2rpx solid var(--ink); padding: 28rpx 28rpx 18rpx; }
+.pb-nut-top { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 18rpx; margin-bottom: 8rpx; border-bottom: 4rpx solid var(--ink); }
+.pb-nut-ttl { font-family: var(--f-bear); font-size: calc(40rpx * var(--font-scale)); font-weight: 400; line-height: 1; color: var(--ink); }
+.pb-nut-basis { font-family: var(--f-aleo); font-style: italic; font-size: calc(22rpx * var(--font-scale)); color: rgba(26,26,23,0.6); text-align: right; line-height: 1.3; }
+.pb-nrow { display: flex; justify-content: space-between; align-items: baseline; padding: 16rpx 0; border-bottom: 2rpx solid rgba(26,26,23,0.12); }
+.pb-nrow:last-child { border-bottom: 0; }
+.pb-nrow-l { font-family: var(--f-toni); font-size: calc(27rpx * var(--font-scale)); letter-spacing: 0.01em; color: var(--ink); }
+.pb-nrow-r { font-family: var(--f-gothic); font-size: calc(40rpx * var(--font-scale)); line-height: 1; font-variant-numeric: tabular-nums; color: var(--ink); }
+.pb-nrow.bold .pb-nrow-l { font-weight: 700; }
+.pb-nrow.child { padding: 10rpx 0 10rpx 44rpx; border-bottom: 2rpx dashed rgba(26,26,23,0.12); }
+.pb-nrow.child .pb-nrow-l { font-family: var(--f-aleo); font-style: italic; font-size: calc(25rpx * var(--font-scale)); color: rgba(26,26,23,0.6); position: relative; }
+.pb-nrow.child .pb-nrow-l::before { content: "—"; margin-right: 12rpx; color: rgba(26,26,23,0.3); font-style: normal; }
+.pb-nrow.child .pb-nrow-r { font-size: calc(32rpx * var(--font-scale)); }
+
 /* shared quiet section label · mono caps + trailing hairline */
 .pb-tpl-quiet_minimal .pb-section-head { justify-content: flex-start; align-items: baseline; gap: 20rpx; margin-bottom: 36rpx; }
 .pb-tpl-quiet_minimal .pb-section-h3 { font-family: monospace !important; font-weight: 400 !important; font-size: 21rpx !important; line-height: 1.4 !important; letter-spacing: 0.28em; text-transform: uppercase; color: var(--ink-60) !important; }

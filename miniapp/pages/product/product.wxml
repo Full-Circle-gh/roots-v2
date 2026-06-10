@@ -194,7 +194,7 @@
       <!-- Nutrition facts — v1 nut-card: bordered card, basis line top-right
            italic Aleo, parent rows bold w/ forest value, child rows indented
            with em-dash prefix and muted styling. -->
-      <view wx:if="{{nutritionRows.length}}" class="nutrition">
+      <view wx:if="{{nutritionRows.length && !hasNutritionBlock}}" class="nutrition">
         <view class="nut-card">
           <view class="nut-card-top">
             <text class="nut-card-ttl f-bear">{{lang === 'cn' ? '营养成分' : 'Nutrition'}}</text>

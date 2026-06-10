@@ -146,6 +146,7 @@ Page({
     reviewsRecent: [],
     nutritionBasis: '',    // resolved label e.g. "Per 100ml" / "每100毫升"
     nutritionRows: [],     // [{label, value}]
+    hasNutritionBlock: false,  // design renders nutrition inline → hide the panel
     socialProof: '',       // "N people bought this today" — '' hides the line
     recency: '',           // "Last ordered X ago" — '' hides the line
     viewingCount: 0,       // live concurrent viewers (from presence heartbeat)
@@ -546,6 +547,7 @@ Page({
       descHtml: useBlocks ? '' : descHtml,
       descriptionParts: useBlocks ? [] : (isRichDesc ? [] : descParts),
       descriptionBlocks: useBlocks ? p.description_blocks : [],
+      hasNutritionBlock: useBlocks && p.description_blocks.some(b => b && b.type === 'nutrition_facts'),
       size: p.size || p.weight || '',
       keywords: lang.pick(p.keywords_en, p.keywords_cn, L),
       tagline: rawTag,
