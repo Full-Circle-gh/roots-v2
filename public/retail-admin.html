@@ -15896,9 +15896,10 @@ async function loadOrders(opts = {}) {
 
     const newIds = new Set(j.data.map(o => o.id));
     // An order is "actionable" only once it's paid — we don't process,
-    // mark, or chime for unpaid orders (status === 'pending_payment'); those
-    // just show their status pill and sit quiet until the customer pays.
-    const isActionable = o => o.status !== 'pending_payment';
+    // mark, or chime for unpaid orders (pending_payment) or dead ones
+    // (cancelled); those just show their status pill and sit quiet. The mark
+    // + chime kick in when there's actually something to fulfil.
+    const isActionable = o => o.status !== 'pending_payment' && o.status !== 'cancelled';
     const actionableIds = new Set(j.data.filter(isActionable).map(o => o.id));
     const prevNotified = _ORDERS_NOTIFIED_IDS;
     // Arrival = an order that's actionable now and we haven't chimed for yet.
@@ -29856,7 +29857,7 @@ window.onLangChange(function () {
         '<div class="rm-ocard-wrap">' + actions +
           '<div class="rm-ocard' + (swipeable ? '' : ' no-swipe') + '" data-id="' + o.id + '">' +
             '<div class="rm-oc-top">' +
-              '<span class="rm-oc-no">' + ((!o.seen_at && o.status !== 'pending_payment') ? '<span class="rm-oc-new">NEW</span>' : '') + esc(o.order_no) + '</span>' +
+              '<span class="rm-oc-no">' + ((!o.seen_at && o.status !== 'pending_payment' && o.status !== 'cancelled') ? '<span class="rm-oc-new">NEW</span>' : '') + esc(o.order_no) + '</span>' +
               '<span class="pill st-' + o.status + '"><span class="dot"></span>' + esc(hstatus(o)) + '</span>' +
             '</div>' +
             '<div class="rm-oc-mid">' +
