@@ -187,11 +187,38 @@ Page({
       const list = await api.get('/api/retail/addresses');
       const arr = Array.isArray(list) ? list : list?.data || [];
       this.setData({ addresses: arr, loading: false });
+      return arr;
     } catch (e) {
       console.warn('[addresses] load failed:', e.message);
       this.setData({ loading: false });
+      return this.data.addresses;
     }
   },
+
+  // The delivery pill (ride-time / "ships by courier") is computed server-side
+  // from the address's geocoded lat/lng, which is resolved in a fire-and-forget
+  // background call AFTER the save responds. So the first refresh right after
+  // adding/editing can land before coords exist — the new card shows with no
+  // pill until you leave and re-enter. Re-pull a few times so the pill fills in
+  // on its own. Bounded + only while the list is on screen.
+  _clearEtaSettle() {
+    if (this._etaSettleTimer) { clearTimeout(this._etaSettleTimer); this._etaSettleTimer = null; }
+  },
+  scheduleEtaSettle(tries = 4) {
+    this._clearEtaSettle();
+    if (tries <= 0) return;
+    this._etaSettleTimer = setTimeout(async () => {
+      this._etaSettleTimer = null;
+      if (this.data.mode !== 'list') return;   // customer started another edit
+      const arr = await this.refresh();
+      // Stop once every address has resolved an ETA (or we run out of tries).
+      const pending = (arr || []).some(a => !a.delivery_eta);
+      if (pending) this.scheduleEtaSettle(tries - 1);
+    }, 1500);
+  },
+
+  onHide() { this._clearEtaSettle(); },
+  onUnload() { this._clearEtaSettle(); },
 
   showAddForm() {
     this.setData({
@@ -463,6 +490,9 @@ Page({
         areaIndex: [0, 0, 0],
       });
       await this.refresh();
+      // New/edited row's geocode resolves in the background — keep refreshing
+      // until its delivery pill appears, so the customer doesn't have to leave.
+      this.scheduleEtaSettle();
     } catch (e) {
       this.setData({ saving: false });
       wx.showToast({ title: e.message, icon: 'none' });
