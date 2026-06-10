@@ -3749,16 +3749,42 @@ function normalizeShipModesInput(csv) {
 // Of the given product ids, return {id, name_en, name_cn} for any that are
 // "Local only" (ship_modes = 'local'). Used to block checkout when the
 // destination is outside Guangzhou.
+// Group-aware "Local only" test. Ship restrictions are a property of the
+// product, not the individual size/option, so a variant counts as
+// Guangzhou-only if ANY member of its variant group is flagged 'local'.
+// (Variants are separate store_products rows sharing variant_group_id.)
+// Takes rows that already carry { ship_modes, variant_group_id } and returns
+// the subset that's local-only, preserving whatever other fields the caller
+// passed (id/name_en/name_cn).
+function filterLocalOnly(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return [];
+  // Variant groups referenced by these rows.
+  const gids = [...new Set(list.map(r => r.variant_group_id).filter(Boolean))];
+  const localGroups = new Set();
+  if (gids.length) {
+    const ph = gids.map(() => '?').join(',');
+    const sib = tdb().prepare(
+      `SELECT variant_group_id, ship_modes FROM store_products WHERE variant_group_id IN (${ph})`
+    ).all(...gids);
+    for (const s of sib) {
+      if (parseShipModes(s.ship_modes).includes('local')) localGroups.add(s.variant_group_id);
+    }
+  }
+  return list.filter(r =>
+    parseShipModes(r.ship_modes).includes('local') ||
+    (r.variant_group_id && localGroups.has(r.variant_group_id))
+  );
+}
+
 function localOnlyProductNames(productIds) {
   const ids = [...new Set((productIds || []).map(n => parseInt(n, 10)).filter(Boolean))];
   if (!ids.length) return [];
   const ph = ids.map(() => '?').join(',');
   const rows = tdb().prepare(
-    `SELECT id, name_en, name_cn, ship_modes FROM store_products WHERE id IN (${ph})`
+    `SELECT id, name_en, name_cn, ship_modes, variant_group_id FROM store_products WHERE id IN (${ph})`
   ).all(...ids);
-  return rows
-    .filter(r => parseShipModes(r.ship_modes).includes('local'))
-    .map(r => ({ id: r.id, name_en: r.name_en, name_cn: r.name_cn }));
+  return filterLocalOnly(rows).map(r => ({ id: r.id, name_en: r.name_en, name_cn: r.name_cn }));
 }
 
 // Bucket assignment for one item, purely by its allowed ship modes:
@@ -4255,7 +4281,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
               sell_price AS price, stock_qty AS stock, image_data,
               flash_price, flash_starts_at, flash_ends_at,
               flash_stock_limit, flash_sold,
-              ship_modes, needs_ice_pack
+              ship_modes, needs_ice_pack, variant_group_id
          FROM store_products
         WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
@@ -4310,9 +4336,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // bound for anywhere outside GZ that still contains one is impossible to
   // fulfil — refuse it. Pickup is always local, so it's exempt.
   if (!isPickup) {
-    const localOnly = resolved
-      .filter(r => parseShipModes(r.product.ship_modes).includes('local'))
-      .map(r => ({ id: r.product.id, name_en: r.product.name_en, name_cn: r.product.name_cn }));
+    // Group-aware: a variant is Guangzhou-only if any sibling in its variant
+    // group is flagged 'local' (the restriction is a product-level property).
+    const localOnly = filterLocalOnly(resolved.map(r => r.product))
+      .map(p => ({ id: p.id, name_en: p.name_en, name_cn: p.name_cn }));
     if (localOnly.length && !isGuangzhou(address.city)) {
       return res.status(400).json({ success: false, error: 'local_only_outside_gz', products: localOnly });
     }
