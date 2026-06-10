@@ -14547,7 +14547,10 @@ document.addEventListener('keydown', (e) => {
      scrolls under it, matching the live mini-app. Drop the 24px home-indicator
      safe-area reserve — the real phone already shows its own home indicator —
      so the bar isn't needlessly tall in the preview. */
-  .fc-preview-embed .phone-tabs { position: sticky; bottom: 0; z-index: 5; height: auto; padding: 8px 0 10px; }
+  .fc-preview-embed .phone-tabs { position: sticky; bottom: 0; z-index: 5; height: auto; padding: 5px 0 6px; }
+  /* Slimmer icons + tighter icon-to-label gap so the bar takes less vertical room. */
+  .fc-preview-embed .phone-tabs .tab { gap: 2px; font-size: 9px; }
+  .fc-preview-embed .phone-tabs .tab svg { width: 19px; height: 19px; }
   /* The real phone already has its own status bar + notch — drop the
      simulated iPhone notch and "9:41" status row so the preview isn't
      wearing a second set of chrome. (Desktop keeps them.) */
