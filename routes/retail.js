@@ -3374,7 +3374,7 @@ const _RIDER_PICKUP_MIN = 8;
 // order ships by courier instead. We flag it (`courier: true`) and omit the
 // minute estimate so the mini app shows "ships by courier" rather than an
 // absurd ride time (e.g. an 1800 km address reading "~3100 min").
-const _RIDER_MAX_KM = 30;
+const _RIDER_MAX_KM = 50;
 function computeRiderEta(address, lat, lng) {
   // Pull all active stores once per request; per-address we just pick the
   // nearest by Haversine. Same fallback (district centroid) as routing.
