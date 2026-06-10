@@ -7703,7 +7703,11 @@
             <div id="pd-variants" class="pd-variants"></div>
             <div id="pd-bundle" class="pd-variants"></div>
             <section class="pd-sec" id="pd-facts">
-              <div class="pd-sec-h" style="margin-bottom:8px;">Product details · 产品详情 <span class="muted" style="font-weight:400;font-size:11px;letter-spacing:0;text-transform:none;font-family:var(--f-sans);">— shown on the storefront; fill English + 中文 · 显示在店面</span></div>
+              <div class="pd-sec-h" style="margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span>Product details · 产品详情</span>
+                <button type="button" id="pd-facts-autofill" class="btn btn-sm" onclick="pdFactsAutofill()" style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500;font-family:var(--f-sans);" title="Read your description (or pasted text) and fill these boxes automatically · 读取描述并自动填充"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:5px"><path d="M7 2.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z"/><path d="M12.5 10.5v3M11 12h3"/></svg>Auto-fill from text · 智能填充</button>
+              </div>
+              <div class="muted" style="font-weight:400;font-size:11px;margin:0 0 8px;font-family:var(--f-sans);">Pulls origin, ingredients, storage… from your description (or pasted text) · 从描述(或粘贴文字)提取详情</div>
               <div class="field"><label class="stacked">Origin · 产地</label>
                 <div class="pd-row2"><input type="text" id="pd-fact-origin-en" placeholder="e.g. Guangzhou, China"><input type="text" id="pd-fact-origin-cn" placeholder="例如:中国广州"></div></div>
               <div class="field"><label class="stacked">Ingredients · 配料</label>
@@ -25639,6 +25643,43 @@ function pdFactsSet(f) {
   for (const [dom, col] of PD_FACT_FIELDS) {
     set('pd-fact-' + dom + '-en', o[col + '_en']);
     set('pd-fact-' + dom + '-cn', o[col + '_cn']);
+  }
+}
+// "Auto-fill from text" — read the description (or a pasted blob) and let the
+// AI split it into the Product details boxes. Same engine that already reads
+// descriptions; fills empty boxes and refreshes found ones for review.
+async function pdFactsAutofill() {
+  const btn = document.getElementById('pd-facts-autofill');
+  let textEn = pdStripToText(pdRteClean(document.getElementById('pd-rte-en').innerHTML));
+  let textCn = pdStripToText(pdRteClean(document.getElementById('pd-rte-cn').innerHTML));
+  if (!textEn && !textCn) {
+    const pasted = prompt(cuT('Paste the product text to pull details from:', '粘贴产品文字以提取详情:'));
+    if (pasted == null || !pasted.trim()) return;
+    textEn = pasted.trim();
+  }
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+  toast(cuT('Reading your text…', '正在识别…'));
+  try {
+    const r = await fetch('/api/retail-admin/ai/extract-facts', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text_en: textEn, text_cn: textCn }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 503) { toast(cuT('AI is not configured yet — fill the boxes by hand', 'AI 尚未配置,请手动填写'), 'err'); return; }
+    if (!r.ok || !j.success) {
+      toast(j && j.error === 'no_text' ? cuT('Add some product text first', '请先填写产品文字') : cuT("Couldn't read the details — fill by hand", '识别失败,请手动填写'), 'err');
+      return;
+    }
+    const facts = (j.data && j.data.facts) || {};
+    if (!Object.keys(facts).length) { toast(cuT('No details found in the text', '未在文字中找到详情'), 'err'); return; }
+    pdFactsSet({ ...pdFactsGet(), ...facts });
+    pdScheduleAutosave();
+    toast(cuT('Filled in the details — review & tweak', '已填充详情,请核对'), 'ok');
+  } catch (e) {
+    toast(cuT("Couldn't read the details", '识别失败'), 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
   }
 }
 function pdCollectBody() {

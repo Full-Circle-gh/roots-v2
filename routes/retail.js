@@ -7884,6 +7884,53 @@ router.get('/api/retail-admin/brand/status', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: { available: modelGateway.isConfigured() } });
 });
 
+// AI: pull structured product facts out of free text → the "Product details"
+// boxes. The tool lists the food fields, but the model returns only what the
+// text actually states (no invention) and fills both EN + CN. White-labeled
+// (the vendor is never revealed). Same flexible bag — other product types get
+// their own tool later.
+const FACTS_EXTRACT_TOOL = {
+  name: 'product_facts',
+  description: 'Return the product facts found in the text. Only include a field when the text clearly states it; leave the rest empty — never invent. Fill BOTH the English and Chinese value for each field, translating naturally when the source has only one language. Keep each value short.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      origin_en: { type: 'string' }, origin_cn: { type: 'string' },
+      ingredients_en: { type: 'string' }, ingredients_cn: { type: 'string' },
+      storage_en: { type: 'string' }, storage_cn: { type: 'string' },
+      shelf_life_en: { type: 'string' }, shelf_life_cn: { type: 'string' },
+      serving_en: { type: 'string' }, serving_cn: { type: 'string' },
+    },
+  },
+};
+router.post('/api/retail-admin/ai/extract-facts', requireRetailAdmin, express.json({ limit: '256kb' }), async (req, res) => {
+  if (!modelGateway.isConfigured()) return res.status(503).json({ success: false, error: 'ai_not_configured' });
+  const textEn = String((req.body && req.body.text_en) || '').slice(0, 8000);
+  const textCn = String((req.body && req.body.text_cn) || '').slice(0, 8000);
+  if (!textEn.trim() && !textCn.trim()) return res.status(400).json({ success: false, error: 'no_text' });
+  const system = 'You extract structured product facts (origin, ingredients, storage, shelf life, serving suggestion) from a product description for a food storefront. Only fill a field when the text clearly states it — never invent. Fill BOTH the English and Chinese value for each field you return (translate naturally if the source has only one language). Keep values concise. Always answer by calling the product_facts tool.';
+  try {
+    const out = await modelGateway.callModel({
+      system,
+      tools: [FACTS_EXTRACT_TOOL],
+      messages: [{ role: 'user', content: `ENGLISH:\n${textEn || '(none)'}\n\n中文:\n${textCn || '(none)'}` }],
+      max_tokens: 800,
+    });
+    const raw = modelGateway.extractToolUse(out.content_blocks, 'product_facts') || {};
+    const facts = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (!/^[a-z0-9_]{1,40}$/i.test(k)) continue;
+      const s = (v == null ? '' : String(v)).trim().slice(0, 4000);
+      if (s) facts[k] = s;
+    }
+    res.json({ success: true, data: { facts } });
+  } catch (e) {
+    if (e && e.code === 'not_configured') return res.status(503).json({ success: false, error: 'ai_not_configured' });
+    console.error('[extract-facts]', e && (e.message || e));
+    res.status(502).json({ success: false, error: 'extract_failed' });
+  }
+});
+
 // Start an async generation job. Body = quiz/upload inputs.
 router.post('/api/retail-admin/brand/generate', requireRetailAdmin, express.json(), (req, res) => {
   if (!modelGateway.isConfigured()) {
