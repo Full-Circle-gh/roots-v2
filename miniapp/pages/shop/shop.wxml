@@ -168,10 +168,10 @@
                     <view class="row-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</view>
                   </view>
                   <view wx:if="{{!item.outOfStock}}"
-                        class="row-plus f-bear"
+                        class="row-plus"
                         id="plus-{{item.id}}"
                         data-id="{{item.id}}"
-                        catchtap="addToCart">+</view>
+                        catchtap="addToCart"></view>
                 </view>
               </view>
             </view>
@@ -223,8 +223,8 @@
                   <text wx:if="{{item.pricePrefix}}" class="gal-price-prefix f-toni">{{item.pricePrefix}}</text>
                   <text class="gal-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
                 </view>
-                <view wx:if="{{!item.outOfStock}}" class="gal-plus f-bear"
-                      id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart">+</view>
+                <view wx:if="{{!item.outOfStock}}" class="gal-plus"
+                      id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart"></view>
               </view>
             </view>
           </view>
@@ -273,8 +273,8 @@
                   <text wx:if="{{item.pricePrefix}}" class="price-prefix f-toni">{{item.pricePrefix}}</text>
                   <text class="price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
                 </view>
-                <view wx:if="{{!item.outOfStock}}" class="card-plus f-bear"
-                      id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart">+</view>
+                <view wx:if="{{!item.outOfStock}}" class="card-plus"
+                      id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart"></view>
               </view>
             </view>
           </view>

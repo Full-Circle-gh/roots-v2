@@ -11174,9 +11174,13 @@
           <!-- ── Fulfillment: 飞鹅 cloud printer ── -->
           <div class="group-card">
             <div class="group-card-head">
-              <h3>Receipt printing — Feie cloud printer · 飞鹅云打印出单 <span id="feie-chip"></span></h3>
+              <h3>Receipt printing · 小票打印</h3>
               <div class="muted">Auto-prints a ticket at the store the moment an order is paid — no PC needed, the printer also voice-announces it. Bind the printer in the Feie app, then get your <b>USERKEY</b> from a developer app at <a href="https://www.feieyun.com" target="_blank" style="color:var(--accent)">feieyun.com</a>. · 付款后自动在门店打印小票并语音播报。</div>
             </div>
+            <div class="dz-subtabs" role="tablist" style="margin-bottom:18px">
+              <button type="button" class="dz-subtab active"><span id="feie-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>Feie cloud printer · 飞鹅云打印</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px"><strong>Feie cloud printer · 飞鹅云打印出单</strong> <span id="feie-chip"></span></div>
             <div class="muted" style="font-size:11px;margin-bottom:12px;background:var(--bg-elev-1);border-radius:6px;padding:8px 10px">⚠ The <b>USERKEY</b> is from your feieyun.com developer console — <em>not</em> the secret/KEY on the device label. One account holds all printers; each store's <b>SN</b> is set per-store below.</div>
             <div class="ops-grid">
               <div>
@@ -12120,6 +12124,8 @@ async function loadShippingIntegrations() {
     if (fChip) fChip.innerHTML = f.enabled
       ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
       : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED</span>';
+    const fDot = document.getElementById('feie-dot');
+    if (fDot) fDot.style.background = f.enabled ? '#10b981' : 'var(--text-3)';
   } catch (e) { console.warn('[integrations] load failed', e); }
 }
 
