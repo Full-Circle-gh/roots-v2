@@ -6021,6 +6021,11 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
        AND address_json IS NOT NULL AND json_extract(address_json, '$.city') IS NOT NULL
      GROUP BY city ORDER BY revenue DESC LIMIT 15`).all(from, to);
+  // Attach an English city name so the dashboard can show either language
+  // (stored address city is canonical Chinese).
+  for (const g of geoCities) {
+    g.city_en = regionI18n.resolveRegion({ city: g.city }).city_en || null;
+  }
   const geoDistricts = tdb().prepare(`
     SELECT json_extract(address_json, '$.city') AS city,
            json_extract(address_json, '$.district') AS district,
