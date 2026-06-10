@@ -9,6 +9,11 @@
 
 const api = require('../../utils/api');
 
+// Loyalty points are worth ¥0.10 each (1 pt = ¥0.10 off), matching wallet.js
+// and the "1 pt = ¥0.10 off" hint. Bonus is awarded in POINTS, so the yuan
+// value of a package's bonus is bonus_points × this rate — NOT bonus × ¥1.
+const POINT_VALUE_YUAN = 0.1;
+
 const TIER_BGS = ['#FFFCF7', 'var(--corn)', 'var(--papaya)', 'var(--lime)'];
 const TIER_LABELS_EN = ['STARTER', 'REGULAR', 'PLUS', 'BEST VALUE'];
 const TIER_LABELS_CN = ['入门', '常规', '高级', '最划算'];
@@ -103,7 +108,10 @@ Page({
       const tiers = rows.map((p, i) => {
         const amount = Number(p.amount || 0);
         const bonus  = Number(p.bonus_points || 0);
-        const pct    = amount > 0 ? Math.round((bonus / amount) * 100) : 0;
+        // Bonus is in points → convert to yuan before comparing against `amount`.
+        const bonusYuan = bonus * POINT_VALUE_YUAN;
+        const pct    = amount > 0 ? Math.round((bonusYuan / amount) * 100) : 0;
+        const totalYuan = amount + bonusYuan;
         const labelFallback = (cn ? TIER_LABELS_CN : TIER_LABELS_EN)[Math.min(i, 3)];
         return {
           id: p.id,
@@ -111,7 +119,7 @@ Page({
           bonus,
           pct,
           amountDisplay: amount.toLocaleString(),
-          totalDisplay:  (amount + bonus).toLocaleString(),
+          totalDisplay:  Number(totalYuan.toFixed(2)).toLocaleString(),
           label: (cn ? (p.title_cn || labelFallback) : (p.title_en || labelFallback)).toUpperCase(),
           bg: TIER_BGS[i % TIER_BGS.length],
           best: false,

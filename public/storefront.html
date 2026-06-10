@@ -1413,6 +1413,10 @@ function loadLeaderboard(metric, period, top_n, reveal_mode) {
     .catch(() => {
       state.leaderboardCache.set(key, { t: Date.now(), loaded: true, entries: [] });
       state._lbInFlight.delete(key);
+      // Re-render like the success path — otherwise the block stays stuck on
+      // its pulsing skeleton (rendered with loaded:false) until some unrelated
+      // event forces a render.
+      if (state.config) render(state.config[currentPage()]?.layout || []);
     });
   return cached || { loaded: false, entries: [] };
 }
@@ -1434,7 +1438,13 @@ function loadTopProducts(channel, window, limit) {
       state._topInFlight.delete(key);
       if (state.config) render(state.config[currentPage()]?.layout || []);
     })
-    .catch(() => { state._topInFlight.delete(key); });
+    .catch(() => {
+      // Cache an empty result on failure (negative caching) so a failing
+      // endpoint isn't re-fetched on every re-render. The 60s TTL above lets
+      // it retry later. Without this, each render re-fires the request.
+      state.topProductsCache.set(key, { t: Date.now(), products: [] });
+      state._topInFlight.delete(key);
+    });
   return cached?.products || [];
 }
 

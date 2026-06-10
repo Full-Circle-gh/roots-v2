@@ -10,7 +10,7 @@
   </view>
 
   <view class="list">
-    <view wx:for="{{items}}" wx:key="*this" class="item"
+    <view wx:for="{{items}}" wx:key="_key" class="item"
           data-product-id="{{item.product_id}}"
           data-order-id="{{item.order_id}}"
           data-name="{{item.display_name}}"

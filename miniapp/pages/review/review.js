@@ -123,7 +123,10 @@ Page({
     const app = getApp();
     const lang = app?.globalData?.lang || 'en';
     const copy = lang === 'cn' ? COPY_CN : COPY_EN;
-    const selected = new Set(['fresh', 'fast-ship']);
+    // Start with NO tags pre-selected — pre-checking 'fresh'/'fast-ship' meant
+    // every review silently submitted those claims unless the customer manually
+    // deselected them, polluting the aggregate review tags.
+    const selected = new Set();
     this.setData({
       productId: parseInt(query.product_id, 10) || null,
       orderId: parseInt(query.order_id, 10) || null,

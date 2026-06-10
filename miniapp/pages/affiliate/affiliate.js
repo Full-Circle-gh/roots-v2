@@ -64,6 +64,7 @@ const COPY = {
     errCannotSelf:      "That's your own code.",
     errProgram:         'Program is not running right now.',
     errMutual:          'You and that friend can\'t refer each other.',
+    errGeneric:         "Couldn't apply that code. Please try again.",
   },
   cn: {
     kicker:        '推广计划',
@@ -106,6 +107,7 @@ const COPY = {
     errCannotSelf:      '不能填自己的邀请码。',
     errProgram:         '推广计划暂未开放。',
     errMutual:          '互相邀请不可叠加。',
+    errGeneric:         '邀请码应用失败,请重试。',
   },
 };
 
@@ -244,7 +246,10 @@ Page({
         program_disabled:  c.errProgram,
         mutual_referral:   c.errMutual,
       };
-      this.setData({ applyError: map[e.message] || e.message });
+      // Only show mapped, localized messages. Unknown backend codes / raw
+      // transport strings (e.g. 'network_…', 'server_error_500') would leak
+      // developer text to the customer, so fall back to a generic message.
+      this.setData({ applyError: map[e.message] || c.errGeneric });
     }
   },
 
@@ -278,6 +283,13 @@ Page({
   },
 
   onLoad(query) {
+    // Enable share-to-Moments. WeChat only fires onShareTimeline (and surfaces
+    // the Moments entry in the "..." menu) if the page opts in here — without
+    // this call the onShareTimeline handler below is dead and Moments referral
+    // sharing never works.
+    if (typeof this.enableShareTimeline === 'function') {
+      this.enableShareTimeline();
+    }
     // If the page was opened from a shared link, pre-fill the apply box.
     if (query && query.ref) {
       this.setData({ applyInput: String(query.ref).toUpperCase().slice(0, 32) });

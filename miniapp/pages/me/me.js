@@ -240,13 +240,13 @@ Page({
     switch (id) {
       case 'notif':      return this.data.notifUnread > 0 ? (this.data.notifUnread + ' ' + c.notifMeta) : '';
       case 'addresses':  return this.data.defaultAddrPreview || c.noAddressMeta;
-      case 'wallet':     return '¥' + this.data.balanceDisplay + ' · ' + (cust.points_balance || 0) + ' pts';
+      case 'wallet':     return '¥' + this.data.balanceDisplay + ' · ' + (cust.points_balance || 0) + ' ' + c.points;
       case 'topup':      return c.topupMeta;
       case 'affiliate':  return c.affiliateMeta;
       case 'coupons':    return (cust.coupon_count || 0) + ' ' + c.couponsMeta;
       case 'invoices':   return '';
       case 'favorites':  return (cust.favorite_count || 0) + ' ' + c.favoritesMeta;
-      case 'membership': return this.data.tierName + ' · LVL ' + this.data.tierLevel;
+      case 'membership': return this.data.tierName + ' · ' + c.memberLvl + ' ' + this.data.tierLevel;
       case 'voting':     return c.votingMeta;
       case 'about':      return c.aboutMeta;
       case 'faq':        return c.faqMeta;

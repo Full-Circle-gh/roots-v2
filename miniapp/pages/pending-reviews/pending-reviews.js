@@ -75,6 +75,9 @@ Page({
       const L = this.data.lang;
       const items = arr.map(it => ({
         ...it,
+        // Stable composite key for wx:for — the same product can be pending
+        // from two different orders, so product_id alone isn't unique.
+        _key: `${it.order_id}-${it.product_id}`,
         display_name: lang.pick(it.name_en, it.name_cn, L),
         image: absUrl(it.image_url) || '',
         delivered_label: formatDeliveredDate(it.delivered_at, L),

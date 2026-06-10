@@ -264,6 +264,25 @@ Component({
   lifetimes: {
     attached() {
       this.recompute();
+      this._startTick();
+    },
+    detached() {
+      this._stopTick();
+    },
+  },
+
+  // Pause the per-second ticker while the host page is hidden (e.g. the user
+  // navigated to another page — the page stays alive but backgrounded). Without
+  // this the timer keeps firing recompute()+setData() every second on a hidden
+  // page, the classic WeChat 'setData on a hidden page' perf anti-pattern.
+  pageLifetimes: {
+    show() { this._startTick(); },
+    hide() { this._stopTick(); },
+  },
+
+  methods: {
+    _startTick() {
+      if (this._tick) return;
       // Countdown + flash-strip blocks tick every second. Other types
       // ignore the timer to save work.
       this._tick = setInterval(() => {
@@ -273,12 +292,10 @@ Component({
         }
       }, 1000);
     },
-    detached() {
+    _stopTick() {
       if (this._tick) { clearInterval(this._tick); this._tick = null; }
     },
-  },
 
-  methods: {
     recompute() {
       const b = this.data.block || this.properties.block;
       if (!b || !b.type) return;

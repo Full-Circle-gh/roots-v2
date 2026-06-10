@@ -300,6 +300,20 @@ Page({
   // Re-check bind state on every show so returning from /pages/profile
   // (after a successful bind via wx.navigateBack) flips the page from
   // empty-state to the real checkout without a manual refresh.
+  // Clear pending timers when the page is torn down or backgrounded. The
+  // success paths redirectTo order-success, which destroys this page while the
+  // 20s placing-watchdog (and the browse-debounce) are still armed — they'd
+  // otherwise fire setData on the unloaded page (WeChat warns + keeps the page
+  // object alive ~20s).
+  _clearPendingTimers() {
+    if (this._placingWatchdog) { clearTimeout(this._placingWatchdog); this._placingWatchdog = null; }
+    if (this._browseDebounce)  { clearTimeout(this._browseDebounce);  this._browseDebounce = null; }
+  },
+
+  onUnload() { this._clearPendingTimers(); },
+
+  onHide() { this._clearPendingTimers(); },
+
   async onShow() {
     const app = getApp();
     const cust = app.globalData.customer || {};
