@@ -2905,6 +2905,9 @@ try {
   // two schemas never drift (idempotent; addColumn swallows duplicate columns).
   const spcols = new Set(db.pragma('table_info(store_products)').map(c => c.name));
   for (const c of pcols) if (!spcols.has(c.name)) addColumn('store_products', c.name, c.type || 'TEXT');
+  // Store-only: a flexible per-product-type facts bag (origin/ingredients/…),
+  // stored as JSON so a new product type needs no new columns.
+  addColumn('store_products', 'product_facts', 'TEXT');
   // Own indexes — store_products has its OWN sku namespace (independent of the
   // kitchen's), mirroring the products indexes the storefront relies on.
   db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_store_products_sku ON store_products(sku)').run();

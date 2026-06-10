@@ -582,6 +582,18 @@ function hydrateNutrition(row) {
   return row;
 }
 
+// Parse the product_facts JSON column → object (or null). The flexible facts
+// bag (origin/ingredients/… for food; material/care/… for other catalogs) —
+// one column, any keys, so new product types need no schema change.
+function parseFactsCol(v) {
+  // Idempotent: an already-parsed object passes straight through, so a second
+  // parse (some handlers run two) never nulls the bag.
+  if (v && typeof v === 'object' && !Array.isArray(v)) return Object.keys(v).length ? v : null;
+  if (typeof v !== 'string' || !v.trim()) return null;
+  try { const o = JSON.parse(v); return (o && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).length) ? o : null; }
+  catch { return null; }
+}
+
 // "Buy together" bundle stored on a product. sanitizeBundle → a JSON string for
 // the `bundle` column (or null to clear). resolveBundle → the customer shape,
 // with each listed product expanded to a lightweight card (published + active
@@ -8016,6 +8028,25 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     sets.push('nutrition = ?');
     params.push(obj ? JSON.stringify(obj) : null);
   }
+  // Structured product facts — the flexible per-product-type bag (origin,
+  // ingredients, storage… for food; material, care… for other catalogs).
+  // Stored as one JSON column like nutrition, so new product types need no
+  // schema change. Generic string map; null/empty clears it.
+  if ('product_facts' in body) {
+    const v = body.product_facts;
+    let obj = null;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const out = {};
+      for (const k of Object.keys(v).slice(0, 60)) {
+        if (!/^[a-z0-9_]{1,40}$/i.test(k)) continue;
+        const val = (v[k] == null ? '' : String(v[k])).trim().slice(0, 4000);
+        if (val) out[k] = val;
+      }
+      if (Object.keys(out).length) obj = out;
+    }
+    sets.push('product_facts = ?');
+    params.push(obj ? JSON.stringify(obj) : null);
+  }
   // ── Core commercial fields (the standalone Mini App Backend product page) ──
   // name_en is NOT NULL — never blank it; fall back to the existing value.
   if ('name_en' in body) { sets.push('name_en = ?'); params.push((body.name_en || '').trim() || existing.name_en); }
@@ -8098,7 +8129,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
-            status, barcode, free_of, notes, is_market, is_restock_only,
+            status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
             is_batch_made, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
@@ -8114,6 +8145,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   } else {
     row.bundle = null;
   }
+  if (row) row.product_facts = parseFactsCol(row.product_facts);
   if (row && typeof row.nutrition === 'string' && row.nutrition.trim()) {
     try {
       const n = JSON.parse(row.nutrition);
@@ -8137,7 +8169,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
-            status, barcode, free_of, notes, is_market, is_restock_only,
+            status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
             variant_group_id, variant_label, variant_sort,
             is_batch_made, page_template,
@@ -8157,6 +8189,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
       row.nutrition = (n && (n.basis_en || n.basis_cn || (n.rows || []).length)) ? n : null;
     } catch { row.nutrition = null; }
   } else { row.nutrition = null; }
+  row.product_facts = parseFactsCol(row.product_facts);
   res.json({ success: true, data: row });
 });
 
@@ -8189,7 +8222,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
       `INSERT INTO store_products
          (name_en, name_cn, sku, category, top_category, subcategory, weight, sell_price, compare_at_price, stock_qty, ship_modes,
           description_en, description_cn, description_format, image_data, images, tags,
-          status, barcode, free_of, notes, is_market, is_restock_only,
+          status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
           is_published, is_active, created_at, updated_at)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
@@ -8215,7 +8248,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
-            status, barcode, free_of, notes, is_market, is_restock_only,
+            status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, tags,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ?`
@@ -8356,7 +8389,7 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
-            status, barcode, free_of, notes, is_market, is_restock_only,
+            status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
             variant_group_id, variant_label,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
@@ -8365,9 +8398,11 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
   if (row && typeof row.description_blocks === 'string' && row.description_blocks) {
     try { row.description_blocks = JSON.parse(row.description_blocks); } catch { row.description_blocks = null; }
   } else { row.description_blocks = null; }
+  if (row) row.product_facts = parseFactsCol(row.product_facts);
   if (row && typeof row.nutrition === 'string' && row.nutrition.trim()) {
     try { const n = JSON.parse(row.nutrition); row.nutrition = (n && (n.basis_en || n.basis_cn || (n.rows || []).length)) ? n : null; } catch { row.nutrition = null; }
   } else { row.nutrition = null; }
+  row.product_facts = parseFactsCol(row.product_facts);
   res.json({ success: true, data: row });
 });
 
@@ -8635,7 +8670,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                       stock_qty
                     ) AS effective_stock,
                     is_published, sort_order, updated_at,
-                    status, barcode, free_of, notes, is_market, is_restock_only,
+                    status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
                     description_en, description_cn, description_format,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
                     nutrition, bundle, tags,
@@ -8676,6 +8711,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
     } else {
       r.nutrition = null;
     }
+    r.product_facts = parseFactsCol(r.product_facts);
     // Parse the buy-together bundle JSON so the editor can pre-fill it.
     if (typeof r.bundle === 'string' && r.bundle.trim()) {
       try { r.bundle = JSON.parse(r.bundle); } catch { r.bundle = null; }

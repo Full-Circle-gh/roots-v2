@@ -7702,6 +7702,19 @@
             </div>
             <div id="pd-variants" class="pd-variants"></div>
             <div id="pd-bundle" class="pd-variants"></div>
+            <section class="pd-sec" id="pd-facts">
+              <div class="pd-sec-h" style="margin-bottom:8px;">Product details · 产品详情 <span class="muted" style="font-weight:400;font-size:11px;letter-spacing:0;text-transform:none;font-family:var(--f-sans);">— shown on the storefront; fill English + 中文 · 显示在店面</span></div>
+              <div class="field"><label class="stacked">Origin · 产地</label>
+                <div class="pd-row2"><input type="text" id="pd-fact-origin-en" placeholder="e.g. Guangzhou, China"><input type="text" id="pd-fact-origin-cn" placeholder="例如:中国广州"></div></div>
+              <div class="field"><label class="stacked">Ingredients · 配料</label>
+                <div class="pd-row2"><textarea id="pd-fact-ingredients-en" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:6px 8px;" placeholder="Comma-separated"></textarea><textarea id="pd-fact-ingredients-cn" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:6px 8px;" placeholder="用逗号分隔"></textarea></div></div>
+              <div class="field"><label class="stacked">Storage · 储存方式</label>
+                <div class="pd-row2"><input type="text" id="pd-fact-storage-en" placeholder="e.g. Keep refrigerated"><input type="text" id="pd-fact-storage-cn" placeholder="例如:冷藏保存"></div></div>
+              <div class="field"><label class="stacked">Shelf life · 保质期</label>
+                <div class="pd-row2"><input type="text" id="pd-fact-shelflife-en" placeholder="e.g. Best within 7 days"><input type="text" id="pd-fact-shelflife-cn" placeholder="例如:7 天内最佳"></div></div>
+              <div class="field"><label class="stacked">Serving suggestion · 食用建议</label>
+                <div class="pd-row2"><textarea id="pd-fact-serving-en" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:6px 8px;" placeholder="How to enjoy it"></textarea><textarea id="pd-fact-serving-cn" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:6px 8px;" placeholder="如何享用"></textarea></div></div>
+            </section>
             <section class="pd-sec">
             <label class="stacked">Description · 描述
               <span class="pd-desc-modebar">
@@ -24649,7 +24662,7 @@ function pdOpen(id) {
   set('pd-price', p ? p.sell_price : ''); set('pd-compare', p && p.compare_at_price);
   set('pd-sku', p && p.sku); set('pd-weight', p && p.size);
   set('pd-status', p ? (p.status || 'Active') : 'Active');
-  pdFreeOfSet(p && p.free_of); set('pd-notes', p && p.notes);
+  pdFreeOfSet(p && p.free_of); set('pd-notes', p && p.notes); pdFactsSet(p && p.product_facts);
   const ck = (el, v) => { const n = document.getElementById(el); if (n) n.checked = !!v; };
   ck('pd-is-market', p && p.is_market === 1); ck('pd-is-batch-made', p && p.is_batch_made === 1); ck('pd-is-restock-only', p && p.is_restock_only === 1);
   pdLoadStoreStocks(p ? p.id : null);
@@ -25607,6 +25620,27 @@ let _pdSaving = false;        // a save request is in flight
 let _pdPendingResave = false; // an edit landed mid-save → save again when it returns
 let _pdOpenBaseline = null;   // form snapshot captured when the product was opened (Revert target)
 
+// Structured product facts (the "Product details" card) ↔ the product_facts
+// JSON bag. Keys are <col>_en/_cn so the same bag fits any product type.
+const PD_FACT_FIELDS = [['origin','origin'],['ingredients','ingredients'],['storage','storage'],['shelflife','shelf_life'],['serving','serving']];
+function pdFactsGet() {
+  const g = el => (document.getElementById(el) && document.getElementById(el).value || '').trim();
+  const out = {};
+  for (const [dom, col] of PD_FACT_FIELDS) {
+    const en = g('pd-fact-' + dom + '-en'), cn = g('pd-fact-' + dom + '-cn');
+    if (en) out[col + '_en'] = en;
+    if (cn) out[col + '_cn'] = cn;
+  }
+  return out;
+}
+function pdFactsSet(f) {
+  const set = (el, v) => { const n = document.getElementById(el); if (n) n.value = (v == null ? '' : v); };
+  const o = (f && typeof f === 'object') ? f : {};
+  for (const [dom, col] of PD_FACT_FIELDS) {
+    set('pd-fact-' + dom + '-en', o[col + '_en']);
+    set('pd-fact-' + dom + '-cn', o[col + '_cn']);
+  }
+}
 function pdCollectBody() {
   const id = document.getElementById('pd-id').value;
   const g = el => (document.getElementById(el) && document.getElementById(el).value || '').trim();
@@ -25624,7 +25658,7 @@ function pdCollectBody() {
     sell_price: parseFloat(g('pd-price')) || 0,
     compare_at_price: parseFloat(g('pd-compare')) || 0,
     status: g('pd-status') || 'Active',
-    free_of: pdFreeOfGet(), notes: g('pd-notes'),
+    free_of: pdFreeOfGet(), notes: g('pd-notes'), product_facts: pdFactsGet(),
     is_market: ckd('pd-is-market'), is_restock_only: ckd('pd-is-restock-only'), is_batch_made: ckd('pd-is-batch-made'),
     ship_modes: modes.join(',') || 'air,land',
     description_en: pdRteClean(document.getElementById('pd-rte-en').innerHTML),
@@ -25744,7 +25778,7 @@ function pdSnapshot() {
   return {
     name_en: g('pd-name-en'), name_cn: g('pd-name-cn'), price: g('pd-price'), compare: g('pd-compare'),
     sku: g('pd-sku'), weight: g('pd-weight'), status: g('pd-status'), free_of: pdFreeOfGet(),
-    notes: g('pd-notes'), badge: g('pd-badge'),
+    notes: g('pd-notes'), badge: g('pd-badge'), facts: pdFactsGet(),
     top: g('pd-top-category'), sub: g('pd-subcategory'),
     is_market: ck('pd-is-market'), is_batch: ck('pd-is-batch-made'), is_restock: ck('pd-is-restock-only'),
     air: ck('pd-ship-air'), land: ck('pd-ship-land'), published: ck('pd-published'),
@@ -25758,7 +25792,7 @@ function pdApplySnapshot(s) {
   const ck  = (el, v) => { const n = document.getElementById(el); if (n) n.checked = v; };
   set('pd-name-en', s.name_en); set('pd-name-cn', s.name_cn); set('pd-price', s.price); set('pd-compare', s.compare);
   set('pd-sku', s.sku); set('pd-weight', s.weight); set('pd-status', s.status); pdFreeOfSet(s.free_of);
-  set('pd-notes', s.notes); set('pd-badge', s.badge);
+  set('pd-notes', s.notes); set('pd-badge', s.badge); pdFactsSet(s.facts);
   ck('pd-is-market', s.is_market); ck('pd-is-batch-made', s.is_batch); ck('pd-is-restock-only', s.is_restock);
   ck('pd-ship-air', s.air); ck('pd-ship-land', s.land); ck('pd-published', s.published);
   document.getElementById('pd-rte-en').innerHTML = s.desc_en;
