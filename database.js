@@ -2991,6 +2991,11 @@ try {
   // holds the English option ("Big 200g"); `variant_label_cn` the Chinese ("大")
   // — the storefront/editor pick the right one per the language toggle.
   addColumn('store_products', 'variant_label_cn', 'TEXT');
+  // Store-only: per-product low-stock alert threshold. NULL = use the tenant
+  // global default (storefront_config 'inventory.lowStockThreshold', default 5).
+  // A product gets flagged "low" when its stock is >0 and ≤ this number — drives
+  // the products list amber dot, the Low-stock KPI tile, and the dashboard/alerts.
+  addColumn('store_products', 'low_stock_threshold', 'INTEGER');
   // Own indexes — store_products has its OWN sku namespace (independent of the
   // kitchen's), mirroring the products indexes the storefront relies on.
   db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_store_products_sku ON store_products(sku)').run();

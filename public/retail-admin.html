@@ -7632,13 +7632,26 @@
       <div class="fc-kpi pa-kpi-click" id="pa-kpi-low-tile" role="button" tabindex="0" onclick="paSetStatus('low')" title="Show low-stock products · 仅显示库存偏低产品">
         <div class="lbl">Low stock · 库存偏低</div>
         <div class="val" id="pa-kpi-low">—</div>
-        <div class="sub">≤ 5 left · 剩余 ≤ 5</div>
+        <div class="sub" id="pa-kpi-low-sub">≤ 5 left · 剩余 ≤ 5</div>
       </div>
       <div class="fc-kpi pa-kpi-click" id="pa-kpi-drafts-tile" role="button" tabindex="0" onclick="paSetStatus('drafts')" title="Show drafts · 仅显示未上架产品">
         <div class="lbl">Drafts · 未上架</div>
         <div class="val" id="pa-kpi-drafts">—</div>
         <div class="sub">not live · 未上架</div>
       </div>
+    </div>
+
+    <!-- Store-wide low-stock alert threshold. Sets when a product is flagged
+         "low" (amber dot in the list + the Low-stock tile/filter above + the
+         dashboard alert). Applies to every product unless a product sets its
+         own threshold in its editor. Saves to storefront_config on change. -->
+    <div class="pa-lowstock-bar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;padding:8px 12px;border:1px solid var(--line,#e6e1d6);border-radius:10px;background:var(--surface-2,#faf8f3);font-size:12px;color:var(--text-2,#6b6457);">
+      <span style="font-weight:600;color:var(--text-1,#2b2620);">Low-stock alert · 低库存提醒</span>
+      <span>when stock falls to · 当库存降至</span>
+      <input type="number" id="pa-low-threshold" min="0" step="1" value="5" onchange="paSaveLowThreshold(this.value)" style="width:64px;padding:4px 8px;border:1px solid var(--line,#d9d3c6);border-radius:7px;font-size:13px;text-align:center;font-variant-numeric:tabular-nums;">
+      <span>units or fewer · 件及以下</span>
+      <span style="margin-left:6px;color:var(--text-3,#9a9384);">Default for all products — override per product in its editor. · 全店默认值,可在单个产品编辑器中单独设置。</span>
+      <span id="pa-low-threshold-status" style="margin-left:auto;color:var(--accent,#365329);"></span>
     </div>
 
     <div class="pa-toolbar">
@@ -7849,6 +7862,10 @@
               </div>
               <div class="field"><label class="stacked">Stock by location · 各门店库存</label>
                 <div id="pd-store-stocks" style="font-size:13px;line-height:1.7;">—</div>
+              </div>
+              <div class="field"><label class="stacked">Low-stock alert at · 低库存提醒阈值 <span class="muted" style="font-weight:400;">(optional)</span></label>
+                <input type="number" id="pd-low-stock" min="0" step="1" placeholder="">
+                <div class="muted" id="pd-low-stock-hint" style="font-weight:400;font-size:11px;margin-top:4px;">Flag this product as low when stock falls to this many units or fewer. Leave blank to use the store default. · 库存降到该数量(含)及以下时标记为低库存。留空则使用全店默认值。</div>
               </div>
             </section>
             <section class="pd-card">
@@ -14581,7 +14598,7 @@ const BENTO_CATALOGUE = {
         <span class="val">${it.stock_qty}</span>
       </div>`).join('');
       body.innerHTML = `<div class="db-tile-num warn">${d.count}</div>
-        <div class="db-tile-sub">items ≤ 5 · 件需补货</div>
+        <div class="db-tile-sub">need restock · 件需补货</div>
         <div class="db-tile-list" style="margin-top:10px">${rows}</div>`;
     },
   },
@@ -18760,6 +18777,11 @@ async function loadConfig() {
     applyFeatureGates(c);
     _cfgCache = c;
     syncFeatureToggles();
+    // Store-wide low-stock threshold (drives the amber dot + Low-stock tile).
+    { const lt = parseInt(c.inventory?.lowStockThreshold, 10); const nv = Number.isFinite(lt) && lt >= 0 ? lt : 5;
+      const changed = nv !== PA_LOW_STOCK; PA_LOW_STOCK = nv; paSyncLowStockUi();
+      // If the catalogue already painted with the default, re-flag it now.
+      if (changed && Array.isArray(PA_PRODUCTS) && PA_PRODUCTS.length) { try { paRenderKpis(false); paRender(); } catch {} } }
     // Brand & theme (accent / notification colour / language / mascots) moved to
     // the Mini App Editor (/cms) 2026-06-09 — saved there directly to config.
     $('#cfg-fees-freeShippingThreshold').value = c.fees?.freeShippingThreshold ?? 399;
@@ -24100,6 +24122,43 @@ let PA_STORES = [];
 let PA_STORE  = (() => { try { const v = localStorage.getItem('pa-store'); return v && v !== 'all' ? (parseInt(v, 10) || 'all') : 'all'; } catch { return 'all'; } })();
 let PA_STOCK  = {};
 let PA_STOCK_LOADED = false;
+// Tenant-wide default low-stock threshold (units). Hydrated by loadConfig() from
+// storefront_config 'inventory.lowStockThreshold'; a product can override it via
+// its own low_stock_threshold. Drives the amber dot, the Low-stock KPI tile +
+// quick-filter — kept in sync with the backend dashboard/alerts definition.
+let PA_LOW_STOCK = 5;
+function paLowThreshold(p) {
+  const t = p && p.low_stock_threshold;
+  return (t == null || t === '' || !(Number(t) >= 0)) ? PA_LOW_STOCK : Number(t);
+}
+// Push the current global default into the products-page UI: the toolbar input,
+// the Low-stock KPI subtitle, and the editor field's placeholder.
+function paSyncLowStockUi() {
+  const inp = document.getElementById('pa-low-threshold');
+  if (inp && document.activeElement !== inp) inp.value = PA_LOW_STOCK;
+  const sub = document.getElementById('pa-kpi-low-sub');
+  if (sub) sub.textContent = '≤ ' + PA_LOW_STOCK + ' left · 剩余 ≤ ' + PA_LOW_STOCK;
+  const ls = document.getElementById('pd-low-stock');
+  if (ls) ls.placeholder = cuT('Default', '默认') + ' ' + PA_LOW_STOCK;
+}
+// Persist the store-wide default low-stock threshold and re-flag the catalogue.
+async function paSaveLowThreshold(val) {
+  const n = Math.max(0, parseInt(val, 10) || 0);
+  PA_LOW_STOCK = n;
+  paSyncLowStockUi();
+  const st = document.getElementById('pa-low-threshold-status');
+  if (st) st.textContent = cuT('Saving…', '保存中…');
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body: { 'inventory.lowStockThreshold': n } });
+    if (_cfgCache) { _cfgCache.inventory = _cfgCache.inventory || {}; _cfgCache.inventory.lowStockThreshold = n; }
+    if (st) st.textContent = cuT('Saved ✓', '已保存 ✓');
+    setTimeout(() => { if (st) st.textContent = ''; }, 2000);
+  } catch (e) {
+    if (st) st.textContent = cuT('Save failed', '保存失败');
+  }
+  paRenderKpis(false);
+  paRender();
+}
 // Product layout: 'grid' (rich cards) | 'compact' (denser) | 'list' (one row
 // each). Separate from the "View" display-tweaks popover; persisted per-browser.
 let PA_VIEW = (() => { try { const v = localStorage.getItem('pa-view'); return (v === 'grid' || v === 'compact' || v === 'list') ? v : 'list'; } catch { return 'list'; } })();
@@ -24129,7 +24188,7 @@ function _paStatusMatch(p) {
     case 'live':   return pub;
     case 'drafts': return !pub;
     case 'oos':    return pub && s <= 0;
-    case 'low':    return pub && s > 0 && s <= 5;
+    case 'low':    return pub && s > 0 && s <= paLowThreshold(p);
     default:       return true;
   }
 }
@@ -24670,7 +24729,7 @@ function _paStockCell(u) {
   if (PA_STORE !== 'all' && PA_STOCK_LOADED) {
     if (u.group) {
       const q = u.members.reduce((s, m) => s + _paStoreQty(m.id, PA_STORE), 0);
-      const c = q <= 0 ? 'is-out' : (q <= 5 ? 'is-low' : '');
+      const c = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p) ? 'is-low' : '');
       return `<span class="pa-stock pa-stock-locked ${c}" title="${cuT('Open the product to set each size’s stock', '打开产品以分别设置各规格库存')}"><span class="pa-stock-dot"></span>${q <= 0 ? cuT('Out', '缺货') : q}</span>`;
     }
     const q = _paStoreQty(u.p.id, PA_STORE);
@@ -24680,7 +24739,7 @@ function _paStockCell(u) {
       + ` onchange="event.stopPropagation(); paSaveStoreStock(${u.p.id}, ${PA_STORE}, this.value, this)">`;
   }
   const qty = _paUnitStock(u);
-  const cls = qty <= 0 ? 'is-out' : (qty <= 5 ? 'is-low' : '');
+  const cls = qty <= 0 ? 'is-out' : (qty <= paLowThreshold(u.p) ? 'is-low' : '');
   const label = qty <= 0 ? cuT('Out', '缺货') : String(qty);
   return `<span class="pa-stock ${cls}"><span class="pa-stock-dot"></span>${label}</span>`;
 }
@@ -24838,7 +24897,6 @@ function pvOutside(e) { if (!(e.target.closest && e.target.closest('.ovp-wrap'))
 function paRenderKpis(animate) {
   if (!document.getElementById('pa-kpis')) return;
   const rows = Array.isArray(PA_PRODUCTS) ? PA_PRODUCTS : [];
-  const LOW = 5;
   const eff = x => Number(x.effective_stock ?? x.stock_qty ?? 0);
   let live = 0, drafts = 0, oos = 0, low = 0;
   for (const p of rows) {
@@ -24847,7 +24905,7 @@ function paRenderKpis(animate) {
       live++;
       const s = eff(p);
       if (s <= 0) oos++;
-      else if (s <= LOW) low++;
+      else if (s <= paLowThreshold(p)) low++;
     } else {
       drafts++;
     }
@@ -25562,6 +25620,8 @@ function pdOpen(id) {
   set('pd-price', p ? p.sell_price : ''); set('pd-compare', p && p.compare_at_price);
   set('pd-sku', p && p.sku); set('pd-weight', p && p.size);
   set('pd-status', p ? (p.status || 'Active') : 'Active');
+  set('pd-low-stock', p && p.low_stock_threshold != null ? p.low_stock_threshold : '');
+  { const ls = document.getElementById('pd-low-stock'); if (ls) ls.placeholder = cuT('Default', '默认') + ' ' + PA_LOW_STOCK; }
   pdFreeOfSet(p && p.free_of); set('pd-notes', p && p.notes); pdFactsSet(p && p.product_facts);
   const ck = (el, v) => { const n = document.getElementById(el); if (n) n.checked = !!v; };
   ck('pd-is-market', p && p.is_market === 1); ck('pd-is-batch-made', p && p.is_batch_made === 1); ck('pd-is-restock-only', p && p.is_restock_only === 1);
@@ -26688,6 +26748,7 @@ function pdCollectBody() {
     tags: g('pd-badge'),
     sell_price: parseFloat(g('pd-price')) || 0,
     compare_at_price: parseFloat(g('pd-compare')) || 0,
+    low_stock_threshold: g('pd-low-stock').trim(),  // '' = clear override → use store default
     status: g('pd-status') || 'Active',
     free_of: pdFreeOfGet(), notes: g('pd-notes'), product_facts: pdFactsGet(),
     is_market: ckd('pd-is-market'), is_restock_only: ckd('pd-is-restock-only'), is_batch_made: ckd('pd-is-batch-made'),

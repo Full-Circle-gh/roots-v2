@@ -587,6 +587,7 @@ const RETAIL_PRODUCT_COLS = `
   p.flash_price, p.flash_starts_at, p.flash_ends_at,
   p.flash_stock_limit, p.flash_sold,
   p.variant_group_id, p.variant_label, p.variant_label_cn, p.variant_sort,
+  p.low_stock_threshold,
   p.updated_at
 `;
 
@@ -3683,6 +3684,14 @@ function cfgValue(key, fallback) {
   try { return JSON.parse(row.value_json); } catch { return fallback; }
 }
 
+// Tenant-wide default low-stock threshold (units). A product flagged "low" when
+// its stock is >0 and at/under its own low_stock_threshold, or this default when
+// the product hasn't set one. Clamped to a sane non-negative integer; 5 if unset.
+function lowStockDefault() {
+  const n = parseInt(cfgValue('inventory.lowStockThreshold', 5), 10);
+  return Number.isFinite(n) && n >= 0 ? n : 5;
+}
+
 // "HH:MM" → minutes since midnight, or null if malformed.
 function hhmmToMinutes(s) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '').trim());
@@ -6408,16 +6417,19 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
 
     // Low stock — items currently low + recently touched. We don't track a
     // true "crossing" event (no stock history), so we proxy with updated_at:
-    // shows items that became (or stayed) low in the window. Matches the
-    // existing alerts.js definition (>0 AND <=5, Active products only).
+    // shows items that became (or stayed) low in the window. "Low" = stock >0
+    // and at/under the product's own low_stock_threshold, falling back to the
+    // tenant global default (storefront_config 'inventory.lowStockThreshold').
+    const lowDefault = lowStockDefault();
     const low = tdb().prepare(`
       SELECT id, name_en, name_cn, sku, stock_qty, updated_at
         FROM store_products
-       WHERE COALESCE(stock_qty,0) > 0 AND COALESCE(stock_qty,0) <= 5
+       WHERE COALESCE(stock_qty,0) > 0
+         AND COALESCE(stock_qty,0) <= COALESCE(low_stock_threshold, ?)
          AND status = 'Active' AND COALESCE(is_active,1) = 1
          AND updated_at >= ?
        ORDER BY updated_at DESC LIMIT ?
-    `).all(sinceIso, limit);
+    `).all(lowDefault, sinceIso, limit);
     for (const r of low) events.push({
       type: 'low_stock',
       ts: parseTs(r.updated_at),
@@ -6543,18 +6555,21 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   let refunds = { count: 0, items: [] };
 
   try {
+    const lowDefault = lowStockDefault();
     const lowCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM store_products
-       WHERE COALESCE(stock_qty,0) > 0 AND COALESCE(stock_qty,0) <= 5
+       WHERE COALESCE(stock_qty,0) > 0
+         AND COALESCE(stock_qty,0) <= COALESCE(low_stock_threshold, ?)
          AND status = 'Active' AND COALESCE(is_active,1) = 1
-    `).get().n;
+    `).get(lowDefault).n;
     const lowItems = tdb().prepare(`
       SELECT id, name_en, name_cn, sku, stock_qty
         FROM store_products
-       WHERE COALESCE(stock_qty,0) > 0 AND COALESCE(stock_qty,0) <= 5
+       WHERE COALESCE(stock_qty,0) > 0
+         AND COALESCE(stock_qty,0) <= COALESCE(low_stock_threshold, ?)
          AND status = 'Active' AND COALESCE(is_active,1) = 1
        ORDER BY stock_qty ASC, name_en LIMIT ?
-    `).all(previewLimit);
+    `).all(lowDefault, previewLimit);
     low = { count: lowCount, items: lowItems };
 
     // Refunds awaiting operator attention. refund_status states:
@@ -8523,6 +8538,14 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     sets.push('compare_at_price = ?'); params.push(Number.isFinite(v) && v > 0 ? v : null);
   }
   if ('stock_qty'  in body) { sets.push('stock_qty = ?');  params.push(Math.max(0, parseInt(body.stock_qty, 10) || 0)); }
+  if ('low_stock_threshold' in body) {
+    // Per-product override for the low-stock alert. Blank/invalid → NULL = use
+    // the tenant global default (storefront_config 'inventory.lowStockThreshold').
+    const raw = body.low_stock_threshold;
+    const v = (raw === '' || raw == null) ? null : parseInt(raw, 10);
+    sets.push('low_stock_threshold = ?');
+    params.push(Number.isFinite(v) && v >= 0 ? v : null);
+  }
   if ('ship_modes' in body) {
     sets.push('ship_modes = ?'); params.push(normalizeShipModesInput(body.ship_modes));
   }
@@ -8590,7 +8613,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // hydrated description_blocks JSON, so the page can update its card
   // and re-open the editor with fresh data.
   const row = tdb().prepare(
-    `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
+    `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, low_stock_threshold, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
@@ -8630,7 +8653,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
   res.set('Cache-Control', 'no-store, must-revalidate');
   const id = parseInt(req.params.id, 10);
   const row = tdb().prepare(
-    `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
+    `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, low_stock_threshold, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
