@@ -24153,7 +24153,7 @@ function paRender() {
         return `
         <div class="pa-row" onclick="paOpenEdit(${p.id})">
           <div class="pa-row-img">${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : PA_ICON_BROKEN}</div>
-          <div class="pa-row-main">
+          <div class="pa-row-main" data-no-i18n>
             <div class="pa-row-name">${escapeHtml(p.name_en || '—')}</div>
             ${p.name_cn ? `<div class="pa-row-sub">${escapeHtml(p.name_cn)}</div>` : ''}
           </div>
@@ -24174,7 +24174,7 @@ function paRender() {
       return `
         <div class="pa-row" onclick="paOpenEdit(${p.id})">
           <div class="pa-row-img">${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : PA_ICON_BROKEN}</div>
-          <div class="pa-row-main">
+          <div class="pa-row-main" data-no-i18n>
             <div class="pa-row-name">${escapeHtml(p.name_en || '—')}</div>
             ${sub ? `<div class="pa-row-sub">${sub}</div>` : ''}
           </div>
@@ -24228,7 +24228,7 @@ function paRender() {
             ${pub ? '' : '<span class="pa-pill pa-pill-draft" title="Not published in mini-app · 未在小程序上架">Draft</span>'}
           </div>
         </div>
-        <div class="pa-card-body">
+        <div class="pa-card-body" data-no-i18n>
           <div class="pa-card-name">${escapeHtml(p.name_en || '—')}</div>
           ${p.name_cn ? `<div class="pa-card-sub">${escapeHtml(p.name_cn)}</div>` : ''}
           ${meta ? `<div class="pa-card-meta">${meta}</div>` : ''}
