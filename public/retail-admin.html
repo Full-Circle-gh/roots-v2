@@ -7979,6 +7979,38 @@
       #cat-editor .cat-subs-kicker { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); margin: 2px 0 6px; }
       #cat-editor button.btn-icon.cat-del { border: 1px solid var(--line); background: var(--bg-pane); border-radius: var(--r-md); padding: 4px 8px; }
       #cat-editor button.btn-icon.cat-del:hover { background: var(--danger-soft); border-color: var(--danger); }
+      #cat-editor .cat-edit { white-space: nowrap; }
+
+      /* ── Per-category detail drawer ── */
+      .cat-detail-scrim { position: fixed; inset: 0; background: rgba(20,18,14,.42); opacity: 0; pointer-events: none; transition: opacity var(--t-fast); z-index: 60; }
+      .cat-detail-scrim.open { opacity: 1; pointer-events: auto; }
+      .cat-detail {
+        position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 94vw);
+        background: var(--bg-pane); border-left: 1px solid var(--line);
+        box-shadow: -12px 0 32px rgba(20,18,14,.18);
+        transform: translateX(100%); transition: transform var(--t-med, .22s) ease;
+        z-index: 61; display: flex; flex-direction: column;
+      }
+      .cat-detail.open { transform: translateX(0); }
+      .cat-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: var(--s4); border-bottom: 1px solid var(--line); }
+      .cat-detail-kicker { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); }
+      .cat-detail-body { padding: var(--s4); overflow-y: auto; flex: 1; }
+      .cat-detail-body .cd-field { margin-bottom: var(--s4); }
+      .cat-detail-body .cd-field > label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
+      .cat-detail-body .cd-field input { width: 100%; padding: 8px 11px; }
+      .cd-sec-title { font-weight: 700; margin: var(--s4) 0 8px; display: flex; align-items: center; gap: 8px; }
+      .cd-sec-title .cd-count { font-family: var(--f-mono); font-size: 11px; color: var(--text-3); font-weight: 400; }
+      .cd-prod { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+      .cd-prod:first-of-type { border-top: 0; }
+      .cd-prod-thumb { width: 38px; height: 38px; border-radius: var(--r-md); object-fit: cover; background: var(--bg-elev-1); flex: none; }
+      .cd-prod-thumb.placeholder { display: flex; align-items: center; justify-content: center; color: var(--text-3); font-size: 14px; }
+      .cd-prod-name { flex: 1; min-width: 0; font-size: 13px; line-height: 1.3; }
+      .cd-prod-name .sku { color: var(--text-3); font-size: 11px; font-family: var(--f-mono); }
+      .cd-prod-unpub { font-size: 10px; color: var(--text-3); border: 1px solid var(--line); border-radius: 999px; padding: 1px 6px; margin-left: 6px; }
+      .cd-prod select { max-width: 190px; padding: 5px 8px; font-size: 12px; }
+      .cd-subchip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; margin: 0 6px 6px 0; font-size: 12px; }
+      .cd-subchip .n { color: var(--text-3); font-family: var(--f-mono); font-size: 11px; }
+      .cat-detail-body .cd-empty { color: var(--text-3); font-size: 13px; padding: 10px 0; }
     </style>
     <h2>Categories · 分类</h2>
     <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
@@ -8022,6 +8054,20 @@
 
     <div id="cat-editor" style="margin-top:var(--s4);"></div>
   </section>
+
+  <!-- ─── Per-category detail drawer (slides in from the right when the operator
+       clicks "Edit" on a top category or subcategory) ─── -->
+  <div id="cat-detail-scrim" class="cat-detail-scrim" onclick="catCloseDetail()"></div>
+  <aside id="cat-detail" class="cat-detail" aria-hidden="true" aria-label="Edit category · 编辑分类">
+    <div class="cat-detail-head">
+      <div>
+        <div id="cat-detail-kicker" class="cat-detail-kicker">Category · 分类</div>
+        <h3 id="cat-detail-title" style="margin:2px 0 0;">—</h3>
+      </div>
+      <button class="btn-icon" type="button" title="Close · 关闭" onclick="catCloseDetail()" style="font-size:18px;">✕</button>
+    </div>
+    <div class="cat-detail-body" id="cat-detail-body"><!-- rendered by catRenderDetail() --></div>
+  </aside>
 
   <!-- ─── VOUCHERS / COUPONS ─── -->
   <section id="tab-vouchers">
@@ -10753,36 +10799,8 @@
             </div>
           </div>
 
-          <!-- CATEGORIES -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Categories · 分类</h3>
-              <div class="muted">The category list customers tap on the left sidebar (or chip bar in grid layouts). Drag the handle to reorder — the first row appears at the top. Categories still in use by a product can't be deleted; unpublish or recategorize first. · 顾客在侧栏(或网格布局顶部标签)点击的分类列表。拖动手柄可调整顺序;仍被产品使用的分类无法删除,请先下架或改分类。</div>
-            </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 6px; background: var(--accent); border-radius: 1px"></div>
-                <div style="position: absolute; left: 4px; top: 22px; bottom: 4px; width: 30px; background: #1a1a1f; border-radius: 3px; padding: 3px; display: flex; flex-direction: column; gap: 2px">
-                  <div style="height: 9px; background: var(--accent); border-radius: 1px"></div>
-                  <div style="height: 9px; background: #2a2a30; border-radius: 1px"></div>
-                  <div style="height: 9px; background: #2a2a30; border-radius: 1px"></div>
-                  <div style="height: 9px; background: #2a2a30; border-radius: 1px"></div>
-                </div>
-                <div class="ms-tile" style="left: 38px; top: 22px; right: 4px; height: 18px"></div>
-                <div class="ms-tile" style="left: 38px; top: 44px; right: 4px; height: 18px"></div>
-                <div class="ms-tile" style="left: 38px; top: 66px; right: 4px; height: 18px"></div>
-              </div>
-              <div class="ctrl">
-                <div id="cats-status" style="font-size: 12px; margin-bottom: 8px;"></div>
-                <ul id="cats-list" class="cats-list"></ul>
-                <div class="row" style="gap: 8px; margin-top: var(--s3);">
-                  <input type="text" id="cats-new-name" placeholder="New category name (e.g. Cookies 饼干)" style="flex: 1; padding: 8px 12px;">
-                  <button class="btn btn-primary" onclick="addCategory()">Add · 添加</button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- Categories moved to their own top-level "Categories" tab (2-level
+               tree editor). Nothing category-related lives in Settings → Shop. -->
         </div>
 
         <!-- (Tab-bar design lives in the CMS / mini-app editor — open /cms
@@ -11174,13 +11192,9 @@
           <!-- ── Fulfillment: 飞鹅 cloud printer ── -->
           <div class="group-card">
             <div class="group-card-head">
-              <h3>Receipt printing · 小票打印</h3>
+              <h3>Receipt printing — Feie cloud printer · 飞鹅云打印出单 <span id="feie-chip"></span></h3>
               <div class="muted">Auto-prints a ticket at the store the moment an order is paid — no PC needed, the printer also voice-announces it. Bind the printer in the Feie app, then get your <b>USERKEY</b> from a developer app at <a href="https://www.feieyun.com" target="_blank" style="color:var(--accent)">feieyun.com</a>. · 付款后自动在门店打印小票并语音播报。</div>
             </div>
-            <div class="dz-subtabs" role="tablist" style="margin-bottom:18px">
-              <button type="button" class="dz-subtab active"><span id="feie-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>Feie cloud printer · 飞鹅云打印</button>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px"><strong>Feie cloud printer · 飞鹅云打印出单</strong> <span id="feie-chip"></span></div>
             <div class="muted" style="font-size:11px;margin-bottom:12px;background:var(--bg-elev-1);border-radius:6px;padding:8px 10px">⚠ The <b>USERKEY</b> is from your feieyun.com developer console — <em>not</em> the secret/KEY on the device label. One account holds all printers; each store's <b>SN</b> is set per-store below.</div>
             <div class="ops-grid">
               <div>
@@ -11937,6 +11951,7 @@ function catRender() {
               ondragstart="catDragStart(event,'sub',${ti},${si})" ondragend="catDragEnd()">⠿</span>
         <input type="text" class="input cat-name" data-f="name" value="${escapeAttr(s.name)}" placeholder="Subcategory (EN)" oninput="catSet(${ti},${si},'name',this.value)">
         <input type="text" class="input cat-name" data-f="name_cn" value="${escapeAttr(s.name_cn)}" placeholder="子分类 (中文)" oninput="catSet(${ti},${si},'name_cn',this.value)">
+        <button class="btn btn-sm cat-edit" type="button" title="Edit this subcategory & its products · 编辑子分类及其产品" onclick="catOpenDetail('sub',${ti},${si})">Edit · 编辑</button>
         <button class="btn-icon cat-del" type="button" title="Remove subcategory" onclick="catRemoveSub(${ti},${si})">✕</button>
       </div>`).join('');
     return `
@@ -11948,7 +11963,8 @@ function catRender() {
               ondragstart="catDragStart(event,'top',${ti})" ondragend="catDragEnd()">⠿</span>
         <input type="text" class="input cat-name" data-f="name" value="${escapeAttr(t.name)}" placeholder="Top category (EN)" oninput="catSet(${ti},-1,'name',this.value)">
         <input type="text" class="input cat-name" data-f="name_cn" value="${escapeAttr(t.name_cn)}" placeholder="主分类 (中文)" oninput="catSet(${ti},-1,'name_cn',this.value)">
-        <button class="btn btn-sm cat-del" type="button" onclick="catRemoveTop(${ti})" style="margin-left:auto;">Remove · 删除</button>
+        <button class="btn btn-sm cat-edit" type="button" title="Edit this category & its products · 编辑分类及其产品" onclick="catOpenDetail('top',${ti})" style="margin-left:auto;">Edit · 编辑</button>
+        <button class="btn btn-sm cat-del" type="button" onclick="catRemoveTop(${ti})">Remove · 删除</button>
       </div>
       <div style="padding-left:34px;">
         ${(t.subs || []).length ? `<div class="cat-subs-kicker">${(t.subs).length} subcategor${(t.subs).length === 1 ? 'y' : 'ies'} · 子分类</div>` : ''}
@@ -12124,8 +12140,6 @@ async function loadShippingIntegrations() {
     if (fChip) fChip.innerHTML = f.enabled
       ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
       : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED</span>';
-    const fDot = document.getElementById('feie-dot');
-    if (fDot) fDot.style.background = f.enabled ? '#10b981' : 'var(--text-3)';
   } catch (e) { console.warn('[integrations] load failed', e); }
 }
 
@@ -12136,6 +12150,16 @@ function _logTab(which) {
     const tab   = document.getElementById('logtab-' + k);
     if (panel) panel.style.display = (k === which) ? '' : 'none';
     if (tab)   tab.classList.toggle('active', k === which);
+  });
+}
+
+// Printer card: switch between per-store printer panels (all stay configurable & save together).
+function _printerTab(storeId) {
+  document.querySelectorAll('#feie-stores [id^="ppanel-"]').forEach(panel => {
+    panel.style.display = (panel.id === 'ppanel-' + storeId) ? 'block' : 'none';
+  });
+  document.querySelectorAll('#feie-stores .dz-subtab').forEach(tab => {
+    tab.classList.toggle('active', tab.id === 'ptab-' + storeId);
   });
 }
 
@@ -12162,7 +12186,12 @@ async function loadPrinterPrefs() {
       if (!stores.length) {
         box.innerHTML = '<div style="font-size:13px;color:var(--text-3)">No active stores. Add stores under Stores first. · 暂无门店,请先添加门店。</div>';
       } else {
-        box.innerHTML = stores.map(s => {
+        const tabs = stores.map((s, i) => {
+          const tabName = escapeHtml(s.name_cn || s.name_en || s.code || ('Store ' + s.id));
+          const lit = !!(s.sn && String(s.sn).trim());
+          return `<button type="button" class="dz-subtab${i === 0 ? ' active' : ''}" id="ptab-${s.id}" onclick="_printerTab(${s.id})"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${lit ? '#10b981' : 'var(--text-3)'};margin-right:7px;vertical-align:middle"></span>${tabName}</button>`;
+        }).join('');
+        const panels = stores.map((s, i) => {
           const nameCn = escapeHtml(s.name_cn || '');
           const nameEn = escapeHtml(s.name_en || '');
           const primary = nameCn || nameEn || escapeHtml(s.code || ('Store ' + s.id));
@@ -12170,7 +12199,7 @@ async function loadPrinterPrefs() {
           const codeTag = s.code ? ` <span style="font-weight:600;font-size:11px;color:var(--text-3)">#${escapeHtml(s.code)}</span>` : '';
           const opts = _FEIE_TEMPLATES.map(t => `<option value="${t.id}" ${s.template===t.id?'selected':''}>${t.label}</option>`).join('');
           return `
-          <div data-store="${s.id}" style="border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg-elev-1)">
+          <div data-store="${s.id}" id="ppanel-${s.id}" style="display:${i === 0 ? 'block' : 'none'};border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg-elev-1)">
             <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:var(--text-1)">🏪 ${primary}${secondary ? ` <span style="font-weight:600;font-size:12px;color:var(--text-3)">${secondary}</span>` : ''}${codeTag}</div>
             <div style="display:grid;grid-template-columns:2fr 1.4fr 0.8fr;gap:10px;align-items:end">
               <div>
@@ -12198,6 +12227,9 @@ async function loadPrinterPrefs() {
             </div>
           </div>`;
         }).join('');
+        box.innerHTML = (stores.length > 1
+          ? `<div class="dz-subtabs" role="tablist" style="margin-bottom:16px">${tabs}</div>`
+          : '') + panels;
         stores.forEach(s => _previewStore(s.id));
       }
       const ooc = document.getElementById('feie-ooc');
@@ -13021,7 +13053,6 @@ let ENTITLEMENTS = {};
   loadOrders();
   loadConfig();        // also hydrates the Mini-app footer fields
   loadSnippets();
-  loadCategories();
   loadVouchers();
   loadPopups();
   loadDeliveryZones();

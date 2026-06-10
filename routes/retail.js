@@ -275,6 +275,36 @@ router.get('/api/retail-admin/category-tree', requireRetailAdmin, (req, res) => 
   res.json({ success: true, data: getCategoryTree(tdb()) });
 });
 
+// Products tagged to a category — drives the per-category "Edit" detail panel
+// (Categories tab). Filter by top_category, optionally narrowed to a subcategory.
+// `?top=` + `?sub=''` (explicit empty) lists products under the top that have NO
+// subcategory yet. Minimal fields only (no base64) + a lazy image URL.
+router.get('/api/retail-admin/category-products', requireRetailAdmin, (req, res) => {
+  const top = String(req.query.top == null ? '' : req.query.top).trim();
+  if (!top) return res.status(400).json({ success: false, error: 'top_required' });
+  const hasSub = 'sub' in req.query;
+  const sub = String(req.query.sub == null ? '' : req.query.sub).trim();
+  let sql = `SELECT id, name_en, name_cn, sku, top_category, subcategory, is_published, updated_at,
+                    ${hasImageFallbackSql('store_products')} AS has_image_data
+               FROM store_products
+              WHERE COALESCE(is_active, 1) = 1 AND top_category = ?`;
+  const params = [top];
+  if (hasSub) {
+    if (sub) { sql += ' AND subcategory = ?'; params.push(sub); }
+    else { sql += " AND (subcategory IS NULL OR subcategory = '')"; }
+  }
+  sql += ' ORDER BY is_published DESC, sort_order ASC, name_en ASC LIMIT 500';
+  const rows = tdb().prepare(sql).all(...params).map(r => {
+    r.image_data = r.has_image_data
+      ? `/api/retail-admin/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`
+      : null;
+    delete r.has_image_data;
+    r.is_published = !!r.is_published;
+    return r;
+  });
+  res.json({ success: true, data: rows });
+});
+
 // Make a URL-ish stable id from a name, unique within `used`.
 function _slugId(name, used) {
   let base = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 16) || 'c';
@@ -4698,7 +4728,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // + arrival dates and drop the customer a heads-up that we'll make the next
   // batch before it ships. Best-effort — never fails the placed order.
   try {
-    const notice = computeBatchNotice(zone, resolved.map((r) => r.product.id), new Date());
+    const notice = computeBatchNotice(zone, resolved.map((r) => r.product.id), new Date(), deliverySlotId, body.delivery_slot_kind);
     if (notice) {
       tdb().prepare(
         'UPDATE retail_orders SET promised_ship_date = ?, promised_delivery_date = ? WHERE id = ?'
@@ -11939,6 +11969,31 @@ function nextBatchShipDate(fromDate, cfg) {
   return toYmdLocal(cand);
 }
 
+// Largest batch day (YYYY-MM-DD) on or before `fromDate`, rolling BACKWARD
+// over skip_dates. Mirror of nextBatchShipDate — used to find the freshest
+// batch that still arrives in time for a schedule-for-later date. null when
+// the cadence is disabled.
+function prevBatchShipDate(fromDate, cfg) {
+  cfg = cfg || batchScheduleCfg();
+  if (!cfg) return null;
+  const anchor = parseYmdLocal(cfg.anchor_date);
+  if (!anchor) return null;
+  const DAY = 86400000;
+  const interval = cfg.interval_days;
+  const skip = new Set(cfg.skip_dates);
+  const from = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(), 12, 0, 0, 0);
+  const diff = Math.round((from.getTime() - anchor.getTime()) / DAY);
+  const rem = ((diff % interval) + interval) % interval;       // 0..interval-1
+  const offset = diff - rem;                                   // first on-cadence day <= diff
+  let cand = new Date(anchor.getTime() + offset * DAY);
+  let guard = 0;
+  while (skip.has(toYmdLocal(cand)) && guard < 365) {
+    cand = new Date(cand.getTime() - interval * DAY);
+    guard++;
+  }
+  return toYmdLocal(cand);
+}
+
 // True when any of the given product ids is flagged is_batch_made.
 function cartHasBatchItem(productIds) {
   const ids = [...new Set((productIds || []).map((n) => parseInt(n, 10)).filter(Boolean))];
@@ -11950,27 +12005,78 @@ function cartHasBatchItem(productIds) {
   return !!row;
 }
 
-// The customer-facing delay notice for an outside-GZ order holding a batch
-// item, or null when it doesn't apply (in-GZ, no batch item, or cadence off).
-// Outside-GZ = zone_type 'city'; GZ districts get it fresh same/next day so
-// the batch wait never bites there.
-function computeBatchNotice(zone, productIds, now) {
-  if (!zone || zone.zone_type !== 'city') return null;
+// The customer-facing "made fresh for you" notice for an order holding a
+// batch-made item, or null when it doesn't apply. Two zone families get it:
+//   • Outside-GZ cities (zone_type 'city') — the shipping leg is always a real
+//     wait, so the notice always shows.
+//   • "Panyu-style" GZ districts (番禺/花都/南沙/从化/增城 …) — gz_district zones
+//     that SHIP rather than instant-deliver (day_only mode and/or a same-day
+//     surcharge). They feel the batch cadence just like outside-GZ. The inner
+//     same-day districts (day_only=0, no surcharge) deliver fresh same/next day
+//     and stay excluded.
+//
+// The notice recomputes against the picked slot:
+//   • express / today / right-away (slotKind ≠ 'schedule') → the SOONEST batch
+//     is the binding date. For a Panyu-style district, if today IS a batch day
+//     the item is made fresh today (no wait) and the notice is suppressed.
+//   • schedule-for-later (slotKind 'schedule') → the customer chose a delivery
+//     date, so we promise the FRESHEST batch that still arrives by that date.
+function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
+  if (!zone) return null;
+  const isCity = zone.zone_type === 'city';
+  const isShipDistrict = zone.zone_type === 'gz_district' &&
+        (Number(zone.day_only) === 1 || Number(zone.same_day_surcharge) > 0);
+  if (!isCity && !isShipDistrict) return null;
   const cfg = batchScheduleCfg();
   if (!cfg) return null;
   if (!cartHasBatchItem(productIds)) return null;
-  const shipDate = nextBatchShipDate(now || new Date(), cfg);
-  if (!shipDate) return null;
-  const sd = parseYmdLocal(shipDate);
-  const deliveryDate = toYmdLocal(new Date(sd.getTime() + 86400000));
+
+  const nowD = now || new Date();
+  const todayIso = toYmdLocal(new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 12, 0, 0, 0));
+
+  // Soonest we can make+ship a fresh batch, and when that would arrive.
+  const soonestShip = nextBatchShipDate(nowD, cfg);
+  if (!soonestShip) return null;
+  const soonestDelivery = toYmdLocal(new Date(parseYmdLocal(soonestShip).getTime() + 86400000));
+
+  // A schedule-for-later pick carries a real chosen delivery date; express
+  // also carries a future date (the schedule window's earliest day), so we
+  // lean on the explicit slotKind to tell the two apart rather than the date.
+  const dateM = /^(\d{4}-\d{2}-\d{2})/.exec(String(slotId || ''));
+  const scheduled = slotKind === 'schedule' && !!dateM && dateM[1] >= soonestDelivery;
+
+  let shipDate, deliveryDate, kind;
+  if (scheduled) {
+    // Freshest batch whose +1-day arrival still lands on/before their date.
+    const targetIso = dateM[1];
+    const dayBefore = toYmdLocal(new Date(parseYmdLocal(targetIso).getTime() - 86400000));
+    shipDate = prevBatchShipDate(parseYmdLocal(dayBefore), cfg) || soonestShip;
+    deliveryDate = targetIso;
+    kind = 'scheduled';
+  } else {
+    shipDate = soonestShip;
+    deliveryDate = soonestDelivery;
+    kind = 'asap';
+    // Panyu-style district + today is a batch day → made fresh today, no wait
+    // to explain. (Cities keep the notice — the shipping leg is still a wait.)
+    if (isShipDistrict && soonestShip === todayIso) return null;
+  }
+
   const fill = (tpl) => tpl
     .replace(/\{ship_date\}/g, shipDate)
     .replace(/\{delivery_date\}/g, deliveryDate);
-  const defEn = `Your order includes freshly-made items. We make the next batch on ${shipDate} and ship it the same day, so it arrives fresh on ${deliveryDate}.`;
-  const defCn = `您的订单包含新鲜现做的商品。我们将于 ${shipDate} 制作下一批并当天发货，预计 ${deliveryDate} 新鲜送达。`;
+  let defEn, defCn;
+  if (kind === 'scheduled') {
+    defEn = `Your order includes freshly-made items. For your selected date ${deliveryDate}, we make a fresh batch on ${shipDate} so it arrives at its freshest.`;
+    defCn = `您的订单包含新鲜现做的商品。为配合您选择的 ${deliveryDate}，我们将于 ${shipDate} 新鲜制作，确保以最佳新鲜度送达。`;
+  } else {
+    defEn = `Your order includes freshly-made items. We make the next batch on ${shipDate} and ship it the same day, so it arrives fresh on ${deliveryDate}.`;
+    defCn = `您的订单包含新鲜现做的商品。我们将于 ${shipDate} 制作下一批并当天发货，预计 ${deliveryDate} 新鲜送达。`;
+  }
   return {
     ship_date: shipDate,
     delivery_date: deliveryDate,
+    kind,
     message_en: cfg.message_en ? fill(cfg.message_en) : defEn,
     message_cn: cfg.message_cn ? fill(cfg.message_cn) : defCn,
   };
@@ -12864,7 +12970,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
         free_threshold: zone.free_threshold,
       },
       scheduling: computeDeliverySlots(zone, new Date()),
-      batch_notice: computeBatchNotice(zone, (items || []).map((i) => i.product_id), new Date()),
+      batch_notice: computeBatchNotice(zone, (items || []).map((i) => i.product_id), new Date(), body.delivery_slot_id, body.slot_kind),
       routing: routingPreview,
     },
   });

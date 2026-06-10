@@ -212,14 +212,16 @@
         </view>
       </view>
 
-      <!-- Fresh batch notice — outside-GZ cart with a made-to-batch item.
-           Tells the customer the exact day we make it + when it arrives. -->
-      <view wx:if="{{batchNotice}}" class="holiday-banner">
+      <!-- Fresh batch notice — outside-GZ or Panyu-style-district cart with a
+           made-to-batch item. Tells the customer the exact day we make it +
+           when it arrives. Tap to re-open the full popup. -->
+      <view wx:if="{{batchNotice}}" class="holiday-banner" bindtap="openBatchNotice">
         <view class="hb-icon">🥗</view>
         <view class="hb-body">
           <view class="hb-title f-bear">{{lang === 'cn' ? '为您新鲜现做' : 'Made fresh for you'}}</view>
           <view class="hb-msg">{{lang === 'cn' ? batchNotice.message_cn : batchNotice.message_en}}</view>
         </view>
+        <view class="hb-more">{{lang === 'cn' ? '详情' : 'Details'}}</view>
       </view>
 
       <!-- Right away — always visible in time-slot mode; greyed when kitchen closed

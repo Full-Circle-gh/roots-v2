@@ -59,7 +59,9 @@ Page({
     usePoints: false,            // toggle: apply max usable on this order
     // Delivery scheduling — populated by the /quote response.
     scheduling: null,            // full scheduling object from server (slots, surcharge, hours)
-    batchNotice: null,           // { ship_date, delivery_date, message_en, message_cn } when an outside-GZ cart holds a batch-made item
+    batchNotice: null,           // { ship_date, delivery_date, kind, message_en, message_cn } when a batch-made item ships rather than instant-delivers
+    batchNoticePopup: false,      // true → the "Made fresh for you" modal is open
+    batchNoticeSeen: false,       // popup auto-shows once per checkout visit; banner persists after
     deliverySlotId: '',          // 'right_away' | 'YYYY-MM-DD' | 'YYYY-MM-DDTHH:MM' — required before placeOrder
     deliverySlotLabel: '',       // human-readable label for the picked slot (passed back to server)
     deliverySurcharge: 0,        // ¥ same-day surcharge for the picked slot
@@ -902,6 +904,11 @@ Page({
       // so the pre-check on placeOrder didn't open it) and the submit
       // retry loop hung until the watchdog tripped.
       delivery_slot_id: this.data.deliverySlotId || null,
+      // Lets the server tell express (asap → soonest batch) apart from a
+      // schedule-for-later pick (recompute the fresh notice to the chosen
+      // date). Express also carries a future slot_id, so the date alone
+      // can't disambiguate.
+      slot_kind: this.data.selectedSlotKind || '',
     };
     if (hasSaved) body.address_id = a.id;
     else          body.address    = { city: a.city, district: a.district };
@@ -1045,6 +1052,13 @@ Page({
           missingItems,
           acceptedFallback: keepAccepted,
         });
+        // First time a fresh-batch notice appears for this checkout visit,
+        // pop the modal once so it can't be missed. The inline banner stays
+        // put afterwards as a persistent reminder, and re-quotes (slot
+        // changes) only refresh the banner — they don't re-pop.
+        if (data.batch_notice && !this.data.batchNoticeSeen) {
+          this.setData({ batchNoticePopup: true, batchNoticeSeen: true });
+        }
         // Day-only mode: configure the three-option picker (Express / Today /
         // Schedule for later) and auto-select Express if there's no prior pick.
         if (sch?.mode === 'day_only') {
@@ -1331,6 +1345,16 @@ Page({
       quoting: false,
     });
   },
+
+  // "Made fresh for you" modal — auto-opens once per visit, and the banner's
+  // tap target re-opens it on demand. Closing leaves the inline banner.
+  openBatchNotice() {
+    if (this.data.batchNotice) this.setData({ batchNoticePopup: true });
+  },
+  closeBatchNotice() {
+    this.setData({ batchNoticePopup: false });
+  },
+  noop() {},
 
   onVoucherInput(e) {
     this.setData({ voucherInput: (e.detail.value || '').toUpperCase() });
@@ -1704,6 +1728,7 @@ Page({
             delivery_mode: this.data.deliveryMethod,
             delivery_slot_id: this.data.deliverySlotId,
             delivery_slot_label: this.data.deliverySlotLabel,
+            delivery_slot_kind: this.data.selectedSlotKind || '',
             ...(extra || {}),
           };
       let order;
