@@ -12334,6 +12334,25 @@ function computeDeliverySlots(zone, now) {
   // Express slot is never "today" — today is the separate same-day day chip.
   const expressDateIso = expressEarliestIso(zone, tzNow);
 
+  // Explicit Express ("ship ASAP") slot for day-only zones — the zone's true
+  // earliest fulfillable day at NO surcharge. Exposed as its own field so the
+  // mini app uses ONE authoritative source for both the auto-default and the
+  // Express tap, instead of synthesizing from schedule.min_date (which carries
+  // the +3-day calendar floor) or — worse — falling back to the surcharged
+  // Today chip when that's the only entry in `slots` (which silently added the
+  // same-day surcharge to an "Express" order). null when there's no schedule
+  // window to ship toward.
+  const expressSlot = (isDayOnly && schedule) ? {
+    slot_id:    expressDateIso,
+    date_iso:   expressDateIso,
+    is_same_day: false,
+    is_day_only: true,
+    requires_surcharge: false,
+    surcharge:  0,
+    label_en:   `Earliest ${expressDateIso}`,
+    label_cn:   `最早 ${expressDateIso}`,
+  } : null;
+
   return {
     mode: isDayOnly ? 'day_only' : 'time_slots',
     right_away_available: rightAwayAvailable,
@@ -12351,6 +12370,10 @@ function computeDeliverySlots(zone, now) {
     holiday_message:      holidayMode ? holidayMessage : null,
     today_slots:          todaySlots,
     today_day_chip:       todayDayChip,
+    // Authoritative Express slot (earliest day, no surcharge) — see expressSlot
+    // above. The mini app reads this for the Express default + tap so Express
+    // never inherits the Today chip's same-day surcharge.
+    express_slot:         expressSlot,
     // 'today' when the chips above are today's, 'tomorrow' when we rolled
     // forward because the kitchen is closed. Drives the chip-strip header.
     slot_day_kind:        slotDayKind,
@@ -12371,18 +12394,7 @@ function computeDeliverySlots(zone, now) {
     slots: isDayOnly
       ? (todayDayChip
           ? [todayDayChip]
-          : (schedule
-              ? [{
-                  slot_id:    expressDateIso,
-                  date_iso:   expressDateIso,
-                  is_same_day: false,
-                  is_day_only: true,
-                  requires_surcharge: false,
-                  surcharge:  0,
-                  label_en:   `Earliest ${expressDateIso}`,
-                  label_cn:   `最早 ${expressDateIso}`,
-                }]
-              : []))
+          : (expressSlot ? [expressSlot] : []))
       : todaySlots,
   };
 }
@@ -12413,6 +12425,12 @@ function resolveDeliverySlot(zone, slotId, now) {
   } else if (mDay) {
     // Same-day day-only chip first (Panyu).
     found = enumed.slots.find(s => s.slot_id === slotId);
+    // Express ("ship ASAP") day — its date is the zone's true earliest and can
+    // sit EARLIER than the schedule-for-later window's +3-day floor, so it
+    // wouldn't pass the window check below. Match it explicitly (no surcharge).
+    if (!found && enumed.express_slot && enumed.express_slot.slot_id === slotId) {
+      found = enumed.express_slot;
+    }
     if (!found) {
       // Otherwise it must fall inside the schedule-for-later window.
       const sch = enumed.schedule;

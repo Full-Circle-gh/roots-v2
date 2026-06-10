@@ -1159,7 +1159,14 @@ Page({
     }
     const surcharge = Number(sch.same_day_surcharge) || 0;
     const todaySlot   = slots.find(s => s.is_same_day);
-    const expressSlot = slots.find(s => !s.requires_surcharge) || slots[0];
+    // Express default = the server's authoritative express_slot (earliest day,
+    // no surcharge), with a prettified date label. Fall back to any
+    // non-surcharged enumerated slot, then to the first slot — but NEVER let
+    // the surcharged Today chip become the Express default (that silently
+    // added the same-day surcharge to Express).
+    const expressSlot = this.prettyExpressSlot()
+      || slots.find(s => !s.requires_surcharge)
+      || slots[0];
     const hasTodayOption = !!todaySlot && surcharge > 0;
     const L = this.data.lang;
 
@@ -1188,11 +1195,33 @@ Page({
     }
   },
 
-  // Tap "Express delivery" — synthesizes a slot at the earliest schedule
-  // date (schedule.min_date). The server resolves any date inside the
-  // schedule window, so we don't need it pre-enumerated.
+  // The server's authoritative express_slot with a prettified bilingual date
+  // label ("Wed, Jun 11" / "6月11日"), matching the style used for the other
+  // day picks. Returns null when the server didn't supply an express_slot
+  // (older server) so callers can fall back. Never carries a surcharge.
+  prettyExpressSlot() {
+    const es = this.data.scheduling?.express_slot;
+    if (!es || !es.date_iso) return null;
+    const [y, m, d] = es.date_iso.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    return {
+      ...es,
+      label_en: dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+      label_cn: `${m}月${d}日`,
+    };
+  },
+
+  // Tap "Express delivery" — uses the server's authoritative express_slot
+  // (the zone's true earliest day at no surcharge). Falls back to a synthesized
+  // schedule.min_date slot for older servers that don't return express_slot.
+  // Either way it must NEVER carry the Today chip's same-day surcharge.
   pickExpress() {
     const sch = this.data.scheduling || {};
+    const es = this.prettyExpressSlot();
+    if (es) {
+      this.applyDayOnlySlot(es, 'express');
+      return;
+    }
     const min = sch.schedule?.min_date;
     if (!min) return;
     const [y, m, d] = min.split('-').map(Number);
