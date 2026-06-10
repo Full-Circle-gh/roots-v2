@@ -12043,6 +12043,170 @@ async function catSave() {
   }
 }
 
+// ── Per-category detail drawer ─────────────────────────────────────────────
+// Opened from the "Edit" button on any top/sub row. Lets the operator rename
+// (EN/CN, same bound model as the inline editor — persisted by Save changes)
+// AND see / quick-recategorize the products tagged to this category. Product
+// moves go straight to PATCH /products/:id; structure (names/order) still saves
+// through the whole-tree catSave(). Product queries + move targets read the
+// LAST-SAVED tree (catClean) because products are tagged with saved names — an
+// unsaved rename wouldn't match until you Save.
+let catDetail = null;        // { kind:'top'|'sub', ti, si }
+let _catMoveTargets = [];    // flattened [{top,sub}] for the move <select>; value = index
+
+function catCleanTree() { try { return JSON.parse(catClean); } catch { return []; } }
+
+// Resolve the saved (top, sub) names for the node being edited, matched by
+// stable id. Returns null for a brand-new/unsaved node (no products yet).
+function catSavedNames(kind, ti, si) {
+  const node = (kind === 'sub') ? (catModel[ti] && catModel[ti].subs[si]) : catModel[ti];
+  if (!node || !node.id) return null;
+  const tree = catCleanTree();
+  if (kind === 'top') { const t = tree.find(x => x.id === node.id); return t ? { top: t.name } : null; }
+  for (const t of tree) { const s = (t.subs || []).find(x => x.id === node.id); if (s) return { top: t.name, sub: s.name }; }
+  return null;
+}
+
+function catOpenDetail(kind, ti, si) {
+  catDetail = { kind, ti, si: si == null ? -1 : si };
+  document.getElementById('cat-detail-scrim').classList.add('open');
+  const aside = document.getElementById('cat-detail');
+  aside.classList.add('open'); aside.setAttribute('aria-hidden', 'false');
+  catRenderDetail();
+  catLoadDetailProducts();
+}
+function catCloseDetail() {
+  catDetail = null;
+  document.getElementById('cat-detail-scrim').classList.remove('open');
+  const aside = document.getElementById('cat-detail');
+  aside.classList.remove('open'); aside.setAttribute('aria-hidden', 'true');
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && catDetail) catCloseDetail(); });
+
+function catRenderDetail() {
+  if (!catDetail) return;
+  const { kind, ti, si } = catDetail;
+  const node = kind === 'sub' ? (catModel[ti] && catModel[ti].subs[si]) : catModel[ti];
+  if (!node) { catCloseDetail(); return; }
+  const isSub = kind === 'sub';
+  document.getElementById('cat-detail-kicker').textContent = isSub
+    ? `Subcategory of ${catModel[ti].name || '—'} · 子分类`
+    : 'Top category · 主分类';
+  document.getElementById('cat-detail-title').textContent = node.name || (isSub ? 'New subcategory' : 'New category');
+  const saved = catSavedNames(kind, ti, si);
+  const fi = isSub ? si : -1;
+  const body = document.getElementById('cat-detail-body');
+  body.innerHTML = `
+    <div class="cd-field">
+      <label>${isSub ? 'Subcategory name (English) · 子分类名(英文)' : 'Category name (English) · 分类名(英文)'}</label>
+      <input type="text" class="input" value="${escapeAttr(node.name)}"
+             oninput="catSet(${ti},${fi},'name',this.value); catDetailTitleSync()">
+    </div>
+    <div class="cd-field">
+      <label>${isSub ? 'Subcategory name (中文)' : 'Category name (中文)'}</label>
+      <input type="text" class="input" value="${escapeAttr(node.name_cn)}"
+             oninput="catSet(${ti},${fi},'name_cn',this.value)">
+    </div>
+    ${catIsDirty() ? `<div class="cd-empty" style="color:#b45309;">Unsaved name changes — click “Save changes” below to apply &amp; re-tag products. · 名称尚未保存,点击下方“保存”后生效。</div>` : ''}
+    <div style="display:flex;gap:8px;margin-bottom:var(--s4);">
+      <button class="btn btn-primary btn-sm" type="button" onclick="catSaveFromDetail()">Save changes · 保存</button>
+      ${isSub ? '' : `<button class="btn btn-sm" type="button" onclick="catAddSub(${ti}); catRenderDetail()">＋ Add subcategory · 新增子分类</button>`}
+    </div>
+
+    ${!isSub ? `<div class="cd-sec-title">Subcategories <span class="cd-count" id="cd-subcounts"></span></div>
+      <div id="cd-subchips">${(node.subs || []).map(s => `<span class="cd-subchip">${escapeHtml(s.name)}<span class="n" data-sub="${escapeAttr(s.name)}">·</span></span>`).join('') || '<span class="cd-empty">No subcategories yet · 暂无子分类</span>'}</div>` : ''}
+
+    <div class="cd-sec-title">Products in this ${isSub ? 'subcategory' : 'category'} <span class="cd-count" id="cd-prod-count">…</span></div>
+    ${saved ? '' : '<div class="cd-empty">Save this category first to see and assign products. · 请先保存分类。</div>'}
+    <div id="cd-prod-list">${saved ? '<div class="cd-empty">Loading… · 加载中</div>' : ''}</div>
+  `;
+}
+function catDetailTitleSync() {
+  if (!catDetail) return;
+  const { kind, ti, si } = catDetail;
+  const node = kind === 'sub' ? catModel[ti].subs[si] : catModel[ti];
+  document.getElementById('cat-detail-title').textContent = node.name || '—';
+}
+async function catSaveFromDetail() {
+  await catSave();
+  if (catDetail) { catRenderDetail(); catLoadDetailProducts(); }
+}
+
+// Flatten the SAVED tree into move targets (products validate against the
+// live/saved tree server-side, so unsaved edits aren't offered as targets).
+function catBuildMoveTargets() {
+  _catMoveTargets = [];
+  for (const t of catCleanTree()) {
+    _catMoveTargets.push({ top: t.name, sub: '' });
+    for (const s of (t.subs || [])) _catMoveTargets.push({ top: t.name, sub: s.name });
+  }
+}
+function catMoveOptions(curTop, curSub) {
+  return _catMoveTargets.map((tg, i) => {
+    const sel = (tg.top === (curTop || '') && (tg.sub || '') === (curSub || '')) ? ' selected' : '';
+    const lbl = tg.sub ? `${tg.top} › ${tg.sub}` : `${tg.top} · (no sub)`;
+    return `<option value="${i}"${sel}>${escapeHtml(lbl)}</option>`;
+  }).join('');
+}
+
+async function catLoadDetailProducts() {
+  if (!catDetail) return;
+  const { kind, ti, si } = catDetail;
+  const saved = catSavedNames(kind, ti, si);
+  const list = document.getElementById('cd-prod-list');
+  const countEl = document.getElementById('cd-prod-count');
+  if (!saved) { if (countEl) countEl.textContent = '0'; return; }
+  catBuildMoveTargets();
+  const qs = new URLSearchParams({ top: saved.top });
+  if (kind === 'sub') qs.set('sub', saved.sub || '');
+  try {
+    const { data } = await api('/api/retail-admin/category-products?' + qs.toString());
+    const rows = data || [];
+    if (countEl) countEl.textContent = String(rows.length);
+    // Top view: per-sub counts on the chips.
+    if (kind === 'top') {
+      const counts = {};
+      rows.forEach(p => { const k = (p.subcategory || '').trim() || 'none'; counts[k] = (counts[k] || 0) + 1; });
+      document.querySelectorAll('#cd-subchips .n[data-sub]').forEach(el => {
+        el.textContent = String(counts[el.getAttribute('data-sub')] || 0);
+      });
+      const sc = document.getElementById('cd-subcounts');
+      if (sc) sc.textContent = (counts['none'] ? `${counts['none']} unfiled · 未归类` : '');
+    }
+    if (!list) return;
+    if (!rows.length) { list.innerHTML = '<div class="cd-empty">No products tagged here yet. · 此分类暂无产品。</div>'; return; }
+    list.innerHTML = rows.map(p => {
+      const name = escapeHtml(p.name_en || p.name_cn || ('#' + p.id));
+      const thumb = p.image_data
+        ? `<img class="cd-prod-thumb" src="${escapeAttr(p.image_data)}" alt="" loading="lazy">`
+        : '<div class="cd-prod-thumb placeholder">▢</div>';
+      return `<div class="cd-prod">
+        ${thumb}
+        <div class="cd-prod-name">${name}${p.sku ? ` <span class="sku">${escapeHtml(p.sku)}</span>` : ''}${p.is_published ? '' : '<span class="cd-prod-unpub">Hidden · 隐藏</span>'}</div>
+        <select title="Move to another category · 移动到其他分类" onchange="catMoveProduct(${p.id}, this)">
+          ${catMoveOptions(p.top_category, p.subcategory)}
+        </select>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    if (list) list.innerHTML = '<div class="cd-empty" style="color:var(--danger);">Failed to load products · 加载产品失败</div>';
+  }
+}
+
+async function catMoveProduct(id, sel) {
+  const tg = _catMoveTargets[Number(sel.value)];
+  if (!tg) return;
+  sel.disabled = true;
+  try {
+    await api('/api/retail-admin/products/' + id, { method: 'PATCH', body: { top_category: tg.top, subcategory: tg.sub || null } });
+    toast('Moved · 已移动', 'ok');
+    catLoadDetailProducts();   // product may have left this category — refresh
+  } catch (e) {
+    toast('Move failed · 移动失败', 'err');
+    sel.disabled = false;
+  }
+}
+
 // Lazy-load the tree the first time the Categories tab is opened.
 (function () {
   const btn = document.querySelector('.tabs [data-tab="categories"]');
@@ -12187,7 +12351,9 @@ async function loadPrinterPrefs() {
         box.innerHTML = '<div style="font-size:13px;color:var(--text-3)">No active stores. Add stores under Stores first. · 暂无门店,请先添加门店。</div>';
       } else {
         const tabs = stores.map((s, i) => {
-          const tabName = escapeHtml(s.name_cn || s.name_en || s.code || ('Store ' + s.id));
+          const tabName = escapeHtml((window.cuLang && cuLang() === 'cn')
+            ? (s.name_cn || s.name_en || s.code || ('Store ' + s.id))
+            : (s.name_en || s.name_cn || s.code || ('Store ' + s.id)));
           const lit = !!(s.sn && String(s.sn).trim());
           return `<button type="button" class="dz-subtab${i === 0 ? ' active' : ''}" id="ptab-${s.id}" onclick="_printerTab(${s.id})"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${lit ? '#10b981' : 'var(--text-3)'};margin-right:7px;vertical-align:middle"></span>${tabName}</button>`;
         }).join('');
