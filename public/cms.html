@@ -1650,6 +1650,19 @@
   }
   .inspector-head .id { font-family: var(--f-mono); font-size: 11px; color: var(--text-4); }
 
+  /* Per-block behaviour note — explains conditional/dynamic blocks (e.g.
+     "hides when the customer has no active order") that used to print inline
+     in the preview canvas. Lives here so the canvas stays a faithful WYSIWYG
+     and the explanation appears exactly when you're editing that block. */
+  .insp-note {
+    margin: var(--s3) var(--s5) 0;
+    padding: var(--s2) var(--s3);
+    background: rgba(107, 142, 111, .08);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-sm);
+    font-size: 11.5px; line-height: 1.45; color: var(--text-3);
+  }
+
   .inspector-body { padding: var(--s4) var(--s5) var(--s7); }
   .field { margin-bottom: var(--s4); }
   .field label {
@@ -5367,7 +5380,9 @@ const BLOCK_META = {
   store_info:       { name: 'Stores',           name_cn: '门店',       desc: 'One or many locations · live open · hours · ETA', desc_cn: '单个或多个门店 · 营业状态 · 营业时间 · 送达时间' },
   voting_block:     { name: 'Voting',           name_cn: '投票',       desc: 'Poll teaser — tap to vote, earn pts',       desc_cn: '投票预告 — 点击投票,赚取积分' },
   affiliate_block:  { name: 'Refer a friend',   name_cn: '邀请好友',   desc: 'Customer\'s live invite code + share CTA',  desc_cn: '顾客的实时邀请码 + 分享按钮' },
-  greeting:         { name: 'Greeting',         name_cn: '问候语',     desc: 'Time-of-day "Good morning, {name} · pts"',  desc_cn: '按时段「早上好,{name} · 积分」' },
+  greeting:         { name: 'Greeting',         name_cn: '问候语',     desc: 'Time-of-day "Good morning, {name} · pts"',  desc_cn: '按时段「早上好,{name} · 积分」',
+    editorNote: 'The name and points are pulled live from each customer\'s own account — the preview here shows sample values.',
+    editorNote_cn: '姓名与积分实时取自每位顾客自己的账户 — 此处预览显示的是示例数据。' },
   kitchen_status:   { name: 'Kitchen status',   name_cn: '厨房状态',   desc: 'Legacy — use the Stores block instead',     desc_cn: '旧版 — 请改用门店模块', hidden: true },
   recipe_story:     { name: 'Recipe story',     name_cn: '食谱故事',   desc: 'Editorial image + serif headline + paragraphs', desc_cn: '编辑配图 + 衬线标题 + 正文段落' },
   bundle:           { name: 'Bundle',           name_cn: '套装',       desc: '3–5 products with one-tap add-all-to-cart', desc_cn: '3–5 件商品,一键全部加入购物车' },
@@ -5375,8 +5390,12 @@ const BLOCK_META = {
   favorites_block:  { name: 'Favorites',        name_cn: '收藏',       desc: 'Your saved — pulls from each customer\'s wishlist', desc_cn: '顾客收藏 — 来自各自的心愿单' },
   leaderboard:      { name: 'Leaderboard',      name_cn: '排行榜',     desc: 'Top members ranked by spend / points / orders',     desc_cn: '会员排行 · 按消费 / 积分 / 订单数' },
   video_banner:     { name: 'Video banner',     name_cn: '视频横幅',   desc: 'Autoplaying muted clip — loops, no controls',       desc_cn: '自动播放静音短片 · 循环 · 无控件' },
-  order_tracker:    { name: 'Order tracker',    name_cn: '订单追踪',   desc: 'Customer\'s latest order — live status, hides when none', desc_cn: '顾客最新订单 · 实时状态 · 无订单时隐藏' },
-  notification_bar: { name: 'Notification bar',  name_cn: '通知条',     desc: 'Unread updates strip — hides when none. Bar / card / pill / banner views', desc_cn: '未读消息条 · 无未读时隐藏 · 条幅/卡片/胶囊/横幅视图' },
+  order_tracker:    { name: 'Order tracker',    name_cn: '订单追踪',   desc: 'Customer\'s latest order — live status, hides when none', desc_cn: '顾客最新订单 · 实时状态 · 无订单时隐藏',
+    editorNote: 'Hides on the storefront when the customer has no active order. The stage shown here is a sample — the live block follows the customer\'s real order.',
+    editorNote_cn: '顾客无进行中订单时,店面将隐藏此模块。此处显示的阶段为示例 — 线上模块跟随顾客的真实订单。' },
+  notification_bar: { name: 'Notification bar',  name_cn: '通知条',     desc: 'Unread updates strip — hides when none. Bar / card / pill / banner views', desc_cn: '未读消息条 · 无未读时隐藏 · 条幅/卡片/胶囊/横幅视图',
+    editorNote: 'Hides on the storefront when the customer has no unread updates. The preview here shows a sample.',
+    editorNote_cn: '顾客无未读消息时,店面将隐藏此模块。此处预览显示的是示例。' },
 };
 
 const state = {
@@ -8429,7 +8448,10 @@ function renderBlockBody(b) {
 
       const thumbs = `<div class="ot-thumbs">${[0, 1, 2].map(() => '<div class="ot-th"></div>').join('')}</div>`;
       const itemsLabel = L ? '3 件商品' : '3 items';
-      const hideNote = `<div class="empty" style="margin-top:8px;font-size:11px;opacity:.6">${B('Preview — hides on the storefront when the customer has no active order. Stage shown is an editor preview; the live block tracks the real order.', '预览 — 顾客无进行中订单时,店面将隐藏此模块。此处阶段为编辑器预览;线上模块跟随真实订单状态。')}</div>`;
+      // The "hides when no active order" explanation now lives in the block's
+      // edit panel (BLOCK_META.editorNote) instead of inline in the preview.
+      // Empty string keeps every ${hideNote} interpolation below a no-op.
+      const hideNote = '';
 
       if (style === 'truck') {
         const dots = [0, 33.3, 66.6, 100].map((x, i) => {
@@ -8545,12 +8567,10 @@ function renderBlockBody(b) {
             <span style="flex:${shape.inline ? '0 1 auto' : '1'};min-width:0;font-size:11px;letter-spacing:.03em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${escapeHtml(txt)}</span>
             <span style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:${view === 'banner' ? '22px' : '17px'};height:${view === 'banner' ? '22px' : '17px'};border-radius:999px;font-size:12px;line-height:1;${nbtnStyle}">→</span>
           </div>
-        </div>
-        <div class="empty" style="margin-top:8px;font-size:11px;opacity:.6">${
-          b.show_order_status === false
-            ? B('Preview — announcements only. Order/shipping updates are hidden; hides entirely when there\'s nothing unread.', '预览 — 仅公告。隐藏订单/物流更新;无未读时整体隐藏。')
-            : B('Preview — hides on the storefront when the customer has no unread updates.', '预览 — 顾客无未读消息时,店面将隐藏此模块。')
-        }</div>`;
+        </div>`;
+      // The "announcements only / hides when nothing unread" explanation now
+      // lives in the block's edit panel (BLOCK_META.editorNote) instead of
+      // inline in the preview, so the canvas stays a clean WYSIWYG.
       return d;
     }
     case 'category_tabs': {
@@ -9746,7 +9766,11 @@ function renderBlockBody(b) {
       const ctaHtml = cta ? `<div class="gr-cta">${escapeHtml(cta)} →</div>` : '';
       const greetHtml = `<div class="gr-headline">${escapeHtml(greet)}, ${escapeHtml(sampleName)}.</div>`;
       const kickerHtml = (k.en || k.cn) ? `<div class="gr-kicker">${biLabel(k.en, k.cn)}</div>` : '';
-      const hintHtml = `<div class="gr-hint">Preview · live name + points pull from the customer's account.</div>`;
+      // The "live name + points" explanation now lives in the block's edit
+      // panel (BLOCK_META.editorNote) instead of inline in the preview, so the
+      // canvas stays a clean WYSIWYG. Empty string keeps every ${hintHtml}
+      // interpolation below a no-op.
+      const hintHtml = '';
 
       // ── Welcome-back design directions: classic / wallet / coin ────────
       // Forest band + time-based greeting + points/wallet, bilingual. Every
@@ -10506,6 +10530,7 @@ function renderInspector() {
       </div>
       <div class="id">id: ${b.id}</div>
     </div>
+    ${BLOCK_META[b.type]?.editorNote ? `<div class="insp-note">${T(BLOCK_META[b.type].editorNote, BLOCK_META[b.type].editorNote_cn)}</div>` : ''}
     <div class="inspector-body" id="inspector-body"></div>`;
   const body = $('#inspector-body');
   switch (b.type) {
@@ -14259,7 +14284,7 @@ document.addEventListener('keydown', (e) => {
   });
   const palette = () => Object.entries(BLOCK_META)
     .filter(([, m]) => !m.hidden)
-    .map(([type, m]) => ({ type, name: m.name, name_cn: m.name_cn, desc: m.desc, desc_cn: m.desc_cn }));
+    .map(([type, m]) => ({ type, name: m.name, name_cn: m.name_cn, desc: m.desc, desc_cn: m.desc_cn, note: m.editorNote, note_cn: m.editorNote_cn }));
   const selectedBlock = () => (state.selectedId == null
     ? null
     : (state.draft.find(b => b.id === state.selectedId) || null));

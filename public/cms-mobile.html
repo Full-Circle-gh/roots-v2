@@ -230,6 +230,11 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
 .fld input,.fld textarea{width:100%;background:var(--bg-input);border:1px solid var(--line);border-radius:var(--r-md);
   padding:11px 12px;font:400 14px var(--f-sans);color:var(--text-1);resize:none;}
 .fld input:focus,.fld textarea:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+/* Per-block behaviour note — conditional/dynamic blocks (e.g. "hides when the
+   customer has no active order"). Replaces the old inline-in-preview caption. */
+.edit-note{margin:0 0 14px;padding:10px 12px;border-radius:var(--r-md);
+  background:var(--accent-soft);border:1px solid var(--line-soft);
+  font:400 12px var(--f-sans);color:var(--text-2);line-height:1.45;}
 .desk-note{display:flex;align-items:center;gap:9px;margin-top:6px;padding:12px;border-radius:var(--r-lg);
   background:var(--brass-soft);border:1px dashed var(--brass);}
 .desk-note svg{width:18px;height:18px;color:var(--brass-hi);flex:0 0 auto;}
@@ -807,6 +812,12 @@ function renderEdit() {
     body.innerHTML = '<div style="font:400 13px var(--f-sans);color:var(--text-3);line-height:1.5;margin-bottom:6px">' +
       cuT('This block has no quick text fields — arrange it here, then fine-tune its details on desktop.', '此模块没有快速文字字段 — 在此排版,详情请在电脑上微调。') + '</div>';
   }
+  // Per-block behaviour note (conditional/dynamic blocks) — rides along on the
+  // palette payload from cms.html (BLOCK_META.editorNote). Pinned at the top via
+  // afterbegin so it survives the !blk "Loading…" / no-fields branches above and
+  // sits over the fields. Shown here instead of inline in the preview canvas.
+  const note = M.lang === 'cn' ? (m.note_cn || m.note) : m.note;
+  if (note) body.insertAdjacentHTML('afterbegin', '<div class="edit-note">' + esc(note) + '</div>');
   body.insertAdjacentHTML('beforeend',
     '<div class="desk-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>' +
     '<div>' + cuT('<b>Images, colours &amp; advanced options</b> for this block are tuned on desktop. ', '此模块的<b>图片、配色与高级选项</b>请在电脑上调整。') +
