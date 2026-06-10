@@ -8590,7 +8590,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
                     nutrition, bundle, tags,
                     variant_group_id, variant_label, variant_sort,
-                    is_batch_made,
+                    is_batch_made, use_block_design,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
                     ${hasImageFallbackSql('p')} AS has_image_data,
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks
