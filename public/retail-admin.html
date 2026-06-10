@@ -23453,9 +23453,7 @@ function _paPagerHtml(total, pages, start, shown) {
   const next = `<span data-lang-block="en">Next ›</span><span data-lang-block="cn">下一页 ›</span>`;
   return `<span class="muted" style="font-size:12px;font-family:var(--f-sans)"><span data-lang-block="en">Showing <b>${from}–${to}</b> of <b>${total}</b></span><span data-lang-block="cn">显示 <b>${from}–${to}</b> / 共 <b>${total}</b></span></span>
     <div style="display:flex;align-items:center;gap:8px">
-      <select onchange="paSetPageSize(this.value)" title="Products per page · 每页产品数"
-        style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;background:var(--bg-elev-1);color:var(--text-1);font-family:var(--f-sans)">${sizeOpts}</select>
-      ${PA_PAGE_SIZE === 'all' ? '' : `${btn(prev, PA_PAGE - 1, PA_PAGE <= 1)}<span style="font-size:12px;white-space:nowrap">${PA_PAGE} / ${pages}</span>${btn(next, PA_PAGE + 1, PA_PAGE >= pages)}`}
+      ${btn(prev, PA_PAGE - 1, PA_PAGE <= 1)}<span style="font-size:12px;white-space:nowrap">${PA_PAGE} / ${pages}</span>${btn(next, PA_PAGE + 1, PA_PAGE >= pages)}
     </div>`;
 }
 
