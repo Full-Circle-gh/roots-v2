@@ -3751,12 +3751,61 @@ function paPairRemove(blockId, idx) {
 // endpoint (stores in retail_media, returns a stable /api/retail/media/:id
 // URL). On success we write the URL into the block and re-render so the
 // thumbnail + live preview update. Mirrors retail-admin's media upload.
+// Downscale + recompress large images in the browser BEFORE upload, so photos
+// stay crisp on phones (≤ PA_MAX_UPLOAD_DIM on the longest side — roughly 2× the
+// widest phone at DPR 3) without storing a multi-megapixel original in the
+// base64 blob store. GIF (animation) and SVG (vector) pass through untouched,
+// and an image that's already small in both pixels and bytes is left as-is.
+// Mirrors the CMS editor's prepareImageForUpload. Returns { file, info } where
+// info is non-null only when a resize actually happened.
+const PA_MAX_UPLOAD_DIM = 1600;
+const PA_UPLOAD_QUALITY  = 0.9;
+function paFmtSize(bytes) {
+  return bytes >= 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(1) + ' MB'
+                              : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+}
+async function paPrepareImageForUpload(file) {
+  try {
+    if (!file || !file.type || !file.type.startsWith('image/')) return { file, info: null };
+    if (file.type === 'image/gif' || file.type === 'image/svg+xml') return { file, info: null };
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => null);
+    if (!bmp) return { file, info: null };
+    const longest = Math.max(bmp.width, bmp.height);
+    if (longest <= PA_MAX_UPLOAD_DIM && file.size <= 1.5 * 1024 * 1024) { bmp.close && bmp.close(); return { file, info: null }; }
+    const scale = Math.min(1, PA_MAX_UPLOAD_DIM / longest);
+    const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+    const origW = bmp.width, origH = bmp.height;
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bmp, 0, 0, w, h);
+    bmp.close && bmp.close();
+    const hasAlpha = file.type === 'image/png' || file.type === 'image/webp';
+    const outType = hasAlpha ? 'image/webp' : 'image/jpeg';
+    const blob = await new Promise(res => canvas.toBlob(res, outType, PA_UPLOAD_QUALITY));
+    if (!blob || blob.size >= file.size) return { file, info: null };
+    const ext = outType === 'image/webp' ? 'webp' : 'jpg';
+    const base = (file.name || 'image').replace(/\.[^.]+$/, '');
+    const out = new File([blob], `${base}.${ext}`, { type: outType });
+    return { file: out, info: { origW, origH, w, h, origBytes: file.size, bytes: out.size } };
+  } catch { return { file, info: null }; }
+}
 async function paImageBandUpload(input, blockId) {
-  const file = input.files && input.files[0];
+  let file = input.files && input.files[0];
   if (!file) return;
   paBlocksSyncFromDOM();
   const b = (window._paBlocks || []).find(x => x.id === blockId);
   if (!b) return;
+  const prep = await paPrepareImageForUpload(file);
+  file = prep.file;
+  if (prep.info) {
+    const i = prep.info;
+    toast(cuT(
+      `Resized ${i.origW}×${i.origH} (${paFmtSize(i.origBytes)}) → ${i.w}×${i.h} (${paFmtSize(i.bytes)})`,
+      `已压缩 ${i.origW}×${i.origH}(${paFmtSize(i.origBytes)})→ ${i.w}×${i.h}(${paFmtSize(i.bytes)})`
+    ));
+  }
   toast(cuT('Uploading…', '上传中…'));
   try {
     const fd = new FormData();
