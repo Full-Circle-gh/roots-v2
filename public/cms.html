@@ -14482,6 +14482,12 @@ document.addEventListener('keydown', (e) => {
      can show the real, faithful storefront preview and drive it via
      postMessage. Desktop (no flag) is completely unaffected. -->
 <style>
+  /* Bind the whole preview chain to the iframe's REAL pixel height (.pv is
+     height:100% of the mobile shell's flex stage) rather than 100dvh. Inside
+     an iframe, dvh can resolve to the TOP-LEVEL visual viewport on some mobile
+     browsers, making .phone taller than the iframe so its scroll container's
+     bottom falls off-screen — the page then "won't scroll to the end". */
+  .fc-preview-embed, .fc-preview-embed body { height: 100%; }
   .fc-preview-embed body { overflow: hidden; background: var(--bg-app); }
   .fc-preview-embed .topbar,
   .fc-preview-embed .pane.left,
@@ -14495,7 +14501,7 @@ document.addEventListener('keydown', (e) => {
   .fc-preview-embed .phone-preview-bg,
   .fc-preview-embed #live-preview-drawer,
   .fc-preview-embed .lp-drawer { display: none !important; }
-  .fc-preview-embed .body { height: 100vh; height: 100dvh; padding: 0; margin: 0; display: block; }
+  .fc-preview-embed .body { height: 100%; padding: 0; margin: 0; display: block; }
   .fc-preview-embed .canvas { padding: 0; margin: 0; display: block; height: 100%; overflow: hidden; background: transparent; }
   .fc-preview-embed .phone {
     width: 100% !important; max-width: none !important; height: 100% !important;
