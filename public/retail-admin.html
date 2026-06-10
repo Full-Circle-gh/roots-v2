@@ -8115,9 +8115,10 @@
     <div class="card cat-bar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:sticky;top:8px;z-index:5;">
       <button class="btn btn-sm" type="button" onclick="catAddTop()">＋ Add top category · 新增主分类</button>
       <span id="cat-dirty" class="muted" style="font-size:12px;"></span>
-      <div style="margin-left:auto;display:flex;gap:8px;">
-        <button class="btn btn-sm" type="button" onclick="catLoad()" id="cat-revert-btn">Revert · 还原</button>
-        <button class="btn btn-primary btn-sm" type="button" onclick="catSave()" id="cat-save-btn">Save changes · 保存</button>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+        <span class="muted" style="font-size:11px;">Changes save automatically · 更改自动保存</span>
+        <button class="btn btn-sm" type="button" onclick="catLoad()" id="cat-revert-btn" title="Reload the last-saved tree · 重新加载已保存版本">Reload · 重新加载</button>
+        <button class="btn btn-sm" type="button" onclick="catSave()" id="cat-save-btn" title="Save right now instead of waiting · 立即保存">Save now · 立即保存</button>
       </div>
     </div>
 
@@ -12008,10 +12009,52 @@ async function catLoad() {
 }
 
 function catIsDirty() { return JSON.stringify(catModel) !== catClean; }
+// Every top + sub needs an English name before the tree can be saved (mirrors
+// the server guard). Autosave waits silently until this holds — no error toast.
+function catIsValid() {
+  for (const t of catModel) {
+    if (!String(t.name || '').trim()) return false;
+    for (const s of (t.subs || [])) if (!String(s.name || '').trim()) return false;
+  }
+  return true;
+}
+let _catSaveTimer = null;
+let _catSaving = false;
+// Debounced autosave: fires ~1.2s after the last edit (rename/add/remove/reorder)
+// once the tree is dirty AND valid. The short pause lets a half-typed name settle
+// before we persist + re-tag products. A save already in flight reschedules.
+function catScheduleAutosave() {
+  if (_catSaveTimer) clearTimeout(_catSaveTimer);
+  _catSaveTimer = setTimeout(() => {
+    _catSaveTimer = null;
+    if (_catSaving || !catIsDirty() || !catIsValid()) return;
+    catSave({ auto: true });
+  }, 1200);
+}
 function catUpdateDirty() {
-  const el = $('#cat-dirty'); if (!el) return;
-  el.textContent = catIsDirty() ? '● Unsaved changes · 未保存' : '';
-  el.style.color = catIsDirty() ? '#b45309' : '';
+  const dirty = catIsDirty();
+  const el = $('#cat-dirty');
+  if (el) {
+    if (!dirty) { el.textContent = _catSaving ? '' : '✓ Saved · 已保存'; el.style.color = 'var(--muted)'; }
+    else if (!catIsValid()) { el.textContent = '● Add a name to auto-save · 填写名称后自动保存'; el.style.color = '#b45309'; }
+    else { el.textContent = '○ Saving… · 自动保存中'; el.style.color = 'var(--muted)'; }
+  }
+  if (dirty) catScheduleAutosave();
+}
+// Re-render the tree but keep the caret in whatever name field is focused, so an
+// autosave mid-session doesn't yank focus out of the input being typed into.
+function catRenderKeepFocus() {
+  const a = document.activeElement;
+  let rid = null, f = null, start = null, end = null;
+  if (a && a.matches && a.matches('#cat-editor input.cat-name')) {
+    const row = a.closest('.cat-top, .cat-subrow');
+    if (row) { rid = row.id; f = a.dataset.f; start = a.selectionStart; end = a.selectionEnd; }
+  }
+  catRender();
+  if (rid && f) {
+    const el = document.querySelector('#' + rid + ' input[data-f="' + f + '"]');
+    if (el) { el.focus(); try { el.setSelectionRange(start, end); } catch (e) {} }
+  }
 }
 // Update a field WITHOUT re-rendering (keeps input focus while typing).
 function catSet(ti, si, field, val) {
@@ -12164,29 +12207,42 @@ function catDrop(ev, kind, ti, si) {
   catRender(); catUpdateDirty();
 }
 
-async function catSave() {
-  // Client-side guards mirror the server: no blank names, no dups.
+async function catSave(opts) {
+  const auto = !!(opts && opts.auto);
+  // Client-side guards mirror the server: no blank names, no dups. On a manual
+  // save we tell the operator why; autosave just waits silently (it only fires
+  // when valid anyway) so a half-finished name never throws an error toast.
   for (const t of catModel) {
-    if (!String(t.name || '').trim()) { toast('Every top category needs an English name · 主分类需填英文名', 'err'); return; }
+    if (!String(t.name || '').trim()) { if (!auto) toast('Every top category needs an English name · 主分类需填英文名', 'err'); return; }
     for (const s of (t.subs || [])) {
-      if (!String(s.name || '').trim()) { toast('Every subcategory needs an English name · 子分类需填英文名', 'err'); return; }
+      if (!String(s.name || '').trim()) { if (!auto) toast('Every subcategory needs an English name · 子分类需填英文名', 'err'); return; }
     }
   }
-  const btn = $('#cat-save-btn'); if (btn) { btn.disabled = true; btn.textContent = 'Saving… · 保存中'; }
+  if (_catSaving) return;
+  _catSaving = true;
+  if (_catSaveTimer) { clearTimeout(_catSaveTimer); _catSaveTimer = null; }
+  const btn = $('#cat-save-btn'); if (btn && !auto) { btn.disabled = true; btn.textContent = 'Saving… · 保存中'; }
+  const ind = $('#cat-dirty'); if (ind) { ind.textContent = '○ Saving… · 保存中'; ind.style.color = 'var(--muted)'; }
   try {
     const j = await api('/api/retail-admin/category-tree', { method: 'PUT', body: { tree: catModel } });
     catModel = Array.isArray(j.data) ? JSON.parse(JSON.stringify(j.data)) : catModel;
     catClean = JSON.stringify(catModel);
-    catRender(); catUpdateDirty();
+    // Keep the operator's caret put when an autosave repaints mid-typing.
+    if (auto) catRenderKeepFocus(); else catRender();
     // Invalidate the product-editor's cached tree so its Shop-section /
     // Subcategory dropdowns pick up the renamed/added/removed nodes.
     if (typeof PA_CAT_TREE !== 'undefined') PA_CAT_TREE = [];
     const moved = j.migrated || 0;
-    toast(moved ? `Saved · ${moved} product${moved === 1 ? '' : 's'} re-tagged · 已保存，迁移 ${moved} 个产品` : 'Saved · 已保存', 'ok');
+    // Manual save always confirms; autosave only speaks up when it re-tagged
+    // products (a real side effect worth surfacing), staying quiet otherwise.
+    if (!auto) toast(moved ? `Saved · ${moved} product${moved === 1 ? '' : 's'} re-tagged · 已保存，迁移 ${moved} 个产品` : 'Saved · 已保存', 'ok');
+    else if (moved) toast(`Auto-saved · ${moved} product${moved === 1 ? '' : 's'} re-tagged · 已自动保存，迁移 ${moved} 个产品`, 'ok');
   } catch (e) {
     toast((e && e.message) ? ('Save failed: ' + e.message) : 'Save failed · 保存失败', 'err');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Save changes · 保存'; }
+    _catSaving = false;
+    if (btn && !auto) { btn.disabled = false; btn.textContent = 'Save changes · 保存'; }
+    catUpdateDirty();   // refresh the indicator; reschedules if edits arrived mid-save
   }
 }
 
@@ -12254,9 +12310,9 @@ function catRenderDetail() {
       <input type="text" class="input" value="${escapeAttr(node.name_cn)}"
              oninput="catSet(${ti},${fi},'name_cn',this.value)">
     </div>
-    ${catIsDirty() ? `<div class="cd-empty" style="color:#b45309;">Unsaved name changes — click “Save changes” below to apply &amp; re-tag products. · 名称尚未保存,点击下方“保存”后生效。</div>` : ''}
+    ${catIsDirty() ? `<div class="cd-empty" style="color:var(--muted);">Name changes save automatically &amp; re-tag products. · 名称更改将自动保存并重新标记产品。</div>` : ''}
     <div style="display:flex;gap:8px;margin-bottom:var(--s4);">
-      <button class="btn btn-primary btn-sm" type="button" onclick="catSaveFromDetail()">Save changes · 保存</button>
+      <button class="btn btn-sm" type="button" onclick="catSaveFromDetail()">Save now · 立即保存</button>
       ${isSub ? '' : `<button class="btn btn-sm" type="button" onclick="catAddSub(${ti}); catRenderDetail()">＋ Add subcategory · 新增子分类</button>`}
     </div>
 
