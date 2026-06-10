@@ -1209,3 +1209,13 @@
   letter-spacing: 0.04em;
 }
 .bn-cta:active { opacity: 0.85; }
+
+/* "Guangzhou delivery only" variant — warm amber/clay wash instead of lime. */
+.bn-hero--warn   { background: linear-gradient(135deg, #f6e6c8 0%, #f0d49b 100%); }
+.bn-badge--warn  { border-color: #eccf95; }
+.bn-kicker--warn { color: #b07d22; }
+.bn-items--warn {
+  background: rgba(240, 212, 155, 0.26);
+  border-color: rgba(176, 125, 34, 0.18);
+}
+.bn-item-img--warn { background: rgba(240, 212, 155, 0.5); }

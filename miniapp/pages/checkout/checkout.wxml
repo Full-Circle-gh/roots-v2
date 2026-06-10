@@ -917,4 +917,29 @@
       <view class="bn-cta f-toni" bindtap="closeBatchNotice">{{ lang === 'cn' ? '知道了' : 'Got it' }}</view>
     </view>
   </view>
+
+  <!-- "Guangzhou delivery only" explainer popup. Custom-styled to match the
+       fresh-batch modal; driven by the single `localOnlyPopup` flag so repeat
+       triggers (re-quote + submit backstop) can't stack a second copy. -->
+  <view wx:if="{{localOnlyPopup}}" class="bn-backdrop" bindtap="closeLocalOnly" catchtouchmove="noop">
+    <view class="bn-card" catchtap="noop">
+      <view class="bn-hero bn-hero--warn">
+        <view class="bn-badge bn-badge--warn">📍</view>
+      </view>
+      <view class="bn-kicker bn-kicker--warn f-toni">{{ lang === 'cn' ? '配送范围' : 'DELIVERY AREA' }}</view>
+      <view class="bn-title f-bear">{{ lang === 'cn' ? '仅广州可配送' : 'Guangzhou delivery only' }}</view>
+
+      <!-- The specific Guangzhou-only items this refers to -->
+      <view wx:if="{{localOnlyNames.length}}" class="bn-items bn-items--warn">
+        <view wx:for="{{localOnlyNames}}" wx:key="*this" class="bn-item">
+          <view class="bn-item-img bn-item-img--ph bn-item-img--warn">📍</view>
+          <view class="bn-item-name">{{item}}</view>
+        </view>
+      </view>
+
+      <view class="bn-body">{{ lang === 'cn' ? '这些商品只支持广州同城配送,无法寄往广州以外。请移除这些商品,或切换到广州的收货地址。' : "These items only deliver within Guangzhou — they can't ship outside the city. Please remove them, or switch to a Guangzhou address." }}</view>
+
+      <view class="bn-cta f-toni" bindtap="closeLocalOnly">{{ lang === 'cn' ? '我知道了' : 'OK' }}</view>
+    </view>
+  </view>
 </view>
