@@ -42,10 +42,12 @@
           <view class="addr-full">{{item.address}}{{item.detail ? ' · ' + item.detail : ''}}</view>
           <view wx:if="{{item.city}}" class="addr-city muted">{{item.city}}</view>
           <!-- Rider ETA pill — distance from the nearest store + estimated
-               e-bike ride time (≈18 km/h + 8 min pickup buffer). Helps the
-               customer pick the address that ships fastest. -->
+               e-bike ride time (≈35 km/h + 8 min pickup buffer). Beyond
+               ~30 km the server flags courier:true and we show "ships by
+               courier" instead of an unrealistic ride time. -->
           <view wx:if="{{item.delivery_eta}}" class="addr-eta f-toni">
-            🛵 {{lang === 'cn' ? '约 ' : '~'}}{{item.delivery_eta.km}}{{lang === 'cn' ? ' 公里 · 约 ' : ' km · ~'}}{{item.delivery_eta.min}}{{lang === 'cn' ? ' 分钟' : ' min'}}
+            <block wx:if="{{item.delivery_eta.courier}}">📦 {{lang === 'cn' ? '快递配送' : 'Ships by courier'}}</block>
+            <block wx:else>🛵 {{lang === 'cn' ? '约 ' : '~'}}{{item.delivery_eta.km}}{{lang === 'cn' ? ' 公里 · 约 ' : ' km · ~'}}{{item.delivery_eta.min}}{{lang === 'cn' ? ' 分钟' : ' min'}}</block>
           </view>
           <view class="addr-actions">
             <!-- Edit / Delete use catchtap so taps on these links don't

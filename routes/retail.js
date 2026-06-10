@@ -578,7 +578,7 @@ const RETAIL_PRODUCT_COLS = `
   ) AS stock,
   p.sort_order AS display_order,
   p.description_en, p.description_cn, p.description_format,
-  p.free_of, p.tags, p.image_data, p.image_url,
+  p.free_of, p.tags, p.ship_modes, p.image_data, p.image_url,
   p.nutrition,
   p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,
   p.description_blocks, p.use_block_design, p.page_template,
@@ -608,6 +608,12 @@ function hydrateNutrition(row) {
     } catch { row.description_blocks = null; }
   } else {
     row.description_blocks = null;
+  }
+  // Clean boolean for the mini-app: "Local only" = Guangzhou same-city delivery
+  // only (no air/land). Lets the storefront badge it + block out-of-GZ carts.
+  if ('ship_modes' in row) {
+    row.local_only = /(^|,)\s*local\s*(,|$)/.test(String(row.ship_modes || '').toLowerCase());
+    delete row.ship_modes;
   }
   return row;
 }
@@ -645,9 +651,14 @@ function sanitizeBundle(input) {
 // lives in the products.tags column (the only consumer is pickBadge() in the
 // mini-app shop page). The editor offers a fixed dropdown, so we allow-list the
 // keyword and store it lowercase; anything unrecognised clears the badge.
+// 'auto' is a special sentinel: the operator lets the system pick the chip from
+// live sales/recency — resolveAutoBadges() rewrites it to a concrete keyword on
+// the storefront list responses (see below). It's stored verbatim so the editor
+// can show "Auto" again, but never reaches the customer as the literal word.
 const PRODUCT_BADGES = ['new', 'pop', 'sale', 'hot'];
 function sanitizeProductBadge(v) {
   const t = String(v == null ? '' : v).trim().toLowerCase();
+  if (t === 'auto') return 'auto';
   return PRODUCT_BADGES.includes(t) ? t : null;
 }
 function resolveBundle(jsonStr) {
@@ -766,6 +777,7 @@ router.get('/api/retail/products', (req, res) => {
     delete r.updated_at;
   }
   attachSoldCounts(rows);
+  resolveAutoBadges(rows);
   const total = tdb().prepare(`SELECT COUNT(*) AS n FROM store_products p
                             WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
                             ${q ? 'AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)' : ''}
@@ -938,6 +950,7 @@ router.get('/api/retail/products/top', (req, res) => {
     delete decorated.updated_at;
     out.push(decorated);
   }
+  resolveAutoBadges(out);
   const meta = {
     channel, window: windowSpec, limit,
     total_candidates: ranked.length,
@@ -1075,6 +1088,75 @@ function attachSoldCounts(rows) {
     }
   } catch (e) {
     console.error('[sold-counts]', e.message);
+  }
+}
+
+// ── "Auto" badge resolution ────────────────────────────────────────────────
+// When an operator sets a product's badge to 'auto', the shop-card chip is
+// chosen from LIVE data every time the catalogue loads, instead of a fixed
+// NEW/POP/SALE/HOT. We resolve it server-side and overwrite the row's `tags`
+// with the concrete keyword (or '' for none) so the mini-app's pickBadge()
+// stays unchanged. Priority — first rule that matches wins:
+//   1. POP   — all-time paid units at/above the top-seller bar
+//   2. NEW   — created within the recency window (and not yet a top seller)
+//   3. SALE  — compare-at price set and higher than the live price
+//   4. HOT   — fast riser: paid units in the recent window clear the velocity bar
+// Thresholds are conservative defaults; tune here (no per-tenant UI yet).
+const AUTO_BADGE = Object.freeze({
+  POP_MIN_UNITS:    20,   // all-time paid units → "top seller"
+  NEW_MAX_AGE_DAYS: 30,   // created within N days → still "new"
+  HOT_WINDOW_DAYS:  14,   // recent window measured for velocity
+  HOT_MIN_UNITS:     5,   // paid units inside that window → "fast riser"
+});
+function resolveAutoBadges(rows) {
+  if (!rows || !rows.length) return;
+  const auto = rows.filter(r => String(r.tags || '').trim().toLowerCase() === 'auto');
+  if (!auto.length) return;
+  const ids = auto.map(r => r.id);
+  const placeholders = ids.map(() => '?').join(',');
+  let allTime = new Map(), recent = new Map(), created = new Map();
+  try {
+    const a = tdb().prepare(`
+      SELECT oi.product_id AS pid, SUM(oi.qty) AS units
+        FROM retail_order_items oi
+        JOIN retail_orders o ON o.id = oi.order_id
+       WHERE oi.product_id IN (${placeholders})
+         AND ${SOCIAL_PROOF_PAID}
+       GROUP BY oi.product_id`).all(...ids);
+    allTime = new Map(a.map(r => [r.pid, Math.round(Number(r.units) || 0)]));
+    const rc = tdb().prepare(`
+      SELECT oi.product_id AS pid, SUM(oi.qty) AS units
+        FROM retail_order_items oi
+        JOIN retail_orders o ON o.id = oi.order_id
+       WHERE oi.product_id IN (${placeholders})
+         AND ${SOCIAL_PROOF_PAID}
+         AND o.placed_at >= datetime('now', '-${AUTO_BADGE.HOT_WINDOW_DAYS} days')
+       GROUP BY oi.product_id`).all(...ids);
+    recent = new Map(rc.map(r => [r.pid, Math.round(Number(r.units) || 0)]));
+    // created_at isn't in RETAIL_PRODUCT_COLS — fetch it for the NEW rule.
+    const cr = tdb().prepare(
+      `SELECT id, created_at FROM store_products WHERE id IN (${placeholders})`
+    ).all(...ids);
+    created = new Map(cr.map(r => [r.id, r.created_at]));
+  } catch (e) {
+    console.error('[auto-badge]', e.message);
+  }
+  const nowMs    = Date.now();
+  const newCutMs = AUTO_BADGE.NEW_MAX_AGE_DAYS * 86400 * 1000;
+  for (const r of auto) {
+    const units  = allTime.get(r.id) || 0;
+    const rUnits = recent.get(r.id)  || 0;
+    const cAt    = created.get(r.id);
+    // SQLite CURRENT_TIMESTAMP is UTC, space-separated — normalise to ISO.
+    const ageMs  = cAt ? (nowMs - Date.parse(String(cAt).replace(' ', 'T') + 'Z')) : Infinity;
+    const price  = Number(r.price) || 0;
+    const cmp    = Number(r.compare_at_price) || 0;
+    let badge = '';
+    if      (units >= AUTO_BADGE.POP_MIN_UNITS)               badge = 'pop';
+    else if (Number.isFinite(ageMs) && ageMs <= newCutMs)     badge = 'new';
+    else if (cmp > price && price > 0)                        badge = 'sale';
+    else if (rUnits >= AUTO_BADGE.HOT_MIN_UNITS)              badge = 'hot';
+    r.tags = badge;   // pickBadge() reads this; '' → no chip shown
   }
 }
 
@@ -3288,6 +3370,11 @@ const ADDRESS_PUBLIC_COLS = `id, recipient_name, phone, province, city, district
 const _RIDER_KM_PER_HR  = 35;
 const _RIDER_MIN_PER_KM = 60 / _RIDER_KM_PER_HR;
 const _RIDER_PICKUP_MIN = 8;
+// Beyond this straight-line distance a scooter ride is unrealistic — the
+// order ships by courier instead. We flag it (`courier: true`) and omit the
+// minute estimate so the mini app shows "ships by courier" rather than an
+// absurd ride time (e.g. an 1800 km address reading "~3100 min").
+const _RIDER_MAX_KM = 30;
 function computeRiderEta(address, lat, lng) {
   // Pull all active stores once per request; per-address we just pick the
   // nearest by Haversine. Same fallback (district centroid) as routing.
@@ -3304,10 +3391,22 @@ function computeRiderEta(address, lat, lng) {
     if (!best || km < best.km) best = { km, store: s };
   }
   if (!best) return null;
+  // Too far for a rider → courier delivery; no minute estimate.
+  if (best.km > _RIDER_MAX_KM) {
+    return {
+      km:            Number(best.km.toFixed(1)),
+      min:           null,
+      courier:       true,
+      store_code:    best.store.code,
+      store_name_en: best.store.name_en,
+      store_name_cn: best.store.name_cn,
+    };
+  }
   const minutes = Math.max(_RIDER_PICKUP_MIN, Math.round(best.km * _RIDER_MIN_PER_KM + _RIDER_PICKUP_MIN));
   return {
     km:           Number(best.km.toFixed(1)),
     min:          Math.round(minutes / 5) * 5, // round to nearest 5 min
+    courier:      false,
     store_code:   best.store.code,
     store_name_en: best.store.name_en,
     store_name_cn: best.store.name_cn,
@@ -14002,6 +14101,7 @@ router.get('/api/retail/favorites', requireRetailAuth, (req, res) => {
   ).all(req.customer.id)
     .map(hydrateNutrition)
     .map(r => flashsales.decorateProduct(r, now));
+  resolveAutoBadges(rows);
   res.json({ success: true, data: rows, meta: { count: rows.length, server_time_ms: now } });
 });
 
