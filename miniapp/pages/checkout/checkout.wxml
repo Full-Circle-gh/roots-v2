@@ -927,7 +927,7 @@
         <view class="bn-badge bn-badge--warn">📍</view>
       </view>
       <view class="bn-kicker bn-kicker--warn f-toni">{{ lang === 'cn' ? '配送范围' : 'DELIVERY AREA' }}</view>
-      <view class="bn-title f-bear">{{ lang === 'cn' ? '仅广州可配送' : 'Guangzhou delivery only' }}</view>
+      <view class="bn-title f-bear">{{localOnlyTitle}}</view>
 
       <!-- The specific Guangzhou-only items this refers to -->
       <view wx:if="{{localOnlyNames.length}}" class="bn-items bn-items--warn">
@@ -939,7 +939,7 @@
 
       <view class="bn-body">{{localOnlyBody}}</view>
 
-      <view class="bn-cta f-toni" bindtap="closeLocalOnly">{{ lang === 'cn' ? '我知道了' : 'OK' }}</view>
+      <view class="bn-cta f-toni" bindtap="closeLocalOnly">{{localOnlyCta}}</view>
     </view>
   </view>
 </view>
