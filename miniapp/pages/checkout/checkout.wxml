@@ -937,7 +937,7 @@
         </view>
       </view>
 
-      <view class="bn-body">{{ lang === 'cn' ? '这些商品只支持广州同城配送,无法寄往广州以外。请移除这些商品,或切换到广州的收货地址。' : "These items only deliver within Guangzhou — they can't ship outside the city. Please remove them, or switch to a Guangzhou address." }}</view>
+      <view class="bn-body">{{localOnlyBody}}</view>
 
       <view class="bn-cta f-toni" bindtap="closeLocalOnly">{{ lang === 'cn' ? '我知道了' : 'OK' }}</view>
     </view>

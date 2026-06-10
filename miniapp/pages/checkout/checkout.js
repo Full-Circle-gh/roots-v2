@@ -24,6 +24,7 @@ Page({
     localOnlyBlock: false,   // true when the cart has a Guangzhou-only item but the address is outside GZ
     localOnlyNames: [],      // display names of those offending items (for the banner + modal)
     localOnlyPopup: false,   // drives the custom "Guangzhou delivery only" popup (one flag → can't stack)
+    localOnlyBody: '',       // computed body copy for that popup (avoids an apostrophe literal in WXML)
     quoting: false,          // suppresses spam-clicks while a quote is in flight
     total: 0,
     voucherCode: '',         // applied code (uppercase)
@@ -1766,12 +1767,19 @@ Page({
   // "Guangzhou only" explainer modal. `names` overrides the stored list (used
   // by the submit-time backstop when /orders rejects without a prior quote).
   showLocalOnlyModal(names) {
+    const cn = this.data.lang === 'cn';
     const list = (names && names.length ? names : this.data.localOnlyNames) || [];
+    // Body copy is computed here (not inline in the WXML) to match the
+    // data-driven batch-notice popup — the English string has an apostrophe
+    // ("can't"), which doesn't play nicely as a literal inside {{ }}.
+    const body = cn
+      ? '这些商品只支持广州同城配送,无法寄往广州以外。请移除这些商品,或切换到广州的收货地址。'
+      : "These items only deliver within Guangzhou — they can't ship outside the city. Please remove them, or switch to a Guangzhou address.";
     // Custom in-page popup (mirrors the "fresh batch" modal styling). Driven by
     // a single boolean, so repeat triggers in quick succession — re-quotes, the
     // submit-time backstop, the place-order guard — just re-assert the same flag
     // instead of stacking a second native modal on top.
-    this.setData({ localOnlyNames: list, localOnlyPopup: true });
+    this.setData({ localOnlyNames: list, localOnlyBody: body, localOnlyPopup: true });
   },
 
   closeLocalOnly() {
