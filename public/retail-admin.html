@@ -17235,7 +17235,7 @@ function renderOpenOrder(o) {
               ${o.fulfillment?.rollup === 'partial' ? `<span class="pill st-preparing"><span class="dot"></span>Partially shipped · 部分发货 (${o.fulfillment.dispatched}/${o.fulfillment.total})</span>` : ''}
               ${refundBadge(o)}
             </div>
-            <div class="od-eyebrow">Order placed · 下单于 ${formatDate(o.placed_at)}</div>
+            <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
           </div>
           ${renderOrderViewPopover()}
         </div>
