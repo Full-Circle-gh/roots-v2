@@ -9047,7 +9047,9 @@ function renderBlockBody(b) {
         const tiles = vals.map((v, i) => `
           <div class="fsd-tile"><div class="fsd-tile-num js-fsd-num">${v}</div><div class="fsd-tile-lbl">${cellsLabels[i]}</div></div>`).join('');
         const liveLbl = state.lang === 'cn' ? '限时秒杀 · 进行中' : 'FLASH SALE · LIVE';
-        const subLine = state.lang === 'cn' ? '' : (t.cn ? `<div class="fsd-sub">${escapeHtml(t.cn)}</div>` : '');
+        // Each language shows only its own headline — never glue the CN title
+        // under the EN one (it surfaced as stray Chinese in the EN view).
+        const subLine = '';
         d.innerHTML = `${cap}
           <div class="fsd-body">
             <div class="fsd-head">
