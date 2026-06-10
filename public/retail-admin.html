@@ -1720,6 +1720,28 @@
   .pa-grip:active { cursor: grabbing; }
   .pa-row.pa-row-dragging { opacity: .45; }
   .pa-row.pa-row-drop { box-shadow: inset 0 2px 0 0 var(--brass, #B08D57); }
+
+  /* ── Multi-select (bulk edit) ──────────────────────────────────────────────
+     A leading checkbox column slides in when select-mode is armed (the "Select"
+     button in the bulk bar). Clicking anywhere on a row toggles its tick; the
+     bulk bar then applies one change to every ticked product. Mutually exclusive
+     with reorder (we don't arm reorder while selecting). */
+  .pa-list-rich.pa-selecting .pa-row,
+  .pa-list-rich.pa-selecting .pa-rowhead {
+    grid-template-columns: 34px 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px 104px;
+  }
+  .pa-selbox { display: flex; align-items: center; justify-content: center; }
+  .pa-selbox input { width: 16px; height: 16px; accent-color: var(--brass, #B08D57); cursor: pointer; margin: 0; }
+  /* On a row the whole row handles the toggle, so the box is display-only. */
+  .pa-list-rich .pa-row .pa-selbox input { pointer-events: none; }
+  .pa-list-rich.pa-selecting .pa-row { cursor: pointer; }
+  .pa-list-rich .pa-row.is-sel { background: rgba(176,141,87,.09); }
+  .pa-list-rich .pa-row.is-sel:hover { background: rgba(176,141,87,.13); }
+  /* Bulk action groups inside #pa-bulkbar when selecting. */
+  .pa-bulk-grp { display: inline-flex; align-items: center; gap: 6px; }
+  .pa-bulk-grp .pa-bulk-lbl { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-4); font-weight: 600; }
+  .pa-bulk-sep { width: 1px; align-self: stretch; background: var(--line-soft); margin: 0 2px; }
+
   .pa-reorder-hint {
     display: flex; align-items: center; gap: 7px;
     padding: 9px 4px 2px; font-size: 12px; color: var(--text-3);
@@ -1758,6 +1780,9 @@
   /* Override the global `section { display:none }` (used for page-level views) —
      these <section> wrappers are content groups inside the editor. */
   #pd-editor .pd-sec { display: block; }
+  #pd-facts.pd-facts-collapsed .pd-facts-body { display: none; }
+  #pd-facts.pd-facts-collapsed .pd-sec-h { margin-bottom: 0; }
+  #pd-facts:not(.pd-facts-collapsed) .pd-facts-caret { transform: rotate(90deg); }
   #pd-editor .pd-sec-h, #pd-editor .pd-card-h { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); margin: 0; }
   #pd-editor .pd-pub { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; }
   #pd-editor .pd-pub input { width: 16px; height: 16px; }
@@ -7709,21 +7734,21 @@
             </div>
             <div id="pd-variants" class="pd-variants"></div>
             <div id="pd-bundle" class="pd-variants"></div>
-            <section class="pd-sec" id="pd-facts">
+            <section class="pd-sec pd-facts-collapsed" id="pd-facts">
               <div class="pd-sec-h" style="margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span>Product details · 产品详情</span>
-                <button type="button" id="pd-facts-autofill" class="btn btn-sm" onclick="pdFactsAutofill()" style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500;font-family:var(--f-sans);" title="Read your description (or pasted text) and fill these boxes automatically · 读取描述并自动填充"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:5px"><path d="M7 2.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z"/><path d="M12.5 10.5v3M11 12h3"/></svg>Auto-fill from text · 智能填充</button>
+                <span role="button" tabindex="0" onclick="pdFactsToggle()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();pdFactsToggle();}" style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none;"><svg class="pd-facts-caret" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .15s;"><path d="M6 4l4 4-4 4"/></svg>Product details · 产品详情</span>
+                <button type="button" id="pd-facts-autofill" class="btn btn-sm pd-facts-body" onclick="pdFactsAutofill()" style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500;font-family:var(--f-sans);" title="Read your description (or pasted text) and fill these boxes automatically · 读取描述并自动填充"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:5px"><path d="M7 2.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z"/><path d="M12.5 10.5v3M11 12h3"/></svg>Auto-fill from text · 智能填充</button>
               </div>
-              <div class="muted" style="font-weight:400;font-size:11px;margin:0 0 8px;font-family:var(--f-sans);">Pulls origin, ingredients, storage… from your description (or pasted text) · 从描述(或粘贴文字)提取详情</div>
-              <div class="field"><label class="stacked">Origin · 产地</label>
+              <div class="muted pd-facts-body" style="font-weight:400;font-size:11px;margin:0 0 8px;font-family:var(--f-sans);">Pulls origin, ingredients, storage… from your description (or pasted text) · 从描述(或粘贴文字)提取详情</div>
+              <div class="field pd-facts-body"><label class="stacked">Origin · 产地</label>
                 <div class="pd-row2"><input type="text" id="pd-fact-origin-en" placeholder="e.g. Guangzhou, China"><input type="text" id="pd-fact-origin-cn" placeholder="例如:中国广州"></div></div>
-              <div class="field"><label class="stacked">Ingredients · 配料</label>
+              <div class="field pd-facts-body"><label class="stacked">Ingredients · 配料</label>
                 <div class="pd-row2"><textarea id="pd-fact-ingredients-en" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:6px 8px;" placeholder="Comma-separated"></textarea><textarea id="pd-fact-ingredients-cn" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:6px 8px;" placeholder="用逗号分隔"></textarea></div></div>
-              <div class="field"><label class="stacked">Storage · 储存方式</label>
+              <div class="field pd-facts-body"><label class="stacked">Storage · 储存方式</label>
                 <div class="pd-row2"><input type="text" id="pd-fact-storage-en" placeholder="e.g. Keep refrigerated"><input type="text" id="pd-fact-storage-cn" placeholder="例如:冷藏保存"></div></div>
-              <div class="field"><label class="stacked">Shelf life · 保质期</label>
+              <div class="field pd-facts-body"><label class="stacked">Shelf life · 保质期</label>
                 <div class="pd-row2"><input type="text" id="pd-fact-shelflife-en" placeholder="e.g. Best within 7 days"><input type="text" id="pd-fact-shelflife-cn" placeholder="例如:7 天内最佳"></div></div>
-              <div class="field"><label class="stacked">Serving suggestion · 食用建议</label>
+              <div class="field pd-facts-body"><label class="stacked">Serving suggestion · 食用建议</label>
                 <div class="pd-row2"><textarea id="pd-fact-serving-en" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:6px 8px;" placeholder="How to enjoy it"></textarea><textarea id="pd-fact-serving-cn" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:6px 8px;" placeholder="如何享用"></textarea></div></div>
             </section>
             <section class="pd-sec">
@@ -7832,11 +7857,13 @@
               <div class="field"><label class="stacked">Badge · 标签 <span class="muted" style="font-weight:400;">(shop card chip)</span></label>
                 <select id="pd-badge">
                   <option value="">None · 无</option>
+                  <option value="auto">Auto · 自动 (by sales · 按销量)</option>
                   <option value="new">NEW · 新品</option>
                   <option value="pop">POP · 热门</option>
                   <option value="sale">SALE · 特价</option>
                   <option value="hot">HOT · 推荐</option>
                 </select>
+                <div class="muted" style="font-weight:400;font-size:11px;margin-top:4px;">Auto picks the chip from live sales &amp; recency — top sellers → POP, new arrivals → NEW, discounted → SALE, fast risers → HOT. · 自动按销量与上架时间选择标签。</div>
               </div>
               <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
               <div class="field"><label class="stacked">Free of (allergens) · 不含 <span class="muted" style="font-weight:400;">(tick what applies)</span></label>
@@ -7849,10 +7876,12 @@
               </div>
               <div class="field">
                 <label class="stacked">Shipping · 配送方式</label>
-                <div style="display:flex;gap:16px;align-items:center;padding-top:4px;">
-                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-air" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M21 15.5 13 13V6a1 1 0 0 0-2 0v7l-8 2.5V17l8-1.5V20l-2.5 1.5V23L12 22l3.5 1.5V21.5L13 20v-4.5l8 1.5z"/></svg> Air · 空运</label>
-                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-land" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M2.5 6.5h11v8h-11z"/><path d="M13.5 9h4l4 3.5v2h-8z"/><circle cx="6.5" cy="16.5" r="1.6"/><circle cx="17.5" cy="16.5" r="1.6"/></svg> Land · 陆运</label>
+                <div style="display:flex;gap:16px;align-items:center;padding-top:4px;flex-wrap:wrap;">
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-air" onchange="pdShipModeChanged('air')" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M21 15.5 13 13V6a1 1 0 0 0-2 0v7l-8 2.5V17l8-1.5V20l-2.5 1.5V23L12 22l3.5 1.5V21.5L13 20v-4.5l8 1.5z"/></svg> Air · 空运</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-land" onchange="pdShipModeChanged('land')" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M2.5 6.5h11v8h-11z"/><path d="M13.5 9h4l4 3.5v2h-8z"/><circle cx="6.5" cy="16.5" r="1.6"/><circle cx="17.5" cy="16.5" r="1.6"/></svg> Land · 陆运</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-local" onchange="pdShipModeChanged('local')" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 21s-6-5.2-6-10a6 6 0 0 1 12 0c0 4.8-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></svg> Local only · 仅广州</label>
                 </div>
+                <div id="pd-ship-local-hint" style="display:none;font-size:11px;color:var(--text-3);margin-top:5px;">Delivers within Guangzhou only — customers outside Guangzhou can't order it. · 仅限广州同城配送 — 广州以外的顾客无法下单。</div>
               </div>
             </section>
             <section class="pd-card">
@@ -16485,6 +16514,11 @@ function sortOrderItems(items, mode) {
 
 function renderPackBadges(it) {
   const arr = it.ship_modes_arr || ['air', 'land'];
+  // Local only = Guangzhou same-city item (never air/land). Surface it plainly
+  // rather than falling through to the air/land restriction logic below.
+  if (arr.length === 1 && arr[0] === 'local') {
+    return '<span class="pack-badge land" title="Guangzhou local delivery only · 仅广州同城配送">Local · 仅广州</span>';
+  }
   const hasAir  = arr.includes('air');
   const hasLand = arr.includes('land');
   const parts = [];
@@ -24993,7 +25027,10 @@ let _pdDragFrom = null;
 // Mirrors pickBadge() in the mini-app shop page so the editor reflects exactly
 // what customers see (priority: NEW > POP > SALE > HOT).
 function pdBadgeOf(tags) {
-  const t = String(tags || '').toLowerCase();
+  const t = String(tags || '').trim().toLowerCase();
+  // 'auto' = operator delegated the chip to the system (resolved live on the
+  // storefront from sales/recency). Show it back as Auto in the dropdown.
+  if (t === 'auto')               return 'auto';
   if (/\bnew\b/.test(t))          return 'new';
   if (/\bpop|popular\b/.test(t))  return 'pop';
   if (/\bsale\b/.test(t))         return 'sale';
@@ -25258,8 +25295,11 @@ function pdOpen(id) {
   _pdDesignStale = false; pdRenderDesignStale();
   pdRenderBlockDesignToggle();
   const modes = String((p && p.ship_modes) || 'air,land').toLowerCase();
-  document.getElementById('pd-ship-air').checked  = !p || modes.includes('air');
-  document.getElementById('pd-ship-land').checked = !p || modes.includes('land');
+  const localOnly = /(^|,)\s*local\s*(,|$)/.test(modes);
+  document.getElementById('pd-ship-local').checked = localOnly;
+  document.getElementById('pd-ship-air').checked  = !localOnly && (!p || modes.includes('air'));
+  document.getElementById('pd-ship-land').checked = !localOnly && (!p || modes.includes('land'));
+  pdShipModeChanged();
   document.getElementById('pd-published').checked = p ? p.is_published === 1 : false;
   // Photo gallery — start empty, then (for an existing product) pull the
   // ordered list from the lightweight images endpoint. New products start blank.
@@ -26263,6 +26303,11 @@ function pdFactsSet(f) {
     set('pd-fact-' + dom + '-cn', o[col + '_cn']);
   }
 }
+// Product details is collapsed by default; click the header to expand/fold.
+function pdFactsToggle() {
+  const sec = document.getElementById('pd-facts');
+  if (sec) sec.classList.toggle('pd-facts-collapsed');
+}
 // "Auto-fill from text" — read the description (or a pasted blob) and let the
 // AI split it into the Product details boxes. Same engine that already reads
 // descriptions; fills empty boxes and refreshes found ones for review.
@@ -26300,13 +26345,35 @@ async function pdFactsAutofill() {
     if (btn) { btn.disabled = false; btn.style.opacity = ''; }
   }
 }
+// Shipping-mode interplay. "Local only" (Guangzhou same-city) is mutually
+// exclusive with Air/Land: ticking it clears + disables them; ticking Air/Land
+// clears it. `source` is the box that fired (omitted when syncing on load).
+function pdShipModeChanged(source) {
+  const air   = document.getElementById('pd-ship-air');
+  const land  = document.getElementById('pd-ship-land');
+  const local = document.getElementById('pd-ship-local');
+  if (!air || !land || !local) return;
+  if (source === 'local' && local.checked) { air.checked = false; land.checked = false; }
+  if ((source === 'air' || source === 'land') && (air.checked || land.checked)) local.checked = false;
+  [air, land].forEach(cb => {
+    cb.disabled = local.checked;
+    const lbl = cb.closest('label'); if (lbl) lbl.style.opacity = local.checked ? '.4' : '';
+  });
+  const hint = document.getElementById('pd-ship-local-hint');
+  if (hint) hint.style.display = local.checked ? 'block' : 'none';
+}
 function pdCollectBody() {
   const id = document.getElementById('pd-id').value;
   const g = el => (document.getElementById(el) && document.getElementById(el).value || '').trim();
   const ckd = el => { const n = document.getElementById(el); return n && n.checked ? 1 : 0; };
+  // Local only is exclusive: it overrides air/land and stores just 'local'.
   const modes = [];
-  if (document.getElementById('pd-ship-air').checked)  modes.push('air');
-  if (document.getElementById('pd-ship-land').checked) modes.push('land');
+  if (document.getElementById('pd-ship-local').checked) {
+    modes.push('local');
+  } else {
+    if (document.getElementById('pd-ship-air').checked)  modes.push('air');
+    if (document.getElementById('pd-ship-land').checked) modes.push('land');
+  }
   // Description: always the cleaned HTML from the Classic (rich) boxes;
   // description_format='rich' tells the mini-app to render it via <rich-text>.
   const body = {
@@ -26460,7 +26527,7 @@ function pdSnapshot() {
     notes: g('pd-notes'), badge: g('pd-badge'), facts: pdFactsGet(),
     top: g('pd-top-category'), sub: g('pd-subcategory'),
     is_market: ck('pd-is-market'), is_batch: ck('pd-is-batch-made'), is_restock: ck('pd-is-restock-only'),
-    air: ck('pd-ship-air'), land: ck('pd-ship-land'), published: ck('pd-published'),
+    air: ck('pd-ship-air'), land: ck('pd-ship-land'), local: ck('pd-ship-local'), published: ck('pd-published'),
     desc_en: document.getElementById('pd-rte-en').innerHTML, desc_cn: document.getElementById('pd-rte-cn').innerHTML,
     gallery: _pdGallery.slice(),
   };
@@ -26473,7 +26540,8 @@ function pdApplySnapshot(s) {
   set('pd-sku', s.sku); set('pd-weight', s.weight); set('pd-status', s.status); pdFreeOfSet(s.free_of);
   set('pd-notes', s.notes); set('pd-badge', s.badge); pdFactsSet(s.facts);
   ck('pd-is-market', s.is_market); ck('pd-is-batch-made', s.is_batch); ck('pd-is-restock-only', s.is_restock);
-  ck('pd-ship-air', s.air); ck('pd-ship-land', s.land); ck('pd-published', s.published);
+  ck('pd-ship-air', s.air); ck('pd-ship-land', s.land); ck('pd-ship-local', s.local); ck('pd-published', s.published);
+  pdShipModeChanged();
   document.getElementById('pd-rte-en').innerHTML = s.desc_en;
   document.getElementById('pd-rte-cn').innerHTML = s.desc_cn;
   // Categories: refill the selects from the loaded tree, then restore the picks.
