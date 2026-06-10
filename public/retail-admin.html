@@ -1695,11 +1695,12 @@
   .pa-store-seg .pa-store-btn.active { background: var(--brass, #B08D57); color: #fff; }
   .pa-store-seg .pa-store-hint { font-size: 11px; color: var(--text-4); }
 
-  /* In the rich table the dup button shares the status cell — reveal on hover. */
-  .pa-list-rich .pa-dup-row { margin-left: 4px; }
   /* Shop column: centre the toggle in its cell so it sits under the SHOP header
-     instead of hugging the right-aligned price next to it. */
-  .pa-list-rich .pa-row-pills { justify-content: center; }
+     instead of hugging the right-aligned price next to it. The dup button is
+     pulled out of flow (absolute, hover-reveal) so it doesn't shift the toggle
+     off-centre. */
+  .pa-list-rich .pa-row-pills { justify-content: center; position: relative; }
+  .pa-list-rich .pa-dup-row { position: absolute; right: 0; }
   .pa-rowhead .pa-col-shop { text-align: center; }
 
   /* Variants ("sizes") — sits in the main column between name and description,
