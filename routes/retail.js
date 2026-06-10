@@ -3282,11 +3282,10 @@ const ADDRESS_PUBLIC_COLS = `id, recipient_name, phone, province, city, district
                               created_at, updated_at`;
 
 // E-bike rider ETA from the nearest active store to a saved address.
-// Mirrors the speed assumption used in lib/inventory.js's fallback calc
-// (~18 km/h average through GZ traffic with pickup overhead, so ≈3.3 min/km).
+// Speed assumption: ~35 km/h average through GZ traffic (≈1.7 min/km).
 // We also add a flat 8 min pickup + handoff buffer so close-in deliveries
 // never read as "<5 min" which would set unrealistic customer expectations.
-const _RIDER_KM_PER_HR  = 18;
+const _RIDER_KM_PER_HR  = 35;
 const _RIDER_MIN_PER_KM = 60 / _RIDER_KM_PER_HR;
 const _RIDER_PICKUP_MIN = 8;
 function computeRiderEta(address, lat, lng) {
@@ -4171,6 +4170,20 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       options: chosenLabels,
       isFlash: eff.is_flash,
     });
+  }
+
+  // ── "Local only" gate ────────────────────────────────────────────────
+  // Products flagged Local only (ship_modes='local') deliver ONLY within
+  // Guangzhou (same-city). They can't ride an air/land shipment, so an order
+  // bound for anywhere outside GZ that still contains one is impossible to
+  // fulfil — refuse it. Pickup is always local, so it's exempt.
+  if (!isPickup) {
+    const localOnly = resolved
+      .filter(r => parseShipModes(r.product.ship_modes).includes('local'))
+      .map(r => ({ id: r.product.id, name_en: r.product.name_en, name_cn: r.product.name_cn }));
+    if (localOnly.length && !isGuangzhou(address.city)) {
+      return res.status(400).json({ success: false, error: 'local_only_outside_gz', products: localOnly });
+    }
   }
 
   // ── Inventory: route to a store and check soft-reservable stock ───────
@@ -8337,7 +8350,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
       Math.max(0, parseFloat(b.sell_price) || 0),
       (() => { const v = parseFloat(b.compare_at_price); return Number.isFinite(v) && v > 0 ? v : null; })(),
       Math.max(0, parseInt(b.stock_qty, 10) || 0),
-      ship.length ? ship.join(',') : 'air,land',
+      ship,
       descEn, descCn, descFormat,
       primaryImg, gallery.length ? JSON.stringify(gallery) : null, sanitizeProductBadge(b.tags),
       status, (b.barcode || '').trim() || null, (b.free_of || '').trim() || null, (b.notes || '').trim() || null,
@@ -12895,6 +12908,19 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
   // so the matcher's province pass can't resolve province-level zones (e.g.
   // a 巴彦淖尔市 pick under 内蒙古自治区 would be refused).
   address = normalizeChinaAddress(address);
+
+  // "Local only" products can't ship outside Guangzhou — surface it at quote
+  // time so the mini-app can block before payment (the order endpoint enforces
+  // it again as a hard backstop).
+  const localOnly = localOnlyProductNames((items || []).map(i => i.product_id));
+  if (localOnly.length && !isGuangzhou(address.city)) {
+    return res.json({
+      success: false,
+      error: 'local_only_outside_gz',
+      data: { products: localOnly, subtotal: priced.subtotal },
+    });
+  }
+
   const zone = matchDeliveryZone(address);
   const fees = computeDeliveryAndPacking(zone, priced.subtotal, deliveryMode, priced.totalQty);
   if (fees.error) {
