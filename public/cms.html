@@ -3352,7 +3352,9 @@
     overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   }
   .b-bundle .bun-card-price { margin-top: 2px; font: 500 10px var(--bf-gothic); }
-  .b-bundle .bun-plus { font: 500 20px var(--bf-bear); opacity: .55; flex-shrink: 0; }
+  /* Centre the + on the 80px product image rather than letting flex-start
+     pin it to the top edge of the card. */
+  .b-bundle .bun-plus { font: 500 20px var(--bf-bear); opacity: .55; flex-shrink: 0; height: 80px; display: flex; align-items: center; }
   .b-bundle .bun-foot {
     margin-top: 12px; display: flex; align-items: center; gap: 10px;
   }

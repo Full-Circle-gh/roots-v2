@@ -3282,6 +3282,10 @@
   font-size: calc(42rpx * var(--font-scale));
   color: var(--olive);
   flex-shrink: 0;
+  /* Centre the + on the 180rpx product image rather than top-aligning it. */
+  height: 180rpx;
+  display: flex;
+  align-items: center;
 }
 .bun-foot {
   margin-top: 22rpx;

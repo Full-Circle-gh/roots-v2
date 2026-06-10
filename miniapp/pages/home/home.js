@@ -442,8 +442,15 @@ Page({
     this.routeTarget(target);
   },
   onCategory(e) {
+    this._gotoCategory(e.detail && e.detail.id);
+  },
+  // Stash the tapped category's name so the Shop tab opens pre-selected and
+  // scrolled to that section. switchTab can't carry params, so we hand off
+  // via globalData and the shop page picks it up in onShow / after refresh.
+  _gotoCategory(id) {
+    const cat = (this.data.categories || []).find(c => c.id === id);
+    if (cat && cat.name) getApp().globalData.pendingCategory = cat.name;
     wx.switchTab({ url: '/pages/shop/shop' });
-    // TODO: pre-select the tapped category on the shop tab
   },
   onProduct(e) {
     const id = e.detail.id;
@@ -515,7 +522,7 @@ Page({
     }
     // Targeted refs
     if (t.startsWith('product:'))  return wx.navigateTo({ url: '/pages/product/product?id=' + t.split(':')[1] });
-    if (t.startsWith('category:')) return wx.switchTab({ url: '/pages/shop/shop' });
+    if (t.startsWith('category:')) return this._gotoCategory(t.split(':')[1]);
   },
 
   // Page-level share — triggered by `<button open-type="share">` inside any

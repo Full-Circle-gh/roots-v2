@@ -168,6 +168,23 @@ Page({
     this._syncConfig();
     const tb = this.getTabBar && this.getTabBar();
     if (tb && tb.setSelected) tb.setSelected('pages/shop/shop');
+    // Honour a category deep-link handed off from the home page (a tapped
+    // category tile). If sections are already loaded we apply it now;
+    // otherwise refresh() applies it once they're built.
+    this._applyPendingCategory();
+  },
+
+  // Pre-select + scroll to the category the customer tapped on Home. The
+  // target name is stashed in globalData because switchTab carries no params.
+  // No-op when nothing is pending or the section hasn't loaded yet.
+  _applyPendingCategory() {
+    const app = getApp();
+    const name = app.globalData && app.globalData.pendingCategory;
+    if (!name) return;
+    const section = (this.data.sections || []).find(s => s.name === name);
+    if (!section) return;            // sections not built yet — refresh() retries
+    app.globalData.pendingCategory = '';
+    this.setCategory({ currentTarget: { dataset: { name } } });
   },
 
   // Page-level scroll: only used when the layout is grid/gallery (the
@@ -322,8 +339,9 @@ Page({
         totalCount,
         loading: false,
       });
-      // Measure section offsets so onScroll can find the active one
-      setTimeout(() => this._measureSections(), 200);
+      // Measure section offsets so onScroll can find the active one, then
+      // honour any pending category deep-link now that sections + offsets exist.
+      setTimeout(() => { this._measureSections(); this._applyPendingCategory(); }, 200);
     } catch (e) {
       console.warn('[shop] refresh failed:', e.message);
       this.setData({ loading: false });
