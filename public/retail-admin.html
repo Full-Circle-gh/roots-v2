@@ -24435,6 +24435,19 @@ function _paStoreQty(productId, storeId) {
   return m ? (Number(m[storeId]) || 0) : 0;
 }
 
+// Mirror a just-saved per-store qty into the list's PA_STOCK cache + the
+// product's effective_stock, so the overview table's Stock column and the OOS
+// badges/KPIs stay honest after an edit made from inside the product editor
+// (the inline list edit already does this; the editor save path didn't, which
+// left the list showing the stale page-load value — e.g. "Out" after restock).
+function _paStockMirror(productId, storeId, qty) {
+  const pid = Number(productId), sid = Number(storeId);
+  if (!PA_STOCK[pid]) PA_STOCK[pid] = {};
+  PA_STOCK[pid][sid] = Math.max(0, Number(qty) || 0);
+  const p = (PA_PRODUCTS || []).find(x => x.id === pid);
+  if (p) p.effective_stock = Object.values(PA_STOCK[pid]).reduce((s, v) => s + (Number(v) || 0), 0);
+}
+
 // Save an edited per-store count. Writes via the inventory PATCH endpoint (which
 // records a ledger row), then keeps the local maps + effective_stock in sync so
 // the KPI tiles and grid badges stay honest without a full reload.
@@ -25390,6 +25403,7 @@ async function pdMatrixCellSave(inp) {
     if (r.ok && j && j.success !== false) {
       inp.value = qty; inp.dataset.orig = String(qty);
       if (msg) msg.textContent = cuT('Saved', '已保存');
+      _paStockMirror(pid, sid, qty);
       pdMatrixSyncTotals();
     } else {
       if (msg) msg.textContent = '';
@@ -25432,7 +25446,7 @@ async function pdSaveStoreStocks() {
         body: JSON.stringify({ physical_qty: qty, reason: 'manual' }),
       });
       const j = await r.json().catch(() => ({}));
-      if (r.ok && j && j.success !== false) { inp.value = qty; inp.dataset.orig = String(qty); }
+      if (r.ok && j && j.success !== false) { inp.value = qty; inp.dataset.orig = String(qty); _paStockMirror(pid, inp.dataset.storeId, qty); }
       else { fail++; }
     } catch (e) { fail++; }
   }
