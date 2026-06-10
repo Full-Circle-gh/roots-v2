@@ -25794,7 +25794,7 @@ async function pdAutoComposeBlocks(id, btn) {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
       body: JSON.stringify({
         text_en: textEn, text_cn: textCn, translate,
-        product: { id: Number(id), name_en: row.name_en, name_cn: row.name_cn, category: row.top_category || row.category },
+        product: { id: Number(id), name_en: row.name_en, name_cn: row.name_cn, category: row.top_category || row.category, weight: (document.getElementById('pd-weight') || {}).value || row.size || '', facts: (typeof pdFactsGet === 'function' ? pdFactsGet() : null) },
       }),
     });
     const j = await r.json().catch(() => ({}));

@@ -611,6 +611,17 @@ const composeBlocksHandler = async (req, res) => {
     if (ctxBits) parts.push(`Product: ${ctxBits}`);
     if (textEn || textLegacy) parts.push('English copy:\n' + (textEn || textLegacy).slice(0, 9000));
     if (textCn)               parts.push('Chinese copy · 中文文案:\n' + textCn.slice(0, 9000));
+    // Structured facts from the store backend's "Product details" boxes — fed in
+    // as the source of truth so the spec_strip / nutrition come from the boxes,
+    // not guessed from prose. Absent for kitchen-app callers (no such boxes).
+    const _facts = (product.facts && typeof product.facts === 'object') ? product.facts : {};
+    const _factLines = [];
+    if (product.weight) _factLines.push('Net weight · 净含量: ' + String(product.weight).slice(0, 60));
+    for (const [k, label] of [['origin', 'Origin · 产地'], ['ingredients', 'Ingredients · 配料'], ['storage', 'Storage · 储存方式'], ['shelf_life', 'Shelf life · 保质期'], ['serving', 'Serving suggestion · 食用建议']]) {
+      const en = _facts[k + '_en'], cn = _facts[k + '_cn'];
+      if (en || cn) _factLines.push(label + ': ' + [en, cn].filter(Boolean).join(' / ').slice(0, 600));
+    }
+    if (_factLines.length) parts.push('Structured product facts — use these as the source of truth. Build a spec_strip from net weight / origin / shelf life, and include ingredients, storage and serving as the appropriate blocks. Do not invent beyond them:\n' + _factLines.join('\n'));
     const userMsg = parts.join('\n\n') + '\n\nCall emit_blocks now with the organised blocks.';
 
     const result = await callLLM({
