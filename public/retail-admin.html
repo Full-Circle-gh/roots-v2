@@ -8635,6 +8635,47 @@
       Recall pulls the broadcast back out of every customer's inbox.
     </div>
 
+    <!-- Automatic notifications — operator chooses which system-generated
+         categories actually reach customers. Off = no in-app row and no
+         WeChat push. Broadcasts are always operator-initiated, so they're
+         not listed here. Saves to notifications.categories via PUT config. -->
+    <div class="bc-card" style="margin-bottom: var(--s5);">
+      <h3 style="margin: 0 0 4px; font-size: 15px;">Automatic notifications · 自动通知</h3>
+      <div class="muted" style="font-size: 12px; margin-bottom: var(--s4); line-height: 1.5;">
+        Choose which automatic updates customers receive. Turning one off stops both the in-app message and the WeChat push for that category. · 选择自动发送给顾客的通知类型。关闭后,该类通知的站内消息与微信推送都将停止。
+      </div>
+      <div id="notif-cat-rows">
+        <label class="nc-row">
+          <span class="nc-text">
+            <span class="nc-title">Order &amp; shipping · 订单与物流</span>
+            <span class="nc-sub muted">Paid, preparing, shipped, delivered, cancelled, tracking updates · 已支付、准备中、已发货、已送达、已取消、物流进度</span>
+          </span>
+          <span class="switch"><input type="checkbox" data-notif-cat="order" onchange="saveNotifCategory(this)"/><span class="slider"></span></span>
+        </label>
+        <label class="nc-row">
+          <span class="nc-text">
+            <span class="nc-title">Invoices · 发票</span>
+            <span class="nc-sub muted">Sent when an invoice is issued for an order · 订单开具发票时发送</span>
+          </span>
+          <span class="switch"><input type="checkbox" data-notif-cat="invoice" onchange="saveNotifCategory(this)"/><span class="slider"></span></span>
+        </label>
+        <label class="nc-row">
+          <span class="nc-text">
+            <span class="nc-title">Refunds · 退款</span>
+            <span class="nc-sub muted">Refund approved, paid, or declined · 退款通过、到账或被拒</span>
+          </span>
+          <span class="switch"><input type="checkbox" data-notif-cat="refund" onchange="saveNotifCategory(this)"/><span class="slider"></span></span>
+        </label>
+      </div>
+      <style>
+        #notif-cat-rows .nc-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding: 12px 0; border-top: 1px solid var(--line); cursor: pointer; }
+        #notif-cat-rows .nc-row:first-child { border-top: 0; }
+        #notif-cat-rows .nc-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        #notif-cat-rows .nc-title { font-size: 13px; font-weight: 600; }
+        #notif-cat-rows .nc-sub { font-size: 11px; line-height: 1.4; }
+      </style>
+    </div>
+
     <div class="bc-grid">
       <!-- Composer -->
       <div class="bc-card">
@@ -18693,6 +18734,28 @@ async function loadBroadcastRegions() {
     wrap.innerHTML = '<span class="err" style="font-size:12px;">Failed to load regions.</span>';
   }
 }
+// Automatic-notification category switches. Read/write notifications.categories
+// on the shared storefront config. Missing entry = enabled (the server defaults
+// the same way), so an untouched store keeps today's behaviour.
+async function loadNotifCategories() {
+  try {
+    const { data: c } = await api('/api/retail-admin/config');
+    const cats = (c.notifications && c.notifications.categories) || {};
+    document.querySelectorAll('[data-notif-cat]').forEach(el => {
+      el.checked = cats[el.dataset.notifCat] !== false;   // default on
+    });
+  } catch (e) { /* leave switches as-is */ }
+}
+async function saveNotifCategory(el) {
+  const cat = el.dataset.notifCat;
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body: { ['notifications.categories.' + cat]: !!el.checked } });
+    toast('Saved · 已保存');
+  } catch (e) {
+    el.checked = !el.checked;   // revert the visual on failure
+    toast('Save failed · 保存失败: ' + e.message, 'err');
+  }
+}
 async function loadBroadcasts() {
   const wrap = $('#bc-list');
   if (!wrap) return;
@@ -18806,6 +18869,7 @@ async function recallBroadcast(id, currentStatus) {
 }
 // Lazy-load when the operator first opens the tab.
 document.querySelector('[data-tab="broadcasts"]').addEventListener('click', () => {
+  loadNotifCategories();
   loadBroadcasts();
   loadBroadcastRegions();
   loadBroadcastAudienceCount();

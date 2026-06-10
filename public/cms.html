@@ -5099,58 +5099,10 @@
         </div>
       </div>
 
-      <!-- Notification strip color -->
-      <div class="group-card">
-        <div class="group-card-head">
-          <h3>Notification strip · 通知条颜色</h3>
-          <div class="muted">The slim strip across the top of the greeting card on Home that surfaces unread updates ("📣 N new updates · Tap to view"). Pick a brand-aligned preset or paste a custom hex. · 首页问候卡顶部的小通知条颜色。</div>
-        </div>
-        <select id="cfg-theme-notifColor" class="picker-source">
-          <option value="#C43A6A">Berry · 莓果红</option>
-          <option value="#3A5A30">Forest · 森林绿</option>
-          <option value="#E87A3A">Carrot · 胡萝卜橙</option>
-          <option value="#F0A050">Papaya · 木瓜橙</option>
-          <option value="#CCD900">Lime · 青柠</option>
-          <option value="#1a1a17">Ink · 墨黑</option>
-        </select>
-        <div class="opt-grid" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));">
-          <div class="opt" data-target="cfg-theme-notifColor" data-value="#C43A6A">
-            <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #C43A6A; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
-            <div class="opt-label">Berry</div>
-            <div class="opt-sub">Default</div>
-          </div>
-          <div class="opt" data-target="cfg-theme-notifColor" data-value="#3A5A30">
-            <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #3A5A30; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
-            <div class="opt-label">Forest</div>
-            <div class="opt-sub">Deep green</div>
-          </div>
-          <div class="opt" data-target="cfg-theme-notifColor" data-value="#E87A3A">
-            <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #E87A3A; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
-            <div class="opt-label">Carrot</div>
-            <div class="opt-sub">Warm orange</div>
-          </div>
-          <div class="opt" data-target="cfg-theme-notifColor" data-value="#F0A050">
-            <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #F0A050; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
-            <div class="opt-label">Papaya</div>
-            <div class="opt-sub">Soft peach</div>
-          </div>
-          <div class="opt" data-target="cfg-theme-notifColor" data-value="#CCD900">
-            <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #CCD900; color: #1a1a17; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
-            <div class="opt-label">Lime</div>
-            <div class="opt-sub">Brand accent</div>
-          </div>
-          <div class="opt" data-target="cfg-theme-notifColor" data-value="#1a1a17">
-            <div class="opt-screen" style="display: flex; align-items: center; justify-content: center; background: #1a1a17; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">📣 1 NEW UPDATE →</div>
-            <div class="opt-label">Ink</div>
-            <div class="opt-sub">High contrast</div>
-          </div>
-        </div>
-        <div style="margin-top: 14px; display: flex; align-items: center; gap: 10px;">
-          <label class="muted" style="font-size: 12px;">Custom hex · 自定义</label>
-          <input id="cfg-theme-notifColorCustom" type="text" maxlength="7" placeholder="#C43A6A" style="width: 110px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; font-family: var(--f-mono); font-size: 13px;">
-          <span id="cfg-theme-notifColorSwatch" style="display: inline-block; width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line); background: #C43A6A;"></span>
-        </div>
-      </div>
+      <!-- Notification-strip colour now lives on the Notification Bar block
+           itself (Mini App Editor → block inspector → COLOURS). The duplicate
+           global preset that used to sit here was removed 2026-06-10 — it wrote
+           theme.notif_color, which the storefront block-renderer never read. -->
 
       <!-- Language -->
       <div class="group-card">
@@ -5851,29 +5803,8 @@ function initThemeBrand() {
     syncOpts(); putKey('theme.ipIntensity', e.target.value, T('Mascots saved', '吉祥物已保存'));
   });
 
-  // Notification strip colour — a valid custom hex wins over the preset.
-  const notifSel    = $('#cfg-theme-notifColor');
-  const notifCustom = $('#cfg-theme-notifColorCustom');
-  const notifSwatch = $('#cfg-theme-notifColorSwatch');
-  const isHex = v => /^#[0-9a-fA-F]{6}$/.test((v || '').trim());
-  function effectiveNotif() {
-    const custom = (notifCustom.value || '').trim();
-    return isHex(custom) ? custom.toUpperCase() : notifSel.value;
-  }
-  function paintNotifSwatch() { notifSwatch.style.background = effectiveNotif(); }
-  function clearNotifOpts() {
-    modal.querySelectorAll('.opt[data-target="cfg-theme-notifColor"]').forEach(o => o.classList.remove('active'));
-  }
-  function saveNotif() { paintNotifSwatch(); putKey('theme.notif_color', effectiveNotif(), T('Notification colour saved', '通知条颜色已保存')); }
-  notifSel.addEventListener('change', () => {
-    notifCustom.value = '';   // choosing a preset clears any stale custom hex
-    syncOpts(); saveNotif();
-  });
-  notifCustom.addEventListener('input', () => {
-    paintNotifSwatch();
-    if (isHex(notifCustom.value)) clearNotifOpts(); else syncOpts();
-  });
-  notifCustom.addEventListener('change', saveNotif);   // save on blur / Enter
+  // Notification-strip colour control removed 2026-06-10 — it's now styled on
+  // the Notification Bar block itself (block inspector → COLOURS).
 
   // Mini-app footer — base64 image buffer + auto-save on any field change.
   function setFooterPreview(dataUrl) {
@@ -5966,11 +5897,6 @@ function initThemeBrand() {
       $('#cfg-theme-accent').value      = (c.theme && c.theme.accent)      || 'lime-leaf';
       $('#cfg-theme-language').value    = (c.theme && c.theme.language)    || 'bilingual';
       $('#cfg-theme-ipIntensity').value = (c.theme && c.theme.ipIntensity) || 'soft';
-      const nc = ((c.theme && c.theme.notif_color) || '#C43A6A').toUpperCase();
-      const presets = Array.from(notifSel.options).map(o => o.value.toUpperCase());
-      if (presets.includes(nc)) { notifSel.value = nc; notifCustom.value = ''; }
-      else { notifCustom.value = nc; }
-      paintNotifSwatch();
       const mef = (c.brand && c.brand.me_footer) || {};
       footerData = mef.wordmark_image || null;
       setFooterPreview(footerData);
@@ -5982,7 +5908,6 @@ function initThemeBrand() {
       hydrateMeRows(c.me_page && c.me_page.rows);
       renderMeRows();
       syncOpts();
-      if (notifCustom.value) clearNotifOpts();   // custom hex → no preset highlighted
     } catch (e) {
       toast(T('Load failed', '加载失败') + ': ' + (e.message || ''), 'err');
     }

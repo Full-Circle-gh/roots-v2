@@ -2563,6 +2563,7 @@ function notifyOrderStatusChange(orderId, newStatus) {
       body_en: `Order ${o.order_no}`, body_cn: `订单 ${o.order_no}`,
     };
   });
+  if (!notifCategoryEnabled('order')) return;   // category muted → no push either
   try {
     const cfg = loadConfig();
     const tplId = cfg.notifications?.order_status_template_id;
@@ -2595,6 +2596,7 @@ function notifyOrderStatusChange(orderId, newStatus) {
 // Idempotency: caller is responsible for skipping repeats (see
 // kd100.callback handler — only notifies if scenario != last notified).
 function notifyTrackingScenario(orderId, scenario) {
+  if (!notifCategoryEnabled('order')) return;   // shipping updates are part of the 'order' category
   try {
     const cfg = loadConfig();
     const tplId = cfg.notifications?.order_status_template_id;
@@ -2620,11 +2622,24 @@ function notifyTrackingScenario(orderId, scenario) {
 }
 
 // ─── In-app notification center ───────────────────────────────────────────
+// Operator switch (Broadcasts page → Automatic notifications) that mutes a
+// whole category of system-generated notifications. Off means neither the
+// in-app row nor the WeChat push is created. Categories with no explicit entry
+// — notably 'broadcast', which is always operator-initiated — stay enabled.
+function notifCategoryEnabled(cat) {
+  try {
+    const cats = loadConfig().notifications?.categories;
+    if (cats && Object.prototype.hasOwnProperty.call(cats, cat)) return cats[cat] !== false;
+  } catch (e) { /* fall through to enabled */ }
+  return true;
+}
+
 // Persistent per-customer inbox (orders / refunds / invoices for v1), written
 // from the same server events that fire the WeChat push. Surfaced in the mini
 // app's Notifications page. Best-effort — never throws into the caller.
 function notifyCustomer(customerId, n) {
   if (!customerId || !n || !n.category || !n.type) return;
+  if (!notifCategoryEnabled(n.category)) return;   // operator muted this category
   try {
     tdb().prepare(
       `INSERT INTO retail_notifications

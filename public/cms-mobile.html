@@ -450,14 +450,8 @@ body{font-family:var(--f-sans); color:var(--text-1); background:var(--bg-app); o
           <div class="t"><span class="i18n-en">Accent colour</span><span class="i18n-cn">主色调</span></div>
           <div class="swatches" id="tb-accent-sw"></div>
         </div>
-        <div class="dgroup">
-          <div class="t"><span class="i18n-en">Notification strip</span><span class="i18n-cn">通知条颜色</span></div>
-          <div class="swatches" id="tb-notif-sw"></div>
-          <div class="fld" style="margin-top:10px;margin-bottom:0;">
-            <label><span class="i18n-en">Custom hex</span><span class="i18n-cn">自定义</span></label>
-            <input type="text" id="tb-notif-custom" maxlength="7" placeholder="#C43A6A" autocapitalize="off" autocorrect="off" spellcheck="false">
-          </div>
-        </div>
+        <!-- Notification-strip colour moved onto the Notification Bar block
+             itself (block inspector → COLOURS); removed here 2026-06-10. -->
         <div class="dgroup">
           <div class="t"><span class="i18n-en">Language</span><span class="i18n-cn">语言</span></div>
           <div class="seg" id="tb-lang">
@@ -1035,7 +1029,6 @@ const TB_ACCENTS = [
   { token: 'papaya-glow',  hex: '#F0A050' },
   { token: 'pea-sprout',   hex: '#A8C75A' },
 ];
-const TB_NOTIFS = ['#C43A6A', '#3A5A30', '#E87A3A', '#F0A050', '#CCD900', '#1A1A17'];
 // IDs MUST match ROW_DEFS in miniapp/pages/me/me.js.
 const TB_ME_DEFS = [
   { id: 'notif',      label: 'Notifications · 通知' },
@@ -1053,9 +1046,8 @@ const TB_ME_DEFS = [
   { id: 'bug',        label: 'Found a bug? · 报告问题' },
   { id: 'tour',       label: 'Take the tour · 查看教程' },
 ];
-const TB = { accent: 'lime-leaf', notif: '#C43A6A', footerImg: null, meRows: [] };
+const TB = { accent: 'lime-leaf', footerImg: null, meRows: [] };
 let tbMeSaveT = null;
-const tbHex = v => /^#[0-9a-fA-F]{6}$/.test((v || '').trim());
 
 async function tbPut(key, value, okMsg) {
   try {
@@ -1072,9 +1064,6 @@ async function tbPut(key, value, okMsg) {
 
 function tbMarkAccent() {
   document.querySelectorAll('#tb-accent-sw .sw').forEach(s => s.classList.toggle('on', s.dataset.token === TB.accent));
-}
-function tbMarkNotif() {
-  document.querySelectorAll('#tb-notif-sw .sw').forEach(s => s.classList.toggle('on', s.dataset.hex === (TB.notif || '').toUpperCase()));
 }
 function tbMarkSeg(id, val) {
   const seg = $('#' + id); if (!seg) return;
@@ -1144,31 +1133,6 @@ function tbInit() {
       accHost.appendChild(s);
     });
   }
-  const notifHost = $('#tb-notif-sw');
-  if (notifHost) {
-    notifHost.innerHTML = '';
-    TB_NOTIFS.forEach(hex => {
-      const s = document.createElement('div');
-      s.className = 'sw'; s.style.background = hex; s.dataset.hex = hex.toUpperCase();
-      s.onclick = () => {
-        TB.notif = hex.toUpperCase();
-        const ci = $('#tb-notif-custom'); if (ci) ci.value = '';
-        tbMarkNotif();
-        tbPut('theme.notif_color', TB.notif, cuT('Notification colour saved', '通知条颜色已保存'));
-      };
-      notifHost.appendChild(s);
-    });
-  }
-  const custom = $('#tb-notif-custom');
-  if (custom) {
-    custom.addEventListener('input', () => {
-      if (tbHex(custom.value)) document.querySelectorAll('#tb-notif-sw .sw').forEach(s => s.classList.remove('on'));
-      else tbMarkNotif();
-    });
-    custom.addEventListener('change', () => {
-      if (tbHex(custom.value)) { TB.notif = custom.value.trim().toUpperCase(); tbPut('theme.notif_color', TB.notif, cuT('Notification colour saved', '通知条颜色已保存')); }
-    });
-  }
   // Language + mascots segmented controls.
   [['tb-lang', 'theme.language', cuT('Language saved', '语言已保存')],
    ['tb-ip', 'theme.ipIntensity', cuT('Mascots saved', '吉祥物已保存')]].forEach(pair => {
@@ -1202,11 +1166,6 @@ function tbHydrate(data) {
   const c = data || {};
   TB.accent = (c.theme && c.theme.accent) || 'lime-leaf';
   tbMarkAccent();
-  const nc = ((c.theme && c.theme.notif_color) || '#C43A6A').toUpperCase();
-  const presets = TB_NOTIFS.map(h => h.toUpperCase());
-  const custom = $('#tb-notif-custom');
-  if (presets.includes(nc)) { TB.notif = nc; if (custom) custom.value = ''; tbMarkNotif(); }
-  else { TB.notif = nc; if (custom) custom.value = nc; document.querySelectorAll('#tb-notif-sw .sw').forEach(s => s.classList.remove('on')); }
   tbMarkSeg('tb-lang', (c.theme && c.theme.language) || 'bilingual');
   tbMarkSeg('tb-ip', (c.theme && c.theme.ipIntensity) || 'soft');
   const mef = (c.brand && c.brand.me_footer) || {};
