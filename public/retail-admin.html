@@ -25852,7 +25852,11 @@ async function pdAutoComposeBlocks(id, btn) {
     const all = (j.blocks || []).filter(b => b && b.type);
     // Nutrition lives in its own column, not in description_blocks — route it out.
     const nutriBlock = all.find(b => b.type === 'nutrition_facts');
-    const composed = all.filter(b => b.type !== 'nutrition_facts')
+    // Keep nutrition_facts IN the design stack (attached, not apart). It's ALSO
+    // mirrored to the nutrition column below, so the not-yet-republished mini-app
+    // keeps showing its separate panel until the new storefront — which renders
+    // the block inline and hides that panel — is published.
+    const composed = all
       .map((b, i) => ({ ...b, id: b.id || ('b' + Date.now().toString(36) + i) }));
     if (!composed.length) {
       await revertFresh(); prog.done(false, cuT("Couldn't build", '生成失败'));
