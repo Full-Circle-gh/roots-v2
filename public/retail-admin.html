@@ -1853,6 +1853,11 @@
   .va-row.va-drop-before { box-shadow: inset 0 2px 0 var(--brass); }
   .va-row.va-drop-after  { box-shadow: inset 0 -2px 0 var(--brass); }
   .va-label { width: 100%; box-sizing: border-box; }
+  /* Variant option name = two stacked inputs (English over 中文), so the EN and
+     CN options are entered & stored separately rather than glued into one tag. */
+  .va-name { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .va-name .va-label-cn { font-size: 13px; }
+  .va-name .va-label-cn::placeholder { color: var(--text-4); }
   .va-num { width: 100%; box-sizing: border-box; text-align: right; font-variant-numeric: tabular-nums; }
   .va-ro { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; }
   .va-show { display: flex; justify-content: center; }
@@ -24871,7 +24876,7 @@ function paRender() {
       }
       const meta = u.group
         ? `${u.members.length} ${cuT('sizes', '规格')}`
-        : [p.sku, p.size].filter(Boolean).map(escapeHtml).join(' · ');
+        : (p.sku ? escapeHtml(p.sku) : '');
       const sub  = [
         p.name_cn ? escapeHtml(p.name_cn) : '',
         meta ? `<span class="pa-row-meta">${meta}</span>` : '',
@@ -25407,12 +25412,12 @@ async function vaLoad(id) {
     // Stock shown on the self row = the live per-store total (Tianhe + Yuexiu),
     // not the legacy flat stock_qty (which per-store edits never touch). Falls
     // back to stock_qty only if no per-store sum is known yet.
-    const self = { id, label: p.variant_label || '', name: _vaName(p), sku: p.sku || '', size: p.size || '', price: p.sell_price, stock: (p.effective_stock != null ? p.effective_stock : p.stock_qty), published: p.is_published, self: true };
+    const self = { id, label: p.variant_label || '', label_cn: p.variant_label_cn || '', name: _vaName(p), sku: p.sku || '', size: p.size || '', price: p.sell_price, stock: (p.effective_stock != null ? p.effective_stock : p.stock_qty), published: p.is_published, self: true };
     VA_MEMBERS = members.length
-      ? members.map(m => ({ id: m.id, label: m.variant_label || '', name: _vaName(m), sku: m.sku || '', size: m.size || '', price: m.price, stock: m.stock, published: m.is_published, self: m.id === id }))
+      ? members.map(m => ({ id: m.id, label: m.variant_label || '', label_cn: m.variant_label_cn || '', name: _vaName(m), sku: m.sku || '', size: m.size || '', price: m.price, stock: m.stock, published: m.is_published, self: m.id === id }))
       : [self];
     if (!VA_MEMBERS.some(v => v.self)) VA_MEMBERS.unshift(self);
-  } catch { VA_MEMBERS = [{ id, label: p.variant_label || '', name: _vaName(p), self: true }]; }
+  } catch { VA_MEMBERS = [{ id, label: p.variant_label || '', label_cn: p.variant_label_cn || '', name: _vaName(p), self: true }]; }
   // Open by default only when there's something to show (real sibling variants);
   // a single-option product starts collapsed so the editor isn't cluttered.
   VA_OPEN = VA_MEMBERS.length > 1;
@@ -25446,7 +25451,12 @@ function vaRender() {
     const oos = stock !== '' && Number(stock) <= 0;
     const rowOpen = `<div class="va-row${oos ? ' va-oos' : ''}" draggable="false" ondragover="vaDragOver(event, ${i})" ondragleave="vaDragLeave(event)" ondrop="vaDrop(event, ${i})" ondragend="vaDragEnd()">`;
     const grip = `<span class="va-drag" draggable="true" ondragstart="vaDragStart(event, ${i})" title="${cuT('Drag to reorder', '拖动以排序')}">⠿</span>`;
-    const label = `<input class="va-label" type="text" value="${escapeAttr(v.label)}" placeholder="${cuT('e.g. 500g', '如 500克')}" title="${escapeAttr(v.name)}" oninput="vaLabel(${v.id}, this.value)">`;
+    // Variant option name is split EN/CN (never glued) — one input per language,
+    // stacked, so "Big 200g" and "大" are stored & shown separately.
+    const label = `<div class="va-name" title="${escapeAttr(v.name)}">` +
+      `<input class="va-label" type="text" value="${escapeAttr(v.label)}" placeholder="${cuT('English · e.g. Big 200g', '英文 · 如 Big 200g')}" oninput="vaLabel(${v.id}, 'en', this.value)">` +
+      `<input class="va-label va-label-cn" type="text" value="${escapeAttr(v.label_cn || '')}" placeholder="${cuT('中文 · 如 大 200克', '中文 · 如 大 200克')}" oninput="vaLabel(${v.id}, 'cn', this.value)">` +
+      `</div>`;
     // STOCK is read-only on every row — it's a per-store total, edited in the
     // Stock-by-location grid (right). A flat field here would clash with the
     // per-store ledger. The total stays live: editing/saving the grid re-renders.
@@ -25477,7 +25487,7 @@ function vaRender() {
       `<button type="button" class="btn btn-sm" onclick="vaAddSize()">${cuT('+ Add variant', '+ 新增规格')}</button>` +
     `</div>`;
 }
-function vaLabel(id, val) { const v = VA_MEMBERS.find(x => x.id === id); if (v) { v.label = val; pdSyncMatrixLabels(); } }
+function vaLabel(id, lang, val) { const v = VA_MEMBERS.find(x => x.id === id); if (v) { if (lang === 'cn') v.label_cn = val; else v.label = val; pdSyncMatrixLabels(); } }
 // The opened ("self") product's quick fields mirror straight into the main form
 // inputs above, so the normal Save persists them — no separate write, and the
 // form stays in sync. Stock is intentionally not here: it's set in the
@@ -25557,7 +25567,7 @@ async function vaAddSize() {
     const j = await api('/api/retail-admin/products/' + VA_ID + '/duplicate', { method: 'POST', body: { as_variant: true, label: '' } });
     const d = j.data; if (!d) throw new Error('add_failed');
     if (Array.isArray(PA_PRODUCTS)) PA_PRODUCTS.unshift(d);
-    VA_MEMBERS.push({ id: d.id, label: d.variant_label || '', name: _vaName(d), sku: d.sku || '', size: d.size || '', price: d.sell_price, stock: d.stock_qty, published: d.is_published, self: false });
+    VA_MEMBERS.push({ id: d.id, label: d.variant_label || '', label_cn: d.variant_label_cn || '', name: _vaName(d), sku: d.sku || '', size: d.size || '', price: d.sell_price, stock: d.stock_qty, published: d.is_published, self: false });
     VA_OPEN = true;
     vaRender();
     pdLoadStoreStocks(VA_ID);   // pull the new variant's row into the stock grid
@@ -25570,7 +25580,7 @@ async function vaAddSize() {
 // single Save covers the whole editor. Throws on failure for the caller.
 async function vaPersist() {
   if (VA_ID == null) return null;
-  const members = VA_MEMBERS.map(v => ({ id: v.id, label: v.label || '' }));
+  const members = VA_MEMBERS.map(v => ({ id: v.id, label: v.label || '', label_cn: v.label_cn || '' }));
   const j = await api('/api/retail-admin/products/' + VA_ID + '/variants', { method: 'PUT', body: { members } });
   const gid = j.group_id, ids = new Set(members.map(m => m.id));
   // The PUT writes variant_sort = array index; mirror that into the in-memory

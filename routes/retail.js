@@ -585,7 +585,7 @@ const RETAIL_PRODUCT_COLS = `
   p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,
   p.flash_price, p.flash_starts_at, p.flash_ends_at,
   p.flash_stock_limit, p.flash_sold,
-  p.variant_group_id, p.variant_label, p.variant_sort,
+  p.variant_group_id, p.variant_label, p.variant_label_cn, p.variant_sort,
   p.updated_at
 `;
 
@@ -1250,7 +1250,7 @@ router.get('/api/retail/products/:id', (req, res) => {
     // a stored image so we can emit a lazy URL; the real bytes stream
     // via /api/retail/products/:id/image, same as the main hero above.
     product.variants = tdb().prepare(
-      `SELECT p.id, p.variant_label, p.name_en, p.name_cn, p.sku, p.weight AS size,
+      `SELECT p.id, p.variant_label, p.variant_label_cn, p.name_en, p.name_cn, p.sku, p.weight AS size,
               p.sell_price AS price,
               p.flash_price, p.flash_starts_at, p.flash_ends_at,
               p.flash_stock_limit, p.flash_sold,
@@ -3595,10 +3595,39 @@ function isGuangzhou(city) {
 }
 
 // Decide which modes a single item is allowed to ship by. csv -> array.
+// 'local' is exclusive: a "Local only" product delivers ONLY within Guangzhou
+// (same-city), never air/land — so it stands alone, ignoring any stray air/land.
 function parseShipModes(csv) {
   if (!csv) return ['air', 'land'];
-  const out = String(csv).split(',').map(s => s.trim().toLowerCase()).filter(m => m === 'air' || m === 'land');
+  const tokens = String(csv).split(',').map(s => s.trim().toLowerCase());
+  if (tokens.includes('local')) return ['local'];
+  const out = tokens.filter(m => m === 'air' || m === 'land');
   return out.length ? out : ['air', 'land'];
+}
+
+// Normalize a user-supplied ship_modes string to the canonical stored form.
+// 'local' wins (Guangzhou-only); otherwise the air/land subset, defaulting to
+// 'air,land' when nothing valid was sent.
+function normalizeShipModesInput(csv) {
+  const tokens = String(csv || '').split(',').map(s => s.trim().toLowerCase());
+  if (tokens.includes('local')) return 'local';
+  const arr = [...new Set(tokens.filter(m => m === 'air' || m === 'land'))];
+  return arr.length ? arr.join(',') : 'air,land';
+}
+
+// Of the given product ids, return {id, name_en, name_cn} for any that are
+// "Local only" (ship_modes = 'local'). Used to block checkout when the
+// destination is outside Guangzhou.
+function localOnlyProductNames(productIds) {
+  const ids = [...new Set((productIds || []).map(n => parseInt(n, 10)).filter(Boolean))];
+  if (!ids.length) return [];
+  const ph = ids.map(() => '?').join(',');
+  const rows = tdb().prepare(
+    `SELECT id, name_en, name_cn, ship_modes FROM store_products WHERE id IN (${ph})`
+  ).all(...ids);
+  return rows
+    .filter(r => parseShipModes(r.ship_modes).includes('local'))
+    .map(r => ({ id: r.id, name_en: r.name_en, name_cn: r.name_cn }));
 }
 
 // Bucket assignment for one item, purely by its allowed ship modes:
@@ -8148,8 +8177,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   }
   if ('stock_qty'  in body) { sets.push('stock_qty = ?');  params.push(Math.max(0, parseInt(body.stock_qty, 10) || 0)); }
   if ('ship_modes' in body) {
-    const arr = [...new Set(String(body.ship_modes || '').split(',').map(s => s.trim().toLowerCase()).filter(m => m === 'air' || m === 'land'))];
-    sets.push('ship_modes = ?'); params.push(arr.length ? arr.join(',') : 'air,land');
+    sets.push('ship_modes = ?'); params.push(normalizeShipModesInput(body.ship_modes));
   }
   if ('images' in body) {
     // Ordered gallery (max 8). Keep the primary image_data in sync — shop
@@ -8283,7 +8311,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   // create path (it's already a UNIQUE column → a clash returns 409 below).
   const sku = (b.sku || '').trim();
   if (!sku) return res.status(400).json({ success: false, error: 'sku_required' });
-  const ship = [...new Set(String(b.ship_modes || 'air,land').split(',').map(s => s.trim().toLowerCase()).filter(m => m === 'air' || m === 'land'))];
+  const ship = normalizeShipModesInput(b.ship_modes || 'air,land');
   // Gallery (max 8); primary image_data mirrors the first photo.
   const gallery = (Array.isArray(b.images) ? b.images : []).filter(s => typeof s === 'string' && s).slice(0, 8);
   const primaryImg = gallery.length ? gallery[0] : (b.image_data || null);
@@ -8865,7 +8893,7 @@ router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, 
   let members = [];
   if (p.variant_group_id) {
     members = tdb().prepare(
-      `SELECT sp.id, sp.name_en, sp.name_cn, sp.sku, sp.variant_label, sp.weight AS size, sp.sell_price AS price,
+      `SELECT sp.id, sp.name_en, sp.name_cn, sp.sku, sp.variant_label, sp.variant_label_cn, sp.weight AS size, sp.sell_price AS price,
               -- Per-variant stock = SUM of its per-store physical_qty (the real
               -- number), falling back to the legacy flat stock_qty only when the
               -- variant has no per-store rows yet.
@@ -8890,32 +8918,36 @@ router.put('/api/retail-admin/products/:id/variants', requireRetailAdmin, expres
   // Variant grouping is product structure — mastered upstream, not editable here.
   if (catalogMode(req) === 'upstream') return res.status(423).json({ success: false, error: 'catalog_locked' });
   const id = parseInt(req.params.id, 10);
-  const self = tdb().prepare('SELECT id, variant_group_id, variant_label FROM store_products WHERE id = ?').get(id);
+  const self = tdb().prepare('SELECT id, variant_group_id, variant_label, variant_label_cn FROM store_products WHERE id = ?').get(id);
   if (!self) return res.status(404).json({ success: false, error: 'not_found' });
   const raw = Array.isArray(req.body?.members) ? req.body.members : [];
   const byId = new Map();
   for (const m of raw) {
     const mid = parseInt(m && m.id, 10);
-    if (Number.isFinite(mid) && mid > 0) byId.set(mid, (m.label || '').toString().trim() || null);
+    if (Number.isFinite(mid) && mid > 0) byId.set(mid, {
+      label:    (m.label || '').toString().trim() || null,
+      label_cn: (m.label_cn || '').toString().trim() || null,
+    });
   }
-  if (!byId.has(id)) byId.set(id, self.variant_label || null);   // edited product always belongs
+  // edited product always belongs — keep its current labels if not re-sent
+  if (!byId.has(id)) byId.set(id, { label: self.variant_label || null, label_cn: self.variant_label_cn || null });
   const desired = [...byId.entries()];
   const prevGid = self.variant_group_id;
   const groupId = id;   // edited product owns the group id
   try {
     const count = tdb().transaction(() => {
       if (desired.length < 2) {
-        if (prevGid) tdb().prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=?').run(prevGid);
-        tdb().prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
+        if (prevGid) tdb().prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=?').run(prevGid);
+        tdb().prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
         return 0;
       }
       if (prevGid) {
         const keep = desired.map(([mid]) => mid);
         const ph = keep.map(() => '?').join(',');
-        tdb().prepare(`UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=? AND id NOT IN (${ph})`).run(prevGid, ...keep);
+        tdb().prepare(`UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=? AND id NOT IN (${ph})`).run(prevGid, ...keep);
       }
-      const upd = tdb().prepare('UPDATE store_products SET variant_group_id=?, variant_label=?, variant_sort=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
-      desired.forEach(([mid, label], idx) => upd.run(groupId, label, idx, mid));
+      const upd = tdb().prepare('UPDATE store_products SET variant_group_id=?, variant_label=?, variant_label_cn=?, variant_sort=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
+      desired.forEach(([mid, lbl], idx) => upd.run(groupId, lbl.label, lbl.label_cn, idx, mid));
       return desired.length;
     })();
     res.json({ success: true, group_id: count >= 2 ? groupId : null, count });

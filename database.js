@@ -2908,6 +2908,10 @@ try {
   // Store-only: a flexible per-product-type facts bag (origin/ingredients/…),
   // stored as JSON so a new product type needs no new columns.
   addColumn('store_products', 'product_facts', 'TEXT');
+  // Store-only: the variant tag, split EN/CN (never glued). `variant_label`
+  // holds the English option ("Big 200g"); `variant_label_cn` the Chinese ("大")
+  // — the storefront/editor pick the right one per the language toggle.
+  addColumn('store_products', 'variant_label_cn', 'TEXT');
   // Own indexes — store_products has its OWN sku namespace (independent of the
   // kitchen's), mirroring the products indexes the storefront relies on.
   db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_store_products_sku ON store_products(sku)').run();
