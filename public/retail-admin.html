@@ -1834,10 +1834,10 @@
   /* Variants is collapsed by default (a single-option product needs no table);
      this header is the open/close toggle. Caret + label + a summary chip so the
      operator sees the state ("Single option" / "N variants") without expanding. */
-  .pd-var-toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; padding: 4px 0; cursor: pointer; text-align: left; }
+  .pd-var-toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 10px; padding: 10px 12px; cursor: pointer; text-align: left; transition: border-color .12s ease, background .12s ease; }
   .pd-var-toggle .pd-var-caret { color: var(--text-4); font-size: 10px; width: 10px; transition: transform .12s ease; }
-  .pd-var-toggle .pd-var-summary { font-size: 11px; color: var(--text-3); font-family: var(--f-sans); letter-spacing: 0; text-transform: none; }
-  .pd-var-toggle:hover .pd-var-summary { color: var(--text-2); }
+  .pd-var-toggle .pd-var-summary { font-size: 12px; color: var(--text-2); font-family: var(--f-sans); letter-spacing: 0; text-transform: none; margin-left: auto; }
+  .pd-var-toggle:hover { border-color: var(--brass); background: var(--bg-elev-1); } .pd-var-toggle:hover .pd-var-summary { color: var(--text-1); }
   /* Sizes table — every size of a product on one inline-editable row
      (name · sku · price · stock · show), so the operator never has to open a
      size just to set its stock. The size you opened is read-only here (edit it
@@ -7707,7 +7707,7 @@
               <span class="pd-desc-modebar">
                 <button type="button" class="pd-mode-btn active" data-mode="classic" onclick="pdDescMode()" title="Edit the description here with the rich-text toolbar · 在此用富文本工具栏编辑描述">Classic · 经典</button>
                 <button type="button" class="pd-mode-btn" onclick="pdOpenPageDesign()" title="Open the full Product Page Editor in a new tab · 在新标签页打开整页编辑器">Product editor · 产品页编辑器 ↗</button>
-                <button type="button" id="pd-blockdesign-toggle" class="pd-mode-btn pd-blockdesign-toggle" onclick="pdToggleBlockDesign()" title="When on, the storefront product page shows the Product editor design instead of this classic description · 开启后,店铺商品页将显示产品页设计而非经典描述">🎨 Design: Off · 关</button>
+                <button type="button" id="pd-blockdesign-toggle" class="pd-mode-btn pd-blockdesign-toggle" onclick="pdToggleBlockDesign()" title="When on, the storefront product page shows the Product editor design instead of this classic description · 开启后,店铺商品页将显示产品页设计而非经典描述"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M2.5 6.5h11M6.5 6.5v7"/></svg>Design: Off · 关</button>
               </span>
             </label>
             <!-- Classic editor — rich-text toolbar + English | 中文 side by side -->
@@ -7827,13 +7827,10 @@
                 </div>
               </div>
             </section>
-            <details class="pd-card" style="padding:0;">
-              <summary style="padding:10px 12px;cursor:pointer;font-weight:600;font-size:13px;">Advanced · 高级</summary>
-              <div style="padding:0 12px 12px;">
-                <div class="field"><label class="stacked">Barcode · 条码</label><input type="text" id="pd-barcode" placeholder="EAN / scan code"></div>
-                <div class="field"><label class="stacked">Internal notes · 内部备注</label><textarea id="pd-notes" rows="2" style="width:100%;resize:vertical;font:inherit;padding:6px 8px;"></textarea></div>
-              </div>
-            </details>
+            <section class="pd-card">
+              <div class="pd-card-h">Internal notes · 内部备注</div>
+              <textarea id="pd-notes" rows="2" style="width:100%;resize:vertical;font:inherit;padding:6px 8px;box-sizing:border-box;"></textarea>
+            </section>
           </aside>
         </div>
         <div class="pu-editor-foot" style="justify-content:space-between;">
@@ -24652,7 +24649,7 @@ function pdOpen(id) {
   set('pd-price', p ? p.sell_price : ''); set('pd-compare', p && p.compare_at_price);
   set('pd-sku', p && p.sku); set('pd-weight', p && p.size);
   set('pd-status', p ? (p.status || 'Active') : 'Active');
-  pdFreeOfSet(p && p.free_of); set('pd-barcode', p && p.barcode); set('pd-notes', p && p.notes);
+  pdFreeOfSet(p && p.free_of); set('pd-notes', p && p.notes);
   const ck = (el, v) => { const n = document.getElementById(el); if (n) n.checked = !!v; };
   ck('pd-is-market', p && p.is_market === 1); ck('pd-is-batch-made', p && p.is_batch_made === 1); ck('pd-is-restock-only', p && p.is_restock_only === 1);
   pdLoadStoreStocks(p ? p.id : null);
@@ -25292,7 +25289,7 @@ function pdRenderBlockDesignToggle() {
   const btn = document.getElementById('pd-blockdesign-toggle');
   if (!btn) return;
   btn.classList.toggle('active', _pdUseBlockDesign);
-  btn.textContent = _pdUseBlockDesign ? '🎨 Design: On · 开' : '🎨 Design: Off · 关';
+  btn.innerHTML = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M2.5 6.5h11M6.5 6.5v7"/></svg>' + (_pdUseBlockDesign ? 'Design: On · 开' : 'Design: Off · 关');
 }
 async function pdToggleBlockDesign() {
   const id = document.getElementById('pd-id').value;
@@ -25627,7 +25624,7 @@ function pdCollectBody() {
     sell_price: parseFloat(g('pd-price')) || 0,
     compare_at_price: parseFloat(g('pd-compare')) || 0,
     status: g('pd-status') || 'Active',
-    free_of: pdFreeOfGet(), barcode: g('pd-barcode'), notes: g('pd-notes'),
+    free_of: pdFreeOfGet(), notes: g('pd-notes'),
     is_market: ckd('pd-is-market'), is_restock_only: ckd('pd-is-restock-only'), is_batch_made: ckd('pd-is-batch-made'),
     ship_modes: modes.join(',') || 'air,land',
     description_en: pdRteClean(document.getElementById('pd-rte-en').innerHTML),
@@ -25747,7 +25744,7 @@ function pdSnapshot() {
   return {
     name_en: g('pd-name-en'), name_cn: g('pd-name-cn'), price: g('pd-price'), compare: g('pd-compare'),
     sku: g('pd-sku'), weight: g('pd-weight'), status: g('pd-status'), free_of: pdFreeOfGet(),
-    barcode: g('pd-barcode'), notes: g('pd-notes'), badge: g('pd-badge'),
+    notes: g('pd-notes'), badge: g('pd-badge'),
     top: g('pd-top-category'), sub: g('pd-subcategory'),
     is_market: ck('pd-is-market'), is_batch: ck('pd-is-batch-made'), is_restock: ck('pd-is-restock-only'),
     air: ck('pd-ship-air'), land: ck('pd-ship-land'), published: ck('pd-published'),
@@ -25761,7 +25758,7 @@ function pdApplySnapshot(s) {
   const ck  = (el, v) => { const n = document.getElementById(el); if (n) n.checked = v; };
   set('pd-name-en', s.name_en); set('pd-name-cn', s.name_cn); set('pd-price', s.price); set('pd-compare', s.compare);
   set('pd-sku', s.sku); set('pd-weight', s.weight); set('pd-status', s.status); pdFreeOfSet(s.free_of);
-  set('pd-barcode', s.barcode); set('pd-notes', s.notes); set('pd-badge', s.badge);
+  set('pd-notes', s.notes); set('pd-badge', s.badge);
   ck('pd-is-market', s.is_market); ck('pd-is-batch-made', s.is_batch); ck('pd-is-restock-only', s.is_restock);
   ck('pd-ship-air', s.air); ck('pd-ship-land', s.land); ck('pd-published', s.published);
   document.getElementById('pd-rte-en').innerHTML = s.desc_en;
