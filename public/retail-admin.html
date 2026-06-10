@@ -7729,6 +7729,10 @@
                 <button type="button" id="pd-blockdesign-toggle" class="pd-mode-btn pd-blockdesign-toggle" onclick="pdToggleBlockDesign()" title="When on, the storefront product page shows the Product editor design instead of this classic description · 开启后,店铺商品页将显示产品页设计而非经典描述"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M2.5 6.5h11M6.5 6.5v7"/></svg>Design: Off · 关</button>
               </span>
             </label>
+            <div id="pd-design-stale" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 2px;padding:7px 11px;border:1px solid var(--brass);border-radius:8px;background:rgba(176,141,74,.08);font-family:var(--f-sans);font-size:12px;">
+              <span style="color:var(--text-2);">Designed page is out of date — content changed since it was built · 设计页已过期 — 内容已更改</span>
+              <button type="button" class="btn btn-sm" style="margin-left:auto;text-transform:none;letter-spacing:0;font-family:var(--f-sans);" onclick="pdRebuildDesign()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5V5H11"/></svg>Rebuild · 重新生成</button>
+            </div>
             <!-- Classic editor — rich-text toolbar + English | 中文 side by side -->
             <div id="pd-desc-rich">
               <div class="pd-rte-toolbar">
@@ -25054,6 +25058,7 @@ function pdOpen(id) {
   document.getElementById('pd-rte-cn').innerHTML = wasRich ? (p.description_cn || '') : pdPlainToHtml(p && p.description_cn);
   pdApplyDescMode();
   _pdUseBlockDesign = !!(p && p.use_block_design === 1);
+  _pdDesignStale = false; pdRenderDesignStale();
   pdRenderBlockDesignToggle();
   const modes = String((p && p.ship_modes) || 'air,land').toLowerCase();
   document.getElementById('pd-ship-air').checked  = !p || modes.includes('air');
@@ -25802,14 +25807,14 @@ async function pdFactsAutoFillQuiet(textEn, textCn) {
     }
   } catch (e) { /* best-effort — proceed to build without facts */ }
 }
-async function pdAutoComposeBlocks(id, btn) {
+async function pdAutoComposeBlocks(id, btn, skipConfirm) {
   const row = PA_PRODUCTS.find(x => x.id === Number(id)) || {};
   let blocks = row.description_blocks;
   if (typeof blocks === 'string') { try { blocks = JSON.parse(blocks); } catch { blocks = null; } }
   const hasBlocks = Array.isArray(blocks) && blocks.length > 0;
   const revertFresh = () => hasBlocks ? Promise.resolve() : pdDesignOff(id);
   // Already designed: don't silently keep the old sections — offer a rebuild.
-  if (hasBlocks) {
+  if (hasBlocks && !skipConfirm) {
     const ok = confirm(cuT(
       'This product already has ' + blocks.length + ' designed section(s).\n\nRebuild them from the current description? This replaces the existing sections.',
       '该商品已有 ' + blocks.length + ' 个板块。\n\n要根据当前描述重新生成吗?这将替换现有板块。'));
@@ -25886,6 +25891,7 @@ async function pdAutoComposeBlocks(id, btn) {
     const i2 = PA_PRODUCTS.findIndex(x => x.id === Number(id));
     if (i2 >= 0) PA_PRODUCTS[i2] = { ...PA_PRODUCTS[i2], ...(sj.data || {}), description_blocks: composed, use_block_design: 1 };
     _pdUseBlockDesign = true; pdRenderBlockDesignToggle();
+    _pdDesignStale = false; pdRenderDesignStale();
     prog.done(true, cuT('Built ✓', '已生成 ✓'));
     toast(cuT('Built ' + composed.length + ' section' + (composed.length === 1 ? '' : 's') + ' — open the Product editor to review ✓',
               '已生成 ' + composed.length + ' 个板块,可在产品页编辑器中查看 ✓'), 'ok');
@@ -26201,6 +26207,24 @@ async function pdAutoSaveNow() {
 // Wire the editor once: any input/change inside it schedules an autosave.
 // Programmatic loads (pdOpen sets .value / .innerHTML directly) don't fire these
 // events, so loading a product never triggers a spurious save.
+// "Design out of date" nudge — once a product has a live designed page, editing
+// its content (description / Product details boxes / name / weight) makes that
+// snapshot stale until rebuilt. Reset on open + on a successful (re)build.
+let _pdDesignStale = false;
+function pdRenderDesignStale() {
+  const el = document.getElementById('pd-design-stale');
+  if (el) el.style.display = _pdDesignStale ? 'flex' : 'none';
+}
+function pdMarkDesignStale() {
+  if (!_pdUseBlockDesign || _pdDesignStale) return;   // only matters when a design exists
+  _pdDesignStale = true;
+  pdRenderDesignStale();
+}
+function pdRebuildDesign() {
+  const id = document.getElementById('pd-id').value;
+  if (!id) return;
+  pdAutoComposeBlocks(id, document.getElementById('pd-blockdesign-toggle'), true);
+}
 function pdWireAutosave() {
   const ed = document.getElementById('pd-editor');
   if (!ed || ed._autosaveWired) return;
@@ -26210,6 +26234,8 @@ function pdWireAutosave() {
     if (!t || !t.closest) return;
     if (t.id === 'pd-img-file') return;  // file picker handled via gallery mutations
     if (t.closest('input, select, textarea, [contenteditable], .pd-rte')) pdScheduleAutosave();
+    // Editing the description or the Product details boxes makes a built design stale.
+    if (t.closest('.pd-rte') || (t.id && t.id.indexOf('pd-fact-') === 0) || t.id === 'pd-name-en' || t.id === 'pd-name-cn' || t.id === 'pd-weight') pdMarkDesignStale();
   };
   ed.addEventListener('input', onEdit);
   ed.addEventListener('change', onEdit);
