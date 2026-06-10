@@ -1,3 +1,4 @@
+<wxs src="../../utils/region.wxs" module="region" />
 <view class="page">
   <view class="header">
     <view class="kicker f-toni">{{lang === 'cn' ? '收货地址' : 'ADDRESSES'}}</view>
@@ -40,7 +41,7 @@
             <view wx:if="{{item.is_default}}" class="default-badge f-toni">{{copy.selectedBadge}}</view>
           </view>
           <view class="addr-full">{{item.address}}{{item.detail ? ' · ' + item.detail : ''}}</view>
-          <view wx:if="{{item.city}}" class="addr-city muted">{{item.city}}</view>
+          <view wx:if="{{item.city}}" class="addr-city muted">{{region.region(item, lang)}}</view>
           <!-- Rider ETA pill — distance from the nearest store + estimated
                e-bike ride time (≈35 km/h + 8 min pickup buffer). Beyond
                ~30 km the server flags courier:true and we show "ships by

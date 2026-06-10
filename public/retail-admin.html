@@ -7716,7 +7716,6 @@
           <h3 id="pd-title" style="margin:0;font-size:14px;">Product · 产品</h3>
           <div style="display:flex;gap:8px;align-items:center;">
             <button class="btn btn-sm" id="pd-expand-btn" type="button" onclick="pdToggleFullscreen()" title="Expand / shrink editor · 全屏 / 还原"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg>Expand · 全屏</button>
-            <button class="btn btn-sm" id="pd-savenext-btn" type="button" onclick="pdSaveNext()" title="Save and open the next product in the list · 保存并打开列表中的下一个">Save &amp; next · 下一个 ↓</button>
             <button class="btn" onclick="pdClose()">Done · 完成</button>
           </div>
         </div>
@@ -24062,8 +24061,13 @@ function _paStatusMatch(p) {
 // search / filter / view change resets to page 1.
 // Fixed at 18 per page — deliberately NOT operator-adjustable. 18 rows fit
 // inside the editor card without the list running past its bottom edge.
-const PA_PAGE_SIZE = 18;
+let PA_PAGE_SIZE = 50;
 let PA_PAGE = 1;
+function paSetPageSize(v) {
+  PA_PAGE_SIZE = (v === 'all') ? 'all' : parseInt(v, 10);
+  PA_PAGE = 1;
+  paRender();
+}
 function paSetPage(n) {
   // Re-render in place — deliberately NO scroll, so paging doesn't jump the
   // viewport (the pager sits above the grid; scrolling the grid into view
@@ -24083,9 +24087,19 @@ function _paPagerHtml(total, pages, start, shown) {
   // several text nodes and defeat the auto " · " splitter, leaking both halves.
   const prev = `<span data-lang-block="en">‹ Prev</span><span data-lang-block="cn">‹ 上一页</span>`;
   const next = `<span data-lang-block="en">Next ›</span><span data-lang-block="cn">下一页 ›</span>`;
+  const sizeOpt = (v, lbl) => `<option value="${v}" ${String(PA_PAGE_SIZE) === String(v) ? 'selected' : ''}>${lbl}</option>`;
+  const sizeSel = `<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-family:var(--f-sans)" class="muted">
+        <span data-lang-block="en">Per page</span><span data-lang-block="cn">每页</span>
+        <select onchange="paSetPageSize(this.value)" style="font-family:var(--f-sans);font-size:12px">
+          ${sizeOpt(50, '50')}${sizeOpt(100, '100')}${sizeOpt(200, '200')}${sizeOpt('all', cuT('All', '全部'))}
+        </select>
+      </label>`;
   return `<span class="muted" style="font-size:12px;font-family:var(--f-sans)"><span data-lang-block="en">Showing <b>${from}–${to}</b> of <b>${total}</b></span><span data-lang-block="cn">显示 <b>${from}–${to}</b> / 共 <b>${total}</b></span></span>
-    <div style="display:flex;align-items:center;gap:8px">
-      ${btn(prev, PA_PAGE - 1, PA_PAGE <= 1)}<span style="font-size:12px;white-space:nowrap">${PA_PAGE} / ${pages}</span>${btn(next, PA_PAGE + 1, PA_PAGE >= pages)}
+    <div style="display:flex;align-items:center;gap:12px">
+      ${sizeSel}
+      <div style="display:flex;align-items:center;gap:8px">
+        ${btn(prev, PA_PAGE - 1, PA_PAGE <= 1)}<span style="font-size:12px;white-space:nowrap">${PA_PAGE} / ${pages}</span>${btn(next, PA_PAGE + 1, PA_PAGE >= pages)}
+      </div>
     </div>`;
 }
 
@@ -24800,23 +24814,25 @@ function paRenderBulkBar() {
         `<span class="pa-bulk-sep"></span>` +
         grp(cuT('Shipping', '配送'), b(cuT('Air + Land', '空运+陆运'), "paBulkApply({ship_modes:'air,land'}, 'ship')") + b(cuT('Air only', '仅空运'), "paBulkApply({ship_modes:'air'}, 'ship')") + b(cuT('Land only', '仅陆运'), "paBulkApply({ship_modes:'land'}, 'ship')")) +
         `<span class="pa-bulk-sep"></span>` +
+        grp(cuT('Badge', '标签'),
+          b(cuT('None', '无'),  "paBulkApply({tags:''}, 'badge-none')") +
+          b(cuT('Auto', '自动'), "paBulkApply({tags:'auto'}, 'badge-auto')") +
+          b('NEW',  "paBulkApply({tags:'new'}, 'badge-new')") +
+          b('POP',  "paBulkApply({tags:'pop'}, 'badge-pop')") +
+          b('SALE', "paBulkApply({tags:'sale'}, 'badge-sale')") +
+          b('HOT',  "paBulkApply({tags:'hot'}, 'badge-hot')")) +
+        `<span class="pa-bulk-sep"></span>` +
+        `<button type="button" class="btn btn-sm" ${n ? '' : 'disabled'} onclick="paBulkDelete()" style="color:var(--danger,#c0392b);">${cuT('Delete', '删除')}</button>` +
+        `<span class="pa-bulk-sep"></span>` +
         `<button type="button" class="btn btn-sm" onclick="paSetSelectMode(false)">${cuT('Done', '完成')}</button>` +
       `</span>`;
     return;
   }
 
-  const toPublish = shown.filter(p => p.is_published !== 1).length;
-  const toHide    = shown.filter(p => p.is_published === 1).length;
-  const filtered = (document.getElementById('pa-search').value || '').trim() !== ''
-    || (document.getElementById('pa-filter').value || 'all') !== 'all'
-    || PA_STATUS !== 'all';
-  const tip = filtered ? '' : cuT(' · tip: filter to Drafts first', ' · 提示:可先筛选未上架');
   bar.innerHTML =
-    `<span class="muted">${cuT(shown.length + ' shown', '显示 ' + shown.length + ' 件')}${tip}</span>` +
+    `<span class="muted">${cuT(shown.length + ' shown', '显示 ' + shown.length + ' 件')}</span>` +
     `<span style="margin-left:auto;display:flex;gap:8px;">` +
-      `<button type="button" class="btn btn-sm" onclick="paSetSelectMode(true)">${cuT('Select', '选择')}</button>` +
-      (toPublish ? `<button type="button" class="btn btn-sm" onclick="paBulkSetPublished(1)">${cuT('Publish ' + toPublish, '上架 ' + toPublish)}</button>` : '') +
-      (toHide ? `<button type="button" class="btn btn-sm" onclick="paBulkSetPublished(0)">${cuT('Hide ' + toHide, '下架 ' + toHide)}</button>` : '') +
+      `<button type="button" class="btn btn-sm" onclick="paSetSelectMode(true)">${cuT('Bulk', '批量')}</button>` +
     `</span>`;
 }
 // Enter/leave select mode. Leaving drops the tick set. Re-renders the list so
@@ -24853,6 +24869,12 @@ async function paBulkApply(patch, kind) {
     'batch-off': cuT('Unmark made fresh in batches', '取消分批现做'),
     'ship': cuT('Set shipping to ' + (patch.ship_modes === 'air' ? 'Air only' : patch.ship_modes === 'land' ? 'Land only' : 'Air + Land'),
                 '设置配送为' + (patch.ship_modes === 'air' ? '仅空运' : patch.ship_modes === 'land' ? '仅陆运' : '空运+陆运')),
+    'badge-none': cuT('Clear the shop-card badge', '清除店面标签'),
+    'badge-auto': cuT('Set badge to Auto (by sales)', '设置标签为自动(按销量)'),
+    'badge-new':  cuT('Set badge to NEW', '设置标签为 NEW · 新品'),
+    'badge-pop':  cuT('Set badge to POP', '设置标签为 POP · 热门'),
+    'badge-sale': cuT('Set badge to SALE', '设置标签为 SALE · 特价'),
+    'badge-hot':  cuT('Set badge to HOT', '设置标签为 HOT · 推荐'),
   };
   const what = labels[kind] || cuT('Update', '更新');
   if (!confirm(cuT(what + ' — ' + ids.length + ' product(s)?', what + ' — ' + ids.length + ' 件商品?'))) return;
@@ -24871,6 +24893,29 @@ async function paBulkApply(patch, kind) {
   toast(fail
     ? cuT(done + ' done, ' + fail + ' failed', done + ' 成功,' + fail + ' 失败')
     : cuT('Updated ' + done + ' ✓', '已更新 ' + done + ' 件 ✓'), fail ? 'err' : 'ok');
+  await paLoad();
+}
+// Delete every ticked product. Double-confirms (irreversible — soft-delete that
+// frees the SKU, no restore UI), DELETEs each, reports, drops the tick set and
+// reloads. Mirrors the per-product delete endpoint.
+async function paBulkDelete() {
+  const ids = [...PA_SELECTED];
+  if (!ids.length) return;
+  if (!confirm(cuT('Delete ' + ids.length + ' product(s)? This removes them from the catalogue and frees their SKUs. This cannot be undone.',
+                   '删除 ' + ids.length + ' 件商品?将从商品库移除并释放其 SKU。此操作无法撤销。'))) return;
+  toast(cuT('Working…', '处理中…'));
+  let done = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      const r = await fetch('/api/retail-admin/products/' + id, { method: 'DELETE' });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j && j.success !== false) done++; else fail++;
+    } catch (e) { fail++; }
+  }
+  toast(fail
+    ? cuT(done + ' deleted, ' + fail + ' failed', done + ' 已删除,' + fail + ' 失败')
+    : cuT('Deleted ' + done + ' ✓', '已删除 ' + done + ' 件 ✓'), fail ? 'err' : 'ok');
+  PA_SELECTED = new Set();
   await paLoad();
 }
 async function paBulkSetPublished(want) {

@@ -2520,6 +2520,42 @@ addColumn('retail_customer_addresses', 'lat',         'REAL');
 addColumn('retail_customer_addresses', 'lng',         'REAL');
 addColumn('retail_customer_addresses', 'geocoded_at', 'DATETIME');
 
+// English companions for the (canonical Chinese) province/city/district so a
+// saved address renders in whichever language the customer's app is set to,
+// instead of being frozen in the language it was entered in. Populated on
+// save by routes/retail.js (lib/region-i18n.js); back-filled below for rows
+// that predate the columns.
+addColumn('retail_customer_addresses', 'province_en', 'TEXT');
+addColumn('retail_customer_addresses', 'city_en',     'TEXT');
+addColumn('retail_customer_addresses', 'district_en', 'TEXT');
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('backfill_addr_region_en_v1');
+  if (!ran) {
+    const regionI18n = require('./lib/region-i18n');
+    const rows = db.prepare(
+      `SELECT id, province, city, district FROM retail_customer_addresses
+        WHERE city IS NOT NULL OR district IS NOT NULL`
+    ).all();
+    const upd = db.prepare(
+      `UPDATE retail_customer_addresses
+          SET province = ?, city = ?, district = ?,
+              province_en = ?, city_en = ?, district_en = ?
+        WHERE id = ?`
+    );
+    let n = 0;
+    const tx = db.transaction(() => {
+      for (const r of rows) {
+        const x = regionI18n.resolveRegion(r);
+        upd.run(x.province, x.city, x.district, x.province_en, x.city_en, x.district_en, r.id);
+        n++;
+      }
+    });
+    tx();
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('backfill_addr_region_en_v1');
+    if (n) console.log(`[migration backfill_addr_region_en_v1] localized ${n} saved addresses`);
+  }
+} catch (e) { console.error('[migration backfill_addr_region_en_v1]', e); }
+
 // Delivery zones gain a `preferred_store_id` link so the office can map
 // a GZ district / city to its default fulfilling store. Routing reads
 // this first; if the linked store is out of stock the inventory service

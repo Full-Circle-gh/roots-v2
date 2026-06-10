@@ -1,3 +1,4 @@
+<wxs src="../../utils/region.wxs" module="region" />
 <view class="page">
   <view class="header">
     <view class="header-row">
@@ -81,7 +82,7 @@
           <view class="head-action f-toni addr-change" bindtap="openPicker">{{lang === 'cn' ? '更换' : 'CHANGE'}}</view>
         </view>
         <view class="addr-text addr-full">
-          {{address.city}}{{address.district ? ' · ' + address.district : ''}}{{address.address ? ' · ' + address.address : ''}}{{address.detail ? ' · ' + address.detail : ''}}
+          {{region.line(address, lang)}}
         </view>
       </block>
 
@@ -92,7 +93,7 @@
           <view class="dot {{address.id === item.id ? 'on' : ''}}"></view>
           <view class="addr-body">
             <view class="addr-text"><text class="f-bear">{{item.recipient_name}}</text> · {{item.phone}} <text wx:if="{{item.is_default}}" class="addr-default f-toni">{{lang === 'cn' ? '默认' : 'DEFAULT'}}</text></view>
-            <view class="addr-text addr-full">{{item.city}}{{item.district ? ' · ' + item.district : ''}}{{item.address ? ' · ' + item.address : ''}}{{item.detail ? ' · ' + item.detail : ''}}</view>
+            <view class="addr-text addr-full">{{region.line(item, lang)}}</view>
           </view>
         </view>
         <view class="link-row f-toni" bindtap="showAddNew">+ {{lang === 'cn' ? '使用新地址' : 'USE A NEW ADDRESS'}}</view>

@@ -489,6 +489,11 @@ Page({
       'address.province': provCn,
       'address.city': c.name_cn,
       'address.district': districtCn,
+      // Carry the English companions so the collapsed line stays in EN before
+      // the row round-trips through the server (which resolves them too).
+      'address.province_en': c.province_en || '',
+      'address.city_en': c.name_en || '',
+      'address.district_en': (d && d.name_en) || '',
     });
     this.refreshQuote();
   },
@@ -524,6 +529,9 @@ Page({
           province: next.province || '',
           city: next.city || '',
           district: next.district || '',
+          province_en: next.province_en || '',
+          city_en: next.city_en || '',
+          district_en: next.district_en || '',
         };
         // Clear the cross-page flag so onShow doesn't keep re-applying it.
         if (justPicked) patch._addressJustPicked = null;
@@ -570,6 +578,9 @@ Page({
             province: def.province || '',
             city: def.city || '',
             district: def.district || '',
+            province_en: def.province_en || '',
+            city_en: def.city_en || '',
+            district_en: def.district_en || '',
           },
         });
         this.syncAreaLabel();
@@ -1490,6 +1501,9 @@ Page({
         province: a.province || '',
         city: a.city || '',
         district: a.district || '',
+        province_en: a.province_en || '',
+        city_en: a.city_en || '',
+        district_en: a.district_en || '',
       },
     });
     this.syncAreaLabel();
@@ -1535,6 +1549,7 @@ Page({
           id: def.id, recipient_name: def.recipient_name, phone: def.phone,
           address: def.address, detail: def.detail || '', province: def.province || '',
           city: def.city || '', district: def.district || '',
+          province_en: def.province_en || '', city_en: def.city_en || '', district_en: def.district_en || '',
         },
       });
       this.syncAreaLabel();

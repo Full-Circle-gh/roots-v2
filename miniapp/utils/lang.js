@@ -68,4 +68,17 @@ function pickLabel(raw, lang) {
   return splitMixed(str, lang);
 }
 
-module.exports = { detect, set, pick, splitMixed, pickLabel };
+// Localize a saved address's region to the active language. The server stores
+// canonical Chinese in city/district plus English companions in
+// city_en/district_en; show the matching side, falling back to the other when
+// the companion is missing (foreign / freeform entries we couldn't translate).
+function addrRegion(a, lang) {
+  const o = a || {};
+  const en = lang !== 'cn';
+  return {
+    city:     (en ? (o.city_en || o.city)         : (o.city || o.city_en))         || '',
+    district: (en ? (o.district_en || o.district) : (o.district || o.district_en)) || '',
+  };
+}
+
+module.exports = { detect, set, pick, splitMixed, pickLabel, addrRegion };

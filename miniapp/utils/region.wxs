@@ -1,0 +1,32 @@
+// Render a saved address's region + street in the active language. The server
+// stores canonical Chinese in city/district plus English companions in
+// city_en/district_en; show the matching side, falling back to the other when
+// the companion is missing (foreign / freeform entries we couldn't translate).
+// address + detail are free-typed and never translated.
+function line(o, lang) {
+  if (!o) return '';
+  var en = lang !== 'cn';
+  var city = en ? (o.city_en || o.city) : (o.city || o.city_en);
+  var dist = en ? (o.district_en || o.district) : (o.district || o.district_en);
+  var parts = [];
+  if (city) parts.push(city);
+  if (dist) parts.push(dist);
+  if (o.address) parts.push(o.address);
+  if (o.detail) parts.push(o.detail);
+  return parts.join(' · ');
+}
+
+// Just the localized "city · district" (no street), for layouts that show the
+// street on its own line.
+function region(o, lang) {
+  if (!o) return '';
+  var en = lang !== 'cn';
+  var city = en ? (o.city_en || o.city) : (o.city || o.city_en);
+  var dist = en ? (o.district_en || o.district) : (o.district || o.district_en);
+  var parts = [];
+  if (city) parts.push(city);
+  if (dist) parts.push(dist);
+  return parts.join(' · ');
+}
+
+module.exports = { line: line, region: region };

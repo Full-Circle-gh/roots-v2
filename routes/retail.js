@@ -18,6 +18,7 @@ const multer = require('multer');
 const db = require('../database');
 const inventory = require('../lib/inventory');
 const geocode = require('../lib/geocode');
+const regionI18n = require('../lib/region-i18n');
 const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
 const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib/category-tree');
@@ -3379,6 +3380,7 @@ router.post('/api/retail/track', express.json(), (req, res) => {
 // single-row per customer at the route level (we flip all others to 0 in
 // the same txn when one is set to 1).
 const ADDRESS_PUBLIC_COLS = `id, recipient_name, phone, province, city, district,
+                              province_en, city_en, district_en,
                               address, detail, postal_code, is_default,
                               created_at, updated_at`;
 
@@ -3532,6 +3534,10 @@ function normalizeChinaAddress(a) {
 
 router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, res) => {
   const a = normalizeChinaAddress(req.body || {});
+  // Resolve province/city/district into canonical Chinese + their English
+  // companions so the address can be shown in whichever language the customer's
+  // app is set to. Unknown places keep their stored value (English stays null).
+  Object.assign(a, regionI18n.resolveRegion(a));
   if (!a.recipient_name || !a.phone || !a.address) {
     return res.status(400).json({ success: false, error: 'missing_required' });
   }
@@ -3548,11 +3554,13 @@ router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, re
     const info = tdb().prepare(
       `INSERT INTO retail_customer_addresses
          (customer_id, recipient_name, phone, province, city, district,
+          province_en, city_en, district_en,
           address, detail, postal_code, is_default)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       req.customer.id, a.recipient_name, a.phone,
       a.province || null, a.city || null, a.district || null,
+      a.province_en || null, a.city_en || null, a.district_en || null,
       a.address, a.detail || null, a.postal_code || null,
       a.is_default ? 1 : 0
     );
@@ -3591,12 +3599,25 @@ router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req,
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
   // Normalize only the fields actually present in the body — PUT is partial.
   const incoming = req.body || {};
-  const a = (incoming.province || incoming.city || incoming.district || incoming.address)
+  const regionChanged = !!(incoming.province || incoming.city || incoming.district);
+  const a = (regionChanged || incoming.address)
     ? normalizeChinaAddress(incoming)
     : incoming;
+  // Re-resolve the bilingual region whenever the customer changed it, so the
+  // English companions stay in lockstep with the (canonical Chinese) values.
+  if (regionChanged) Object.assign(a, regionI18n.resolveRegion(a));
   const tx = tdb().transaction(() => {
     if (a.is_default) {
       tdb().prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(req.customer.id);
+    }
+    if (regionChanged) {
+      // Set the *_en companions directly (not COALESCE) so an unresolvable
+      // new region clears a stale English name instead of keeping it.
+      tdb().prepare(
+        `UPDATE retail_customer_addresses
+            SET province_en = ?, city_en = ?, district_en = ?
+          WHERE id = ?`
+      ).run(a.province_en || null, a.city_en || null, a.district_en || null, id);
     }
     tdb().prepare(
       `UPDATE retail_customer_addresses
