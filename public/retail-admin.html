@@ -28449,18 +28449,35 @@ window.onLangChange(function () {
     return o.status === 'dispatched' || o.status === 'delivered'
         || o.status === 'cancelled' || o.status === 'refunded';
   }
+  // Robust parse for scheduled_for, which arrives in two shapes: a full ISO
+  // string ("2026-06-10T08:00:00.000Z", from .toISOString()) or a bare SQLite
+  // UTC stamp ("2026-06-10 08:00:00"). The old `.replace(' ','T') + 'Z'` blindly
+  // appended a 'Z' — harmless on the bare form but it DOUBLED the Z on the ISO
+  // form ("…ZZ" → Invalid Date), which made shipBy() bail out to an empty "—".
+  function schedDate(s) {
+    if (!s) return null;
+    var str = String(s).trim();
+    var hasTz = /[zZ]$|[+\-]\d\d:?\d\d$/.test(str);   // already tz-aware?
+    var norm = str.indexOf('T') >= 0 ? str : str.replace(' ', 'T');
+    if (!hasTz) norm += 'Z';                          // bare SQLite stamp is UTC
+    var d = new Date(norm);
+    return isNaN(d.getTime()) ? null : d;
+  }
   function shipBy(o) {
     if (o.fulfillment_type === 'pickup') {
       var l = (typeof humanizeSlotLabel === 'function' ? humanizeSlotLabel(o.delivery_slot_label) : '') || 'ASAP';
       return { text: 'Pickup · ' + l, late: false };
     }
-    if (!o.scheduled_for) return { text: 'ASAP', late: false };
-    var dt = new Date(String(o.scheduled_for).replace(' ', 'T') + 'Z');
-    if (isNaN(dt.getTime())) return { text: '', late: false };
+    // Prefer the human picker label captured at checkout (e.g. "Today" /
+    // same-day) — it's the truest answer and survives an unparseable timestamp.
+    var lbl = (typeof humanizeSlotLabel === 'function' ? humanizeSlotLabel(o.delivery_slot_label) : '') || '';
+    if (!o.scheduled_for) return { text: lbl || 'ASAP', late: false };
+    var dt = schedDate(o.scheduled_for);
     var actionable = (o.status === 'paid' || o.status === 'preparing');
-    var lbl = (typeof humanizeSlotLabel === 'function' && humanizeSlotLabel(o.delivery_slot_label))
-      || (typeof fmtSlotShort === 'function' ? fmtSlotShort(dt) : '');
-    return { text: lbl, late: actionable && dt.getTime() < Date.now() };
+    var text = lbl
+      || (dt && typeof fmtSlotShort === 'function' ? fmtSlotShort(dt) : '')
+      || String(o.scheduled_for);   // last resort: never render an empty "—"
+    return { text: text, late: !!dt && actionable && dt.getTime() < Date.now() };
   }
 
   var ICON_ADV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
@@ -28481,8 +28498,8 @@ window.onLangChange(function () {
   ];
   function shipTime(o) {
     if (!o.scheduled_for) return 0;            // ASAP / unscheduled → most urgent
-    var t = Date.parse(String(o.scheduled_for).replace(' ', 'T') + 'Z');
-    return isNaN(t) ? Infinity : t;
+    var d = schedDate(o.scheduled_for);        // shared parse — tolerates ISO + bare
+    return d ? d.getTime() : Infinity;
   }
   function applySort(arr) {
     var a = arr.slice();
