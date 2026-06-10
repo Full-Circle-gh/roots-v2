@@ -24953,7 +24953,7 @@ function pdRenderStockMatrix(box, d) {
   }).join('');
   box.innerHTML =
     '<table class="pd-stock-matrix">' + head + body + '</table>' +
-    '<div style="margin-top:8px;"><span id="pd-store-stocks-msg" class="muted" style="font-size:12px;">' + cuT('Stock saves automatically', '库存自动保存') + '</span></div>';
+    '<div style="margin-top:8px;"><span id="pd-store-stocks-msg" class="muted" style="font-size:12px;"></span></div>';
 }
 // Re-label the stock matrix rows live from VA_MEMBERS, so renaming a variant on
 // the left is reflected on the right immediately (no exit + re-open). Only the
