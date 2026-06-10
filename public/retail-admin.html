@@ -1697,6 +1697,10 @@
 
   /* In the rich table the dup button shares the status cell — reveal on hover. */
   .pa-list-rich .pa-dup-row { margin-left: 4px; }
+  /* Shop column: centre the toggle in its cell so it sits under the SHOP header
+     instead of hugging the right-aligned price next to it. */
+  .pa-list-rich .pa-row-pills { justify-content: center; }
+  .pa-rowhead .pa-col-shop { text-align: center; }
 
   /* Variants ("sizes") — sits in the main column between name and description,
      so the most-edited control is reachable without scrolling past the long
@@ -7780,10 +7784,10 @@
               <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
               <div class="field"><label class="stacked">Free of (allergens) · 不含 <span class="muted" style="font-weight:400;">(tick what applies)</span></label>
                 <div id="pd-free-of" data-freeof-group="1" style="display:flex;flex-wrap:wrap;gap:10px 16px;padding-top:4px;">
-                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="nuts" style="width:15px;height:15px;"> 🥜 Nuts · 无坚果</label>
-                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="soy" style="width:15px;height:15px;"> 🌱 Soy · 无大豆</label>
-                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="gluten" style="width:15px;height:15px;"> 🌾 Gluten · 无麸质</label>
-                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="5 spice" style="width:15px;height:15px;"> 🫙 5 Spice · 无五香</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="nuts" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 3a3.3 3.3 0 0 0-3 4.9c.3.5.5 1 .5 1.7s-.2 1.2-.5 1.8a3.3 3.3 0 1 0 6 0c-.3-.6-.5-1.1-.5-1.8s.2-1.2.5-1.7A3.3 3.3 0 0 0 12 3z"/><path d="M10 7.5h.01M14 7.5h.01M10.5 11h.01M13.5 11h.01"/></svg> Nuts · 无坚果</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="soy" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 21v-8"/><path d="M12 13c0-3-2-5.5-5.5-5.5 0 3 2 5.5 5.5 5.5z"/><path d="M12 11.5c0-2.6 2-4.8 5.2-4.8 0 2.6-2 4.8-5.2 4.8z"/></svg> Soy · 无大豆</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="gluten" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 21V8"/><path d="M12 8c-1.6 0-3-1.2-3-3.2 1.6 0 3 1.2 3 3.2zM12 8c1.6 0 3-1.2 3-3.2-1.6 0-3 1.2-3 3.2zM12 13c-1.6 0-3-1.2-3-3.2 1.6 0 3 1.2 3 3.2zM12 13c1.6 0 3-1.2 3-3.2-1.6 0-3 1.2-3 3.2z"/></svg> Gluten · 无麸质</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="5 spice" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M8 10h8v9a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2z"/><path d="M9 10V7.5a3 3 0 0 1 6 0V10"/><path d="M11 14h.01M13 14h.01M12 16.5h.01"/></svg> 5 Spice · 无五香</label>
                 </div>
               </div>
               <div class="field">
@@ -24136,7 +24140,7 @@ function paRender() {
         <span>SKU</span>
         <span>${(PA_STORE !== 'all' && PA_STOCK_LOADED) ? escapeHtml(cuT('Stock · ', '库存 · ') + _paStoreName(PA_STORE)) : cuT('Stock', '库存')}</span>
         <span class="pa-col-price">${cuT('Price', '价格')}</span>
-        <span>${cuT('Shop', '上架')}</span>
+        <span class="pa-col-shop">${cuT('Shop', '上架')}</span>
       </div>` : '';
     grid.innerHTML = head + pageUnits.map(u => {
       const p = u.p;
