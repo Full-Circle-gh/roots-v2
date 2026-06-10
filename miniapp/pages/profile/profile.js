@@ -256,7 +256,11 @@ Page({
     try {
       const body = { nickname };
       if (avatar_url) body.avatar_url = avatar_url;
-      if (this.data.phone) body.phone = this.data.phone;
+      // NOTE: phone is intentionally NOT sent here. The server only accepts a
+      // phone via the WeChat-verified getPhoneNumber path (POST /api/retail/phone,
+      // wired on the wallet page), because the phone unlocks OUT1N migration
+      // credit and must prove ownership. A free-form phone PATCH would be a
+      // money-theft vector, so it's ignored server-side.
       const updated = await api.patch('/api/retail/customer', body);
       const app = getApp();
       app.globalData.customer = { ...(app.globalData.customer || {}), ...updated };

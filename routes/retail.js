@@ -844,6 +844,16 @@ router.get('/api/retail/products/:productId/substitute-options', requireRetailAu
 //   ?limit=N (1..24)        default: 6
 //
 // 5-min in-process cache keyed by (channel, window, limit).
+// Several module-level Maps below cache storefront data process-wide, but the
+// process serves multiple tenants (each a separate SQLite file), so every cache
+// key MUST be prefixed with the active tenant's db file — otherwise once
+// TENANT_DATA_ISOLATION is on, the first tenant to populate a key serves its
+// rows (best-sellers, buyer names, social proof) to every other tenant sharing
+// that key. Mirrors the tenantKey approach already used by POP_RANK_CACHE.
+function tenantCacheKey() {
+  try { return tdb().name || 'default'; } catch { return 'default'; }
+}
+
 const TOP_PRODUCT_CACHE = new Map();
 const TOP_PRODUCT_TTL_MS = 5 * 60 * 1000;
 
@@ -854,7 +864,7 @@ router.get('/api/retail/products/top', (req, res) => {
     ? req.query.window : '7d';
   const limit = Math.max(1, Math.min(24, parseInt(req.query.limit || '6', 10) || 6));
 
-  const cacheKey = `${channel}|${windowSpec}|${limit}`;
+  const cacheKey = `${tenantCacheKey()}|${channel}|${windowSpec}|${limit}`;
   const cached = TOP_PRODUCT_CACHE.get(cacheKey);
   const now = Date.now();
   if (cached && (now - cached.t) < TOP_PRODUCT_TTL_MS) {
@@ -1183,7 +1193,11 @@ function resolveAutoBadges(rows) {
 
 function socialProofForProduct(id) {
   const now = Date.now();
-  const cached = SOCIAL_PROOF_CACHE.get(id);
+  // Tenant-prefixed key: product ids are per-tenant autoincrement and collide
+  // across tenants, so a bare id would leak one tenant's bought-count/last-order
+  // to another's same-id product.
+  const ck = tenantCacheKey() + '|' + id;
+  const cached = SOCIAL_PROOF_CACHE.get(ck);
   if (cached && (now - cached.t) < SOCIAL_PROOF_TTL_MS) return cached.value;
 
   const cfg = getSocialConfig();
@@ -1192,7 +1206,7 @@ function socialProofForProduct(id) {
   // Both halves of the payload are off → skip the query entirely. The
   // mini-app already hides the product-page nudge when this is null.
   if (!bc.enabled && !lo.enabled) {
-    SOCIAL_PROOF_CACHE.set(id, { t: now, value: null });
+    SOCIAL_PROOF_CACHE.set(ck, { t: now, value: null });
     return null;
   }
   const mins = {
@@ -1265,7 +1279,7 @@ function socialProofForProduct(id) {
   } catch (e) {
     console.error('[social-proof]', e.message);
   }
-  SOCIAL_PROOF_CACHE.set(id, { t: now, value });
+  SOCIAL_PROOF_CACHE.set(ck, { t: now, value });
   return value;
 }
 
@@ -1434,7 +1448,7 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
   const manualFp = manualEntries.length
     ? manualEntries.length + ':' + manualEntries.map(m => (m.name || '') + '|' + (m.minutes_ago || 0)).join(',')
     : '0';
-  const cacheKey = windowDays + '@' + manualFp;
+  const cacheKey = tenantCacheKey() + '|' + windowDays + '@' + manualFp;
   const cached = RECENT_BUYERS_CACHE.get(cacheKey);
   if (cached && (now - cached.t < RECENT_BUYERS_TTL_MS)) {
     res.set('Cache-Control', 'public, max-age=30');
@@ -1509,7 +1523,7 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
 // mini-app's per-launch session id so repeat pings from one client dedupe.
 // Ephemeral by design — a PM2 restart just resets it and clients re-register on
 // their next heartbeat. Assumes a single app instance (this PM2 fork is one).
-const VIEWING = new Map();   // product_id → Map<viewerKey, lastSeenMs>
+const VIEWING = new Map();   // `${tenantKey}|${product_id}` → Map<viewerKey, lastSeenMs>
 const VIEW_TTL_MS = 45 * 1000;
 // Hard cap on tracked viewers per product. Bounds memory and stops a client
 // spamming distinct viewer_ids from inflating the "N viewing now" badge — past
@@ -1551,13 +1565,17 @@ router.post('/api/retail/products/:id/viewing', express.json(), (req, res) => {
   const vid = (b.viewer_id ? String(b.viewer_id).slice(0, 64) : '')
             || ((req.ip || '') + '|' + String(req.get('user-agent') || '').slice(0, 40));
 
-  let viewers = VIEWING.get(id);
-  if (!viewers) { viewers = new Map(); VIEWING.set(id, viewers); }
+  // Tenant-prefixed map key: product ids are per-tenant autoincrement and would
+  // otherwise collide across tenants, merging one tenant's live viewers into
+  // another's "N viewing now" badge.
+  const mk = tenantCacheKey() + '|' + id;
+  let viewers = VIEWING.get(mk);
+  if (!viewers) { viewers = new Map(); VIEWING.set(mk, viewers); }
   if (b.leaving) viewers.delete(vid);
   // Refresh known viewers always; only admit a NEW key while under the cap.
   else if (viewers.has(vid) || viewers.size < MAX_VIEWERS_PER_PRODUCT) viewers.set(vid, now);
   for (const [k, ts] of viewers) if (now - ts > ttlMs) viewers.delete(k);
-  if (viewers.size === 0) VIEWING.delete(id);
+  if (viewers.size === 0) VIEWING.delete(mk);
 
   // Per-product boost from the configured range — different products land on
   // different fake counts via productHash(id). On top of that, a slow time
@@ -6297,7 +6315,12 @@ router.get('/api/retail-admin/dashboard/presence', requireRetailAdmin, (req, res
   const now = Date.now();
   const uniq = new Set();
   let productsWithViewers = 0;
-  for (const [, viewers] of VIEWING) {
+  // Only this tenant's products. VIEWING keys are `${tenantKey}|${id}`, so scope
+  // by the active tenant prefix — otherwise the dashboard would union viewers
+  // from every tenant in the process.
+  const prefix = tenantCacheKey() + '|';
+  for (const [mk, viewers] of VIEWING) {
+    if (!mk.startsWith(prefix)) continue;
     let has = false;
     for (const [vid, ts] of viewers) {
       if (now - ts <= VIEW_TTL_MS) { uniq.add(vid); has = true; }
@@ -8062,13 +8085,30 @@ router.post('/api/retail/orders/:id/cancel', requireRetailAuth, express.json(), 
     return res.status(409).json({ success: false, error: 'not_cancellable', current: order.status });
   }
   const reason = (req.body?.reason || '').slice(0, 200);
-  tdb().prepare(
-    "UPDATE retail_orders SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, cancelled_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+  // Atomic status transition: only flip if STILL pending_payment. `changes`
+  // tells us we won the race (vs. a concurrent cancel / payment callback), so
+  // the one-time reversals below run exactly once for this order.
+  const flipped = tdb().prepare(
+    "UPDATE retail_orders SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, cancelled_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending_payment'"
   ).run(reason || 'customer_cancelled', id);
+  if (!flipped.changes) {
+    // Someone else already moved it (paid or cancelled) between our read and here.
+    const cur = tdb().prepare('SELECT status FROM retail_orders WHERE id = ?').get(id);
+    return res.status(409).json({ success: false, error: 'not_cancellable', current: cur?.status });
+  }
   // Also flip the pending payment row so the admin queue stays consistent
   tdb().prepare(
     "UPDATE retail_payments SET status = 'cancelled' WHERE order_id = ? AND status = 'pending'"
   ).run(id);
+  // Points are debited at order-CREATE (before payment), so a cancel must
+  // return them — otherwise the customer permanently loses points they spent
+  // on an order that was never paid. reverseOrderRedeem is idempotent.
+  try { reverseOrderRedeem(id); }
+  catch (e) { console.error('[cancel.reverseRedeem]', e); }
+  // Vouchers are also consumed at create (global pool + personal grant), so
+  // return them too. Safe to call exactly once thanks to the transition guard.
+  try { reverseOrderVoucher(id); }
+  catch (e) { console.error('[cancel.reverseVoucher]', e); }
   // Release soft-reservations so the stock returns to the available pool.
   try { inventory.releaseOrderReservations(id, { reason: 'customer_cancelled' }); }
   catch (e) { console.error('[inventory.release]', e); }
@@ -8101,9 +8141,16 @@ router.get('/api/retail/customer', requireRetailAuth, (req, res) => {
 // Customer profile update. Used by the WeChat-binding flow on the Me page:
 // the user picks an avatar via <button open-type="chooseAvatar"> and types
 // their nickname via <input type="nickname"> (both pull real WeChat data
-// when granted). Phone update is open for the future getPhoneNumber flow.
+// when granted).
+//
+// SECURITY: this endpoint deliberately does NOT accept `phone`. The phone is
+// the key that unlocks OUT1N migration credit (balance + points), so it must
+// only ever be set via the WeChat-verified getPhoneNumber path below
+// (POST /api/retail/phone), which proves the caller actually owns the number.
+// Accepting a free-form phone here would let any logged-in customer set a
+// victim's number and steal their migrated balance/points.
 router.patch('/api/retail/customer', requireRetailAuth, express.json(), (req, res) => {
-  const { nickname, avatar_url, phone } = req.body || {};
+  const { nickname, avatar_url } = req.body || {};
   const sets = [];
   const params = [];
   if (typeof nickname === 'string') {
@@ -8113,18 +8160,9 @@ router.patch('/api/retail/customer', requireRetailAuth, express.json(), (req, re
   if (typeof avatar_url === 'string') {
     sets.push('avatar_url = ?'); params.push(avatar_url.slice(0, 512) || null);
   }
-  if (typeof phone === 'string') {
-    sets.push('phone = ?'); params.push(phone.slice(0, 32) || null);
-  }
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
   params.push(req.customer.id);
   tdb().prepare(`UPDATE retail_customers SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-  // If the customer just set/changed their phone, try to apply any unclaimed
-  // OUT1N migration credit for that number. Best-effort, never fails the save.
-  if (typeof phone === 'string') {
-    try { claimMigrationCredit(req.customer.id); }
-    catch (e) { console.warn('[retail/customer] migration claim failed:', e.message); }
-  }
   const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(req.customer.id);
   res.json({ success: true, data: publicCustomer(fresh) });
 });
@@ -11026,6 +11064,13 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     if (o.status === 'pending_payment') {
       try { inventory.releaseOrderReservations(id, { reason: 'admin_cancelled' }); }
       catch (e) { console.error('[inventory.release (admin)]', e); }
+      // An unpaid order still consumed points + voucher at create time, so a
+      // cancel from pending_payment must return them (no money was taken, so
+      // there's no gateway refund — just restore the redeemed value). The
+      // transition guard above (def.prev) prevents re-cancelling, so these run
+      // once. reverseOrderRedeem is idempotent; reverseOrderVoucher is once-only.
+      try { reverseOrderRedeem(id); } catch (e) { console.error('[admin-cancel.reverseRedeem]', e); }
+      try { reverseOrderVoucher(id); } catch (e) { console.error('[admin-cancel.reverseVoucher]', e); }
     } else {
       try { inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, note: reason || null }); }
       catch (e) { console.error('[inventory.reverse (cancel)]', e); }
@@ -11225,6 +11270,14 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   } else {
     amount = +Number(o.total).toFixed(2);
   }
+  // Cap the refund at the order total (= the NET cash actually charged after any
+  // points discount). The line-itemized paths above sum GROSS line_totals, which
+  // exceed o.total whenever points were redeemed — without this clamp a per-line
+  // refund + a non-WeChat payout would pay back more than was charged, and a full
+  // refund would ALSO return the points (double compensation). Clamping to o.total
+  // means a full refund returns net cash here + points via reverseOrderRedeem =
+  // exactly what the customer paid. (The amount-based path was already capped.)
+  if (amount != null) amount = +Math.min(Number(amount) || 0, Number(o.total) || 0).toFixed(2);
   if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount' });
 
   const isFull = amount + 0.005 >= Number(o.total); // tolerance for ¥0.01 rounding
@@ -13136,6 +13189,39 @@ function reverseOrderRedeem(orderId) {
   });
   try { tx(); } catch (e) { console.error('[reverseOrderRedeem]', e); }
   return refundedPts;
+}
+
+// Restore a voucher consumed at order-create when that order is cancelled.
+// Mirrors the create-time consume (global pool bump + personal-grant mark):
+// returns one use to the global pool and clears any personal grant tied to
+// this order so the customer can use it again.
+//
+// NOTE: there is no per-order voucher ledger row to use as an idempotency
+// marker, so the CALLER must invoke this exactly once per order — guard the
+// cancel on an atomic pending_payment → cancelled status transition (UPDATE …
+// WHERE status='pending_payment' with changes===1) before calling. The
+// `used_count > 0` floor and the `used_at IS NOT NULL` predicate keep a stray
+// double-call from driving values negative, but the contract is once-per-order.
+function reverseOrderVoucher(orderId) {
+  const o = tdb().prepare(
+    'SELECT voucher_code FROM retail_orders WHERE id = ?'
+  ).get(orderId);
+  if (!o || !o.voucher_code) return;
+  try {
+    tdb().transaction(() => {
+      // Return the global pool use (matched the same case-insensitive way
+      // create resolved it). Floor at 0 so we never go negative.
+      tdb().prepare(
+        'UPDATE retail_vouchers SET used_count = used_count - 1 WHERE UPPER(code) = ? AND used_count > 0'
+      ).run(String(o.voucher_code).trim().toUpperCase());
+      // Un-mark any personal grant this order consumed so it reappears in the
+      // customer's wallet/checkout list (idempotent: only un-set rows still
+      // tagged to this order).
+      tdb().prepare(
+        'UPDATE retail_customer_vouchers SET used_at = NULL, used_order_id = NULL WHERE used_order_id = ? AND used_at IS NOT NULL'
+      ).run(orderId);
+    })();
+  } catch (e) { console.error('[reverseOrderVoucher]', e.message); }
 }
 
 // Award earn-points on payment success. Idempotent — checks the ledger

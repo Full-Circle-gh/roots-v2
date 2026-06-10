@@ -26746,7 +26746,12 @@ function pdCollectBody() {
     sku: g('pd-sku'), weight: g('pd-weight'),
     top_category: g('pd-top-category'), subcategory: g('pd-subcategory'),
     tags: g('pd-badge'),
-    sell_price: parseFloat(g('pd-price')) || 0,
+    // Only include sell_price when the field actually has a value. An empty
+    // field (e.g. the operator cleared it to retype a new price) must NOT
+    // autosave sell_price:0 — that would make the live product FREE until the
+    // next keystroke saves. Omitting the key leaves the stored price unchanged
+    // (the server only writes sell_price when it's present in the body).
+    ...(g('pd-price') !== '' ? { sell_price: parseFloat(g('pd-price')) || 0 } : {}),
     compare_at_price: parseFloat(g('pd-compare')) || 0,
     low_stock_threshold: g('pd-low-stock').trim(),  // '' = clear override → use store default
     status: g('pd-status') || 'Active',
