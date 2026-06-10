@@ -8226,6 +8226,53 @@ router.get('/api/retail-admin/products/:id/store-stocks', requireRetailAdmin, (r
   res.json({ success: true, data: rows });
 });
 
+// Variant × store stock matrix for the product editor. Stock is owned per
+// (variant, store): each variant is its own store_products row, and each holds
+// independent per-store physical_qty in retail_store_stock. This returns the
+// full grid — every variant in the group (or just this product if it has none)
+// crossed with every active store — so the editor can show/edit it in one place.
+// Writes still go through the existing per-store PATCH (one cell at a time).
+router.get('/api/retail-admin/products/:id/variant-store-stocks', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const p = tdb().prepare('SELECT id, variant_group_id FROM store_products WHERE id = ?').get(id);
+  if (!p) return res.status(404).json({ success: false, error: 'not_found' });
+  const stores = tdb().prepare(`
+    SELECT id AS store_id, code, name_en, name_cn
+      FROM retail_stores WHERE is_active = 1
+     ORDER BY sort_order ASC, id ASC
+  `).all();
+  // The group is keyed by variant_group_id (= the owner's id). A lone product
+  // with no group is its own single-row "group".
+  const gid = p.variant_group_id;
+  const variants = gid
+    ? tdb().prepare(`
+        SELECT id, name_en, name_cn, variant_label
+          FROM store_products
+         WHERE variant_group_id = ? AND COALESCE(is_active, 1) = 1
+         ORDER BY COALESCE(variant_sort, 0), COALESCE(variant_label, name_en), id`).all(gid)
+    : tdb().prepare(`SELECT id, name_en, name_cn, variant_label FROM store_products WHERE id = ?`).all(id);
+  const vIds = variants.map(v => v.id);
+  let qty = {};
+  if (vIds.length) {
+    const ph = vIds.map(() => '?').join(',');
+    const rows = tdb().prepare(`
+      SELECT product_id, store_id, physical_qty
+        FROM retail_store_stock
+       WHERE product_id IN (${ph})`).all(...vIds);
+    for (const r of rows) { (qty[r.product_id] || (qty[r.product_id] = {}))[r.store_id] = r.physical_qty; }
+  }
+  res.json({
+    success: true,
+    data: {
+      self_id: id,
+      stores,
+      variants: variants.map(v => ({ ...v, self: v.id === id })),
+      // qty[variantId][storeId] = physical_qty (missing = 0)
+      qty,
+    },
+  });
+});
+
 // Soft-delete a product from the Mini App Backend (hide from shop + lists).
 router.delete('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
   // upstream tenants can't remove master products from this backend.
@@ -8655,11 +8702,18 @@ router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, 
   let members = [];
   if (p.variant_group_id) {
     members = tdb().prepare(
-      `SELECT id, name_en, name_cn, sku, variant_label, weight AS size, sell_price AS price,
-              stock_qty AS stock, image_data, image_url, is_published
-         FROM store_products
-        WHERE variant_group_id = ? AND COALESCE(is_active, 1) = 1
-        ORDER BY COALESCE(variant_sort, 0), COALESCE(variant_label, name_en), id`
+      `SELECT sp.id, sp.name_en, sp.name_cn, sp.sku, sp.variant_label, sp.weight AS size, sp.sell_price AS price,
+              -- Per-variant stock = SUM of its per-store physical_qty (the real
+              -- number), falling back to the legacy flat stock_qty only when the
+              -- variant has no per-store rows yet.
+              COALESCE(
+                (SELECT SUM(rss.physical_qty) FROM retail_store_stock rss WHERE rss.product_id = sp.id),
+                sp.stock_qty, 0
+              ) AS stock,
+              sp.image_data, sp.image_url, sp.is_published
+         FROM store_products sp
+        WHERE sp.variant_group_id = ? AND COALESCE(sp.is_active, 1) = 1
+        ORDER BY COALESCE(sp.variant_sort, 0), COALESCE(sp.variant_label, sp.name_en), sp.id`
     ).all(p.variant_group_id);
   }
   res.json({ success: true, data: { group_id: p.variant_group_id || null, members } });

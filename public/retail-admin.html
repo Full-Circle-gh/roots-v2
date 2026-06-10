@@ -1806,6 +1806,16 @@
   /* Out-of-stock size — faint row tint + red stock cell so it stands out. */
   .va-row.va-oos { background: rgba(182,86,86,.06); border-radius: 6px; }
   .va-row.va-oos .va-stk { color: var(--danger); border-color: rgba(182,86,86,.5); }
+  /* Stock-by-location grid: variant rows × store columns + a live row total.
+     One place to set every variant's stock in every store. */
+  .pd-stock-matrix { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .pd-stock-matrix th, .pd-stock-matrix td { padding: 4px 6px; text-align: center; }
+  .pd-stock-matrix tr:first-child th { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-4); font-family: var(--f-mono); font-weight: 500; }
+  .pd-stock-matrix th.vh { text-align: left; color: var(--text-1); font-weight: 600; white-space: nowrap; }
+  .pd-stock-matrix tr:first-child th.vh { color: var(--text-4); font-weight: 500; }
+  .pd-stock-matrix input { width: 64px; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--line,#d8d2c4); border-radius: 8px; font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+  .pd-stock-matrix td.mtot, .pd-stock-matrix th.mtot { color: var(--text-2); font-weight: 600; min-width: 34px; font-variant-numeric: tabular-nums; }
+  .pd-stock-matrix .va-self { font-size: 11px; }
   /* Description editor — Classic (rich) editor + "Product editor" launch, EN|CN side-by-side. */
   .pd-desc-modebar { display: inline-flex; gap: 4px; margin-left: 10px; vertical-align: middle; }
   .pd-mode-btn { font-size: 11px; padding: 3px 10px; border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-2); border-radius: 6px; cursor: pointer; font-weight: 500; }
@@ -24259,67 +24269,95 @@ function pdOnTopCatChange() {
   pdFillSubCats(document.getElementById('pd-top-category').value, '');
 }
 
-// Editable "stock by location" panel in the product editor. The store holds
-// independent stock per location (Tianhe / Yuexiu) in retail_store_stock; each
-// row is a number input that writes back via the per-store adjust endpoint
-// (PATCH /stores/:storeId/stock/:productId), so a ledger row is recorded.
+// Variant × store stock matrix in the product editor. Stock is owned per
+// (variant, store): each variant is its own product row, holding independent
+// per-store physical_qty in retail_store_stock. This grid shows EVERY variant
+// across EVERY store in one place — so you never open another variant just to
+// set its stock — and feeds the read-only STOCK column in the variants table
+// (VA_STORE_TOTALS) so the two views always agree. Each changed cell writes via
+// the per-store PATCH (/stores/:storeId/stock/:productId) → a ledger row lands.
 // New (unsaved) products show a hint — stock needs a product id to attach to.
-// Keep the read-only stock shown on the variants "self" row in step with the
-// per-store panel — that number is the Tianhe + Yuexiu total, so it must move
-// whenever the per-store inputs do (load or save). No-op if the variants editor
-// is on a different product or not yet populated.
-function vaSyncSelfStock(total) {
-  const selfV = (VA_MEMBERS || []).find(v => v.self);
-  if (!selfV) return;
-  selfV.stock = total;
-  if (document.getElementById('pd-variants')) vaRender();
+function _vaMatrixLabel(v) {
+  const lbl = (v.variant_label || '').trim();
+  if (lbl) return lbl;
+  return cuT(v.name_en || '—', v.name_cn || v.name_en || '—');
 }
 function pdLoadStoreStocks(id) {
   const box = document.getElementById('pd-store-stocks');
   if (!box) return;
   box.dataset.productId = (id == null ? '' : String(id));
-  if (id == null) { box.className = 'muted'; box.textContent = cuT('Set per-location stock after saving', '保存后按门店设置库存'); return; }
+  if (id == null) { box.className = 'muted'; box.textContent = cuT('Set stock after saving', '保存后设置库存'); return; }
   box.className = '';
   box.textContent = '…';
-  fetch('/api/retail-admin/products/' + id + '/store-stocks', { credentials: 'same-origin' })
+  // NOTE: use cuT() for language, NOT the raw `_lang` global — `_lang` is scoped
+  // inside the i18n module closure and is NOT visible here.
+  fetch('/api/retail-admin/products/' + id + '/variant-store-stocks', { credentials: 'same-origin' })
     .then(r => r.json())
     .then(j => {
-      if (!j || !j.success || !Array.isArray(j.data) || !j.data.length) {
+      const d = j && j.success && j.data;
+      if (!d || !Array.isArray(d.stores) || !d.stores.length || !Array.isArray(d.variants) || !d.variants.length) {
         box.className = 'muted'; box.textContent = cuT('No stock info yet', '暂无库存信息'); return;
       }
       box.className = '';
-      // NOTE: use cuT() for language, NOT the raw `_lang` global — `_lang` is
-      // scoped inside the i18n module closure and is NOT visible here. Reading
-      // it threw a ReferenceError that the .catch swallowed into a misleading
-      // "couldn't load stock" (the original read-only summary had this bug too).
-      const rows = j.data.map(s => {
-        const nm = cuT(s.name_en || s.code, s.name_cn || s.name_en) || s.code;
-        const qty = s.physical_qty || 0;
-        return '<div style="display:flex;align-items:center;gap:10px;margin:4px 0;">' +
-                 '<b style="color:var(--text-1);min-width:96px;">' + escapeHtml(nm) + '</b>' +
-                 '<input type="number" min="0" step="1" value="' + qty + '" data-orig="' + qty + '" data-store-id="' + s.store_id + '" ' +
-                   'style="width:96px;padding:6px 8px;border:1px solid var(--line,#d8d2c4);border-radius:8px;font-size:13px;">' +
-               '</div>';
-      }).join('');
-      box.innerHTML = rows +
-        '<div style="margin-top:8px;"><button type="button" id="pd-store-stocks-save" class="btn small" ' +
-          'onclick="pdSaveStoreStocks()">' + cuT('Save stock', '保存库存') + '</button>' +
-        '<span id="pd-store-stocks-msg" class="muted" style="margin-left:10px;font-size:12px;"></span></div>';
-      // Mirror the live per-store total onto the variants self row.
-      if (String(box.dataset.productId) === String(VA_ID)) {
-        vaSyncSelfStock(j.data.reduce((s, st) => s + (st.physical_qty || 0), 0));
-      }
+      pdRenderStockMatrix(box, d);
+      pdSyncVariantTotals(d);
     })
     .catch(() => { box.className = 'muted'; box.textContent = cuT('Couldn’t load stock', '无法加载库存'); });
 }
-// Persist any changed per-store quantities. Each changed row is PATCHed
-// independently (set physical_qty); the endpoint routes through adjustStock so
-// every change lands in retail_stock_ledger. Untouched rows are skipped.
+// Build the grid: rows = variants, columns = stores, + a live row total. The
+// variant currently open above is flagged with ● so it's obvious which row the
+// rest of the form edits.
+function pdRenderStockMatrix(box, d) {
+  const stores = d.stores, variants = d.variants, qty = d.qty || {};
+  const multi = variants.length > 1;
+  const head = '<tr><th class="vh">' + (multi ? cuT('Variant', '规格') : '') + '</th>' +
+    stores.map(s => '<th>' + escapeHtml(cuT(s.name_en || s.code, s.name_cn || s.name_en) || s.code) + '</th>').join('') +
+    '<th class="mtot">' + cuT('Total', '合计') + '</th></tr>';
+  const body = variants.map(v => {
+    const cells = stores.map(s => {
+      const q = (qty[v.id] && qty[v.id][s.store_id]) || 0;
+      return '<td><input type="number" min="0" step="1" value="' + q + '" data-orig="' + q + '" ' +
+        'data-variant-id="' + v.id + '" data-store-id="' + s.store_id + '" oninput="pdMatrixRecalc(this)"></td>';
+    }).join('');
+    const tot = stores.reduce((a, s) => a + ((qty[v.id] && qty[v.id][s.store_id]) || 0), 0);
+    const name = escapeHtml(_vaMatrixLabel(v)) +
+      (v.self ? ' <span class="va-self" title="' + cuT('The variant open above', '上方打开的规格') + '">●</span>' : '');
+    return '<tr data-variant-id="' + v.id + '"><th class="vh">' + name + '</th>' + cells +
+      '<td class="mtot" data-tot="' + v.id + '">' + tot + '</td></tr>';
+  }).join('');
+  box.innerHTML =
+    '<table class="pd-stock-matrix">' + head + body + '</table>' +
+    '<div style="margin-top:8px;"><button type="button" id="pd-store-stocks-save" class="btn small" ' +
+      'onclick="pdSaveStoreStocks()">' + cuT('Save stock', '保存库存') + '</button>' +
+    '<span id="pd-store-stocks-msg" class="muted" style="margin-left:10px;font-size:12px;"></span></div>';
+}
+// Live-update a row's Total cell as the operator types (no save needed to see it).
+function pdMatrixRecalc(inp) {
+  const box = document.getElementById('pd-store-stocks'); if (!box) return;
+  const vid = inp.dataset.variantId;
+  const sum = Array.from(box.querySelectorAll('input[data-variant-id="' + vid + '"]'))
+    .reduce((a, i) => a + (Math.max(0, parseInt(i.value, 10) || 0)), 0);
+  const cell = box.querySelector('td.mtot[data-tot="' + vid + '"]');
+  if (cell) cell.textContent = sum;
+}
+// Push per-variant totals (from matrix data) into VA_STORE_TOTALS + the variants
+// table, so the read-only STOCK column there matches this grid exactly.
+function pdSyncVariantTotals(d) {
+  const qty = d.qty || {}, stores = d.stores || [];
+  const totals = {};
+  (d.variants || []).forEach(v => {
+    totals[v.id] = stores.reduce((a, s) => a + ((qty[v.id] && qty[v.id][s.store_id]) || 0), 0);
+  });
+  VA_STORE_TOTALS = totals;
+  (VA_MEMBERS || []).forEach(m => { if (totals[m.id] != null) m.stock = totals[m.id]; });
+  if (document.getElementById('pd-variants') && VA_ID != null) vaRender();
+}
+// Persist any changed cells. Each changed (variant, store) cell is PATCHed to
+// THAT variant's product (data-variant-id), so stock lands on the right row and
+// a ledger entry is recorded. Untouched cells are skipped.
 async function pdSaveStoreStocks() {
   const box = document.getElementById('pd-store-stocks');
   if (!box) return;
-  const id = box.dataset.productId;
-  if (!id) return;
   const msg = document.getElementById('pd-store-stocks-msg');
   const inputs = Array.from(box.querySelectorAll('input[data-store-id]'));
   const changed = inputs.filter(i => String(i.value) !== String(i.dataset.orig));
@@ -24327,27 +24365,30 @@ async function pdSaveStoreStocks() {
   const btn = document.getElementById('pd-store-stocks-save');
   if (btn) btn.disabled = true;
   if (msg) msg.textContent = cuT('Saving…', '保存中…');
-  let ok = 0, fail = 0;
+  let fail = 0;
   for (const inp of changed) {
     const qty = Math.max(0, parseInt(inp.value, 10) || 0);
+    const pid = inp.dataset.variantId;
     try {
-      const r = await fetch('/api/retail-admin/stores/' + inp.dataset.storeId + '/stock/' + id, {
+      const r = await fetch('/api/retail-admin/stores/' + inp.dataset.storeId + '/stock/' + pid, {
         method: 'PATCH', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ physical_qty: qty, reason: 'manual' }),
       });
       const j = await r.json().catch(() => ({}));
-      if (r.ok && j && j.success !== false) { inp.value = qty; inp.dataset.orig = String(qty); ok++; }
+      if (r.ok && j && j.success !== false) { inp.value = qty; inp.dataset.orig = String(qty); }
       else { fail++; }
     } catch (e) { fail++; }
   }
   if (btn) btn.disabled = false;
   if (fail) { toast('Some stock updates failed · 部分库存更新失败', 'err'); if (msg) msg.textContent = ''; }
   else { toast('Stock updated · 库存已更新'); if (msg) msg.textContent = 'Saved · 已保存'; }
-  // Reflect the new per-store total on the variants self row right away.
-  if (String(id) === String(VA_ID)) {
-    vaSyncSelfStock(inputs.reduce((s, i) => s + (parseInt(i.value, 10) || 0), 0));
-  }
+  // Recompute per-variant totals from the live cells and mirror to the table.
+  const totals = {};
+  inputs.forEach(i => { const v = i.dataset.variantId; totals[v] = (totals[v] || 0) + Math.max(0, parseInt(i.value, 10) || 0); });
+  VA_STORE_TOTALS = totals;
+  (VA_MEMBERS || []).forEach(m => { if (totals[m.id] != null) m.stock = totals[m.id]; });
+  if (document.getElementById('pd-variants') && VA_ID != null) vaRender();
 }
 function pdOpen(id) {
   const p = id != null ? (PA_PRODUCTS || []).find(x => x.id === id) : null;
@@ -24508,7 +24549,7 @@ let VA_STORE_TOTALS = {};
 function _vaName(p) { return (p.name_en || '—') + (p.name_cn ? ' · ' + p.name_cn : ''); }
 async function vaLoad(id) {
   const box = document.getElementById('pd-variants'); if (!box) return;
-  VA_ID = id; VA_MEMBERS = []; VA_HAD_GROUP = false;
+  VA_ID = id; VA_MEMBERS = []; VA_HAD_GROUP = false; VA_STORE_TOTALS = {};
   if (!id) {
     box.innerHTML = `<div class="pd-var-head">${cuT('Variants', '规格')}</div>` +
       `<div class="helper" style="font-size:11px">${cuT('Save the product first, then add its variants here.', '请先保存产品,再在此添加规格。')}</div>`;
@@ -24554,27 +24595,34 @@ function vaRender() {
     `<span style="text-align:center">${cuT('Show', '上架')}</span><span></span></div>`;
   const rows = VA_MEMBERS.map((v, i) => {
     const price = (v.price != null && v.price !== '') ? Number(v.price) : '';
-    const stock = (v.stock != null && v.stock !== '') ? v.stock : '';
+    // STOCK column is read-only here — the real number is the per-store total
+    // from the Stock-by-location grid (VA_STORE_TOTALS), falling back to the
+    // value the variants endpoint computed.
+    const totStock = (VA_STORE_TOTALS && VA_STORE_TOTALS[v.id] != null) ? VA_STORE_TOTALS[v.id] : v.stock;
+    const stock = (totStock != null && totStock !== '') ? totStock : '';
     const oos = stock !== '' && Number(stock) <= 0;
     const rowOpen = `<div class="va-row${oos ? ' va-oos' : ''}" draggable="false" ondragover="vaDragOver(event, ${i})" ondragleave="vaDragLeave(event)" ondrop="vaDrop(event, ${i})" ondragend="vaDragEnd()">`;
     const grip = `<span class="va-drag" draggable="true" ondragstart="vaDragStart(event, ${i})" title="${cuT('Drag to reorder', '拖动以排序')}">⠿</span>`;
     const label = `<input class="va-label" type="text" value="${escapeAttr(v.label)}" placeholder="${cuT('e.g. 500g', '如 500克')}" title="${escapeAttr(v.name)}" oninput="vaLabel(${v.id}, this.value)">`;
+    // STOCK is read-only on every row — it's a per-store total, edited in the
+    // Stock-by-location grid (right). A flat field here would clash with the
+    // per-store ledger. The total stays live: editing/saving the grid re-renders.
+    const stkCell = `<span class="va-ro va-stk" title="${cuT('Stock is per store — set it in “Stock by location”.', '库存按门店计 — 在「各门店库存」中设置。')}">${stock === '' ? '—' : escapeHtml(String(stock))}</span>`;
     if (v.self) {
       // The opened product. Its quick fields are editable here too, mirrored into
       // the main form inputs above so the normal Save persists them (see
-      // vaSelfField). Stock stays read-only — it's set in the per-location panel
-      // below; a flat field here would clash with the per-store ledger.
+      // vaSelfField).
       return rowOpen + grip + label +
         `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaSelfField('sku', this.value)">` +
         `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaSelfField('price', this.value)">` +
-        `<span class="va-ro va-stk" title="${cuT('Set this product’s stock in “Stock by location” below.', '在下方「按门店库存」中设置本产品库存。')}">${stock === '' ? '—' : escapeHtml(String(stock))}</span>` +
+        stkCell +
         `<span class="va-show"><input type="checkbox" ${v.published === 0 ? '' : 'checked'} title="${cuT('Show this variant in the shop', '在店面显示此规格')}" onchange="vaSelfField('published', this.checked ? 1 : 0)"></span>` +
         `<span class="va-self" title="${cuT('This is the main product. Its name, photos & details are edited in the form above; the quick fields here stay in sync.', '这是主产品。名称、图片和详情在上方表单中编辑;此处的快捷字段保持同步。')}">●</span></div>`;
     }
     return rowOpen + grip + label +
       `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaField(${v.id}, 'sku', this.value)">` +
       `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaField(${v.id}, 'price', this.value)">` +
-      `<input class="va-num va-stk" type="number" min="0" step="1" value="${stock}" placeholder="0" oninput="vaStockInput(${v.id}, this)">` +
+      stkCell +
       `<span class="va-show"><input type="checkbox" ${v.published === 0 ? '' : 'checked'} title="${cuT('Show this variant in the shop', '在店面显示此规格')}" onchange="vaField(${v.id}, 'published', this.checked ? 1 : 0)"></span>` +
       `<button type="button" class="va-x" title="${cuT('Delete this variant', '删除此规格')}" onclick="vaRemove(${v.id})">✕</button></div>`;
   }).join('');
@@ -24689,14 +24737,15 @@ async function vaPersist() {
   });
   return gid;
 }
-// Push inline price / stock / show edits for sibling sizes to their own
-// product rows. The opened ("self") size is saved via the main form fields.
+// Push inline price / sku / show edits for sibling sizes to their own product
+// rows. The opened ("self") size is saved via the main form fields. Stock is
+// NOT written here — it's per-store (retail_store_stock), owned by the
+// Stock-by-location grid; writing the flat stock_qty would fight that ledger.
 // Partial PATCH — only the listed fields change.
 async function vaPersistSiblings() {
   const dirty = VA_MEMBERS.filter(v => !v.self && v._dirty);
   for (const v of dirty) {
     const body = {};
-    if (typeof v.stock !== 'undefined') body.stock_qty = (v.stock === '' || v.stock == null) ? 0 : v.stock;
     if (v.price !== '' && v.price != null) body.sell_price = v.price;
     if (v.sku != null) body.sku = v.sku;
     if (v.published === 0 || v.published === 1) body.is_published = v.published;
