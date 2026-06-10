@@ -8192,6 +8192,34 @@ function findSkuConflict(sku, excludeId) {
   } catch { return null; }
 }
 
+// A SKU held only by a HIDDEN (is_published=0) or DELETED/archived (is_active=0)
+// product is unreachable from the catalogue grid — the operator can't open those
+// rows to free the code, so the UNIQUE slot wedges forever ("SKU in use, but I
+// can't find it"). When an operator (re)assigns that SKU to a live product, blank
+// it on every such hidden/deleted holder so the save can claim it. An ACTIVE +
+// PUBLISHED holder is a real, reachable clash and is left alone — the UNIQUE
+// constraint still blocks it and findSkuConflict names it. Returns the rows freed
+// (for the audit log).
+function releaseSkuFromHiddenHolders(sku, excludeId) {
+  const s = (sku == null ? '' : String(sku)).trim();
+  if (!s) return [];
+  try {
+    const holders = tdb().prepare(
+      `SELECT id, name_en, COALESCE(is_active, 1) AS is_active, is_published
+         FROM store_products
+        WHERE sku = ?${excludeId ? ' AND id != ?' : ''}
+          AND (COALESCE(is_active, 1) = 0 OR is_published = 0)`
+    ).all(...(excludeId ? [s, excludeId] : [s]));
+    if (!holders.length) return [];
+    tdb().prepare(
+      `UPDATE store_products SET sku = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE sku = ?${excludeId ? ' AND id != ?' : ''}
+          AND (COALESCE(is_active, 1) = 0 OR is_published = 0)`
+    ).run(...(excludeId ? [s, excludeId] : [s]));
+    return holders;
+  } catch (e) { console.error('[sku release]', e); return []; }
+}
+
 router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const existing = tdb().prepare('SELECT id, name_en FROM store_products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
@@ -8342,6 +8370,16 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
 
   sets.push('updated_at = CURRENT_TIMESTAMP');
   params.push(id);
+  // Reclaim the SKU from any hidden/deleted holder the operator can't reach,
+  // so the save below doesn't hit a phantom UNIQUE clash. Live holders are left
+  // to block as usual.
+  if ('sku' in body && (body.sku || '').trim()) {
+    const freed = releaseSkuFromHiddenHolders(body.sku, id);
+    if (freed.length) {
+      logActivity(req.user.id, req.user.username, 'sku_release', 'product_retail', id,
+        { sku: String(body.sku).trim(), freed_from: freed.map(f => ({ id: f.id, name: f.name_en })) }, req.ip);
+    }
+  }
   try {
     tdb().prepare(`UPDATE store_products SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   } catch (e) {
@@ -8445,6 +8483,9 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   const cat2 = normalizeCategoryPair(b.top_category, b.subcategory, tdb());
   const ST = ['Active', 'Inactive', 'Seasonal', 'Coming Soon'];
   const status = ST.includes(b.status) ? b.status : 'Active';
+  // Reclaim the SKU from any hidden/deleted holder before the INSERT so a brand
+  // new product can take a code that's only wedged on an unreachable row.
+  const freedOnCreate = releaseSkuFromHiddenHolders(sku, null);
   let info;
   try {
     info = tdb().prepare(
@@ -8475,6 +8516,10 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   }
   const id = info.lastInsertRowid;
   logActivity(req.user.id, req.user.username, 'create', 'product_retail', id, { name: name_en || name_cn }, req.ip);
+  if (freedOnCreate.length) {
+    logActivity(req.user.id, req.user.username, 'sku_release', 'product_retail', id,
+      { sku, freed_from: freedOnCreate.map(f => ({ id: f.id, name: f.name_en })) }, req.ip);
+  }
   const row = tdb().prepare(
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
