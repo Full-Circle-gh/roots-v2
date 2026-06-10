@@ -1271,7 +1271,15 @@ Page({
     const payingWithPoints = !!this.data.usePoints && this.data.pointsAffordable;
     const gross = Math.max(0, subtotal + deliveryFee + packingFee - voucherDiscount + surcharge);
     const total = payingWithPoints ? 0 : Math.max(0, gross - pointsDiscount);
-    const slotChanged = slot.slot_id !== this.data.deliverySlotId;
+    // Re-quote on a change of slot identity OR of slot KIND. The kind matters
+    // even when the id is unchanged: when the kitchen is open the server only
+    // emits the surcharged "today" chip, so Express defaults onto that very
+    // chip — Express and "Get it today" then share one slot_id. Without the
+    // kind check, switching between them wouldn't re-quote, so the server never
+    // learns slot_kind flipped and the "Made fresh for you" notice (suppressed
+    // for same-day "today" picks) would stay stale on screen.
+    const slotChanged = slot.slot_id !== this.data.deliverySlotId
+                     || kind !== this.data.selectedSlotKind;
     this.setData({
       selectedSlotKind: kind,
       deliverySlotId: slot.slot_id,
@@ -1279,11 +1287,11 @@ Page({
       deliverySurcharge: surcharge,
       total: total.toFixed(2),
     });
-    // Re-quote when the slot identity changes — slot affects server-side
+    // Re-quote when the slot identity/kind changes — slot affects server-side
     // stock-gating + fallback detection (right_away triggers stock check,
-    // scheduled-for-later bypasses it). Without this re-quote, the client
-    // can think `needsFallback=false` while /orders POST returns
-    // `needs_fallback_confirmation` for the same cart, leading to the
+    // scheduled-for-later bypasses it) AND the fresh-batch notice. Without this
+    // re-quote, the client can think `needsFallback=false` while /orders POST
+    // returns `needs_fallback_confirmation` for the same cart, leading to the
     // submit-retry loop we just patched.
     if (slotChanged) this.refreshQuote();
   },
