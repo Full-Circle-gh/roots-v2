@@ -7721,7 +7721,7 @@
           <!-- MAIN COLUMN — photos first, then name, then sizes, then description -->
           <div class="pd-main">
             <section class="pd-sec">
-              <div class="pd-sec-h" style="margin-bottom:8px;">Photos · 图片 <span class="muted" style="font-weight:400;font-size:11px;letter-spacing:0;text-transform:none;font-family:var(--f-sans);">— first photo is the main one; drag to reorder · 第一张为主图,可拖动排序</span></div>
+              <div class="pd-sec-h" style="margin-bottom:8px;">Photos · 图片</div>
               <div id="pd-gallery" class="pd-gallery"></div>
               <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
                 <input type="file" id="pd-img-file" accept="image/*" multiple onchange="pdAddPhotos(event)" style="font-size:12px;">
@@ -7739,7 +7739,6 @@
                 <span role="button" tabindex="0" onclick="pdFactsToggle()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();pdFactsToggle();}" style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none;"><svg class="pd-facts-caret" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .15s;"><path d="M6 4l4 4-4 4"/></svg>Product details · 产品详情</span>
                 <button type="button" id="pd-facts-autofill" class="btn btn-sm pd-facts-body" onclick="pdFactsAutofill()" style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500;font-family:var(--f-sans);" title="Read your description (or pasted text) and fill these boxes automatically · 读取描述并自动填充"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:5px"><path d="M7 2.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z"/><path d="M12.5 10.5v3M11 12h3"/></svg>Auto-fill from text · 智能填充</button>
               </div>
-              <div class="muted pd-facts-body" style="font-weight:400;font-size:11px;margin:0 0 8px;font-family:var(--f-sans);">Pulls origin, ingredients, storage… from your description (or pasted text) · 从描述(或粘贴文字)提取详情</div>
               <div class="field pd-facts-body"><label class="stacked">Origin · 产地</label>
                 <div class="pd-row2"><input type="text" id="pd-fact-origin-en" placeholder="e.g. Guangzhou, China"><input type="text" id="pd-fact-origin-cn" placeholder="例如:中国广州"></div></div>
               <div class="field pd-facts-body"><label class="stacked">Ingredients · 配料</label>
@@ -7806,7 +7805,6 @@
                 <div><div class="pd-desc-lang">English</div><div id="pd-rte-en" class="pd-rte" contenteditable="true"></div></div>
                 <div><div class="pd-desc-lang">中文</div><div id="pd-rte-cn" class="pd-rte" contenteditable="true"></div></div>
               </div>
-              <div class="muted" style="font-size:11px;margin-top:6px;">Shown on the mini-app: headings, bold, italic, underline, strikethrough, colour, highlight, alignment, lists, quotes, rules, links, images, tables. · 小程序支持:标题、加粗、斜体、下划线、删除线、颜色、高亮、对齐、列表、引用、分隔线、链接、图片、表格。</div>
             </div>
             </section>
           </div>
@@ -7863,7 +7861,6 @@
                   <option value="sale">SALE · 特价</option>
                   <option value="hot">HOT · 推荐</option>
                 </select>
-                <div class="muted" style="font-weight:400;font-size:11px;margin-top:4px;">Auto picks the chip from live sales &amp; recency — top sellers → POP, new arrivals → NEW, discounted → SALE, fast risers → HOT. · 自动按销量与上架时间选择标签。</div>
               </div>
               <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
               <div class="field"><label class="stacked">Free of (allergens) · 不含 <span class="muted" style="font-weight:400;">(tick what applies)</span></label>
