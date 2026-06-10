@@ -1354,7 +1354,6 @@ Page({
   closeBatchNotice() {
     this.setData({ batchNoticePopup: false });
   },
-  noop() {},
 
   onVoucherInput(e) {
     this.setData({ voucherInput: (e.detail.value || '').toUpperCase() });

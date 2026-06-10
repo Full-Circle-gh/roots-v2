@@ -359,6 +359,14 @@
   line-height: 1.45;
   color: var(--text-2, #555);
 }
+.holiday-banner .hb-more {
+  flex-shrink: 0;
+  align-self: center;
+  font-size: calc(20rpx * var(--font-scale));
+  color: #c98a2a;
+  text-decoration: underline;
+  padding-left: 6rpx;
+}
 .slot-banner {
   padding: 12rpx 16rpx;
   background: rgba(204, 217, 0, 0.18);

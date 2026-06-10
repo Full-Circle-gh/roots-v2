@@ -867,4 +867,26 @@
       </view>
     </view>
   </view>
+
+  <!-- "Made fresh for you" popup. Auto-opens once per checkout visit when the
+       cart holds a batch-made item shipping to an outside-GZ / Panyu-style
+       zone, and re-opens from the inline banner. Reuses fb-modal-card so the
+       palette + type match the other checkout modals. -->
+  <view wx:if="{{batchNoticePopup && batchNotice}}" class="fb-modal-backdrop" bindtap="closeBatchNotice" catchtouchmove="noop">
+    <view class="fb-modal-card" catchtap="noop">
+      <view class="fb-modal-icon">🥗</view>
+      <view class="fb-modal-kicker f-toni">{{ lang === 'cn' ? '新鲜现做' : 'FRESHLY MADE' }}</view>
+      <view class="fb-modal-title f-bear">
+        {{ lang === 'cn' ? '为您新鲜现做' : 'Made fresh for you' }}
+      </view>
+      <view class="fb-modal-body">
+        <text>{{ lang === 'cn' ? batchNotice.message_cn : batchNotice.message_en }}</text>
+      </view>
+      <view class="fb-modal-actions">
+        <view class="fb-modal-btn fb-modal-btn--primary f-toni" bindtap="closeBatchNotice">
+          {{ lang === 'cn' ? '知道了' : 'Got it' }}
+        </view>
+      </view>
+    </view>
+  </view>
 </view>
