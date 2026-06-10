@@ -1097,42 +1097,63 @@ function attachSoldCounts(rows) {
 // NEW/POP/SALE/HOT. We resolve it server-side and overwrite the row's `tags`
 // with the concrete keyword (or '' for none) so the mini-app's pickBadge()
 // stays unchanged. Priority — first rule that matches wins:
-//   1. POP   — all-time paid units at/above the top-seller bar
-//   2. NEW   — created within the recency window (and not yet a top seller)
+//   1. POP   — among the top-N best sellers (by units) over the trailing window
+//   2. NEW   — created within the recency window (and not already POP)
 //   3. SALE  — compare-at price set and higher than the live price
-//   4. HOT   — fast riser: paid units in the recent window clear the velocity bar
-// Thresholds are conservative defaults; tune here (no per-tenant UI yet).
+//   4. HOT   — PARKED: "rising sales" signal still TBD (see HOT_ENABLED below)
+// Thresholds are tunable here (no per-tenant UI yet).
 const AUTO_BADGE = Object.freeze({
-  POP_MIN_UNITS:    20,   // all-time paid units → "top seller"
-  NEW_MAX_AGE_DAYS: 30,   // created within N days → still "new"
-  HOT_WINDOW_DAYS:  14,   // recent window measured for velocity
-  HOT_MIN_UNITS:     5,   // paid units inside that window → "fast riser"
+  POP_TOP_N:        15,    // POP = the best N sellers...
+  POP_WINDOW_DAYS:  30,    // ...by units sold over this trailing window
+  NEW_MAX_AGE_DAYS: 30,    // created within N days → still "new"
+  // HOT is not wired yet — operator hasn't decided which "rising sales" metric
+  // drives it (e.g. week-over-week growth %, or velocity vs the product's own
+  // baseline). Leave OFF so Auto never emits HOT until that's settled.
+  HOT_ENABLED:      false,
 });
+// Top-N seller ids over the POP window, cached briefly — it's the same ranking
+// for every product on a page (and across concurrent shoppers), so we compute
+// it once per tenant per minute rather than per shop-list request. Keyed by the
+// active tenant db file so multi-tenant runs don't cross-contaminate.
+const POP_RANK_TTL_MS = 60 * 1000;
+const POP_RANK_CACHE  = new Map();   // tenantKey → { t, ids:Set }
+function topSellerIds() {
+  let tenantKey = 'default';
+  try { tenantKey = tdb().name || 'default'; } catch {}
+  const now = Date.now();
+  const hit = POP_RANK_CACHE.get(tenantKey);
+  if (hit && (now - hit.t) < POP_RANK_TTL_MS) return hit.ids;
+  let ids = new Set();
+  try {
+    const rows = tdb().prepare(`
+      SELECT oi.product_id AS pid, SUM(oi.qty) AS units
+        FROM retail_order_items oi
+        JOIN retail_orders   o ON o.id = oi.order_id
+        JOIN store_products  p ON p.id = oi.product_id
+       WHERE ${SOCIAL_PROOF_PAID}
+         AND oi.product_id IS NOT NULL
+         AND o.placed_at >= datetime('now', '-${AUTO_BADGE.POP_WINDOW_DAYS} days')
+         AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
+       GROUP BY oi.product_id
+       HAVING SUM(oi.qty) > 0
+       ORDER BY units DESC, oi.product_id ASC
+       LIMIT ${AUTO_BADGE.POP_TOP_N}`).all();
+    ids = new Set(rows.map(r => r.pid));
+  } catch (e) {
+    console.error('[auto-badge pop-rank]', e.message);
+  }
+  POP_RANK_CACHE.set(tenantKey, { t: now, ids });
+  return ids;
+}
 function resolveAutoBadges(rows) {
   if (!rows || !rows.length) return;
   const auto = rows.filter(r => String(r.tags || '').trim().toLowerCase() === 'auto');
   if (!auto.length) return;
   const ids = auto.map(r => r.id);
   const placeholders = ids.map(() => '?').join(',');
-  let allTime = new Map(), recent = new Map(), created = new Map();
+  const topSellers = topSellerIds();   // POP = membership in this set
+  let created = new Map();
   try {
-    const a = tdb().prepare(`
-      SELECT oi.product_id AS pid, SUM(oi.qty) AS units
-        FROM retail_order_items oi
-        JOIN retail_orders o ON o.id = oi.order_id
-       WHERE oi.product_id IN (${placeholders})
-         AND ${SOCIAL_PROOF_PAID}
-       GROUP BY oi.product_id`).all(...ids);
-    allTime = new Map(a.map(r => [r.pid, Math.round(Number(r.units) || 0)]));
-    const rc = tdb().prepare(`
-      SELECT oi.product_id AS pid, SUM(oi.qty) AS units
-        FROM retail_order_items oi
-        JOIN retail_orders o ON o.id = oi.order_id
-       WHERE oi.product_id IN (${placeholders})
-         AND ${SOCIAL_PROOF_PAID}
-         AND o.placed_at >= datetime('now', '-${AUTO_BADGE.HOT_WINDOW_DAYS} days')
-       GROUP BY oi.product_id`).all(...ids);
-    recent = new Map(rc.map(r => [r.pid, Math.round(Number(r.units) || 0)]));
     // created_at isn't in RETAIL_PRODUCT_COLS — fetch it for the NEW rule.
     const cr = tdb().prepare(
       `SELECT id, created_at FROM store_products WHERE id IN (${placeholders})`
@@ -1144,18 +1165,16 @@ function resolveAutoBadges(rows) {
   const nowMs    = Date.now();
   const newCutMs = AUTO_BADGE.NEW_MAX_AGE_DAYS * 86400 * 1000;
   for (const r of auto) {
-    const units  = allTime.get(r.id) || 0;
-    const rUnits = recent.get(r.id)  || 0;
-    const cAt    = created.get(r.id);
+    const cAt   = created.get(r.id);
     // SQLite CURRENT_TIMESTAMP is UTC, space-separated — normalise to ISO.
-    const ageMs  = cAt ? (nowMs - Date.parse(String(cAt).replace(' ', 'T') + 'Z')) : Infinity;
-    const price  = Number(r.price) || 0;
-    const cmp    = Number(r.compare_at_price) || 0;
+    const ageMs = cAt ? (nowMs - Date.parse(String(cAt).replace(' ', 'T') + 'Z')) : Infinity;
+    const price = Number(r.price) || 0;
+    const cmp   = Number(r.compare_at_price) || 0;
     let badge = '';
-    if      (units >= AUTO_BADGE.POP_MIN_UNITS)               badge = 'pop';
-    else if (Number.isFinite(ageMs) && ageMs <= newCutMs)     badge = 'new';
-    else if (cmp > price && price > 0)                        badge = 'sale';
-    else if (rUnits >= AUTO_BADGE.HOT_MIN_UNITS)              badge = 'hot';
+    if      (topSellers.has(r.id))                       badge = 'pop';
+    else if (Number.isFinite(ageMs) && ageMs <= newCutMs) badge = 'new';
+    else if (cmp > price && price > 0)                   badge = 'sale';
+    // HOT intentionally not emitted until AUTO_BADGE.HOT_ENABLED + its metric land.
     r.tags = badge;   // pickBadge() reads this; '' → no chip shown
   }
 }
