@@ -12251,31 +12251,6 @@ function nextBatchShipDate(fromDate, cfg) {
   return toYmdLocal(cand);
 }
 
-// Largest batch day (YYYY-MM-DD) on or before `fromDate`, rolling BACKWARD
-// over skip_dates. Mirror of nextBatchShipDate — used to find the freshest
-// batch that still arrives in time for a schedule-for-later date. null when
-// the cadence is disabled.
-function prevBatchShipDate(fromDate, cfg) {
-  cfg = cfg || batchScheduleCfg();
-  if (!cfg) return null;
-  const anchor = parseYmdLocal(cfg.anchor_date);
-  if (!anchor) return null;
-  const DAY = 86400000;
-  const interval = cfg.interval_days;
-  const skip = new Set(cfg.skip_dates);
-  const from = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(), 12, 0, 0, 0);
-  const diff = Math.round((from.getTime() - anchor.getTime()) / DAY);
-  const rem = ((diff % interval) + interval) % interval;       // 0..interval-1
-  const offset = diff - rem;                                   // first on-cadence day <= diff
-  let cand = new Date(anchor.getTime() + offset * DAY);
-  let guard = 0;
-  while (skip.has(toYmdLocal(cand)) && guard < 365) {
-    cand = new Date(cand.getTime() - interval * DAY);
-    guard++;
-  }
-  return toYmdLocal(cand);
-}
-
 // The batch-made (is_batch_made) products among the given ids, as
 // [{ id, name_en, name_cn }]. Empty array when none. Drives both the
 // "does the notice apply" gate and the item list shown in the popup.
@@ -12303,8 +12278,12 @@ function batchItemsInCart(productIds) {
 //   • express / today / right-away (slotKind ≠ 'schedule') → the SOONEST batch
 //     is the binding date. For a Panyu-style district, if today IS a batch day
 //     the item is made fresh today (no wait) and the notice is suppressed.
-//   • schedule-for-later (slotKind 'schedule') → the customer chose a delivery
-//     date, so we promise the FRESHEST batch that still arrives by that date.
+//   • schedule-for-later (slotKind 'schedule') → batch items can only be
+//     DELIVERED on a batch-day + 1 (made one day, arrives the next), so we snap
+//     the customer's chosen date FORWARD to the first such delivery day on/after
+//     it: if a fresh batch lands on their date we send it, otherwise they wait
+//     for the next fresh batch (never an older one held back). This keeps
+//     ship_date and delivery_date exactly one transit-day apart.
 function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
   if (!zone) return null;
   const isCity = zone.zone_type === 'city';
@@ -12330,13 +12309,16 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
   const dateM = /^(\d{4}-\d{2}-\d{2})/.exec(String(slotId || ''));
   const scheduled = slotKind === 'schedule' && !!dateM && dateM[1] >= soonestDelivery;
 
-  let shipDate, deliveryDate, kind;
+  let shipDate, deliveryDate, kind, selectedDate = null;
   if (scheduled) {
-    // Freshest batch whose +1-day arrival still lands on/before their date.
-    const targetIso = dateM[1];
-    const dayBefore = toYmdLocal(new Date(parseYmdLocal(targetIso).getTime() - 86400000));
-    shipDate = prevBatchShipDate(parseYmdLocal(dayBefore), cfg) || soonestShip;
-    deliveryDate = targetIso;
+    // Snap the chosen date forward to the next real delivery day: a batch made
+    // on S arrives S+1, so the earliest batch reaching them on/after their date
+    // ships on (chosenDate − 1) or later. ship_date = that batch, delivery_date
+    // = ship_date + 1 — always one transit-day apart, never an older held batch.
+    selectedDate = dateM[1];
+    const earliestShip = toYmdLocal(new Date(parseYmdLocal(selectedDate).getTime() - 86400000));
+    shipDate = nextBatchShipDate(parseYmdLocal(earliestShip), cfg) || soonestShip;
+    deliveryDate = toYmdLocal(new Date(parseYmdLocal(shipDate).getTime() + 86400000));
     kind = 'scheduled';
   } else {
     // "Get it today" / "Right away" are same-day picks: the customer is NOT
@@ -12355,11 +12337,19 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
 
   const fill = (tpl) => tpl
     .replace(/\{ship_date\}/g, shipDate)
-    .replace(/\{delivery_date\}/g, deliveryDate);
+    .replace(/\{delivery_date\}/g, deliveryDate)
+    .replace(/\{selected_date\}/g, selectedDate || deliveryDate);
   let defEn, defCn;
   if (kind === 'scheduled') {
-    defEn = `Your order includes freshly-made items. For your selected date ${deliveryDate}, we make a fresh batch on ${shipDate} so it arrives at its freshest.`;
-    defCn = `您的订单包含新鲜现做的商品。为配合您选择的 ${deliveryDate}，我们将于 ${shipDate} 新鲜制作，确保以最佳新鲜度送达。`;
+    if (deliveryDate === selectedDate) {
+      // Their chosen date is itself a fresh-batch delivery day — no shift.
+      defEn = `Your order includes freshly-made items. We make a fresh batch on ${shipDate} and deliver it on ${deliveryDate}, your selected date — made fresh, not pulled from stock.`;
+      defCn = `您的订单包含新鲜现做的商品。我们将于 ${shipDate} 新鲜制作，并于您选择的 ${deliveryDate} 送达 — 新鲜现做，并非库存。`;
+    } else {
+      // Their chosen date isn't a delivery day, so we shift to the next batch.
+      defEn = `Your order includes freshly-made items, which we deliver only on fresh-batch days. The first one on or after your selected ${selectedDate} is made on ${shipDate} and reaches you fresh on ${deliveryDate}.`;
+      defCn = `您的订单包含新鲜现做的商品，我们仅在新鲜现做日配送。在您选择的 ${selectedDate} 当天或之后的第一批将于 ${shipDate} 新鲜制作，并于 ${deliveryDate} 新鲜送达。`;
+    }
   } else {
     defEn = `Your order includes freshly-made items. We make the next batch on ${shipDate} and ship it the same day, so it arrives fresh on ${deliveryDate}.`;
     defCn = `您的订单包含新鲜现做的商品。我们将于 ${shipDate} 制作下一批并当天发货，预计 ${deliveryDate} 新鲜送达。`;
