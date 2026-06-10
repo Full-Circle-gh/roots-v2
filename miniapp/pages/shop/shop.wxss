@@ -566,3 +566,8 @@
   color: rgba(0, 0, 0, 0.4);
   text-decoration: line-through;
 }
+/* "SAVE ¥X" deal pill on a discounted variant (compare-at price set). */
+.vp-opt-save {
+  font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.06em; font-weight: 700;
+  background: #E96174; color: #fff; padding: 2rpx 12rpx; border-radius: 999rpx;
+}

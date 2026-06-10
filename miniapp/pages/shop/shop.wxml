@@ -163,7 +163,7 @@
                 </view>
                 <view class="row-right">
                   <view class="row-price-stack">
-                    <view wx:if="{{item.isFlash}}" class="row-was f-aleo">{{item.priceWas}}</view>
+                    <view wx:if="{{item.priceWas}}" class="row-was f-aleo">{{item.priceWas}}</view>
                     <view wx:if="{{item.pricePrefix}}" class="row-price-prefix f-toni">{{item.pricePrefix}}</view>
                     <view class="row-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</view>
                   </view>
@@ -219,7 +219,7 @@
               </view>
               <view class="gal-foot">
                 <view class="gal-price-stack">
-                  <text wx:if="{{item.isFlash}}" class="gal-was f-aleo">{{item.priceWas}}</text>
+                  <text wx:if="{{item.priceWas}}" class="gal-was f-aleo">{{item.priceWas}}</text>
                   <text wx:if="{{item.pricePrefix}}" class="gal-price-prefix f-toni">{{item.pricePrefix}}</text>
                   <text class="gal-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
                 </view>
@@ -269,7 +269,7 @@
               <view wx:if="{{item.soldCaption}}" class="sold-cap f-toni">{{item.soldCaption}}</view>
               <view class="card-foot">
                 <view class="price-stack">
-                  <text wx:if="{{item.isFlash}}" class="price-was f-aleo">{{item.priceWas}}</text>
+                  <text wx:if="{{item.priceWas}}" class="price-was f-aleo">{{item.priceWas}}</text>
                   <text wx:if="{{item.pricePrefix}}" class="price-prefix f-toni">{{item.pricePrefix}}</text>
                   <text class="price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
                 </view>
@@ -304,10 +304,11 @@
             <text class="vp-opt-label f-bear">{{opt.label}}</text>
             <text wx:if="{{opt.weight}}" class="vp-opt-weight f-toni">{{opt.weight}}</text>
             <text wx:if="{{opt.low}}" class="vp-opt-low f-toni">{{opt.low}}</text>
+            <text wx:if="{{opt.save}}" class="vp-opt-save f-toni">{{opt.save}}</text>
             <text wx:if="{{opt.soldOut}}" class="vp-opt-oos f-toni">{{oosLabel}}</text>
           </view>
           <view class="vp-opt-price-stack">
-            <text wx:if="{{opt.isFlash}}" class="vp-opt-was f-aleo">{{opt.priceWas}}</text>
+            <text wx:if="{{opt.priceWas}}" class="vp-opt-was f-aleo">{{opt.priceWas}}</text>
             <text class="vp-opt-price f-bear {{opt.isFlash ? 'is-flash' : ''}}">{{opt.price}}</text>
           </view>
         </view>

@@ -691,6 +691,11 @@
   color: rgba(0, 0, 0, 0.4);
   text-decoration: line-through;
 }
+/* "SAVE ¥X" deal pill on a discounted variant (compare-at price set). */
+.vp-opt-save {
+  font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.06em; font-weight: 700;
+  background: #E96174; color: #fff; padding: 2rpx 12rpx; border-radius: 999rpx;
+}
 
 /* Sticky bottom bar */
 .sticky-bar {
@@ -765,6 +770,19 @@
 }
 .add-price {
   font-size: calc(36rpx * var(--font-scale));
+}
+/* Compare-at "was" + SAVE badge stacked above the live price in the add button
+   (single, non-variant products). On the dark button: muted struck was + a
+   bright savings tag. */
+.add-was-row { display: flex; align-items: baseline; gap: 10rpx; justify-content: flex-end; }
+.add-was {
+  font-size: calc(24rpx * var(--font-scale));
+  text-decoration: line-through;
+  color: rgba(255, 255, 255, 0.6);
+}
+.add-save {
+  font-size: calc(20rpx * var(--font-scale)); font-weight: 700; letter-spacing: 0.04em;
+  color: var(--lime, #c8f560);
 }
 
 .loading { padding: 0 0 60rpx; }

@@ -102,6 +102,8 @@ Page({
     priceN: 0,
     isFlash: false,
     flashWas: '',
+    priceWas: '',
+    saveLabel: '',
     images: [],
     heroIndex: 0,
     descHtml: '',
@@ -310,6 +312,13 @@ Page({
     const flashWas = isFlash ? '¥' + regular.toFixed(2) : '';
     const flashOff = isFlash && regular > 0 ? '-' + Math.round(((regular - v) / regular) * 100) + '%' : '';
     const flashEnds = isFlash && p.flash?.ends_at ? p.flash.ends_at : '';
+    // Compare-at "was" price for a single (non-variant) product — shown
+    // struck-through in the add button with a SAVE badge. Flash takes priority.
+    const cmp = Number(p.compare_at_price) || 0;
+    const hasCmp = !isFlash && cmp > v && v > 0;
+    const priceWas = hasCmp ? '¥' + cmp.toFixed(2) : '';
+    const saveN = hasCmp ? Math.round((cmp - v) * 100) / 100 : 0;
+    const saveLabel = saveN > 0 ? (L === 'cn' ? '省¥' : 'SAVE ¥') + (Number.isInteger(saveN) ? saveN : saveN.toFixed(2)) : '';
     // free_of (comma list like "gluten,nuts") → badges
     const freeOf = (p.free_of || '').split(',').map(s => s.trim()).filter(Boolean);
     const badgeMap = {
@@ -535,6 +544,8 @@ Page({
       flashWas,
       flashOff,
       flashEnds,
+      priceWas,
+      saveLabel,
       description: rawDesc,
       // `use_block_design` is the office's per-product toggle in the kitchen
       // Description card. When true AND blocks were actually authored → render
@@ -721,6 +732,11 @@ Page({
       const regular = Number(m.price ?? m.sell_price) || 0;
       const eff = Number(m.effective_price) > 0 ? Number(m.effective_price) : regular;
       const isFlash = !!m.is_on_flash && eff < regular;
+      // Compare-at "was" price: shown struck-through when it beats the live price
+      // and there's no flash sale (a flash takes priority and uses `regular`).
+      const cmp = Number(m.compare_at_price) || 0;
+      const wasN = isFlash ? regular : (cmp > eff && eff > 0 ? cmp : 0);
+      const saveN = wasN > eff && eff > 0 ? Math.round((wasN - eff) * 100) / 100 : 0;
       const stock = m.stock == null ? null : Number(m.stock);
       const soldOut = stock != null && stock <= 0;
       return {
@@ -728,7 +744,8 @@ Page({
         label: lang.pickLabel(m.variant_label, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
         weight: (m.size || '').toString().trim(),
         price: eff > 0 ? money(eff) : '',
-        priceWas: isFlash && regular > 0 ? money(regular) : '',
+        priceWas: wasN > 0 ? money(wasN) : '',
+        save: saveN > 0 ? (L === 'cn' ? '省¥' : 'SAVE ¥') + (Number.isInteger(saveN) ? saveN : saveN.toFixed(2)) : '',
         isFlash,
         soldOut,
         low: (!soldOut && stock != null && stock <= 5)

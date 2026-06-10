@@ -454,7 +454,11 @@ Page({
         // threshold), shown as a small "X SOLD" popularity caption on the card.
         soldUnits = Number(p.units_sold) || 0;
         price = eff > 0 ? money(eff) : '—';
-        priceWas = isFlash && regular > 0 ? money(regular) : '';
+        // Was-price: flash strikethrough, or a compare-at "was" when set higher
+        // than the live price (the card's SALE badge already flags the deal).
+        const cmp = Number(p.compare_at_price) || 0;
+        const wasN = isFlash ? regular : (cmp > eff && eff > 0 ? cmp : 0);
+        priceWas = wasN > 0 ? money(wasN) : '';
         subline = (p.size || '').toString().trim();
       }
 
@@ -746,6 +750,11 @@ Page({
       const regular = Number(m.price ?? m.sell_price) || 0;
       const eff = _effPrice(m);
       const isFlash = !!m.is_on_flash && eff < regular;
+      // Compare-at "was" price: struck-through when higher than the live price
+      // and there's no flash sale (flash takes priority and uses `regular`).
+      const cmp = Number(m.compare_at_price) || 0;
+      const wasN = isFlash ? regular : (cmp > eff && eff > 0 ? cmp : 0);
+      const saveN = wasN > eff && eff > 0 ? Math.round((wasN - eff) * 100) / 100 : 0;
       const stock = m.stock == null ? null : Number(m.stock);
       const soldOut = stock != null && stock <= 0;
       return {
@@ -753,7 +762,8 @@ Page({
         label: lang.pickLabel(m.variant_label, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
         weight: (m.size || '').toString().trim(),
         price: eff > 0 ? money(eff) : '',
-        priceWas: isFlash && regular > 0 ? money(regular) : '',
+        priceWas: wasN > 0 ? money(wasN) : '',
+        save: saveN > 0 ? (L === 'cn' ? '省¥' : 'SAVE ¥') + (Number.isInteger(saveN) ? saveN : saveN.toFixed(2)) : '',
         isFlash,
         soldOut,
         low: (!soldOut && stock != null && stock <= 5)

@@ -1870,7 +1870,11 @@
   .va-table { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
   /* grip · name · sku · ¥ · stock · show · ✕ · slack — name is capped so it
      doesn't sprawl; the trailing slack track absorbs leftover width. */
-  .va-row { display: grid; grid-template-columns: 20px minmax(96px,190px) 92px 64px 56px 38px 22px minmax(0,1fr); gap: 8px; align-items: center; }
+  .va-row { display: grid; grid-template-columns: 20px minmax(96px,190px) 92px 64px 64px 56px 38px 22px minmax(0,1fr); gap: 8px; align-items: center; }
+  /* Was-price (compare-at) column input: dimmed so it reads as the secondary,
+     optional "original price" next to the live ¥ price. */
+  .va-num.va-was { color: var(--text-3); }
+  .va-num.va-was::placeholder { color: var(--text-4); }
   .va-row-head span { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-4); font-family: var(--f-mono); }
   .va-row-head .va-num { text-align: right; }
   .va-drag { cursor: grab; color: var(--text-4); text-align: center; user-select: none; font-size: 13px; line-height: 1; }
@@ -25580,9 +25584,9 @@ async function vaLoad(id) {
     // Stock shown on the self row = the live per-store total (Tianhe + Yuexiu),
     // not the legacy flat stock_qty (which per-store edits never touch). Falls
     // back to stock_qty only if no per-store sum is known yet.
-    const self = { id, label: p.variant_label || '', label_cn: p.variant_label_cn || '', name: _vaName(p), sku: p.sku || '', size: p.size || '', price: p.sell_price, stock: (p.effective_stock != null ? p.effective_stock : p.stock_qty), published: p.is_published, self: true };
+    const self = { id, label: p.variant_label || '', label_cn: p.variant_label_cn || '', name: _vaName(p), sku: p.sku || '', size: p.size || '', price: p.sell_price, compare: (p.compare_at_price != null ? p.compare_at_price : ''), stock: (p.effective_stock != null ? p.effective_stock : p.stock_qty), published: p.is_published, self: true };
     VA_MEMBERS = members.length
-      ? members.map(m => ({ id: m.id, label: m.variant_label || '', label_cn: m.variant_label_cn || '', name: _vaName(m), sku: m.sku || '', size: m.size || '', price: m.price, stock: m.stock, published: m.is_published, self: m.id === id }))
+      ? members.map(m => ({ id: m.id, label: m.variant_label || '', label_cn: m.variant_label_cn || '', name: _vaName(m), sku: m.sku || '', size: m.size || '', price: m.price, compare: (m.compare != null ? m.compare : ''), stock: m.stock, published: m.is_published, self: m.id === id }))
       : [self];
     if (!VA_MEMBERS.some(v => v.self)) VA_MEMBERS.unshift(self);
   } catch { VA_MEMBERS = [{ id, label: p.variant_label || '', label_cn: p.variant_label_cn || '', name: _vaName(p), self: true }]; }
@@ -25607,10 +25611,13 @@ function vaRender() {
   if (!VA_OPEN) { box.innerHTML = toggle; return; }
   const head = `<div class="va-row va-row-head"><span></span><span>${cuT('Name', '名称')}</span>` +
     `<span>${cuT('SKU', '货号')}</span>` +
-    `<span class="va-num">¥</span><span class="va-num">${cuT('Stock', '库存')}</span>` +
+    `<span class="va-num">¥</span><span class="va-num">${cuT('Was', '划线价')}</span><span class="va-num">${cuT('Stock', '库存')}</span>` +
     `<span style="text-align:center">${cuT('Show', '上架')}</span><span></span></div>`;
   const rows = VA_MEMBERS.map((v, i) => {
     const price = (v.price != null && v.price !== '') ? Number(v.price) : '';
+    // Was-price (compare-at): optional original price. Shown struck-through to
+    // shoppers when it's higher than the live price; blank/0 = no discount.
+    const cmp = (v.compare != null && v.compare !== '' && Number(v.compare) > 0) ? Number(v.compare) : '';
     // STOCK column is read-only here — the real number is the per-store total
     // from the Stock-by-location grid (VA_STORE_TOTALS), falling back to the
     // value the variants endpoint computed.
@@ -25636,6 +25643,7 @@ function vaRender() {
       return rowOpen + grip + label +
         `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaSelfField('sku', this.value)">` +
         `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaSelfField('price', this.value)">` +
+        `<input class="va-num va-was" type="number" min="0" step="0.01" value="${cmp === '' ? '' : cmp}" placeholder="—" title="${cuT('Was price — shown struck-through to shoppers when higher than the price. Leave blank for no discount.', '划线价 — 高于售价时在顾客端显示删除线。留空则不打折。')}" oninput="vaSelfField('compare', this.value)">` +
         stkCell +
         `<span class="va-show"><input type="checkbox" ${v.published === 0 ? '' : 'checked'} title="${cuT('Show this variant in the shop', '在店面显示此规格')}" onchange="vaSelfField('published', this.checked ? 1 : 0)"></span>` +
         `<span class="va-self" title="${cuT('This is the main product. Its name, photos & details are edited in the form above; the quick fields here stay in sync.', '这是主产品。名称、图片和详情在上方表单中编辑;此处的快捷字段保持同步。')}">●</span></div>`;
@@ -25643,6 +25651,7 @@ function vaRender() {
     return rowOpen + grip + label +
       `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaField(${v.id}, 'sku', this.value)">` +
       `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaField(${v.id}, 'price', this.value)">` +
+      `<input class="va-num va-was" type="number" min="0" step="0.01" value="${cmp === '' ? '' : cmp}" placeholder="—" title="${cuT('Was price — shown struck-through to shoppers when higher than the price. Leave blank for no discount.', '划线价 — 高于售价时在顾客端显示删除线。留空则不打折。')}" oninput="vaField(${v.id}, 'compare', this.value)">` +
       stkCell +
       `<span class="va-show"><input type="checkbox" ${v.published === 0 ? '' : 'checked'} title="${cuT('Show this variant in the shop', '在店面显示此规格')}" onchange="vaField(${v.id}, 'published', this.checked ? 1 : 0)"></span>` +
       `<button type="button" class="va-x" title="${cuT('Delete this variant', '删除此规格')}" onclick="vaRemove(${v.id})">✕</button></div>`;
@@ -25671,6 +25680,9 @@ function vaSelfField(key, val) {
   } else if (key === 'published') {
     v.published = val ? 1 : 0;
     const f = document.getElementById('pd-published'); if (f) f.checked = !!val;
+  } else if (key === 'compare') {
+    v.compare = (val === '' ? '' : Math.max(0, parseFloat(val) || 0));
+    const f = document.getElementById('pd-compare'); if (f) f.value = val;
   }
 }
 // Inline edit of a sibling size's commercial fields. Mutates the model only
@@ -25681,6 +25693,7 @@ function vaField(id, key, val) {
   else if (key === 'stock') v.stock = (val === '' ? '' : Math.max(0, parseInt(val, 10) || 0));
   else if (key === 'sku')   v.sku = val;
   else if (key === 'published') v.published = val ? 1 : 0;
+  else if (key === 'compare') v.compare = (val === '' ? '' : Math.max(0, parseFloat(val) || 0));
   v._dirty = true;
 }
 // Stock edits also re-tint the row (out-of-stock = red) live, without a full
@@ -25735,7 +25748,7 @@ async function vaAddSize() {
     const j = await api('/api/retail-admin/products/' + VA_ID + '/duplicate', { method: 'POST', body: { as_variant: true, label: '' } });
     const d = j.data; if (!d) throw new Error('add_failed');
     if (Array.isArray(PA_PRODUCTS)) PA_PRODUCTS.unshift(d);
-    VA_MEMBERS.push({ id: d.id, label: d.variant_label || '', label_cn: d.variant_label_cn || '', name: _vaName(d), sku: d.sku || '', size: d.size || '', price: d.sell_price, stock: d.stock_qty, published: d.is_published, self: false });
+    VA_MEMBERS.push({ id: d.id, label: d.variant_label || '', label_cn: d.variant_label_cn || '', name: _vaName(d), sku: d.sku || '', size: d.size || '', price: d.sell_price, compare: (d.compare_at_price != null ? d.compare_at_price : ''), stock: d.stock_qty, published: d.is_published, self: false });
     VA_OPEN = true;
     vaRender();
     pdLoadStoreStocks(VA_ID);   // pull the new variant's row into the stock grid
@@ -25772,6 +25785,10 @@ async function vaPersistSiblings() {
     if (v.price !== '' && v.price != null) body.sell_price = v.price;
     if (v.sku != null) body.sku = v.sku;
     if (v.published === 0 || v.published === 1) body.is_published = v.published;
+    // Was-price (compare-at): always sent so clearing it sticks. 0/blank → server
+    // stores NULL (no strike-through). v.compare is loaded from the row, so a
+    // price-only edit re-sends the existing value (a no-op) rather than wiping it.
+    body.compare_at_price = (v.compare === '' || v.compare == null) ? 0 : v.compare;
     if (!Object.keys(body).length) { v._dirty = false; continue; }
     let j;
     try { j = await api('/api/retail-admin/products/' + v.id, { method: 'PATCH', body }); }
