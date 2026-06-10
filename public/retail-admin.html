@@ -23407,12 +23407,12 @@ let PA_PAGE_SIZE = (() => {
     const v = localStorage.getItem('pa-page-size');
     if (v === 'all') return 'all';
     const n = parseInt(v, 10);
-    return [20, 50, 100].includes(n) ? n : 50;
-  } catch { return 50; }
+    return [20, 50, 100].includes(n) ? n : 20;
+  } catch { return 20; }
 })();
 let PA_PAGE = 1;
 function paSetPageSize(v) {
-  PA_PAGE_SIZE = (v === 'all') ? 'all' : (parseInt(v, 10) || 50);
+  PA_PAGE_SIZE = (v === 'all') ? 'all' : (parseInt(v, 10) || 20);
   try { localStorage.setItem('pa-page-size', String(PA_PAGE_SIZE)); } catch {}
   PA_PAGE = 1;
   paRender();
