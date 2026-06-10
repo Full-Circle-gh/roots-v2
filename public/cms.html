@@ -11193,7 +11193,6 @@ function buildNotificationBarForm(m, b) {
   const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
   const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
   const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
-  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
 
   secContent.appendChild(note);
 
@@ -11213,14 +11212,10 @@ function buildNotificationBarForm(m, b) {
     sel(b.fg_color || 'white', BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
   secColours.appendChild(field(T('Button colour', '按钮颜色'), T('The round arrow button. By default it matches the text colour; pick a brand colour to make it stand out.', '圆形箭头按钮。默认与文字同色;选一个品牌色使其更醒目。'),
     sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v || undefined }))));
-
-  secBehaviour.appendChild(field(T('Order & shipping updates', '订单与物流更新'),
-    T('On = also show order-progress updates (paid, shipped, delivered) along with announcements, invoices and refunds. Off = announcements only — order/shipping updates are hidden here (customers still see them on their notifications page).',
-      '开启 = 在公告、发票、退款之外,同时显示订单进度更新(已付款、已发货、已送达)。关闭 = 仅公告 — 此处隐藏订单/物流更新(顾客仍可在通知页查看)。'),
-    sel(b.show_order_status === false ? 'off' : 'on', [
-      { value: 'on',  label: T('Show all updates', '显示全部更新') },
-      { value: 'off', label: T('Announcements only', '仅公告') },
-    ], v => updateBlock(b.id, { show_order_status: v === 'on' }))));
+  // Which notification categories appear here is controlled in Broadcasts
+  // (per-category mute switches), not on the block — so there's no Behaviour
+  // section. The old per-block "Order & shipping updates" toggle was removed
+  // to avoid a duplicate control that fights the Broadcasts settings.
 }
 
 function buildCtaRow(b, cta, idx) {
@@ -13452,7 +13447,43 @@ function imgPicker(currentUrl, onSet) {
   return container;
 }
 
+// Downscale + recompress large images in the browser BEFORE upload, so banners
+// stay crisp on phones (≤ MAX_UPLOAD_DIM on the longest side — roughly 2× the
+// widest phone at DPR 3) without storing a multi-megapixel original in the
+// base64 blob store. GIF (animation) and SVG (vector) pass through untouched,
+// and an image that's already small in both pixels and bytes is left as-is to
+// avoid a needless generational recompression.
+const MAX_UPLOAD_DIM = 1600;   // longest side, device px — plenty for retina phones
+const UPLOAD_QUALITY  = 0.9;   // high-def; visually lossless for photos
+async function prepareImageForUpload(file) {
+  try {
+    if (!file || !file.type || !file.type.startsWith('image/')) return file;
+    if (file.type === 'image/gif' || file.type === 'image/svg+xml') return file;
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => null);
+    if (!bmp) return file;
+    const longest = Math.max(bmp.width, bmp.height);
+    if (longest <= MAX_UPLOAD_DIM && file.size <= 1.5 * 1024 * 1024) { bmp.close && bmp.close(); return file; }
+    const scale = Math.min(1, MAX_UPLOAD_DIM / longest);
+    const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bmp, 0, 0, w, h);
+    bmp.close && bmp.close();
+    // Keep an alpha-capable container for sources that may have transparency.
+    const hasAlpha = file.type === 'image/png' || file.type === 'image/webp';
+    const outType = hasAlpha ? 'image/webp' : 'image/jpeg';
+    const blob = await new Promise(res => canvas.toBlob(res, outType, UPLOAD_QUALITY));
+    if (!blob || blob.size >= file.size) return file;  // recompression didn't help → keep original
+    const ext = outType === 'image/webp' ? 'webp' : 'jpg';
+    const base = (file.name || 'image').replace(/\.[^.]+$/, '');
+    return new File([blob], `${base}.${ext}`, { type: outType });
+  } catch { return file; }
+}
+
 async function uploadImage(file) {
+  file = await prepareImageForUpload(file);
   const fd = new FormData(); fd.append('file', file);
   setStatusText({ en: 'Uploading…', cn: '上传中…' }, 'saving');
   try {
