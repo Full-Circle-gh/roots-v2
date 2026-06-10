@@ -1333,7 +1333,7 @@ router.get('/api/retail/products/:id', (req, res) => {
     // via /api/retail/products/:id/image, same as the main hero above.
     product.variants = tdb().prepare(
       `SELECT p.id, p.variant_label, p.variant_label_cn, p.name_en, p.name_cn, p.sku, p.weight AS size,
-              p.sell_price AS price,
+              p.sell_price AS price, p.compare_at_price,
               p.flash_price, p.flash_starts_at, p.flash_ends_at,
               p.flash_stock_limit, p.flash_sold,
               p.image_url, p.updated_at,
@@ -8174,6 +8174,24 @@ router.post('/api/retail-admin/brand/publish', requireRetailAdmin, express.json(
 //                                          when non-empty, replaces the
 //                                          plain description on the mini-app
 // Any field absent from the body is left untouched.
+
+// Find the product currently holding a SKU so a "sku_taken" reply can name it.
+// Deliberately searches ALL rows — including archived/inactive ones, which keep
+// occupying the UNIQUE slot but are hidden from the catalogue list. That hidden
+// holder is the usual reason an operator hits "SKU already in use" yet cannot
+// find the SKU anywhere in the grid/search.
+function findSkuConflict(sku, excludeId) {
+  const s = (sku == null ? '' : String(sku)).trim();
+  if (!s) return null;
+  try {
+    const row = tdb().prepare(
+      `SELECT id, name_en, name_cn, variant_label, COALESCE(is_active, 1) AS is_active, is_published
+         FROM store_products WHERE sku = ?${excludeId ? ' AND id != ?' : ''} LIMIT 1`
+    ).get(...(excludeId ? [s, excludeId] : [s]));
+    return row || null;
+  } catch { return null; }
+}
+
 router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const existing = tdb().prepare('SELECT id, name_en FROM store_products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
@@ -8327,7 +8345,8 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   try {
     tdb().prepare(`UPDATE store_products SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   } catch (e) {
-    if (String(e.message || '').includes('UNIQUE')) return res.status(409).json({ success: false, error: 'sku_taken' });
+    if (String(e.message || '').includes('UNIQUE'))
+      return res.status(409).json({ success: false, error: 'sku_taken', conflict: findSkuConflict(body.sku, id) });
     throw e;
   }
 
@@ -8450,7 +8469,8 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
       b.is_published ? 1 : 0
     );
   } catch (e) {
-    if (String(e.message || '').includes('UNIQUE')) return res.status(409).json({ success: false, error: 'sku_taken' });
+    if (String(e.message || '').includes('UNIQUE'))
+      return res.status(409).json({ success: false, error: 'sku_taken', conflict: findSkuConflict(sku, null) });
     throw e;
   }
   const id = info.lastInsertRowid;
@@ -8999,6 +9019,7 @@ router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, 
   if (p.variant_group_id) {
     members = tdb().prepare(
       `SELECT sp.id, sp.name_en, sp.name_cn, sp.sku, sp.variant_label, sp.variant_label_cn, sp.weight AS size, sp.sell_price AS price,
+              sp.compare_at_price AS compare,
               -- Per-variant stock = SUM of its per-store physical_qty (the real
               -- number), falling back to the legacy flat stock_qty only when the
               -- variant has no per-store rows yet.

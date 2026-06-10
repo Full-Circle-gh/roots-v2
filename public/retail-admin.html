@@ -11786,7 +11786,7 @@ const ICONS = {
   empty:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
 };
 
-function toast(msg, kind = 'ok') {
+function toast(msg, kind = 'ok', ms) {
   const t = $('#toast');
   t.textContent = msg;
   // Normalize aliases so every caller lands on a styled variant (.ok / .err).
@@ -11796,7 +11796,10 @@ function toast(msg, kind = 'ok') {
   t.className = 'toast ' + cls;
   requestAnimationFrame(() => t.classList.add('show'));
   clearTimeout(toast._h);
-  toast._h = setTimeout(() => t.classList.remove('show'), 2600);
+  // Errors linger longer so the operator can read what went wrong before it
+  // fades; callers can override with an explicit duration.
+  const dur = ms != null ? ms : (cls === 'err' ? 6000 : 2600);
+  toast._h = setTimeout(() => t.classList.remove('show'), dur);
 }
 async function api(path, opts = {}) {
   const headers = { ...(opts.headers || {}) };
@@ -11807,8 +11810,35 @@ async function api(path, opts = {}) {
   const r = await fetch(path, { credentials: 'same-origin', ...opts, headers });
   if (r.status === 401) { location.href = '/backend/login'; throw new Error('401'); }
   const j = await r.json().catch(() => ({ success: false, error: 'bad_response', status: r.status }));
-  if (!j.success) throw new Error(j.error || ('request_failed (' + r.status + ')'));
+  if (!j.success) {
+    const err = new Error(j.error || ('request_failed (' + r.status + ')'));
+    err.data = j;            // carry server detail (e.g. sku_taken `conflict`) to callers
+    err.status = r.status;
+    throw err;
+  }
   return j;
+}
+// Turn a sku_taken error into a human sentence that NAMES the product holding
+// the SKU — including when that product is archived/hidden, which is why the
+// operator couldn't find it by searching the grid. Falls back gracefully when
+// the server didn't attach a `conflict`.
+function skuTakenMsg(skuVal, conflict, sizeLabel) {
+  const sku = (skuVal || '').toString().trim();
+  const skuTxt = sku ? cuT('SKU “', '货号“') + sku + '”' : cuT('That SKU', '该货号');
+  const where = sizeLabel ? cuT(' (size “', '(规格“') + sizeLabel + '”)' : '';
+  if (conflict) {
+    const nm = cuT(conflict.name_en || conflict.name_cn || ('#' + conflict.id),
+                   conflict.name_cn || conflict.name_en || ('#' + conflict.id));
+    const vlabel = conflict.variant_label ? ' · ' + conflict.variant_label : '';
+    const hidden = Number(conflict.is_active) === 0
+      ? cuT(' — that product is archived/deleted, so it won’t show in the list. Restore it or change its SKU to free this code.',
+            ' — 该商品已归档/删除,因此不会显示在列表中。请恢复它或修改其货号以释放该编号。')
+      : (Number(conflict.is_published) === 0
+          ? cuT(' (hidden product — use the “Hidden” filter to find it)', '(已隐藏的商品 — 用“隐藏”筛选查看)')
+          : '');
+    return skuTxt + where + cuT(' is already used by ', ' 已被 ') + '“' + nm + vlabel + '”' + hidden;
+  }
+  return skuTxt + where + cuT(' is already in use', ' 已被占用');
 }
 function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escapeAttr(s) { return escapeHtml(s); }
@@ -25747,7 +25777,8 @@ async function vaPersistSiblings() {
     try { j = await api('/api/retail-admin/products/' + v.id, { method: 'PATCH', body }); }
     catch (e) {
       if (String(e.message).includes('sku_taken')) {
-        throw new Error(cuT('SKU already in use — size “', '货号已被占用 — 规格“') + ((v.label && v.label.trim()) || v.name || ('#' + v.id)) + '”');
+        const sizeLabel = (v.label && v.label.trim()) || v.name || ('#' + v.id);
+        throw new Error(skuTakenMsg(v.sku, e.data && e.data.conflict, sizeLabel));
       }
       throw e;
     }
@@ -26505,7 +26536,7 @@ async function pdSaveCore() {
   const r = await fetch(url, { method: id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json();
   if (!j.success) {
-    const msg = j.error === 'sku_taken'     ? 'That SKU is already in use · 该货号已被占用'
+    const msg = j.error === 'sku_taken'     ? skuTakenMsg(body.sku, j.conflict, '')
               : j.error === 'sku_required'   ? 'A SKU is required · 需要填写货号'
               : j.error === 'catalog_locked' ? 'This catalog is managed by the upstream system · 该商品目录由上游系统管理'
               : (j.error || 'save_failed');
@@ -26571,6 +26602,9 @@ async function pdAutoSaveNow() {
     pdSetStatus('saved');
   } catch (e) {
     pdSetStatus('error', cuT('Save failed: ', '保存失败:') + e.message);
+    // The save status sits at the bottom of a long editor — pop a toast too so a
+    // failure is seen without scrolling down.
+    toast(cuT('Save failed: ', '保存失败:') + e.message, 'err');
   } finally {
     _pdSaving = false;
     if (_pdPendingResave) { _pdPendingResave = false; pdScheduleAutosave(); }
