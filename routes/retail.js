@@ -1712,6 +1712,14 @@ router.post('/api/retail/auth', express.json(), async (req, res) => {
     customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(customer.id);
   }
 
+  // Best-effort: if this customer already has a phone matching an unclaimed
+  // OUT1N migration credit, apply it now. Never block the auth response.
+  try {
+    if (claimMigrationCredit(customer.id)) {
+      customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(customer.id);
+    }
+  } catch (e) { console.warn('[retail/auth] migration claim failed:', e.message); }
+
   if (customer.is_blocked) return res.status(403).json({ success: false, error: 'account_blocked' });
 
   const { token, expiresAt } = issueToken(customer.id, req.headers['user-agent']);
@@ -5625,6 +5633,70 @@ function grantSignupVouchers(customerId) {
   return n;
 }
 
+// Normalize a phone to bare digits for migration-credit matching. Strips
+// spaces, punctuation and a leading +86 / 86 country code so the OUT1N export
+// ("18878839078") and a customer-entered "+86 188 7883 9078" land on the same
+// key. Returns '' when there's nothing usable.
+function normalizeMigrationPhone(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (d.length === 13 && d.startsWith('86')) d = d.slice(2);
+  return d;
+}
+
+// One-time migration of OUT1N wallet balance + points onto a roots customer,
+// matched by phone. Idempotent and race-safe: we CLAIM the staging row first
+// (UPDATE ... WHERE claimed_at IS NULL) and only credit the customer if that
+// claim won the row, so a phone can never be credited twice even under
+// concurrent calls. Safe to call on every login / phone change — it's a cheap
+// no-op when there's no unclaimed credit. Returns the applied credit or null.
+function claimMigrationCredit(customerId) {
+  if (!customerId) return null;
+  const c = tdb().prepare('SELECT id, phone FROM retail_customers WHERE id = ?').get(customerId);
+  const phone = normalizeMigrationPhone(c && c.phone);
+  if (!phone) return null;
+  const credit = tdb().prepare(
+    'SELECT * FROM retail_migration_credits WHERE phone = ? AND claimed_at IS NULL'
+  ).get(phone);
+  if (!credit) return null;
+
+  try {
+    const applied = tdb().transaction(() => {
+      const won = tdb().prepare(
+        `UPDATE retail_migration_credits
+            SET claimed_at = CURRENT_TIMESTAMP, claimed_customer_id = ?
+          WHERE id = ? AND claimed_at IS NULL`
+      ).run(customerId, credit.id);
+      if (!won.changes) return null;   // another request claimed it first
+
+      if (credit.balance && credit.balance > 0) {
+        tdb().prepare('UPDATE retail_customers SET balance = COALESCE(balance, 0) + ? WHERE id = ?')
+          .run(credit.balance, customerId);
+      }
+      if (credit.points && credit.points > 0) {
+        tdb().prepare('UPDATE retail_customers SET points_balance = COALESCE(points_balance, 0) + ? WHERE id = ?')
+          .run(credit.points, customerId);
+        const after = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?')
+          .get(customerId).points_balance;
+        // expires_at NULL → migrated points are grandfathered (never auto-swept),
+        // matching how legacy NULL-expiry earn rows are treated.
+        tdb().prepare(
+          `INSERT INTO retail_points_transactions
+             (customer_id, delta, balance_after, source, note, expires_at)
+           VALUES (?, ?, ?, 'migration', ?, NULL)`
+        ).run(customerId, credit.points, after, `Migrated from OUT1N (uid ${credit.source_uid || '?'})`);
+      }
+      return credit;
+    })();
+    if (applied) {
+      console.log(`[migration] claimed credit for customer ${customerId} phone ${phone}: +¥${credit.balance} +${credit.points}pts`);
+    }
+    return applied;
+  } catch (e) {
+    console.error('[claimMigrationCredit]', e.message);
+    return null;
+  }
+}
+
 // Compute the discount a voucher would apply given the subtotal +
 // shipping fee. Returns { discount, free_shipping, applied }.
 function computeVoucherDiscount(voucher, subtotal, shippingFee) {
@@ -6939,6 +7011,12 @@ router.patch('/api/retail-admin/customers/:id', requireRetailAdmin, express.json
 
   params.push(id);
   tdb().prepare(`UPDATE retail_customers SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+  // If an admin set/changed this customer's phone, apply any unclaimed OUT1N
+  // migration credit for it. Best-effort.
+  if (Object.prototype.hasOwnProperty.call(changed, 'phone')) {
+    try { claimMigrationCredit(id); }
+    catch (e) { console.warn('[retail-admin/customer] migration claim failed:', e.message); }
+  }
   logActivity(req.user.id, req.user.username, 'update', 'retail_customer', id, changed, req.ip);
   res.json({ success: true, changed });
 });
@@ -8026,6 +8104,12 @@ router.patch('/api/retail/customer', requireRetailAuth, express.json(), (req, re
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
   params.push(req.customer.id);
   tdb().prepare(`UPDATE retail_customers SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  // If the customer just set/changed their phone, try to apply any unclaimed
+  // OUT1N migration credit for that number. Best-effort, never fails the save.
+  if (typeof phone === 'string') {
+    try { claimMigrationCredit(req.customer.id); }
+    catch (e) { console.warn('[retail/customer] migration claim failed:', e.message); }
+  }
   const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(req.customer.id);
   res.json({ success: true, data: publicCustomer(fresh) });
 });

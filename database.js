@@ -2063,6 +2063,30 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_pts_customer ON retail_points_transactions(customer_id, created_at);
 `);
 
+// ─── Customer migration credits (OUT1N → roots) ───────────────────────────
+// Staging table for the one-time migration of wallet balance + points from
+// the legacy OUT1N store. We can't pre-create retail_customers rows (openid is
+// UNIQUE NOT NULL and we don't have openids), so balances wait here keyed by
+// PHONE and are CLAIMED the moment a customer's phone is known (login if a
+// phone is already on file, or when they set/confirm it). claimMigrationCredit()
+// in routes/retail.js applies a row atomically and stamps claimed_at, so each
+// phone is credited exactly once. Phone is normalized to bare digits (no +/86).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_migration_credits (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone               TEXT NOT NULL UNIQUE,
+    balance             REAL NOT NULL DEFAULT 0,
+    points              INTEGER NOT NULL DEFAULT 0,
+    source_uid          TEXT,                    -- OUT1N User ID, for audit
+    name                TEXT,                    -- OUT1N display name, reference only
+    claimed_at          DATETIME,                -- NULL = unclaimed
+    claimed_customer_id INTEGER,                 -- retail_customers.id once claimed
+    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (claimed_customer_id) REFERENCES retail_customers(id) ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_migr_unclaimed ON retail_migration_credits(phone) WHERE claimed_at IS NULL;
+`);
+
 // Order-level columns for the new fee model. Each added idempotently so
 // existing DBs migrate cleanly without dropping data.
 addColumn('retail_orders', 'packing_fee',      'REAL DEFAULT 0');

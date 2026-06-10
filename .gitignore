@@ -48,3 +48,8 @@ _live_*
 
 # Internal ops doc — kept locally, contains server access details
 DEPLOY.md
+
+# Customer-migration PII (phones + balances) — transfer out-of-band, never commit
+/migration_credits.json
+/scratch_*
+C:/Users/Asher/Downloads/migration_phoneless.json
