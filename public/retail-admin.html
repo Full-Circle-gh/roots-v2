@@ -24907,6 +24907,7 @@ function pdLoadStoreStocks(id) {
   const box = document.getElementById('pd-store-stocks');
   if (!box) return;
   box.dataset.productId = (id == null ? '' : String(id));
+  PD_STOCK_DATA = null;
   if (id == null) { box.className = 'muted'; box.textContent = cuT('Set stock after saving', '保存后设置库存'); return; }
   box.className = '';
   box.textContent = '…';
@@ -24920,6 +24921,7 @@ function pdLoadStoreStocks(id) {
         box.className = 'muted'; box.textContent = cuT('No stock info yet', '暂无库存信息'); return;
       }
       box.className = '';
+      PD_STOCK_DATA = d;
       pdRenderStockMatrix(box, d);
       pdSyncVariantTotals(d);
     })
@@ -24952,6 +24954,23 @@ function pdRenderStockMatrix(box, d) {
   box.innerHTML =
     '<table class="pd-stock-matrix">' + head + body + '</table>' +
     '<div style="margin-top:8px;"><span id="pd-store-stocks-msg" class="muted" style="font-size:12px;">' + cuT('Stock saves automatically', '库存自动保存') + '</span></div>';
+}
+// Re-label the stock matrix rows live from VA_MEMBERS, so renaming a variant on
+// the left is reflected on the right immediately (no exit + re-open). Only the
+// labels change here — quantities stay as last loaded/edited. Falls out quietly
+// if the matrix isn't built yet or nothing changed (keeps in-progress cell edits).
+function pdSyncMatrixLabels() {
+  if (!PD_STOCK_DATA || !Array.isArray(PD_STOCK_DATA.variants)) return;
+  const box = document.getElementById('pd-store-stocks');
+  if (!box || !box.querySelector('table.pd-stock-matrix')) return;
+  let changed = false;
+  PD_STOCK_DATA.variants.forEach(mv => {
+    const src = (VA_MEMBERS || []).find(m => m.id === mv.id);
+    if (!src) return;
+    const next = src.label || '';
+    if ((mv.variant_label || '') !== next) { mv.variant_label = next; changed = true; }
+  });
+  if (changed) pdRenderStockMatrix(box, PD_STOCK_DATA);
 }
 // Live-update a row's Total cell as the operator types (no save needed to see it).
 function pdMatrixRecalc(inp) {
@@ -25225,6 +25244,10 @@ let VA_ID = null, VA_MEMBERS = [], VA_HAD_GROUP = false, VA_OPEN = false;
 // variant × store matrix panel. The variants table reads these for its
 // read-only STOCK column so both views always agree.
 let VA_STORE_TOTALS = {};
+// Last-loaded stock-by-location matrix payload, kept so the panel can re-render
+// live when variants are renamed/added/removed on the left — without an exit +
+// re-open. Cleared when the editor opens a new product.
+let PD_STOCK_DATA = null;
 function _vaName(p) { return (p.name_en || '—') + (p.name_cn ? ' · ' + p.name_cn : ''); }
 async function vaLoad(id) {
   const box = document.getElementById('pd-variants'); if (!box) return;
@@ -25313,7 +25336,7 @@ function vaRender() {
       `<button type="button" class="btn btn-sm" onclick="vaAddSize()">${cuT('+ Add variant', '+ 新增规格')}</button>` +
     `</div>`;
 }
-function vaLabel(id, val) { const v = VA_MEMBERS.find(x => x.id === id); if (v) v.label = val; }
+function vaLabel(id, val) { const v = VA_MEMBERS.find(x => x.id === id); if (v) { v.label = val; pdSyncMatrixLabels(); } }
 // The opened ("self") product's quick fields mirror straight into the main form
 // inputs above, so the normal Save persists them — no separate write, and the
 // form stays in sync. Stock is intentionally not here: it's set in the
@@ -25380,6 +25403,7 @@ async function vaRemove(id) {
     VA_MEMBERS = VA_MEMBERS.filter(m => m.id !== id);
     if (Array.isArray(PA_PRODUCTS)) PA_PRODUCTS = PA_PRODUCTS.filter(x => x.id !== id);
     vaRender();
+    pdLoadStoreStocks(VA_ID);   // drop the removed variant's row from the stock grid
     toast(cuT('Size deleted', '规格已删除'));
   } catch (e) { toast(cuT('Delete failed: ', '删除失败:') + e.message, 'err'); }
 }
@@ -25395,6 +25419,7 @@ async function vaAddSize() {
     VA_MEMBERS.push({ id: d.id, label: d.variant_label || '', name: _vaName(d), sku: d.sku || '', size: d.size || '', price: d.sell_price, stock: d.stock_qty, published: d.is_published, self: false });
     VA_OPEN = true;
     vaRender();
+    pdLoadStoreStocks(VA_ID);   // pull the new variant's row into the stock grid
     const last = document.querySelector('#pd-variants .va-row:last-child .va-label'); if (last) last.focus();
     toast(cuT('Variant added — set its name, SKU, price & stock, then Save.', '已添加规格 — 设置名称、货号、价格、库存后保存。'));
   } catch (e) { toast(cuT('Could not add variant: ', '无法添加规格:') + e.message, 'err'); }
