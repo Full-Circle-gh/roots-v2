@@ -7716,7 +7716,7 @@
           <h3 id="pd-title" style="margin:0;font-size:14px;">Product · 产品</h3>
           <div style="display:flex;gap:8px;align-items:center;">
             <button class="btn btn-sm" id="pd-expand-btn" type="button" onclick="pdToggleFullscreen()" title="Expand / shrink editor · 全屏 / 还原"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg>Expand · 全屏</button>
-            <button class="btn" onclick="pdClose()">Done · 完成</button>
+            <button class="btn btn-sm" type="button" onclick="pdClose()" title="Close · 关闭" aria-label="Close"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
           </div>
         </div>
         <div class="pu-editor-body">
@@ -14577,8 +14577,9 @@ const BENTO_CATALOGUE = {
     render: (body) => {
       const list = (DASH_DATA && DASH_DATA.geoCities) || [];
       if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No delivery data · 暂无数据</div>`;
+      const en = !(window.cuLang && cuLang() === 'cn');
       const rows = dashBarRows(list.slice(0, 6), {
-        name: g => g.city || '—',
+        name: g => (en ? (g.city_en || g.city) : (g.city || g.city_en)) || '—',
         value: g => Number(g.orders || 0),
         display: g => String(g.orders || 0),
       });
