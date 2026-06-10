@@ -8515,6 +8515,41 @@ router.post('/api/retail-admin/categories/reorder', requireRetailAdmin, express.
   }
 });
 
+// Reorder products on the storefront by passing their ids in the desired order.
+// The customer shop sorts its grid by store_products.sort_order (see the catalog
+// query above), so this is what arranges the products a category shows.
+//
+// We redistribute the SET's own existing sort_order slots rather than assigning
+// a fresh 1..n ramp: read the current sort_order values of the passed ids, sort
+// them ascending, and hand them back out in the new sequence. That way only the
+// relative order WITHIN this set changes — the slots (and thus where this set
+// sits among every other product) are preserved, so arranging one category never
+// shuffles another. (If the set was never sorted — all slots equal/zero — fall
+// back to a 1..n ramp so a virgin catalogue still gets a stable order.)
+router.post('/api/retail-admin/products/reorder', requireRetailAdmin, express.json(), (req, res) => {
+  const ids = Array.isArray(req.body?.ids)
+    ? req.body.ids.map(n => parseInt(n, 10)).filter(Number.isFinite)
+    : null;
+  if (!ids || ids.length < 2) return res.status(400).json({ success: false, error: 'ids_required' });
+  try {
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = tdb().prepare(
+      `SELECT id, sort_order FROM store_products WHERE id IN (${placeholders})`
+    ).all(...ids);
+    if (rows.length !== ids.length) return res.status(400).json({ success: false, error: 'unknown_ids' });
+    let slots = rows.map(r => Number(r.sort_order) || 0).sort((a, b) => a - b);
+    if (slots[0] === slots[slots.length - 1]) slots = ids.map((_, i) => i + 1);
+    const stmt = tdb().prepare('UPDATE store_products SET sort_order = ? WHERE id = ?');
+    const tx = tdb().transaction(() => { ids.forEach((id, i) => stmt.run(slots[i], id)); });
+    tx();
+    logActivity(req.user.id, req.user.username, 'update', 'product_order', null, { count: ids.length }, req.ip);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[retail-admin/products/reorder]', e);
+    res.status(500).json({ success: false, error: 'reorder_failed' });
+  }
+});
+
 router.patch('/api/retail-admin/categories/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const existing = tdb().prepare("SELECT id, name FROM categories WHERE id = ? AND kind = 'product'").get(id);
