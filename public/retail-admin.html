@@ -15552,6 +15552,11 @@ let _ORDERS_AUTO_TIMER = null;
 let _ORDERS_LAST_FP = null;
 let _ORDERS_LAST_FP_KEY = '';        // filter signature for the FP
 let _ORDERS_SEEN_IDS = null;         // null = first-paint baseline not set
+// IDs we've already chimed/toasted for. Tracks "became actionable (paid)",
+// NOT "row first appeared" — an order lands as pending_payment (silent, no
+// chime/mark) and only counts as an arrival once it flips to paid+, which
+// is when there's actually something to process.
+let _ORDERS_NOTIFIED_IDS = null;     // null = first-paint baseline not set
 let _ORDERS_IN_FLIGHT = false;
 let _ORDERS_LAST_OK_AT = 0;
 let _ORDERS_LIVE_PAUSED = false;
@@ -15860,6 +15865,7 @@ async function loadOrders(opts = {}) {
       _ORDERS_LAST_FP_KEY = filterKey;
       _ORDERS_LAST_FP = null;
       _ORDERS_SEEN_IDS = null;
+      _ORDERS_NOTIFIED_IDS = null;
     }
 
     const fp = _ordersFp(j.data);
@@ -15883,20 +15889,31 @@ async function loadOrders(opts = {}) {
         </div>
       </td></tr>`;
       _ORDERS_SEEN_IDS = new Set();
+      _ORDERS_NOTIFIED_IDS = new Set();
       if (window.rmRenderOrderCards) rmRenderOrderCards([]);
       return;
     }
 
     const newIds = new Set(j.data.map(o => o.id));
-    const arrivals = prevSeen
-      ? j.data.filter(o => !prevSeen.has(o.id))
+    // An order is "actionable" only once it's paid — we don't process,
+    // mark, or chime for unpaid orders (status === 'pending_payment'); those
+    // just show their status pill and sit quiet until the customer pays.
+    const isActionable = o => o.status !== 'pending_payment';
+    const actionableIds = new Set(j.data.filter(isActionable).map(o => o.id));
+    const prevNotified = _ORDERS_NOTIFIED_IDS;
+    // Arrival = an order that's actionable now and we haven't chimed for yet.
+    // Catches both brand-new paid orders AND pending→paid flips (the id may
+    // already be on screen, but it wasn't actionable before).
+    const arrivals = prevNotified
+      ? j.data.filter(o => isActionable(o) && !prevNotified.has(o.id))
       : [];
 
     tbody.innerHTML = j.data.map(o => {
-      const fresh = (prevSeen && !prevSeen.has(o.id)) ? ' is-fresh' : '';
+      // No flash / no NEW mark for unpaid orders — nothing to act on yet.
+      const fresh = (isActionable(o) && prevSeen && !prevSeen.has(o.id)) ? ' is-fresh' : '';
       // Unread until any operator opens the detail (server seen_at). Stays
       // bold + lit across reloads/devices, unlike the transient arrival flash.
-      const isUnread = !o.seen_at;
+      const isUnread = !o.seen_at && isActionable(o);
       const unread = isUnread ? ' is-unread' : '';
       return `
       <tr class="order-row${fresh}${unread}" data-order-id="${o.id}" tabindex="0">
@@ -15921,9 +15938,10 @@ async function loadOrders(opts = {}) {
     if (window.rmRenderOrderCards) rmRenderOrderCards(j.data);
 
     _ORDERS_SEEN_IDS = newIds;
+    _ORDERS_NOTIFIED_IDS = actionableIds;
 
     // Surface real arrivals — only after the first paint baseline exists.
-    if (arrivals.length && prevSeen) {
+    if (arrivals.length && prevNotified) {
       const word = arrivals.length === 1 ? 'order' : 'orders';
       toast(`${arrivals.length} new ${word} · ${arrivals.length} 个新订单`);
       notifyNewOrders(arrivals.length);
@@ -29838,7 +29856,7 @@ window.onLangChange(function () {
         '<div class="rm-ocard-wrap">' + actions +
           '<div class="rm-ocard' + (swipeable ? '' : ' no-swipe') + '" data-id="' + o.id + '">' +
             '<div class="rm-oc-top">' +
-              '<span class="rm-oc-no">' + (!o.seen_at ? '<span class="rm-oc-new">NEW</span>' : '') + esc(o.order_no) + '</span>' +
+              '<span class="rm-oc-no">' + ((!o.seen_at && o.status !== 'pending_payment') ? '<span class="rm-oc-new">NEW</span>' : '') + esc(o.order_no) + '</span>' +
               '<span class="pill st-' + o.status + '"><span class="dot"></span>' + esc(hstatus(o)) + '</span>' +
             '</div>' +
             '<div class="rm-oc-mid">' +
