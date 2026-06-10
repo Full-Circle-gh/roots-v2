@@ -218,7 +218,7 @@
       <view wx:if="{{batchNotice}}" class="holiday-banner" bindtap="openBatchNotice">
         <view class="hb-icon">🥗</view>
         <view class="hb-body">
-          <view class="hb-title f-bear">{{lang === 'cn' ? '为您新鲜现做' : 'Made fresh for you'}}</view>
+          <view class="hb-title f-bear">{{lang === 'cn' ? batchNotice.title_cn : batchNotice.title_en}}</view>
           <view class="hb-msg">{{lang === 'cn' ? batchNotice.message_cn : batchNotice.message_en}}</view>
         </view>
         <view class="hb-more">{{lang === 'cn' ? '详情' : 'Details'}}</view>
@@ -870,23 +870,43 @@
 
   <!-- "Made fresh for you" popup. Auto-opens once per checkout visit when the
        cart holds a batch-made item shipping to an outside-GZ / Panyu-style
-       zone, and re-opens from the inline banner. Reuses fb-modal-card so the
-       palette + type match the other checkout modals. -->
-  <view wx:if="{{batchNoticePopup && batchNotice}}" class="fb-modal-backdrop" bindtap="closeBatchNotice" catchtouchmove="noop">
-    <view class="fb-modal-card" catchtap="noop">
-      <view class="fb-modal-icon">🥗</view>
-      <view class="fb-modal-kicker f-toni">{{ lang === 'cn' ? '新鲜现做' : 'FRESHLY MADE' }}</view>
-      <view class="fb-modal-title f-bear">
-        {{ lang === 'cn' ? '为您新鲜现做' : 'Made fresh for you' }}
+       zone, and re-opens from the inline banner. Copy (kicker/title/body) is
+       operator-editable; the item list is matched to the cart for thumbnails. -->
+  <view wx:if="{{batchNoticePopup && batchNotice}}" class="bn-backdrop" bindtap="closeBatchNotice" catchtouchmove="noop">
+    <view class="bn-card" catchtap="noop">
+      <view class="bn-hero">
+        <view class="bn-badge">🥗</view>
       </view>
-      <view class="fb-modal-body">
-        <text>{{ lang === 'cn' ? batchNotice.message_cn : batchNotice.message_en }}</text>
-      </view>
-      <view class="fb-modal-actions">
-        <view class="fb-modal-btn fb-modal-btn--primary f-toni" bindtap="closeBatchNotice">
-          {{ lang === 'cn' ? '知道了' : 'Got it' }}
+      <view class="bn-kicker f-toni">{{ lang === 'cn' ? batchNotice.kicker_cn : batchNotice.kicker_en }}</view>
+      <view class="bn-title f-bear">{{ lang === 'cn' ? batchNotice.title_cn : batchNotice.title_en }}</view>
+
+      <!-- The specific fresh items this refers to -->
+      <view wx:if="{{batchNoticeItems.length}}" class="bn-items">
+        <view wx:for="{{batchNoticeItems}}" wx:key="id" class="bn-item">
+          <image wx:if="{{item.image}}" class="bn-item-img" src="{{item.image}}" mode="aspectFill"/>
+          <view wx:else class="bn-item-img bn-item-img--ph">🥗</view>
+          <view class="bn-item-name">{{item.name}}</view>
         </view>
       </view>
+
+      <view class="bn-body">{{ lang === 'cn' ? batchNotice.message_cn : batchNotice.message_en }}</view>
+
+      <!-- Ship → arrive timeline -->
+      <view class="bn-timeline">
+        <view class="bn-tl-step">
+          <view class="bn-tl-dot bn-tl-dot--make"></view>
+          <view class="bn-tl-lbl f-toni">{{ lang === 'cn' ? '现做发货' : 'MADE & SHIPPED' }}</view>
+          <view class="bn-tl-date f-bear">{{batchNotice.ship_date}}</view>
+        </view>
+        <view class="bn-tl-line"></view>
+        <view class="bn-tl-step">
+          <view class="bn-tl-dot bn-tl-dot--arrive"></view>
+          <view class="bn-tl-lbl f-toni">{{ lang === 'cn' ? '新鲜送达' : 'ARRIVES FRESH' }}</view>
+          <view class="bn-tl-date f-bear">{{batchNotice.delivery_date}}</view>
+        </view>
+      </view>
+
+      <view class="bn-cta f-toni" bindtap="closeBatchNotice">{{ lang === 'cn' ? '知道了' : 'Got it' }}</view>
     </view>
   </view>
 </view>

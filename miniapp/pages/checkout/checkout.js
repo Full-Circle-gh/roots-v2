@@ -59,7 +59,8 @@ Page({
     usePoints: false,            // toggle: apply max usable on this order
     // Delivery scheduling — populated by the /quote response.
     scheduling: null,            // full scheduling object from server (slots, surcharge, hours)
-    batchNotice: null,           // { ship_date, delivery_date, kind, message_en, message_cn } when a batch-made item ships rather than instant-delivers
+    batchNotice: null,           // { ship_date, delivery_date, kind, kicker/title/message_en/cn, items[] } when a batch-made item ships rather than instant-delivers
+    batchNoticeItems: [],         // [{ id, name, image }] — the fresh items, matched to the cart for thumbnails
     batchNoticePopup: false,      // true → the "Made fresh for you" modal is open
     batchNoticeSeen: false,       // popup auto-shows once per checkout visit; banner persists after
     deliverySlotId: '',          // 'right_away' | 'YYYY-MM-DD' | 'YYYY-MM-DDTHH:MM' — required before placeOrder
@@ -1036,6 +1037,7 @@ Page({
           pointsPotentialDiscount: (pointsMaxUsable / (Number(data.points_redeem_rate) || 100)).toFixed(2),
           scheduling: sch,
           batchNotice: data.batch_notice || null,
+          batchNoticeItems: this.buildBatchNoticeItems(data.batch_notice),
           slotsByDay,
           deliverySlotId: nextSlotId,
           deliverySlotLabel: nextSlotLabel,
@@ -1381,6 +1383,26 @@ Page({
       total: Math.max(0, subtotal - voucherDiscount).toFixed(2),
       quoting: false,
     });
+  },
+
+  // Build the display list of freshly-made items for the popup: the server
+  // tells us WHICH cart products are batch-made (id + names); we match each to
+  // the live cart row to pull its thumbnail + the customer's chosen language
+  // name. Returns [] when there's no notice.
+  buildBatchNoticeItems(notice) {
+    const items = (notice && Array.isArray(notice.items)) ? notice.items : [];
+    if (!items.length) return [];
+    const L = this.data.lang;
+    const cartItems = cart.get().items || [];
+    const imgById = {};
+    for (const ci of cartItems) {
+      if (ci.product_id != null && !imgById[ci.product_id]) imgById[ci.product_id] = ci.image || '';
+    }
+    return items.map(it => ({
+      id: it.id,
+      name: lang.pick(it.name_en, it.name_cn, L),
+      image: imgById[it.id] || '',
+    }));
   },
 
   // "Made fresh for you" modal — auto-opens once per visit, and the banner's

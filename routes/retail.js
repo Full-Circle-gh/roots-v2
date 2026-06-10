@@ -11921,14 +11921,21 @@ function batchScheduleCfg() {
   const skip = Array.isArray(c.skip_dates)
     ? c.skip_dates.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s)))
     : [];
+  const str = (v) => (typeof v === 'string' ? v : '');
   return {
     anchor_date: c.anchor_date,
     interval_days: interval,
     skip_dates: skip,
-    // Optional operator-authored notice templates. Placeholders {ship_date}
-    // and {delivery_date} are filled with the resolved YYYY-MM-DD dates.
-    message_en: typeof c.message_en === 'string' ? c.message_en : '',
-    message_cn: typeof c.message_cn === 'string' ? c.message_cn : '',
+    // Optional operator-authored popup copy. The body placeholders {ship_date}
+    // and {delivery_date} are filled with the resolved YYYY-MM-DD dates. Title
+    // and kicker are plain text. Any blank field falls back to a built-in
+    // bilingual default in computeBatchNotice.
+    title_en:   str(c.title_en),
+    title_cn:   str(c.title_cn),
+    kicker_en:  str(c.kicker_en),
+    kicker_cn:  str(c.kicker_cn),
+    message_en: str(c.message_en),
+    message_cn: str(c.message_cn),
   };
 }
 
@@ -11994,15 +12001,22 @@ function prevBatchShipDate(fromDate, cfg) {
   return toYmdLocal(cand);
 }
 
+// The batch-made (is_batch_made) products among the given ids, as
+// [{ id, name_en, name_cn }]. Empty array when none. Drives both the
+// "does the notice apply" gate and the item list shown in the popup.
+function batchItemsInCart(productIds) {
+  const ids = [...new Set((productIds || []).map((n) => parseInt(n, 10)).filter(Boolean))];
+  if (!ids.length) return [];
+  const ph = ids.map(() => '?').join(',');
+  return tdb().prepare(
+    `SELECT id, name_en, name_cn FROM store_products
+      WHERE id IN (${ph}) AND COALESCE(is_batch_made, 0) = 1`
+  ).all(...ids);
+}
+
 // True when any of the given product ids is flagged is_batch_made.
 function cartHasBatchItem(productIds) {
-  const ids = [...new Set((productIds || []).map((n) => parseInt(n, 10)).filter(Boolean))];
-  if (!ids.length) return false;
-  const ph = ids.map(() => '?').join(',');
-  const row = tdb().prepare(
-    `SELECT 1 FROM store_products WHERE id IN (${ph}) AND COALESCE(is_batch_made, 0) = 1 LIMIT 1`
-  ).get(...ids);
-  return !!row;
+  return batchItemsInCart(productIds).length > 0;
 }
 
 // The customer-facing "made fresh for you" notice for an order holding a
@@ -12029,7 +12043,8 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
   if (!isCity && !isShipDistrict) return null;
   const cfg = batchScheduleCfg();
   if (!cfg) return null;
-  if (!cartHasBatchItem(productIds)) return null;
+  const batchItems = batchItemsInCart(productIds);
+  if (!batchItems.length) return null;
 
   const nowD = now || new Date();
   const todayIso = toYmdLocal(new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 12, 0, 0, 0));
@@ -12083,8 +12098,16 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
     ship_date: shipDate,
     delivery_date: deliveryDate,
     kind,
+    // Operator-editable popup copy (Mini App Backend → Delivery → Fresh batch
+    // schedule). Each falls back to a built-in bilingual default when blank.
+    kicker_en:  cfg.kicker_en  || 'Freshly made',
+    kicker_cn:  cfg.kicker_cn  || '新鲜现做',
+    title_en:   cfg.title_en   || 'Made fresh for you',
+    title_cn:   cfg.title_cn   || '为您新鲜现做',
     message_en: cfg.message_en ? fill(cfg.message_en) : defEn,
     message_cn: cfg.message_cn ? fill(cfg.message_cn) : defCn,
+    // The specific batch-made items this notice refers to.
+    items: batchItems.map((it) => ({ id: it.id, name_en: it.name_en, name_cn: it.name_cn })),
   };
 }
 

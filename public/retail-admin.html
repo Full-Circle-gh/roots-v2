@@ -9206,7 +9206,26 @@
           <textarea id="batch-skip" rows="3" style="width: 100%; font-family: monospace; font-size: 12px;" placeholder="2026-07-14&#10;2026-07-16"></textarea>
         </div>
         <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-          <label class="stacked">Checkout notice — English · 结账提示(英文) <span class="help-i" data-tip="Shown on mini-app checkout when an outside-Guangzhou cart holds a batch-made item. Use {ship_date} and {delivery_date} as placeholders — they're replaced with the real dates. Leave blank to use the default wording. · 含「分批现做」商品的广州以外订单结账时显示。可用 {ship_date} 与 {delivery_date} 作为日期占位符,系统会替换为真实日期。留空则使用默认文案。">?</span></label>
+          <div class="muted" style="font-size: 11px; margin-bottom: 8px;">The checkout popup the customer sees. Leave any field blank to use the default wording. · 顾客在结账页看到的弹窗。任意字段留空则使用默认文案。</div>
+        </div>
+        <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
+          <label class="stacked">Popup eyebrow — English · 弹窗小标题(英文) <span class="help-i" data-tip="The small uppercase label above the title (default: FRESHLY MADE). · 标题上方的小号大写标签(默认:FRESHLY MADE)。">?</span></label>
+          <input id="batch-kicker-en" type="text" maxlength="40" style="width: 100%;" placeholder="Freshly made">
+        </div>
+        <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
+          <label class="stacked">弹窗小标题(中文)· Popup eyebrow — Chinese</label>
+          <input id="batch-kicker-cn" type="text" maxlength="40" style="width: 100%;" placeholder="新鲜现做">
+        </div>
+        <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
+          <label class="stacked">Popup title — English · 弹窗标题(英文) <span class="help-i" data-tip="The big heading in the popup (default: Made fresh for you). · 弹窗中的大标题(默认:Made fresh for you)。">?</span></label>
+          <input id="batch-title-en" type="text" maxlength="60" style="width: 100%;" placeholder="Made fresh for you">
+        </div>
+        <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
+          <label class="stacked">弹窗标题(中文)· Popup title — Chinese</label>
+          <input id="batch-title-cn" type="text" maxlength="60" style="width: 100%;" placeholder="为您新鲜现做">
+        </div>
+        <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
+          <label class="stacked">Checkout notice — English · 结账提示(英文) <span class="help-i" data-tip="The popup body. Shown when a cart holds a batch-made item shipping outside Guangzhou OR to a far GZ district (Panyu, Huadu, Nansha, Conghua, Zengcheng). Use {ship_date} and {delivery_date} as placeholders — they're replaced with the real dates. Leave blank to use the default. · 弹窗正文。当订单含「分批现做」商品且配送至广州以外或较远的广州城区(番禺、花都、南沙、从化、增城)时显示。可用 {ship_date} 与 {delivery_date} 占位符,系统会替换为真实日期。留空则使用默认。">?</span></label>
           <textarea id="batch-msg-en" rows="2" style="width: 100%;" placeholder="Your order includes freshly-made items. We make the next batch on {ship_date} and ship it the same day, so it arrives fresh on {delivery_date}."></textarea>
         </div>
         <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
@@ -19751,6 +19770,10 @@ async function loadDeliveryZones() {
     if ($('#batch-anchor'))   $('#batch-anchor').value   = batch.anchor_date || '';
     if ($('#batch-interval')) $('#batch-interval').value = batch.interval_days || 2;
     if ($('#batch-skip'))     $('#batch-skip').value     = (Array.isArray(batch.skip_dates) ? batch.skip_dates : []).join('\n');
+    if ($('#batch-kicker-en')) $('#batch-kicker-en').value = batch.kicker_en || '';
+    if ($('#batch-kicker-cn')) $('#batch-kicker-cn').value = batch.kicker_cn || '';
+    if ($('#batch-title-en'))  $('#batch-title-en').value  = batch.title_en || '';
+    if ($('#batch-title-cn'))  $('#batch-title-cn').value  = batch.title_cn || '';
     if ($('#batch-msg-en'))   $('#batch-msg-en').value   = batch.message_en || '';
     if ($('#batch-msg-cn'))   $('#batch-msg-cn').value   = batch.message_cn || '';
     const bcb = $('#batch-enabled');
@@ -19814,11 +19837,16 @@ async function saveBatchSchedule() {
   const interval = Math.max(1, parseInt($('#batch-interval').value, 10) || 2);
   const skip = ($('#batch-skip').value || '')
     .split(/[\s,]+/).map(s => s.trim()).filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s));
+  const val = (sel) => (($(sel) && $(sel).value) || '').trim();
   const body = {
     'batch.schedule': {
       enabled, anchor_date: anchor, interval_days: interval, skip_dates: skip,
-      message_en: ($('#batch-msg-en').value || '').trim(),
-      message_cn: ($('#batch-msg-cn').value || '').trim(),
+      kicker_en: val('#batch-kicker-en'),
+      kicker_cn: val('#batch-kicker-cn'),
+      title_en:  val('#batch-title-en'),
+      title_cn:  val('#batch-title-cn'),
+      message_en: val('#batch-msg-en'),
+      message_cn: val('#batch-msg-cn'),
     },
   };
   try {
@@ -20594,10 +20622,14 @@ const RM_DLV_EDITORS = {
   batch: {
     title: 'Batch schedule · 现做排期', save: 'saveBatchSchedule',
     fields: [
-      { id: 'batch-enabled', kind: 'toggle', label: 'Fresh batch schedule · 分批现做', hint: 'Only affects outside-Guangzhou orders holding a batch-made item. · 仅影响含「分批现做」商品的广州以外订单。' },
+      { id: 'batch-enabled', kind: 'toggle', label: 'Fresh batch schedule · 分批现做', hint: 'Affects orders with a batch-made item shipping outside Guangzhou OR to a far GZ district (Panyu, Huadu, Nansha, Conghua, Zengcheng). · 影响含「分批现做」商品且配送至广州以外或较远城区(番禺、花都、南沙、从化、增城)的订单。' },
       { id: 'batch-anchor', kind: 'date', label: 'A batch day · 某个制作日' },
       { id: 'batch-interval', kind: 'numsm', unit: 'days · 天', label: 'Make every · 每隔' },
       { id: 'batch-skip', kind: 'textarea', mono: true, label: 'Skip these dates · 跳过这些日期', ph: '2026-07-14\n2026-07-16' },
+      { id: 'batch-kicker-en', kind: 'text', label: 'Popup eyebrow — English · 弹窗小标题(英文)' },
+      { id: 'batch-kicker-cn', kind: 'text', label: '弹窗小标题(中文)· Popup eyebrow — Chinese' },
+      { id: 'batch-title-en', kind: 'text', label: 'Popup title — English · 弹窗标题(英文)' },
+      { id: 'batch-title-cn', kind: 'text', label: '弹窗标题(中文)· Popup title — Chinese' },
       { id: 'batch-msg-en', kind: 'textarea', label: 'Checkout notice — English · 结账提示(英文)' },
       { id: 'batch-msg-cn', kind: 'textarea', label: '结账提示(中文)· Checkout notice — Chinese' },
     ],
@@ -20745,7 +20777,7 @@ function rmDlvRenderHub() {
     grouplab('Schedule &amp; closures · 排期与休假') +
     '<div class="rm-dlv-group">' +
       row('sun', 'Holiday mode · 假期模式', 'Pause same-day, show a banner · 暂停当日达并显示横幅', toggle(holidayOn, 'holiday'), "rmDlvOpenEditor('holiday')") +
-      row('repeat', 'Fresh batch schedule · 现做排期', 'Outside-GZ batch-made items · 广州以外现做商品', pill(batchOn), "rmDlvOpenEditor('batch')") +
+      row('repeat', 'Fresh batch schedule · 现做排期', 'Outside-GZ + far districts · 广州以外及较远城区', pill(batchOn), "rmDlvOpenEditor('batch')") +
     '</div>' +
     grouplab('Defaults · 默认') +
     '<div class="rm-dlv-group">' +

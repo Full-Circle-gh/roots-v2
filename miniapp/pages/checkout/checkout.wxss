@@ -1044,3 +1044,168 @@
 .fb-sub__curated { font-size: 22rpx; margin-left: 4rpx; }
 .fb-sub__price { font-size: 28rpx; color: var(--ink, #1a2a0c); white-space: nowrap; }
 .fb-subs__footer { margin-top: 12rpx; }
+
+/* ─── "Made fresh for you" popup (redesigned) ─────────────────────────────
+   Brand palette: oat card (#FFFCF7), ink (#1a2314), lime accent. Hero band
+   with a salad badge, operator-editable kicker/title, the fresh-item list
+   (thumb + name), the body copy, and a ship→arrive timeline. */
+.bn-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(26, 35, 20, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 48rpx;
+  animation: fbFade 180ms ease-out;
+}
+.bn-card {
+  width: 100%;
+  max-width: 640rpx;
+  max-height: 86vh;
+  overflow-y: auto;
+  background: #FFFCF7;
+  border-radius: 32rpx;
+  padding: 0 0 36rpx;
+  box-shadow: 0 24rpx 60rpx rgba(26, 35, 20, 0.38);
+  animation: fbPop 220ms cubic-bezier(.2,.9,.3,1.1);
+}
+/* Hero band — soft lime wash with a circular badge straddling the edge. */
+.bn-hero {
+  height: 132rpx;
+  background: linear-gradient(135deg, #e9efd0 0%, #d9e6b3 100%);
+  border-radius: 32rpx 32rpx 0 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  position: relative;
+  margin-bottom: 56rpx;
+}
+.bn-badge {
+  position: absolute;
+  bottom: -44rpx;
+  width: 108rpx;
+  height: 108rpx;
+  border-radius: 50%;
+  background: #FFFCF7;
+  border: 4rpx solid #d9e6b3;
+  box-shadow: 0 8rpx 20rpx rgba(26, 35, 20, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 58rpx;
+  line-height: 1;
+}
+.bn-kicker {
+  text-align: center;
+  font-size: 22rpx;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6d7a2a;
+  padding: 0 48rpx;
+  margin-bottom: 8rpx;
+}
+.bn-title {
+  text-align: center;
+  font-size: calc(54rpx * var(--font-scale, 1));
+  line-height: 1.08;
+  color: #1a2314;
+  padding: 0 48rpx;
+  margin-bottom: 24rpx;
+}
+/* Fresh-item list — each row a thumb + the chosen-language name. */
+.bn-items {
+  margin: 0 40rpx 24rpx;
+  padding: 14rpx;
+  background: rgba(217, 230, 179, 0.28);
+  border: 2rpx solid rgba(109, 122, 42, 0.18);
+  border-radius: 16rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+.bn-item {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+.bn-item-img {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 12rpx;
+  flex-shrink: 0;
+  background: #f0ede6;
+}
+.bn-item-img--ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34rpx;
+}
+.bn-item-name {
+  font-size: calc(26rpx * var(--font-scale, 1));
+  color: #1a2314;
+  line-height: 1.3;
+}
+.bn-body {
+  font-size: calc(27rpx * var(--font-scale, 1));
+  line-height: 1.55;
+  color: #2a3a22;
+  text-align: center;
+  padding: 0 48rpx;
+  margin-bottom: 30rpx;
+}
+/* Ship → arrive timeline */
+.bn-timeline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 8rpx;
+  margin: 0 40rpx 34rpx;
+  padding: 24rpx 16rpx;
+  background: rgba(243, 235, 220, 0.5);
+  border-radius: 16rpx;
+}
+.bn-tl-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+.bn-tl-dot {
+  width: 22rpx;
+  height: 22rpx;
+  border-radius: 50%;
+}
+.bn-tl-dot--make   { background: #c98a2a; }
+.bn-tl-dot--arrive { background: #6d9c2a; }
+.bn-tl-lbl {
+  font-size: 19rpx;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6a6e2d;
+}
+.bn-tl-date {
+  font-size: calc(28rpx * var(--font-scale, 1));
+  color: #1a2314;
+}
+.bn-tl-line {
+  flex: 0 0 56rpx;
+  height: 3rpx;
+  background: repeating-linear-gradient(to right, #b9c089 0, #b9c089 8rpx, transparent 8rpx, transparent 16rpx);
+  margin-top: 10rpx;
+}
+.bn-cta {
+  margin: 0 40rpx;
+  padding: 26rpx 0;
+  text-align: center;
+  background: #1a2314;
+  color: var(--lime, #c3e000);
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  letter-spacing: 0.04em;
+}
+.bn-cta:active { opacity: 0.85; }
