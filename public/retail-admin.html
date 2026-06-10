@@ -7681,6 +7681,7 @@
           <h3 id="pd-title" style="margin:0;font-size:14px;">Product · 产品</h3>
           <div style="display:flex;gap:8px;align-items:center;">
             <button class="btn btn-sm" id="pd-expand-btn" type="button" onclick="pdToggleFullscreen()" title="Expand / shrink editor · 全屏 / 还原"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg>Expand · 全屏</button>
+            <button class="btn btn-sm" id="pd-savenext-btn" type="button" onclick="pdSaveNext()" title="Save and open the next product in the list · 保存并打开列表中的下一个">Save &amp; next · 下一个 ↓</button>
             <button class="btn" onclick="pdClose()">Done · 完成</button>
           </div>
         </div>
@@ -24491,6 +24492,7 @@ function paRenderKpis(animate) {
   }
 }
 
+let PA_ORDERED_UNIT_IDS = [];
 function paRender() {
   const grid   = document.getElementById('pa-grid');
   const empty  = document.getElementById('pa-empty');
@@ -24516,7 +24518,10 @@ function paRender() {
     rows = rows.filter(_paStatusMatch);
   }
 
-  count.textContent = `${rows.length} of ${PA_PRODUCTS.length} · 共 ${PA_PRODUCTS.length} 件,显示 ${rows.length} 件`;
+  // Count display UNITS (variant sizes merged into one), so the toolbar total
+  // matches the list pager's "of N" instead of looking like a mismatch.
+  const _uShown = _paUnits(rows).length, _uTotal = _paUnits(PA_PRODUCTS).length;
+  count.textContent = `${_uShown} of ${_uTotal} · 共 ${_uTotal} 件,显示 ${_uShown} 件`;
 
   // Drag-to-reorder is offered only when the picture is unambiguous: the list
   // overview (editor closed), one real category picked, and no search/status
@@ -24534,6 +24539,8 @@ function paRender() {
   // anywhere in its order, not just within the current page.
   const units = _paUnits(rows);
   const total = units.length;
+  // Ordered ids of the on-screen list — drives the editor's "Save & next".
+  PA_ORDERED_UNIT_IDS = units.map(u => (u && u.p ? u.p.id : null)).filter(x => x != null);
   empty.style.display = total ? 'none' : 'block';
   const paged = !reorderActive && PA_PAGE_SIZE !== 'all' && total > 0;
   const size  = paged ? PA_PAGE_SIZE : total;
@@ -24900,6 +24907,22 @@ async function pdSaveStoreStocks() {
   VA_STORE_TOTALS = totals;
   (VA_MEMBERS || []).forEach(m => { if (totals[m.id] != null) m.stock = totals[m.id]; });
   if (document.getElementById('pd-variants') && VA_ID != null) vaRender();
+}
+// "Save & next" — flush the current product's autosave, then open the next one
+// in the on-screen list order (flipping pages if needed). Built for clearing a
+// big draft backlog without round-tripping through the list each time.
+async function pdSaveNext() {
+  const ids = PA_ORDERED_UNIT_IDS || [];
+  const idx = _pdSelectedId == null ? -1 : ids.indexOf(_pdSelectedId);
+  if (idx < 0) { toast(cuT('Open a product first', '请先打开一个产品'), 'err'); return; }
+  if (idx >= ids.length - 1) { toast(cuT('That was the last product', '已是最后一个产品'), 'ok'); return; }
+  const nextId = ids[idx + 1];
+  const btn = document.getElementById('pd-savenext-btn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+  try { await pdAutoSaveNow(); } catch (e) {}
+  if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+  if (PA_PAGE_SIZE !== 'all') PA_PAGE = Math.floor((idx + 1) / PA_PAGE_SIZE) + 1;
+  pdOpen(nextId);
 }
 function pdOpen(id) {
   const p = id != null ? (PA_PRODUCTS || []).find(x => x.id === id) : null;
