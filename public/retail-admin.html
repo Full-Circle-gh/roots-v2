@@ -1807,14 +1807,19 @@
   .va-row.va-oos { background: rgba(182,86,86,.06); border-radius: 6px; }
   .va-row.va-oos .va-stk { color: var(--danger); border-color: rgba(182,86,86,.5); }
   /* Stock-by-location grid: variant rows × store columns + a live row total.
-     One place to set every variant's stock in every store. */
+     One place to set every variant's stock in every store. Wrapped so many
+     stores scroll horizontally instead of bursting out of the narrow card. */
+  #pd-store-stocks { overflow-x: auto; }
   .pd-stock-matrix { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .pd-stock-matrix th, .pd-stock-matrix td { padding: 4px 6px; text-align: center; }
+  .pd-stock-matrix th, .pd-stock-matrix td { padding: 4px 5px; text-align: center; }
+  .pd-stock-matrix th:first-child, .pd-stock-matrix td:first-child { padding-left: 0; }
   .pd-stock-matrix tr:first-child th { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-4); font-family: var(--f-mono); font-weight: 500; }
-  .pd-stock-matrix th.vh { text-align: left; color: var(--text-1); font-weight: 600; white-space: nowrap; }
+  /* Variant-name cell — left-aligned, normal case, and capped so a long product
+     name truncates with an ellipsis rather than widening the whole table. */
+  .pd-stock-matrix th.vh { text-align: left; color: var(--text-1); font-weight: 600; text-transform: none; letter-spacing: 0; font-family: var(--f-sans); white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
   .pd-stock-matrix tr:first-child th.vh { color: var(--text-4); font-weight: 500; }
-  .pd-stock-matrix input { width: 64px; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--line,#d8d2c4); border-radius: 8px; font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
-  .pd-stock-matrix td.mtot, .pd-stock-matrix th.mtot { color: var(--text-2); font-weight: 600; min-width: 34px; font-variant-numeric: tabular-nums; }
+  .pd-stock-matrix input { width: 56px; box-sizing: border-box; padding: 6px 7px; border: 1px solid var(--line,#d8d2c4); border-radius: 8px; font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+  .pd-stock-matrix td.mtot, .pd-stock-matrix th.mtot { color: var(--text-2); font-weight: 600; min-width: 30px; font-variant-numeric: tabular-nums; }
   .pd-stock-matrix .va-self { font-size: 11px; }
   /* Description editor — Classic (rich) editor + "Product editor" launch, EN|CN side-by-side. */
   .pd-desc-modebar { display: inline-flex; gap: 4px; margin-left: 10px; vertical-align: middle; }
@@ -24320,9 +24325,12 @@ function pdRenderStockMatrix(box, d) {
         'data-variant-id="' + v.id + '" data-store-id="' + s.store_id + '" oninput="pdMatrixRecalc(this)"></td>';
     }).join('');
     const tot = stores.reduce((a, s) => a + ((qty[v.id] && qty[v.id][s.store_id]) || 0), 0);
-    const name = escapeHtml(_vaMatrixLabel(v)) +
-      (v.self ? ' <span class="va-self" title="' + cuT('The variant open above', '上方打开的规格') + '">●</span>' : '');
-    return '<tr data-variant-id="' + v.id + '"><th class="vh">' + name + '</th>' + cells +
+    // With a single variant the product name is redundant (it's the one being
+    // edited, shown at the top) — leave the row label blank. With several, show
+    // each variant's label + a ● on the one currently open above.
+    const name = !multi ? '' : (escapeHtml(_vaMatrixLabel(v)) +
+      (v.self ? ' <span class="va-self" title="' + cuT('The variant open above', '上方打开的规格') + '">●</span>' : ''));
+    return '<tr data-variant-id="' + v.id + '"><th class="vh"' + (multi ? ' title="' + escapeAttr(_vaMatrixLabel(v)) + '"' : '') + '>' + name + '</th>' + cells +
       '<td class="mtot" data-tot="' + v.id + '">' + tot + '</td></tr>';
   }).join('');
   box.innerHTML =
