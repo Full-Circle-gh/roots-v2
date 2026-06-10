@@ -25781,6 +25781,27 @@ function pdComposeProgress() {
 // iedAutoComposeBlocks + product-editor's compose flow (same /api/ai/compose-
 // blocks endpoint). Any miss flips the flag back off for a fresh product so the
 // storefront never lands on an empty designed page.
+// Quietly fill the Product details boxes from the description text when they're
+// still empty — called by Design On so the boxes feed the design without a
+// separate "Auto-fill" click. Best-effort: AI off / failure / no text just
+// proceeds (the design still builds from the description as before).
+async function pdFactsAutoFillQuiet(textEn, textCn) {
+  try {
+    if (typeof pdFactsGet !== 'function') return;
+    if (Object.keys(pdFactsGet()).length) return;   // never clobber existing box values
+    if (!textEn && !textCn) return;
+    const r = await fetch('/api/retail-admin/ai/extract-facts', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text_en: textEn || '', text_cn: textCn || '' }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j && j.success && j.data && j.data.facts && Object.keys(j.data.facts).length) {
+      pdFactsSet({ ...pdFactsGet(), ...j.data.facts });
+      pdScheduleAutosave();   // persist the freshly-filled boxes alongside the design
+    }
+  } catch (e) { /* best-effort — proceed to build without facts */ }
+}
 async function pdAutoComposeBlocks(id, btn) {
   const row = PA_PRODUCTS.find(x => x.id === Number(id)) || {};
   let blocks = row.description_blocks;
@@ -25805,6 +25826,10 @@ async function pdAutoComposeBlocks(id, btn) {
   // Only one language needed — the AI drafts the other in the brand voice.
   const translate = !(textEn && textCn);
   const prog = pdComposeProgress();
+  // Fold "Auto-fill" into Design On — if the Product details boxes are empty,
+  // pull the facts from the description first so the design is built FROM the
+  // boxes in a single click. No-ops if the boxes are already filled.
+  await pdFactsAutoFillQuiet(textEn, textCn);
   try {
     const r = await fetch('/api/retail-admin/ai/compose-blocks', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
