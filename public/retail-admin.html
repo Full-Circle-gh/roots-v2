@@ -24832,7 +24832,7 @@ function pdRenderStockMatrix(box, d) {
     const cells = stores.map(s => {
       const q = (qty[v.id] && qty[v.id][s.store_id]) || 0;
       return '<td><input type="number" min="0" step="1" value="' + q + '" data-orig="' + q + '" ' +
-        'data-variant-id="' + v.id + '" data-store-id="' + s.store_id + '" oninput="pdMatrixRecalc(this)"></td>';
+        'data-variant-id="' + v.id + '" data-store-id="' + s.store_id + '" oninput="pdMatrixRecalc(this)" onblur="pdMatrixCellSave(this)"></td>';
     }).join('');
     const tot = stores.reduce((a, s) => a + ((qty[v.id] && qty[v.id][s.store_id]) || 0), 0);
     // With a single variant the product name is redundant (it's the one being
@@ -24845,9 +24845,7 @@ function pdRenderStockMatrix(box, d) {
   }).join('');
   box.innerHTML =
     '<table class="pd-stock-matrix">' + head + body + '</table>' +
-    '<div style="margin-top:8px;"><button type="button" id="pd-store-stocks-save" class="btn small" ' +
-      'onclick="pdSaveStoreStocks()">' + cuT('Save stock', '保存库存') + '</button>' +
-    '<span id="pd-store-stocks-msg" class="muted" style="margin-left:10px;font-size:12px;"></span></div>';
+    '<div style="margin-top:8px;"><span id="pd-store-stocks-msg" class="muted" style="font-size:12px;">' + cuT('Stock saves automatically', '库存自动保存') + '</span></div>';
 }
 // Live-update a row's Total cell as the operator types (no save needed to see it).
 function pdMatrixRecalc(inp) {
@@ -24873,6 +24871,46 @@ function pdSyncVariantTotals(d) {
 // Persist any changed cells. Each changed (variant, store) cell is PATCHed to
 // THAT variant's product (data-variant-id), so stock lands on the right row and
 // a ledger entry is recorded. Untouched cells are skipped.
+// Auto-save a single stock cell on blur (only if it changed) — mirrors the old
+// "Save stock" button's per-cell PATCH, so each store's physical_qty lands with
+// its ledger row. Blur debounces naturally (one save per cell you leave).
+async function pdMatrixCellSave(inp) {
+  if (!inp || String(inp.value) === String(inp.dataset.orig)) return;
+  const qty = Math.max(0, parseInt(inp.value, 10) || 0);
+  const pid = inp.dataset.variantId, sid = inp.dataset.storeId;
+  const msg = document.getElementById('pd-store-stocks-msg');
+  if (msg) msg.textContent = cuT('Saving…', '保存中…');
+  try {
+    const r = await fetch('/api/retail-admin/stores/' + sid + '/stock/' + pid, {
+      method: 'PATCH', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ physical_qty: qty, reason: 'manual' }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j && j.success !== false) {
+      inp.value = qty; inp.dataset.orig = String(qty);
+      if (msg) msg.textContent = cuT('Saved', '已保存');
+      pdMatrixSyncTotals();
+    } else {
+      if (msg) msg.textContent = '';
+      toast(cuT('Stock save failed', '库存保存失败'), 'err');
+    }
+  } catch (e) {
+    if (msg) msg.textContent = '';
+    toast(cuT('Stock save failed', '库存保存失败'), 'err');
+  }
+}
+// Recompute per-variant stock totals from the live cells + mirror them to the
+// variants table so the read-only STOCK column stays in sync.
+function pdMatrixSyncTotals() {
+  const box = document.getElementById('pd-store-stocks'); if (!box) return;
+  const inputs = Array.from(box.querySelectorAll('input[data-store-id]'));
+  const totals = {};
+  inputs.forEach(i => { const v = i.dataset.variantId; totals[v] = (totals[v] || 0) + Math.max(0, parseInt(i.value, 10) || 0); });
+  VA_STORE_TOTALS = totals;
+  (VA_MEMBERS || []).forEach(m => { if (totals[m.id] != null) m.stock = totals[m.id]; });
+  if (document.getElementById('pd-variants') && VA_ID != null) vaRender();
+}
 async function pdSaveStoreStocks() {
   const box = document.getElementById('pd-store-stocks');
   if (!box) return;
