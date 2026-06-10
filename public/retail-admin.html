@@ -1582,6 +1582,32 @@
   .pa-row-sub .pa-row-meta { font-family: var(--f-mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; }
   .pa-row-pills { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
 
+  /* "Available on the shop" switch — flips is_published from the catalogue. */
+  .pa-shop-toggle {
+    position: relative; display: inline-flex; align-items: center;
+    width: 34px; height: 20px; flex-shrink: 0; cursor: pointer;
+  }
+  .pa-shop-toggle input {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    margin: 0; opacity: 0; cursor: pointer;
+  }
+  .pa-shop-knob {
+    width: 34px; height: 20px; border-radius: 999px;
+    background: var(--line); transition: background .15s ease;
+  }
+  .pa-shop-knob::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25);
+    transition: transform .15s ease;
+  }
+  .pa-shop-toggle.is-on .pa-shop-knob { background: #5B8C5A; }
+  .pa-shop-toggle.is-on .pa-shop-knob::after { transform: translateX(14px); }
+  /* Mixed family (some sizes live, some not) — brass instead of green. */
+  .pa-shop-toggle.is-mixed .pa-shop-knob { background: var(--brass, #B08D4A); }
+  .pa-card-shop { display: flex; align-items: center; gap: 7px; margin-top: 8px; }
+  .pa-card-shop-lbl { font-size: 11px; color: var(--text-3); }
+
   /* ── Overview table (.pa-list-rich) — the full-width "products on the go"
      landing list. One product per row laid out as real columns: photo · name ·
      category · SKU · stock · price · status. Shown only when the editor is
@@ -1592,7 +1618,7 @@
   }
   .pa-list-rich .pa-row, .pa-rowhead {
     display: grid;
-    grid-template-columns: 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px 64px;
+    grid-template-columns: 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px 104px;
     align-items: center; gap: var(--s3);
   }
   .pa-list-rich .pa-row {
@@ -23402,21 +23428,10 @@ function _paStatusMatch(p) {
 // ── Catalogue pagination — caps how many cards render at once so the grid
 // paints fast even with the full 200+ catalogue. Page size persists; any
 // search / filter / view change resets to page 1.
-let PA_PAGE_SIZE = (() => {
-  try {
-    const v = localStorage.getItem('pa-page-size');
-    if (v === 'all') return 'all';
-    const n = parseInt(v, 10);
-    return [20, 50, 100].includes(n) ? n : 20;
-  } catch { return 20; }
-})();
+// Fixed at 18 per page — deliberately NOT operator-adjustable. 18 rows fit
+// inside the editor card without the list running past its bottom edge.
+const PA_PAGE_SIZE = 18;
 let PA_PAGE = 1;
-function paSetPageSize(v) {
-  PA_PAGE_SIZE = (v === 'all') ? 'all' : (parseInt(v, 10) || 20);
-  try { localStorage.setItem('pa-page-size', String(PA_PAGE_SIZE)); } catch {}
-  PA_PAGE = 1;
-  paRender();
-}
 function paSetPage(n) {
   // Re-render in place — deliberately NO scroll, so paging doesn't jump the
   // viewport (the pager sits above the grid; scrolling the grid into view
@@ -23428,9 +23443,6 @@ function paSetPage(n) {
 function _paPagerHtml(total, pages, start, shown) {
   const from = total === 0 ? 0 : start + 1;
   const to   = start + shown;
-  const sizeOpts = [20, 50, 100].map(n =>
-    `<option value="${n}"${PA_PAGE_SIZE === n ? ' selected' : ''}>${n} / page · 每页 ${n}</option>`).join('')
-    + `<option value="all"${PA_PAGE_SIZE === 'all' ? ' selected' : ''}>All · 全部</option>`;
   const btn = (label, page, dis) =>
     `<button class="btn btn-sm" type="button" ${dis ? 'disabled' : ''} onclick="paSetPage(${page})" style="font-family:var(--f-sans)">${label}</button>`;
   // EN/CN are kept as separate, self-contained spans tagged with data-lang-block
@@ -23850,6 +23862,42 @@ function _paDraftPill(p) {
     : '<span class="pa-pill pa-pill-draft" title="Not published in mini-app · 未在小程序上架">Draft</span>';
 }
 
+// Inline "available on the shop" switch — flips is_published (the same flag the
+// storefront filters on) straight from the catalogue, no need to open the
+// editor. For a variant family the toggle is On when ANY size is live; flipping
+// it sets every size at once. Persists via the per-product PATCH endpoint.
+function _paShopToggle(u) {
+  const members = u.group ? u.members : [u.p];
+  const on = members.some(m => m.is_published === 1);
+  const mixed = u.group && on && members.some(m => m.is_published !== 1);
+  const ids = members.map(m => m.id).join(',');
+  const title = on
+    ? cuT('On the shop · tap to hide', '已上架 · 点按下架')
+    : cuT('Off the shop · tap to show', '未上架 · 点按上架');
+  return `<label class="pa-shop-toggle${on ? ' is-on' : ''}${mixed ? ' is-mixed' : ''}" title="${title}" onclick="event.stopPropagation()">`
+    + `<input type="checkbox" ${on ? 'checked' : ''} onchange="paToggleShop('${ids}', this.checked)">`
+    + `<span class="pa-shop-knob"></span></label>`;
+}
+// Optimistically flip the cached rows + repaint, then PATCH each id. Revert on
+// failure so the switch never lies about the live state.
+async function paToggleShop(ids, on) {
+  const list = String(ids).split(',').map(Number).filter(Boolean);
+  const val = on ? 1 : 0;
+  const set = v => list.forEach(id => {
+    const i = PA_PRODUCTS.findIndex(x => x.id === id);
+    if (i >= 0) PA_PRODUCTS[i].is_published = v;
+  });
+  set(val); paRender(); paRenderKpis(false);
+  try {
+    for (const id of list) {
+      await api('/api/retail-admin/products/' + id, { method: 'PATCH', body: { is_published: val } });
+    }
+  } catch (e) {
+    set(on ? 0 : 1); paRender(); paRenderKpis(false);
+    alert(cuT('Could not update availability — ', '无法更新上架状态 — ') + (e.message || e));
+  }
+}
+
 // ── Overview list (full-width "products on the go" table) cell helpers ──
 // A unit is either a lone product or a collapsed variant family; prices and
 // stock fold across the family's members so the row reflects the whole product.
@@ -24090,7 +24138,7 @@ function paRender() {
         <span>SKU</span>
         <span>${(PA_STORE !== 'all' && PA_STOCK_LOADED) ? escapeHtml(cuT('Stock · ', '库存 · ') + _paStoreName(PA_STORE)) : cuT('Stock', '库存')}</span>
         <span class="pa-col-price">${cuT('Price', '价格')}</span>
-        <span></span>
+        <span>${cuT('Shop', '上架')}</span>
       </div>` : '';
     grid.innerHTML = head + pageUnits.map(u => {
       const p = u.p;
@@ -24110,7 +24158,7 @@ function paRender() {
           <div class="pa-col-sku">${sku}</div>
           <div class="pa-col-stock">${_paStockCell(u)}</div>
           ${_paPriceCell(u)}
-          <div class="pa-row-pills">${_paDraftPill(p)}<button class="pa-dup-row" type="button" title="Duplicate · 复制" onclick="event.stopPropagation(); paDuplicate(${p.id})">⧉</button></div>
+          <div class="pa-row-pills">${_paShopToggle(u)}<button class="pa-dup-row" type="button" title="Duplicate · 复制" onclick="event.stopPropagation(); paDuplicate(${p.id})">⧉</button></div>
         </div>`;
       }
       const meta = u.group
@@ -24181,6 +24229,7 @@ function paRender() {
           <div class="pa-card-name">${escapeHtml(p.name_en || '—')}</div>
           ${p.name_cn ? `<div class="pa-card-sub">${escapeHtml(p.name_cn)}</div>` : ''}
           ${meta ? `<div class="pa-card-meta">${meta}</div>` : ''}
+          <div class="pa-card-shop">${_paShopToggle(u)}<span class="pa-card-shop-lbl">${pub ? cuT('On shop', '已上架') : cuT('Off shop', '未上架')}</span></div>
         </div>
       </div>`;
   }).join('');
