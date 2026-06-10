@@ -14482,13 +14482,15 @@ document.addEventListener('keydown', (e) => {
      can show the real, faithful storefront preview and drive it via
      postMessage. Desktop (no flag) is completely unaffected. -->
 <style>
-  /* Bind the whole preview chain to the iframe's REAL pixel height (.pv is
-     height:100% of the mobile shell's flex stage) rather than 100dvh. Inside
-     an iframe, dvh can resolve to the TOP-LEVEL visual viewport on some mobile
-     browsers, making .phone taller than the iframe so its scroll container's
-     bottom falls off-screen — the page then "won't scroll to the end". */
-  .fc-preview-embed, .fc-preview-embed body { height: 100%; }
-  .fc-preview-embed body { overflow: hidden; background: var(--bg-app); }
+  /* Scroll model: let the IFRAME DOCUMENT scroll naturally — exactly how the
+     working desktop preview does it (the canvas grows with content and the page
+     scrolls). Earlier attempts forced a height:100% flex chain with an internal
+     .phone-content scroller + body{overflow:hidden}; inside an iframe that model
+     keeps mis-resolving the available height (dvh/visual-viewport quirks) and
+     clips the tail of the page so it "won't scroll to the end". Natural document
+     scroll has no fixed inner height to get wrong, so it can't clip. */
+  .fc-preview-embed, .fc-preview-embed body { height: auto; min-height: 100%; }
+  .fc-preview-embed body { overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--bg-app); }
   .fc-preview-embed .topbar,
   .fc-preview-embed .pane.left,
   .fc-preview-embed .pane.right,
@@ -14501,21 +14503,20 @@ document.addEventListener('keydown', (e) => {
   .fc-preview-embed .phone-preview-bg,
   .fc-preview-embed #live-preview-drawer,
   .fc-preview-embed .lp-drawer { display: none !important; }
-  .fc-preview-embed .body { height: 100%; padding: 0; margin: 0; display: block; }
-  .fc-preview-embed .canvas { padding: 0; margin: 0; display: block; height: 100%; overflow: hidden; background: transparent; }
+  .fc-preview-embed .body { height: auto; padding: 0; margin: 0; display: block; }
+  .fc-preview-embed .canvas { padding: 0; margin: 0; display: block; height: auto; overflow: visible; background: transparent; }
+  /* .phone grows with its content (height:auto) — no fixed inner height, no
+     clip. min-height:0 overrides the desktop 844px floor so short pages don't
+     leave a dead band. */
   .fc-preview-embed .phone {
-    width: 100% !important; max-width: none !important; height: 100% !important;
+    width: 100% !important; max-width: none !important; height: auto !important; min-height: 0 !important;
     margin: 0 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
-    display: flex !important; flex-direction: column;
+    display: block !important; overflow: visible !important;
   }
-  /* min-height:0 is the crux: a flex child defaults to min-height:auto, which
-     refuses to shrink below its CONTENT height. Without it, .phone-content grows
-     to the full block stack, overflows .phone (height:100%), and the excess is
-     clipped by .canvas (overflow:hidden) — so the page can't scroll past the
-     last on-screen block. Pinning min-height:0 caps it at the iframe's real
-     height so the overflow becomes an internal scroll instead of clipped. */
-  .fc-preview-embed .phone-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  .fc-preview-embed .phone-tabs { flex: 0 0 auto; }
+  .fc-preview-embed .phone-content { overflow: visible; }
+  /* Keep the bottom tab bar pinned to the bottom of the iframe viewport while
+     the content scrolls under it, matching the live mini-app. */
+  .fc-preview-embed .phone-tabs { position: sticky; bottom: 0; z-index: 5; }
   /* The real phone already has its own status bar + notch — drop the
      simulated iPhone notch and "9:41" status row so the preview isn't
      wearing a second set of chrome. (Desktop keeps them.) */
@@ -14526,7 +14527,7 @@ document.addEventListener('keydown', (e) => {
      the bottom ~60px of this preview when a block is selected. Without it the
      final block stays jammed under the toolbar and reads as "can't scroll to the
      end of the page". ~88px clears the toolbar + a breath of gap. */
-  .fc-preview-embed .phone-content { scroll-padding-bottom: 88px; }
+  .fc-preview-embed body { scroll-padding-bottom: 88px; }
   .fc-preview-embed .phone-content::after { content: ''; display: block; height: 88px; }
 </style>
 
