@@ -2005,6 +2005,11 @@
   body.ent-socialProof:not(.feat-socialProof) .tabs-popover [data-feat="socialProof"]::after {
     position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
     margin-left: 0;
+    /* Reset the active brass-bar's width/height (.tabs-popover button.active::after)
+       which otherwise leaks in on the current tab's OFF row, squashing the pill to
+       3px and shoving its text left out of line with the other rows. Mirrors the
+       leaderboard/voting/flash status pills below. */
+    width: auto; height: auto;
   }
   /* Pill is out of flow, so reserve right padding on the off row to keep a long
      label from sliding under it. */
@@ -24176,7 +24181,7 @@ function paRender() {
         </div>`;
       }
       const meta = u.group
-        ? `${u.members.length} ${cuT('sizes', '规格')} · ${u.members.map(_paVariantTag).join(' · ')}`
+        ? `${u.members.length} ${cuT('sizes', '规格')}`
         : [p.sku, p.size].filter(Boolean).map(escapeHtml).join(' · ');
       const sub  = [
         p.name_cn ? escapeHtml(p.name_cn) : '',
