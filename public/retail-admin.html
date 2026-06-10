@@ -24726,30 +24726,120 @@ function paRenderKpis(animate) {
 }
 
 let PA_FILTERED_IDS = [];
-// Bulk publish/hide — acts on the products currently matching the list filter
-// (search + category + status). Filter to "Drafts" then Publish to clear a
-// backlog in one go. Reuses the per-product PATCH (is_published); confirms with
-// an exact count first. Shown only in the full-width overview (editor closed).
+// ── Multi-select bulk edit ──────────────────────────────────────────────────
+// PA_SELECT_MODE arms the checkbox column; PA_SELECTED holds the ticked product
+// ids (variant families expanded to every member, so a group edits as a block).
+// PA_VISIBLE_MEMBER_IDS is the member ids of the units on the current page —
+// drives the header "select all" tick. All filled during paRender().
+let PA_SELECT_MODE = false;
+let PA_SELECTED = new Set();
+let PA_VISIBLE_MEMBER_IDS = [];
+
+// Bulk bar — two modes, both shown only in the full-width overview (editor
+// closed). Default: bulk publish/hide of everything matching the current filter
+// (search + category + status) plus a "Select" button. Select mode: tick
+// specific products, then apply one change (shop on/off, markets, fresh batches,
+// shipping) to just the ticked set. All reuse the per-product PATCH.
 function paRenderBulkBar() {
   const bar = document.getElementById('pa-bulkbar');
   if (!bar) return;
   const overview = PA_VIEW === 'list' && !_paEditorOpen;
   const idset = new Set(PA_FILTERED_IDS || []);
   const shown = overview ? (PA_PRODUCTS || []).filter(p => idset.has(p.id)) : [];
-  if (!shown.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  if (!shown.length) { bar.style.display = 'none'; bar.innerHTML = ''; PA_SELECT_MODE = false; PA_SELECTED = new Set(); return; }
+  bar.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 var(--s3);padding:8px 12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--bg-app);font-family:var(--f-sans);font-size:12px;';
+
+  if (PA_SELECT_MODE) {
+    const n = PA_SELECTED.size;
+    const visN = PA_VISIBLE_MEMBER_IDS.length;
+    const allVis = visN && PA_VISIBLE_MEMBER_IDS.every(id => PA_SELECTED.has(id));
+    const grp = (lbl, btns) => `<span class="pa-bulk-grp"><span class="pa-bulk-lbl">${lbl}</span>${btns}</span>`;
+    const b = (txt, fn) => `<button type="button" class="btn btn-sm" ${n ? '' : 'disabled'} onclick="${fn}">${txt}</button>`;
+    bar.innerHTML =
+      `<span class="muted">${cuT(n + ' selected', '已选 ' + n + ' 件')}</span>` +
+      `<button type="button" class="btn btn-sm" onclick="paSelectAllVisible(${allVis ? 'false' : 'true'})">${allVis ? cuT('Clear page', '清空本页') : cuT('Select all ' + visN, '全选 ' + visN)}</button>` +
+      (n ? `<button type="button" class="btn btn-sm" onclick="paClearSelection()">${cuT('Clear', '清除')}</button>` : '') +
+      `<span style="margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">` +
+        grp(cuT('Shop', '上架'), b(cuT('On', '上架'), "paBulkApply({is_published:1}, 'shop-on')") + b(cuT('Off', '下架'), "paBulkApply({is_published:0}, 'shop-off')")) +
+        `<span class="pa-bulk-sep"></span>` +
+        grp(cuT('Markets', '市集'), b(cuT('Yes', '是'), "paBulkApply({is_market:1}, 'mkt-on')") + b(cuT('No', '否'), "paBulkApply({is_market:0}, 'mkt-off')")) +
+        `<span class="pa-bulk-sep"></span>` +
+        grp(cuT('Fresh batch', '现做'), b(cuT('Yes', '是'), "paBulkApply({is_batch_made:1}, 'batch-on')") + b(cuT('No', '否'), "paBulkApply({is_batch_made:0}, 'batch-off')")) +
+        `<span class="pa-bulk-sep"></span>` +
+        grp(cuT('Shipping', '配送'), b(cuT('Air + Land', '空运+陆运'), "paBulkApply({ship_modes:'air,land'}, 'ship')") + b(cuT('Air only', '仅空运'), "paBulkApply({ship_modes:'air'}, 'ship')") + b(cuT('Land only', '仅陆运'), "paBulkApply({ship_modes:'land'}, 'ship')")) +
+        `<span class="pa-bulk-sep"></span>` +
+        `<button type="button" class="btn btn-sm" onclick="paSetSelectMode(false)">${cuT('Done', '完成')}</button>` +
+      `</span>`;
+    return;
+  }
+
   const toPublish = shown.filter(p => p.is_published !== 1).length;
   const toHide    = shown.filter(p => p.is_published === 1).length;
   const filtered = (document.getElementById('pa-search').value || '').trim() !== ''
     || (document.getElementById('pa-filter').value || 'all') !== 'all'
     || PA_STATUS !== 'all';
-  bar.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 var(--s3);padding:8px 12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--bg-app);font-family:var(--f-sans);font-size:12px;';
   const tip = filtered ? '' : cuT(' · tip: filter to Drafts first', ' · 提示:可先筛选未上架');
   bar.innerHTML =
     `<span class="muted">${cuT(shown.length + ' shown', '显示 ' + shown.length + ' 件')}${tip}</span>` +
     `<span style="margin-left:auto;display:flex;gap:8px;">` +
+      `<button type="button" class="btn btn-sm" onclick="paSetSelectMode(true)">${cuT('Select', '选择')}</button>` +
       (toPublish ? `<button type="button" class="btn btn-sm" onclick="paBulkSetPublished(1)">${cuT('Publish ' + toPublish, '上架 ' + toPublish)}</button>` : '') +
       (toHide ? `<button type="button" class="btn btn-sm" onclick="paBulkSetPublished(0)">${cuT('Hide ' + toHide, '下架 ' + toHide)}</button>` : '') +
     `</span>`;
+}
+// Enter/leave select mode. Leaving drops the tick set. Re-renders the list so
+// the checkbox column slides in/out and the bar swaps.
+function paSetSelectMode(on) {
+  PA_SELECT_MODE = !!on;
+  if (!PA_SELECT_MODE) PA_SELECTED = new Set();
+  paRender();
+}
+function paClearSelection() { PA_SELECTED = new Set(); paRender(); }
+// Toggle one unit (csv of member ids). All-in → remove all; otherwise add all,
+// so a half-selected group flips fully on.
+function paToggleSelect(ids) {
+  const list = String(ids).split(',').map(Number).filter(Boolean);
+  const allIn = list.length && list.every(id => PA_SELECTED.has(id));
+  list.forEach(id => allIn ? PA_SELECTED.delete(id) : PA_SELECTED.add(id));
+  paRender();
+}
+function paSelectAllVisible(on) {
+  PA_VISIBLE_MEMBER_IDS.forEach(id => on ? PA_SELECTED.add(id) : PA_SELECTED.delete(id));
+  paRender();
+}
+// Apply one patch to every ticked product. Confirms, PATCHes each, reports, then
+// reloads (keeps select mode + the tick set so a second change can follow).
+async function paBulkApply(patch, kind) {
+  const ids = [...PA_SELECTED];
+  if (!ids.length) return;
+  const labels = {
+    'shop-on': cuT('Publish to the shop', '上架到店面'),
+    'shop-off': cuT('Hide from the shop', '从店面下架'),
+    'mkt-on': cuT('Mark as sold at markets', '标记为市集销售'),
+    'mkt-off': cuT('Unmark sold at markets', '取消市集销售'),
+    'batch-on': cuT('Mark as made fresh in batches', '标记为分批现做'),
+    'batch-off': cuT('Unmark made fresh in batches', '取消分批现做'),
+    'ship': cuT('Set shipping to ' + (patch.ship_modes === 'air' ? 'Air only' : patch.ship_modes === 'land' ? 'Land only' : 'Air + Land'),
+                '设置配送为' + (patch.ship_modes === 'air' ? '仅空运' : patch.ship_modes === 'land' ? '仅陆运' : '空运+陆运')),
+  };
+  const what = labels[kind] || cuT('Update', '更新');
+  if (!confirm(cuT(what + ' — ' + ids.length + ' product(s)?', what + ' — ' + ids.length + ' 件商品?'))) return;
+  toast(cuT('Working…', '处理中…'));
+  let done = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      const r = await fetch('/api/retail-admin/products/' + id, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j && j.success !== false) done++; else fail++;
+    } catch (e) { fail++; }
+  }
+  toast(fail
+    ? cuT(done + ' done, ' + fail + ' failed', done + ' 成功,' + fail + ' 失败')
+    : cuT('Updated ' + done + ' ✓', '已更新 ' + done + ' 件 ✓'), fail ? 'err' : 'ok');
+  await paLoad();
 }
 async function paBulkSetPublished(want) {
   const idset = new Set(PA_FILTERED_IDS || []);
@@ -24813,7 +24903,7 @@ function paRender() {
   // category's full storefront sequence, so dragging one maps cleanly onto its
   // sort_order. (Any of those filters could hide siblings → a drag would reorder
   // an incomplete set, so we don't arm it then.)
-  const reorderActive = PA_VIEW === 'list' && !_paEditorOpen
+  const reorderActive = PA_VIEW === 'list' && !_paEditorOpen && !PA_SELECT_MODE
     && filter && filter !== 'all' && !q && PA_STATUS === 'all';
 
   // Collapse variant siblings into display units, then paginate the units so
@@ -24826,7 +24916,6 @@ function paRender() {
   // Ordered ids of the on-screen list — drives the editor's "Save & next".
   PA_ORDERED_UNIT_IDS = units.map(u => (u && u.p ? u.p.id : null)).filter(x => x != null);
   PA_FILTERED_IDS = rows.map(p => p.id);
-  paRenderBulkBar();
   empty.style.display = total ? 'none' : 'block';
   const paged = !reorderActive && PA_PAGE_SIZE !== 'all' && total > 0;
   const size  = paged ? PA_PAGE_SIZE : total;
@@ -24835,6 +24924,10 @@ function paRender() {
   if (PA_PAGE < 1) PA_PAGE = 1;
   const start = paged ? (PA_PAGE - 1) * size : 0;
   const pageUnits = paged ? units.slice(start, start + size) : units;
+  // Member ids of the units on this page — drives the bulk "select all" + the
+  // checkbox column. A variant family contributes every member id.
+  PA_VISIBLE_MEMBER_IDS = pageUnits.flatMap(u => u && u.group ? u.members.map(m => m.id) : [u.p.id]);
+  paRenderBulkBar();
   const pager = document.getElementById('pa-pager');
   if (pager) {
     pager.innerHTML = reorderActive
@@ -24863,16 +24956,18 @@ function paRender() {
     // scanning the catalogue; Docked = narrow list beside the editor, kept to a
     // compact name + pills row so it fits the 380px pane.
     const overview = !_paEditorOpen;
-    grid.className = (overview ? 'pa-list pa-list-rich' : 'pa-list') + (reorderActive ? ' pa-reorder' : '');
+    grid.className = (overview ? 'pa-list pa-list-rich' : 'pa-list') + (reorderActive ? ' pa-reorder' : '') + ((overview && PA_SELECT_MODE) ? ' pa-selecting' : '');
     // Snapshot the on-screen unit order as lists of product ids (a variant group
     // moves as one block). paRowDrop reads this to compute the new sequence.
     PA_REORDER_UNITS = reorderActive
       ? pageUnits.map(u => u.group ? u.members.map(m => m.id) : [u.p.id])
       : null;
     const grip = reorderActive ? '<span></span>' : '';
+    const allVisSel = PA_VISIBLE_MEMBER_IDS.length && PA_VISIBLE_MEMBER_IDS.every(id => PA_SELECTED.has(id));
+    const selHead = PA_SELECT_MODE ? `<span class="pa-selbox"><input type="checkbox" ${allVisSel ? 'checked' : ''} onclick="paSelectAllVisible(this.checked)" title="${cuT('Select all on this page', '全选本页')}"></span>` : '';
     const head = (overview && pageUnits.length) ? `
-      <div class="pa-rowhead" aria-hidden="true">
-        ${grip}<span></span>
+      <div class="pa-rowhead"${PA_SELECT_MODE ? '' : ' aria-hidden="true"'}>
+        ${selHead}${grip}<span></span>
         <span>${cuT('Product', '产品')}</span>
         <span>${cuT('Category', '分类')}</span>
         <span>SKU</span>
@@ -24893,9 +24988,15 @@ function paRender() {
         const rowDrag = reorderActive
           ? ` ondragover="paRowDragOver(event, ${ui})" ondragleave="paRowDragLeave(event)" ondrop="paRowDrop(event, ${ui})"`
           : '';
+        const memberIds = (u.group ? u.members.map(m => m.id) : [p.id]).join(',');
+        const selRow = PA_SELECT_MODE && memberIds.split(',').every(id => PA_SELECTED.has(Number(id)));
+        const selCell = PA_SELECT_MODE
+          ? `<span class="pa-selbox"><input type="checkbox" tabindex="-1" aria-hidden="true" ${selRow ? 'checked' : ''}></span>`
+          : '';
+        const rowClick = PA_SELECT_MODE ? `paToggleSelect('${memberIds}')` : `paOpenEdit(${p.id})`;
         return `
-        <div class="pa-row" onclick="paOpenEdit(${p.id})"${rowDrag}>
-          ${gripCell}
+        <div class="pa-row${selRow ? ' is-sel' : ''}" onclick="${rowClick}"${rowDrag}>
+          ${selCell}${gripCell}
           <div class="pa-row-img">${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : PA_ICON_BROKEN}</div>
           <div class="pa-row-main" data-no-i18n>
             <div class="pa-row-name">${escapeHtml(p.name_en || '—')}</div>
