@@ -785,6 +785,13 @@
   .fc-kpi.alert { border-color: rgba(176,141,74,.42); }
   .fc-kpi.alert::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--warn); }
   .fc-kpi.alert .val { color: var(--warn); }
+  /* Clickable catalogue-health tiles double as quick status filters. The
+     cursor + a slightly firmer hover say "press me"; .pa-kpi-on is the
+     selected state (accent ring), cleared by clicking the same tile again. */
+  .fc-kpi.pa-kpi-click { cursor: pointer; user-select: none; }
+  .fc-kpi.pa-kpi-click:active { transform: translateY(0); }
+  .fc-kpi.pa-kpi-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset, 0 2px 4px rgba(18,22,26,.06), 0 12px 28px rgba(18,22,26,.11); }
+  .fc-kpi.pa-kpi-on.alert { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn) inset, 0 2px 4px rgba(18,22,26,.06), 0 12px 28px rgba(18,22,26,.11); }
 
   /* ── Delta: change vs the prior period. The calm rule — a down delta is
      soft clay, never alarm-red, so the page never reads as an emergency. ── */
@@ -7502,22 +7509,22 @@
          already-loaded catalogue (no extra fetch). Out-of-stock and Low-stock
          tiles flip to .alert so the operator sees what needs restocking. -->
     <div class="fc-kpis" id="pa-kpis">
-      <div class="fc-kpi accent">
+      <div class="fc-kpi accent pa-kpi-click" id="pa-kpi-live-tile" role="button" tabindex="0" onclick="paSetStatus('live')" title="Show live products · 仅显示上架产品">
         <div class="lbl">Live · 上架</div>
         <div class="val" id="pa-kpi-live">—</div>
         <div class="sub">published · 已上架</div>
       </div>
-      <div class="fc-kpi" id="pa-kpi-oos-tile">
+      <div class="fc-kpi pa-kpi-click" id="pa-kpi-oos-tile" role="button" tabindex="0" onclick="paSetStatus('oos')" title="Show out-of-stock products · 仅显示缺货产品">
         <div class="lbl">Out of stock · 缺货</div>
         <div class="val" id="pa-kpi-oos">—</div>
         <div class="sub">live &amp; sold out · 上架缺货</div>
       </div>
-      <div class="fc-kpi" id="pa-kpi-low-tile">
+      <div class="fc-kpi pa-kpi-click" id="pa-kpi-low-tile" role="button" tabindex="0" onclick="paSetStatus('low')" title="Show low-stock products · 仅显示库存偏低产品">
         <div class="lbl">Low stock · 库存偏低</div>
         <div class="val" id="pa-kpi-low">—</div>
         <div class="sub">≤ 5 left · 剩余 ≤ 5</div>
       </div>
-      <div class="fc-kpi">
+      <div class="fc-kpi pa-kpi-click" id="pa-kpi-drafts-tile" role="button" tabindex="0" onclick="paSetStatus('drafts')" title="Show drafts · 仅显示未上架产品">
         <div class="lbl">Drafts · 未上架</div>
         <div class="val" id="pa-kpi-drafts">—</div>
         <div class="sub">not live · 未上架</div>
@@ -23353,6 +23360,30 @@ function paSetView(v) {
   paRender();
 }
 
+// Quick status filter driven by the catalogue-health KPI tiles. One of
+// 'all' | 'live' | 'oos' | 'low' | 'drafts'. Clicking a tile toggles its
+// filter (click again to clear), narrowing the grid to that status —
+// independent of the search box and category filter, which still stack on top.
+let PA_STATUS = 'all';
+function paSetStatus(v) {
+  PA_STATUS = (PA_STATUS === v) ? 'all' : v;   // click the active tile to clear
+  PA_PAGE = 1;
+  paRender();
+}
+// Does a product match the active status filter? Mirrors paRenderKpis' buckets.
+function _paStatusMatch(p) {
+  if (PA_STATUS === 'all') return true;
+  const pub = p.is_published === 1;
+  const s = Number(p.effective_stock ?? p.stock_qty ?? 0);
+  switch (PA_STATUS) {
+    case 'live':   return pub;
+    case 'drafts': return !pub;
+    case 'oos':    return pub && s <= 0;
+    case 'low':    return pub && s > 0 && s <= 5;
+    default:       return true;
+  }
+}
+
 // ── Catalogue pagination — caps how many cards render at once so the grid
 // paints fast even with the full 200+ catalogue. Page size persists; any
 // search / filter / view change resets to page 1.
@@ -23620,6 +23651,11 @@ document.querySelector('[data-tab="products"]').addEventListener('click', () => 
 
 document.getElementById('pa-search').addEventListener('input', _paDebouncedRender);
 document.getElementById('pa-filter').addEventListener('change', () => { PA_PAGE = 1; paRender(); });
+// Keyboard support for the role="button" KPI quick-filter tiles.
+document.querySelectorAll('.pa-kpi-click').forEach(tile =>
+  tile.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tile.click(); }
+  }));
 document.querySelectorAll('#pa-view-seg .pa-view-btn').forEach(btn =>
   btn.addEventListener('click', () => paSetView(btn.dataset.view)));
 
@@ -23958,6 +23994,12 @@ function paRenderKpis(animate) {
   set('pa-kpi-drafts', drafts);
   const oosTile = document.getElementById('pa-kpi-oos-tile'); if (oosTile) oosTile.classList.toggle('alert', oos > 0);
   const lowTile = document.getElementById('pa-kpi-low-tile'); if (lowTile) lowTile.classList.toggle('alert', low > 0);
+  // Light up whichever tile drives the active quick-filter (none when 'all').
+  const tiles = { live: 'pa-kpi-live-tile', oos: 'pa-kpi-oos-tile', low: 'pa-kpi-low-tile', drafts: 'pa-kpi-drafts-tile' };
+  for (const [status, id] of Object.entries(tiles)) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('pa-kpi-on', PA_STATUS === status);
+  }
 }
 
 function paRender() {
@@ -23980,6 +24022,9 @@ function paRender() {
   }
   if (filter && filter !== 'all') {
     rows = rows.filter(p => (p.top_category || p.category || '').trim() === filter);
+  }
+  if (PA_STATUS !== 'all') {
+    rows = rows.filter(_paStatusMatch);
   }
 
   count.textContent = `${rows.length} of ${PA_PRODUCTS.length} · 共 ${PA_PRODUCTS.length} 件,显示 ${rows.length} 件`;
@@ -24456,6 +24501,10 @@ function paApplyRowSelection() {
 // via /api/retail-admin/products/:id/variants. Same model as the customer
 // switcher + the staff grouping.
 let VA_ID = null, VA_MEMBERS = [], VA_HAD_GROUP = false, VA_OPEN = false;
+// Live per-variant stock totals (variantId → sum across stores), filled by the
+// variant × store matrix panel. The variants table reads these for its
+// read-only STOCK column so both views always agree.
+let VA_STORE_TOTALS = {};
 function _vaName(p) { return (p.name_en || '—') + (p.name_cn ? ' · ' + p.name_cn : ''); }
 async function vaLoad(id) {
   const box = document.getElementById('pd-variants'); if (!box) return;
