@@ -8556,10 +8556,15 @@ router.delete('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) =
   // upstream tenants can't remove master products from this backend.
   if (catalogMode(req) === 'upstream') return res.status(423).json({ success: false, error: 'catalog_locked' });
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare('SELECT id, name_en FROM store_products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
+  const existing = tdb().prepare('SELECT id, name_en, sku FROM store_products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
-  tdb().prepare('UPDATE store_products SET is_active = 0, is_published = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
-  logActivity(req.user.id, req.user.username, 'delete', 'product_retail', id, { name: existing.name_en }, req.ip);
+  // Release the SKU on delete. A soft-deleted row is hidden from the catalogue
+  // but still occupies the UNIQUE sku slot — which blocks ever reusing that code
+  // and surfaces as a baffling "SKU in use, but I can't find it". Blanking it
+  // frees the code for a live product. (No restore UI exists, so this is safe;
+  // the freed code is recorded in the activity log for audit.)
+  tdb().prepare('UPDATE store_products SET is_active = 0, is_published = 0, sku = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  logActivity(req.user.id, req.user.username, 'delete', 'product_retail', id, { name: existing.name_en, freed_sku: existing.sku || null }, req.ip);
   res.json({ success: true });
 });
 
