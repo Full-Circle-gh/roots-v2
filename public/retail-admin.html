@@ -1803,9 +1803,22 @@
      hits Expand on the editor or switches to grid/compact catalogue scan. */
   .pa-split { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
   .pa-split-list { min-width: 0; }
-  /* The editor flows at full height and the whole page scrolls (one scroll, not
-     a pane-within-a-page). Deliberately NOT sticky: a sticky sidebar taller
-     than the viewport pins its top and hides its bottom. */
+  /* Master-detail: while the editor is docked beside it, the list is the pinned
+     "master" pane — it sticks in the viewport and scrolls inside ITSELF, so the
+     page height tracks the EDITOR, not the list. Without this an un-capped list
+     outgrows a short editor and leaves a dead gap running down the editor
+     column. Scoped to true split mode on wide screens; list-only / editor-only
+     and the <=1024px single-column stack keep the normal one-page scroll.
+     top:64px clears the 56px sticky topbar; vh ÷ --ui-scale tracks the real
+     viewport under the Aa zoom. */
+  @media (min-width: 1025px) {
+    .pa-split:not(.pa-split-listonly):not(.pa-split-editonly) .pa-split-list {
+      position: sticky; top: 64px;
+      max-height: calc(100vh / var(--ui-scale, 1) - 80px);
+      overflow-y: auto; overscroll-behavior: contain;
+    }
+  }
+  /* The editor flows at full height and the whole page scrolls through it. */
   .pa-split-editor { min-width: 0; }
   @media (max-width: 1024px) { .pa-split { grid-template-columns: 1fr; } .pa-split-editor { position: static; } }
   /* Catalogue-scan mode: grid/compact view hides the editor so the list takes
@@ -24060,8 +24073,10 @@ function _paStatusMatch(p) {
 // ── Catalogue pagination — caps how many cards render at once so the grid
 // paints fast even with the full 200+ catalogue. Page size persists; any
 // search / filter / view change resets to page 1.
-// Fixed at 18 per page — deliberately NOT operator-adjustable. 18 rows fit
-// inside the editor card without the list running past its bottom edge.
+// Operator-adjustable via the pager's "Per page" selector (50/100/200/All).
+// The docked list no longer needs a tight cap to match the editor height — in
+// split mode the list pane scrolls inside itself (see .pa-split-list sticky
+// rule), so a long list never runs past the editor's bottom edge.
 let PA_PAGE_SIZE = 50;
 let PA_PAGE = 1;
 function paSetPageSize(v) {
