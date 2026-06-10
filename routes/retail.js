@@ -3391,22 +3391,15 @@ function computeRiderEta(address, lat, lng) {
     if (!best || km < best.km) best = { km, store: s };
   }
   if (!best) return null;
-  // Too far for a rider → courier delivery; no minute estimate.
-  if (best.km > _RIDER_MAX_KM) {
-    return {
-      km:            Number(best.km.toFixed(1)),
-      min:           null,
-      courier:       true,
-      store_code:    best.store.code,
-      store_name_en: best.store.name_en,
-      store_name_cn: best.store.name_cn,
-    };
-  }
   const minutes = Math.max(_RIDER_PICKUP_MIN, Math.round(best.km * _RIDER_MIN_PER_KM + _RIDER_PICKUP_MIN));
+  // Beyond _RIDER_MAX_KM the order ships by courier; the new mini-app keys off
+  // `courier` to show "ships by courier". We still send `min` (the now-large
+  // estimate) so the previously-published app — which renders `min` directly —
+  // keeps working until the .wxml courier change is published.
   return {
     km:           Number(best.km.toFixed(1)),
     min:          Math.round(minutes / 5) * 5, // round to nearest 5 min
-    courier:      false,
+    courier:      best.km > _RIDER_MAX_KM,
     store_code:   best.store.code,
     store_name_en: best.store.name_en,
     store_name_cn: best.store.name_cn,
