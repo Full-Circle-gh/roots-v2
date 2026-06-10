@@ -12054,6 +12054,12 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
     deliveryDate = targetIso;
     kind = 'scheduled';
   } else {
+    // "Get it today" / "Right away" are same-day picks: the customer is NOT
+    // waiting for a future batch, so a "next batch ships on …" note would
+    // contradict the selection. Suppress it. (Whether a fresh item that wasn't
+    // made today can truly be fulfilled same-day is a stock/availability
+    // question handled by the slot + inventory gates, not this notice.)
+    if (slotKind === 'today' || slotKind === 'right_away') return null;
     shipDate = soonestShip;
     deliveryDate = soonestDelivery;
     kind = 'asap';

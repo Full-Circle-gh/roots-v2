@@ -7981,6 +7981,32 @@
       #cat-editor button.btn-icon.cat-del:hover { background: var(--danger-soft); border-color: var(--danger); }
       #cat-editor .cat-edit { white-space: nowrap; }
 
+      /* ── Drag mode: the moment a drag starts the whole editor folds to compact
+         single lines, so you can drag one row the full length of the list in one
+         shot without scrolling. Layout is restored on drop / dragend. ── */
+      #cat-editor.cat-dnd-top .cat-top,
+      #cat-editor.cat-dnd-sub .cat-top:not(.cat-dnd-parent) { margin-bottom: 4px; padding: 6px 10px; }
+      #cat-editor.cat-dnd-top .cat-top-head,
+      #cat-editor.cat-dnd-sub .cat-top:not(.cat-dnd-parent) .cat-top-head { margin-bottom: 0; }
+      /* Collapse the subcategory body of every card we're stepping past. */
+      #cat-editor.cat-dnd-top .cat-top > div:last-child,
+      #cat-editor.cat-dnd-sub .cat-top:not(.cat-dnd-parent) > div:last-child { display: none; }
+      /* Hide the CN input + per-row buttons + kicker so each line is just the EN name. */
+      #cat-editor.cat-dnd-top .cat-name[data-f="name_cn"],
+      #cat-editor.cat-dnd-top .cat-edit,
+      #cat-editor.cat-dnd-top .cat-del,
+      #cat-editor.cat-dnd-sub .cat-name[data-f="name_cn"],
+      #cat-editor.cat-dnd-sub .cat-edit,
+      #cat-editor.cat-dnd-sub .cat-del,
+      #cat-editor.cat-dnd-sub .cat-subs-kicker { display: none; }
+      /* Slim the parent's sub rows to single lines while dragging a sub. */
+      #cat-editor.cat-dnd-sub .cat-subrow { padding: 1px 0; }
+      #cat-editor.cat-dnd-sub .cat-subrow input { padding: 4px 8px; }
+      #cat-editor.cat-dnd-sub .cat-dnd-parent .cat-name[data-f="name_cn"] { display: none; }
+      /* Drop-target line on a collapsed row reads clearly. */
+      #cat-editor.cat-dnd-top .cat-top.cat-droptarget,
+      #cat-editor.cat-dnd-sub .cat-subrow.cat-droptarget { box-shadow: 0 -2px 0 var(--accent) inset; }
+
       /* ── Per-category detail drawer ── */
       .cat-detail-scrim { position: fixed; inset: 0; background: rgba(20,18,14,.42); opacity: 0; pointer-events: none; transition: opacity var(--t-fast); z-index: 60; }
       .cat-detail-scrim.open { opacity: 1; pointer-events: auto; }
@@ -11985,12 +12011,27 @@ function catDragStart(ev, kind, ti, si) {
   ev.dataTransfer.effectAllowed = 'move';
   try { ev.dataTransfer.setData('text/plain', kind); } catch (e) {}
   const row = ev.target.closest('.cat-top, .cat-subrow');
-  if (row) setTimeout(() => row.classList.add('cat-dragging'), 0);
+  // Fold the editor to compact single lines AFTER the drag image is snapshotted
+  // (next tick) so changing layout mid-dragstart can't cancel the drag. When
+  // dragging a sub we keep its parent card expanded; every other card folds.
+  setTimeout(() => {
+    if (row) row.classList.add('cat-dragging');
+    const host = document.getElementById('cat-editor');
+    if (!host) return;
+    host.classList.add(kind === 'top' ? 'cat-dnd-top' : 'cat-dnd-sub');
+    if (kind === 'sub') {
+      const parent = document.getElementById('cat-top-' + ti);
+      if (parent) parent.classList.add('cat-dnd-parent');
+    }
+  }, 0);
 }
 function catDragEnd() {
   catDrag = null;
+  const host = document.getElementById('cat-editor');
+  if (host) host.classList.remove('cat-dnd-top', 'cat-dnd-sub');
   $$('.cat-dragging').forEach(el => el.classList.remove('cat-dragging'));
   $$('.cat-droptarget').forEach(el => el.classList.remove('cat-droptarget'));
+  $$('.cat-dnd-parent').forEach(el => el.classList.remove('cat-dnd-parent'));
 }
 function catDragOver(ev, kind, ti) {
   if (!catDrag || catDrag.kind !== kind) return;          // only same-kind drops
