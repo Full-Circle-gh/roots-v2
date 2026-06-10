@@ -7662,6 +7662,7 @@
     <div id="pa-split" class="pa-split">
       <div class="pa-split-list">
         <div id="pa-pager" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;margin:0 0 var(--s3);font-family:var(--f-sans);font-variant-numeric:tabular-nums;color:var(--text-3)"></div>
+        <div id="pa-bulkbar"></div>
         <div id="pa-grid" class="pa-grid"></div>
         <div id="pa-empty" class="pa-empty" style="display:none">No products match this filter. · 没有匹配此筛选条件的产品。</div>
       </div>
@@ -24492,6 +24493,57 @@ function paRenderKpis(animate) {
   }
 }
 
+let PA_FILTERED_IDS = [];
+// Bulk publish/hide — acts on the products currently matching the list filter
+// (search + category + status). Filter to "Drafts" then Publish to clear a
+// backlog in one go. Reuses the per-product PATCH (is_published); confirms with
+// an exact count first. Shown only in the full-width overview (editor closed).
+function paRenderBulkBar() {
+  const bar = document.getElementById('pa-bulkbar');
+  if (!bar) return;
+  const overview = PA_VIEW === 'list' && !_paEditorOpen;
+  const idset = new Set(PA_FILTERED_IDS || []);
+  const shown = overview ? (PA_PRODUCTS || []).filter(p => idset.has(p.id)) : [];
+  if (!shown.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  const toPublish = shown.filter(p => p.is_published !== 1).length;
+  const toHide    = shown.filter(p => p.is_published === 1).length;
+  const filtered = (document.getElementById('pa-search').value || '').trim() !== ''
+    || (document.getElementById('pa-filter').value || 'all') !== 'all'
+    || PA_STATUS !== 'all';
+  bar.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 var(--s3);padding:8px 12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--bg-app);font-family:var(--f-sans);font-size:12px;';
+  const tip = filtered ? '' : cuT(' · tip: filter to Drafts first', ' · 提示:可先筛选未上架');
+  bar.innerHTML =
+    `<span class="muted">${cuT(shown.length + ' shown', '显示 ' + shown.length + ' 件')}${tip}</span>` +
+    `<span style="margin-left:auto;display:flex;gap:8px;">` +
+      (toPublish ? `<button type="button" class="btn btn-sm" onclick="paBulkSetPublished(1)">${cuT('Publish ' + toPublish, '上架 ' + toPublish)}</button>` : '') +
+      (toHide ? `<button type="button" class="btn btn-sm" onclick="paBulkSetPublished(0)">${cuT('Hide ' + toHide, '下架 ' + toHide)}</button>` : '') +
+    `</span>`;
+}
+async function paBulkSetPublished(want) {
+  const idset = new Set(PA_FILTERED_IDS || []);
+  const targets = (PA_PRODUCTS || []).filter(p => idset.has(p.id) && (p.is_published === 1 ? 1 : 0) !== want).map(p => p.id);
+  if (!targets.length) return;
+  const ask = want
+    ? cuT('Publish ' + targets.length + ' product(s)? They will go live in the shop.', '确定上架 ' + targets.length + ' 件商品?它们将在店面显示。')
+    : cuT('Hide ' + targets.length + ' product(s)? They will be removed from the shop.', '确定下架 ' + targets.length + ' 件商品?它们将从店面移除。');
+  if (!confirm(ask)) return;
+  toast(cuT('Working…', '处理中…'));
+  let done = 0, fail = 0;
+  for (const id of targets) {
+    try {
+      const r = await fetch('/api/retail-admin/products/' + id, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_published: want }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j && j.success !== false) done++; else fail++;
+    } catch (e) { fail++; }
+  }
+  toast(fail
+    ? cuT(done + ' done, ' + fail + ' failed', done + ' 成功,' + fail + ' 失败')
+    : cuT((want ? 'Published ' : 'Hidden ') + done + ' ✓', '已处理 ' + done + ' 件 ✓'), fail ? 'err' : 'ok');
+  await paLoad();
+}
 let PA_ORDERED_UNIT_IDS = [];
 function paRender() {
   const grid   = document.getElementById('pa-grid');
@@ -24541,6 +24593,8 @@ function paRender() {
   const total = units.length;
   // Ordered ids of the on-screen list — drives the editor's "Save & next".
   PA_ORDERED_UNIT_IDS = units.map(u => (u && u.p ? u.p.id : null)).filter(x => x != null);
+  PA_FILTERED_IDS = rows.map(p => p.id);
+  paRenderBulkBar();
   empty.style.display = total ? 'none' : 'block';
   const paged = !reorderActive && PA_PAGE_SIZE !== 'all' && total > 0;
   const size  = paged ? PA_PAGE_SIZE : total;
