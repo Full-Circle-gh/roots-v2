@@ -11128,15 +11128,15 @@
           <!-- ── Order routing: Tencent Maps ── -->
           <div class="group-card">
             <div class="group-card-head">
-              <h3>Order routing · 派单 — Tencent Maps · 腾讯地图</h3>
-              <div class="muted">Geocodes store + customer addresses so paid orders route to the geographically closest store (GPS distance), not just by district name. Set <code>TENCENT_MAPS_KEY</code> in <code>/root/roots-v2/.env</code>; free key at <a href="https://lbs.qq.com" target="_blank" style="color:var(--accent)">lbs.qq.com</a>. · 地址保存时自动转经纬度,按 GPS 距离选最近门店。</div>
+              <h3>Order routing · 派单 — Maps geocoding · 地图定位</h3>
+              <div class="muted">Geocodes store + customer addresses so paid orders route to the geographically closest store (GPS distance), not just by district name. Set <code>AMAP_MAPS_KEY</code> (高德, recommended) <em>or</em> <code>TENCENT_MAPS_KEY</code> in <code>/root/roots-v2/.env</code>, then restart pm2. Free keys: <a href="https://console.amap.com" target="_blank" style="color:var(--accent)">console.amap.com</a> · <a href="https://lbs.qq.com" target="_blank" style="color:var(--accent)">lbs.qq.com</a>. <strong>Without a working key, distances fall back to district centres and can be several km off.</strong> · 地址保存时自动转经纬度,按 GPS 距离选最近门店。无可用 key 时退回到区中心点,距离会偏差数公里。</div>
             </div>
             <div id="integrations-status" class="muted" style="font-size:13px;padding:14px 16px;background:var(--bg-elev-1);border-radius:8px;margin-bottom:14px">Loading status…</div>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
               <button class="btn" onclick="loadIntegrationsStatus()">↻ Refresh status</button>
               <button class="btn btn-primary" onclick="_geocodeBackfill()">🗺 Geocode all stores &amp; addresses now</button>
             </div>
-            <div class="muted" style="font-size:11px;margin-top:10px">New addresses + stores geocode automatically on save. This only matters for first-time setup, after a quota reset, or after changing a store's street address outside the form. · 新地址自动同步;此按钮仅用于初始化或批量补全。</div>
+            <div class="muted" style="font-size:11px;margin-top:10px"><strong>↻ Refresh status</strong> only re-counts — it does NOT geocode. Use <strong>🗺 Geocode all</strong> to actually fetch coordinates. New addresses + stores also geocode automatically on save. · ↻ 仅刷新计数,不定位;🗺 才会真正获取坐标。新地址保存时自动定位。</div>
           </div>
 
           <!-- ── Logistics integration: 快递100 tracking + 京东物流 LOP waybill ── -->
@@ -12596,20 +12596,26 @@ async function _testJd() {
 }
 
 async function _geocodeBackfill() {
-  if (!confirm('Geocode all stores + customer addresses now? Uses your Tencent Maps quota. · 现在为所有门店与客户地址重新定位?将消耗腾讯地图配额。')) return;
+  if (!confirm('Geocode all stores + customer addresses now? Uses your maps quota. · 现在为所有门店与客户地址重新定位?将消耗地图配额。')) return;
   try {
     toast('Geocoding…', 'info');
     const r = await fetch('/api/retail-admin/inventory/geocode-backfill', { method: 'POST' });
     const j = await r.json();
     if (!r.ok || j.success === false) {
       const err = j.error || ('HTTP ' + r.status);
-      toast(err === 'tencent_maps_key_missing'
-        ? 'Set TENCENT_MAPS_KEY in /root/roots-v2/.env first · 请先在 /root/roots-v2/.env 配置 TENCENT_MAPS_KEY'
+      toast((err === 'tencent_maps_key_missing' || err === 'maps_key_missing')
+        ? 'Set AMAP_MAPS_KEY or TENCENT_MAPS_KEY in /root/roots-v2/.env first · 请先在 /root/roots-v2/.env 配置地图 key'
         : 'Failed: ' + err, 'error');
       return;
     }
     const d = j.data || {};
-    toast(`✅ Geocoded ${d.stores_geocoded}/${d.stores_total} stores · ${d.addresses_geocoded}/${d.addresses_total} addresses`, 'success');
+    if (d.aborted_on_quota || (d.last_error && d.last_error.quota)) {
+      toast('🚫 Daily map quota exhausted — geocoding stopped. Fix the key (see panel), quota resets next day. · 地图配额已用尽,已停止。请修复 key,次日重置。', 'error');
+    } else if (d.addresses_total > 0 && d.addresses_geocoded === 0 && d.last_error) {
+      toast('⚠ Could not geocode addresses: ' + (d.last_error.message || d.last_error.code), 'error');
+    } else {
+      toast(`✅ Geocoded ${d.stores_geocoded}/${d.stores_total} stores · ${d.addresses_geocoded}/${d.addresses_total} addresses`, 'success');
+    }
     loadIntegrationsStatus();
   } catch (e) { toast('Failed: ' + e.message, 'error'); }
 }
@@ -12697,13 +12703,22 @@ async function loadIntegrationsStatus() {
     const cfg = d.tencent_maps_configured;
     const s = d.stores || { total: 0, missing: 0, geocoded: 0 };
     const a = d.addresses || { total: 0, missing: 0, geocoded: 0 };
+    const provLabel = d.provider === 'amap' ? '高德 / Amap' : d.provider === 'tencent' ? '腾讯 / Tencent' : 'Maps';
     const keyChip = cfg
       ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ KEY CONFIGURED</span>'
       : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ KEY MISSING</span>';
     const pct = (got, tot) => tot === 0 ? '—' : `${got}/${tot}`;
+    // Surface the real provider error (esp. quota) so 0/41 isn't a mystery.
+    const le = d.last_error;
+    let errBox = '';
+    if (le && le.quota) {
+      errBox = `<div style="margin-top:10px;padding:8px 12px;background:#fee2e2;color:#991b1b;border-radius:6px;font-size:12px">🚫 <strong>Daily quota exhausted</strong> on ${escapeHtml(provLabel)} (${escapeHtml(String(le.code))}: ${escapeHtml(le.message || '')}). Coordinates can't be fetched until quota resets or you switch to a real-name-verified / higher-quota key. · 当日配额已用尽,需等待重置或更换已实名/更高配额的 key。</div>`;
+    } else if (le) {
+      errBox = `<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px">⚠ Last geocode error (${escapeHtml(provLabel)}): ${escapeHtml(String(le.code))} ${escapeHtml(le.message || '')}</div>`;
+    }
     box.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-        <strong style="color:var(--text-1)">Tencent Maps</strong>
+        <strong style="color:var(--text-1)">${escapeHtml(provLabel)}</strong>
         ${keyChip}
       </div>
       <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:12px">
@@ -12712,7 +12727,8 @@ async function loadIntegrationsStatus() {
         <span style="color:var(--text-3)">Addresses geocoded</span>
         <span><strong>${pct(a.geocoded, a.total)}</strong>${a.missing ? ` · <span style="color:#b85c00">${a.missing} missing GPS</span>` : ''}</span>
       </div>
-      ${!cfg ? '<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px">⚠ Add <code>TENCENT_MAPS_KEY=...</code> to <code>/root/roots-v2/.env</code> and restart pm2 to enable geocoding.</div>' : ''}
+      ${!cfg ? '<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px">⚠ Add <code>AMAP_MAPS_KEY=...</code> (or <code>TENCENT_MAPS_KEY=...</code>) to <code>/root/roots-v2/.env</code> and restart pm2 to enable geocoding.</div>' : ''}
+      ${errBox}
     `;
   } catch (e) {
     box.innerHTML = `<span style="color:var(--danger)">Failed to load status · 加载状态失败: ${escapeHtml(e.message)}</span>`;

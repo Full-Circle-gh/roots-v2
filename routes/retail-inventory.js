@@ -324,10 +324,13 @@ router.get('/api/retail-admin/inventory/geocode-status', requireRetailAdmin, (re
   const storeMissing = db.prepare('SELECT COUNT(*) AS n FROM retail_stores WHERE is_active = 1 AND (lat IS NULL OR lng IS NULL)').get().n;
   const addrTotal = db.prepare('SELECT COUNT(*) AS n FROM retail_customer_addresses').get().n;
   const addrMissing = db.prepare('SELECT COUNT(*) AS n FROM retail_customer_addresses WHERE lat IS NULL OR lng IS NULL').get().n;
+  const err = geocode.lastError && geocode.lastError();
   res.json({
     success: true,
     data: {
-      tencent_maps_configured: geocode.configured(),
+      tencent_maps_configured: geocode.configured(),   // kept for back-compat: true if ANY provider key set
+      provider: geocode.provider ? geocode.provider() : null,
+      last_error: err ? { code: err.code, message: err.message, provider: err.provider, quota: geocode.isQuotaError(err) } : null,
       stores: { total: storeTotal, missing: storeMissing, geocoded: storeTotal - storeMissing },
       addresses: { total: addrTotal, missing: addrMissing, geocoded: addrTotal - addrMissing },
     },
@@ -344,15 +347,16 @@ router.post('/api/retail-admin/inventory/geocode-backfill', requireRetailAdmin, 
   const stores = db.prepare('SELECT id, address, city, district FROM retail_stores WHERE is_active = 1 AND (lat IS NULL OR lng IS NULL)').all();
   const addrs  = db.prepare('SELECT id, province, city, district, address, detail FROM retail_customer_addresses WHERE lat IS NULL OR lng IS NULL').all();
   let storesDone = 0, addrsDone = 0;
+  let aborted = false;   // set if the provider hits a daily-quota cap mid-run
 
   for (const s of stores) {
     const c = await geocode.geocodeAddress({ city: s.city, district: s.district, address: s.address });
     if (c) {
       db.prepare('UPDATE retail_stores SET lat = ?, lng = ? WHERE id = ?').run(c.lat, c.lng, s.id);
       storesDone++;
-    }
+    } else if (geocode.isQuotaError(geocode.lastError())) { aborted = true; break; }
   }
-  for (const a of addrs) {
+  if (!aborted) for (const a of addrs) {
     const c = await geocode.geocodeAddress({
       province: a.province, city: a.city, district: a.district,
       address: [a.address, a.detail].filter(Boolean).join(' '),
@@ -360,10 +364,20 @@ router.post('/api/retail-admin/inventory/geocode-backfill', requireRetailAdmin, 
     if (c) {
       db.prepare('UPDATE retail_customer_addresses SET lat = ?, lng = ?, geocoded_at = CURRENT_TIMESTAMP WHERE id = ?').run(c.lat, c.lng, a.id);
       addrsDone++;
-    }
+    } else if (geocode.isQuotaError(geocode.lastError())) { aborted = true; break; }
   }
-  logActivity(req.user.id, req.user.username, 'geocode_backfill', null, null, { storesDone, addrsDone }, req.ip);
-  res.json({ success: true, data: { stores_geocoded: storesDone, stores_total: stores.length, addresses_geocoded: addrsDone, addresses_total: addrs.length } });
+  logActivity(req.user.id, req.user.username, 'geocode_backfill', null, null, { storesDone, addrsDone, aborted }, req.ip);
+  const err = geocode.lastError && geocode.lastError();
+  res.json({
+    success: true,
+    data: {
+      stores_geocoded: storesDone, stores_total: stores.length,
+      addresses_geocoded: addrsDone, addresses_total: addrs.length,
+      // When nothing geocoded, tell the UI WHY (quota vs other) instead of a silent 0.
+      aborted_on_quota: aborted,
+      last_error: err ? { code: err.code, message: err.message, provider: err.provider, quota: geocode.isQuotaError(err) } : null,
+    },
+  });
 });
 
 // Admin: list / set / clear substitutes for a product.
