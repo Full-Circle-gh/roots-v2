@@ -11148,7 +11148,21 @@
             </div>
           </div>
 
-          <!-- ── Order routing: Tencent Maps ── -->
+          <!-- ── Stores · 门店 — the online store self-manages its own stores
+               (independent of the kitchen app). Uses the dual-realm
+               /api/retail-admin/stores endpoints. The street address sets each
+               store's GPS location used for nearest-store order routing. ── -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Stores · 门店</h3>
+              <div class="muted">The stores / warehouses this online store ships and routes orders from. Each store's <strong>street address</strong> sets the GPS location used to route orders to the nearest store — keep it accurate. · 本店派单/发货的门店与仓库。每个门店的<strong>详细地址</strong>决定其 GPS 定位(用于就近派单),请保持准确。</div>
+            </div>
+            <div id="ops-stores-list" class="muted" style="font-size:13px">Loading…</div>
+            <div style="margin-top:12px"><button class="btn btn-primary" onclick="_opsStoreForm(null)">+ Add store · 添加门店</button></div>
+            <div id="ops-store-form"></div>
+          </div>
+
+          <!-- ── Order routing: Maps geocoding ── -->
           <div class="group-card">
             <div class="group-card-head">
               <h3>Order routing · 派单 — Maps geocoding · 地图定位</h3>
@@ -12316,9 +12330,136 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
 // were adapted to this app's theme tokens (--text-1/3, --line, --bg-elev-1).
 // ═══════════════════════════════════════════════════════════════════════
 function loadOpsPanel() {
+  loadOpsStores();
   loadIntegrationsStatus();
   loadShippingIntegrations();
   loadPrinterPrefs();
+}
+
+// ── Stores · 门店 — list + add/edit, online-store self-managed ──
+// Mirrors the kitchen app's store editor but lives here so the online store
+// is fully independent. Uses the dual-realm /api/retail-admin/stores routes;
+// saving an address auto-re-geocodes the store in the background.
+let _opsStores = [];
+async function loadOpsStores() {
+  const box = document.getElementById('ops-stores-list');
+  if (!box) return;
+  box.innerHTML = 'Loading…';
+  try {
+    const j = await api('/api/retail-admin/stores');
+    _opsStores = (j.data || []).filter(s => s.is_active);
+    if (!_opsStores.length) {
+      box.innerHTML = '<div style="padding:10px 0;color:var(--text-3)">No stores yet. Add one below. · 暂无门店,请在下方添加。</div>';
+      return;
+    }
+    box.innerHTML = _opsStores.map(s => {
+      const loc = [s.city, s.district].filter(Boolean).join(' · ');
+      const gps = (s.lat != null && s.lng != null)
+        ? '<span style="color:#16a34a">📍 GPS located · 已定位</span>'
+        : '<span style="color:#dc2626">⚠ no GPS — set a street address · 未定位,请填写详细地址</span>';
+      return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--line)">
+        <div style="min-width:0">
+          <div><strong style="color:var(--text-1)">${escapeHtml(s.name_en || s.code)}</strong>${s.name_cn ? ` <span style="color:var(--text-3)">· ${escapeHtml(s.name_cn)}</span>` : ''}</div>
+          ${loc ? `<div style="color:var(--text-3);font-size:12px;margin-top:2px">${escapeHtml(loc)}</div>` : ''}
+          ${s.address ? `<div style="color:var(--text-3);font-size:12px;margin-top:2px">${escapeHtml(s.address)}</div>` : ''}
+          <div style="font-size:12px;margin-top:3px">${gps}</div>
+        </div>
+        <button class="btn" style="flex:none" onclick="_opsStoreEdit(${s.id})">Edit · 编辑</button>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    box.innerHTML = `<span style="color:var(--danger)">Failed to load stores · 加载失败: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function _opsStoreEdit(id) {
+  const s = _opsStores.find(x => x.id === id);
+  if (s) _opsStoreForm(s);
+}
+
+function _opsStoreForm(s) {
+  const isEdit = !!s;
+  const box = document.getElementById('ops-store-form');
+  if (!box) return;
+  const val = v => escapeAttr(v == null ? '' : v);
+  box.innerHTML = `
+    <div style="margin-top:14px;padding:16px;background:var(--bg-elev-1);border:1px solid var(--line);border-radius:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <strong style="color:var(--text-1)">${isEdit ? 'Edit store · 编辑门店' : 'New store · 新建门店'}</strong>
+        <button class="btn" style="flex:none" onclick="document.getElementById('ops-store-form').innerHTML=''">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div${isEdit ? '' : ''}>
+          <label class="field-label">Code · 短标识 ${isEdit ? '' : '<span style="color:var(--text-3);font-weight:400">— e.g. pudong</span>'}</label>
+          <input type="text" id="osf_code" value="${val(s?.code)}" placeholder="pudong" ${isEdit ? 'disabled style="font-family:monospace;opacity:.6"' : 'style="font-family:monospace"'}>
+        </div>
+        <div><label class="field-label">Phone · 电话</label><input type="text" id="osf_phone" value="${val(s?.phone)}" placeholder="020-XXXXXXXX"></div>
+        <div><label class="field-label">Name (EN)</label><input type="text" id="osf_name_en" value="${val(s?.name_en)}" placeholder="Roots — Tianhe"></div>
+        <div><label class="field-label">名称 (CN)</label><input type="text" id="osf_name_cn" value="${val(s?.name_cn)}" placeholder="Roots · 天河店"></div>
+        <div><label class="field-label">City · 城市</label><input type="text" id="osf_city" value="${val(s?.city)}" placeholder="广州"></div>
+        <div><label class="field-label">District · 区</label><input type="text" id="osf_district" value="${val(s?.district)}" placeholder="天河区"></div>
+        <div style="grid-column:1 / -1">
+          <label class="field-label">Street address · 详细地址 <span style="color:var(--text-3);font-weight:400">— sets the store GPS, auto-geocoded on save · 决定门店 GPS,保存时自动定位</span></label>
+          <input type="text" id="osf_address" value="${val(s?.address)}" placeholder="新塘大街3号新塘科创园2栋">
+        </div>
+        <div><label class="field-label">Sort priority · 排序 <span style="color:var(--text-3);font-weight:400">(lower = preferred)</span></label><input type="number" id="osf_sort" value="${s?.sort_order ?? 0}"></div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:6px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-1)">
+            <input type="checkbox" id="osf_pickup" ${s?.pickup_enabled ? 'checked' : ''} style="width:16px;height:16px">🏬 Offer store pickup · 到店自提
+          </label>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding:12px;background:rgba(204,217,0,.06);border:1px dashed var(--line);border-radius:8px">
+        <label class="field-label">📍 GPS coordinates · 经纬度 <span style="color:var(--text-3);font-weight:400">— optional manual override. <strong>Leave blank to auto-locate from the address on save.</strong> Only fill these to pin an exact spot; get coords at <a href="https://lbs.qq.com/getPoint/" target="_blank" style="color:var(--accent)">lbs.qq.com/getPoint</a>. · 留空则保存时按地址自动定位;仅在需要精确指定时填写。</span></label>
+        ${(s && s.lat != null && s.lng != null) ? `<div style="font-size:12px;color:var(--text-3);margin:6px 0 8px">Current · 当前: <code>${s.lat.toFixed(6)}, ${s.lng.toFixed(6)}</code></div>` : ''}
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <input type="number" step="0.000001" id="osf_lat" value="" placeholder="Latitude 纬度 23.1519" style="flex:1">
+          <input type="number" step="0.000001" id="osf_lng" value="" placeholder="Longitude 经度 113.4061" style="flex:1">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" onclick="_opsStoreSave(${isEdit ? s.id : 'null'})">Save · 保存</button>
+        <button class="btn" onclick="document.getElementById('ops-store-form').innerHTML=''">Cancel · 取消</button>
+      </div>
+    </div>`;
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function _opsStoreSave(id) {
+  const v = sel => (document.getElementById(sel).value || '').trim();
+  const body = {
+    name_en: v('osf_name_en'), name_cn: v('osf_name_cn'),
+    city: v('osf_city'), district: v('osf_district'),
+    address: v('osf_address'), phone: v('osf_phone'),
+    sort_order: +document.getElementById('osf_sort').value || 0,
+    pickup_enabled: document.getElementById('osf_pickup').checked,
+  };
+  const latRaw = v('osf_lat'), lngRaw = v('osf_lng');
+  if (latRaw && lngRaw) {
+    // Manual override supplied → send explicit coords (backend skips geocoding).
+    const lat = parseFloat(latRaw), lng = parseFloat(lngRaw);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      return toast('Invalid coordinates · 坐标无效', 'error');
+    }
+    body.lat = lat; body.lng = lng;
+  }
+  // Else: omit lat/lng entirely so the backend re-geocodes from the address
+  // (touchedAddr && !explicitLatLng). Never send lat:null here — that would
+  // both wipe the coords AND suppress the re-geocode.
+  if (!id) {
+    body.code = v('osf_code');
+    if (!body.code) return toast('Code required · 请填写编号', 'error');
+  }
+  try {
+    await api(id ? `/api/retail-admin/stores/${id}` : '/api/retail-admin/stores', { method: id ? 'PATCH' : 'POST', body });
+    toast('Saved · 已保存', 'success');
+    document.getElementById('ops-store-form').innerHTML = '';
+    loadOpsStores();
+    loadIntegrationsStatus();
+    // Address saves re-geocode in the background; refresh again shortly so the
+    // 📍 GPS badge updates without a manual reload.
+    setTimeout(loadOpsStores, 2500);
+  } catch (e) { toast('Failed: ' + e.message, 'error'); }
 }
 
 // ── Shipping integrations: kd100 + JD LOP + Feie credentials & status chips ──
