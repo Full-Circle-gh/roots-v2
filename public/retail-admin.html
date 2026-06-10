@@ -15741,6 +15741,17 @@ function humanizeSlotLabel(label) {
     const d = new Date(s.replace(' ', 'T') + 'Z');
     if (!isNaN(d.getTime())) return fmtSlotShort(d);
   }
+  // Date-only "YYYY-MM-DD" — a schedule-for-later calendar pick or a day-only
+  // zone chip stores just the date. Show "Jun 12" (no fake 00:00 time) rather
+  // than leaking the raw ISO date to the operator.
+  const mDay = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (mDay) {
+    const d = new Date(Number(mDay[1]), Number(mDay[2]) - 1, Number(mDay[3]));
+    if (!isNaN(d.getTime())) {
+      const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+      return M + ' ' + String(d.getDate()).padStart(2, '0');
+    }
+  }
   return s;
 }
 // Operator tiles show only what staff act on. The default delivery mode
