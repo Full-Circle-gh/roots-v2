@@ -1081,24 +1081,12 @@ Page({
       .catch(err => {
         const code = err?.message || '';
         if (code === 'local_only_outside_gz') {
-          // Cart has a Guangzhou-only item but the address is outside GZ — the
-          // order can't ship. Block + name the offending items so the customer
-          // knows exactly what to remove (or switch to a GZ address).
-          const L = this.data.lang;
-          const names = ((err.body && err.body.data && err.body.data.products) || [])
-            .map(p => lang.pick(p.name_en, p.name_cn, L))
-            .filter(Boolean);
-          this.setData({
-            zone: null,
-            zoneError: '',
-            localOnlyBlock: true,
-            localOnlyNames: names,
-            deliveryFee: '0.00',
-            packingFee: '0.00',
-            freeShipping: false,
-            total: subtotal.toFixed(2),
-            quoting: false,
-          });
+          // Cart has Guangzhou-only item(s) but the address is outside GZ — the
+          // order can't ship. Auto-remove them for the customer, then re-quote
+          // so the rest of the cart checks out cleanly.
+          this.setData({ quoting: false });
+          this.autoRemoveLocalOnly((err.body && err.body.data && err.body.data.products) || []);
+          return;
         } else if (code === 'no_zone_match' || code === 'max_not_offered') {
           this.setData({
             zone: null,
@@ -1670,8 +1658,9 @@ Page({
       });
       return;
     }
-    // Guangzhou-only item in a cart bound outside GZ — can't ship. Spell out
-    // which items so the customer can remove them or switch to a GZ address.
+    // Guangzhou-only item in a cart bound outside GZ — can't ship. Only reached
+    // in the rare case the items couldn't be auto-identified for removal; let
+    // the customer re-quote / fix it rather than proceed into a refusal.
     if (this.data.isBound && this.data.localOnlyBlock) {
       this.showLocalOnlyModal();
       return;
@@ -1718,6 +1707,59 @@ Page({
       }
     }
     return this.submitOrder({ accept_fallback: !!this.data.acceptedFallback });
+  },
+
+  // Auto-remove Guangzhou-only items from the cart on the customer's behalf,
+  // tell them what happened, then re-quote so the remaining cart checks out.
+  // `products` is [{id, name_en, name_cn}] from the server. When the list is
+  // empty (can't identify the items) we fall back to the explainer + block so
+  // nothing is removed blindly and the customer can fix it manually.
+  autoRemoveLocalOnly(products) {
+    const cn = this.data.lang === 'cn';
+    const list = Array.isArray(products) ? products : [];
+    if (!list.length) {
+      this.setData({ localOnlyBlock: true, localOnlyNames: [], quoting: false });
+      this.showLocalOnlyModal();
+      return;
+    }
+    const ids   = new Set(list.map(p => p.id));
+    const names = list.map(p => lang.pick(p.name_en, p.name_cn, this.data.lang)).filter(Boolean);
+    // Drop every cart line whose product is Guangzhou-only (all option variants).
+    let removed = 0;
+    cart.get().items
+      .filter(it => ids.has(it.product_id))
+      .forEach(it => { cart.remove(it.key); removed++; });
+    // Couldn't match anything in the cart → don't loop; explain + block instead.
+    if (!removed) {
+      this.setData({ localOnlyBlock: true, localOnlyNames: names, quoting: false });
+      this.showLocalOnlyModal(names);
+      return;
+    }
+    this.setData({ localOnlyBlock: false, localOnlyNames: [] });
+    const listText = names.length ? (cn ? names.join('、') : names.join(', ')) : '';
+    // Everything was Guangzhou-only → cart is now empty; nowhere to check out.
+    if (!cart.get().items.length) {
+      wx.showModal({
+        title: cn ? '已移除仅广州商品' : 'Guangzhou-only items removed',
+        content: cn
+          ? `${listText} 只支持广州同城配送,已为你移除。购物车已空,请继续选购。`
+          : `${listText} only deliver within Guangzhou, so we removed them. Your cart is now empty — please add other items.`,
+        showCancel: false,
+        confirmText: cn ? '去逛逛' : 'Browse',
+        success: () => { wx.navigateBack({ delta: 1, fail: () => wx.switchTab({ url: '/pages/shop/shop', fail: () => {} }) }); },
+      });
+      return;
+    }
+    // Tell them what we removed, then re-quote the trimmed cart.
+    wx.showModal({
+      title: cn ? '已移除仅广州商品' : 'Removed Guangzhou-only items',
+      content: cn
+        ? `${listText} 只支持广州同城配送,无法寄往广州以外,已为你移除。其余商品可正常下单。`
+        : `${listText} only deliver within Guangzhou and can't ship to this address, so we removed them. The rest of your cart is ready to check out.`,
+      showCancel: false,
+      confirmText: cn ? '好的' : 'Got it',
+    });
+    this.refreshQuote();
   },
 
   // "Guangzhou only" explainer modal. `names` overrides the stored list (used
@@ -2015,14 +2057,10 @@ Page({
         return;
       }
       // Guangzhou-only backstop: if the order POST refuses (e.g. the quote was
-      // skipped or stale), explain it with the same modal + remember the block.
+      // skipped or stale), auto-remove the offending items the same way.
       if (e?.message === 'local_only_outside_gz') {
-        const L = this.data.lang;
-        const names = ((e.body && e.body.products) || [])
-          .map(p => lang.pick(p.name_en, p.name_cn, L))
-          .filter(Boolean);
-        this.setData({ placing: false, localOnlyBlock: true, localOnlyNames: names });
-        this.showLocalOnlyModal(names);
+        this.setData({ placing: false });
+        this.autoRemoveLocalOnly((e.body && e.body.products) || []);
         return;
       }
       const friendly = {
