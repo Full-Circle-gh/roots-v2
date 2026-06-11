@@ -170,6 +170,9 @@ Page({
     // manual re-tour entry point. Default true so a config miss still
     // lets users re-watch.
     tourEnabled: true,
+    // Help/FAQ feature switch (features.faq, set in the Mini App Backend).
+    // Default true so a config miss still shows the Help row.
+    faqEnabled: true,
     // Operator-defined row layout (config.me_page.rows): array of
     // { id, enabled }. null = use the ROW_DEFS default order, all shown.
     meRowsConfig: null,
@@ -230,6 +233,9 @@ Page({
       ordered = ROW_DEFS.map(r => r.id);
     }
     if (!this.data.tourEnabled) ordered = ordered.filter(id => id !== 'tour');
+    // Operator can switch the whole Help/FAQ feature off in the Mini App
+    // Backend (features.faq) — when off, drop the Help & FAQ row entirely.
+    if (!this.data.faqEnabled) ordered = ordered.filter(id => id !== 'faq');
     return ordered;
   },
 
@@ -283,12 +289,15 @@ Page({
   async applyFooter() {
     let cfg = {};
     let tourEnabled = true;
+    let faqEnabled = true;
     let meRowsConfig = null;
     try {
       const full = await config.load(false);
       cfg = (full && full.brand && full.brand.me_footer) || {};
       // show_to='off' disables onboarding entirely → hide the re-tour row.
       tourEnabled = full?.onboarding?.show_to !== 'off';
+      // features.faq off → hide the Help & FAQ row (unset defaults to on).
+      faqEnabled = full?.features?.faq !== false;
       // Operator's Me-page row layout (order + visibility).
       if (Array.isArray(full?.me_page?.rows)) meRowsConfig = full.me_page.rows;
     } catch {}
@@ -306,6 +315,7 @@ Page({
     // otherwise wx:if (image) wins anyway and the text wouldn't render.
     this.setData({
       tourEnabled,
+      faqEnabled,
       meRowsConfig,
       footer: {
         wordmark_image: cfg.wordmark_image || '',

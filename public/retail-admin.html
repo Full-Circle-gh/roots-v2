@@ -318,7 +318,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h6"/></svg>
         Legal pages · 法律条款
       </button>
-      <button data-tab="faq">
+      <button data-tab="faq" data-feat="faq">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         FAQ &amp; help · 常见问题
       </button>
@@ -5666,7 +5666,7 @@
 
   <!-- ─── FAQ & HELP CENTRE ─── (moved out of Settings into the Content group
        2026-06-08; keeps its own loadFaq()/saveFaq()). -->
-  <section id="tab-faq">
+  <section id="tab-faq" data-feat="faq">
     <h2>FAQ &amp; help centre · 常见问题与帮助中心</h2>
     <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
       Powers the <b>Me → Help &amp; FAQ</b> screen in the mini app. Each question stores both EN and 中文 — the customer's language picks one. Changes appear in the mini app within ~60s (config cache TTL).

@@ -1994,7 +1994,8 @@
   body:not(.ent-affiliate)   [data-feat="affiliate"],
   body:not(.ent-reviews)     [data-feat="reviews"],
   body:not(.ent-feedback)    [data-feat="feedback"],
-  body:not(.ent-socialProof) [data-feat="socialProof"] { display: none !important; }
+  body:not(.ent-socialProof) [data-feat="socialProof"],
+  body:not(.ent-faq)         [data-feat="faq"] { display: none !important; }
   /* Inbox group holds ONLY Reviews + Feedback — hide it only when NEITHER is
      entitled (off items just dim inside it, so the group still has something). */
   body:not(.ent-reviews):not(.ent-feedback) .tabs-group[data-group="inbox"] { display: none !important; }
@@ -2003,12 +2004,14 @@
   body.ent-affiliate:not(.feat-affiliate)     .tabs [data-feat="affiliate"],
   body.ent-reviews:not(.feat-reviews)         .tabs [data-feat="reviews"],
   body.ent-feedback:not(.feat-feedback)       .tabs [data-feat="feedback"],
-  body.ent-socialProof:not(.feat-socialProof) .tabs [data-feat="socialProof"] { opacity: .5; }
+  body.ent-socialProof:not(.feat-socialProof) .tabs [data-feat="socialProof"],
+  body.ent-faq:not(.feat-faq)                 .tabs [data-feat="faq"] { opacity: .5; }
   body.ent-membership:not(.feat-membership) .tabs [data-feat="membership"]::after,
   body.ent-affiliate:not(.feat-affiliate)   .tabs [data-feat="affiliate"]::after,
   body.ent-reviews:not(.feat-reviews)       .tabs [data-feat="reviews"]::after,
   body.ent-feedback:not(.feat-feedback)     .tabs [data-feat="feedback"]::after,
-  body.ent-socialProof:not(.feat-socialProof) .tabs [data-feat="socialProof"]::after {
+  body.ent-socialProof:not(.feat-socialProof) .tabs [data-feat="socialProof"]::after,
+  body.ent-faq:not(.feat-faq)                 .tabs [data-feat="faq"]::after {
     content: "OFF"; margin-left: 6px; font: 700 9px/1 var(--f-mono, monospace);
     letter-spacing: .06em; padding: 3px 5px; border-radius: 6px;
     display: inline-flex; align-items: center; align-self: center;
@@ -2022,7 +2025,8 @@
   body.ent-affiliate:not(.feat-affiliate)   .tabs-popover [data-feat="affiliate"]::after,
   body.ent-reviews:not(.feat-reviews)       .tabs-popover [data-feat="reviews"]::after,
   body.ent-feedback:not(.feat-feedback)     .tabs-popover [data-feat="feedback"]::after,
-  body.ent-socialProof:not(.feat-socialProof) .tabs-popover [data-feat="socialProof"]::after {
+  body.ent-socialProof:not(.feat-socialProof) .tabs-popover [data-feat="socialProof"]::after,
+  body.ent-faq:not(.feat-faq)               .tabs-popover [data-feat="faq"]::after {
     position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
     margin-left: 0;
     /* Reset the active brass-bar's width/height (.tabs-popover button.active::after)
@@ -2038,6 +2042,7 @@
   body.ent-reviews:not(.feat-reviews)       .tabs-popover [data-feat="reviews"],
   body.ent-feedback:not(.feat-feedback)     .tabs-popover [data-feat="feedback"],
   body.ent-socialProof:not(.feat-socialProof) .tabs-popover [data-feat="socialProof"],
+  body.ent-faq:not(.feat-faq)               .tabs-popover [data-feat="faq"],
   body.lb-off .tabs-popover button[data-tab="leaderboard"],
   body.vot-open .tabs-popover button[data-tab="voting"] { padding-right: 56px; }
   /* Leaderboard isn't entitlement-gated (it has its own enable toggle on its
@@ -2084,12 +2089,14 @@
   body.ent-affiliate:not(.feat-affiliate)     #tab-affiliate  > :not(.feat-bar):not(.feat-off),
   body.ent-reviews:not(.feat-reviews)         #tab-reviews    > :not(.feat-bar):not(.feat-off),
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   > :not(.feat-bar):not(.feat-off),
-  body.ent-socialProof:not(.feat-socialProof) #tab-social     > :not(.feat-bar):not(.feat-off) { display: none !important; }
+  body.ent-socialProof:not(.feat-socialProof) #tab-social     > :not(.feat-bar):not(.feat-off),
+  body.ent-faq:not(.feat-faq)                 #tab-faq        > :not(.feat-bar):not(.feat-off) { display: none !important; }
   body.ent-membership:not(.feat-membership)   #tab-membership .feat-off,
   body.ent-affiliate:not(.feat-affiliate)     #tab-affiliate  .feat-off,
   body.ent-reviews:not(.feat-reviews)         #tab-reviews    .feat-off,
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   .feat-off,
-  body.ent-socialProof:not(.feat-socialProof) #tab-social     .feat-off { display: block; }
+  body.ent-socialProof:not(.feat-socialProof) #tab-social     .feat-off,
+  body.ent-faq:not(.feat-faq)                 #tab-faq        .feat-off { display: block; }
   /* feature on/off bar + enable card (mounted at the top of each feature page) */
   .feat-bar { display: flex; align-items: center; justify-content: space-between;
     gap: 16px; padding: 12px 16px; margin-bottom: var(--s4);

@@ -1086,6 +1086,8 @@ const FEATURE_CATALOG = [
     desc: 'The "Found a bug?" inbox from the mini-app Me page. · 来自小程序“我的”页面的反馈收件箱。' },
   { key: 'socialProof', en: 'Social proof',         cn: '社交证明',   def: true,
     desc: 'Bought-counts, recent-buyers ticker and the SOLD badge. · 购买人数、最近购买动态与“已售”标签。' },
+  { key: 'faq',         en: 'Help / FAQ',           cn: '帮助 / 常见问题', def: true,
+    desc: 'The Me → Help & FAQ screen — categories, search and the contact bar. When off, the FAQ row is hidden in the mini app. · “我的”→帮助与常见问题页面:分类、搜索与联系入口。关闭后小程序内不显示该入口。' },
 ];
 let ENTITLEMENTS = {};
 (async () => {

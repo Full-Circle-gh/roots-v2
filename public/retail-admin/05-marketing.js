@@ -442,6 +442,7 @@ const FEATURE_HOMES = {
   reviews:     '#tab-reviews',
   feedback:    '#tab-feedback',
   socialProof: '#tab-social',
+  faq:         '#tab-faq',
 };
 let _cfgCache = {};
 // Inject an on/off bar + an "off / enable" card at the top of each feature's home
