@@ -1946,7 +1946,8 @@ Component({
         .catch((err) => {
           const code = (err && err.body && err.body.error) || '';
           let msg = cn ? '无法领取' : 'Could not claim';
-          if (code === 'not_claimable')                       msg = cn ? '此券不可领取' : 'Not available to claim';
+          if (code === 'signup_only')                         msg = cn ? '仅限新用户' : 'New customers only';
+          else if (code === 'not_claimable')                  msg = cn ? '此券不可领取' : 'Not available to claim';
           else if (code === 'limit_reached')                  msg = cn ? '已达领取上限' : 'Already claimed';
           else if (code === 'unavailable' || code === 'not_found') msg = cn ? '优惠券已失效' : 'Coupon unavailable';
           else if (err && /unauth/.test(err.message || ''))   msg = cn ? '请重新登录' : 'Please sign in';

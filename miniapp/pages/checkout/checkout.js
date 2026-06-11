@@ -1487,6 +1487,7 @@ Page({
     } catch (e) {
       const map = {
         not_found:                 this.data.lang === 'cn' ? '优惠码无效' : 'Coupon not found',
+        signup_only:               this.data.lang === 'cn' ? '仅限新用户' : 'New customers only',
         not_applicable:            this.data.lang === 'cn' ? '订单未达使用门槛' : "Doesn't apply yet",
         per_customer_limit_reached:this.data.lang === 'cn' ? '此优惠已使用' : 'Already used',
       };

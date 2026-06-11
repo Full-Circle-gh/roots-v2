@@ -5981,7 +5981,10 @@ router.post('/api/retail/vouchers/claim', requireRetailAuth, express.json(), (re
   // (returning customers stay suppressed) and never leaks a private operator
   // gift to someone who wasn't granted it.
   if (!v.is_public || v.auto_grant_signup) {
-    return res.status(403).json({ success: false, error: 'not_claimable' });
+    // Public signup-only coupon → say so plainly (new-customers-only); a
+    // private gift just isn't claimable from the storefront.
+    const error = (v.is_public && v.auto_grant_signup) ? 'signup_only' : 'not_claimable';
+    return res.status(403).json({ success: false, error });
   }
 
   // Respect the per-customer cap — no point granting a coupon they've already
@@ -6025,7 +6028,17 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
       `SELECT 1 FROM retail_customer_vouchers
         WHERE customer_id = ? AND voucher_id = ? AND used_at IS NULL LIMIT 1`
     ).get(req.customer.id, v.id);
-    if (!grant) return res.status(404).json({ success: false, error: 'not_found' });
+    if (!grant) {
+      // A PUBLIC signup-only coupon (e.g. one printed on the home Coupon
+      // block) has a code that's openly displayed — nothing to hide — so tell
+      // the customer plainly it's new-customers-only instead of a misleading
+      // "invalid code". A truly private code (is_public=0) still returns the
+      // generic not_found so codes can't be enumerated by probing.
+      if (v.is_public && v.auto_grant_signup) {
+        return res.status(403).json({ success: false, error: 'signup_only' });
+      }
+      return res.status(404).json({ success: false, error: 'not_found' });
+    }
   }
   // Per-customer limit check
   if (v.per_customer_limit && v.per_customer_limit > 0) {
