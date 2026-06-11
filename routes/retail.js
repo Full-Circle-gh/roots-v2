@@ -6787,26 +6787,65 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
   // "FOREIGN KEY constraint failed" on every operator-created coupon. Store
   // NULL for backend operators; only real kitchen users get attributed.
   const createdBy = req.backendUser ? null : ((req.user && req.user.id) || null);
+  // Normalized field set, shared by the insert + the revive path below.
+  const v = {
+    type: b.type,
+    value: Number(b.value) || 0,
+    min_subtotal: Number(b.min_subtotal) || 0,
+    max_uses: b.max_uses != null && b.max_uses !== '' ? parseInt(b.max_uses, 10) : null,
+    per_customer_limit: b.per_customer_limit != null ? parseInt(b.per_customer_limit, 10) : 1,
+    expires_at: b.expires_at || null,
+    is_active: b.is_active === false ? 0 : 1,
+    is_public: b.is_public ? 1 : 0,
+    title_en: b.title_en || null,
+    title_cn: b.title_cn || null,
+    description: b.description || null,
+    auto_grant_signup: b.auto_grant_signup ? 1 : 0,
+  };
   try {
+    // Codes are permanently UNIQUE (soft-delete keeps the row), so a code that
+    // was used by a now-expired or disabled coupon would otherwise be locked
+    // forever. Allow reuse: if the existing coupon on this code is NOT live
+    // (disabled OR past its expiry), repurpose that row with the new settings
+    // and reset its usage. A still-live, unexpired coupon stays protected.
+    const existing = tdb().prepare(
+      `SELECT id, is_active,
+              CASE WHEN expires_at IS NOT NULL AND datetime(expires_at) <= CURRENT_TIMESTAMP
+                   THEN 1 ELSE 0 END AS is_expired
+         FROM retail_vouchers WHERE UPPER(code) = ?`
+    ).get(code);
+
+    if (existing) {
+      const live = existing.is_active === 1 && existing.is_expired === 0;
+      if (live) return res.status(409).json({ success: false, error: 'code_active' });
+      // Revive: overwrite the dormant coupon, reactivate, reset the used count.
+      tdb().prepare(
+        `UPDATE retail_vouchers SET
+            type = ?, value = ?, min_subtotal = ?, max_uses = ?, per_customer_limit = ?,
+            expires_at = ?, is_active = ?, is_public = ?, title_en = ?, title_cn = ?,
+            description = ?, auto_grant_signup = ?, used_count = 0,
+            created_by = ?, created_at = CURRENT_TIMESTAMP
+          WHERE id = ?`
+      ).run(
+        v.type, v.value, v.min_subtotal, v.max_uses, v.per_customer_limit,
+        v.expires_at, v.is_active, v.is_public, v.title_en, v.title_cn,
+        v.description, v.auto_grant_signup, createdBy, existing.id
+      );
+      logActivity(req.user.id, req.user.username, 'revive', 'voucher', existing.id, { code, type: v.type }, req.ip);
+      return res.json({ success: true, reused: true, data: tdb().prepare('SELECT * FROM retail_vouchers WHERE id = ?').get(existing.id) });
+    }
+
     const info = tdb().prepare(
       `INSERT INTO retail_vouchers
          (code, type, value, min_subtotal, max_uses, per_customer_limit, expires_at,
           is_active, is_public, title_en, title_cn, description, auto_grant_signup, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
-      code, b.type, Number(b.value) || 0, Number(b.min_subtotal) || 0,
-      b.max_uses != null && b.max_uses !== '' ? parseInt(b.max_uses, 10) : null,
-      b.per_customer_limit != null ? parseInt(b.per_customer_limit, 10) : 1,
-      b.expires_at || null,
-      b.is_active === false ? 0 : 1,
-      b.is_public ? 1 : 0,
-      b.title_en || null,
-      b.title_cn || null,
-      b.description || null,
-      b.auto_grant_signup ? 1 : 0,
-      createdBy
+      code, v.type, v.value, v.min_subtotal, v.max_uses, v.per_customer_limit,
+      v.expires_at, v.is_active, v.is_public, v.title_en, v.title_cn,
+      v.description, v.auto_grant_signup, createdBy
     );
-    logActivity(req.user.id, req.user.username, 'create', 'voucher', info.lastInsertRowid, { code, type: b.type }, req.ip);
+    logActivity(req.user.id, req.user.username, 'create', 'voucher', info.lastInsertRowid, { code, type: v.type }, req.ip);
     res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_vouchers WHERE id = ?').get(info.lastInsertRowid) });
   } catch (e) {
     if (/UNIQUE/.test(e.message)) return res.status(409).json({ success: false, error: 'code_exists' });

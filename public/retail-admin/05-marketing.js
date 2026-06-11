@@ -75,8 +75,11 @@ async function createVoucher() {
     toast('Public coupons need a label (EN or 中)', 'err'); return;
   }
   try {
-    await api('/api/retail-admin/vouchers', { method: 'POST', body });
-    toast('Created · 已创建 ' + body.code);
+    // Reusing the code of an expired/disabled coupon revives that row
+    // (reused:true) rather than erroring — surface that so the operator knows
+    // the old coupon was repurposed, not duplicated.
+    const r = await api('/api/retail-admin/vouchers', { method: 'POST', body });
+    toast(r.reused ? ('Reused code · 已复用编码 ' + body.code) : ('Created · 已创建 ' + body.code));
     ['v-code', 'v-value', 'v-min', 'v-max', 'v-expires', 'v-title-en', 'v-title-cn']
       .forEach(id => $('#' + id).value = '');
     $('#v-percust').value = '1';
@@ -84,7 +87,11 @@ async function createVoucher() {
     $('#v-auto-grant').checked = false;
     await loadVouchers();
   } catch (e) {
-    toast('Failed · 失败: ' + (e.message === 'code_exists' ? 'Code already exists · 编码已存在' : e.message), 'err');
+    const msg = e.message === 'code_active'
+      ? 'A live coupon already uses this code — disable it first · 已有生效中的优惠券使用此编码,请先停用'
+      : e.message === 'code_exists' ? 'Code already exists · 编码已存在'
+      : e.message;
+    toast('Failed · 失败: ' + msg, 'err');
   }
 }
 
