@@ -785,15 +785,15 @@
     <!-- Status chip strip — click to filter, auto-loads -->
     <div class="status-chips" id="orders-status-chips" style="margin-bottom: var(--s3)">
       <div class="status-chip st-all active"             data-status=""                 onclick="setOrderStatus(this)"><span class="dot"></span>All</div>
-      <div class="status-chip st-pending_payment"        data-status="pending_payment"  onclick="setOrderStatus(this)"><span class="dot"></span>Pending</div>
-      <div class="status-chip st-paid"                   data-status="paid"             onclick="setOrderStatus(this)"><span class="dot"></span>Paid</div>
-      <div class="status-chip st-preparing"              data-status="preparing"        onclick="setOrderStatus(this)"><span class="dot"></span>Preparing</div>
-      <div class="status-chip st-dispatched"             data-status="dispatched"       onclick="setOrderStatus(this)"><span class="dot"></span>Dispatched</div>
+      <div class="status-chip st-pending_payment"        data-status="pending_payment"  onclick="setOrderStatus(this)"><span class="dot"></span>Pending<span class="chip-ct" id="oc-pending_payment"></span></div>
+      <div class="status-chip st-paid"                   data-status="paid"             onclick="setOrderStatus(this)"><span class="dot"></span>Paid<span class="chip-ct" id="oc-paid"></span></div>
+      <div class="status-chip st-preparing"              data-status="preparing"        onclick="setOrderStatus(this)"><span class="dot"></span>Preparing<span class="chip-ct" id="oc-preparing"></span></div>
+      <div class="status-chip st-dispatched"             data-status="dispatched"       onclick="setOrderStatus(this)"><span class="dot"></span>Dispatched<span class="chip-ct" id="oc-dispatched"></span></div>
       <div class="status-chip st-delivered"              data-status="delivered"        onclick="setOrderStatus(this)"><span class="dot"></span>Delivered</div>
-      <div class="status-chip st-awaiting_restock"       data-status="awaiting_restock" onclick="setOrderStatus(this)" title="Paid orders waiting for stock to arrive · 待补货订单"><span class="dot"></span>Awaiting restock</div>
+      <div class="status-chip st-awaiting_restock"       data-status="awaiting_restock" onclick="setOrderStatus(this)" title="Paid orders waiting for stock to arrive · 待补货订单"><span class="dot"></span>Awaiting restock<span class="chip-ct alert" id="oc-awaiting_restock"></span></div>
       <div class="status-chip st-cancelled"              data-status="cancelled"        onclick="setOrderStatus(this)"><span class="dot"></span>Cancelled</div>
       <div class="status-chip st-refunded"               data-status="refunded"         onclick="setOrderStatus(this)"><span class="dot"></span>Refunded</div>
-      <div class="status-chip st-refunded"               data-status="refunds_open"     onclick="setOrderStatus(this)" title="Pending refund requests · 待处理退款"><span class="dot"></span>Refund queue <span id="refund-queue-count" class="muted" style="margin-left: 4px; font-size: 11px;"></span></div>
+      <div class="status-chip st-refunded"               data-status="refunds_open"     onclick="setOrderStatus(this)" title="Pending refund requests · 待处理退款"><span class="dot"></span>Refund queue<span class="chip-ct alert" id="refund-queue-count"></span></div>
     </div>
     <!-- Hidden source-of-truth for existing loadOrders() reads -->
     <select id="orders-status" style="display: none">

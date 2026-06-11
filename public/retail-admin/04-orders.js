@@ -313,9 +313,9 @@ async function loadOrders(opts = {}) {
     }
     // Populate the store filter once stores are loaded.
     ensureOrdersStoreFilter();
-    // Background-refresh the refund queue count badge — staff should always
-    // see how many requests are open without switching tabs.
-    refreshRefundQueueCount();
+    // Background-refresh the open-work count badges on the chip strip — staff
+    // should always see what's queued without clicking through each chip.
+    refreshOrderStatusCounts();
 
     let j;
     try {
@@ -2730,18 +2730,25 @@ async function openRefundEvents(orderId) {
   }
 }
 
-// Background ping to keep the chip count fresh. Cheap — `open` is small.
-async function refreshRefundQueueCount(known) {
-  const badge = document.getElementById('refund-queue-count');
-  if (!badge) return;
-  if (typeof known === 'number') {
-    badge.textContent = known > 0 ? `(${known})` : '';
-    return;
-  }
+// Refresh every open-work count badge on the orders status-chip strip in one
+// cheap call. We badge ONLY the open states an operator is meant to clear
+// (pending/paid/preparing/dispatched/awaiting-restock/refund-queue) — terminal
+// states (delivered/cancelled/refunded/all) grow forever, so they stay bare.
+// Each badge is hidden when its count is 0 (.chip-ct:empty), so cleared queues
+// don't carry a "0". Honours the active store filter, matching the list.
+async function refreshOrderStatusCounts() {
+  if (!document.getElementById('orders-status-chips')) return;
+  const storeId = (document.getElementById('orders-store') || {}).value || '';
   try {
-    const j = await api('/api/retail-admin/refunds?status=actionable');
-    const n = (j.data || []).length;
-    badge.textContent = n > 0 ? `(${n})` : '';
+    const j = await api('/api/retail-admin/order-status-counts' + (storeId ? '?store_id=' + storeId : ''));
+    const d = j.data || {};
+    const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n > 0 ? String(n) : ''; };
+    set('oc-pending_payment', d.pending_payment);
+    set('oc-paid',            d.paid);
+    set('oc-preparing',       d.preparing);
+    set('oc-dispatched',      d.dispatched);
+    set('oc-awaiting_restock',d.awaiting_restock);
+    set('refund-queue-count', d.refunds_open);
   } catch {}
 }
 

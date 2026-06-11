@@ -9486,6 +9486,34 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: rows, meta: { limit, offset } });
 });
 
+// Open-work counts for the orders status-chip strip. Deliberately covers ONLY
+// the "open" states an operator is meant to clear (the count stays bounded and
+// drives to zero) — terminal/archive states (delivered/cancelled/refunded/all)
+// grow forever, so a lifetime badge there would be noise and is omitted on
+// purpose. Honours the same store filter as the list. `refunds_open` is the
+// refund pipeline (refund_status), distinct from order.status.
+router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, res) => {
+  const { store_id } = req.query;
+  const sid = store_id ? parseInt(store_id, 10) : null;
+  const where = sid ? ' AND store_id = ?' : '';
+  const args  = sid ? [sid] : [];
+
+  const out = { pending_payment: 0, paid: 0, preparing: 0, dispatched: 0, awaiting_restock: 0, refunds_open: 0 };
+  const rows = tdb().prepare(
+    `SELECT status, COUNT(*) AS n FROM retail_orders
+      WHERE status IN ('pending_payment','paid','preparing','dispatched','awaiting_restock')${where}
+      GROUP BY status`
+  ).all(...args);
+  for (const r of rows) { if (r.status in out) out[r.status] = r.n; }
+
+  out.refunds_open = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM retail_orders
+      WHERE refund_status IN ('pending','reviewing','approved')${where}`
+  ).get(...args).n;
+
+  res.json({ success: true, data: out });
+});
+
 router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare(

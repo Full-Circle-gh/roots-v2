@@ -3630,6 +3630,12 @@
   .status-chip:hover { background: var(--bg-elev-2); color: var(--text-2); }
   .status-chip:active { transform: translateY(1px); }
   .status-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-4); }
+  /* Open-work count badge. Empty by default (hidden) — JS only fills it when
+     the count is > 0, so cleared queues carry no "0". Neutral for the normal
+     flow; .alert tints the stuck states (awaiting restock / refund queue). */
+  .status-chip .chip-ct { margin-left: 5px; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; opacity: .85; }
+  .status-chip .chip-ct:empty { display: none; }
+  .status-chip .chip-ct.alert { color: var(--danger); opacity: 1; }
   .status-chip.active                     { background: var(--bg-elev-2); color: var(--text-1); border-color: var(--line-strong); }
   .status-chip.active.st-all              { background: rgba(107, 142, 111, .14); color: var(--accent); border-color: rgba(107, 142, 111, .40); }
   .status-chip.active.st-all .dot         { background: var(--accent); }
