@@ -244,7 +244,13 @@ function _resolveBlock(b, L) {
       const num  = (_pick(c.num_en, c.num_cn, L) || c.num || '').toString();
       const unit = _pick(c.unit_en, c.unit_cn, L);
       if (!head && !num && !unit) return null;
-      return { icon: c.icon || '', head, num, unit, alt: !!c.alt };
+      // The `num` slot is a 96rpx hero numeral (designed for "4°C", "1", "-18°C").
+      // The office sometimes authors a whole phrase here ("Cool & dry",
+      // "Refrigerate") — at hero size that overflows the half-width card and
+      // clips. Flag anything longer than a short numeric so the WXSS can drop
+      // it to a readable, wrapping display size instead of clipping.
+      const numLong = num.replace(/\s+/g, '').length > 5;
+      return { icon: c.icon || '', head, num, numLong, unit, alt: !!c.alt };
     };
     const left  = card(b.left);
     const right = card(b.right);

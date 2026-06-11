@@ -424,6 +424,11 @@
   flex-direction: column;
   gap: 18rpx;
   min-height: 280rpx;
+  /* Grid items default to min-width:auto, which refuses to shrink below the
+     widest unbreakable child — that's what let an over-long hero numeral push
+     past the card edge and clip. Allow the card to shrink so children wrap. */
+  min-width: 0;
+  overflow: hidden;
 }
 .pb-storage-card.alt {
   background: var(--ink);
@@ -447,6 +452,17 @@
   font-size: 96rpx;
   line-height: 0.95;
   margin-top: auto;
+  /* Never clip horizontally — wrap if a value somehow runs long, whatever
+     font (brand or wide fallback) ends up rendering it. */
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+/* `.long` = the slot holds a phrase, not a hero numeral ("Cool & dry",
+   "Refrigerate"). Drop to a readable display size that wraps inside the card
+   instead of overflowing at 96rpx. Set from product-blocks.js (numLong). */
+.pb-storage-num.long {
+  font-size: 46rpx;
+  line-height: 1.1;
 }
 .pb-storage-unit {
   font-family: var(--f-toni);

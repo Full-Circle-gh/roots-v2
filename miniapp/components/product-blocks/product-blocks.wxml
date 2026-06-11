@@ -131,13 +131,13 @@
           <view wx:if="{{item.left}}" class="pb-storage-card {{item.left.alt ? 'alt' : ''}}">
             <text wx:if="{{item.left.icon}}" class="pb-storage-ic">{{item.left.icon}}</text>
             <text wx:if="{{item.left.head}}" class="pb-storage-head">{{item.left.head}}</text>
-            <text wx:if="{{item.left.num}}" class="pb-storage-num">{{item.left.num}}</text>
+            <text wx:if="{{item.left.num}}" class="pb-storage-num {{item.left.numLong ? 'long' : ''}}">{{item.left.num}}</text>
             <text wx:if="{{item.left.unit}}" class="pb-storage-unit">{{item.left.unit}}</text>
           </view>
           <view wx:if="{{item.right}}" class="pb-storage-card {{item.right.alt ? 'alt' : ''}}">
             <text wx:if="{{item.right.icon}}" class="pb-storage-ic">{{item.right.icon}}</text>
             <text wx:if="{{item.right.head}}" class="pb-storage-head">{{item.right.head}}</text>
-            <text wx:if="{{item.right.num}}" class="pb-storage-num">{{item.right.num}}</text>
+            <text wx:if="{{item.right.num}}" class="pb-storage-num {{item.right.numLong ? 'long' : ''}}">{{item.right.num}}</text>
             <text wx:if="{{item.right.unit}}" class="pb-storage-unit">{{item.right.unit}}</text>
           </view>
         </view>
