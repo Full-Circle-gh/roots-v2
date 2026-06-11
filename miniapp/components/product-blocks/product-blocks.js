@@ -257,9 +257,17 @@ function _resolveBlock(b, L) {
       const head = _pick(c.head_en, c.head_cn, L);
       // num is now bilingual (num_en/num_cn); fall back to the legacy single
       // `num` field for blocks saved before the split.
-      const num  = (_pick(c.num_en, c.num_cn, L) || c.num || '').toString();
-      const unit = _pick(c.unit_en, c.unit_cn, L);
+      let num  = (_pick(c.num_en, c.num_cn, L) || c.num || '').toString();
+      let unit = _pick(c.unit_en, c.unit_cn, L);
       if (!head && !num && !unit) return null;
+      // This card is built around a hero figure in `num` (e.g. "0–4°") with
+      // `unit` as the small caption beneath it. When the office/AI authors only
+      // a descriptive phrase and no figure ("Cool, dry place …"), it lands in
+      // `unit` and the hero slot is left empty — so the card renders tall and
+      // mostly blank, with the real message stuck in tiny caption type. Promote
+      // that lone phrase up into the hero slot so it fills the card at the
+      // readable wrapping size, exactly like any other worded value.
+      if (!num && unit) { num = unit; unit = ''; }
       // The `num` slot is a 96rpx hero numeral (designed for "4°C", "1", "-18°C").
       // The office sometimes authors a whole phrase here ("Cool & dry",
       // "Refrigerate") — at hero size that overflows the half-width card and
