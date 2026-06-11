@@ -319,18 +319,32 @@ Page({
     const priceWas = hasCmp ? '¥' + cmp.toFixed(2) : '';
     const saveN = hasCmp ? Math.round((cmp - v) * 100) / 100 : 0;
     const saveLabel = saveN > 0 ? (L === 'cn' ? '省¥' : 'SAVE ¥') + (Number.isInteger(saveN) ? saveN : saveN.toFixed(2)) : '';
-    // free_of (comma list like "gluten,nuts") → badges
-    const freeOf = (p.free_of || '').split(',').map(s => s.trim()).filter(Boolean);
+    // free_of (comma list like "gluten,nuts") → allergen-free badges. The whole
+    // shop is 100% plant-based, so EVERY product also carries the PLANT-BASED
+    // badge by default (regardless of `free_of`). EGG FREE is intentionally
+    // hidden — it's redundant in an all-plant catalogue.
+    // Lowercase on the way in so matching is case-insensitive — the store
+    // editor / legacy data can carry "Egg", "Animal Products", etc.
+    const freeOf = (p.free_of || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
     const badgeMap = {
       gluten: { en: 'GLUTEN FREE', cn: '无麸质' },
       nuts:   { en: 'NUT FREE',    cn: '无坚果' },
       soy:    { en: 'SOY FREE',    cn: '无大豆' },
       dairy:  { en: 'DAIRY FREE',  cn: '无乳制品' },
-      egg:    { en: 'EGG FREE',    cn: '无蛋' },
       '5spice': { en: '5-SPICE FREE', cn: '无五香' },
-      'animal products': { en: 'PLANT-BASED', cn: '纯植物' },
     };
-    const badges = freeOf.map(k => badgeMap[k] ? lang.pick(badgeMap[k].en, badgeMap[k].cn, L) : k.toUpperCase()).filter(Boolean);
+    const hiddenFreeOf = new Set(['egg', 'animal products']);
+    const plantBased = lang.pick('PLANT-BASED', '纯植物', L);
+    const freeBadges = freeOf
+      .filter(k => !hiddenFreeOf.has(k))
+      .map(k => {
+        // The store editor stores the 5-spice token as "5 spice" (with a space)
+        // while the badge key is "5spice"; collapse spaces for the lookup so it
+        // doesn't fall through to a raw, untranslated "5 SPICE" badge.
+        const bk = k.replace(/\s+/g, '');
+        return badgeMap[bk] ? lang.pick(badgeMap[bk].en, badgeMap[bk].cn, L) : k.toUpperCase();
+      });
+    const badges = [plantBased, ...freeBadges];
     // Pre-resolve option labels for the WXML
     const options = (p.options || []).map(o => ({
       ...o,

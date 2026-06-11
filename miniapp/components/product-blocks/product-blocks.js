@@ -268,6 +268,19 @@ function _resolveBlock(b, L) {
       // that lone phrase up into the hero slot so it fills the card at the
       // readable wrapping size, exactly like any other worded value.
       if (!num && unit) { num = unit; unit = ''; }
+      // The hero figure already carries the degree mark ("0–4°"), and the AI
+      // often repeats the scale at the head of the caption ("°C at all times")
+      // — so the degree shows twice and the stray "C" reads as misplaced. The
+      // display font (League Gothic) also gives the degree glyph a wide advance,
+      // so any glyph appended after it lands with an ugly gap ("0–4°  C").
+      // Cleanest: keep the degree terminal on the figure (renders tight) and
+      // drop the redundant scale from the caption, leaving just the qualifier.
+      if (/°\s*$/.test(num) && unit) {
+        unit = unit
+          .replace(/^\s*°?\s*[cf]\b\.?\s*/i, '')  // "°C ", "C "
+          .replace(/^\s*[℃℉]\s*/, '')             // "℃ "
+          .trim();
+      }
       // The `num` slot is a 96rpx hero numeral (designed for "4°C", "1", "-18°C").
       // The office sometimes authors a whole phrase here ("Cool & dry",
       // "Refrigerate") — at hero size that overflows the half-width card and

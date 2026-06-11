@@ -63,7 +63,7 @@
 .pb-spec-cell:last-child { border-right: 0; }
 .pb-spec-k {
   font-family: var(--f-toni);
-  font-size: 19rpx;
+  font-size: 22rpx;
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--pa-accent, var(--ink-60));
@@ -164,7 +164,7 @@
 }
 .pb-why-claim {
   font-family: var(--f-toni);
-  font-size: 29rpx;
+  font-size: 32rpx;
   line-height: 1.35;
   font-weight: 400;
   color: var(--pa-fg, var(--ink));
@@ -305,7 +305,7 @@
 }
 .pb-allergen-meta {
   font-family: var(--f-toni);
-  font-size: 19rpx;
+  font-size: 22rpx;
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--ink-60);
@@ -321,7 +321,7 @@
 }
 .pb-allergen-lbl {
   font-family: var(--f-toni);
-  font-size: 20rpx;
+  font-size: 22rpx;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-60);
@@ -339,12 +339,12 @@
   padding: 10rpx 20rpx 8rpx;
   border-radius: 999rpx;
   font-family: var(--f-toni);
-  font-size: 23rpx;
+  font-size: 25rpx;
   line-height: 1;
 }
 .pb-al-chip-strong {
   background: var(--berry);
-  color: #fff;
+  color: var(--ink);
   font-weight: 700;
 }
 .pb-al-chip-soft {
@@ -391,7 +391,7 @@
 }
 .pb-how-lbl {
   font-family: var(--f-toni);
-  font-size: 22rpx;
+  font-size: 24rpx;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--pa-fg, var(--ink));
@@ -399,7 +399,7 @@
 .pb-how-sub {
   font-family: var(--f-aleo);
   font-style: italic;
-  font-size: 22rpx;
+  font-size: 24rpx;
   color: var(--ink-60);
   margin-top: -8rpx;
 }
@@ -443,7 +443,7 @@
 }
 .pb-storage-head {
   font-family: var(--f-toni);
-  font-size: 20rpx;
+  font-size: 22rpx;
   letter-spacing: 0.22em;
   text-transform: uppercase;
 }
@@ -466,7 +466,7 @@
 }
 .pb-storage-unit {
   font-family: var(--f-toni);
-  font-size: 22rpx;
+  font-size: 24rpx;
   letter-spacing: 0.16em;
   line-height: 1.5;
   text-transform: uppercase;
@@ -634,7 +634,7 @@
 }
 .pb-recipe-time {
   font-family: var(--f-toni);
-  font-size: 19rpx;
+  font-size: 22rpx;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--olive);
@@ -673,7 +673,7 @@
   display: block;
   margin-top: 14rpx;
   font-family: var(--f-toni);
-  font-size: 23rpx;
+  font-size: 25rpx;
   line-height: 1.3;
   color: var(--pa-fg, var(--ink));
 }

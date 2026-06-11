@@ -27,7 +27,6 @@
       <view class="pb-why">
         <view class="pb-why-head">
           <text class="pb-why-head-l">{{item.head}}</text>
-          <text class="pb-why-head-r">{{item.count}}</text>
         </view>
         <view wx:for="{{item.rows}}" wx:for-item="r" wx:key="n"
               class="pb-why-row {{r.first ? 'first' : ''}}">
@@ -42,7 +41,6 @@
       <view class="pb-ing">
         <view class="pb-section-head">
           <text class="pb-section-h3">{{item.headLabel}}</text>
-          <text class="pb-section-tag">{{item.tag}}</text>
         </view>
         <view class="pb-ing-chips">
           <view wx:for="{{item.items}}" wx:for-item="it" wx:key="name"
@@ -59,7 +57,6 @@
       <view class="pb-ing">
         <view class="pb-section-head">
           <text class="pb-section-h3">{{item.headLabel}}</text>
-          <text class="pb-section-tag">{{item.tag}}</text>
         </view>
         <view class="pb-ing-line">
           <block wx:for="{{item.items}}" wx:for-item="it" wx:key="name">
@@ -80,7 +77,6 @@
               <text class="pb-allergen-warn">!</text>
               <text>{{item.title}}</text>
             </view>
-            <text class="pb-allergen-meta">{{item.compliance}}</text>
           </view>
           <view class="pb-allergen-row">
             <text class="pb-allergen-lbl">{{item.containsLabel}}</text>
@@ -108,7 +104,6 @@
       <view class="pb-how">
         <view class="pb-section-head">
           <text class="pb-section-h3">{{item.head}}</text>
-          <text class="pb-section-tag">{{item.tag}}</text>
         </view>
         <view class="pb-how-grid {{item.cols === 4 ? 'cols-4' : ''}}">
           <view wx:for="{{item.tiles}}" wx:for-item="t" wx:key="lbl" class="pb-how-tile">
@@ -125,7 +120,6 @@
       <view class="pb-storage">
         <view class="pb-section-head">
           <text class="pb-section-h3">{{item.head}}</text>
-          <text class="pb-section-tag">{{item.tag}}</text>
         </view>
         <view class="pb-storage-pair">
           <view wx:if="{{item.left}}" class="pb-storage-card {{item.left.alt ? 'alt' : ''}}">
@@ -182,7 +176,6 @@
       <view class="pb-recipe">
         <view class="pb-section-head">
           <text class="pb-section-h3">{{item.head}}</text>
-          <text class="pb-section-tag">{{item.tag}}</text>
         </view>
         <view wx:for="{{item.steps}}" wx:for-item="s" wx:key="n" class="pb-recipe-step">
           <text class="pb-recipe-n">{{s.n}}</text>
