@@ -686,16 +686,30 @@ Page({
       // ¥/% auto promo wins on its discount; free-ship-vs-fee ties defer to the
       // server (we don't know the fee here). Manual keeps the win on a tie.
       if (autoDisc > manual.discount) {
+        const L = this.data.lang;
+        // The voucher's headline value (e.g. "5% off") — always shown so the
+        // customer sees what the coupon is worth, not just the ¥ on this order.
+        const valueLabel = a.type === 'percent' ? (a.value + (L === 'cn' ? '% 优惠' : '% off'))
+          : a.type === 'free_shipping' ? (L === 'cn' ? '免运费' : 'Free shipping')
+          : ('¥' + Number(a.value).toFixed(0) + (L === 'cn' ? ' 优惠' : ' off'));
         return {
           code: a.code, discount: autoDisc, freeShip: !!a.free_shipping, auto: true,
-          title: lang.pick(a.title_en, a.title_cn, this.data.lang)
-            || (a.type === 'percent' ? (a.value + (this.data.lang === 'cn' ? '% 优惠' : '% off'))
-              : a.type === 'free_shipping' ? (this.data.lang === 'cn' ? '免运费' : 'Free shipping')
-              : ('¥' + Number(a.value).toFixed(0) + (this.data.lang === 'cn' ? ' 优惠' : ' off'))),
+          title: lang.pick(a.title_en, a.title_cn, L) || valueLabel,
+          valueLabel,
         };
       }
     }
     return manual;
+  },
+
+  // Builds the auto-applied banner {title, sub}. Sub always leads with the
+  // coupon's value ("5% off") unless the title already IS the value.
+  autoAppliedBanner(ev, discount) {
+    if (!ev.auto) return null;
+    const L = this.data.lang;
+    const valuePart = (ev.valueLabel && ev.title !== ev.valueLabel) ? (ev.valueLabel + ' · ') : '';
+    const applied = L === 'cn' ? '已自动抵扣' : 'Applied automatically';
+    return { title: ev.title, sub: valuePart + applied + ' · −¥' + discount.toFixed(2) };
   },
 
   async loadPointsBalance() {
@@ -863,7 +877,7 @@ Page({
       zone: null, zoneError: '',
       deliveryFee: '0.00', packingFee: packingFee.toFixed(2), freeShipping: false,
       needsFallback: false, fallbackGate: 'none',
-      autoApplied: ev.auto ? { title: ev.title, amount: voucherDiscount.toFixed(2) } : null,
+      autoApplied: this.autoAppliedBanner(ev, voucherDiscount),
       couponShown: voucherDiscount > 0 ? voucherDiscount.toFixed(2) : '',
       couponFreeShown: !!ev.freeShip,
       pointsToUse,
@@ -1136,7 +1150,7 @@ Page({
           zone: data.zone || null,
           zoneError: '',
           deliveryFee: effectiveDelivery.toFixed(2),
-          autoApplied: ev.auto ? { title: ev.title, amount: voucherDiscount.toFixed(2) } : null,
+          autoApplied: this.autoAppliedBanner(ev, voucherDiscount),
           couponShown: voucherDiscount > 0 ? voucherDiscount.toFixed(2) : '',
           couponFreeShown: !!ev.freeShip,
           savedTotal: savedTotal > 0 ? savedTotal.toFixed(2) : '',

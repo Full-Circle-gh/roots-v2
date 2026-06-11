@@ -448,7 +448,7 @@
     <view wx:if="{{autoApplied}}" class="voucher-applied auto">
       <view>
         <view class="va-name f-bear">{{autoApplied.title}}</view>
-        <view class="va-desc muted">{{lang === 'cn' ? '已自动抵扣' : 'Applied automatically'}} · −¥{{autoApplied.amount}}</view>
+        <view class="va-desc muted">{{autoApplied.sub}}</view>
       </view>
     </view>
 
