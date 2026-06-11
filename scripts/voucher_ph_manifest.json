@@ -1,0 +1,34 @@
+[
+  {
+    "slug": "01_front",
+    "caption": "Front door"
+  },
+  {
+    "slug": "02_ideas",
+    "caption": "Ideas from sales"
+  },
+  {
+    "slug": "03_describe",
+    "caption": "Describe it"
+  },
+  {
+    "slug": "04_deal",
+    "caption": "Step 1 · The deal"
+  },
+  {
+    "slug": "05_who",
+    "caption": "Step 2 · Who gets it"
+  },
+  {
+    "slug": "06_rules",
+    "caption": "Step 3 · Rules"
+  },
+  {
+    "slug": "07_review",
+    "caption": "Step 4 · Review"
+  },
+  {
+    "slug": "08_headsup",
+    "caption": "Heads up"
+  }
+]

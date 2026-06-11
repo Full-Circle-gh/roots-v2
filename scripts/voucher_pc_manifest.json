@@ -1,0 +1,34 @@
+[
+  {
+    "slug": "01_front",
+    "caption": "Front door &mdash; pick a goal in plain words, or just describe the deal."
+  },
+  {
+    "slug": "02_ideas",
+    "caption": "Ideas from your sales &mdash; the blank page becomes &ldquo;pick a smart idea,&rdquo; each with a real number."
+  },
+  {
+    "slug": "03_describe",
+    "caption": "Describe it &mdash; one plain sentence, and the AI fills every box (code and label included)."
+  },
+  {
+    "slug": "04_deal",
+    "caption": "Step 1 &mdash; The deal. Pick the kind, type one number; the unit is built into the box."
+  },
+  {
+    "slug": "05_who",
+    "caption": "Step 2 &mdash; Who gets it. One plain choice replaces three confusing checkboxes."
+  },
+  {
+    "slug": "06_rules",
+    "caption": "Step 3 &mdash; Rules &amp; dates. Optional, with smart defaults; the minimum is anchored to your average order."
+  },
+  {
+    "slug": "07_review",
+    "caption": "Step 4 &mdash; Review. See the real card, read plain heads-up notices, then save a draft or turn it on."
+  },
+  {
+    "slug": "08_headsup",
+    "caption": "The smart heads-up &mdash; reads your live coupons and says, in plain words, what wins, what overlaps, what resets."
+  }
+]
