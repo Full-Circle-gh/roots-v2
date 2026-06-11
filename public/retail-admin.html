@@ -1977,8 +1977,20 @@
       #cat-editor .cat-drag:hover { background: var(--bg-elev-1); color: var(--text-1); }
       #cat-editor .cat-drag:active { cursor: grabbing; }
       #cat-editor .cat-dragging { opacity: .45; }
+      #cat-editor .cat-subrow { transition: background var(--t-fast), box-shadow var(--t-fast), opacity var(--t-fast); }
       #cat-editor .cat-top.cat-droptarget { box-shadow: 0 0 0 2px var(--accent) inset; }
       #cat-editor .cat-subrow.cat-droptarget { background: rgba(107,142,111,.12); border-radius: var(--r-md); }
+      /* Gentle landing: the dropped row settles with a soft accent ring that
+         fades out. Inset ring (not background) so a top card keeps its pane
+         background while the cue dissolves. */
+      #cat-editor .cat-landed { animation: cat-land .7s ease-out; border-radius: var(--r-md); }
+      @keyframes cat-land {
+        from { box-shadow: 0 0 0 2px rgba(107,142,111,.45) inset; }
+        to   { box-shadow: 0 0 0 2px rgba(107,142,111,0) inset; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #cat-editor .cat-landed { animation: none; }
+      }
       /* Destructive controls stay quiet (neutral) at rest and only flush red on
          hover — a wall of resting red fights the calm aesthetic (brief §6/§9). */
       #cat-editor .cat-del { color: var(--text-3); }

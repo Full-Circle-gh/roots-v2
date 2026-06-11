@@ -342,7 +342,7 @@ function catRender() {
   }
   host.innerHTML = catModel.map((t, ti) => {
     const subs = (t.subs || []).map((s, si) => `
-      <div class="cat-subrow" id="cat-sub-${ti}-${si}"
+      <div class="cat-subrow" id="cat-sub-${ti}-${si}" data-fk="s${catFk(s)}"
            ondragover="catDragOver(event,'sub',${ti})" ondrop="catDrop(event,'sub',${ti},${si})" ondragleave="catDragLeave(event)"
            style="display:flex;gap:6px;align-items:center;padding:5px 0;">
         <span class="cat-drag" draggable="true" title="Drag to reorder · 拖动排序"
@@ -353,7 +353,7 @@ function catRender() {
         <button class="btn-icon cat-del" type="button" title="Remove subcategory" onclick="catRemoveSub(${ti},${si})">✕</button>
       </div>`).join('');
     return `
-    <div class="card cat-top" id="cat-top-${ti}"
+    <div class="card cat-top" id="cat-top-${ti}" data-fk="t${catFk(t)}"
          ondragover="catDragOver(event,'top',${ti})" ondrop="catDrop(event,'top',${ti})" ondragleave="catDragLeave(event)"
          style="margin-bottom:var(--s4);">
       <div class="cat-top-head" style="display:flex;gap:8px;align-items:center;margin-bottom:var(--s3);">
@@ -377,33 +377,94 @@ function catRender() {
 // Tops reorder among themselves; subs reorder only WITHIN their parent top
 // (no cross-parent move, which keeps the rename-migration model simple — a
 // reorder changes neither name nor parent, so it never touches product rows).
+//
+// Motion: every layout change (fold on dragstart, unfold on dragend, re-sort
+// on drop) is FLIP-animated so rows glide instead of snapping — same floating
+// feel as the orders manifest re-sort. Keys live in a WeakMap (not on the
+// model) so the save payload and dirty-diff never see them.
+const _catFk = new WeakMap(); let _catFkSeq = 0;
+function catFk(o) { let k = _catFk.get(o); if (!k) { k = ++_catFkSeq; _catFk.set(o, k); } return k; }
+// Like flipReorder, but corrects nested rows (subrows inside an animating top
+// card) by subtracting the nearest animated ancestor's delta — both levels
+// share the same curve, so the composite still lands exactly.
+function catFlip(swap) {
+  const host = document.getElementById('cat-editor');
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!host || reduce) { swap(); return; }
+  const first = new Map();
+  host.querySelectorAll('[data-fk]').forEach(el => first.set(el.dataset.fk, el.getBoundingClientRect()));
+  swap();
+  const els = Array.from(host.querySelectorAll('[data-fk]'));
+  const delta = new Map();
+  els.forEach(el => {
+    const a = first.get(el.dataset.fk);
+    if (!a) return;
+    const b = el.getBoundingClientRect();
+    delta.set(el, { dx: a.left - b.left, dy: a.top - b.top });
+  });
+  els.forEach(el => {
+    const d = delta.get(el); if (!d) return;
+    let dx = d.dx, dy = d.dy;
+    for (let p = el.parentElement; p && p !== host; p = p.parentElement) {
+      const pd = delta.get(p);
+      if (pd) { dx -= pd.dx; dy -= pd.dy; break; }
+    }
+    if (!dx && !dy) return;
+    el.style.transition = 'none';
+    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    requestAnimationFrame(() => {
+      el.style.transition = 'transform 320ms cubic-bezier(.22,.61,.36,1)';
+      el.style.transform = '';
+      el.addEventListener('transitionend', () => {
+        el.style.transition = '';
+        el.style.transform = '';
+      }, { once: true });
+    });
+  });
+}
 let catDrag = null;   // { kind:'top'|'sub', ti, si }
 function catDragStart(ev, kind, ti, si) {
   catDrag = { kind, ti, si };
   ev.dataTransfer.effectAllowed = 'move';
   try { ev.dataTransfer.setData('text/plain', kind); } catch (e) {}
   const row = ev.target.closest('.cat-top, .cat-subrow');
+  // Float the whole row as the drag ghost (not just the ⠿ grip).
+  if (row && ev.dataTransfer.setDragImage) {
+    try {
+      const r = row.getBoundingClientRect();
+      ev.dataTransfer.setDragImage(row, ev.clientX - r.left, ev.clientY - r.top);
+    } catch (e) {}
+  }
   // Fold the editor to compact single lines AFTER the drag image is snapshotted
   // (next tick) so changing layout mid-dragstart can't cancel the drag. When
   // dragging a sub we keep its parent card expanded; every other card folds.
   setTimeout(() => {
-    if (row) row.classList.add('cat-dragging');
-    const host = document.getElementById('cat-editor');
-    if (!host) return;
-    host.classList.add(kind === 'top' ? 'cat-dnd-top' : 'cat-dnd-sub');
-    if (kind === 'sub') {
-      const parent = document.getElementById('cat-top-' + ti);
-      if (parent) parent.classList.add('cat-dnd-parent');
-    }
+    if (!catDrag) return;   // drag already ended before the tick
+    catFlip(() => {
+      if (row) row.classList.add('cat-dragging');
+      const host = document.getElementById('cat-editor');
+      if (!host) return;
+      host.classList.add(kind === 'top' ? 'cat-dnd-top' : 'cat-dnd-sub');
+      if (kind === 'sub') {
+        const parent = document.getElementById('cat-top-' + ti);
+        if (parent) parent.classList.add('cat-dnd-parent');
+      }
+    });
   }, 0);
 }
 function catDragEnd() {
   catDrag = null;
   const host = document.getElementById('cat-editor');
-  if (host) host.classList.remove('cat-dnd-top', 'cat-dnd-sub');
-  $$('.cat-dragging').forEach(el => el.classList.remove('cat-dragging'));
-  $$('.cat-droptarget').forEach(el => el.classList.remove('cat-droptarget'));
-  $$('.cat-dnd-parent').forEach(el => el.classList.remove('cat-dnd-parent'));
+  const folded = host && (host.classList.contains('cat-dnd-top') || host.classList.contains('cat-dnd-sub'));
+  const unfold = () => {
+    if (host) host.classList.remove('cat-dnd-top', 'cat-dnd-sub');
+    $$('.cat-dragging').forEach(el => el.classList.remove('cat-dragging'));
+    $$('.cat-droptarget').forEach(el => el.classList.remove('cat-droptarget'));
+    $$('.cat-dnd-parent').forEach(el => el.classList.remove('cat-dnd-parent'));
+  };
+  // Glide back open on a cancelled drag; if already unfolded (drop path
+  // handled it inside its own flip) just clear classes with no animation.
+  if (folded) catFlip(unfold); else unfold();
 }
 function catDragOver(ev, kind, ti) {
   if (!catDrag || catDrag.kind !== kind) return;          // only same-kind drops
@@ -418,16 +479,28 @@ function catDragLeave(ev) { ev.currentTarget.classList.remove('cat-droptarget');
 function catDrop(ev, kind, ti, si) {
   if (!catDrag || catDrag.kind !== kind) return;
   ev.preventDefault();
+  let moved = null;
   if (kind === 'top') {
     const from = catDrag.ti;
-    if (from !== ti) { const m = catModel.splice(from, 1)[0]; catModel.splice(ti, 0, m); }
+    if (from !== ti) { moved = catModel.splice(from, 1)[0]; catModel.splice(ti, 0, moved); }
   } else {
     if (catDrag.ti !== ti) { catDragEnd(); return; }
     const subs = catModel[ti].subs, from = catDrag.si;
-    if (from !== si) { const m = subs.splice(from, 1)[0]; subs.splice(si, 0, m); }
+    if (from !== si) { moved = subs.splice(from, 1)[0]; subs.splice(si, 0, moved); }
   }
-  catDragEnd();
-  catRender(); catUpdateDirty();
+  // One flip covers unfold + re-sort: rows glide from their folded drag-mode
+  // boxes straight to their final expanded spots — the gentle landing.
+  catDrag = null;
+  catFlip(() => {
+    const host = document.getElementById('cat-editor');
+    if (host) host.classList.remove('cat-dnd-top', 'cat-dnd-sub');
+    catRender();   // re-render drops the dragging/droptarget/parent classes
+  });
+  if (moved) {
+    const el = document.querySelector(`#cat-editor [data-fk="${kind === 'top' ? 't' : 's'}${catFk(moved)}"]`);
+    if (el) { el.classList.add('cat-landed'); el.addEventListener('animationend', () => el.classList.remove('cat-landed'), { once: true }); }
+  }
+  catUpdateDirty();
 }
 
 async function catSave(opts) {
@@ -2771,16 +2844,30 @@ function dashOpenOrderFromFeed(orderId) {
 }
 
 // Jump from a low-stock / out-of-stock activity event straight to that
-// product's edit page in the KITCHEN app — stock/master data lives there, not
-// in this Mini App Backend, and restocking is the next action. Reuses the same
-// `/?openProduct=ID` deep link the order-item links use (kitchen app navigates
-// to Products → viewProduct). Opens in a new tab so the dashboard stays put.
+// product's editor — staying INSIDE this Mini App Backend (no new kitchen-app
+// tab). Switch to the Products tab (loading it on first open), then open the
+// product the same way a grid card does via paOpenEdit() — which respects the
+// catalog mode (self → in-page commercial/stock form; upstream → page designer).
 function dashOpenProductFromFeed(productId) {
   if (productId === null || productId === undefined || productId === '') return;
   const id = Number(productId);
   if (Number.isNaN(id) || id <= 0) return;
   closeDrawer('#db-activity-drawer');
-  window.open('/?openProduct=' + encodeURIComponent(id), '_blank', 'noopener');
+  const btn = document.querySelector('.tabs [data-tab="products"]');
+  if (btn) btn.click();   // activates Products + triggers paLoad() on first open
+  // paLoad() is async; the self-mode editor (pdOpen) needs PA_PRODUCTS populated
+  // to find the row. Poll briefly, then open. Upstream mode loads by id and
+  // doesn't need the cache, so don't block on it there.
+  let tries = 0;
+  const tick = () => {
+    if (CATALOG_MODE === 'upstream' || (Array.isArray(PA_PRODUCTS) && PA_PRODUCTS.length)) {
+      paOpenEdit(id);
+      return;
+    }
+    if (tries++ < 30) { setTimeout(tick, 150); return; }
+    paOpenEdit(id);   // give up waiting — open anyway
+  };
+  tick();
 }
 
 // Programmatic tab-switch — clicks the tab button so the global switcher
