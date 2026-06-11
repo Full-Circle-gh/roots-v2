@@ -9,13 +9,11 @@ Severity key: 🔴 high (money / data-loss / cross-tenant) · 🟠 medium (wrong
 ## TL;DR
 
 - **30 confirmed bugs** across 5 scopes (34 false positives filtered out by the verification pass).
-- **16 fixed + deployed to prod** in 4 batched commits, each health-checked (app online, key endpoints 200). 1 more fixed in the mini-app (**needs your WeChat publish**).
-- **6 held for you** — all either need a business-policy call or change the behavior of existing live data. None are emergencies.
-- **The 3 I'd look at first when you wake:**
-  1. **Referral reward not clawed back on refund (1.1)** — a real, repeatable money leak; held only because the clawback policy (what if the referrer already spent it?) is your call.
-  2. **Subscribe-message consent burned on transient send failure (5.5)** — *already fixed/deployed*; flagging because it was quietly eating customers' order/refund push consent.
-  3. **Expiry timezone (4.4/4.7)** — *held*; coupons currently die ~8 a.m. on their last day. The fix is easy but it extends every existing coupon, so you should green-light it.
-- Two whole route files (`retail-inventory.js`, `retail-page-templates.js`) were running on the shared DB handle — harmless today (Roots only) but a cross-tenant leak the moment you enable data isolation. **Fixed now** (no-op for Roots) so it can't bite at cut-over.
+- **Round 1 (overnight):** 16 fixed + deployed, 1 mini-app fixed (needs publish), 6 held for review.
+- **Round 2 (after your go-ahead):** all 6 held items applied — 4 more deployed (`0b17eb4`: referral clawback 1.1, restock referral 1.2, partial-refund points 1.6, expiry tz 4.4/4.7), 1 more mini-app (`79bd8eb`: recent-buyers 3.1, needs publish), and 3.2 left as harmless dead code.
+- **Net: 20 fixes deployed to prod, 2 mini-app fixes awaiting WeChat publish, 1 optional prod-DB migration awaiting your go-ahead** (existing bare-date coupon expiries — see ledger). Every deploy was health-checked (app online, key endpoints 200).
+- **1.1 clawback policy chosen:** clamp the debit to available balance (never negative wallet) + log a shortfall for manual follow-up. One-line change if you later want full negative clawback.
+- Two whole route files (`retail-inventory.js`, `retail-page-templates.js`) were running on the shared DB handle — harmless today (Roots only) but a cross-tenant leak the moment you enable data isolation. **Fixed** (no-op for Roots) so it can't bite at cut-over.
 
 ---
 
@@ -236,12 +234,21 @@ Refund payout/reject/partial-approve call `notifyOrderStatusChange(id, null)`. T
 | 5.1 broadcast i18n data-no-i18n | deploy | ✅ deployed `8a72efe` |
 | 5.2 / 5.3 / 5.4 app.html i18n tables | deploy | ✅ deployed `3e00454` |
 | 4.2 5-spice badge + lowercase free_of | commit | ✅ committed `d8bc214` — **needs WeChat publish** |
-| **1.1 referral clawback on refund** | **HELD** | needs clawback policy (already-spent case) |
-| **1.2 wait-for-restock referral credit** | **HELD** | money path, wants your eyes |
-| **1.6 partial-refund points over-reversal** | **HELD** | operator-gated money |
-| **4.4 / 4.7 expiry timezone** | **HELD** | extends every live coupon's expiry ~16h; conscious call |
-| 3.1 recent-buyers timing | **HELD** | clean fix needs a *coordinated* backend+mini-app change (changing the response shape alone would break the live ticker until republish); low severity |
-| 3.2 image_aspect dead read | **left as-is** | harmless dead read (always `''`), and it sits inside your actively-edited PDP hero code — didn't want to step on in-progress work |
+| 1.1 referral clawback on refund | deploy | ✅ deployed `0b17eb4` — policy: **clamp-to-zero** (never negative wallet) + shortfall log |
+| 1.2 wait-for-restock referral credit | deploy | ✅ deployed `0b17eb4` (inventory `setOnOrdersPromoted` hook) |
+| 1.6 partial-refund points over-reversal | deploy | ✅ deployed `0b17eb4` (reversePoints clamped to isFull) |
+| 4.4 / 4.7 expiry timezone | deploy | ✅ deployed `0b17eb4` for **new/edited** coupons (`normalizeVoucherExpiry`). ⚠️ **existing bare-date rows need a one-time prod-DB migration — awaiting your go-ahead** (see below) |
+| 3.1 recent-buyers timing | commit | ✅ committed `79bd8eb` — **needs WeChat publish** (added opt-in `raw` flag to api.js; no backend shape change) |
+| 3.2 image_aspect dead read | **left as-is** | harmless dead read (always `''`); sits in your actively-edited PDP hero code — say the word and I'll remove it |
+
+### ⚠️ One pending data migration (needs your go-ahead)
+The expiry fix (4.4/4.7) is correct for all coupons created/edited from now on. To retroactively fix the handful of **existing** coupons stored with a bare date, run once against the prod DB:
+```sql
+UPDATE retail_vouchers
+   SET expires_at = substr(expires_at, 1, 10) || 'T15:59:59Z'
+ WHERE expires_at IS NOT NULL AND length(expires_at) = 10 AND expires_at LIKE '____-__-__';
+```
+I didn't run it autonomously (direct prod-data mutation outside the "apply fixes" scope). Say "run the expiry migration" and I'll do it with a DB backup first; or it's harmless to skip (those coupons just keep the old ~8 a.m.-last-day behavior until edited).
 
 ### Follow-up noted during the fix (not a regression)
 - The inventory **ledger** read (`routes/retail-inventory.js`) `LEFT JOIN`s control-plane `users` with tenant data-plane tables. Correct today on `tdb()` (Roots: `tdb()===db`), but once data isolation is on, a non-Roots tenant DB won't contain `users` — that join must be resolved out-of-band before cut-over. Flagged with a comment in the code.
