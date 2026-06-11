@@ -3007,6 +3007,12 @@ try {
   // scan stays fast as the product count grows.
   db.prepare('CREATE INDEX IF NOT EXISTS idx_store_products_pub_active ON store_products(is_published, is_active)').run();
   db.prepare('CREATE INDEX IF NOT EXISTS idx_store_products_category ON store_products(category)').run();
+  // The shop's default ("featured") sort is ORDER BY sort_order, name_en under a
+  // is_published = 1 filter. This composite lets SQLite satisfy both the filter
+  // and the ordering straight from the index — no full-table sort as the catalogue
+  // grows. (is_active is COALESCE'd, so it can't live in the index; it's a cheap
+  // residual filter on the already-ordered rows.)
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_store_products_sort ON store_products(is_published, sort_order, name_en)').run();
   // Release SKUs still held by soft-deleted rows. A deleted product is hidden
   // from the catalogue but used to keep its UNIQUE sku — blocking reuse of that
   // code and surfacing as "SKU in use, but I can't find it". Deletes now blank
