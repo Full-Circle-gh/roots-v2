@@ -886,7 +886,13 @@ router.get('/api/retail/products/:id/image', async (req, res) => {
   // to the original bytes so the image still renders.
   if (w && /^image\//i.test(mime) && !/svg/i.test(mime)) {
     try {
-      const out = await sharp(buf).resize({ width: w, withoutEnlargement: true }).toBuffer({ resolveWithObject: true });
+      let pipe = sharp(buf).resize({ width: w, withoutEnlargement: true });
+      // Re-encode at a grid-thumbnail quality — mozjpeg ~q72 is visually clean on
+      // a small card and roughly halves the bytes vs sharp's default q80. PNGs
+      // keep transparency (max zlib + palette quantise); other formats pass through.
+      if (/jpe?g/i.test(mime))     pipe = pipe.jpeg({ quality: 72, mozjpeg: true });
+      else if (/png/i.test(mime))  pipe = pipe.png({ compressionLevel: 9, palette: true });
+      const out = await pipe.toBuffer({ resolveWithObject: true });
       buf = out.data;
       outMime = 'image/' + out.info.format;
       if (ckey) {
