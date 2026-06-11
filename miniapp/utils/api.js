@@ -71,7 +71,9 @@ function request(path, opts = {}, _retried = false) {
           err.status = res.statusCode;
           return reject(err);
         }
-        resolve(body?.data ?? body);
+        // Default: unwrap to the data payload. opts.raw returns the FULL body
+        // so callers can read fields that sit alongside `data` (e.g. `timing`).
+        resolve(opts.raw ? body : (body?.data ?? body));
       },
       fail: (e) => reject(new Error('network_' + (e?.errMsg || 'unknown'))),
     });

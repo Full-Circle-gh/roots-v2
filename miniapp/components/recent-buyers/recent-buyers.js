@@ -68,7 +68,10 @@ Component({
   methods: {
     async load() {
       try {
-        const res = await api.get('/api/retail/social/recent-buyers');
+        // raw:true so we can read the top-level `timing` that sits alongside
+        // `data` (the default unwrap would drop it, leaving the ticker stuck on
+        // the hardcoded cadence and ignoring the operator's tuning).
+        const res = await api.request('/api/retail/social/recent-buyers', { raw: true });
         const items = Array.isArray(res) ? res : (res && res.data) || [];
         if (!items.length || this.data.dismissed) return;
         const t = (res && res.timing) || {};
