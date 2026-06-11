@@ -9078,10 +9078,14 @@ function renderBlockBody(b) {
       d.className = 'b-coupon cp-st-' + cpStyle;
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-pink)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
+      // Mirror the linked voucher live so the canvas matches the home page even
+      // when the coupon was renamed/repriced after this block was created.
+      const live = liveCouponDisplay(b);
       const k = getBi(b, 'kicker');
-      const t = getBi(b, 'title');
-      const sub = pickLang(b.subtitle_en, b.subtitle_cn);
-      const disc = pickLang(b.discount_label_en, b.discount_label_cn);
+      const t = live ? { en: live.title_en, cn: live.title_cn } : getBi(b, 'title');
+      const sub = live ? pickLang(live.subtitle_en, live.subtitle_cn) : pickLang(b.subtitle_en, b.subtitle_cn);
+      const disc = live ? pickLang(live.discount_label_en, live.discount_label_cn) : pickLang(b.discount_label_en, b.discount_label_cn);
+      const code = live ? live.code : b.code;
       const cta = pickLang(b.cta_label_en, b.cta_label_cn);
       d.innerHTML = `
         ${disc ? `<div class="cp-disc"><div class="cp-big">${escapeHtml(disc)}</div></div>` : ''}
@@ -9089,7 +9093,7 @@ function renderBlockBody(b) {
           <div class="cp-kicker">${biLabel(k.en, k.cn)}</div>
           <div class="cp-ttl">${biLabel(t.en, t.cn)}</div>
           ${sub ? `<div class="cp-sub">${escapeHtml(sub)}</div>` : ''}
-          ${b.code ? `<div class="cp-code">CODE · ${escapeHtml(b.code)}</div>` : ''}
+          ${code ? `<div class="cp-code">CODE · ${escapeHtml(code)}</div>` : ''}
         </div>
         ${cta ? `<div class="cp-cta"${btnPreviewStyle(b.btn_color)}>${escapeHtml(cta)}</div>` : ''}`;
       return d;
@@ -11912,6 +11916,18 @@ function couponDisplayFromVoucher(v) {
   };
 }
 
+// Resolve a coupon_block's LIVE display from its linked voucher — by id first,
+// then by code (the operator's stable identifier). Returns the same shape as
+// couponDisplayFromVoucher(), or null when nothing is linked/found. The canvas
+// preview + inspector both read this so the editor mirrors what the home page
+// renders (server does the same in /api/retail/config → refreshCouponBlocks).
+function liveCouponDisplay(b) {
+  const vs = state.vouchers || [];
+  const v = vs.find(x => String(x.id) === String(b.voucher_id))
+    || (b.code ? vs.find(x => String(x.code || '').toUpperCase() === String(b.code).toUpperCase()) : null);
+  return v ? couponDisplayFromVoucher(v) : null;
+}
+
 function buildCouponForm(m, b) {
   const secLayout  = inspectorSection(m, b.type, 'layout', T('Style', '样式'), { open: true });
   const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
@@ -11954,20 +11970,26 @@ function buildCouponForm(m, b) {
       })));
   }
 
-  secContent.appendChild(field(T('Small heading', '小标题'), '',
+  secContent.appendChild(field(T('Small heading', '小标题'), T('Your own marketing line above the headline — this is the one piece you write.', '标题上方的自定义营销文案 — 这是唯一由你自由填写的部分。'),
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  secContent.appendChild(field(T('Headline', '标题'), T('Display copy shown on the ticket — pre-filled from the coupon; edit it to suit the page.', '票券上显示的文案 — 已根据优惠券预填,可按页面需要修改。'),
-    txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  secContent.appendChild(field(T('Subtitle', '副标题'), T('Optional — e.g. minimum spend or expiry date. Pre-filled from the coupon.', '可选 — 例如最低消费或到期日期。已根据优惠券预填。'),
-    txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
+  // The headline, subtitle, discount + code all MIRROR the linked coupon live —
+  // the home page reads them straight from the voucher, so a renamed/repriced
+  // coupon updates automatically. Show them read-only here (from the live
+  // voucher, not the stored snapshot) so the editor reflects what will display.
+  const liveDisp = liveCouponDisplay(b);
+  const roLine = (text) => { const d = document.createElement('div'); d.className = 'helper'; d.textContent = text; return d; };
+  secContent.appendChild(field(T('Headline', '标题'), T('Follows the coupon — change it by editing the coupon’s name in Marketing.', '自动跟随优惠券 — 如需修改请在「营销」中编辑优惠券名称。'),
+    roLine(liveDisp ? pickLang(liveDisp.title_en, liveDisp.title_cn) : T('Pick a coupon above.', '请在上方选择优惠券。'))));
+  if (liveDisp && (liveDisp.subtitle_en || liveDisp.subtitle_cn)) {
+    secContent.appendChild(field(T('Subtitle', '副标题'), T('Follows the coupon (min spend / expiry).', '自动跟随优惠券(最低消费 / 到期)。'),
+      roLine(pickLang(liveDisp.subtitle_en, liveDisp.subtitle_cn))));
+  }
   // Discount label + code are READ-ONLY mirrors of the selected coupon — shown
   // for confidence, not editable, so the block can't advertise a fake offer.
-  const discRO = document.createElement('div');
-  discRO.className = 'helper';
-  discRO.textContent = (b.discount_label_en || b.code)
-    ? T('Big number: ', '左侧大号数字:') + (b.discount_label_en || '—') + (b.code ? '   ·   CODE: ' + b.code : '')
-    : T('Pick a coupon above to set the discount and code.', '请在上方选择优惠券以设置折扣与券码。');
-  secContent.appendChild(field(T('Discount & code', '折扣与券码'), '', discRO));
+  secContent.appendChild(field(T('Discount & code', '折扣与券码'), '',
+    roLine((liveDisp && (liveDisp.discount_label_en || liveDisp.code))
+      ? T('Big number: ', '左侧大号数字:') + (liveDisp.discount_label_en || '—') + (liveDisp.code ? '   ·   CODE: ' + liveDisp.code : '')
+      : T('Pick a coupon above to set the discount and code.', '请在上方选择优惠券以设置折扣与券码。'))));
   secContent.appendChild(field(T('Button text', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
   secContent.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. coupons · shop · category:5', '按钮跳转到哪里。例如 coupons · shop · category:5'),

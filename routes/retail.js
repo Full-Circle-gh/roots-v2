@@ -407,6 +407,68 @@ router.put('/api/retail-admin/category-tree', requireRetailAdmin, express.json({
   }
 });
 
+// Map a live voucher to a coupon_block's display fields. Mirrors
+// couponDisplayFromVoucher() in public/cms.html so the home page shows the same
+// facts the editor would seed. EN/CN differ only for free-shipping + min-spend.
+function couponFieldsFromVoucher(v) {
+  let discEn = '', discCn = '';
+  if (v.type === 'fixed_amount') { discEn = discCn = '¥' + (Number(v.value) || 0); }
+  else if (v.type === 'percent') { discEn = discCn = (Number(v.value) || 0) + '%'; }
+  else if (v.type === 'free_shipping') { discEn = 'FREE'; discCn = '包邮'; }
+  let subEn = (v.description || '').trim(), subCn = (v.description || '').trim();
+  if (!subEn) {
+    const parts = [];
+    if (Number(v.min_subtotal) > 0) parts.push({ en: 'Min spend ¥' + Number(v.min_subtotal), cn: '满 ' + Number(v.min_subtotal) + ' 元可用' });
+    if (v.expires_at) { const d = String(v.expires_at).slice(0, 10); parts.push({ en: 'Expires ' + d, cn: d + ' 截止' }); }
+    subEn = parts.map(p => p.en).join(' · ');
+    subCn = parts.map(p => p.cn).join(' · ');
+  }
+  return {
+    code: v.code || '',
+    discount_label_en: discEn, discount_label_cn: discCn,
+    title_en: v.title_en || v.code || '', title_cn: v.title_cn || v.title_en || v.code || '',
+    subtitle_en: subEn, subtitle_cn: subCn,
+  };
+}
+
+// Refresh every coupon_block in the served config from the live voucher it links
+// to, so a renamed/repriced coupon — or a new one reusing the same code — shows
+// on the home page without re-picking it in the editor. The kicker, CTA, colours
+// and style stay block-authored; the voucher facts (headline, subtitle, discount,
+// code) mirror the coupon. Match by voucher_id first, then fall back to the code
+// (the operator's stable identifier) when the id points at a gone/disabled row.
+function refreshCouponBlocks(cfg) {
+  let vById = null, vByCode = null;
+  const ensure = () => {
+    if (vById) return;
+    vById = new Map(); vByCode = new Map();
+    const rows = tdb().prepare(
+      `SELECT id, code, type, value, min_subtotal, expires_at, title_en, title_cn, description, is_active
+         FROM retail_vouchers`
+    ).all();
+    for (const v of rows) {
+      vById.set(String(v.id), v);
+      if (v.code) vByCode.set(String(v.code).toUpperCase(), v);
+    }
+  };
+  for (const page of ALLOWED_PAGES) {
+    const layout = cfg[page] && cfg[page].layout;
+    if (!Array.isArray(layout)) continue;
+    for (const b of layout) {
+      if (!b || b.type !== 'coupon_block' || (!b.voucher_id && !b.code)) continue;
+      ensure();
+      let v = b.voucher_id ? vById.get(String(b.voucher_id)) : null;
+      if ((!v || !v.is_active) && b.code) {
+        const byCode = vByCode.get(String(b.code).toUpperCase());
+        if (byCode && byCode.is_active) v = byCode;
+      }
+      if (!v || !v.is_active) continue;   // gone/disabled → leave the snapshot as-is
+      Object.assign(b, couponFieldsFromVoucher(v));
+      b.voucher_id = v.id;                // keep CLAIM pointed at the live coupon
+    }
+  }
+}
+
 router.get('/api/retail/config', (req, res) => {
   try {
     const cfg = loadConfig();
@@ -454,6 +516,9 @@ router.get('/api/retail/config', (req, res) => {
     if (!Number.isFinite(cfg.onboarding.version) || cfg.onboarding.version < 1) {
       cfg.onboarding.version = 1;
     }
+    // Mirror live vouchers into coupon_blocks so a renamed/repriced coupon (or
+    // one reusing the same code) updates the home page without re-picking it.
+    try { refreshCouponBlocks(cfg); } catch (e) { console.error('[retail/config refreshCouponBlocks]', e); }
     res.set('Cache-Control', 'public, max-age=60');
     res.json({ success: true, data: cfg });
   } catch (e) {
