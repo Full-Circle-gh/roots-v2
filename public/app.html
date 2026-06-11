@@ -6777,7 +6777,7 @@ async function viewRecipe(id) {
             <td style="font-family:monospace;font-size:11px;color:var(--muted)">${i.sku||'—'}</td>
             <td>
               <div style="font-weight:600">${i.name_en}</div>
-              ${i.name_cn?`<div style="font-size:11px;color:var(--muted)">${i.name_cn}</div>`:''}
+              ${i.name_cn?`<span style="display:block;font-size:11px;color:var(--muted)">${i.name_cn}</span>`:''}
             </td>
             <td class="ing-orig-qty" data-qty="${i.qty}" style="text-align:right;font-weight:600">${i.qty}</td>
             <td data-scaled-col class="ing-scaled-qty" data-qty="${i.qty}" style="text-align:right;color:var(--lime-text);font-weight:700;display:none"></td>
@@ -20160,7 +20160,7 @@ async function _salesRenderMiniapp(body) {
       ${_maSortable('ma_products', [
         { key:'name',    label:'Product · 产品', align:'left', numeric:false,
           value: r => r.name_en || '',
-          render: r => `<div style="font-weight:600">${esc(r.name_en||'—')}</div>${r.name_cn?`<div style="font-size:11px;color:var(--muted)">${esc(r.name_cn)}</div>`:''}` },
+          render: r => `<div style="font-weight:600">${esc(r.name_en||'—')}</div>${r.name_cn?`<span style="display:block;font-size:11px;color:var(--muted)">${esc(r.name_cn)}</span>`:''}` },
         { key:'lines',   label:'Lines · 行数',   align:'right', numeric:true,
           value: r => r.line_count, render: r => r.line_count },
         { key:'units',   label:'Units · 数量',   align:'right', numeric:true,
@@ -20642,7 +20642,7 @@ async function _salesRenderGzgrocery(body) {
       ${_maSortable('gz_products', [
         { key:'name', label:'Product · 产品', align:'left', numeric:false,
           value: r => r.name_en || '',
-          render: r => `<div style="font-weight:600">${esc(r.name_en||'—')}</div>${r.name_cn?`<div style="font-size:11px;color:var(--muted)">${esc(r.name_cn)}</div>`:''}${r.variant_label?`<div style="margin-top:3px"><span style="background:rgba(204,217,0,.15);color:#6d7a2a;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:700">🎨 ${esc(r.variant_label)}</span></div>`:''}` },
+          render: r => `<div style="font-weight:600">${esc(r.name_en||'—')}</div>${r.name_cn?`<span style="display:block;font-size:11px;color:var(--muted)">${esc(r.name_cn)}</span>`:''}${r.variant_label?`<div style="margin-top:3px"><span style="background:rgba(204,217,0,.15);color:#6d7a2a;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:700">🎨 ${esc(r.variant_label)}</span></div>`:''}` },
         { key:'sku', label:'SKU', align:'left', numeric:false,
           value: r => r.sku || '', render: r => `<span style="font-family:monospace;font-size:11px;color:var(--muted)">${esc(r.sku||'—')}</span>` },
         { key:'category', label:'Category · 分类', align:'left', numeric:false,
@@ -23698,7 +23698,7 @@ function _alertExpiryRows(rows, alreadyExpired) {
       const days = Math.round((new Date(r.expiry_date) - new Date(today)) / 86400000);
       const daysLabel = alreadyExpired ? `${Math.abs(days)} days ago · ${Math.abs(days)} 天前` : `in ${days}d · ${days} 天后`;
       return `<tr style="cursor:pointer" onclick="navigate('purchases');setTimeout(()=>viewPO(${r.po_id}),200)">
-      <td><strong>${esc(r.name_en||'—')}</strong>${r.name_cn?`<div style="font-size:11px;color:var(--muted)">${esc(r.name_cn)}</div>`:''}</td>
+      <td><strong>${esc(r.name_en||'—')}</strong>${r.name_cn?`<span style="display:block;font-size:11px;color:var(--muted)">${esc(r.name_cn)}</span>`:''}</td>
       <td style="font-family:monospace;font-size:11px">${esc(r.lot_number||'—')}</td>
       <td style="font-family:monospace;font-size:11px;color:var(--muted)">${esc(r.po_number||'—')}</td>
       <td style="text-align:right">${r.qty||0} ${esc(r.unit||'')}</td>
