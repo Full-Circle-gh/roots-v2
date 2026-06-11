@@ -297,7 +297,10 @@ Page({
     try {
       // No category filter at the API — we group client-side. Pull the full
       // catalog (cap raised server-side to 500) so every top/sub renders.
-      const params = ['limit=500'];
+      // slim=1 → card-only columns + downscaled thumbnail image URLs (the grid
+      // never renders descriptions/taglines or full-res photos). Big win on slow
+      // connections: ~350 KB → ~115 KB JSON and ~76 KB → ~kB per card image.
+      const params = ['limit=500', 'slim=1'];
       if (this.data.query)          params.push('q=' + encodeURIComponent(this.data.query));
       const sortVal = SORT_OPTIONS[this.data.sortIndex]?.value;
       if (sortVal)                  params.push('sort=' + sortVal);

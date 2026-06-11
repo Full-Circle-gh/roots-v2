@@ -30,6 +30,11 @@ let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
 const _feie = require('../lib/feie');   // Feie cloud-printer client (order auto-print)
 const qrpng = require('../lib/qrpng');  // zero-dep QR→PNG (renders the Alipay qr_code)
+// Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
+// that hasn't `npm install`ed sharp yet still serves full-size originals rather
+// than crashing — the image endpoint just skips the resize branch when null.
+let sharp = null;
+try { sharp = require('sharp'); } catch (e) { console.warn('[retail] sharp not available — image thumbnails disabled:', e.message); }
 const router = express.Router();
 
 // ── Public storefront per-tenant routing (Platform readiness ⑥) ───────────
@@ -616,21 +621,34 @@ const RETAIL_PRODUCT_COLS_LIST = RETAIL_PRODUCT_COLS
   .replace('p.description_blocks, p.use_block_design, p.page_template,', '')
   .replace('p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,', '');
 
+// Leanest set for the shop's full-catalogue grid pull (slim=1). The card renders
+// only name / price / image / badge / stock / variant — never the long
+// description, tagline or keywords — so drop those too. ~2.4 KB/row saved → a
+// 97-product shop pull drops from ~350 KB to ~115 KB. Shared list consumers that
+// DO render copy (home product_grid blocks) keep the fuller RETAIL_PRODUCT_COLS_LIST.
+const RETAIL_PRODUCT_COLS_CARD = RETAIL_PRODUCT_COLS_LIST
+  .replace('p.description_en, p.description_cn, p.description_format,', '')
+  .replace('p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,', '');
+
 // Swap a list row's heavy inline base64 primary photo for a tiny streamed-image
 // URL the mini-app lazy-loads + caches (see GET /api/retail/products/:id/image).
 // Pairs with RETAIL_PRODUCT_COLS_LIST (which already collapsed the blob to a
 // 'data:' marker). ABSOLUTE URLs so the live mini-app renders them without
 // absUrl(). Mutates + returns the row; drops the helper-only updated_at /
 // has_group_image fields. baseUrl = `${req.protocol}://${req.get('host')}`.
-function lazifyProductImage(r, baseUrl) {
+// thumbW (optional): when set, the streamed-image URL carries &w=<thumbW> so the
+// image route returns a downscaled JPEG/PNG instead of the full-res original —
+// the shop grid (slim=1) uses this so a 97-card page pulls ~kB thumbnails, not MB.
+function lazifyProductImage(r, baseUrl, thumbW) {
   const hasGroupImg = r.has_group_image;
   delete r.has_group_image;
+  const wq = thumbW ? `&w=${thumbW}` : '';
   if (typeof r.image_data === 'string' && /^data:/i.test(r.image_data)) {
-    r.image_data = `${baseUrl}/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`;
+    r.image_data = `${baseUrl}/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}${wq}`;
   } else if (!r.image_data && !r.image_url && hasGroupImg) {
     // Variant with no photo of its own — point at its image route, which
     // resolves a sibling's photo ("fallback when empty").
-    r.image_data = `${baseUrl}/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`;
+    r.image_data = `${baseUrl}/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}${wq}`;
   }
   delete r.updated_at;
   return r;
@@ -774,7 +792,13 @@ router.get('/api/retail/products', (req, res) => {
   const limit  = Math.min(parseInt(req.query.limit  || '50', 10) || 50, 500);
   const offset = Math.max(parseInt(req.query.offset || '0',  10) || 0, 0);
 
-  let sql = `SELECT ${RETAIL_PRODUCT_COLS_LIST}, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
+  // slim=1 (the shop grid): leanest card columns + downscaled thumbnail image
+  // URLs. Other consumers (home product_grid blocks) omit it and get the fuller
+  // copy fields + full-res images.
+  const slim = req.query.slim === '1' || req.query.slim === 'true';
+  const cols = slim ? RETAIL_PRODUCT_COLS_CARD : RETAIL_PRODUCT_COLS_LIST;
+  const thumbW = slim ? 480 : 0;
+  let sql = `SELECT ${cols}, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
              WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`;
   const params = [];
   if (q) {
@@ -802,7 +826,7 @@ router.get('/api/retail/products', (req, res) => {
   // this just builds the lazy-loaded URL. trust-proxy is on (server.js) so
   // req.protocol respects X-Forwarded-Proto.
   const baseUrl = `${req.protocol}://${req.get('host')}`;
-  for (const r of rows) lazifyProductImage(r, baseUrl);
+  for (const r of rows) lazifyProductImage(r, baseUrl, thumbW);
   attachSoldCounts(rows);
   resolveAutoBadges(rows);
   const total = tdb().prepare(`SELECT COUNT(*) AS n FROM store_products p
@@ -824,9 +848,27 @@ router.get('/api/retail/products', (req, res) => {
 // (?v=updated_at busts it when the photo changes). Plain-URL images redirect.
 // Only published + active products are exposed. This is the public twin of
 // /api/retail-admin/products/:id/image (no auth, public cache).
-router.get('/api/retail/products/:id/image', (req, res) => {
+// In-process cache of resized thumbnails. Keyed per tenant + id + width + photo
+// version (?v=updated_at) so a photo change or a different size never collides.
+// Bounded LRU-ish (oldest key evicted at the cap); thumbnails are a few kB each.
+const THUMB_CACHE = new Map();
+const THUMB_CACHE_MAX = 800;
+router.get('/api/retail/products/:id/image', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).end();
+  // Optional thumbnail width — clamp to a sane range; only ever downsizes.
+  let w = parseInt(req.query.w, 10);
+  w = (sharp && Number.isFinite(w)) ? Math.max(80, Math.min(1200, w)) : 0;
+  const ver  = String(req.query.v || '');
+  const ckey = w ? `${tenantCacheKey()}|${id}|w${w}|${ver}` : '';
+  if (ckey) {
+    const hit = THUMB_CACHE.get(ckey);
+    if (hit) {
+      res.set('Content-Type', hit.mime);
+      res.set('Cache-Control', 'public, max-age=31536000, immutable');
+      return res.send(hit.buf);
+    }
+  }
   const gate = tdb().prepare(
     `SELECT id FROM store_products
       WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
@@ -837,8 +879,23 @@ router.get('/api/retail/products/:id/image', (req, res) => {
   const m = /^data:([^;,]*?)(;base64)?,([\s\S]*)$/.exec(data);
   if (!m) return res.redirect(String(data));
   const mime = m[1] || 'application/octet-stream';
-  const buf  = m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]), 'utf8');
-  res.set('Content-Type', mime);
+  let buf  = m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]), 'utf8');
+  let outMime = mime;
+  // Downscale on the fly when a width is requested (sharp keeps the source
+  // format). SVGs are vector — never rasterize them. On any failure fall back
+  // to the original bytes so the image still renders.
+  if (w && /^image\//i.test(mime) && !/svg/i.test(mime)) {
+    try {
+      const out = await sharp(buf).resize({ width: w, withoutEnlargement: true }).toBuffer({ resolveWithObject: true });
+      buf = out.data;
+      outMime = 'image/' + out.info.format;
+      if (ckey) {
+        if (THUMB_CACHE.size >= THUMB_CACHE_MAX) THUMB_CACHE.delete(THUMB_CACHE.keys().next().value);
+        THUMB_CACHE.set(ckey, { buf, mime: outMime });
+      }
+    } catch (e) { /* keep original bytes */ }
+  }
+  res.set('Content-Type', outMime);
   res.set('Cache-Control', 'public, max-age=31536000, immutable');
   res.send(buf);
 });
@@ -4688,7 +4745,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     //      the code. Without this, any leaked private code is redeemable.
     //   3. per-customer redemption cap
     let ok = !!candidate;
-    if (ok && !candidate.is_public) {
+    // A signup voucher (auto_grant_signup) is ALWAYS grant-gated, even if it's
+    // also flagged is_public — otherwise a returning customer (whose grant was
+    // revoked / never issued, e.g. migrated OUT1N customers) could redeem it as
+    // a public code. So require an unused personal grant when the code is
+    // private OR a signup voucher.
+    if (ok && (!candidate.is_public || candidate.auto_grant_signup)) {
       const grant = tdb().prepare(
         `SELECT 1 FROM retail_customer_vouchers
           WHERE customer_id = ? AND voucher_id = ? AND used_at IS NULL LIMIT 1`
@@ -5813,6 +5875,7 @@ router.get('/api/retail/vouchers/public', (req, res) => {
             per_customer_limit, expires_at, title_en, title_cn, description
        FROM retail_vouchers
       WHERE is_active = 1 AND is_public = 1
+        AND auto_grant_signup = 0          -- signup vouchers are grant-only, never browseable
         AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)
         AND (max_uses IS NULL OR used_count < max_uses)
       ORDER BY created_at DESC
@@ -5877,8 +5940,10 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
   if (!v) return res.status(404).json({ success: false, error: 'not_found' });
   // Ownership gate — a private/granted code is only valid for a customer who
   // holds an unused personal grant for it. Return the same not_found as a
-  // nonexistent code so private codes can't be enumerated/probed.
-  if (!v.is_public) {
+  // nonexistent code so private codes can't be enumerated/probed. Signup
+  // vouchers (auto_grant_signup) are grant-gated too even when public, so a
+  // returning customer with no grant (e.g. migrated OUT1N) can't redeem one.
+  if (!v.is_public || v.auto_grant_signup) {
     const grant = tdb().prepare(
       `SELECT 1 FROM retail_customer_vouchers
         WHERE customer_id = ? AND voucher_id = ? AND used_at IS NULL LIMIT 1`
