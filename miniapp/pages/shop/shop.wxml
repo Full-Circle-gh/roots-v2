@@ -106,38 +106,42 @@
         <!-- TOP LEVEL — ALL + top categories. A ›-chevron marks the ones
              that drill into their own subcategories (≥2 subs). -->
         <block wx:if="{{!drillTop}}">
-          <view id="s-top-anchor"
-                class="side-tab {{!activeCategory ? 'on' : ''}}"
-                data-name="" bindtap="setCategory">
-            <text class="f-bear">{{seeAll}}</text>
-          </view>
-          <view wx:for="{{sections}}" wx:key="id"
-                id="s-{{item.id}}"
-                class="side-tab {{item.drillable ? 'has-chev' : ''}} {{activeCategory === item.name ? 'on' : ''}}"
-                data-name="{{item.name}}" bindtap="onTopTab">
-            <text class="f-bear">{{item.label}}</text>
-            <text wx:if="{{item.drillable}}" class="side-chev">›</text>
+          <view class="rail-pane">
+            <view id="s-top-anchor"
+                  class="side-tab {{!activeCategory ? 'on' : ''}}"
+                  data-name="" bindtap="setCategory">
+              <text class="side-label f-bear">{{seeAll}}</text>
+            </view>
+            <view wx:for="{{sections}}" wx:key="id"
+                  id="s-{{item.id}}"
+                  class="side-tab {{item.drillable ? 'has-chev' : ''}} {{activeCategory === item.name ? 'on' : ''}}"
+                  data-name="{{item.name}}" bindtap="onTopTab">
+              <text class="side-label f-bear">{{item.label}}</text>
+              <text wx:if="{{item.drillable}}" class="side-chev">›</text>
+            </view>
           </view>
         </block>
 
         <!-- DRILLED — back bar (the exit) + parent label + ALL-of-category
              + this category's subcategories as jump targets. -->
         <block wx:else>
-          <view id="sub-top" class="side-back" bindtap="drillBack">
-            <text class="side-back-chev">‹</text>
-            <text class="side-back-txt f-bear">{{backLabel}}</text>
-          </view>
-          <view class="side-parent f-toni">{{drillLabel}}</view>
-          <view id="sub-all"
-                class="side-tab side-sub {{!activeSub ? 'on' : ''}}"
-                data-sub="" bindtap="setSub">
-            <text class="f-bear">{{seeAll}}</text>
-          </view>
-          <view wx:for="{{subTabs}}" wx:key="id"
-                id="sub-{{item.id}}"
-                class="side-tab side-sub {{activeSub === item.id ? 'on' : ''}}"
-                data-sub="{{item.id}}" bindtap="setSub">
-            <text class="f-bear">{{item.label}}</text>
+          <view class="rail-pane">
+            <view id="sub-top" class="side-back" bindtap="drillBack">
+              <text class="side-back-chev">‹</text>
+              <text class="side-back-txt f-bear">{{backLabel}}</text>
+            </view>
+            <view class="side-parent f-toni">{{drillLabel}}</view>
+            <view id="sub-all"
+                  class="side-tab side-sub {{!activeSub ? 'on' : ''}}"
+                  data-sub="" bindtap="setSub">
+              <text class="side-label f-bear">{{seeAll}}</text>
+            </view>
+            <view wx:for="{{subTabs}}" wx:key="id"
+                  id="sub-{{item.id}}"
+                  class="side-tab side-sub {{activeSub === item.id ? 'on' : ''}}"
+                  data-sub="{{item.id}}" bindtap="setSub">
+              <text class="side-label f-bear">{{item.label}}</text>
+            </view>
           </view>
         </block>
       </scroll-view>
