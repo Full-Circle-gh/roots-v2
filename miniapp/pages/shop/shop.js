@@ -72,7 +72,6 @@ const LAYOUT_OPTIONS = [
   { key: 'list-compact', icon: '≡',  en: 'List compact',       cn: '列表（紧凑）' },
   { key: 'grid-2col',    icon: '⊞',  en: 'Grid 2-col',          cn: '网格 2 列' },
   { key: 'grid-3col',    icon: '⊟',  en: 'Grid 3-col',          cn: '网格 3 列' },
-  { key: 'gallery',      icon: '▢',  en: 'Gallery',             cn: '画廊' },
 ];
 
 const LAYOUT_STORAGE_KEY = 'shop_layout_pref';
