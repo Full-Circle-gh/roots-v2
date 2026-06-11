@@ -2321,6 +2321,12 @@
       .vw-note .ni { flex: 0 0 auto; color: var(--tea, #6B8E6F); margin-top: 1px; display: flex; }
       .vw-note.brass { border-left-color: var(--brass, #b08d4a); } .vw-note.brass .ni { color: var(--brass, #b08d4a); }
       .vw-note.red { border-left-color: #b2564b; } .vw-note.red .ni { color: #b2564b; }
+      /* Step transitions — calm fade-out / fade-in-and-rise on the platform's zen ease. */
+      #vw-body { transition: opacity .24s var(--ease-out, cubic-bezier(.16, 1, .3, 1)); }
+      #vw-body.vw-leaving { opacity: 0; }
+      @keyframes vwStepIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+      #vw-body.vw-entering { animation: vwStepIn .45s var(--ease-out, cubic-bezier(.16, 1, .3, 1)); }
+      @media (prefers-reduced-motion: reduce) { #vw-body, #vw-body.vw-leaving, #vw-body.vw-entering { transition: none; animation: none; opacity: 1; } }
     </style>
     <div id="vw-bg" class="pu-editor-bg">
       <div class="pu-editor vw" style="width: 880px; max-width: 94vw;">

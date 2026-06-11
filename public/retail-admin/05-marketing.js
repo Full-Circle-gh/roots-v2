@@ -310,7 +310,26 @@ async function vwOpen() {
   catch { _vwVouchers = []; }
 }
 function vwClose() { $('#vw-bg').classList.remove('show'); _vw = null; }
-function vwGoto(step) { if (!_vw) return; _vw.step = step; vwRender(); }
+// Step navigation fades the current step out, swaps content while invisible,
+// then fades + rises the next step in — matching the platform's calm zen motion.
+// In-step re-renders (vwSetType/vwSetPath…) call vwRender() directly, so only
+// Next/Back/goal-pick animate. Respects prefers-reduced-motion.
+function vwGoto(step) {
+  if (!_vw) return;
+  const body = $('#vw-body');
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!body || reduce) { _vw.step = step; vwRender(); if (body) body.scrollTop = 0; return; }
+  body.classList.remove('vw-entering');
+  body.classList.add('vw-leaving');
+  setTimeout(() => {
+    _vw.step = step;
+    vwRender();
+    body.scrollTop = 0;
+    body.classList.remove('vw-leaving');
+    void body.offsetWidth;            // restart the keyframe
+    body.classList.add('vw-entering');
+  }, 240);
+}
 
 // Preset state from a chosen goal, then drop into the first step.
 function vwApplyGoal(goal) {
