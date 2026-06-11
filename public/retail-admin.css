@@ -3238,6 +3238,13 @@
     100% { background: transparent;              box-shadow: inset 0   0 0 transparent; }
   }
   tbody tr.order-row.is-fresh { animation: order-row-flash 6s ease-out 1; }
+  /* One-shot highlight for a row a deep-link jumped to (e.g. an activity-feed
+     event opening its Feedback report). Same lime wash, shorter + self-clearing. */
+  @keyframes row-flash {
+    0%   { background: rgba(107, 142, 111, .28); box-shadow: inset 3px 0 0 var(--accent); }
+    100% { background: transparent;              box-shadow: inset 0   0 0 transparent; }
+  }
+  tbody tr.row-flash { animation: row-flash 1.6s ease-out 1; }
   /* Unread order — a Tea "NEW" chip + bold order#/customer + a soft Tea wash
      over the whole row, persisting from arrival until any operator opens the
      detail (server seen_at). The wash is an inset box-shadow so it layers above

@@ -2712,19 +2712,52 @@ function dashFeedClick(row, ev) {
       dashOpenOrderFromFeed(refId);
       break;
     case 'topup':
-      dashJumpTab('topup');
+    case 'new_customer':
+      dashOpenCustomerFromFeed(refId);
       break;
     case 'low_stock':
     case 'out_of_stock':
       dashOpenProductFromFeed(refId);
       break;
-    case 'new_customer':
-      dashJumpTab('customers');
-      break;
     case 'feedback':
-      dashJumpTab('feedback');
+      dashOpenFeedbackFromFeed(refId);
       break;
   }
+}
+
+// Jump from a new-customer / top-up activity event straight to that customer's
+// detail drawer (same drawer the Customers tab opens), over the dashboard. If
+// the id is missing (e.g. a top-up with no linked customer) fall back to the
+// Customers tab so the click still lands somewhere sensible.
+function dashOpenCustomerFromFeed(customerId) {
+  closeDrawer('#db-activity-drawer');
+  const id = Number(customerId);
+  if (!customerId || Number.isNaN(id) || id <= 0) { dashJumpTab('customers'); return; }
+  cuOpenDetail(id);
+}
+
+// Jump from a feedback activity event straight to that report: switch to the
+// Feedback tab, then scroll to and briefly highlight its row once the table
+// has loaded.
+function dashOpenFeedbackFromFeed(feedbackId) {
+  closeDrawer('#db-activity-drawer');
+  dashJumpTab('feedback');
+  const id = Number(feedbackId);
+  if (!feedbackId || Number.isNaN(id) || id <= 0) return;
+  // The tab's first open kicks off an async loadFeedback(); poll briefly for
+  // the row to appear, then reveal it.
+  let tries = 0;
+  const tick = () => {
+    const row = document.querySelector(`#feedback-table tbody tr[data-id="${id}"]`);
+    if (row) {
+      row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      row.classList.add('row-flash');
+      setTimeout(() => row.classList.remove('row-flash'), 1600);
+      return;
+    }
+    if (tries++ < 20) setTimeout(tick, 150);
+  };
+  setTimeout(tick, 150);
 }
 
 // Jump from an activity-feed event straight to its order, opened in the

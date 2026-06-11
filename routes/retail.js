@@ -6524,7 +6524,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
 
     // Wallet top-ups — real money in, settled (status='success', paid_at set).
     const topups = tdb().prepare(`
-      SELECT t.id, t.amount, t.paid_at,
+      SELECT t.id, t.customer_id, t.amount, t.paid_at,
              COALESCE(NULLIF(TRIM(c.nickname), ''), '') AS buyer
         FROM retail_topup_transactions t
         LEFT JOIN retail_customers c ON c.id = t.customer_id
@@ -6534,7 +6534,8 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
     for (const r of topups) events.push({
       type: 'topup',
       ts: parseTs(r.paid_at),
-      ref_type: 'customer', ref_id: r.id,
+      // ref_id is the customer so the activity row jumps straight to their page.
+      ref_type: 'customer', ref_id: r.customer_id,
       payload: { amount: r.amount, buyer: r.buyer },
     });
 
