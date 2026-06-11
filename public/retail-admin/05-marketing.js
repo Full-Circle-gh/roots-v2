@@ -360,7 +360,7 @@ function vwFlags() {
 function vwTicketHtml() {
   const minTxt = Number(_vw.min) > 0 ? ('orders ¥' + Number(_vw.min) + '+ · 满 ¥' + Number(_vw.min)) : 'any order · 无门槛';
   const who = _vw.path === 'welcome' ? 'new customers · 新顾客'
-            : _vw.path === 'auto'   ? 'everyone, automatic · 所有人 · 自动'
+            : _vw.path === 'auto'   ? 'automatic, no code · 自动,无需编码'
             : _vw.path === 'public' ? 'anyone can use · 人人可用'
             : 'customers you pick · 你指定的顾客';
   const ttl = _vw.title_en || vwGenLabelEn();
@@ -412,7 +412,7 @@ function vwRender() {
 function vwFrontHtml() {
   const goals = [
     ['welcome', 'gift', 'Welcome gift · 新人礼', 'A thank-you for new customers · 给新顾客的感谢'],
-    ['sale', 'tag', 'Store sale · 店铺促销', 'A discount that comes off by itself · 自动抵扣的折扣'],
+    ['sale', 'tag', 'Store sale · 店铺促销', 'An automatic discount, no code needed · 自动折扣,无需编码'],
     ['public', 'ticket', 'A coupon anyone can use · 人人可领', 'People find it and tap to save · 顾客自己领取'],
     ['shipping', 'truck', 'Free shipping · 免运费', 'Take the delivery fee off · 减免运费'],
     ['fresh', 'pencil', 'Start fresh · 从头开始', 'Set it up myself · 自己设置'],
@@ -458,7 +458,7 @@ function vwNextDeal() {
 
 function vwWhoHtml() {
   const paths = [
-    ['auto', 'bolt', 'Comes off the price by itself · 自动抵扣', 'Everyone, at checkout. No code. Best deal wins. · 所有人结账时自动减,无需输入,取最优'],
+    ['auto', 'bolt', 'Automatic — no code needed · 自动 — 无需编码', 'Everyone gets it at checkout. The best deal wins. · 所有人结账时都享,自动取最优'],
     ['public', 'ticket', 'Anyone can use it · 人人可用', 'Shows in the app; a shared code also works. · 显示在小程序,分享的码也能用'],
     ['welcome', 'gift', 'A welcome gift for new customers · 新人礼', 'Goes into new customers’ coupons; they tap it at checkout. · 自动进入新顾客的优惠券,结账时使用'],
     ['pick', 'users', 'I choose who gets it · 我来指定', 'You pick the customers after saving. · 保存后你来挑选顾客'],
