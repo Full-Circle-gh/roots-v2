@@ -123,7 +123,7 @@
         <!-- DRILLED — back bar (the exit) + parent label + ALL-of-category
              + this category's subcategories as jump targets. -->
         <block wx:else>
-          <view class="side-back" bindtap="drillBack">
+          <view id="sub-top" class="side-back" bindtap="drillBack">
             <text class="side-back-chev">‹</text>
             <text class="side-back-txt f-bear">{{backLabel}}</text>
           </view>

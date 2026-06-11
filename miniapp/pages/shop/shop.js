@@ -692,7 +692,7 @@ Page({
     const threshold = h > 0 ? Math.round(h * 0.3) : LIST_STICKY_OFFSET_PX;
     const cutoff = scrollTop + threshold;
     if (scrollTop <= 2 || cutoff < this._groupOffsets[0].top) {
-      if (this.data.activeSub !== '') this.setData({ activeSub: '', sidebarScrollId: 'sub-all' });
+      if (this.data.activeSub !== '') this.setData({ activeSub: '', sidebarScrollId: 'sub-top' });
       return;
     }
     let activeId = this._groupOffsets[0].id;
@@ -730,7 +730,7 @@ Page({
       activeSub: '',
       activeCategory: name,
       visibleSections: [section],
-      sidebarScrollId: 'sub-all',
+      sidebarScrollId: 'sub-top',
     });
     // Once the filtered list has rendered: jump it to the top + measure the
     // sub anchors so scroll-sync works.
@@ -768,7 +768,7 @@ Page({
     this._suppressScrollUntil = Date.now() + 500;
     this.setData({
       activeSub: gid,
-      sidebarScrollId: gid ? 'sub-' + gid : 'sub-all',
+      sidebarScrollId: gid ? 'sub-' + gid : 'sub-top',
       scrollIntoListId: gid ? 'g-' + gid : 'top-anchor',
     });
     setTimeout(() => this.setData({ scrollIntoListId: '' }), 400);
