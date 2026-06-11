@@ -4,7 +4,8 @@
 // template stays declarative.
 
 const lang = require('../../utils/lang');
-const { BASE } = require('../../utils/api');
+const api = require('../../utils/api');
+const { BASE } = api;
 
 // Block types whose root view paints a full-panel background. When framed,
 // these must fill the frame edge-to-edge (kill the frame's inner padding) so
@@ -935,6 +936,10 @@ Component({
           out.bg = color(b.bg_color || 'pink-guava');
           out.fg = color(b.fg_color || 'ink');
           out.coupon = {
+            // voucher_id links the block to a real coupon (set by the editor's
+            // coupon picker). When present, CLAIM grants it straight into the
+            // wallet; when absent (legacy free-typed block) CLAIM just navigates.
+            voucherId: b.voucher_id || null,
             kicker:   lang.pick(b.kicker_en,   b.kicker_cn,   L),
             title:    lang.pick(b.title_en,    b.title_cn,    L),
             subtitle: lang.pick(b.subtitle_en, b.subtitle_cn, L),
@@ -1919,8 +1924,35 @@ Component({
       if (target) this.triggerEvent('cta', { target });
     },
     onCouponCtaTap() {
-      const target = this.data.coupon?.ctaTarget || 'coupons';
-      this.triggerEvent('cta', { target });
+      const c = this.data.coupon || {};
+      const target = c.ctaTarget || 'coupons';
+      // Need a real coupon to claim — by id (picker) or by code (older block).
+      // With neither (legacy free-typed block) → behave as before: navigate.
+      if (!c.voucherId && !c.code) { this.triggerEvent('cta', { target }); return; }
+      if (this._claiming) return;
+      this._claiming = true;
+      const cn = this.properties.lang === 'cn';
+      const payload = c.voucherId ? { voucher_id: c.voucherId } : { code: c.code };
+      api.post('/api/retail/vouchers/claim', payload)
+        .then((data) => {
+          const already = data && data.already;
+          wx.showToast({
+            title: cn ? (already ? '已在卡包' : '领取成功') : (already ? 'In your wallet' : 'Claimed!'),
+            icon: 'success',
+          });
+          // Hand off to the host page (usually routes to the Coupons wallet).
+          this.triggerEvent('cta', { target });
+        })
+        .catch((err) => {
+          const code = (err && err.body && err.body.error) || '';
+          let msg = cn ? '无法领取' : 'Could not claim';
+          if (code === 'not_claimable')                       msg = cn ? '此券不可领取' : 'Not available to claim';
+          else if (code === 'limit_reached')                  msg = cn ? '已达领取上限' : 'Already claimed';
+          else if (code === 'unavailable' || code === 'not_found') msg = cn ? '优惠券已失效' : 'Coupon unavailable';
+          else if (err && /unauth/.test(err.message || ''))   msg = cn ? '请重新登录' : 'Please sign in';
+          wx.showToast({ title: msg, icon: 'none' });
+        })
+        .finally(() => { this._claiming = false; });
     },
     onCouponCodeTap() {
       const code = this.data.coupon?.code;

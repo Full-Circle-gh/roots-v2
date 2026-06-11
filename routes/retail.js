@@ -5934,6 +5934,77 @@ router.get('/api/retail/my-vouchers', requireRetailAuth, (req, res) => {
   res.json({ success: true, data: rows });
 });
 
+// Customer taps CLAIM on the home "Coupon" block. Grants the linked voucher
+// into their wallet so it shows in Coupons and applies at checkout with no
+// code typing. Idempotent: a second tap just reports the existing grant (the
+// unique (customer_id, voucher_id) key on retail_customer_vouchers stops it
+// from stacking). Eligibility is left untouched — we only self-grant coupons
+// that are genuinely claimable (active, unexpired, stock left, public AND not
+// signup-only). Signup-only vouchers (auto_grant_signup) stay governed by
+// reconcileSignupVouchers, so a returning OUT1N customer remains suppressed;
+// private gifts are only acknowledged, never newly handed out, here.
+router.post('/api/retail/vouchers/claim', requireRetailAuth, express.json(), (req, res) => {
+  // Prefer voucher_id (set by the editor's coupon picker); fall back to code
+  // so a coupon block that predates the picker (code only, no id) still works
+  // without the operator having to re-pick + republish it.
+  const voucherId = Number(req.body?.voucher_id || 0);
+  const code = String(req.body?.code || '').trim().toUpperCase();
+  if (!voucherId && !code) return res.status(400).json({ success: false, error: 'voucher_required' });
+
+  const v = voucherId
+    ? tdb().prepare(
+        `SELECT * FROM retail_vouchers
+           WHERE id = ? AND is_active = 1
+             AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)
+             AND (max_uses IS NULL OR used_count < max_uses)`
+      ).get(voucherId)
+    : tdb().prepare(
+        `SELECT * FROM retail_vouchers
+           WHERE UPPER(code) = ? AND is_active = 1
+             AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)
+             AND (max_uses IS NULL OR used_count < max_uses)`
+      ).get(code);
+  if (!v) return res.status(404).json({ success: false, error: 'unavailable' });
+
+  // Already in their wallet (or already used)? Idempotent success — surface
+  // the existing grant rather than creating a second one.
+  const existing = tdb().prepare(
+    `SELECT used_at FROM retail_customer_vouchers
+      WHERE customer_id = ? AND voucher_id = ? LIMIT 1`
+  ).get(req.customer.id, v.id);
+  if (existing) {
+    return res.json({ success: true, data: { voucher_id: v.id, code: v.code, already: true, used: !!existing.used_at } });
+  }
+
+  // No grant yet — only PUBLIC, non-signup coupons can be self-claimed. This
+  // keeps signup-voucher eligibility exactly as reconcileSignupVouchers set it
+  // (returning customers stay suppressed) and never leaks a private operator
+  // gift to someone who wasn't granted it.
+  if (!v.is_public || v.auto_grant_signup) {
+    return res.status(403).json({ success: false, error: 'not_claimable' });
+  }
+
+  // Respect the per-customer cap — no point granting a coupon they've already
+  // redeemed up to its limit.
+  if (v.per_customer_limit && v.per_customer_limit > 0) {
+    const used = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_orders
+        WHERE customer_id = ? AND voucher_code = ? AND status NOT IN ('cancelled')`
+    ).get(req.customer.id, v.code).n;
+    if (used >= v.per_customer_limit) {
+      return res.status(409).json({ success: false, error: 'limit_reached' });
+    }
+  }
+
+  tdb().prepare(
+    `INSERT OR IGNORE INTO retail_customer_vouchers
+       (customer_id, voucher_id, granted_by, granted_note)
+     VALUES (?, ?, NULL, 'Claimed from storefront')`
+  ).run(req.customer.id, v.id);
+
+  res.json({ success: true, data: { voucher_id: v.id, code: v.code, already: false } });
+});
+
 // Customer validates a code at checkout. Returns the discount + voucher
 // id without committing — actual increment happens in order create.
 router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), (req, res) => {
