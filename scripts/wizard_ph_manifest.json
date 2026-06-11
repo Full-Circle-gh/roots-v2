@@ -1,0 +1,30 @@
+[
+  {
+    "slug": "01_front",
+    "caption": "Front door"
+  },
+  {
+    "slug": "02_step1",
+    "caption": "Step 1 · What it is"
+  },
+  {
+    "slug": "03_step2",
+    "caption": "Step 2 · Price & stock"
+  },
+  {
+    "slug": "04_step3",
+    "caption": "Step 3 · Details"
+  },
+  {
+    "slug": "05_step4",
+    "caption": "Step 4 · Review"
+  },
+  {
+    "slug": "06_finish",
+    "caption": "Finish · missing info"
+  },
+  {
+    "slug": "07_import",
+    "caption": "Import · map a sheet"
+  }
+]

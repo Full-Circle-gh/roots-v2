@@ -1,0 +1,30 @@
+[
+  {
+    "slug": "01_front",
+    "caption": "Front door — meet people where their product already lives."
+  },
+  {
+    "slug": "02_step1",
+    "caption": "Step 1 — What it is. Pre-filled if they snapped or pasted; just confirm."
+  },
+  {
+    "slug": "03_step2",
+    "caption": "Step 2 — the one real fork. “Yes” moves price &amp; stock per option."
+  },
+  {
+    "slug": "04_step3",
+    "caption": "Step 3 — Details. One paste fills the facts; you glance and confirm."
+  },
+  {
+    "slug": "05_step4",
+    "caption": "Step 4 — Review &amp; publish. Designed page is the default; draft-first."
+  },
+  {
+    "slug": "06_finish",
+    "caption": "Finish — a gap queue batched by field. Approve the AI, don’t type."
+  },
+  {
+    "slug": "07_import",
+    "caption": "Import — AI maps any sheet to our fields; confirm once, lands as drafts."
+  }
+]

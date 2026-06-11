@@ -1,0 +1,72 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont/dist/tabler-icons.min.css">
+<style>
+body{margin:0;background:#fff;}
+.dw{width:1000px;--ink:#1d1d1a;--brass:#b08d4a;--tea:#6B8E6F;--oat:#faf7f0;--oat2:#f2efe6;--line:#e3ded2;--mut:#6b6b63;padding:18px;font-family:'IBM Plex Sans',sans-serif;}
+.dw *{box-sizing:border-box;}
+.dwin{background:#fff;border:.5px solid var(--line);border-radius:14px;overflow:hidden;}
+.dtop{background:var(--ink);color:#fff;display:flex;align-items:center;gap:12px;padding:11px 18px;font-size:13px;}
+.dtop .wm{font-weight:500;letter-spacing:.02em;}
+.dtop .bc{color:#b6b3a6;font-size:12px;}
+.dpage{background:var(--oat2);padding:26px;}
+.dmod{background:#fff;border:.5px solid var(--line);border-radius:12px;overflow:hidden;max-width:760px;margin:0 auto;}
+.dmh{display:flex;justify-content:space-between;align-items:center;padding:15px 22px;border-bottom:.5px solid var(--line);}
+.dmh .t{font-size:17px;font-weight:500;}
+.dmh .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--brass);}
+.dgrid{display:grid;grid-template-columns:180px 1fr 220px;}
+.drail{border-right:.5px solid var(--line);padding:20px 18px;display:flex;flex-direction:column;gap:16px;background:var(--oat);}
+.dstep{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--mut);}
+.dnum{width:23px;height:23px;border-radius:50%;border:.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;background:#fff;flex:0 0 auto;}
+.dstep.on{color:var(--ink);font-weight:500;}
+.dstep.on .dnum{background:var(--tea);color:#fff;border-color:var(--tea);}
+.dform{padding:22px;display:flex;flex-direction:column;gap:15px;}
+.dlab{font-size:12px;color:var(--mut);margin-bottom:5px;}
+.din{background:#fff;border:.5px solid var(--line);border-radius:7px;padding:9px 11px;font-size:13.5px;display:flex;justify-content:space-between;align-items:center;}
+.dph{background:var(--oat2);border:.5px dashed var(--line);border-radius:8px;height:96px;display:flex;align-items:center;justify-content:center;color:#a59d88;}
+.dtag{font-size:10.5px;color:var(--tea);border:.5px solid var(--tea);border-radius:10px;padding:1px 7px;}
+.dprev{border-left:.5px solid var(--line);padding:20px 16px;background:var(--oat);}
+.dprevl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:11px;}
+.dcard{background:#fff;border:.5px solid var(--line);border-radius:10px;overflow:hidden;}
+.dcardimg{background:var(--oat2);height:96px;display:flex;align-items:center;justify-content:center;color:#a59d88;}
+.dmf{display:flex;justify-content:space-between;align-items:center;padding:15px 22px;border-top:.5px solid var(--line);}
+.dbtn{background:var(--tea);color:#fff;border-radius:8px;padding:9px 20px;font-size:13.5px;font-weight:500;}
+.dghost{border:.5px solid var(--line);border-radius:8px;padding:9px 18px;font-size:13.5px;color:var(--mut);background:#fff;}
+.ddots{display:flex;gap:5px;}
+.ddot{width:7px;height:7px;border-radius:50%;background:var(--line);}
+.ddot.on{background:var(--brass);}
+</style></head><body>
+<div class="dw">
+  <div class="dwin">
+    <div class="dtop"><span class="wm">Full Circle</span><span class="bc">Mini App Backend · Products · Add a product</span></div>
+    <div class="dpage">
+      <div class="dmod">
+        <div class="dmh"><div><div class="k">New product</div><div class="t">Add a product</div></div><i class="ti ti-x" style="color:var(--mut);font-size:19px;"></i></div>
+        <div class="dgrid">
+          <div class="drail">
+            <div class="dstep on"><span class="dnum">1</span>What it is</div>
+            <div class="dstep"><span class="dnum">2</span>Price &amp; stock</div>
+            <div class="dstep"><span class="dnum">3</span>Details</div>
+            <div class="dstep"><span class="dnum">4</span>Review</div>
+          </div>
+          <div class="dform">
+            <div class="dph"><div style="text-align:center;"><i class="ti ti-photo" style="font-size:26px;"></i><div style="font-size:12px;margin-top:4px;">Drop photos, or snap the label</div></div></div>
+            <div><div class="dlab">Name</div><div class="din">Chili crisp <span class="dtag">EN &rarr; CN auto</span></div></div>
+            <div style="display:flex;gap:14px;"><div style="flex:1;"><div class="dlab">Section</div><div class="din">Sauces &amp; condiments <i class="ti ti-chevron-down"></i></div></div><div style="flex:1;"><div class="dlab">Price</div><div class="din">¥ 45.00</div></div></div>
+            <div style="font-size:11px;color:var(--mut);">Product code · FC-CHILI-200 <span style="color:var(--brass);">auto — edit if you have your own</span></div>
+          </div>
+          <div class="dprev">
+            <div class="dprevl">Live preview</div>
+            <div class="dcard">
+              <div class="dcardimg"><i class="ti ti-photo" style="font-size:22px;"></i></div>
+              <div style="padding:10px 12px;"><div style="font-size:14px;font-weight:500;">Chili crisp</div><div style="font-size:13px;color:var(--brass);margin-top:3px;">¥45</div></div>
+            </div>
+            <div style="font-size:11px;color:var(--mut);margin-top:12px;line-height:1.5;">The shop card builds as you type.</div>
+          </div>
+        </div>
+        <div class="dmf"><div style="display:flex;align-items:center;gap:14px;"><span class="dghost">Back</span><div class="ddots"><span class="ddot on"></span><span class="ddot"></span><span class="ddot"></span><span class="ddot"></span></div></div><div style="display:flex;align-items:center;gap:12px;"><span style="font-size:12px;color:var(--mut);">Open full editor</span><span class="dbtn">Next</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body></html>
