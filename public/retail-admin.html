@@ -2138,8 +2138,15 @@
       Coupons are either <b>code-redeemed</b> (customers type the code at checkout) or <b>public</b>
       (browseable from the mini-app — no code needed). Three types: fixed ¥ off, percent off, or free shipping.
     </div>
+    <div class="card" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div style="min-width: 220px;">
+        <h3 style="font-size: 13px; margin: 0 0 4px;">Make a coupon — guided · 新建优惠券 · 向导</h3>
+        <div class="muted" style="font-size: 12px;">Answer a few simple questions. We set the tricky parts for you, warn you about clashes with coupons you already run, and show the card customers see. · 回答几个简单问题,我们替你设置复杂部分,提示与现有优惠券的冲突,并预览顾客看到的样子。</div>
+      </div>
+      <button class="btn btn-primary" onclick="vwOpen()" style="white-space: nowrap;">✨ Start · 开始</button>
+    </div>
     <div class="card">
-      <h3 style="font-size: 13px; margin-bottom: 12px;">New coupon · 新建优惠券</h3>
+      <h3 style="font-size: 13px; margin-bottom: 12px;">New coupon — advanced · 高级(逐项填写)</h3>
       <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
         <div class="field" style="margin: 0;">
           <label class="stacked">Code · 编码</label>
@@ -2269,6 +2276,51 @@
             <div id="grant-existing" style="max-height: 180px; overflow-y: auto;"></div>
           </div>
         </div>
+      </div>
+    </div>
+    <!-- ─── Guided coupon wizard (additive; advanced form above is untouched) ─── -->
+    <style>
+      #vw-bg .vw-kick { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--brass, #b08d4a); font-weight: 600; margin-bottom: 2px; }
+      .vw-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-top: 1px solid var(--line); }
+      .vw-dots { display: flex; gap: 6px; }
+      .vw-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+      .vw-dot.on { background: var(--brass, #b08d4a); }
+      .vw-goal { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 14px; background: var(--bg-input, #fff); cursor: pointer; text-align: left; font: inherit; color: inherit; }
+      .vw-goal:hover { border-color: var(--brass, #b08d4a); }
+      .vw-goal .gt { font-weight: 600; font-size: 13.5px; }
+      .vw-goal .gs { font-size: 11.5px; color: var(--muted, #6b6b63); }
+      .vw-type { flex: 1; text-align: center; border: 1px solid var(--line); border-radius: 10px; padding: 14px 8px; background: var(--bg-input, #fff); cursor: pointer; }
+      .vw-type.on { border-color: var(--tea, #6B8E6F); box-shadow: inset 0 0 0 1px var(--tea, #6B8E6F); }
+      .vw-type .tt { font-weight: 600; font-size: 12.5px; margin-top: 4px; }
+      .vw-type .ts { font-size: 10.5px; color: var(--muted, #6b6b63); margin-top: 2px; }
+      .vw-path { display: flex; gap: 11px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 12px; cursor: pointer; background: var(--bg-input, #fff); }
+      .vw-path.on { border-color: var(--tea, #6B8E6F); box-shadow: inset 0 0 0 1px var(--tea, #6B8E6F); }
+      .vw-path .pt { font-weight: 600; font-size: 13px; }
+      .vw-path .ps { font-size: 11px; color: var(--muted, #6b6b63); }
+      .vw-radio { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--line); margin-left: auto; flex: 0 0 auto; margin-top: 2px; }
+      .vw-path.on .vw-radio { border-color: var(--tea, #6B8E6F); background: var(--tea, #6B8E6F); box-shadow: inset 0 0 0 2px var(--bg-input, #fff); }
+      .vw-ticket { border: 1px solid var(--line); border-left: 4px solid var(--brass, #b08d4a); border-radius: 10px; padding: 14px 16px; background: var(--bg-input, #fff); }
+      .vw-tk-big { font-size: 26px; font-weight: 700; line-height: 1; }
+      .vw-tk-big span { font-size: 13px; font-weight: 600; color: var(--muted, #6b6b63); }
+      .vw-tk-sub { font-size: 11px; color: var(--muted, #6b6b63); margin-top: 3px; }
+      .vw-tk-ttl { font-size: 13px; font-weight: 600; margin-top: 9px; }
+      .vw-tk-exp { font-size: 10.5px; color: var(--muted, #6b6b63); margin-top: 3px; }
+      .vw-note { display: flex; gap: 9px; align-items: flex-start; border: 1px solid var(--line); border-left: 3px solid var(--tea, #6B8E6F); border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.45; }
+      .vw-note.brass { border-left-color: var(--brass, #b08d4a); }
+      .vw-note.red { border-left-color: #b2564b; }
+      .vw-note .ni { flex: 0 0 auto; }
+    </style>
+    <div id="vw-bg" class="pu-editor-bg">
+      <div class="pu-editor vw" style="width: 720px; max-width: 94vw;">
+        <div class="pu-editor-head">
+          <div>
+            <div class="vw-kick">NEW COUPON · 新建优惠券</div>
+            <h3 id="vw-title" style="margin: 0; font-size: 15px;">Make a coupon</h3>
+          </div>
+          <button class="btn" onclick="vwClose()">Close · 关闭</button>
+        </div>
+        <div id="vw-body" style="display: flex; flex-direction: column; gap: 14px; padding: 20px; max-height: 70vh; overflow: auto;"></div>
+        <div id="vw-foot" class="vw-foot"></div>
       </div>
     </div>
   </section>
