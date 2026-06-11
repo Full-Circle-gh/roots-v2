@@ -447,7 +447,7 @@
 
     <view wx:if="{{autoApplied}}" class="voucher-applied auto">
       <view>
-        <view class="va-code f-gothic">{{autoApplied.title}}</view>
+        <view class="va-name f-bear">{{autoApplied.title}}</view>
         <view class="va-desc muted">{{lang === 'cn' ? '已自动抵扣' : 'Applied automatically'}} · −¥{{autoApplied.amount}}</view>
       </view>
     </view>
@@ -465,7 +465,7 @@
         <view wx:for="{{myVouchers}}" wx:key="code"
               class="coupon-chip mine" data-code="{{item.code}}" bindtap="selectPublicCoupon">
           <view class="cc-badge f-toni">{{lang === 'cn' ? '专属' : 'YOURS'}}</view>
-          <view class="cc-title f-gothic">{{item.title}}</view>
+          <view class="cc-title f-bear">{{item.title}}</view>
           <view wx:if="{{item.sublabel}}" class="cc-sub f-toni">{{item.sublabel}}</view>
           <view class="cc-apply f-toni">{{lang === 'cn' ? '点击使用 →' : 'TAP TO USE →'}}</view>
         </view>
@@ -474,7 +474,7 @@
       <view wx:if="{{publicCoupons.length}}" class="coupon-chips">
         <view wx:for="{{publicCoupons}}" wx:key="code"
               class="coupon-chip" data-code="{{item.code}}" bindtap="selectPublicCoupon">
-          <view class="cc-title f-gothic">{{item.title}}</view>
+          <view class="cc-title f-bear">{{item.title}}</view>
           <view wx:if="{{item.sublabel}}" class="cc-sub f-toni">{{item.sublabel}}</view>
           <view class="cc-apply f-toni">{{lang === 'cn' ? '点击使用 →' : 'TAP TO USE →'}}</view>
         </view>

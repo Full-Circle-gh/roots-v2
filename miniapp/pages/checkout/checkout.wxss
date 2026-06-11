@@ -527,7 +527,10 @@
   border: 2rpx solid var(--lime);
   padding: 16rpx 20rpx;
 }
-.va-code { font-size: calc(30rpx * var(--font-scale)); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); }
+.va-code { font-size: calc(30rpx * var(--font-scale)); letter-spacing: 0.06em; color: var(--ink); }
+/* Auto-applied promo shows the coupon NAME (not a code), so it uses the Bear
+   Serif title treatment from the coupon card — matches the original design. */
+.va-name { font-size: calc(28rpx * var(--font-scale)); font-weight: 500; color: var(--ink); line-height: 1.3; }
 .va-desc { font-size: calc(22rpx * var(--font-scale)); margin-top: 2rpx; }
 .va-remove { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.1em; color: var(--berry); text-decoration: underline; }
 .voucher-applied.auto { background: rgba(204, 217, 0, 0.12); border-color: var(--forest); margin-bottom: 14rpx; }
@@ -557,9 +560,7 @@
   border-radius: 999rpx;
 }
 .coupon-chip:active { background: rgba(204, 217, 0, 0.12); }
-/* League Gothic to match the applied-voucher style — condensed caps read taller
-   and narrower, so bump the size and uppercase it like a ticket. */
-.cc-title { font-size: calc(34rpx * var(--font-scale)); letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink); line-height: 1.15; padding-right: 150rpx; }
+.cc-title { font-size: calc(28rpx * var(--font-scale)); font-weight: 500; color: var(--ink); line-height: 1.3; }
 .cc-sub { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.06em; opacity: 0.55; margin-top: 4rpx; }
 .cc-apply {
   position: absolute;
