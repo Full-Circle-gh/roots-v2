@@ -40,6 +40,25 @@
 <!-- File split (2026-06-11): page CSS lives in /assets/retail-admin.css; the
      main app JS lives in /assets/retail-admin.js (loaded mid-body, same spot
      the inline block used to be). Smaller page-specific blocks remain inline. -->
+<link rel="preload" href="/assets/retail-admin.js" as="script">
+<style>
+  /* Anti-FOUC for the language layer: the raw markup carries BOTH languages
+     ("EN · 中文") and the app JS hides one at boot, stamping data-ui-lang on
+     <html> (see applyLang/init in retail-admin.js). While the external JS is
+     still downloading on a cold cache, keep the body hidden so the bilingual
+     raw state never paints. The failsafe below reveals it even if the JS
+     never loads. */
+  html:not([data-ui-lang]) body { visibility: hidden; }
+</style>
+<script>
+  // Failsafe for the anti-FOUC guard above: if the app JS hasn't booted within
+  // 3s (failed fetch, JS error), reveal the page in its raw bilingual state
+  // rather than leaving it blank.
+  setTimeout(function () {
+    var h = document.documentElement;
+    if (!h.hasAttribute('data-ui-lang')) h.setAttribute('data-ui-lang', 'en');
+  }, 3000);
+</script>
 </head>
 <!-- Features default to ON so nothing flashes hidden before loadConfig() runs;
      applyFeatureGates() then removes the class for any feature an operator (or
