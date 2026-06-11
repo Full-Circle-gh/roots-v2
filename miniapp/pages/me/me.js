@@ -261,7 +261,10 @@ Page({
         const tmpl = them > 0 ? c.affiliateMeta : c.affiliateMetaSolo;
         return tmpl.replace(/\{you\}/g, you).replace(/\{them\}/g, String(them));
       }
-      case 'coupons':    return (cust.coupon_count || 0) + ' ' + c.couponsMeta;
+      // Only count coupons the customer OWNS (claimed/granted). Auto-apply promos
+      // aren't owned, so a live promo still reads 0 here — hide the "0 active"
+      // subtitle rather than mislead; show "N active" only when they really hold some.
+      case 'coupons':    return (cust.coupon_count || 0) > 0 ? (cust.coupon_count + ' ' + c.couponsMeta) : '';
       case 'invoices':   return '';
       case 'favorites':  return (cust.favorite_count || 0) + ' ' + c.favoritesMeta;
       case 'membership': return this.data.tierName + ' · ' + c.memberLvl + ' ' + this.data.tierLevel;
