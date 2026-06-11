@@ -1,3 +1,10 @@
+/* eslint-disable no-undef, no-func-assign, no-self-assign */
+/* Extracted verbatim from the main inline script block of retail-admin.html
+   (Step 2a of the file split). It shares one global scope with the smaller
+   <script> blocks still in the HTML — cuT/cuLang/DASH_VIEW etc. live there,
+   so no-undef is noise for this file. no-func-assign / no-self-assign cover
+   two pre-existing, intentional browser idioms (dashRenderAll rebind, iframe
+   src self-assign reload). */
 const $  = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 
