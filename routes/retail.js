@@ -3442,6 +3442,11 @@ function publicCustomer(c) {
     tier_key: c.tier_key,
     lifetime_spend: c.lifetime_spend,
     points_balance: c.points_balance,
+    // point_value_yuan (= 1 / points.redeemRate) lets every screen that shows
+    // this customer object (greeting block, Me page…) value points at the
+    // store's REAL redeem rate instead of a hardcoded ¥0.01. Without it the
+    // home greeting showed "2 pts · ¥0.02" even after Roots flipped to 1pt=¥1.
+    point_value_yuan: 1 / pointsRedeemRate(),
     coupon_count: couponCount,
     balance: c.balance,
     created_at: c.created_at,

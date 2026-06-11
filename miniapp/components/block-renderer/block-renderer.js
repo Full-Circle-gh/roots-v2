@@ -1385,7 +1385,13 @@ Component({
             : `${greeting}.`;
           const pts = Number(c.points_balance) || 0;
           const showPts = b.show_points !== false && pts > 0;
-          const ptsValue = (pts / 100).toFixed(2);
+          // Value points at the store's REAL redeem rate. /api/retail/auth now
+          // carries point_value_yuan (= 1 / points.redeemRate) on the customer
+          // object; fall back to ¥0.01 only for an old backend that omits it.
+          // Hardcoding /100 here is why "2 pts · ¥0.02" showed after Roots
+          // flipped to 1 pt = ¥1.
+          const ptVal = Number(c.point_value_yuan) > 0 ? Number(c.point_value_yuan) : 0.01;
+          const ptsValue = (pts * ptVal).toFixed(2);
           const view = b.view || 'card';
           const isDesign = view === 'classic' || view === 'wallet' || view === 'coin';
           out.greeting = {
