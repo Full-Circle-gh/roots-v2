@@ -271,6 +271,30 @@ let _vw = null;          // the coupon being built (wizard state)
 let _vwVouchers = [];     // snapshot of existing coupons, for the heads-up
 const VW_STEPS = ['deal', 'who', 'rules', 'review'];  // (front door is separate)
 
+// Inline line-icons (Tabler-style, stroke = currentColor) so the wizard matches
+// the backend's monochrome icon language instead of coloured emoji.
+const VW_ICONS = {
+  gift: '<path d="M3 8m0 1a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1z"/><path d="M12 8l0 13"/><path d="M19 12v7a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0 -5a4.8 8 0 0 1 4.5 5a4.8 8 0 0 1 4.5 -5a2.5 2.5 0 0 1 0 5"/>',
+  tag: '<path d="M7.5 7.5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M3 6v5.172a2 2 0 0 0 .586 1.414l7.71 7.71a2.41 2.41 0 0 0 3.408 0l5.592 -5.592a2.41 2.41 0 0 0 0 -3.408l-7.71 -7.71a2 2 0 0 0 -1.414 -.586h-5.172a3 3 0 0 0 -3 3z"/>',
+  ticket: '<path d="M15 5l0 2"/><path d="M15 11l0 2"/><path d="M15 17l0 2"/><path d="M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-3a2 2 0 0 0 0 -4v-3a2 2 0 0 1 2 -2"/>',
+  truck: '<path d="M7 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M17 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M5 17h-2v-11a1 1 0 0 1 1 -1h9v12m-4 0h6m4 0h2v-6h-8m0 -5h5l3 5"/>',
+  pencil: '<path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/>',
+  coin: '<path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M15 8l-3 5l-3 -5"/><path d="M9 11h6"/><path d="M9 14h6"/><path d="M12 13v3"/>',
+  percent: '<path d="M17 17m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M7 7m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M6 18l12 -12"/>',
+  bolt: '<path d="M13 3l0 7l6 0l-8 11l0 -7l-6 0l8 -11"/>',
+  users: '<path d="M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0 -3 -3.85"/>',
+  alert: '<path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z"/><path d="M12 16h.01"/>',
+  refresh: '<path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"/>',
+  scale: '<path d="M7 20l10 0"/><path d="M6 6l6 -1l6 1"/><path d="M12 3l0 17"/><path d="M9 12l-3 -6l-3 6a3 3 0 0 0 6 0"/><path d="M21 12l-3 -6l-3 6a3 3 0 0 0 6 0"/>',
+  trophy: '<path d="M8 21l8 0"/><path d="M12 17l0 4"/><path d="M7 4l10 0"/><path d="M17 4v8a5 5 0 0 1 -10 0v-8"/><path d="M5 9a2 2 0 0 1 -2 -2v-2h4"/><path d="M19 9a2 2 0 0 0 2 -2v-2h-4"/>',
+  eye: '<path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/><path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6"/>',
+};
+function vwIcon(name, size) {
+  size = size || 22;
+  return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" fill="none" stroke="currentColor" '
+    + 'stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + (VW_ICONS[name] || '') + '</svg>';
+}
+
 async function vwOpen() {
   _vw = {
     goal: null, step: 'front',
@@ -387,35 +411,35 @@ function vwRender() {
 
 function vwFrontHtml() {
   const goals = [
-    ['welcome', '🎁', 'Welcome gift · 新人礼', 'A thank-you for new customers · 给新顾客的感谢'],
-    ['sale', '🏷️', 'Store sale · 店铺促销', 'A discount that comes off by itself · 自动抵扣的折扣'],
-    ['public', '🎟️', 'A coupon anyone can use · 人人可领', 'People find it and tap to save · 顾客自己领取'],
-    ['shipping', '🚚', 'Free shipping · 免运费', 'Take the delivery fee off · 减免运费'],
-    ['fresh', '✏️', 'Start fresh · 从头开始', 'Set it up myself · 自己设置'],
+    ['welcome', 'gift', 'Welcome gift · 新人礼', 'A thank-you for new customers · 给新顾客的感谢'],
+    ['sale', 'tag', 'Store sale · 店铺促销', 'A discount that comes off by itself · 自动抵扣的折扣'],
+    ['public', 'ticket', 'A coupon anyone can use · 人人可领', 'People find it and tap to save · 顾客自己领取'],
+    ['shipping', 'truck', 'Free shipping · 免运费', 'Take the delivery fee off · 减免运费'],
+    ['fresh', 'pencil', 'Start fresh · 从头开始', 'Set it up myself · 自己设置'],
   ];
-  return '<div style="font-size:12.5px;color:var(--muted,#6b6b63);">What do you want to do? · 你想做什么?</div>'
+  return '<div class="vw-lab" style="margin-bottom:2px;">What do you want to do? · 你想做什么?</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
-    + goals.map(g => '<button class="vw-goal" onclick="vwApplyGoal(\'' + g[0] + '\')"><span style="font-size:22px;">' + g[1] + '</span>'
+    + goals.map(g => '<button class="vw-goal" onclick="vwApplyGoal(\'' + g[0] + '\')"><span class="vico">' + vwIcon(g[1], 26) + '</span>'
         + '<span><span class="gt">' + g[2] + '</span><br><span class="gs">' + g[3] + '</span></span></button>').join('')
     + '</div>';
 }
 
 function vwDealHtml() {
   const types = [
-    ['fixed_amount', '💴', 'Money off · 立减', 'a set ¥ amount · 固定金额'],
-    ['percent', '％', 'Percent off · 折扣', 'a % of the order · 按比例'],
-    ['free_shipping', '🚚', 'Free shipping · 免运费', 'no delivery fee · 不收运费'],
+    ['fixed_amount', 'coin', 'Money off · 立减', 'a set ¥ amount · 固定金额'],
+    ['percent', 'percent', 'Percent off · 折扣', 'a % of the order · 按比例'],
+    ['free_shipping', 'truck', 'Free shipping · 免运费', 'no delivery fee · 不收运费'],
   ];
   const cards = types.map(t => '<div class="vw-type' + (_vw.type === t[0] ? ' on' : '') + '" onclick="vwSetType(\'' + t[0] + '\')">'
-    + '<div style="font-size:20px;">' + t[1] + '</div><div class="tt">' + t[2] + '</div><div class="ts">' + t[3] + '</div></div>').join('');
+    + '<span class="vico">' + vwIcon(t[1], 28) + '</span><div class="tt">' + t[2] + '</div><div class="ts">' + t[3] + '</div></div>').join('');
   const valBox = _vw.type === 'free_shipping' ? ''
-    : '<div class="field" style="margin:0;max-width:240px;"><label class="stacked">How much? · 数值 (' + (_vw.type === 'percent' ? '%' : '¥') + ')</label>'
+    : '<div class="field" style="margin:0;max-width:260px;"><label class="vw-lab">How much do they save? · 优惠多少? (' + (_vw.type === 'percent' ? '%' : '¥') + ')</label>'
       + '<input type="number" id="vw-value" value="' + (_vw.value || '') + '" oninput="vwLiveValue(this.value)" style="width:100%;"></div>';
   return vwTicketHtml()
-    + '<div class="field" style="margin:0;"><label class="stacked">What do customers save? · 顾客能省什么?</label>'
-    + '<div style="display:flex;gap:10px;">' + cards + '</div></div>'
+    + '<div class="field" style="margin:0;"><label class="vw-lab">What kind of discount? · 哪种优惠?</label>'
+    + '<div style="display:flex;gap:12px;">' + cards + '</div></div>'
     + valBox
-    + '<div class="muted" style="font-size:11px;">The box shows ¥ or % so it is never mixed up. · 输入框会显示 ¥ 或 %,不会弄错。</div>';
+    + '<div class="vw-help">The box shows ¥ or % so it is never mixed up. · 输入框会显示 ¥ 或 %,不会弄错。</div>';
 }
 function vwSetType(t) { _vw.type = t; if (t === 'free_shipping') _vw.value = 0; vwRender(); }
 function vwLiveValue(v) {
@@ -434,16 +458,16 @@ function vwNextDeal() {
 
 function vwWhoHtml() {
   const paths = [
-    ['auto', '💸', 'Comes off the price by itself · 自动抵扣', 'Everyone, at checkout. No code. Best deal wins. · 所有人结账时自动减,无需输入,取最优'],
-    ['public', '🎟️', 'Anyone can use it · 人人可用', 'Shows in the app; a shared code also works. · 显示在小程序,分享的码也能用'],
-    ['welcome', '🎁', 'A welcome gift for new customers · 新人礼', 'Goes into new customers’ coupons; they tap it at checkout. · 自动进入新顾客的优惠券,结账时使用'],
-    ['pick', '👥', 'I choose who gets it · 我来指定', 'You pick the customers after saving. · 保存后你来挑选顾客'],
+    ['auto', 'bolt', 'Comes off the price by itself · 自动抵扣', 'Everyone, at checkout. No code. Best deal wins. · 所有人结账时自动减,无需输入,取最优'],
+    ['public', 'ticket', 'Anyone can use it · 人人可用', 'Shows in the app; a shared code also works. · 显示在小程序,分享的码也能用'],
+    ['welcome', 'gift', 'A welcome gift for new customers · 新人礼', 'Goes into new customers’ coupons; they tap it at checkout. · 自动进入新顾客的优惠券,结账时使用'],
+    ['pick', 'users', 'I choose who gets it · 我来指定', 'You pick the customers after saving. · 保存后你来挑选顾客'],
   ];
   let html = vwTicketHtml()
-    + '<div class="field" style="margin:0;"><label class="stacked">How do customers get it? · 顾客怎么获得?</label>'
-    + '<div style="display:flex;flex-direction:column;gap:9px;">'
+    + '<div class="field" style="margin:0;"><label class="vw-lab">How do customers get it? · 顾客怎么获得?</label>'
+    + '<div style="display:flex;flex-direction:column;gap:10px;">'
     + paths.map(p => '<div class="vw-path' + (_vw.path === p[0] ? ' on' : '') + '" onclick="vwSetPath(\'' + p[0] + '\')">'
-        + '<span style="font-size:18px;">' + p[1] + '</span><span><span class="pt">' + p[2] + '</span><br><span class="ps">' + p[3] + '</span></span>'
+        + '<span class="vico">' + vwIcon(p[1], 22) + '</span><span><span class="pt">' + p[2] + '</span><br><span class="ps">' + p[3] + '</span></span>'
         + '<span class="vw-radio"></span></div>').join('')
     + '</div></div>';
   if (_vw.path === 'welcome') {
@@ -460,17 +484,17 @@ function vwSetHome(b) { _vw.showOnHome = b; vwRender(); }
 function vwNextWho() { vwGoto('rules'); }
 
 function vwRulesHtml() {
-  const f = (lab, id, val, ph, type) => '<div class="field" style="margin:0;flex:1;min-width:150px;"><label class="stacked">' + lab
+  const f = (lab, id, val, ph, type) => '<div class="field" style="margin:0;flex:1;min-width:200px;"><label class="vw-lab">' + lab
     + '</label><input type="' + (type || 'number') + '" id="' + id + '" value="' + escapeAttr(String(val)) + '" placeholder="' + (ph || '') + '" style="width:100%;"></div>';
   return vwTicketHtml()
-    + '<div style="font-size:12px;color:var(--muted,#6b6b63);">All set with smart defaults. Change only what you want. · 已有默认值,只改你想改的。</div>'
-    + '<div style="display:flex;gap:14px;flex-wrap:wrap;">'
-      + f('Spend at least ¥ · 最低消费', 'vw-min', (_vw.min || ''), '0 = any order · 0=任意')
-      + f('Ends on (empty = never) · 到期(留空=永久)', 'vw-expires', (_vw.expires || ''), '', 'date')
+    + '<div class="vw-help">These already have good defaults. Change only what you want. · 这些已有合适的默认值,只改你想改的。</div>'
+    + '<div style="display:flex;gap:16px;flex-wrap:wrap;">'
+      + f('Smallest order to use it (¥) · 最低订单金额', 'vw-min', (_vw.min || ''), '0 = any order · 0 = 任意订单')
+      + f('Last day it works · 截止日期', 'vw-expires', (_vw.expires || ''), 'empty = never', 'date')
     + '</div>'
-    + '<div style="display:flex;gap:14px;flex-wrap:wrap;">'
-      + f('Each person can use it · 每人可用次数', 'vw-percust', (_vw.perCust != null ? _vw.perCust : 1), '1')
-      + f('Stop after … uses (empty = no limit) · 总次数(留空=不限)', 'vw-maxuses', (_vw.maxUses || ''), '∞')
+    + '<div style="display:flex;gap:16px;flex-wrap:wrap;">'
+      + f('How many times can one person use it? · 每人可用几次?', 'vw-percust', (_vw.perCust != null ? _vw.perCust : 1), '1')
+      + f('How many coupons in total? · 总共多少张?', 'vw-maxuses', (_vw.maxUses || ''), 'empty = no limit · 留空 = 不限')
     + '</div>';
 }
 function vwNextRules() {
@@ -504,23 +528,23 @@ function vwHeadsUp() {
   if (clash) {
     const expired = clash.expires_at && new Date(clash.expires_at) < new Date();
     if (clash.is_active && !expired) {
-      notes.push({ tone: 'red', icon: '⛔', html: 'A live coupon already uses <b>' + escapeHtml(code) + '</b>. Pick another code, or turn the old one off first. · 已有生效中的优惠券使用 <b>' + escapeHtml(code) + '</b>,请换一个编码或先停用旧的。' });
+      notes.push({ tone: 'red', icon: vwIcon('alert', 18), html: 'A live coupon already uses <b>' + escapeHtml(code) + '</b>. Pick another code, or turn the old one off first. · 已有生效中的优惠券使用 <b>' + escapeHtml(code) + '</b>,请换一个编码或先停用旧的。' });
     } else {
-      notes.push({ tone: 'brass', icon: '↻', html: 'You used <b>' + escapeHtml(code) + '</b> before and it is off now. Saving reuses it and starts its count from zero. · 你以前用过 <b>' + escapeHtml(code) + '</b>(现已停用),保存会复用它并把使用次数清零。' });
+      notes.push({ tone: 'brass', icon: vwIcon('refresh', 18), html: 'You used <b>' + escapeHtml(code) + '</b> before and it is off now. Saving reuses it and starts its count from zero. · 你以前用过 <b>' + escapeHtml(code) + '</b>(现已停用),保存会复用它并把使用次数清零。' });
     }
   }
   if (flags.auto_apply) {
     const others = active.filter(v => v.auto_apply && !v.auto_grant_signup && String(v.code).toUpperCase() !== code);
     if (others.length) {
       const list = others.map(v => '<b>' + escapeHtml(v.code) + '</b>').join(', ');
-      notes.push({ tone: '', icon: '⚖️', html: 'You already have automatic deal(s): ' + list + '. Customers get the single best one — these do not add together. · 你已有自动优惠:' + list + '。顾客只享最优的一张,不叠加。' });
+      notes.push({ tone: '', icon: vwIcon('scale', 18), html: 'You already have automatic deal(s): ' + list + '. Customers get the single best one — these do not add together. · 你已有自动优惠:' + list + '。顾客只享最优的一张,不叠加。' });
       if (_vw.type !== 'free_shipping') {
         const ref = 200, mine = vwDiscAt(_vw, ref);
         const bigger = others.filter(v => v.type !== 'free_shipping' && vwDiscAt(v, ref) >= mine);
         if (bigger.length) {
-          notes.push({ tone: 'brass', icon: '🏆', html: 'On a typical ¥200 order, <b>' + escapeHtml(bigger[0].code) + '</b> gives more — your new deal may rarely be used. · 以 ¥200 订单为例,<b>' + escapeHtml(bigger[0].code) + '</b> 更划算,你的新优惠可能很少被用到。' });
+          notes.push({ tone: 'brass', icon: vwIcon('trophy', 18), html: 'On a typical ¥200 order, <b>' + escapeHtml(bigger[0].code) + '</b> gives more — your new deal may rarely be used. · 以 ¥200 订单为例,<b>' + escapeHtml(bigger[0].code) + '</b> 更划算,你的新优惠可能很少被用到。' });
         } else {
-          notes.push({ tone: 'brass', icon: '🏆', html: 'On a typical ¥200 order, your new deal gives the most — it will usually win. · 以 ¥200 订单为例,你的新优惠最划算,通常会胜出。' });
+          notes.push({ tone: 'brass', icon: vwIcon('trophy', 18), html: 'On a typical ¥200 order, your new deal gives the most — it will usually win. · 以 ¥200 订单为例,你的新优惠最划算,通常会胜出。' });
         }
       }
     }
@@ -529,13 +553,13 @@ function vwHeadsUp() {
     const others = active.filter(v => v.auto_grant_signup && String(v.code).toUpperCase() !== code);
     if (others.length) {
       const list = others.map(v => '<b>' + escapeHtml(v.code) + '</b>').join(', ');
-      notes.push({ tone: '', icon: '🎁', html: 'New customers will also get ' + list + '. They can use one per order. · 新顾客还会获得 ' + list + ',每单只能用一张。' });
+      notes.push({ tone: '', icon: vwIcon('gift', 18), html: 'New customers will also get ' + list + '. They can use one per order. · 新顾客还会获得 ' + list + ',每单只能用一张。' });
     }
   }
   if (_vw.path === 'pick') {
-    notes.push({ tone: '', icon: '👥', html: 'After saving, pick the customers to give it to — it lands in their coupons, no code needed. · 保存后挑选顾客,优惠券直接进入他们的账户,无需编码。' });
+    notes.push({ tone: '', icon: vwIcon('users', 18), html: 'After saving, pick the customers to give it to — it lands in their coupons, no code needed. · 保存后挑选顾客,优惠券直接进入他们的账户,无需编码。' });
   } else if (flags.is_public) {
-    notes.push({ tone: '', icon: '👀', html: 'Anyone can find this in the app, and a shared code also works. · 任何人都能在小程序看到,分享的编码也能用。' });
+    notes.push({ tone: '', icon: vwIcon('eye', 18), html: 'Anyone can find this in the app, and a shared code also works. · 任何人都能在小程序看到,分享的编码也能用。' });
   }
   return notes;
 }
@@ -548,15 +572,15 @@ function vwReviewHtml() {
         '<div class="vw-note ' + (n.tone || '') + '"><span class="ni">' + (n.icon || '•') + '</span><span>' + n.html + '</span></div>').join('') + '</div>'
     : '<div class="muted" style="font-size:12px;">No clashes with your live coupons. · 与现有优惠券无冲突。</div>';
   const labelFields = flags.is_public
-    ? '<div class="field" style="margin:0;flex:1;min-width:150px;"><label class="stacked">Label EN · 英文标签</label><input type="text" id="vw-title-en" value="' + escapeAttr(_vw.title_en || '') + '" oninput="vwEditLabel()" style="width:100%;"></div>'
-      + '<div class="field" style="margin:0;flex:1;min-width:150px;"><label class="stacked">Label 中 · 中文标签</label><input type="text" id="vw-title-cn" value="' + escapeAttr(_vw.title_cn || '') + '" oninput="vwEditLabel()" style="width:100%;"></div>'
+    ? '<div class="field" style="margin:0;flex:1;min-width:200px;"><label class="vw-lab">What customers see (English) · 顾客看到的文字(英文)</label><input type="text" id="vw-title-en" value="' + escapeAttr(_vw.title_en || '') + '" oninput="vwEditLabel()" style="width:100%;"></div>'
+      + '<div class="field" style="margin:0;flex:1;min-width:200px;"><label class="vw-lab">What customers see (Chinese) · 顾客看到的文字(中文)</label><input type="text" id="vw-title-cn" value="' + escapeAttr(_vw.title_cn || '') + '" oninput="vwEditLabel()" style="width:100%;"></div>'
     : '';
   return vwTicketHtml()
-    + '<div style="display:flex;gap:14px;flex-wrap:wrap;">'
-      + '<div class="field" style="margin:0;flex:1;min-width:150px;"><label class="stacked">Code customers type · 编码</label><input type="text" id="vw-code" value="' + escapeAttr(_vw.code) + '" oninput="vwEditCode(this.value)" style="width:100%;font-family:var(--f-mono);text-transform:uppercase;"></div>'
+    + '<div style="display:flex;gap:16px;flex-wrap:wrap;">'
+      + '<div class="field" style="margin:0;flex:1;min-width:200px;"><label class="vw-lab">Coupon code · 优惠码</label><input type="text" id="vw-code" value="' + escapeAttr(_vw.code) + '" oninput="vwEditCode(this.value)" style="width:100%;font-family:var(--f-mono);text-transform:uppercase;"></div>'
       + labelFields
     + '</div>'
-    + '<div style="font-weight:600;font-size:12px;">Heads up · 提示</div>'
+    + '<div class="vw-lab" style="margin-bottom:0;">Heads up · 提示</div>'
     + notesHtml;
 }
 function vwEditCode(v) { _vw.code = v.toUpperCase(); _vw.codeEdited = true; }
