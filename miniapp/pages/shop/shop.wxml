@@ -113,7 +113,7 @@
           </view>
           <view wx:for="{{sections}}" wx:key="id"
                 id="s-{{item.id}}"
-                class="side-tab {{activeCategory === item.name ? 'on' : ''}}"
+                class="side-tab {{item.drillable ? 'has-chev' : ''}} {{activeCategory === item.name ? 'on' : ''}}"
                 data-name="{{item.name}}" bindtap="onTopTab">
             <text class="f-bear">{{item.label}}</text>
             <text wx:if="{{item.drillable}}" class="side-chev">›</text>
