@@ -599,10 +599,22 @@ const RETAIL_PRODUCT_COLS = `
 // This is the single biggest shop / mini-app load win: a 50-row grid drops from
 // several MB to a few hundred KB. Detail pages (PDP) keep RETAIL_PRODUCT_COLS so
 // they still ship the full photo and render without an extra round-trip.
-const RETAIL_PRODUCT_COLS_LIST = RETAIL_PRODUCT_COLS.replace(
-  'p.image_data, p.image_url',
-  "CASE WHEN p.image_data LIKE 'data:%' THEN 'data:' ELSE p.image_data END AS image_data, p.image_url"
-);
+const RETAIL_PRODUCT_COLS_LIST = RETAIL_PRODUCT_COLS
+  .replace(
+    'p.image_data, p.image_url',
+    "CASE WHEN p.image_data LIKE 'data:%' THEN 'data:' ELSE p.image_data END AS image_data, p.image_url"
+  )
+  // Grid cards never render the PDP page design / nutrition table / colophon, yet
+  // these columns were shipping for EVERY row — description_blocks alone is a
+  // multi-KB page-design JSON per product, so a 500-row shop pull carried megabytes
+  // of detail-page content the grid throws away. Drop them from the list set; the
+  // PDP (GET /products/:id) still ships them via the full RETAIL_PRODUCT_COLS.
+  // hydrateNutrition() already null-safes the missing nutrition/description_blocks.
+  // NB: this file is CRLF — match the column tokens only, not the line ending, so
+  // the leftover indentation (harmless SQL whitespace) is all that remains.
+  .replace('p.nutrition,', '')
+  .replace('p.description_blocks, p.use_block_design, p.page_template,', '')
+  .replace('p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,', '');
 
 // Swap a list row's heavy inline base64 primary photo for a tiny streamed-image
 // URL the mini-app lazy-loads + caches (see GET /api/retail/products/:id/image).
@@ -1719,12 +1731,11 @@ router.post('/api/retail/auth', express.json(), async (req, res) => {
        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`
     ).run(openid, unionid, nickname || null, avatar_url || null);
     customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(info.lastInsertRowid);
-    // Auto-grant any voucher flagged auto_grant_signup. Best-effort: a failure
-    // here must NOT block the auth response. Uses INSERT OR IGNORE so even if
-    // the same hook ran twice for the same (customer, voucher) we land on one
-    // grant. Filters out expired vouchers so we don't gift a dead coupon.
-    try { grantSignupVouchers(customer.id); }
-    catch (e) { console.warn('[retail/auth] signup voucher grant failed:', e.message); }
+    // Signup voucher is deliberately NOT granted here: at first auth we only
+    // have the openid, not the phone, so we can't yet distinguish a genuine new
+    // signup from a returning OUT1N customer. The grant is deferred to
+    // reconcileSignupVouchers() below, which fires once a phone is on file
+    // (also re-run at getPhoneNumber and admin phone-set).
   } else {
     // Refresh last_login_at; opportunistically fill nickname/avatar if we
     // didn't have them before and the client just sent them.
@@ -1747,6 +1758,11 @@ router.post('/api/retail/auth', express.json(), async (req, res) => {
       customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(customer.id);
     }
   } catch (e) { console.warn('[retail/auth] migration claim failed:', e.message); }
+
+  // Grant (genuine new) or suppress (returning OUT1N) the signup voucher now
+  // that any phone on file is known. No-op when no phone is set yet.
+  try { reconcileSignupVouchers(customer.id); }
+  catch (e) { console.warn('[retail/auth] signup voucher reconcile failed:', e.message); }
 
   if (customer.is_blocked) return res.status(403).json({ success: false, error: 'account_blocked' });
 
@@ -5669,6 +5685,40 @@ function grantSignupVouchers(customerId) {
   return n;
 }
 
+// Decide signup-voucher eligibility from the customer's PHONE — the only key
+// shared with the OUT1N roster. Called at every phone-touch point (auth,
+// getPhoneNumber, admin set). Three outcomes:
+//   • no phone yet         → no-op; the grant is deferred until a phone is known
+//   • returning OUT1N phone → revoke any UNUSED auto-granted signup voucher
+//                             (they are NOT a new signup)
+//   • brand-new phone       → grant the signup voucher(s)
+// retail_migration_credits now holds EVERY OUT1N phone (incl. zero-balance
+// customers seeded with 0/0), so "phone present in that table" == "returning
+// OUT1N customer", regardless of whether they had money or have claimed yet.
+function reconcileSignupVouchers(customerId) {
+  if (!customerId) return;
+  const c = tdb().prepare('SELECT id, phone FROM retail_customers WHERE id = ?').get(customerId);
+  const phone = normalizeMigrationPhone(c && c.phone);
+  if (!phone) return;                         // defer — phone not captured yet
+  const returning = tdb().prepare(
+    'SELECT 1 FROM retail_migration_credits WHERE phone = ? LIMIT 1'
+  ).get(phone);
+  if (returning) {
+    // Pull back only AUTO-granted, still-unused signup vouchers — never an
+    // operator's deliberate gift (granted_by / note guard that).
+    tdb().prepare(
+      `DELETE FROM retail_customer_vouchers
+        WHERE customer_id = ?
+          AND used_at IS NULL
+          AND granted_by IS NULL
+          AND granted_note = 'Auto-granted on signup'
+          AND voucher_id IN (SELECT id FROM retail_vouchers WHERE auto_grant_signup = 1)`
+    ).run(customerId);
+  } else {
+    grantSignupVouchers(customerId);          // genuine new signup
+  }
+}
+
 // Normalize a phone to bare digits for migration-credit matching. Strips
 // spaces, punctuation and a leading +86 / 86 country code so the OUT1N export
 // ("18878839078") and a customer-entered "+86 188 7883 9078" land on the same
@@ -7064,6 +7114,8 @@ router.patch('/api/retail-admin/customers/:id', requireRetailAdmin, express.json
   if (Object.prototype.hasOwnProperty.call(changed, 'phone')) {
     try { claimMigrationCredit(id); }
     catch (e) { console.warn('[retail-admin/customer] migration claim failed:', e.message); }
+    try { reconcileSignupVouchers(id); }
+    catch (e) { console.warn('[retail-admin/customer] signup voucher reconcile failed:', e.message); }
   }
   logActivity(req.user.id, req.user.username, 'update', 'retail_customer', id, changed, req.ip);
   res.json({ success: true, changed });
@@ -8213,6 +8265,10 @@ router.post('/api/retail/phone', requireRetailAuth, express.json(), async (req, 
   tdb().prepare('UPDATE retail_customers SET phone = ? WHERE id = ?').run(phone, req.customer.id);
   try { claimMigrationCredit(req.customer.id); }
   catch (e) { console.warn('[retail/phone] migration claim failed:', e.message); }
+  // Phone is now known — grant the signup voucher if genuinely new, or revoke
+  // it if this phone belongs to a returning OUT1N customer.
+  try { reconcileSignupVouchers(req.customer.id); }
+  catch (e) { console.warn('[retail/phone] signup voucher reconcile failed:', e.message); }
   const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(req.customer.id);
   res.json({ success: true, data: publicCustomer(fresh) });
 });
