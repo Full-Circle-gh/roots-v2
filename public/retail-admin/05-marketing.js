@@ -30,12 +30,15 @@ async function loadVouchers() {
       const autoBadge = v.auto_grant_signup
         ? '<span class="pill info" style="font-size: 10px;" title="Auto-granted to every new signup">AUTO</span>'
         : '';
+      const autoApplyBadge = v.auto_apply
+        ? '<span class="pill pub" style="font-size: 10px;" title="Applied automatically at checkout (best one wins)">AUTO-APPLY</span>'
+        : '';
       const grantBadge = v.grant_count
         ? `<span class="pill info" style="font-size: 10px;">GRANTED ${v.grant_used_count || 0}/${v.grant_count}</span>`
         : '';
       return `
       <tr data-id="${v.id}">
-        <td><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;"><span style="font-family: var(--f-mono); font-weight: 700">${escapeHtml(v.code)}</span>${publicBadge}${autoBadge}${grantBadge}</div></td>
+        <td><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;"><span style="font-family: var(--f-mono); font-weight: 700">${escapeHtml(v.code)}</span>${publicBadge}${autoBadge}${autoApplyBadge}${grantBadge}</div></td>
         <td style="font-size: 12px;">${label}</td>
         <td class="muted">${v.type === 'fixed_amount' ? '¥ off' : v.type === 'percent' ? '% off' : 'Free ship'}</td>
         <td class="numeric">${v.type === 'percent' ? v.value + '%' : (v.type === 'free_shipping' ? '—' : '¥' + fmt(v.value))}</td>
@@ -47,6 +50,7 @@ async function loadVouchers() {
           <button class="btn btn-sm" onclick='openGrantModal(${v.id}, ${JSON.stringify(v.code)})'>Grant · 发放</button>
           <button class="btn btn-sm" onclick="togglePublic(${v.id}, ${v.is_public ? 0 : 1})">${v.is_public ? 'Make private' : 'Make public'}</button>
           <button class="btn btn-sm" onclick="toggleAutoGrant(${v.id}, ${v.auto_grant_signup ? 0 : 1})" title="Auto-grant to every new signup">${v.auto_grant_signup ? 'Stop auto-grant' : 'Auto-grant'}</button>
+          <button class="btn btn-sm" onclick="toggleAutoApply(${v.id}, ${v.auto_apply ? 0 : 1})" title="Apply automatically at checkout — best coupon wins, no code needed">${v.auto_apply ? 'Stop auto-apply' : 'Auto-apply'}</button>
           <button class="btn btn-sm" onclick="toggleVoucher(${v.id}, ${v.is_active ? 0 : 1})">${v.is_active ? 'Disable' : 'Enable'}</button>
         </td>
       </tr>`;
@@ -67,6 +71,7 @@ async function createVoucher() {
     expires_at: $('#v-expires').value.trim() || null,
     is_public: $('#v-public').checked,
     auto_grant_signup: $('#v-auto-grant').checked,
+    auto_apply: $('#v-auto-apply').checked,
     title_en: $('#v-title-en').value.trim() || null,
     title_cn: $('#v-title-cn').value.trim() || null,
   };
@@ -85,6 +90,7 @@ async function createVoucher() {
     $('#v-percust').value = '1';
     $('#v-public').checked = false;
     $('#v-auto-grant').checked = false;
+    $('#v-auto-apply').checked = false;
     await loadVouchers();
   } catch (e) {
     const msg = e.message === 'code_active'
@@ -116,6 +122,15 @@ async function toggleAutoGrant(id, value) {
   try {
     await api('/api/retail-admin/vouchers/' + id, { method: 'PATCH', body: { auto_grant_signup: !!value } });
     toast(value ? 'Auto-grant enabled · 已开启自动发放' : 'Auto-grant disabled · 已关闭自动发放');
+    await loadVouchers();
+  } catch (e) {
+    toast('Failed · 失败: ' + e.message, 'err');
+  }
+}
+async function toggleAutoApply(id, value) {
+  try {
+    await api('/api/retail-admin/vouchers/' + id, { method: 'PATCH', body: { auto_apply: !!value } });
+    toast(value ? 'Auto-apply enabled · 已开启自动抵扣' : 'Auto-apply disabled · 已关闭自动抵扣');
     await loadVouchers();
   } catch (e) {
     toast('Failed · 失败: ' + e.message, 'err');

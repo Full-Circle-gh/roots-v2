@@ -3924,14 +3924,22 @@ function filterLocalOnly(rows) {
   );
 }
 
-function localOnlyProductNames(productIds) {
+function localOnlyProductNames(productIds, baseUrl) {
   const ids = [...new Set((productIds || []).map(n => parseInt(n, 10)).filter(Boolean))];
   if (!ids.length) return [];
   const ph = ids.map(() => '?').join(',');
   const rows = tdb().prepare(
     `SELECT id, name_en, name_cn, ship_modes, variant_group_id FROM store_products WHERE id IN (${ph})`
   ).all(...ids);
-  return filterLocalOnly(rows).map(r => ({ id: r.id, name_en: r.name_en, name_cn: r.name_cn }));
+  // Include the product image route so the "Guangzhou delivery only" popup can
+  // show a real thumbnail without depending on the cart still holding one (the
+  // image route resolves the product's own photo or a sibling's as fallback).
+  return filterLocalOnly(rows).map(r => ({
+    id: r.id,
+    name_en: r.name_en,
+    name_cn: r.name_cn,
+    image: baseUrl ? `${baseUrl}/api/retail/products/${r.id}/image` : '',
+  }));
 }
 
 // Bucket assignment for one item, purely by its allowed ship modes:
@@ -4485,8 +4493,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   if (!isPickup) {
     // Group-aware: a variant is Guangzhou-only if any sibling in its variant
     // group is flagged 'local' (the restriction is a product-level property).
+    const _baseUrl = `${req.protocol}://${req.get('host')}`;
     const localOnly = filterLocalOnly(resolved.map(r => r.product))
-      .map(p => ({ id: p.id, name_en: p.name_en, name_cn: p.name_cn }));
+      .map(p => ({ id: p.id, name_en: p.name_en, name_cn: p.name_cn, image: `${_baseUrl}/api/retail/products/${p.id}/image` }));
     if (localOnly.length && !isGuangzhou(address.city)) {
       return res.status(400).json({ success: false, error: 'local_only_outside_gz', products: localOnly });
     }
@@ -4761,8 +4770,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   shippingFee += sameDaySurcharge;
 
   // ── Voucher resolution ───────────────────────────────────────────────
-  // Customer sends voucher_code; server re-validates + computes discount.
+  // Customer sends voucher_code; server re-validates + computes discount. Then
+  // we also weigh the best store-wide auto-apply promo and keep whichever is
+  // worth more (best one wins). shippingFee is only zeroed AFTER the winner is
+  // chosen, so a free-shipping voucher that loses can't leak the waived fee.
   let voucher = null, voucherDiscount = 0;
+  let chosen = null;   // the customer's code, if eligible
   if (voucherCode) {
     const candidate = tdb().prepare(
       'SELECT * FROM retail_vouchers WHERE UPPER(code) = ? AND is_active = 1'
@@ -4798,11 +4811,20 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     if (ok) {
       const result = computeVoucherDiscount(candidate, subtotal, shippingFee);
       if (result.applied) {
-        voucher = candidate;
-        voucherDiscount = Number(result.discount) || 0;
-        if (result.free_shipping) shippingFee = 0;
+        chosen = { voucher: candidate, discount: Number(result.discount) || 0, free_shipping: !!result.free_shipping };
       }
     }
+  }
+  // Best auto-apply promo (no code, no grant). Compare it against the customer's
+  // chosen code and keep the bigger benefit; a free-shipping win is valued at the
+  // live shipping fee. On a tie, the customer's explicit pick is kept.
+  const auto = bestAutoVoucher(req.customer.id, subtotal, shippingFee);
+  const valueOf = (c) => c ? (c.discount + (c.free_shipping ? (Number(shippingFee) || 0) : 0)) : 0;
+  const winner = valueOf(auto) > valueOf(chosen) ? auto : chosen;
+  if (winner) {
+    voucher = winner.voucher;
+    voucherDiscount = winner.discount;
+    if (winner.free_shipping) shippingFee = 0;
   }
 
   const grossTotal = Math.max(0, subtotal + shippingFee + packingFee - voucherDiscount);
@@ -5895,6 +5917,41 @@ function computeVoucherDiscount(voucher, subtotal, shippingFee) {
   return { discount: 0, free_shipping: false, applied: false };
 }
 
+// Pick the single best auto-apply voucher for this customer + cart. Auto-apply
+// vouchers are store-wide automatic promos: no code, no personal grant. We still
+// honour expiry / usage pool / min-subtotal / per-customer cap. Signup-only
+// vouchers (auto_grant_signup) are NEVER auto-applied this way — they stay
+// grant-gated so a returning/migrated customer can't silently redeem one. A
+// free-shipping voucher is valued at the live shipping fee so it can be compared
+// like-for-like against a ¥/% discount. Returns
+// { voucher, discount, free_shipping } or null.
+function bestAutoVoucher(customerId, subtotal, shippingFee) {
+  const rows = tdb().prepare(
+    `SELECT * FROM retail_vouchers
+      WHERE is_active = 1 AND auto_apply = 1 AND auto_grant_signup = 0
+        AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)
+        AND (max_uses IS NULL OR used_count < max_uses)`
+  ).all();
+  let best = null, bestValue = 0;
+  for (const v of rows) {
+    if (customerId && v.per_customer_limit && v.per_customer_limit > 0) {
+      const used = tdb().prepare(
+        `SELECT COUNT(*) AS n FROM retail_orders
+          WHERE customer_id = ? AND voucher_code = ? AND status NOT IN ('cancelled')`
+      ).get(customerId, v.code).n;
+      if (used >= v.per_customer_limit) continue;
+    }
+    const r = computeVoucherDiscount(v, subtotal, shippingFee);
+    if (!r.applied) continue;
+    const value = (Number(r.discount) || 0) + (r.free_shipping ? (Number(shippingFee) || 0) : 0);
+    if (value > bestValue) {
+      best = { voucher: v, discount: Number(r.discount) || 0, free_shipping: !!r.free_shipping };
+      bestValue = value;
+    }
+  }
+  return best;
+}
+
 // Browseable coupons — public list customers can apply without a code.
 // Filters out inactive, expired, and exhausted vouchers. Auth optional:
 // when a token is present we also strip ones the customer has already
@@ -5956,6 +6013,24 @@ router.get('/api/retail/my-vouchers', requireRetailAuth, (req, res) => {
       ORDER BY g.granted_at DESC`
   ).all(req.customer.id);
   res.json({ success: true, data: rows });
+});
+
+// Best auto-apply promo for a given subtotal — lets the checkout show (and
+// pre-reflect in the total) the coupon the server will apply automatically.
+// Display only; /api/retail/orders re-decides authoritatively at placement and
+// also weighs free shipping against the live fee. Returns data:null when none.
+router.get('/api/retail/vouchers/auto', requireRetailAuth, (req, res) => {
+  const subtotal = Number(req.query.subtotal) || 0;
+  // Shipping fee isn't known here, so a pure free-shipping promo (¥0 discount)
+  // won't surface in the display — it still applies at order time.
+  const best = bestAutoVoucher(req.customer.id, subtotal, 0);
+  if (!best) return res.json({ success: true, data: null });
+  const v = best.voucher;
+  res.json({ success: true, data: {
+    code: v.code, type: v.type, value: v.value,
+    discount: best.discount, free_shipping: best.free_shipping,
+    title_en: v.title_en, title_cn: v.title_cn, min_subtotal: v.min_subtotal,
+  }});
 });
 
 // Customer taps CLAIM on the home "Coupon" block. Grants the linked voucher
@@ -6909,6 +6984,7 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
     title_cn: b.title_cn || null,
     description: b.description || null,
     auto_grant_signup: b.auto_grant_signup ? 1 : 0,
+    auto_apply: b.auto_apply ? 1 : 0,
   };
   try {
     // Codes are permanently UNIQUE (soft-delete keeps the row), so a code that
@@ -6931,13 +7007,13 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
         `UPDATE retail_vouchers SET
             type = ?, value = ?, min_subtotal = ?, max_uses = ?, per_customer_limit = ?,
             expires_at = ?, is_active = ?, is_public = ?, title_en = ?, title_cn = ?,
-            description = ?, auto_grant_signup = ?, used_count = 0,
+            description = ?, auto_grant_signup = ?, auto_apply = ?, used_count = 0,
             created_by = ?, created_at = CURRENT_TIMESTAMP
           WHERE id = ?`
       ).run(
         v.type, v.value, v.min_subtotal, v.max_uses, v.per_customer_limit,
         v.expires_at, v.is_active, v.is_public, v.title_en, v.title_cn,
-        v.description, v.auto_grant_signup, createdBy, existing.id
+        v.description, v.auto_grant_signup, v.auto_apply, createdBy, existing.id
       );
       logActivity(req.user.id, req.user.username, 'revive', 'voucher', existing.id, { code, type: v.type }, req.ip);
       return res.json({ success: true, reused: true, data: tdb().prepare('SELECT * FROM retail_vouchers WHERE id = ?').get(existing.id) });
@@ -6946,12 +7022,12 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
     const info = tdb().prepare(
       `INSERT INTO retail_vouchers
          (code, type, value, min_subtotal, max_uses, per_customer_limit, expires_at,
-          is_active, is_public, title_en, title_cn, description, auto_grant_signup, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          is_active, is_public, title_en, title_cn, description, auto_grant_signup, auto_apply, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       code, v.type, v.value, v.min_subtotal, v.max_uses, v.per_customer_limit,
       v.expires_at, v.is_active, v.is_public, v.title_en, v.title_cn,
-      v.description, v.auto_grant_signup, createdBy
+      v.description, v.auto_grant_signup, v.auto_apply, createdBy
     );
     logActivity(req.user.id, req.user.username, 'create', 'voucher', info.lastInsertRowid, { code, type: v.type }, req.ip);
     res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_vouchers WHERE id = ?').get(info.lastInsertRowid) });
@@ -6967,13 +7043,14 @@ router.patch('/api/retail-admin/vouchers/:id', requireRetailAdmin, express.json(
   if (!v) return res.status(404).json({ success: false, error: 'not_found' });
   const fields = ['value', 'min_subtotal', 'max_uses', 'per_customer_limit', 'expires_at',
                   'is_active', 'is_public', 'title_en', 'title_cn', 'description',
-                  'auto_grant_signup'];
+                  'auto_grant_signup', 'auto_apply'];
   const updates = {};
   for (const f of fields) if (f in req.body) updates[f] = req.body[f];
   if (!Object.keys(updates).length) return res.status(400).json({ success: false, error: 'no_fields' });
   if ('is_active' in updates) updates.is_active = updates.is_active ? 1 : 0;
   if ('is_public' in updates) updates.is_public = updates.is_public ? 1 : 0;
   if ('auto_grant_signup' in updates) updates.auto_grant_signup = updates.auto_grant_signup ? 1 : 0;
+  if ('auto_apply' in updates) updates.auto_apply = updates.auto_apply ? 1 : 0;
   if ('expires_at' in updates && !updates.expires_at) updates.expires_at = null;
   // Coerce + bound numeric fields, mirroring POST, so a malformed PATCH can't
   // store a non-numeric or negative discount that breaks computeVoucherDiscount.
@@ -13715,7 +13792,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
   // "Local only" products can't ship outside Guangzhou — surface it at quote
   // time so the mini-app can block before payment (the order endpoint enforces
   // it again as a hard backstop).
-  const localOnly = localOnlyProductNames((items || []).map(i => i.product_id));
+  const localOnly = localOnlyProductNames((items || []).map(i => i.product_id), `${req.protocol}://${req.get('host')}`);
   if (localOnly.length && !isGuangzhou(address.city)) {
     return res.json({
       success: false,

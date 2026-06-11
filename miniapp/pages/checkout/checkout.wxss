@@ -530,6 +530,15 @@
 .va-code { font-size: calc(30rpx * var(--font-scale)); letter-spacing: 0.06em; color: var(--ink); }
 .va-desc { font-size: calc(22rpx * var(--font-scale)); margin-top: 2rpx; }
 .va-remove { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.1em; color: var(--berry); text-decoration: underline; }
+.voucher-applied.auto { background: rgba(204, 217, 0, 0.12); border-color: var(--forest); margin-bottom: 14rpx; }
+.va-auto-pill {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  background: var(--forest);
+  color: var(--lime);
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+}
 
 .coupon-chips {
   display: flex;

@@ -37,6 +37,10 @@ Page({
     voucherInput: '',        // text being typed (not applied yet)
     publicCoupons: [],       // [{code, title, sublabel}]
     myVouchers: [],          // granted to this customer
+    autoVoucher: null,       // best store-wide auto-apply promo for this cart {code,discount,...}
+    autoApplied: null,       // banner shown when the auto promo is the winning discount {title, amount}
+    couponShown: '',         // effective coupon discount for the breakdown (manual OR auto, best wins)
+    couponFreeShown: false,  // effective free-shipping flag for the breakdown
     showCodeInput: false,    // collapses the type-a-code row until tapped
     deliveryMethod: 'standard',  // 'standard' | 'max' — 'sameday' kept as legacy fallback
     // Fulfillment — 'delivery' (default) or 'pickup' (collect at a store).
@@ -608,18 +612,23 @@ Page({
     try {
       const L = this.data.lang;
       const fmt = (v) => {
-        const title = lang.pick(v.title_en, v.title_cn, L)
-          || (v.type === 'percent'        ? (v.value + '% off')
-           :  v.type === 'free_shipping'  ? (L === 'cn' ? '免运费' : 'Free shipping')
-                                          : ('¥' + Number(v.value).toFixed(0) + ' off'));
+        const valueStr = v.type === 'percent'        ? (v.value + (L === 'cn' ? '% 优惠' : '% off'))
+                       : v.type === 'free_shipping'  ? (L === 'cn' ? '免运费' : 'Free shipping')
+                                                     : ('¥' + Number(v.value).toFixed(0) + (L === 'cn' ? ' 优惠' : ' off'));
+        const customTitle = lang.pick(v.title_en, v.title_cn, L);
+        const title = customTitle || valueStr;
         const subBits = [];
+        // Always surface the discount value. When the coupon has a custom title
+        // (e.g. "New Mini App celebration") the value would otherwise be hidden,
+        // so show it in the sublabel. When the title already IS the value, skip.
+        if (customTitle) subBits.push(valueStr);
         if (v.min_subtotal > 0) {
           subBits.push((L === 'cn' ? '满 ¥' : 'Min ¥') + Number(v.min_subtotal).toFixed(0));
         }
         if (v.expires_at) {
           subBits.push((L === 'cn' ? '至 ' : 'Until ') + String(v.expires_at).slice(0, 10));
         }
-        return { code: v.code, title, sublabel: subBits.join(' · ') };
+        return { code: v.code, title, sublabel: subBits.join(' · '), min: Number(v.min_subtotal) || 0 };
       };
       const [pubRes, mineRes] = await Promise.all([
         api.get('/api/retail/vouchers/public').catch(() => []),
@@ -634,6 +643,50 @@ Page({
     } catch (e) {
       console.warn('[checkout] loadPublicCoupons failed:', e.message);
     }
+    this.loadAutoVoucher();
+  },
+
+  // Fetch the best store-wide auto-apply promo for the current cart. The server
+  // applies it automatically at order time (best coupon wins); we mirror that in
+  // the checkout total + show an "Applied automatically" banner.
+  async loadAutoVoucher() {
+    try {
+      const data = await api.get('/api/retail/vouchers/auto?subtotal=' + cart.subtotal());
+      // api unwraps body.data → resolves to the object (or null) directly.
+      this.setData({ autoVoucher: data && data.code ? data : null });
+    } catch (e) {
+      console.warn('[checkout] loadAutoVoucher failed:', e.message);
+    }
+    this.refreshQuote();
+  },
+
+  // The discount actually in effect = whichever of {customer's applied code,
+  // best auto-apply promo} is worth more (best one wins). Mirrors the server's
+  // order-placement decision so the shown total matches what we charge.
+  effectiveVoucher() {
+    const manual = {
+      code: this.data.voucherCode,
+      discount: Number(this.data.voucherDiscount) || 0,
+      freeShip: !!this.data.voucherFreeShip,
+      auto: false,
+      title: '',
+    };
+    const a = this.data.autoVoucher;
+    if (a) {
+      const autoDisc = Number(a.discount) || 0;
+      // ¥/% auto promo wins on its discount; free-ship-vs-fee ties defer to the
+      // server (we don't know the fee here). Manual keeps the win on a tie.
+      if (autoDisc > manual.discount) {
+        return {
+          code: a.code, discount: autoDisc, freeShip: !!a.free_shipping, auto: true,
+          title: lang.pick(a.title_en, a.title_cn, this.data.lang)
+            || (a.type === 'percent' ? (a.value + (this.data.lang === 'cn' ? '% 优惠' : '% off'))
+              : a.type === 'free_shipping' ? (this.data.lang === 'cn' ? '免运费' : 'Free shipping')
+              : ('¥' + Number(a.value).toFixed(0) + (this.data.lang === 'cn' ? ' 优惠' : ' off'))),
+        };
+      }
+    }
+    return manual;
   },
 
   async loadPointsBalance() {
@@ -782,7 +835,8 @@ Page({
       };
     });
     const itemCount = state.items.reduce((s, it) => s + (it.qty || 0), 0);
-    const voucherDiscount = Number(this.data.voucherDiscount) || 0;
+    const ev = this.effectiveVoucher();
+    const voucherDiscount = ev.discount;
     const packingFee = Number(this.data.pickupPackingFee) || 0;
     const grossTotal = Math.max(0, subtotal + packingFee - voucherDiscount);
     const rate = Number(this.data.pointsRedeemRate) || 100;
@@ -800,6 +854,9 @@ Page({
       zone: null, zoneError: '',
       deliveryFee: '0.00', packingFee: packingFee.toFixed(2), freeShipping: false,
       needsFallback: false, fallbackGate: 'none',
+      autoApplied: ev.auto ? { title: ev.title, amount: voucherDiscount.toFixed(2) } : null,
+      couponShown: voucherDiscount > 0 ? voucherDiscount.toFixed(2) : '',
+      couponFreeShown: !!ev.freeShip,
       pointsToUse,
       pointsDiscount: pointsDiscount.toFixed(2),
       pointsAffordable,
@@ -816,6 +873,18 @@ Page({
   selectPublicCoupon(e) {
     const code = e.currentTarget.dataset.code;
     if (!code) return;
+    // If the coupon has a spend threshold the cart hasn't met yet, tell the
+    // customer exactly how much more to add instead of a vague "doesn't apply".
+    const card = [...this.data.myVouchers, ...this.data.publicCoupons].find(c => c.code === code);
+    const gap = card ? card.min - cart.subtotal() : 0;
+    if (gap > 0) {
+      const amt = '¥' + gap.toFixed(2);
+      wx.showToast({
+        title: this.data.lang === 'cn' ? ('再买 ' + amt + ' 可用') : ('Add ' + amt + ' to use'),
+        icon: 'none',
+      });
+      return;
+    }
     this.setData({ voucherInput: code });
     this.applyVoucher();
   },
@@ -987,9 +1056,10 @@ Page({
         this.setData({ items: itemRows, subtotal: srvSubtotal.toFixed(2) });
         const deliveryFee = Number(data.delivery_fee) || 0;
         const packingFee  = Number(data.packing_fee)  || 0;
+        const ev = this.effectiveVoucher();
         let effectiveDelivery = deliveryFee;
-        if (this.data.voucherFreeShip) effectiveDelivery = 0;
-        const voucherDiscount = Number(this.data.voucherDiscount) || 0;
+        if (ev.freeShip) effectiveDelivery = 0;
+        const voucherDiscount = ev.discount;
         const grossTotal = Math.max(0, srvSubtotal + effectiveDelivery + packingFee - voucherDiscount);
         const payingWithPoints = !!this.data.usePoints && data.points_affordable;
         // Partial-points stack: server clamped points_to_use → applied amount + discount.
@@ -1052,11 +1122,14 @@ Page({
         // "You saved" total — flash savings + voucher + points + waived
         // delivery (free-ship voucher). Empty string hides the summary row.
         const savedTotal = flashSavings + voucherDiscount + pointsDiscount
-          + (this.data.voucherFreeShip ? deliveryFee : 0);
+          + (ev.freeShip ? deliveryFee : 0);
         this.setData({
           zone: data.zone || null,
           zoneError: '',
           deliveryFee: effectiveDelivery.toFixed(2),
+          autoApplied: ev.auto ? { title: ev.title, amount: voucherDiscount.toFixed(2) } : null,
+          couponShown: voucherDiscount > 0 ? voucherDiscount.toFixed(2) : '',
+          couponFreeShown: !!ev.freeShip,
           savedTotal: savedTotal > 0 ? savedTotal.toFixed(2) : '',
           packingFee:  packingFee.toFixed(2),
           freeShipping: !!data.free_shipping,
@@ -1345,7 +1418,7 @@ Page({
     const subtotal = cart.subtotal();
     const deliveryFee = Number(this.data.deliveryFee) || 0;
     const packingFee  = Number(this.data.packingFee)  || 0;
-    const voucherDiscount = Number(this.data.voucherDiscount) || 0;
+    const voucherDiscount = this.effectiveVoucher().discount;  // best of {manual, auto-apply}
     const pointsDiscount  = Number(this.data.pointsDiscount)  || 0;
     const payingWithPoints = !!this.data.usePoints && this.data.pointsAffordable;
     const gross = Math.max(0, subtotal + deliveryFee + packingFee - voucherDiscount + surcharge);
@@ -1393,7 +1466,7 @@ Page({
     const subtotal = cart.subtotal();
     const deliveryFee = Number(this.data.deliveryFee) || 0;
     const packingFee  = Number(this.data.packingFee)  || 0;
-    const voucherDiscount = Number(this.data.voucherDiscount) || 0;
+    const voucherDiscount = this.effectiveVoucher().discount;  // best of {manual, auto-apply}
     const pointsDiscount  = Number(this.data.pointsDiscount)  || 0;
     const payingWithPoints = !!this.data.usePoints && this.data.pointsAffordable;
     const gross = Math.max(0, subtotal + deliveryFee + packingFee - voucherDiscount + surcharge);
@@ -1421,7 +1494,7 @@ Page({
   // Used when we can't quote (no address yet, or transient error). Keeps the
   // totals readable by just showing subtotal − voucher.
   applyQuoteFallback(subtotal) {
-    const voucherDiscount = Number(this.data.voucherDiscount) || 0;
+    const voucherDiscount = this.effectiveVoucher().discount;  // best of {manual, auto-apply}
     this.setData({
       zone: null,
       zoneError: '',
@@ -1768,12 +1841,25 @@ Page({
     // popup's item-thumbnail matching.
     const cartItems = cart.get().items || [];
     const imgById = {};
+    const imgByName = {};
     for (const ci of cartItems) {
       if (ci.product_id != null && !imgById[ci.product_id]) imgById[ci.product_id] = ci.image || '';
+      // Name fallback: server product ids don't always line up with the cart
+      // row's product_id (variants, upstream/self id skew). Keying by the
+      // display name too lets the thumbnail resolve even when the id match
+      // misses — otherwise the popup falls back to the pin icon.
+      const nm = lang.pick(ci.name_en, ci.name_cn, L);
+      if (nm && !imgByName[nm] && ci.image) imgByName[nm] = ci.image;
     }
     const ids   = new Set(list.map(p => p.id));
     const items = list
-      .map(p => ({ name: lang.pick(p.name_en, p.name_cn, L), image: imgById[p.id] || '' }))
+      .map(p => {
+        const name = lang.pick(p.name_en, p.name_cn, L);
+        // Prefer the server-provided product image; fall back to the matching
+        // cart row (by id, then name) so the popup shows a thumbnail even on
+        // older server payloads that didn't carry one.
+        return { name, image: p.image || imgById[p.id] || imgByName[name] || '' };
+      })
       .filter(x => x.name);
     const names = items.map(x => x.name);
     // Drop every cart line whose product is Guangzhou-only (all option variants).
@@ -1853,11 +1939,18 @@ Page({
 
   // Back-compat thin wrapper — existing callers (place-order guard, submit
   // backstop) want the "blocked" explainer. They pass display names (strings);
-  // wrap them as {name, image} so the popup renders consistently (no cart
-  // thumbnail available on these paths, so it falls back to the pin icon).
+  // wrap them as {name, image}. The offending items are still in the cart on
+  // the blocked path, so match each name to its live cart row for a product
+  // thumbnail (pin icon only as a fallback when there's no match).
   showLocalOnlyModal(names) {
     const src = (names && names.length ? names : this.data.localOnlyNames) || [];
-    this.showLocalOnlyPopup('blocked', src.map(n => ({ name: n, image: '' })));
+    const L = this.data.lang;
+    const imgByName = {};
+    for (const ci of (cart.get().items || [])) {
+      const nm = lang.pick(ci.name_en, ci.name_cn, L);
+      if (nm && !imgByName[nm]) imgByName[nm] = ci.image || '';
+    }
+    this.showLocalOnlyPopup('blocked', src.map(n => ({ name: n, image: imgByName[n] || '' })));
   },
 
   closeLocalOnly() {

@@ -1406,6 +1406,7 @@ addColumn('retail_vouchers', 'is_public',         'INTEGER DEFAULT 0');  // 1 = 
 addColumn('retail_vouchers', 'title_en',          'TEXT');               // customer-facing label for public coupons
 addColumn('retail_vouchers', 'title_cn',          'TEXT');
 addColumn('retail_vouchers', 'auto_grant_signup', 'INTEGER DEFAULT 0');  // 1 = auto-granted to new customers on first /api/retail/auth
+addColumn('retail_vouchers', 'auto_apply',        'INTEGER DEFAULT 0');  // 1 = applied automatically at checkout (best one wins), no code/grant needed
 
 db.exec(`CREATE TABLE IF NOT EXISTS retail_subscriptions (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

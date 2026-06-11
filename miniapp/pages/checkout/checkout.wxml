@@ -445,7 +445,15 @@
   <view class="section">
     <view class="section-title f-bear">{{copy.couponsTitle}}</view>
 
-    <view wx:if="{{voucherCode}}" class="voucher-applied">
+    <view wx:if="{{autoApplied}}" class="voucher-applied auto">
+      <view>
+        <view class="va-code f-gothic">{{autoApplied.title}}</view>
+        <view class="va-desc muted">{{lang === 'cn' ? '已自动抵扣' : 'Applied automatically'}} · −¥{{autoApplied.amount}}</view>
+      </view>
+      <view class="va-auto-pill f-toni">{{lang === 'cn' ? '最优' : 'BEST'}}</view>
+    </view>
+
+    <view wx:if="{{voucherCode && !autoApplied}}" class="voucher-applied">
       <view>
         <view class="va-code f-gothic">{{voucherCode}}</view>
         <view class="va-desc muted">{{voucherFreeShip ? (lang === 'cn' ? '免运费' : 'Free shipping') : '−¥' + voucherDiscount}}</view>
@@ -496,15 +504,15 @@
     </view>
     <view wx:elif="{{!zoneError && !localOnlyBlock}}" class="bd-row">
       <view class="bd-label">{{lang === 'cn' ? '配送费' : 'Delivery'}}</view>
-      <view class="bd-val f-bear">{{(freeShipping && !voucherDiscount) || voucherFreeShip ? copy.free : '¥' + deliveryFee}}</view>
+      <view class="bd-val f-bear">{{(freeShipping && !couponShown) || couponFreeShown ? copy.free : '¥' + deliveryFee}}</view>
     </view>
     <view wx:if="{{packingFee && packingFee !== '0.00'}}" class="bd-row">
       <view class="bd-label">{{lang === 'cn' ? '包装费' : 'Packing fee'}}</view>
       <view class="bd-val f-bear">¥{{packingFee}}</view>
     </view>
-    <view wx:if="{{voucherDiscount}}" class="bd-row">
+    <view wx:if="{{couponShown}}" class="bd-row">
       <view class="bd-label">{{lang === 'cn' ? '优惠券' : 'Coupon'}}</view>
-      <view class="bd-val f-bear">−¥{{voucherDiscount}}</view>
+      <view class="bd-val f-bear">−¥{{couponShown}}</view>
     </view>
     <view wx:if="{{paymentMethod === 'points' && pointsToUse > 0}}" class="bd-row">
       <view class="bd-label">{{lang === 'cn' ? '积分抵扣 · ' : 'Points · '}}{{pointsToUse}}{{lang === 'cn' ? ' 积分' : ' pts'}}</view>
