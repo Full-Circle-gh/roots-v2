@@ -444,7 +444,7 @@ function vwFrontHtml() {
     ['fresh', 'pencil', 'Start fresh · 从头开始', 'Set it up myself · 自己设置'],
   ];
   return '<div class="vw-lab" style="margin-bottom:2px;">What do you want to do? · 你想做什么?</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+    + '<div class="vw-goals">'
     + goals.map(g => '<button class="vw-goal" onclick="vwApplyGoal(\'' + g[0] + '\')"><span class="vico">' + vwIcon(g[1], 26) + '</span>'
         + '<span><span class="gt">' + g[2] + '</span><br><span class="gs">' + g[3] + '</span></span></button>').join('')
     + '</div>';
@@ -511,7 +511,7 @@ function vwNextWho() { vwGoto('rules'); }
 
 function vwRulesHtml() {
   const f = (lab, id, val, ph, type) => '<div class="field" style="margin:0;flex:1;min-width:200px;"><label class="vw-lab">' + lab
-    + '</label><input type="' + (type || 'number') + '" id="' + id + '" value="' + escapeAttr(String(val)) + '" placeholder="' + (ph || '') + '" style="width:100%;"></div>';
+    + '</label><input type="' + (type || 'number') + '" id="' + id + '" value="' + escapeAttr(String(val)) + '" placeholder="' + (ph || '') + '" oninput="vwLiveRules()" onchange="vwLiveRules()" style="width:100%;"></div>';
   return vwTicketHtml()
     + '<div class="vw-help">These already have good defaults. Change only what you want. · 这些已有合适的默认值,只改你想改的。</div>'
     + '<div style="display:flex;gap:16px;flex-wrap:wrap;">'
@@ -522,6 +522,16 @@ function vwRulesHtml() {
       + f('How many times can one person use it? · 每人可用几次?', 'vw-percust', (_vw.perCust != null ? _vw.perCust : 1), '1')
       + f('How many coupons in total? · 总共多少张?', 'vw-maxuses', (_vw.maxUses || ''), 'empty = no limit · 留空 = 不限')
     + '</div>';
+}
+// Live-reflect the rules fields (min spend, end date, limits) into the preview
+// ticket as the operator types — same as the deal value.
+function vwLiveRules() {
+  _vw.min = Number($('#vw-min').value) || 0;
+  _vw.expires = $('#vw-expires').value || '';
+  _vw.perCust = $('#vw-percust').value !== '' ? Math.max(0, parseInt($('#vw-percust').value, 10) || 0) : 1;
+  _vw.maxUses = $('#vw-maxuses').value || '';
+  const t = document.getElementById('vw-ticket');
+  if (t) t.outerHTML = vwTicketHtml();
 }
 function vwNextRules() {
   _vw.min = Number($('#vw-min').value) || 0;

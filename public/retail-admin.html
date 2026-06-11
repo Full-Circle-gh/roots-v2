@@ -2290,6 +2290,8 @@
       .vw-dots { display: flex; gap: 7px; }
       .vw-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
       .vw-dot.on { background: var(--brass, #b08d4a); }
+      .vw-goals { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      @media (max-width: 560px) { .vw-goals { grid-template-columns: 1fr; } }
       .vw-goal { display: flex; align-items: center; gap: 14px; border: 1px solid var(--line); border-radius: 12px; padding: 18px; background: var(--bg-input, #fff); cursor: pointer; text-align: left; font: inherit; color: inherit; }
       .vw-goal:hover { border-color: var(--brass, #b08d4a); background: var(--bg-elev-1, #faf7f0); }
       .vw-goal .vico { color: var(--brass, #b08d4a); flex: 0 0 auto; display: flex; }
