@@ -7054,6 +7054,20 @@ router.get('/api/retail-admin/vouchers', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: rows });
 });
 
+// A voucher expiry entered as a bare date ("2026-06-15") means "valid through
+// the END of that day in store-local (GZ, UTC+8) time" — but stored bare it is
+// compared as UTC midnight (datetime('2026-06-15') = 2026-06-15 00:00 UTC =
+// 08:00 GZ), so the coupon died ~8am on its last day and a "today" expiry was
+// born already-expired. Normalize a bare date to GZ end-of-day expressed in UTC
+// (23:59:59 +08:00 = 15:59:59Z) so both the SQLite datetime() and JS new Date()
+// comparisons treat it correctly. Values that already carry a time are kept.
+function normalizeVoucherExpiry(v) {
+  if (v == null || v === '') return null;
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T15:59:59Z`;
+  return s;
+}
+
 router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (req, res) => {
   const b = req.body || {};
   const code = String(b.code || '').trim().toUpperCase();
@@ -7079,7 +7093,7 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
     min_subtotal: Math.max(0, Number(b.min_subtotal) || 0),
     max_uses: b.max_uses != null && b.max_uses !== '' ? parseInt(b.max_uses, 10) : null,
     per_customer_limit: b.per_customer_limit != null ? parseInt(b.per_customer_limit, 10) : 1,
-    expires_at: b.expires_at || null,
+    expires_at: normalizeVoucherExpiry(b.expires_at),
     is_active: b.is_active === false ? 0 : 1,
     is_public: b.is_public ? 1 : 0,
     title_en: b.title_en || null,
@@ -7153,7 +7167,7 @@ router.patch('/api/retail-admin/vouchers/:id', requireRetailAdmin, express.json(
   if ('is_public' in updates) updates.is_public = updates.is_public ? 1 : 0;
   if ('auto_grant_signup' in updates) updates.auto_grant_signup = updates.auto_grant_signup ? 1 : 0;
   if ('auto_apply' in updates) updates.auto_apply = updates.auto_apply ? 1 : 0;
-  if ('expires_at' in updates && !updates.expires_at) updates.expires_at = null;
+  if ('expires_at' in updates) updates.expires_at = normalizeVoucherExpiry(updates.expires_at);
   // Coerce + bound numeric fields, mirroring POST, so a malformed PATCH can't
   // store a non-numeric or negative discount that breaks computeVoucherDiscount.
   if ('value' in updates)        updates.value        = Math.max(0, Number(updates.value) || 0);
@@ -7994,6 +8008,78 @@ function creditReferralReward(orderId) {
   });
   try { tx(); } catch (e) { console.error('[creditReferralReward]', e); }
 }
+
+// Reverse a referral payout when its triggering (first paid) order is fully
+// refunded or cancelled. Without this, the buyer gets their money back AND the
+// referral cash stays in both wallets — a repeatable leak. Idempotent: the
+// status='ordered' → 'void' flip inside the transaction only fires once.
+//
+// CLAWBACK POLICY: debit is CLAMPED to the wallet's available balance — we never
+// drive a balance negative (the rest of the system assumes balance >= 0). If the
+// referrer already spent the credit, the unreclaimed remainder is logged as a
+// shortfall for manual follow-up rather than forced into a negative balance.
+// Only the FULL-refund/cancel paths call this; a partial refund leaves the
+// referral intact (the order still counts as a kept first order).
+function reverseOrderReferral(orderId) {
+  const s = affiliateSettings();
+  if (!s.enabled) return;
+  const ref = tdb().prepare(
+    `SELECT id, referrer_id, invitee_id, reward_amount, referee_reward_amount
+       FROM retail_referrals
+      WHERE first_paid_order_id = ? AND status = 'ordered'`
+  ).get(orderId);
+  if (!ref) return;
+  const reward = Number(ref.reward_amount) || 0;
+  const refereeReward = Number(ref.referee_reward_amount) || 0;
+  // Debit a wallet by up to `amount`, clamped so the balance never goes below 0,
+  // logging a negative ledger row (and a shortfall warning when clamped).
+  const debitWallet = (customerId, amount, method, outTradeNo) => {
+    if (!(amount > 0)) return;
+    const cur = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(customerId);
+    const bal = cur?.balance || 0;
+    const take = Math.min(amount, bal);
+    if (take < amount) {
+      console.warn(`[reverseOrderReferral] shortfall: wanted ¥${amount} back from customer ${customerId} (order ${orderId}) but only ¥${bal} available — reclaimed ¥${take}, ¥${Math.round((amount - take) * 100) / 100} not recovered`);
+    }
+    if (take <= 0) return;   // nothing left to claw back
+    const after = Math.round((bal - take) * 100) / 100;
+    tdb().prepare('UPDATE retail_customers SET balance = ? WHERE id = ?').run(after, customerId);
+    tdb().prepare(
+      `INSERT INTO retail_topup_transactions
+         (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
+       VALUES (?, ?, 0, ?, 'success', CURRENT_TIMESTAMP, ?, ?)`
+    ).run(
+      customerId, -take, method, outTradeNo,
+      JSON.stringify({ referral_id: ref.id, invitee_id: ref.invitee_id, order_id: orderId, clawback: true })
+    );
+  };
+  const tx = tdb().transaction(() => {
+    // Flip first under the status guard — only proceed if we won the flip
+    // (idempotent: a re-fire finds status != 'ordered' and does nothing).
+    const won = tdb().prepare(
+      "UPDATE retail_referrals SET status = 'void', voided_at = CURRENT_TIMESTAMP, voided_reason = 'order_refunded' WHERE id = ? AND status = 'ordered'"
+    ).run(ref.id);
+    if (!won.changes) return;
+    if (reward > 0)        debitWallet(ref.referrer_id, reward, 'referral_clawback', `referral_clawback:${ref.id}:${orderId}`);
+    if (refereeReward > 0) debitWallet(ref.invitee_id, refereeReward, 'referral_welcome_clawback', `referral_welcome_clawback:${ref.id}:${orderId}`);
+  });
+  try { tx(); } catch (e) { console.error('[reverseOrderReferral]', e); }
+}
+
+// When a stock adjustment promotes an awaiting_restock order to 'paid', fire the
+// post-payment side effects markOrderPaid skipped while it was awaiting restock.
+// Points were already awarded at payment (and awardOrderPoints is idempotent),
+// but creditReferralReward early-returns until status='paid' — so an invited
+// friend's first order being a wait-for-restock order would otherwise never pay
+// out the referral. Both are idempotent, so re-firing here is safe.
+try {
+  inventory.setOnOrdersPromoted((orderIds) => {
+    for (const oid of orderIds) {
+      try { awardOrderPoints(oid); }     catch (e) { console.error('[promote.awardOrderPoints]', e); }
+      try { creditReferralReward(oid); } catch (e) { console.error('[promote.creditReferralReward]', e); }
+    }
+  });
+} catch (e) { console.error('[inventory.setOnOrdersPromoted]', e); }
 
 // ─── Affiliate admin ─────────────────────────────────────────────────────
 router.get('/api/retail-admin/affiliate/settings', requireRetailAdmin, (req, res) => {
@@ -11639,6 +11725,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
         logRefundEvent({ orderId: id, event: 'paid', amount: fullTotal, note: 'auto-refund on cancel', userId: req.user.id, meta: { method: 'wechat', reference: wechatRefundRef } });
         try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints cancel]', e); }
         try { reverseOrderRedeem(id); } catch (e) { console.error('[reverseOrderRedeem cancel]', e); }
+        try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral cancel]', e); }
       } catch (e) { console.error('[cancel refund bookkeeping]', e); }
     }
   }
@@ -11661,6 +11748,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     logRefundEvent({ orderId: id, event: 'paid',     amount: fullTotal, note: 'legacy status-transition shortcut', userId: req.user.id });
     try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints]', e); }
     try { reverseOrderRedeem(id); } catch (e) { console.error('[reverseOrderRedeem]', e); }
+    try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral]', e); }
     try { inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, note: reason || null }); }
     catch (e) { console.error('[inventory.reverse (refund)]', e); }
     // Mirror onto retail_payments for the audit trail.
@@ -11824,7 +11912,12 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount' });
 
   const isFull = amount + 0.005 >= Number(o.total); // tolerance for ¥0.01 rounding
-  const reversePoints = req.body?.reverse_points != null ? !!req.body.reverse_points : isFull;
+  // Points reversal is ALL-OR-NOTHING (reverseOrderRedeem returns the entire
+  // redemption, with no partial notion), so only allow it on a FULL refund.
+  // Previously an operator could pass reverse_points=true on a PARTIAL refund
+  // and the customer got all redeemed points back plus partial cash — a large
+  // over-compensation. Clamp to isFull so a partial can never reverse points.
+  const reversePoints = isFull && (req.body?.reverse_points != null ? !!req.body.reverse_points : true);
 
   tdb().prepare(
     `UPDATE retail_orders
@@ -11849,6 +11942,10 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   if (reversePoints) {
     try { reverseOrderPoints(id); }  catch (e) { console.error('[reverseOrderPoints]', e); }
     try { reverseOrderRedeem(id); }  catch (e) { console.error('[reverseOrderRedeem]', e); }
+  }
+  // A full refund undoes the kept-first-order, so claw back any referral payout.
+  if (isFull) {
+    try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral]', e); }
   }
   // Full refund flips the order's main status too.
   if (isFull && o.status !== 'refunded' && o.status !== 'cancelled') {
