@@ -7607,7 +7607,13 @@ function affiliateSettings() {
   // source of truth for whether the referral program runs.
   return {
     enabled:        cfgValue('features.affiliate', true) ? true : false,
+    // Referrer reward ("for you") — keeps the legacy `rewardPerOrder` key so
+    // existing setups (and the per-row admin reward edit) keep working.
     rewardPerOrder: Number(cfgValue('affiliate.rewardPerOrder', AFFILIATE_REWARD_DEFAULT)) || 0,
+    // Referee reward ("for them") — the invited friend's cashback, credited to
+    // their wallet on their first paid order. Defaults to 0 (off) so enabling
+    // the split is an explicit, opt-in spend decision by the operator.
+    rewardReferee:  Number(cfgValue('affiliate.rewardReferee', 0)) || 0,
     codePrefix:     String(cfgValue('affiliate.codePrefix', REFERRAL_CODE_PREFIX)),
   };
 }
@@ -7681,6 +7687,7 @@ router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
     data: {
       enabled:          s.enabled,
       reward_per_order: s.rewardPerOrder,
+      reward_referee:   s.rewardReferee,
       code,
       referred_by:      referredBy?.id ? { id: referredBy.id, nickname: referredBy.nickname, code: referredBy.referral_code } : null,
       stats:            affiliateStatsFor(req.customer.id),
@@ -7721,9 +7728,9 @@ router.post('/api/retail/affiliate/apply', requireRetailAuth, express.json(), (r
     ).run(inviter.id, me.id);
     tdb().prepare(
       `INSERT OR IGNORE INTO retail_referrals
-         (referrer_id, invitee_id, code_used, status, reward_amount)
-       VALUES (?, ?, ?, 'joined', ?)`
-    ).run(inviter.id, me.id, raw, s.rewardPerOrder);
+         (referrer_id, invitee_id, code_used, status, reward_amount, referee_reward_amount)
+       VALUES (?, ?, ?, 'joined', ?, ?)`
+    ).run(inviter.id, me.id, raw, s.rewardPerOrder, s.rewardReferee);
   });
   tx();
 
@@ -7748,7 +7755,7 @@ function creditReferralReward(orderId) {
   const o = tdb().prepare('SELECT id, customer_id, status FROM retail_orders WHERE id = ?').get(orderId);
   if (!o || o.status !== 'paid') return;
   const ref = tdb().prepare(
-    `SELECT id, referrer_id, invitee_id, reward_amount, status
+    `SELECT id, referrer_id, invitee_id, reward_amount, referee_reward_amount, status
        FROM retail_referrals
       WHERE invitee_id = ? AND status = 'joined'`
   ).get(o.customer_id);
@@ -7764,20 +7771,30 @@ function creditReferralReward(orderId) {
     return;
   }
   const reward = Number(ref.reward_amount) || 0;
+  const refereeReward = Number(ref.referee_reward_amount) || 0;
+  // Shared helper: credit a wallet + log a ledger row. out_trade_no is the
+  // idempotency key (UNIQUE), so a double-fire of markOrderPaid can't double-pay.
+  const creditWallet = (customerId, amount, method, outTradeNo) => {
+    const cur = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(customerId);
+    const after = Math.round(((cur?.balance || 0) + amount) * 100) / 100;
+    tdb().prepare('UPDATE retail_customers SET balance = ? WHERE id = ?').run(after, customerId);
+    tdb().prepare(
+      `INSERT INTO retail_topup_transactions
+         (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
+       VALUES (?, ?, 0, ?, 'success', CURRENT_TIMESTAMP, ?, ?)`
+    ).run(
+      customerId, amount, method, outTradeNo,
+      JSON.stringify({ referral_id: ref.id, invitee_id: ref.invitee_id, order_id: orderId })
+    );
+  };
   const tx = tdb().transaction(() => {
+    // "For you" — credit the referrer.
     if (reward > 0) {
-      const cur = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(ref.referrer_id);
-      const after = Math.round(((cur?.balance || 0) + reward) * 100) / 100;
-      tdb().prepare('UPDATE retail_customers SET balance = ? WHERE id = ?').run(after, ref.referrer_id);
-      tdb().prepare(
-        `INSERT INTO retail_topup_transactions
-           (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
-         VALUES (?, ?, 0, 'referral_reward', 'success', CURRENT_TIMESTAMP, ?, ?)`
-      ).run(
-        ref.referrer_id, reward,
-        `referral:${ref.id}:${orderId}`,
-        JSON.stringify({ referral_id: ref.id, invitee_id: ref.invitee_id, order_id: orderId })
-      );
+      creditWallet(ref.referrer_id, reward, 'referral_reward', `referral:${ref.id}:${orderId}`);
+    }
+    // "For them" — credit the invited friend (cashback on their first order).
+    if (refereeReward > 0) {
+      creditWallet(ref.invitee_id, refereeReward, 'referral_welcome', `referral_welcome:${ref.id}:${orderId}`);
     }
     tdb().prepare(
       `UPDATE retail_referrals
@@ -7804,6 +7821,11 @@ router.patch('/api/retail-admin/affiliate/settings', requireRetailAdmin, express
     const n = Number(b.rewardPerOrder);
     if (!Number.isFinite(n) || n < 0 || n > 10000) return res.status(400).json({ success: false, error: 'bad_reward' });
     writes.push(['affiliate.rewardPerOrder', Math.round(n * 100) / 100]);
+  }
+  if (b.rewardReferee !== undefined) {
+    const n = Number(b.rewardReferee);
+    if (!Number.isFinite(n) || n < 0 || n > 10000) return res.status(400).json({ success: false, error: 'bad_reward' });
+    writes.push(['affiliate.rewardReferee', Math.round(n * 100) / 100]);
   }
   if (typeof b.codePrefix === 'string') {
     const p = b.codePrefix.trim().toUpperCase().slice(0, 12);

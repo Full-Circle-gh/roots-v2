@@ -50,7 +50,8 @@ const COPY_EN = {
   menuMembershipCn: '会员',
   menuAffiliate: 'Refer a friend',
   menuAffiliateCn: '推广计划',
-  affiliateMeta: '¥30 for you, ¥30 for them',
+  affiliateMeta: '¥{you} for you, ¥{them} for them',
+  affiliateMetaSolo: '¥{you} per friend who orders',
   menuAbout: 'About Roots',
   menuAboutCn: '关于我们',
   aboutMeta: 'Our story',
@@ -109,7 +110,8 @@ const COPY_CN = {
   menuMembershipCn: 'MEMBERSHIP',
   menuAffiliate: '推广计划',
   menuAffiliateCn: 'REFER A FRIEND',
-  affiliateMeta: '推荐好友双方各得 ¥30',
+  affiliateMeta: '你得 ¥{you},好友得 ¥{them}',
+  affiliateMetaSolo: '每位好友下单,你得 ¥{you}',
   menuAbout: '关于我们',
   menuAboutCn: 'ABOUT ROOTS',
   aboutMeta: '我们的故事',
@@ -173,6 +175,11 @@ Page({
     // Help/FAQ feature switch (features.faq, set in the Mini App Backend).
     // Default true so a config miss still shows the Help row.
     faqEnabled: true,
+    // Refer-a-friend reward (¥ per converted order), from config.affiliate
+    // .rewardPerOrder. Drives the "¥N for you, ¥N for them" subtitle so it
+    // always matches the backend setting. Default 30 if config misses.
+    affiliateReward: 30,    // referrer reward ("for you")
+    affiliateReferee: 0,    // friend reward ("for them"); 0 → solo subtitle
     // Operator-defined row layout (config.me_page.rows): array of
     // { id, enabled }. null = use the ROW_DEFS default order, all shown.
     meRowsConfig: null,
@@ -248,7 +255,12 @@ Page({
       case 'addresses':  return this.data.defaultAddrPreview || c.noAddressMeta;
       case 'wallet':     return '¥' + this.data.balanceDisplay + ' · ' + (cust.points_balance || 0) + ' ' + c.points;
       case 'topup':      return c.topupMeta;
-      case 'affiliate':  return c.affiliateMeta;
+      case 'affiliate': {
+        const you = String(this.data.affiliateReward || 0);
+        const them = Number(this.data.affiliateReferee) || 0;
+        const tmpl = them > 0 ? c.affiliateMeta : c.affiliateMetaSolo;
+        return tmpl.replace(/\{you\}/g, you).replace(/\{them\}/g, String(them));
+      }
       case 'coupons':    return (cust.coupon_count || 0) + ' ' + c.couponsMeta;
       case 'invoices':   return '';
       case 'favorites':  return (cust.favorite_count || 0) + ' ' + c.favoritesMeta;
@@ -291,6 +303,8 @@ Page({
     let tourEnabled = true;
     let faqEnabled = true;
     let meRowsConfig = null;
+    let affiliateReward = this.data.affiliateReward;
+    let affiliateReferee = this.data.affiliateReferee;
     try {
       const full = await config.load(false);
       cfg = (full && full.brand && full.brand.me_footer) || {};
@@ -300,6 +314,11 @@ Page({
       faqEnabled = full?.features?.faq !== false;
       // Operator's Me-page row layout (order + visibility).
       if (Array.isArray(full?.me_page?.rows)) meRowsConfig = full.me_page.rows;
+      // Refer-a-friend rewards → keep the row subtitle in sync with backend.
+      const r = Number(full?.affiliate?.rewardPerOrder);
+      if (Number.isFinite(r) && r > 0) affiliateReward = r;
+      const rr = Number(full?.affiliate?.rewardReferee);
+      if (Number.isFinite(rr) && rr >= 0) affiliateReferee = rr;
     } catch {}
     const lang = this.data.lang;
     const tEN = (cfg.tagline_en || '').trim();
@@ -317,6 +336,8 @@ Page({
       tourEnabled,
       faqEnabled,
       meRowsConfig,
+      affiliateReward,
+      affiliateReferee,
       footer: {
         wordmark_image: cfg.wordmark_image || '',
         wordmark_text:  cfg.wordmark_text  || (cfg.wordmark_image ? '' : 'Full Circle'),

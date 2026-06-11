@@ -27,7 +27,8 @@ const COPY = {
     kicker:        'AFFILIATE',
     title1:        'Plant seeds.',
     title2:        'Reap rewards',
-    tagline:       '¥30 for you, ¥30 for them. Every friend that orders.',
+    tagline:       '¥{you} for you, ¥{them} for them. Every friend that orders.',
+    taglineSolo:   '¥{you} for every friend that orders.',
     earned:        'EARNED',
     invited:       'INVITED',
     joined:        'JOINED',
@@ -51,7 +52,8 @@ const COPY = {
     disabledTitle: 'Refer-a-friend is paused.',
     disabledBody:  'Our affiliate program is taking a short break. Check back soon — we will let you know when it returns.',
     shareTitle:    'INVITE FRIENDS',
-    shareBody:     'Share this code with a friend. They get ¥30 off, you get ¥30 when they order.',
+    shareBody:     'Share this code with a friend. They get ¥{them}, you get ¥{you} when they order.',
+    shareBodySolo: 'Share this code with a friend. You get ¥{you} when they order.',
     close:         'CLOSE',
     statusJoined:  'JOINED · ¥{r}',
     statusOrdered: 'ORDERED · ¥{r}',
@@ -70,7 +72,8 @@ const COPY = {
     kicker:        '推广计划',
     title1:        '种下种子,',
     title2:        '收获奖励',
-    tagline:       '推荐好友下单,你得 ¥30,TA 也得 ¥30。',
+    tagline:       '推荐好友下单,你得 ¥{you},TA 也得 ¥{them}。',
+    taglineSolo:   '每位好友下单,你得 ¥{you}。',
     earned:        '已赚',
     invited:       '邀请',
     joined:        '加入',
@@ -94,7 +97,8 @@ const COPY = {
     disabledTitle: '推广计划暂停中。',
     disabledBody:  '我们的推广计划暂时关闭,稍后会重新开放。',
     shareTitle:    '邀请好友',
-    shareBody:     '把邀请码发给朋友,TA 得 ¥30 优惠,TA 下单后你得 ¥30。',
+    shareBody:     '把邀请码发给朋友,TA 得 ¥{them},TA 下单后你得 ¥{you}。',
+    shareBodySolo: '把邀请码发给朋友,TA 下单后你得 ¥{you}。',
     close:         '关闭',
     statusJoined:  '加入 · ¥{r}',
     statusOrdered: '已下单 · ¥{r}',
@@ -118,7 +122,8 @@ Page({
     loading: true,
     enabled: true,
     code: '',
-    rewardPerOrder: 30,
+    rewardPerOrder: 30,   // referrer reward ("for you")
+    rewardReferee: 0,      // friend reward ("for them"); 0 = friend gets nothing
     referredBy: null,
     canApply: false,
     applyInput: '',
@@ -127,6 +132,8 @@ Page({
     invites: [],
     showQrModal: false,
     how3subResolved: '',
+    taglineResolved: '',
+    shareBodyResolved: '',
   },
 
   onShow() {
@@ -142,10 +149,23 @@ Page({
 
   applyCopy() {
     const copy = this.data.lang === 'cn' ? COPY.cn : COPY.en;
-    this.setData({
-      copy,
-      how3subResolved: copy.how3sub.replace('{r}', String(this.data.rewardPerOrder || 30)),
-    });
+    this.setData({ copy, ...this.resolveCopy(copy, this.data.rewardPerOrder, this.data.rewardReferee) });
+  },
+
+  // Build the render-ready strings from the two reward amounts. When the
+  // friend reward ("them") is 0 we use the single-sided "solo" copy so the
+  // page never advertises a ¥0 friend reward. `how3sub` (the "You earn" step)
+  // always reflects the referrer amount.
+  resolveCopy(copy, you, them) {
+    const y = String(Number(you) || 0);
+    const t = String(Number(them) || 0);
+    const sub = (s) => String(s || '').replace(/\{you\}/g, y).replace(/\{them\}/g, t);
+    const split = (Number(them) || 0) > 0;
+    return {
+      how3subResolved:   copy.how3sub.replace('{r}', y),
+      taglineResolved:   sub(split ? copy.tagline   : copy.taglineSolo),
+      shareBodyResolved: sub(split ? copy.shareBody : copy.shareBodySolo),
+    };
   },
 
   async refresh() {
@@ -161,6 +181,7 @@ Page({
     try {
       const data = await api.get('/api/retail/affiliate');
       const reward = Number(data.reward_per_order) || 0;
+      const refereeReward = Number(data.reward_referee) || 0;
       const invites = (data.invites || []).map(it => ({
         id: it.id,
         nickname: it.nickname || '',
@@ -175,6 +196,7 @@ Page({
         enabled: data.enabled !== false,
         code: data.code || '',
         rewardPerOrder: reward,
+        rewardReferee: refereeReward,
         referredBy: data.referred_by || null,
         canApply: !data.referred_by && data.enabled !== false,
         stats: {
@@ -184,7 +206,7 @@ Page({
           converted: data.stats?.converted || 0,
         },
         invites,
-        how3subResolved: this.data.copy.how3sub.replace('{r}', String(reward || 30)),
+        ...this.resolveCopy(this.data.copy, reward, refereeReward),
       });
     } catch (e) {
       this.setData({ loading: false });
@@ -259,12 +281,18 @@ Page({
   // we can pre-fill the apply box on the affiliate page.
   onShareAppMessage() {
     const code = this.data.code || '';
-    const reward = this.data.rewardPerOrder || 30;
+    // The share lands on the FRIEND, so it advertises THEIR reward
+    // (rewardReferee). When that's 0 we use a neutral invite rather than
+    // promising money the friend won't receive.
+    const them = Number(this.data.rewardReferee) || 0;
     const en = this.data.lang === 'en';
+    const title = them > 0
+      ? (en ? `¥${them} back on your first Roots order — code ${code}`
+            : `Roots 邀请码 ${code} · 首单返 ¥${them}`)
+      : (en ? `Join me on Roots — use my code ${code}`
+            : `Roots 邀请码 ${code} · 一起来逛`);
     return {
-      title: en
-        ? `Get ¥${reward} off your first Roots order — code ${code}`
-        : `Roots 邀请码 ${code} · 首单立减 ¥${reward}`,
+      title,
       path: `/pages/affiliate/affiliate?ref=${encodeURIComponent(code)}`,
       imageUrl: '/assets/brand/share-affiliate.png',
     };
@@ -272,12 +300,15 @@ Page({
 
   onShareTimeline() {
     const code = this.data.code || '';
-    const reward = this.data.rewardPerOrder || 30;
+    const them = Number(this.data.rewardReferee) || 0;
     const en = this.data.lang === 'en';
+    const title = them > 0
+      ? (en ? `¥${them} back on your first Roots order — ${code}`
+            : `Roots 首单返 ¥${them} · ${code}`)
+      : (en ? `Join me on Roots — ${code}`
+            : `一起来逛 Roots · ${code}`);
     return {
-      title: en
-        ? `¥${reward} off your first Roots order — ${code}`
-        : `Roots 首单立减 ¥${reward} · ${code}`,
+      title,
       query: `ref=${encodeURIComponent(code)}`,
     };
   },

@@ -3655,9 +3655,14 @@
       <div class="muted" style="font-size: 11px; margin-bottom: 12px;">Turn the program on/off in <b>Settings → Features</b>; the reward and code prefix below apply while it's on. · 计划开关位于“设置 → 功能”,以下奖励与前缀在启用时生效。</div>
       <div class="row" style="gap: 16px; align-items: flex-end; flex-wrap: wrap;">
         <div class="field" style="margin: 0;">
-          <label class="stacked">Reward per first paid order (¥) · 首单付款奖励(¥)</label>
+          <label class="stacked">Reward for the referrer ("for you") (¥) · 推荐人奖励(“给你”)(¥)</label>
           <input type="number" id="af-reward" placeholder="30" min="0" step="0.5" style="width: 160px;">
           <div class="muted" style="font-size: 11px; margin-top: 4px;">Credited to the referrer's wallet when their invitee's first order goes 'paid'. · 当受邀人首单付款后,奖励入推荐人钱包。</div>
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Reward for the friend ("for them") (¥) · 好友奖励(“给TA”)(¥)</label>
+          <input type="number" id="af-reward-referee" placeholder="0" min="0" step="0.5" style="width: 160px;">
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">Cashback to the invited friend's wallet on their first paid order. Set 0 to give the friend nothing. · 受邀好友首单付款后返现入其钱包;设为 0 则好友不获奖励。</div>
         </div>
         <div class="field" style="margin: 0;">
           <label class="stacked">Code prefix · 邀请码前缀</label>

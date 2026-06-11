@@ -25,8 +25,9 @@ async function afLoadSettings() {
     const d = r.data || {};
     // On/off now lives in Settings → Features (features.affiliate); this tab only
     // edits the reward + code prefix.
-    $('#af-reward').value    = (Number(d.rewardPerOrder) || 0).toString();
-    $('#af-prefix').value    = String(d.codePrefix || 'ROOTS-').toUpperCase();
+    $('#af-reward').value         = (Number(d.rewardPerOrder) || 0).toString();
+    $('#af-reward-referee').value = (Number(d.rewardReferee) || 0).toString();
+    $('#af-prefix').value         = String(d.codePrefix || 'ROOTS-').toUpperCase();
   } catch (e) {
     toast('Settings load failed · 加载设置失败: ' + e.message, 'err');
   }
@@ -35,6 +36,7 @@ async function afLoadSettings() {
 async function afSaveSettings() {
   const body = {
     rewardPerOrder: Number($('#af-reward').value) || 0,
+    rewardReferee:  Number($('#af-reward-referee').value) || 0,
     codePrefix:     String($('#af-prefix').value || '').trim().toUpperCase(),
   };
   try {

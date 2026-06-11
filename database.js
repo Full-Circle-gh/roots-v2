@@ -2788,7 +2788,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS retail_referrals (
   invitee_id            INTEGER NOT NULL,
   code_used             TEXT,
   status                TEXT NOT NULL DEFAULT 'joined',  -- joined | ordered | void
-  reward_amount         REAL NOT NULL DEFAULT 0,         -- ¥ credited to referrer on conversion
+  reward_amount         REAL NOT NULL DEFAULT 0,         -- ¥ credited to referrer ("for you") on conversion
+  referee_reward_amount REAL NOT NULL DEFAULT 0,         -- ¥ credited to the invited friend ("for them") on conversion
   first_paid_order_id   INTEGER,
   joined_at             DATETIME DEFAULT CURRENT_TIMESTAMP,
   rewarded_at           DATETIME,
@@ -2799,6 +2800,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS retail_referrals (
   FOREIGN KEY (first_paid_order_id) REFERENCES retail_orders(id)    ON DELETE SET NULL,
   UNIQUE(invitee_id)
 )`);
+addColumn('retail_referrals', 'referee_reward_amount', 'REAL NOT NULL DEFAULT 0');
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_referrals_referrer ON retail_referrals(referrer_id, status)'); } catch {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_referrals_order ON retail_referrals(first_paid_order_id)'); } catch {}
 

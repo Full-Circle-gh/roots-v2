@@ -15,7 +15,7 @@
         {{copy.title1}}
         <view><text class="hl">{{copy.title2}}</text>.</view>
       </view>
-      <view class="sub f-aleo">{{copy.tagline}}</view>
+      <view class="sub f-aleo">{{taglineResolved}}</view>
     </view>
 
     <!-- Stats strip -->
@@ -115,7 +115,7 @@
   <view wx:if="{{showQrModal}}" class="modal-backdrop" bindtap="closeQr">
     <view class="modal" catchtap>
       <view class="modal-kicker f-toni">{{copy.shareTitle}}</view>
-      <view class="modal-title f-bear">{{copy.shareBody}}</view>
+      <view class="modal-title f-bear">{{shareBodyResolved}}</view>
       <view class="modal-code f-bear">{{code}}</view>
       <view class="modal-actions">
         <view class="modal-btn f-gothic tap" bindtap="copyCode">{{copy.copy}}</view>
