@@ -52,5 +52,6 @@ DEPLOY.md
 # Customer-migration PII (phones + balances) — transfer out-of-band, never commit
 /migration_credits.json
 /migration_unmatched.json
+/migration_roster.json
 /scratch_*
 C:/Users/Asher/Downloads/migration_phoneless.json
