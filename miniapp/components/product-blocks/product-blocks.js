@@ -27,6 +27,22 @@ const api = require('../../utils/api');
 
 function _pick(en, cn, L) { return lang.pick(en, cn, L); }
 
+// ── Plant-based icon guard ──
+// The whole shop is vegan and leans into it, so a product page must never
+// show an animal-product glyph (a fried egg in the "Pan" tile, a cheese
+// wedge, a rasher of bacon…). Office authors and the AI generator both pull
+// from free-form emoji, so we sanitise at render time: any animal glyph maps
+// to a neutral plant-friendly stand-in. Also repairs the "microwave" tile —
+// Unicode has no microwave emoji, so authors reached for 📡 (satellite dish),
+// which reads as off; ♨️ (steam) fits "works, but no crisp" far better.
+const PB_ICON_FIX = {
+  '🍳': '🥘', '🥚': '🥘', '🧀': '🌱', '🧈': '🌱', '🥓': '🌱', '🍖': '🌱',
+  '🍗': '🌱', '🥩': '🌱', '🍔': '🥗', '🌭': '🥗', '🍤': '🥗', '🦐': '🥗',
+  '🦑': '🥗', '🦞': '🥗', '🦀': '🥗', '🐟': '🥗', '🐠': '🥗', '🍯': '🌿',
+  '🥛': '🌿', '📡': '♨️',
+};
+function _icon(s) { return PB_ICON_FIX[s] || (s || ''); }
+
 // ── Per-block colour palette (mirrors the editor's PA_HEX / CMS DC_HEX) ──
 // Office can tint a block's background / text / accent independently. Tokens
 // resolve to the same brand hexes used across the storefront + product page.
@@ -215,7 +231,7 @@ function _resolveBlock(b, L) {
   if (t === 'how_to_use') {
     const tiles = (Array.isArray(b.tiles) ? b.tiles : [])
       .map(it => ({
-        icon: it.icon || '',
+        icon: _icon(it.icon),
         lbl:  _pick(it.label_en, it.label_cn, L),
         sub:  _pick(it.sub_en,   it.sub_cn,   L),
       }))
@@ -250,7 +266,7 @@ function _resolveBlock(b, L) {
       // clips. Flag anything longer than a short numeric so the WXSS can drop
       // it to a readable, wrapping display size instead of clipping.
       const numLong = num.replace(/\s+/g, '').length > 5;
-      return { icon: c.icon || '', head, num, numLong, unit, alt: !!c.alt };
+      return { icon: _icon(c.icon), head, num, numLong, unit, alt: !!c.alt };
     };
     const left  = card(b.left);
     const right = card(b.right);

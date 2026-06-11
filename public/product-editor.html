@@ -2806,7 +2806,7 @@ const PA_PREVIEW_SAMPLE = [
     { icon: '🥣', label_en: 'Stir through',  label_cn: '拌入',   sub_en: 'noodles & grain bowls', sub_cn: '面与谷物碗' },
     { icon: '🍞', label_en: 'Spread',        label_cn: '涂抹',   sub_en: 'warm toast',           sub_cn: '热吐司'     },
     { icon: '🥗', label_en: 'Whisk dressing',label_cn: '调成酱汁', sub_en: 'lemon + water',        sub_cn: '柠檬 + 水'  },
-    { icon: '🍯', label_en: 'Drizzle',       label_cn: '淋上',   sub_en: 'over fruit',           sub_cn: '水果上'     },
+    { icon: '🫙', label_en: 'Drizzle',       label_cn: '淋上',   sub_en: 'over fruit',           sub_cn: '水果上'     },
     { icon: '🥄', label_en: 'Bake',          label_cn: '烘焙',   sub_en: 'cookies & cakes',      sub_cn: '饼干与蛋糕' },
     { icon: '☕', label_en: 'Blend',         label_cn: '搅打',   sub_en: 'into smoothies',       sub_cn: '加入冰沙'   },
   ] },
@@ -3018,10 +3018,13 @@ function paLivePreview() {
 // ── Inline emoji picker for tile / card Icon fields ──
 // A curated set covering food, prep, storage and usage contexts — the glyphs
 // most product "How to use" / "Storage" sections actually reach for.
+// Plant-based only: the shop is fully vegan, so no egg / dairy / meat / honey
+// glyphs (🥚🍳🧀🧈🥓🍯) ever appear in the palette. ♨ stands in for steaming /
+// microwave (Unicode has no microwave emoji — never use 📡 satellite dish).
 const PE_EMOJI = [
-  '🥖','🍞','🥐','🥯','🧈','🥚','🍳','🧀','🥓','🥞','🧇','🥗',
+  '🥖','🍞','🥐','🥯','🥞','🧇','🥗','🌱','🌿','🥦','🫛','🌰',
   '🍚','🍜','🍝','🥣','🥘','🍲','🫕','🌶','🧄','🧅','🥕','🍅',
-  '🍋','🍯','🧂','🥄','🍴','🔪','🫙','🍶','☕','🫖','🧊','❄',
+  '🍋','🥑','🧂','🥄','🍴','🔪','🫙','🍶','☕','🫖','🧊','❄',
   '🔥','🌡','♨','💧','☀','🌙','⏱','⏲','📦','🛒','✨','✅',
 ];
 let _peEmojiPop = null;

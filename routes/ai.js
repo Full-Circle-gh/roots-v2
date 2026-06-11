@@ -534,7 +534,7 @@ BLOCK TYPES (pick the ones that fit — skip the rest, never force-fill):
 - **ingredients_chips** — ingredient list as pills. Fields: items[] of { name_en, name_cn, pct (string % or ""), lead (boolean: true for a hero ingredient) }.
 - **ingredients_line** — same data as a typographic run instead of pills. Only use ONE of chips/line, not both.
 - **allergen_card** — Fields: contains_en/cn, may_contain_en/cn (comma-separated allergens).
-- **how_to_use** — usage ideas as a grid. Fields: tiles[] of { icon (one emoji), label_en/cn, sub_en/cn (optional). 6 tiles ideal.
+- **how_to_use** — usage ideas as a grid. Fields: tiles[] of { icon (one emoji), label_en/cn, sub_en/cn (optional). 6 tiles ideal. PLANT-BASED ONLY: the shop is fully vegan — never use an animal-product emoji (no 🥚🍳🧀🧈🥓🍖🍗🥩🐟🦐🍯 etc.); use plant/cookware glyphs (🥘🍲🥣🔥♨🌱🥗). For a microwave tile use ♨ (Unicode has no microwave emoji — never 📡).
 - **storage_box** — storage conditions. Fields: left & right each { icon, head_en/cn, num (e.g. "0–4°"), unit_en/cn, alt (boolean) }; plus note_en/cn.
 - **notes_callout** — fine-print note. Fields: text_en/cn.
 - **big_stat** — one big number. Fields: stat (the number/figure), what_en/cn (what it measures), claim_en/cn (short line), bg ("lime").
