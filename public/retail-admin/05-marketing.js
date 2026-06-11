@@ -382,12 +382,19 @@ function vwTicketHtml() {
             : _vw.path === 'auto'   ? 'automatic, no code · 自动,无需编码'
             : _vw.path === 'public' ? 'anyone can use · 人人可用'
             : 'customers you pick · 你指定的顾客';
-  const ttl = _vw.title_en || vwGenLabelEn();
   const exp = _vw.expires ? ('Ends ' + _vw.expires) : 'No end date · 永久';
-  return '<div class="vw-ticket"><div class="vw-tk-big" id="vw-tk-big">' + vwBigValue() + ' <span>' + vwBigUnit() + '</span></div>'
+  // The big number already shows the value, so only show the marketing label
+  // when it ADDS something (a welcome phrase, or a label the operator edited) —
+  // never echo "5% off" twice. Computed live so it tracks the value as you type.
+  const ttl = _vw.labelEdited ? (_vw.title_en || '') : vwGenLabelEn();
+  const echo = _vw.type === 'percent' ? ((Number(_vw.value) || 0) + '% off')
+             : _vw.type === 'fixed_amount' ? ('¥' + (Number(_vw.value) || 0) + ' off')
+             : 'free shipping';
+  const showTtl = ttl && ttl.trim().toLowerCase() !== echo.toLowerCase();
+  return '<div class="vw-ticket" id="vw-ticket"><div class="vw-tk-big" id="vw-tk-big">' + vwBigValue() + ' <span>' + vwBigUnit() + '</span></div>'
     + '<div class="vw-tk-sub">' + minTxt + '</div>'
-    + '<div class="vw-tk-ttl">' + escapeHtml(ttl) + '</div>'
-    + '<div class="vw-tk-exp">' + escapeHtml(exp) + ' · ' + who + '</div></div>';
+    + (showTtl ? '<div class="vw-tk-ttl">' + escapeHtml(ttl) + '</div>' : '')
+    + '<div class="vw-tk-exp">' + who + ' · ' + escapeHtml(exp) + '</div></div>';
 }
 
 function vwDots(active) {
@@ -463,8 +470,8 @@ function vwDealHtml() {
 function vwSetType(t) { _vw.type = t; if (t === 'free_shipping') _vw.value = 0; vwRender(); }
 function vwLiveValue(v) {
   _vw.value = v;
-  const el = document.getElementById('vw-tk-big');
-  if (el) el.innerHTML = vwBigValue() + ' <span>' + vwBigUnit() + '</span>';
+  const t = document.getElementById('vw-ticket');
+  if (t) t.outerHTML = vwTicketHtml();   // re-render the whole preview so every line tracks (not just the big number)
 }
 function vwNextDeal() {
   if (_vw.type !== 'free_shipping') {
