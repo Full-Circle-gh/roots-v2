@@ -5356,6 +5356,10 @@ const state = {
   // from /api/retail-admin/polls on bootstrap; refreshed when the editor
   // first selects a voting_block (cheap, lazy).
   polls: [],
+  // Real vouchers (the actual coupons from Marketing). The coupon_block
+  // picker binds to these — operators SELECT an existing coupon, they
+  // never type a fake one. Loaded once from /api/retail-admin/vouchers.
+  vouchers: [],
   selectedId: null, dirty: false, saving: false,
   // Preview language. Customers in WeChat see either EN or 中 (their app
   // language), never both fused. The CMS lets the author flip between
@@ -5446,7 +5450,7 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
     // Categories + products are page-agnostic; load once. flashSales is
     // refreshed every 60s by a background timer (see below) so the
     // flash_sale_strip preview reflects what customers actually see.
-    const [catsResp, prodsResp, flashResp, pollsResp] = await Promise.all([
+    const [catsResp, prodsResp, flashResp, pollsResp, vouchersResp] = await Promise.all([
       // Categories are the TOP nodes of the 2-level category tree (the legacy
       // categories table is gone — the tree is the only category system). Each
       // top → { id, name (EN, matches products.category), name_cn }.
@@ -5456,11 +5460,14 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
       // Polls feed the voting_block auto-pull preview + the per-block
       // poll picker. Cheap (small table) so we load once at boot.
       api('/api/retail-admin/polls').catch(() => ({ data: [] })),
+      // Real coupons for the coupon_block picker (active ones only).
+      api('/api/retail-admin/vouchers').catch(() => ({ data: [] })),
     ]);
     state.categories = (catsResp?.data || []).map(t => ({ id: t.id, name: t.name, name_cn: t.name_cn || '' }));
     state.products = prodsResp.data || [];
     state.flashSales = flashResp?.data || [];
     state.polls = pollsResp?.data || [];
+    state.vouchers = (vouchersResp?.data || []).filter(v => v.is_active);
     setInterval(async () => {
       try {
         const r = await fetch('/api/retail/flash-sales', { credentials: 'same-origin' }).then(r => r.json());
@@ -7573,14 +7580,17 @@ function makeBlock(type) {
     case 'coupon_block': {
       return {
         id, type,
+        // voucher_id binds the block to a REAL coupon in Marketing. The
+        // operator picks one in the inspector; the code + discount label
+        // below are then filled from that coupon, never typed by hand.
+        voucher_id: null,
         kicker_en: 'COUPON', kicker_cn: '优惠券',
         title_en: '¥50 off your first order', title_cn: '首单立减 ¥50',
         subtitle_en: 'Min spend ¥299 · expires Sunday',
         subtitle_cn: '满 299 元可用 · 周日截止',
         discount_label_en: '¥50', discount_label_cn: '¥50',
-        // Optional code — when set, the block shows "CODE: NEWBIE50" with
-        // a tap-to-copy affordance. Leave blank for public coupons that
-        // don't need a code.
+        // code mirrors the selected coupon's code (shown as a tap-to-copy
+        // "CODE: NEWBIE50"). Driven by the picker, not free-typed.
         code: '',
         bg_color: 'pink-guava', fg_color: 'ink',
         cta_label_en: 'CLAIM', cta_label_cn: '立即领取',
@@ -11850,20 +11860,79 @@ function buildFlashStripForm(m, b) {
     txtPair(b.empty_text_en, b.empty_text_cn, ({ en, cn }) => updateBlockSilent(b.id, { empty_text_en: en, empty_text_cn: cn }))));
 }
 
+// Turn a real voucher (from Marketing) into the block's display fields.
+// The discount label + code come straight from the coupon so the operator
+// can never advertise a number or code that isn't backed by a live coupon.
+function couponDisplayFromVoucher(v) {
+  let discEn = '', discCn = '';
+  if (v.type === 'fixed_amount') { discEn = discCn = '¥' + (Number(v.value) || 0); }
+  else if (v.type === 'percent') { discEn = discCn = (Number(v.value) || 0) + '%'; }
+  else if (v.type === 'free_shipping') { discEn = 'FREE'; discCn = '包邮'; }
+  // Subtitle: prefer the coupon's own description, else compose min-spend / expiry.
+  let subEn = (v.description || '').trim(), subCn = (v.description || '').trim();
+  if (!subEn) {
+    const parts = [];
+    if (Number(v.min_subtotal) > 0) parts.push({ en: 'Min spend ¥' + Number(v.min_subtotal), cn: '满 ' + Number(v.min_subtotal) + ' 元可用' });
+    if (v.expires_at) { const d = String(v.expires_at).slice(0, 10); parts.push({ en: 'Expires ' + d, cn: d + ' 截止' }); }
+    subEn = parts.map(p => p.en).join(' · ');
+    subCn = parts.map(p => p.cn).join(' · ');
+  }
+  return {
+    voucher_id: v.id,
+    code: v.code || '',
+    discount_label_en: discEn, discount_label_cn: discCn,
+    title_en: v.title_en || v.code || '', title_cn: v.title_cn || v.title_en || v.code || '',
+    subtitle_en: subEn, subtitle_cn: subCn,
+  };
+}
+
 function buildCouponForm(m, b) {
   const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
   const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
 
+  const vouchers = state.vouchers || [];
+
+  if (!vouchers.length) {
+    // No real coupons exist yet — the block can't show a fake one, so steer
+    // the operator to Marketing to create one first.
+    const note = document.createElement('div');
+    note.className = 'helper';
+    note.style.lineHeight = '1.5';
+    note.textContent = T('No coupons exist yet. Create one in the Mini App Backend → Marketing → Coupons, then pick it here.', '尚未创建优惠券。请到「小程序后台 → 营销 → 优惠券」中创建,然后在此处选择。');
+    secContent.appendChild(field(T('Coupon', '优惠券'), '', note));
+  } else {
+    // Pick a REAL coupon. Selecting one fills the code + discount label from
+    // that coupon (and seeds the headline/subtitle); the operator never types
+    // a coupon that isn't backed by a live voucher.
+    const vOptions = [
+      { value: '', label: T('— Select a coupon —', '— 选择优惠券 —') },
+      ...vouchers.map(v => ({
+        value: String(v.id),
+        label: (v.code || ('#' + v.id)) + (v.title_en ? ' — ' + v.title_en : ''),
+      })),
+    ];
+    secContent.appendChild(field(T('Coupon', '优惠券'), T('The real coupon this block hands out. Manage coupons in the Mini App Backend → Marketing.', '本区块发放的真实优惠券。请在「小程序后台 → 营销」中管理优惠券。'),
+      sel(b.voucher_id ? String(b.voucher_id) : '', vOptions, val => {
+        if (!val) { updateBlock(b.id, { voucher_id: null }); return; }
+        const v = vouchers.find(x => String(x.id) === String(val));
+        if (v) updateBlock(b.id, couponDisplayFromVoucher(v));
+      })));
+  }
+
   secContent.appendChild(field(T('Small heading', '小标题'), '',
     txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  secContent.appendChild(field(T('Title', '标题'), '',
+  secContent.appendChild(field(T('Headline', '标题'), T('Display copy shown on the ticket — pre-filled from the coupon; edit it to suit the page.', '票券上显示的文案 — 已根据优惠券预填,可按页面需要修改。'),
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
-  secContent.appendChild(field(T('Subtitle', '副标题'), T('Optional — e.g. minimum spend or expiry date.', '可选 — 例如最低消费或到期日期。'),
+  secContent.appendChild(field(T('Subtitle', '副标题'), T('Optional — e.g. minimum spend or expiry date. Pre-filled from the coupon.', '可选 — 例如最低消费或到期日期。已根据优惠券预填。'),
     txtPair(b.subtitle_en, b.subtitle_cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
-  secContent.appendChild(field(T('Discount label', '折扣标签'), T('The big number on the left — e.g. "¥50", "8折", "20%". You type this yourself; it is not linked to a real coupon.', '左侧的大号数字 — 例如「¥50」「8折」「20%」。由你自己填写,不绑定真实优惠券。'),
-    txtPair(b.discount_label_en, b.discount_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { discount_label_en: en, discount_label_cn: cn }))));
-  secContent.appendChild(field(T('Coupon code', '优惠券码'), T('Optional — shows as "CODE: NEWBIE50" that customers can tap to copy. Leave empty if no code is needed.', '可选 — 显示为「CODE: NEWBIE50」,顾客可点击复制。无需券码时请留空。'),
-    txt(b.code, v => updateBlockSilent(b.id, { code: (v || '').toUpperCase() }), 'NEWBIE50')));
+  // Discount label + code are READ-ONLY mirrors of the selected coupon — shown
+  // for confidence, not editable, so the block can't advertise a fake offer.
+  const discRO = document.createElement('div');
+  discRO.className = 'helper';
+  discRO.textContent = (b.discount_label_en || b.code)
+    ? T('Big number: ', '左侧大号数字:') + (b.discount_label_en || '—') + (b.code ? '   ·   CODE: ' + b.code : '')
+    : T('Pick a coupon above to set the discount and code.', '请在上方选择优惠券以设置折扣与券码。');
+  secContent.appendChild(field(T('Discount & code', '折扣与券码'), '', discRO));
   secContent.appendChild(field(T('Button text', '按钮文字'), T('Leave both blank to hide the button.', '两者留空则隐藏按钮。'),
     txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
   secContent.appendChild(field(T('Button link', '按钮链接'), T('Where the button goes. e.g. coupons · shop · category:5', '按钮跳转到哪里。例如 coupons · shop · category:5'),
