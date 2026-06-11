@@ -3002,6 +3002,11 @@ try {
   db.prepare('CREATE INDEX IF NOT EXISTS idx_store_products_variant_group ON store_products(variant_group_id)').run();
   db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_store_products_barcode ON store_products(barcode) WHERE barcode IS NOT NULL').run();
   db.prepare('CREATE INDEX IF NOT EXISTS idx_store_products_kitchen_id ON store_products(kitchen_product_id)').run();
+  // Every storefront / mini-app list query gates on (is_published, is_active)
+  // and the shop's category filter hits `category` — index both so the catalogue
+  // scan stays fast as the product count grows.
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_store_products_pub_active ON store_products(is_published, is_active)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_store_products_category ON store_products(category)').run();
   // Release SKUs still held by soft-deleted rows. A deleted product is hidden
   // from the catalogue but used to keep its UNIQUE sku — blocking reuse of that
   // code and surfacing as "SKU in use, but I can't find it". Deletes now blank

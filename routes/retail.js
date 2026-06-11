@@ -591,6 +591,39 @@ const RETAIL_PRODUCT_COLS = `
   p.updated_at
 `;
 
+// List/grid variant of the column set: NEVER pull the heavy inline base64 photo.
+// A data: URI is collapsed to the tiny literal 'data:' marker INSIDE SQLite, so
+// the multi-MB blob never enters Node's heap or the JSON payload — the list
+// endpoints below then swap that marker for a streamed-image URL via
+// lazifyProductImage(). Plain-URL image_data (small) passes through untouched.
+// This is the single biggest shop / mini-app load win: a 50-row grid drops from
+// several MB to a few hundred KB. Detail pages (PDP) keep RETAIL_PRODUCT_COLS so
+// they still ship the full photo and render without an extra round-trip.
+const RETAIL_PRODUCT_COLS_LIST = RETAIL_PRODUCT_COLS.replace(
+  'p.image_data, p.image_url',
+  "CASE WHEN p.image_data LIKE 'data:%' THEN 'data:' ELSE p.image_data END AS image_data, p.image_url"
+);
+
+// Swap a list row's heavy inline base64 primary photo for a tiny streamed-image
+// URL the mini-app lazy-loads + caches (see GET /api/retail/products/:id/image).
+// Pairs with RETAIL_PRODUCT_COLS_LIST (which already collapsed the blob to a
+// 'data:' marker). ABSOLUTE URLs so the live mini-app renders them without
+// absUrl(). Mutates + returns the row; drops the helper-only updated_at /
+// has_group_image fields. baseUrl = `${req.protocol}://${req.get('host')}`.
+function lazifyProductImage(r, baseUrl) {
+  const hasGroupImg = r.has_group_image;
+  delete r.has_group_image;
+  if (typeof r.image_data === 'string' && /^data:/i.test(r.image_data)) {
+    r.image_data = `${baseUrl}/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`;
+  } else if (!r.image_data && !r.image_url && hasGroupImg) {
+    // Variant with no photo of its own — point at its image route, which
+    // resolves a sibling's photo ("fallback when empty").
+    r.image_data = `${baseUrl}/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`;
+  }
+  delete r.updated_at;
+  return r;
+}
+
 // Parse JSON-string columns (nutrition, description_blocks) into objects for
 // the client. Drops empty values to null so the mini-app can `wx:if` cleanly.
 function hydrateNutrition(row) {
@@ -729,7 +762,7 @@ router.get('/api/retail/products', (req, res) => {
   const limit  = Math.min(parseInt(req.query.limit  || '50', 10) || 50, 500);
   const offset = Math.max(parseInt(req.query.offset || '0',  10) || 0, 0);
 
-  let sql = `SELECT ${RETAIL_PRODUCT_COLS}, p.updated_at, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
+  let sql = `SELECT ${RETAIL_PRODUCT_COLS_LIST}, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
              WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`;
   const params = [];
   if (q) {
@@ -752,32 +785,12 @@ router.get('/api/retail/products', (req, res) => {
   const rows = tdb().prepare(sql).all(...params)
     .map(hydrateNutrition)
     .map(r => flashsales.decorateProduct(r, now));
-  // Replace the heavy inline base64 primary photo with a tiny streamed-image
-  // URL the mini-app lazy-loads + caches — mirrors the retail-admin grid fix
-  // (see GET /api/retail-admin/products). Shipping image_data inline for up to
-  // 50 rows made this payload several MB and the shop slow to open. Products
-  // that store only a plain image_url keep it untouched; ?v=updated_at busts
-  // the cache when the photo changes. The PDP (/products/:id) still ships the
-  // full image so the detail page renders without an extra round-trip.
-  //
-  // We emit ABSOLUTE URLs (not /api/...) so the live mini-app — which doesn't
-  // run absUrl() on the image_data fallback yet (that needs a WeChat publish) —
-  // still renders thumbnails for products that only have a base64 photo. The
-  // mini-app needs an http(s) URL in <image src>; a relative path won't load.
-  // trust-proxy is on (server.js) so req.protocol respects X-Forwarded-Proto.
+  // Swap the heavy inline base64 photos for tiny streamed-image URLs — the blob
+  // was already collapsed to a 'data:' marker by RETAIL_PRODUCT_COLS_LIST, so
+  // this just builds the lazy-loaded URL. trust-proxy is on (server.js) so
+  // req.protocol respects X-Forwarded-Proto.
   const baseUrl = `${req.protocol}://${req.get('host')}`;
-  for (const r of rows) {
-    const hasGroupImg = r.has_group_image;
-    delete r.has_group_image;
-    if (typeof r.image_data === 'string' && /^data:/i.test(r.image_data)) {
-      r.image_data = `${baseUrl}/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`;
-    } else if (!r.image_data && !r.image_url && hasGroupImg) {
-      // Variant with no photo of its own — point at its image route, which
-      // resolves a sibling's photo ("fallback when empty").
-      r.image_data = `${baseUrl}/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`;
-    }
-    delete r.updated_at;
-  }
+  for (const r of rows) lazifyProductImage(r, baseUrl);
   attachSoldCounts(rows);
   resolveAutoBadges(rows);
   const total = tdb().prepare(`SELECT COUNT(*) AS n FROM store_products p
@@ -933,15 +946,15 @@ router.get('/api/retail/products/top', (req, res) => {
   if (candidateIds.length) {
     const placeholders = candidateIds.map(() => '?').join(',');
     products = tdb().prepare(
-      `SELECT ${RETAIL_PRODUCT_COLS}, p.updated_at, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
+      `SELECT ${RETAIL_PRODUCT_COLS_LIST}, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
         WHERE p.id IN (${placeholders})
           AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`
     ).all(...candidateIds);
   }
-  // Replace the heavy inline base64 primary photo with a tiny streamed-image
-  // URL — same fix as the shop-list endpoint above. Shipping image_data inline
-  // made this payload several MB; on mobile the mini-app's 12s fetch timed out
-  // and the "best sellers" grid silently fell back to its empty state.
+  // Heavy base64 photos were already collapsed to a 'data:' marker by
+  // RETAIL_PRODUCT_COLS_LIST; lazifyProductImage swaps it for a streamed-image
+  // URL — same fix as the shop-list endpoint above, which kept the "best
+  // sellers" grid from timing out on mobile.
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   const productsById = new Map(products.map(p => [p.id, p]));
   const out = [];
@@ -952,14 +965,7 @@ router.get('/api/retail/products/top', (req, res) => {
     const decorated = flashsales.decorateProduct(hydrateNutrition(p), now);
     decorated.units_sold = Math.round(r.units);
     decorated.revenue    = Math.round(r.revenue * 100) / 100;
-    const hasGroupImg = decorated.has_group_image;
-    delete decorated.has_group_image;
-    if (typeof decorated.image_data === 'string' && /^data:/i.test(decorated.image_data)) {
-      decorated.image_data = `${baseUrl}/api/retail/products/${decorated.id}/image?v=${encodeURIComponent(decorated.updated_at || '')}`;
-    } else if (!decorated.image_data && !decorated.image_url && hasGroupImg) {
-      decorated.image_data = `${baseUrl}/api/retail/products/${decorated.id}/image?v=${encodeURIComponent(decorated.updated_at || '')}`;
-    }
-    delete decorated.updated_at;
+    lazifyProductImage(decorated, baseUrl);
     out.push(decorated);
   }
   resolveAutoBadges(out);
@@ -1606,8 +1612,9 @@ router.post('/api/retail/products/:id/viewing', express.json(), (req, res) => {
 router.get('/api/retail/flash-sales', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit || '12', 10) || 12, 50);
   const now = Date.now();
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
   const rows = tdb().prepare(
-    `SELECT ${RETAIL_PRODUCT_COLS} FROM store_products p
+    `SELECT ${RETAIL_PRODUCT_COLS_LIST}, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
       WHERE p.is_published = 1
         AND COALESCE(p.is_active, 1) = 1
         AND p.flash_price IS NOT NULL
@@ -1627,7 +1634,9 @@ router.get('/api/retail/flash-sales', (req, res) => {
       const kb = b.flash.state === 'upcoming' ? b.flash.starts_at : b.flash.ends_at;
       return new Date(ka).getTime() - new Date(kb).getTime();
     })
-    .slice(0, limit);
+    .slice(0, limit)
+    // Swap heavy inline base64 photos for streamed-image URLs (see shop-list).
+    .map(r => lazifyProductImage(r, baseUrl));
   res.set('Cache-Control', 'public, max-age=10');
   res.json({ success: true, data: rows, meta: { server_time_ms: now } });
 });
@@ -14478,8 +14487,9 @@ router.post('/api/retail/polls/:id/vote', requireRetailAuth, express.json(), (re
 // idempotent. ─────────────────────────────────────────────────────────
 router.get('/api/retail/favorites', requireRetailAuth, (req, res) => {
   const now = Date.now();
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
   const rows = tdb().prepare(
-    `SELECT ${RETAIL_PRODUCT_COLS}, f.created_at AS favorited_at
+    `SELECT ${RETAIL_PRODUCT_COLS_LIST}, ${hasImageFallbackSql('p')} AS has_group_image, f.created_at AS favorited_at
        FROM retail_customer_favorites f
        JOIN store_products p ON p.id = f.product_id
       WHERE f.customer_id = ?
@@ -14488,7 +14498,9 @@ router.get('/api/retail/favorites', requireRetailAuth, (req, res) => {
       ORDER BY f.created_at DESC`
   ).all(req.customer.id)
     .map(hydrateNutrition)
-    .map(r => flashsales.decorateProduct(r, now));
+    .map(r => flashsales.decorateProduct(r, now))
+    // Swap heavy inline base64 photos for streamed-image URLs (see shop-list).
+    .map(r => lazifyProductImage(r, baseUrl));
   resolveAutoBadges(rows);
   res.json({ success: true, data: rows, meta: { count: rows.length, server_time_ms: now } });
 });
