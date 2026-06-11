@@ -653,7 +653,16 @@ Page({
     try {
       const data = await api.get('/api/retail/vouchers/auto?subtotal=' + cart.subtotal());
       // api unwraps body.data → resolves to the object (or null) directly.
-      this.setData({ autoVoucher: data && data.code ? data : null });
+      const auto = data && data.code ? data : null;
+      // A coupon that's auto-applied is already shown in the banner — don't also
+      // list it as a "TAP TO USE" card (it appeared twice). Strip it from both
+      // card lists so the same coupon never shows in two places.
+      const strip = (arr) => auto ? arr.filter(c => c.code !== auto.code) : arr;
+      this.setData({
+        autoVoucher: auto,
+        publicCoupons: strip(this.data.publicCoupons),
+        myVouchers: strip(this.data.myVouchers),
+      });
     } catch (e) {
       console.warn('[checkout] loadAutoVoucher failed:', e.message);
     }

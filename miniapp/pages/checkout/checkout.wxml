@@ -450,7 +450,6 @@
         <view class="va-code f-gothic">{{autoApplied.title}}</view>
         <view class="va-desc muted">{{lang === 'cn' ? '已自动抵扣' : 'Applied automatically'}} · −¥{{autoApplied.amount}}</view>
       </view>
-      <view class="va-auto-pill f-toni">{{lang === 'cn' ? '最优' : 'BEST'}}</view>
     </view>
 
     <view wx:if="{{voucherCode && !autoApplied}}" class="voucher-applied">
