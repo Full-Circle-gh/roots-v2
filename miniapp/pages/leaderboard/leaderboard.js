@@ -14,6 +14,7 @@ const COPY_EN = {
   notRankedSub:   'Place a paid order to start climbing the leaderboard.',
   rewardsTitle:   'REWARDS',
   metricSpend:    'By lifetime spend',
+  metricSpendWin: 'By spend',           // when a period window is set, "lifetime" is wrong
   metricPoints:   'By points balance',
   metricOrders:   'By paid orders',
   periodAll:      'All time',
@@ -30,6 +31,7 @@ const COPY_CN = {
   notRankedSub:   '完成一笔已付款订单即可开始上榜。',
   rewardsTitle:   '奖励',
   metricSpend:    '按累计消费',
+  metricSpendWin: '按消费',             // when a period window is set, "累计/lifetime" is wrong
   metricPoints:   '按积分余额',
   metricOrders:   '按已付订单数',
   periodAll:      '全部时间',
@@ -68,11 +70,12 @@ Page({
     this.refresh().finally(() => wx.stopPullDownRefresh());
   },
 
-  metricLabel(metric) {
+  metricLabel(metric, period) {
     const c = this.data.copy;
     if (metric === 'points_balance') return c.metricPoints;
     if (metric === 'orders_count')   return c.metricOrders;
-    return c.metricSpend;
+    // Spend is windowed when a period is set, so "lifetime" only fits all-time.
+    return (period && period !== 'all') ? c.metricSpendWin : c.metricSpend;
   },
   periodLabel(period) {
     const c = this.data.copy;
@@ -137,7 +140,7 @@ Page({
       kicker: lang === 'cn' ? (cfg.kicker_cn || cfg.kicker_en || '') : (cfg.kicker_en || cfg.kicker_cn || ''),
       title:  lang === 'cn' ? (cfg.title_cn  || cfg.title_en  || '') : (cfg.title_en  || cfg.title_cn  || ''),
       subhead: lang === 'cn' ? (cfg.subhead_cn || cfg.subhead_en || '') : (cfg.subhead_en || cfg.subhead_cn || ''),
-      metaLabel: this.metricLabel(cfg.metric) + ' · ' + this.periodLabel(cfg.period),
+      metaLabel: this.metricLabel(cfg.metric, cfg.period) + ' · ' + this.periodLabel(cfg.period),
       metric: cfg.metric || 'lifetime_spend',
       entries,
       listEntries,
