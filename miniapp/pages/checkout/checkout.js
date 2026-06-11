@@ -2062,7 +2062,13 @@ Page({
             wx.redirectTo({ url: '/pages/order-success/order-success?id=' + orderId });
           },
           fail: () => {
-            wx.showToast({ title: this.data.lang === 'cn' ? '支付未完成' : 'Payment incomplete', icon: 'none' });
+            // Customer dismissed or the pay sheet failed. The order already
+            // exists as `pending_payment`, so don't strand them on checkout —
+            // clear the cart (its items now live on that order; re-checking-out
+            // would create a duplicate) and route to the order page, which
+            // shows an "Awaiting payment" banner + a PAY NOW button to retry.
+            cart.clear();
+            wx.redirectTo({ url: '/pages/order/order?id=' + orderId });
           },
           // ALWAYS reset placing — some WeChat builds don't fire `fail`
           // when the customer dismisses the pay sheet by tapping outside,
@@ -2088,10 +2094,13 @@ Page({
         return;
       }
 
-      // Unknown rail / missing pay params — fail loudly rather than silently.
+      // Unknown rail / missing pay params — the order still exists as
+      // pending_payment, so route to it (PAY NOW lets them retry) rather than
+      // leaving the customer on checkout with no obvious next step.
       console.error('[checkout] no payment handler for', this.data.paymentMethod, payData);
-      wx.showToast({ title: this.data.lang === 'cn' ? '支付方式暂不可用' : 'Payment unavailable', icon: 'none' });
+      cart.clear();
       this.setData({ placing: false });
+      wx.redirectTo({ url: '/pages/order/order?id=' + orderId });
     } catch (e) {
       console.error('[checkout] place order failed:', e);
       // Race-on-pay: stock changed between quote and Pay tap. Re-fetch the
