@@ -691,9 +691,11 @@
     </view>
   </block>
 
-  <!-- B · Riso pop — ink border, sticker badge + verified stamp, first review -->
+  <!-- B · Riso pop — ink border, sticker badge + verified stamp.
+       One review → a static card; 2+ → an autoplay swiper that cycles through
+       every review, each keeping the full sticker + VERIFIED look. -->
   <block wx:elif="{{reviewView === 'riso'}}">
-    <view class="rv-card">
+    <view wx:if="{{reviews.length < 2}}" class="rv-card">
       <view class="riso-badge">
         <text class="riso-badge-star">★</text><text class="riso-badge-star">★</text><text class="riso-badge-star">★</text><text class="riso-badge-star">★</text><text class="riso-badge-star">★</text>
       </view>
@@ -711,6 +713,28 @@
         </view>
       </view>
     </view>
+    <swiper wx:else class="rv-swiper riso-swiper" style="height:{{reviewSwiperH || 420}}rpx" indicator-dots="{{true}}" indicator-color="rgba(0,0,0,0.18)" indicator-active-color="rgba(0,0,0,0.7)" autoplay="{{true}}" interval="{{5000}}" circular="{{true}}">
+      <swiper-item wx:for="{{reviews}}" wx:key="key">
+        <view class="rv-card riso-swiper-card">
+          <view class="riso-badge">
+            <text class="riso-badge-star">★</text><text class="riso-badge-star">★</text><text class="riso-badge-star">★</text><text class="riso-badge-star">★</text><text class="riso-badge-star">★</text>
+          </view>
+          <view class="riso-stamp">{{lang === 'cn' ? '真实评价' : 'VERIFIED'}}</view>
+          <view wx:if="{{reviewKicker}}" class="riso-kicker">{{reviewKicker}}</view>
+          <view wx:if="{{item.quote}}" class="rv-quote rv-quote-left">{{item.quote}}</view>
+          <view class="rv-person">
+            <view class="rv-mono rv-mono-sticker">
+              <image wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill" class="rv-mono-img"/>
+              <text wx:else class="rv-mono-inner">{{item.avatarInitial}}</text>
+            </view>
+            <view class="rv-person-text">
+              <view wx:if="{{item.authorName}}" class="rv-name">{{item.authorName}}</view>
+              <view wx:if="{{item.authorSub}}" class="rv-role">{{item.authorSub}}</view>
+            </view>
+          </view>
+        </view>
+      </swiper-item>
+    </swiper>
   </block>
 
   <!-- C · Spotlight — header band + dark hero card + thumbnail rail -->

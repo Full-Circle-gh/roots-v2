@@ -2084,6 +2084,15 @@
   background: var(--rv-circle, #7BBD3B); font-family: var(--f-bear); font-weight: 700;
   font-size: calc(36rpx * var(--font-scale));
 }
+/* Riso with 2+ reviews → autoplay swiper. The swiper box clips overflow, so pad
+   each slide enough to clear the badge (pokes up ~24rpx) and the offset hard
+   shadow (down/right); the slide height rides on reviewSwiperH (measured). */
+.review-riso .riso-swiper { width: 100%; min-height: 420rpx; }
+.review-riso .riso-swiper swiper-item {
+  box-sizing: border-box; padding: 34rpx 26rpx 30rpx;
+  display: flex; align-items: center;
+}
+.review-riso .riso-swiper .rv-card { width: 100%; margin-top: 0; }
 
 /* C · Spotlight — header band + dark hero card + thumbnail rail */
 .spot-head {

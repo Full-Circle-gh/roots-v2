@@ -1870,18 +1870,25 @@ Component({
         // <swiper> can't auto-size, so a fixed height clips long reviews
         // (the byline gets cut off). Measure the tallest review and grow the
         // swiper to fit. Runs only for the carousel view with >1 review.
-        if (out.type === 'review_card' && out.reviewView === 'carousel'
+        if (out.type === 'review_card'
+            && (out.reviewView === 'carousel' || out.reviewView === 'riso')
             && out.reviews && out.reviews.length > 1) {
           this.measureReviewSwiper();
         }
       });
     },
 
-    // Size the review carousel's <swiper> to its tallest slide so no byline
-    // gets clipped. Falls back silently if the query returns nothing.
+    // Size the review <swiper> to its tallest slide so no byline gets clipped.
+    // Falls back silently if the query returns nothing. Carousel measures the
+    // plain .rv-item; riso measures its sticker card and needs more headroom to
+    // clear the slide padding (badge pokes up, hard shadow drops down/right).
     measureReviewSwiper() {
+      const isRiso = this.data.reviewView === 'riso';
+      const sel = isRiso ? '.riso-swiper-card' : '.rv-item';
+      const headroom = isRiso ? 120 : 56;
+      const floor = isRiso ? 420 : 360;
       this.createSelectorQuery()
-        .selectAll('.rv-item')
+        .selectAll(sel)
         .boundingClientRect((rects) => {
           if (!rects || !rects.length) return;
           let maxPx = 0;
@@ -1892,9 +1899,9 @@ Component({
             const info = (wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync());
             if (info && info.windowWidth) winW = info.windowWidth;
           } catch (e) { /* keep default */ }
-          // px → rpx, plus headroom for the indicator dots; floor at 360rpx.
-          const rpx = (maxPx * 750) / winW + 56;
-          const h = Math.max(360, Math.ceil(rpx));
+          // px → rpx, plus headroom for slide padding + indicator dots.
+          const rpx = (maxPx * 750) / winW + headroom;
+          const h = Math.max(floor, Math.ceil(rpx));
           if (h !== this.data.reviewSwiperH) this.setData({ reviewSwiperH: h });
         })
         .exec();
