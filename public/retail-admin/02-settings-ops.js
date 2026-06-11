@@ -1,0 +1,1246 @@
+/* eslint-disable no-undef, no-func-assign, no-self-assign */
+/* retail-admin app JS — part 02/10.
+   All 10 parts share ONE global scope and are loaded sequentially by
+   retail-admin.html — LOAD ORDER MATTERS. Cross-file globals (cuT, cuLang,
+   DASH_VIEW, rm* mobile renderers…) live in other parts or in the inline
+   script blocks still in the HTML, hence the eslint no-undef opt-out.
+   Contents: Operations panel (stores, shipping integrations, printers, geocode), command palette (Ctrl+K), visual preview painters, account menu (acct*) */
+// ═══════════════════════════════════════════════════════════════════════
+// OPERATIONS PANEL (Settings → Operations)
+// Integrations moved here from the kitchen app 2026-06-09. The data layer was
+// already on /api/retail-admin/*; these functions just drive the UI now. They
+// were adapted to this app's theme tokens (--text-1/3, --line, --bg-elev-1).
+// ═══════════════════════════════════════════════════════════════════════
+function loadOpsPanel() {
+  loadOpsStores();
+  loadIntegrationsStatus();
+  loadShippingIntegrations();
+  loadPrinterPrefs();
+}
+
+// ── Stores · 门店 — list + add/edit, online-store self-managed ──
+// Mirrors the kitchen app's store editor but lives here so the online store
+// is fully independent. Uses the dual-realm /api/retail-admin/stores routes;
+// saving an address auto-re-geocodes the store in the background.
+let _opsStores = [];
+async function loadOpsStores() {
+  const box = document.getElementById('ops-stores-list');
+  if (!box) return;
+  box.innerHTML = 'Loading…';
+  try {
+    const j = await api('/api/retail-admin/stores');
+    _opsStores = (j.data || []).filter(s => s.is_active);
+    if (!_opsStores.length) {
+      box.innerHTML = '<div style="padding:10px 0;color:var(--text-3)">No stores yet. Add one below. · 暂无门店,请在下方添加。</div>';
+      return;
+    }
+    box.innerHTML = _opsStores.map(s => {
+      const loc = [s.city, s.district].filter(Boolean).join(' · ');
+      const gps = (s.lat != null && s.lng != null)
+        ? '<span style="color:#16a34a">📍 GPS located · 已定位</span>'
+        : '<span style="color:#dc2626">⚠ no GPS — set a street address · 未定位,请填写详细地址</span>';
+      return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--line)">
+        <div style="min-width:0">
+          <div><strong style="color:var(--text-1)">${escapeHtml(s.name_en || s.code)}</strong>${s.name_cn ? ` <span style="color:var(--text-3)">· ${escapeHtml(s.name_cn)}</span>` : ''}</div>
+          ${loc ? `<div style="color:var(--text-3);font-size:12px;margin-top:2px">${escapeHtml(loc)}</div>` : ''}
+          ${s.address ? `<div style="color:var(--text-3);font-size:12px;margin-top:2px">${escapeHtml(s.address)}</div>` : ''}
+          <div style="font-size:12px;margin-top:3px">${gps}</div>
+        </div>
+        <button class="btn" style="flex:none" onclick="_opsStoreEdit(${s.id})">Edit · 编辑</button>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    box.innerHTML = `<span style="color:var(--danger)">Failed to load stores · 加载失败: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function _opsStoreEdit(id) {
+  const s = _opsStores.find(x => x.id === id);
+  if (s) _opsStoreForm(s);
+}
+
+function _opsStoreForm(s) {
+  const isEdit = !!s;
+  const box = document.getElementById('ops-store-form');
+  if (!box) return;
+  const val = v => escapeAttr(v == null ? '' : v);
+  box.innerHTML = `
+    <div style="margin-top:14px;padding:16px;background:var(--bg-elev-1);border:1px solid var(--line);border-radius:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <strong style="color:var(--text-1)">${isEdit ? 'Edit store · 编辑门店' : 'New store · 新建门店'}</strong>
+        <button class="btn" style="flex:none" onclick="document.getElementById('ops-store-form').innerHTML=''">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div${isEdit ? '' : ''}>
+          <label class="field-label">Code · 短标识 ${isEdit ? '' : '<span style="color:var(--text-3);font-weight:400">— e.g. pudong</span>'}</label>
+          <input type="text" id="osf_code" value="${val(s?.code)}" placeholder="pudong" ${isEdit ? 'disabled style="font-family:monospace;opacity:.6"' : 'style="font-family:monospace"'}>
+        </div>
+        <div><label class="field-label">Phone · 电话</label><input type="text" id="osf_phone" value="${val(s?.phone)}" placeholder="020-XXXXXXXX"></div>
+        <div><label class="field-label">Name (EN)</label><input type="text" id="osf_name_en" value="${val(s?.name_en)}" placeholder="Roots — Tianhe"></div>
+        <div><label class="field-label">名称 (CN)</label><input type="text" id="osf_name_cn" value="${val(s?.name_cn)}" placeholder="Roots · 天河店"></div>
+        <div><label class="field-label">City · 城市</label><input type="text" id="osf_city" value="${val(s?.city)}" placeholder="广州"></div>
+        <div><label class="field-label">District · 区</label><input type="text" id="osf_district" value="${val(s?.district)}" placeholder="天河区"></div>
+        <div style="grid-column:1 / -1">
+          <label class="field-label">Street address · 详细地址 <span style="color:var(--text-3);font-weight:400">— sets the store GPS, auto-geocoded on save · 决定门店 GPS,保存时自动定位</span></label>
+          <input type="text" id="osf_address" value="${val(s?.address)}" placeholder="新塘大街3号新塘科创园2栋">
+        </div>
+        <div><label class="field-label">Sort priority · 排序 <span style="color:var(--text-3);font-weight:400">(lower = preferred)</span></label><input type="number" id="osf_sort" value="${s?.sort_order ?? 0}"></div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:6px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-1)">
+            <input type="checkbox" id="osf_pickup" ${s?.pickup_enabled ? 'checked' : ''} style="width:16px;height:16px">${pickupIcon(13)} Offer store pickup · 到店自提
+          </label>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding:12px;background:rgba(204,217,0,.06);border:1px dashed var(--line);border-radius:8px">
+        <label class="field-label">📍 GPS coordinates · 经纬度 <span style="color:var(--text-3);font-weight:400">— optional manual override. <strong>Leave blank to auto-locate from the address on save.</strong> Only fill these to pin an exact spot; get coords at <a href="https://lbs.qq.com/getPoint/" target="_blank" style="color:var(--accent)">lbs.qq.com/getPoint</a>. · 留空则保存时按地址自动定位;仅在需要精确指定时填写。</span></label>
+        ${(s && s.lat != null && s.lng != null) ? `<div style="font-size:12px;color:var(--text-3);margin:6px 0 8px">Current · 当前: <code>${s.lat.toFixed(6)}, ${s.lng.toFixed(6)}</code></div>` : ''}
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <input type="number" step="0.000001" id="osf_lat" value="" placeholder="Latitude 纬度 23.1519" style="flex:1">
+          <input type="number" step="0.000001" id="osf_lng" value="" placeholder="Longitude 经度 113.4061" style="flex:1">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" onclick="_opsStoreSave(${isEdit ? s.id : 'null'})">Save · 保存</button>
+        <button class="btn" onclick="document.getElementById('ops-store-form').innerHTML=''">Cancel · 取消</button>
+      </div>
+    </div>`;
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function _opsStoreSave(id) {
+  const v = sel => (document.getElementById(sel).value || '').trim();
+  const body = {
+    name_en: v('osf_name_en'), name_cn: v('osf_name_cn'),
+    city: v('osf_city'), district: v('osf_district'),
+    address: v('osf_address'), phone: v('osf_phone'),
+    sort_order: +document.getElementById('osf_sort').value || 0,
+    pickup_enabled: document.getElementById('osf_pickup').checked,
+  };
+  const latRaw = v('osf_lat'), lngRaw = v('osf_lng');
+  if (latRaw && lngRaw) {
+    // Manual override supplied → send explicit coords (backend skips geocoding).
+    const lat = parseFloat(latRaw), lng = parseFloat(lngRaw);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      return toast('Invalid coordinates · 坐标无效', 'error');
+    }
+    body.lat = lat; body.lng = lng;
+  }
+  // Else: omit lat/lng entirely so the backend re-geocodes from the address
+  // (touchedAddr && !explicitLatLng). Never send lat:null here — that would
+  // both wipe the coords AND suppress the re-geocode.
+  if (!id) {
+    body.code = v('osf_code');
+    if (!body.code) return toast('Code required · 请填写编号', 'error');
+  }
+  try {
+    await api(id ? `/api/retail-admin/stores/${id}` : '/api/retail-admin/stores', { method: id ? 'PATCH' : 'POST', body });
+    toast('Saved · 已保存', 'success');
+    document.getElementById('ops-store-form').innerHTML = '';
+    loadOpsStores();
+    loadIntegrationsStatus();
+    // Address saves re-geocode in the background; refresh again shortly so the
+    // 📍 GPS badge updates without a manual reload.
+    setTimeout(loadOpsStores, 2500);
+  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+// ── Shipping integrations: kd100 + JD LOP + Feie credentials & status chips ──
+async function loadShippingIntegrations() {
+  try {
+    const r = await fetch('/api/retail-admin/integrations');
+    if (!r.ok) return;
+    const j = await r.json();
+    const k = j.data?.kd100 || {};
+    const d = j.data?.jd || {};
+    const kCust = document.getElementById('kd100-customer');
+    const kKey  = document.getElementById('kd100-key');
+    const kCb   = document.getElementById('kd100-callback');
+    const kSec  = document.getElementById('kd100-secret');
+    if (kCust) kCust.value = k.customer || '';
+    if (kKey)  kKey.placeholder      = k.key_masked    ? `${k.key_masked} · leave blank to keep` : 'paste 授权 key';
+    if (kCb && k.callback) kCb.value = k.callback;
+    if (kSec) kSec.placeholder       = k.secret_masked ? `${k.secret_masked} · leave blank to keep` : 'random string — do not rotate';
+    const kChip = document.getElementById('kd100-chip');
+    if (kChip) kChip.innerHTML = k.enabled
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED</span>';
+    const kDot = document.getElementById('kd100-dot');
+    if (kDot) kDot.style.background = k.enabled ? '#10b981' : 'var(--text-3)';
+
+    const jAk = document.getElementById('jd-app_key');
+    const jAs = document.getElementById('jd-app_secret');
+    const jAt = document.getElementById('jd-access_token');
+    const jCc = document.getElementById('jd-customer_code');
+    const jEv = document.getElementById('jd-env');
+    if (jAk) jAk.value = d.app_key || '';
+    if (jAs) jAs.placeholder = d.app_secret_masked   ? `${d.app_secret_masked} · leave blank to keep`   : 'paste app_secret';
+    if (jAt) jAt.placeholder = d.access_token_masked ? `${d.access_token_masked} · leave blank to keep` : 'paste access_token';
+    if (jCc) jCc.value = d.customer_code || '';
+    if (jEv) jEv.value = d.env || 'production';
+    const jChip = document.getElementById('jd-chip');
+    if (jChip) jChip.innerHTML = d.enabled
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
+      : '<span style="background:#fef3c7;color:#92400e;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">⏳ PENDING JD ACCOUNT</span>';
+    const jDot = document.getElementById('jd-dot');
+    if (jDot) jDot.style.background = d.enabled ? '#10b981' : '#f59e0b';
+
+    const f = j.data?.feie || {};
+    const fUser = document.getElementById('feie-user');
+    const fUkey = document.getElementById('feie-ukey');
+    if (fUser) fUser.value = f.user || '';
+    if (fUkey) fUkey.placeholder = f.ukey_masked ? `${f.ukey_masked} · leave blank to keep` : 'paste USERKEY from dev console';
+    const fChip = document.getElementById('feie-chip');
+    if (fChip) fChip.innerHTML = f.enabled
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED</span>';
+  } catch (e) { console.warn('[integrations] load failed', e); }
+}
+
+// Logistics card: toggle between the 快递100 and 京东物流 panels (both stay configurable).
+function _logTab(which) {
+  ['kd100', 'jd'].forEach(k => {
+    const panel = document.getElementById('logpanel-' + k);
+    const tab   = document.getElementById('logtab-' + k);
+    if (panel) panel.style.display = (k === which) ? '' : 'none';
+    if (tab)   tab.classList.toggle('active', k === which);
+  });
+}
+
+// Printer card: switch between per-store printer panels (all stay configurable & save together).
+function _printerTab(storeId) {
+  document.querySelectorAll('#feie-stores [id^="ppanel-"]').forEach(panel => {
+    panel.style.display = (panel.id === 'ppanel-' + storeId) ? 'block' : 'none';
+  });
+  document.querySelectorAll('#feie-stores .dz-subtab').forEach(tab => {
+    tab.classList.toggle('active', tab.id === 'ptab-' + storeId);
+  });
+}
+
+// Printer behaviour prefs + one row per store (SN + template + copies).
+const _FEIE_TEMPLATES = [
+  { id: 'receipt', label: 'Customer receipt · 顾客小票' },
+  { id: 'packing', label: 'Packing slip · 配货单' },
+  { id: 'compact', label: 'Compact · 精简' },
+];
+
+async function loadPrinterPrefs() {
+  try {
+    const r = await fetch('/api/retail-admin/printer');
+    if (!r.ok) return;
+    const p = (await r.json()).data || {};
+    const auto = document.getElementById('feie-auto');
+    const shop = document.getElementById('feie-shop');
+    if (auto) auto.checked = p.auto_print !== false;
+    if (shop) shop.value = p.shop_name || '';
+
+    const box = document.getElementById('feie-stores');
+    if (box) {
+      const stores = p.stores || [];
+      if (!stores.length) {
+        box.innerHTML = '<div style="font-size:13px;color:var(--text-3)">No active stores. Add stores under Stores first. · 暂无门店,请先添加门店。</div>';
+      } else {
+        const tabs = stores.map((s, i) => {
+          const tabName = escapeHtml((window.cuLang && cuLang() === 'cn')
+            ? (s.name_cn || s.name_en || s.code || ('Store ' + s.id))
+            : (s.name_en || s.name_cn || s.code || ('Store ' + s.id)));
+          const lit = !!(s.sn && String(s.sn).trim());
+          return `<button type="button" class="dz-subtab${i === 0 ? ' active' : ''}" id="ptab-${s.id}" onclick="_printerTab(${s.id})"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${lit ? '#10b981' : 'var(--text-3)'};margin-right:7px;vertical-align:middle"></span>${tabName}</button>`;
+        }).join('');
+        const panels = stores.map((s, i) => {
+          const nameCn = escapeHtml(s.name_cn || '');
+          const nameEn = escapeHtml(s.name_en || '');
+          const primary = nameCn || nameEn || escapeHtml(s.code || ('Store ' + s.id));
+          const secondary = (nameCn && nameEn) ? nameEn : '';
+          const codeTag = s.code ? ` <span style="font-weight:600;font-size:11px;color:var(--text-3)">#${escapeHtml(s.code)}</span>` : '';
+          const opts = _FEIE_TEMPLATES.map(t => `<option value="${t.id}" ${s.template===t.id?'selected':''}>${t.label}</option>`).join('');
+          return `
+          <div data-store="${s.id}" id="ppanel-${s.id}" style="display:${i === 0 ? 'block' : 'none'};border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg-elev-1)">
+            <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:var(--text-1)">🏪 ${primary}${secondary ? ` <span style="font-weight:600;font-size:12px;color:var(--text-3)">${secondary}</span>` : ''}${codeTag}</div>
+            <div style="display:grid;grid-template-columns:2fr 1.4fr 0.8fr;gap:10px;align-items:end">
+              <div>
+                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:3px">Printer SN · 编号</label>
+                <input type="text" class="feie-store-sn" value="${escapeHtml(s.sn)}" style="width:100%;font-family:monospace;font-size:12px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-input);color:var(--text-1)" placeholder="e.g. 550540977">
+              </div>
+              <div>
+                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:3px">Template · 模板</label>
+                <select class="feie-store-tpl" onchange="_previewStore(${s.id})" style="width:100%;font-size:12px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-input);color:var(--text-1)">${opts}</select>
+              </div>
+              <div>
+                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:3px">Copies · 份数</label>
+                <input type="number" class="feie-store-copies" min="1" max="5" value="${Number(s.copies)||1}" style="width:100%;font-size:12px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-input);color:var(--text-1)">
+              </div>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+              <div style="flex:0 0 auto">
+                <div style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);margin-bottom:5px">Print preview · 打印预览</div>
+                <div id="feie-prev-${s.id}" class="feie-prev"><div style="color:var(--text-3);font-size:12px">Loading preview…</div></div>
+              </div>
+              <div style="flex:1 1 160px;min-width:140px">
+                <button class="btn" style="font-size:12px;padding:5px 12px" onclick="_testPrinter(${s.id})">🖨 Save &amp; test this store</button>
+                <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.5">The preview shows your latest order in this template (or sample data if none yet). Change the template above to compare. · 预览即真实打印效果</div>
+              </div>
+            </div>
+          </div>`;
+        }).join('');
+        box.innerHTML = (stores.length > 1
+          ? `<div class="dz-subtabs" role="tablist" style="margin-bottom:16px">${tabs}</div>`
+          : '') + panels;
+        stores.forEach(s => _previewStore(s.id));
+      }
+      const ooc = document.getElementById('feie-ooc');
+      if (ooc) {
+        const sel = p.out_of_city_store_id;
+        ooc.innerHTML =
+          '<option value="">— Use each order’s own store · 按订单所属门店 —</option>' +
+          stores.map(s => {
+            const name = escapeHtml(s.name_cn || s.name_en || s.code || ('Store ' + s.id));
+            return `<option value="${s.id}" ${String(sel)===String(s.id)?'selected':''}>${name}</option>`;
+          }).join('');
+      }
+    }
+  } catch (e) { console.warn('[printer] load failed', e); }
+}
+
+// Faux 58mm thermal-paper render of Feieyun markup so the operator sees roughly
+// how the slip prints. Tags wrap a whole line: <CB> center+enlarge · <B> enlarge
+// · <L> double-height · <BOLD> bold · <C> center
+function _renderThermal(content) {
+  const lines = String(content == null ? '' : content).replace(/\s+$/, '').split('\n');
+  return lines.map(line => {
+    let cls = '', inner = line;
+    const m = line.match(/^<(CB|B|L|BOLD|C)>([\s\S]*)<\/\1>$/);
+    if (m) {
+      inner = m[2];
+      cls = ({ CB:'tc tbig', B:'tbig', L:'ttall', BOLD:'tbold', C:'tc' })[m[1]] || '';
+    }
+    inner = inner.replace(/<\/?(CB|B|L|BOLD|C)>/g, '');
+    if (inner === '') return '<div class="tln"> </div>';
+    return `<div class="tln ${cls}">${escapeHtml(inner)}</div>`;
+  }).join('');
+}
+
+async function _previewStore(storeId) {
+  const box = document.getElementById('feie-prev-' + storeId);
+  if (!box) return;
+  const row = document.querySelector('#feie-stores [data-store="' + storeId + '"]');
+  const tpl = row?.querySelector('.feie-store-tpl')?.value || 'receipt';
+  try {
+    const r = await fetch('/api/retail-admin/printer/preview?store_id=' + storeId + '&template=' + encodeURIComponent(tpl));
+    const j = await r.json();
+    if (!j.ok) { box.innerHTML = '<div style="color:var(--text-3);font-size:12px">No preview available</div>'; return; }
+    box.innerHTML =
+      `<div class="thermal">${_renderThermal(j.content)}</div>` +
+      `<div style="font-size:11px;color:var(--text-3);margin-top:6px;text-align:center;max-width:230px">${
+        j.sample ? 'Sample data · 示例数据' : 'Your latest order · 最近订单'}</div>`;
+  } catch { box.innerHTML = '<div style="color:var(--text-3);font-size:12px">Preview failed</div>'; }
+}
+
+function _collectPrinterByStore() {
+  const by_store = {};
+  document.querySelectorAll('#feie-stores [data-store]').forEach(row => {
+    const id = row.getAttribute('data-store');
+    by_store[id] = {
+      sn:       row.querySelector('.feie-store-sn')?.value.trim() || '',
+      template: row.querySelector('.feie-store-tpl')?.value || 'receipt',
+      copies:   parseInt(row.querySelector('.feie-store-copies')?.value, 10) || 1,
+    };
+  });
+  return by_store;
+}
+
+async function _savePrinter() {
+  await _saveIntegration('feie');
+  try {
+    const body = {
+      auto_print: document.getElementById('feie-auto')?.checked,
+      shop_name:  document.getElementById('feie-shop')?.value || '',
+      by_store:   _collectPrinterByStore(),
+      out_of_city_store_id: document.getElementById('feie-ooc')?.value || null,
+    };
+    const r = await fetch('/api/retail-admin/printer', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    toast('✅ Printer settings saved · 已保存', 'success');
+    loadPrinterPrefs();
+  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+async function _testPrinter(storeId) {
+  await _savePrinter();
+  try {
+    const r = await fetch('/api/retail-admin/printer/test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store_id: storeId }),
+    });
+    const j = await r.json();
+    if (j.ok) toast('🖨 Test sent — check that store\'s printer · 已发送', 'success');
+    else      toast('Print failed: ' + (j.error || 'unknown'), 'error');
+  } catch (e) { toast('Test failed: ' + e.message, 'error'); }
+}
+
+async function _saveIntegration(svc) {
+  // Empty string for password fields = "keep current" (backend treats undefined
+  // as keep, null/"" as clear).
+  const v = (id) => document.getElementById(id)?.value;
+  const payload = {};
+  if (svc === 'kd100') {
+    payload.kd100 = {
+      customer: v('kd100-customer').trim() || null,
+      key:      v('kd100-key') || undefined,
+      callback: v('kd100-callback').trim() || null,
+      secret:   v('kd100-secret') || undefined,
+    };
+  } else if (svc === 'jd') {
+    payload.jd = {
+      app_key:       v('jd-app_key').trim() || null,
+      app_secret:    v('jd-app_secret') || undefined,
+      access_token:  v('jd-access_token') || undefined,
+      customer_code: v('jd-customer_code').trim() || null,
+      env:           v('jd-env') || 'production',
+    };
+  } else if (svc === 'feie') {
+    payload.feie = {
+      user: v('feie-user').trim() || null,
+      ukey: v('feie-ukey') || undefined,
+    };
+  }
+  try {
+    const r = await fetch('/api/retail-admin/integrations', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'save failed');
+    toast(`✅ Saved ${svc} · 已保存`, 'success');
+    if (svc === 'kd100') { document.getElementById('kd100-key').value = ''; document.getElementById('kd100-secret').value = ''; }
+    if (svc === 'jd')    { document.getElementById('jd-app_secret').value = ''; document.getElementById('jd-access_token').value = ''; }
+    if (svc === 'feie')  { document.getElementById('feie-ukey').value = ''; }
+    loadShippingIntegrations();
+  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+async function _testKd100() {
+  await _saveIntegration('kd100');
+  try {
+    const r = await fetch('/api/retail-admin/integrations/kd100/test', { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) toast('✅ 快递100 reachable · auth OK', 'success');
+    else      toast('快递100 test failed: ' + (j.error || 'unknown'), 'error');
+  } catch (e) { toast('Test failed: ' + e.message, 'error'); }
+}
+
+async function _testJd() {
+  await _saveIntegration('jd');
+  try {
+    const r = await fetch('/api/retail-admin/integrations/jd/test', { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) {
+      toast('✅ JD reachable · auth OK', 'success');
+      if (j.note && /customercode|商家编码/i.test(j.note)) toast('Next: enter CUSTOMER_CODE (商家编码) to enable waybill push · 还需填写商家编码', 'info');
+    } else toast('JD ping failed: ' + (j.error || 'unknown'), 'error');
+  } catch (e) { toast('Test failed: ' + e.message, 'error'); }
+}
+
+async function _geocodeBackfill() {
+  if (!confirm('Geocode all stores + customer addresses now? Uses your maps quota. · 现在为所有门店与客户地址重新定位?将消耗地图配额。')) return;
+  try {
+    toast('Geocoding…', 'info');
+    const r = await fetch('/api/retail-admin/inventory/geocode-backfill', { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok || j.success === false) {
+      const err = j.error || ('HTTP ' + r.status);
+      toast((err === 'tencent_maps_key_missing' || err === 'maps_key_missing')
+        ? 'Set AMAP_MAPS_KEY or TENCENT_MAPS_KEY in /root/roots-v2/.env first · 请先在 /root/roots-v2/.env 配置地图 key'
+        : 'Failed: ' + err, 'error');
+      return;
+    }
+    const d = j.data || {};
+    if (d.aborted_on_quota || (d.last_error && d.last_error.quota)) {
+      toast('🚫 Daily map quota exhausted — geocoding stopped. Fix the key (see panel), quota resets next day. · 地图配额已用尽,已停止。请修复 key,次日重置。', 'error');
+    } else if (d.addresses_total > 0 && d.addresses_geocoded === 0 && d.last_error) {
+      toast('⚠ Could not geocode addresses: ' + (d.last_error.message || d.last_error.code), 'error');
+    } else {
+      toast(`✅ Geocoded ${d.stores_geocoded}/${d.stores_total} stores · ${d.addresses_geocoded}/${d.addresses_total} addresses`, 'success');
+    }
+    loadIntegrationsStatus();
+  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+// ── GZ-express excluded districts ──
+// All 11 official Guangzhou districts as a multi-select. Clicking a chip toggles
+// it between "included" (5-option modal eligible) and "excluded" (legacy yes/no
+// modal). Saves on every click; caches the current list in _gzExclSet.
+const GZ_DISTRICTS = [
+  { code: '越秀区', en: 'Yuexiu' },
+  { code: '海珠区', en: 'Haizhu' },
+  { code: '荔湾区', en: 'Liwan' },
+  { code: '天河区', en: 'Tianhe' },
+  { code: '白云区', en: 'Baiyun' },
+  { code: '黄埔区', en: 'Huangpu' },
+  { code: '番禺区', en: 'Panyu' },
+  { code: '花都区', en: 'Huadu' },
+  { code: '南沙区', en: 'Nansha' },
+  { code: '从化区', en: 'Conghua' },
+  { code: '增城区', en: 'Zengcheng' },
+];
+let _gzExclSet = new Set();
+async function _loadGzExcludedDistricts() {
+  try {
+    const r = await fetch('/api/retail-admin/config/gz-excluded-districts');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    _gzExclSet = new Set(j.data || []);
+    _paintGzExclChips();
+  } catch (e) {
+    toast('Failed to load: ' + e.message, 'error');
+  }
+}
+function _paintGzExclChips() {
+  const wrap = document.getElementById('gz-excl-chips');
+  if (!wrap) return;
+  wrap.innerHTML = GZ_DISTRICTS.map(d => {
+    const on = _gzExclSet.has(d.code);
+    return `<button onclick="_toggleGzExclDistrict('${d.code}')" style="
+      display:inline-flex;align-items:center;gap:6px;
+      padding:7px 14px;border-radius:99px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;
+      border:1.5px solid ${on ? '#dc2626' : 'var(--line)'};
+      background:${on ? 'rgba(220,38,38,.08)' : 'var(--bg-elev-1)'};
+      color:${on ? '#dc2626' : 'var(--text-1)'};
+      transition:all .12s;
+    ">${on ? '🚫' : '✓'} ${d.code} · ${d.en}</button>`;
+  }).join('');
+  const summary = document.getElementById('gz-excl-summary');
+  if (summary) {
+    const n = _gzExclSet.size;
+    summary.textContent = n === 0
+      ? 'All 11 districts get the 5-option modal. · 全部 11 区使用 5 选项弹窗。'
+      : `${n} district${n === 1 ? '' : 's'} excluded · ${n} 个区已排除${ n === GZ_DISTRICTS.length ? ' (no district gets the 5-option modal)' : ''}`;
+  }
+}
+async function _toggleGzExclDistrict(code) {
+  if (_gzExclSet.has(code)) _gzExclSet.delete(code);
+  else                       _gzExclSet.add(code);
+  _paintGzExclChips();
+  const districts = Array.from(_gzExclSet);
+  try {
+    const r = await fetch('/api/retail-admin/config/gz-excluded-districts', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ districts }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    toast('Saved · 已保存', 'success');
+  } catch (e) {
+    if (districts.includes(code)) _gzExclSet.delete(code); else _gzExclSet.add(code);
+    _paintGzExclChips();
+    toast('Failed: ' + e.message, 'error');
+  }
+}
+
+// ── Order routing status — Tencent Maps key + geocode counts ──
+async function loadIntegrationsStatus() {
+  const box = document.getElementById('integrations-status');
+  if (!box) return;
+  box.innerHTML = 'Loading…';
+  try {
+    const r = await fetch('/api/retail-admin/inventory/geocode-status');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const d = j.data || {};
+    const cfg = d.tencent_maps_configured;
+    const s = d.stores || { total: 0, missing: 0, geocoded: 0 };
+    const a = d.addresses || { total: 0, missing: 0, geocoded: 0 };
+    const provLabel = d.provider === 'amap' ? '高德 / Amap' : d.provider === 'tencent' ? '腾讯 / Tencent' : 'Maps';
+    const keyChip = cfg
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ KEY CONFIGURED</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ KEY MISSING</span>';
+    const pct = (got, tot) => tot === 0 ? '—' : `${got}/${tot}`;
+    // Surface the real provider error (esp. quota) so 0/41 isn't a mystery.
+    const le = d.last_error;
+    let errBox = '';
+    if (le && le.quota) {
+      errBox = `<div style="margin-top:10px;padding:8px 12px;background:#fee2e2;color:#991b1b;border-radius:6px;font-size:12px">🚫 <strong>Daily quota exhausted</strong> on ${escapeHtml(provLabel)} (${escapeHtml(String(le.code))}: ${escapeHtml(le.message || '')}). Coordinates can't be fetched until quota resets or you switch to a real-name-verified / higher-quota key. · 当日配额已用尽,需等待重置或更换已实名/更高配额的 key。</div>`;
+    } else if (le) {
+      errBox = `<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px">⚠ Last geocode error (${escapeHtml(provLabel)}): ${escapeHtml(String(le.code))} ${escapeHtml(le.message || '')}</div>`;
+    }
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <strong style="color:var(--text-1)">${escapeHtml(provLabel)}</strong>
+        ${keyChip}
+      </div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:12px">
+        <span style="color:var(--text-3)">Stores geocoded</span>
+        <span><strong>${pct(s.geocoded, s.total)}</strong>${s.missing ? ` · <span style="color:#b85c00">${s.missing} missing GPS</span>` : ''}</span>
+        <span style="color:var(--text-3)">Addresses geocoded</span>
+        <span><strong>${pct(a.geocoded, a.total)}</strong>${a.missing ? ` · <span style="color:#b85c00">${a.missing} missing GPS</span>` : ''}</span>
+      </div>
+      ${!cfg ? '<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px">⚠ Add <code>AMAP_MAPS_KEY=...</code> (or <code>TENCENT_MAPS_KEY=...</code>) to <code>/root/roots-v2/.env</code> and restart pm2 to enable geocoding.</div>' : ''}
+      ${errBox}
+    `;
+  } catch (e) {
+    box.innerHTML = `<span style="color:var(--danger)">Failed to load status · 加载状态失败: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// COMMAND SEARCH PALETTE
+// A keyword search over every page, every Settings panel, and the individual
+// setting cards inside them. The index is rebuilt from the live DOM each time
+// the palette opens, so it never drifts from the chrome and automatically
+// respects feature gates (hidden tabs / panels are skipped).
+// ═══════════════════════════════════════════════════════════════════════
+(function () {
+  const overlay  = $('#gsearch-overlay');
+  const input    = $('#gsearch-input');
+  const resultsEl = $('#gsearch-results');
+  if (!overlay || !input || !resultsEl) return;
+
+  // Extra search keywords for things operators describe in their own words but
+  // that aren't spelled out in the on-screen label. Keyed by a substring of the
+  // entry label (lowercased); matched aliases get appended to that entry's
+  // searchable text. Bilingual where it helps discovery.
+  const ALIASES = {
+    'dashboard':   'home overview stats revenue sales summary 概览 首页 数据',
+    'orders':      'fulfil fulfill shipping refund cancel 订单 退款 发货',
+    'invoices':    'receipt billing tax fapiao 发票 收据',
+    'customers':   'members users buyers tags 顾客 会员 用户',
+    'products':    'items catalog inventory stock price sku 产品 商品 库存 价格',
+    'coupons':     'voucher discount promo code 优惠券 折扣 促销',
+    'flash sales': 'sale countdown deal 秒杀 限时',
+    'pop-ups':     'popup banner modal announcement 弹窗',
+    'affiliate':   'referral commission distributor 分销 推广',
+    'leaderboard': 'ranking top spenders 排行榜',
+    'membership':  'tier vip points loyalty 会员 等级 积分',
+    'voting':      'poll survey vote 投票',
+    'top-up':      'wallet balance recharge points 充值 余额 积分',
+    'broadcasts':  'message blast push announcement 群发 广播',
+    'copy':        'text snippets wording strings 文案',
+    'about':       'story brand page 关于',
+    'reviews':     'ratings stars feedback 评价 评分',
+    'feedback':    'bug report complaint 反馈 报告',
+    'media':       'images photos upload library 媒体 图片',
+    'delivery':    'shipping holiday batch fresh zones same-day district cutoff lead time 配送 节假日 现做 区域 当天',
+    'brand':       'logo colour color theme accent font palette dark light wordmark 品牌 主题 颜色 字体 标志',
+    'shop':        'category grid sort filter 商店 分类',
+    'push':        'notification alert message subscribe 推送 通知',
+    'social proof': 'bought count viewers recent buyers ticker 社交 人气 销量',
+    'customer service': 'cs contact whatsapp wechat hours support chat 客服 联系',
+    'legal':       'terms privacy policy refund 条款 隐私 政策',
+    'faq':         'help questions support 常见问题 帮助',
+  };
+
+  // SVG icons keyed by destination so results echo the chrome.
+  const ICON = {
+    page:    '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    setting: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82M4.6 9a1.65 1.65 0 0 0-.33-1.82"/><circle cx="12" cy="12" r="9"/>',
+    section: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+    product:  '<path d="M3 3h18l-2 14H5L3 3z"/><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M8 7h8"/>',
+    order:    '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/>',
+    customer: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>',
+  };
+
+  // Result groups, shown in this order. Static chrome ("nav") first, then live
+  // records pulled from the backend. Empty groups collapse automatically.
+  const GROUP_LABEL = {
+    nav:      'Pages & settings · 页面与设置',
+    product:  'Products · 产品',
+    order:    'Orders · 订单',
+    customer: 'Customers · 顾客',
+  };
+
+  // True when el (or an ancestor) is hidden by a feature gate. Mirrors the CSS
+  // rule `body:not(.feat-X) [data-feat="X"]{display:none}`. We can't use
+  // offset/visibility here because collapsed dropdown popovers are also
+  // display:none yet their tabs are still valid destinations.
+  function gatedOff(el) {
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+      const f = n.getAttribute && n.getAttribute('data-feat');
+      if (f && !document.body.classList.contains('feat-' + f)) return true;
+    }
+    return false;
+  }
+
+  // Read a button's visible label, dropping nested icons / badges.
+  function cleanLabel(el) {
+    const c = el.cloneNode(true);
+    c.querySelectorAll('svg, .tab-badge, .gsearch-kbd').forEach(n => n.remove());
+    return c.textContent.replace(/\s+/g, ' ').trim();
+  }
+
+  // Pull the descriptive blurb attached to a settings/section card so the
+  // card's words become searchable (e.g. "announcement bar" finds Accent).
+  function cardKeywords(card) {
+    if (!card) return '';
+    const bits = [];
+    card.querySelectorAll('.muted, label').forEach(n => {
+      const t = n.textContent.replace(/\s+/g, ' ').trim();
+      if (t && t.length < 200) bits.push(t);
+    });
+    return bits.join(' ');
+  }
+
+  function applyAliases(label) {
+    const low = label.toLowerCase();
+    let extra = '';
+    for (const key in ALIASES) if (low.includes(key)) extra += ' ' + ALIASES[key];
+    return extra;
+  }
+
+  // Walk a section for its heading cards → deep "jump to this card" entries.
+  function indexCards(rootSel, item, items) {
+    const root = document.querySelector(rootSel);
+    if (!root) return;
+    root.querySelectorAll('.group-card-head h3, .group-card > h3, .card > h3').forEach(h3 => {
+      const card = h3.closest('.group-card') || h3.closest('.card') || h3.parentElement;
+      const title = cleanLabel(h3);
+      if (!title) return;
+      items.push({
+        type: 'section',
+        title,
+        crumb: item.crumb ? item.crumb + ' › ' + item.title : item.title,
+        tab: item.tab, sub: item.sub, anchor: card,
+        kw: (title + ' ' + cardKeywords(card)).toLowerCase(),
+      });
+    });
+  }
+
+  function buildIndex() {
+    const items = [];
+    // 1) Top-level tabs (+ deep cards within each tab's section)
+    document.querySelectorAll('.tabs [data-tab]').forEach(btn => {
+      if (gatedOff(btn)) return;
+      const tab = btn.dataset.tab;
+      const title = cleanLabel(btn);
+      const it = { type: 'page', title, crumb: '', tab, sub: null, anchor: null,
+                   kw: (title + applyAliases(title)).toLowerCase() };
+      items.push(it);
+      if (tab !== 'config') indexCards('#tab-' + tab, it, items);
+    });
+    // 2) External editor launchers in the Content group (open in a new tab)
+    document.querySelectorAll('.tabs-popover button[onclick*="window.open"]').forEach(btn => {
+      if (gatedOff(btn)) return;
+      const title = cleanLabel(btn);
+      const m = btn.getAttribute('onclick').match(/window\.open\(['"]([^'"]+)/);
+      items.push({ type: 'page', title, crumb: 'Content', tab: null, sub: null,
+                   anchor: null, openUrl: m ? m[1] : null,
+                   kw: (title + ' editor open external').toLowerCase() });
+    });
+    // 3) Settings panels (+ deep cards within each panel)
+    document.querySelectorAll('#settings-nav button[data-sub]').forEach(btn => {
+      if (gatedOff(btn)) return;
+      const sub = btn.dataset.sub;
+      const title = cleanLabel(btn);
+      const it = { type: 'setting', title, crumb: 'Settings', tab: 'config', sub,
+                   anchor: null, kw: (title + ' settings ' + applyAliases(title)).toLowerCase() };
+      items.push(it);
+      indexCards('#sub-' + sub, it, items);
+    });
+    return items;
+  }
+
+  // Score a query against an item. Returns -1 for no match.
+  function score(item, tokens, raw) {
+    const title = item.title.toLowerCase();
+    const hay = item.kw;
+    let s = 0;
+    if (title === raw) s += 1000;
+    if (title.startsWith(raw)) s += 200;
+    if (title.includes(raw)) s += 80;
+    for (const tk of tokens) {
+      if (title.includes(tk)) s += 30;
+      else if (hay.includes(tk)) s += 10;
+      else return -1; // every token must appear somewhere
+    }
+    // Prefer top-level destinations over deep cards on ties
+    if (item.type === 'page') s += 6;
+    else if (item.type === 'setting') s += 4;
+    return s;
+  }
+
+  let INDEX = [];        // static chrome index, rebuilt on open
+  let matches = [];      // flat list currently shown (nav + live records)
+  let active = 0;
+  let dataItems = [];    // live record matches for the current query
+  let dataSeq = 0;       // guards against out-of-order async responses
+  let debounceT = null;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  // Static chrome matches for a query (capped). Empty query → starter menu.
+  function navMatches(raw) {
+    if (!raw) return INDEX.filter(i => i.type === 'page' || i.type === 'setting').slice(0, 12);
+    const tokens = raw.split(/\s+/);
+    return INDEX
+      .map(i => ({ i, s: score(i, tokens, raw) }))
+      .filter(x => x.s >= 0)
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 8)
+      .map(x => x.i);
+  }
+
+  function itemTag(it) {
+    if (it.openUrl) return 'opens ↗';
+    if (it.type === 'product') return 'edit ↗';
+    if (it.type === 'order' || it.type === 'customer') return 'open';
+    if (it.type === 'section') return 'jump';
+    return '';
+  }
+
+  function itemHtml(it, idx) {
+    const tag = itemTag(it);
+    const crumb = it.crumb ? '<div class="gs-crumb">' + esc(it.crumb) + '</div>' : '';
+    return '<button class="gsearch-item" role="option" data-idx="' + idx + '">'
+      + '<span class="gs-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + (ICON[it.type] || ICON.page) + '</svg></span>'
+      + '<span class="gs-body"><div class="gs-title">' + esc(it.title) + '</div>' + crumb + '</span>'
+      + (tag ? '<span class="gs-tag">' + esc(tag) + '</span>' : '')
+      + '</button>';
+  }
+
+  // Paint the combined result list, inserting a header whenever the group
+  // changes. matches[] stays 1:1 and in-order with the rendered .gsearch-item
+  // buttons (group headers are non-selectable), so data-idx == matches index.
+  function paint() {
+    matches = navMatches(input.value.trim().toLowerCase()).concat(dataItems);
+    active = 0;
+    if (!matches.length) {
+      resultsEl.innerHTML = '<div class="gsearch-empty">No matches · 没有结果</div>';
+      return;
+    }
+    let html = '', lastG = null;
+    matches.forEach((it, idx) => {
+      const g = it.group || 'nav';
+      if (g !== lastG) { html += '<div class="gsearch-group-head">' + esc(GROUP_LABEL[g] || '') + '</div>'; lastG = g; }
+      html += itemHtml(it, idx);
+    });
+    resultsEl.innerHTML = html;
+    const first = resultsEl.querySelector('.gsearch-item');
+    if (first) first.classList.add('active');
+  }
+
+  // Debounced live-record search against the existing list endpoints (same
+  // cookie auth as the page). Records become Products / Orders / Customers
+  // result groups that deep-link straight into their editor or drawer.
+  function scheduleData() {
+    clearTimeout(debounceT);
+    const raw = input.value.trim();
+    if (raw.length < 2) { dataItems = []; return; }
+    debounceT = setTimeout(() => fetchData(raw), 190);
+  }
+
+  async function fetchData(raw) {
+    const mySeq = ++dataSeq;
+    const enc = encodeURIComponent(raw);
+    const grab = url => fetch(url, { credentials: 'same-origin' })
+      .then(r => (r.ok ? r.json() : null)).catch(() => null);
+    const [p, o, c] = await Promise.all([
+      grab('/api/retail-admin/products?q=' + enc + '&limit=8'),
+      grab('/api/retail-admin/orders?q=' + enc + '&limit=8'),
+      grab('/api/retail-admin/customers?q=' + enc + '&pageSize=8'),
+    ]);
+    if (mySeq !== dataSeq) return; // a newer keystroke superseded this fetch
+    const items = [];
+    ((p && p.data) || []).slice(0, 6).forEach(r => {
+      const name = r.name_en || r.name_cn || ('#' + r.id);
+      const bits = [r.sku, r.category].filter(Boolean);
+      items.push({ type: 'product', group: 'product', title: name,
+        crumb: bits.join(' · '), pid: r.id });
+    });
+    // Did this order surface because the query matched its phone (rather than
+    // the order number or recipient name)? If so, show the phone in the
+    // subtitle so the operator sees *why* it came up. Compare on digits only.
+    const qDigits = raw.replace(/\D/g, '');
+    ((o && o.data) || []).slice(0, 6).forEach(r => {
+      const who = r.recipient_name || r.nickname || '';
+      const bits = [r.status, who];
+      const phoneDigits = String(r.recipient_phone || '').replace(/\D/g, '');
+      if (qDigits.length >= 3 && phoneDigits && phoneDigits.includes(qDigits)) {
+        bits.push(r.recipient_phone);
+      }
+      items.push({ type: 'order', group: 'order',
+        title: r.order_no || ('Order #' + r.id),
+        crumb: bits.filter(Boolean).join(' · '), oid: r.id });
+    });
+    ((c && c.data) || []).slice(0, 6).forEach(r => {
+      const bits = [r.phone, (r.orders_count != null ? r.orders_count + ' orders' : null)].filter(Boolean);
+      items.push({ type: 'customer', group: 'customer',
+        title: r.nickname || r.phone || ('#' + r.id),
+        crumb: bits.join(' · '), cid: r.id });
+    });
+    dataItems = items;
+    paint();
+  }
+
+  function setActive(i) {
+    const els = resultsEl.querySelectorAll('.gsearch-item');
+    if (!els.length) return;
+    active = (i + els.length) % els.length;
+    els.forEach((e, idx) => e.classList.toggle('active', idx === active));
+    els[active].scrollIntoView({ block: 'nearest' });
+  }
+
+  function go(it) {
+    if (!it) return;
+    close();
+    if (it.openUrl) { window.open(it.openUrl, '_blank', 'noopener'); return; }
+    // Live records → open the matching editor / detail drawer.
+    if (it.type === 'product') {
+      openProductEditor(it.pid);
+      return;
+    }
+    if (it.type === 'order') {
+      const t = document.querySelector('.tabs [data-tab="orders"]');
+      if (t) t.click();
+      if (typeof openOrder === 'function') setTimeout(() => openOrder(it.oid), 60);
+      return;
+    }
+    if (it.type === 'customer') {
+      const t = document.querySelector('.tabs [data-tab="customers"]');
+      if (t) t.click();
+      if (typeof cuOpenDetail === 'function') setTimeout(() => cuOpenDetail(it.cid), 60);
+      return;
+    }
+    const tabBtn = it.tab && document.querySelector('.tabs [data-tab="' + it.tab + '"]');
+    if (tabBtn) tabBtn.click();
+    if (it.sub) {
+      const subBtn = document.querySelector('#settings-nav button[data-sub="' + it.sub + '"]');
+      if (subBtn) subBtn.click();
+    }
+    const anchor = it.anchor;
+    if (anchor) {
+      setTimeout(() => {
+        anchor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        anchor.classList.remove('gsearch-flash');
+        void anchor.offsetWidth; // restart animation
+        anchor.classList.add('gsearch-flash');
+        setTimeout(() => anchor.classList.remove('gsearch-flash'), 1600);
+      }, 90);
+    }
+  }
+
+  function open() {
+    INDEX = buildIndex();
+    dataItems = [];
+    dataSeq++;
+    clearTimeout(debounceT);
+    overlay.hidden = false;
+    input.value = '';
+    paint();
+    input.focus();
+  }
+  function close() {
+    overlay.hidden = true;
+    clearTimeout(debounceT);
+    input.blur();
+  }
+
+  // Expose the opener for the topbar pill's inline onclick.
+  window.openCmdSearch = open;
+
+  input.addEventListener('input', () => { paint(); scheduleData(); });
+  resultsEl.addEventListener('click', (e) => {
+    const el = e.target.closest('.gsearch-item');
+    if (el) go(matches[+el.dataset.idx]);
+  });
+  resultsEl.addEventListener('mousemove', (e) => {
+    const el = e.target.closest('.gsearch-item');
+    if (el) setActive(+el.dataset.idx);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(active + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(active - 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); go(matches[active]); }
+    else if (e.key === 'Escape') { e.preventDefault(); close(); }
+  });
+  overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(); });
+  // Global shortcut: Ctrl/⌘+K toggles the palette.
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      overlay.hidden ? open() : close();
+    }
+  });
+})();
+
+// ── Live visual updates: paint accent + tab-bar colour into the mockups ──
+const ACCENT_HEX = {
+  'lime-leaf':    '#ccd900',
+  'forest-kale':  '#3a5a30',
+  'carrot-blaze': '#e87a3a',
+  'berry-punch':  '#c43a6a',
+  'papaya-glow':  '#f0a050',
+  'pea-sprout':   '#a8c75a',
+};
+function applyVisualPreviews() {
+  const accentSel = $('#cfg-theme-accent');
+  const accent = ACCENT_HEX[accentSel?.value] || '#ccd900';
+  // Top-panel context visuals (Home / Push / Legal still use the larger .phone)
+  $$('.pv-bar, .pv-highlight').forEach(el => {
+    if (el.classList.contains('pv-highlight')) el.style.outlineColor = accent;
+    else el.style.background = accent;
+  });
+  // (Tab-bar live preview lives in /cms now — the TAB BAR topbar picker
+  // owns the bottom-bar theme + icon design + colour overrides.)
+}
+
+// (Notification-strip custom-hex handler moved to the Mini App Editor /cms 2026-06-09.)
+
+// ── Sub-panel visual picker (Shop layout; Brand & theme pickers moved to /cms) ──
+const PICKER_TARGETS = ['cfg-shop-layout'];
+document.addEventListener('click', e => {
+  const opt = e.target.closest('.opt[data-target]');
+  if (!opt) return;
+  const sel = document.getElementById(opt.dataset.target);
+  if (!sel) return;
+  sel.value = opt.dataset.value;
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+});
+function syncAllPickers() {
+  PICKER_TARGETS.forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    document.querySelectorAll(`.opt[data-target="${id}"]`).forEach(t => {
+      t.classList.toggle('active', t.dataset.value === sel.value);
+    });
+  });
+}
+
+// ── Live Shop-filters preview: show/hide rows in the mini phone based on toggles ──
+function applyShopFiltersPreview() {
+  const rows = {
+    'pv-view-row':    !$('#cfg-shop-lockLayout')?.checked,
+    'pv-sort-row':    $('#cfg-shop-showSort')?.checked,
+    'pv-dietary-row': $('#cfg-shop-showDietary')?.checked,
+    'pv-stock-row':   $('#cfg-shop-showStockFilter')?.checked,
+    'pv-badge-row':   $('#cfg-shop-showBadgeFilter')?.checked,
+    'pv-price-row':   $('#cfg-shop-showPriceFilter')?.checked,
+  };
+  Object.entries(rows).forEach(([id, on]) => {
+    const el = document.getElementById(id);
+    if (el) el.style.opacity = on ? '1' : '0.15';
+  });
+  // Also dim chip strips next to disabled toggles
+  const dietaryStrip = $('#cfg-shop-showDietary')?.closest('label')?.nextElementSibling;
+  const badgeStrip   = $('#cfg-shop-showBadgeFilter')?.closest('label')?.nextElementSibling;
+  if (dietaryStrip?.classList.contains('chip-strip'))
+    dietaryStrip.style.opacity = $('#cfg-shop-showDietary')?.checked ? '1' : '0.35';
+  if (badgeStrip?.classList.contains('chip-strip'))
+    badgeStrip.style.opacity = $('#cfg-shop-showBadgeFilter')?.checked ? '1' : '0.35';
+}
+
+// ── Live sort preview ──
+function applySortPreview() {
+  const labels = {
+    '':           'Featured ↓',
+    'newest':     'Newest',
+    'price_asc':  'Price ↑',
+    'price_desc': 'Price ↓',
+    'popular':    'Popular',
+  };
+  const el = document.getElementById('pv-sort-label');
+  if (el) el.textContent = labels[$('#cfg-shop-defaultSort')?.value] || 'Featured ↓';
+}
+
+// ── Live fee previews: write ¥ values into the mini-phone overlays ──
+function applyFeePreviews() {
+  const free = Number($('#cfg-fees-freeShippingThreshold')?.value) || 0;
+  const std  = Number($('#cfg-fees-standardShipping')?.value) || 0;
+  const sd   = Number($('#cfg-fees-sameDayDelivery')?.value) || 0;
+  const min  = Number($('#cfg-fees-minOrder')?.value) || 0;
+  const elFree = document.getElementById('pv-free-rem');
+  if (elFree) elFree.textContent = String(Math.max(0, free - Math.round(free * 0.78))) || '0';
+  const elStd = document.getElementById('pv-std-fee');
+  if (elStd) elStd.textContent = String(std);
+  const elSd = document.getElementById('pv-sameday-fee');
+  if (elSd) elSd.textContent = String(sd);
+  const elMin = document.getElementById('pv-min-order');
+  if (elMin) elMin.textContent = String(min);
+}
+
+document.addEventListener('change', e => {
+  const id = e.target.id;
+  if (PICKER_TARGETS.includes(id)) syncAllPickers();
+  if (id?.startsWith('cfg-shop-')) { applyShopFiltersPreview(); applySortPreview(); }
+  if (id?.startsWith('cfg-fees-')) applyFeePreviews();
+});
+document.addEventListener('input', e => {
+  if (e.target.id?.startsWith('cfg-fees-')) applyFeePreviews();
+});
+
+// ── Bootstrap ──
+// Per-tenant catalog ownership, surfaced by /api/backend/me. 'upstream' (Roots)
+// = catalog + stock live in the kitchen app, so this backend only merchandises
+// the channel; 'self' = this backend manages its own products + stock.
+let CATALOG_MODE = 'self';
+// Toggleable backend features — keep keys in sync with lib/features.js. `def`
+// is the operator-on default when the tenant has never touched the Features tab.
+const FEATURE_CATALOG = [
+  { key: 'membership',  en: 'Membership & points', cn: '会员与积分', def: true,
+    desc: 'Roots Club tiers and the points shown to shoppers. · 会员等级与向顾客展示的积分。' },
+  { key: 'affiliate',   en: 'Referral program',    cn: '推荐计划',   def: true,
+    desc: 'On/off for the whole referral program — when off, shoppers can\'t apply codes or earn rewards, and the admin tab is hidden. · 推荐计划总开关:关闭后顾客无法使用邀请码或获得奖励,后台标签页也会隐藏。' },
+  { key: 'reviews',     en: 'Product reviews',      cn: '商品评价',   def: true,
+    desc: 'Customer reviews and the review-tag editor. · 顾客评价与评价标签编辑。' },
+  { key: 'feedback',    en: 'Customer feedback',    cn: '用户反馈',   def: true,
+    desc: 'The "Found a bug?" inbox from the mini-app Me page. · 来自小程序“我的”页面的反馈收件箱。' },
+  { key: 'socialProof', en: 'Social proof',         cn: '社交证明',   def: true,
+    desc: 'Bought-counts, recent-buyers ticker and the SOLD badge. · 购买人数、最近购买动态与“已售”标签。' },
+];
+let ENTITLEMENTS = {};
+(async () => {
+  try {
+    // Mini App Backend is its own auth realm — authenticate against the
+    // backend operator endpoint, not the kitchen one, so an unauthenticated
+    // visitor lands on the backend's own login rather than in the kitchen app.
+    const me = await fetch('/api/backend/me', { credentials: 'same-origin' }).then(r => r.json());
+    if (!me?.user) { location.href = '/backend/login'; return; }
+    const u = me.user;
+    // Resolve catalog ownership before any product UI renders, so upstream
+    // tenants never see the catalog-write controls / stock modal.
+    CATALOG_MODE = (u.tenant && u.tenant.catalogMode) || 'self';
+    document.body.classList.toggle('catalog-upstream', CATALOG_MODE === 'upstream');
+    // Feature entitlements (platform ceiling). { key: false } = not entitled;
+    // a missing key means entitled. loadConfig() combines this with the
+    // operator's own on/off preferences before showing each feature.
+    ENTITLEMENTS = (u.tenant && u.tenant.entitlements) || {};
+    // Google-style profile circle + dropdown (avatar · account · team · sign
+    // out). Every authenticated operator has full backend access — the backend
+    // realm has no per-module permission gate; role here is identity, not a gate.
+    initAcctMenu(u);
+  } catch (e) { location.href = '/backend/login'; return; }
+  // Phase 1 — feature controls. ent-<key> = platform entitlement; the per-feature
+  // on/off switch lives on each feature's own page (Option B: off dims the nav
+  // instead of hiding it), injected by mountFeatureControls(). We seed feat-<key>
+  // to its catalog default up front so the nav doesn't flash an "Off" state before
+  // loadConfig()'s applyFeatureGates() applies the operator's real preference.
+  for (const f of FEATURE_CATALOG) {
+    const ent = ENTITLEMENTS[f.key] !== false;
+    document.body.classList.toggle('ent-' + f.key, ent);
+    document.body.classList.toggle('feat-' + f.key, ent && f.def);
+  }
+  mountFeatureControls();
+  dashInit();          // landing tab — set up date range + first load
+  loadOrders();
+  loadConfig();        // also hydrates the Mini-app footer fields
+  loadSnippets();
+  loadVouchers();
+  loadPopups();
+  loadDeliveryZones();
+  _loadGzExcludedDistricts();  // GZ same-day excluded-districts chips (now on the Delivery tab)
+  loadTopup();
+  loadPointsSettings(); // Loyalty & Wallet → Membership & points (earn rate, point value, expiry)
+  loadRctiers();        // Loyalty & Wallet → Membership tier ladder (Roots Club)
+  loadFaq();
+  lbInitNavState();     // seed the Leaderboard nav OFF pill (lazy form loads later)
+  votInitNavState();    // seed the Voting nav OPEN pill (lazy list loads later)
+  fsInitNavState();     // seed the Flash sales nav LIVE pill (lazy list loads later)
+})();
+
+// ── Account menu — Google-style profile circle + dropdown ────────────────
+// Avatar (uploaded photo, or initials monogram fallback) in the topbar; click
+// opens a menu with the operator's identity, Account, Manage team, Sign out.
+let ACCT_USER = null;
+function acctInitials(u) {
+  const src = String(u.displayName || u.username || '').trim();
+  if (!src) return '?';
+  if (/^[\x00-\x7F]+$/.test(src)) {            // Latin → up to two word-initials
+    const parts = src.split(/\s+/).filter(Boolean);
+    const ini = (parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '');
+    return ini.toUpperCase() || '?';
+  }
+  return Array.from(src)[0];                    // CJK / other → first glyph
+}
+function acctRoleLabel(role) {
+  return cuT(
+    ({ owner: 'Owner', admin: 'Admin', staff: 'Staff' })[role] || (role || 'Operator'),
+    ({ owner: '负责人', admin: '管理员', staff: '员工' })[role] || (role || '操作员')
+  );
+}
+function acctRenderCircle(el, u) {
+  if (!el) return;
+  if (u.avatarUrl) {
+    el.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = u.avatarUrl; img.alt = '';
+    img.onerror = () => { el.textContent = acctInitials(u); };
+    el.appendChild(img);
+  } else {
+    el.textContent = acctInitials(u);
+  }
+}
+function acctRenderMeta() {
+  const u = ACCT_USER; if (!u) return;
+  acctRenderCircle($('#acctCircle'), u);
+  acctRenderCircle($('#acctCircleLg'), u);
+  const nameEl = $('#acctName');
+  if (nameEl) nameEl.textContent = u.displayName || u.username || '—';
+  const roleEl = $('#acctRoleLine');
+  if (roleEl) {
+    const company = (u.tenant && (u.tenant.brand || u.tenant.name)) || '';
+    roleEl.textContent = acctRoleLabel(u.role) + (company ? ' · ' + company : '');
+  }
+}
+// Refresh the right-hand value chips on the in-menu preference rows (Appearance
+// / Text size / Language) so each reflects the live state. Reads the same
+// sources the toggles write, so it's correct after a toggle, a language flip,
+// or on first open. Each lookup is guarded — the rows may not exist on every
+// surface that reuses this script.
+function acctSyncPrefs() {
+  const themeVal = $('#acctThemeVal');
+  if (themeVal) {
+    const dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
+    themeVal.textContent = dark ? cuT('Dark', '深色') : cuT('Light', '浅色');
+  }
+  const scaleVal = $('#acctScaleVal');
+  if (scaleVal && window.cuGetUiScale) scaleVal.textContent = Math.round(cuGetUiScale() * 100) + '%';
+  const langVal = $('#acctLangVal');
+  if (langVal) langVal.textContent = (window.cuLang && cuLang() === 'cn') ? '中文' : 'English';
+}
+function initAcctMenu(u) {
+  ACCT_USER = u;
+  const wrap = $('#acct'), btn = $('#acctBtn'), menu = $('#acctMenu');
+  if (!wrap || !btn || !menu) return;
+  wrap.style.display = '';
+  acctRenderMeta();
+  acctSyncPrefs();
+  if (window.onLangChange) window.onLangChange(() => { acctRenderMeta(); acctSyncPrefs(); });
+
+  const close = () => {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', onOutside);
+    document.removeEventListener('keydown', onKey);
+  };
+  const open = () => {
+    if (!menu.hidden) return;
+    menu.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    setTimeout(() => {
+      document.addEventListener('mousedown', onOutside);
+      document.addEventListener('keydown', onKey);
+    }, 0);
+  };
+  function onOutside(e) { if (!wrap.contains(e.target)) close(); }
+  function onKey(e) { if (e.key === 'Escape') { close(); btn.focus(); } }
+
+  btn.addEventListener('click', () => { menu.hidden ? open() : close(); });
+
+  // In-menu preference rows. These deliberately do NOT close the menu so the
+  // operator can nudge text size or flip theme several times in a row; the
+  // value chip updates in place via acctSyncPrefs().
+  const themeRow = $('#acctTheme');
+  if (themeRow) themeRow.addEventListener('click', () => { if (window.cuToggleTheme) cuToggleTheme(); acctSyncPrefs(); });
+  const scaleRow = $('#acctScale');
+  if (scaleRow) scaleRow.addEventListener('click', () => { if (window.cuCycleUiScale) cuCycleUiScale(); acctSyncPrefs(); });
+  const langRow = $('#acctLang');
+  if (langRow) langRow.addEventListener('click', () => { if (window.cuToggleLang) cuToggleLang(); acctSyncPrefs(); });
+
+  const signout = $('#acctSignout');
+  if (signout) signout.addEventListener('click', () => {
+    fetch('/api/backend/logout', { method: 'POST', credentials: 'same-origin' })
+      .finally(() => { location.href = '/backend/login'; });
+  });
+}
+
