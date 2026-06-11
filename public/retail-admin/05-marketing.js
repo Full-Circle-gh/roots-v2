@@ -309,7 +309,22 @@ async function vwOpen() {
   try { const r = await api('/api/retail-admin/vouchers'); _vwVouchers = r.data || []; }
   catch { _vwVouchers = []; }
 }
-function vwClose() { $('#vw-bg').classList.remove('show'); _vw = null; }
+function vwClose() {
+  // Clear the transient fade classes too: vw-leaving is opacity:0, and if the
+  // operator closes mid-fade the next open would otherwise inherit it and show
+  // a blank modal until they click Next/Back.
+  const body = $('#vw-body');
+  if (body) body.classList.remove('vw-leaving', 'vw-entering');
+  $('#vw-bg').classList.remove('show');
+  _vw = null;
+}
+// Esc closes the wizard — parity with the platform's other modals/drawers
+// (the backdrop click is wired inline on #vw-bg in retail-admin.html).
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !_vw) return;
+  const bg = document.getElementById('vw-bg');
+  if (bg && bg.classList.contains('show')) vwClose();
+});
 // Step navigation fades the current step out, swaps content while invisible,
 // then fades + rises the next step in — matching the platform's calm zen motion.
 // In-step re-renders (vwSetType/vwSetPath…) call vwRender() directly, so only
@@ -322,6 +337,7 @@ function vwGoto(step) {
   body.classList.remove('vw-entering');
   body.classList.add('vw-leaving');
   setTimeout(() => {
+    if (!_vw) return;   // closed mid-fade — don't deref null (vwClose cleared the classes)
     _vw.step = step;
     vwRender();
     body.scrollTop = 0;
@@ -528,7 +544,10 @@ function vwRulesHtml() {
 function vwLiveRules() {
   _vw.min = Number($('#vw-min').value) || 0;
   _vw.expires = $('#vw-expires').value || '';
-  _vw.perCust = $('#vw-percust').value !== '' ? Math.max(0, parseInt($('#vw-percust').value, 10) || 0) : 1;
+  // Clamp to a minimum of 1: an explicit 0 here used to be stored and read by
+  // the backend as "no per-person cap" (unlimited) — the exact opposite of what
+  // an operator answering "how many times can one person use it?" with 0 means.
+  _vw.perCust = $('#vw-percust').value !== '' ? Math.max(1, parseInt($('#vw-percust').value, 10) || 1) : 1;
   _vw.maxUses = $('#vw-maxuses').value || '';
   const t = document.getElementById('vw-ticket');
   if (t) t.outerHTML = vwTicketHtml();
@@ -536,7 +555,10 @@ function vwLiveRules() {
 function vwNextRules() {
   _vw.min = Number($('#vw-min').value) || 0;
   _vw.expires = $('#vw-expires').value || '';
-  _vw.perCust = $('#vw-percust').value !== '' ? Math.max(0, parseInt($('#vw-percust').value, 10) || 0) : 1;
+  // Clamp to a minimum of 1: an explicit 0 here used to be stored and read by
+  // the backend as "no per-person cap" (unlimited) — the exact opposite of what
+  // an operator answering "how many times can one person use it?" with 0 means.
+  _vw.perCust = $('#vw-percust').value !== '' ? Math.max(1, parseInt($('#vw-percust').value, 10) || 1) : 1;
   _vw.maxUses = $('#vw-maxuses').value || '';
   if (_vw.expires) {
     const d = new Date(_vw.expires + 'T23:59:59');
@@ -600,13 +622,20 @@ function vwHeadsUp() {
   return notes;
 }
 
-function vwReviewHtml() {
-  const flags = vwFlags();
+// The heads-up notes depend on _vw.code, which is editable on the Review step —
+// so render them through this helper and re-run it when the code changes (see
+// vwEditCode), otherwise the "live" clash detection would stay frozen on the
+// code that was generated when Review first rendered.
+function vwHeadsUpHtml() {
   const notes = vwHeadsUp();
-  const notesHtml = notes.length
+  return notes.length
     ? '<div style="display:flex;flex-direction:column;gap:9px;">' + notes.map(n =>
         '<div class="vw-note ' + (n.tone || '') + '"><span class="ni">' + (n.icon || '•') + '</span><span>' + n.html + '</span></div>').join('') + '</div>'
     : '<div class="muted" style="font-size:12px;">No clashes with your live coupons. · 与现有优惠券无冲突。</div>';
+}
+function vwReviewHtml() {
+  const flags = vwFlags();
+  const notesHtml = '<div id="vw-headsup">' + vwHeadsUpHtml() + '</div>';
   const labelFields = flags.is_public
     ? '<div class="field" style="margin:0;flex:1;min-width:200px;"><label class="vw-lab">What customers see (English) · 顾客看到的文字(英文)</label><input type="text" id="vw-title-en" value="' + escapeAttr(_vw.title_en || '') + '" oninput="vwEditLabel()" style="width:100%;"></div>'
       + '<div class="field" style="margin:0;flex:1;min-width:200px;"><label class="vw-lab">What customers see (Chinese) · 顾客看到的文字(中文)</label><input type="text" id="vw-title-cn" value="' + escapeAttr(_vw.title_cn || '') + '" oninput="vwEditLabel()" style="width:100%;"></div>'
@@ -619,7 +648,12 @@ function vwReviewHtml() {
     + '<div class="vw-lab" style="margin-bottom:0;">Heads up · 提示</div>'
     + notesHtml;
 }
-function vwEditCode(v) { _vw.code = v.toUpperCase(); _vw.codeEdited = true; }
+function vwEditCode(v) {
+  _vw.code = v.toUpperCase(); _vw.codeEdited = true;
+  // Re-run the live clash/auto-apply detection against the newly typed code.
+  const h = document.getElementById('vw-headsup');
+  if (h) h.innerHTML = vwHeadsUpHtml();
+}
 function vwEditLabel() {
   const en = $('#vw-title-en'), cn = $('#vw-title-cn');
   if (en) _vw.title_en = en.value;
@@ -1584,11 +1618,11 @@ async function loadBroadcasts() {
       return `
         <div class="bc-item" data-id="${b.id}">
           <div class="bc-item-head">
-            <div class="bc-item-title">${title}</div>
+            <div class="bc-item-title" data-no-i18n>${title}</div>
             ${pill}
             <div style="margin-left: auto;">${recallBtn}</div>
           </div>
-          ${body ? `<div class="bc-item-body">${body}</div>` : ''}
+          ${body ? `<div class="bc-item-body" data-no-i18n>${body}</div>` : ''}
           <div class="bc-item-meta">${meta.join('<span class="sep">·</span>')}</div>
         </div>`;
     }).join('');
