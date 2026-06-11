@@ -7,24 +7,34 @@
 //   - retail_stock_ledger      (read for audit)
 
 const express = require('express');
+// `db` is the shared global handle (always Roots) — use it ONLY for
+// control-plane tables (users). Tenant data-plane tables (retail_stores,
+// store_products, retail_store_stock, retail_customer_addresses,
+// retail_product_substitutes, storefront_config, …) MUST go through the
+// request-scoped tdb(); for Roots/kitchen sessions tdb()===db so this is a
+// no-op today, and it closes the cross-tenant leak before data isolation is on.
 const db = require('../database');
+const { tdb } = require('../lib/tenant-db');
 const inventory = require('../lib/inventory');
 const geocode = require('../lib/geocode');
 const { requireAuth, logActivity } = require('../middleware/auth');
 
 // Background geocode for a store row. Called after create + update when
 // an address-y field changed and the admin didn't supply explicit lat/lng.
-function geocodeStoreAsync(storeId) {
+// The caller passes its tenant connection (captured synchronously while the
+// request's tenant context is still active) because this runs in setImmediate,
+// off the request's async chain, where tdb() could no longer resolve it.
+function geocodeStoreAsync(storeId, conn) {
   if (!geocode.configured()) return;
   setImmediate(async () => {
     try {
-      const s = db.prepare('SELECT city, district, address FROM retail_stores WHERE id = ?').get(storeId);
+      const s = conn.prepare('SELECT city, district, address FROM retail_stores WHERE id = ?').get(storeId);
       if (!s) return;
       const coords = await geocode.geocodeAddress({
         city: s.city, district: s.district, address: s.address,
       });
       if (!coords) return;
-      db.prepare('UPDATE retail_stores SET lat = ?, lng = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      conn.prepare('UPDATE retail_stores SET lat = ?, lng = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
         .run(coords.lat, coords.lng, storeId);
     } catch (e) { console.warn('[geocodeStoreAsync]', e.message); }
   });
@@ -63,10 +73,10 @@ router.get('/api/retail-admin/stores', requireInventoryRead, (req, res) => {
 router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req, res) => {
   const b = req.body || {};
   if (!b.code || typeof b.code !== 'string') return res.status(400).json({ success: false, error: 'code_required' });
-  const existing = db.prepare('SELECT id FROM retail_stores WHERE code = ?').get(b.code);
+  const existing = tdb().prepare('SELECT id FROM retail_stores WHERE code = ?').get(b.code);
   if (existing) return res.status(409).json({ success: false, error: 'code_taken' });
 
-  const info = db.prepare(`
+  const info = tdb().prepare(`
     INSERT INTO retail_stores (code, name_en, name_cn, address, city, district, lat, lng, phone,
                                meituan_account_id, is_active, pickup_enabled, sort_order)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -83,7 +93,7 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
     Number.isFinite(b.sort_order) ? b.sort_order : 0,
   );
   // Background geocode the new store unless the admin provided coords.
-  if (b.lat == null || b.lng == null) geocodeStoreAsync(info.lastInsertRowid);
+  if (b.lat == null || b.lng == null) geocodeStoreAsync(info.lastInsertRowid, tdb());
   logActivity(req.user.id, req.user.username, 'create', 'retail_store', info.lastInsertRowid, b, req.ip);
   res.json({ success: true, data: inventory.getStore(info.lastInsertRowid) });
 });
@@ -106,12 +116,12 @@ router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(),
   }
   if (!sets.length) return res.json({ success: true, data: existing });
   vals.push(id);
-  db.prepare(`UPDATE retail_stores SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...vals);
+  tdb().prepare(`UPDATE retail_stores SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...vals);
   // If the address-shaped fields changed AND no explicit lat/lng was sent,
   // re-geocode in the background so coordinates stay in sync.
   const touchedAddr = ['address','city','district'].some(k => k in req.body);
   const explicitLatLng = ('lat' in req.body) || ('lng' in req.body);
-  if (touchedAddr && !explicitLatLng) geocodeStoreAsync(id);
+  if (touchedAddr && !explicitLatLng) geocodeStoreAsync(id, tdb());
   logActivity(req.user.id, req.user.username, 'update', 'retail_store', id, req.body, req.ip);
   res.json({ success: true, data: inventory.getStore(id) });
 });
@@ -119,7 +129,7 @@ router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(),
 router.delete('/api/retail-admin/stores/:id', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   // Soft-delete via is_active=0 so historical orders keep the reference.
-  const r = db.prepare("UPDATE retail_stores SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
+  const r = tdb().prepare("UPDATE retail_stores SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
   if (r.changes === 0) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'deactivate', 'retail_store', id, {}, req.ip);
   res.json({ success: true });
@@ -136,7 +146,7 @@ router.get('/api/retail-admin/inventory/grid', requireInventoryRead, (req, res) 
   const extraWhere = publishedOnly ? ' AND p.is_published = 1' : '';
 
   const stores = inventory.listStores({ activeOnly: true });
-  const products = db.prepare(`
+  const products = tdb().prepare(`
     SELECT id AS product_id, name_en, name_cn, sku, retail_price, weight,
            COALESCE(is_published, 0) AS is_published
       FROM store_products
@@ -146,7 +156,7 @@ router.get('/api/retail-admin/inventory/grid', requireInventoryRead, (req, res) 
 
   const stockByPair = new Map();
   if (stores.length && products.length) {
-    const rows = db.prepare(`
+    const rows = tdb().prepare(`
       SELECT store_id, product_id, physical_qty, restock_target
         FROM retail_store_stock
     `).all();
@@ -185,7 +195,7 @@ router.get('/api/retail-admin/stores/:id/stock', requireInventoryRead, (req, res
   const publishedOnly = req.query.published === '1';
   const extraWhere = publishedOnly ? ' AND p.is_published = 1' : '';
 
-  const rows = db.prepare(`
+  const rows = tdb().prepare(`
     SELECT p.id AS product_id, p.name_en, p.name_cn, p.sku, p.retail_price, p.weight,
            COALESCE(p.is_published, 0) AS is_published,
            COALESCE(p.is_market, 0)    AS is_market,
@@ -221,7 +231,7 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
   const storeId   = parseInt(req.params.storeId, 10);
   const productId = parseInt(req.params.productId, 10);
   if (!inventory.getStore(storeId)) return res.status(404).json({ success: false, error: 'store_not_found' });
-  const product = db.prepare('SELECT id FROM store_products WHERE id = ?').get(productId);
+  const product = tdb().prepare('SELECT id FROM store_products WHERE id = ?').get(productId);
   if (!product) return res.status(404).json({ success: false, error: 'product_not_found' });
 
   // Store-scoped access. A Mini App Backend operator (req.backendUser) has
@@ -259,7 +269,7 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
   logActivity(req.user.id, req.user.username, 'stock_update', 'retail_store_stock', null,
               { store_id: storeId, product_id: productId, ...b }, req.ip);
 
-  const row = db.prepare(`
+  const row = tdb().prepare(`
     SELECT physical_qty, safety_buffer, wechat_quota, meituan_quota, updated_at
       FROM retail_store_stock WHERE store_id = ? AND product_id = ?
   `).get(storeId, productId);
@@ -270,7 +280,7 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
 router.get('/api/retail-admin/stores/:id/reservations', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const status = req.query.status || 'active';
-  const rows = db.prepare(`
+  const rows = tdb().prepare(`
     SELECT r.id, r.product_id, p.name_en, p.name_cn, r.order_id, r.qty, r.channel, r.status,
            r.expires_at, r.created_at, r.committed_at, r.released_at
       FROM retail_stock_reservations r
@@ -287,7 +297,11 @@ router.get('/api/retail-admin/stores/:id/ledger', requireRetailAdmin, (req, res)
   const where = ['store_id = ?'];
   const params = [id];
   if (productId) { where.push('product_id = ?'); params.push(productId); }
-  const rows = db.prepare(`
+  // NOTE: this joins control-plane `users` with tenant data-plane tables. On
+  // tdb() it's correct today (Roots: tdb()===db), but once data isolation is on,
+  // a non-Roots tenant DB won't contain `users` — this LEFT JOIN must be
+  // resolved out-of-band (lookup actor names from the global db) before cut-over.
+  const rows = tdb().prepare(`
     SELECT l.id, l.product_id, p.name_en, p.name_cn, l.delta, l.reason, l.ref_table, l.ref_id,
            l.balance_after, l.actor_user_id, u.username AS actor, l.channel, l.note, l.created_at
       FROM retail_stock_ledger l
@@ -320,10 +334,10 @@ router.put('/api/admin/users/:userId/retail-store', requireAuth, (req, res, next
 // the Tencent Maps key is configured + how many stores / customer
 // addresses still need coordinates.
 router.get('/api/retail-admin/inventory/geocode-status', requireRetailAdmin, (req, res) => {
-  const storeTotal = db.prepare('SELECT COUNT(*) AS n FROM retail_stores WHERE is_active = 1').get().n;
-  const storeMissing = db.prepare('SELECT COUNT(*) AS n FROM retail_stores WHERE is_active = 1 AND (lat IS NULL OR lng IS NULL)').get().n;
-  const addrTotal = db.prepare('SELECT COUNT(*) AS n FROM retail_customer_addresses').get().n;
-  const addrMissing = db.prepare('SELECT COUNT(*) AS n FROM retail_customer_addresses WHERE lat IS NULL OR lng IS NULL').get().n;
+  const storeTotal = tdb().prepare('SELECT COUNT(*) AS n FROM retail_stores WHERE is_active = 1').get().n;
+  const storeMissing = tdb().prepare('SELECT COUNT(*) AS n FROM retail_stores WHERE is_active = 1 AND (lat IS NULL OR lng IS NULL)').get().n;
+  const addrTotal = tdb().prepare('SELECT COUNT(*) AS n FROM retail_customer_addresses').get().n;
+  const addrMissing = tdb().prepare('SELECT COUNT(*) AS n FROM retail_customer_addresses WHERE lat IS NULL OR lng IS NULL').get().n;
   const err = geocode.lastError && geocode.lastError();
   res.json({
     success: true,
@@ -344,15 +358,15 @@ router.get('/api/retail-admin/inventory/geocode-status', requireRetailAdmin, (re
 router.post('/api/retail-admin/inventory/geocode-backfill', requireRetailAdmin, async (req, res) => {
   if (!geocode.configured()) return res.status(400).json({ success: false, error: 'tencent_maps_key_missing' });
 
-  const stores = db.prepare('SELECT id, address, city, district FROM retail_stores WHERE is_active = 1 AND (lat IS NULL OR lng IS NULL)').all();
-  const addrs  = db.prepare('SELECT id, province, city, district, address, detail FROM retail_customer_addresses WHERE lat IS NULL OR lng IS NULL').all();
+  const stores = tdb().prepare('SELECT id, address, city, district FROM retail_stores WHERE is_active = 1 AND (lat IS NULL OR lng IS NULL)').all();
+  const addrs  = tdb().prepare('SELECT id, province, city, district, address, detail FROM retail_customer_addresses WHERE lat IS NULL OR lng IS NULL').all();
   let storesDone = 0, addrsDone = 0;
   let aborted = false;   // set if the provider hits a daily-quota cap mid-run
 
   for (const s of stores) {
     const c = await geocode.geocodeAddress({ city: s.city, district: s.district, address: s.address });
     if (c) {
-      db.prepare('UPDATE retail_stores SET lat = ?, lng = ? WHERE id = ?').run(c.lat, c.lng, s.id);
+      tdb().prepare('UPDATE retail_stores SET lat = ?, lng = ? WHERE id = ?').run(c.lat, c.lng, s.id);
       storesDone++;
     } else if (geocode.isQuotaError(geocode.lastError())) { aborted = true; break; }
   }
@@ -362,7 +376,7 @@ router.post('/api/retail-admin/inventory/geocode-backfill', requireRetailAdmin, 
       address: [a.address, a.detail].filter(Boolean).join(' '),
     });
     if (c) {
-      db.prepare('UPDATE retail_customer_addresses SET lat = ?, lng = ?, geocoded_at = CURRENT_TIMESTAMP WHERE id = ?').run(c.lat, c.lng, a.id);
+      tdb().prepare('UPDATE retail_customer_addresses SET lat = ?, lng = ?, geocoded_at = CURRENT_TIMESTAMP WHERE id = ?').run(c.lat, c.lng, a.id);
       addrsDone++;
     } else if (geocode.isQuotaError(geocode.lastError())) { aborted = true; break; }
   }
@@ -383,7 +397,7 @@ router.post('/api/retail-admin/inventory/geocode-backfill', requireRetailAdmin, 
 // Admin: list / set / clear substitutes for a product.
 router.get('/api/retail-admin/products/:productId/substitutes', requireRetailAdmin, (req, res) => {
   const productId = parseInt(req.params.productId, 10);
-  const rows = db.prepare(`
+  const rows = tdb().prepare(`
     SELECT s.substitute_product_id AS product_id, s.sort_order,
            p.name_en, p.name_cn, p.sku, p.sell_price, p.image_data, p.category
       FROM retail_product_substitutes s
@@ -401,9 +415,9 @@ router.put('/api/retail-admin/products/:productId/substitutes', requireRetailAdm
   const ids = Array.isArray(req.body?.substitute_product_ids) ? req.body.substitute_product_ids.map(n => parseInt(n, 10)).filter(Boolean) : [];
   // Drop self-references defensively.
   const cleanIds = ids.filter(id => id !== productId);
-  const tx = db.transaction(() => {
-    db.prepare('DELETE FROM retail_product_substitutes WHERE product_id = ?').run(productId);
-    const ins = db.prepare('INSERT OR IGNORE INTO retail_product_substitutes (product_id, substitute_product_id, sort_order) VALUES (?, ?, ?)');
+  const tx = tdb().transaction(() => {
+    tdb().prepare('DELETE FROM retail_product_substitutes WHERE product_id = ?').run(productId);
+    const ins = tdb().prepare('INSERT OR IGNORE INTO retail_product_substitutes (product_id, substitute_product_id, sort_order) VALUES (?, ?, ?)');
     cleanIds.forEach((sid, i) => ins.run(productId, sid, i));
   });
   tx();
@@ -419,7 +433,7 @@ router.get('/api/retail-admin/config/gz-excluded-districts', requireRetailAdmin,
 
 router.put('/api/retail-admin/config/gz-excluded-districts', requireRetailAdmin, express.json(), (req, res) => {
   const list = Array.isArray(req.body?.districts) ? req.body.districts.map(s => String(s).trim()).filter(Boolean) : [];
-  db.prepare(
+  tdb().prepare(
     "INSERT INTO storefront_config (key, value_json) VALUES ('routing.gz_express_excluded_districts', ?) " +
     "ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json"
   ).run(JSON.stringify(list));

@@ -798,11 +798,21 @@ function resolveBundle(jsonStr) {
   if (!ids.length) return null;
   const ph = ids.map(() => '?').join(',');
   const rows = tdb().prepare(
-    `SELECT id, name_en, name_cn, sku, weight AS size, sell_price AS price, stock_qty AS stock,
-            image_data, image_url
-       FROM store_products
-      WHERE id IN (${ph}) AND is_published = 1 AND COALESCE(is_active, 1) = 1`
-  ).all(...ids);
+    `SELECT sp.id, sp.name_en, sp.name_cn, sp.sku, sp.weight AS size, sp.sell_price AS price, sp.stock_qty AS stock,
+            sp.image_url, sp.updated_at, ${hasImageFallbackSql('sp')} AS has_image_data
+       FROM store_products sp
+      WHERE sp.id IN (${ph}) AND sp.is_published = 1 AND COALESCE(sp.is_active, 1) = 1`
+  ).all(...ids).map(r => {
+    // Lazy image URL — never embed the multi-MB inline base64 hero of every
+    // bundle item in the PDP JSON (the /image route serves it on demand). The
+    // mini-app reads `image_data || image_url`, so put the URL there.
+    r.image_data = r.has_image_data
+      ? `/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`
+      : null;
+    delete r.has_image_data;
+    delete r.updated_at;
+    return r;
+  });
   const byId = new Map(rows.map(r => [r.id, r]));
   const items = ids.map(i => byId.get(i)).filter(Boolean);   // keep chosen order
   if (!items.length) return null;
@@ -2833,18 +2843,22 @@ async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/
   const cust = tdb().prepare('SELECT openid FROM retail_customers WHERE id = ?').get(customerId);
   if (!cust?.openid) return { sent: false, reason: 'no_openid' };
 
-  // Mark used eagerly — even if the WeChat send fails, the consent is gone
-  // either way (one-shot from the customer's perspective).
-  tdb().prepare("UPDATE retail_subscriptions SET used = 1, used_at = CURRENT_TIMESTAMP WHERE id = ?").run(sub.id);
+  // WeChat one-shot consent is precious: it is only spent on WeChat's side by a
+  // SUCCESSFUL send. So consume it (used=1) ONLY after a confirmed success (or a
+  // genuinely non-retryable refusal) — never on a transient failure (no token,
+  // network throw, 5xx), so a later event can still retry and deliver.
+  const markUsed = () =>
+    tdb().prepare("UPDATE retail_subscriptions SET used = 1, used_at = CURRENT_TIMESTAMP WHERE id = ?").run(sub.id);
 
   if (getTenantCreds(currentTenantId()).wechat.devMode || cust.openid.startsWith('dev:')) {
+    markUsed();   // dev: nothing is sent; treat as a consumed no-op (matches prior behavior)
     console.log(`[subscribe-message] DEV — would send template=${templateId} to=${cust.openid}, data=${JSON.stringify(data)}`);
     return { sent: false, dev: true };
   }
 
   try {
     const token = await getWeChatAccessToken();
-    if (!token) return { sent: false, reason: 'no_access_token' };
+    if (!token) return { sent: false, reason: 'no_access_token' };   // transient → consent intact for retry
     const url = `https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=${token}`;
     const body = {
       touser: cust.openid,
@@ -2856,11 +2870,16 @@ async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/
     };
     const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const j = await resp.json();
-    if (j.errcode !== 0) console.warn('[subscribe-message] send failed:', j);
-    return { sent: j.errcode === 0, response: j };
+    if (j.errcode === 0) { markUsed(); return { sent: true, response: j }; }
+    console.warn('[subscribe-message] send failed:', j);
+    // 43101 = user has no / revoked subscription for this template — genuinely
+    // non-retryable, so consume to stop pointless re-attempts. Any other errcode
+    // is treated as transient and leaves the consent unused for a later retry.
+    if (j.errcode === 43101) markUsed();
+    return { sent: false, response: j };
   } catch (e) {
     console.error('[subscribe-message]', e);
-    return { sent: false, reason: 'exception' };
+    return { sent: false, reason: 'exception' };   // transient → consent intact for retry
   }
 }
 
@@ -2887,6 +2906,11 @@ function notifyOrderStatusChange(orderId, newStatus) {
       body_en: `Order ${o.order_no}`, body_cn: `订单 ${o.order_no}`,
     };
   });
+  // Only known order statuses map to a push. Refund flows call this with
+  // newStatus=null (they emit their own 'refund' in-app rows); without this
+  // guard the push branch would build a phrase2:{value:null}, get rejected by
+  // WeChat, and STILL burn the customer's one-shot order-status consent.
+  if (!ORDER_STATUS_NOTIF[newStatus]) return;
   if (!notifCategoryEnabled('order')) return;   // category muted → no push either
   try {
     const cfg = loadConfig();
@@ -6145,10 +6169,18 @@ router.post('/api/retail/vouchers/claim', requireRetailAuth, express.json(), (re
   // (returning customers stay suppressed) and never leaks a private operator
   // gift to someone who wasn't granted it.
   if (!v.is_public || v.auto_grant_signup) {
-    // Public signup-only coupon → say so plainly (new-customers-only); a
-    // private gift just isn't claimable from the storefront.
-    const error = (v.is_public && v.auto_grant_signup) ? 'signup_only' : 'not_claimable';
-    return res.status(403).json({ success: false, error });
+    // Public signup-only coupon → say so plainly (new-customers-only).
+    if (v.is_public && v.auto_grant_signup) {
+      return res.status(403).json({ success: false, error: 'signup_only' });
+    }
+    // Truly-private code: otherwise an attacker could distinguish a real
+    // private code (403 not_claimable) from a nonexistent one (404 unavailable)
+    // and enumerate the code space. When the lookup was by CODE, return the
+    // SAME 404 a missing code gets — mirrors the validate endpoint's stated
+    // enumeration guard. The voucher_id path isn't guessable, so it keeps the
+    // explicit not_claimable (the coupon block relies on that message).
+    if (!voucherId) return res.status(404).json({ success: false, error: 'unavailable' });
+    return res.status(403).json({ success: false, error: 'not_claimable' });
   }
 
   // Respect the per-customer cap — no point granting a coupon they've already
@@ -7036,10 +7068,15 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
   // NULL for backend operators; only real kitchen users get attributed.
   const createdBy = req.backendUser ? null : ((req.user && req.user.id) || null);
   // Normalized field set, shared by the insert + the revive path below.
+  // Clamp value/min_subtotal to non-negative (and percent to <=100) — mirrors
+  // the PATCH handler. A negative fixed_amount otherwise yields a NEGATIVE
+  // discount in computeVoucherDiscount, i.e. a surcharge that overcharges the
+  // customer at checkout (the old 12-field form can post an unclamped value).
+  const rawValue = Math.max(0, Number(b.value) || 0);
   const v = {
     type: b.type,
-    value: Number(b.value) || 0,
-    min_subtotal: Number(b.min_subtotal) || 0,
+    value: b.type === 'percent' ? Math.min(100, rawValue) : rawValue,
+    min_subtotal: Math.max(0, Number(b.min_subtotal) || 0),
     max_uses: b.max_uses != null && b.max_uses !== '' ? parseInt(b.max_uses, 10) : null,
     per_customer_limit: b.per_customer_limit != null ? parseInt(b.per_customer_limit, 10) : 1,
     expires_at: b.expires_at || null,
@@ -7919,8 +7956,12 @@ function creditReferralReward(orderId) {
   }
   const reward = Number(ref.reward_amount) || 0;
   const refereeReward = Number(ref.referee_reward_amount) || 0;
-  // Shared helper: credit a wallet + log a ledger row. out_trade_no is the
-  // idempotency key (UNIQUE), so a double-fire of markOrderPaid can't double-pay.
+  // Shared helper: credit a wallet + log a ledger row. NOTE: double-pay is
+  // prevented by the status='joined' guard above + the WHERE status='joined'
+  // UPDATE inside this transaction (better-sqlite3 serializes in-process) — NOT
+  // by a DB constraint. retail_topup_transactions.out_trade_no has only a plain
+  // (non-unique) index, so do not rely on it as an idempotency key if this ever
+  // credits outside the status-guarded transaction or gains a second writer.
   const creditWallet = (customerId, amount, method, outTradeNo) => {
     const cur = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(customerId);
     const after = Math.round(((cur?.balance || 0) + amount) * 100) / 100;
@@ -9413,7 +9454,8 @@ router.get('/api/retail-admin/flash-sales', requireRetailAdmin, (req, res) => {
   const now = Date.now();
   const rows = tdb().prepare(
     `SELECT p.id, p.name_en, p.name_cn, p.sku, p.weight AS size,
-            p.sell_price, p.image_url, p.image_data, p.is_published,
+            p.sell_price, p.image_url, p.updated_at, p.is_published,
+            ${hasImageFallbackSql('p')} AS has_image_data,
             p.flash_price, p.flash_starts_at, p.flash_ends_at,
             p.flash_stock_limit, p.flash_sold
        FROM store_products p
@@ -9424,7 +9466,12 @@ router.get('/api/retail-admin/flash-sales', requireRetailAdmin, (req, res) => {
     const f = flashsales.flashStatus(p, now);
     return {
       id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku, size: p.size,
-      sell_price: p.sell_price, image_url: p.image_url, image_data: p.image_data,
+      // Lazy image URL — never ship the full inline base64 blob in a list (the
+      // PDP/detail + the /image route serve the full photo on demand).
+      sell_price: p.sell_price, image_url: p.image_url,
+      image_data: p.has_image_data
+        ? `/api/retail-admin/products/${p.id}/image?v=${encodeURIComponent(p.updated_at || '')}`
+        : null,
       is_published: p.is_published,
       flash_price: p.flash_price,
       flash_starts_at: p.flash_starts_at,
@@ -9793,11 +9840,20 @@ router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, 
                 (SELECT SUM(rss.physical_qty) FROM retail_store_stock rss WHERE rss.product_id = sp.id),
                 sp.stock_qty, 0
               ) AS stock,
-              sp.image_data, sp.image_url, sp.is_published
+              sp.updated_at, ${hasImageFallbackSql('sp')} AS has_image_data,
+              sp.image_url, sp.is_published
          FROM store_products sp
         WHERE sp.variant_group_id = ? AND COALESCE(sp.is_active, 1) = 1
         ORDER BY COALESCE(sp.variant_sort, 0), COALESCE(sp.variant_label, sp.name_en), sp.id`
-    ).all(p.variant_group_id);
+    ).all(p.variant_group_id).map(m => {
+      // Lazy image URL, never the raw inline base64 blob (a variant group of
+      // photo-bearing siblings would otherwise ship megabytes per list call).
+      m.image_data = m.has_image_data
+        ? `/api/retail-admin/products/${m.id}/image?v=${encodeURIComponent(m.updated_at || '')}`
+        : null;
+      delete m.has_image_data;
+      return m;
+    });
   }
   res.json({ success: true, data: { group_id: p.variant_group_id || null, members } });
 });
