@@ -641,12 +641,14 @@ Page({
       const me = await api.get('/api/retail/customer');
       const data = me?.data || me || {};
       const bal = Number(data.points_balance) || 0;
-      // Display value uses config'd points.redeemRate (default 100 pts = ¥1).
-      // We don't have the rate client-side; fall back to /100 which matches
-      // the seeded default. The figure is preview-only.
+      // Value points at the store's REAL redeem rate — /api/retail/customer now
+      // returns point_value_yuan (= 1 / points.redeemRate). Fall back to ¥0.01
+      // (the seeded default) only if an old backend omits it. Preview-only; the
+      // server re-prices at order time.
+      const ptVal = Number(data.point_value_yuan) > 0 ? Number(data.point_value_yuan) : 0.01;
       this.setData({
         pointsBalance: bal,
-        pointsValue: (bal / 100).toFixed(2),
+        pointsValue: (bal * ptVal).toFixed(2),
       });
     } catch (e) { /* not signed in / no profile — silently skip Points option */ }
   },
