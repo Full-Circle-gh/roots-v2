@@ -6781,6 +6781,12 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
   if (!['fixed_amount', 'percent', 'free_shipping'].includes(b.type)) {
     return res.status(400).json({ success: false, error: 'invalid_type' });
   }
+  // retail_vouchers.created_by has a FK to users(id) — that's a KITCHEN user.
+  // A Mini App Backend operator's req.user.id is a tenant_users id (shimmed in
+  // requireRetailAdmin), which isn't in users, so passing it would trip
+  // "FOREIGN KEY constraint failed" on every operator-created coupon. Store
+  // NULL for backend operators; only real kitchen users get attributed.
+  const createdBy = req.backendUser ? null : ((req.user && req.user.id) || null);
   try {
     const info = tdb().prepare(
       `INSERT INTO retail_vouchers
@@ -6798,7 +6804,7 @@ router.post('/api/retail-admin/vouchers', requireRetailAdmin, express.json(), (r
       b.title_cn || null,
       b.description || null,
       b.auto_grant_signup ? 1 : 0,
-      req.user.id
+      createdBy
     );
     logActivity(req.user.id, req.user.username, 'create', 'voucher', info.lastInsertRowid, { code, type: b.type }, req.ip);
     res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_vouchers WHERE id = ?').get(info.lastInsertRowid) });
