@@ -2181,8 +2181,8 @@ try {
     ins.run('points.earnPoints',              JSON.stringify(1));
     ins.run('points.earnSpend',               JSON.stringify(100));
     ins.run('points.earnRate',                JSON.stringify(100));
-    // 100 points = ¥1 when redeeming. redeemRate is "points per ¥1".
-    ins.run('points.redeemRate',              JSON.stringify(100));
+    // 1 point = ¥1 when redeeming. redeemRate is "points per ¥1".
+    ins.run('points.redeemRate',              JSON.stringify(1));
     // Points expire N months after earn. 0 = never expire. Admin can change
     // on the Top-up tab. Existing earn rows stay NULL → grandfathered.
     ins.run('points.expiryMonths',            JSON.stringify(12));
