@@ -167,7 +167,15 @@ Page({
       if (cust) {
         next.walletBal  = Number(cust.balance || 0).toFixed(2);
         next.pointsBal  = cust.points_balance || 0;
-        next.pointsCash = (next.pointsBal * 0.1).toFixed(1);
+        // Value points at the store's REAL redeem rate (point_value_yuan =
+        // 1 / points.redeemRate), not a hardcoded ¥0.10. Also rewrite the hint
+        // so "1 pt = ¥X off" always matches what a point actually redeems for.
+        const ptVal = Number(cust.point_value_yuan) > 0 ? Number(cust.point_value_yuan) : 0.01;
+        next.pointsCash = (next.pointsBal * ptVal).toFixed(2);
+        const ptStr = ptVal >= 1 ? String(ptVal) : ptVal.toFixed(2);
+        next['copy.pointsHint'] = this.data.lang === 'cn'
+          ? `1 积分 = 抵扣 ¥${ptStr}。`
+          : `1 pt = ¥${ptStr} off.`;
         next.needPhone  = !cust.phone;
       }
 

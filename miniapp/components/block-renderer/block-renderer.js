@@ -985,13 +985,18 @@ Component({
           const tiers = pick.map(({ p, idx }, i) => {
             const amount = Number(p.amount || 0);
             const bonus  = Number(p.bonus_points || 0);
-            const pct    = amount > 0 ? Math.round((bonus / amount) * 100) : 0;
+            // Value bonus points at the store's REAL redeem rate (server sends
+            // point_value_yuan = 1 / points.redeemRate per row), NOT 1 pt = ¥1.
+            // Hardcoding ¥1 here made this block disagree with the top-up page.
+            const pointValue = Number(p.point_value_yuan) > 0 ? Number(p.point_value_yuan) : 0.01;
+            const bonusYuan  = bonus * pointValue;
+            const pct    = amount > 0 ? Math.round((bonusYuan / amount) * 100) : 0;
             const best   = i === n - 1 && n > 1;
             return {
               id: p.id,
               numLabel: 'NO.' + String(idx + 1).padStart(2, '0'),
               amountDisplay: amount.toLocaleString(),
-              valueDisplay: (amount + bonus).toLocaleString(),
+              valueDisplay: Number((amount + bonusYuan).toFixed(2)).toLocaleString(),
               bonus,
               pct,
               best,

@@ -8396,7 +8396,12 @@ router.get('/api/retail/customer', requireRetailAuth, (req, res) => {
   ).get(req.customer.id).n;
   res.json({
     success: true,
-    data: { ...publicCustomer(fresh), addresses, favorite_count: favoriteCount },
+    // point_value_yuan (= 1 / points.redeemRate) lets the wallet show what the
+    // points balance is worth at the real redeem rate, not a hardcoded ¥0.10.
+    data: {
+      ...publicCustomer(fresh), addresses, favorite_count: favoriteCount,
+      point_value_yuan: 1 / pointsRedeemRate(),
+    },
   });
 });
 
@@ -13835,7 +13840,13 @@ router.get('/api/retail/topup-packages', requireRetailAuth, (req, res) => {
        FROM retail_topup_packages WHERE is_active = 1
       ORDER BY sort_order ASC, amount ASC`
   ).all();
-  res.json({ success: true, data: rows });
+  // Bonus points are valued at the SAME rate customers redeem them for at
+  // checkout (points.redeemRate = points per ¥1). The mini-app must use this,
+  // not a hardcoded guess, or the "≈¥ value" / "% bonus" will lie. It rides on
+  // each ROW because utils/api.js unwraps the response to `data` — an
+  // envelope-level field would be dropped before the client ever saw it.
+  const pointValueYuan = 1 / pointsRedeemRate();
+  res.json({ success: true, data: rows.map(r => ({ ...r, point_value_yuan: pointValueYuan })) });
 });
 
 // Public storefront variant — no auth, so the home page top_up block can show
@@ -13848,7 +13859,10 @@ router.get('/api/retail/storefront/topup-packages', (req, res) => {
        FROM retail_topup_packages WHERE is_active = 1
       ORDER BY sort_order ASC, amount ASC`
   ).all();
-  res.json({ success: true, data: rows });
+  // Same per-row point value as the authed route so the home top_up block
+  // values bonus points at the real redeem rate, not 1 pt = ¥1.
+  const pointValueYuan = 1 / pointsRedeemRate();
+  res.json({ success: true, data: rows.map(r => ({ ...r, point_value_yuan: pointValueYuan })) });
 });
 
 // POST /api/retail/topup/create

@@ -9,10 +9,12 @@
 
 const api = require('../../utils/api');
 
-// Loyalty points are worth ¥0.10 each (1 pt = ¥0.10 off), matching wallet.js
-// and the "1 pt = ¥0.10 off" hint. Bonus is awarded in POINTS, so the yuan
-// value of a package's bonus is bonus_points × this rate — NOT bonus × ¥1.
-const POINT_VALUE_YUAN = 0.1;
+// Fallback point value ONLY if the server doesn't supply point_value_yuan
+// (old backend). The real rate comes from points.redeemRate and is sent on the
+// topup-packages response. Backend default is 100 pts/¥1 → ¥0.01 per point, so
+// match that here rather than guessing higher. Bonus is awarded in POINTS, so a
+// package's bonus is worth bonus_points × this rate — NOT bonus × ¥1.
+const POINT_VALUE_YUAN = 0.01;
 
 const TIER_BGS = ['#FFFCF7', 'var(--corn)', 'var(--papaya)', 'var(--lime)'];
 const TIER_LABELS_EN = ['STARTER', 'REGULAR', 'PLUS', 'BEST VALUE'];
@@ -108,9 +110,20 @@ Page({
       const tiers = rows.map((p, i) => {
         const amount = Number(p.amount || 0);
         const bonus  = Number(p.bonus_points || 0);
+        // Value bonus points at the store's REAL redeem rate — the server sends
+        // point_value_yuan (= 1 / points.redeemRate) on each row. utils/api.js
+        // unwraps the response to `data`, so this MUST be read off the row, not
+        // the envelope; a hardcoded guess is how "≈¥ value" / "% bonus" drifted.
+        const pointValue = Number(p.point_value_yuan) > 0
+          ? Number(p.point_value_yuan)
+          : POINT_VALUE_YUAN;
         // Bonus is in points → convert to yuan before comparing against `amount`.
-        const bonusYuan = bonus * POINT_VALUE_YUAN;
-        const pct    = amount > 0 ? Math.round((bonusYuan / amount) * 100) : 0;
+        const bonusYuan = bonus * pointValue;
+        // Show the TRUE rate, not a whole-number round. ¥1000+50pts is 0.5%,
+        // ¥2000+150pts is 0.75%, ¥3000+300pts is 1% — rounding to int made them
+        // all read "1%", overstating the two smaller tiers. Trim trailing zeros.
+        const pctRaw = amount > 0 ? (bonusYuan / amount) * 100 : 0;
+        const pct    = parseFloat(pctRaw.toFixed(2));
         const totalYuan = amount + bonusYuan;
         const labelFallback = (cn ? TIER_LABELS_CN : TIER_LABELS_EN)[Math.min(i, 3)];
         return {
