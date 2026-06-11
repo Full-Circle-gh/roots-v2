@@ -89,11 +89,23 @@
                  scroll-into-view="{{activeChipId}}"
                  scroll-with-animation
                  enhanced show-scrollbar="{{false}}">
-      <view id="chip-all" class="chip {{!activeCategory ? 'on' : ''}}" data-name="" bindtap="setCategory">{{seeAll}}</view>
-      <view wx:for="{{sections}}" wx:key="id"
-            id="chip-{{item.id}}"
-            class="chip {{activeCategory === item.name ? 'on' : ''}}"
-            data-name="{{item.name}}" bindtap="setCategory">{{item.label}}</view>
+      <!-- TOP LEVEL chips: ALL + top categories (› = drills into subs). -->
+      <view wx:if="{{!drillTop}}" class="chip-pane">
+        <view id="chip-all" class="chip {{!activeCategory ? 'on' : ''}}" data-name="" bindtap="setCategory">{{seeAll}}</view>
+        <view wx:for="{{sections}}" wx:key="id"
+              id="chip-{{item.id}}"
+              class="chip {{activeCategory === item.name ? 'on' : ''}}"
+              data-name="{{item.name}}" bindtap="onTopTab">{{item.label}}<text wx:if="{{item.drillable}}" class="chip-chev">›</text></view>
+      </view>
+      <!-- DRILLED chips: back (olive exit) + ALL-of-category + subcategories. -->
+      <view wx:else class="chip-pane">
+        <view id="chip-back" class="chip chip-back" bindtap="drillBack">‹ {{backLabel}}</view>
+        <view id="chip-suball" class="chip {{!activeSub ? 'on' : ''}}" data-sub="" bindtap="setSub">{{seeAll}}</view>
+        <view wx:for="{{subTabs}}" wx:key="id"
+              id="chip-{{item.id}}"
+              class="chip {{activeSub === item.id ? 'on' : ''}}"
+              data-sub="{{item.id}}" bindtap="setSub">{{item.label}}</view>
+      </view>
     </scroll-view>
   </view>
 
@@ -224,9 +236,10 @@
     </view>
 
     <view wx:else>
-      <view wx:for="{{sections}}" wx:key="id" wx:for-item="section"
+      <view wx:for="{{visibleSections}}" wx:key="id" wx:for-item="section"
             id="{{section.id}}" class="cat-section">
-        <view wx:for="{{section.groups}}" wx:key="id" wx:for-item="group" class="cat-group">
+        <view wx:for="{{section.groups}}" wx:key="id" wx:for-item="group"
+              id="g-{{group.id}}" class="cat-group">
           <view wx:if="{{group.label}}" class="grid-section-head">
             <view class="grid-section-kicker f-toni">{{group.label}}</view>
             <view class="grid-section-count f-gothic">{{group.countStr}}</view>
@@ -277,9 +290,10 @@
     </view>
 
     <view wx:else>
-      <view wx:for="{{sections}}" wx:key="id" wx:for-item="section"
+      <view wx:for="{{visibleSections}}" wx:key="id" wx:for-item="section"
             id="{{section.id}}" class="cat-section">
-        <view wx:for="{{section.groups}}" wx:key="id" wx:for-item="group" class="cat-group">
+        <view wx:for="{{section.groups}}" wx:key="id" wx:for-item="group"
+              id="g-{{group.id}}" class="cat-group">
           <view wx:if="{{group.label}}" class="grid-section-head">
             <view class="grid-section-kicker f-toni">{{group.label}}</view>
             <view class="grid-section-count f-gothic">{{group.countStr}}</view>

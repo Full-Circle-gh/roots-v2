@@ -205,6 +205,32 @@
 }
 .chip.on { background: var(--ink); color: var(--oat); }
 
+/* Drill chips: › affordance on drillable top categories + the olive back
+   chip (mirrors the sidebar back bar). The chip-pane wraps the row so the
+   per-chip stagger has a stable parent to count against. */
+.chip-pane { display: inline-block; white-space: nowrap; }
+.chip-chev { margin-left: 8rpx; font-size: calc(24rpx * var(--font-scale)); }
+.chip-back { background: var(--olive); color: var(--oat); border-color: var(--olive); }
+@keyframes chipIn {
+  from { opacity: 0; transform: translateX(-18rpx); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.chip { animation: chipIn 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+.chip-pane > .chip:nth-child(1)  { animation-delay: 0s; }
+.chip-pane > .chip:nth-child(2)  { animation-delay: 0.03s; }
+.chip-pane > .chip:nth-child(3)  { animation-delay: 0.06s; }
+.chip-pane > .chip:nth-child(4)  { animation-delay: 0.09s; }
+.chip-pane > .chip:nth-child(5)  { animation-delay: 0.12s; }
+.chip-pane > .chip:nth-child(6)  { animation-delay: 0.15s; }
+.chip-pane > .chip:nth-child(7)  { animation-delay: 0.18s; }
+.chip-pane > .chip:nth-child(8)  { animation-delay: 0.21s; }
+.chip-pane > .chip:nth-child(9)  { animation-delay: 0.24s; }
+.chip-pane > .chip:nth-child(10) { animation-delay: 0.27s; }
+.chip-pane > .chip:nth-child(11) { animation-delay: 0.30s; }
+.chip-pane > .chip:nth-child(12) { animation-delay: 0.33s; }
+.chip-pane > .chip:nth-child(13) { animation-delay: 0.36s; }
+.chip-pane > .chip:nth-child(14) { animation-delay: 0.39s; }
+
 /* ─── Dietary chips ──────────────────────────────────────────────── */
 .diet-chips { white-space: nowrap; }
 .diet-chip {
