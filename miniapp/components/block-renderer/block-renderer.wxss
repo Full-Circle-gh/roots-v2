@@ -1578,6 +1578,42 @@
   border-radius: 8rpx;
 }
 
+/* Coupon · stamp — centred postage-stamp card with a full-width button */
+.coupon-blk.cp-st-stamp {
+  flex-direction: column;
+  text-align: center;
+  gap: 16rpx;
+  padding: 40rpx 36rpx;
+  border: 3rpx dashed currentColor;
+}
+.coupon-blk.cp-st-stamp::before, .coupon-blk.cp-st-stamp::after { display: none; }
+.coupon-blk.cp-st-stamp .cp-disc {
+  min-width: 0;
+  padding-right: 0;
+  border-right: 0;
+}
+.coupon-blk.cp-st-stamp .cp-big { font-size: calc(72rpx * var(--font-scale)); }
+.coupon-blk.cp-st-stamp .cp-body { flex: 0 0 auto; width: 100%; }
+.coupon-blk.cp-st-stamp .cp-cta {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  margin-top: 4rpx;
+}
+
+/* Coupon · strip — slim one-line banner */
+.coupon-blk.cp-st-strip {
+  padding: 18rpx 30rpx;
+  gap: 20rpx;
+}
+.coupon-blk.cp-st-strip .cp-disc { min-width: 0; padding-right: 20rpx; }
+.coupon-blk.cp-st-strip .cp-big { font-size: calc(40rpx * var(--font-scale)); }
+.coupon-blk.cp-st-strip .cp-kicker,
+.coupon-blk.cp-st-strip .cp-sub,
+.coupon-blk.cp-st-strip .cp-code { display: none; }
+.coupon-blk.cp-st-strip .cp-title { margin-top: 0; font-size: calc(26rpx * var(--font-scale)); }
+.coupon-blk.cp-st-strip .cp-cta { padding: 12rpx 20rpx; }
+
 /* ── Points widget ────────────────────────────────────────────────────── */
 .points-blk {
   padding: 40rpx 36rpx;

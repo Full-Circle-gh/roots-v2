@@ -940,6 +940,8 @@ Component({
             // coupon picker). When present, CLAIM grants it straight into the
             // wallet; when absent (legacy free-typed block) CLAIM just navigates.
             voucherId: b.voucher_id || null,
+            // Visual style: ticket (perforated row) · stamp (centred card) · strip (slim banner)
+            style: ['ticket', 'stamp', 'strip'].includes(b.coupon_style) ? b.coupon_style : 'ticket',
             kicker:   lang.pick(b.kicker_en,   b.kicker_cn,   L),
             title:    lang.pick(b.title_en,    b.title_cn,    L),
             subtitle: lang.pick(b.subtitle_en, b.subtitle_cn, L),

@@ -546,7 +546,7 @@
   </view>
 </view>
 
-<view wx:elif="{{type === 'coupon_block' && coupon}}" class="coupon-blk" style="background:{{bg}};color:{{fg}}">
+<view wx:elif="{{type === 'coupon_block' && coupon}}" class="coupon-blk cp-st-{{coupon.style}}" style="background:{{bg}};color:{{fg}}">
   <view wx:if="{{coupon.discount}}" class="cp-disc">
     <view class="cp-big">{{coupon.discount}}</view>
   </view>

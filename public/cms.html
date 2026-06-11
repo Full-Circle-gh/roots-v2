@@ -3698,6 +3698,29 @@
     background: rgba(255, 255, 255, .92); color: var(--b-ink);
     border-radius: 4px;
   }
+  /* Coupon · stamp — centred postage-stamp card */
+  .b-coupon.cp-st-stamp {
+    flex-direction: column; text-align: center; gap: 8px;
+    padding: 22px 18px; border: 2px dashed currentColor;
+  }
+  .b-coupon.cp-st-stamp::before, .b-coupon.cp-st-stamp::after { display: none; }
+  .b-coupon.cp-st-stamp .cp-disc {
+    min-width: 0; padding-right: 0; border-right: 0;
+  }
+  .b-coupon.cp-st-stamp .cp-disc .cp-big { font-size: 38px; }
+  .b-coupon.cp-st-stamp .cp-body { flex: 0 0 auto; width: 100%; }
+  .b-coupon.cp-st-stamp .cp-cta {
+    display: flex; width: 100%; justify-content: center; margin-top: 4px;
+  }
+  /* Coupon · strip — slim one-line banner */
+  .b-coupon.cp-st-strip { padding: 10px 16px; gap: 12px; }
+  .b-coupon.cp-st-strip .cp-disc { min-width: 0; padding-right: 12px; }
+  .b-coupon.cp-st-strip .cp-disc .cp-big { font-size: 20px; }
+  .b-coupon.cp-st-strip .cp-kicker,
+  .b-coupon.cp-st-strip .cp-sub,
+  .b-coupon.cp-st-strip .cp-code { display: none; }
+  .b-coupon.cp-st-strip .cp-ttl { margin-top: 0; font-size: 14px; }
+  .b-coupon.cp-st-strip .cp-cta { padding: 6px 12px; }
   /* ── Points widget ── */
   .b-points {
     margin: 0; padding: 22px;
@@ -7592,6 +7615,8 @@ function makeBlock(type) {
         // code mirrors the selected coupon's code (shown as a tap-to-copy
         // "CODE: NEWBIE50"). Driven by the picker, not free-typed.
         code: '',
+        // ticket (perforated row) · stamp (centred postage card) · strip (slim banner)
+        coupon_style: 'ticket',
         bg_color: 'pink-guava', fg_color: 'ink',
         cta_label_en: 'CLAIM', cta_label_cn: '立即领取',
         cta_target: 'coupons',
@@ -9049,7 +9074,8 @@ function renderBlockBody(b) {
       return d;
     }
     case 'coupon_block': {
-      d.className = 'b-coupon';
+      const cpStyle = ['ticket', 'stamp', 'strip'].includes(b.coupon_style) ? b.coupon_style : 'ticket';
+      d.className = 'b-coupon cp-st-' + cpStyle;
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-pink)';
       d.style.color = brandColorVar(b.fg_color) || 'var(--b-ink)';
       const k = getBi(b, 'kicker');
@@ -11887,8 +11913,17 @@ function couponDisplayFromVoucher(v) {
 }
 
 function buildCouponForm(m, b) {
+  const secLayout  = inspectorSection(m, b.type, 'layout', T('Style', '样式'), { open: true });
   const secContent = inspectorSection(m, b.type, 'content', T('Content', '内容'), { open: true });
   const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
+
+  secLayout.appendChild(field(T('Style', '样式'),
+    T('Ticket — perforated stub with the discount on the left. Stamp — a centred postage-stamp card with a full-width button. Strip — a slim one-line banner.', '票券 — 带齿孔的票根,折扣在左侧。邮票 — 居中的邮票卡片,按钮通栏。横条 — 纤细的单行横幅。'),
+    sel(['ticket', 'stamp', 'strip'].includes(b.coupon_style) ? b.coupon_style : 'ticket', [
+      { value: 'ticket', label: T('Ticket — perforated stub', '票券 — 齿孔票根') },
+      { value: 'stamp',  label: T('Stamp — centred card', '邮票 — 居中卡片') },
+      { value: 'strip',  label: T('Strip — slim banner', '横条 — 纤细横幅') },
+    ], v => updateBlock(b.id, { coupon_style: v }))));
 
   const vouchers = state.vouchers || [];
 
