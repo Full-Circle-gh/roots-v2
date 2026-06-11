@@ -1503,6 +1503,9 @@
   .pa-view-btn + .pa-view-btn { border-left: 1px solid var(--line); }
   .pa-view-btn:hover { color: var(--text-1); background: var(--bg-elev-1); }
   .pa-view-btn.active { background: var(--brass); color: #12161A; }
+  /* Locked while the editor is docked — list layout is forced. */
+  .pa-view-btn:disabled { opacity: .35; cursor: not-allowed; }
+  .pa-view-btn:disabled:hover { color: var(--text-3); background: var(--bg-pane); }
   .pa-view-btn svg { display: block; }
 
   .pa-grid {

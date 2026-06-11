@@ -64,6 +64,8 @@ async function paSaveLowThreshold(val) {
 // each). Separate from the "View" display-tweaks popover; persisted per-browser.
 let PA_VIEW = (() => { try { const v = localStorage.getItem('pa-view'); return (v === 'grid' || v === 'compact' || v === 'list') ? v : 'list'; } catch { return 'list'; } })();
 function paSetView(v) {
+  // Docked editor locks the list to the split layout — ignore grid/compact taps.
+  if (_paEditorOpen && v !== 'list') return;
   PA_VIEW = (v === 'compact' || v === 'list') ? v : 'grid';
   try { localStorage.setItem('pa-view', PA_VIEW); } catch {}
   PA_PAGE = 1;
@@ -1073,9 +1075,14 @@ function paRender() {
       : (total ? _paPagerHtml(total, pages, start, pageUnits.length, !_paEditorOpen) : '');
   }
 
-  // Reflect the active layout in the toolbar segmented control.
-  document.querySelectorAll('#pa-view-seg .pa-view-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.view === PA_VIEW));
+  // Reflect the active layout in the toolbar segmented control. While the editor
+  // is docked the list is locked to the split layout, so the grid/compact buttons
+  // are disabled (only re-enabled once the editor closes).
+  document.querySelectorAll('#pa-view-seg .pa-view-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.view === PA_VIEW);
+    const lockable = b.dataset.view !== 'list';
+    b.disabled = _paEditorOpen && lockable;
+  });
 
   // Sync the split-view container with the chosen layout: list = split (editor
   // docked on the right), grid/compact = list-only (catalogue scan, full width).
