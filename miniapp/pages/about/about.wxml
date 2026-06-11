@@ -53,14 +53,12 @@
     </view>
     <view class="promise-title f-bear">
       <block wx:if="{{lang === 'cn'}}">
-        留下<text class="hl">该有的</text>。
-        <text class="nl"></text>
-        剔除<text class="strike">多余的</text>。
+        <text class="line">留下<text class="hl">该有的</text>。</text>
+        <text class="line">剔除<text class="strike">多余的</text>。</text>
       </block>
       <block wx:else>
-        What's <text class="hl">in</text>.
-        <text class="nl"></text>
-        What's&nbsp;<text class="strike">out</text>.
+        <text class="line">What's <text class="hl">in</text>.</text>
+        <text class="line">What's <text class="strike">out</text>.</text>
       </block>
     </view>
 

@@ -76,13 +76,14 @@
 
 /* Founder */
 .founder-row {
-  display: flex;
-  gap: 28rpx;
   margin-top: 24rpx;
+  overflow: hidden; /* contain the floated photo */
 }
 .founder-photo {
-  flex: 0 0 220rpx;
+  float: left;
+  width: 220rpx;
   height: 280rpx;
+  margin: 0 28rpx 16rpx 0;
   background: var(--lime);
   border: 3rpx solid var(--ink);
   position: relative;
@@ -102,7 +103,7 @@
   letter-spacing: 0.15em;
   color: rgba(0, 0, 0, 0.55);
 }
-.founder-meta { flex: 1; min-width: 0; }
+.founder-meta { min-width: 0; }
 .founder-name {
   font-size: calc(44rpx * var(--font-scale));
   line-height: 0.95;
@@ -150,7 +151,7 @@
   text-decoration-thickness: 4rpx;
   color: var(--olive);
 }
-.promise-title .nl { display: block; height: 0; }
+.promise-title .line { display: block; white-space: nowrap; }
 .promise-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
