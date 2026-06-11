@@ -91,9 +91,21 @@ Page({
     // section headings in the right pane (subs are NOT separately tappable).
     // [{ id, name, label, groups: [{ id, label, items, countStr }] }]
     sections: [],
+    visibleSections: [],     // what the right pane renders: all sections, or
+                             // just the one drilled-into category
     _raw: [],
     categories: [],          // [{ id, name, label }] top categories (without ALL)
     activeCategory: '',      // '' = ALL / above all sections
+
+    // Drill-in sidebar state (list layout). Tapping a top category with ≥2
+    // subs flips the rail from top categories to that category's subs and
+    // focuses the right pane on it; the back bar returns to all categories.
+    drillTop: '',            // '' = top level; else name of the drilled top
+    drillLabel: '',          // its display label (header under the back bar)
+    subTabs: [],             // [{ id, label }] subcategory groups of the drill
+    activeSub: '',           // active subgroup id ('' = ALL-of-category)
+    backLabel: 'ALL CATEGORIES',
+
     activeDietary: '',
     activeBadge: '',
     inStockOnly: false,
@@ -203,6 +215,7 @@ Page({
       sortLabel: sortLabels[this.data.sortIndex] || sortLabels[0],
       layoutOptions: LAYOUT_OPTIONS.map(o => ({ ...o, label: L === 'cn' ? o.cn : o.en })),
       seeAll:            L === 'cn' ? '全部' : 'ALL',
+      backLabel:         L === 'cn' ? '全部分类' : 'ALL CATEGORIES',
       searchPlaceholder: L === 'cn' ? '搜索…'  : 'Search the pantry…',
       listTitle:         L === 'cn' ? '分类' : 'CATEGORIES',
       inStockLabel:      L === 'cn' ? '有货' : 'IN STOCK',
@@ -263,10 +276,18 @@ Page({
     if (!key || !VALID_LAYOUTS.includes(key)) return;
     if (key === this.data.layout) return;
     const isListLayout = LIST_LAYOUTS.includes(key);
-    this.setData({ layout: key, isListLayout });
+    const patch = { layout: key, isListLayout };
+    // Drill-in is a list-only affordance — leaving the sidebar layout exits it.
+    if (!isListLayout && this.data.drillTop) {
+      patch.drillTop = ''; patch.drillLabel = ''; patch.subTabs = [];
+      patch.activeSub = ''; patch.visibleSections = this.data.sections;
+    }
+    this.setData(patch);
     try { wx.setStorageSync(LAYOUT_STORAGE_KEY, key); } catch {}
-    // Re-measure sections after the new layout renders
-    setTimeout(() => this._measureSections(), 200);
+    // Re-measure for the active mode after the new layout renders
+    setTimeout(() => {
+      if (this.data.drillTop) this._measureGroups(); else this._measureSections();
+    }, 200);
   },
 
   async onPullDownRefresh() {
@@ -332,16 +353,38 @@ Page({
       const totalCount = sections.reduce(
         (sum, s) => sum + s.groups.reduce((n, g) => n + g.items.length, 0), 0);
 
+      // Preserve an active drill across a refresh (e.g. a dietary filter
+      // applied while drilled in). Drop it if that category no longer has
+      // any products after the new filter.
+      let { drillTop, drillLabel, subTabs } = this.data;
+      let visibleSections = sections;
+      if (drillTop) {
+        const sec = sections.find(s => s.name === drillTop);
+        if (sec) {
+          visibleSections = [sec];
+          subTabs = sec.groups.map(g => ({ id: g.id, label: g.label }));
+          drillLabel = sec.label;
+        } else {
+          drillTop = ''; drillLabel = ''; subTabs = [];
+        }
+      }
+
       this.setData({
         _raw: raw,
         sections,
+        visibleSections,
         categories,
         totalCount,
+        drillTop, drillLabel, subTabs,
         loading: false,
       });
-      // Measure section offsets so onScroll can find the active one, then
-      // honour any pending category deep-link now that sections + offsets exist.
-      setTimeout(() => { this._measureSections(); this._applyPendingCategory(); }, 200);
+      // Measure offsets for the active mode (sub anchors when drilled, top
+      // sections otherwise) so onScroll can find the active one, then honour
+      // any pending category deep-link now that sections + offsets exist.
+      setTimeout(() => {
+        if (this.data.drillTop) this._measureGroups(); else this._measureSections();
+        this._applyPendingCategory();
+      }, 200);
     } catch (e) {
       console.warn('[shop] refresh failed:', e.message);
       this.setData({ loading: false });
@@ -404,6 +447,9 @@ Page({
         id: `top${ti}`,
         name: top.name,
         label: ((L === 'cn' ? top.name_cn : top.name) || top.name).toUpperCase(),
+        // Only categories with ≥2 subcategories are worth drilling into — a
+        // single-group top just scrolls (the chevron is its tell).
+        drillable: groups.length >= 2,
         groups,
       });
     });
@@ -414,6 +460,7 @@ Page({
         id: 'other',
         name: '__other__',
         label: L === 'cn' ? '其他' : 'OTHER',
+        drillable: false,
         groups: [{ id: 'other-g0', label: '', items: rows, countStr: pad(rows.length) }],
       });
     }
@@ -558,6 +605,33 @@ Page({
     });
   },
 
+  // Drilled mode: measure each subcategory group's offset inside the single
+  // rendered section so scrolling highlights the matching sub-rail entry
+  // (mirrors _measureSections, one level deeper).
+  _measureGroups() {
+    if (!this.data.drillTop) { this._groupOffsets = []; return; }
+    const sec = this.data.sections.find(s => s.name === this.data.drillTop);
+    if (!sec || !sec.groups.length) { this._groupOffsets = []; return; }
+    const q = wx.createSelectorQuery().in(this);
+    sec.groups.forEach(g => q.select('#g-' + g.id).boundingClientRect());
+    q.select('.list-main').scrollOffset();
+    q.select('.list-main').boundingClientRect();
+    q.exec((res) => {
+      if (!res) return;
+      const n = sec.groups.length;
+      const rects = res.slice(0, n);
+      const tail = res.slice(n);
+      const currentScroll = tail[0]?.scrollTop || 0;
+      const containerTop  = tail[1]?.top       || 0;
+      this._listViewportH = tail[1]?.height || 0;
+      this._groupOffsets = sec.groups.map((g, i) => {
+        const r = rects[i];
+        if (!r) return { id: g.id, top: 0 };
+        return { id: g.id, top: (r.top - containerTop) + currentScroll };
+      });
+    });
+  },
+
   // Pick the active section given a scroll position. Threshold is the
   // y-coordinate inside the scroll container that we consider "the top
   // edge" — i.e. the height of the sticky bar.
@@ -582,6 +656,8 @@ Page({
   // since setData inside _updateActive only fires on category transitions.
   onListScroll(e) {
     const st = e.detail.scrollTop;
+    // Drilled in → track the active subcategory instead of the top category.
+    if (this.data.drillTop) { this._updateActiveSubByScrollTop(st); return; }
     // At the very top, keep "ALL" active (the sidebar's default tab).
     if (st <= 2) {
       if (this.data.activeCategory !== '') this._setActive('');
@@ -604,6 +680,98 @@ Page({
       sidebarScrollId: sec ? 's-' + sec.id : 's-top-anchor',
       activeChipId:    sec ? 'chip-' + sec.id : 'chip-all',
     });
+  },
+
+  // Drilled counterpart of _updateActiveByScrollTop: highlights the
+  // subcategory whose heading currently dominates the upper viewport and
+  // keeps the (possibly tall) sub-rail scrolled so it stays in view.
+  _updateActiveSubByScrollTop(scrollTop) {
+    if (this._suppressScrollUntil && Date.now() < this._suppressScrollUntil) return;
+    if (!this._groupOffsets || !this._groupOffsets.length) return;
+    const h = this._listViewportH || 0;
+    const threshold = h > 0 ? Math.round(h * 0.3) : LIST_STICKY_OFFSET_PX;
+    const cutoff = scrollTop + threshold;
+    if (scrollTop <= 2 || cutoff < this._groupOffsets[0].top) {
+      if (this.data.activeSub !== '') this.setData({ activeSub: '', sidebarScrollId: 'sub-all' });
+      return;
+    }
+    let activeId = this._groupOffsets[0].id;
+    for (const g of this._groupOffsets) {
+      if (g.top <= cutoff) activeId = g.id;
+      else break;
+    }
+    if (activeId !== this.data.activeSub) {
+      this.setData({ activeSub: activeId, sidebarScrollId: 'sub-' + activeId });
+    }
+  },
+
+  // ── Drill-in sidebar ──────────────────────────────────────────
+  // Tap on a top-category tab. Categories with ≥2 subs flip the rail to
+  // their subcategories; a rare single-group top just scrolls to itself.
+  onTopTab(e) {
+    const name = e.currentTarget.dataset.name || '';
+    const sec = this.data.sections.find(s => s.name === name);
+    if (sec && sec.drillable) this.drillInto(name);
+    else this.setCategory(e);
+  },
+
+  // Flip the rail from top categories → this category's subcategories and
+  // focus the right pane on it. The right pane filters to just this section
+  // so the sub-rail maps 1:1 to what's on screen (no cross-category scroll).
+  drillInto(name) {
+    const section = this.data.sections.find(s => s.name === name);
+    if (!section) return;
+    const subTabs = section.groups.map(g => ({ id: g.id, label: g.label }));
+    this._suppressScrollUntil = Date.now() + 600;
+    this.setData({
+      drillTop: name,
+      drillLabel: section.label,
+      subTabs,
+      activeSub: '',
+      activeCategory: name,
+      visibleSections: [section],
+      sidebarScrollId: 'sub-all',
+    });
+    // Once the filtered list has rendered: jump it to the top + measure the
+    // sub anchors so scroll-sync works.
+    setTimeout(() => {
+      this.setData({ scrollIntoListId: 'top-anchor' });
+      setTimeout(() => this.setData({ scrollIntoListId: '' }), 400);
+      this._measureGroups();
+    }, 120);
+  },
+
+  // The back bar: zoom back out to all categories and land on the one we
+  // were just in, so "back" feels like stepping up a level, not a reset.
+  drillBack() {
+    const prev = this.data.drillTop;
+    this._suppressScrollUntil = Date.now() + 700;
+    this.setData({
+      drillTop: '', drillLabel: '', subTabs: [], activeSub: '',
+      visibleSections: this.data.sections,
+      activeCategory: prev,
+    });
+    setTimeout(() => {
+      this._measureSections();
+      const sec = this.data.sections.find(s => s.name === prev);
+      if (sec) {
+        this.setData({ scrollIntoListId: sec.id, sidebarScrollId: 's-' + sec.id });
+        setTimeout(() => this.setData({ scrollIntoListId: '' }), 400);
+      }
+    }, 120);
+  },
+
+  // Tap a subcategory in the drilled rail → scroll the right pane to its
+  // heading ('' = the ALL-of-category top).
+  setSub(e) {
+    const gid = e.currentTarget.dataset.sub || '';
+    this._suppressScrollUntil = Date.now() + 500;
+    this.setData({
+      activeSub: gid,
+      sidebarScrollId: gid ? 'sub-' + gid : 'sub-all',
+      scrollIntoListId: gid ? 'g-' + gid : 'top-anchor',
+    });
+    setTimeout(() => this.setData({ scrollIntoListId: '' }), 400);
   },
 
   // ── Filter / sort handlers ────────────────────────────────────

@@ -360,6 +360,7 @@
   border-right: 3rpx solid var(--ink);
 }
 .side-tab {
+  position: relative;
   padding: 32rpx 12rpx;
   text-align: center;
   font-size: calc(26rpx * var(--font-scale)); color: var(--ink);
@@ -367,6 +368,31 @@
   line-height: 1.15;
 }
 .side-tab.on { background: var(--lime); }
+
+/* ── Drill-in sidebar (top categories ⇄ subcategories) ───────────── */
+/* › chevron on a top category that opens its own subcategories. */
+.side-chev {
+  position: absolute; right: 8rpx; top: 50%; transform: translateY(-50%);
+  font-size: calc(30rpx * var(--font-scale)); color: var(--olive); line-height: 1;
+}
+.side-tab.on .side-chev { color: var(--ink); }
+/* Back bar = the one obvious exit from a drilled category. */
+.side-back {
+  display: flex; align-items: center; justify-content: center; gap: 6rpx;
+  padding: 26rpx 10rpx;
+  background: var(--olive);
+}
+.side-back-chev { color: var(--oat); font-size: calc(34rpx * var(--font-scale)); line-height: 1; }
+.side-back-txt  { color: var(--oat); font-size: calc(21rpx * var(--font-scale)); letter-spacing: 0.04em; }
+/* Muted parent-category label sitting under the back bar so you always
+   know which category's subs you're looking at. */
+.side-parent {
+  padding: 16rpx 10rpx 14rpx; text-align: center;
+  font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.14em;
+  color: var(--olive);
+  border-bottom: 2rpx solid rgba(0,0,0,.12);
+}
+.side-sub { font-size: calc(24rpx * var(--font-scale)); }
 
 /* padding-bottom: the list-main scroll-view fills 100% of its flex slot
    (which extends to the bottom of the viewport). The custom tab bar
