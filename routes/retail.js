@@ -14639,6 +14639,24 @@ router.get('/api/retail/storefront/leaderboard', (req, res) => {
 // `reward_points` (default 5) once per (poll, customer). Admin builds and
 // closes polls from the retail-admin Voting tab.
 
+// Editable intro tagline shown under the "Your say" headline. Stored in
+// `storefront_config` under `voting.config`; the mini app reads it live (no
+// republish needed). `{pts}` in the text auto-fills from the featured poll's
+// reward_points. Defaults mirror the original hardcoded mini-app copy.
+const VOTING_DEFAULTS = {
+  intro_en: 'Every poll closes Sundays. Voting earns {pts} pts.',
+  intro_cn: '每周日截止,投票得 {pts} 积分。',
+};
+
+function loadVotingConfig() {
+  const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'voting.config'").get();
+  if (!row) return { ...VOTING_DEFAULTS };
+  let parsed;
+  try { parsed = JSON.parse(row.value_json); }
+  catch { parsed = {}; }
+  return { ...VOTING_DEFAULTS, ...(parsed || {}) };
+}
+
 function loadPollOptions(pollId) {
   return tdb().prepare(
     `SELECT id, label_en, label_cn, color_hex, image_url, sort_order, votes
@@ -14675,6 +14693,12 @@ router.get('/api/retail/polls', requireRetailAuth, (req, res) => {
   ).all();
   const hydrated = rows.map(p => hydratePoll(p, req.customer.id));
   res.json({ success: true, data: hydrated });
+});
+
+// Customer-facing voting config (editable intro tagline). Read live by the
+// mini-app "Your say" page so staff can reword it without a republish.
+router.get('/api/retail/voting/config', requireRetailAuth, (req, res) => {
+  res.json({ success: true, data: loadVotingConfig() });
 });
 
 // Single poll detail — useful for share-link landing pages.
@@ -14812,6 +14836,30 @@ router.delete('/api/retail/favorites/:productId', requireRetailAuth, (req, res) 
 });
 
 // ─── Voting · Admin ─────────────────────────────────────────────────────
+
+// Editable intro tagline (EN/CN). Stored under `voting.config`; read live by
+// the mini app, so a reword takes effect without a republish.
+router.get('/api/retail-admin/voting/config', requireRetailAdmin, (req, res) => {
+  res.json({ success: true, data: loadVotingConfig() });
+});
+
+router.put('/api/retail-admin/voting/config', requireRetailAdmin, express.json(), (req, res) => {
+  const body = req.body || {};
+  const next = {
+    intro_en: String(body.intro_en || '').slice(0, 240) || VOTING_DEFAULTS.intro_en,
+    intro_cn: String(body.intro_cn || '').slice(0, 240) || VOTING_DEFAULTS.intro_cn,
+  };
+  tdb().prepare(
+    `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+     VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+     ON CONFLICT(key) DO UPDATE SET
+       value_json = excluded.value_json,
+       updated_at = CURRENT_TIMESTAMP,
+       updated_by = excluded.updated_by`
+  ).run('voting.config', JSON.stringify(next), req.user.id);
+  logActivity(req.user.id, req.user.username, 'update', 'voting_config', null, {}, req.ip);
+  res.json({ success: true, data: next });
+});
 
 // Allowed status values (kept narrow so the UI's chip filters can map 1:1).
 const POLL_STATUSES = new Set(['draft', 'open', 'closed']);

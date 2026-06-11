@@ -4217,6 +4217,24 @@
       Build polls the mini-app shows on Me → Your say. Customers vote one option per poll and earn the poll's reward points (default 5) once per poll. Drafts stay hidden; flip status to Open to publish. Close to lock in the result and surface it under "Past results" — pick the winner to highlight it.
     </p>
 
+    <!-- Editable intro tagline shown under the "Your say" headline. Reads live
+         in the mini-app, so a reword takes effect with no republish. -->
+    <div class="vot-form" style="max-width: 720px;">
+      <h3>Intro tagline · 引导文字</h3>
+      <div class="muted" style="font-size: 11px;">
+        The line under the "Your say" headline. Use <code>{pts}</code> where the points number should appear — it auto-fills from the featured poll's reward. Saves instantly; no app republish needed.
+      </div>
+      <div class="field">
+        <label>English</label>
+        <input type="text" id="vot-intro-en" maxlength="240" placeholder="Every poll closes Sundays. Voting earns {pts} pts."/>
+      </div>
+      <div class="field">
+        <label>中文</label>
+        <input type="text" id="vot-intro-cn" maxlength="240" placeholder="每周日截止,投票得 {pts} 积分。"/>
+      </div>
+      <button class="btn btn-primary" onclick="saveVotingConfig(this)" style="margin-top: 14px;">Save tagline · 保存</button>
+    </div>
+
     <div style="display: flex; gap: 10px; margin-bottom: var(--s4);">
       <button class="btn btn-primary" onclick="newPoll()">+ New poll</button>
       <button class="btn" onclick="loadPolls()">Refresh · 刷新</button>

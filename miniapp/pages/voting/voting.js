@@ -148,7 +148,12 @@ Page({
       return;
     }
     try {
-      const data = await api.get('/api/retail/polls');
+      // Polls + the editable intro config, fetched together. The config is
+      // optional — if it fails we fall back to the built-in COPY.intro.
+      const [data, cfg] = await Promise.all([
+        api.get('/api/retail/polls'),
+        api.get('/api/retail/voting/config').catch(() => null),
+      ]);
       const rows = Array.isArray(data) ? data : [];
       const lang = this.data.lang;
       const decorated = rows.map(p => decorate(p, lang));
@@ -159,7 +164,10 @@ Page({
       let featured = openPolls.find(p => p.is_featured) || openPolls[0] || null;
       const otherOpen = openPolls.filter(p => !featured || p.id !== featured.id);
 
-      const introLine = format(this.data.copy.intro, { pts: featured?.rewardPoints || 5 });
+      // Intro template: staff-edited copy from the backend if present,
+      // otherwise the bundled default. `{pts}` fills from the featured poll.
+      const introTpl = (cfg && (lang === 'cn' ? cfg.intro_cn : cfg.intro_en)) || this.data.copy.intro;
+      const introLine = format(introTpl, { pts: featured?.rewardPoints || 5 });
 
       this.setData({
         loading: false,

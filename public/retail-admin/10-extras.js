@@ -1133,8 +1133,38 @@ async function deletePoll(id) {
   } catch (e) { toast('Delete failed · 删除失败: ' + e.message, 'err'); }
 }
 
+// Intro tagline editor — the line shown under the "Your say" headline.
+// Stored under storefront_config.voting.config; read live by the mini app.
+async function loadVotingConfig() {
+  try {
+    const r = await api('/api/retail-admin/voting/config');
+    const c = r.data || {};
+    const en = $('#vot-intro-en'), cn = $('#vot-intro-cn');
+    if (en) en.value = c.intro_en || '';
+    if (cn) cn.value = c.intro_cn || '';
+  } catch (e) { /* leave placeholders if the load fails */ }
+}
+
+async function saveVotingConfig(btn) {
+  if (btn) btn.disabled = true;
+  try {
+    await api('/api/retail-admin/voting/config', {
+      method: 'PUT',
+      body: {
+        intro_en: $('#vot-intro-en').value.trim(),
+        intro_cn: $('#vot-intro-cn').value.trim(),
+      },
+    });
+    toast('Tagline saved · 已保存');
+  } catch (e) {
+    toast('Save failed · 保存失败: ' + e.message, 'err');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 document.querySelector('[data-tab="voting"]').addEventListener('click', () => {
-  if (!POLLS_LOADED) { POLLS_LOADED = true; loadPolls(); }
+  if (!POLLS_LOADED) { POLLS_LOADED = true; loadPolls(); loadVotingConfig(); }
 });
 
 // ─── About page editor ─────────────────────────────────────────────────
