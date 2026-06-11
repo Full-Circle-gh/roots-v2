@@ -3415,6 +3415,25 @@ function requireRetailAuth(req, res, next) {
 // Strip internal/admin-only fields before returning a customer to the app.
 function publicCustomer(c) {
   if (!c) return null;
+  // coupon_count is computed LIVE from the customer's granted vouchers — the
+  // old retail_customers.coupon_count column was never maintained (claims,
+  // signup grants and redemptions all wrote retail_customer_vouchers without
+  // touching it), so it always read 0. Mirror the /api/retail/my-vouchers
+  // "active" definition exactly: unused, voucher still active + not expired +
+  // not maxed-out — so "N active" on the Me page matches the Coupons list.
+  let couponCount = 0;
+  try {
+    couponCount = tdb().prepare(
+      `SELECT COUNT(*) AS n
+         FROM retail_customer_vouchers g
+         JOIN retail_vouchers v ON v.id = g.voucher_id
+        WHERE g.customer_id = ?
+          AND g.used_at IS NULL
+          AND v.is_active = 1
+          AND (v.expires_at IS NULL OR datetime(v.expires_at) > CURRENT_TIMESTAMP)
+          AND (v.max_uses IS NULL OR v.used_count < v.max_uses)`
+    ).get(c.id).n;
+  } catch (e) { console.warn('[publicCustomer coupon_count]', e.message); }
   return {
     id: c.id,
     nickname: c.nickname,
@@ -3423,7 +3442,7 @@ function publicCustomer(c) {
     tier_key: c.tier_key,
     lifetime_spend: c.lifetime_spend,
     points_balance: c.points_balance,
-    coupon_count: c.coupon_count,
+    coupon_count: couponCount,
     balance: c.balance,
     created_at: c.created_at,
   };

@@ -1524,8 +1524,8 @@
 .cp-title {
   font-family: var(--f-bear);
   font-weight: 500;
-  font-size: calc(30rpx * var(--font-scale));
-  line-height: 1.15;
+  font-size: calc(25rpx * var(--font-scale));
+  line-height: 1.2;
   margin-top: 6rpx;
 }
 .cp-sub {

@@ -554,7 +554,7 @@
     <view wx:if="{{coupon.kicker}}" class="cp-kicker">{{coupon.kicker}}</view>
     <view wx:if="{{coupon.title}}" class="cp-title">{{coupon.title}}</view>
     <view wx:if="{{coupon.subtitle}}" class="cp-sub">{{coupon.subtitle}}</view>
-    <view wx:if="{{coupon.code}}" class="cp-code" bindtap="onCouponCodeTap">
+    <view wx:if="{{coupon.code && !coupon.ctaLabel}}" class="cp-code" bindtap="onCouponCodeTap">
       <text class="cp-code-label">CODE</text>
       <text class="cp-code-val">{{coupon.code}}</text>
       <text class="cp-code-copy">{{coupon.codeLabel}}</text>
