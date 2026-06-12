@@ -876,9 +876,13 @@ router.get('/api/retail/products', (req, res) => {
   let sql = `SELECT ${cols}, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
              WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`;
   const params = [];
-  if (q) {
+  // Tokenise the search: trim + split on whitespace so stray/leading/trailing/
+  // doubled spaces never break a match (a raw `LIKE '%bolognese %'` misses
+  // "Bolognese"). Each token must hit name_en/name_cn/sku — word-order agnostic.
+  const terms = String(q || '').trim().split(/\s+/).filter(Boolean);
+  for (const t of terms) {
     sql += ' AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)';
-    const s = `%${q}%`; params.push(s, s, s);
+    const s = `%${t}%`; params.push(s, s, s);
   }
   if (category) { sql += ' AND p.category = ?'; params.push(category); }
 
@@ -904,11 +908,13 @@ router.get('/api/retail/products', (req, res) => {
   for (const r of rows) lazifyProductImage(r, baseUrl, thumbW);
   attachSoldCounts(rows);
   resolveAutoBadges(rows);
+  const termClause = terms.map(() => 'AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)').join(' ');
+  const termParams = terms.flatMap(t => { const s = `%${t}%`; return [s, s, s]; });
   const total = tdb().prepare(`SELECT COUNT(*) AS n FROM store_products p
                             WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
-                            ${q ? 'AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)' : ''}
+                            ${termClause}
                             ${category ? 'AND p.category = ?' : ''}`)
-    .get(...(q ? [`%${q}%`,`%${q}%`,`%${q}%`] : []), ...(category ? [category] : [])).n;
+    .get(...termParams, ...(category ? [category] : [])).n;
 
   // Short cache — flash-sale windows mean the response goes stale in
   // minutes, not the prior 30s used for static catalogue data.
