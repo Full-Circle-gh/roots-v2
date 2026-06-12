@@ -4139,6 +4139,11 @@
             <button type="button" class="btn" onclick="lbGenerateSeed()">Generate placeholder members · 生成占位会员</button>
             <span id="lb-seed-summary" class="muted" style="font-size: 12px;"></span>
           </div>
+          <div class="lb-field" style="margin-top: 14px;">
+            <label>Hide these real members · 隐藏指定真实会员</label>
+            <input type="text" id="lb-hide-names" oninput="updateLeaderboardPreview()" placeholder="mimi, asher, steve"/>
+            <div class="muted" style="font-size: 11px; margin-top: 4px;">Comma-separated nicknames (e.g. staff or test accounts). They stay active everywhere else — just hidden from the board. · 逗号分隔的昵称(如员工或测试账号);仅从榜单隐藏,其他功能不受影响。</div>
+          </div>
         </div>
 
         <div class="lb-save-bar">
@@ -4169,7 +4174,7 @@
   <section id="tab-membership" data-feat="membership">
     <h2>Membership &amp; points · 会员积分</h2>
     <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
-      How points are earned and what they're worth, plus the Roots Club tier ladder that multiplies them. <b>Order-earn rate:</b> every <span id="pts-ratemsg">¥100</span> spent earns 1 point. · 积分如何获取、价值几何,以及在此基础上叠加倍率的会员等级体系。
+      How points are earned and what they're worth, plus the Roots Club tier ladder that multiplies them. <b>Base rate:</b> every <span id="pts-ratemsg">¥100</span> spent earns 1 point at a <b>1.0×</b> tier — each tier earns this base × its <b>Points ×</b> below (so a 1.3× tier earns 30% more). · 积分如何获取、价值几何,以及在此基础上叠加倍率的会员等级体系。基础速率:每消费 ¥100 在 1.0 倍等级得 1 积分;各等级按其「积分倍率」叠加(1.3 倍则多得 30%)。
     </div>
 
     <!-- Points settings — the global loyalty rules. Moved here from Top-up so
@@ -4186,7 +4191,7 @@
             <input type="number" id="pts-earn-spend" placeholder="100" min="1" style="width: 90px;">
             <span>spent</span>
           </div>
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">e.g. 1 point per ¥100 = 1% loyalty rate. · 例:每消费 ¥100 得 1 积分。</div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">Base rate, before tier multiplier. e.g. 1 point per ¥100 = 1% at a 1.0× tier. · 基础速率(未含等级倍率)。例:每消费 ¥100 在 1.0 倍等级得 1 积分。</div>
         </div>
         <div class="field" style="margin: 0;">
           <label class="stacked">Point value · 积分价值</label>
