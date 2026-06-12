@@ -490,8 +490,8 @@ Page({
         wx.showModal({
           title: this.data.lang === 'cn' ? '无法读取地址' : "Couldn't read the address",
           content: this.data.lang === 'cn'
-            ? '地图未返回详细地址。请关闭 VPN/加速器后重试,或改用上方“从微信地址导入”。'
-            : 'The map returned no address detail. Turn off any VPN, then retry — or use “Import from WeChat address” above.',
+            ? '请在列表中点选一个带名称的地点(例如“阳华国花苑”),不要选最上方的“位置”。若仍不行,请关闭 VPN/加速器,或改用上方“从微信地址导入”。'
+            : 'Tap a NAMED place in the list (e.g. “阳华国花苑”), not the top “Location” entry. If it still fails, turn off any VPN — or use “Import from WeChat address” above.',
           showCancel: false,
           confirmText: this.data.lang === 'cn' ? '知道了' : 'OK',
         });
@@ -519,6 +519,7 @@ Page({
     const fail = (err) => {
       this.setData({ mapPicking: false });
       const msg = (err && err.errMsg) || '';
+      console.warn('[pickOnMap] chooseLocation fail:', msg, err);
       if (/cancel/i.test(msg)) return;                  // backed out — stay silent
       if (/auth|deny|权限/i.test(msg)) {
         // Previously denied location — bounce them to the setting toggle, then
@@ -532,7 +533,19 @@ Page({
         });
         return;
       }
-      wx.showToast({ title: this.data.copy.mapUnavailable, icon: 'none' });
+      // Any other failure (some WeChat clients fire fail when the customer taps
+      // the bare top "Location"/current-position entry instead of a named POI).
+      // We can't recover coords from a failed pick — wx.getLocation is rejected
+      // for this AppID — so guide them to a named result. errMsg stays in the
+      // console (above) for us; the customer just sees the actionable steer.
+      wx.showModal({
+        title: this.data.lang === 'cn' ? '请选择一个地点' : 'Pick a place',
+        content: this.data.lang === 'cn'
+          ? '请在列表中点选一个带名称的地点(例如“阳华国花苑”),不要选最上方的“位置”。或改用上方“从微信地址导入”。'
+          : 'Tap a NAMED place in the list (e.g. “阳华国花苑”) — not the top “Location” entry. Or use “Import from WeChat address” above.',
+        showCancel: false,
+        confirmText: this.data.lang === 'cn' ? '知道了' : 'OK',
+      });
     };
 
     if (!wx.chooseLocation) return fail({ errMsg: 'api_missing' });

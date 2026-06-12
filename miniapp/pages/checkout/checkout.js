@@ -555,10 +555,10 @@ Page({
       if (!street && !p.city && !p.province) {
         this.setData({ mapPicking: false });
         wx.showModal({
-          title: this.data.copy.mapUnavailable,
+          title: this.data.lang === 'cn' ? '无法读取地址' : "Couldn't read the address",
           content: this.data.lang === 'cn'
-            ? '地图未返回详细地址。请关闭 VPN/加速器后重试,或在列表中选择带名称的地点。'
-            : 'The map returned no address detail. Turn off any VPN and retry, or pick a named place from the list.',
+            ? '请在列表中点选一个带名称的地点(例如“阳华国花苑”),不要选最上方的“位置”。若仍不行,请关闭 VPN/加速器后重试。'
+            : 'Tap a NAMED place in the list (e.g. “阳华国花苑”), not the top “Location” entry. If it still fails, turn off any VPN and retry.',
           showCancel: false,
           confirmText: this.data.lang === 'cn' ? '知道了' : 'OK',
         });
@@ -590,6 +590,7 @@ Page({
     const fail = (err) => {
       this.setData({ mapPicking: false });
       const msg = (err && err.errMsg) || '';
+      console.warn('[checkout pickOnMap] chooseLocation fail:', msg, err);
       if (/cancel/i.test(msg)) return;                  // backed out — silent
       if (/auth|deny|权限/i.test(msg)) {
         wx.openSetting({
@@ -601,7 +602,18 @@ Page({
         });
         return;
       }
-      wx.showToast({ title: this.data.copy.mapUnavailable, icon: 'none' });
+      // Some WeChat clients fire fail when the customer taps the bare top
+      // "Location"/current-position entry instead of a named POI. We can't
+      // recover coords from a failed pick (wx.getLocation is rejected for this
+      // AppID), so guide them to a named result. errMsg stays in the console.
+      wx.showModal({
+        title: this.data.lang === 'cn' ? '请选择一个地点' : 'Pick a place',
+        content: this.data.lang === 'cn'
+          ? '请在列表中点选一个带名称的地点(例如“阳华国花苑”),不要选最上方的“位置”。'
+          : 'Tap a NAMED place in the list (e.g. “阳华国花苑”) — not the top “Location” entry.',
+        showCancel: false,
+        confirmText: this.data.lang === 'cn' ? '知道了' : 'OK',
+      });
     };
 
     if (!wx.chooseLocation) return fail({ errMsg: 'api_missing' });
