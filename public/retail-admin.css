@@ -824,6 +824,8 @@
     flex-wrap: wrap; gap: var(--s3); margin-bottom: var(--s4);
   }
   .db-range { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+  /* Wraps onto its own full-width row under the range controls, right-aligned. */
+  .db-range-note { flex-basis: 100%; text-align: right; font-size: 11px; color: var(--text-3); margin-top: 2px; }
   .db-range .seg {
     display: inline-flex; background: var(--bg-elev-1);
     border: 1px solid var(--line-soft); border-radius: var(--r-md); overflow: hidden;

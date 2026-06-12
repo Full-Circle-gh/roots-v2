@@ -421,6 +421,10 @@
         <button class="db-btn primary" onclick="dashLoad()">Apply · 应用</button>
         <button class="db-btn" onclick="dashRefresh()" title="Refresh · 刷新">↻</button>
       </div>
+      <!-- Scope hint: the date range drives the tiles + Deep dive below, NOT the
+           "Right now / Today" hero (which is always live). Operators kept reading
+           the TODAY box as the range total and thought revenue was broken. -->
+      <div class="db-range-note">Range drives the cards &amp; Deep dive below — “Right now” is always live · 日期范围作用于下方卡片与“详细”，“实时”始终显示当前</div>
     </div>
 
     <!-- ── Mobile dashboard (Variant A — full-screen push) ──
