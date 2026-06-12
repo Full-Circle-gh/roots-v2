@@ -494,11 +494,17 @@ async function paSaveStoreStock(productId, storeId, raw, el) {
   el.disabled = true;
   try {
     const res = await fetch(`/api/retail-admin/stores/${storeId}/stock/${productId}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ physical_qty: qty }),
     });
-    const j = await res.json();
-    if (!j.success) throw new Error(j.error || 'save_failed');
+    // The endpoint always answers JSON; a body we can't parse means an HTTP error
+    // (500/502/504, or a login-redirect HTML page) reached us. Parse defensively
+    // and check res.ok so the operator sees the real status — not Safari's opaque
+    // "string did not match the expected pattern" JSON-parse error. Mirrors the
+    // variant-matrix save path (pdMatrixCellSave).
+    const j = await res.json().catch(() => null);
+    if (!res.ok || !j || !j.success) throw new Error((j && j.error) || `HTTP ${res.status}`);
     if (!PA_STOCK[productId]) PA_STOCK[productId] = {};
     PA_STOCK[productId][storeId] = qty;
     el.value = qty;
@@ -1540,8 +1546,8 @@ function pdOpen(id) {
   // row is promoted to HTML so old text still shows formatted; on next save it
   // is stored as rich.
   const wasRich = p && p.description_format === 'rich';
-  document.getElementById('pd-rte-en').innerHTML = wasRich ? (p.description_en || '') : pdPlainToHtml(p && p.description_en);
-  document.getElementById('pd-rte-cn').innerHTML = wasRich ? (p.description_cn || '') : pdPlainToHtml(p && p.description_cn);
+  document.getElementById('pd-rte-en').innerHTML = wasRich ? pdRichForEdit(p.description_en) : pdPlainToHtml(p && p.description_en);
+  document.getElementById('pd-rte-cn').innerHTML = wasRich ? pdRichForEdit(p.description_cn) : pdPlainToHtml(p && p.description_cn);
   pdApplyDescMode();
   _pdUseBlockDesign = !!(p && p.use_block_design === 1);
   _pdDesignStale = false; pdRenderDesignStale();
@@ -2755,6 +2761,11 @@ function pdFreeOfGet() {
 }
 // A visually-empty rich box (just <br>/&nbsp;) saves as '' rather than junk markup.
 function pdRteClean(html) { const d = document.createElement('div'); d.innerHTML = html || ''; return (d.innerText || '').trim() ? (html || '').trim() : ''; }
+// Scraped/pasted rich copy (OUT1N TinyMCE, Word) glues words with non-breaking
+// spaces, so a long paragraph becomes one unbreakable line that overflows the
+// editor instead of wrapping. Swap them for plain spaces on load so the text
+// wraps at word boundaries — and saves clean on the next autosave.
+function pdRichForEdit(html) { return (html || '').replace(/&nbsp;|\u00a0/g, ' '); }
 // ── Autosave engine ────────────────────────────────────────────────────────
 // The editor has no manual Save button: edits persist on a short debounce.
 // pdCollectBody() reads the form; pdSaveCore() does the network write (shared by
