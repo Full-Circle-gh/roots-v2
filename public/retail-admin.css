@@ -1989,10 +1989,15 @@
   .bu-pick { padding: 8px 12px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--line-soft); }
   .bu-pick:last-child { border-bottom: none; }
   .bu-pick:hover { background: var(--bg-elev-1); color: var(--text-1); }
-  /* Bundle-product editor (#pd-bundle-product) — reuses the bu-* chip styles;
-     adds a small per-component quantity stepper inside each chip. */
-  .bp-qty { display: inline-flex; align-items: center; gap: 2px; color: var(--text-2); font-size: 12px; }
-  .bp-qty input { width: 42px; padding: 1px 4px; font-size: 12px; text-align: center; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--bg-pane); color: var(--text-1); }
+  /* Bundle-product editor (#pd-bundle-product) — its own chip so the long
+     product name truncates while the qty stepper + remove stay fixed-width and
+     never get clipped (the bu-chip span ellipsis rule was squeezing the qty). */
+  .bp-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 14px; padding: 3px 8px 3px 12px; font-size: 12px; color: var(--text-1); }
+  .bp-chip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+  .bp-chip-qty { display: inline-flex; align-items: center; gap: 3px; color: var(--text-3); flex: none; }
+  .bp-chip-qty input { width: 40px; padding: 2px 4px; font-size: 12px; text-align: center; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--bg-pane); color: var(--text-1); -moz-appearance: textfield; }
+  .bp-chip-x { border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 13px; line-height: 1; padding: 0 2px; flex: none; }
+  .bp-chip-x:hover { color: var(--brass); }
   /* "Bundle" card pill — flags a product that is sold as one but made of others. */
   .pa-pill-bundle { background: color-mix(in srgb, var(--brass, #B08D4A) 18%, transparent); color: var(--brass, #B08D4A); }
   /* Order-line bundle "what's inside" pack list (admin order drawer). */

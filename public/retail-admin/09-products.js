@@ -1945,8 +1945,8 @@ function buLoad(id) {
   BU_ID = id; BU_PICKING = false;
   BU = { title_en: '', title_cn: '', ids: [], price: '', voucher: '' };
   if (!id) {
-    box.innerHTML = `<div class="pd-var-head">${cuT('Bundle', '套装')}</div>` +
-      `<div class="helper" style="font-size:11px">${cuT('Save the product first, then build a bundle here.', '请先保存产品,再在此创建套装。')}</div>`;
+    box.innerHTML = `<div class="pd-var-head">${cuT('Buy together', '一起买')}</div>` +
+      `<div class="helper" style="font-size:11px">${cuT('Save the product first, then build a buy-together set here.', '请先保存产品,再在此创建“一起买”套餐。')}</div>`;
     return;
   }
   const p = (PA_PRODUCTS || []).find(x => x.id === id);
@@ -1974,7 +1974,7 @@ function buRender() {
     : cuT('No bundle · tap to add', '无套装 · 点击添加');
   const toggle = `<button type="button" class="pd-var-toggle" onclick="buToggle()" aria-expanded="${BU_OPEN ? 'true' : 'false'}">` +
     `<span class="pd-var-caret">${BU_OPEN ? '▾' : '▸'}</span>` +
-    `<span class="pd-var-head" style="margin:0">${cuT('Bundle', '套装')}</span>` +
+    `<span class="pd-var-head" style="margin:0">${cuT('Buy together', '一起买')}</span>` +
     `<span class="pd-var-summary">${summary}</span></button>`;
   if (!BU_OPEN) { box.innerHTML = toggle; return; }
   const nameOf = id => { const p = (PA_PRODUCTS || []).find(x => x.id === id); return p ? _vaName(p) : ('#' + id); };
@@ -2068,10 +2068,10 @@ function bpRender() {
   const nameOf = id => { const p = (PA_PRODUCTS || []).find(x => x.id === id); return p ? _vaName(p) : ('#' + id); };
   const chips = BP.length
     ? BP.map(c =>
-        `<span class="bu-chip" style="gap:6px">` +
-          `<span title="${escapeAttr(nameOf(c.id))}">${escapeHtml(nameOf(c.id))}</span>` +
-          `<span class="bp-qty">×<input type="number" min="1" step="1" value="${c.qty}" onchange="bpQty(${c.id}, this.value)" oninput="bpQty(${c.id}, this.value)" style="width:42px"></span>` +
-          `<button type="button" class="bu-chip-x" title="${cuT('Remove', '移除')}" onclick="bpRemove(${c.id})">✕</button>` +
+        `<span class="bp-chip">` +
+          `<span class="bp-chip-name" title="${escapeAttr(nameOf(c.id))}">${escapeHtml(nameOf(c.id))}</span>` +
+          `<span class="bp-chip-qty" title="${cuT('Quantity in the bundle', '套装内数量')}">×<input type="number" min="1" step="1" value="${c.qty}" onchange="bpQty(${c.id}, this.value)" oninput="bpQty(${c.id}, this.value)"></span>` +
+          `<button type="button" class="bp-chip-x" title="${cuT('Remove', '移除')}" onclick="bpRemove(${c.id})">✕</button>` +
         `</span>`).join('')
     : `<span class="helper" style="font-size:11px">${cuT('Add the products this bundle contains.', '添加本套装包含的商品。')}</span>`;
   const picker = BP_PICKING ? `
