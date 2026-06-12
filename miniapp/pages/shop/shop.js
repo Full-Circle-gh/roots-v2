@@ -932,6 +932,12 @@ Page({
     }
     const raw = (this.data._raw || []).find(p => Number(p.id) === id);
     if (!raw) return;
+    // Has customer choices (e.g. a dressing) → can't quick-add; open the product
+    // page so the pick gets made (the PDP enforces required options).
+    if (raw.has_options) {
+      wx.navigateTo({ url: '/pages/product/product?id=' + id });
+      return;
+    }
     this._addRawToCart(raw, id);
   },
 

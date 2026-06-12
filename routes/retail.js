@@ -726,7 +726,12 @@ const RETAIL_PRODUCT_COLS_LIST = RETAIL_PRODUCT_COLS
   // the leftover indentation (harmless SQL whitespace) is all that remains.
   .replace('p.nutrition,', '')
   .replace('p.description_blocks, p.use_block_design, p.page_template,', '')
-  .replace('p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,', '');
+  .replace('p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,', '')
+  // has_options: 0/1 flag so a card grid knows the product needs a customer
+  // choice (e.g. dressing). The shop's quick-add reads it to route to the PDP
+  // (where the choice is made + required-validated) instead of adding straight
+  // to cart. Indexed lookup (idx_retail_opts_product) → cheap per row.
+  + ', EXISTS(SELECT 1 FROM retail_product_options o WHERE o.product_id = p.id) AS has_options';
 
 // Leanest set for the shop's full-catalogue grid pull (slim=1). The card renders
 // only name / price / image / badge / stock / variant — never the long
