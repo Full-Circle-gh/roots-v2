@@ -1405,8 +1405,8 @@ function renderShipmentCard(o, s) {
   const lines = s.items.length;
   const units = (s.items || []).reduce((n, it) => n + (Number(it.qty) || 0), 0);
   const countLabel = units !== lines
-    ? `${lines} line${lines === 1 ? '' : 's'} · ${units} units`
-    : `${lines} item${lines === 1 ? '' : 's'}`;
+    ? `<span data-lang-block="en">${lines} line${lines === 1 ? '' : 's'} · ${units} units</span><span data-lang-block="cn">${lines} 项 · ${units} 件</span>`
+    : `<span data-lang-block="en">${lines} item${lines === 1 ? '' : 's'}</span><span data-lang-block="cn">${lines} 件商品</span>`;
   const state = s.state || 'pending';
   // Per-shipment dispatch is offered once the order is paid (or later) and this
   // parcel hasn't shipped. The order being 'dispatched' doesn't block it — a
@@ -1766,24 +1766,24 @@ function renderOpenOrder(o) {
             <div class="sub">Collects at <b>${escapeHtml(o.address?.store_name_en || o.store_name_en || o.store_code || 'store')}</b>${o.address?.address ? ' · ' + escapeHtml(o.address.address) : ''}</div>
           </div>` : `
           <div>
-            <div class="kicker">Ship to ${copyChip([o.recipient_name, o.recipient_phone, o.address_full].filter(Boolean).join('\n'), 'Ship-to')}</div>
+            <div class="kicker">Ship to · 收货人 ${copyChip([o.recipient_name, o.recipient_phone, o.address_full].filter(Boolean).join('\n'), 'Ship-to')}</div>
             <div class="val" data-no-i18n><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
             <div class="sub" data-no-i18n>${escapeHtml(o.address_full || '')}</div>
           </div>`}
           <div${o.customer_id ? ` onclick="orderGotoCustomer(${o.customer_id})" style="cursor: pointer;" title="View customer · 查看顾客"` : ''}>
-            <div class="kicker">Customer</div>
+            <div class="kicker">Customer · 顾客</div>
             <div class="val"><b>${escapeHtml(o.nickname || '—')}</b>${o.customer_id ? ` <span style="color: var(--text-3); font-weight: 600;">›</span>` : ''}</div>
             ${o.customer_id ? `<div class="sub">ID #${o.customer_id}</div>` : ''}
           </div>
           ${(() => { const _pmt = primaryPayment(o); return `
           <div>
-            <div class="kicker">Payment ${_pmt?.transaction_id ? copyChip(_pmt.transaction_id, 'Txn ID') : ''}</div>
+            <div class="kicker">Payment · 付款 ${_pmt?.transaction_id ? copyChip(_pmt.transaction_id, 'Txn ID') : ''}</div>
             <div class="val">${paymentBrandHTML(o.payment_method, 'lg')} · ${escapeHtml(paymentStatusLabel(_pmt?.status))}</div>
           </div>`; })()}
           ${ODV.totalPlacement === 'inline' ? renderOrderTotalInline(o) : ''}
           ${renderShipByTile(o)}
           ${o.store_code ? `<div>
-            <div class="kicker">Fulfilled by</div>
+            <div class="kicker">Fulfilled by · 出货门店</div>
             <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
             <div class="sub">${escapeHtml(o.store_name_cn || '')}${routingNote(o.routing_reason) ? ' · ' + routingNote(o.routing_reason) : ''}${(o.channel && o.channel.toLowerCase() !== 'wechat') ? ' · ' + escapeHtml(o.channel) : ''}</div>
           </div>` : ''}
@@ -1794,7 +1794,7 @@ function renderOpenOrder(o) {
         </div>
 
         <div class="order-items">
-          <div class="kicker" style="font-size: 10px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--brass); margin-bottom: var(--s2);">Items &amp; shipments</div>
+          <div class="kicker" style="font-size: 10px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--brass); margin-bottom: var(--s2);">Items &amp; shipments · 商品与发货</div>
           ${_DISMISSED_SPLIT.has(o.id) ? '' : splitSuggestionBanner(o)}
           ${o.outside_guangzhou && (o.shipments?.length > 1) ? `
             <div class="outside-gz-note">
