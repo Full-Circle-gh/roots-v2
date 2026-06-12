@@ -16,6 +16,24 @@ function absUrl(u) {
   return u;
 }
 
+// Make every <img> in an office-authored rich description safe for WeChat
+// <rich-text>. Inside <rich-text> external CSS is ignored, so each image is
+// sized purely by its own inline style/attributes: a tall "scroll strip" or
+// any image carrying a fixed pixel width (or a width=/height= attribute)
+// renders at natural size and the right edge gets clipped off-screen. We strip
+// those and force a clean responsive style so the image always fits the column
+// and shows in full. Legacy images saved before the editor added a style get
+// fixed too.
+function normalizeRichImages(html) {
+  if (!html || html.indexOf('<img') === -1) return html || '';
+  return html.replace(/<img\b[^>]*>/gi, (tag) => {
+    const m = tag.match(/\bsrc\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+    const src = m ? (m[2] || m[3] || m[4] || '') : '';
+    if (!src) return tag;
+    return '<img src="' + src + '" style="max-width:100%;height:auto;display:block;margin:8px auto;" />';
+  });
+}
+
 const MONTHS_SHORT = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 function formatReviewDate(iso, L) {
   if (!iso || iso.length < 10) return '';
@@ -494,7 +512,7 @@ Page({
     // Formatted description — when the office authored rich HTML, render it via
     // <rich-text>; otherwise fall back to the plain ## parsed parts below.
     const isRichDesc = p.description_format === 'rich' && !!rawDesc;
-    const descHtml = isRichDesc ? rawDesc : '';
+    const descHtml = isRichDesc ? normalizeRichImages(rawDesc) : '';
     const descParts = [];
     let buf = [];
     const flush = () => {

@@ -1932,6 +1932,11 @@
   .pd-rte blockquote { margin: 6px 0; padding: 2px 0 2px 12px; border-left: 3px solid var(--line); color: var(--text-2); }
   .pd-rte hr { border: none; border-top: 1px solid var(--line); margin: 10px 0; }
   .pd-rte a { color: var(--brass, #B08D4A); }
+  /* Inserted/pasted images stay inside the editor column (never bleed past it
+     into the right rail) and preview exactly how the mini-app renders them —
+     full column width, proportional height. Overrides any fixed pixel width an
+     image carried in. */
+  .pd-rte img { max-width: 100% !important; height: auto !important; display: block; margin: 8px auto; }
   /* Fullscreen — lift the whole formatted block over the page so the office
      can write a long description without the cramped modal. */
   #pd-desc-rich.pd-rte-fs { position: fixed; inset: 0; z-index: 9999; margin: 0; padding: 16px 20px 20px; background: var(--bg-app); overflow-y: auto; }
