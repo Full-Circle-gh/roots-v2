@@ -26,6 +26,10 @@ Page({
     // Newest products keyed by limit (e.g. '6'). Only fetched when a
     // product_grid block sources from 'new_arrivals'.
     newArrivals: {},
+    // Category/all product_grid rows keyed by `${categoryId||'all'}|${limit}`.
+    // Each category-scoped (or source=all) grid fetches its own slice
+    // server-side so it isn't capped by the home's first-100 products pull.
+    catGrids: {},
     // Customer's latest in-flight order (or null) — feeds the order_tracker
     // block. Only fetched when the layout contains one and the user is authed.
     activeOrder: null,
@@ -272,6 +276,9 @@ Page({
       this._fetchLeaderboardsFor(layout);
       // New-arrivals grids + the order tracker fetch on demand too.
       this._fetchNewArrivalsFor(layout);
+      // Category / source=all grids fetch their own slice server-side so a
+      // category sorting past the first-100 products pull still shows.
+      this._fetchCategoryGridsFor(layout);
       this._fetchActiveOrderFor(layout);
       // Live top-up tiers for any top_up block.
       this._fetchTopupPackagesFor(layout);
@@ -374,6 +381,44 @@ Page({
       }
     }));
     this.setData({ newArrivals: next });
+  },
+
+  // Walk the layout for product_grid blocks that source from a category (or
+  // 'all' — anything that isn't manual / top_selling / new_arrivals). Each
+  // fetches its own slice server-side, keyed by `${categoryId||'all'}|${limit}`,
+  // so a category whose products sort past the home's first-100 products pull
+  // still appears (the block-renderer would otherwise filter only that capped
+  // array). Mirrors _fetchTopProductsFor / _fetchNewArrivalsFor; lean=1 keeps
+  // each slice tiny. The /products endpoint filters by category NAME, so we
+  // resolve the block's category_id → name via the loaded category tree.
+  async _fetchCategoryGridsFor(layout) {
+    const specs = new Map();   // key → { categoryId, limit }
+    (layout || []).forEach(b => {
+      if (b.type !== 'product_grid') return;
+      const st = b.source_type;
+      if (st === 'manual' || st === 'top_selling' || st === 'new_arrivals') return;
+      const limit = b.limit || 6;
+      specs.set(`${b.category_id || 'all'}|${limit}`, { categoryId: b.category_id || null, limit });
+    });
+    if (!specs.size) return;
+    const next = { ...(this.data.catGrids || {}) };
+    await Promise.all([...specs].map(async ([key, spec]) => {
+      if (next[key]) return;   // already loaded this render cycle
+      let qs = `lean=1&limit=${encodeURIComponent(spec.limit)}`;
+      if (spec.categoryId) {
+        const cat = (this.data.categories || []).find(c => c.id === spec.categoryId);
+        // Unknown category id (e.g. tree changed since publish) → empty, not all.
+        if (!cat || !cat.name) { next[key] = []; return; }
+        qs += `&category=${encodeURIComponent(cat.name)}`;
+      }
+      try {
+        const res = await api.get(`/api/retail/products?${qs}`);
+        next[key] = Array.isArray(res) ? res : (res?.data || []);
+      } catch {
+        next[key] = [];
+      }
+    }));
+    this.setData({ catGrids: next });
   },
 
   // The order_tracker block shows the customer's latest in-flight order.

@@ -28,6 +28,7 @@
     top-products="{{topProducts}}"
     leaderboards="{{leaderboards}}"
     new-arrivals="{{newArrivals}}"
+    cat-grids="{{catGrids}}"
     active-order="{{activeOrder}}"
     active-order-count="{{activeOrderCount}}"
     affiliate="{{affiliate}}"

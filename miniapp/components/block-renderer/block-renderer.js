@@ -180,6 +180,13 @@ Component({
     // /api/retail/products?sort=newest&limit=N for any product_grid block
     // with source_type='new_arrivals' — same lazy pattern as topProducts.
     newArrivals: { type: Object, value: {} },
+    // Category/all product_grid rows keyed by `${category_id||'all'}|${limit}`.
+    // The host page fetches each grid's slice server-side (/products?category=
+    // &lean=1&limit=N) so a category whose items sort past the home's first-100
+    // products pull still appears — same lazy pattern as topProducts/newArrivals.
+    // Empty until the fetch lands; the grid falls back to filtering the shared
+    // products array meanwhile (and on older host pages that don't pass this).
+    catGrids: { type: Object, value: {} },
     // Customer's latest in-flight order (paid/preparing/dispatched or unpaid),
     // or null. Feeds the order_tracker block; host page fetches it when the
     // layout contains one and the customer is authed.
@@ -257,7 +264,7 @@ Component({
   },
 
   observers: {
-    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards, newArrivals, activeOrder, activeOrderCount, topupPackages, notifUnread, notifNoOrderUnread, notifIsFresh, notifNoOrderFresh, notifHasBroadcast': function () {
+    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards, newArrivals, catGrids, activeOrder, activeOrderCount, topupPackages, notifUnread, notifNoOrderUnread, notifIsFresh, notifNoOrderFresh, notifHasBroadcast': function () {
       this.recompute();
     },
   },
@@ -535,8 +542,19 @@ Component({
             const key = String(b.limit || 6);
             list = Array.isArray(na[key]) ? na[key] : [];
           } else {
-            const cat = this.properties.categories.find(c => c.id === b.category_id);
-            list = this.properties.products.filter(p => !b.category_id || p.category === cat?.name);
+            // Category-scoped (or source=all) grid. The host page fetches this
+            // grid's slice server-side into catGrids (keyed by category_id|limit)
+            // so it isn't capped by whatever sorted into the home's first-100
+            // products pull. Until that lands — or on an older host page that
+            // doesn't pass catGrids — fall back to filtering the shared array.
+            const cgKey = `${b.category_id || 'all'}|${b.limit || 6}`;
+            const cg = this.properties.catGrids || {};
+            if (Array.isArray(cg[cgKey])) {
+              list = cg[cgKey];
+            } else {
+              const cat = this.properties.categories.find(c => c.id === b.category_id);
+              list = this.properties.products.filter(p => !b.category_id || p.category === cat?.name);
+            }
           }
           const isTopSelling = b.source_type === 'top_selling';
           // Rank badge gating — `gridRankMode` picks which positions show
