@@ -2308,8 +2308,12 @@ db.exec(`
     note            TEXT,
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (store_id)     REFERENCES retail_stores(id),
-    FOREIGN KEY (product_id)   REFERENCES products(id),
-    FOREIGN KEY (actor_user_id) REFERENCES users(id)
+    FOREIGN KEY (product_id)   REFERENCES products(id)
+    -- NOTE: actor_user_id is deliberately NOT an FK. It records WHO made a
+    -- movement, but the actor can be a kitchen users(id) OR a Mini App Backend
+    -- operator's tenant_users(id) — two id spaces. A hard FK to users(id)
+    -- rejected every operator-driven write (same trap as retail_vouchers.
+    -- created_by). It stays a plain audit integer; see drop_ledger_actor_fk_v1.
   );
   CREATE INDEX IF NOT EXISTS idx_retail_ledger_lookup ON retail_stock_ledger(store_id, product_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_retail_ledger_ref    ON retail_stock_ledger(ref_table, ref_id);
@@ -3176,5 +3180,59 @@ try {
     }
   }
 } catch (e) { console.error('[fix_orphan_customer_fks_v1] failed (left untouched):', e); }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Drop the retail_stock_ledger.actor_user_id → users(id) FK.
+// actor_user_id records who made a stock movement, but the actor can be a
+// kitchen users(id) OR a Mini App Backend operator's tenant_users(id) — two
+// separate id spaces. The hard FK to users(id) rejected EVERY operator-driven
+// ledger write with "FOREIGN KEY constraint failed" (stock save, order
+// commit/reverse/refund) — the same trap as retail_vouchers.created_by. Make
+// it a plain audit integer so any actor id is accepted; the operator's identity
+// is still captured in logActivity + the ledger note.
+//
+// Rebuild reads the LIVE CREATE from sqlite_master (so ALTER-added columns and
+// the already-repointed product FK come along), strips only the actor FK clause,
+// and renames a temp table into place. Guarded + atomic; a residual
+// foreign_key_check rolls the whole thing back and leaves prod untouched.
+// ─────────────────────────────────────────────────────────────────────────
+try {
+  const done = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('drop_ledger_actor_fk_v1');
+  const haveLedger = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='retail_stock_ledger'").get();
+  const hasActorFk = haveLedger && db.pragma('foreign_key_list(retail_stock_ledger)')
+    .some(f => f.from === 'actor_user_id' && f.table === 'users');
+  if (!done && hasActorFk) {
+    db.pragma('foreign_keys = OFF');
+    db.pragma('legacy_alter_table = ON');
+    try {
+      db.transaction(() => {
+        const trow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='retail_stock_ledger'").get();
+        const idxSqls = db.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='retail_stock_ledger' AND sql IS NOT NULL").all().map(r => r.sql);
+        // Remove the actor FK clause (with its leading comma so no dangling comma
+        // is left). Everything else — including the product FK already repointed
+        // to store_products by store_products_seed_fk_v1 — is preserved verbatim.
+        const createSql = trow.sql.replace(
+          /,\s*FOREIGN\s+KEY\s*\(\s*actor_user_id\s*\)\s*REFERENCES\s+users\s*\(\s*id\s*\)/i, '');
+        if (createSql === trow.sql) throw new Error('[drop_ledger_actor_fk_v1] actor FK clause not found in CREATE');
+        const tmpSql = createSql.replace(
+          /(CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`']?)retail_stock_ledger(["`']?)/i,
+          '$1_fk_tmp_retail_stock_ledger$2');
+        if (tmpSql === createSql) throw new Error('[drop_ledger_actor_fk_v1] could not rename CREATE');
+        db.exec(tmpSql);
+        db.exec('INSERT INTO _fk_tmp_retail_stock_ledger SELECT * FROM retail_stock_ledger');
+        db.exec('DROP TABLE retail_stock_ledger');
+        db.exec('ALTER TABLE _fk_tmp_retail_stock_ledger RENAME TO retail_stock_ledger');
+        for (const s of idxSqls) db.exec(s);
+        const bad = db.pragma('foreign_key_check(retail_stock_ledger)');
+        if (bad.length) throw new Error('[drop_ledger_actor_fk_v1] residual FK violations: ' + JSON.stringify(bad).slice(0, 300));
+        db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('drop_ledger_actor_fk_v1');
+      })();
+      console.log('[drop_ledger_actor_fk_v1] retail_stock_ledger actor FK dropped');
+    } finally {
+      db.pragma('legacy_alter_table = OFF');
+      db.pragma('foreign_keys = ON');
+    }
+  }
+} catch (e) { console.error('[drop_ledger_actor_fk_v1] failed (left untouched):', e); }
 
 module.exports = db;
