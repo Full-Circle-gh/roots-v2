@@ -236,7 +236,10 @@ Page({
         // Keeps this array small enough to thread through every block-renderer
         // without blowing WeChat's setData bridge. PDP still fetches full copy.
         api.get('/api/retail/products?limit=100&lean=1').catch(() => []),
-        api.get('/api/retail/category-tree').catch(() => []),
+        // counts=1 enriches each top with an accurate full-catalogue product
+        // count + cover URL (the category_tabs block reads them) — otherwise it
+        // would derive both from the capped products pull and undercount.
+        api.get('/api/retail/category-tree?counts=1').catch(() => []),
         api.get('/api/retail/flash-sales').catch(() => []),
         hasToken ? api.get('/api/retail/affiliate').catch(() => null) : Promise.resolve(null),
         // Polls feed voting_block in auto-pull mode. Requires auth, so
@@ -258,7 +261,7 @@ Page({
         // legacy categories table is gone). Shape each top as { id, name (EN,
         // matches products.category), name_cn } so blocks match + show CN.
         categories: (Array.isArray(cats) ? cats : (cats?.data || []))
-          .map(t => ({ id: t.id, name: t.name, name_cn: t.name_cn || '' })),
+          .map(t => ({ id: t.id, name: t.name, name_cn: t.name_cn || '', count: t.count, cover: t.cover || '' })),
         flashSales: Array.isArray(flash) ? flash : (flash?.data || []),
         affiliate: aff || null,
         polls: Array.isArray(polls) ? polls : (polls?.data || []),

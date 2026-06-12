@@ -271,7 +271,45 @@ router.get('/api/retail/categories', (req, res) => {
 // hard-coded SEED_TREE as fallback. The shop only renders tops/subs with products.
 router.get('/api/retail/category-tree', (req, res) => {
   res.set('Cache-Control', 'public, max-age=60');
-  res.json({ success: true, data: getCategoryTree(tdb()) });
+  const tree = getCategoryTree(tdb());
+  // counts=1 (the home category_tabs block): enrich each top node with an
+  // accurate published-product count + a cover-image URL computed across the
+  // WHOLE catalogue. Without this the block derived both from the home's capped
+  // products pull, so far-sorted categories undercounted. Gated by the flag so
+  // the shop rail (which only needs order + CN labels) skips the extra queries.
+  if (req.query.counts === '1' || req.query.counts === 'true') {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    // Match the block's `(top_category || category)` rule: top_category when
+    // set, else the legacy free-form category for products not yet re-saved.
+    const topExpr = "COALESCE(NULLIF(p.top_category, ''), p.category)";
+    const countRows = tdb().prepare(
+      `SELECT ${topExpr} AS topname, COUNT(*) AS n FROM store_products p
+        WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
+        GROUP BY topname`
+    ).all();
+    const countByName = {};
+    for (const r of countRows) if (r.topname) countByName[r.topname] = r.n;
+    const coverStmt = tdb().prepare(
+      `SELECT id, updated_at FROM store_products p
+        WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
+          AND ${topExpr} = ?
+          AND ((p.image_data IS NOT NULL AND p.image_data != '')
+            OR (p.image_url IS NOT NULL AND p.image_url != ''))
+        ORDER BY p.sort_order ASC, p.name_en ASC LIMIT 1`
+    );
+    const enriched = tree.map(t => {
+      const cov = coverStmt.get(t.name);
+      return {
+        ...t,
+        count: countByName[t.name] || 0,
+        // Point at the public image route (handles base64 + plain-URL photos);
+        // small &w for a tile thumbnail. '' when the category has no photo yet.
+        cover: cov ? `${baseUrl}/api/retail/products/${cov.id}/image?v=${encodeURIComponent(cov.updated_at || '')}&w=480` : '',
+      };
+    });
+    return res.json({ success: true, data: enriched });
+  }
+  res.json({ success: true, data: tree });
 });
 
 // ── Category tree editor (Mini App Backend → Categories) ──────────────────

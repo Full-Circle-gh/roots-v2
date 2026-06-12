@@ -445,12 +445,19 @@ Component({
           // is built from); fall back to the legacy free-form `category` for
           // products not yet re-saved under the two-level scheme.
           const inCat = (p, c) => (p.top_category || p.category) === c.name;
-          const catCount = (c) => allProducts.filter(p => inCat(p, c)).length;
+          // Count + cover come from the server (category-tree?counts=1) so they
+          // reflect the WHOLE catalogue — the products array here is capped by
+          // the home's main pull and would undercount far-sorted categories.
+          // Fall back to deriving from it on an older shell that omits them.
+          const catCount = (c) => (typeof c.count === 'number')
+            ? c.count
+            : allProducts.filter(p => inCat(p, c)).length;
           // Per-category image override (bento) keyed by category id; unset →
-          // first product in the category that has a photo. Mirrors CMS preview.
+          // server cover, then first in-pull product with a photo (legacy).
           const tileImages = b.tile_images || {};
           const catCover = (c) => {
             if (tileImages[c.id]) return absUrl(tileImages[c.id]);
+            if (c.cover) return absUrl(c.cover);
             const p = allProducts.find(x => inCat(x, c) && (absUrl(x.image_url) || x.image_data));
             return p ? (absUrl(p.image_url) || p.image_data) : '';
           };
