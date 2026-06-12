@@ -499,12 +499,16 @@ async function paSaveStoreStock(productId, storeId, raw, el) {
       body: JSON.stringify({ physical_qty: qty }),
     });
     // The endpoint always answers JSON; a body we can't parse means an HTTP error
-    // (500/502/504, or a login-redirect HTML page) reached us. Parse defensively
-    // and check res.ok so the operator sees the real status — not Safari's opaque
-    // "string did not match the expected pattern" JSON-parse error. Mirrors the
-    // variant-matrix save path (pdMatrixCellSave).
-    const j = await res.json().catch(() => null);
-    if (!res.ok || !j || !j.success) throw new Error((j && j.error) || `HTTP ${res.status}`);
+    // (500/502/504, or a login-redirect HTML page) reached us. Read the body as
+    // text and parse it ourselves so a non-JSON response surfaces the server's
+    // real message (e.g. a SQLite/Express error) instead of Safari's opaque
+    // "string did not match the expected pattern" JSON-parse error.
+    const text = await res.text();
+    let j = null; try { j = JSON.parse(text); } catch (_) { /* non-JSON body */ }
+    if (!res.ok || !j || !j.success) {
+      const detail = (j && j.error) || (text || '').trim().slice(0, 160) || `HTTP ${res.status}`;
+      throw new Error(`HTTP ${res.status} · ${detail}`);
+    }
     if (!PA_STOCK[productId]) PA_STOCK[productId] = {};
     PA_STOCK[productId][storeId] = qty;
     el.value = qty;
