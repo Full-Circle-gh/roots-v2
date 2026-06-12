@@ -21,15 +21,15 @@
     <view class="picker__search">
       <text class="picker__search-ico">🔍</text>
       <input
-        class="picker__search-input"
+        class="picker__search-input f-aleo"
         value="{{ keyword }}"
         bindinput="onSearchInput"
         bindconfirm="onSearchConfirm"
         confirm-type="search"
-        placeholder="{{ lang === 'cn' ? '搜索地点' : 'Search for location' }}"
+        placeholder="{{ lang === 'cn' ? '搜索地点' : 'Search for a place' }}"
         placeholder-class="picker__search-ph"
       />
-      <text wx:if="{{ keyword }}" class="picker__search-clear" bindtap="clearSearch">✕</text>
+      <view wx:if="{{ keyword }}" class="picker__search-clear" bindtap="clearSearch">✕</view>
     </view>
 
     <!-- Results -->
@@ -37,7 +37,7 @@
       <!-- Centre-pin entry (hidden while searching) -->
       <view wx:if="{{ !keyword }}" class="picker__item {{ selectedId === 'pin' ? 'is-sel' : '' }}" bindtap="selectPin">
         <view class="picker__item-main">
-          <view class="picker__item-name">{{ lang === 'cn' ? '当前位置' : 'My pin location' }}</view>
+          <view class="picker__item-label f-toni">{{ lang === 'cn' ? '当前位置' : 'My pin location' }}</view>
           <view class="picker__item-sub">
             <block wx:if="{{ resolving }}">{{ lang === 'cn' ? '读取地址中…' : 'Reading address…' }}</block>
             <block wx:elif="{{ pinAddress }}">{{ pinAddress }}</block>
@@ -57,7 +57,9 @@
       >
         <view class="picker__item-main">
           <view class="picker__item-name">{{ item.name }}</view>
-          <view class="picker__item-sub">{{ item.distance != null ? item.distance + 'm · ' : '' }}{{ item.address }}</view>
+          <view class="picker__item-sub">
+            <text wx:if="{{ item.distance != null }}" class="picker__dist">{{ item.distance }}m</text>{{ item.address }}
+          </view>
         </view>
         <text wx:if="{{ selectedId === item.id }}" class="picker__check">✓</text>
       </view>
@@ -68,11 +70,11 @@
 
     <!-- Actions -->
     <view class="picker__actions">
-      <view class="picker__btn picker__btn--ghost" bindtap="cancel">{{ lang === 'cn' ? '取消' : 'Cancel' }}</view>
+      <view class="picker__btn picker__btn--ghost f-toni" bindtap="cancel">{{ lang === 'cn' ? '取消' : 'Cancel' }}</view>
       <view
-        class="picker__btn picker__btn--primary {{ canConfirm ? '' : 'picker__btn--disabled' }}"
+        class="picker__btn picker__btn--primary f-toni {{ canConfirm ? '' : 'picker__btn--disabled' }}"
         bindtap="confirm"
-      >{{ lang === 'cn' ? '确认' : 'Use this spot' }}</view>
+      >{{ lang === 'cn' ? '确认位置' : 'Use this spot' }}</view>
     </view>
   </view>
 </view>

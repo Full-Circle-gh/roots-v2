@@ -47,8 +47,32 @@ Page({
 
   onReady() {
     this.mapCtx = wx.createMapContext('picker-map', this);
-    // Open centred on the customer (see centerOnMe).
-    setTimeout(() => this.centerOnMe(true), 200);
+    // Open centred on the customer. Give the map a moment to initialise, then
+    // make sure we have location permission BEFORE moving — otherwise the very
+    // first open silently no-ops (and the user only sees themselves after
+    // tapping the locate button).
+    setTimeout(() => this.initLocate(), 300);
+  },
+
+  initLocate() {
+    wx.getSetting({
+      success: (s) => {
+        const granted = s.authSetting && s.authSetting['scope.userLocation'];
+        if (granted === false) {
+          // Explicitly denied before — can't auto-locate; resolve the default.
+          this.refreshForCenter();
+          return;
+        }
+        if (granted === true) { this.centerOnMe(true); return; }
+        // Undecided → ask once; on grant, locate; otherwise fall back.
+        wx.authorize({
+          scope: 'scope.userLocation',
+          success: () => this.centerOnMe(true),
+          fail: () => this.refreshForCenter(),
+        });
+      },
+      fail: () => this.centerOnMe(true),
+    });
   },
 
   onUnload() {
@@ -170,12 +194,15 @@ Page({
     this.setData({ selectedId: poi.id, canConfirm: true, lat: poi.lat, lng: poi.lng });
   },
 
-  // Recentre the map on the device. `initial` = on-open (silent on failure).
-  centerOnMe(initial) {
+  // Recentre the map on the device. `initial` = on-open (silent on failure);
+  // retries once because the first attempt can fire before the map's location
+  // subsystem is ready (which is why the on-open jump used to be missed).
+  centerOnMe(initial, _retry) {
     if (!this.mapCtx) return;
     this.mapCtx.moveToLocation({
       success: () => { setTimeout(() => this.refreshForCenter(), 250); },
       fail: () => {
+        if (!_retry) { setTimeout(() => this.centerOnMe(initial, true), 700); return; }
         if (!initial) {
           wx.showToast({ title: this.data.lang === 'cn' ? '无法定位,请手动拖动地图' : 'Can’t locate — drag the map', icon: 'none' });
         }
