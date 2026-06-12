@@ -10148,6 +10148,11 @@ router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, 
                 sp.stock_qty, 0
               ) AS stock,
               sp.updated_at, ${hasImageFallbackSql('sp')} AS has_image_data,
+              -- own_image = a photo stored on THIS variant (not inherited from a
+              -- sibling), so the editor can flag "shared" shades vs ones given a
+              -- distinct picture.
+              ((sp.image_data IS NOT NULL AND sp.image_data != '')
+               OR (sp.image_url IS NOT NULL AND sp.image_url != '')) AS own_image,
               sp.image_url, sp.is_published
          FROM store_products sp
         WHERE sp.variant_group_id = ? AND COALESCE(sp.is_active, 1) = 1
@@ -10158,6 +10163,7 @@ router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, 
       m.image_data = m.has_image_data
         ? `/api/retail-admin/products/${m.id}/image?v=${encodeURIComponent(m.updated_at || '')}`
         : null;
+      m.own_image = !!m.own_image;
       delete m.has_image_data;
       return m;
     });

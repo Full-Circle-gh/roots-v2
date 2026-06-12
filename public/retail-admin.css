@@ -1873,9 +1873,9 @@
      size just to set its stock. The size you opened is read-only here (edit it
      in the form); sibling sizes are editable inline; ✕ deletes the size. */
   .va-table { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
-  /* grip · name · sku · ¥ · stock · show · ✕ · slack — name is capped so it
-     doesn't sprawl; the trailing slack track absorbs leftover width. */
-  .va-row { display: grid; grid-template-columns: 20px minmax(96px,190px) 92px 64px 64px 56px 38px 22px minmax(0,1fr); gap: 8px; align-items: center; }
+  /* grip · photo · name · sku · ¥ · stock · show · ✕ · slack — name is capped so
+     it doesn't sprawl; the trailing slack track absorbs leftover width. */
+  .va-row { display: grid; grid-template-columns: 20px 44px minmax(96px,190px) 92px 64px 64px 56px 38px 22px minmax(0,1fr); gap: 8px; align-items: center; }
   /* Was-price (compare-at) column input: dimmed so it reads as the secondary,
      optional "original price" next to the live ¥ price. */
   .va-num.va-was { color: var(--text-3); }
@@ -1896,6 +1896,20 @@
   .va-ro { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; }
   .va-show { display: flex; justify-content: center; }
   .va-self { color: var(--brass); font-size: 12px; text-align: center; cursor: help; }
+  /* Per-variant photo: a small square thumbnail that doubles as the upload
+     trigger. Empty rows show a dashed "＋" placeholder; clicking either opens
+     the file picker (siblings) or jumps to the gallery above (the self row). */
+  .va-photo { width: 40px; height: 40px; border-radius: 6px; padding: 0; cursor: pointer; overflow: hidden;
+              border: 1px solid var(--line); background: var(--surface-2); background-size: cover; background-position: center;
+              display: flex; align-items: center; justify-content: center; position: relative; flex: none; }
+  .va-photo:hover { border-color: var(--brass); }
+  .va-photo.va-photo-empty { border-style: dashed; color: var(--text-4); font-size: 17px; line-height: 1; }
+  .va-photo.va-photo-busy { opacity: .5; pointer-events: none; }
+  /* Inherited (not its own) photo: dimmed + a brass corner dot so the operator
+     can see at a glance which shades still share the group photo. */
+  .va-photo.va-photo-shared { opacity: .6; }
+  .va-photo.va-photo-shared::after { content: ''; position: absolute; top: 2px; right: 2px; width: 6px; height: 6px;
+                                     border-radius: 50%; background: var(--brass); box-shadow: 0 0 0 1.5px var(--surface-2); }
   /* Out-of-stock size — faint row tint + red stock cell so it stands out. */
   .va-row.va-oos { background: rgba(182,86,86,.06); border-radius: 6px; }
   .va-row.va-oos .va-stk { color: var(--danger); border-color: rgba(182,86,86,.5); }

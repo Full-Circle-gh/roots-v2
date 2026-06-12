@@ -1713,12 +1713,12 @@ async function vaLoad(id) {
     // Stock shown on the self row = the live per-store total (Tianhe + Yuexiu),
     // not the legacy flat stock_qty (which per-store edits never touch). Falls
     // back to stock_qty only if no per-store sum is known yet.
-    const self = { id, label: p.variant_label || '', label_cn: p.variant_label_cn || '', name: _vaName(p), sku: p.sku || '', size: p.size || '', price: p.sell_price, compare: (p.compare_at_price != null ? p.compare_at_price : ''), stock: (p.effective_stock != null ? p.effective_stock : p.stock_qty), published: p.is_published, self: true };
+    const self = { id, label: p.variant_label || '', label_cn: p.variant_label_cn || '', name: _vaName(p), sku: p.sku || '', size: p.size || '', price: p.sell_price, compare: (p.compare_at_price != null ? p.compare_at_price : ''), stock: (p.effective_stock != null ? p.effective_stock : p.stock_qty), published: p.is_published, img: (p.image_data || p.image_url || ''), ownImg: !!(p.image_data || p.image_url), self: true };
     VA_MEMBERS = members.length
-      ? members.map(m => ({ id: m.id, label: m.variant_label || '', label_cn: m.variant_label_cn || '', name: _vaName(m), sku: m.sku || '', size: m.size || '', price: m.price, compare: (m.compare != null ? m.compare : ''), stock: m.stock, published: m.is_published, self: m.id === id }))
+      ? members.map(m => ({ id: m.id, label: m.variant_label || '', label_cn: m.variant_label_cn || '', name: _vaName(m), sku: m.sku || '', size: m.size || '', price: m.price, compare: (m.compare != null ? m.compare : ''), stock: m.stock, published: m.is_published, img: (m.image_data || ''), ownImg: !!m.own_image, self: m.id === id }))
       : [self];
     if (!VA_MEMBERS.some(v => v.self)) VA_MEMBERS.unshift(self);
-  } catch { VA_MEMBERS = [{ id, label: p.variant_label || '', label_cn: p.variant_label_cn || '', name: _vaName(p), self: true }]; }
+  } catch { VA_MEMBERS = [{ id, label: p.variant_label || '', label_cn: p.variant_label_cn || '', name: _vaName(p), img: (p.image_data || p.image_url || ''), ownImg: !!(p.image_data || p.image_url), self: true }]; }
   // Open by default only when there's something to show (real sibling variants);
   // a single-option product starts collapsed so the editor isn't cluttered.
   VA_OPEN = VA_MEMBERS.length > 1;
@@ -1738,7 +1738,7 @@ function vaRender() {
     `<span class="pd-var-head" style="margin:0">${cuT('Variants', '规格')}</span>` +
     `<span class="pd-var-summary">${summary}</span></button>`;
   if (!VA_OPEN) { box.innerHTML = toggle; return; }
-  const head = `<div class="va-row va-row-head"><span></span><span>${cuT('Name', '名称')}</span>` +
+  const head = `<div class="va-row va-row-head"><span></span><span>${cuT('Photo', '图片')}</span><span>${cuT('Name', '名称')}</span>` +
     `<span>${cuT('SKU', '货号')}</span>` +
     `<span class="va-num">¥</span><span class="va-num">${cuT('Was', '划线价')}</span><span class="va-num">${cuT('Stock', '库存')}</span>` +
     `<span style="text-align:center">${cuT('Show', '上架')}</span><span></span></div>`;
@@ -1755,6 +1755,16 @@ function vaRender() {
     const oos = stock !== '' && Number(stock) <= 0;
     const rowOpen = `<div class="va-row${oos ? ' va-oos' : ''}" draggable="false" ondragover="vaDragOver(event, ${i})" ondragleave="vaDragLeave(event)" ondrop="vaDrop(event, ${i})" ondragend="vaDragEnd()">`;
     const grip = `<span class="va-drag" draggable="true" ondragstart="vaDragStart(event, ${i})" title="${cuT('Drag to reorder', '拖动以排序')}">⠿</span>`;
+    // Per-variant photo. Each variant is its own product, so it can carry its own
+    // picture; with none of its own it inherits a sibling's (shown dimmed + a
+    // "shared" hint). The self row's photo is the main gallery above — its thumb
+    // just jumps there. Siblings open a file picker (vaPhotoPick).
+    const thumbStyle = v.img ? `background-image:url('${String(v.img).replace(/'/g, '%27')}')` : '';
+    const shared = !!v.img && !v.ownImg && !v.self;
+    const photoCls = 'va-photo' + (v.img ? '' : ' va-photo-empty') + (shared ? ' va-photo-shared' : '');
+    const photo = v.self
+      ? `<button type="button" class="${photoCls}" style="${thumbStyle}" title="${cuT('Main photo — edit it in the gallery above', '主图 — 在上方图库中编辑')}" onclick="vaPhotoGallery()">${v.img ? '' : '＋'}</button>`
+      : `<button type="button" class="${photoCls}" data-vid="${v.id}" style="${thumbStyle}" title="${shared ? cuT('Shared from another variant — click to give this one its own photo', '与其他规格共用 — 点击为本规格设置专属图片') : (v.img ? cuT('Change this variant’s photo', '更换此规格的图片') : cuT('Add a photo for this variant', '为此规格添加图片'))}" onclick="vaPhotoPick(${v.id})">${v.img ? '' : '＋'}</button>`;
     // Variant option name is split EN/CN (never glued) — one input per language,
     // stacked, so "Big 200g" and "大" are stored & shown separately.
     const label = `<div class="va-name" title="${escapeAttr(v.name)}">` +
@@ -1769,7 +1779,7 @@ function vaRender() {
       // The opened product. Its quick fields are editable here too, mirrored into
       // the main form inputs above so the normal Save persists them (see
       // vaSelfField).
-      return rowOpen + grip + label +
+      return rowOpen + grip + photo + label +
         `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaSelfField('sku', this.value)">` +
         `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaSelfField('price', this.value)">` +
         `<input class="va-num va-was" type="number" min="0" step="0.01" value="${cmp === '' ? '' : cmp}" placeholder="—" title="${cuT('Was price — shown struck-through to shoppers when higher than the price. Leave blank for no discount.', '划线价 — 高于售价时在顾客端显示删除线。留空则不打折。')}" oninput="vaSelfField('compare', this.value)">` +
@@ -1777,7 +1787,7 @@ function vaRender() {
         `<span class="va-show"><input type="checkbox" ${v.published === 0 ? '' : 'checked'} title="${cuT('Show this variant in the shop', '在店面显示此规格')}" onchange="vaSelfField('published', this.checked ? 1 : 0)"></span>` +
         `<span class="va-self" title="${cuT('This is the main product. Its name, photos & details are edited in the form above; the quick fields here stay in sync.', '这是主产品。名称、图片和详情在上方表单中编辑;此处的快捷字段保持同步。')}">●</span></div>`;
     }
-    return rowOpen + grip + label +
+    return rowOpen + grip + photo + label +
       `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaField(${v.id}, 'sku', this.value)">` +
       `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaField(${v.id}, 'price', this.value)">` +
       `<input class="va-num va-was" type="number" min="0" step="0.01" value="${cmp === '' ? '' : cmp}" placeholder="—" title="${cuT('Was price — shown struck-through to shoppers when higher than the price. Leave blank for no discount.', '划线价 — 高于售价时在顾客端显示删除线。留空则不打折。')}" oninput="vaField(${v.id}, 'compare', this.value)">` +
@@ -1832,6 +1842,44 @@ function vaStockInput(id, el) {
   const row = el.closest('.va-row');
   if (row) row.classList.toggle('va-oos', el.value !== '' && Number(el.value) <= 0);
 }
+// The self row's photo IS the main product photo — jump up to the gallery
+// (above) rather than editing it twice from two places.
+function vaPhotoGallery() {
+  const g = document.getElementById('pd-gallery');
+  if (g) g.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+// Pick + set a sibling variant's own photo. Each variant is its own product, so
+// this PATCHes that product's image directly (it persists immediately, like
+// add/remove variant — not folded into the main Save). Replaces the variant's
+// gallery with the one chosen photo, which is what a per-variant pic wants.
+function vaPhotoPick(id) {
+  const v = VA_MEMBERS.find(x => x.id === id); if (!v || v.self) return;
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) vaPhotoUpload(id, f); };
+  inp.click();
+}
+async function vaPhotoUpload(id, file) {
+  const v = VA_MEMBERS.find(x => x.id === id); if (!v || v.self) return;
+  const cell = document.querySelector('#pd-variants .va-photo[data-vid="' + id + '"]');
+  if (cell) cell.classList.add('va-photo-busy');
+  // Same resize/optimise pipeline as the main gallery (base64 in image_data).
+  const dataURL = await pdHandleImageUpload(file, PD_IMG_OPTS);
+  if (!dataURL) { if (cell) cell.classList.remove('va-photo-busy'); return; }
+  try {
+    const j = await api('/api/retail-admin/products/' + id, { method: 'PATCH', body: { images: [dataURL] } });
+    v.img = dataURL; v.ownImg = true;
+    if (j && j.data && Array.isArray(PA_PRODUCTS)) {
+      const i = PA_PRODUCTS.findIndex(x => x.id === id);
+      if (i >= 0) PA_PRODUCTS[i] = { ...PA_PRODUCTS[i], ...j.data };
+    }
+    vaRender();
+    toast(cuT('Variant photo updated', '规格图片已更新'));
+  } catch (e) {
+    if (cell) cell.classList.remove('va-photo-busy');
+    toast(cuT('Photo update failed: ', '图片更新失败:') + e.message, 'err');
+  }
+}
 // Drag-to-reorder the sizes. The row order = the front-end display order; it
 // rides the main Save (vaPersist sends members in array order → variant_sort).
 let VA_DRAG = null;
@@ -1877,7 +1925,7 @@ async function vaAddSize() {
     const j = await api('/api/retail-admin/products/' + VA_ID + '/duplicate', { method: 'POST', body: { as_variant: true, label: '' } });
     const d = j.data; if (!d) throw new Error('add_failed');
     if (Array.isArray(PA_PRODUCTS)) PA_PRODUCTS.unshift(d);
-    VA_MEMBERS.push({ id: d.id, label: d.variant_label || '', label_cn: d.variant_label_cn || '', name: _vaName(d), sku: d.sku || '', size: d.size || '', price: d.sell_price, compare: (d.compare_at_price != null ? d.compare_at_price : ''), stock: d.stock_qty, published: d.is_published, self: false });
+    VA_MEMBERS.push({ id: d.id, label: d.variant_label || '', label_cn: d.variant_label_cn || '', name: _vaName(d), sku: d.sku || '', size: d.size || '', price: d.sell_price, compare: (d.compare_at_price != null ? d.compare_at_price : ''), stock: d.stock_qty, published: d.is_published, img: (d.image_data || d.image_url || ''), ownImg: !!(d.image_data || d.image_url), self: false });
     VA_OPEN = true;
     vaRender();
     pdLoadStoreStocks(VA_ID);   // pull the new variant's row into the stock grid
