@@ -1572,6 +1572,7 @@ function pdOpen(id) {
   document.getElementById('pd-delete-btn').style.display = p ? '' : 'none';
   vaLoad(p ? p.id : null);
   buLoad(p ? p.id : null);
+  bpLoad(p ? p.id : null);
   // Show the docked editor, hide the empty-state placeholder, and mark which
   // row in the list is currently loaded so the operator never loses their place.
   _pdSelectedId = p ? p.id : null;
@@ -2029,6 +2030,89 @@ function buBody() {
     voucher: (BU.voucher || '').trim(),
   };
 }
+
+// ── BUNDLE PRODUCT (editor) ─────────────────────────────────────────────────
+// THIS product IS a bundle: it sells as one product (one card, one price set in
+// the Price field above) but is really a fixed combination of OTHER products.
+// At checkout the COMPONENT stock is deducted, and availability = min(component
+// stock ÷ qty). Stored in the `bundle_items` column as [{id, qty}]; saved with
+// the main Save. Separate from the "buy together" upsell (bu*) below.
+let BP_ID = null, BP = [], BP_PICKING = false, BP_OPEN = false;   // BP = [{id, qty}]
+function bpLoad(id) {
+  const box = document.getElementById('pd-bundle-product'); if (!box) return;
+  BP_ID = id; BP_PICKING = false; BP = [];
+  if (!id) {
+    box.innerHTML = `<div class="pd-var-head">${cuT('Bundle (sold as one)', '套装产品(作为一个产品出售)')}</div>` +
+      `<div class="helper" style="font-size:11px">${cuT('Save the product first, then choose what goes inside.', '请先保存产品,再选择套装内含的商品。')}</div>`;
+    return;
+  }
+  const p = (PA_PRODUCTS || []).find(x => x.id === id);
+  const items = (p && Array.isArray(p.bundle_items)) ? p.bundle_items : [];
+  BP = items.map(c => ({ id: Number(c.id), qty: Math.max(1, parseInt(c.qty, 10) || 1) }))
+            .filter(c => Number.isFinite(c.id) && c.id > 0);
+  BP_OPEN = BP.length > 0;
+  bpRender();
+}
+function bpToggle() { BP_OPEN = !BP_OPEN; bpRender(); }
+function bpRender() {
+  const box = document.getElementById('pd-bundle-product'); if (!box || BP_ID == null) return;
+  const summary = BP.length
+    ? cuT(BP.length + ' products inside', '内含 ' + BP.length + ' 件商品')
+    : cuT('Not a bundle · tap to make one', '非套装 · 点击设为套装');
+  const toggle = `<button type="button" class="pd-var-toggle" onclick="bpToggle()" aria-expanded="${BP_OPEN ? 'true' : 'false'}">` +
+    `<span class="pd-var-caret">${BP_OPEN ? '▾' : '▸'}</span>` +
+    `<span class="pd-var-head" style="margin:0">${cuT('Bundle (sold as one)', '套装产品')}</span>` +
+    `<span class="pd-var-summary">${summary}</span></button>`;
+  if (!BP_OPEN) { box.innerHTML = toggle; return; }
+  const nameOf = id => { const p = (PA_PRODUCTS || []).find(x => x.id === id); return p ? _vaName(p) : ('#' + id); };
+  const chips = BP.length
+    ? BP.map(c =>
+        `<span class="bu-chip" style="gap:6px">` +
+          `<span title="${escapeAttr(nameOf(c.id))}">${escapeHtml(nameOf(c.id))}</span>` +
+          `<span class="bp-qty">×<input type="number" min="1" step="1" value="${c.qty}" onchange="bpQty(${c.id}, this.value)" oninput="bpQty(${c.id}, this.value)" style="width:42px"></span>` +
+          `<button type="button" class="bu-chip-x" title="${cuT('Remove', '移除')}" onclick="bpRemove(${c.id})">✕</button>` +
+        `</span>`).join('')
+    : `<span class="helper" style="font-size:11px">${cuT('Add the products this bundle contains.', '添加本套装包含的商品。')}</span>`;
+  const picker = BP_PICKING ? `
+    <input id="bp-search" class="bu-search" type="text" autocomplete="off" placeholder="${cuT('Search a product to add…', '搜索商品以添加…')}" oninput="bpPickerList()">
+    <div id="bp-picklist" class="bu-picklist"></div>` : '';
+  box.innerHTML = toggle +
+    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT('Customers see ONE product at the price you set above. Behind the scenes it’s these products combined — their stock is what gets deducted, and the bundle sells while every item is in stock.', '顾客看到的是上方价格的单个产品。其实它由下列商品组合而成 — 扣减的是这些商品的库存,且仅当每件商品都有货时套装才可售。')}</div>` +
+    `<div class="bu-chips">${chips}</div>` +
+    `<div class="va-actions">` +
+      `<button type="button" class="btn btn-sm" onclick="bpTogglePicker()">${BP_PICKING ? cuT('Close', '关闭') : cuT('+ Add product', '+ 添加商品')}</button>` +
+    `</div>` + picker;
+  if (BP_PICKING) { const s = document.getElementById('bp-search'); if (s) s.focus(); bpPickerList(); }
+}
+function bpQty(id, val) {
+  const c = BP.find(x => x.id === id); if (!c) return;
+  c.qty = Math.max(1, parseInt(val, 10) || 1);
+}
+function bpRemove(id) { BP = BP.filter(x => x.id !== id); bpRender(); }
+function bpTogglePicker() { BP_PICKING = !BP_PICKING; bpRender(); }
+function bpPickerList() {
+  const el = document.getElementById('bp-picklist'); if (!el) return;
+  const q = (document.getElementById('bp-search')?.value || '').toLowerCase().trim();
+  const have = new Set(BP.map(c => c.id));
+  // Exclude self (a bundle can't contain itself) and other bundle products
+  // (no nested bundles in v1) and items already added.
+  const matches = (PA_PRODUCTS || []).filter(p => p.id !== BP_ID && !have.has(p.id) && !p.is_bundle)
+    .filter(p => !q || (p.name_en || '').toLowerCase().includes(q) || (p.name_cn || '').includes(q) || (p.sku || '').toLowerCase().includes(q))
+    .slice(0, 40);
+  el.innerHTML = matches.length
+    ? matches.map(p => `<div class="bu-pick" onclick="bpPick(${p.id})">${escapeHtml(_vaName(p))}</div>`).join('')
+    : `<div class="bu-pick muted">${cuT('No matches', '无匹配')}</div>`;
+}
+function bpPick(id) {
+  if (!BP.some(c => c.id === id)) BP.push({ id, qty: 1 });
+  const s = document.getElementById('bp-search'); if (s) s.value = '';
+  bpRender();
+}
+// Recipe to save (null clears → turns it back into a normal product).
+function bpBody() {
+  if (!BP.length) return null;
+  return BP.map(c => ({ id: c.id, qty: Math.max(1, parseInt(c.qty, 10) || 1) }));
+}
 // ── Image optimisation (resize) ─────────────────────────────────────────────
 // Gallery photos are base64-stored in store_products.image_data, so a raw
 // 4–10MB phone JPEG would bloat the DB and slow the storefront. Mirror the
@@ -2471,6 +2555,9 @@ async function pdAutoComposeBlocks(id, btn, skipConfirm) {
     if (i2 >= 0) PA_PRODUCTS[i2] = { ...PA_PRODUCTS[i2], ...(sj.data || {}), description_blocks: composed, use_block_design: 1 };
     _pdUseBlockDesign = true; pdRenderBlockDesignToggle();
     _pdDesignStale = false; pdRenderDesignStale();
+    // Repaint the grid so the just-built design flips the card's Plain → Designed
+    // pill immediately, without waiting for the operator to click another product.
+    if (typeof paRender === 'function') paRender();
     prog.done(true, cuT('Built ✓', '已生成 ✓'));
     toast(cuT('Built ' + composed.length + ' section' + (composed.length === 1 ? '' : 's') + ' — open the Product editor to review ✓',
               '已生成 ' + composed.length + ' 个板块,可在产品页编辑器中查看 ✓'), 'ok');
@@ -2731,6 +2818,7 @@ function pdCollectBody() {
   };
   if (_pdGalleryDirty) body.images = _pdGallery;  // gallery drives image_data (first = main)
   if (id && BU_ID === Number(id)) body.bundle = buBody();  // buy-together bundle (null clears)
+  if (id && BP_ID === Number(id)) body.bundle_items = bpBody();  // THIS-is-a-bundle recipe (null clears)
   return { id, body };
 }
 
@@ -2774,7 +2862,7 @@ async function pdSaveCore() {
       _pdSelectedId = j.data.id;
       document.getElementById('pd-dup-btn').style.display = '';
       document.getElementById('pd-delete-btn').style.display = '';
-      vaLoad(j.data.id); buLoad(j.data.id);
+      vaLoad(j.data.id); buLoad(j.data.id); bpLoad(j.data.id);
     }
   } catch (e) { uiError = e; }
 
