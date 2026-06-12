@@ -824,8 +824,9 @@
     flex-wrap: wrap; gap: var(--s3); margin-bottom: var(--s4);
   }
   .db-range { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
-  /* Wraps onto its own full-width row under the range controls, right-aligned. */
-  .db-range-note { flex-basis: 100%; text-align: right; font-size: 11px; color: var(--text-3); margin-top: 2px; }
+  /* Range bar relocated below the live hero, heading the range-driven cards. */
+  .db-rangebar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2) var(--s3); }
+  .db-range-note { font-size: 11px; color: var(--text-3); margin-left: auto; }
   .db-range .seg {
     display: inline-flex; background: var(--bg-elev-1);
     border: 1px solid var(--line-soft); border-radius: var(--r-md); overflow: hidden;
@@ -1012,23 +1013,23 @@
      C–F fill row 3. Below the bento sits the Deep-dive collapse holding the
      legacy KPI strip + 12 chart cards. Layout collapses to a 2-col stack
      under 1080px, full single column under 720px. */
+  /* Live hero + range bar each span the full width as the first two rows; the
+     6 tiles flow into a 3-col grid below. (Hero was formerly cols 1–3 with two
+     tiles beside it; the range bar now sits between the always-live hero and
+     the range-driven cards.) */
   .db-bento {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    grid-template-rows: minmax(120px, auto) minmax(120px, auto) minmax(190px, auto);
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: minmax(240px, auto) auto;
+    grid-auto-rows: minmax(190px, auto);
     gap: var(--s3);
     margin-bottom: var(--s4);
   }
-  .db-bento #db-hero { grid-column: 1 / 4; grid-row: 1 / 3; margin-bottom: 0; }
-  .db-bento .db-tile[data-slot="a"] { grid-column: 4; grid-row: 1; }
-  .db-bento .db-tile[data-slot="b"] { grid-column: 4; grid-row: 2; }
-  .db-bento .db-tile[data-slot="c"] { grid-column: 1; grid-row: 3; }
-  .db-bento .db-tile[data-slot="d"] { grid-column: 2; grid-row: 3; }
-  .db-bento .db-tile[data-slot="e"] { grid-column: 3; grid-row: 3; }
-  .db-bento .db-tile[data-slot="f"] { grid-column: 4; grid-row: 3; }
+  .db-bento #db-hero     { grid-column: 1 / -1; grid-row: 1; margin-bottom: 0; }
+  .db-bento #db-rangebar { grid-column: 1 / -1; grid-row: 2; }
   @media (max-width: 1080px) {
-    .db-bento { grid-template-columns: repeat(2, 1fr); grid-template-rows: auto; }
-    .db-bento #db-hero { grid-column: 1 / 3; grid-row: auto; }
+    .db-bento { grid-template-columns: repeat(2, 1fr); grid-template-rows: auto; grid-auto-rows: minmax(190px, auto); }
+    .db-bento #db-hero, .db-bento #db-rangebar { grid-column: 1 / -1; grid-row: auto; }
     .db-bento .db-tile { grid-column: auto; grid-row: auto; }
   }
   @media (max-width: 720px) {

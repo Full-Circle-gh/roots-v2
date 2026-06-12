@@ -408,23 +408,9 @@
   <section id="tab-dashboard" class="active">
     <div class="db-head">
       <h2 style="margin:0">Dashboard · 概览</h2>
-      <div class="db-range">
-        <div class="seg" id="db-range-seg">
-          <button data-range="today">Today · 今日</button>
-          <button data-range="7">7d</button>
-          <button data-range="30" class="active">30d</button>
-          <button data-range="90">90d</button>
-        </div>
-        <input type="date" id="db-from" aria-label="From date">
-        <span style="color:var(--text-3)">–</span>
-        <input type="date" id="db-to" aria-label="To date">
-        <button class="db-btn primary" onclick="dashLoad()">Apply · 应用</button>
-        <button class="db-btn" onclick="dashRefresh()" title="Refresh · 刷新">↻</button>
-      </div>
-      <!-- Scope hint: the date range drives the tiles + Deep dive below, NOT the
-           "Right now / Today" hero (which is always live). Operators kept reading
-           the TODAY box as the range total and thought revenue was broken. -->
-      <div class="db-range-note">Range drives the cards &amp; Deep dive below — “Right now” is always live · 日期范围作用于下方卡片与“详细”，“实时”始终显示当前</div>
+      <!-- Date range lives below the live hero now (see #db-rangebar), so the
+           controls sit with the cards they drive instead of above the always-
+           live "Right now" panel. -->
     </div>
 
     <!-- ── Mobile dashboard (Variant A — full-screen push) ──
@@ -503,6 +489,29 @@
         </div>
       </div>
     </section>
+
+    <!-- Date range — relocated here from the page header so the controls sit
+         directly above the cards they drive, with the always-live hero above
+         them (operators were reading the live TODAY total as the range total).
+         Lives inside #db-bento as a full-width row so it spans above the tiles
+         and inherits the bento's mobile hide. -->
+    <div class="db-rangebar" id="db-rangebar">
+      <div class="db-range">
+        <div class="seg" id="db-range-seg">
+          <button data-range="today">Today · 今日</button>
+          <button data-range="7">7d</button>
+          <button data-range="30" class="active">30d</button>
+          <button data-range="90">90d</button>
+        </div>
+        <input type="date" id="db-from" aria-label="From date">
+        <span style="color:var(--text-3)">–</span>
+        <input type="date" id="db-to" aria-label="To date">
+        <button class="db-btn primary" onclick="dashLoad()">Apply · 应用</button>
+        <button class="db-btn" onclick="dashRefresh()" title="Refresh · 刷新">↻</button>
+      </div>
+      <div class="db-range-note">Drives the cards &amp; Deep dive below · 作用于下方卡片与“详细”</div>
+    </div>
+
     <!-- 6 swappable bento tiles. Each cell has a generic chrome (title + ⋯
          swap menu); JS dispatches to the registered render fn per tile type.
          Slot positions a/b are stacked on the hero's right; c/d/e/f form
