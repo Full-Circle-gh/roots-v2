@@ -2330,15 +2330,28 @@ async function pdFactsAutoFillQuiet(textEn, textCn) {
 }
 async function pdAutoComposeBlocks(id, btn, skipConfirm) {
   const row = PA_PRODUCTS.find(x => x.id === Number(id)) || {};
-  let blocks = row.description_blocks;
-  if (typeof blocks === 'string') { try { blocks = JSON.parse(blocks); } catch { blocks = null; } }
-  const hasBlocks = Array.isArray(blocks) && blocks.length > 0;
+  // The catalogue LIST endpoint omits the heavy description_blocks JSON and
+  // ships only a `has_blocks` flag, so reading row.description_blocks here
+  // always saw undefined — an already-designed product was treated as fresh:
+  // the rebuild confirm never fired, and a failed pass flipped the flag back
+  // OFF, dropping a saved design. Detect via _paHasBlocks (flag-aware), then
+  // pull the real array on demand for the rebuild prompt's count.
+  let blocks = Array.isArray(row.description_blocks) ? row.description_blocks : null;
+  if (!blocks && _paHasBlocks(row)) {
+    try {
+      const rr = await fetch('/api/retail-admin/products/' + id, { credentials: 'same-origin' });
+      const jj = await rr.json().catch(() => ({}));
+      if (jj && jj.success && jj.data && Array.isArray(jj.data.description_blocks)) blocks = jj.data.description_blocks;
+    } catch (e) { /* fall back to the flag below */ }
+  }
+  const hasBlocks = (Array.isArray(blocks) && blocks.length > 0) || _paHasBlocks(row);
   const revertFresh = () => hasBlocks ? Promise.resolve() : pdDesignOff(id);
   // Already designed: don't silently keep the old sections — offer a rebuild.
   if (hasBlocks && !skipConfirm) {
+    const n = Array.isArray(blocks) ? blocks.length : 0;
     const ok = confirm(cuT(
-      'This product already has ' + blocks.length + ' designed section(s).\n\nRebuild them from the current description? This replaces the existing sections.',
-      '该商品已有 ' + blocks.length + ' 个板块。\n\n要根据当前描述重新生成吗?这将替换现有板块。'));
+      'This product already has ' + (n ? n + ' designed section(s)' : 'a designed page') + '.\n\nRebuild it from the current description? This replaces the existing sections.',
+      '该商品已有' + (n ? n + ' 个板块' : '已设计的页面') + '。\n\n要根据当前描述重新生成吗?这将替换现有板块。'));
     if (!ok) { toast(cuT('Kept the existing design — open the Product editor to edit it', '已保留现有设计,可在产品页编辑器中编辑'), 'ok'); return; }
   }
   // Read the description straight from the editor (cleaned HTML → plain text).
