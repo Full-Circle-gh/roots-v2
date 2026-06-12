@@ -1154,6 +1154,15 @@ function itemSkuHtml(it) {
   return `<span class="item-sku">${it.sku ? escapeHtml(it.sku) : 'no SKU'}</span>`;
 }
 
+// Chosen customer options (dressing, paid extras) for an order line, parsed
+// from options_json server-side into it.options = [{label, ...}]. Shown so the
+// operator/packer sees "which dressing" — two same-SKU salads differ only here.
+function itemOptionsHtml(it) {
+  const txt = (Array.isArray(it.options) ? it.options : [])
+    .map(o => escapeHtml((o && o.label) || '')).filter(Boolean).join(' · ');
+  return txt ? `<div class="oi-opts">▸ ${txt}</div>` : '';
+}
+
 // One line of the packing manifest. `opts.index` (1-based) renders the
 // 01 / 02 … brass line number; `opts.showPack` toggles the pack badges.
 function renderItemRow(it, opts = {}) {
@@ -1182,6 +1191,7 @@ function renderItemRow(it, opts = {}) {
           <span class="item-unit">@ ¥${fmt(it.unit_price)}</span>
           ${showPack ? `<span class="mf-packs">${renderPackBadges(it)}</span>` : ''}
         </div>
+        ${itemOptionsHtml(it)}
       </div>
     </div>`;
 }
@@ -1297,7 +1307,7 @@ function renderItemsAsGrid(items, showPack = true) {
     return `<div class="oi-row" data-fk="${it.id}">
       <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
         ${itemThumb(it)}
-        <div style="min-width:0">${nameCell}${zh}<div style="margin-top:4px">${itemSkuHtml(it)}</div>${renderBundleInside(it)}</div>
+        <div style="min-width:0">${nameCell}${zh}<div style="margin-top:4px">${itemSkuHtml(it)}</div>${itemOptionsHtml(it)}${renderBundleInside(it)}</div>
       </div>
       <span class="oi-c">${itemQtyHtml(it)}</span>
       <span class="oi-r">¥${fmt(it.unit_price)}</span>
@@ -1331,6 +1341,7 @@ function renderItemsAsCards(items, showPack = true) {
         <span class="item-unit">@ ¥${fmt(it.unit_price)}</span>
         ${showPack ? `<span class="oic-packs">${renderPackBadges(it)}</span>` : ''}
       </div>
+      ${itemOptionsHtml(it)}
       ${renderBundleInside(it)}
     </div>`;
   }).join('');
