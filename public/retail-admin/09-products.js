@@ -2304,7 +2304,20 @@ function pdLightbox(start) {
     count.textContent = multi ? `${i + 1} / ${_pdGallery.length}` : '';
   };
   const step = d => { i = (i + d + _pdGallery.length) % _pdGallery.length; show(); };
-  const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
+  // Browser-history integration: opening this full-screen viewer pushes a
+  // throwaway history entry, so the operator's instinct to press the browser
+  // Back button (the viewer covers the whole app and reads like a new page)
+  // CLOSES the lightbox instead of navigating off the admin entirely. Closing
+  // any other way (✕ / backdrop / Esc) consumes that entry via history.back().
+  let closed = false, closedViaPop = false;
+  const close = () => {
+    if (closed) return; closed = true;
+    box.remove();
+    document.removeEventListener('keydown', onKey);
+    window.removeEventListener('popstate', onPop);
+    if (!closedViaPop) history.back();  // unwind the entry we pushed
+  };
+  const onPop = () => { closedViaPop = true; close(); };
   const onKey = e => {
     if (e.key === 'Escape') close();
     else if (e.key === 'ArrowLeft') step(-1);
@@ -2317,6 +2330,8 @@ function pdLightbox(start) {
     else close();                       // backdrop or ✕ closes
   });
   document.addEventListener('keydown', onKey);
+  history.pushState({ pdLightbox: true }, '');
+  window.addEventListener('popstate', onPop);
   document.body.appendChild(box);
   show();
 }
