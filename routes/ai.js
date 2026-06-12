@@ -1,6 +1,10 @@
 const express = require('express');
 const db = require('../database');
 const { requireAuth, requireAdmin, requirePermission, logActivity } = require('../middleware/auth');
+// Shared lenient tool-argument recovery (relay can stringify / mis-escape a
+// tool_use input or a nested field). This module is the canonical home; ai.js
+// uses its own provider abstraction below but reuses these pure helpers.
+const { parseToolInput, escapeStrayJsonQuotes } = require('../lib/model-gateway');
 const router = express.Router();
 
 // ─────────────────────────────────────────────────────────────────────
@@ -500,37 +504,12 @@ function mergeStackedBilingual(blocks) {
   return enOnly.map((en, i) => mergeEnCnBlock(en, cnOnly[i]));
 }
 
-// Some relay / global-inference paths return the emit_blocks argument with
-// `blocks` as a PRE-SERIALIZED JSON string instead of a native array — and
-// that inner JSON sometimes carries UNESCAPED double-quotes inside a text
-// value (e.g. a Chinese line like 这是给"…"准备的). JSON.parse then throws and
-// the WHOLE design drops to zero blocks ("Couldn't build the design"). Recover
-// it: parse strictly first, then re-escape stray in-string quotes and retry.
-// Always returns an array; worst case is the same empty result as before.
-function escapeStrayJsonQuotes(s) {
-  let out = '', inStr = false, esc = false;
-  for (let i = 0; i < s.length; i++) {
-    const c = s[i];
-    if (esc) { out += c; esc = false; continue; }
-    if (c === '\\') { out += c; esc = true; continue; }
-    if (c === '"') {
-      if (!inStr) { inStr = true; out += c; continue; }
-      // Inside a string: a genuine terminator is followed (past whitespace) by
-      // a structural token or end-of-input; anything else is content to escape.
-      let j = i + 1;
-      while (j < s.length && /\s/.test(s[j])) j++;
-      const next = s[j];
-      if (next === undefined || next === ':' || next === ',' || next === '}' || next === ']') {
-        inStr = false; out += c;
-      } else {
-        out += '\\"';
-      }
-      continue;
-    }
-    out += c;
-  }
-  return out;
-}
+// The emit_blocks `blocks` argument can arrive as a PRE-SERIALIZED JSON string
+// (relay behavior) whose inner JSON sometimes has UNESCAPED double-quotes in a
+// text value (e.g. a Chinese line like 这是给"…"准备的). JSON.parse then throws
+// and the WHOLE design drops to zero blocks ("Couldn't build the design").
+// Recover it via the shared escapeStrayJsonQuotes; always returns an array, so
+// worst case is the same empty result as before.
 function parseBlocksArg(blocks) {
   if (Array.isArray(blocks)) return blocks;
   if (typeof blocks !== 'string') return [];
@@ -685,12 +664,12 @@ const composeBlocksHandler = async (req, res) => {
       });
       let rawBlocks = [];
       const toolUse = (result.content_blocks || []).find(b => b.type === 'tool_use' && b.name === 'emit_blocks');
-      let input = toolUse && toolUse.input;
-      if (typeof input === 'string') { try { input = JSON.parse(input); } catch (e) { input = null; } }
-      // `input.blocks` may be a native array OR a (sometimes malformed) JSON
-      // string from a relay — parseBlocksArg handles both and recovers stray
-      // unescaped quotes rather than dropping the whole design to zero.
-      rawBlocks = parseBlocksArg(input && input.blocks);
+      // The input may be a native object OR a (sometimes mis-escaped) JSON
+      // string from a relay; parseToolInput normalizes that. `input.blocks` may
+      // ITSELF be a stringified array — parseBlocksArg handles that second
+      // layer and recovers stray quotes rather than dropping the design to zero.
+      const input = parseToolInput(toolUse && toolUse.input);
+      rawBlocks = parseBlocksArg(input.blocks);
       if (!rawBlocks.length) {
         // Fallback: a provider returned JSON as text instead of a tool call.
         const txt = (result.content_blocks || []).filter(b => b.type === 'text').map(b => b.text || '').join('\n');
@@ -3211,15 +3190,18 @@ router.post('/api/ai/chat', requireAuth, async (req, res) => {
       messages.push({ role: 'assistant', content: blocks });
       const toolResults = [];
       for (const tu of toolUses) {
+        // A relay can hand back tu.input as a (possibly mis-escaped) JSON
+        // string; normalize before the handler reads its fields.
+        const toolInput = parseToolInput(tu.input);
         let output;
         try {
           const handler = TOOL_HANDLERS[tu.name];
           if (!handler) output = { error: 'unknown tool: ' + tu.name };
-          else          output = handler(tu.input || {}, { user_id: req.user.id });
+          else          output = handler(toolInput, { user_id: req.user.id });
         } catch (e) {
           output = { error: 'tool error: ' + (e.message || 'unknown') };
         }
-        toolCalls.push({ name: tu.name, input: tu.input, output });
+        toolCalls.push({ name: tu.name, input: toolInput, output });
         toolResults.push({
           type: 'tool_result',
           tool_use_id: tu.id,
