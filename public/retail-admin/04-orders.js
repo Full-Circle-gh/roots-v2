@@ -2081,8 +2081,10 @@ function renderShipmentTrackingCard(o, s) {
         <select id="trk-carrier-${sid}" style="min-width:180px;">${carrierOpts}</select>
         <input type="text" id="trk-number-${sid}" value="${has ? escapeHtml(t.number) : ''}" placeholder="Tracking / waybill number" style="flex:1; min-width:200px; font-family: var(--f-mono);">
         <button class="btn ${has ? 'btn-primary' : ''} btn-sm" onclick="saveTracking(${o.id}, ${sid})">${has ? 'Update' : 'Save tracking'}</button>
+        ${has && t.carrier_code === 'jd' ? `<button class="btn btn-sm" style="color:var(--danger);" onclick="cancelJdPickup(${o.id}, ${sid}, event)">Cancel JD pickup · 取消揽收</button>` : ''}
         ${has ? `<button class="btn btn-sm" onclick="clearTracking(${o.id}, ${sid})">Clear · 清除</button>` : ''}
       </div>
+      ${has && t.carrier_code === 'jd' ? `<div class="muted" style="font-size:11px; margin-top:6px;">“Cancel JD pickup” calls off the courier with JD. “Clear” only removes the number locally (courier still comes).</div>` : ''}
       ${!has ? `<div class="muted" style="font-size:11px; margin-top:6px;">A hand-entered JD personal waybill (JDV0…) won't sync free — use “Create JD label” above, or 快递100 (paid) via Retry sync.</div>` : ''}
     </div>`;
 }
@@ -2197,6 +2199,28 @@ async function createJdLabel(orderId, shipmentId, ev) {
       toast('Set the store’s sender phone first (Settings → Stores) · 请先在门店设置寄件电话', 'err');
     }
   }
+}
+
+// Cancel the JD courier for this parcel via JD's own API (pre-pickup cancel,
+// falling back to in-transit intercept). Unlike "Clear", this actually calls
+// off the courier. On success the waybill is removed + the order may roll back
+// to preparing.
+async function cancelJdPickup(orderId, shipmentId, ev) {
+  if (!confirm('Cancel the JD pickup / recall this parcel with JD?\n向京东取消揽收 / 拦截此包裹？')) return;
+  const qs = shipmentId ? '?shipment_id=' + shipmentId : '';
+  try {
+    const r = await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/jd-waybill/cancel${qs}`,
+      method: 'POST', body: { shipment_id: shipmentId },
+      errLabelEn: 'JD cancel failed', errLabelCn: '取消揽收失败',
+    });
+    toast(r?.data?.method === 'intercept'
+      ? 'JD parcel intercepted (was already collected) · 已拦截在途包裹'
+      : 'JD pickup cancelled · 已取消揽收');
+    openOrder(orderId, { instant: true });
+    loadOrders();
+  } catch {}
 }
 
 // ─── Partial / late fulfillment (per-shipment) ──────────────────────────

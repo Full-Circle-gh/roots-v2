@@ -12108,6 +12108,76 @@ router.delete('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, (req,
   res.json({ success: true });
 });
 
+// Cancel a JD pickup through JD's OWN API, then clear the waybill off the parcel.
+// Tries pre-pickup cancel (delivery.provider.cancelWayBill) first; if JD rejects
+// it (typically because the courier already collected the parcel) it falls back
+// to intercept (receive.order.intercept = in-transit recall). On success the
+// waybill is cleared and the parcel un-dispatched; if no parcel is still out, the
+// order rolls back dispatched → preparing. NOTE: "Clear · 清除" only forgets the
+// number locally — THIS is what actually calls off the courier.
+router.post('/api/retail-admin/orders/:id/jd-waybill/cancel', requireRetailAdmin, express.json(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const shipmentIdReq = req.body?.shipment_id != null ? parseInt(req.body.shipment_id, 10) : null;
+  const jc = integ().jd;
+  if (!jd.jdEnabled(jc)) return res.status(409).json({ success: false, error: 'jd_not_configured' });
+
+  const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const shipments = ensureShipments(id);
+  const s = shipmentIdReq
+    ? shipments.find(x => x.id === shipmentIdReq)
+    : (shipments.find(x => x.tracking_carrier === 'jd' && x.tracking_number) || shipments[0]);
+  if (!s) return res.status(400).json({ success: false, error: 'invalid_shipment_id' });
+  if (s.tracking_carrier !== 'jd' || !s.tracking_number) {
+    return res.status(400).json({ success: false, error: 'no_jd_waybill' });
+  }
+  const waybill = s.tracking_number;
+  const reason = String(req.body?.reason || 'merchant_cancelled').slice(0, 100);
+
+  let method = 'cancel';
+  let r;
+  try { r = await jd.cancelWaybill(waybill, reason, req.user.username, jc); }
+  catch (e) { console.error('[jd.cancel] threw', e); return res.status(502).json({ success: false, error: 'jd_request_failed' }); }
+  if (!r.ok) {
+    // Pre-pickup cancel refused — try an in-transit intercept instead.
+    let it;
+    try { it = await jd.interceptWaybill(waybill, reason, jc); }
+    catch (e) { console.error('[jd.intercept] threw', e); it = { ok: false, error: 'jd_request_failed' }; }
+    if (it.ok) { method = 'intercept'; }
+    else return res.status(502).json({ success: false, error: 'jd_cancel_failed', cancel_error: r.error, intercept_error: it.error });
+  }
+
+  // Clear the waybill off the parcel + un-dispatch it (mirror to order if primary).
+  tdb().prepare(
+    `UPDATE retail_shipments
+        SET tracking_carrier = NULL, tracking_number = NULL, tracking_status = NULL,
+            tracking_events_json = NULL, tracking_synced_at = NULL, tracking_last_error = NULL,
+            tracking_kd100_subscribed = 0, dispatched_at = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`).run(s.id);
+  if (s.id === shipments[0].id) {
+    tdb().prepare(
+      `UPDATE retail_orders
+          SET tracking_carrier = NULL, tracking_number = NULL, tracking_status = NULL,
+              tracking_events_json = NULL, tracking_synced_at = NULL, tracking_last_error = NULL,
+              tracking_kd100_subscribed = 0, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`).run(id);
+  }
+
+  // If nothing is dispatched anymore, roll the order back to preparing.
+  let rolledBack = false;
+  if (o.status === 'dispatched') {
+    const stillOut = tdb().prepare(
+      "SELECT COUNT(*) AS n FROM retail_shipments WHERE order_id = ? AND (dispatched_at IS NOT NULL OR delivered_at IS NOT NULL)").get(id).n;
+    if (!stillOut) {
+      tdb().prepare("UPDATE retail_orders SET status = 'preparing', dispatched_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'dispatched'").run(id);
+      rolledBack = true;
+    }
+  }
+  logActivity(req.user.id, req.user.username, 'jd_waybill_cancelled', 'retail_order', id,
+    { waybill, method, rolled_back: rolledBack }, req.ip);
+  res.json({ success: true, data: { id, shipment_id: s.id, waybill, method, order_status: rolledBack ? 'preparing' : o.status } });
+});
+
 // Status transitions. Allowed steps and the timestamp column they touch.
 // Stays explicit so accidental sql-injection-style status values can't slip in.
 const STATUS_TRANSITIONS = {
