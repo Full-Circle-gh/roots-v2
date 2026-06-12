@@ -1995,7 +1995,18 @@
   .bp-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 14px; padding: 3px 8px 3px 12px; font-size: 12px; color: var(--text-1); }
   .bp-chip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
   .bp-chip-qty { display: inline-flex; align-items: center; gap: 3px; color: var(--text-3); flex: none; }
-  .bp-chip-qty input { width: 40px; padding: 2px 4px; font-size: 12px; text-align: center; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--bg-pane); color: var(--text-1); -moz-appearance: textfield; }
+  /* Scope under the container #id so this beats the base input[type=number] rule
+     (equal specificity, but that one is later in the file → it would otherwise
+     win and re-apply 8px 10px padding, squeezing the digit to a sliver). */
+  #pd-bundle-product .bp-chip-qty input {
+    width: 46px; height: 28px; box-sizing: border-box;
+    padding: 0 4px; font: 13px var(--f-sans); line-height: 26px; text-align: center;
+    border: 1px solid var(--line-soft); border-radius: 6px;
+    background: var(--bg-pane); color: var(--text-1);
+    appearance: textfield; -moz-appearance: textfield;
+  }
+  #pd-bundle-product .bp-chip-qty input::-webkit-outer-spin-button,
+  #pd-bundle-product .bp-chip-qty input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .bp-chip-x { border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 13px; line-height: 1; padding: 0 2px; flex: none; }
   .bp-chip-x:hover { color: var(--brass); }
   /* "Bundle" card pill — flags a product that is sold as one but made of others. */
