@@ -369,7 +369,14 @@ document.querySelector('[data-tab="products"]').addEventListener('click', () => 
 });
 
 document.getElementById('pa-search').addEventListener('input', _paDebouncedRender);
-document.getElementById('pa-filter').addEventListener('change', () => { PA_PAGE = 1; paRender(); });
+document.getElementById('pa-filter').addEventListener('change', () => {
+  PA_PAGE = 1;
+  const sub = document.getElementById('pa-subfilter');
+  if (sub) sub.value = 'all';          // picking a new category resets the subcategory
+  paFillSubFilter();
+  paRender();
+});
+document.getElementById('pa-subfilter').addEventListener('change', () => { PA_PAGE = 1; paRender(); });
 // Keyboard support for the role="button" KPI quick-filter tiles.
 document.querySelectorAll('.pa-kpi-click').forEach(tile =>
   tile.addEventListener('keydown', e => {
@@ -545,6 +552,47 @@ function paFillCatFilter() {
       return `<option value="${escapeAttr(c)}">${escapeHtml(c)}${cn}</option>`;
     }).join('');
   sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
+  paFillSubFilter();   // keep the dependent subcategory select in sync
+}
+
+// Populate the toolbar SUBcategory filter for the currently-picked top category.
+// Hidden when "All categories" is selected (nothing to narrow). Options = the
+// canonical tree's subs that actually have products here, plus any stray
+// subcategory string present on a product but missing from the tree (catches
+// post-rename drift). Lets the operator isolate one subcategory and drag-to-
+// reorder within just it — the reorder endpoint is slot-preserving, so shuffling
+// only a subcategory's ids never disturbs the rest of the category.
+function paFillSubFilter() {
+  const top = document.getElementById('pa-filter');
+  const sub = document.getElementById('pa-subfilter');
+  if (!top || !sub) return;
+  const cat = top.value;
+  if (!cat || cat === 'all') {
+    sub.innerHTML = '<option value="all">All subcategories · 全部子分类</option>';
+    sub.value = 'all';
+    sub.style.display = 'none';
+    return;
+  }
+  const cur = sub.value || 'all';
+  const node = (PA_CAT_TREE || []).find(t => t && t.name === cat);
+  const treeSubs = node ? (node.subs || []) : [];
+  const cnOf = {};
+  treeSubs.forEach(s => { if (s && s.name) cnOf[s.name] = s.name_cn || ''; });
+  const treeOrder = treeSubs.map(s => s.name).filter(Boolean);
+  // Subcategories actually present on this category's products.
+  const present = new Set(PA_PRODUCTS
+    .filter(p => (p.top_category || p.category || '').trim() === cat)
+    .map(p => (p.subcategory || '').trim())
+    .filter(Boolean));
+  const extras = [...present].filter(s => !treeOrder.includes(s)).sort((a, b) => a.localeCompare(b));
+  const subs = [...treeOrder.filter(s => present.has(s)), ...extras];
+  sub.innerHTML = '<option value="all">All subcategories · 全部子分类</option>' +
+    subs.map(s => {
+      const cn = cnOf[s] ? ' · ' + escapeHtml(cnOf[s]) : '';
+      return `<option value="${escapeAttr(s)}">${escapeHtml(s)}${cn}</option>`;
+    }).join('');
+  sub.value = [...sub.options].some(o => o.value === cur) ? cur : 'all';
+  sub.style.display = subs.length ? '' : 'none';
 }
 
 // "Has designer sections?" The catalogue list now sends a lightweight
@@ -1034,6 +1082,11 @@ function paRender() {
   }
   if (filter && filter !== 'all') {
     rows = rows.filter(p => (p.top_category || p.category || '').trim() === filter);
+  }
+  const subEl = document.getElementById('pa-subfilter');
+  const subFilter = (filter && filter !== 'all' && subEl) ? subEl.value : 'all';
+  if (subFilter && subFilter !== 'all') {
+    rows = rows.filter(p => (p.subcategory || '').trim() === subFilter);
   }
   if (PA_STATUS !== 'all') {
     rows = rows.filter(_paStatusMatch);
