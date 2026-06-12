@@ -500,6 +500,51 @@ function mergeStackedBilingual(blocks) {
   return enOnly.map((en, i) => mergeEnCnBlock(en, cnOnly[i]));
 }
 
+// Some relay / global-inference paths return the emit_blocks argument with
+// `blocks` as a PRE-SERIALIZED JSON string instead of a native array — and
+// that inner JSON sometimes carries UNESCAPED double-quotes inside a text
+// value (e.g. a Chinese line like 这是给"…"准备的). JSON.parse then throws and
+// the WHOLE design drops to zero blocks ("Couldn't build the design"). Recover
+// it: parse strictly first, then re-escape stray in-string quotes and retry.
+// Always returns an array; worst case is the same empty result as before.
+function escapeStrayJsonQuotes(s) {
+  let out = '', inStr = false, esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (esc) { out += c; esc = false; continue; }
+    if (c === '\\') { out += c; esc = true; continue; }
+    if (c === '"') {
+      if (!inStr) { inStr = true; out += c; continue; }
+      // Inside a string: a genuine terminator is followed (past whitespace) by
+      // a structural token or end-of-input; anything else is content to escape.
+      let j = i + 1;
+      while (j < s.length && /\s/.test(s[j])) j++;
+      const next = s[j];
+      if (next === undefined || next === ':' || next === ',' || next === '}' || next === ']') {
+        inStr = false; out += c;
+      } else {
+        out += '\\"';
+      }
+      continue;
+    }
+    out += c;
+  }
+  return out;
+}
+function parseBlocksArg(blocks) {
+  if (Array.isArray(blocks)) return blocks;
+  if (typeof blocks !== 'string') return [];
+  const tryParse = str => {
+    try {
+      const v = JSON.parse(str);
+      if (Array.isArray(v)) return v;
+      if (v && Array.isArray(v.blocks)) return v.blocks;
+      return null;
+    } catch (e) { return null; }
+  };
+  return tryParse(blocks) || tryParse(escapeStrayJsonQuotes(blocks)) || [];
+}
+
 const COMPOSE_TOOL = {
   name: 'emit_blocks',
   description: 'Return the product copy organised into ordered Roots description blocks.',
@@ -642,9 +687,11 @@ const composeBlocksHandler = async (req, res) => {
       const toolUse = (result.content_blocks || []).find(b => b.type === 'tool_use' && b.name === 'emit_blocks');
       let input = toolUse && toolUse.input;
       if (typeof input === 'string') { try { input = JSON.parse(input); } catch (e) { input = null; } }
-      if (input && Array.isArray(input.blocks)) {
-        rawBlocks = input.blocks;
-      } else {
+      // `input.blocks` may be a native array OR a (sometimes malformed) JSON
+      // string from a relay — parseBlocksArg handles both and recovers stray
+      // unescaped quotes rather than dropping the whole design to zero.
+      rawBlocks = parseBlocksArg(input && input.blocks);
+      if (!rawBlocks.length) {
         // Fallback: a provider returned JSON as text instead of a tool call.
         const txt = (result.content_blocks || []).filter(b => b.type === 'text').map(b => b.text || '').join('\n');
         const m = txt.match(/\{[\s\S]*\}/);
