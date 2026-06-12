@@ -11510,11 +11510,12 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
   // tenant's kd100 creds synchronously (before the async fire) so the deferred
   // subscribe runs under this tenant's own account.
   const kc = kd100Creds();
-  // JD waybills track for FREE via JD's own trace.get (for labels we created
-  // under the account) — so JD does NOT auto-subscribe to the paid 快递100
-  // push. It stays opt-in: the operator can still 快递100-track a hand-entered
-  // personal JD number via the "resubscribe" action. Other carriers auto-sub.
-  if (carrier !== 'jd' && tracking.kd100Enabled(kc) && tracking.KD100_CARRIER_MAP[carrier]) {
+  // A MANUALLY-entered number auto-subscribes to 快递100 (paid) so it tracks in
+  // the customer app — incl. JD, because a hand-typed personal JDV0… waybill
+  // ISN'T under our JD account, so JD's free trace.get can't see it. (Labels
+  // made via "Create JD label" never reach this path → they stay free on JD's
+  // own trace.) Only carriers 快递100 maps are subscribed.
+  if (tracking.kd100Enabled(kc) && tracking.KD100_CARRIER_MAP[carrier]) {
     tracking.subscribeWithKd100({
       orderId: id, carrierCode: carrier, trackingNumber: number,
       recipientPhone: o.recipient_phone,
@@ -11922,8 +11923,9 @@ router.post('/api/retail-admin/orders/bulk-tracking', requireRetailAdmin, expres
       try { notifyOrderStatusChange(o.id, 'dispatched'); } catch (e) { /* best-effort */ }
     }
 
-    // JD tracks free via its own API — don't auto-subscribe it to paid 快递100.
-    if (carrier !== 'jd' && tracking.kd100Enabled(kc) && tracking.KD100_CARRIER_MAP[carrier]) {
+    // Manually-entered numbers auto-subscribe to 快递100 (incl. JD — a hand-typed
+    // personal JDV0… isn't on our JD account, so JD's free trace can't see it).
+    if (tracking.kd100Enabled(kc) && tracking.KD100_CARRIER_MAP[carrier]) {
       subscribeQueue.push({ orderId: o.id, carrier, number, phone: o.recipient_phone });
     }
 

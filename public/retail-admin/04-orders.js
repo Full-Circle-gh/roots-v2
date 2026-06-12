@@ -2096,7 +2096,7 @@ function renderShipmentTrackingCard(o, s) {
         ${has ? `<button class="btn btn-sm" onclick="clearTracking(${o.id}, ${sid})">Clear · 清除</button>` : ''}
       </div>
       ${has && t.carrier_code === 'jd' ? `<div class="muted" style="font-size:11px; margin-top:6px;">“Cancel JD pickup” calls off the courier with JD. “Clear” only removes the number locally (courier still comes).</div>` : ''}
-      ${!has ? `<div class="muted" style="font-size:11px; margin-top:6px;">A hand-entered JD personal waybill (JDV0…) won't sync free — use “Create JD label” above, or 快递100 (paid) via Retry sync.</div>` : ''}
+      ${!has ? `<div class="muted" style="font-size:11px; margin-top:6px;">A manually-entered number tracks via 快递100 (paid) — incl. a personal JD JDV0… number. For free JD tracking, use “Create JD label” above instead.</div>` : ''}
     </div>`;
 }
 
