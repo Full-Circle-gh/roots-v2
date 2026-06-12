@@ -2161,7 +2161,12 @@ function pdGalleryWire() {
   if (!wrap || wrap._wired) return;
   wrap._wired = true;
   wrap.addEventListener('click', e => {
-    const x = e.target.closest('.pd-thumb-x'); if (x) pdRemovePhoto(parseInt(x.dataset.rm, 10));
+    const x = e.target.closest('.pd-thumb-x');
+    if (x) { pdRemovePhoto(parseInt(x.dataset.rm, 10)); return; }
+    // Click the photo itself (not the ✕) → open it big in a lightbox.
+    const t = e.target.closest('.pd-thumb'); if (!t) return;
+    const i = parseInt(t.dataset.i, 10);
+    if (Number.isFinite(i) && _pdGallery[i]) pdLightbox(i);
   });
   wrap.addEventListener('dragstart', e => {
     const t = e.target.closest('.pd-thumb'); if (!t) return;
@@ -2189,6 +2194,46 @@ function pdGalleryWire() {
     }
     _pdDragFrom = null;
   });
+}
+// Lightbox — show a gallery photo big (full size, contained on screen). Click
+// the backdrop, the ✕, or press Esc to close; ‹ › step through the gallery.
+function pdLightbox(start) {
+  let i = start;
+  const old = document.getElementById('pd-lightbox');
+  if (old) old.remove();
+  const box = document.createElement('div');
+  box.id = 'pd-lightbox';
+  box.innerHTML = `
+    <button type="button" class="pd-lb-x" title="${cuT('Close', '关闭')}">×</button>
+    <button type="button" class="pd-lb-nav pd-lb-prev" title="${cuT('Previous', '上一张')}">‹</button>
+    <img class="pd-lb-img" alt="">
+    <button type="button" class="pd-lb-nav pd-lb-next" title="${cuT('Next', '下一张')}">›</button>
+    <div class="pd-lb-count"></div>`;
+  const img = box.querySelector('.pd-lb-img');
+  const count = box.querySelector('.pd-lb-count');
+  const show = () => {
+    img.src = _pdGallery[i] || '';
+    const multi = _pdGallery.length > 1;
+    box.querySelector('.pd-lb-prev').style.display = multi ? '' : 'none';
+    box.querySelector('.pd-lb-next').style.display = multi ? '' : 'none';
+    count.textContent = multi ? `${i + 1} / ${_pdGallery.length}` : '';
+  };
+  const step = d => { i = (i + d + _pdGallery.length) % _pdGallery.length; show(); };
+  const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => {
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowLeft') step(-1);
+    else if (e.key === 'ArrowRight') step(1);
+  };
+  box.addEventListener('click', e => {
+    if (e.target.closest('.pd-lb-prev')) step(-1);
+    else if (e.target.closest('.pd-lb-next')) step(1);
+    else if (e.target === img) return; // click the image itself = no-op
+    else close();                       // backdrop or ✕ closes
+  });
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(box);
+  show();
 }
 // "Product editor" — opens the full page designer in a new tab. Needs a saved
 // product (the editor loads it by id), so prompt to save a brand-new one first.
