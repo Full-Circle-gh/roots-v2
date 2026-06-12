@@ -2185,6 +2185,29 @@ function renderShipmentTrackingCard(o, s) {
     }
   }
 
+  // Recycled-waybill warning: the same number is already attached to another
+  // order. If that order already delivered, kd100 won't replay events for it,
+  // so this card would sit at "Waiting for the first update" forever despite
+  // the green sync badge. Surface it loudly so the operator re-checks the number
+  // instead of waiting on a sync that will never come.
+  let reuseBanner = '';
+  if (has && t.reuse_warning) {
+    const w = t.reuse_warning;
+    const en = w.delivered
+      ? `This waybill is already on a delivered order (${escapeHtml(w.order_no)}). A reused number won't sync live — double-check it's correct.`
+      : `This waybill is also attached to order ${escapeHtml(w.order_no)} (${escapeHtml(w.status)}). Reused numbers may not sync live.`;
+    const cn = w.delivered
+      ? `此运单号已用于一笔已签收订单(${escapeHtml(w.order_no)})。重复运单号不会实时同步,请核对。`
+      : `此运单号也绑定在订单 ${escapeHtml(w.order_no)}(${escapeHtml(w.status)})上。重复运单号可能无法实时同步。`;
+    reuseBanner = `
+      <div style="display:flex; gap:8px; align-items:flex-start; padding:8px 10px; margin-bottom:10px;
+                  background: var(--danger-bg, #fbeaea); border:1px solid var(--danger, #c0392b);
+                  border-radius:6px; font-size:12px; line-height:1.4; color: var(--danger, #c0392b);">
+        <span>⚠️</span>
+        <div><div>${en}</div><div style="margin-top:2px;">${cn}</div></div>
+      </div>`;
+  }
+
   const eventsBlock = (has && t.events && t.events.length) ? `
     <div style="margin-top:14px; border-top: 1px dashed var(--line-soft); padding-top:10px;">
       <div class="muted" style="font-size:10px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:6px;">Recent events · 最近事件</div>
@@ -2204,6 +2227,7 @@ function renderShipmentTrackingCard(o, s) {
   return `
     <div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);" id="trk-card-${sid}">
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Tracking · 物流</div>
+      ${reuseBanner}
       ${has ? `
         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:10px;">
           <div>
@@ -2433,11 +2457,16 @@ async function saveTracking(orderId, shipmentId, ev) {
     drafts.push({ sid, number: draft, carrier: document.getElementById('trk-carrier-' + sid)?.value });
   });
   try {
-    await adminWrite({
+    const res = await adminWrite({
       btn: ev?.currentTarget, url: `/api/retail-admin/orders/${orderId}/tracking`,
       method: 'PUT', body, errLabelEn: 'Save failed', errLabelCn: '保存失败',
     });
-    toast('Tracking saved · 运单号已保存');
+    const w = res?.data?.tracking?.reuse_warning;
+    if (w) {
+      toast(`⚠️ Waybill already on order ${w.order_no}${w.delivered ? ' (delivered)' : ''} — reused numbers may not sync live · 运单号重复,可能无法实时同步`, 'err', 8000);
+    } else {
+      toast('Tracking saved · 运单号已保存');
+    }
     // openOrder() rebuilds the whole drawer body, which yanks scroll back to the
     // top — jarring when the operator is mid-list updating a parcel. Snapshot the
     // scroll offset and restore it once the re-render lands.

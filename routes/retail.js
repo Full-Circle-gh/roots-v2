@@ -4682,6 +4682,32 @@ function buildShipmentTrackingView(s) {
   if (s.tracking_scenario_data_json) {
     try { scenario = JSON.parse(s.tracking_scenario_data_json); } catch { scenario = null; }
   }
+  // Operator guard: flag when this exact waybill number is ALSO attached to a
+  // different order. kd100 keys subscriptions by company+number, so re-using a
+  // recycled number returns "重复订阅" and — if the original parcel already
+  // closed out (delivered/shutdown) — kd100 never replays events. The card
+  // would otherwise sit at "Waiting for the first update" forever with the
+  // green sync badge lit, which reads as a bug. This is operator-only context
+  // (the customer-facing split-parcel path cherry-picks fields and never spreads
+  // the full view, so it doesn't leak). Skipped when order_id is absent.
+  let reuse_warning = null;
+  if (s.order_id != null) {
+    try {
+      const other = tdb().prepare(
+        `SELECT order_no, status FROM retail_orders
+          WHERE tracking_number = ? AND id <> ?
+          ORDER BY CASE status WHEN 'delivered' THEN 0 ELSE 1 END, id DESC
+          LIMIT 1`
+      ).get(s.tracking_number, s.order_id);
+      if (other) {
+        reuse_warning = {
+          order_no:  other.order_no,
+          status:    other.status,
+          delivered: other.status === 'delivered',
+        };
+      }
+    } catch { /* non-fatal — never block the card on this */ }
+  }
   return {
     shipment_id:     s.id,
     mode:            s.mode,
@@ -4699,6 +4725,7 @@ function buildShipmentTrackingView(s) {
     scenario,
     kd100_subscribed: !!s.tracking_kd100_subscribed,
     last_error:      s.tracking_last_error,
+    reuse_warning,
   };
 }
 
