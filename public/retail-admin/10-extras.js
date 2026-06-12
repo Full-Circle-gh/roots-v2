@@ -599,15 +599,22 @@ const LB_FIELD_TO_ID = {
 // store before real activity exists. Held here as an array of {name, value,
 // tier_key}; saved alongside the rest of the config and blended server-side.
 let LB_SEED_ENTRIES = [];
-// Realistic-looking WeChat-style nicknames. Default reveal masks these to the
-// first character, so the exact text mainly matters in "full" reveal mode.
-const LB_SEED_NAME_POOL = [
-  '小确幸', '清晨慢跑', '绿野仙踪', '一颗西兰花', '山茶花开', '麦田守望者',
-  '半糖主义', '林深时见鹿', '云淡风轻', '番茄炒蛋', '七月的风', '海盐柠檬',
-  '阿杰', '老张同学', '豆豆妈', '江南细雨', '木棉花', '一勺蜂蜜',
-  '南山', '慢慢来', '小满', '橙子味的猫', '晚风', '一只小肥啾',
-  'Leo', 'Coco', 'Mochi', 'Hazel', 'Nina', 'Theo', 'Ricky', 'Mia',
+// Realistic-looking nicknames, split into Western and Chinese pools so the
+// generator can hold a fixed ratio (default 70% Western / 30% Chinese).
+// Default reveal masks these to the first character, so the exact text mainly
+// matters in "full" reveal mode.
+const LB_SEED_NAMES_WEST = [
+  'Emma', 'Oliver', 'Sophie', 'Liam', 'Chloe', 'Lucas', 'Grace', 'Ethan',
+  'Ava', 'Noah', 'Isla', 'Max', 'Ruby', 'Leo', 'Hazel', 'Theo', 'Nina',
+  'Ivy', 'Felix', 'Daisy', 'Owen', 'Lily', 'Jasper', 'Elena', 'Marcus',
+  'Clara', 'Hugo', 'Stella', 'Adrian', 'Naomi', 'Victor', 'Freya',
 ];
+const LB_SEED_NAMES_CN = [
+  '小确幸', '清晨慢跑', '一颗西兰花', '半糖主义', '林深时见鹿', '番茄炒蛋',
+  '海盐柠檬', '江南细雨', '木棉花', '一勺蜂蜜', '南山以南', '慢慢来呀',
+  '小满', '晚风温柔', '橙子味的猫', '麦田守望者',
+];
+const LB_SEED_WEST_RATIO = 0.7;   // 70% Western, 30% Chinese
 // Tier badges aren't shown on the leaderboard page, but keep them plausible
 // for any surface that does read tier_key (top earners trend higher).
 function lbSeedTier(frac) {
@@ -639,7 +646,13 @@ function lbUpdateSeedSummary() {
 function lbGenerateSeed() {
   const max = Math.max(50, parseInt($('#lb-seed-max') && $('#lb-seed-max').value, 10) || 3000);
   const count = Math.max(3, Math.min(50, parseInt($('#lb-seed-count') && $('#lb-seed-count').value, 10) || 18));
-  const names = lbShuffle(LB_SEED_NAME_POOL).slice(0, count);
+  // Hold the Western/Chinese ratio, then shuffle so the two aren't grouped by
+  // rank. Fall back to "Member N" only if a pool runs out at very high counts.
+  const westN = Math.round(count * LB_SEED_WEST_RATIO);
+  const names = lbShuffle(
+    lbShuffle(LB_SEED_NAMES_WEST).slice(0, westN)
+      .concat(lbShuffle(LB_SEED_NAMES_CN).slice(0, count - westN))
+  );
   const entries = [];
   for (let i = 0; i < count; i++) {
     const frac = count > 1 ? i / (count - 1) : 0;           // 0 (top) .. 1 (bottom)
