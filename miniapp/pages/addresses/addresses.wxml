@@ -73,6 +73,9 @@
       <button class="wx-pick-btn f-toni" bindtap="pickFromWechat" disabled="{{wxPicking}}">
         {{wxPicking ? '...' : copy.wxPickBtn}}
       </button>
+      <button class="map-pick-btn f-toni" bindtap="pickOnMap" disabled="{{mapPicking}}">
+        {{mapPicking ? '...' : copy.mapPickBtn}}
+      </button>
     </view>
 
     <view class="field">

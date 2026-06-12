@@ -146,6 +146,7 @@ Page({
     //    wheel. Both write canonical Chinese province/city/district onto
     //    `address`, which is what the zone matcher needs.
     areaLabel: '',        // localized summary shown on the trigger ("Guangzhou · Tianhe")
+    mapPicking: false,    // guards the "Choose on map" (wx.chooseLocation) button
     regionValue: [],      // CN native picker position [省, 市, 区]
     cityOptions: [],      // EN: [{ label, name_cn, name_en }] — for syncAreaLabel city→EN lookup
     cityLabel: '',        // EN: selected city label (label-build helper)
@@ -199,6 +200,8 @@ Page({
       phone: 'Phone',
       addr: 'Address',
       detailPlaceholder: 'Floor / unit / apartment (optional)',
+      mapPickBtn: '📍 Choose on map',
+      mapUnavailable: "Couldn't read the address",
       cutlery: 'Include cutlery',
       invoice: 'Need an invoice',
       invPersonal: 'Personal',
@@ -517,6 +520,120 @@ Page({
       'address.district_en': (d && d.name_en) || '',
     });
     this.refreshQuote();
+  },
+
+  // Open WeChat's native map picker — centers on the customer, lets them drag
+  // the pin / search, and returns a Chinese address. The English-address
+  // answer at checkout: customer points at the spot, we store canonical
+  // Chinese (no translation) and re-quote. Requires scope.userLocation +
+  // chooseLocation in app.json (already declared). Mirrors the addresses page.
+  pickOnMap() {
+    if (this.data.mapPicking) return;
+    this.setData({ mapPicking: true });
+
+    const apply = async (res) => {
+      console.log('[checkout pickOnMap] chooseLocation result:', res);
+      let addressStr = res.address || '';
+      // The generic "Location" (current-position) entry returns bare coords
+      // with no name and an empty address. Reverse-geocode the lat/lng on the
+      // server so the pin still yields a usable 省/市/区 + street instead of a
+      // dead "Couldn't read the address". Falls through to the guidance modal
+      // if no maps key is set or the lookup fails.
+      if (!addressStr && res.latitude != null && res.longitude != null) {
+        try {
+          const r = await api.post('/api/retail/reverse-geocode', { lat: res.latitude, lng: res.longitude });
+          if (r && r.success && r.data && r.data.address) addressStr = r.data.address;
+        } catch (e) { /* fall through to modal */ }
+      }
+      const p = this.parseCnAddress(addressStr);
+      let street = p.rest || '';
+      if (res.name && street.indexOf(res.name) === -1) {
+        street = street ? `${res.name} ${street}` : res.name;
+      }
+      // Coords with an empty address (commonly a VPN issue, or the generic
+      // "Location" list entry with no place name) — don't fake success.
+      if (!street && !p.city && !p.province) {
+        this.setData({ mapPicking: false });
+        wx.showModal({
+          title: this.data.copy.mapUnavailable,
+          content: this.data.lang === 'cn'
+            ? '地图未返回详细地址。请关闭 VPN/加速器后重试,或在列表中选择带名称的地点。'
+            : 'The map returned no address detail. Turn off any VPN and retry, or pick a named place from the list.',
+          showCancel: false,
+          confirmText: this.data.lang === 'cn' ? '知道了' : 'OK',
+        });
+        return;
+      }
+      this.setData({
+        mapPicking: false,
+        // Overwrite the street with the pick (never keep a stale street from a
+        // previously-loaded address — that could pair the new region with an
+        // old, unrelated street). street already folds in the POI name.
+        'address.address': street,
+        'address.province': p.province || '',
+        'address.city': p.city || '',
+        'address.district': p.district || '',
+        // Pin gives Chinese only — clear stale EN companions so the label
+        // stays Chinese (what's stored + shipped) instead of half-translating.
+        'address.province_en': '',
+        'address.city_en': '',
+        'address.district_en': '',
+        cityLabel: p.city || this.data.cityLabel,
+        areaLabel: [p.city, p.district].filter(Boolean).join(' · '),
+      });
+      // Re-quote so the zone-match, delivery fee, and packing fee reflect the
+      // picked city/district — same as onRegionChange / onAreaConfirm.
+      this.refreshQuote();
+      wx.showToast({ title: this.data.lang === 'cn' ? '已选择' : 'Picked', icon: 'success' });
+    };
+
+    const fail = (err) => {
+      this.setData({ mapPicking: false });
+      const msg = (err && err.errMsg) || '';
+      if (/cancel/i.test(msg)) return;                  // backed out — silent
+      if (/auth|deny|权限/i.test(msg)) {
+        wx.openSetting({
+          success: (r) => {
+            if (r.authSetting && r.authSetting['scope.userLocation']) {
+              wx.chooseLocation({ success: apply, fail });
+            }
+          },
+        });
+        return;
+      }
+      wx.showToast({ title: this.data.copy.mapUnavailable, icon: 'none' });
+    };
+
+    if (!wx.chooseLocation) return fail({ errMsg: 'api_missing' });
+    wx.chooseLocation({ success: apply, fail });
+  },
+
+  // Split a flat Chinese address string into { province, city, district, rest }.
+  // chooseLocation returns the address as one string, so we segment on the
+  // standard administrative suffixes. Handles direct-controlled municipalities
+  // (北京/上海/天津/重庆), where the 市 IS the province and the next token is 区.
+  parseCnAddress(input) {
+    const str = String(input || '').trim();
+    const out = { province: '', city: '', district: '', rest: str };
+    let rest = str;
+
+    let m = rest.match(/^(.*?(?:省|特别行政区|自治区))/);
+    if (m) { out.province = m[1]; rest = rest.slice(m[1].length); }
+    else {
+      const muni = rest.match(/^(北京市|上海市|天津市|重庆市)/);
+      if (muni) { out.province = muni[1]; rest = rest.slice(muni[1].length); }
+    }
+
+    m = rest.match(/^(.*?(?:市|自治州|地区|盟))/);
+    if (m) { out.city = m[1]; rest = rest.slice(m[1].length); }
+
+    m = rest.match(/^(.*?(?:区|县|旗))/);
+    if (m) { out.district = m[1]; rest = rest.slice(m[1].length); }
+
+    if (!out.city && /市$/.test(out.province)) out.city = out.province;
+
+    out.rest = rest.trim();
+    return out;
   },
 
   // Lightweight re-fetch used by onShow when the user navigates back from
@@ -978,6 +1095,8 @@ Page({
         phone: '电话',
         addr: '地址',
         detailPlaceholder: '楼层 / 单元 / 公寓 (可选)',
+        mapPickBtn: '📍 地图选点',
+        mapUnavailable: '无法读取地址',
         cutlery: '需要餐具',
         invoice: '需要发票',
         invPersonal: '个人',

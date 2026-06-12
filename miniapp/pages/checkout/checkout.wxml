@@ -22,7 +22,7 @@
           <image wx:if="{{item.image}}" class="line-thumb" src="{{item.image}}" mode="aspectFill"/>
           <view wx:else class="line-thumb line-thumb--empty"></view>
           <view class="line-name">
-            <text>{{item.display_name}}</text>
+            <text class="f-bear">{{item.display_name}}</text>
             <text class="line-meta"> ×{{item.qty}}</text>
             <view wx:if="{{item.display_options}}" class="line-opts f-toni">{{item.display_options}}</view>
           </view>
@@ -102,6 +102,11 @@
 
       <!-- Inline form: shown when no saved addresses OR user wants new. -->
       <block wx:if="{{showNewForm || (!savedAddresses.length && !address.id)}}">
+        <view class="map-pick-wrap">
+          <button class="map-pick-btn f-toni" bindtap="pickOnMap" disabled="{{mapPicking}}">
+            {{mapPicking ? '...' : copy.mapPickBtn}}
+          </button>
+        </view>
         <view class="field">
           <input class="input" placeholder="{{copy.name}}" value="{{address.recipient_name}}" data-field="recipient_name" bindinput="onAddrField"/>
         </view>

@@ -146,18 +146,32 @@
 }
 .wx-pick-wrap {
   padding: 0 44rpx 24rpx;
+  display: flex;
+  gap: 16rpx;
 }
-.wx-pick-btn {
-  width: 100%;
-  background: #07c160;
-  color: #fff;
+.wx-pick-btn,
+.map-pick-btn {
+  flex: 1;
+  width: auto;
   padding: 22rpx 0;
   font-size: calc(24rpx * var(--font-scale));
   letter-spacing: 0.08em;
   text-align: center;
   line-height: 1.2;
 }
-.wx-pick-btn[disabled] { opacity: 0.5; }
+.wx-pick-btn {
+  background: #07c160;
+  color: #fff;
+}
+/* Map picker — brand ink frame so it reads as the "point on a map" option,
+   visually distinct from the green WeChat-address import. */
+.map-pick-btn {
+  background: #FFFCF7;
+  color: var(--ink);
+  border: 3rpx solid var(--ink);
+}
+.wx-pick-btn[disabled],
+.map-pick-btn[disabled] { opacity: 0.5; }
 .field {
   padding: 0 44rpx;
   margin-bottom: 12rpx;

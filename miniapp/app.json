@@ -55,5 +55,11 @@
   },
   "style": "v2",
   "sitemapLocation": "sitemap.json",
-  "lazyCodeLoading": "requiredComponents"
+  "lazyCodeLoading": "requiredComponents",
+  "requiredPrivateInfos": ["chooseLocation", "chooseAddress"],
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于在地图上选择收货地址"
+    }
+  }
 }

@@ -41,6 +41,7 @@ Page({
     loading: true,
     saving: false,
     wxPicking: false,
+    mapPicking: false,
     // Mirror of app.globalData.customer.nickname presence. When false we
     // show the bind-empty card in place of the list + add button — same
     // contract as checkout: addresses tie to WeChat-verified identity.
@@ -62,6 +63,8 @@ Page({
       formEdit: 'Edit address',
       empty: 'No saved addresses yet.',
       wxPickBtn: 'Import from WeChat address',
+      mapPickBtn: '📍 Choose on map',
+      mapUnavailable: 'Map picker unavailable',
       placeholders: {
         name:   'Recipient name',
         phone:  'Phone number',
@@ -165,6 +168,8 @@ Page({
         formEdit: '编辑地址',
         empty: '暂无保存的地址。',
         wxPickBtn: '从微信地址导入',
+        mapPickBtn: '📍 地图选点',
+        mapUnavailable: '地图选点不可用',
         placeholders: {
           name:   '收件人姓名',
           phone:  '手机号码',
@@ -439,6 +444,130 @@ Page({
       },
       fail,
     });
+  },
+
+  // Open WeChat's native map picker — centers on the customer's current
+  // location, lets them drag the pin / search, and returns a Chinese address
+  // ({ name, address, latitude, longitude }) for ANY spot (no need for it to
+  // be in their saved WeChat address book, unlike pickFromWechat). This is the
+  // English-address answer: the customer points at the place and we store
+  // canonical Chinese — nothing to translate. Requires `scope.userLocation`
+  // (declared in app.json) AND the geolocation interface approved for the
+  // AppID in the WeChat MP console — see note in the form WXML.
+  pickOnMap() {
+    if (this.data.mapPicking) return;
+    this.setData({ mapPicking: true });
+
+    const apply = async (res) => {
+      console.log('[pickOnMap] chooseLocation result:', res);
+      // chooseLocation gives a flat Chinese `address` string (no split region)
+      // plus the POI `name`. Parse 省/市/区 out so the served-zone matcher gets
+      // the same canonical fields pickFromWechat feeds it; keep the remainder
+      // (+ POI name) as the street line.
+      let addressStr = res.address || '';
+      // The generic "Location" (current-position) entry returns bare coords
+      // with no name and an empty address. Reverse-geocode the lat/lng on the
+      // server so the pin still yields a usable address instead of a dead
+      // "Couldn't read the address". Falls through to the guidance modal below
+      // if no maps key is set or the lookup fails.
+      if (!addressStr && res.latitude != null && res.longitude != null) {
+        try {
+          const r = await api.post('/api/retail/reverse-geocode', { lat: res.latitude, lng: res.longitude });
+          if (r && r.success && r.data && r.data.address) addressStr = r.data.address;
+        } catch (e) { /* fall through to modal */ }
+      }
+      const p = this.parseCnAddress(addressStr);
+      let street = p.rest || '';
+      // Prefix the POI name as a landmark when it isn't already in the street.
+      if (res.name && street.indexOf(res.name) === -1) {
+        street = street ? `${res.name} ${street}` : res.name;
+      }
+      // WeChat sometimes returns coords with an EMPTY address (commonly when a
+      // VPN is on — its reverse-geocode service is China-geofenced). Don't fake
+      // success: tell the customer why and point them at a working path.
+      if (!street && !p.city && !p.province) {
+        this.setData({ mapPicking: false });
+        wx.showModal({
+          title: this.data.lang === 'cn' ? '无法读取地址' : "Couldn't read the address",
+          content: this.data.lang === 'cn'
+            ? '地图未返回详细地址。请关闭 VPN/加速器后重试,或改用上方“从微信地址导入”。'
+            : 'The map returned no address detail. Turn off any VPN, then retry — or use “Import from WeChat address” above.',
+          showCancel: false,
+          confirmText: this.data.lang === 'cn' ? '知道了' : 'OK',
+        });
+        return;
+      }
+      this.setData({
+        mapPicking: false,
+        // Overwrite the street with the pick (never keep a stale street from a
+        // previously-loaded/edited address — that could pair the new region
+        // with an old, unrelated street). street already folds in the POI name.
+        'form.address': street,
+        'form.province': p.province || '',
+        'form.city': p.city || '',
+        'form.district': p.district || '',
+        // Label the picked region in CHINESE — it's exactly what's stored and
+        // what JD prints on the waybill, so we don't half-translate it to a
+        // mixed "Guangzhou · 天河区". (The native CN picker labels in Chinese
+        // anyway; this just keeps the EN-mode pin flow consistent.)
+        cityLabel: p.city || this.data.cityLabel,
+        areaLabel: [p.city, p.district].filter(Boolean).join(' · '),
+      });
+      wx.showToast({ title: this.data.lang === 'cn' ? '已选择' : 'Picked', icon: 'success' });
+    };
+
+    const fail = (err) => {
+      this.setData({ mapPicking: false });
+      const msg = (err && err.errMsg) || '';
+      if (/cancel/i.test(msg)) return;                  // backed out — stay silent
+      if (/auth|deny|权限/i.test(msg)) {
+        // Previously denied location — bounce them to the setting toggle, then
+        // reopen the picker if they grant it.
+        wx.openSetting({
+          success: (r) => {
+            if (r.authSetting && r.authSetting['scope.userLocation']) {
+              wx.chooseLocation({ success: apply, fail });
+            }
+          },
+        });
+        return;
+      }
+      wx.showToast({ title: this.data.copy.mapUnavailable, icon: 'none' });
+    };
+
+    if (!wx.chooseLocation) return fail({ errMsg: 'api_missing' });
+    wx.chooseLocation({ success: apply, fail });
+  },
+
+  // Split a flat Chinese address string into { province, city, district, rest }.
+  // chooseLocation returns the address as one string (unlike chooseAddress's
+  // structured fields), so we segment on the standard administrative suffixes.
+  // Handles direct-controlled municipalities (北京/上海/天津/重庆), where the
+  // 市 IS the province and the next token is the 区.
+  parseCnAddress(input) {
+    const str = String(input || '').trim();
+    const out = { province: '', city: '', district: '', rest: str };
+    let rest = str;
+
+    let m = rest.match(/^(.*?(?:省|特别行政区|自治区))/);
+    if (m) { out.province = m[1]; rest = rest.slice(m[1].length); }
+    else {
+      const muni = rest.match(/^(北京市|上海市|天津市|重庆市)/);
+      if (muni) { out.province = muni[1]; rest = rest.slice(muni[1].length); }
+    }
+
+    m = rest.match(/^(.*?(?:市|自治州|地区|盟))/);
+    if (m) { out.city = m[1]; rest = rest.slice(m[1].length); }
+
+    m = rest.match(/^(.*?(?:区|县|旗))/);
+    if (m) { out.district = m[1]; rest = rest.slice(m[1].length); }
+
+    // Municipality: 市 was consumed as the province → use it as the city too,
+    // matching how onRegionChange folds 市辖区 onto the province.
+    if (!out.city && /市$/.test(out.province)) out.city = out.province;
+
+    out.rest = rest.trim();
+    return out;
   },
 
   onDefaultToggle(e) {
