@@ -1701,7 +1701,7 @@ async function vaLoad(id) {
   VA_ID = id; VA_MEMBERS = []; VA_HAD_GROUP = false; VA_STORE_TOTALS = {};
   if (!id) {
     box.innerHTML = `<div class="pd-var-head">${cuT('Variants', '规格')}</div>` +
-      `<div class="helper" style="font-size:11px">${cuT('Save the product first, then add its variants here.', '请先保存产品,再在此添加规格。')}</div>`;
+      `<div class="helper" style="font-size:11px">${cuT('Add a name & SKU above — it saves automatically, then variants open here.', '请先在上方填写名称和货号 — 系统会自动保存,随后即可在此添加规格。')}</div>`;
     return;
   }
   box.innerHTML = `<div class="pd-var-head">${cuT('Variants', '规格')}</div><div class="helper" style="font-size:11px">${cuT('Loading…', '加载中…')}</div>`;
@@ -1994,7 +1994,7 @@ function buLoad(id) {
   BU = { title_en: '', title_cn: '', ids: [], price: '', voucher: '' };
   if (!id) {
     box.innerHTML = `<div class="pd-var-head">${cuT('Buy together', '一起买')}</div>` +
-      `<div class="helper" style="font-size:11px">${cuT('Save the product first, then build a buy-together set here.', '请先保存产品,再在此创建“一起买”套餐。')}</div>`;
+      `<div class="helper" style="font-size:11px">${cuT('Add a name & SKU above — it saves automatically, then build a buy-together set here.', '请先在上方填写名称和货号 — 系统会自动保存,随后即可创建“一起买”套餐。')}</div>`;
     return;
   }
   const p = (PA_PRODUCTS || []).find(x => x.id === id);
@@ -2092,7 +2092,7 @@ function bpLoad(id) {
   BP_ID = id; BP_PICKING = false; BP = [];
   if (!id) {
     box.innerHTML = `<div class="pd-var-head">${cuT('Bundle (sold as one)', '套装产品(作为一个产品出售)')}</div>` +
-      `<div class="helper" style="font-size:11px">${cuT('Save the product first, then choose what goes inside.', '请先保存产品,再选择套装内含的商品。')}</div>`;
+      `<div class="helper" style="font-size:11px">${cuT('Add a name & SKU above — it saves automatically, then choose what goes inside.', '请先在上方填写名称和货号 — 系统会自动保存,随后即可选择套装内含的商品。')}</div>`;
     return;
   }
   const p = (PA_PRODUCTS || []).find(x => x.id === id);
