@@ -12023,7 +12023,7 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   const payload = {
     orderId:        o.order_no,
     product,
-    senderName:     store.name_cn || store.name_en || 'Roots',
+    senderName:     'Roots',   // 寄件人 = brand (user-set); the store supplies the pickup address only
     senderAddress,  senderMobile,
     receiveName:    o.recipient_name,
     receiveAddress: o.address_full,
