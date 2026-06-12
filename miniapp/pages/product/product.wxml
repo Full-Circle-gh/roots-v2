@@ -221,23 +221,9 @@
         </view>
       </view>
 
-      <!-- Per-product options (size, cutlery, etc.) -->
-      <block wx:if="{{options.length}}">
-        <view wx:for="{{options}}" wx:for-item="opt" wx:key="id" class="option-group">
-          <view class="option-label f-toni">
-            {{opt.question}}{{opt.is_required ? ' *' : ''}}
-          </view>
-          <view class="option-choices">
-            <view wx:for="{{opt.choices}}" wx:for-item="ch" wx:key="id"
-                  class="choice {{selectedChoices[opt.id] === ch.id ? 'on' : ''}}"
-                  data-option-id="{{opt.id}}" data-choice-id="{{ch.id}}"
-                  bindtap="pickChoice">
-              <text>{{ch.label}}</text>
-              <text wx:if="{{ch.delta_text}}" class="choice-delta">{{ch.delta_text}}</text>
-            </view>
-          </view>
-        </view>
-      </block>
+      <!-- Per-product options (dressing, spice level…) are chosen in a bottom
+           sheet opened from "Add to basket" (see the options picker below),
+           not inline — so the choice is unmissable like the size picker. -->
 
       <!-- Colophon — page sign-off. One IP character (mapped by category)
            centred on oat fill, "From Soil to Soul" tagline below, then a
@@ -302,6 +288,37 @@
               <text class="vp-opt-price f-bear {{opt.isFlash ? 'is-flash' : ''}}">{{opt.price}}</text>
             </view>
           </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- Options picker — bottom sheet opened from "Add to basket" when the
+         product has customer choices (e.g. dressing). Mirrors the size picker:
+         tap a choice, then confirm with the live total. -->
+    <view wx:if="{{opShow}}" class="vp-mask" bindtap="closeOptionPicker">
+      <view class="vp-sheet" catchtap="vpStop">
+        <view class="vp-head">
+          <view>
+            <view class="vp-title f-bear">{{opTitle}}</view>
+            <view wx:if="{{name}}" class="vp-name f-yuan">{{name}}</view>
+          </view>
+          <view class="vp-close" bindtap="closeOptionPicker">×</view>
+        </view>
+        <scroll-view scroll-y class="op-body">
+          <view wx:for="{{options}}" wx:for-item="opt" wx:key="id" class="op-group">
+            <view class="op-q f-toni">{{opt.question}}{{opt.is_required ? ' *' : ''}}</view>
+            <view class="op-choices">
+              <view wx:for="{{opt.choices}}" wx:for-item="ch" wx:key="id"
+                    class="op-choice {{selectedChoices[opt.id] === ch.id ? 'on' : ''}}"
+                    data-option-id="{{opt.id}}" data-choice-id="{{ch.id}}" bindtap="pickChoice">
+                <text class="op-choice-label f-bear">{{ch.label}}</text>
+                <text wx:if="{{ch.delta_text}}" class="op-choice-delta f-toni">{{ch.delta_text}}</text>
+              </view>
+            </view>
+          </view>
+        </scroll-view>
+        <view class="op-foot">
+          <button class="op-add f-toni" bindtap="confirmOptions">{{opAddLabel}}</button>
         </view>
       </view>
     </view>

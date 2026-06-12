@@ -151,6 +151,11 @@ Page({
     vpName: '',
     vpTitle: 'Choose a size',
     vpOptions: [],
+    // Options picker bottom sheet (dressing, spice level…). Opened from "Add to
+    // basket" when the product has customer choices, so the pick is unmissable.
+    opShow: false,
+    opTitle: 'Choose your options',
+    opAddLabel: 'Add to basket',
     oosLabel: 'SOLD OUT',
     qty: 1,
     lang: 'en',
@@ -646,6 +651,8 @@ Page({
     const { optionId, choiceId } = e.currentTarget.dataset;
     const selected = { ...this.data.selectedChoices, [optionId]: choiceId };
     this.setData({ selectedChoices: selected });
+    // setData updates this.data synchronously, so the total reads the new pick.
+    if (this.data.opShow) this.setData({ opAddLabel: this._optTotalLabel() });
   },
 
   decQty() { this.setData({ qty: Math.max(1, this.data.qty - 1) }); },
@@ -703,14 +710,24 @@ Page({
       wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
       return;
     }
-    // Validate required options chosen
+    // Customer choices (e.g. dressing) → open a bottom-sheet so the pick is
+    // unmissable, mirroring the size picker. Otherwise add straight away.
+    if (this.data.options.length) { this._openOptionPicker(); return; }
+    if (this._doAddWithOptions()) this._finishAdd();
+  },
+
+  // Validate required options, price in the chosen deltas, and add to the cart.
+  // Returns true when the item was added (false = a required choice is still
+  // unmade, in which case a prompt toast has already fired).
+  _doAddWithOptions() {
+    const p = this.data.product;
+    if (!p) return false;
     for (const o of this.data.options) {
       if (o.is_required && !this.data.selectedChoices[o.id]) {
         wx.showToast({ title: this.data.lang === 'cn' ? '请选择 ' + o.question : 'Please choose: ' + o.question, icon: 'none' });
-        return;
+        return false;
       }
     }
-    // Compute final unit price (base + option deltas)
     let delta = 0;
     const chosen = [];
     this.data.options.forEach(o => {
@@ -731,7 +748,37 @@ Page({
       image_data: p.image_data,
       price: this.data.priceN + delta,
     }, this.data.qty, chosen);
-    this._finishAdd();
+    return true;
+  },
+
+  // ── Options picker (dressing, spice level…) ──────────────────────────
+  // Bottom sheet listing each option's choices. Defaults are pre-picked on
+  // load; the footer button shows the live total (base + chosen deltas).
+  _openOptionPicker() {
+    const L = this.data.lang;
+    this.setData({
+      opShow: true,
+      opTitle: L === 'cn' ? '选择选项' : 'Choose your options',
+      opAddLabel: this._optTotalLabel(),
+    });
+  },
+  closeOptionPicker() { this.setData({ opShow: false }); },
+  confirmOptions() {
+    if (this._doAddWithOptions()) { this.setData({ opShow: false }); this._finishAdd(); }
+  },
+  // "Add to basket · ¥XX" reflecting the currently selected choices.
+  _optTotalLabel() {
+    const L = this.data.lang;
+    const money = v => '¥' + (Number.isInteger(v) ? v : v.toFixed(2));
+    let delta = 0;
+    this.data.options.forEach(o => {
+      const cid = this.data.selectedChoices[o.id];
+      if (!cid) return;
+      const c = o.choices.find(x => x.id === cid);
+      if (c) delta += Number(c.price_delta) || 0;
+    });
+    const total = (Number(this.data.priceN) || 0) + delta;
+    return (L === 'cn' ? '加入购物车 · ' : 'Add to basket · ') + money(total);
   },
 
   // Shared post-add: confirm toast + pop back to where they came from.

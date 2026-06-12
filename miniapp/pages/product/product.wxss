@@ -697,6 +697,39 @@
   background: #E96174; color: #fff; padding: 2rpx 12rpx; border-radius: 999rpx;
 }
 
+/* ─── Options picker bottom sheet (dressing, spice…). Reuses .vp-mask /
+   .vp-sheet / .vp-head; each choice is a full-width tappable row. ─── */
+.op-body { max-height: 50vh; }
+.op-group { margin-bottom: 28rpx; }
+.op-group:last-child { margin-bottom: 8rpx; }
+.op-q {
+  font-size: calc(24rpx * var(--font-scale)); letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--olive); margin-bottom: 14rpx;
+}
+.op-choices { display: flex; flex-direction: column; gap: 14rpx; }
+.op-choice {
+  display: flex; align-items: center; justify-content: space-between; gap: 16rpx;
+  padding: 24rpx 28rpx;
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  border-radius: 14rpx;
+}
+.op-choice.on { background: var(--ink); }
+.op-choice-label { font-size: calc(32rpx * var(--font-scale)); color: var(--ink); }
+.op-choice.on .op-choice-label { color: var(--oat); }
+.op-choice-delta { font-size: calc(24rpx * var(--font-scale)); color: var(--olive); flex-shrink: 0; }
+.op-choice.on .op-choice-delta { color: var(--oat); opacity: 0.85; }
+.op-foot { margin-top: 24rpx; }
+.op-add {
+  width: 100%;
+  background: var(--ink); color: var(--oat);
+  border-radius: 14rpx;
+  padding: 26rpx 0;
+  font-size: calc(30rpx * var(--font-scale)); letter-spacing: 0.06em;
+  line-height: 1.1;
+}
+.op-add::after { border: none; }
+
 /* Sticky bottom bar */
 .sticky-bar {
   position: fixed;
