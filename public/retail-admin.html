@@ -2001,8 +2001,11 @@
       #cat-editor .cat-drag:active { cursor: grabbing; }
       #cat-editor .cat-dragging { opacity: .45; }
       #cat-editor .cat-subrow { transition: background var(--t-fast), box-shadow var(--t-fast), opacity var(--t-fast); }
-      #cat-editor .cat-top.cat-droptarget { box-shadow: 0 0 0 2px var(--accent) inset; }
-      #cat-editor .cat-subrow.cat-droptarget { background: rgba(107,142,111,.12); border-radius: var(--r-md); }
+      /* Insertion line: a clear accent bar on the edge where the dragged row
+         will land. The list never folds or reflows during a drag (rows stay
+         steady) — this line is the single "lands here" cue. */
+      #cat-editor .cat-drop-before { box-shadow: 0 -3px 0 var(--accent) inset; }
+      #cat-editor .cat-drop-after  { box-shadow: 0  3px 0 var(--accent) inset; }
       /* Gentle landing: the dropped row settles with a soft accent ring that
          fades out. Inset ring (not background) so a top card keeps its pane
          background while the cue dissolves. */
@@ -2029,32 +2032,6 @@
       #cat-editor button.btn-icon.cat-del { border: 1px solid var(--line); background: var(--bg-pane); border-radius: var(--r-md); padding: 4px 8px; }
       #cat-editor button.btn-icon.cat-del:hover { background: var(--danger-soft); border-color: var(--danger); }
       #cat-editor .cat-edit { white-space: nowrap; }
-
-      /* ── Drag mode: the moment a drag starts the whole editor folds to compact
-         single lines, so you can drag one row the full length of the list in one
-         shot without scrolling. Layout is restored on drop / dragend. ── */
-      #cat-editor.cat-dnd-top .cat-top,
-      #cat-editor.cat-dnd-sub .cat-top:not(.cat-dnd-parent) { margin-bottom: 4px; padding: 6px 10px; }
-      #cat-editor.cat-dnd-top .cat-top-head,
-      #cat-editor.cat-dnd-sub .cat-top:not(.cat-dnd-parent) .cat-top-head { margin-bottom: 0; }
-      /* Collapse the subcategory body of every card we're stepping past. */
-      #cat-editor.cat-dnd-top .cat-top > div:last-child,
-      #cat-editor.cat-dnd-sub .cat-top:not(.cat-dnd-parent) > div:last-child { display: none; }
-      /* Hide the CN input + per-row buttons + kicker so each line is just the EN name. */
-      #cat-editor.cat-dnd-top .cat-name[data-f="name_cn"],
-      #cat-editor.cat-dnd-top .cat-edit,
-      #cat-editor.cat-dnd-top .cat-del,
-      #cat-editor.cat-dnd-sub .cat-name[data-f="name_cn"],
-      #cat-editor.cat-dnd-sub .cat-edit,
-      #cat-editor.cat-dnd-sub .cat-del,
-      #cat-editor.cat-dnd-sub .cat-subs-kicker { display: none; }
-      /* Slim the parent's sub rows to single lines while dragging a sub. */
-      #cat-editor.cat-dnd-sub .cat-subrow { padding: 1px 0; }
-      #cat-editor.cat-dnd-sub .cat-subrow input { padding: 4px 8px; }
-      #cat-editor.cat-dnd-sub .cat-dnd-parent .cat-name[data-f="name_cn"] { display: none; }
-      /* Drop-target line on a collapsed row reads clearly. */
-      #cat-editor.cat-dnd-top .cat-top.cat-droptarget,
-      #cat-editor.cat-dnd-sub .cat-subrow.cat-droptarget { box-shadow: 0 -2px 0 var(--accent) inset; }
 
       /* ── Per-category detail drawer ── */
       .cat-detail-scrim { position: fixed; inset: 0; background: rgba(20,18,14,.42); opacity: 0; pointer-events: none; transition: opacity var(--t-fast); z-index: 60; }

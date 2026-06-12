@@ -343,7 +343,7 @@ function catRender() {
   host.innerHTML = catModel.map((t, ti) => {
     const subs = (t.subs || []).map((s, si) => `
       <div class="cat-subrow" id="cat-sub-${ti}-${si}" data-fk="s${catFk(s)}"
-           ondragover="catDragOver(event,'sub',${ti})" ondrop="catDrop(event,'sub',${ti},${si})" ondragleave="catDragLeave(event)"
+           ondragover="catDragOver(event,'sub',${ti},${si})" ondrop="catDrop(event,'sub',${ti},${si})" ondragleave="catDragLeave(event)"
            style="display:flex;gap:6px;align-items:center;padding:5px 0;">
         <span class="cat-drag" draggable="true" title="Drag to reorder · 拖动排序"
               ondragstart="catDragStart(event,'sub',${ti},${si})" ondragend="catDragEnd()">⠿</span>
@@ -435,47 +435,36 @@ function catDragStart(ev, kind, ti, si) {
       ev.dataTransfer.setDragImage(row, ev.clientX - r.left, ev.clientY - r.top);
     } catch (e) {}
   }
-  // Fold the editor to compact single lines AFTER the drag image is snapshotted
-  // (next tick) so changing layout mid-dragstart can't cancel the drag. When
-  // dragging a sub we keep its parent card expanded; every other card folds.
-  setTimeout(() => {
-    if (!catDrag) return;   // drag already ended before the tick
-    catFlip(() => {
-      if (row) row.classList.add('cat-dragging');
-      const host = document.getElementById('cat-editor');
-      if (!host) return;
-      host.classList.add(kind === 'top' ? 'cat-dnd-top' : 'cat-dnd-sub');
-      if (kind === 'sub') {
-        const parent = document.getElementById('cat-top-' + ti);
-        if (parent) parent.classList.add('cat-dnd-parent');
-      }
-    });
-  }, 0);
+  // Mark only the row being dragged (dimmed); the rest of the list stays
+  // EXACTLY where it is — no fold, no reflow — so the operator keeps their
+  // bearings and the live insertion line is the single source of "lands here".
+  // Done next tick so changing the row mid-dragstart can't cancel the drag.
+  setTimeout(() => { if (catDrag && row) row.classList.add('cat-dragging'); }, 0);
+}
+function catClearDropCues() {
+  $$('.cat-drop-before, .cat-drop-after').forEach(el => el.classList.remove('cat-drop-before', 'cat-drop-after'));
 }
 function catDragEnd() {
   catDrag = null;
-  const host = document.getElementById('cat-editor');
-  const folded = host && (host.classList.contains('cat-dnd-top') || host.classList.contains('cat-dnd-sub'));
-  const unfold = () => {
-    if (host) host.classList.remove('cat-dnd-top', 'cat-dnd-sub');
-    $$('.cat-dragging').forEach(el => el.classList.remove('cat-dragging'));
-    $$('.cat-droptarget').forEach(el => el.classList.remove('cat-droptarget'));
-    $$('.cat-dnd-parent').forEach(el => el.classList.remove('cat-dnd-parent'));
-  };
-  // Glide back open on a cancelled drag; if already unfolded (drop path
-  // handled it inside its own flip) just clear classes with no animation.
-  if (folded) catFlip(unfold); else unfold();
+  $$('.cat-dragging').forEach(el => el.classList.remove('cat-dragging'));
+  catClearDropCues();
 }
-function catDragOver(ev, kind, ti) {
+function catDragOver(ev, kind, ti, si) {
   if (!catDrag || catDrag.kind !== kind) return;          // only same-kind drops
   if (kind === 'sub' && catDrag.ti !== ti) return;        // subs stay in their top
   ev.preventDefault();
   ev.dataTransfer.dropEffect = 'move';
   const row = ev.currentTarget;
-  $$('.cat-droptarget').forEach(el => { if (el !== row) el.classList.remove('cat-droptarget'); });
-  row.classList.add('cat-droptarget');
+  // Draw the insertion line on the edge facing the move direction — that edge
+  // IS where the row will land (matches the splice in catDrop), so you see the
+  // exact slot before releasing.
+  const from = kind === 'top' ? catDrag.ti : catDrag.si;
+  const to   = kind === 'top' ? ti : si;
+  catClearDropCues();
+  if (to === from) return;            // hovering its own row → no line
+  row.classList.add(to < from ? 'cat-drop-before' : 'cat-drop-after');
 }
-function catDragLeave(ev) { ev.currentTarget.classList.remove('cat-droptarget'); }
+function catDragLeave(ev) { ev.currentTarget.classList.remove('cat-drop-before', 'cat-drop-after'); }
 function catDrop(ev, kind, ti, si) {
   if (!catDrag || catDrag.kind !== kind) return;
   ev.preventDefault();
@@ -488,14 +477,11 @@ function catDrop(ev, kind, ti, si) {
     const subs = catModel[ti].subs, from = catDrag.si;
     if (from !== si) { moved = subs.splice(from, 1)[0]; subs.splice(si, 0, moved); }
   }
-  // One flip covers unfold + re-sort: rows glide from their folded drag-mode
-  // boxes straight to their final expanded spots — the gentle landing.
+  // FLIP the re-sort so the rows glide from their old spots to their new ones
+  // — the only motion in the whole interaction, and it shows the result.
   catDrag = null;
-  catFlip(() => {
-    const host = document.getElementById('cat-editor');
-    if (host) host.classList.remove('cat-dnd-top', 'cat-dnd-sub');
-    catRender();   // re-render drops the dragging/droptarget/parent classes
-  });
+  catClearDropCues();
+  catFlip(() => { catRender(); });   // re-render drops the dragging/drop-cue classes
   if (moved) {
     const el = document.querySelector(`#cat-editor [data-fk="${kind === 'top' ? 't' : 's'}${catFk(moved)}"]`);
     if (el) { el.classList.add('cat-landed'); el.addEventListener('animationend', () => el.classList.remove('cat-landed'), { once: true }); }
