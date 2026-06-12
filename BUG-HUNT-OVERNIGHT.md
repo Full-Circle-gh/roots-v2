@@ -237,18 +237,12 @@ Refund payout/reject/partial-approve call `notifyOrderStatusChange(id, null)`. T
 | 1.1 referral clawback on refund | deploy | ✅ deployed `0b17eb4` — policy: **clamp-to-zero** (never negative wallet) + shortfall log |
 | 1.2 wait-for-restock referral credit | deploy | ✅ deployed `0b17eb4` (inventory `setOnOrdersPromoted` hook) |
 | 1.6 partial-refund points over-reversal | deploy | ✅ deployed `0b17eb4` (reversePoints clamped to isFull) |
-| 4.4 / 4.7 expiry timezone | deploy | ✅ deployed `0b17eb4` for **new/edited** coupons (`normalizeVoucherExpiry`). ⚠️ **existing bare-date rows need a one-time prod-DB migration — awaiting your go-ahead** (see below) |
+| 4.4 / 4.7 expiry timezone | deploy + migrate | ✅ deployed `0b17eb4` (`normalizeVoucherExpiry`) **and** existing rows migrated on prod 2026-06-12 (4 coupons; backup `roots-pre-expiry-1781222526711.db`) |
 | 3.1 recent-buyers timing | commit | ✅ committed `79bd8eb` — **needs WeChat publish** (added opt-in `raw` flag to api.js; no backend shape change) |
 | 3.2 image_aspect dead read | **left as-is** | harmless dead read (always `''`); sits in your actively-edited PDP hero code — say the word and I'll remove it |
 
-### ⚠️ One pending data migration (needs your go-ahead)
-The expiry fix (4.4/4.7) is correct for all coupons created/edited from now on. To retroactively fix the handful of **existing** coupons stored with a bare date, run once against the prod DB:
-```sql
-UPDATE retail_vouchers
-   SET expires_at = substr(expires_at, 1, 10) || 'T15:59:59Z'
- WHERE expires_at IS NOT NULL AND length(expires_at) = 10 AND expires_at LIKE '____-__-__';
-```
-I didn't run it autonomously (direct prod-data mutation outside the "apply fixes" scope). Say "run the expiry migration" and I'll do it with a DB backup first; or it's harmless to skip (those coupons just keep the old ~8 a.m.-last-day behavior until edited).
+### ✅ Expiry data migration — DONE (2026-06-12)
+Ran on prod with a DB backup first (`/root/backups/roots-pre-expiry-1781222526711.db`). 4 existing bare-date coupons normalized to `…T15:59:59Z` (BE20, TAPTAP, TES, FULLCIRCLE). FULLCIRCLE (June 18) is the only future one that benefited.
 
 ### Follow-up noted during the fix (not a regression)
 - The inventory **ledger** read (`routes/retail-inventory.js`) `LEFT JOIN`s control-plane `users` with tenant data-plane tables. Correct today on `tdb()` (Roots: `tdb()===db`), but once data isolation is on, a non-Roots tenant DB won't contain `users` — that join must be resolved out-of-band before cut-over. Flagged with a comment in the code.
