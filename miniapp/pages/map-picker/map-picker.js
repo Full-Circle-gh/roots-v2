@@ -1,126 +1,197 @@
-// In-app map picker — our own replacement for wx.chooseLocation, whose native
-// list has an unreliable bare "Location" (current-position) entry that fails on
-// some clients. Here the customer drags the map so the FIXED centre pin sits on
-// their building, we reverse-geocode the pin's coordinates via
-// /api/retail/reverse-geocode (Amap), and emit a chooseLocation-shaped result
-// back to the opener (addresses / checkout) through the page event channel —
-// so the opener's existing apply() consumes it unchanged.
+// In-app map picker — our own replacement for wx.chooseLocation (whose native
+// list has an unreliable bare "Location" entry). Mirrors WeChat's UI: a <map>
+// with a fixed centre pin on top, then a search box + a scrollable POI list.
 //
-// Why this is robust: MapContext.getCenterLocation() returns the map's centre
-// coordinates with NO location permission at all — so even though
-// wx.getLocation is rejected for this AppID, panning + confirming always works.
-// show-location / moveToLocation (the blue dot + "locate me") are best-effort
-// niceties layered on top; the core flow never depends on them.
+//   • Pan the map  → the centre pin's address resolves (reverse-geocode) and
+//                    becomes the selection; nearby POIs refresh below.
+//   • Tap a POI    → the map recentres on it and it becomes the selection.
+//   • Type to search → keyword POI results (biased to the centre / city).
+//   • Use this spot → emits a chooseLocation-shaped result to the opener.
+//
+// MapContext.getCenterLocation() needs no location permission, so the core
+// flow works even though wx.getLocation is rejected for this AppID. POI search +
+// reverse-geocode go through our server (/api/retail/*), which holds the Amap key.
 const api = require('../../utils/api');
 
 Page({
   data: {
-    lat: 23.1351,      // default centre — Guangzhou / Tianhe (Roots' area)
+    lat: 23.1351,        // default centre — Guangzhou / Tianhe (Roots' area)
     lng: 113.3607,
     scale: 16,
     lang: 'en',
-    resolving: false,
-    resolvedAddress: '',
+    resolving: false,    // pin address being reverse-geocoded
+    pinAddress: '',      // the centre pin's resolved address
+    pois: [],            // [{ id, name, address, lat, lng, distance, ... }]
+    selectedId: 'pin',   // 'pin' = use the centre pin; otherwise a POI id
+    keyword: '',
+    listLoading: false,
+    listEmpty: false,
+    canConfirm: false,
   },
 
   onLoad(query) {
     let lang = 'en';
     try { lang = getApp().globalData.lang || 'en'; } catch (e) {}
     const patch = { lang };
-    // Opener may pass a starting centre (e.g. the address being edited).
     const qLat = query && Number(query.lat);
     const qLng = query && Number(query.lng);
     if (qLat && qLng && isFinite(qLat) && isFinite(qLng)) { patch.lat = qLat; patch.lng = qLng; }
     this.setData(patch);
-    this._result = null;
+    this._result = null;                          // chosen payload (non-data)
+    this._center = { lat: this.data.lat, lng: this.data.lng };
+    this._pinCity = '';
+    this._suppress = false;                       // skip the next regionchange
     this._t = null;
+    this._st = null;
   },
 
   onReady() {
     this.mapCtx = wx.createMapContext('picker-map', this);
-    // Open centred on the customer. moveToLocation() with no args jumps the map
-    // to the current position via the <map> component's own location access —
-    // this works with scope.userLocation even though the wx.getLocation API is
-    // rejected for this AppID. Falls back to the default centre if it can't.
+    // Open centred on the customer (see centerOnMe).
     setTimeout(() => this.centerOnMe(true), 200);
   },
 
-  onUnload() { if (this._t) clearTimeout(this._t); },
-
-  // Fires on every pan/zoom; only the 'end' of a move is worth resolving.
-  onRegionChange(e) {
-    if (e.type !== 'end') return;
+  onUnload() {
     if (this._t) clearTimeout(this._t);
-    this._t = setTimeout(() => this.resolveCenter(), 450);
+    if (this._st) clearTimeout(this._st);
   },
 
-  // Read the map centre → reverse-geocode → show the address in the sheet.
-  resolveCenter() {
+  // A user-driven pan/zoom selects the pin again and refreshes; a programmatic
+  // recentre (POI tap) is suppressed so it doesn't flip the selection back.
+  onRegionChange(e) {
+    if (e.type !== 'end') return;
+    if (this._suppress) { this._suppress = false; return; }
+    if (this.data.selectedId !== 'pin') this.setData({ selectedId: 'pin' });
+    if (this._t) clearTimeout(this._t);
+    this._t = setTimeout(() => this.refreshForCenter(), 450);
+  },
+
+  // Read the map centre once, then refresh the pin address + nearby POIs.
+  refreshForCenter() {
     if (!this.mapCtx) return;
     this.mapCtx.getCenterLocation({
       success: (c) => {
-        this.setData({ resolving: true });
-        // api unwraps to the data payload on success, or throws on success:false
-        // (no maps key / no result) — either way we end with a clean state.
-        api.post('/api/retail/reverse-geocode', { lat: c.latitude, lng: c.longitude })
-          .then((g) => {
-            if (g && g.address) {
-              this._result = {
-                name: '',
-                address: g.address,
-                province: g.province || '',
-                city: g.city || '',
-                district: g.district || '',
-                latitude: c.latitude,
-                longitude: c.longitude,
-              };
-              this.setData({ resolving: false, resolvedAddress: g.address });
-            } else {
-              this._result = null;
-              this.setData({ resolving: false, resolvedAddress: '' });
-            }
-          })
-          .catch(() => {
-            this._result = null;
-            this.setData({ resolving: false, resolvedAddress: '' });
-          });
+        this._center = { lat: c.latitude, lng: c.longitude };
+        this.resolvePin(c.latitude, c.longitude);
+        if (!this.data.keyword.trim()) this.loadNearby(c.latitude, c.longitude);
       },
-      fail: () => this.setData({ resolving: false }),
     });
   },
 
-  // Locate-me button → recentre on the device, nudging the customer if it can't.
-  locateMe() { this.centerOnMe(false); },
+  resolvePin(lat, lng) {
+    this.setData({ resolving: true });
+    api.post('/api/retail/reverse-geocode', { lat, lng })
+      .then((g) => {
+        const onPin = this.data.selectedId === 'pin';
+        if (g && g.address) {
+          this._pinCity = g.city || '';
+          if (onPin) {
+            this._result = { name: '', address: g.address, province: g.province || '', city: g.city || '', district: g.district || '', latitude: lat, longitude: lng };
+          }
+          this.setData({ resolving: false, pinAddress: g.address, canConfirm: onPin ? true : this.data.canConfirm });
+        } else {
+          if (onPin) { this._result = null; this.setData({ canConfirm: false }); }
+          this.setData({ resolving: false, pinAddress: '' });
+        }
+      })
+      .catch(() => {
+        if (this.data.selectedId === 'pin') { this._result = null; this.setData({ canConfirm: false }); }
+        this.setData({ resolving: false, pinAddress: '' });
+      });
+  },
 
-  // Recentre the map on the device location. `initial` = the on-open call (stay
-  // silent on failure and just resolve the default centre); otherwise it's the
-  // locate-me button (toast if it can't locate). wx.getLocation is rejected for
-  // this AppID, so this leans on the <map> component's own location access; the
-  // pan-to-confirm flow works regardless.
+  loadNearby(lat, lng) {
+    this.setData({ listLoading: true });
+    api.post('/api/retail/poi-search', { lat, lng })
+      .then((list) => this.setPois(list))
+      .catch(() => this.setPois([]));
+  },
+
+  setPois(list) {
+    const arr = (Array.isArray(list) ? list : []).slice(0, 25).map((p, i) => ({
+      id: 'p' + i,
+      name: p.name || '',
+      address: p.address || '',
+      province: p.province || '',
+      city: p.city || '',
+      district: p.district || '',
+      lat: p.lat,
+      lng: p.lng,
+      distance: (p.distance != null && isFinite(p.distance)) ? p.distance : null,
+    })).filter((x) => x.name && x.lat != null && x.lng != null);
+    this.setData({ pois: arr, listLoading: false, listEmpty: arr.length === 0 });
+  },
+
+  onSearchInput(e) {
+    const kw = e.detail.value || '';
+    this.setData({ keyword: kw });
+    if (this._st) clearTimeout(this._st);
+    if (!kw.trim()) { this.refreshForCenter(); return; }
+    this._st = setTimeout(() => this.runSearch(kw.trim()), 400);
+  },
+
+  onSearchConfirm(e) {
+    const kw = (e.detail.value || '').trim();
+    if (kw) this.runSearch(kw);
+  },
+
+  clearSearch() {
+    this.setData({ keyword: '' });
+    this.refreshForCenter();
+  },
+
+  runSearch(kw) {
+    this.setData({ listLoading: true });
+    api.post('/api/retail/poi-search', { lat: this._center.lat, lng: this._center.lng, keyword: kw, city: this._pinCity || '' })
+      .then((list) => this.setPois(list))
+      .catch(() => this.setPois([]));
+  },
+
+  selectPin() {
+    this.setData({ selectedId: 'pin', keyword: '' });
+    this.refreshForCenter();
+  },
+
+  selectPoi(e) {
+    const i = Number(e.currentTarget.dataset.i);
+    const poi = this.data.pois[i];
+    if (!poi) return;
+    this._result = {
+      name: poi.name,
+      address: poi.address || poi.name,
+      province: poi.province,
+      city: poi.city,
+      district: poi.district,
+      latitude: poi.lat,
+      longitude: poi.lng,
+    };
+    this._center = { lat: poi.lat, lng: poi.lng };
+    this._suppress = true;   // the recentre below shouldn't reset to the pin
+    this.setData({ selectedId: poi.id, canConfirm: true, lat: poi.lat, lng: poi.lng });
+  },
+
+  // Recentre the map on the device. `initial` = on-open (silent on failure).
   centerOnMe(initial) {
     if (!this.mapCtx) return;
     this.mapCtx.moveToLocation({
-      success: () => { setTimeout(() => this.resolveCenter(), 250); },
+      success: () => { setTimeout(() => this.refreshForCenter(), 250); },
       fail: () => {
         if (!initial) {
-          wx.showToast({
-            title: this.data.lang === 'cn' ? '无法定位,请手动拖动地图' : 'Can’t locate — drag the map',
-            icon: 'none',
-          });
+          wx.showToast({ title: this.data.lang === 'cn' ? '无法定位,请手动拖动地图' : 'Can’t locate — drag the map', icon: 'none' });
         }
-        // Resolve whatever centre we're on so the sheet isn't blank.
-        this.resolveCenter();
+        this.refreshForCenter();
       },
     });
   },
+  locateMe() { this.setData({ selectedId: 'pin' }); this.centerOnMe(false); },
 
   confirm() {
-    if (this.data.resolving) {
+    if (this.data.resolving && this.data.selectedId === 'pin') {
       wx.showToast({ title: this.data.lang === 'cn' ? '正在读取地址,请稍候' : 'Reading address — one moment', icon: 'none' });
       return;
     }
-    if (!this._result) {
-      wx.showToast({ title: this.data.lang === 'cn' ? '无法读取此处地址,请微调图钉' : 'Can’t read this spot — nudge the pin', icon: 'none' });
+    if (!this._result || !this._result.address) {
+      wx.showToast({ title: this.data.lang === 'cn' ? '请选择一个位置' : 'Pick a location', icon: 'none' });
       return;
     }
     const ch = this.getOpenerEventChannel && this.getOpenerEventChannel();

@@ -1,39 +1,78 @@
 <view class="picker">
-  <map
-    id="picker-map"
-    class="picker__map"
-    longitude="{{ lng }}"
-    latitude="{{ lat }}"
-    scale="{{ scale }}"
-    show-location
-    enable-rotate="{{ false }}"
-    enable-overlooking="{{ false }}"
-    bindregionchange="onRegionChange"
-  ></map>
-
-  <!-- Fixed centre pin — the map moves underneath it, its tip marks the spot
-       getCenterLocation() reads (dead centre of the map component). -->
-  <view class="picker__pin">
-    <view class="picker__pin-head">📍</view>
+  <!-- Map with a fixed centre pin (the map moves underneath it). -->
+  <view class="picker__mapwrap">
+    <map
+      id="picker-map"
+      class="picker__map"
+      longitude="{{ lng }}"
+      latitude="{{ lat }}"
+      scale="{{ scale }}"
+      show-location
+      enable-rotate="{{ false }}"
+      enable-overlooking="{{ false }}"
+      bindregionchange="onRegionChange"
+    ></map>
+    <view class="picker__pin"><view class="picker__pin-head">📍</view></view>
+    <view class="picker__locate" bindtap="locateMe"><text>◎</text></view>
   </view>
 
-  <!-- Locate-me (best-effort) -->
-  <view class="picker__locate" bindtap="locateMe"><text>◎</text></view>
-
-  <!-- Bottom sheet: live address + actions -->
-  <view class="picker__sheet">
-    <view class="picker__label">{{ lang === 'cn' ? '收货位置' : 'DELIVERY SPOT' }}</view>
-    <view class="picker__addr {{ resolvedAddress ? '' : 'picker__addr--hint' }}">
-      <block wx:if="{{ resolving }}">{{ lang === 'cn' ? '正在读取地址…' : 'Reading address…' }}</block>
-      <block wx:elif="{{ resolvedAddress }}">{{ resolvedAddress }}</block>
-      <block wx:else>{{ lang === 'cn' ? '拖动地图,把图钉对准你的位置' : 'Drag the map so the pin sits on your spot' }}</block>
+  <view class="picker__panel">
+    <!-- Search -->
+    <view class="picker__search">
+      <text class="picker__search-ico">🔍</text>
+      <input
+        class="picker__search-input"
+        value="{{ keyword }}"
+        bindinput="onSearchInput"
+        bindconfirm="onSearchConfirm"
+        confirm-type="search"
+        placeholder="{{ lang === 'cn' ? '搜索地点' : 'Search for location' }}"
+        placeholder-class="picker__search-ph"
+      />
+      <text wx:if="{{ keyword }}" class="picker__search-clear" bindtap="clearSearch">✕</text>
     </view>
+
+    <!-- Results -->
+    <scroll-view class="picker__list" scroll-y>
+      <!-- Centre-pin entry (hidden while searching) -->
+      <view wx:if="{{ !keyword }}" class="picker__item {{ selectedId === 'pin' ? 'is-sel' : '' }}" bindtap="selectPin">
+        <view class="picker__item-main">
+          <view class="picker__item-name">{{ lang === 'cn' ? '当前位置' : 'My pin location' }}</view>
+          <view class="picker__item-sub">
+            <block wx:if="{{ resolving }}">{{ lang === 'cn' ? '读取地址中…' : 'Reading address…' }}</block>
+            <block wx:elif="{{ pinAddress }}">{{ pinAddress }}</block>
+            <block wx:else>{{ lang === 'cn' ? '拖动地图选择位置' : 'Drag the map to choose' }}</block>
+          </view>
+        </view>
+        <text wx:if="{{ selectedId === 'pin' }}" class="picker__check">✓</text>
+      </view>
+
+      <!-- POI results -->
+      <view
+        wx:for="{{ pois }}"
+        wx:key="id"
+        class="picker__item {{ selectedId === item.id ? 'is-sel' : '' }}"
+        data-i="{{ index }}"
+        bindtap="selectPoi"
+      >
+        <view class="picker__item-main">
+          <view class="picker__item-name">{{ item.name }}</view>
+          <view class="picker__item-sub">{{ item.distance != null ? item.distance + 'm · ' : '' }}{{ item.address }}</view>
+        </view>
+        <text wx:if="{{ selectedId === item.id }}" class="picker__check">✓</text>
+      </view>
+
+      <view wx:if="{{ listLoading }}" class="picker__hint">{{ lang === 'cn' ? '搜索中…' : 'Searching…' }}</view>
+      <view wx:elif="{{ listEmpty }}" class="picker__hint">{{ lang === 'cn' ? '没有找到地点' : 'No places found' }}</view>
+    </scroll-view>
+
+    <!-- Actions -->
     <view class="picker__actions">
       <view class="picker__btn picker__btn--ghost" bindtap="cancel">{{ lang === 'cn' ? '取消' : 'Cancel' }}</view>
       <view
-        class="picker__btn picker__btn--primary {{ (resolvedAddress && !resolving) ? '' : 'picker__btn--disabled' }}"
+        class="picker__btn picker__btn--primary {{ canConfirm ? '' : 'picker__btn--disabled' }}"
         bindtap="confirm"
-      >{{ lang === 'cn' ? '确认此位置' : 'Use this spot' }}</view>
+      >{{ lang === 'cn' ? '确认' : 'Use this spot' }}</view>
     </view>
   </view>
 </view>

@@ -4128,6 +4128,32 @@ router.post('/api/retail/reverse-geocode', requireRetailAuth, express.json(), as
   }
 });
 
+// POI search for the in-app map picker's "search + nearby list" (mirrors
+// WeChat's chooseLocation UI). No keyword → places around the map centre; with
+// a keyword → a text search biased to the centre / city. Degrades to
+// { success:false } with no key or on failure, so the picker just shows an
+// empty list and the pan-to-confirm flow still works.
+router.post('/api/retail/poi-search', requireRetailAuth, express.json(), async (req, res) => {
+  const lat = Number(req.body?.lat);
+  const lng = Number(req.body?.lng);
+  const keyword = typeof req.body?.keyword === 'string' ? req.body.keyword.slice(0, 60) : '';
+  const city = typeof req.body?.city === 'string' ? req.body.city.slice(0, 40) : '';
+  if (!keyword && (!isFinite(lat) || !isFinite(lng))) {
+    return res.status(400).json({ success: false, error: 'bad_input' });
+  }
+  if (!geocode.configured()) {
+    return res.json({ success: false, error: 'maps_key_missing' });
+  }
+  try {
+    const list = await geocode.searchPoi({ lat, lng, keyword, city });
+    if (!list) return res.json({ success: false, error: 'no_result' });
+    return res.json({ success: true, data: list });
+  } catch (e) {
+    console.warn('[poi-search]', e.message);
+    return res.json({ success: false, error: 'lookup_failed' });
+  }
+});
+
 router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const existing = tdb().prepare('SELECT id FROM retail_customer_addresses WHERE id = ? AND customer_id = ?').get(id, req.customer.id);
