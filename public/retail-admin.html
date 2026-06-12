@@ -6417,6 +6417,8 @@
   var ICON_MORE = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>';
   var ICON_SORT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 4 7 20"/><polyline points="3 8 7 4 11 8"/><polyline points="17 20 17 4"/><polyline points="13 16 17 20 21 16"/></svg>';
   var ICON_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+  var ICON_TRUCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>';
+  var ICON_EXT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
 
   // Variant B blend state: keep the last rendered (filtered) list so the Sort
   // sheet can re-order it client-side and the Manage sheet can look orders up.
@@ -6563,6 +6565,45 @@
     });
     return rows ? '<div class="rm-oc-items">' + rows + '</div>' : '';
   }
+  // Tracking block for the inline peek — gives operators the carrier, waybill,
+  // live-sync state, latest scan and a one-tap link to the carrier page so they
+  // never open the full drawer just to answer "where's my parcel?". Only
+  // shipments that actually carry a waybill render (buildShipmentTrackingView
+  // returns null otherwise); split orders list each parcel.
+  function peekTrackingHTML(o) {
+    if (!o || o.fulfillment_type === 'pickup') return '';
+    var ships = (o.shipments || []).filter(function (s) { return s.tracking && s.tracking.number; });
+    if (!ships.length) return '';
+    var multi = ships.length > 1;
+    var rows = ships.map(function (s, i) {
+      var t = s.tracking;
+      var carrier = String(t.carrier_name_en || t.carrier_code || '').toUpperCase();
+      var live = (t.kd100_subscribed || s.jd_live)
+        ? '<span class="rm-trk-live">● live</span>'
+        : '<span class="rm-trk-manual">manual</span>';
+      var status = t.status_label_en ? '<span class="rm-trk-status">' + esc(t.status_label_en) + '</span>' : '';
+      var link = t.track_url
+        ? '<a class="rm-trk-link" href="' + esc(t.track_url) + '" target="_blank" rel="noopener" onclick="event.stopPropagation();">Track' + ICON_EXT + '</a>'
+        : '';
+      var ev = (t.events && t.events.length) ? t.events[0] : null;
+      var evLine = ev
+        ? '<div class="rm-trk-ev"><span class="d">' + esc(ev.description_en || ev.description_cn || '') + '</span>'
+          + (ev.time ? '<span class="t">' + esc(String(ev.time).slice(5, 16)) + '</span>' : '') + '</div>'
+        : '';
+      var label = multi ? '<div class="rm-trk-parcel">' + esc(s.label || ('Parcel ' + (i + 1))) + '</div>' : '';
+      return '<div class="rm-trk-row">' + label +
+        '<div class="rm-trk-line">' +
+          '<span class="rm-trk-carrier">' + esc(carrier) + '</span>' +
+          '<span class="rm-trk-num">' + esc(t.number) + '</span>' +
+          copyChip(t.number, 'Tracking number') +
+          live +
+        '</div>' +
+        ((status || link) ? '<div class="rm-trk-meta">' + status + link + '</div>' : '') +
+        evLine +
+      '</div>';
+    }).join('');
+    return '<div class="rm-oc-trk"><div class="rm-trk-h">' + ICON_TRUCK + 'Tracking · 物流</div>' + rows + '</div>';
+  }
   function peekHTML(o) {
     var fwd = forwardAction(o), sb = shipBy(o), phone = o.recipient_phone || '';
     var shipByLbl = shipByDone(o) ? 'Requested timing' : 'Ship by';
@@ -6584,7 +6625,7 @@
           (phone ? '<button type="button" class="rm-pbtn call" data-pact="call" data-phone="' + esc(phone) + '" aria-label="Call">' + ICON_CALL + '</button>' : '') +
         '</div>'
       : '';
-    return dl + peekItemsHTML(o) + acts +
+    return dl + peekTrackingHTML(o) + peekItemsHTML(o) + acts +
       '<button type="button" class="rm-oc-full" data-pact="open" data-id="' + o.id + '">Full detail &amp; manage · 详情管理 ' + ICON_CHEV_R + '</button>';
   }
   function fillPeek(card) {
