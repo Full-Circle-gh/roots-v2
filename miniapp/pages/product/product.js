@@ -142,6 +142,7 @@ Page({
     options: [],
     selectedChoices: {},   // { [option_id]: choice_id }
     bundle: null,          // "buy together" set (resolved item cards) or null
+    whatsInside: null,     // bundle PRODUCT component list ("what's inside") or null
     hasVariants: false,    // ≥2 purchasable siblings → "Add" opens the size picker
     // Variant size-picker bottom sheet (same UX as the shop grid's +). Opened
     // from "Add to basket" when the product has ≥2 siblings; choosing a size
@@ -558,12 +559,29 @@ Page({
       };
     }
 
+    // Bundle PRODUCT ("what's inside") — when THIS product is itself a bundle,
+    // the server ships its component cards. We show them read-only so the
+    // customer sees what they get; they still buy the single product with the
+    // normal Add-to-cart (one price, one line). Distinct from "buy together".
+    const whatsInside = (p.is_bundle && Array.isArray(p.bundle_components) && p.bundle_components.length)
+      ? {
+          title: L === 'cn' ? '套装内含' : "What's inside",
+          items: p.bundle_components.map(c => ({
+            id: c.id,
+            name: lang.pick(c.name_en, c.name_cn, L) || ('#' + c.id),
+            img: c.image_data || c.image_url || '',
+            qty: Number(c.qty) > 1 ? ('×' + c.qty) : '',
+          })),
+        }
+      : null;
+
     // Blocks only "win" when the toggle is on AND blocks were actually authored.
     // An empty/failed designed page falls back to the classic description below.
     const useBlocks = !!(p.use_block_design && Array.isArray(p.description_blocks) && p.description_blocks.length);
 
     this.setData({
       bundle,
+      whatsInside,
       image: img,
       images: gallery,
       heroIndex: 0,

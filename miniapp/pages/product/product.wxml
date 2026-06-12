@@ -157,6 +157,20 @@
         </view>
       </view>
 
+      <!-- Bundle PRODUCT "what's inside" — this product IS a bundle (one price,
+           one Add-to-cart). Show the components so the customer knows what they
+           get. Read-only; buying happens via the normal cart button. -->
+      <view wx:if="{{whatsInside}}" class="pd-inside">
+        <text class="pd-inside-title f-bear">{{whatsInside.title}}</text>
+        <view class="pd-inside-list">
+          <view wx:for="{{whatsInside.items}}" wx:key="id" class="pd-inside-item">
+            <image class="pd-inside-img" src="{{item.img}}" mode="aspectFill"/>
+            <text class="pd-inside-name f-aleo">{{item.name}}</text>
+            <text wx:if="{{item.qty}}" class="pd-inside-qty f-toni">{{item.qty}}</text>
+          </view>
+        </view>
+      </view>
+
       <!-- Reviews summary + recent -->
       <view wx:if="{{reviewCount > 0}}" class="reviews-block">
         <view class="reviews-head">

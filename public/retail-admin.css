@@ -1989,6 +1989,18 @@
   .bu-pick { padding: 8px 12px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--line-soft); }
   .bu-pick:last-child { border-bottom: none; }
   .bu-pick:hover { background: var(--bg-elev-1); color: var(--text-1); }
+  /* Bundle-product editor (#pd-bundle-product) — reuses the bu-* chip styles;
+     adds a small per-component quantity stepper inside each chip. */
+  .bp-qty { display: inline-flex; align-items: center; gap: 2px; color: var(--text-2); font-size: 12px; }
+  .bp-qty input { width: 42px; padding: 1px 4px; font-size: 12px; text-align: center; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--bg-pane); color: var(--text-1); }
+  /* "Bundle" card pill — flags a product that is sold as one but made of others. */
+  .pa-pill-bundle { background: color-mix(in srgb, var(--brass, #B08D4A) 18%, transparent); color: var(--brass, #B08D4A); }
+  /* Order-line bundle "what's inside" pack list (admin order drawer). */
+  .oi-bndl { margin-top: 6px; padding: 6px 8px; border-left: 2px solid color-mix(in srgb, var(--brass, #B08D4A) 50%, transparent); background: var(--bg-app); border-radius: 0 6px 6px 0; }
+  .oi-bndl-h { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); margin-bottom: 3px; }
+  .oi-bndl-row { display: flex; gap: 6px; font-size: 12px; color: var(--text-1); line-height: 1.5; }
+  .oi-bndl-qty { color: var(--brass, #B08D4A); font-variant-numeric: tabular-nums; min-width: 24px; }
+  .oi-bndl-zh { color: var(--text-3); }
 
   .pa-card {
     background: var(--bg-pane);

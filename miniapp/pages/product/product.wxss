@@ -855,3 +855,24 @@
 }
 .pd-bundle-cta::after { border: none; }
 .pd-bundle-cta[disabled] { background: var(--olive); opacity: 0.55; color: var(--oat); }
+
+/* ─── Bundle PRODUCT "what's inside" (read-only component list) ──────────── */
+.pd-inside {
+  margin: 40rpx 0 12rpx;
+  background: #FFFCF7;
+  border: 4rpx solid var(--ink);
+  border-radius: 20rpx;
+  padding: 24rpx;
+}
+.pd-inside-title { display: block; font-size: calc(32rpx * var(--font-scale)); color: var(--ink); line-height: 1.1; margin-bottom: 18rpx; }
+.pd-inside-list { display: flex; flex-direction: column; gap: 14rpx; }
+.pd-inside-item { display: flex; align-items: center; gap: 16rpx; }
+.pd-inside-img {
+  width: 84rpx; height: 84rpx; border-radius: 12rpx; flex-shrink: 0;
+  border: 3rpx solid var(--ink); background: var(--oat); box-sizing: border-box;
+}
+.pd-inside-name { flex: 1; min-width: 0; font-size: calc(26rpx * var(--font-scale)); color: var(--ink); line-height: 1.3; }
+.pd-inside-qty {
+  flex-shrink: 0; font-size: calc(24rpx * var(--font-scale)); color: var(--olive);
+  background: rgba(0,0,0,.06); padding: 4rpx 14rpx; border-radius: 999rpx;
+}

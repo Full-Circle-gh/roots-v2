@@ -699,6 +699,7 @@ const RETAIL_PRODUCT_COLS = `
   p.flash_stock_limit, p.flash_sold,
   p.variant_group_id, p.variant_label, p.variant_label_cn, p.variant_sort,
   p.low_stock_threshold,
+  p.bundle_items,
   p.updated_at
 `;
 
@@ -872,6 +873,151 @@ function resolveBundle(jsonStr) {
   return { title_en: b.title_en || null, title_cn: b.title_cn || null, price: Number(b.price) || 0, voucher: b.voucher || null, ids, items };
 }
 
+// ── BUNDLE PRODUCTS (store_products.bundle_items) ──────────────────────────
+// A bundle product is a real store_products row whose `bundle_items` JSON lists
+// the component products it's made of: [{ id, qty }] (per-unit quantities). It
+// looks/sells like one product — one card, one PDP, one cart line, one fixed
+// price (the row's own sell_price). Behind the scenes it deducts COMPONENT
+// stock at checkout (see expandStockLines) and shows a "what's inside" list.
+// This is a SEPARATE concept from the legacy "buy together" `bundle` upsell
+// above — don't conflate the two columns.
+//
+// parseBundleItems → the clean [{id, qty}] array (or [] when not a bundle).
+function parseBundleItems(v) {
+  if (!v) return [];
+  let arr = v;
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch { return []; } }
+  if (!Array.isArray(arr)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const it of arr) {
+    const id = parseInt(it && (it.id != null ? it.id : it.product_id), 10);
+    let qty  = parseInt(it && it.qty, 10);
+    if (!Number.isFinite(id) || id <= 0 || seen.has(id)) continue;
+    if (!Number.isFinite(qty) || qty <= 0) qty = 1;
+    seen.add(id);
+    out.push({ id, qty });
+  }
+  return out;
+}
+// sanitizeBundleItems → the JSON string to store (or null to clear / not a
+// bundle). A component can't be the bundle itself. Caps at 20 components.
+function sanitizeBundleItems(input, selfId = null) {
+  const items = parseBundleItems(input)
+    .filter(c => c.id !== Number(selfId))
+    .slice(0, 20);
+  return items.length ? JSON.stringify(items) : null;
+}
+// resolveBundleComponents → customer/operator display shape: each component
+// expanded to a light card with its per-unit qty. Kept in the operator's chosen
+// order. Used by the PDP "what's inside" and the backend order-detail pack list.
+// `stock` here is the SUM of per-store physical_qty (same source the shop grid
+// uses), so the caller can compute the bundle's availability = min(stock ÷ qty).
+function resolveBundleComponents(v) {
+  const comps = parseBundleItems(v);
+  if (!comps.length) return [];
+  const ids = comps.map(c => c.id);
+  const ph  = ids.map(() => '?').join(',');
+  const rows = tdb().prepare(
+    `SELECT sp.id, sp.name_en, sp.name_cn, sp.sku, sp.weight AS size, sp.sell_price AS price,
+            COALESCE((SELECT SUM(rss.physical_qty) FROM retail_store_stock rss
+                        JOIN retail_stores rs ON rs.id = rss.store_id
+                       WHERE rss.product_id = sp.id AND rs.is_active = 1), sp.stock_qty, 0) AS stock,
+            sp.is_published, sp.is_active, sp.updated_at,
+            ${hasImageFallbackSql('sp')} AS has_image_data
+       FROM store_products sp
+      WHERE sp.id IN (${ph})`
+  ).all(...ids);
+  const byId = new Map(rows.map(r => [r.id, r]));
+  const out = [];
+  for (const c of comps) {
+    const r = byId.get(c.id);
+    if (!r) continue;
+    out.push({
+      id: r.id, qty: c.qty, name_en: r.name_en, name_cn: r.name_cn,
+      sku: r.sku, size: r.size, price: r.price,
+      stock: r.stock,
+      available: !!(r.is_published && (r.is_active == null || r.is_active === 1)),
+      image_data: r.has_image_data
+        ? `/api/retail/products/${r.id}/image?v=${encodeURIComponent(r.updated_at || '')}`
+        : null,
+    });
+  }
+  return out;
+}
+// bundleStockFromComponents → how many whole bundles the live component stock
+// can make: min over components of floor(component_stock ÷ per-unit qty). A
+// missing / unpublished / inactive component drops the bundle to 0 (it can't
+// be assembled honestly). Returns null when `v` isn't a bundle.
+function bundleStockFromComponents(v) {
+  const recipe = parseBundleItems(v);
+  if (!recipe.length) return null;
+  const comps = resolveBundleComponents(v);
+  // A bundle with fewer resolved components than recipe entries lost one → 0.
+  if (comps.length !== recipe.length) return 0;
+  let min = Infinity;
+  for (const c of comps) {
+    if (!c.available) return 0;
+    min = Math.min(min, Math.floor((Number(c.stock) || 0) / c.qty));
+  }
+  return Number.isFinite(min) ? min : 0;
+}
+// expandStockLines → turn resolved cart lines into the flat [{product_id, qty}]
+// list the inventory layer reserves/routes on, EXPANDING any bundle line into
+// its component demand (component qty × units bought) and aggregating repeats.
+// A component bought both standalone and via a bundle sums correctly. Non-bundle
+// lines pass straight through. `r.product.bundle_items` must be selected.
+function expandStockLines(resolvedLines) {
+  const agg = new Map();
+  for (const r of resolvedLines) {
+    const comps = parseBundleItems(r.product && r.product.bundle_items);
+    if (comps.length) {
+      for (const c of comps) agg.set(c.id, (agg.get(c.id) || 0) + c.qty * r.qty);
+    } else {
+      agg.set(r.product.id, (agg.get(r.product.id) || 0) + r.qty);
+    }
+  }
+  return [...agg.entries()].map(([product_id, qty]) => ({ product_id, qty }));
+}
+// Map each bundle COMPONENT id → the set of bundle product ids (in this cart)
+// that contain it. Lets the shortage/fallback flow translate a short component
+// back to the bundle the customer actually ordered.
+function bundleComponentIndex(resolvedLines) {
+  const idx = new Map();
+  for (const r of resolvedLines) {
+    const comps = parseBundleItems(r.product && r.product.bundle_items);
+    for (const c of comps) {
+      if (!idx.has(c.id)) idx.set(c.id, new Set());
+      idx.get(c.id).add(r.product.id);
+    }
+  }
+  return idx;
+}
+// Decorate a storefront list / PDP row IN PLACE: flag bundles, override the
+// displayed `stock` with the assemble-from-components figure, and (PDP only)
+// attach the "what's inside" component cards. The raw recipe JSON is stripped
+// so it never reaches the customer. Cheap no-op for normal products.
+function decorateBundleRow(r, { withComponents = false } = {}) {
+  if (!r) return r;
+  const recipe = parseBundleItems(r.bundle_items);
+  if (!recipe.length) { r.is_bundle = false; delete r.bundle_items; return r; }
+  r.is_bundle = true;
+  const comps = resolveBundleComponents(r.bundle_items);
+  let bstock = 0;
+  if (comps.length === recipe.length) {
+    let min = Infinity;
+    for (const c of comps) {
+      if (!c.available) { min = 0; break; }
+      min = Math.min(min, Math.floor((Number(c.stock) || 0) / c.qty));
+    }
+    bstock = Number.isFinite(min) ? min : 0;
+  }
+  r.stock = bstock;                       // shop card "sold out" honesty
+  if (withComponents) r.bundle_components = comps;
+  delete r.bundle_items;                  // never ship the raw recipe
+  return r;
+}
+
 // ── Variant photo inheritance ("fallback when empty") ──────────────────────
 // Variants are independent product rows linked by variant_group_id. A variant
 // with NO photo of its own should show a sibling's photo by default — so all
@@ -974,6 +1120,7 @@ router.get('/api/retail/products', (req, res) => {
   // req.protocol respects X-Forwarded-Proto.
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   for (const r of rows) lazifyProductImage(r, baseUrl, thumbW);
+  for (const r of rows) decorateBundleRow(r);   // flag bundles + real (component-derived) stock
   attachSoldCounts(rows);
   resolveAutoBadges(rows);
   const termClause = terms.map(() => 'AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)').join(' ');
@@ -1629,6 +1776,11 @@ router.get('/api/retail/products/:id', (req, res) => {
   // "Buy together" bundle — resolved to item cards (each its own product/stock).
   const bundleRow = tdb().prepare('SELECT bundle FROM store_products WHERE id = ?').get(id);
   product.bundle = resolveBundle(bundleRow && bundleRow.bundle);
+
+  // Bundle PRODUCT (this row IS a bundle): attach the "what's inside" component
+  // cards + override `stock` with the assemble-from-components figure. Separate
+  // concept from the "buy together" upsell on the line above.
+  decorateBundleRow(product, { withComponents: true });
 
   product.social_proof = socialProofForProduct(id);
 
@@ -4601,7 +4753,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
               sell_price AS price, stock_qty AS stock, image_data,
               flash_price, flash_starts_at, flash_ends_at,
               flash_stock_limit, flash_sold,
-              ship_modes, needs_ice_pack, variant_group_id
+              ship_modes, needs_ice_pack, variant_group_id, bundle_items
          FROM store_products
         WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
@@ -4689,11 +4841,23 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   let mutatedItems  = resolved.slice();
   let awaitingRestockPids = null;
 
+  // Bundle products don't fit the per-item out-of-stock fallback flows: replace
+  // / cancel / wait operate on a single product id, but a bundle is really
+  // several component products with no stock row of its own. If the cart holds a
+  // bundle, refuse those choices — the mini-app re-quotes and places the order
+  // normally, which routes/reserves the COMPONENTS (expandStockLines) and
+  // returns a plain insufficient_stock when a component is genuinely short.
+  const cartHasBundle = resolved.some(r => parseBundleItems(r.product && r.product.bundle_items).length > 0);
+  if (cartHasBundle && (fallbackChoice === 'cancel_missing' || fallbackChoice === 'replace_missing' || fallbackChoice === 'wait_for_restock')) {
+    return res.status(409).json({ success: false, error: 'bundle_no_fallback' });
+  }
+
   if (fallbackChoice === 'cancel_missing' || fallbackChoice === 'replace_missing' || fallbackChoice === 'wait_for_restock') {
-    // All three need shortage analysis at the nearest store.
+    // All three need shortage analysis at the nearest store. (Bundle carts are
+    // already refused above, so resolved == its own components here.)
     const a = inventory.analyzeShortage({
       address,
-      items: resolved.map(r => ({ product_id: r.product.id, qty: r.qty })),
+      items: expandStockLines(resolved),
       deliverySlotId, channel: 'wechat',
     });
     if (a.error === 'no_active_store') {
@@ -4810,7 +4974,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     // know stock is short there and that's the whole point.
     const a = inventory.analyzeShortage({
       address,
-      items: resolved.map(r => ({ product_id: r.product.id, qty: r.qty })),
+      items: expandStockLines(resolved),
       deliverySlotId, channel: 'wechat',
     });
     if (!a.nearest?.store && !a.resolved?.store) return res.status(503).json({ success: false, error: 'no_active_store' });
@@ -4819,7 +4983,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   } else {
     const routing = inventory.routeOrder({
       address,
-      items: mutatedItems.map(r => ({ product_id: r.product.id, qty: r.qty })),
+      items: expandStockLines(mutatedItems),   // bundles → component demand
       channel: 'wechat',
       acceptFallback,
       ignoreStock: !stockGate,
@@ -5192,7 +5356,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       inventory.reserveForOrder({
         storeId: fulfillingStore.id,
         orderId,
-        items: resolved.map(r => ({ product_id: r.product.id, qty: r.qty })),
+        items: expandStockLines(resolved),   // a bundle reserves its COMPONENTS, not itself
         channel: 'wechat',
       });
     }
@@ -9258,6 +9422,9 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     sets.push('image_data = ?'); params.push(arr.length ? arr[0] : null);
   }
   if ('bundle' in body) { sets.push('bundle = ?'); params.push(sanitizeBundle(body.bundle)); }
+  // Bundle PRODUCT recipe — [{id, qty}] of component products. A product can't
+  // list itself; null clears (turns it back into a normal product).
+  if ('bundle_items' in body) { sets.push('bundle_items = ?'); params.push(sanitizeBundleItems(body.bundle_items, id)); }
   if ('tags' in body) { sets.push('tags = ?'); params.push(sanitizeProductBadge(body.tags)); }
   if ('is_batch_made' in body) { sets.push('is_batch_made = ?'); params.push(body.is_batch_made ? 1 : 0); }
   // Kitchen-parity flags brought over so the store editor is a full superset.
@@ -9316,7 +9483,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, low_stock_threshold, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
-            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
+            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, tags,
             is_batch_made, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ?`
@@ -9331,6 +9498,10 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   } else {
     row.bundle = null;
   }
+  // Hydrate the bundle recipe to component cards (id+qty+name+stock) so the
+  // editor can render chips. Empty array = not a bundle. Round-trips on save
+  // (sanitizeBundleItems reads each card's id+qty).
+  if (row) { row.bundle_items = resolveBundleComponents(row.bundle_items); row.is_bundle = row.bundle_items.length > 0; }
   if (row) row.product_facts = parseFactsCol(row.product_facts);
   if (row && typeof row.nutrition === 'string' && row.nutrition.trim()) {
     try {
@@ -9356,7 +9527,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, low_stock_threshold, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
-            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, tags,
+            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, tags,
             variant_group_id, variant_label, variant_sort,
             is_batch_made, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
@@ -9369,6 +9540,8 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
   if (typeof row.bundle === 'string' && row.bundle.trim()) {
     try { row.bundle = JSON.parse(row.bundle); } catch { row.bundle = null; }
   } else { row.bundle = null; }
+  row.bundle_items = resolveBundleComponents(row.bundle_items);   // hydrate recipe → component cards
+  row.is_bundle = row.bundle_items.length > 0;
   if (typeof row.nutrition === 'string' && row.nutrition.trim()) {
     try {
       const n = JSON.parse(row.nutrition);
@@ -9878,7 +10051,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
                     description_en, description_cn, description_format,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
-                    nutrition, bundle, tags,
+                    nutrition, bundle, bundle_items, tags,
                     variant_group_id, variant_label, variant_sort,
                     is_batch_made, use_block_design,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
@@ -9923,6 +10096,9 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
     } else {
       r.bundle = null;
     }
+    // Bundle PRODUCT flag for the list card (cheap parse, no component lookup).
+    r.bundle_items = parseBundleItems(r.bundle_items);
+    r.is_bundle = r.bundle_items.length > 0;
     return r;
   });
   res.json({ success: true, data: rows });
@@ -10255,7 +10431,8 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     `SELECT oi.id, oi.product_id, oi.name_en, oi.name_cn, oi.sku, oi.size,
             COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json,
-            oi.ship_modes, oi.needs_ice_pack, oi.shipment_id
+            oi.ship_modes, oi.needs_ice_pack, oi.shipment_id,
+            p.bundle_items
        FROM retail_order_items oi
   LEFT JOIN store_products p ON p.id = oi.product_id
       WHERE oi.order_id = ? ORDER BY oi.id ASC`
@@ -10267,6 +10444,14 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     if (typeof it.image_url === 'string' && /^data:/i.test(it.image_url)) {
       it.image_url = `/api/retail/products/${it.product_id}/image`;
     }
+    // Bundle line → attach the component pack list so fulfilment knows what to
+    // box. `pack_qty` is the per-bundle qty × this line's qty (total to pack).
+    const _comps = resolveBundleComponents(it.bundle_items);
+    if (_comps.length) {
+      it.is_bundle = true;
+      it.bundle_components = _comps.map(c => ({ ...c, pack_qty: c.qty * it.qty }));
+    }
+    delete it.bundle_items;
     return it;
   });
   o.payments = tdb().prepare(
@@ -14154,12 +14339,36 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
   // gets. `gate` tells the mini-app which modal to render.
   let routingPreview = null;
   try {
-    const cleanItems = (items || []).map(i => ({ product_id: parseInt(i.product_id, 10), qty: Number(i.qty) }));
+    const rawItems = (items || [])
+      .map(i => ({ product_id: parseInt(i.product_id, 10), qty: Number(i.qty) }))
+      .filter(i => i.product_id && i.qty > 0);
+    // Expand bundle products → component demand so availability is judged on the
+    // real component stock (a bundle has no stock row of its own).
+    const _bi = new Map();   // product_id → [{id,qty}] recipe (empty = normal)
+    for (const it of rawItems) {
+      if (_bi.has(it.product_id)) continue;
+      const row = tdb().prepare('SELECT bundle_items FROM store_products WHERE id = ?').get(it.product_id);
+      _bi.set(it.product_id, parseBundleItems(row && row.bundle_items));
+    }
+    const quoteHasBundle = rawItems.some(it => (_bi.get(it.product_id) || []).length > 0);
+    const _agg = new Map();
+    for (const it of rawItems) {
+      const comps = _bi.get(it.product_id) || [];
+      if (comps.length) { for (const c of comps) _agg.set(c.id, (_agg.get(c.id) || 0) + c.qty * it.qty); }
+      else _agg.set(it.product_id, (_agg.get(it.product_id) || 0) + it.qty);
+    }
+    const cleanItems = [..._agg.entries()].map(([product_id, qty]) => ({ product_id, qty }));
     const analysis = inventory.analyzeShortage({
       address, items: cleanItems,
       deliverySlotId: body.delivery_slot_id || null,
       channel: 'wechat',
     });
+    // Bundle carts can't use the per-item 5-option modal (checkout refuses it).
+    // Collapse any shortage to a plain no_stock so the mini-app just shows
+    // "out of stock for same-day" and the customer adjusts the cart.
+    if (quoteHasBundle && analysis.gate && analysis.gate !== 'none') {
+      routingPreview = { ok: false, error: 'no_stock', bundle: true, shortages: analysis.missing_items || [] };
+    } else
     if (analysis.error === 'no_active_store') {
       routingPreview = { ok: false, error: 'no_active_store' };
     } else if (analysis.gate === 'none') {

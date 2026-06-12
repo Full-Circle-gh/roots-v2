@@ -1267,6 +1267,18 @@ function renderItemsTable(items, showPack = true) {
 }
 
 // Items layout · TABLE — aligned columns (Item / Qty / Unit / Total / Pack).
+// Bundle line → a small "Inside" pack list so whoever fulfils the order knows
+// exactly what to box. pack_qty = per-bundle qty × this line's qty (server-set).
+function renderBundleInside(it) {
+  if (!it || !it.is_bundle || !Array.isArray(it.bundle_components) || !it.bundle_components.length) return '';
+  const rows = it.bundle_components.map(c => {
+    const nm = escapeHtml(c.name_en || c.name_cn || ('#' + c.id));
+    const cn = (c.name_cn && c.name_en) ? ` <span class="oi-bndl-zh">${escapeHtml(c.name_cn)}</span>` : '';
+    return `<div class="oi-bndl-row"><span class="oi-bndl-qty">${c.pack_qty}×</span><span>${nm}${cn}</span></div>`;
+  }).join('');
+  return `<div class="oi-bndl"><div class="oi-bndl-h">${cuT('Inside this bundle', '套装内含')}</div>${rows}</div>`;
+}
+
 function renderItemsAsGrid(items, showPack = true) {
   const head = `<div class="oi-th">
     <span>Item · 商品</span>
@@ -1285,7 +1297,7 @@ function renderItemsAsGrid(items, showPack = true) {
     return `<div class="oi-row" data-fk="${it.id}">
       <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
         ${itemThumb(it)}
-        <div style="min-width:0">${nameCell}${zh}<div style="margin-top:4px">${itemSkuHtml(it)}</div></div>
+        <div style="min-width:0">${nameCell}${zh}<div style="margin-top:4px">${itemSkuHtml(it)}</div>${renderBundleInside(it)}</div>
       </div>
       <span class="oi-c">${itemQtyHtml(it)}</span>
       <span class="oi-r">¥${fmt(it.unit_price)}</span>
@@ -1319,6 +1331,7 @@ function renderItemsAsCards(items, showPack = true) {
         <span class="item-unit">@ ¥${fmt(it.unit_price)}</span>
         ${showPack ? `<span class="oic-packs">${renderPackBadges(it)}</span>` : ''}
       </div>
+      ${renderBundleInside(it)}
     </div>`;
   }).join('');
   return `<div class="oi-cards">${cards}</div>`;

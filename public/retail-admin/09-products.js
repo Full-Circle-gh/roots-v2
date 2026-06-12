@@ -1212,6 +1212,7 @@ function paRender() {
           <div class="pa-card-pills">
             ${oosPill}
             ${variantPill}
+            ${p.is_bundle ? `<span class="pa-pill pa-pill-bundle" title="Bundle — sold as one, made of other products · 套装产品">${cuT('Bundle', '套装')}</span>` : ''}
             ${designed
               ? `<span class="pa-pill pa-pill-designed" title="Designer sections authored · 已配置设计板块">${PA_ICON_SPARKLE}Designed</span>`
               : `<span class="pa-pill pa-pill-plain" title="No designer sections yet · 尚未配置设计板块">Plain</span>`}

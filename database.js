@@ -2999,6 +2999,15 @@ try {
   // A product gets flagged "low" when its stock is >0 and ≤ this number — drives
   // the products list amber dot, the Low-stock KPI tile, and the dashboard/alerts.
   addColumn('store_products', 'low_stock_threshold', 'INTEGER');
+  // Store-only: BUNDLE PRODUCTS. A bundle is a normal store_products row (own
+  // name/photo/price/category — one card, one PDP, one cart line) that is really
+  // a fixed combination of OTHER products. bundle_items holds the recipe as JSON
+  // [{ id, qty }] of component product ids + per-unit quantities. When non-empty
+  // the row IS a bundle: its own stock_qty is ignored, availability is computed
+  // as min(component stock ÷ qty), and at checkout the COMPONENT stock is
+  // reserved/deducted (never the bundle's). Distinct from the legacy `bundle`
+  // column, which is the "buy together" upsell shown inside another product.
+  addColumn('store_products', 'bundle_items', 'TEXT');
   // Own indexes — store_products has its OWN sku namespace (independent of the
   // kitchen's), mirroring the products indexes the storefront relies on.
   db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_store_products_sku ON store_products(sku)').run();
