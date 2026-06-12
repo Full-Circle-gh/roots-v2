@@ -624,31 +624,59 @@ const composeBlocksHandler = async (req, res) => {
     if (_factLines.length) parts.push('Structured product facts — use these as the source of truth. Build a spec_strip from net weight / origin / shelf life, and include ingredients, storage and serving as the appropriate blocks. Do not invent beyond them:\n' + _factLines.join('\n'));
     const userMsg = parts.join('\n\n') + '\n\nCall emit_blocks now with the organised blocks.';
 
-    const result = await callLLM({
-      // Long bilingual products (full EN + CN copy) easily exceed a few
-      // thousand output tokens once expanded into paired blocks. Too low a cap
-      // truncates the emit_blocks tool call mid-JSON, leaving nothing parseable.
-      max_tokens: 8000,
-      system: { static: COMPOSE_SYSTEM, dynamic: composeLangDirective(hasEn, hasCn, translate) },
-      tools: [COMPOSE_TOOL],
-      messages: [{ role: 'user', content: userMsg }],
-    });
+    // One compose pass: call the model, pull the emit_blocks payload (robust to
+    // the tool input arriving as either a parsed object OR a JSON string — some
+    // relay paths hand it back un-parsed), sanitise + pair the blocks. Returns
+    // the parsed shape so the orchestration below can retry on an empty result.
+    // Long bilingual products (full EN + CN copy) easily exceed a few thousand
+    // output tokens once expanded into paired blocks; 12k keeps the emit_blocks
+    // tool call from truncating mid-JSON.
+    const composeOnce = async (directive, userText, maxTok = 12000) => {
+      const result = await callLLM({
+        max_tokens: maxTok,
+        system: { static: COMPOSE_SYSTEM, dynamic: directive },
+        tools: [COMPOSE_TOOL],
+        messages: [{ role: 'user', content: userText }],
+      });
+      let rawBlocks = [];
+      const toolUse = (result.content_blocks || []).find(b => b.type === 'tool_use' && b.name === 'emit_blocks');
+      let input = toolUse && toolUse.input;
+      if (typeof input === 'string') { try { input = JSON.parse(input); } catch (e) { input = null; } }
+      if (input && Array.isArray(input.blocks)) {
+        rawBlocks = input.blocks;
+      } else {
+        // Fallback: a provider returned JSON as text instead of a tool call.
+        const txt = (result.content_blocks || []).filter(b => b.type === 'text').map(b => b.text || '').join('\n');
+        const m = txt.match(/\{[\s\S]*\}/);
+        if (m) { try { const o = JSON.parse(m[0]); if (Array.isArray(o.blocks)) rawBlocks = o.blocks; } catch (e) {} }
+      }
+      let blocks = rawBlocks.map(sanitizeComposedBlock).filter(b => b && composedBlockHasContent(b));
+      // Repair the common "all-English blocks, then all-Chinese blocks" output
+      // into properly paired bilingual blocks.
+      if (hasEn && hasCn) blocks = mergeStackedBilingual(blocks);
+      return { result, rawBlocks, blocks, hadToolUse: !!toolUse };
+    };
 
-    let rawBlocks = [];
-    const toolUse = (result.content_blocks || []).find(b => b.type === 'tool_use' && b.name === 'emit_blocks');
-    if (toolUse && Array.isArray(toolUse.input && toolUse.input.blocks)) {
-      rawBlocks = toolUse.input.blocks;
-    } else {
-      // Fallback: a provider returned JSON as text instead of a tool call.
-      const txt = (result.content_blocks || []).filter(b => b.type === 'text').map(b => b.text || '').join('\n');
-      const m = txt.match(/\{[\s\S]*\}/);
-      if (m) { try { const o = JSON.parse(m[0]); if (Array.isArray(o.blocks)) rawBlocks = o.blocks; } catch (e) {} }
+    const baseDirective = composeLangDirective(hasEn, hasCn, translate);
+    let a = await composeOnce(baseDirective, userMsg);
+
+    // The model occasionally calls emit_blocks with an EMPTY list for a rich
+    // paste (no truncation, just a bad pass). Self-correct: retry once telling
+    // it that returning nothing was wrong.
+    if (!a.result.truncated && !a.blocks.length) {
+      const nudge = userMsg + '\n\nIMPORTANT: a previous attempt returned ZERO blocks, which is wrong — the copy above clearly contains several distinct sections (intro, why, ingredients, allergens, how to use, storage, nutrition, notes…). Emit one block per section now. Do NOT return an empty list.';
+      a = await composeOnce(baseDirective, nudge);
+    }
+    // Last resort for bilingual input: the dual-language "every block must be
+    // fully bilingual" pass is the most demanding and the most likely to come
+    // back empty. Drop to a single-language pass (English primary) and let the
+    // model draft the matching Chinese itself.
+    if (!a.result.truncated && !a.blocks.length && hasEn && hasCn) {
+      const soloMsg = parts.filter(p => !p.startsWith('Chinese copy')).join('\n\n') + '\n\nCall emit_blocks now with the organised blocks.';
+      a = await composeOnce(composeLangDirective(true, false, true), soloMsg);
     }
 
-    let blocks = rawBlocks.map(sanitizeComposedBlock).filter(b => b && composedBlockHasContent(b));
-    // Repair the common "all-English blocks, then all-Chinese blocks" output
-    // into properly paired bilingual blocks.
-    if (hasEn && hasCn) blocks = mergeStackedBilingual(blocks);
+    const { result, rawBlocks, blocks, hadToolUse } = a;
 
     // The reply was cut off mid-output — the tool call is partial, so any blocks
     // we did parse are unreliable. Surface this as its own error instead of the
@@ -667,7 +695,9 @@ const composeBlocksHandler = async (req, res) => {
     if (!blocks.length) {
       console.warn('[compose-blocks] no usable blocks parsed', {
         product: product.id || null, raw_count: rawBlocks.length,
-        had_tool_use: !!toolUse,
+        had_tool_use: hadToolUse,
+        stop_reason: result.raw && result.raw.stop_reason,
+        output_tokens: result.usage && result.usage.output_tokens,
         text_preview: (result.content_blocks || []).filter(b => b.type === 'text').map(b => (b.text || '').slice(0, 200)).join(' | ').slice(0, 400),
       });
     }
