@@ -1969,7 +1969,7 @@
      max-height. vh ÷ --ui-scale so the cap tracks the real viewport at any
      text-size zoom (raw vh ignores the html `zoom`). Fullscreen overrides this
      cap below. */
-  .pd-rte { min-height: 140px; max-height: calc(42vh / var(--ui-scale, 1)); overflow: auto; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; color: var(--text-1); background: var(--bg-app); }
+  .pd-rte { min-height: 140px; max-height: calc(42vh / var(--ui-scale, 1)); overflow: auto; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; color: var(--text-1); background: var(--bg-app); overflow-wrap: break-word; }
   .pd-rte:focus { outline: none; border-color: var(--brass, #B08D4A); }
   .pd-rte h2 { font-size: 17px; margin: 8px 0 4px; font-weight: 700; }
   .pd-rte h3 { font-size: 15px; margin: 6px 0; }
@@ -2023,6 +2023,26 @@
   #pd-bundle-product .bp-chip-qty input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .bp-chip-x { border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 13px; line-height: 1; padding: 0 2px; flex: none; }
   .bp-chip-x:hover { color: var(--brass); }
+  /* Customer-choice options editor (#pd-options) — one .opt-block per option
+     (question + type + required), each holding a list of .opt-choice rows. */
+  .opt-list { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 2px; }
+  .opt-block { border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 10px 12px; background: var(--bg-app); }
+  .opt-qrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .opt-q { flex: 1 1 160px; min-width: 120px; }
+  .opt-type { flex: none; }
+  .opt-req { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); white-space: nowrap; cursor: pointer; }
+  .opt-req input { margin: 0; }
+  .opt-choices { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line-soft); }
+  .opt-choice { display: flex; align-items: center; gap: 8px; }
+  .opt-choice > input[type="radio"], .opt-choice > input[type="checkbox"] { margin: 0; flex: none; }
+  .opt-clab { flex: 1 1 120px; min-width: 90px; }
+  .opt-cdelta { display: inline-flex; align-items: center; gap: 2px; color: var(--text-3); font-size: 12px; flex: none; }
+  #pd-options .opt-cdelta input {
+    width: 64px; height: 28px; box-sizing: border-box; padding: 0 6px;
+    font: 13px var(--f-sans); border: 1px solid var(--line-soft); border-radius: 6px;
+    background: var(--bg-pane); color: var(--text-1);
+  }
+  .opt-addc { align-self: flex-start; margin-top: 2px; }
   /* "Bundle" card pill — flags a product that is sold as one but made of others. */
   .pa-pill-bundle { background: color-mix(in srgb, var(--brass, #B08D4A) 18%, transparent); color: var(--brass, #B08D4A); }
   /* Order-line bundle "what's inside" pack list (admin order drawer). */

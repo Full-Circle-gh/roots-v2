@@ -908,6 +908,76 @@ function sanitizeBundleItems(input, selfId = null) {
     .slice(0, 20);
   return items.length ? JSON.stringify(items) : null;
 }
+// ── Per-product options (customer choices: dressing, spice level, cutlery…) ──
+// Stored in retail_product_options + retail_product_option_choices, keyed by the
+// store-product id. Orthogonal to stock — a choice never deducts inventory; it
+// only records the customer's pick (+ an optional price_delta). The customer
+// PDP/cart/checkout pipeline already reads these; these two helpers give the
+// Mini App Backend editor a read + write path so options can actually be authored.
+function loadProductOptions(productId) {
+  const options = tdb().prepare(
+    `SELECT id, question_en, question_cn, type, is_required, sort_order
+       FROM retail_product_options WHERE product_id = ?
+      ORDER BY sort_order ASC, id ASC`
+  ).all(productId);
+  if (!options.length) return [];
+  const placeholders = options.map(() => '?').join(',');
+  const choices = tdb().prepare(
+    `SELECT id, option_id, label_en, label_cn, price_delta, is_default, sort_order
+       FROM retail_product_option_choices
+      WHERE option_id IN (${placeholders})
+      ORDER BY sort_order ASC, id ASC`
+  ).all(...options.map(o => o.id));
+  const byOpt = {};
+  for (const c of choices) (byOpt[c.option_id] ||= []).push(c);
+  return options.map(o => ({ ...o, choices: byOpt[o.id] || [] }));
+}
+
+// Replace ALL options for a product with the supplied set (delete-then-insert in
+// one transaction). Editor sends the full list every save, so this is the whole
+// truth — an empty/missing array clears them. Choice price_delta is the only way
+// an option touches the bill; stock is never involved.
+function saveProductOptions(productId, input) {
+  const TYPES = ['single', 'multi', 'text'];
+  const clean = (Array.isArray(input) ? input : []).slice(0, 12).map(o => {
+    const type = TYPES.includes(o && o.type) ? o.type : 'single';
+    const question_en = String((o && o.question_en) || '').trim().slice(0, 120);
+    const question_cn = String((o && o.question_cn) || '').trim().slice(0, 120);
+    // 'text' options take a free-typed answer — they carry no preset choices.
+    const choices = type === 'text' ? [] : (Array.isArray(o && o.choices) ? o.choices : [])
+      .slice(0, 24)
+      .map(c => ({
+        label_en: String((c && c.label_en) || '').trim().slice(0, 80),
+        label_cn: String((c && c.label_cn) || '').trim().slice(0, 80),
+        price_delta: Math.round((Number(c && c.price_delta) || 0) * 100) / 100,
+        is_default: c && c.is_default ? 1 : 0,
+      }))
+      .filter(c => c.label_en || c.label_cn);
+    return { question_en, question_cn, type, is_required: o && o.is_required ? 1 : 0, choices };
+  }).filter(o => (o.question_en || o.question_cn) && (o.type === 'text' || o.choices.length));
+
+  const tx = tdb().transaction(() => {
+    tdb().prepare(
+      `DELETE FROM retail_product_option_choices
+        WHERE option_id IN (SELECT id FROM retail_product_options WHERE product_id = ?)`
+    ).run(productId);
+    tdb().prepare('DELETE FROM retail_product_options WHERE product_id = ?').run(productId);
+    const insOpt = tdb().prepare(
+      `INSERT INTO retail_product_options (product_id, question_en, question_cn, type, is_required, sort_order)
+       VALUES (?,?,?,?,?,?)`
+    );
+    const insChoice = tdb().prepare(
+      `INSERT INTO retail_product_option_choices (option_id, label_en, label_cn, price_delta, is_default, sort_order)
+       VALUES (?,?,?,?,?,?)`
+    );
+    clean.forEach((o, oi) => {
+      const optId = insOpt.run(productId, o.question_en, o.question_cn || null, o.type, o.is_required, oi).lastInsertRowid;
+      o.choices.forEach((c, ci) => insChoice.run(optId, c.label_en, c.label_cn || null, c.price_delta, c.is_default, ci));
+    });
+  });
+  tx();
+}
+
 // resolveBundleComponents → customer/operator display shape: each component
 // expanded to a light card with its per-unit qty. Kept in the operator's chosen
 // order. Used by the PDP "what's inside" and the backend order-detail pack list.
@@ -9522,7 +9592,10 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     // mapping + any legacy reader still read products.category.
     sets.push('category = ?'); params.push(norm.top);
   }
-  if (!sets.length) {
+  // Options (customer choices) live in their own tables, not store_products
+  // columns, so they're handled separately below — an options-only save is valid.
+  const hasOptions = 'options' in body;
+  if (!sets.length && !hasOptions) {
     return res.status(strippedLocked ? 423 : 400)
       .json({ success: false, error: strippedLocked ? 'catalog_locked' : 'no_fields' });
   }
@@ -9546,6 +9619,10 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
       return res.status(409).json({ success: false, error: 'sku_taken', conflict: findSkuConflict(body.sku, id) });
     throw e;
   }
+
+  // Persist customer-choice options (replace-all). Retail-owned like price/photos,
+  // so allowed even when core catalog fields are locked.
+  if (hasOptions) saveProductOptions(id, body.options);
 
   logActivity(req.user.id, req.user.username, 'update', 'product_retail', id, { fields: Object.keys(body), name: existing.name_en }, req.ip);
 
@@ -9584,6 +9661,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   } else {
     row.nutrition = null;
   }
+  if (row) row.options = loadProductOptions(id);
   res.json({ success: true, data: row });
 });
 
@@ -9622,6 +9700,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
     } catch { row.nutrition = null; }
   } else { row.nutrition = null; }
   row.product_facts = parseFactsCol(row.product_facts);
+  row.options = loadProductOptions(id);
   res.json({ success: true, data: row });
 });
 

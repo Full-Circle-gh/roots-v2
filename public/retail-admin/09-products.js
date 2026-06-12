@@ -1584,6 +1584,7 @@ function pdOpen(id) {
   vaLoad(p ? p.id : null);
   buLoad(p ? p.id : null);
   bpLoad(p ? p.id : null);
+  optLoad(p ? p.id : null);
   // Show the docked editor, hide the empty-state placeholder, and mark which
   // row in the list is currently loaded so the operator never loses their place.
   _pdSelectedId = p ? p.id : null;
@@ -2171,6 +2172,122 @@ function bpPick(id) {
 function bpBody() {
   if (!BP.length) return null;
   return BP.map(c => ({ id: c.id, qty: Math.max(1, parseInt(c.qty, 10) || 1) }));
+}
+// ── Customer-choice options (dressing, spice level, cutlery…) ─────────────────
+// A choice records the customer's pick at checkout and NEVER touches stock — so
+// an always-available dressing on a limited salad stays on the salad's stock.
+// The mini-app PDP/cart/checkout already read these; here the operator authors
+// them. Stored in retail_product_options + _choices, saved via body.options on
+// the main Save (replace-all). OPT mirrors the server shape (minus ids).
+let OPT_ID = null, OPT = [], OPT_OPEN = false;
+function optLoad(id) {
+  const box = document.getElementById('pd-options'); if (!box) return;
+  OPT_ID = id; OPT = []; OPT_OPEN = false;
+  if (!id) {
+    box.innerHTML = `<div class="pd-var-head">${cuT('Options (customer chooses)', '选项(顾客选择)')}</div>` +
+      `<div class="helper" style="font-size:11px">${cuT('Add a name & SKU above — it saves automatically, then add a choice like a dressing here.', '请先在上方填写名称和货号 — 系统会自动保存,随后即可在此添加如酱料等选项。')}</div>`;
+    return;
+  }
+  optRender();   // show the collapsed bar immediately
+  // Options aren't in the list cache, so pull them from the full product.
+  fetch('/api/retail-admin/products/' + id, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(j => {
+      if (OPT_ID !== id) return;   // operator switched products mid-fetch
+      const opts = (j && j.success && j.data && Array.isArray(j.data.options)) ? j.data.options : [];
+      OPT = opts.map(o => ({
+        question_en: o.question_en || '', question_cn: o.question_cn || '',
+        type: o.type || 'single', is_required: o.is_required ? 1 : 0,
+        choices: (o.choices || []).map(c => ({
+          label_en: c.label_en || '', label_cn: c.label_cn || '',
+          price_delta: Number(c.price_delta) || 0, is_default: c.is_default ? 1 : 0,
+        })),
+      }));
+      OPT_OPEN = OPT.length > 0;
+      optRender();
+    })
+    .catch(() => {});
+}
+function optToggle() { OPT_OPEN = !OPT_OPEN; optRender(); }
+function optRender() {
+  const box = document.getElementById('pd-options'); if (!box || OPT_ID == null) return;
+  const nChoices = OPT.reduce((n, o) => n + (o.type === 'text' ? 0 : o.choices.length), 0);
+  const summary = OPT.length
+    ? cuT(OPT.length + (OPT.length === 1 ? ' option' : ' options') + (nChoices ? ' · ' + nChoices + ' choices' : ''),
+          OPT.length + ' 个选项' + (nChoices ? ' · ' + nChoices + ' 项' : ''))
+    : cuT('None · tap to add a choice', '无 · 点击添加选项');
+  const toggle = `<button type="button" class="pd-var-toggle" onclick="optToggle()" aria-expanded="${OPT_OPEN ? 'true' : 'false'}">` +
+    `<span class="pd-var-caret">${OPT_OPEN ? '▾' : '▸'}</span>` +
+    `<span class="pd-var-head" style="margin:0">${cuT('Options (customer chooses)', '选项(顾客选择)')}</span>` +
+    `<span class="pd-var-summary">${summary}</span></button>`;
+  if (!OPT_OPEN) { box.innerHTML = toggle; return; }
+  const typeSel = (oi, t) => {
+    const opt = (v, lbl) => `<option value="${v}"${t === v ? ' selected' : ''}>${lbl}</option>`;
+    return `<select class="opt-type" onchange="optType(${oi}, this.value)" title="${cuT('How the customer answers', '顾客如何选择')}">` +
+      opt('single', cuT('Pick one', '单选')) + opt('multi', cuT('Pick any', '多选')) + opt('text', cuT('Type an answer', '填写')) + `</select>`;
+  };
+  const blocks = OPT.map((o, oi) => {
+    const choices = o.type === 'text' ? '' : (o.choices.length
+      ? o.choices.map((c, ci) =>
+          `<div class="opt-choice">` +
+            (o.type === 'single'
+              ? `<input type="radio" name="opt-def-${oi}" title="${cuT('Default pick', '默认选项')}"${c.is_default ? ' checked' : ''} onchange="optDefault(${oi}, ${ci})">`
+              : `<input type="checkbox" title="${cuT('Pre-selected', '默认勾选')}"${c.is_default ? ' checked' : ''} onchange="optDefaultMulti(${oi}, ${ci}, this.checked)">`) +
+            `<input type="text" class="opt-clab" value="${escapeAttr(c.label_en)}" placeholder="${cuT('Choice EN', '选项(英文)')}" oninput="optC(${oi}, ${ci}, 'label_en', this.value)">` +
+            `<input type="text" class="opt-clab" value="${escapeAttr(c.label_cn)}" placeholder="${cuT('Choice 中文', '选项(中文)')}" oninput="optC(${oi}, ${ci}, 'label_cn', this.value)">` +
+            `<span class="opt-cdelta" title="${cuT('Extra charge for this choice (0 = free)', '此选项加价(0 = 免费)')}">+¥<input type="number" step="0.01" value="${c.price_delta || 0}" oninput="optC(${oi}, ${ci}, 'price_delta', this.value)"></span>` +
+            `<button type="button" class="bp-chip-x" title="${cuT('Remove', '移除')}" onclick="optRemoveChoice(${oi}, ${ci})">✕</button>` +
+          `</div>`).join('')
+      : `<span class="helper" style="font-size:11px">${cuT('Add at least one choice.', '请至少添加一个选项。')}</span>`);
+    return `<div class="opt-block">` +
+      `<div class="opt-qrow">` +
+        `<input type="text" class="opt-q" value="${escapeAttr(o.question_en)}" placeholder="${cuT('Question EN (e.g. Choose your dressing)', '问题(英文,如:选择酱料)')}" oninput="optQ(${oi}, 'question_en', this.value)">` +
+        `<input type="text" class="opt-q" value="${escapeAttr(o.question_cn)}" placeholder="${cuT('Question 中文', '问题(中文)')}" oninput="optQ(${oi}, 'question_cn', this.value)">` +
+        typeSel(oi, o.type) +
+        `<label class="opt-req" title="${cuT('Customer must choose before adding to cart', '加入购物车前必须选择')}"><input type="checkbox"${o.is_required ? ' checked' : ''} onchange="optReq(${oi}, this.checked)"> ${cuT('Required', '必选')}</label>` +
+        `<button type="button" class="bp-chip-x" title="${cuT('Remove this option', '移除此选项')}" onclick="optRemoveOption(${oi})">✕</button>` +
+      `</div>` +
+      (o.type === 'text' ? '' : `<div class="opt-choices">${choices}` +
+        `<button type="button" class="btn btn-sm opt-addc" onclick="optAddChoice(${oi})">${cuT('+ Add choice', '+ 添加选项')}</button></div>`) +
+    `</div>`;
+  }).join('');
+  box.innerHTML = toggle +
+    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT('Let customers choose — dressing, spice level, cutlery. The choice shows on their order but never affects stock (so an always-on dressing fits a limited salad).', '让顾客自由选择 — 酱料、辣度、餐具等。选择会显示在订单上,但绝不影响库存(因此常备酱料可搭配数量有限的沙拉)。')}</div>` +
+    `<div class="opt-list">${blocks}</div>` +
+    `<div class="va-actions"><button type="button" class="btn btn-sm" onclick="optAddOption()">${cuT('+ Add option', '+ 添加选项组')}</button></div>`;
+}
+// Text/number inputs update the model only — re-rendering mid-type would drop
+// the caret. Structural changes (add/remove/type/default) re-render.
+function optQ(oi, key, val) { if (OPT[oi]) OPT[oi][key] = val; }
+function optC(oi, ci, key, val) {
+  const c = OPT[oi] && OPT[oi].choices[ci]; if (!c) return;
+  c[key] = key === 'price_delta' ? (parseFloat(val) || 0) : val;
+}
+function optType(oi, val) { if (OPT[oi]) { OPT[oi].type = val; optRender(); } }
+function optReq(oi, on) { if (OPT[oi]) OPT[oi].is_required = on ? 1 : 0; }
+function optDefault(oi, ci) {   // single-select: exactly one default
+  const o = OPT[oi]; if (!o) return;
+  o.choices.forEach((c, i) => { c.is_default = i === ci ? 1 : 0; });
+  optRender();
+}
+function optDefaultMulti(oi, ci, on) { const c = OPT[oi] && OPT[oi].choices[ci]; if (c) c.is_default = on ? 1 : 0; }
+function optAddOption() {
+  OPT.push({ question_en: '', question_cn: '', type: 'single', is_required: 1, choices: [{ label_en: '', label_cn: '', price_delta: 0, is_default: 0 }, { label_en: '', label_cn: '', price_delta: 0, is_default: 0 }] });
+  OPT_OPEN = true; optRender();
+}
+function optRemoveOption(oi) { OPT.splice(oi, 1); optRender(); }
+function optAddChoice(oi) { if (OPT[oi]) { OPT[oi].choices.push({ label_en: '', label_cn: '', price_delta: 0, is_default: 0 }); optRender(); } }
+function optRemoveChoice(oi, ci) { if (OPT[oi]) { OPT[oi].choices.splice(ci, 1); optRender(); } }
+// Save payload — always an array ([] clears). Mirrors the server sanitiser so
+// the round-trip is stable: drop empty choices, then options with no usable body.
+function optBody() {
+  return OPT.map(o => {
+    const type = ['single', 'multi', 'text'].includes(o.type) ? o.type : 'single';
+    const choices = type === 'text' ? [] : (o.choices || [])
+      .map(c => ({ label_en: (c.label_en || '').trim(), label_cn: (c.label_cn || '').trim(), price_delta: Number(c.price_delta) || 0, is_default: c.is_default ? 1 : 0 }))
+      .filter(c => c.label_en || c.label_cn);
+    return { question_en: (o.question_en || '').trim(), question_cn: (o.question_cn || '').trim(), type, is_required: o.is_required ? 1 : 0, choices };
+  }).filter(o => (o.question_en || o.question_cn) && (o.type === 'text' || o.choices.length));
 }
 // ── Image optimisation (resize) ─────────────────────────────────────────────
 // Gallery photos are base64-stored in store_products.image_data, so a raw
@@ -2898,6 +3015,7 @@ function pdCollectBody() {
   if (_pdGalleryDirty) body.images = _pdGallery;  // gallery drives image_data (first = main)
   if (id && BU_ID === Number(id)) body.bundle = buBody();  // buy-together bundle (null clears)
   if (id && BP_ID === Number(id)) body.bundle_items = bpBody();  // THIS-is-a-bundle recipe (null clears)
+  if (id && OPT_ID === Number(id)) body.options = optBody();  // customer-choice options ([] clears)
   return { id, body };
 }
 
@@ -2946,7 +3064,7 @@ async function pdSaveCore() {
       _pdSelectedId = j.data.id;
       document.getElementById('pd-dup-btn').style.display = '';
       document.getElementById('pd-delete-btn').style.display = '';
-      vaLoad(j.data.id); buLoad(j.data.id); bpLoad(j.data.id);
+      vaLoad(j.data.id); buLoad(j.data.id); bpLoad(j.data.id); optLoad(j.data.id);
     }
   } catch (e) { uiError = e; }
 
