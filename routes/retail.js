@@ -6267,6 +6267,46 @@ function bestAutoVoucher(customerId, subtotal, shippingFee, couponableSubtotal =
   return best;
 }
 
+// The best auto-apply promo the customer is JUST short of unlocking — active,
+// in-pool, within the per-customer cap, but blocked solely by an unmet spend
+// threshold (subtotal < min_subtotal). Used to show a "locked" coupon at
+// checkout so the customer sees the reward for adding a little more to the cart.
+// Ranked by smallest shortfall (closest to unlocking wins). Display only.
+function nearMissAutoVoucher(customerId, subtotal, couponableSubtotal = subtotal) {
+  const rows = tdb().prepare(
+    `SELECT * FROM retail_vouchers
+      WHERE is_active = 1 AND auto_apply = 1 AND auto_grant_signup = 0
+        AND min_subtotal > 0 AND ? < min_subtotal
+        AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)
+        AND (max_uses IS NULL OR used_count < max_uses)`
+  ).all(subtotal);
+  let best = null, bestGap = Infinity;
+  for (const v of rows) {
+    if (customerId && v.per_customer_limit && v.per_customer_limit > 0) {
+      const used = tdb().prepare(
+        `SELECT COUNT(*) AS n FROM retail_orders
+          WHERE customer_id = ? AND voucher_code = ? AND status NOT IN ('cancelled')`
+      ).get(customerId, v.code).n;
+      if (used >= v.per_customer_limit) continue;
+    }
+    const gap = Number(v.min_subtotal) - Number(subtotal);
+    if (gap > 0 && gap < bestGap) {
+      // Value the promo AT its threshold so the teaser figure is honest even
+      // though the cart hasn't reached it yet.
+      const r = computeVoucherDiscount(v, v.min_subtotal, 0,
+        Math.max(Number(couponableSubtotal) || 0, Number(v.min_subtotal) || 0));
+      best = {
+        voucher: v,
+        shortfall: +gap.toFixed(2),
+        wouldDiscount: Number(r.discount) || 0,
+        wouldFreeShipping: !!r.free_shipping,
+      };
+      bestGap = gap;
+    }
+  }
+  return best;
+}
+
 // Browseable coupons — public list customers can apply without a code.
 // Filters out inactive, expired, and exhausted vouchers. Auth optional:
 // when a token is present we also strip ones the customer has already
@@ -6343,13 +6383,29 @@ router.get('/api/retail/vouchers/auto', requireRetailAuth, (req, res) => {
   // Shipping fee isn't known here, so a pure free-shipping promo (¥0 discount)
   // won't surface in the display — it still applies at order time.
   const best = bestAutoVoucher(req.customer.id, subtotal, 0, couponableSubtotal);
-  if (!best) return res.json({ success: true, data: null });
-  const v = best.voucher;
-  res.json({ success: true, data: {
-    code: v.code, type: v.type, value: v.value,
-    discount: best.discount, free_shipping: best.free_shipping,
-    title_en: v.title_en, title_cn: v.title_cn, min_subtotal: v.min_subtotal,
-  }});
+  if (best) {
+    const v = best.voucher;
+    return res.json({ success: true, data: {
+      code: v.code, type: v.type, value: v.value,
+      discount: best.discount, free_shipping: best.free_shipping,
+      title_en: v.title_en, title_cn: v.title_cn, min_subtotal: v.min_subtotal,
+    }});
+  }
+  // Nothing applies yet — but if an auto promo is blocked ONLY by an unmet spend
+  // threshold, surface it as a "locked" coupon so the customer sees what a bit
+  // more spend would unlock (nudges basket size). discount here is the teaser
+  // value at the threshold, NOT a discount on the current cart.
+  const near = nearMissAutoVoucher(req.customer.id, subtotal, couponableSubtotal);
+  if (near) {
+    const v = near.voucher;
+    return res.json({ success: true, data: {
+      code: v.code, type: v.type, value: v.value,
+      discount: near.wouldDiscount, free_shipping: near.wouldFreeShipping,
+      title_en: v.title_en, title_cn: v.title_cn, min_subtotal: v.min_subtotal,
+      blocked: true, shortfall: near.shortfall,
+    }});
+  }
+  res.json({ success: true, data: null });
 });
 
 // Customer taps CLAIM on the home "Coupon" block. Grants the linked voucher

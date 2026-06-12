@@ -38,6 +38,7 @@ Page({
     publicCoupons: [],       // [{code, title, sublabel}]
     myVouchers: [],          // granted to this customer
     autoVoucher: null,       // best store-wide auto-apply promo for this cart {code,discount,...}
+    lockedVoucher: null,     // near-miss auto promo (cart just short of its min) — display-only nudge
     autoApplied: null,       // banner shown when the auto promo is the winning discount {title, amount}
     couponShown: '',         // effective coupon discount for the breakdown (manual OR auto, best wins)
     couponFreeShown: false,  // effective free-shipping flag for the breakdown
@@ -213,6 +214,7 @@ Page({
       regionRequired: 'Please choose your delivery area',
       wechatOpt: 'WeChat Pay',
       alipayOpt: 'Alipay',
+      comingSoon: 'Coming soon',
       pointsOpt: 'Points',
       free: 'FREE',
       // Bind-WeChat empty state, shown in place of the address form when
@@ -651,15 +653,20 @@ Page({
   // the checkout total + show an "Applied automatically" banner.
   async loadAutoVoucher() {
     try {
-      const data = await api.get('/api/retail/vouchers/auto?subtotal=' + cart.subtotal());
-      // api unwraps body.data → resolves to the object (or null) directly.
-      const auto = data && data.code ? data : null;
-      // A coupon that's auto-applied is already shown in the banner — don't also
-      // list it as a "TAP TO USE" card (it appeared twice). Strip it from both
-      // card lists so the same coupon never shows in two places.
-      const strip = (arr) => auto ? arr.filter(c => c.code !== auto.code) : arr;
+      const data = await api.get('/api/retail/vouchers/auto?subtotal=' + cart.subtotal()
+        + '&couponable_subtotal=' + cart.couponableSubtotal());
+      // api unwraps body.data → resolves to the object (or null) directly. The
+      // server returns EITHER an applied auto promo OR a `blocked` near-miss
+      // (an auto promo the cart is just short of unlocking), never both.
+      const auto = data && data.code && !data.blocked ? data : null;
+      const locked = data && data.code && data.blocked ? data : null;
+      // A coupon shown in the banner (applied OR locked) shouldn't ALSO appear
+      // as a "TAP TO USE" card — strip its code from both card lists.
+      const stripCode = (auto || locked) ? (auto || locked).code : '';
+      const strip = (arr) => stripCode ? arr.filter(c => c.code !== stripCode) : arr;
       this.setData({
         autoVoucher: auto,
+        lockedVoucher: this.buildLockedVoucher(locked),
         publicCoupons: strip(this.data.publicCoupons),
         myVouchers: strip(this.data.myVouchers),
       });
@@ -667,6 +674,29 @@ Page({
       console.warn('[checkout] loadAutoVoucher failed:', e.message);
     }
     this.refreshQuote();
+  },
+
+  // Build the "locked" coupon card from a near-miss auto promo (one the cart is
+  // just short of unlocking). Display only — it never touches the total; it just
+  // shows the reward + how much more to spend, to nudge a bigger basket.
+  buildLockedVoucher(b) {
+    if (!b) return null;
+    const L = this.data.lang;
+    const valueLabel = b.type === 'percent' ? (b.value + (L === 'cn' ? '% 优惠' : '% off'))
+      : b.type === 'free_shipping' ? (L === 'cn' ? '免运费' : 'Free shipping')
+      : ('¥' + Number(b.value).toFixed(0) + (L === 'cn' ? ' 优惠' : ' off'));
+    const shortfall = Number(b.shortfall) || 0;
+    const addMore = L === 'cn'
+      ? ('再买 ¥' + shortfall.toFixed(2) + ' 即可使用')
+      : ('Add ¥' + shortfall.toFixed(2) + ' to use');
+    const minNote = L === 'cn'
+      ? ('满 ¥' + Number(b.min_subtotal).toFixed(0))
+      : ('Min ¥' + Number(b.min_subtotal).toFixed(0));
+    return {
+      title: lang.pick(b.title_en, b.title_cn, L) || valueLabel,
+      code: b.code || '',
+      sub: addMore + ' · ' + minNote,
+    };
   },
 
   // The discount actually in effect = whichever of {customer's applied code,
@@ -962,6 +992,7 @@ Page({
         regionRequired: '请选择配送区域',
         wechatOpt: '微信支付',
         alipayOpt: '支付宝',
+        comingSoon: '即将推出',
         pointsOpt: '积分抵扣',
         free: '免费',
         bindTitle: '绑定微信,配送到家',
@@ -1569,6 +1600,7 @@ Page({
       const v = await api.post('/api/retail/vouchers/validate', {
         code,
         subtotal: cart.subtotal(),
+        couponable_subtotal: cart.couponableSubtotal(),
       });
       const data = v?.data || v;
       this.setData({

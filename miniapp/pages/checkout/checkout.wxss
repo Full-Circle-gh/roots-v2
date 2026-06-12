@@ -303,6 +303,16 @@
   padding: 14rpx 0;
 }
 .opt-row.opt-disabled { opacity: 0.45; }
+.soon-pill {
+  flex: none;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.04em;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(0,0,0,0.06);
+  color: #1a1a17;
+  opacity: 0.85;
+}
 .opt-body { flex: 1; min-width: 0; }
 .opt-label {
   font-size: calc(30rpx * var(--font-scale));
@@ -548,6 +558,17 @@
 .va-desc { font-size: calc(22rpx * var(--font-scale)); margin-top: 2rpx; }
 .va-remove { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.1em; color: var(--berry); text-decoration: underline; }
 .voucher-applied.auto { background: rgba(204, 217, 0, 0.12); border-color: var(--forest); margin-bottom: 14rpx; }
+/* Locked near-miss promo — greyed + dashed so it reads as "not yet usable",
+   while still showing the reward + how much more to spend to unlock it. */
+.voucher-applied.locked {
+  background: rgba(0, 0, 0, 0.03);
+  border: 2rpx dashed rgba(0, 0, 0, 0.18);
+  margin-bottom: 14rpx;
+}
+.voucher-applied.locked .va-name { color: var(--ink); opacity: 0.7; }
+.voucher-applied.locked .va-code-tag { color: rgba(0, 0, 0, 0.45); border-color: rgba(0, 0, 0, 0.08); }
+.voucher-applied.locked .va-desc { color: var(--berry); opacity: 0.95; }
+.va-lock { font-size: calc(28rpx * var(--font-scale)); opacity: 0.5; padding-left: 12rpx; }
 
 .coupon-chips {
   display: flex;

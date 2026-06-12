@@ -393,12 +393,13 @@
       </view>
     </view>
 
-    <view class="opt-row" data-method="alipay" bindtap="setPayment">
-      <view class="dot {{paymentMethod === 'alipay' ? 'on' : ''}}"></view>
+    <view class="opt-row opt-disabled" data-method="alipay">
+      <view class="dot"></view>
       <view class="pay-swatch" style="background: #1677FF;"></view>
       <view class="opt-body">
         <view class="opt-label f-bear">{{copy.alipayOpt}}</view>
       </view>
+      <view class="soon-pill f-bear">{{copy.comingSoon}}</view>
     </view>
 
     <!-- When points fully cover the bill, the picked radio is purely a
@@ -462,6 +463,15 @@
     </view>
 
     <block wx:else>
+      <view wx:if="{{lockedVoucher}}" class="voucher-applied locked">
+        <view>
+          <view class="va-name f-bear">{{lockedVoucher.title}}</view>
+          <view wx:if="{{lockedVoucher.code}}" class="va-code-tag f-gothic">{{lockedVoucher.code}}</view>
+          <view class="va-desc muted">{{lockedVoucher.sub}}</view>
+        </view>
+        <view class="va-lock">🔒</view>
+      </view>
+
       <view wx:if="{{myVouchers.length}}" class="coupon-chips">
         <view wx:for="{{myVouchers}}" wx:key="code"
               class="coupon-chip mine" data-code="{{item.code}}" bindtap="selectPublicCoupon">
