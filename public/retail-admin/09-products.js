@@ -2179,10 +2179,10 @@ function bpBody() {
 // The mini-app PDP/cart/checkout already read these; here the operator authors
 // them. Stored in retail_product_options + _choices, saved via body.options on
 // the main Save (replace-all). OPT mirrors the server shape (minus ids).
-let OPT_ID = null, OPT = [], OPT_OPEN = false;
+let OPT_ID = null, OPT = [], OPT_OPEN = false, OPT_PICK = null;   // OPT_PICK = {oi,ci} choosing a stock product
 function optLoad(id) {
   const box = document.getElementById('pd-options'); if (!box) return;
-  OPT_ID = id; OPT = []; OPT_OPEN = false;
+  OPT_ID = id; OPT = []; OPT_OPEN = false; OPT_PICK = null;
   if (!id) {
     box.innerHTML = `<div class="pd-var-head">${cuT('Options (customer chooses)', '选项(顾客选择)')}</div>` +
       `<div class="helper" style="font-size:11px">${cuT('Add a name & SKU above — it saves automatically, then add a choice like a dressing here.', '请先在上方填写名称和货号 — 系统会自动保存,随后即可在此添加如酱料等选项。')}</div>`;
@@ -2201,6 +2201,10 @@ function optLoad(id) {
         choices: (o.choices || []).map(c => ({
           label_en: c.label_en || '', label_cn: c.label_cn || '',
           price_delta: Number(c.price_delta) || 0, is_default: c.is_default ? 1 : 0,
+          // Stock-backed add-on link (paid extra drawn from a real product).
+          stock_product_id: c.stock_product_id || null,
+          addon_name_en: c.addon_name_en || '', addon_name_cn: c.addon_name_cn || '',
+          addon_stock: c.addon_stock != null ? c.addon_stock : null,
         })),
       }));
       OPT_OPEN = OPT.length > 0;
@@ -2228,16 +2232,7 @@ function optRender() {
   };
   const blocks = OPT.map((o, oi) => {
     const choices = o.type === 'text' ? '' : (o.choices.length
-      ? o.choices.map((c, ci) =>
-          `<div class="opt-choice">` +
-            (o.type === 'single'
-              ? `<input type="radio" name="opt-def-${oi}" title="${cuT('Default pick', '默认选项')}"${c.is_default ? ' checked' : ''} onchange="optDefault(${oi}, ${ci})">`
-              : `<input type="checkbox" title="${cuT('Pre-selected', '默认勾选')}"${c.is_default ? ' checked' : ''} onchange="optDefaultMulti(${oi}, ${ci}, this.checked)">`) +
-            `<input type="text" class="opt-clab" value="${escapeAttr(c.label_en)}" placeholder="${cuT('Choice EN', '选项(英文)')}" oninput="optC(${oi}, ${ci}, 'label_en', this.value)">` +
-            `<input type="text" class="opt-clab" value="${escapeAttr(c.label_cn)}" placeholder="${cuT('Choice 中文', '选项(中文)')}" oninput="optC(${oi}, ${ci}, 'label_cn', this.value)">` +
-            `<span class="opt-cdelta" title="${cuT('Extra charge for this choice (0 = free)', '此选项加价(0 = 免费)')}">+¥<input type="number" step="0.01" value="${c.price_delta || 0}" oninput="optC(${oi}, ${ci}, 'price_delta', this.value)"></span>` +
-            `<button type="button" class="bp-chip-x" title="${cuT('Remove', '移除')}" onclick="optRemoveChoice(${oi}, ${ci})">✕</button>` +
-          `</div>`).join('')
+      ? o.choices.map((c, ci) => _optChoiceRow(o, oi, c, ci)).join('')
       : `<span class="helper" style="font-size:11px">${cuT('Add at least one choice.', '请至少添加一个选项。')}</span>`);
     return `<div class="opt-block">` +
       `<div class="opt-qrow">` +
@@ -2247,14 +2242,46 @@ function optRender() {
         `<label class="opt-req" title="${cuT('Customer must choose before adding to cart', '加入购物车前必须选择')}"><input type="checkbox"${o.is_required ? ' checked' : ''} onchange="optReq(${oi}, this.checked)"> ${cuT('Required', '必选')}</label>` +
         `<button type="button" class="bp-chip-x" title="${cuT('Remove this option', '移除此选项')}" onclick="optRemoveOption(${oi})">✕</button>` +
       `</div>` +
+      (o.type === 'multi' ? `<div class="helper" style="font-size:11px;margin:2px 0 0">${cuT('Pick-any extras. Link each to a product so it draws from that product’s stock and sells out when it runs low.', '多选加项。将每项关联到商品,即可占用该商品库存,售罄时自动隐藏。')}</div>` : '') +
       (o.type === 'text' ? '' : `<div class="opt-choices">${choices}` +
         `<button type="button" class="btn btn-sm opt-addc" onclick="optAddChoice(${oi})">${cuT('+ Add choice', '+ 添加选项')}</button></div>`) +
     `</div>`;
   }).join('');
   box.innerHTML = toggle +
-    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT('Let customers choose — dressing, spice level, cutlery. The choice shows on their order but never affects stock (so an always-on dressing fits a limited salad).', '让顾客自由选择 — 酱料、辣度、餐具等。选择会显示在订单上,但绝不影响库存(因此常备酱料可搭配数量有限的沙拉)。')}</div>` +
+    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT('Let customers choose. A free pick (dressing) never affects stock. A paid extra (pickles, sauce) can be linked to a product so it draws from that product’s stock and sells out when low.', '让顾客自由选择。免费选项(酱料)不影响库存;付费加项(腌菜、酱汁)可关联商品,从而占用其库存并在不足时售罄。')}</div>` +
     `<div class="opt-list">${blocks}</div>` +
-    `<div class="va-actions"><button type="button" class="btn btn-sm" onclick="optAddOption()">${cuT('+ Add option', '+ 添加选项组')}</button></div>`;
+    `<div class="va-actions">` +
+      `<button type="button" class="btn btn-sm" onclick="optAddOption()">${cuT('+ Add a pick (free)', '+ 添加选择(免费)')}</button>` +
+      `<button type="button" class="btn btn-sm" onclick="optAddExtras()">${cuT('+ Add paid extras', '+ 添加付费加项')}</button>` +
+    `</div>`;
+  if (OPT_PICK) { const s = document.getElementById('opt-search'); if (s) s.focus(); optPickerList(); }
+}
+// One choice row + (when it's the active link target) the product picker below.
+function _optChoiceRow(o, oi, c, ci) {
+  const def = o.type === 'single'
+    ? `<input type="radio" name="opt-def-${oi}" title="${cuT('Default pick', '默认选项')}"${c.is_default ? ' checked' : ''} onchange="optDefault(${oi}, ${ci})">`
+    : `<input type="checkbox" title="${cuT('Pre-selected', '默认勾选')}"${c.is_default ? ' checked' : ''} onchange="optDefaultMulti(${oi}, ${ci}, this.checked)">`;
+  // Link control: a chip when linked (name + live stock), else a "+ Stock" button.
+  let link;
+  if (c.stock_product_id) {
+    const nm = escapeHtml(c.addon_name_en || c.addon_name_cn || ('#' + c.stock_product_id));
+    const stk = c.addon_stock != null ? ` · ${c.addon_stock} ${cuT('in stock', '库存')}` : '';
+    link = `<span class="opt-link on" title="${cuT('Draws from this product’s stock', '占用该商品库存')}">🔗 ${nm}${stk}` +
+      `<button type="button" class="opt-unlink" title="${cuT('Unlink', '取消关联')}" onclick="optUnlink(${oi}, ${ci})">✕</button></span>`;
+  } else {
+    link = `<button type="button" class="btn btn-sm opt-link-btn" title="${cuT('Link a product so this extra uses its stock', '关联商品,使此加项占用其库存')}" onclick="optLinkPick(${oi}, ${ci})">${cuT('+ Stock product', '+ 关联库存商品')}</button>`;
+  }
+  const picking = OPT_PICK && OPT_PICK.oi === oi && OPT_PICK.ci === ci;
+  const picker = picking ? `<div class="opt-picker">` +
+    `<input id="opt-search" class="bu-search" type="text" autocomplete="off" placeholder="${cuT('Search a product to use for stock…', '搜索作为库存来源的商品…')}" oninput="optPickerList()">` +
+    `<div id="opt-picklist" class="bu-picklist"></div></div>` : '';
+  return `<div class="opt-choice">` + def +
+    `<input type="text" class="opt-clab" value="${escapeAttr(c.label_en)}" placeholder="${cuT('Choice EN', '选项(英文)')}" oninput="optC(${oi}, ${ci}, 'label_en', this.value)">` +
+    `<input type="text" class="opt-clab" value="${escapeAttr(c.label_cn)}" placeholder="${cuT('Choice 中文', '选项(中文)')}" oninput="optC(${oi}, ${ci}, 'label_cn', this.value)">` +
+    `<span class="opt-cdelta" title="${cuT('Extra charge for this choice (0 = free)', '此选项加价(0 = 免费)')}">+¥<input type="number" step="0.01" value="${c.price_delta || 0}" oninput="optC(${oi}, ${ci}, 'price_delta', this.value)"></span>` +
+    link +
+    `<button type="button" class="bp-chip-x" title="${cuT('Remove', '移除')}" onclick="optRemoveChoice(${oi}, ${ci})">✕</button>` +
+  `</div>` + picker;
 }
 // Text/number inputs update the model only — re-rendering mid-type would drop
 // the caret. Structural changes (add/remove/type/default) re-render.
@@ -2272,19 +2299,60 @@ function optDefault(oi, ci) {   // single-select: exactly one default
 }
 function optDefaultMulti(oi, ci, on) { const c = OPT[oi] && OPT[oi].choices[ci]; if (c) c.is_default = on ? 1 : 0; }
 function optAddOption() {
-  OPT.push({ question_en: '', question_cn: '', type: 'single', is_required: 1, choices: [{ label_en: '', label_cn: '', price_delta: 0, is_default: 0 }, { label_en: '', label_cn: '', price_delta: 0, is_default: 0 }] });
+  OPT.push({ question_en: '', question_cn: '', type: 'single', is_required: 1, choices: [_optBlankChoice(), _optBlankChoice()] });
   OPT_OPEN = true; optRender();
 }
-function optRemoveOption(oi) { OPT.splice(oi, 1); optRender(); }
-function optAddChoice(oi) { if (OPT[oi]) { OPT[oi].choices.push({ label_en: '', label_cn: '', price_delta: 0, is_default: 0 }); optRender(); } }
-function optRemoveChoice(oi, ci) { if (OPT[oi]) { OPT[oi].choices.splice(ci, 1); optRender(); } }
+// "Add paid extras" → a pick-any group seeded with one product-linked slot.
+function optAddExtras() {
+  OPT.push({ question_en: 'Add extras?', question_cn: '加点配料?', type: 'multi', is_required: 0, choices: [_optBlankChoice()] });
+  OPT_OPEN = true; optRender();
+}
+function _optBlankChoice() {
+  return { label_en: '', label_cn: '', price_delta: 0, is_default: 0, stock_product_id: null, addon_name_en: '', addon_name_cn: '', addon_stock: null };
+}
+function optRemoveOption(oi) { OPT.splice(oi, 1); if (OPT_PICK && OPT_PICK.oi === oi) OPT_PICK = null; optRender(); }
+function optAddChoice(oi) { if (OPT[oi]) { OPT[oi].choices.push(_optBlankChoice()); optRender(); } }
+function optRemoveChoice(oi, ci) { if (OPT[oi]) { OPT[oi].choices.splice(ci, 1); OPT_PICK = null; optRender(); } }
+// ── Stock-product link (paid add-on draws from a real product's inventory) ──
+function optLinkPick(oi, ci) { OPT_PICK = { oi, ci }; optRender(); }
+function optPickerList() {
+  const el = document.getElementById('opt-picklist'); if (!el) return;
+  const q = (document.getElementById('opt-search')?.value || '').toLowerCase().trim();
+  // Any product can be a stock source EXCEPT this product itself (no self-link).
+  const matches = (PA_PRODUCTS || []).filter(p => p.id !== OPT_ID)
+    .filter(p => !q || (p.name_en || '').toLowerCase().includes(q) || (p.name_cn || '').includes(q) || (p.sku || '').toLowerCase().includes(q))
+    .slice(0, 40);
+  el.innerHTML = matches.length
+    ? matches.map(p => `<div class="bu-pick" onclick="optPick(${p.id})">${escapeHtml(_vaName(p))}${p.sku ? ' · ' + escapeHtml(p.sku) : ''}</div>`).join('')
+    : `<div class="bu-pick muted">${cuT('No matches', '无匹配')}</div>`;
+}
+function optPick(productId) {
+  if (!OPT_PICK) return;
+  const c = OPT[OPT_PICK.oi] && OPT[OPT_PICK.oi].choices[OPT_PICK.ci]; if (!c) { OPT_PICK = null; optRender(); return; }
+  const p = (PA_PRODUCTS || []).find(x => x.id === productId);
+  c.stock_product_id = productId;
+  c.addon_name_en = (p && p.name_en) || ''; c.addon_name_cn = (p && p.name_cn) || '';
+  c.addon_stock = (p && p.stock != null) ? p.stock : null;
+  // Seed the choice label from the product name when still blank, so the
+  // operator usually doesn't have to type it twice.
+  if (!c.label_en && p) c.label_en = p.name_en || '';
+  if (!c.label_cn && p) c.label_cn = p.name_cn || '';
+  // Default the add-on charge to the product's own price (operator can override).
+  if (!(Number(c.price_delta) > 0) && p && Number(p.sell_price) > 0) c.price_delta = Number(p.sell_price);
+  OPT_PICK = null; optRender();
+}
+function optUnlink(oi, ci) {
+  const c = OPT[oi] && OPT[oi].choices[ci]; if (!c) return;
+  c.stock_product_id = null; c.addon_name_en = ''; c.addon_name_cn = ''; c.addon_stock = null;
+  optRender();
+}
 // Save payload — always an array ([] clears). Mirrors the server sanitiser so
 // the round-trip is stable: drop empty choices, then options with no usable body.
 function optBody() {
   return OPT.map(o => {
     const type = ['single', 'multi', 'text'].includes(o.type) ? o.type : 'single';
     const choices = type === 'text' ? [] : (o.choices || [])
-      .map(c => ({ label_en: (c.label_en || '').trim(), label_cn: (c.label_cn || '').trim(), price_delta: Number(c.price_delta) || 0, is_default: c.is_default ? 1 : 0 }))
+      .map(c => ({ label_en: (c.label_en || '').trim(), label_cn: (c.label_cn || '').trim(), price_delta: Number(c.price_delta) || 0, is_default: c.is_default ? 1 : 0, stock_product_id: c.stock_product_id || null }))
       .filter(c => c.label_en || c.label_cn);
     return { question_en: (o.question_en || '').trim(), question_cn: (o.question_cn || '').trim(), type, is_required: o.is_required ? 1 : 0, choices };
   }).filter(o => (o.question_en || o.question_cn) && (o.type === 'text' || o.choices.length));
