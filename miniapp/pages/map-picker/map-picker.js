@@ -38,8 +38,11 @@ Page({
 
   onReady() {
     this.mapCtx = wx.createMapContext('picker-map', this);
-    // Resolve the starting centre so the sheet isn't blank on open.
-    setTimeout(() => this.resolveCenter(), 350);
+    // Open centred on the customer. moveToLocation() with no args jumps the map
+    // to the current position via the <map> component's own location access —
+    // this works with scope.userLocation even though the wx.getLocation API is
+    // rejected for this AppID. Falls back to the default centre if it can't.
+    setTimeout(() => this.centerOnMe(true), 200);
   },
 
   onUnload() { if (this._t) clearTimeout(this._t); },
@@ -86,16 +89,28 @@ Page({
     });
   },
 
-  // Best-effort jump to the device location. wx.getLocation is rejected for this
-  // AppID, so on newer base libs this may no-op — the pan-to-confirm flow works
-  // regardless, so we only nudge the customer to drag if it can't locate.
-  locateMe() {
+  // Locate-me button → recentre on the device, nudging the customer if it can't.
+  locateMe() { this.centerOnMe(false); },
+
+  // Recentre the map on the device location. `initial` = the on-open call (stay
+  // silent on failure and just resolve the default centre); otherwise it's the
+  // locate-me button (toast if it can't locate). wx.getLocation is rejected for
+  // this AppID, so this leans on the <map> component's own location access; the
+  // pan-to-confirm flow works regardless.
+  centerOnMe(initial) {
     if (!this.mapCtx) return;
     this.mapCtx.moveToLocation({
-      fail: () => wx.showToast({
-        title: this.data.lang === 'cn' ? '无法定位,请手动拖动地图' : 'Can’t locate — drag the map',
-        icon: 'none',
-      }),
+      success: () => { setTimeout(() => this.resolveCenter(), 250); },
+      fail: () => {
+        if (!initial) {
+          wx.showToast({
+            title: this.data.lang === 'cn' ? '无法定位,请手动拖动地图' : 'Can’t locate — drag the map',
+            icon: 'none',
+          });
+        }
+        // Resolve whatever centre we're on so the sheet isn't blank.
+        this.resolveCenter();
+      },
     });
   },
 
