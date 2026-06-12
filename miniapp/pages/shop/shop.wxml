@@ -191,7 +191,7 @@
                     class="row {{layout === 'list-compact' ? 'row-compact' : ''}}"
                     data-id="{{item.id}}" bindtap="openProduct">
                 <view wx:if="{{layout !== 'list-compact'}}" class="row-img">
-                  <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+                  <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full" lazy-load/>
                   <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="img-placeholder"/>
                 </view>
                 <view class="row-body">
@@ -248,7 +248,7 @@
             <view wx:for="{{group.items}}" wx:key="id" wx:for-item="item"
                   class="gal-card" data-id="{{item.id}}" bindtap="openProduct">
               <view class="gal-img">
-                <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+                <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full" lazy-load/>
                 <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="img-placeholder"/>
                 <view wx:if="{{item.badge}}" class="gal-badge f-gothic">{{item.badge}}</view>
                 <view wx:if="{{item.isFlash}}" class="gal-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
@@ -302,7 +302,7 @@
             <view wx:for="{{group.items}}" wx:key="id" wx:for-item="item"
                   class="card" data-id="{{item.id}}" bindtap="openProduct">
               <view class="img">
-                <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+                <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full" lazy-load/>
                 <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="img-placeholder"/>
                 <view wx:if="{{item.badge}}" class="card-badge f-gothic">{{item.badge}}</view>
                 <view wx:if="{{item.isFlash}}" class="card-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
