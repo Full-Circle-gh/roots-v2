@@ -1779,6 +1779,7 @@ function fsCancelEdit() {
   $('#fs-stock').value = '';
   $('#fs-starts').value = '';
   $('#fs-ends').value = '';
+  $('#fs-no-coupon').checked = false;
   fsUpdatePriceHint();
 }
 
@@ -1794,6 +1795,7 @@ function fsStartEdit(row) {
   $('#fs-stock').value = row.flash_stock_limit ?? '';
   $('#fs-starts').value = fsLocalDatetime(row.flash_starts_at);
   $('#fs-ends').value = fsLocalDatetime(row.flash_ends_at);
+  $('#fs-no-coupon').checked = !!row.no_coupon_on_flash;
   fsUpdatePriceHint();
   document.querySelector('#tab-flash .card').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1811,6 +1813,7 @@ async function fsSave() {
     flash_ends_at: new Date(endsLocal).toISOString(),
     flash_starts_at: startsLocal ? new Date(startsLocal).toISOString() : null,
     flash_stock_limit: $('#fs-stock').value ? Number($('#fs-stock').value) : null,
+    no_coupon_on_flash: $('#fs-no-coupon').checked ? 1 : 0,
   };
   try {
     await api(`/api/retail-admin/products/${productId}/flash-sale`, { method: 'PUT', body });

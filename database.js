@@ -3008,6 +3008,12 @@ try {
   // reserved/deducted (never the bundle's). Distinct from the legacy `bundle`
   // column, which is the "buy together" upsell shown inside another product.
   addColumn('store_products', 'bundle_items', 'TEXT');
+  // Store-only: COUPON-ON-FLASH policy. 0/NULL (default) = vouchers stack on top
+  // of the flash price as usual. 1 = while this product is on an ACTIVE flash
+  // sale, its line is excluded from the voucher discount base (a sitewide coupon
+  // won't pile on top of the deep flash price). Dormant when the product isn't on
+  // flash — the checkout only honours it for items whose flash window is live.
+  addColumn('store_products', 'no_coupon_on_flash', 'INTEGER');
   // Own indexes — store_products has its OWN sku namespace (independent of the
   // kitchen's), mirroring the products indexes the storefront relies on.
   db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_store_products_sku ON store_products(sku)').run();

@@ -4721,7 +4721,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       `SELECT id, name_en, name_cn, sku, weight AS size,
               sell_price AS price, stock_qty AS stock, image_data,
               flash_price, flash_starts_at, flash_ends_at,
-              flash_stock_limit, flash_sold,
+              flash_stock_limit, flash_sold, no_coupon_on_flash,
               ship_modes, needs_ice_pack, variant_group_id, bundle_items
          FROM store_products
         WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
@@ -4768,6 +4768,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       lineTotal: unitPrice * qty,
       options: chosenLabels,
       isFlash: eff.is_flash,
+      // Ring-fence this line from coupons only while its flash window is LIVE.
+      noCoupon: !!(eff.is_flash && p.no_coupon_on_flash),
     });
   }
 
@@ -5000,6 +5002,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
 
   const subtotal = resolved.reduce((s, r) => s + r.lineTotal, 0);
   const totalQty = resolved.reduce((s, r) => s + r.qty, 0);
+  // Coupon-eligible slice of the cart: the full subtotal minus any line that's
+  // ring-fenced from coupons (a product on an active flash sale flagged
+  // no_coupon_on_flash). A sitewide voucher's ¥/% discount is computed off this,
+  // so it can't stack on top of a deep flash price. Equals `subtotal` for normal
+  // carts, so the default behaviour is unchanged.
+  const couponableSubtotal = resolved.reduce((s, r) => s + (r.noCoupon ? 0 : r.lineTotal), 0);
 
   // Zone-driven fee model. If no zone matches the address, we currently
   // refuse the order — the office must configure the district/city in
@@ -5107,7 +5115,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       if (used >= candidate.per_customer_limit) ok = false;
     }
     if (ok) {
-      const result = computeVoucherDiscount(candidate, subtotal, shippingFee);
+      const result = computeVoucherDiscount(candidate, subtotal, shippingFee, couponableSubtotal);
       if (result.applied) {
         chosen = { voucher: candidate, discount: Number(result.discount) || 0, free_shipping: !!result.free_shipping };
       }
@@ -5116,7 +5124,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // Best auto-apply promo (no code, no grant). Compare it against the customer's
   // chosen code and keep the bigger benefit; a free-shipping win is valued at the
   // live shipping fee. On a tie, the customer's explicit pick is kept.
-  const auto = bestAutoVoucher(req.customer.id, subtotal, shippingFee);
+  const auto = bestAutoVoucher(req.customer.id, subtotal, shippingFee, couponableSubtotal);
   const valueOf = (c) => c ? (c.discount + (c.free_shipping ? (Number(shippingFee) || 0) : 0)) : 0;
   const winner = valueOf(auto) > valueOf(chosen) ? auto : chosen;
   if (winner) {
@@ -6197,17 +6205,26 @@ function claimMigrationCredit(customerId) {
 
 // Compute the discount a voucher would apply given the subtotal +
 // shipping fee. Returns { discount, free_shipping, applied }.
-function computeVoucherDiscount(voucher, subtotal, shippingFee) {
+//
+// `couponableSubtotal` (defaults to the full subtotal) is the slice of the
+// order the discount is actually allowed to reduce — it equals `subtotal`
+// minus the line totals of any items excluded from coupons (e.g. products on
+// an active flash sale flagged no_coupon_on_flash). The min-spend gate still
+// reads the FULL subtotal (the customer genuinely spent it), but the ¥/%
+// discount is computed off the couponable slice so a sitewide coupon can't
+// pile onto a deep flash price the operator ring-fenced.
+function computeVoucherDiscount(voucher, subtotal, shippingFee, couponableSubtotal = subtotal) {
   if (!voucher || !voucher.is_active) return { discount: 0, free_shipping: false, applied: false };
   if (voucher.expires_at && new Date(voucher.expires_at) < new Date()) return { discount: 0, free_shipping: false, applied: false };
   if (voucher.max_uses != null && voucher.used_count >= voucher.max_uses) return { discount: 0, free_shipping: false, applied: false };
   if (Number(subtotal) < Number(voucher.min_subtotal || 0)) return { discount: 0, free_shipping: false, applied: false };
+  const couponable = Math.max(0, Number(couponableSubtotal ?? subtotal) || 0);
   if (voucher.type === 'fixed_amount') {
-    return { discount: Math.min(Number(voucher.value || 0), Number(subtotal)), free_shipping: false, applied: true };
+    return { discount: Math.min(Number(voucher.value || 0), couponable), free_shipping: false, applied: true };
   }
   if (voucher.type === 'percent') {
     const pct = Math.max(0, Math.min(100, Number(voucher.value || 0)));
-    return { discount: +(Number(subtotal) * pct / 100).toFixed(2), free_shipping: false, applied: true };
+    return { discount: +(couponable * pct / 100).toFixed(2), free_shipping: false, applied: true };
   }
   if (voucher.type === 'free_shipping') {
     return { discount: 0, free_shipping: true, applied: true };
@@ -6223,7 +6240,7 @@ function computeVoucherDiscount(voucher, subtotal, shippingFee) {
 // free-shipping voucher is valued at the live shipping fee so it can be compared
 // like-for-like against a ¥/% discount. Returns
 // { voucher, discount, free_shipping } or null.
-function bestAutoVoucher(customerId, subtotal, shippingFee) {
+function bestAutoVoucher(customerId, subtotal, shippingFee, couponableSubtotal = subtotal) {
   const rows = tdb().prepare(
     `SELECT * FROM retail_vouchers
       WHERE is_active = 1 AND auto_apply = 1 AND auto_grant_signup = 0
@@ -6239,7 +6256,7 @@ function bestAutoVoucher(customerId, subtotal, shippingFee) {
       ).get(customerId, v.code).n;
       if (used >= v.per_customer_limit) continue;
     }
-    const r = computeVoucherDiscount(v, subtotal, shippingFee);
+    const r = computeVoucherDiscount(v, subtotal, shippingFee, couponableSubtotal);
     if (!r.applied) continue;
     const value = (Number(r.discount) || 0) + (r.free_shipping ? (Number(shippingFee) || 0) : 0);
     if (value > bestValue) {
@@ -6319,9 +6336,13 @@ router.get('/api/retail/my-vouchers', requireRetailAuth, (req, res) => {
 // also weighs free shipping against the live fee. Returns data:null when none.
 router.get('/api/retail/vouchers/auto', requireRetailAuth, (req, res) => {
   const subtotal = Number(req.query.subtotal) || 0;
+  // Optional coupon-eligible slice (mini-app sends it post-publish; falls back
+  // to subtotal). Order time recomputes it authoritatively.
+  const couponableSubtotal = req.query.couponable_subtotal == null
+    ? subtotal : Number(req.query.couponable_subtotal) || 0;
   // Shipping fee isn't known here, so a pure free-shipping promo (¥0 discount)
   // won't surface in the display — it still applies at order time.
-  const best = bestAutoVoucher(req.customer.id, subtotal, 0);
+  const best = bestAutoVoucher(req.customer.id, subtotal, 0, couponableSubtotal);
   if (!best) return res.json({ success: true, data: null });
   const v = best.voucher;
   res.json({ success: true, data: {
@@ -6418,6 +6439,12 @@ router.post('/api/retail/vouchers/claim', requireRetailAuth, express.json(), (re
 router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), (req, res) => {
   const code = String(req.body?.code || '').trim().toUpperCase();
   const subtotal = Number(req.body?.subtotal || 0);
+  // Coupon-eligible slice — the mini-app sends this once it's been published
+  // with the flash-exclusion logic; until then it's absent and the preview
+  // uses the full subtotal. The authoritative /orders endpoint recomputes it
+  // server-side regardless, so the final charge is always correct.
+  const couponableSubtotal = req.body?.couponable_subtotal == null
+    ? subtotal : Number(req.body.couponable_subtotal) || 0;
   if (!code) return res.status(400).json({ success: false, error: 'code_required' });
   const v = tdb().prepare(
     'SELECT * FROM retail_vouchers WHERE UPPER(code) = ? AND is_active = 1'
@@ -6456,7 +6483,7 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
       return res.status(409).json({ success: false, error: 'per_customer_limit_reached' });
     }
   }
-  const result = computeVoucherDiscount(v, subtotal, 0);
+  const result = computeVoucherDiscount(v, subtotal, 0, couponableSubtotal);
   if (!result.applied) {
     return res.status(409).json({ success: false, error: 'not_applicable', detail: { min_subtotal: v.min_subtotal } });
   }
@@ -9783,7 +9810,7 @@ router.get('/api/retail-admin/flash-sales', requireRetailAdmin, (req, res) => {
             p.sell_price, p.image_url, p.updated_at, p.is_published,
             ${hasImageFallbackSql('p')} AS has_image_data,
             p.flash_price, p.flash_starts_at, p.flash_ends_at,
-            p.flash_stock_limit, p.flash_sold
+            p.flash_stock_limit, p.flash_sold, p.no_coupon_on_flash
        FROM store_products p
       WHERE COALESCE(p.is_active, 1) = 1
         AND p.flash_price IS NOT NULL
@@ -9804,6 +9831,7 @@ router.get('/api/retail-admin/flash-sales', requireRetailAdmin, (req, res) => {
       flash_ends_at: p.flash_ends_at,
       flash_stock_limit: p.flash_stock_limit,
       flash_sold: p.flash_sold || 0,
+      no_coupon_on_flash: p.no_coupon_on_flash ? 1 : 0,
       flash_state: f ? f.state : 'none',
     };
   });
@@ -9821,6 +9849,9 @@ router.put('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, expr
   const ends   = (body.flash_ends_at || '').trim() || null;
   const limit  = body.flash_stock_limit == null || body.flash_stock_limit === ''
     ? null : parseInt(body.flash_stock_limit, 10);
+  // When set, a sitewide coupon won't stack on this flash price (the line is
+  // excluded from the voucher discount base at checkout). Default off = stacks.
+  const noCoupon = body.no_coupon_on_flash ? 1 : 0;
 
   if (!(price > 0)) return res.status(400).json({ success: false, error: 'flash_price_invalid' });
   if (!ends) return res.status(400).json({ success: false, error: 'flash_ends_at_required' });
@@ -9846,21 +9877,22 @@ router.put('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, expr
 
   tdb().prepare(
     `UPDATE store_products
-        SET flash_price       = ?,
-            flash_starts_at   = ?,
-            flash_ends_at     = ?,
-            flash_stock_limit = ?,
-            flash_sold        = CASE WHEN ? = 1 THEN 0 ELSE flash_sold END,
-            updated_at        = CURRENT_TIMESTAMP
+        SET flash_price        = ?,
+            flash_starts_at    = ?,
+            flash_ends_at      = ?,
+            flash_stock_limit  = ?,
+            no_coupon_on_flash = ?,
+            flash_sold         = CASE WHEN ? = 1 THEN 0 ELSE flash_sold END,
+            updated_at         = CURRENT_TIMESTAMP
       WHERE id = ?`
-  ).run(price, starts, ends, limit, resetNeeded ? 1 : 0, id);
+  ).run(price, starts, ends, limit, noCoupon, resetNeeded ? 1 : 0, id);
 
   logActivity(req.user.id, req.user.username, 'update', 'product_flash_sale', id,
-    { name: existing.name_en, price, starts, ends, limit, reset: resetNeeded }, req.ip);
+    { name: existing.name_en, price, starts, ends, limit, no_coupon_on_flash: noCoupon, reset: resetNeeded }, req.ip);
 
   const fresh = tdb().prepare(
     `SELECT id, name_en, flash_price, flash_starts_at, flash_ends_at,
-            flash_stock_limit, flash_sold
+            flash_stock_limit, flash_sold, no_coupon_on_flash
        FROM store_products WHERE id = ?`
   ).get(id);
   res.json({ success: true, data: fresh });
@@ -9873,7 +9905,7 @@ router.delete('/api/retail-admin/products/:id/flash-sale', requireRetailAdmin, (
   tdb().prepare(
     `UPDATE store_products
         SET flash_price = NULL, flash_starts_at = NULL, flash_ends_at = NULL,
-            flash_stock_limit = NULL, flash_sold = 0,
+            flash_stock_limit = NULL, flash_sold = 0, no_coupon_on_flash = 0,
             updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`
   ).run(id);
