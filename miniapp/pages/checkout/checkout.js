@@ -709,7 +709,7 @@ Page({
     const L = this.data.lang;
     const valuePart = (ev.valueLabel && ev.title !== ev.valueLabel) ? (ev.valueLabel + ' · ') : '';
     const applied = L === 'cn' ? '已自动抵扣' : 'Applied automatically';
-    return { title: ev.title, sub: valuePart + applied + ' · −¥' + discount.toFixed(2) };
+    return { title: ev.title, code: ev.code || '', sub: valuePart + applied + ' · −¥' + discount.toFixed(2) };
   },
 
   async loadPointsBalance() {

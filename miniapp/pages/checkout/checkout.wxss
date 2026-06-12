@@ -526,6 +526,20 @@
   background: rgba(204, 217, 0, 0.18);
   border: 2rpx solid var(--lime);
   padding: 16rpx 20rpx;
+  margin-top: 16rpx;
+}
+/* Coupon code under the auto-applied promo name — small monospaced chip so the
+   customer can see exactly which code is in effect. */
+.va-code-tag {
+  display: inline-block;
+  margin-top: 6rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  color: var(--forest);
+  background: rgba(255, 255, 255, 0.55);
+  border: 2rpx solid rgba(0, 0, 0, 0.06);
+  border-radius: 6rpx;
+  padding: 1rpx 10rpx;
 }
 .va-code { font-size: calc(30rpx * var(--font-scale)); letter-spacing: 0.06em; color: var(--ink); }
 /* Auto-applied promo shows the coupon NAME (not a code), so it uses the Bear
