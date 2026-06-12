@@ -756,10 +756,53 @@ function _paVariantTag(m) {
 // redistributes sort_order across the same ids (POST …/products/reorder).
 let PA_REORDER_UNITS = null;
 let _paDragFrom = null;
+
+// ── Edge auto-scroll while dragging a row ───────────────────────────────────
+// Native HTML5 drag barely auto-scrolls (and not at all when the drag began on
+// the tiny grip), so dropping a product at the TOP of a long list meant manual
+// scrolling first. We drive our own scroll: a generous 160px band near the top
+// / bottom edge ramps speed by how close the cursor is, so "scroll up" engages
+// easily the moment you near the top.
+let _paScrollRAF = null, _paScrollDir = 0, _paScrollSpeed = 0;
+function _paScrollTarget() {
+  // Use an inner scroller wrapped around the list if there is one; otherwise the
+  // whole page scrolls — fall back to the document scroller.
+  let el = document.getElementById('tab-products');
+  while (el && el !== document.body) {
+    const s = getComputedStyle(el);
+    if (/(auto|scroll)/.test(s.overflowY) && el.scrollHeight > el.clientHeight + 4) return el;
+    el = el.parentElement;
+  }
+  return document.scrollingElement || document.documentElement;
+}
+function _paAutoScrollTick() {
+  if (!_paScrollDir) { _paScrollRAF = null; return; }
+  _paScrollTarget().scrollTop += _paScrollDir * _paScrollSpeed;
+  _paScrollRAF = requestAnimationFrame(_paAutoScrollTick);
+}
+function _paDragAutoScroll(clientY) {
+  const BAND = 160, MAX = 26;            // big band + brisk max = easy to trigger
+  const top = BAND, bot = window.innerHeight - BAND;
+  let dir = 0, frac = 0;
+  if (clientY < top)      { dir = -1; frac = (top - clientY) / BAND; }
+  else if (clientY > bot) { dir =  1; frac = (clientY - bot) / BAND; }
+  _paScrollDir = dir;
+  _paScrollSpeed = dir ? Math.max(5, Math.min(1, frac) * MAX) : 0;
+  if (dir && !_paScrollRAF) _paScrollRAF = requestAnimationFrame(_paAutoScrollTick);
+}
+function _paStopAutoScroll() {
+  _paScrollDir = 0; _paScrollSpeed = 0;
+  if (_paScrollRAF) { cancelAnimationFrame(_paScrollRAF); _paScrollRAF = null; }
+}
+// Document-level so the band still works in the row gaps and off to the side,
+// not only when the cursor is directly over a row.
+function _paDocDragOver(ev) { if (_paDragFrom !== null) _paDragAutoScroll(ev.clientY); }
+
 function paRowDragStart(ev, idx) {
   _paDragFrom = idx;
   ev.dataTransfer.effectAllowed = 'move';
   try { ev.dataTransfer.setData('text/plain', String(idx)); } catch (e) {}
+  document.addEventListener('dragover', _paDocDragOver);
   const row = ev.target.closest('.pa-row');
   // Drag the whole row, not just the tiny grip, as the ghost image.
   if (row) { try { ev.dataTransfer.setDragImage(row, 24, 18); } catch (e) {}
@@ -767,6 +810,8 @@ function paRowDragStart(ev, idx) {
 }
 function paRowDragEnd() {
   _paDragFrom = null;
+  document.removeEventListener('dragover', _paDocDragOver);
+  _paStopAutoScroll();
   document.querySelectorAll('.pa-row-dragging').forEach(el => el.classList.remove('pa-row-dragging'));
   document.querySelectorAll('.pa-row-drop').forEach(el => el.classList.remove('pa-row-drop'));
 }
