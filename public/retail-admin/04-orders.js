@@ -1215,8 +1215,27 @@ function renderSortChips() {
 // sort change only swaps this fragment — re-rendering the whole order would
 // tear down any open floating window (tracking popover, etc.).
 function renderSortableItems(o) {
+  const ships = o.shipments || [];
+  // Items grouped into parcels render in their shipment card. Anything NOT in a
+  // parcel — a pending order before its parcels are assigned, a pickup order
+  // (no shipments at all), or an orphaned row — would otherwise vanish from the
+  // drawer (taking its dressing/extras with it). Render those in a fallback
+  // block so EVERY ordered line + its options always shows, in every status.
+  const inParcel = new Set();
+  ships.forEach(s => (s.items || []).forEach(it => inParcel.add(it.id)));
+  const loose = (o.items || []).filter(it => !inParcel.has(it.id));
+  let looseHtml = '';
+  if (loose.length) {
+    looseHtml = ships.length
+      ? `<div class="shipment-card"><div class="shipment-head">
+           <span class="mode-pill">📦 Not yet in a parcel · 待分配</span>
+           <span class="count">${loose.length} item${loose.length === 1 ? '' : 's'}</span>
+         </div>${renderItemsTable(loose, true)}</div>`
+      : renderItemsTable(loose, true);   // pickup / no-parcel order: plain list
+  }
   return renderSortChips()
-    + (o.shipments || []).map(s => renderShipmentCard(o, s)).join('');
+    + ships.map(s => renderShipmentCard(o, s)).join('')
+    + looseHtml;
 }
 
 function setItemsSort(mode) {
