@@ -2979,7 +2979,6 @@ function pdScheduleAutosave() {
 async function pdAutoSaveNow() {
   if (_pdSaving) { _pdPendingResave = true; return; }  // coalesce — save again when current returns
   const g = el => (document.getElementById(el) && document.getElementById(el).value || '').trim();
-  const id = document.getElementById('pd-id').value;
   // Soft validation — never alert during autosave; just hold and hint until the
   // minimums the server requires are present.
   if (!g('pd-name-en') && !g('pd-name-cn')) { pdSetStatus('hint', cuT('Add a name to start autosaving', '填写名称后自动保存')); return; }
