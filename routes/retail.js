@@ -5781,7 +5781,7 @@ function _jdApplyTrace(table, rowId, fetchRes) {
 async function syncJdTrackingForCustomer(orderId, customerId) {
   const o = tdb().prepare(
     `SELECT id, status, tracking_carrier, tracking_number, tracking_events_json,
-            tracking_synced_at, tracking_scenario_notified
+            tracking_synced_at, tracking_scenario_notified, tracking_kd100_subscribed
        FROM retail_orders WHERE id = ? AND customer_id = ?`
   ).get(orderId, customerId);
   if (!o) return;
@@ -5796,11 +5796,14 @@ async function syncJdTrackingForCustomer(orderId, customerId) {
   const targets = [];
   const shipments = tdb().prepare(
     `SELECT id, tracking_carrier, tracking_number, tracking_status,
-            tracking_events_json, tracking_synced_at
+            tracking_events_json, tracking_synced_at, tracking_kd100_subscribed
        FROM retail_shipments WHERE order_id = ?`
   ).all(o.id);
   for (const s of shipments) {
-    if (s.tracking_carrier === 'jd' && s.tracking_number) {
+    // A JD waybill that's been handed to kd100 (e.g. a hand-entered personal
+    // JDV0… number JD's own account-scoped API can't see) is tracked by the
+    // kd100 push pipeline — don't also poll JD's empty trace for it.
+    if (s.tracking_carrier === 'jd' && s.tracking_number && !s.tracking_kd100_subscribed) {
       targets.push({
         table: 'retail_shipments', id: s.id, number: s.tracking_number,
         hasEvents: !!s.tracking_events_json, syncedAt: s.tracking_synced_at,
@@ -5808,7 +5811,7 @@ async function syncJdTrackingForCustomer(orderId, customerId) {
       });
     }
   }
-  if (o.tracking_carrier === 'jd' && o.tracking_number) {
+  if (o.tracking_carrier === 'jd' && o.tracking_number && !o.tracking_kd100_subscribed) {
     targets.push({
       table: 'retail_orders', id: o.id, number: o.tracking_number,
       hasEvents: !!o.tracking_events_json, syncedAt: o.tracking_synced_at,
@@ -10502,7 +10505,10 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   const jdLiveOn = jd.jdEnabled(integ().jd);
   for (const r of rows) {
     r.item_count = tdb().prepare('SELECT COUNT(*) AS n FROM retail_order_items WHERE order_id = ?').get(r.id).n;
-    r.jd_live = r.tracking_carrier === 'jd' && !!r.tracking_number && jdLiveOn;
+    // A JD waybill handed to kd100 is tracked by the push pipeline, not JD's
+    // own API — let the kd100 badge own it (the list cell still reads "live"
+    // off tracking_kd100_subscribed).
+    r.jd_live = r.tracking_carrier === 'jd' && !!r.tracking_number && jdLiveOn && !r.tracking_kd100_subscribed;
   }
   res.json({ success: true, data: rows, meta: { limit, offset } });
 });
@@ -10655,7 +10661,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     tracking_number:  s.tracking_number,
     tracking_status:  s.tracking_status,
     tracking_kd100_subscribed: !!s.tracking_kd100_subscribed,
-    jd_live: s.tracking_carrier === 'jd' && !!s.tracking_number && jdLiveOn,
+    jd_live: s.tracking_carrier === 'jd' && !!s.tracking_number && jdLiveOn && !s.tracking_kd100_subscribed,
     tracking_last_error: s.tracking_last_error,
     tracking_synced_at:  s.tracking_synced_at,
     dispatched_at: s.dispatched_at,
