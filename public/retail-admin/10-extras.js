@@ -697,6 +697,8 @@ function lbApplyConfigToForm(cfg) {
   const seedBox = $('#lb-seed-enabled');
   if (seedBox) seedBox.checked = !!cfg.seed_enabled;
   LB_SEED_ENTRIES = Array.isArray(cfg.seed_entries) ? cfg.seed_entries : [];
+  const hideEl = $('#lb-hide-names');
+  if (hideEl) hideEl.value = Array.isArray(cfg.hide_names) ? cfg.hide_names.join(', ') : '';
   lbUpdateSeedSummary();
   lbUpdateEnabledPill();
 }
@@ -713,6 +715,8 @@ function lbReadForm() {
   const seedBox = $('#lb-seed-enabled');
   out.seed_enabled = !!(seedBox && seedBox.checked);
   out.seed_entries = LB_SEED_ENTRIES;
+  const hideEl = $('#lb-hide-names');
+  out.hide_names = hideEl ? hideEl.value.split(/[,\n]/).map(s => s.trim()).filter(Boolean) : [];
   return out;
 }
 function lbUpdateEnabledPill() {
@@ -791,6 +795,10 @@ function lbRenderPreview() {
     ? 'Note: points-balance metric is point-in-time. Period selector is ignored for this metric.'
     : '';
   let rawEntries = ((LB_PREVIEW_DATA && LB_PREVIEW_DATA.raw_entries) || []).slice();
+  // Drop hidden real members client-side so the preview reacts to unsaved
+  // edits to the hide field (matched case-insensitively).
+  const hideSet = new Set((f.hide_names || []).map(n => String(n).trim().toLowerCase()).filter(Boolean));
+  if (hideSet.size) rawEntries = rawEntries.filter(e => !hideSet.has(String(e.nickname || '').trim().toLowerCase()));
   // Blend placeholder members into the preview client-side so the operator
   // sees them immediately (the server only includes them after a save).
   const seedBox = $('#lb-seed-enabled');

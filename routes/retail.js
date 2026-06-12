@@ -15077,6 +15077,10 @@ const LEADERBOARD_DEFAULTS = {
   // clear) once the board fills on its own.
   seed_enabled:    false,
   seed_entries:    [],
+  // Real member nicknames to exclude from the board (e.g. staff / test
+  // accounts) — matched case-insensitively. The accounts stay active
+  // everywhere else; they just don't appear on the leaderboard.
+  hide_names:      [],
 };
 
 function loadLeaderboardConfig() {
@@ -15163,6 +15167,16 @@ function computeLeaderboard(cfg) {
     id: r.id, nickname: r.nickname, avatar_url: r.avatar_url,
     tier_key: r.tier_key, value: Number(r.value) || 0,
   }));
+
+  // Drop hidden members (staff / test accounts) by nickname, case-insensitive.
+  const hideSet = new Set(
+    (Array.isArray(cfg.hide_names) ? cfg.hide_names : [])
+      .map(n => String(n || '').trim().toLowerCase()).filter(Boolean)
+  );
+  if (hideSet.size) {
+    merged = merged.filter(r => !hideSet.has(String(r.nickname || '').trim().toLowerCase()));
+  }
+
   if (cfg.seed_enabled && Array.isArray(cfg.seed_entries) && cfg.seed_entries.length) {
     for (const s of cfg.seed_entries) {
       const value = Number(s && s.value) || 0;
@@ -15327,6 +15341,12 @@ router.put('/api/retail-admin/leaderboard/config', requireRetailAdmin, express.j
           tier_key: String((s && s.tier_key) || 'seed').slice(0, 16),
         })).filter(s => s.value > 0)
       : [],
+    hide_names:      (() => {
+      let raw = body.hide_names;
+      if (typeof raw === 'string') raw = raw.split(/[,\n]/);
+      if (!Array.isArray(raw)) return [];
+      return raw.map(n => String(n || '').trim()).filter(Boolean).slice(0, 50).map(n => n.slice(0, 40));
+    })(),
   };
 
   tdb().prepare(
