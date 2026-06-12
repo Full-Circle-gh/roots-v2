@@ -2448,6 +2448,13 @@ db.exec(`
 // it. Optional (NULL = no target set yet).
 addColumn('retail_store_stock', 'restock_target', 'INTEGER');
 
+// Human-readable actor name captured at write time. actor_user_id can be a
+// kitchen users(id) OR a Mini App Backend operator's tenant_users(id) — two
+// id spaces that COLLIDE, so the actor can't be resolved by id alone. Store
+// the display name on the row; the ledger audit view reads this first and
+// falls back to the users join for historical rows. (NULL on old/system rows.)
+addColumn('retail_stock_ledger', 'actor_label', 'TEXT');
+
 // Per-product substitutes — admin-curated list of "if we're out of X,
 // these are acceptable swaps". Used by the mini-app's 5-option fallback
 // flow when the customer picks "Replace missing item". Order-aware: the

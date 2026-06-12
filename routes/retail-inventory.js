@@ -252,7 +252,12 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
     const newQty = parseInt(b.physical_qty, 10) || 0;
     out.adjust = inventory.adjustStock({
       storeId, productId, newPhysicalQty: newQty,
-      actorUserId: req.user.id, note: b.note || null, reason: b.reason || 'adjust',
+      // actor_user_id is just an audit integer (no FK) — but it can't be
+      // resolved by id (kitchen users vs operator tenant_users id spaces
+      // collide), so record the display name too. req.user is shimmed for
+      // both realms (retail.js requireRetailAdmin).
+      actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null,
+      note: b.note || null, reason: b.reason || 'adjust',
     });
   }
   const layerFields = {};
@@ -303,7 +308,10 @@ router.get('/api/retail-admin/stores/:id/ledger', requireRetailAdmin, (req, res)
   // resolved out-of-band (lookup actor names from the global db) before cut-over.
   const rows = tdb().prepare(`
     SELECT l.id, l.product_id, p.name_en, p.name_cn, l.delta, l.reason, l.ref_table, l.ref_id,
-           l.balance_after, l.actor_user_id, u.username AS actor, l.channel, l.note, l.created_at
+           l.balance_after, l.actor_user_id,
+           -- actor name captured at write time (operator OR kitchen user);
+           -- fall back to the users join for historical rows with no label.
+           COALESCE(l.actor_label, u.username) AS actor, l.channel, l.note, l.created_at
       FROM retail_stock_ledger l
       LEFT JOIN store_products p ON p.id = l.product_id
       LEFT JOIN users u ON u.id = l.actor_user_id

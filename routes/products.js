@@ -598,6 +598,7 @@ router.post('/api/products/:id/store-stocks/:storeId/adjust', requireAuth, requi
     storeId, productId,
     newPhysicalQty: newQty,
     actorUserId: req.user.id,
+    actorLabel: req.user.display_name || req.user.username || null,
     note: notes ? String(notes).trim() : null,
     reason: String(reason).trim(),
   });

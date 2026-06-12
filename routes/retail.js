@@ -12162,7 +12162,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // Admin-side flip to 'paid' commits the soft-reservations into a real
     // physical stock deduction. markOrderPaid() handles this too, but the
     // admin path bypasses it.
-    try { inventory.commitOrderReservations(id, { actorUserId: req.user.id }); }
+    try { inventory.commitOrderReservations(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
     catch (e) { console.error('[inventory.commit (admin)]', e); }
     try { creditReferralReward(id); } catch (e) { console.error('[creditReferralReward]', e); }
     // Auto-print the bill, same as the gateway callbacks do inside
@@ -12187,7 +12187,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       try { reverseOrderRedeem(id); } catch (e) { console.error('[admin-cancel.reverseRedeem]', e); }
       try { reverseOrderVoucher(id); } catch (e) { console.error('[admin-cancel.reverseVoucher]', e); }
     } else {
-      try { inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, note: reason || null }); }
+      try { inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, note: reason || null }); }
       catch (e) { console.error('[inventory.reverse (cancel)]', e); }
     }
     // Cancelling a paid order issues a full refund — record the payout +
@@ -12235,7 +12235,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints]', e); }
     try { reverseOrderRedeem(id); } catch (e) { console.error('[reverseOrderRedeem]', e); }
     try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral]', e); }
-    try { inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, note: reason || null }); }
+    try { inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, note: reason || null }); }
     catch (e) { console.error('[inventory.reverse (refund)]', e); }
     // Mirror onto retail_payments for the audit trail.
     try {
@@ -12419,10 +12419,11 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
 
   // Side effects
   try {
+    const _actorLabel = req.user.display_name || req.user.username || null;
     if (isFull) {
-      inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, note: 'refund approved (full)' });
+      inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund approved (full)' });
     } else if (lines) {
-      inventory.reverseCommittedLines(id, lines, { actorUserId: req.user.id, note: 'refund approved (partial lines)' });
+      inventory.reverseCommittedLines(id, lines, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund approved (partial lines)' });
     }
   } catch (e) { console.error('[inventory.reverse (approve)]', e); }
   if (reversePoints) {
