@@ -2923,6 +2923,11 @@ async function pdSaveCore() {
       // next autosave PATCHes instead of creating a second product.
       PA_PRODUCTS.unshift(j.data);
       document.getElementById('pd-id').value = j.data.id;
+      // The server may have minted a DRAFT-… SKU (created name-only). Reflect it
+      // into the form so the operator sees the code AND the next autosave PATCHes
+      // the real SKU instead of an empty one (which we'd otherwise ignore).
+      const skuEl = document.getElementById('pd-sku');
+      if (skuEl && !skuEl.value.trim() && j.data.sku) skuEl.value = j.data.sku;
       _pdSelectedId = j.data.id;
       document.getElementById('pd-dup-btn').style.display = '';
       document.getElementById('pd-delete-btn').style.display = '';
@@ -2978,7 +2983,8 @@ async function pdAutoSaveNow() {
   // Soft validation — never alert during autosave; just hold and hint until the
   // minimums the server requires are present.
   if (!g('pd-name-en') && !g('pd-name-cn')) { pdSetStatus('hint', cuT('Add a name to start autosaving', '填写名称后自动保存')); return; }
-  if (!id && !g('pd-sku'))                   { pdSetStatus('hint', cuT('Add a SKU to start autosaving', '填写货号后自动保存')); return; }
+  // No SKU gate: a name is enough. The server mints a unique DRAFT-… SKU on
+  // create when the field is blank (pdSaveCore writes it back into the form).
   _pdSaving = true; pdSetStatus('saving');
   try {
     await pdSaveCore();

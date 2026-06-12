@@ -9236,6 +9236,19 @@ function findSkuConflict(sku, excludeId) {
   } catch { return null; }
 }
 
+// Auto-generate a unique placeholder SKU for a product created without one (the
+// editor auto-saves off the name alone). Format DRAFT-XXXXX so it's obviously a
+// stand-in the operator can overwrite later. Collision-checks against the UNIQUE
+// sku column; the timestamp tail is a last-resort guarantee of uniqueness.
+function generateRetailSku() {
+  const t = tdb();
+  for (let i = 0; i < 25; i++) {
+    const code = 'DRAFT-' + Math.random().toString(36).slice(2, 7).toUpperCase();
+    if (!t.prepare('SELECT 1 FROM store_products WHERE sku = ?').get(code)) return code;
+  }
+  return 'DRAFT-' + Date.now().toString(36).toUpperCase();
+}
+
 // A SKU held only by a HIDDEN (is_published=0) or DELETED/archived (is_active=0)
 // product is unreachable from the catalogue grid — the operator can't open those
 // rows to free the code, so the UNIQUE slot wedges forever ("SKU in use, but I
@@ -9355,7 +9368,15 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     sets.push('description_format = ?'); params.push(body.description_format === 'rich' ? 'rich' : 'plain');
   }
   const richDesc = body.description_format === 'rich';
-  for (const k of ['name_cn', 'sku', 'category', 'weight', 'description_en', 'description_cn', 'image_data', 'image_url',
+  // SKU is the catalog match key (auto-minted as DRAFT-… when a product is
+  // created name-only). A blank sku in a PATCH means "unchanged" — never null it
+  // out, or the next autosave (whose form field is still empty) would wipe the
+  // generated code. Only a non-empty value updates it.
+  if ('sku' in body) {
+    const s = (body.sku || '').trim();
+    if (s) { sets.push('sku = ?'); params.push(s); }
+  }
+  for (const k of ['name_cn', 'category', 'weight', 'description_en', 'description_cn', 'image_data', 'image_url',
                    'barcode', 'free_of', 'notes']) {
     if (k in body) {
       let val = (body[k] == null || body[k] === '') ? null : body[k];
@@ -9530,10 +9551,11 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   const name_en = (b.name_en || '').trim();
   const name_cn = (b.name_cn || '').trim();
   if (!name_en && !name_cn) return res.status(400).json({ success: false, error: 'name_required' });
-  // SKU is the catalog/sync match key — required + unique on the self-mode
-  // create path (it's already a UNIQUE column → a clash returns 409 below).
-  const sku = (b.sku || '').trim();
-  if (!sku) return res.status(400).json({ success: false, error: 'sku_required' });
+  // SKU is the catalog/sync match key (UNIQUE column → a clash returns 409 below).
+  // The editor auto-saves off the name alone, so when none is supplied we mint a
+  // unique DRAFT-XXXXX placeholder the operator can rename later, rather than
+  // blocking the create.
+  const sku = (b.sku || '').trim() || generateRetailSku();
   const ship = normalizeShipModesInput(b.ship_modes || 'air,land');
   // Gallery (max 8); primary image_data mirrors the first photo.
   const gallery = (Array.isArray(b.images) ? b.images : []).filter(s => typeof s === 'string' && s).slice(0, 8);
