@@ -115,7 +115,7 @@ function paSetPageSize(v) {
 }
 function paSetPage(n) {
   // Re-render in place — deliberately NO scroll, so paging doesn't jump the
-  // viewport (the pager sits above the grid; scrolling the grid into view
+  // viewport (the pager sits below the grid; scrolling the grid into view
   // nudged the page down on every click).
   PA_PAGE = n;
   paRender();
