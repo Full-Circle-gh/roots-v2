@@ -1942,6 +1942,52 @@ function askReason(opts) {
   });
 }
 
+// Generic yes/no confirmation modal — resolves true on confirm, false on
+// cancel/dismiss. Mirrors askReason's floating-modal plumbing so it inherits
+// the same backdrop, Escape-to-close, and calm motion.
+function askConfirm(opts) {
+  return new Promise((resolve) => {
+    const bg = document.createElement('div');
+    bg.className = 'pu-editor-bg';
+    bg.style.display = 'flex';
+    bg.innerHTML = `
+      <div class="pu-editor" style="width: 460px; max-width: 92vw;" role="dialog" aria-modal="true">
+        <div class="pu-editor-head">
+          <div>
+            <h3 style="margin: 0; font-size: 14px;">${opts.titleEn} · ${opts.titleCn}</h3>
+          </div>
+          <button class="btn" data-cancel>Close · 关闭</button>
+        </div>
+        <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display: block;">
+          <div style="font-size: 13px; line-height: 1.5; margin-bottom: 16px;">
+            <div>${opts.bodyEn}</div>
+            <div class="muted" style="margin-top: 6px;">${opts.bodyCn}</div>
+          </div>
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button class="btn" data-cancel>${opts.cancelEn || 'Cancel'} · ${opts.cancelCn || '取消'}</button>
+            <button class="btn btn-primary" data-submit>${opts.confirmEn} · ${opts.confirmCn}</button>
+          </div>
+        </div>
+      </div>`;
+    mountFloatingPuModal(bg);
+
+    let done = false;
+    const finish = (val) => {
+      if (done) return; done = true;
+      document.removeEventListener('keydown', onKey);
+      bg.remove();
+      resolve(val);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') finish(false); };
+    bg.addEventListener('mousedown', (e) => { if (e.target === bg) finish(false); });
+    bg.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => finish(false)));
+    bg.querySelector('[data-submit]').addEventListener('click', () => finish(true));
+    document.addEventListener('keydown', onKey);
+    const submit = bg.querySelector('[data-submit]');
+    if (submit) setTimeout(() => submit.focus(), 30);
+  });
+}
+
 // Receipt-print status tile in the order drawer. Hidden for orders that
 // can't have a receipt (unpaid / cancelled / refunded). Shows the last
 // auto-print outcome (printed / failed / not yet) plus a one-click reprint.
@@ -1979,9 +2025,80 @@ async function reprintOrder(id) {
   }
 }
 
+// Guangzhou (UTC+8) wall-clock date as YYYY-MM-DD — the store's local "today".
+function gzTodayISODate() {
+  return new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+}
+// Normalise any stored timestamp (date-only or UTC datetime) to the Guangzhou
+// calendar date it falls on. SQLite stores UTC with no zone marker, so we tag
+// it Z, shift +8h, and take the date — matching the store's local clock.
+function gzDateOf(iso) {
+  if (!iso) return null;
+  let s = String(iso).trim().replace(' ', 'T');
+  if (!/[zZ]$|[+-]\d\d:?\d\d$/.test(s)) s += 'Z';
+  const t = Date.parse(s);
+  if (isNaN(t)) return null;
+  return new Date(t + 8 * 3600000).toISOString().slice(0, 10);
+}
+function daysBetweenISO(fromISO, toISO) {
+  return Math.round((Date.parse(toISO + 'T00:00:00Z') - Date.parse(fromISO + 'T00:00:00Z')) / 86400000);
+}
+
+// Decide whether dispatching this order *now* ships it too early, and if so
+// return the warning copy. Two cases, in priority order:
+//   1. Batch make-fresh order whose make-fresh day hasn't arrived — the batch
+//      isn't even made yet, so dispatching is always wrong.
+//   2. Customer-scheduled delivery more than 2 days out — normal 1–2 day land
+//      transit is fine, but shipping well ahead of that arrives early.
+// Pickup orders are out of scope (no shipping). Returns null when fine.
+function earlyDispatchWarning(o) {
+  if (!o || o.fulfillment_type === 'pickup') return null;
+  const today = gzTodayISODate();
+
+  const freshDay = gzDateOf(o.promised_ship_date);
+  if (freshDay && freshDay > today) {
+    const arrives = gzDateOf(o.promised_delivery_date);
+    return {
+      titleEn: 'Made fresh later', titleCn: '稍后制作',
+      bodyEn: `This order is scheduled to be made fresh on <b>${escapeHtml(freshDay)}</b>` +
+        (arrives ? ` (arrives ~${escapeHtml(arrives)})` : '') +
+        `. It hasn't been made yet — dispatching now ships it early. Mark dispatched anyway?`,
+      bodyCn: `此订单计划于 <b>${escapeHtml(freshDay)}</b> 当天新鲜制作,目前尚未制作。现在发货将提前出库。仍要标记已发货吗?`,
+    };
+  }
+
+  const target = gzDateOf(o.promised_delivery_date) || gzDateOf(o.scheduled_for);
+  if (target) {
+    const daysOut = daysBetweenISO(today, target);
+    if (daysOut > 2) {
+      const label = humanizeSlotLabel(o.delivery_slot_label) || target;
+      return {
+        titleEn: 'Delivery requested later', titleCn: '要求稍后送达',
+        bodyEn: `The customer requested delivery around <b>${escapeHtml(label)}</b> — about ${daysOut} days from now. Shipping today will likely arrive early. Mark dispatched anyway?`,
+        bodyCn: `客户要求约在 <b>${escapeHtml(label)}</b> 送达,距今约 ${daysOut} 天。今天发货可能提前送达。仍要标记已发货吗?`,
+      };
+    }
+  }
+  return null;
+}
+
 async function transition(id, status) {
   let reason = null;
   let pay_method = null;
+  // Dispatching an order whose requested timing is still in the future ships it
+  // early — for fresh food that means it sits or arrives before the customer
+  // wants it. Confirm before advancing. (See earlyDispatchWarning for the rules.)
+  if (status === 'dispatched' && _OPEN_ORDER && _OPEN_ORDER.id === id) {
+    const warn = earlyDispatchWarning(_OPEN_ORDER);
+    if (warn) {
+      const ok = await askConfirm({
+        ...warn,
+        confirmEn: 'Mark dispatched anyway', confirmCn: '仍要标记已发货',
+        cancelEn: 'Not yet', cancelCn: '暂不',
+      });
+      if (!ok) return;
+    }
+  }
   if (status === 'cancelled' || status === 'refunded') {
     const isCancel = status === 'cancelled';
     reason = await askReason({
