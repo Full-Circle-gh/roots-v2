@@ -11483,6 +11483,67 @@ function escapeHtml(s) {
   ));
 }
 
+// Native tracking data (JSON) — same source as the /track HTML page above, but
+// returned as data so the mini app can render it NATIVELY (no <web-view>, hence
+// no 业务域名 / ICP dependency). Scoped to the logged-in customer's own order.
+// order_no + tracking_number identify the parcel (split orders carry one number
+// per parcel); we mirror the HTML route's exact lookup so behaviour is parity.
+router.get('/api/retail/orders/:orderNo/tracking/:trackingNumber', requireRetailAuth, (req, res) => {
+  const orderNo = String(req.params.orderNo || '');
+  const number  = String(req.params.trackingNumber || '');
+  const lang    = (req.query.lang === 'cn') ? 'cn' : 'en';
+  const o = tdb().prepare(
+    `SELECT order_no, status, tracking_carrier, tracking_number,
+            tracking_status, tracking_events_json, tracking_synced_at,
+            tracking_scenario_data_json, customer_id
+       FROM retail_orders
+      WHERE order_no = ? AND tracking_number = ?`
+  ).get(orderNo, number);
+  if (!o || o.customer_id !== req.customer.id) {
+    return res.status(404).json({ success: false, error: 'not_found' });
+  }
+
+  const carrier   = tracking.carrierByCode(o.tracking_carrier);
+  const statusDef = tracking.statusByCode(o.tracking_status || tracking.deriveStatusFromOrder(o.status));
+  const events = (() => {
+    try {
+      const raw = JSON.parse(o.tracking_events_json) || [];
+      return raw.map(ev => ({
+        time: (ev.time || '').slice(0, 16),
+        location: ev.location || '',
+        description: lang === 'cn'
+          ? (ev.description_cn || '')
+          : tracking.translateEventDescription(ev.description_cn),
+      }));
+    } catch { return []; }
+  })();
+  const sc = (() => { try { return JSON.parse(o.tracking_scenario_data_json) || null; } catch { return null; } })();
+
+  const cName  = lang === 'cn' ? (carrier?.name_cn || o.tracking_carrier) : (carrier?.name_en || o.tracking_carrier);
+  const sLabel = lang === 'cn' ? (statusDef?.label_cn || '') : (statusDef?.label_en || '');
+
+  res.json({
+    success: true,
+    data: {
+      order_no: o.order_no,
+      carrier: cName,
+      number: o.tracking_number,
+      status_label: sLabel,
+      synced_at: o.tracking_synced_at ? o.tracking_synced_at.replace('T', ' ').slice(0, 16) : '',
+      track_url: tracking.trackingUrl(o.tracking_carrier, o.tracking_number) || '',
+      scenario: sc ? {
+        urgency: sc.urgency || 'info',
+        icon: sc.icon || '',
+        title: lang === 'cn' ? (sc.label_cn || '') : (sc.label_en || ''),
+        sub: sc.location_label || (sc.signer ? (lang === 'cn' ? '签收人:' + sc.signer : 'Signed by ' + sc.signer) : ''),
+        pickup_code: sc.pickup_code || '',
+        action: sc.scenario === 'no_contact' ? (lang === 'cn' ? '请尽快回拨快递员电话' : 'Call the courier back ASAP') : '',
+      } : null,
+      events,
+    },
+  });
+});
+
 // 快递100 callback — they POST here on every event update for a
 // subscribed waybill. Body is form-urlencoded `param=<json>`. We verify
 // the salt was one we issued before trusting the payload, look up the

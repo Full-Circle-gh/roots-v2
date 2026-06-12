@@ -30,6 +30,7 @@
     "pages/voting/voting",
     "pages/favorites/favorites",
     "pages/feedback/feedback",
+    "pages/track/track",
     "pages/track-webview/track-webview"
   ],
   "window": {

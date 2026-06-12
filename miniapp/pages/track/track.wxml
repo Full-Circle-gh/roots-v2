@@ -1,0 +1,48 @@
+<!-- Native shipment tracking. Same look as the old web-view page, no ICP. -->
+<view class="wrap">
+  <view wx:if="{{loading}}" class="state">{{lang === 'cn' ? '加载中…' : 'Loading…'}}</view>
+
+  <view wx:elif="{{error || !t}}" class="state err">
+    <view class="err-title">{{lang === 'cn' ? '暂时无法加载' : 'Unable to load tracking'}}</view>
+    <view class="err-sub">{{lang === 'cn' ? '请返回订单页面重试。' : 'Please go back to the order page and try again.'}}</view>
+  </view>
+
+  <block wx:else>
+    <view class="hdr">{{lang === 'cn' ? '物流跟踪' : 'SHIPMENT TRACKING'}}</view>
+    <view class="carrier">{{t.carrier}}</view>
+    <view class="num" bindtap="copyNumber">{{t.number}}<text class="copy-hint"> · {{lang === 'cn' ? '点击复制' : 'tap to copy'}}</text></view>
+    <view wx:if="{{t.status_label}}" class="pill">● {{t.status_label}}</view>
+    <view wx:if="{{t.synced_at}}" class="synced">{{lang === 'cn' ? '最后更新' : 'Last update'}} · {{t.synced_at}}</view>
+
+    <!-- Scenario banner -->
+    <view wx:if="{{t.scenario}}" class="banner" style="{{bannerStyle}}" bindtap="copyPickup">
+      <view class="b-icon">{{t.scenario.icon}}</view>
+      <view class="b-body">
+        <view class="b-title">{{t.scenario.title}}</view>
+        <view wx:if="{{t.scenario.sub}}" class="b-sub">{{t.scenario.sub}}</view>
+        <view wx:if="{{t.scenario.pickup_code}}" class="b-code">
+          <view class="b-code-label">{{lang === 'cn' ? '取件码' : 'PICKUP CODE'}}</view>
+          <view class="b-code-val">{{t.scenario.pickup_code}}</view>
+        </view>
+        <view wx:if="{{t.scenario.action}}" class="b-action">{{t.scenario.action}} →</view>
+      </view>
+    </view>
+
+    <!-- Event timeline -->
+    <view wx:if="{{t.events.length}}" class="events">
+      <view class="spine"></view>
+      <view wx:for="{{t.events}}" wx:key="index" class="ev {{index === 0 ? 'ev-first' : ''}}">
+        <view class="dot"></view>
+        <view class="desc">{{item.description}}</view>
+        <view class="meta">{{item.time}}{{item.location ? ' · ' + item.location : ''}}</view>
+      </view>
+    </view>
+    <view wx:else class="empty">{{lang === 'cn' ? '暂无承运商事件。首次扫描通常在发货后几小时内到达。' : 'No events from the carrier yet. The first scan usually arrives within a few hours of dispatch.'}}</view>
+
+    <!-- CTA -->
+    <view class="cta-row">
+      <view class="cta primary" bindtap="copyNumber">{{lang === 'cn' ? '复制运单号' : 'Copy tracking number'}}</view>
+    </view>
+    <view class="footer">{{lang === 'cn' ? '数据来源 ' : 'Data via '}}{{t.carrier}}</view>
+  </block>
+</view>

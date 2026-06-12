@@ -478,13 +478,13 @@ Page({
     });
   },
 
-  // Open the full carrier tracking page for one parcel of a split-package order.
+  // Open the full tracking page for one parcel of a split-package order.
   openShipmentLink(e) {
     const o = this.data.order || {};
     const n = e.currentTarget.dataset.number || '';
     if (!o.order_no || !n) return;
     wx.navigateTo({
-      url: `/pages/track-webview/track-webview?order_no=${encodeURIComponent(o.order_no)}&number=${encodeURIComponent(n)}`,
+      url: `/pages/track/track?order_no=${encodeURIComponent(o.order_no)}&number=${encodeURIComponent(n)}`,
       fail: () => {
         wx.setClipboardData({
           data: n,
@@ -513,11 +513,9 @@ Page({
     });
   },
 
-  // Open the full editorial tracking page inside WeChat via the
-  // pages/track-webview page (which wraps a <web-view> pointing at
-  // https://rootskitchenchina.com/track/:orderNo/:number). The host
-  // domain is now in the AppID's 业务域名 whitelist (added 2026-05-18)
-  // so the web-view loads without the "无法打开该页面" error.
+  // Open the full editorial tracking page — now a NATIVE page (pages/track),
+  // which fetches the carrier events as JSON over the request domain and
+  // renders them in-app. No <web-view>, so no 业务域名 / ICP dependency.
   // Fallback: if wx.navigateTo fails for any reason (older mini-app
   // version, missing page, etc.) we copy the tracking number so the
   // customer can paste it into the JD app instead.
@@ -526,7 +524,7 @@ Page({
     const t = this.data.tracking || {};
     if (!o.order_no || !t.number) return;
     wx.navigateTo({
-      url: `/pages/track-webview/track-webview?order_no=${encodeURIComponent(o.order_no)}&number=${encodeURIComponent(t.number)}`,
+      url: `/pages/track/track?order_no=${encodeURIComponent(o.order_no)}&number=${encodeURIComponent(t.number)}`,
       fail: () => {
         wx.setClipboardData({
           data: t.number,
