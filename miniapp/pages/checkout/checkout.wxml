@@ -24,6 +24,7 @@
           <view class="line-name">
             <text>{{item.display_name}}</text>
             <text class="line-meta"> ×{{item.qty}}</text>
+            <view wx:if="{{item.display_options}}" class="line-opts f-toni">{{item.display_options}}</view>
           </view>
         </view>
         <view class="line-total f-bear">

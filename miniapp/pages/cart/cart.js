@@ -75,6 +75,8 @@ Page({
         ...it,
         display_name: lang.pick(it.name_en, it.name_cn, L),
         display_size: lang.pickLabel(it.size, L),
+        // Chosen options (e.g. dressing). Labels were localised at add-time.
+        display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
         line_total: (it.unit_price * it.qty).toFixed(2),
         regular_total: onFlash ? (it.regular_price * it.qty).toFixed(2) : '',
       };

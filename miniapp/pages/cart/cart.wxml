@@ -24,6 +24,7 @@
         <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="thumb thumb-empty"/>
         <view class="info">
           <view class="name f-bear">{{item.display_name}}</view>
+          <view wx:if="{{item.display_options}}" class="opt-meta f-toni">{{item.display_options}}</view>
           <view class="meta">{{item.display_size}}</view>
           <view class="qty">
             <view class="qty-btn" data-key="{{item.key}}" bindtap="decQty">−</view>

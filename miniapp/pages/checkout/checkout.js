@@ -881,6 +881,7 @@ Page({
       return {
         ...it,
         display_name: lang.pick(it.name_en, it.name_cn, L),
+        display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
         line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
         on_flash: onFlash,
         was_total: onFlash ? '¥' + (Number(it.regular_price) * it.qty).toFixed(2) : '',
@@ -1021,6 +1022,7 @@ Page({
     const items = state.items.map(it => ({
       ...it,
       display_name: lang.pick(it.name_en, it.name_cn, L),
+      display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
       line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
     }));
     const itemCount = state.items.reduce((s, it) => s + (it.qty || 0), 0);
@@ -1101,6 +1103,7 @@ Page({
           return {
             ...it,
             display_name: lang.pick(it.name_en, it.name_cn, L),
+            display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
             line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
             on_flash: onFlash,
             was_total: onFlash ? '¥' + (Number(it.regular_price) * it.qty).toFixed(2) : '',

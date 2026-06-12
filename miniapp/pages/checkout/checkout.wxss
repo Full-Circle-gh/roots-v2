@@ -74,6 +74,9 @@
   white-space: nowrap;
 }
 .line-meta { color: var(--olive); }
+/* Chosen options (e.g. dressing) on their own wrapped line under the name —
+   the parent .line-name is nowrap+ellipsis, so reset that here. */
+.line-opts { white-space: normal; color: var(--ink); font-size: calc(22rpx * var(--font-scale)); margin-top: 4rpx; line-height: 1.2; }
 .line-total { font-size: calc(28rpx * var(--font-scale)); display: flex; flex-direction: column; align-items: flex-end; }
 /* Flash-sale line: struck-through original price + a green "save ¥X" tag. */
 .line-was { color: var(--olive); text-decoration: line-through; margin-right: 10rpx; font-size: calc(24rpx * var(--font-scale)); }

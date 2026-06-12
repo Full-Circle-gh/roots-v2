@@ -64,6 +64,9 @@
 .info { flex: 1; min-width: 0; }
 .name { font-size: calc(34rpx * var(--font-scale)); line-height: 1.05; }
 .meta { font-size: calc(20rpx * var(--font-scale)); color: var(--olive); margin-top: 4rpx; }
+/* Chosen options (e.g. dressing) — darker than the size meta so the pick reads
+   as a real choice, not a spec. */
+.opt-meta { font-size: calc(22rpx * var(--font-scale)); color: var(--ink); margin-top: 4rpx; line-height: 1.2; }
 .qty { display: flex; align-items: center; gap: 20rpx; margin-top: 12rpx; }
 .qty-btn {
   width: 48rpx; height: 48rpx;
