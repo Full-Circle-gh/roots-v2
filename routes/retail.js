@@ -279,9 +279,12 @@ router.get('/api/retail/category-tree', (req, res) => {
   // the shop rail (which only needs order + CN labels) skips the extra queries.
   if (req.query.counts === '1' || req.query.counts === 'true') {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    // Match the block's `(top_category || category)` rule: top_category when
-    // set, else the legacy free-form category for products not yet re-saved.
-    const topExpr = "COALESCE(NULLIF(p.top_category, ''), p.category)";
+    // Count strictly by top_category — the SAME rule the shop's _buildSections
+    // uses, so a tile count matches what you see when you open that section (a
+    // product with no top_category is "Other" in the shop, so it's not counted
+    // under any top here either). The legacy free-form `category` column is NOT
+    // consulted; see the matching change to the ?category= filter below.
+    const topExpr = "p.top_category";
     const countRows = tdb().prepare(
       `SELECT ${topExpr} AS topname, COUNT(*) AS n FROM store_products p
         WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
@@ -944,7 +947,11 @@ router.get('/api/retail/products', (req, res) => {
     sql += ' AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)';
     const s = `%${t}%`; params.push(s, s, s);
   }
-  if (category) { sql += ' AND p.category = ?'; params.push(category); }
+  // Filter by the storefront top_category (the 2-level tree field the shop +
+  // home category_tabs use) — NOT the legacy free-form `category` column, which
+  // a re-saved product may no longer match. Keeps a category grid in sync with
+  // its tile count and the shop section. Only caller is the home category grid.
+  if (category) { sql += ' AND p.top_category = ?'; params.push(category); }
   if (idList.length) { sql += ` AND p.id IN (${idList.map(() => '?').join(',')})`; params.push(...idList); }
 
   // Sort: 'price_asc' | 'price_desc' | 'newest' | 'popular' | 'featured' (default → curated sort_order)
@@ -975,7 +982,7 @@ router.get('/api/retail/products', (req, res) => {
   const total = tdb().prepare(`SELECT COUNT(*) AS n FROM store_products p
                             WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
                             ${termClause}
-                            ${category ? 'AND p.category = ?' : ''}
+                            ${category ? 'AND p.top_category = ?' : ''}
                             ${idsClause}`)
     .get(...termParams, ...(category ? [category] : []), ...idList).n;
 

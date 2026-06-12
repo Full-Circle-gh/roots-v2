@@ -441,10 +441,11 @@ Component({
           // products (count = products in the category; cover = first product
           // with an image). Mirrors the CMS preview.
           const allProducts = this.properties.products || [];
-          // Match on the storefront `top_category` (the field the category tree
-          // is built from); fall back to the legacy free-form `category` for
-          // products not yet re-saved under the two-level scheme.
-          const inCat = (p, c) => (p.top_category || p.category) === c.name;
+          // Match strictly on `top_category` (the field the category tree is
+          // built from) — same rule as the shop + the server count/grid, so a
+          // tile count agrees with its section. Used only as the fallback path
+          // when server counts/covers haven't landed (older shell).
+          const inCat = (p, c) => p.top_category === c.name;
           // Count + cover come from the server (category-tree?counts=1) so they
           // reflect the WHOLE catalogue — the products array here is capped by
           // the home's main pull and would undercount far-sorted categories.
@@ -573,7 +574,7 @@ Component({
               list = cg[cgKey];
             } else {
               const cat = this.properties.categories.find(c => c.id === b.category_id);
-              list = this.properties.products.filter(p => !b.category_id || p.category === cat?.name);
+              list = this.properties.products.filter(p => !b.category_id || p.top_category === cat?.name);
             }
           }
           const isTopSelling = b.source_type === 'top_selling';
