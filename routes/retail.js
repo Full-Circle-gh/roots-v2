@@ -15066,6 +15066,13 @@ const LEADERBOARD_DEFAULTS = {
   reward_top3_cn:  '',
   reward_top10_en: '',
   reward_top10_cn: '',
+  // Placeholder ("seed") board — a temporary fake leaderboard used to prime a
+  // brand-new store before it has real ranked activity. Seeds are plain
+  // {name, value, tier_key} rows that blend in with real customers by value,
+  // so genuine spenders naturally outrank and displace them. Turn off (or
+  // clear) once the board fills on its own.
+  seed_enabled:    false,
+  seed_entries:    [],
 };
 
 function loadLeaderboardConfig() {
@@ -15144,7 +15151,31 @@ function computeLeaderboard(cfg) {
     ).all(topN);
   }
 
-  return rows.map((r, i) => ({
+  // Blend in admin-provided placeholder ("seed") entries — a temporary fake
+  // board to prime a new store. Seeds carry a plain value and intermix with
+  // real customers by value, then we re-slice to topN so genuine spenders
+  // naturally outrank and displace placeholders as they appear.
+  let merged = rows.map(r => ({
+    id: r.id, nickname: r.nickname, avatar_url: r.avatar_url,
+    tier_key: r.tier_key, value: Number(r.value) || 0,
+  }));
+  if (cfg.seed_enabled && Array.isArray(cfg.seed_entries) && cfg.seed_entries.length) {
+    for (const s of cfg.seed_entries) {
+      const value = Number(s && s.value) || 0;
+      if (value <= 0) continue;
+      merged.push({
+        id: null,
+        nickname: String((s && s.name) || '').trim(),
+        avatar_url: '',
+        tier_key: (s && s.tier_key) || 'seed',
+        value,
+      });
+    }
+    merged.sort((a, b) => b.value - a.value);
+    merged = merged.slice(0, topN);
+  }
+
+  return merged.map((r, i) => ({
     rank: i + 1,
     customer_id: r.id,
     nickname: r.nickname || '',
@@ -15213,6 +15244,13 @@ router.get('/api/retail/leaderboard', requireRetailAuth, (req, res) => {
     }
     // orders_count rank-when-not-in-top-N would need an extra aggregate;
     // skip for now — UI shows "Not ranked yet" in that case.
+
+    // Count any placeholder ("seed") entries ranked ahead of the caller so the
+    // "you are #N" footer stays consistent with the blended board above.
+    if (myRank && cfg.seed_enabled && Array.isArray(cfg.seed_entries)) {
+      const seedsAhead = cfg.seed_entries.filter(s => (Number(s && s.value) || 0) > myValue).length;
+      myRank += seedsAhead;
+    }
   }
 
   res.set('Cache-Control', 'private, max-age=30');
@@ -15277,6 +15315,14 @@ router.put('/api/retail-admin/leaderboard/config', requireRetailAdmin, express.j
     reward_top3_cn:  String(body.reward_top3_cn  || '').slice(0, 240),
     reward_top10_en: String(body.reward_top10_en || '').slice(0, 240),
     reward_top10_cn: String(body.reward_top10_cn || '').slice(0, 240),
+    seed_enabled:    !!body.seed_enabled,
+    seed_entries:    Array.isArray(body.seed_entries)
+      ? body.seed_entries.slice(0, 50).map(s => ({
+          name:     String((s && s.name) || '').slice(0, 40),
+          value:    Math.max(0, Math.min(10000000, Math.round(Number(s && s.value) || 0))),
+          tier_key: String((s && s.tier_key) || 'seed').slice(0, 16),
+        })).filter(s => s.value > 0)
+      : [],
   };
 
   tdb().prepare(
@@ -15294,10 +15340,12 @@ router.put('/api/retail-admin/leaderboard/config', requireRetailAdmin, express.j
 
 // Admin: preview leaderboard data (uses current config, ignores enabled
 // flag, returns full nicknames + reveal applied separately so the editor
-// can preview the mini-app view at any reveal mode).
+// can preview the mini-app view at any reveal mode). Placeholder ("seed")
+// entries are intentionally excluded here — the editor blends them in
+// client-side so the preview reacts to unsaved edits without double-counting.
 router.get('/api/retail-admin/leaderboard/preview', requireRetailAdmin, (req, res) => {
   const cfg = loadLeaderboardConfig();
-  const board = computeLeaderboard(cfg);
+  const board = computeLeaderboard({ ...cfg, seed_enabled: false });
   res.json({
     success: true,
     data: {
@@ -15329,11 +15377,20 @@ router.get('/api/retail/storefront/leaderboard', (req, res) => {
   const top_n  = Math.max(3, Math.min(10, parseInt(req.query.top_n, 10) || 5));
   const reveal_mode = allowedReveal.includes(req.query.reveal_mode) ? req.query.reveal_mode : 'first_char';
 
-  const key = `${metric}|${period}|${top_n}`;
+  // Blend in the saved placeholder ("seed") board if it's enabled, so the
+  // storefront block matches the mini-app leaderboard while a new store is
+  // being primed. Keyed into the cache so toggling it on/off reflects.
+  const lbCfg = loadLeaderboardConfig();
+  const useSeed = !!lbCfg.seed_enabled && Array.isArray(lbCfg.seed_entries) && lbCfg.seed_entries.length;
+
+  const key = `${metric}|${period}|${top_n}|${useSeed ? 's' + lbCfg.seed_entries.length : 'n'}`;
   const now = Date.now();
   let cached = _leaderboardBlockCache.get(key);
   if (!cached || (now - cached.t) > LEADERBOARD_BLOCK_TTL_MS) {
-    const raw = computeLeaderboard({ metric, period, top_n });
+    const raw = computeLeaderboard({
+      metric, period, top_n,
+      seed_enabled: useSeed, seed_entries: lbCfg.seed_entries,
+    });
     cached = { t: now, entries: raw };
     _leaderboardBlockCache.set(key, cached);
   }

@@ -595,6 +595,71 @@ const LB_FIELD_TO_ID = {
   reward_top10_en: 'lb-r10-en', reward_top10_cn: 'lb-r10-cn',
 };
 
+// Placeholder ("seed") board — a temporary fake leaderboard to prime a new
+// store before real activity exists. Held here as an array of {name, value,
+// tier_key}; saved alongside the rest of the config and blended server-side.
+let LB_SEED_ENTRIES = [];
+// Realistic-looking WeChat-style nicknames. Default reveal masks these to the
+// first character, so the exact text mainly matters in "full" reveal mode.
+const LB_SEED_NAME_POOL = [
+  '小确幸', '清晨慢跑', '绿野仙踪', '一颗西兰花', '山茶花开', '麦田守望者',
+  '半糖主义', '林深时见鹿', '云淡风轻', '番茄炒蛋', '七月的风', '海盐柠檬',
+  '阿杰', '老张同学', '豆豆妈', '江南细雨', '木棉花', '一勺蜂蜜',
+  '南山', '慢慢来', '小满', '橙子味的猫', '晚风', '一只小肥啾',
+  'Leo', 'Coco', 'Mochi', 'Hazel', 'Nina', 'Theo', 'Ricky', 'Mia',
+];
+// Tier badges aren't shown on the leaderboard page, but keep them plausible
+// for any surface that does read tier_key (top earners trend higher).
+function lbSeedTier(frac) {
+  if (frac < 0.10) return 'tree';
+  if (frac < 0.35) return 'root';
+  if (frac < 0.70) return 'sprout';
+  return 'seed';
+}
+function lbShuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function lbUpdateSeedSummary() {
+  const el = $('#lb-seed-summary');
+  if (!el) return;
+  if (!LB_SEED_ENTRIES.length) { el.textContent = cuT('No placeholder members yet.', '尚未生成占位会员。'); return; }
+  const top = LB_SEED_ENTRIES[0], bottom = LB_SEED_ENTRIES[LB_SEED_ENTRIES.length - 1];
+  el.textContent = cuT(
+    LB_SEED_ENTRIES.length + ' members · ¥' + top.value + ' → ¥' + bottom.value,
+    LB_SEED_ENTRIES.length + ' 位会员 · ¥' + top.value + ' → ¥' + bottom.value
+  );
+}
+// Build a believable descending spend distribution from the top value down,
+// with light jitter, then force it strictly decreasing.
+function lbGenerateSeed() {
+  const max = Math.max(50, parseInt($('#lb-seed-max') && $('#lb-seed-max').value, 10) || 3000);
+  const count = Math.max(3, Math.min(50, parseInt($('#lb-seed-count') && $('#lb-seed-count').value, 10) || 18));
+  const names = lbShuffle(LB_SEED_NAME_POOL).slice(0, count);
+  const entries = [];
+  for (let i = 0; i < count; i++) {
+    const frac = count > 1 ? i / (count - 1) : 0;           // 0 (top) .. 1 (bottom)
+    let v = max * Math.pow(1 - frac, 1.35);                 // steeper near the top
+    v = v * (1 + (Math.random() - 0.5) * 0.08);             // ±4% jitter
+    v = Math.max(max * 0.04, v);
+    entries.push({ name: names[i] || ('Member ' + (i + 1)), value: Math.round(v / 5) * 5, tier_key: lbSeedTier(frac) });
+  }
+  entries[0].value = max;                                    // exact requested top
+  for (let i = 1; i < entries.length; i++) {                // enforce strict descent
+    if (entries[i].value >= entries[i - 1].value) entries[i].value = Math.max(20, entries[i - 1].value - 5);
+  }
+  LB_SEED_ENTRIES = entries;
+  const box = $('#lb-seed-enabled');
+  if (box) box.checked = true;                              // generating implies "use it"
+  lbUpdateSeedSummary();
+  lbRenderPreview();
+  toast(cuT('Placeholder members generated', '已生成占位会员'));
+}
+
 async function lbLoad() {
   try {
     const r = await fetch('/api/retail-admin/leaderboard/config', { credentials: 'same-origin' });
@@ -616,6 +681,10 @@ function lbApplyConfigToForm(cfg) {
     if (f === 'enabled') el.checked = !!cfg[f];
     else el.value = cfg[f] != null ? cfg[f] : '';
   }
+  const seedBox = $('#lb-seed-enabled');
+  if (seedBox) seedBox.checked = !!cfg.seed_enabled;
+  LB_SEED_ENTRIES = Array.isArray(cfg.seed_entries) ? cfg.seed_entries : [];
+  lbUpdateSeedSummary();
   lbUpdateEnabledPill();
 }
 function lbReadForm() {
@@ -628,6 +697,9 @@ function lbReadForm() {
     else if (f === 'top_n') out[f] = parseInt(el.value, 10) || 20;
     else out[f] = el.value;
   }
+  const seedBox = $('#lb-seed-enabled');
+  out.seed_enabled = !!(seedBox && seedBox.checked);
+  out.seed_entries = LB_SEED_ENTRIES;
   return out;
 }
 function lbUpdateEnabledPill() {
@@ -705,7 +777,17 @@ function lbRenderPreview() {
   if (note) note.textContent = (f.metric === 'points_balance')
     ? 'Note: points-balance metric is point-in-time. Period selector is ignored for this metric.'
     : '';
-  const rawEntries = (LB_PREVIEW_DATA && LB_PREVIEW_DATA.raw_entries) || [];
+  let rawEntries = ((LB_PREVIEW_DATA && LB_PREVIEW_DATA.raw_entries) || []).slice();
+  // Blend placeholder members into the preview client-side so the operator
+  // sees them immediately (the server only includes them after a save).
+  const seedBox = $('#lb-seed-enabled');
+  if (seedBox && seedBox.checked && LB_SEED_ENTRIES.length) {
+    rawEntries = rawEntries
+      .map(e => ({ nickname: e.nickname, value: Number(e.value) || 0 }))
+      .concat(LB_SEED_ENTRIES.map(s => ({ nickname: s.name, value: Number(s.value) || 0 })))
+      .sort((a, b) => b.value - a.value)
+      .map((e, i) => ({ ...e, rank: i + 1 }));
+  }
   const topN = Math.max(1, Math.min(100, parseInt(f.top_n, 10) || 20));
   const sliced = rawEntries.slice(0, topN);
   const list = $('#lb-pv-list');

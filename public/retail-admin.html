@@ -4112,6 +4112,35 @@
           </div>
         </div>
 
+        <div class="lb-card">
+          <h3>Placeholder board (temporary) · 占位榜单(临时)</h3>
+          <div class="muted">Fill the board with realistic-looking members so it doesn't sit empty before real activity picks up. Real customers blend in and outrank placeholders as they spend — switch this off once the board fills on its own. · 在真实消费产生前,用拟真会员填充榜单,避免空榜。真实顾客会自动混入并在消费后超越占位会员;榜单自然填满后请关闭。</div>
+          <div class="lb-toggle" style="margin-top: 10px;">
+            <div>
+              <h3 style="margin-bottom: 2px;">Show placeholder members · 显示占位会员</h3>
+              <div class="muted">Blends the generated members below into the live board. · 将下方生成的会员混入实时榜单。</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="lb-seed-enabled" onchange="updateLeaderboardPreview()"/>
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="lb-row-2" style="margin-top: 10px;">
+            <div class="lb-field">
+              <label>Top spender (¥) · 榜首消费</label>
+              <input type="number" id="lb-seed-max" min="50" step="50" value="3000"/>
+            </div>
+            <div class="lb-field">
+              <label>How many members · 会员数量</label>
+              <input type="number" id="lb-seed-count" min="3" max="50" step="1" value="18"/>
+            </div>
+          </div>
+          <div class="row" style="gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap;">
+            <button type="button" class="btn" onclick="lbGenerateSeed()">Generate placeholder members · 生成占位会员</button>
+            <span id="lb-seed-summary" class="muted" style="font-size: 12px;"></span>
+          </div>
+        </div>
+
         <div class="lb-save-bar">
           <button class="btn btn-primary" onclick="saveLeaderboardConfig()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
