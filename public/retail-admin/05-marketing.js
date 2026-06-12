@@ -318,8 +318,9 @@ function vwClose() {
   $('#vw-bg').classList.remove('show');
   _vw = null;
 }
-// Esc closes the wizard — parity with the platform's other modals/drawers
-// (the backdrop click is wired inline on #vw-bg in retail-admin.html).
+// Esc closes the wizard — parity with the platform's other modals/drawers.
+// Backdrop click intentionally does NOT close (would discard in-progress work);
+// only Esc and the Close button dismiss it.
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || !_vw) return;
   const bg = document.getElementById('vw-bg');
