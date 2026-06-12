@@ -2171,9 +2171,16 @@ function renderShipmentTrackingCard(o, s) {
     ? `<a href="${t.track_url}" target="_blank" rel="noopener" class="muted" style="font-size:11px; text-decoration:underline;">View on carrier site →</a>`
     : '';
 
+  // A waybill reused from an ALREADY-DELIVERED order can't live-sync: kd100/JD
+  // keys by company+number and won't replay events for a parcel they already
+  // closed out. The green "live sync on" badge would lie next to the red reuse
+  // banner, so override it to a muted amber "sync inactive" the moment we know.
+  const deadReuse = !!(t && t.reuse_warning && t.reuse_warning.delivered);
   let kdBadge = '';
   if (has) {
-    if (s.jd_live) {
+    if (deadReuse) {
+      kdBadge = `<span style="font-size:11px; color:#b8860b;">● sync inactive · 同步未生效 (reused number · 重复运单号)</span>`;
+    } else if (s.jd_live) {
       kdBadge = `<span class="muted" style="font-size:11px; color: #5a8c2a;">● JD live sync on</span>`;
     } else if (s.tracking_kd100_subscribed) {
       kdBadge = `<span class="muted" style="font-size:11px; color: #5a8c2a;">● kd100 live sync on</span>`;
