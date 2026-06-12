@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const zlib = require('zlib');
 
 // ── Tiny .env loader ─────────────────────────────────────────────────
 // Loads /root/roots-v2/.env into process.env so we don't need a dotenv
@@ -57,6 +58,34 @@ app.use(helmet({
 // Body parsing
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// ── Response compression (zero-dependency) ───────────────────────────
+// nginx in front does NOT gzip our API responses, so JSON payloads ship
+// uncompressed — the storefront/mini-app catalogue pull alone was >1 MB on the
+// wire, and rich-HTML/JSON compresses ~85%. We wrap res.json ONLY: the binary
+// image-streaming routes use res.send(buffer) and stay untouched (already-
+// compressed JPEG/PNG must never be re-gzipped). The 1 KB floor skips tiny
+// bodies (error payloads, counts) where the gzip header costs more than it
+// saves. Adding the `compression` npm package would need a manual server-side
+// `npm install` (the auto-deploy doesn't install deps), so we use built-in zlib.
+app.use((req, res, next) => {
+  if (!/\bgzip\b/.test(req.headers['accept-encoding'] || '')) return next();
+  const origJson = res.json.bind(res);
+  res.json = (body) => {
+    let str;
+    try { str = JSON.stringify(body); } catch { return origJson(body); }
+    if (!str || Buffer.byteLength(str) < 1024) return origJson(body);
+    let gz;
+    try { gz = zlib.gzipSync(str); } catch { return origJson(body); }
+    res.setHeader('Content-Encoding', 'gzip');
+    res.setHeader('Vary', 'Accept-Encoding');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.removeHeader('Content-Length');
+    res.setHeader('Content-Length', gz.length);
+    return res.end(gz);
+  };
+  next();
+});
 
 // Session secret. If unset OR equal to the historical hardcoded literal that
 // shipped before the fix, fall back to a process-lifetime random key so an

@@ -222,7 +222,12 @@ Page({
     try {
       const [cfg, prods, cats, flash, aff, polls, favs, notif] = await Promise.all([
         config.load(force),
-        api.get('/api/retail/products?limit=100').catch(() => []),
+        // lean=1: home cards render name/price/image/tagline only — never the
+        // full rich-HTML description. lean drops it server-side (a 100-row pull
+        // was 1.28 MB, 1.2 MB of it descriptions the home throws away → ~80 KB).
+        // Keeps this array small enough to thread through every block-renderer
+        // without blowing WeChat's setData bridge. PDP still fetches full copy.
+        api.get('/api/retail/products?limit=100&lean=1').catch(() => []),
         api.get('/api/retail/category-tree').catch(() => []),
         api.get('/api/retail/flash-sales').catch(() => []),
         hasToken ? api.get('/api/retail/affiliate').catch(() => null) : Promise.resolve(null),
@@ -362,7 +367,7 @@ Page({
     await Promise.all([...limits].map(async limit => {
       if (next[limit]) return;
       try {
-        const res = await api.get(`/api/retail/products?sort=newest&limit=${encodeURIComponent(limit)}`);
+        const res = await api.get(`/api/retail/products?sort=newest&limit=${encodeURIComponent(limit)}&lean=1`);
         next[limit] = Array.isArray(res) ? res : (res?.data || []);
       } catch {
         next[limit] = [];

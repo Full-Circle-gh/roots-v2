@@ -695,6 +695,18 @@ const RETAIL_PRODUCT_COLS_CARD = RETAIL_PRODUCT_COLS_LIST
   .replace('p.description_en, p.description_cn, p.description_format,', '')
   .replace('p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,', '');
 
+// Home page set (lean=1). The home renders block-renderer cards that show a
+// short tagline caption but NEVER the full rich-HTML description — yet the
+// fuller LIST set shipped description_en/cn for every row, and 99/100 Roots
+// products are format:'rich'. A 100-row home pull measured 1.28 MB, 1.2 MB of
+// it descriptions the home throws away (it only used them as an 80-char tagline
+// fallback). Drop the heavy descriptions + keywords but KEEP tagline_en/cn so
+// grid captions survive. The PDP (GET /products/:id) still ships the full
+// description via the complete RETAIL_PRODUCT_COLS. ~1.2 MB → ~80 KB per 100.
+const RETAIL_PRODUCT_COLS_HOME = RETAIL_PRODUCT_COLS_LIST
+  .replace('p.description_en, p.description_cn, p.description_format,', '')
+  .replace('p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,', 'p.tagline_en, p.tagline_cn,');
+
 // Swap a list row's heavy inline base64 primary photo for a tiny streamed-image
 // URL the mini-app lazy-loads + caches (see GET /api/retail/products/:id/image).
 // Pairs with RETAIL_PRODUCT_COLS_LIST (which already collapsed the blob to a
@@ -871,7 +883,11 @@ router.get('/api/retail/products', (req, res) => {
   // URLs. Other consumers (home product_grid blocks) omit it and get the fuller
   // copy fields + full-res images.
   const slim = req.query.slim === '1' || req.query.slim === 'true';
-  const cols = slim ? RETAIL_PRODUCT_COLS_CARD : RETAIL_PRODUCT_COLS_LIST;
+  // lean=1 (the Home page): drops the multi-KB rich-HTML descriptions but keeps
+  // the tagline caption + full-res image URLs — the big home-payload win without
+  // softening the featured/hero image. slim still wins if both are passed.
+  const lean = !slim && (req.query.lean === '1' || req.query.lean === 'true');
+  const cols = slim ? RETAIL_PRODUCT_COLS_CARD : (lean ? RETAIL_PRODUCT_COLS_HOME : RETAIL_PRODUCT_COLS_LIST);
   const thumbW = slim ? 480 : 0;
   let sql = `SELECT ${cols}, ${hasImageFallbackSql('p')} AS has_group_image FROM store_products p
              WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`;
