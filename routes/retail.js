@@ -11510,7 +11510,11 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
   // tenant's kd100 creds synchronously (before the async fire) so the deferred
   // subscribe runs under this tenant's own account.
   const kc = kd100Creds();
-  if (tracking.kd100Enabled(kc) && tracking.KD100_CARRIER_MAP[carrier]) {
+  // JD waybills track for FREE via JD's own trace.get (for labels we created
+  // under the account) — so JD does NOT auto-subscribe to the paid 快递100
+  // push. It stays opt-in: the operator can still 快递100-track a hand-entered
+  // personal JD number via the "resubscribe" action. Other carriers auto-sub.
+  if (carrier !== 'jd' && tracking.kd100Enabled(kc) && tracking.KD100_CARRIER_MAP[carrier]) {
     tracking.subscribeWithKd100({
       orderId: id, carrierCode: carrier, trackingNumber: number,
       recipientPhone: o.recipient_phone,
@@ -11918,7 +11922,8 @@ router.post('/api/retail-admin/orders/bulk-tracking', requireRetailAdmin, expres
       try { notifyOrderStatusChange(o.id, 'dispatched'); } catch (e) { /* best-effort */ }
     }
 
-    if (tracking.kd100Enabled(kc) && tracking.KD100_CARRIER_MAP[carrier]) {
+    // JD tracks free via its own API — don't auto-subscribe it to paid 快递100.
+    if (carrier !== 'jd' && tracking.kd100Enabled(kc) && tracking.KD100_CARRIER_MAP[carrier]) {
       subscribeQueue.push({ orderId: o.id, carrier, number, phone: o.recipient_phone });
     }
 
@@ -11969,6 +11974,103 @@ router.post('/api/retail-admin/orders/:id/tracking/resubscribe', requireRetailAd
     tdb().prepare("UPDATE retail_shipments SET tracking_kd100_subscribed = 0, tracking_last_error = ? WHERE id = ?").run(r.error, s.id);
   }
   res.json({ success: r.ok, error: r.error });
+});
+
+// Create a JD waybill for an order through JD's own LDOP API and attach it.
+// The label is allocated UNDER our JD account, so jingdong.ldop.receive.trace.get
+// streams its events for FREE (no 快递100). Sender = the fulfilling store's
+// 发货地址 (JD requires a sender phone — set it on the store first); receiver =
+// the order's recipient. Creating a label = shipping, so the order advances to
+// dispatched. Body overrides (all optional): { weight, vloumn, product,
+// shipment_id, guarantee_amount }.
+router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, express.json(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const jc = integ().jd;
+  if (!jd.jdEnabled(jc)) return res.status(409).json({ success: false, error: 'jd_not_configured' });
+
+  const o = tdb().prepare(
+    `SELECT id, order_no, status, store_id, recipient_name, recipient_phone, address_full
+       FROM retail_orders WHERE id = ?`).get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  if (!['paid', 'preparing', 'dispatched'].includes(o.status)) {
+    return res.status(409).json({ success: false, error: 'not_shippable', status: o.status });
+  }
+  if (!o.recipient_name || !o.recipient_phone || !o.address_full) {
+    return res.status(400).json({ success: false, error: 'incomplete_address' });
+  }
+
+  // Sender = the fulfilling store's 发货地址. JD requires a sender mobile.
+  const store = tdb().prepare(
+    'SELECT name_cn, name_en, address, city, district, phone FROM retail_stores WHERE id = ?').get(o.store_id);
+  if (!store) return res.status(400).json({ success: false, error: 'store_missing' });
+  const senderMobile = String(store.phone || '').replace(/\D/g, '');
+  if (!senderMobile) return res.status(400).json({ success: false, error: 'store_sender_phone_missing' });
+  const senderAddress = [store.city, store.district, store.address].filter(Boolean).join(' ');
+
+  // Resolve the shipment row to attach to (default = primary parcel).
+  const shipments = ensureShipments(id);
+  const shipmentIdReq = req.body?.shipment_id != null ? parseInt(req.body.shipment_id, 10) : null;
+  const shipment = shipmentIdReq ? shipments.find(s => s.id === shipmentIdReq) : shipments[0];
+  if (!shipment) return res.status(400).json({ success: false, error: 'invalid_shipment_id' });
+  if (shipment.tracking_number) {
+    return res.status(409).json({ success: false, error: 'already_has_waybill', number: shipment.tracking_number });
+  }
+
+  const product = String(req.body?.product || 'ed-m-0001');
+  const weight  = Number(req.body?.weight) > 0 ? Number(req.body.weight) : 1;    // kg
+  const vloumn  = Number(req.body?.vloumn) > 0 ? Number(req.body.vloumn) : 100;  // cm³
+
+  const payload = {
+    orderId:        o.order_no,
+    product,
+    senderName:     store.name_cn || store.name_en || 'Roots',
+    senderAddress,  senderMobile,
+    receiveName:    o.recipient_name,
+    receiveAddress: o.address_full,
+    receiveMobile:  String(o.recipient_phone).replace(/\D/g, ''),
+    packageCount:   1, weight, vloumn,
+    description:    o.order_no,
+  };
+  if (req.body?.guarantee_amount) {
+    payload.guaranteeValue = 1;
+    payload.guaranteeValueAmount = Number(req.body.guarantee_amount) || 0;
+  }
+
+  let cr;
+  try { cr = await jd.createWaybill(payload, jc); }
+  catch (e) { console.error('[jd.create] threw', e); return res.status(502).json({ success: false, error: 'jd_request_failed' }); }
+  if (!cr.ok) return res.status(502).json({ success: false, error: cr.error || 'jd_create_failed' });
+
+  const waybill = cr.waybillCode;
+  const derived = tracking.deriveStatusFromOrder('dispatched');
+  // Attach to the shipment — NO kd100 (JD's own trace.get handles it for free).
+  tdb().prepare(
+    `UPDATE retail_shipments
+        SET tracking_carrier = 'jd', tracking_number = ?, tracking_status = ?,
+            tracking_events_json = NULL, tracking_synced_at = NULL,
+            tracking_last_error = NULL, tracking_kd100_subscribed = 0,
+            dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`).run(derived, waybill, shipment.id);
+  if (shipment.id === shipments[0].id) {
+    tdb().prepare(
+      `UPDATE retail_orders
+          SET tracking_carrier = 'jd', tracking_number = ?, tracking_status = ?,
+              tracking_events_json = NULL, tracking_synced_at = NULL,
+              tracking_last_error = NULL, tracking_kd100_subscribed = 0, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`).run(derived, waybill, id);
+  }
+
+  let firstDispatch = false;
+  if (o.status !== 'dispatched') {
+    tdb().prepare(
+      "UPDATE retail_orders SET status = 'dispatched', dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
+    firstDispatch = true;
+  }
+  logActivity(req.user.id, req.user.username, 'jd_waybill_created', 'retail_order', id,
+    { waybill, product, shipment_id: shipment.id }, req.ip);
+  if (firstDispatch) { try { notifyOrderStatusChange(id, 'dispatched'); } catch (e) { /* best-effort */ } }
+
+  res.json({ success: true, data: { id, shipment_id: shipment.id, waybill, presort: cr.presort, order_status: 'dispatched' } });
 });
 
 router.delete('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, (req, res) => {

@@ -2071,13 +2071,19 @@ function renderShipmentTrackingCard(o, s) {
           </div>
         </div>` : ''}
       ${eventsBlock}
+      ${!has ? `
+        <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="createJdLabel(${o.id}, ${sid}, event)">📦 Create JD label · 生成京东运单</button>
+          <span class="muted" style="font-size:11px;">Free live tracking — JD bills the parcel. · 免费物流追踪。</span>
+        </div>
+        <div class="muted" style="font-size:11px; margin:8px 0 4px;">— or attach an existing waybill manually · 或手动填写已有运单 —</div>` : ''}
       <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap; margin-top: ${has ? '10px' : '0'};">
         <select id="trk-carrier-${sid}" style="min-width:180px;">${carrierOpts}</select>
         <input type="text" id="trk-number-${sid}" value="${has ? escapeHtml(t.number) : ''}" placeholder="Tracking / waybill number" style="flex:1; min-width:200px; font-family: var(--f-mono);">
-        <button class="btn btn-primary btn-sm" onclick="saveTracking(${o.id}, ${sid})">${has ? 'Update' : 'Save tracking'}</button>
+        <button class="btn ${has ? 'btn-primary' : ''} btn-sm" onclick="saveTracking(${o.id}, ${sid})">${has ? 'Update' : 'Save tracking'}</button>
         ${has ? `<button class="btn btn-sm" onclick="clearTracking(${o.id}, ${sid})">Clear · 清除</button>` : ''}
       </div>
-      ${!has ? `<div class="muted" style="font-size:11px; margin-top:6px;">Paste the waybill number after shipping this segment. When 快递100 is configured, live status updates push into the customer mini app automatically.</div>` : ''}
+      ${!has ? `<div class="muted" style="font-size:11px; margin-top:6px;">A hand-entered JD personal waybill (JDV0…) won't sync free — use “Create JD label” above, or 快递100 (paid) via Retry sync.</div>` : ''}
     </div>`;
 }
 
@@ -2166,6 +2172,31 @@ async function resubscribeTracking(orderId, shipmentId, ev) {
     toast('Re-subscribed · 已重新订阅');
     openOrder(orderId);
   } catch {}
+}
+
+// Generate a JD waybill for this parcel through JD's own API. The label is
+// created under our JD account, so JD streams tracking events for free (no
+// 快递100). Server resolves the sender from the fulfilling store's 发货地址 —
+// surface the common "store has no sender phone" gap as a clear instruction.
+async function createJdLabel(orderId, shipmentId, ev) {
+  if (!confirm('Create a JD waybill and ship this parcel now?\n生成京东运单并发货？')) return;
+  const qs = shipmentId ? '?shipment_id=' + shipmentId : '';
+  try {
+    const r = await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/jd-waybill${qs}`,
+      method: 'POST', body: { shipment_id: shipmentId },
+      errLabelEn: 'JD label failed', errLabelCn: '生成运单失败',
+    });
+    toast('JD waybill created · 京东运单已生成: ' + (r?.data?.waybill || ''));
+    openOrder(orderId, { instant: true });
+    loadOrders();
+  } catch (e) {
+    // adminWrite already toasts the raw error; add guidance for the usual cause.
+    if (String(e?.message || e).includes('store_sender_phone_missing')) {
+      toast('Set the store’s sender phone first (Settings → Stores) · 请先在门店设置寄件电话', 'err');
+    }
+  }
 }
 
 // ─── Partial / late fulfillment (per-shipment) ──────────────────────────
