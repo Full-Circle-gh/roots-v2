@@ -5689,6 +5689,7 @@
     .rm-oc-item:first-child { border-top: 0; }
     .rm-oc-item .nm { flex: 1; min-width: 0; }
     .rm-oc-item .nm .sku { display: block; margin-top: 2px; font: 11px var(--f-mono); color: var(--text-3); letter-spacing: .02em; }
+    .rm-oc-item .nm .opts { display: block; margin-top: 3px; font-size: 12px; line-height: 1.35; color: var(--brass); }
     .rm-oc-item .q { font: 12px var(--f-mono); color: var(--text-3); flex: 0 0 auto; }
     /* >1 unit — bold + brass so a multi-unit line can't be shipped short. */
     .rm-oc-item .q.qty-multi { font-weight: 700; color: var(--brass); }

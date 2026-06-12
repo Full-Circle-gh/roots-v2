@@ -1027,12 +1027,21 @@ function resolveBundleComponents(v) {
 // lines pass straight through. `r.product.bundle_items` must be selected.
 function expandStockLines(resolvedLines) {
   const agg = new Map();
+  const add = (id, qty) => { const pid = parseInt(id, 10); if (pid) agg.set(pid, (agg.get(pid) || 0) + qty); };
   for (const r of resolvedLines) {
     const comps = parseBundleItems(r.product && r.product.bundle_items);
     if (comps.length) {
-      for (const c of comps) agg.set(c.id, (agg.get(c.id) || 0) + c.qty * r.qty);
+      for (const c of comps) add(c.id, c.qty * r.qty);
     } else {
-      agg.set(r.product.id, (agg.get(r.product.id) || 0) + r.qty);
+      add(r.product.id, r.qty);
+    }
+    // Stock-backed paid extras: each chosen option that carries a
+    // stock_product_id contributes its own demand (one add-on per unit
+    // bought), so the add-on's inventory is reserved/committed/released right
+    // alongside the main product. Plain (no-stock) option picks carry no
+    // stock_product_id and are ignored here.
+    for (const o of (r.options || [])) {
+      if (o.stock_product_id) add(o.stock_product_id, r.qty);
     }
   }
   return [...agg.entries()].map(([product_id, qty]) => ({ product_id, qty }));
@@ -4861,7 +4870,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     if (Array.isArray(it.choices) && it.choices.length) {
       const placeholders = it.choices.map(() => '?').join(',');
       const choices = tdb().prepare(
-        `SELECT c.id, c.option_id, c.label_en, c.price_delta, o.product_id, o.type
+        `SELECT c.id, c.option_id, c.label_en, c.price_delta, c.stock_product_id, o.product_id, o.type
            FROM retail_product_option_choices c
            JOIN retail_product_options o ON o.id = c.option_id
           WHERE c.id IN (${placeholders})`
@@ -4871,7 +4880,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
           return res.status(400).json({ success: false, error: 'choice_wrong_product' });
         }
         optionDelta += Number(c.price_delta) || 0;
-        chosenLabels.push({ option_id: c.option_id, choice_id: c.id, label: c.label_en, delta: c.price_delta });
+        // stock_product_id carries through so expandStockLines can reserve a
+        // stock-backed paid extra's inventory alongside the main product.
+        chosenLabels.push({ option_id: c.option_id, choice_id: c.id, label: c.label_en, delta: c.price_delta, stock_product_id: c.stock_product_id || null });
       }
     }
 

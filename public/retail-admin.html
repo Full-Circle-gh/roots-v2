@@ -6559,8 +6559,14 @@
       (s.items || []).forEach(function (it) {
         var nm = it.name_en || it.name_cn || ('#' + it.id);
         var sku = it.sku ? '<span class="sku">' + esc(it.sku) + '</span>' : '';
+        // Chosen customer options (dressing, paid extras) — parsed server-side
+        // into it.options=[{label}]; shown so the packer sees which dressing.
+        var opts = (Array.isArray(it.options) ? it.options : [])
+          .map(function (op) { return op && op.label ? esc(op.label) : ''; })
+          .filter(Boolean).join(' · ');
+        var optsHTML = opts ? '<span class="opts">&#9656; ' + opts + '</span>' : '';
         var multi = Number(it.qty) > 1 ? ' qty-multi' : '';
-        rows += '<div class="rm-oc-item"><span class="nm">' + esc(nm) + sku + '</span><span class="q' + multi + '">×' + (it.qty || 0) + '</span><span class="a">¥' + money(it.line_total) + '</span></div>';
+        rows += '<div class="rm-oc-item"><span class="nm">' + esc(nm) + sku + optsHTML + '</span><span class="q' + multi + '">×' + (it.qty || 0) + '</span><span class="a">¥' + money(it.line_total) + '</span></div>';
       });
     });
     return rows ? '<div class="rm-oc-items">' + rows + '</div>' : '';
