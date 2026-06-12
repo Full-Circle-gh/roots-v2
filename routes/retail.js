@@ -696,7 +696,7 @@ const RETAIL_PRODUCT_COLS = `
   p.description_blocks, p.use_block_design, p.page_template,
   p.colophon_character, p.colophon_tagline_en, p.colophon_tagline_cn,
   p.flash_price, p.flash_starts_at, p.flash_ends_at,
-  p.flash_stock_limit, p.flash_sold,
+  p.flash_stock_limit, p.flash_sold, p.no_coupon_on_flash,
   p.variant_group_id, p.variant_label, p.variant_label_cn, p.variant_sort,
   p.low_stock_threshold,
   p.bundle_items,
@@ -13999,7 +13999,7 @@ function priceCart(items, customerId) {
     const p = tdb().prepare(
       `SELECT id, sell_price AS price,
               flash_price, flash_starts_at, flash_ends_at,
-              flash_stock_limit, flash_sold
+              flash_stock_limit, flash_sold, no_coupon_on_flash
          FROM store_products
         WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
@@ -14032,6 +14032,10 @@ function priceCart(items, customerId) {
       unit_price: Math.round(unit * 100) / 100,
       is_flash: !!eff.is_flash,
       regular_price: eff.is_flash ? Math.round((Number(p.price) + optionDelta) * 100) / 100 : null,
+      // Excluded from coupons right now (active flash + product opt-out)? The
+      // checkout sums non-blocked lines into couponable_subtotal for the voucher
+      // preview; /orders recomputes it authoritatively.
+      coupon_blocked: !!(eff.is_flash && p.no_coupon_on_flash),
     });
   }
   return { subtotal: Math.round(subtotal * 100) / 100, totalQty, lines };
