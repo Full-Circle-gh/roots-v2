@@ -37,6 +37,18 @@ function save() {
 function get() { return load(); }
 function count() { return load().items.reduce((s, i) => s + (i.qty || 0), 0); }
 function subtotal() { return load().items.reduce((s, i) => s + (i.qty || 0) * (i.unit_price || 0), 0); }
+// Coupon-eligible slice of the cart: the subtotal minus any line ring-fenced
+// from coupons right now (a product on an active flash sale flagged
+// no_coupon_on_flash, surfaced by the server as coupon_blocked). Vouchers are
+// previewed against THIS so a sitewide coupon doesn't appear to stack on a deep
+// flash price; /orders recomputes it authoritatively. Equals subtotal() for a
+// normal cart, so nothing changes unless an operator flags a flash item.
+function couponableSubtotal() {
+  return load().items.reduce(
+    (s, i) => s + (i.coupon_blocked ? 0 : (i.qty || 0) * (i.unit_price || 0)),
+    0,
+  );
+}
 
 function add(product, qty = 1, options = []) {
   load();
@@ -61,6 +73,9 @@ function add(product, qty = 1, options = []) {
       unit_price: eff,
       regular_price: isFlash ? regular : null,
       is_flash: isFlash,
+      // Server-derived: this line is excluded from coupons while its flash is
+      // live (product flagged no_coupon_on_flash). Refreshed by reprice().
+      coupon_blocked: !!product.coupon_blocked,
       qty,
       options,
     });
@@ -103,7 +118,15 @@ function reprice(lines) {
   let changed = false;
   for (const it of state.items) {
     const ln = byKey[keyOf(it.product_id, (it.options || []).map(o => o.choice_id))];
-    if (ln && ln.unit_price != null && Number(it.unit_price) !== Number(ln.unit_price)) {
+    if (!ln) continue;
+    // Keep the coupon-exclusion flag fresh even when the price is unchanged —
+    // a flash window can start/end while items sit in the cart, flipping whether
+    // the line is ring-fenced from coupons.
+    if (ln.coupon_blocked != null && !!it.coupon_blocked !== !!ln.coupon_blocked) {
+      it.coupon_blocked = !!ln.coupon_blocked;
+      changed = true;
+    }
+    if (ln.unit_price != null && Number(it.unit_price) !== Number(ln.unit_price)) {
       it.unit_price    = Number(ln.unit_price);
       it.is_flash      = !!ln.is_flash;
       it.regular_price = ln.regular_price != null ? Number(ln.regular_price) : null;
@@ -134,4 +157,4 @@ function updateBadge() {
   } catch (e) { /* swallow — badge is cosmetic, never break cart writes */ }
 }
 
-module.exports = { get, count, subtotal, add, setQty, remove, clear, subscribe, updateBadge, reprice };
+module.exports = { get, count, subtotal, couponableSubtotal, add, setQty, remove, clear, subscribe, updateBadge, reprice };

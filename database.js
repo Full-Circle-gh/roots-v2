@@ -1312,6 +1312,15 @@ try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_reviews_customer ON retail_
 // the wording without a migration.
 addColumn('retail_reviews', 'tags_json', 'TEXT');
 
+// A paid add-on choice (e.g. "Pickles", "Spicy sauce") backed by a real
+// store product so it has its OWN stock + SKU + packing line. When set, the
+// option choice consumes that product's inventory at checkout (qty 1 per unit
+// of the parent line) and is hidden/disabled when that product is sold out.
+// NULL = an ordinary choice (dressing) with no stock link. See feie.js +
+// expandStockLines (order-create reserves the linked product like a bundle
+// component, so the existing atomic stock gate prevents overselling).
+addColumn('retail_product_option_choices', 'stock_product_id', 'INTEGER');
+
 // Customer-reported bugs / feedback submitted from the mini app "Found a bug?"
 // form. Lands read-only in the Mini App Backend → Feedback tab — completely
 // separate from the staff `feedback` table (which is the kitchen-app Sprout

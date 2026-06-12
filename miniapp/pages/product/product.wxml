@@ -305,11 +305,11 @@
           <view class="vp-close" bindtap="closeOptionPicker">×</view>
         </view>
         <scroll-view scroll-y class="op-body">
-          <view wx:for="{{options}}" wx:for-item="opt" wx:key="id" class="op-group">
+          <view wx:for="{{optionsSingle}}" wx:for-item="opt" wx:key="id" class="op-group">
             <view class="op-q f-toni">{{opt.question}}{{opt.is_required ? ' *' : ''}}</view>
             <view class="op-choices">
               <view wx:for="{{opt.choices}}" wx:for-item="ch" wx:key="id"
-                    class="op-choice {{selectedChoices[opt.id] === ch.id ? 'on' : ''}}"
+                    class="op-choice {{choiceSel[ch.id] ? 'on' : ''}}"
                     data-option-id="{{opt.id}}" data-choice-id="{{ch.id}}" bindtap="pickChoice">
                 <text class="op-choice-label f-bear">{{ch.label}}</text>
                 <text wx:if="{{ch.delta_text}}" class="op-choice-delta f-toni">{{ch.delta_text}}</text>
@@ -318,7 +318,40 @@
           </view>
         </scroll-view>
         <view class="op-foot">
-          <button class="op-add f-toni" bindtap="confirmOptions">{{opAddLabel}}</button>
+          <button class="op-add f-toni" bindtap="confirmOptions">{{optionsExtra.length ? (lang === 'cn' ? '下一步' : 'Next') : opAddLabel}}</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- Extras picker — SECOND sheet, opened after the dressing. Optional paid
+         add-ons (pickles, sauce…). Multi-select; a sold-out extra is greyed and
+         can't be tapped. -->
+    <view wx:if="{{exShow}}" class="vp-mask" bindtap="closeExtrasPicker">
+      <view class="vp-sheet" catchtap="vpStop">
+        <view class="vp-head">
+          <view>
+            <view class="vp-title f-bear">{{exTitle}}</view>
+            <view wx:if="{{name}}" class="vp-name f-yuan">{{name}}</view>
+          </view>
+          <view class="vp-close" bindtap="closeExtrasPicker">×</view>
+        </view>
+        <scroll-view scroll-y class="op-body">
+          <view wx:for="{{optionsExtra}}" wx:for-item="opt" wx:key="id" class="op-group">
+            <view wx:if="{{opt.question}}" class="op-q f-toni">{{opt.question}}{{opt.is_required ? ' *' : ''}}</view>
+            <view class="op-choices">
+              <view wx:for="{{opt.choices}}" wx:for-item="ch" wx:key="id"
+                    class="op-choice op-extra {{choiceSel[ch.id] ? 'on' : ''}} {{ch.sold_out ? 'sold-out' : ''}}"
+                    data-option-id="{{opt.id}}" data-choice-id="{{ch.id}}" data-sold-out="{{ch.sold_out}}" bindtap="toggleExtra">
+                <view class="op-extra-box">{{choiceSel[ch.id] ? '✓' : ''}}</view>
+                <text class="op-choice-label f-bear">{{ch.label}}</text>
+                <text wx:if="{{ch.sold_out}}" class="op-extra-oos f-toni">{{oosLabel}}</text>
+                <text wx:elif="{{ch.delta_text}}" class="op-choice-delta f-toni">{{ch.delta_text}}</text>
+              </view>
+            </view>
+          </view>
+        </scroll-view>
+        <view class="op-foot">
+          <button class="op-add f-toni" bindtap="confirmExtras">{{exAddLabel}}</button>
         </view>
       </view>
     </view>

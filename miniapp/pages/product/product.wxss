@@ -729,6 +729,20 @@
   line-height: 1.1;
 }
 .op-add::after { border: none; }
+/* Extras sheet: multi-select rows with a tick box; sold-out rows greyed out. */
+.op-extra { justify-content: flex-start; }
+.op-extra .op-choice-label { flex: 1; }
+.op-extra-box {
+  flex: none; width: 40rpx; height: 40rpx; border: 3rpx solid var(--ink);
+  border-radius: 8rpx; display: flex; align-items: center; justify-content: center;
+  font-size: calc(28rpx * var(--font-scale)); color: var(--oat); line-height: 1;
+}
+.op-extra.on .op-extra-box { background: var(--ink); }
+.op-extra-oos {
+  flex: none; font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.08em;
+  color: var(--olive); background: rgba(0,0,0,.08); padding: 2rpx 12rpx; border-radius: 999rpx;
+}
+.op-extra.sold-out { opacity: 0.45; }
 
 /* Sticky bottom bar */
 .sticky-bar {

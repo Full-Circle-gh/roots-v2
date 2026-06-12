@@ -140,7 +140,10 @@ Page({
     colophonTagline: '', // resolved tagline text ("From Soil to Soul" or override)
     badges: [],
     options: [],
-    selectedChoices: {},   // { [option_id]: choice_id }
+    optionsSingle: [],     // 'single'/'text' groups → first (dressing) sheet
+    optionsExtra: [],      // 'multi' groups → second (paid extras) sheet
+    selectedChoices: {},   // { [option_id]: choice_id (single) | [choice_id] (multi) }
+    choiceSel: {},         // { [choice_id]: true } — flat map for the WXML "on" state
     bundle: null,          // "buy together" set (resolved item cards) or null
     whatsInside: null,     // bundle PRODUCT component list ("what's inside") or null
     hasVariants: false,    // ≥2 purchasable siblings → "Add" opens the size picker
@@ -156,6 +159,11 @@ Page({
     opShow: false,
     opTitle: 'Choose your options',
     opAddLabel: 'Add to basket',
+    // Second sheet: optional paid extras (pickles, sauce…), shown after the
+    // dressing sheet. Multi-select; sold-out extras are greyed out.
+    exShow: false,
+    exTitle: 'Add extras?',
+    exAddLabel: 'Add to basket',
     oosLabel: 'SOLD OUT',
     qty: 1,
     lang: 'en',
@@ -369,7 +377,8 @@ Page({
         return badgeMap[bk] ? lang.pick(badgeMap[bk].en, badgeMap[bk].cn, L) : k.toUpperCase();
       });
     const badges = [plantBased, ...freeBadges];
-    // Pre-resolve option labels for the WXML
+    // Pre-resolve option labels for the WXML. A choice linked to a stock product
+    // (a paid extra) is greyed + unselectable when that product is sold out.
     const options = (p.options || []).map(o => ({
       ...o,
       question: lang.pick(o.question_en, o.question_cn, L),
@@ -377,15 +386,26 @@ Page({
         ...c,
         label: lang.pick(c.label_en, c.label_cn, L),
         delta_text: Number(c.price_delta) ? (Number(c.price_delta) > 0 ? '+¥' + Number(c.price_delta).toFixed(2) : '−¥' + Math.abs(Number(c.price_delta)).toFixed(2)) : '',
+        sold_out: !!c.stock_product_id && c.addon_available === false,
       })),
     }));
-    // Pre-pick default choices on first load
+    // Split: 'single'/'text' = the dressing-style first sheet; 'multi' = the
+    // paid extras shown in a SECOND sheet after the dressing.
+    const optionsSingle = options.filter(o => o.type !== 'multi');
+    const optionsExtra  = options.filter(o => o.type === 'multi');
+    // Pre-pick defaults: a scalar choice_id for single/text, an array for multi
+    // (only defaults that are in stock).
     const selected = { ...this.data.selectedChoices };
     options.forEach(o => {
-      if (selected[o.id] != null) return;
-      const def = o.choices.find(c => c.is_default);
-      if (def) selected[o.id] = def.id;
-      else if (o.is_required && o.choices.length === 1) selected[o.id] = o.choices[0].id;
+      if (o.type === 'multi') {
+        if (Array.isArray(selected[o.id])) return;
+        selected[o.id] = o.choices.filter(c => c.is_default && !c.sold_out).map(c => c.id);
+      } else {
+        if (selected[o.id] != null) return;
+        const def = o.choices.find(c => c.is_default);
+        if (def) selected[o.id] = def.id;
+        else if (o.is_required && o.choices.length === 1) selected[o.id] = o.choices[0].id;
+      }
     });
     // Variant siblings (decorated server-side with effective price + stock).
     // Kept raw on the instance for the size picker; ≥2 members → "Add" opens
@@ -622,7 +642,10 @@ Page({
       colophonTagline,
       badges,
       options,
+      optionsSingle,
+      optionsExtra,
       selectedChoices: selected,
+      choiceSel: this._buildChoiceSel(selected),
       hasVariants,
       oosLabel: L === 'cn' ? '售罄' : 'SOLD OUT',
       addBtnLabel: soldOut
@@ -647,12 +670,35 @@ Page({
     this.recomputeFlashCountdown();
   },
 
+  // Single-select pick (dressing sheet): one choice per option group.
   pickChoice(e) {
-    const { optionId, choiceId } = e.currentTarget.dataset;
+    const optionId = e.currentTarget.dataset.optionId;
+    const choiceId = e.currentTarget.dataset.choiceId;
     const selected = { ...this.data.selectedChoices, [optionId]: choiceId };
-    this.setData({ selectedChoices: selected });
+    this.setData({ selectedChoices: selected, choiceSel: this._buildChoiceSel(selected) });
     // setData updates this.data synchronously, so the total reads the new pick.
-    if (this.data.opShow) this.setData({ opAddLabel: this._optTotalLabel() });
+    if (this.data.opShow) this.setData({ opAddLabel: this._sheetBtnLabel() });
+  },
+  // Multi-select toggle (extras sheet): a sold-out extra can't be picked.
+  toggleExtra(e) {
+    if (e.currentTarget.dataset.soldOut) return;
+    const optionId = e.currentTarget.dataset.optionId;
+    const choiceId = e.currentTarget.dataset.choiceId;
+    const cur = Array.isArray(this.data.selectedChoices[optionId]) ? this.data.selectedChoices[optionId].slice() : [];
+    const i = cur.indexOf(choiceId);
+    if (i >= 0) cur.splice(i, 1); else cur.push(choiceId);
+    const selected = { ...this.data.selectedChoices, [optionId]: cur };
+    this.setData({ selectedChoices: selected, choiceSel: this._buildChoiceSel(selected), exAddLabel: this._sheetBtnLabel() });
+  },
+  // Flatten selectedChoices ({opt: id | [id]}) → { [choice_id]: true } so the
+  // WXML can mark a row selected without array lookups.
+  _buildChoiceSel(selected) {
+    const m = {};
+    Object.keys(selected || {}).forEach(k => {
+      const v = selected[k];
+      (Array.isArray(v) ? v : (v != null ? [v] : [])).forEach(id => { m[id] = true; });
+    });
+    return m;
   },
 
   decQty() { this.setData({ qty: Math.max(1, this.data.qty - 1) }); },
@@ -710,20 +756,27 @@ Page({
       wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
       return;
     }
-    // Customer choices (e.g. dressing) → open a bottom-sheet so the pick is
-    // unmissable, mirroring the size picker. Otherwise add straight away.
-    if (this.data.options.length) { this._openOptionPicker(); return; }
+    // Flow: dressing sheet (required picks) → extras sheet (optional paid
+    // add-ons) → add. Skip straight to whichever applies; add directly if none.
+    if (this.data.optionsSingle.length) { this._openOptionPicker(); return; }
+    if (this.data.optionsExtra.length)  { this._openExtrasPicker(); return; }
     if (this._doAddWithOptions()) this._finishAdd();
   },
 
-  // Validate required options, price in the chosen deltas, and add to the cart.
-  // Returns true when the item was added (false = a required choice is still
-  // unmade, in which case a prompt toast has already fired).
+  // Chosen choice-ids for an option group (scalar→[id], array as-is).
+  _selIds(o) {
+    const sel = this.data.selectedChoices[o.id];
+    return Array.isArray(sel) ? sel : (sel != null ? [sel] : []);
+  },
+
+  // Validate required options, price in the chosen deltas (skipping any sold-out
+  // extra), and add to the cart. Returns true when added (false = a required
+  // choice is unmade, with a prompt toast already shown).
   _doAddWithOptions() {
     const p = this.data.product;
     if (!p) return false;
     for (const o of this.data.options) {
-      if (o.is_required && !this.data.selectedChoices[o.id]) {
+      if (o.is_required && !this._selIds(o).length) {
         wx.showToast({ title: this.data.lang === 'cn' ? '请选择 ' + o.question : 'Please choose: ' + o.question, icon: 'none' });
         return false;
       }
@@ -731,12 +784,12 @@ Page({
     let delta = 0;
     const chosen = [];
     this.data.options.forEach(o => {
-      const cid = this.data.selectedChoices[o.id];
-      if (!cid) return;
-      const c = o.choices.find(x => x.id === cid);
-      if (!c) return;
-      delta += Number(c.price_delta) || 0;
-      chosen.push({ option_id: o.id, choice_id: c.id, label: c.label, delta: Number(c.price_delta) || 0 });
+      this._selIds(o).forEach(cid => {
+        const c = o.choices.find(x => x.id === cid);
+        if (!c || c.sold_out) return;   // never bill/add a sold-out extra
+        delta += Number(c.price_delta) || 0;
+        chosen.push({ option_id: o.id, choice_id: c.id, label: c.label, delta: Number(c.price_delta) || 0 });
+      });
     });
     cart.add({
       id: p.id,
@@ -751,34 +804,45 @@ Page({
     return true;
   },
 
-  // ── Options picker (dressing, spice level…) ──────────────────────────
-  // Bottom sheet listing each option's choices. Defaults are pre-picked on
-  // load; the footer button shows the live total (base + chosen deltas).
-  _openOptionPicker() {
-    const L = this.data.lang;
-    this.setData({
-      opShow: true,
-      opTitle: L === 'cn' ? '选择选项' : 'Choose your options',
-      opAddLabel: this._optTotalLabel(),
-    });
-  },
-  closeOptionPicker() { this.setData({ opShow: false }); },
-  confirmOptions() {
-    if (this._doAddWithOptions()) { this.setData({ opShow: false }); this._finishAdd(); }
-  },
-  // "Add to basket · ¥XX" reflecting the currently selected choices.
-  _optTotalLabel() {
+  // "Add to basket · ¥XX" reflecting every current selection (both sheets).
+  _sheetBtnLabel() {
     const L = this.data.lang;
     const money = v => '¥' + (Number.isInteger(v) ? v : v.toFixed(2));
     let delta = 0;
-    this.data.options.forEach(o => {
-      const cid = this.data.selectedChoices[o.id];
-      if (!cid) return;
+    this.data.options.forEach(o => this._selIds(o).forEach(cid => {
       const c = o.choices.find(x => x.id === cid);
-      if (c) delta += Number(c.price_delta) || 0;
-    });
-    const total = (Number(this.data.priceN) || 0) + delta;
-    return (L === 'cn' ? '加入购物车 · ' : 'Add to basket · ') + money(total);
+      if (c && !c.sold_out) delta += Number(c.price_delta) || 0;
+    }));
+    return (L === 'cn' ? '加入购物车 · ' : 'Add to basket · ') + money((Number(this.data.priceN) || 0) + delta);
+  },
+
+  // ── Sheet 1: dressing / required picks ───────────────────────────────
+  _openOptionPicker() {
+    const L = this.data.lang;
+    this.setData({ opShow: true, opTitle: L === 'cn' ? '选择选项' : 'Choose your options', opAddLabel: this._sheetBtnLabel() });
+  },
+  closeOptionPicker() { this.setData({ opShow: false }); },
+  // Confirm the dressing → require any 'required' single picks, then either move
+  // on to the optional extras sheet or add straight to the cart.
+  confirmOptions() {
+    for (const o of this.data.optionsSingle) {
+      if (o.is_required && !this._selIds(o).length) {
+        wx.showToast({ title: this.data.lang === 'cn' ? '请选择 ' + o.question : 'Please choose: ' + o.question, icon: 'none' });
+        return;
+      }
+    }
+    if (this.data.optionsExtra.length) { this.setData({ opShow: false }); this._openExtrasPicker(); return; }
+    if (this._doAddWithOptions()) { this.setData({ opShow: false }); this._finishAdd(); }
+  },
+
+  // ── Sheet 2: optional paid extras (pickles, sauce…) ──────────────────
+  _openExtrasPicker() {
+    const L = this.data.lang;
+    this.setData({ exShow: true, exTitle: L === 'cn' ? '加点配料?' : 'Add extras?', exAddLabel: this._sheetBtnLabel() });
+  },
+  closeExtrasPicker() { this.setData({ exShow: false }); },
+  confirmExtras() {
+    if (this._doAddWithOptions()) { this.setData({ exShow: false }); this._finishAdd(); }
   },
 
   // Shared post-add: confirm toast + pop back to where they came from.
