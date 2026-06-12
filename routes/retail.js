@@ -945,23 +945,6 @@ function resolveBundleComponents(v) {
   }
   return out;
 }
-// bundleStockFromComponents → how many whole bundles the live component stock
-// can make: min over components of floor(component_stock ÷ per-unit qty). A
-// missing / unpublished / inactive component drops the bundle to 0 (it can't
-// be assembled honestly). Returns null when `v` isn't a bundle.
-function bundleStockFromComponents(v) {
-  const recipe = parseBundleItems(v);
-  if (!recipe.length) return null;
-  const comps = resolveBundleComponents(v);
-  // A bundle with fewer resolved components than recipe entries lost one → 0.
-  if (comps.length !== recipe.length) return 0;
-  let min = Infinity;
-  for (const c of comps) {
-    if (!c.available) return 0;
-    min = Math.min(min, Math.floor((Number(c.stock) || 0) / c.qty));
-  }
-  return Number.isFinite(min) ? min : 0;
-}
 // expandStockLines → turn resolved cart lines into the flat [{product_id, qty}]
 // list the inventory layer reserves/routes on, EXPANDING any bundle line into
 // its component demand (component qty × units bought) and aggregating repeats.
@@ -978,20 +961,6 @@ function expandStockLines(resolvedLines) {
     }
   }
   return [...agg.entries()].map(([product_id, qty]) => ({ product_id, qty }));
-}
-// Map each bundle COMPONENT id → the set of bundle product ids (in this cart)
-// that contain it. Lets the shortage/fallback flow translate a short component
-// back to the bundle the customer actually ordered.
-function bundleComponentIndex(resolvedLines) {
-  const idx = new Map();
-  for (const r of resolvedLines) {
-    const comps = parseBundleItems(r.product && r.product.bundle_items);
-    for (const c of comps) {
-      if (!idx.has(c.id)) idx.set(c.id, new Set());
-      idx.get(c.id).add(r.product.id);
-    }
-  }
-  return idx;
 }
 // Decorate a storefront list / PDP row IN PLACE: flag bundles, override the
 // displayed `stock` with the assemble-from-components figure, and (PDP only)
