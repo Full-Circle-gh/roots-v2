@@ -878,6 +878,12 @@ router.get('/api/retail/products', (req, res) => {
   const { q, category, sort } = req.query;
   const limit  = Math.min(parseInt(req.query.limit  || '50', 10) || 50, 500);
   const offset = Math.max(parseInt(req.query.offset || '0',  10) || 0, 0);
+  // ids=1,2,3 (home by-id blocks: featured / manual grid / bundle / recipe_story):
+  // fetch exactly the handpicked products in one call so they resolve even when
+  // they sort past the home's main products pull. Capped at 100; when present it
+  // drives the row cap so every requested id comes back regardless of `limit`.
+  const idList = String(req.query.ids || '').split(',').map(s => parseInt(s, 10)).filter(Number.isFinite).slice(0, 100);
+  const rowCap = idList.length ? idList.length : limit;
 
   // slim=1 (the shop grid): leanest card columns + downscaled thumbnail image
   // URLs. Other consumers (home product_grid blocks) omit it and get the fuller
@@ -901,6 +907,7 @@ router.get('/api/retail/products', (req, res) => {
     const s = `%${t}%`; params.push(s, s, s);
   }
   if (category) { sql += ' AND p.category = ?'; params.push(category); }
+  if (idList.length) { sql += ` AND p.id IN (${idList.map(() => '?').join(',')})`; params.push(...idList); }
 
   // Sort: 'price_asc' | 'price_desc' | 'newest' | 'popular' | 'featured' (default → curated sort_order)
   // 'popular' has no sales metric yet, so it maps to featured for now.
@@ -910,7 +917,7 @@ router.get('/api/retail/products', (req, res) => {
   else                             sql += ' ORDER BY p.sort_order ASC, p.name_en ASC';
 
   sql += ' LIMIT ? OFFSET ?';
-  params.push(limit, offset);
+  params.push(rowCap, idList.length ? 0 : offset);
 
   const now = Date.now();
   const rows = tdb().prepare(sql).all(...params)
@@ -926,11 +933,13 @@ router.get('/api/retail/products', (req, res) => {
   resolveAutoBadges(rows);
   const termClause = terms.map(() => 'AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)').join(' ');
   const termParams = terms.flatMap(t => { const s = `%${t}%`; return [s, s, s]; });
+  const idsClause = idList.length ? `AND p.id IN (${idList.map(() => '?').join(',')})` : '';
   const total = tdb().prepare(`SELECT COUNT(*) AS n FROM store_products p
                             WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
                             ${termClause}
-                            ${category ? 'AND p.category = ?' : ''}`)
-    .get(...termParams, ...(category ? [category] : [])).n;
+                            ${category ? 'AND p.category = ?' : ''}
+                            ${idsClause}`)
+    .get(...termParams, ...(category ? [category] : []), ...idList).n;
 
   // Short cache — flash-sale windows mean the response goes stale in
   // minutes, not the prior 30s used for static catalogue data.

@@ -29,6 +29,7 @@
     leaderboards="{{leaderboards}}"
     new-arrivals="{{newArrivals}}"
     cat-grids="{{catGrids}}"
+    products-by-id="{{productsById}}"
     active-order="{{activeOrder}}"
     active-order-count="{{activeOrderCount}}"
     affiliate="{{affiliate}}"

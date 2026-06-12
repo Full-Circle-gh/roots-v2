@@ -30,6 +30,10 @@ Page({
     // Each category-scoped (or source=all) grid fetches its own slice
     // server-side so it isn't capped by the home's first-100 products pull.
     catGrids: {},
+    // Handpicked products keyed by id — fetched for the by-id blocks (featured /
+    // manual grid / bundle / recipe_story) so a product chosen in the CMS that
+    // sorts past the first-100 pull still resolves.
+    productsById: {},
     // Customer's latest in-flight order (or null) — feeds the order_tracker
     // block. Only fetched when the layout contains one and the user is authed.
     activeOrder: null,
@@ -279,6 +283,9 @@ Page({
       // Category / source=all grids fetch their own slice server-side so a
       // category sorting past the first-100 products pull still shows.
       this._fetchCategoryGridsFor(layout);
+      // By-id blocks (featured / manual / bundle / recipe_story) fetch their
+      // handpicked products by id so a far-sorted pick still resolves.
+      this._fetchProductsByIdFor(layout);
       this._fetchActiveOrderFor(layout);
       // Live top-up tiers for any top_up block.
       this._fetchTopupPackagesFor(layout);
@@ -421,6 +428,38 @@ Page({
     this.setData({ catGrids: next });
   },
 
+  // Collect every product id the by-id blocks reference (featured / manual
+  // product_grid / bundle incl. its variants / recipe_story) and fetch them in
+  // ONE lean call into data.productsById, so a handpicked product that sorts
+  // past the home's first-100 products pull still resolves. Skips ids already
+  // covered by that pull (the block-renderer falls back to it for those).
+  async _fetchProductsByIdFor(layout) {
+    const ids = new Set();
+    const addId  = v => { const n = Number(v); if (Number.isFinite(n) && n > 0) ids.add(n); };
+    const addIds = a => { if (Array.isArray(a)) a.forEach(addId); };
+    (layout || []).forEach(b => {
+      if (b.type === 'featured' || b.type === 'recipe_story') addId(b.product_id);
+      else if (b.type === 'product_grid' && b.source_type === 'manual') addIds(b.product_ids);
+      else if (b.type === 'bundle') {
+        addIds(b.product_ids);
+        if (Array.isArray(b.variants)) b.variants.forEach(v => addIds(v && v.product_ids));
+      }
+    });
+    if (!ids.size) return;
+    const have = new Set((this.data.products || []).map(p => p.id));
+    const byId = { ...(this.data.productsById || {}) };
+    const missing = [...ids].filter(id => !have.has(id) && !byId[id]);
+    if (!missing.length) return;
+    try {
+      const res = await api.get(`/api/retail/products?lean=1&ids=${missing.join(',')}`);
+      const rows = Array.isArray(res) ? res : (res?.data || []);
+      rows.forEach(p => { byId[p.id] = p; });
+      this.setData({ productsById: byId });
+    } catch {
+      /* leave productsById as-is — blocks fall back to the products array */
+    }
+  },
+
   // The order_tracker block shows the customer's latest in-flight order.
   // Only fetch when the layout has one and the user is authed. We follow the
   // single most recent order (orders come back placed_at DESC): if it's still
@@ -517,7 +556,9 @@ Page({
     if (!productIds.length) return;
     let added = 0;
     productIds.forEach(id => {
-      const p = (this.data.products || []).find(x => x.id === id);
+      // Prefer the by-id map (handpicked products fetched even when they sort
+      // past the first-100 pull); fall back to the main products array.
+      const p = (this.data.productsById || {})[id] || (this.data.products || []).find(x => x.id === id);
       if (p) { cart.add(p, 1, []); added++; }
     });
     if (voucherCode) {

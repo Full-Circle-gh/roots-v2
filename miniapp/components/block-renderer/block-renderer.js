@@ -187,6 +187,11 @@ Component({
     // Empty until the fetch lands; the grid falls back to filtering the shared
     // products array meanwhile (and on older host pages that don't pass this).
     catGrids: { type: Object, value: {} },
+    // Handpicked products keyed by id, fetched by the host page for the by-id
+    // blocks (featured / manual product_grid / bundle / recipe_story) so a
+    // product chosen in the CMS resolves even when it sorts past the home's
+    // main products pull. findProductById() falls back to the products array.
+    productsById: { type: Object, value: {} },
     // Customer's latest in-flight order (paid/preparing/dispatched or unpaid),
     // or null. Feeds the order_tracker block; host page fetches it when the
     // layout contains one and the customer is authed.
@@ -264,7 +269,7 @@ Component({
   },
 
   observers: {
-    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards, newArrivals, catGrids, activeOrder, activeOrderCount, topupPackages, notifUnread, notifNoOrderUnread, notifIsFresh, notifNoOrderFresh, notifHasBroadcast': function () {
+    'block, lang, categories, products, flashSales, topProducts, affiliate, polls, customer, kitchen, favorites, leaderboards, newArrivals, catGrids, productsById, activeOrder, activeOrderCount, topupPackages, notifUnread, notifNoOrderUnread, notifIsFresh, notifNoOrderFresh, notifHasBroadcast': function () {
       this.recompute();
     },
   },
@@ -289,6 +294,14 @@ Component({
   },
 
   methods: {
+    // Resolve a by-id product the host page may have fetched into productsById
+    // (the handpicked-product map) before falling back to the shared products
+    // array — so featured / manual / bundle / recipe_story render their picked
+    // product even when it sorts past the home's main products pull.
+    findProductById(id) {
+      const byId = this.properties.productsById || {};
+      return byId[id] || (this.properties.products || []).find(p => p.id === id) || null;
+    },
     _startTick() {
       if (this._tick) return;
       // Countdown + flash-strip blocks tick every second. Other types
@@ -470,7 +483,7 @@ Component({
           break;
         }
         case 'featured_item': {
-          const p = this.properties.products.find(x => x.id === b.product_id);
+          const p = this.findProductById(b.product_id);
           if (p) {
             const regular = Number(p.sell_price ?? p.price) || 0;
             const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
@@ -527,7 +540,7 @@ Component({
           out.gridSaleFg = b.accent_color ? btnText(b.accent_color) : '';
           let list = [];
           if (b.source_type === 'manual') {
-            list = (b.product_ids || []).map(id => this.properties.products.find(p => p.id === id)).filter(Boolean);
+            list = (b.product_ids || []).map(id => this.findProductById(id)).filter(Boolean);
           } else if (b.source_type === 'top_selling') {
             // Host page pre-fetches top sellers per (channel|window|limit)
             // key; we just look up the result here. Empty array until data
@@ -1511,7 +1524,7 @@ Component({
           // Editorial long-form: image + serif headline + paragraphs + linked product.
           out.bg = color(b.bg_color || 'oat-milk');
           out.fg = color(b.fg_color || 'ink');
-          const linked = b.product_id ? this.properties.products.find(p => p.id === b.product_id) : null;
+          const linked = b.product_id ? this.findProductById(b.product_id) : null;
           let linkedCard = null;
           if (linked) {
             const regular = Number(linked.sell_price ?? linked.price) || 0;
@@ -1580,7 +1593,7 @@ Component({
           const buildVariant = v => {
             const ids = Array.isArray(v.product_ids) ? v.product_ids : [];
             const items = ids
-              .map(id => this.properties.products.find(p => p.id === id))
+              .map(id => this.findProductById(id))
               .filter(Boolean)
               .slice(0, 6);
             let sum = 0;
