@@ -4093,6 +4093,32 @@ function geocodeAddressAsync(addressId, a) {
   });
 }
 
+// Reverse-geocode a map pin into a Chinese address. The mini-app "Choose on
+// map" picker calls this when WeChat's chooseLocation hands back bare
+// coordinates with an empty address (the generic "Location"/current-position
+// list entry has no POI name or street). Returns 省/市/区 + a formatted street
+// so the customer doesn't have to hunt for a named place. Degrades to
+// { success:false } when no maps key is configured or the lookup fails — the
+// client then shows its "pick a named place" guidance, so this never regresses.
+router.post('/api/retail/reverse-geocode', requireRetailAuth, express.json(), async (req, res) => {
+  const lat = Number(req.body?.lat);
+  const lng = Number(req.body?.lng);
+  if (!isFinite(lat) || !isFinite(lng)) {
+    return res.status(400).json({ success: false, error: 'bad_coords' });
+  }
+  if (!geocode.configured()) {
+    return res.json({ success: false, error: 'maps_key_missing' });
+  }
+  try {
+    const out = await geocode.reverseGeocode({ lat, lng });
+    if (!out || !out.address) return res.json({ success: false, error: 'no_result' });
+    return res.json({ success: true, data: out });
+  } catch (e) {
+    console.warn('[reverse-geocode]', e.message);
+    return res.json({ success: false, error: 'lookup_failed' });
+  }
+});
+
 router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const existing = tdb().prepare('SELECT id FROM retail_customer_addresses WHERE id = ? AND customer_id = ?').get(id, req.customer.id);
