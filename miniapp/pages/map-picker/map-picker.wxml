@@ -1,0 +1,39 @@
+<view class="picker">
+  <map
+    id="picker-map"
+    class="picker__map"
+    longitude="{{ lng }}"
+    latitude="{{ lat }}"
+    scale="{{ scale }}"
+    show-location
+    enable-rotate="{{ false }}"
+    enable-overlooking="{{ false }}"
+    bindregionchange="onRegionChange"
+  ></map>
+
+  <!-- Fixed centre pin — the map moves underneath it, its tip marks the spot
+       getCenterLocation() reads (dead centre of the map component). -->
+  <view class="picker__pin">
+    <view class="picker__pin-head">📍</view>
+  </view>
+
+  <!-- Locate-me (best-effort) -->
+  <view class="picker__locate" bindtap="locateMe"><text>◎</text></view>
+
+  <!-- Bottom sheet: live address + actions -->
+  <view class="picker__sheet">
+    <view class="picker__label">{{ lang === 'cn' ? '收货位置' : 'DELIVERY SPOT' }}</view>
+    <view class="picker__addr {{ resolvedAddress ? '' : 'picker__addr--hint' }}">
+      <block wx:if="{{ resolving }}">{{ lang === 'cn' ? '正在读取地址…' : 'Reading address…' }}</block>
+      <block wx:elif="{{ resolvedAddress }}">{{ resolvedAddress }}</block>
+      <block wx:else>{{ lang === 'cn' ? '拖动地图,把图钉对准你的位置' : 'Drag the map so the pin sits on your spot' }}</block>
+    </view>
+    <view class="picker__actions">
+      <view class="picker__btn picker__btn--ghost" bindtap="cancel">{{ lang === 'cn' ? '取消' : 'Cancel' }}</view>
+      <view
+        class="picker__btn picker__btn--primary {{ (resolvedAddress && !resolving) ? '' : 'picker__btn--disabled' }}"
+        bindtap="confirm"
+      >{{ lang === 'cn' ? '确认此位置' : 'Use this spot' }}</view>
+    </view>
+  </view>
+</view>

@@ -458,43 +458,20 @@ Page({
     if (this.data.mapPicking) return;
     this.setData({ mapPicking: true });
 
-    const apply = async (res) => {
-      console.log('[pickOnMap] chooseLocation result:', res);
-      // chooseLocation gives a flat Chinese `address` string (no split region)
-      // plus the POI `name`. Parse 省/市/区 out so the served-zone matcher gets
-      // the same canonical fields pickFromWechat feeds it; keep the remainder
-      // (+ POI name) as the street line.
-      let addressStr = res.address || '';
-      // The generic "Location" (current-position) entry returns bare coords
-      // with no name and an empty address. Reverse-geocode the lat/lng on the
-      // server so the pin still yields a usable address instead of a dead
-      // "Couldn't read the address". Falls through to the guidance modal below
-      // if no maps key is set or the lookup fails.
-      if (!addressStr && res.latitude != null && res.longitude != null) {
-        try {
-          const r = await api.post('/api/retail/reverse-geocode', { lat: res.latitude, lng: res.longitude });
-          if (r && r.success && r.data && r.data.address) addressStr = r.data.address;
-        } catch (e) { /* fall through to modal */ }
-      }
+    // Consume the picker's result. It's shaped like a wx.chooseLocation result
+    // ({ name, address, latitude, longitude } + already-resolved province/city/
+    // district), so the parse below is identical to the old native-picker path.
+    const apply = (res) => {
+      const addressStr = (res && res.address) || '';
       const p = this.parseCnAddress(addressStr);
       let street = p.rest || '';
       // Prefix the POI name as a landmark when it isn't already in the street.
-      if (res.name && street.indexOf(res.name) === -1) {
+      if (res && res.name && street.indexOf(res.name) === -1) {
         street = street ? `${res.name} ${street}` : res.name;
       }
-      // WeChat sometimes returns coords with an EMPTY address (commonly when a
-      // VPN is on — its reverse-geocode service is China-geofenced). Don't fake
-      // success: tell the customer why and point them at a working path.
       if (!street && !p.city && !p.province) {
         this.setData({ mapPicking: false });
-        wx.showModal({
-          title: this.data.lang === 'cn' ? '无法读取地址' : "Couldn't read the address",
-          content: this.data.lang === 'cn'
-            ? '请在列表中点选一个带名称的地点(例如“阳华国花苑”),不要选最上方的“位置”。若仍不行,请关闭 VPN/加速器,或改用上方“从微信地址导入”。'
-            : 'Tap a NAMED place in the list (e.g. “阳华国花苑”), not the top “Location” entry. If it still fails, turn off any VPN — or use “Import from WeChat address” above.',
-          showCancel: false,
-          confirmText: this.data.lang === 'cn' ? '知道了' : 'OK',
-        });
+        wx.showToast({ title: this.data.lang === 'cn' ? '无法读取此处地址' : "Couldn't read that spot", icon: 'none' });
         return;
       }
       this.setData({
@@ -508,48 +485,28 @@ Page({
         'form.district': p.district || '',
         // Label the picked region in CHINESE — it's exactly what's stored and
         // what JD prints on the waybill, so we don't half-translate it to a
-        // mixed "Guangzhou · 天河区". (The native CN picker labels in Chinese
-        // anyway; this just keeps the EN-mode pin flow consistent.)
+        // mixed "Guangzhou · 天河区".
         cityLabel: p.city || this.data.cityLabel,
         areaLabel: [p.city, p.district].filter(Boolean).join(' · '),
       });
       wx.showToast({ title: this.data.lang === 'cn' ? '已选择' : 'Picked', icon: 'success' });
     };
 
-    const fail = (err) => {
-      this.setData({ mapPicking: false });
-      const msg = (err && err.errMsg) || '';
-      console.warn('[pickOnMap] chooseLocation fail:', msg, err);
-      if (/cancel/i.test(msg)) return;                  // backed out — stay silent
-      if (/auth|deny|权限/i.test(msg)) {
-        // Previously denied location — bounce them to the setting toggle, then
-        // reopen the picker if they grant it.
-        wx.openSetting({
-          success: (r) => {
-            if (r.authSetting && r.authSetting['scope.userLocation']) {
-              wx.chooseLocation({ success: apply, fail });
-            }
-          },
-        });
-        return;
-      }
-      // Any other failure (some WeChat clients fire fail when the customer taps
-      // the bare top "Location"/current-position entry instead of a named POI).
-      // We can't recover coords from a failed pick — wx.getLocation is rejected
-      // for this AppID — so guide them to a named result. errMsg stays in the
-      // console (above) for us; the customer just sees the actionable steer.
-      wx.showModal({
-        title: this.data.lang === 'cn' ? '请选择一个地点' : 'Pick a place',
-        content: this.data.lang === 'cn'
-          ? '请在列表中点选一个带名称的地点(例如“阳华国花苑”),不要选最上方的“位置”。或改用上方“从微信地址导入”。'
-          : 'Tap a NAMED place in the list (e.g. “阳华国花苑”) — not the top “Location” entry. Or use “Import from WeChat address” above.',
-        showCancel: false,
-        confirmText: this.data.lang === 'cn' ? '知道了' : 'OK',
-      });
-    };
-
-    if (!wx.chooseLocation) return fail({ errMsg: 'api_missing' });
-    wx.chooseLocation({ success: apply, fail });
+    // Open OUR in-app map picker instead of wx.chooseLocation — its native
+    // list's bare "Location" entry fails on some clients. Seed the picker with
+    // the address being edited if it carries coordinates.
+    const f = this.data.form || {};
+    const sLat = Number(f.lat), sLng = Number(f.lng);
+    const q = (sLat && sLng && isFinite(sLat) && isFinite(sLng)) ? `?lat=${sLat}&lng=${sLng}` : '';
+    wx.navigateTo({
+      url: '/pages/map-picker/map-picker' + q,
+      events: { mapPicked: apply },
+      success: () => this.setData({ mapPicking: false }),
+      fail: () => {
+        this.setData({ mapPicking: false });
+        wx.showToast({ title: this.data.copy.mapUnavailable, icon: 'none' });
+      },
+    });
   },
 
   // Split a flat Chinese address string into { province, city, district, rest }.

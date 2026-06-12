@@ -13,6 +13,7 @@
     "pages/invoices/invoices",
     "pages/notifications/notifications",
     "pages/addresses/addresses",
+    "pages/map-picker/map-picker",
     "pages/membership/membership",
     "pages/leaderboard/leaderboard",
     "pages/wallet/wallet",

@@ -1,0 +1,87 @@
+.picker {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: #F2E7DF;
+}
+.picker__map { width: 100%; height: 100%; }
+
+/* Fixed centre pin. left/top 50% = the map component's centre, which is what
+   getCenterLocation() samples; translate -100% Y drops the pin's TIP onto it.
+   The bottom sheet overlays the lower map, but 50% stays comfortably above it. */
+.picker__pin {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  z-index: 10;
+}
+.picker__pin-head {
+  font-size: 68rpx;
+  line-height: 1;
+  filter: drop-shadow(0 4rpx 6rpx rgba(0, 0, 0, 0.35));
+}
+
+.picker__locate {
+  position: fixed;
+  right: 32rpx;
+  bottom: 380rpx;
+  width: 84rpx;
+  height: 84rpx;
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 46rpx;
+  color: var(--ink);
+  z-index: 11;
+}
+
+.picker__sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #F2E7DF;
+  border-top: 4rpx solid var(--ink);
+  padding: 28rpx 36rpx calc(28rpx + env(safe-area-inset-bottom));
+  z-index: 12;
+}
+.picker__label {
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.18em;
+  color: var(--ink);
+  opacity: 0.6;
+  margin-bottom: 12rpx;
+}
+.picker__addr {
+  font-size: calc(30rpx * var(--font-scale));
+  line-height: 1.4;
+  color: var(--ink);
+  min-height: 84rpx;
+  margin-bottom: 24rpx;
+  font-family: var(--f-aleo);
+}
+.picker__addr--hint { opacity: 0.55; }
+
+.picker__actions { display: flex; gap: 20rpx; }
+.picker__btn {
+  flex: 1;
+  text-align: center;
+  padding: 26rpx 0;
+  font-size: calc(26rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+}
+.picker__btn--ghost {
+  background: #FFFCF7;
+  color: var(--ink);
+  border: 3rpx solid var(--ink);
+}
+.picker__btn--primary {
+  background: var(--ink);
+  color: var(--lime);
+}
+.picker__btn--disabled { opacity: 0.45; }
