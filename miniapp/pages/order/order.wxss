@@ -1,4 +1,9 @@
-.page { background: var(--oat); min-height: 100vh; padding-bottom: 80rpx; }
+/* env(safe-area-inset-bottom) is the iPhone home-indicator height. The
+   Pay/Cancel actions are the last elements in normal flow, so without this
+   the bottom button sits under the gesture strip — on iOS 16+ the OS clips it
+   and eats taps, which is why "Cancel order" couldn't be tapped. max() keeps
+   the brand spacing on Androids that have no indicator. */
+.page { background: var(--oat); min-height: 100vh; padding-bottom: max(80rpx, calc(40rpx + env(safe-area-inset-bottom))); }
 
 .header { padding: 60rpx 44rpx 24rpx; }
 .kicker {
@@ -192,18 +197,20 @@
 
 /* Customer-side action buttons (Pay now / Cancel) */
 .cust-actions {
-  padding: 40rpx 44rpx;
+  padding: 16rpx 44rpx;
   display: flex;
   flex-direction: column;
   gap: 16rpx;
 }
+/* Trim the doubled gap where two action blocks stack (refund + invoice). */
+.cust-actions + .cust-actions { padding-top: 0; }
 .cust-actions .btn {
   /* WeChat <button> defaults to ~568rpx wide instead of stretching to the
      flex column's cross-axis, so without an explicit width the bar is
      narrower than the container and the letter-spaced "REQUEST INVOICE"
      text looks like it's being cropped against the borders. */
   width: 100%;
-  padding: 28rpx 20rpx;
+  padding: 20rpx 20rpx;
   font-size: calc(28rpx * var(--font-scale));
   letter-spacing: 0.12em;
   text-align: center;
