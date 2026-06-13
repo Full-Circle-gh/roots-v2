@@ -7847,10 +7847,7 @@ function makeBlock(type) {
       // Each variant points at a real Bundle product (one with a non-empty
       // bundle_items recipe). Seed from whatever bundle products already exist;
       // if there are none yet the picker shows empty and prompts to make one.
-      const bundleProds = state.products.filter(p => {
-        try { const a = JSON.parse(p.bundle_items || '[]'); return Array.isArray(a) && a.length > 0; }
-        catch { return false; }
-      });
+      const bundleProds = state.products.filter(p => bundleRecipe(p).length > 0);
       const v1 = {
         id: 'v1',
         label_en: 'Starter', label_cn: '入门款',
@@ -10000,8 +9997,7 @@ function renderBlockBody(b) {
       let t, sub, itemData, sum, bundlePrice, addLbl;
       const bp = v.bundle_product_id ? state.products.find(p => p.id === v.bundle_product_id) : null;
       if (bp) {
-        let recipe = [];
-        try { recipe = JSON.parse(bp.bundle_items || '[]') || []; } catch {}
+        const recipe = bundleRecipe(bp);
         const comps = recipe.map(c => {
           const cp = state.products.find(p => p.id === c.id);
           return cp ? { p: cp, qty: Number(c.qty) || 1 } : null;
@@ -13430,17 +13426,24 @@ function buildCountdownForm(m, b) {
 // without rebuilding the whole inspector (which would lose the search
 // query and scroll position). Click handlers preventDefault on mousedown
 // to keep focus in the search input across selections.
+// A product's bundle recipe as an array of {id, qty}. The admin list endpoint
+// (/api/retail-admin/products) already parses bundle_items into an array (and
+// sets is_bundle); other payloads may still carry it as a JSON string. Tolerate
+// both — JSON.parse on an already-parsed array throws, which previously made the
+// Bundle picker see zero bundles even when bundle products existed.
+function bundleRecipe(p) {
+  if (!p) return [];
+  if (Array.isArray(p.bundle_items)) return p.bundle_items;
+  try { const a = JSON.parse(p.bundle_items || '[]'); return Array.isArray(a) ? a : []; }
+  catch { return []; }
+}
 function productPicker({ multi, value, onChange, bundlesOnly }) {
   const wrap = document.createElement('div');
   wrap.className = 'product-picker';
 
   // bundlesOnly → restrict the list to real Bundle products (a store_products
-  // row whose bundle_items recipe is non-empty). The admin list ships the raw
-  // bundle_items JSON, so detect by parsing it.
-  const isBundleProduct = p => {
-    try { const a = JSON.parse(p.bundle_items || '[]'); return Array.isArray(a) && a.length > 0; }
-    catch { return false; }
-  };
+  // row whose bundle_items recipe is non-empty), via the shared bundleRecipe().
+  const isBundleProduct = p => bundleRecipe(p).length > 0;
   const pool = bundlesOnly ? state.products.filter(isBundleProduct) : state.products;
 
   if (!pool.length) {
