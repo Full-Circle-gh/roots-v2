@@ -12648,30 +12648,37 @@ function buildBundleForm(m, b) {
   // ── Variants repeater (Content) — each row is a swappable bundle. ────────
   const variants = getBundleVariants(b);
 
+  // Always re-derive from the LIVE block, never the stale closure: silent edits
+  // (title/products) mutate state without rebuilding this form, so the captured
+  // `variants` array goes out of date. Reading it back would revert an earlier
+  // silent edit — e.g. retyping the title brought back unchecked products.
+  function currentVariants() { return getBundleVariants(findBlock(b.id) || b); }
   function setVariants(next) {
-    updateBlock(b.id, syncBundleFlatPatch({ variants: next }, variants));
+    updateBlock(b.id, syncBundleFlatPatch({ variants: next }, next));
   }
   function setVariantsSilent(next) {
-    updateBlockSilent(b.id, syncBundleFlatPatch({ variants: next }, variants));
+    updateBlockSilent(b.id, syncBundleFlatPatch({ variants: next }, next));
   }
   function updateVariant(idx, patch) {
-    const next = variants.slice();
+    const next = currentVariants().slice();
     next[idx] = { ...next[idx], ...patch };
     setVariantsSilent(next);
   }
   function removeVariant(idx) {
-    if (variants.length <= 1) return;  // keep at least one
-    const next = variants.slice();
+    const cur = currentVariants();
+    if (cur.length <= 1) return;  // keep at least one
+    const next = cur.slice();
     next.splice(idx, 1);
     // If we just dropped the recommended one, promote the first remaining.
     if (!next.some(v => v.recommended)) next[0] = { ...next[0], recommended: true };
     setVariants(next);
   }
   function addVariant() {
-    const next = [...variants, {
+    const cur = currentVariants();
+    const next = [...cur, {
       id: 'v' + Date.now().toString(36),
-      label_en: 'Bundle ' + (variants.length + 1),
-      label_cn: '组合 ' + (variants.length + 1),
+      label_en: 'Bundle ' + (cur.length + 1),
+      label_cn: '组合 ' + (cur.length + 1),
       title_en: '', title_cn: '',
       subtitle_en: '', subtitle_cn: '',
       product_ids: [],
@@ -12683,7 +12690,7 @@ function buildBundleForm(m, b) {
     setVariants(next);
   }
   function setRecommended(idx) {
-    const next = variants.map((v, i) => ({ ...v, recommended: i === idx }));
+    const next = currentVariants().map((v, i) => ({ ...v, recommended: i === idx }));
     setVariants(next);
   }
 
