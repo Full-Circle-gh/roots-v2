@@ -48,7 +48,7 @@ let _pickedCities    = [];   // [{name_cn, name_en}]
 function renderDistrictChips() {
   const wrap = $('#dz-gz-chips');
   if (!wrap) return;
-  if (!_regions.gz.length) { wrap.innerHTML = '<div class="muted" style="font-size: 11px;">Loading districts…</div>'; return; }
+  if (!_regions.gz.length) { wrap.innerHTML = '<div class="muted" style="font-size: 11px;">Loading districts… · 加载区/县…</div>'; return; }
   // Districts already saved as zones — disable them so the user can't
   // create duplicates. Edit existing rows from the list instead.
   const taken = new Set(_zones.filter(z => z.zone_type === 'gz_district').map(z => z.match_district));
@@ -406,14 +406,14 @@ function renderZoneTable() {
       <th></th>
     </tr>`;
     if (!rows.length) {
-      body.innerHTML = `<tr><td colspan="6" class="muted">${q ? 'No matches.' : 'No zones yet — click + Add zone above.'}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="6" class="muted">${q ? 'No matches. · 无匹配结果' : 'No zones yet — click + Add zone above. · 暂无配送区,请点上方「+ 添加配送区」'}</td></tr>`;
       return;
     }
     body.innerHTML = groupedZoneBodyHtml(rows, 6, z => `
       <tr class="dz-row" onclick="openZoneDrawer(${z.id})">
         <td>${zoneCellHtml(z)}</td>
         <td class="numeric">¥${z.base_fee ?? 0}</td>
-        <td class="numeric">${z.free_threshold == null ? '<span class="muted">default</span>' : '¥'+z.free_threshold}</td>
+        <td class="numeric">${z.free_threshold == null ? '<span class="muted">default · 默认</span>' : '¥'+z.free_threshold}</td>
         <td>${zoneExtrasHtml(z)}</td>
         <td style="text-align: center;" onclick="event.stopPropagation()">
           <input type="checkbox" ${z.is_active?'checked':''} onchange="updateZone(${z.id},'is_active', this.checked ? 1 : 0)">
@@ -436,7 +436,7 @@ function renderZoneTable() {
       <th></th>
     </tr>`;
     if (!rows.length) {
-      body.innerHTML = `<tr><td colspan="7" class="muted">${q ? 'No matches.' : 'No zones yet.'}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="7" class="muted">${q ? 'No matches. · 无匹配结果' : 'No zones yet. · 暂无配送区'}</td></tr>`;
       return;
     }
     body.innerHTML = groupedZoneBodyHtml(rows, 7, z => `
@@ -785,7 +785,7 @@ function openApplyPanel() {
   const src = _zoneEditId ? _zones.find(z => z.id === _zoneEditId) : null;
   $('#dz-apply-sub').textContent = src
     ? `Pushing ${zoneLabel(src)}'s current form values. · 当前以 ${zoneLabel(src)} 表单内的值为准。`
-    : 'Pushing the drawer\'s current form values.';
+    : 'Pushing the drawer\'s current form values. · 以当前抽屉表单内的值为准。';
   renderApplyTargets();
   updateApplyCount();
   $('#dz-apply-bg').classList.add('show');

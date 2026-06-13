@@ -68,7 +68,7 @@ async function afLoadReferrals() {
       `<div class="card" style="padding: 12px 16px;"><div class="muted" style="font-size: 11px;">Paid out · 已发奖励</div><div style="font-size: 20px; font-weight: 600;">¥${fmt(s.paid_out||0)}</div></div>`;
 
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="9" class="muted" style="text-align: center; padding: 24px;">No referrals match.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="muted" style="text-align: center; padding: 24px;">No referrals match. · 暂无匹配的推荐记录</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(r => {
@@ -81,7 +81,7 @@ async function afLoadReferrals() {
         ? `<button class="btn btn-sm" onclick="afEditReward(${r.id}, ${Number(r.reward_amount) || 0})">Reward · 奖励</button>
            ${r.status === 'joined' ? `<button class="btn btn-sm" onclick="afVoid(${r.id})">Void · 作废</button>` : ''}
            ${r.status === 'void' ? `<button class="btn btn-sm" onclick="afRestore(${r.id})">Restore · 恢复</button>` : ''}`
-        : `<span class="muted" style="font-size: 11px;">paid · adjust via wallet</span>`;
+        : `<span class="muted" style="font-size: 11px;">paid — adjust via wallet · 已发放 — 请在钱包调整</span>`;
       return `<tr>
         <td class="muted">${r.id}</td>
         <td>${referrerLbl}</td>
@@ -95,7 +95,7 @@ async function afLoadReferrals() {
       </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="9" class="muted">Failed: ${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="muted">Failed · 加载失败: ${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -232,6 +232,9 @@ cuApplyUiScale(cuGetUiScale());
     'ACTIVE': '进行中',
     'UPCOMING': '即将开始',
     'ENDED': '已结束',
+    'JOINED': '已加入',
+    'ORDERED': '已下单',
+    'VOIDED': '已作废',
     'Loading preview…': '加载预览中…',
     'Live': '开启',
     'Off': '关闭',
@@ -681,7 +684,7 @@ async function lbLoad() {
     lbApplyConfigToForm(body.data);
   } catch (e) {
     console.warn('[lb] config load failed', e);
-    toast('Failed to load leaderboard config: ' + e.message);
+    toast('Failed to load leaderboard config · 加载排行榜配置失败: ' + e.message);
   }
   await lbLoadPreview();
   lbRenderPreview();
@@ -792,7 +795,7 @@ function lbRenderPreview() {
   $('#lb-pv-meta').textContent     = lbMetricLabel(f.metric) + ' · ' + lbPeriodLabel(f.period);
   const note = $('#lb-period-note');
   if (note) note.textContent = (f.metric === 'points_balance')
-    ? 'Note: points-balance metric is point-in-time. Period selector is ignored for this metric.'
+    ? cuT('Note: points-balance metric is point-in-time. Period selector is ignored for this metric.', '说明:积分余额为实时快照指标,该指标会忽略周期选择。')
     : '';
   let rawEntries = ((LB_PREVIEW_DATA && LB_PREVIEW_DATA.raw_entries) || []).slice();
   // Drop hidden real members client-side so the preview reacts to unsaved
@@ -859,8 +862,8 @@ async function saveLeaderboardConfig() {
     const data = await r.json();
     if (!data.success) throw new Error(data.error || 'save_failed');
     lbApplyConfigToForm(data.data);
-    if (status) status.textContent = 'Saved ' + new Date().toLocaleTimeString();
-    toast('Leaderboard saved');
+    if (status) status.textContent = cuT('Saved', '已保存') + ' · ' + new Date().toLocaleTimeString();
+    toast('Leaderboard saved · 排行榜已保存');
     await lbLoadPreview();
     lbRenderPreview();
   } catch (e) {
@@ -932,11 +935,11 @@ function renderPollList() {
       .slice()
       .sort((a, b) => (b.votes || 0) - (a.votes || 0))[0];
     const meta = [
-      `${(p.options || []).length} opts`,
-      `${p.total_votes || 0} votes`,
-      p.reward_points ? `+${p.reward_points} pts` : null,
-      p.closes_at ? `closes ${String(p.closes_at).slice(0, 16).replace('T', ' ')}` : null,
-      top && (p.status !== 'open' || p.total_votes > 0) ? `top: ${escapeHtml(top.label_en)}` : null,
+      `${(p.options || []).length} ${cuT('opts', '选项')}`,
+      `${p.total_votes || 0} ${cuT('votes', '票')}`,
+      p.reward_points ? `+${p.reward_points} ${cuT('pts', '积分')}` : null,
+      p.closes_at ? `${cuT('closes', '截止')} ${String(p.closes_at).slice(0, 16).replace('T', ' ')}` : null,
+      top && (p.status !== 'open' || p.total_votes > 0) ? `${cuT('top:', '领先:')} ${escapeHtml(top.label_en)}` : null,
     ].filter(Boolean).join(' · ');
     return `
       <div class="vot-row" data-id="${p.id}">
@@ -944,7 +947,7 @@ function renderPollList() {
           <div class="vot-q">${escapeHtml(p.question_en || '(untitled)')}</div>
           <div class="vot-meta">${escapeHtml(meta)}</div>
         </div>
-        ${p.is_featured ? '<span class="vot-featured">Featured</span>' : ''}
+        ${p.is_featured ? '<span class="vot-featured">Featured · 精选</span>' : ''}
         ${pollStatusPill(p.status)}
         <div class="vot-actions">
           <button class="btn" onclick="editPoll(${p.id})">Edit · 编辑</button>
@@ -1012,8 +1015,8 @@ function renderPollForm() {
 
   $('#vot-form-mount').innerHTML = `
     <div class="vot-form">
-      <h3>${isEdit ? 'Edit poll #' + d.id : 'New poll'}</h3>
-      <div class="muted" style="font-size: 11px;">Question + options are required (min 2 options). Customers see polls with status <code>open</code> or <code>closed</code>; <code>draft</code> stays hidden.</div>
+      <h3>${isEdit ? cuT('Edit poll', '编辑投票') + ' #' + d.id : cuT('New poll', '新建投票')}</h3>
+      <div class="muted" style="font-size: 11px;">Question + options are required (min 2 options). Customers see polls with status <code>open</code> or <code>closed</code>; <code>draft</code> stays hidden. · 问题与选项为必填(至少 2 个选项)。顾客只能看到状态为 <code>open</code> 或 <code>closed</code> 的投票;<code>draft</code> 始终隐藏。</div>
 
       <div class="vot-row-2">
         <div class="field">
@@ -1039,7 +1042,7 @@ function renderPollForm() {
 
       <div class="vot-row-2">
         <div class="field">
-          <label>Explainer · EN <span class="muted" style="font-weight: normal; letter-spacing: 0;">(italic line under the question)</span></label>
+          <label>Explainer · EN <span class="muted" style="font-weight: normal; letter-spacing: 0;">(italic line under the question) · (问题下方的斜体说明行)</span></label>
           <textarea id="vot-exp-en" placeholder="You spoke, we listened — Mango sold out. Pick what we develop next.">${escapeHtml(d.explainer_en || '')}</textarea>
         </div>
         <div class="field">
@@ -1049,12 +1052,12 @@ function renderPollForm() {
       </div>
 
       <div class="field">
-        <label>Options <span class="muted" style="font-weight: normal; letter-spacing: 0;">(drag is server-side via sort_order; reorder by editing — first row becomes A)</span></label>
+        <label>Options · 选项 <span class="muted" style="font-weight: normal; letter-spacing: 0;">(drag is server-side via sort_order; reorder by editing — first row becomes A) · (排序由服务端的 sort_order 决定;通过编辑来调整顺序——第一行即为 A)</span></label>
         <div class="vot-opts">${optsHtml}</div>
         <div style="margin-top: 6px;">
-          <button class="btn" onclick="pollOptAdd()" ${d.options.length >= 8 ? 'disabled' : ''}>+ Add option</button>
+          <button class="btn" onclick="pollOptAdd()" ${d.options.length >= 8 ? 'disabled' : ''}>+ Add option · 添加选项</button>
           <span class="muted" style="font-size: 11px; margin-left: 8px;">${d.options.length}/8 options</span>
-          ${hasVotes ? '<span class="muted" style="font-size: 11px; margin-left: 8px;">· options with votes can\'t be removed individually — use the "Hard reset" toggle below to wipe all votes</span>' : ''}
+          ${hasVotes ? '<span class="muted" style="font-size: 11px; margin-left: 8px;">· options with votes can\'t be removed individually — use the "Hard reset" toggle below to wipe all votes · 含有投票的选项不能单独删除——请用下方“硬重置”开关清空所有投票</span>' : ''}
         </div>
       </div>
 
@@ -1079,7 +1082,7 @@ function renderPollForm() {
           <input type="datetime-local" id="vot-closes" value="${escapeAttr(d.closes_at || '')}"/>
         </div>
         <div class="field">
-          <label>Featured? <span class="muted" style="font-weight: normal; letter-spacing: 0;">(promotes this poll to the big top card)</span></label>
+          <label>Featured? · 精选? <span class="muted" style="font-weight: normal; letter-spacing: 0;">(promotes this poll to the big top card) · (将此投票提升为顶部大卡片)</span></label>
           <select id="vot-featured">
             <option value="0" ${!d.is_featured ? 'selected' : ''}>No · 否</option>
             <option value="1" ${d.is_featured  ? 'selected' : ''}>Featured · 精选</option>
@@ -1090,14 +1093,14 @@ function renderPollForm() {
       ${isEdit ? `
       <div class="vot-row-2">
         <div class="field">
-          <label>Winner option <span class="muted" style="font-weight: normal; letter-spacing: 0;">(only used when Closed)</span></label>
+          <label>Winner option · 获胜选项 <span class="muted" style="font-weight: normal; letter-spacing: 0;">(only used when Closed) · (仅在已结束时生效)</span></label>
           <select id="vot-winner">
-            <option value="">— (auto: highest vote count)</option>
+            <option value="">— (auto: highest vote count) · —(自动:票数最高)</option>
             ${winnerOpts}
           </select>
         </div>
         <div class="field">
-          <label>Sort order <span class="muted" style="font-weight: normal; letter-spacing: 0;">(lower appears first within status)</span></label>
+          <label>Sort order · 排序 <span class="muted" style="font-weight: normal; letter-spacing: 0;">(lower appears first within status) · (数值越小在同状态内越靠前)</span></label>
           <input type="number" id="vot-sort" value="${d.sort_order || 0}"/>
         </div>
       </div>
@@ -1105,7 +1108,7 @@ function renderPollForm() {
       ${hasVotes ? `
       <div class="field">
         <label class="danger" style="display: flex; align-items: center; gap: 8px;">
-          <input type="checkbox" id="vot-replace-opts"/> Hard reset options (clears all ${d.total_votes || 0} votes)
+          <input type="checkbox" id="vot-replace-opts"/> Hard reset options · 硬重置选项 (clears all ${d.total_votes || 0} votes · 将清空全部 ${d.total_votes || 0} 票)
         </label>
         <div class="muted" style="font-size: 11px;">Use this only when reworking the question entirely. Otherwise just edit labels in place — vote counts are preserved. · 仅在彻底改写问题时使用;否则直接就地编辑文本即可,投票数会保留。</div>
       </div>
@@ -1118,7 +1121,7 @@ function renderPollForm() {
       `}
 
       <div class="vot-form-actions">
-        <button class="btn btn-primary" onclick="savePoll()">${isEdit ? 'Save changes' : 'Create poll'}</button>
+        <button class="btn btn-primary" onclick="savePoll()">${isEdit ? cuT('Save changes', '保存更改') : cuT('Create poll', '创建投票')}</button>
         <button class="btn" onclick="cancelPollEdit()">Cancel · 取消</button>
         <div style="flex: 1"></div>
         ${isEdit ? `<button class="btn danger" onclick="deletePoll(${d.id})">Delete · 删除</button>` : ''}
@@ -1377,7 +1380,7 @@ function paintAboutPhoto() {
   if (url) {
     wrap.innerHTML = `<img src="${escapeAttr(url)}" alt="Founder">`;
   } else {
-    wrap.innerHTML = '<div class="ab-photo-empty">No photo — placeholder tile will show.</div>';
+    wrap.innerHTML = '<div class="ab-photo-empty">No photo — placeholder tile will show. · 暂无照片 — 将显示占位图块。</div>';
   }
 }
 

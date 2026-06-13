@@ -76,12 +76,12 @@ function refundBadge(o) {
   const rs = o.refund_status;
   if (!rs || rs === 'withdrawn' || rs === 'rejected') return '';
   if (rs === 'paid') {
-    return `<span class="pill refund-pending" title="Refund paid · 已退款">↩ refunded</span>`;
+    return `<span class="pill refund-pending" title="Refund paid · 已退款">↩ refunded · 已退款</span>`;
   }
   const labels = {
-    pending:   'refund req',
-    reviewing: 'reviewing',
-    approved:  'approved',
+    pending:   'refund req · 申请退款',
+    reviewing: 'reviewing · 处理中',
+    approved:  'approved · 已批准',
   };
   const label = labels[rs] || rs;
   return `<span class="pill refund-pending" title="Open refund · 退款进行中 (${rs})">↩ ${label}</span>`;
@@ -102,9 +102,9 @@ function drawerRefundBanner(o) {
   };
   const l = labels[rs] || { en: `Refund · ${rs}`, cn: '' };
   const amt = (o.refund_amount_requested != null && Number(o.refund_amount_requested) > 0)
-    ? `¥${fmt(o.refund_amount_requested)} of ¥${fmt(o.total)}`
-    : `full ¥${fmt(o.total)}`;
-  const when = o.refund_requested_at ? ` · requested ${formatDate(o.refund_requested_at)}` : '';
+    ? cuT(`¥${fmt(o.refund_amount_requested)} of ¥${fmt(o.total)}`, `¥${fmt(o.refund_amount_requested)} / 共 ¥${fmt(o.total)}`)
+    : cuT(`full ¥${fmt(o.total)}`, `全额 ¥${fmt(o.total)}`);
+  const when = o.refund_requested_at ? ` · ${cuT('requested', '申请于')} ${formatDate(o.refund_requested_at)}` : '';
   return `
     <div class="drawer-refund-banner" data-state="${rs}" role="status">
       <span class="arrow">↩</span>
@@ -827,7 +827,7 @@ function renderShipByCell(o) {
   const isAsap     = !o.scheduled_for;
   if (isAsap) {
     return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-3)'};">ASAP</div>
-            <div class="muted" style="font-size: 10px; margin-top: 2px;">no slot picked</div>`;
+            <div class="muted" style="font-size: 10px; margin-top: 2px;">no slot picked · 未选时段</div>`;
   }
   // Parse "YYYY-MM-DD HH:MM:SS" (UTC from SQLite) → local time
   const dt = new Date(String(o.scheduled_for).replace(' ', 'T') + 'Z');
@@ -838,10 +838,10 @@ function renderShipByCell(o) {
   let color = 'var(--text-1)';
   let badge = '';
   if (actionable && hrsUntil !== null) {
-    if (hrsUntil < 0)        { color = 'var(--danger)'; badge = ' · <b>OVERDUE</b>'; }
-    else if (hrsUntil < 6)   { color = 'var(--danger)'; badge = ' · today'; }
-    else if (hrsUntil < 24)  { color = 'var(--warn)';   badge = ' · today'; }
-    else if (hrsUntil < 48)  { color = 'var(--warn)';   badge = ' · tomorrow'; }
+    if (hrsUntil < 0)        { color = 'var(--danger)'; badge = ` · <b>${cuT('OVERDUE','已逾期')}</b>`; }
+    else if (hrsUntil < 6)   { color = 'var(--danger)'; badge = ` · ${cuT('today','今天')}`; }
+    else if (hrsUntil < 24)  { color = 'var(--warn)';   badge = ` · ${cuT('today','今天')}`; }
+    else if (hrsUntil < 48)  { color = 'var(--warn)';   badge = ` · ${cuT('tomorrow','明天')}`; }
   }
   // Some orders saved an ISO timestamp into delivery_slot_label (rather
   // than a human "May 25 11am"). humanizeSlotLabel rewrites those before
@@ -850,7 +850,7 @@ function renderShipByCell(o) {
     || (valid ? fmtSlotShort(dt) : escapeHtml(String(o.scheduled_for)));
   const dateLine = valid ? fmtSlotShort(dt) : '';
   const surcharge = (Number(o.same_day_surcharge_fee) || 0) > 0
-    ? ` <span style="font-size: 10px; color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} same-day</span>` : '';
+    ? ` <span style="font-size: 10px; color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day','当日')}</span>` : '';
   return `<div style="font-size: 12px; font-weight: 600; color: ${color}; line-height: 1.3;">${escapeHtml(rawLabel)}${badge}</div>
           ${(rawLabel !== dateLine && dateLine) ? `<div class="muted" style="font-size: 10px; margin-top: 2px; font-family: var(--f-mono);">${dateLine}</div>` : ''}
           ${surcharge}`;
@@ -899,8 +899,8 @@ function deliveryModeNote(mode) {
 }
 function routingNote(reason) {
   const r = String(reason || '').toLowerCase().trim();
-  if (r === 'fallback_no_stock') return 'rerouted · out of stock';
-  if (r === 'manual')            return 'manually routed';
+  if (r === 'fallback_no_stock') return 'rerouted · 改派(缺货)';
+  if (r === 'manual')            return 'manually routed · 手动改派';
   return ''; // only_store / nearest / unknown — nothing worth showing
 }
 // Full-size "Ship by" tile shown in the order-detail card grid. Mirrors the
@@ -919,13 +919,13 @@ function renderShipByTile(o) {
   // this exact day, then ship same-day. Surfaced so the packer doesn't ship
   // early off the shelf.
   const batchSub = o.promised_ship_date
-    ? `<div class="sub" style="color: var(--warn); font-weight: 600;">🥗 Make fresh on ${escapeHtml(o.promised_ship_date)} → arrives ~${escapeHtml(o.promised_delivery_date || '')}</div>`
+    ? `<div class="sub" style="color: var(--warn); font-weight: 600;">${cuT(`🥗 Make fresh on ${escapeHtml(o.promised_ship_date)} → arrives ~${escapeHtml(o.promised_delivery_date || '')}`, `🥗 ${escapeHtml(o.promised_ship_date)} 当天现做 → 约 ${escapeHtml(o.promised_delivery_date || '')} 送达`)}</div>`
     : '';
   // Pickup orders have no "ship by" deadline — show the customer-chosen pickup
   // window instead so staff know when to have it ready at the counter.
   if (o.fulfillment_type === 'pickup') {
     const label = humanizeSlotLabel(o.delivery_slot_label)
-      || (o.scheduled_for ? humanizeSlotLabel(o.scheduled_for) : 'During pickup hours');
+      || (o.scheduled_for ? humanizeSlotLabel(o.scheduled_for) : cuT('During pickup hours', '营业时间内自取'));
     return `<div>
       <div class="kicker">Pickup time · 取货时间</div>
       <div class="val"><b style="color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">${escapeHtml(label)}</b></div>
@@ -937,8 +937,8 @@ function renderShipByTile(o) {
   if (isAsap) {
     return `<div>
       <div class="kicker">${shipByKicker(o)}</div>
-      <div class="val"><b style="color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">ASAP / Right away</b></div>
-      <div class="sub">No slot picked${mode ? ' · ' + mode : ''}</div>
+      <div class="val"><b style="color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">${cuT('ASAP / Right away', '尽快 / 立即')}</b></div>
+      <div class="sub">${cuT('No slot picked', '未选时段')}${mode ? ' · ' + mode : ''}</div>
       ${batchSub}
     </div>`;
   }
@@ -948,20 +948,20 @@ function renderShipByTile(o) {
   let color = 'var(--text-1)';
   let urgencyLabel = '';
   if (actionable && hrsUntil !== null) {
-    if (hrsUntil < 0)        { color = 'var(--danger)'; urgencyLabel = '⚠ OVERDUE'; }
-    else if (hrsUntil < 6)   { color = 'var(--danger)'; urgencyLabel = `⚠ in ${Math.round(hrsUntil)}h`; }
-    else if (hrsUntil < 24)  { color = 'var(--warn)';   urgencyLabel = `today (${Math.round(hrsUntil)}h)`; }
-    else if (hrsUntil < 48)  { color = 'var(--warn)';   urgencyLabel = 'tomorrow'; }
-    else                     { urgencyLabel = `in ${Math.round(hrsUntil / 24)}d`; }
+    if (hrsUntil < 0)        { color = 'var(--danger)'; urgencyLabel = cuT('⚠ OVERDUE', '⚠ 已逾期'); }
+    else if (hrsUntil < 6)   { color = 'var(--danger)'; urgencyLabel = cuT(`⚠ in ${Math.round(hrsUntil)}h`, `⚠ ${Math.round(hrsUntil)}小时内`); }
+    else if (hrsUntil < 24)  { color = 'var(--warn)';   urgencyLabel = cuT(`today (${Math.round(hrsUntil)}h)`, `今天 (${Math.round(hrsUntil)}小时)`); }
+    else if (hrsUntil < 48)  { color = 'var(--warn)';   urgencyLabel = cuT('tomorrow', '明天'); }
+    else                     { urgencyLabel = cuT(`in ${Math.round(hrsUntil / 24)}d`, `${Math.round(hrsUntil / 24)}天后`); }
   } else if (hrsUntil !== null) {
-    urgencyLabel = hrsUntil < 0 ? 'past' : (hrsUntil < 24 ? 'within 24h' : `in ${Math.round(hrsUntil / 24)}d`);
+    urgencyLabel = hrsUntil < 0 ? cuT('past', '已过期') : (hrsUntil < 24 ? cuT('within 24h', '24小时内') : cuT(`in ${Math.round(hrsUntil / 24)}d`, `${Math.round(hrsUntil / 24)}天后`));
   }
   const fullIso = valid ? fmtSlotShort(dt) : escapeHtml(String(o.scheduled_for));
   // Humanize any ISO-shaped label so the tile never reads as
   // "2026-05-20T08:00:00.000Z · mode: standard".
   const label = humanizeSlotLabel(o.delivery_slot_label) || fullIso;
   const surcharge = (Number(o.same_day_surcharge_fee) || 0) > 0
-    ? ` · <span style="color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} same-day surcharge</span>` : '';
+    ? ` · <span style="color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day surcharge','当日加收')}</span>` : '';
   return `<div>
     <div class="kicker">${shipByKicker(o)}</div>
     <div class="val"><b style="color: ${color};">${escapeHtml(label)}</b>${urgencyLabel ? ` <span style="font-size: 11px; color: ${color}; font-weight: 600;">· ${urgencyLabel}</span>` : ''}</div>
@@ -972,17 +972,17 @@ function renderShipByTile(o) {
 
 function renderTrackingCell(o) {
   if (o.fulfillment_type === 'pickup') {
-    return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} pickup</span>`;
+    return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${cuT('pickup','自提')}</span>`;
   }
   if (!o.tracking_number) {
     // Shipped without tracking = office still needs to enter the waybill.
-    if (o.status === 'dispatched') return '<span class="err" style="font-size:11px;">⚠ missing</span>';
+    if (o.status === 'dispatched') return `<span class="err" style="font-size:11px;">${cuT('⚠ missing','⚠ 缺运单号')}</span>`;
     return '<span class="muted">—</span>';
   }
   const carrier = (o.tracking_carrier || '').toUpperCase();
   const sync = (o.tracking_kd100_subscribed || o.jd_live)
-    ? '<span style="color:#5a8c2a; font-size:10px;">● live</span>'
-    : '<span class="muted" style="font-size:10px;">manual</span>';
+    ? `<span style="color:#5a8c2a; font-size:10px;">● ${cuT('live','实时')}</span>`
+    : `<span class="muted" style="font-size:10px;">${cuT('manual','手动')}</span>`;
   return `<div style="font-family: var(--f-mono); font-size: 11px; font-weight: 600;">${escapeHtml(carrier)} ${escapeHtml(o.tracking_number)}</div>
           <div style="margin-top: 2px;">${sync}</div>`;
 }
@@ -1010,8 +1010,8 @@ function humanStatus(s, fulfillmentType) {
   // counter" and "collected by customer" (see retail.js progress tracker), so
   // relabel them for the operator instead of showing "Dispatched/Delivered".
   if (fulfillmentType === 'pickup') {
-    if (s === 'dispatched') return 'Ready';
-    if (s === 'delivered')  return 'Picked up';
+    if (s === 'dispatched') return 'Ready · 可取货';
+    if (s === 'delivered')  return 'Picked up · 已取货';
   }
   return { pending_payment: 'Pending', paid: 'Paid', preparing: 'Preparing', dispatched: 'Dispatched', delivered: 'Delivered', cancelled: 'Cancelled', refunded: 'Refunded', awaiting_restock: 'Awaiting restock' }[s] || s;
 }
@@ -1151,7 +1151,7 @@ function itemQtyHtml(it) {
 // SKU chip — shared across all item layouts (manifest / table / cards) so the
 // packer's scan code reads identically in every view.
 function itemSkuHtml(it) {
-  return `<span class="item-sku">${it.sku ? escapeHtml(it.sku) : 'no SKU'}</span>`;
+  return `<span class="item-sku">${it.sku ? escapeHtml(it.sku) : cuT('no SKU','无货号')}</span>`;
 }
 
 // Chosen customer options (dressing, paid extras) for an order line, parsed
@@ -1170,7 +1170,7 @@ function renderItemRow(it, opts = {}) {
   const num = opts.index != null ? String(opts.index).padStart(2, '0') : '';
   const name = `<span class="mf-name">${escapeHtml(it.name_en || '')}</span>`;
   const nameCell = it.product_id
-    ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab">${name}</a>`
+    ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${name}</a>`
     : name;
   const zh = (it.name_cn || it.size)
     ? `<span class="mf-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</span>`
@@ -1230,7 +1230,7 @@ function renderSortableItems(o) {
     looseHtml = ships.length
       ? `<div class="shipment-card"><div class="shipment-head">
            <span class="mode-pill">📦 Not yet in a parcel · 待分配</span>
-           <span class="count">${loose.length} item${loose.length === 1 ? '' : 's'}</span>
+           <span class="count">${cuT(`${loose.length} item${loose.length === 1 ? '' : 's'}`, `${loose.length} 件商品`)}</span>
          </div>${renderItemsTable(loose, true)}</div>`
       : renderItemsTable(loose, true);   // pickup / no-parcel order: plain list
   }
@@ -1320,7 +1320,7 @@ function renderItemsAsGrid(items, showPack = true) {
   const rows = items.map(it => {
     const nm = `<span class="oi-name">${escapeHtml(it.name_en || '')}</span>`;
     const nameCell = it.product_id
-      ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab">${nm}</a>`
+      ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
       : nm;
     const zh = (it.name_cn || it.size)
       ? `<div class="oi-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
@@ -1343,7 +1343,7 @@ function renderItemsAsCards(items, showPack = true) {
   const cards = items.map(it => {
     const nm = `<span class="oic-name">${escapeHtml(it.name_en || '')}</span>`;
     const nameCell = it.product_id
-      ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab">${nm}</a>`
+      ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
       : nm;
     const zh = (it.name_cn || it.size)
       ? `<div class="oic-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
@@ -1484,7 +1484,7 @@ async function openOrder(id, opts = {}) {
       // Re-rendering the same order in place: keep the old content on screen
       // until the fresh data lands — no "Loading…" flash, no slide.
     } else {
-      mount.innerHTML = '<div class="order-card muted">Loading order…</div>';
+      mount.innerHTML = '<div class="order-card muted">Loading order… · 正在加载订单…</div>';
       openDrawer('#order-drawer');
     }
   }
@@ -1515,7 +1515,7 @@ async function openOrder(id, opts = {}) {
       if (_chip) _chip.remove();
     }
   } catch (e) {
-    mount.innerHTML = `<div class="order-card err">Failed: ${escapeHtml(e.message)}</div>`;
+    mount.innerHTML = `<div class="order-card err">Failed · 失败: ${escapeHtml(e.message)}</div>`;
     mount.classList.remove('od-swapping');
   }
 }
@@ -1698,7 +1698,7 @@ function renderOrderTotalBanner(o) {
     <div class="order-total-banner">
       <div>
         <div class="otb-label">Order total · 订单总额</div>
-        <div class="otb-sub">subtotal ¥${fmt(o.subtotal)} · shipping ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · voucher −¥' + fmt(o.voucher_amount) : ''}</div>
+        <div class="otb-sub">${cuT('subtotal','小计')} ¥${fmt(o.subtotal)} · ${cuT('shipping','运费')} ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · ' + cuT('voucher','优惠券') + ' −¥' + fmt(o.voucher_amount) : ''}</div>
       </div>
       <div class="otb-amount">¥${fmt(o.total)}</div>
     </div>`;
@@ -1708,7 +1708,7 @@ function renderOrderTotalInline(o) {
     <div class="od-total-inline">
       <div class="kicker">Order total · 订单总额</div>
       <div class="od-total-big">¥${fmt(o.total)}</div>
-      <div class="od-total-sub">subtotal ¥${fmt(o.subtotal)} · shipping ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · voucher −¥' + fmt(o.voucher_amount) : ''}</div>
+      <div class="od-total-sub">${cuT('subtotal','小计')} ¥${fmt(o.subtotal)} · ${cuT('shipping','运费')} ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · ' + cuT('voucher','优惠券') + ' −¥' + fmt(o.voucher_amount) : ''}</div>
     </div>`;
 }
 function renderOrderTotalFooter(o, transitionsHtml) {
@@ -1716,7 +1716,7 @@ function renderOrderTotalFooter(o, transitionsHtml) {
     <div class="order-total-banner otb-footer">
       <div>
         <div class="otb-label">Order total · 订单总额</div>
-        <div class="otb-sub">subtotal ¥${fmt(o.subtotal)} · shipping ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · voucher −¥' + fmt(o.voucher_amount) : ''}</div>
+        <div class="otb-sub">${cuT('subtotal','小计')} ¥${fmt(o.subtotal)} · ${cuT('shipping','运费')} ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · ' + cuT('voucher','优惠券') + ' −¥' + fmt(o.voucher_amount) : ''}</div>
       </div>
       <div class="otb-amount">¥${fmt(o.total)}</div>
       ${transitionsHtml ? `<div class="otb-actions">${transitionsHtml}</div>` : ''}
@@ -1764,7 +1764,7 @@ function renderOpenOrder(o) {
           <div>
             <div class="kicker">${pickupIcon(11)} Pickup · 到店自提 ${copyChip([o.recipient_name, o.recipient_phone, (o.address?.store_name_cn || o.store_name_cn || ''), (o.address?.address || '')].filter(Boolean).join('\n'), 'Pickup')}</div>
             <div class="val"><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
-            <div class="sub">Collects at <b>${escapeHtml(o.address?.store_name_en || o.store_name_en || o.store_code || 'store')}</b>${o.address?.address ? ' · ' + escapeHtml(o.address.address) : ''}</div>
+            <div class="sub">${cuT('Collects at','自提门店')} <b>${escapeHtml(o.address?.store_name_en || o.store_name_en || o.store_code || cuT('store','门店'))}</b>${o.address?.address ? ' · ' + escapeHtml(o.address.address) : ''}</div>
           </div>` : `
           <div>
             <div class="kicker">Ship to · 收货人 ${copyChip([o.recipient_name, o.recipient_phone, o.address_full].filter(Boolean).join('\n'), 'Ship-to')}</div>
@@ -1799,11 +1799,11 @@ function renderOpenOrder(o) {
           ${_DISMISSED_SPLIT.has(o.id) ? '' : splitSuggestionBanner(o)}
           ${o.outside_guangzhou && (o.shipments?.length > 1) ? `
             <div class="outside-gz-note">
-              ⚠ Destination outside Guangzhou<span data-lang-block="cn"> (${escapeHtml(o.shipping_city || 'unknown city')})</span> — order split into ${o.shipments.length} shipments
+              <span data-lang-block="en">⚠ Destination outside Guangzhou (${escapeHtml(o.shipping_city || 'unknown city')}) — order split into ${o.shipments.length} shipments</span><span data-lang-block="cn">⚠ 目的地在广州以外 (${escapeHtml(o.shipping_city || '未知城市')}) — 订单已拆分为 ${o.shipments.length} 个包裹</span>
             </div>` : ''}
           ${o.outside_guangzhou && (o.shipments?.length === 1) ? `
             <div class="outside-gz-note">
-              <span data-lang-block="en">Outside Guangzhou — </span><span data-lang-block="cn">${escapeHtml(o.shipping_city || '广州以外')} — </span>single ${shipGlyph(o.shipments[0].mode)} ${o.shipments[0].mode === 'air' ? 'air' : 'land'} shipment
+              <span data-lang-block="en">Outside Guangzhou — single ${shipGlyph(o.shipments[0].mode)} ${o.shipments[0].mode === 'air' ? 'air' : 'land'} shipment</span><span data-lang-block="cn">${escapeHtml(o.shipping_city || '广州以外')} — 单个 ${shipGlyph(o.shipments[0].mode)} ${o.shipments[0].mode === 'air' ? '空运' : '陆运'}包裹</span>
             </div>` : ''}
           <div id="odv-items-sortable">${renderSortableItems(o)}</div>
         </div>
@@ -1830,7 +1830,7 @@ function renderOpenOrder(o) {
                   ? `<div>${escapeHtml(r.product_name_en || '')}</div>${r.product_name_cn ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(r.product_name_cn)}</div>` : ''}`
                   : `<span class="muted" style="font-family: var(--f-mono); font-size: 11px;">product_id ${r.product_id}</span>`;
                 const cell = r.product_id
-                  ? `<a href="/?openProduct=${r.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab">${label}</a>`
+                  ? `<a href="/?openProduct=${r.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${label}</a>`
                   : label;
                 return `
                 <tr>
@@ -2167,9 +2167,9 @@ function renderShipmentTrackingCard(o, s) {
   const carrierOpts = (TRACKING_CARRIERS || []).map(c =>
     `<option value="${c.code}" ${ (has ? t.carrier_code : 'jd') === c.code ? 'selected' : '' }>${escapeHtml(c.name_en)} · ${escapeHtml(c.name_cn)}</option>`
   ).join('');
-  const synced = t?.synced_at ? `last updated ${formatDate(t.synced_at)}` : 'no live sync yet';
+  const synced = t?.synced_at ? cuT(`last updated ${formatDate(t.synced_at)}`, `最后更新 ${formatDate(t.synced_at)}`) : cuT('no live sync yet', '尚未实时同步');
   const trackLink = (has && t.track_url)
-    ? `<a href="${t.track_url}" target="_blank" rel="noopener" class="muted" style="font-size:11px; text-decoration:underline;">View on carrier site →</a>`
+    ? `<a href="${t.track_url}" target="_blank" rel="noopener" class="muted" style="font-size:11px; text-decoration:underline;">View on carrier site → · 在承运商官网查看 →</a>`
     : '';
 
   // A waybill reused from an ALREADY-DELIVERED order can't live-sync: kd100/JD
@@ -2182,14 +2182,14 @@ function renderShipmentTrackingCard(o, s) {
     if (deadReuse) {
       kdBadge = `<span style="font-size:11px; color:#b8860b;">● sync inactive · 同步未生效 (reused number · 重复运单号)</span>`;
     } else if (s.jd_live) {
-      kdBadge = `<span class="muted" style="font-size:11px; color: #5a8c2a;">● JD live sync on</span>`;
+      kdBadge = `<span class="muted" style="font-size:11px; color: #5a8c2a;">● JD live sync on · 京东实时同步中</span>`;
     } else if (s.tracking_kd100_subscribed) {
-      kdBadge = `<span class="muted" style="font-size:11px; color: #5a8c2a;">● kd100 live sync on</span>`;
+      kdBadge = `<span class="muted" style="font-size:11px; color: #5a8c2a;">● kd100 live sync on · 快递100实时同步中</span>`;
     } else if (s.tracking_last_error) {
       kdBadge = `<span style="font-size:11px; color: var(--danger);">⚠ ${escapeHtml(s.tracking_last_error)}</span>
         <button class="btn btn-sm" onclick="resubscribeTracking(${o.id}, ${sid})" style="margin-left:6px;">Retry sync · 重试同步</button>`;
     } else {
-      kdBadge = `<span class="muted" style="font-size:11px;">manual entry only</span>`;
+      kdBadge = `<span class="muted" style="font-size:11px;">manual entry only · 仅手动录入</span>`;
     }
   }
 
@@ -2258,13 +2258,13 @@ function renderShipmentTrackingCard(o, s) {
         <div class="muted" style="font-size:11px; margin:8px 0 4px;">— or attach an existing waybill manually · 或手动填写已有运单 —</div>` : ''}
       <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap; margin-top: ${has ? '10px' : '0'};">
         <select id="trk-carrier-${sid}" style="min-width:180px;">${carrierOpts}</select>
-        <input type="text" id="trk-number-${sid}" value="${has ? escapeHtml(t.number) : ''}" placeholder="Tracking / waybill number" style="flex:1; min-width:200px; font-family: var(--f-mono);">
-        <button class="btn ${has ? 'btn-primary' : ''} btn-sm" onclick="saveTracking(${o.id}, ${sid})">${has ? 'Update' : 'Save tracking'}</button>
+        <input type="text" id="trk-number-${sid}" value="${has ? escapeHtml(t.number) : ''}" placeholder="Tracking / waybill number" data-ph-en="Tracking / waybill number" data-ph-cn="快递单号 / 运单号" style="flex:1; min-width:200px; font-family: var(--f-mono);">
+        <button class="btn ${has ? 'btn-primary' : ''} btn-sm" onclick="saveTracking(${o.id}, ${sid})">${has ? 'Update · 更新' : 'Save tracking · 保存运单号'}</button>
         ${has && t.carrier_code === 'jd' ? `<button class="btn btn-sm" style="color:var(--danger);" onclick="cancelJdPickup(${o.id}, ${sid}, event)">Cancel JD pickup · 取消揽收</button>` : ''}
         ${has ? `<button class="btn btn-sm" onclick="clearTracking(${o.id}, ${sid})">Clear · 清除</button>` : ''}
       </div>
-      ${has && t.carrier_code === 'jd' ? `<div class="muted" style="font-size:11px; margin-top:6px;">“Cancel JD pickup” calls off the courier with JD. “Clear” only removes the number locally (courier still comes).</div>` : ''}
-      ${!has ? `<div class="muted" style="font-size:11px; margin-top:6px;">A manually-entered number tracks via 快递100 (paid) — incl. a personal JD JDV0… number. For free JD tracking, use “Create JD label” above instead.</div>` : ''}
+      ${has && t.carrier_code === 'jd' ? `<div class="muted" style="font-size:11px; margin-top:6px;">“Cancel JD pickup” calls off the courier with JD. “Clear” only removes the number locally (courier still comes). · “取消揽收”会向京东取消上门;“清除”仅在本地移除运单号(快递仍会上门)。</div>` : ''}
+      ${!has ? `<div class="muted" style="font-size:11px; margin-top:6px;">A manually-entered number tracks via 快递100 (paid) — incl. a personal JD JDV0… number. For free JD tracking, use “Create JD label” above instead. · 手动录入的运单号通过快递100(付费)追踪,含个人的京东 JDV0… 单号;如需免费京东追踪,请改用上方“生成京东运单”。</div>` : ''}
     </div>`;
 }
 
@@ -2277,7 +2277,7 @@ async function openBulkTracking() {
   ).join('');
   document.getElementById('bulk-trk-text').value = '';
   document.getElementById('bulk-trk-results').innerHTML = '';
-  document.getElementById('bulk-trk-counter').textContent = '0 entries';
+  document.getElementById('bulk-trk-counter').textContent = cuT('0 entries', '0 条');
   document.getElementById('bulk-trk-bg').classList.add('show');
   document.getElementById('bulk-trk-text').addEventListener('input', updateBulkTrkCounter);
   setTimeout(() => document.getElementById('bulk-trk-text').focus(), 100);
@@ -2287,7 +2287,7 @@ function closeBulkTracking() {
 }
 function updateBulkTrkCounter() {
   const lines = document.getElementById('bulk-trk-text').value.split(/\r?\n/).filter(l => l.trim().length);
-  document.getElementById('bulk-trk-counter').textContent = lines.length + (lines.length === 1 ? ' entry' : ' entries');
+  document.getElementById('bulk-trk-counter').textContent = cuT(lines.length + (lines.length === 1 ? ' entry' : ' entries'), lines.length + ' 条');
 }
 function parseBulkTrackingText(text, defaultCarrier) {
   const out = [];
@@ -2636,7 +2636,7 @@ function renderRefundPanel(o) {
 
   const customerLinesBlock = (state === 'pending' || state === 'reviewing') && lines.length
     ? `<div style="margin-top: 8px; padding: 8px 10px; background: var(--bg-elev-1); border-radius: 6px; font-size: 12px;">
-         <div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px;">Customer-selected lines</div>
+         <div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px;">Customer-selected lines · 顾客选择的商品</div>
          ${lines.map(l => {
            const it = lineMap.get(l.item_id);
            const label = it ? (it.name_en || it.name_cn || ('item #' + l.item_id)) : ('item #' + l.item_id);
@@ -2647,13 +2647,13 @@ function renderRefundPanel(o) {
   const amountSummary = isApproved || state === 'paid'
     ? `
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 10px; font-size: 12px;">
-        <div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Order total</div><b>¥${fmt(total)}</b></div>
-        ${reqAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Requested</div><b>¥${fmt(reqAmt)}</b></div>` : ''}
-        ${apvAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Approved</div><b>¥${fmt(apvAmt)}</b></div>` : ''}
-        ${paidAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Paid back</div><b>¥${fmt(paidAmt)}</b></div>` : ''}
-        ${o.refund_payout_method ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Method</div><b>${escapeHtml(o.refund_payout_method)}</b>${o.refund_payout_ref ? `<div class="muted" style="font-size: 10px; font-family: var(--f-mono); margin-top: 2px;">${escapeHtml(o.refund_payout_ref)}</div>` : ''}</div>` : ''}
+        <div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Order total · 订单总额</div><b>¥${fmt(total)}</b></div>
+        ${reqAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Requested · 申请金额</div><b>¥${fmt(reqAmt)}</b></div>` : ''}
+        ${apvAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Approved · 已批准</div><b>¥${fmt(apvAmt)}</b></div>` : ''}
+        ${paidAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Paid back · 已退款</div><b>¥${fmt(paidAmt)}</b></div>` : ''}
+        ${o.refund_payout_method ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Method · 方式</div><b>${escapeHtml(o.refund_payout_method)}</b>${o.refund_payout_ref ? `<div class="muted" style="font-size: 10px; font-family: var(--f-mono); margin-top: 2px;">${escapeHtml(o.refund_payout_ref)}</div>` : ''}</div>` : ''}
       </div>` : reqAmt != null
-        ? `<div style="margin-top: 8px; font-size: 12px;">Customer asked for <b>¥${fmt(reqAmt)}</b> of <b>¥${fmt(total)}</b></div>`
+        ? `<div style="margin-top: 8px; font-size: 12px;">${cuT(`Customer asked for <b>¥${fmt(reqAmt)}</b> of <b>¥${fmt(total)}</b>`, `顾客申请退 <b>¥${fmt(reqAmt)}</b> / 共 <b>¥${fmt(total)}</b>`)}</div>`
         : '';
 
   return `
@@ -2661,14 +2661,14 @@ function renderRefundPanel(o) {
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
         <div style="display: flex; align-items: center; gap: 10px;">
           ${refundStepBadge(state)}
-          <span class="muted" style="font-size: 11px;">${o.refund_requested_at ? 'requested ' + formatDate(o.refund_requested_at) : ''}</span>
+          <span class="muted" style="font-size: 11px;">${o.refund_requested_at ? cuT('requested', '申请于') + ' ' + formatDate(o.refund_requested_at) : ''}</span>
         </div>
-        <button class="btn btn-sm" onclick="openRefundEvents(${o.id})" title="Audit log">📜 History</button>
+        <button class="btn btn-sm" onclick="openRefundEvents(${o.id})" title="Audit log · 审计记录">📜 History · 历史</button>
       </div>
       ${o.refund_reason ? `<div style="margin-top: 10px; font-size: 13px;">${escapeHtml(o.refund_reason)}</div>` : ''}
       ${customerLinesBlock}
       ${amountSummary}
-      ${o.refund_review_note ? `<div class="muted" style="margin-top: 8px; font-size: 12px;">Staff note: ${escapeHtml(o.refund_review_note)}</div>` : ''}
+      ${o.refund_review_note ? `<div class="muted" style="margin-top: 8px; font-size: 12px;">${cuT('Staff note', '客服备注')}: ${escapeHtml(o.refund_review_note)}</div>` : ''}
       ${actions ? `<div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">${actions}</div>` : ''}
     </div>`;
 }
@@ -2754,7 +2754,7 @@ function openRefundApproveDialog(orderId) {
         <div class="field" id="rf-amt-wrap" style="margin-bottom: 14px;">
           <label class="stacked">Amount · 金额 (¥)</label>
           <input type="number" id="rf-amt" step="0.01" min="0" max="${total}" value="${total.toFixed(2)}" style="width: 100%;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">Order total ¥${fmt(total)}${o.refund_amount_requested != null ? ' · customer asked for ¥' + fmt(o.refund_amount_requested) : ''}</div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">${cuT('Order total', '订单总额')} ¥${fmt(total)}${o.refund_amount_requested != null ? ' · ' + cuT('customer asked for', '顾客申请') + ' ¥' + fmt(o.refund_amount_requested) : ''}</div>
         </div>
         <div class="field" id="rf-lines-wrap" style="margin-bottom: 14px; display: none;">
           <label class="stacked">Lines · 商品</label>
@@ -2767,9 +2767,9 @@ function openRefundApproveDialog(orderId) {
                 </label>
                 <input type="number" class="rf-line-qty" data-item="${it.id}" step="0.001" min="0" max="${it.qty}" value="${preMap.get(it.id) ?? it.qty}" style="width: 80px;">
                 <span class="muted" style="font-size: 11px;">× ¥${fmt(it.unit)} = <b id="rf-line-amt-${it.id}">¥${fmt(it.unit * (preMap.get(it.id) ?? it.qty))}</b></span>
-              </div>`).join('') : '<div class="muted" style="padding: 8px;">No items</div>'}
+              </div>`).join('') : `<div class="muted" style="padding: 8px;">${cuT('No items', '无商品')}</div>`}
           </div>
-          <div style="margin-top: 6px; text-align: right; font-size: 13px;">Lines total: <b id="rf-lines-total">¥0.00</b></div>
+          <div style="margin-top: 6px; text-align: right; font-size: 13px;">${cuT('Lines total', '商品合计')}: <b id="rf-lines-total">¥0.00</b></div>
         </div>
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">Staff note (shown to customer) · 客服备注(顾客可见)</label>
@@ -2972,7 +2972,7 @@ async function openRefundEvents(orderId) {
         <div style="font-family: var(--f-mono); font-size: 11px; color: var(--text-3); min-width: 120px;">${formatDate(ev.created_at)}</div>
         <div style="flex: 1;">
           <div><b>${escapeHtml(ev.event)}</b>${ev.amount != null ? ` <span class="muted">¥${fmt(ev.amount)}</span>` : ''}</div>
-          <div class="muted" style="font-size: 11px; margin-top: 2px;">by ${escapeHtml(ev.user_username || ev.customer_nickname || (ev.user_id ? 'staff#' + ev.user_id : 'customer'))}</div>
+          <div class="muted" style="font-size: 11px; margin-top: 2px;">${cuT('by', '操作人')} ${escapeHtml(ev.user_username || ev.customer_nickname || (ev.user_id ? 'staff#' + ev.user_id : cuT('customer', '顾客')))}</div>
           ${ev.note ? `<div style="font-size: 12px; margin-top: 4px;">${escapeHtml(ev.note)}</div>` : ''}
           ${formatRefundMeta(ev.meta)}
         </div>

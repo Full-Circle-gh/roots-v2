@@ -848,7 +848,7 @@ async function paPersistOrder(ids) {
   try {
     await api('/api/retail-admin/products/reorder', { method: 'POST', body: { ids } });
   } catch (e) {
-    toast((e && e.message) ? ('Reorder failed: ' + e.message) : 'Reorder failed · 排序未保存', 'err');
+    toast((e && e.message) ? (cuT('Reorder failed: ', '排序失败:') + e.message) : 'Reorder failed · 排序未保存', 'err');
     paLoad();   // resync from the server so the screen can't drift from the DB
   }
 }
@@ -2529,7 +2529,7 @@ async function pdHandleImageUpload(file, opts = {}) {
   }
   try {
     const r = await pdResizeImage(file, opts);
-    if (r.resized) toast(`📐 Optimized ${pdFmtBytes(r.originalBytes)} → ${pdFmtBytes(r.finalBytes)} · 已优化`, 'ok');
+    if (r.resized) toast(`📐 ${cuT('Optimized', '已优化')} ${pdFmtBytes(r.originalBytes)} → ${pdFmtBytes(r.finalBytes)}`, 'ok');
     return r.dataURL;
   } catch (e) {
     console.warn('[pd image upload] failed', e);
@@ -3795,7 +3795,7 @@ function _paBlockEditorBody(b) {
         <div class="pa-edit-section" style="padding:12px 14px;background:var(--bg-pane);margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
-            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','rows',${i})" ${rows.length <= 1 ? 'disabled' : ''}>Remove</button>
+            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','rows',${i})" ${rows.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
           <div class="pa-edit-grid-2">
             <div class="field"><label class="stacked">Claim EN · 说明(英文)</label><input data-rowidx="${i}" data-bkey="claim_en" type="text" value="${escapeAttr(r.claim_en || '')}" placeholder="Fresh herb flavor with controlled heat."></div>
@@ -3819,7 +3819,7 @@ function _paBlockEditorBody(b) {
         <div class="pa-edit-section" style="padding:12px 14px;background:var(--bg-pane);margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
-            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','items',${i})" ${items.length <= 1 ? 'disabled' : ''}>Remove</button>
+            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','items',${i})" ${items.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
           <div class="pa-edit-grid-2">
             <div class="field"><label class="stacked">Name EN · 名称(英文)</label><input data-rowidx="${i}" data-bkey="name_en" type="text" value="${escapeAttr(it.name_en || '')}" placeholder="Fresh cilantro"></div>
@@ -3866,7 +3866,7 @@ function _paBlockEditorBody(b) {
         <div class="pa-edit-section" style="padding:12px 14px;background:var(--bg-pane);margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
-            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','tiles',${i})" ${tiles.length <= 1 ? 'disabled' : ''}>Remove</button>
+            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','tiles',${i})" ${tiles.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
           </div>
           <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px">
             <div class="field"><label class="stacked">Icon · 图标</label><input data-rowidx="${i}" data-bkey="icon" type="text" value="${escapeAttr(tl.icon || '')}" placeholder="🥖" style="text-align:center;font-size:18px"></div>
@@ -3936,7 +3936,7 @@ function _paBlockEditorBody(b) {
       <div class="pa-edit-grid-2">
         <div class="field" style="grid-column:span 2"><label class="stacked">Stat · 数字</label>
           <input data-bkey="stat" type="text" value="${v('stat')}" placeholder="81%" style="font-size:22px;font-weight:700;text-align:center">
-          <div class="helper">e.g. <code>81%</code>, <code>500g</code>, <code>0g</code></div>
+          <div class="helper">e.g. <code>81%</code>, <code>500g</code>, <code>0g</code> · 例如</div>
         </div>
         <div class="field"><label class="stacked">What EN · 内容(英文)</label>
           <input data-bkey="what_en" type="text" value="${v('what_en')}" placeholder="HAZELNUTS">

@@ -88,13 +88,13 @@ async function cuLoad() {
     const res = await fetch('/api/retail-admin/customers?' + params);
     j = await res.json();
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">Network error.</td></tr>';
-    if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Network error');
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">Network error. · 网络错误。</td></tr>';
+    if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Network error · 网络错误');
     return;
   }
   if (!j.success) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">Failed to load.</td></tr>';
-    if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Failed to load');
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">Failed to load. · 加载失败。</td></tr>';
+    if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Failed to load · 加载失败');
     return;
   }
   CU_TOTAL = j.total || 0;
@@ -111,7 +111,7 @@ async function cuLoad() {
         <td>${escapeHtml(r.phone || '—')}</td>
         <td>
           <span class="cu-pill tier-${escapeHtml(r.tier_key || 'seed')}">${escapeHtml(r.tier_key || 'seed')}</span>
-          ${r.is_blocked ? ' <span class="cu-pill blocked">Blocked</span>' : ''}
+          ${r.is_blocked ? ' <span class="cu-pill blocked">Blocked · 已封禁</span>' : ''}
         </td>
         <td class="numeric cu-num ${(r.orders_count || 0) === 0 ? 'is-zero' : ''}">${r.orders_count || 0}</td>
         <td class="numeric cu-num ${(r.points_balance || 0) === 0 ? 'is-zero' : ''}">${r.points_balance || 0}</td>
@@ -121,7 +121,7 @@ async function cuLoad() {
     `).join('');
   }
   const pages = Math.max(1, Math.ceil(CU_TOTAL / CU_PAGE_SIZE));
-  $('#cu-total').textContent = CU_TOTAL ? `${CU_TOTAL} total · page ${CU_PAGE} of ${pages}` : '';
+  $('#cu-total').textContent = CU_TOTAL ? `${CU_TOTAL} total · 共 ${CU_TOTAL} 位 · page ${CU_PAGE} of ${pages} · 第 ${CU_PAGE}/${pages} 页` : '';
   $('#cu-prev').disabled = CU_PAGE <= 1;
   $('#cu-next').disabled = CU_PAGE >= pages;
   cuViewApply();  // keep the View-tweak classes on #cu-table after each render
@@ -388,7 +388,7 @@ function cuRenderDetail() {
         <tr>
           <td>${paymentBrandHTML(t.payment_method)}</td>
           <td class="numeric">¥${Number(t.amount || 0).toFixed(2)}</td>
-          <td class="numeric">+${t.bonus_points || 0} pts</td>
+          <td class="numeric">+${t.bonus_points || 0} pts · 分</td>
           <td><span class="cu-pill">${escapeHtml(t.status)}</span></td>
           <td class="muted">${cuFmtTime(t.created_at)}</td>
         </tr>`).join('')
@@ -402,7 +402,7 @@ function cuRenderDetail() {
               <span class="cu-addr-name">${escapeHtml(a.recipient_name)}</span>
               <span style="color: var(--text-4);">·</span>
               <span class="cu-addr-phone">${escapeHtml(a.phone)}</span>
-              ${a.is_default ? '<span class="cu-addr-default">Default</span>' : ''}
+              ${a.is_default ? '<span class="cu-addr-default">Default · 默认</span>' : ''}
             </div>
             <div class="cu-addr-text">${escapeHtml([a.province, a.city, a.district, a.address, a.detail].filter(Boolean).join(' ')) || '—'}</div>
           </div>
@@ -563,11 +563,11 @@ function renderAffiliateBlock(aff) {
   if (!aff) return '';
   const codeHtml = aff.referral_code
     ? `<code>${escapeHtml(aff.referral_code)}</code>`
-    : '<span class="muted">(none yet)</span>';
+    : '<span class="muted">(none yet) · 暂无</span>';
   const referredBy = aff.referred_by
     ? `<a href="#" onclick="event.preventDefault(); cuOpenDetail(${aff.referred_by.id})">${escapeHtml(aff.referred_by.nickname || ('#' + aff.referred_by.id))}</a>
        ${aff.referred_by.referral_code ? `<span class="muted" style="margin-left: 8px; font-size: 11px;">via <code>${escapeHtml(aff.referred_by.referral_code)}</code></span>` : ''}`
-    : '<span class="muted">— none —</span>';
+    : '<span class="muted">— none — · 无</span>';
 
   const sum = aff.summary || {};
   const invRows = (aff.invites || []).length
@@ -579,10 +579,10 @@ function renderAffiliateBlock(aff) {
           <td>${escapeHtml(cuFmtDate(i.joined_at) || '')}</td>
           <td>${i.first_paid_order_id ? '#' + i.first_paid_order_id : ''}</td>
         </tr>`).join('')
-    : '<tr><td colspan="5" class="muted">No invites yet.</td></tr>';
+    : '<tr><td colspan="5" class="muted">No invites yet. · 暂无邀请记录。</td></tr>';
 
   return `
-    <h3>Affiliate <span class="muted" style="font-weight: 400; font-size: 12px;">· edit in the Affiliate tab</span></h3>
+    <h3>Affiliate · 推广 <span class="muted" style="font-weight: 400; font-size: 12px;">· edit in the Affiliate tab · 在推广标签页编辑</span></h3>
     <div class="row" style="gap: 24px; flex-wrap: wrap; margin-bottom: 12px;">
       <div class="field" style="margin: 0;">
         <label class="stacked">Their code · 本人邀请码</label>
@@ -596,12 +596,12 @@ function renderAffiliateBlock(aff) {
       </div>
       <div class="field" style="margin: 0;">
         <label class="stacked">Conversions · 转化数</label>
-        <div style="font-size: 13px; padding: 6px 0;">${Number(sum.converted || 0)} / ${Number(sum.total || 0)} <span class="muted">· ¥${fmt(sum.earned || 0)} earned</span></div>
+        <div style="font-size: 13px; padding: 6px 0;">${Number(sum.converted || 0)} / ${Number(sum.total || 0)} <span class="muted">· ¥${fmt(sum.earned || 0)} earned · 已赚</span></div>
       </div>
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Invitee · 受邀人</th><th>Status · 状态</th><th class="numeric">Reward ¥ · 奖励</th><th>Joined · 加入时间</th><th>First order</th></tr></thead>
+        <thead><tr><th>Invitee · 受邀人</th><th>Status · 状态</th><th class="numeric">Reward ¥ · 奖励</th><th>Joined · 加入时间</th><th>First order · 首单</th></tr></thead>
         <tbody>${invRows}</tbody>
       </table>
     </div>

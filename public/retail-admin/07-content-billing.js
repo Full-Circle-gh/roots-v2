@@ -113,7 +113,7 @@ function onNewFolderKey(ev) {
   if (!name) return;
   api('/api/retail-admin/media/folders', { method: 'POST', body: { name } })
     .then(() => { ev.target.value = ''; toast('Folder created · 文件夹已创建'); loadMedia(); })
-    .catch(e => toast('Create failed: '+e.message, 'err'));
+    .catch(e => toast('Create failed · 创建失败: '+e.message, 'err'));
 }
 
 async function renameFolder(id) {
@@ -126,7 +126,7 @@ async function renameFolder(id) {
   try {
     await api(`/api/retail-admin/media/folders/${id}`, { method: 'PATCH', body: { name: trimmed } });
     toast('Renamed · 已重命名'); loadMedia();
-  } catch (e) { toast('Rename failed: '+e.message, 'err'); }
+  } catch (e) { toast('Rename failed · 重命名失败: '+e.message, 'err'); }
 }
 
 async function deleteFolder(id) {
@@ -140,7 +140,7 @@ async function deleteFolder(id) {
     await api(`/api/retail-admin/media/folders/${id}`, { method: 'DELETE' });
     if (_mlActiveFolder === String(id)) _mlActiveFolder = '';
     toast('Folder deleted · 文件夹已删除'); loadMedia();
-  } catch (e) { toast('Delete failed: '+e.message, 'err'); }
+  } catch (e) { toast('Delete failed · 删除失败: '+e.message, 'err'); }
 }
 
 // ── Drag a card onto a sidebar folder to move it ───────────────────
@@ -166,7 +166,7 @@ async function moveMediaTo(ids, key) {
   try {
     await api('/api/retail-admin/media/bulk-move', { method: 'POST', body: { ids, folder_id } });
     toast(`Moved ${ids.length} · 已移动 ${ids.length}`); _mlSel.clear(); loadMedia();
-  } catch (e) { toast('Move failed: '+e.message, 'err'); }
+  } catch (e) { toast('Move failed · 移动失败: '+e.message, 'err'); }
 }
 
 async function loadMediaTags() {
@@ -211,7 +211,7 @@ function renderMediaGrid() {
                   ondragstart="onCardDragStart(event, ${m.id})"
                   ondragend="onCardDragEnd(event)">
         <div class="ml-card-check" onclick="event.stopPropagation(); toggleMediaSel(${m.id})">✓</div>
-        <div class="used-badge ${used ? '' : 'zero'}" title="${used ? `Used in ${used} place${used===1?'':'s'}` : 'Not used anywhere yet'}">${used ? '× '+used : 'unused'}</div>
+        <div class="used-badge ${used ? '' : 'zero'}" title="${used ? `Used in ${used} place${used===1?'':'s'} · 被引用 ${used} 处` : '未被引用 · Not used anywhere yet'}">${used ? '× '+used : 'unused'}</div>
         <div class="ml-thumb"><img loading="lazy" src="/api/retail/media/${m.id}" alt="${escapeAttr(m.alt_text || m.filename || '')}"></div>
         <div class="ml-card-info">
           <div class="name" title="${escapeAttr(m.filename || '')}">${escapeHtml(m.filename || '(untitled)')}</div>
@@ -330,9 +330,9 @@ function openMediaDrawer(id) {
   sel.value = m.folder_id == null ? '' : String(m.folder_id);
   const used = _mlUsage[id] || 0;
   $('#ml-edit-usage').innerHTML = used
-    ? `<span style="color: var(--st-preparing); font-weight: 600;">× ${used}</span> reference${used===1?'':'s'}`
-    : '<span class="muted">Not used yet</span>';
-  $('#ml-edit-info').innerHTML = `<span class="muted">Uploaded</span> ${new Date((m.uploaded_at || '').replace(' ', 'T') + 'Z').toLocaleString()}`;
+    ? `<span style="color: var(--st-preparing); font-weight: 600;">× ${used}</span> · 被引用 ${used} 处`
+    : '<span class="muted">Not used yet · 未使用</span>';
+  $('#ml-edit-info').innerHTML = `<span class="muted">Uploaded · 上传于</span> ${new Date((m.uploaded_at || '').replace(' ', 'T') + 'Z').toLocaleString()}`;
   renderEditTags();
   $('#ml-edit-tag-input').value = '';
   openDrawer('#ml-edit-bg');
@@ -349,7 +349,7 @@ function renderEditTags() {
   for (const t of _mlEditTags) {
     const chip = document.createElement('span');
     chip.className = 'ml-tag';
-    chip.innerHTML = `${escapeHtml(t)} <button type="button" class="x" title="Remove">×</button>`;
+    chip.innerHTML = `${escapeHtml(t)} <button type="button" class="x" title="Remove · 移除">×</button>`;
     chip.querySelector('.x').onclick = () => { _mlEditTags = _mlEditTags.filter(x => x !== t); renderEditTags(); };
     row.insertBefore(chip, input);
   }
@@ -670,8 +670,8 @@ async function bulkDeleteSelected() {
   const ids = [...(_mlSel)];
   const usedCount = ids.reduce((s, id) => s + (_mlUsage[id] || 0), 0);
   const msg = usedCount
-    ? `Delete ${ids.length} item${ids.length===1?'':'s'} — ${usedCount} reference${usedCount===1?'':'s'} will be broken. Continue?`
-    : `Delete ${ids.length} item${ids.length===1?'':'s'}?`;
+    ? `Delete ${ids.length} item${ids.length===1?'':'s'} — ${usedCount} reference${usedCount===1?'':'s'} will be broken. Continue? · 删除 ${ids.length} 项，将破坏 ${usedCount} 处引用，是否继续？`
+    : `Delete ${ids.length} item${ids.length===1?'':'s'}? · 删除 ${ids.length} 项？`;
   if (!confirm(msg)) return;
   try {
     await api('/api/retail-admin/media/bulk-delete', { method: 'POST', body: { ids } });
@@ -721,7 +721,7 @@ function renderBulkTagChips(kind) {
   for (const t of list) {
     const chip = document.createElement('span');
     chip.className = 'ml-tag';
-    chip.innerHTML = `${escapeHtml(t)} <button type="button" class="x" title="Remove">×</button>`;
+    chip.innerHTML = `${escapeHtml(t)} <button type="button" class="x" title="Remove · 移除">×</button>`;
     chip.querySelector('.x').onclick = () => {
       if (kind === 'add') _mlBulkAdd = _mlBulkAdd.filter(x => x !== t);
       else _mlBulkRemove = _mlBulkRemove.filter(x => x !== t);
@@ -995,7 +995,7 @@ async function loadTopupTransactions() {
   tbody.innerHTML = rows.map(t => `
     <tr>
       <td class="muted">${(t.created_at || '').replace('T',' ').slice(0,16)}</td>
-      <td>${escapeHtml(t.nickname || '(no name)')} <span class="muted">${escapeHtml(t.phone || '')}</span></td>
+      <td>${escapeHtml(t.nickname || '(no name) · 无名')} <span class="muted">${escapeHtml(t.phone || '')}</span></td>
       <td class="numeric">${fmt(t.amount)}</td>
       <td class="numeric">${t.bonus_points || 0}</td>
       <td>${paymentBrandHTML(t.payment_method)}</td>
@@ -1032,7 +1032,7 @@ const REVIEW_TAG_COLOURS = [
 
 async function loadReviewTags() {
   const tbody = $('#rtags-table tbody');
-  tbody.innerHTML = '<tr><td colspan="5" class="muted">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="5" class="muted">Loading… · 加载中…</td></tr>';
   try {
     const { data } = await api('/api/retail/config');
     const list = data?.reviews?.tags;
@@ -1045,7 +1045,7 @@ async function loadReviewTags() {
     syncReviewTagLabels();
     renderReviewTagsTable();
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="err">Failed · 失败: ${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -1104,8 +1104,8 @@ async function saveReviewTags() {
   const ids = new Set();
   for (const t of REVIEW_TAGS_STATE) {
     if (!t.id) { toast('Every tag needs an id · 每个标签都需要 id', 'err'); return; }
-    if (ids.has(t.id)) { toast(`Duplicate id "${t.id}"`, 'err'); return; }
-    if (!t.en && !t.cn) { toast(`Tag "${t.id}" needs at least one label`, 'err'); return; }
+    if (ids.has(t.id)) { toast(`Duplicate id · 重复 id "${t.id}"`, 'err'); return; }
+    if (!t.en && !t.cn) { toast(`Tag "${t.id}" needs a label · 标签需至少一个名称`, 'err'); return; }
     ids.add(t.id);
   }
   try {
@@ -1147,7 +1147,7 @@ const FAQ_DEFAULT_CATS = [
 async function loadFaq() {
   const catBody = $('#faq-cats-table tbody');
   const qsList  = $('#faq-qs-list');
-  if (catBody) catBody.innerHTML = '<tr><td colspan="5" class="muted">Loading…</td></tr>';
+  if (catBody) catBody.innerHTML = '<tr><td colspan="5" class="muted">Loading… · 加载中…</td></tr>';
   if (qsList)  qsList.innerHTML  = '<div class="muted" style="padding: 16px 0;">Loading… · 加载中…</div>';
   try {
     const { data } = await api('/api/retail/config');
@@ -1170,8 +1170,8 @@ async function loadFaq() {
     renderFaqCatsTable();
     renderFaqQs();
   } catch (e) {
-    if (catBody) catBody.innerHTML = `<tr><td colspan="5" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
-    if (qsList)  qsList.innerHTML  = `<div class="err">Failed: ${escapeHtml(e.message)}</div>`;
+    if (catBody) catBody.innerHTML = `<tr><td colspan="5" class="err">Failed · 失败: ${escapeHtml(e.message)}</td></tr>`;
+    if (qsList)  qsList.innerHTML  = `<div class="err">Failed · 失败: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -1230,7 +1230,7 @@ function renderFaqQs() {
     list.innerHTML = '<div class="muted" style="padding: 16px 0;">No questions yet — click "+ Add question" to write the first one. · 暂无问题 — 点击"+ 添加问题"录入第一个。</div>';
     return;
   }
-  const catOpts = ['<option value="">— pick category —</option>']
+  const catOpts = ['<option value="">— pick category · 选择分类 —</option>']
     .concat(FAQ_CATS.filter(c => c.id).map(c => `<option value="${escapeAttr(c.id)}">${escapeHtml(c.id)} · ${escapeHtml(c.en || c.cn)}</option>`))
     .join('');
   list.innerHTML = FAQ_QS.map((q, i) => `
@@ -1244,7 +1244,7 @@ function renderFaqQs() {
           </select>
         </div>
         <div class="field" style="flex: 1; margin: 0;">
-          <label class="stacked">id (optional)</label>
+          <label class="stacked">id (optional) · 选填</label>
           <input type="text" value="${escapeAttr(q.id)}" oninput="updateFaqQ(${i}, 'id', this.value)" placeholder="auto" style="width: 100%; font-family: var(--f-mono);">
         </div>
         <div class="row" style="gap: 4px; align-self: flex-end; padding-bottom: 2px;">
@@ -1332,14 +1332,14 @@ async function saveLegal() {
 
 async function saveFaq() {
   const status = $('#faq-status');
-  status.textContent = 'Saving…';
+  status.textContent = 'Saving… · 保存中…';
 
   // Validate categories: unique non-empty ids + at least one label.
   const catIds = new Set();
   for (const c of FAQ_CATS) {
-    if (!c.id) { status.innerHTML = '<span class="err">Every category needs an id</span>'; return; }
-    if (catIds.has(c.id)) { status.innerHTML = `<span class="err">Duplicate category id "${escapeHtml(c.id)}"</span>`; return; }
-    if (!c.en && !c.cn) { status.innerHTML = `<span class="err">Category "${escapeHtml(c.id)}" needs a label</span>`; return; }
+    if (!c.id) { status.innerHTML = '<span class="err">Every category needs an id · 每个分类都需要 id</span>'; return; }
+    if (catIds.has(c.id)) { status.innerHTML = `<span class="err">Duplicate category id · 分类 id 重复 "${escapeHtml(c.id)}"</span>`; return; }
+    if (!c.en && !c.cn) { status.innerHTML = `<span class="err">Category "${escapeHtml(c.id)}" needs a label · 分类需要名称</span>`; return; }
     catIds.add(c.id);
   }
 
@@ -1360,9 +1360,9 @@ async function saveFaq() {
 
   // Sanity-check that each question has a category and at least one Q/A pair.
   for (const q of payloadQs) {
-    if (!q.cat) { status.innerHTML = `<span class="err">Question "${escapeHtml(q.q_en || q.q_cn || q.id)}" needs a category</span>`; return; }
-    if (!q.q_en && !q.q_cn) { status.innerHTML = `<span class="err">Question "${escapeHtml(q.id)}" needs a Q in at least one language</span>`; return; }
-    if (!q.a_en && !q.a_cn) { status.innerHTML = `<span class="err">Question "${escapeHtml(q.id)}" needs an A in at least one language</span>`; return; }
+    if (!q.cat) { status.innerHTML = `<span class="err">Question "${escapeHtml(q.q_en || q.q_cn || q.id)}" needs a category · 该问题需要选择分类</span>`; return; }
+    if (!q.q_en && !q.q_cn) { status.innerHTML = `<span class="err">Question "${escapeHtml(q.id)}" needs a Q in at least one language · 问题至少需一种语言</span>`; return; }
+    if (!q.a_en && !q.a_cn) { status.innerHTML = `<span class="err">Question "${escapeHtml(q.id)}" needs an A in at least one language · 回答至少需一种语言</span>`; return; }
   }
 
   try {
@@ -1375,7 +1375,7 @@ async function saveFaq() {
     });
     FAQ_QS = payloadQs;  // keep buffer in sync with auto-assigned ids
     renderFaqQs();
-    status.innerHTML = '<span class="ok">Saved ✓</span>';
+    status.innerHTML = '<span class="ok">Saved ✓ · 已保存</span>';
     toast('FAQ saved · 常见问题已保存');
   } catch (e) {
     status.innerHTML = '<span class="err">Failed · 失败: ' + escapeHtml(e.message) + '</span>';
@@ -1386,7 +1386,7 @@ let REVIEWS_LOADED = false;
 
 async function loadReviews() {
   const tbody = $('#reviews-table tbody');
-  tbody.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" class="muted">Loading… · 加载中…</td></tr>';
   const qs = new URLSearchParams();
   const vis    = $('#rv-visible').value;
   const rating = $('#rv-rating').value;
@@ -1399,7 +1399,7 @@ async function loadReviews() {
     const { data, meta } = await api('/api/retail-admin/reviews?' + qs.toString());
     const s = meta?.summary;
     $('#rv-summary').textContent = s
-      ? `${s.total} total · ${s.visible || 0} visible · ${s.hidden || 0} hidden`
+      ? cuT(`${s.total} total · ${s.visible || 0} visible · ${s.hidden || 0} hidden`, `共 ${s.total} · 显示 ${s.visible || 0} · 隐藏 ${s.hidden || 0}`)
       : '';
     if (!data.length) {
       tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="icon">' + ICONS.empty + '</div><h3>No reviews match · 无匹配评价</h3><p class="muted">Adjust the filters above, or wait for delivered orders. · 请调整上方筛选,或等待订单送达。</p></div></td></tr>';
@@ -1407,7 +1407,7 @@ async function loadReviews() {
     }
     tbody.innerHTML = data.map(renderReviewRow).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="err">Failed · 失败: ${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -1429,7 +1429,7 @@ function renderReviewRow(r) {
 
   const commentHtml = r.comment
     ? `<div style="font-size: 12px; line-height: 1.4; max-width: 480px; white-space: pre-wrap; word-break: break-word;">${escapeHtml(r.comment)}</div>`
-    : '<div class="muted" style="font-size: 11px;">(no comment)</div>';
+    : '<div class="muted" style="font-size: 11px;">(no comment) · 无评论</div>';
 
   return `
     <tr data-id="${r.id}" ${r.is_visible ? '' : 'style="opacity:.55"'}>
@@ -1449,10 +1449,10 @@ function renderReviewRow(r) {
         ${photosHtml ? `<div style="margin-top: 8px;">${photosHtml}</div>` : ''}
       </td>
       <td class="muted" style="font-size: 11px; white-space: nowrap;">${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
-      <td><span class="pill ${r.is_visible ? 'pub' : 'draft'}"><span class="dot"></span>${r.is_visible ? 'Visible' : 'Hidden'}</span></td>
+      <td><span class="pill ${r.is_visible ? 'pub' : 'draft'}"><span class="dot"></span>${r.is_visible ? 'Visible · 显示' : 'Hidden · 隐藏'}</span></td>
       <td style="white-space: nowrap;">
         <button class="btn btn-sm" onclick="toggleReview(${r.id}, ${r.is_visible ? 0 : 1})">
-          ${r.is_visible ? 'Hide' : 'Restore'}
+          ${r.is_visible ? 'Hide · 隐藏' : 'Restore · 恢复'}
         </button>
       </td>
     </tr>`;
@@ -1464,7 +1464,7 @@ async function toggleReview(id, visible) {
       method: 'PATCH',
       body: { is_visible: !!visible },
     });
-    toast(visible ? 'Restored' : 'Hidden');
+    toast(visible ? 'Restored · 已恢复' : 'Hidden · 已隐藏');
     await loadReviews();
   } catch (e) {
     toast('Failed · 失败: ' + e.message, 'err');
@@ -1506,7 +1506,7 @@ async function loadFeedback() {
     }
     tbody.innerHTML = data.map(renderFeedbackRow).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="4" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="err">Failed · 失败: ${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -1613,7 +1613,7 @@ function fsRenderPickerTrigger() {
   } else {
     thumb.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
     label.classList.add('empty');
-    label.textContent = '— pick a product —';
+    label.textContent = '— pick a product · 选择产品 —';
     hidden.value = '';
   }
 }
@@ -1626,7 +1626,7 @@ async function fsPickerRenderList(filter) {
     : list;
   const mount = $('#fs-picker-list');
   if (!filtered.length) {
-    mount.innerHTML = `<div class="fs-picker-empty">${q ? 'No products match — try a different search.' : 'No products in the system yet.'}</div>`;
+    mount.innerHTML = `<div class="fs-picker-empty">${q ? 'No products match · 无匹配产品 — try a different search.' : 'No products in the system yet · 系统中暂无产品。'}</div>`;
     _fsPickerFocusIdx = -1;
     return;
   }
@@ -1711,18 +1711,18 @@ function fsUpdatePriceHint() {
   const flash = Number($('#fs-price').value) || 0;
   const hint = $('#fs-price-hint');
   if (!_fsSelected) { hint.textContent = ''; return; }
-  if (!regular) { hint.textContent = `${escapeHtml(_fsSelected.name_en || '')} has no regular price set — set one in the kitchen admin first.`; return; }
+  if (!regular) { hint.textContent = `${escapeHtml(_fsSelected.name_en || '')} has no regular price set — set one in the kitchen admin first. · 该产品未设置原价，请先在后厨后台设置。`; return; }
   if (!flash) {
-    hint.innerHTML = `Regular price: <b>¥${fmt(regular)}</b>. Enter a lower price above to activate the discount.`;
+    hint.innerHTML = `Regular price: <b>¥${fmt(regular)}</b>. Enter a lower price above to activate the discount. · 原价 ¥${fmt(regular)}，在上方输入更低的价格以启用折扣。`;
     return;
   }
   if (flash >= regular) {
-    hint.innerHTML = `<span class="err">Flash price (¥${fmt(flash)}) must be lower than regular ¥${fmt(regular)} or the discount won't apply.</span>`;
+    hint.innerHTML = `<span class="err">Flash price (¥${fmt(flash)}) must be lower than regular ¥${fmt(regular)} or the discount won't apply. · 秒杀价必须低于原价，否则折扣不生效。</span>`;
     return;
   }
   const off = regular - flash;
   const pct = Math.round((off / regular) * 100);
-  hint.innerHTML = `Saves <b>¥${fmt(off)}</b> (${pct}% off) vs regular ¥${fmt(regular)}.`;
+  hint.innerHTML = `Saves <b>¥${fmt(off)}</b> (${pct}% off) vs regular ¥${fmt(regular)}. · 比原价省 ¥${fmt(off)}（${pct}% off）。`;
 }
 
 // ─── Datetime quick-pick chips ─────────────────────────────────────────
@@ -1822,12 +1822,12 @@ async function fsSave() {
     await fsLoadList();
   } catch (e) {
     const map = {
-      flash_price_invalid: 'Flash price must be greater than 0',
-      flash_ends_at_required: 'End time required',
-      flash_ends_at_invalid: 'End time invalid',
-      flash_starts_at_invalid: 'Start time invalid',
-      flash_starts_after_ends: 'Start time must be before end time',
-      flash_stock_limit_invalid: 'Stock cap must be a positive number',
+      flash_price_invalid: 'Flash price must be greater than 0 · 秒杀价必须大于 0',
+      flash_ends_at_required: 'End time required · 请填写结束时间',
+      flash_ends_at_invalid: 'End time invalid · 结束时间无效',
+      flash_starts_at_invalid: 'Start time invalid · 开始时间无效',
+      flash_starts_after_ends: 'Start time must be before end time · 开始时间必须早于结束时间',
+      flash_stock_limit_invalid: 'Stock cap must be a positive number · 库存上限必须为正数',
     };
     toast('Failed · 失败: ' + (map[e.message] || e.message), 'err');
   }
@@ -1880,14 +1880,14 @@ async function fsLoadList() {
     fsUpdateNavState(data);
     if (!data.length) {
       if (table) table.classList.add('is-empty');
-      tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="icon">${ICONS.empty}</div><h3>No flash sales yet</h3><p class="muted">Set one up above to start a flash-sale event. · 请在上方设置以开启秒杀活动。</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="icon">${ICONS.empty}</div><h3>No flash sales yet · 暂无秒杀</h3><p class="muted">Set one up above to start a flash-sale event. · 请在上方设置以开启秒杀活动。</p></div></td></tr>`;
       return;
     }
     if (table) table.classList.remove('is-empty');
     tbody.innerHTML = data.map(p => {
       const name = [p.name_en, p.name_cn].filter(Boolean).join(' · ') || ('#' + p.id);
       const sku = p.sku ? ` <span class="muted" style="font-size: 11px;">[${escapeHtml(p.sku)}]</span>` : '';
-      const draft = !p.is_published ? ' <span class="pill draft" style="font-size:9px;">DRAFT</span>' : '';
+      const draft = !p.is_published ? ' <span class="pill draft" style="font-size:9px;">DRAFT · 草稿</span>' : '';
       const sold = p.flash_sold || 0;
       const cap = p.flash_stock_limit;
       return `<tr data-id="${p.id}">

@@ -350,7 +350,7 @@ function catRender() {
         <input type="text" class="input cat-name" data-f="name" value="${escapeAttr(s.name)}" placeholder="Subcategory (EN)" oninput="catSet(${ti},${si},'name',this.value)">
         <input type="text" class="input cat-name" data-f="name_cn" value="${escapeAttr(s.name_cn)}" placeholder="子分类 (中文)" oninput="catSet(${ti},${si},'name_cn',this.value)">
         <button class="btn btn-sm cat-edit" type="button" title="Edit this subcategory & its products · 编辑子分类及其产品" onclick="catOpenDetail('sub',${ti},${si})">Edit · 编辑</button>
-        <button class="btn-icon cat-del" type="button" title="Remove subcategory" onclick="catRemoveSub(${ti},${si})">✕</button>
+        <button class="btn-icon cat-del" type="button" title="Remove subcategory · 删除子分类" onclick="catRemoveSub(${ti},${si})">✕</button>
       </div>`).join('');
     return `
     <div class="card cat-top" id="cat-top-${ti}" data-fk="t${catFk(t)}"

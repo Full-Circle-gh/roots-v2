@@ -141,7 +141,7 @@ async function _opsStoreSave(id) {
     // Address saves re-geocode in the background; refresh again shortly so the
     // 📍 GPS badge updates without a manual reload.
     setTimeout(loadOpsStores, 2500);
-  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+  } catch (e) { toast('Failed · 操作失败: ' + e.message, 'error'); }
 }
 
 // ── Shipping integrations: kd100 + JD LOP + Feie credentials & status chips ──
@@ -157,13 +157,13 @@ async function loadShippingIntegrations() {
     const kCb   = document.getElementById('kd100-callback');
     const kSec  = document.getElementById('kd100-secret');
     if (kCust) kCust.value = k.customer || '';
-    if (kKey)  kKey.placeholder      = k.key_masked    ? `${k.key_masked} · leave blank to keep` : 'paste 授权 key';
+    if (kKey)  kKey.placeholder      = k.key_masked    ? `${k.key_masked} · leave blank to keep · 留空则保持不变` : 'paste 授权 key · 粘贴授权 key';
     if (kCb && k.callback) kCb.value = k.callback;
-    if (kSec) kSec.placeholder       = k.secret_masked ? `${k.secret_masked} · leave blank to keep` : 'random string — do not rotate';
+    if (kSec) kSec.placeholder       = k.secret_masked ? `${k.secret_masked} · leave blank to keep · 留空则保持不变` : 'random string — do not rotate · 随机字符串,请勿更换';
     const kChip = document.getElementById('kd100-chip');
     if (kChip) kChip.innerHTML = k.enabled
-      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
-      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED</span>';
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED · 未配置</span>';
     const kDot = document.getElementById('kd100-dot');
     if (kDot) kDot.style.background = k.enabled ? '#10b981' : 'var(--text-3)';
 
@@ -173,14 +173,14 @@ async function loadShippingIntegrations() {
     const jCc = document.getElementById('jd-customer_code');
     const jEv = document.getElementById('jd-env');
     if (jAk) jAk.value = d.app_key || '';
-    if (jAs) jAs.placeholder = d.app_secret_masked   ? `${d.app_secret_masked} · leave blank to keep`   : 'paste app_secret';
-    if (jAt) jAt.placeholder = d.access_token_masked ? `${d.access_token_masked} · leave blank to keep` : 'paste access_token';
+    if (jAs) jAs.placeholder = d.app_secret_masked   ? `${d.app_secret_masked} · leave blank to keep · 留空保持不变`   : 'paste app_secret · 粘贴 app_secret';
+    if (jAt) jAt.placeholder = d.access_token_masked ? `${d.access_token_masked} · leave blank to keep · 留空保持不变` : 'paste access_token · 粘贴 access_token';
     if (jCc) jCc.value = d.customer_code || '';
     if (jEv) jEv.value = d.env || 'production';
     const jChip = document.getElementById('jd-chip');
     if (jChip) jChip.innerHTML = d.enabled
-      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
-      : '<span style="background:#fef3c7;color:#92400e;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">⏳ PENDING JD ACCOUNT</span>';
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
+      : '<span style="background:#fef3c7;color:#92400e;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">⏳ PENDING JD ACCOUNT · 待开通京东账号</span>';
     const jDot = document.getElementById('jd-dot');
     if (jDot) jDot.style.background = d.enabled ? '#10b981' : '#f59e0b';
 
@@ -188,11 +188,11 @@ async function loadShippingIntegrations() {
     const fUser = document.getElementById('feie-user');
     const fUkey = document.getElementById('feie-ukey');
     if (fUser) fUser.value = f.user || '';
-    if (fUkey) fUkey.placeholder = f.ukey_masked ? `${f.ukey_masked} · leave blank to keep` : 'paste USERKEY from dev console';
+    if (fUkey) fUkey.placeholder = f.ukey_masked ? `${f.ukey_masked} · leave blank to keep · 留空保持不变` : 'paste USERKEY from dev console · 从开发者后台粘贴 USERKEY';
     const fChip = document.getElementById('feie-chip');
     if (fChip) fChip.innerHTML = f.enabled
-      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE</span>'
-      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED</span>';
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED · 未配置</span>';
   } catch (e) { console.warn('[integrations] load failed', e); }
 }
 
@@ -276,7 +276,7 @@ async function loadPrinterPrefs() {
                 <div id="feie-prev-${s.id}" class="feie-prev"><div style="color:var(--text-3);font-size:12px">Loading preview…</div></div>
               </div>
               <div style="flex:1 1 160px;min-width:140px">
-                <button class="btn" style="font-size:12px;padding:5px 12px" onclick="_testPrinter(${s.id})">🖨 Save &amp; test this store</button>
+                <button class="btn" style="font-size:12px;padding:5px 12px" onclick="_testPrinter(${s.id})">🖨 Save &amp; test this store · 保存并测试本店</button>
                 <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.5">The preview shows your latest order in this template (or sample data if none yet). Change the template above to compare. · 预览即真实打印效果</div>
               </div>
             </div>
@@ -327,12 +327,12 @@ async function _previewStore(storeId) {
   try {
     const r = await fetch('/api/retail-admin/printer/preview?store_id=' + storeId + '&template=' + encodeURIComponent(tpl));
     const j = await r.json();
-    if (!j.ok) { box.innerHTML = '<div style="color:var(--text-3);font-size:12px">No preview available</div>'; return; }
+    if (!j.ok) { box.innerHTML = '<div style="color:var(--text-3);font-size:12px">No preview available · 暂无预览</div>'; return; }
     box.innerHTML =
       `<div class="thermal">${_renderThermal(j.content)}</div>` +
       `<div style="font-size:11px;color:var(--text-3);margin-top:6px;text-align:center;max-width:230px">${
         j.sample ? 'Sample data · 示例数据' : 'Your latest order · 最近订单'}</div>`;
-  } catch { box.innerHTML = '<div style="color:var(--text-3);font-size:12px">Preview failed</div>'; }
+  } catch { box.innerHTML = '<div style="color:var(--text-3);font-size:12px">Preview failed · 预览失败</div>'; }
 }
 
 function _collectPrinterByStore() {
@@ -363,7 +363,7 @@ async function _savePrinter() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     toast('✅ Printer settings saved · 已保存', 'success');
     loadPrinterPrefs();
-  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+  } catch (e) { toast('Failed · 操作失败: ' + e.message, 'error'); }
 }
 
 async function _testPrinter(storeId) {
@@ -374,8 +374,8 @@ async function _testPrinter(storeId) {
     });
     const j = await r.json();
     if (j.ok) toast('🖨 Test sent — check that store\'s printer · 已发送', 'success');
-    else      toast('Print failed: ' + (j.error || 'unknown'), 'error');
-  } catch (e) { toast('Test failed: ' + e.message, 'error'); }
+    else      toast('Print failed · 打印失败: ' + (j.error || 'unknown'), 'error');
+  } catch (e) { toast('Test failed · 测试失败: ' + e.message, 'error'); }
 }
 
 async function _saveIntegration(svc) {
@@ -416,7 +416,7 @@ async function _saveIntegration(svc) {
     if (svc === 'jd')    { document.getElementById('jd-app_secret').value = ''; document.getElementById('jd-access_token').value = ''; }
     if (svc === 'feie')  { document.getElementById('feie-ukey').value = ''; }
     loadShippingIntegrations();
-  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+  } catch (e) { toast('Failed · 操作失败: ' + e.message, 'error'); }
 }
 
 async function _testKd100() {
@@ -424,9 +424,9 @@ async function _testKd100() {
   try {
     const r = await fetch('/api/retail-admin/integrations/kd100/test', { method: 'POST' });
     const j = await r.json();
-    if (j.ok) toast('✅ 快递100 reachable · auth OK', 'success');
-    else      toast('快递100 test failed: ' + (j.error || 'unknown'), 'error');
-  } catch (e) { toast('Test failed: ' + e.message, 'error'); }
+    if (j.ok) toast('✅ 快递100 reachable · auth OK · 连接正常', 'success');
+    else      toast('快递100 测试失败: ' + (j.error || 'unknown'), 'error');
+  } catch (e) { toast('Test failed · 测试失败: ' + e.message, 'error'); }
 }
 
 async function _testJd() {
@@ -435,16 +435,16 @@ async function _testJd() {
     const r = await fetch('/api/retail-admin/integrations/jd/test', { method: 'POST' });
     const j = await r.json();
     if (j.ok) {
-      toast('✅ JD reachable · auth OK', 'success');
+      toast('✅ JD reachable · auth OK · 连接正常', 'success');
       if (j.note && /customercode|商家编码/i.test(j.note)) toast('Next: enter CUSTOMER_CODE (商家编码) to enable waybill push · 还需填写商家编码', 'info');
-    } else toast('JD ping failed: ' + (j.error || 'unknown'), 'error');
-  } catch (e) { toast('Test failed: ' + e.message, 'error'); }
+    } else toast('JD ping failed · 连接失败: ' + (j.error || 'unknown'), 'error');
+  } catch (e) { toast('Test failed · 测试失败: ' + e.message, 'error'); }
 }
 
 async function _geocodeBackfill() {
   if (!confirm('Geocode all stores + customer addresses now? Uses your maps quota. · 现在为所有门店与客户地址重新定位?将消耗地图配额。')) return;
   try {
-    toast('Geocoding…', 'info');
+    toast('Geocoding… · 定位中…', 'info');
     const r = await fetch('/api/retail-admin/inventory/geocode-backfill', { method: 'POST' });
     const j = await r.json();
     if (!r.ok || j.success === false) {
@@ -458,12 +458,12 @@ async function _geocodeBackfill() {
     if (d.aborted_on_quota || (d.last_error && d.last_error.quota)) {
       toast('🚫 Daily map quota exhausted — geocoding stopped. Fix the key (see panel), quota resets next day. · 地图配额已用尽,已停止。请修复 key,次日重置。', 'error');
     } else if (d.addresses_total > 0 && d.addresses_geocoded === 0 && d.last_error) {
-      toast('⚠ Could not geocode addresses: ' + (d.last_error.message || d.last_error.code), 'error');
+      toast('⚠ Could not geocode addresses · 地址定位失败: ' + (d.last_error.message || d.last_error.code), 'error');
     } else {
-      toast(`✅ Geocoded ${d.stores_geocoded}/${d.stores_total} stores · ${d.addresses_geocoded}/${d.addresses_total} addresses`, 'success');
+      toast(`✅ Geocoded ${d.stores_geocoded}/${d.stores_total} stores · ${d.addresses_geocoded}/${d.addresses_total} addresses · 已定位 门店与地址`, 'success');
     }
     loadIntegrationsStatus();
-  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+  } catch (e) { toast('Failed · 操作失败: ' + e.message, 'error'); }
 }
 
 // ── GZ-express excluded districts ──
@@ -492,7 +492,7 @@ async function _loadGzExcludedDistricts() {
     _gzExclSet = new Set(j.data || []);
     _paintGzExclChips();
   } catch (e) {
-    toast('Failed to load: ' + e.message, 'error');
+    toast('Failed to load · 加载失败: ' + e.message, 'error');
   }
 }
 function _paintGzExclChips() {
@@ -532,7 +532,7 @@ async function _toggleGzExclDistrict(code) {
   } catch (e) {
     if (districts.includes(code)) _gzExclSet.delete(code); else _gzExclSet.add(code);
     _paintGzExclChips();
-    toast('Failed: ' + e.message, 'error');
+    toast('Failed · 操作失败: ' + e.message, 'error');
   }
 }
 
@@ -551,8 +551,8 @@ async function loadIntegrationsStatus() {
     const a = d.addresses || { total: 0, missing: 0, geocoded: 0 };
     const provLabel = d.provider === 'amap' ? '高德 / Amap' : d.provider === 'tencent' ? '腾讯 / Tencent' : 'Maps';
     const keyChip = cfg
-      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ KEY CONFIGURED</span>'
-      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ KEY MISSING</span>';
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ KEY CONFIGURED · 已配置密钥</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ KEY MISSING · 缺少密钥</span>';
     const pct = (got, tot) => tot === 0 ? '—' : `${got}/${tot}`;
     // Surface the real provider error (esp. quota) so 0/41 isn't a mystery.
     const le = d.last_error;
@@ -560,7 +560,7 @@ async function loadIntegrationsStatus() {
     if (le && le.quota) {
       errBox = `<div style="margin-top:10px;padding:8px 12px;background:#fee2e2;color:#991b1b;border-radius:6px;font-size:12px">🚫 <strong>Daily quota exhausted</strong> on ${escapeHtml(provLabel)} (${escapeHtml(String(le.code))}: ${escapeHtml(le.message || '')}). Coordinates can't be fetched until quota resets or you switch to a real-name-verified / higher-quota key. · 当日配额已用尽,需等待重置或更换已实名/更高配额的 key。</div>`;
     } else if (le) {
-      errBox = `<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px">⚠ Last geocode error (${escapeHtml(provLabel)}): ${escapeHtml(String(le.code))} ${escapeHtml(le.message || '')}</div>`;
+      errBox = `<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px">⚠ Last geocode error · 最近定位错误 (${escapeHtml(provLabel)}): ${escapeHtml(String(le.code))} ${escapeHtml(le.message || '')}</div>`;
     }
     box.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
@@ -568,12 +568,12 @@ async function loadIntegrationsStatus() {
         ${keyChip}
       </div>
       <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:12px">
-        <span style="color:var(--text-3)">Stores geocoded</span>
-        <span><strong>${pct(s.geocoded, s.total)}</strong>${s.missing ? ` · <span style="color:#b85c00">${s.missing} missing GPS</span>` : ''}</span>
-        <span style="color:var(--text-3)">Addresses geocoded</span>
-        <span><strong>${pct(a.geocoded, a.total)}</strong>${a.missing ? ` · <span style="color:#b85c00">${a.missing} missing GPS</span>` : ''}</span>
+        <span style="color:var(--text-3)">Stores geocoded · 门店已定位</span>
+        <span><strong>${pct(s.geocoded, s.total)}</strong>${s.missing ? ` · <span style="color:#b85c00">${s.missing} 个未定位 (missing GPS)</span>` : ''}</span>
+        <span style="color:var(--text-3)">Addresses geocoded · 地址已定位</span>
+        <span><strong>${pct(a.geocoded, a.total)}</strong>${a.missing ? ` · <span style="color:#b85c00">${a.missing} 个未定位 (missing GPS)</span>` : ''}</span>
       </div>
-      ${!cfg ? '<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px">⚠ Add <code>AMAP_MAPS_KEY=...</code> (or <code>TENCENT_MAPS_KEY=...</code>) to <code>/root/roots-v2/.env</code> and restart pm2 to enable geocoding.</div>' : ''}
+      ${!cfg ? '<div style="margin-top:10px;padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px">⚠ Add <code>AMAP_MAPS_KEY=...</code> (or <code>TENCENT_MAPS_KEY=...</code>) to <code>/root/roots-v2/.env</code> and restart pm2 to enable geocoding. · 在 .env 中添加密钥并重启 pm2 以启用定位。</div>' : ''}
       ${errBox}
     `;
   } catch (e) {

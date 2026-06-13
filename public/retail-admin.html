@@ -826,7 +826,7 @@
       <select id="orders-store" onchange="loadOrders()">
         <option value="">All stores · 全部门店</option>
       </select>
-      <input type="text" id="orders-q" oninput="debouncedLoadOrders()" placeholder="Search order #, name, phone…" style="flex: 1; min-width: 220px">
+      <input type="text" id="orders-q" oninput="debouncedLoadOrders()" data-ph-en="Search order #, name, phone…" data-ph-cn="搜索订单号、姓名、电话…" placeholder="Search order #, name, phone…" style="flex: 1; min-width: 220px">
       <button class="btn" onclick="loadOrders(); ordLoadKpis(true)" title="Refresh now · 立即刷新">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
         Refresh
@@ -896,12 +896,12 @@
             <select id="bulk-trk-carrier" style="width: 100%;"></select>
           </div>
           <div class="field" style="margin: 0 0 6px;">
-            <label class="stacked">Entries — <code>order#  waybill#</code> on each line (comma, tab, or space-separated)</label>
+            <label class="stacked">Entries — <code>order#  waybill#</code> on each line (comma, tab, or space-separated) · 条目 — 每行一个 订单号  运单号(逗号、制表或空格分隔)</label>
             <textarea id="bulk-trk-text" rows="10" style="width:100%; font-family: var(--f-mono); font-size: 12px; line-height: 1.5; resize: vertical;" placeholder="R260517000123, JD0012345678&#10;R260517000124  SF1234567890&#10;R260517000125;EMS9999"></textarea>
           </div>
           <div class="muted" style="font-size: 11px; margin-bottom: 14px;">
             <span id="bulk-trk-counter">0 entries</span> ·
-            Per-line override: append a third value to set a different carrier (e.g. <code>R26… JD123 sf</code>).
+            Per-line override: append a third value to set a different carrier (e.g. <code>R26… JD123 sf</code>). · 单行覆盖:追加第三个值可指定不同快递。
           </div>
           <div style="display:flex; gap:8px; justify-content: flex-end;">
             <button class="btn" onclick="closeBulkTracking()">Cancel · 取消</button>
@@ -1376,7 +1376,7 @@
         <button type="button" class="cu-tchip"    data-v="tree"   onclick="cuMobTier(this,'tree')">Tree</button>
       </div>
       <div class="row" id="cu-toolbar" style="margin-bottom: var(--s4)">
-        <input type="text" id="cu-q" placeholder="Search name, phone, openid, or order #…" oninput="cuSearchDebounced()" style="flex: 1; min-width: 240px">
+        <input type="text" id="cu-q" data-ph-en="Search name, phone, openid, or order #…" data-ph-cn="搜索姓名、电话、openid 或订单号…" placeholder="Search name, phone, openid, or order #…" oninput="cuSearchDebounced()" style="flex: 1; min-width: 240px">
         <select id="cu-tier" onchange="cuLoad()">
           <option value="">All tiers · 全部等级</option>
           <option value="seed">Seed · 种子</option>
@@ -1569,7 +1569,7 @@
           </div>
           <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; margin-top: var(--s2);">
             <input type="checkbox" id="cu-addr-default" style="width: 16px; height: 16px;">
-            Set as default address
+            Set as default address · 设为默认地址
           </label>
         </div>
         <div class="pu-editor-foot">
@@ -1922,7 +1922,7 @@
             <div class="pa-edit-palette-head">
               <span class="pa-edit-palette-title">🎨 Sections · 板块</span>
               <select id="pa-blocks-picker" onchange="paBlocksAdd(this.value);this.value=''" style="font-size:11px;padding:5px 8px;font-weight:500;width:100%">
-                <option value="">+ Add section…</option>
+                <option value="">+ Add section… · 添加板块…</option>
               </select>
             </div>
             <div id="pa-blocks-list" class="pa-edit-palette-scroll"></div>
@@ -2132,6 +2132,7 @@
     <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4);">
       Coupons are either <b>code-redeemed</b> (customers type the code at checkout) or <b>public</b>
       (browseable from the mini-app — no code needed). Three types: fixed ¥ off, percent off, or free shipping.
+      · 优惠券分为<b>凭码核销</b>(顾客在结算时输入优惠码)或<b>公开</b>(可在小程序中浏览,无需输入码)两种。共三种类型:固定 ¥ 减免、百分比折扣、或免运费。
     </div>
     <div class="card" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
       <div style="min-width: 220px;">
@@ -2150,8 +2151,8 @@
         <div class="field" style="margin: 0;">
           <label class="stacked">Type · 类型</label>
           <select id="v-type" style="width: 160px;">
-            <option value="fixed_amount">¥ off</option>
-            <option value="percent">% off</option>
+            <option value="fixed_amount">¥ off · 减 ¥</option>
+            <option value="percent">% off · 百分比折扣</option>
             <option value="free_shipping">Free shipping · 免运费</option>
           </select>
         </div>
@@ -2200,7 +2201,7 @@
 
       <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px;">
         <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-          <label class="stacked">Public label · EN <span class="muted" style="font-weight: normal;">(shown to customers when Public)</span></label>
+          <label class="stacked">Public label · EN <span class="muted" style="font-weight: normal;">(shown to customers when Public)(公开时顾客可见)</span></label>
           <input type="text" id="v-title-en" placeholder="¥20 off your first order" style="width: 100%;">
         </div>
         <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
@@ -2209,7 +2210,7 @@
         </div>
         <button class="btn btn-primary" onclick="createVoucher()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Create
+          Create · 创建
         </button>
       </div>
     </div>
@@ -2253,14 +2254,14 @@
           </div>
           <div style="margin-top: 14px; padding: 12px; background: var(--bg-elev-1); border-radius: var(--r-md); display: flex; align-items: center; justify-content: space-between; gap: 12px;">
             <div style="min-width: 0;">
-              <div style="font-weight: 600; font-size: 13px;">Grant to every customer</div>
+              <div style="font-weight: 600; font-size: 13px;">Grant to every customer · 发放给所有顾客</div>
               <div class="muted" style="font-size: 11px; margin-top: 2px;">Bulk-grants to all non-blocked customers. Idempotent — customers who already have it are skipped. · 批量发放给所有未封禁顾客;幂等操作,已拥有的会自动跳过。</div>
             </div>
             <button class="btn btn-primary" onclick="grantToAll()">Grant to all · 全部发放</button>
           </div>
           <div class="field" style="margin-top: 18px;">
             <label class="stacked">Or grant to a specific customer · 或发放给指定顾客</label>
-            <input type="text" id="grant-search" placeholder="Search by name, phone, or openid…" oninput="searchGrantCustomers()" style="width: 100%;">
+            <input type="text" id="grant-search" data-ph-en="Search by name, phone, or openid…" data-ph-cn="搜索姓名、电话或 openid…" placeholder="Search by name, phone, or openid…" oninput="searchGrantCustomers()" style="width: 100%;">
           </div>
           <div>
             <div class="muted" style="font-size: 11px; margin-bottom: 6px;">Matching customers — click to grant. · 匹配的顾客 — 点击发放。</div>
@@ -2330,7 +2331,7 @@
         <div class="pu-editor-head">
           <div>
             <div class="vw-kick">NEW COUPON · 新建优惠券</div>
-            <h3 id="vw-title" style="margin: 0; font-size: 15px;">Make a coupon</h3>
+            <h3 id="vw-title" style="margin: 0; font-size: 15px;">Make a coupon · 新建优惠券</h3>
           </div>
           <button class="btn" onclick="vwClose()">Close · 关闭</button>
         </div>
@@ -2344,7 +2345,7 @@
   <section id="tab-flash">
     <h2>Flash sales · 限时秒杀</h2>
     <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4);">
-      Put a product on flash sale by setting a discounted price and an end time. Customers see the flash price (with the regular price struck through) in the mini app until the clock runs out or the stock cap is hit — whichever comes first. The <b>Flash sale</b> CMS block surfaces active sales on the homepage with a live countdown.
+      Put a product on flash sale by setting a discounted price and an end time. Customers see the flash price (with the regular price struck through) in the mini app until the clock runs out or the stock cap is hit — whichever comes first. The <b>Flash sale</b> CMS block surfaces active sales on the homepage with a live countdown. · 为产品设置秒杀价和结束时间即可上架限时秒杀。顾客在小程序中会看到秒杀价（原价划线显示），直到倒计时结束或库存售罄为止——以先到者为准。<b>Flash sale</b> CMS 板块会在首页展示进行中的秒杀并带实时倒计时。
     </div>
 
     <div class="card">
@@ -2360,7 +2361,7 @@
               <div class="fs-picker-thumb" id="fs-picker-thumb">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
               </div>
-              <div class="fs-picker-label empty" id="fs-picker-label">— pick a product —</div>
+              <div class="fs-picker-label empty" id="fs-picker-label">— pick a product — · 选择产品</div>
               <svg class="fs-picker-chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </div>
             <div class="fs-picker-pop" id="fs-picker-pop" hidden>
@@ -2384,19 +2385,19 @@
 
       <div class="fs-time-grid">
         <div class="field" style="margin: 0;">
-          <label class="stacked">Starts at <span class="muted" style="font-weight: normal;">· optional, defaults to now</span></label>
+          <label class="stacked">Starts at <span class="muted" style="font-weight: normal;">· 可选,默认即时</span></label>
           <div class="fs-dt-wrap">
             <input type="datetime-local" id="fs-starts" class="fs-dt-input">
             <div class="fs-quick-row">
-              <span class="fs-quick-chip" data-fs-quick="starts:now">Now</span>
+              <span class="fs-quick-chip" data-fs-quick="starts:now">Now · 现在</span>
               <span class="fs-quick-chip" data-fs-quick="starts:+1h">+1h</span>
-              <span class="fs-quick-chip" data-fs-quick="starts:tomorrow-9">Tomorrow 09:00</span>
-              <span class="fs-quick-chip" data-fs-quick="starts:clear">Clear</span>
+              <span class="fs-quick-chip" data-fs-quick="starts:tomorrow-9">Tomorrow 09:00 · 明天 09:00</span>
+              <span class="fs-quick-chip" data-fs-quick="starts:clear">Clear · 清除</span>
             </div>
           </div>
         </div>
         <div class="field" style="margin: 0;">
-          <label class="stacked">Ends at <span class="muted" style="font-weight: normal;">· required</span></label>
+          <label class="stacked">Ends at <span class="muted" style="font-weight: normal;">· 必填</span></label>
           <div class="fs-dt-wrap">
             <input type="datetime-local" id="fs-ends" class="fs-dt-input">
             <div class="fs-quick-row">
@@ -2450,14 +2451,14 @@
   <section id="tab-snippets">
     <h2>Mini-app copy · 小程序文案</h2>
     <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
-      Short text labels shown on fixed mini-app screens (cart, checkout, profile, order tracking, etc).<br>
-      Customers see one language at a time based on their WeChat preference — fill in both EN and 中.
+      Short text labels shown on fixed mini-app screens (cart, checkout, profile, order tracking, etc). · 显示在小程序固定页面（购物车、结算、个人中心、订单追踪等）上的短文案标签。<br>
+      Customers see one language at a time based on their WeChat preference — fill in both EN and 中. · 顾客会根据微信语言偏好一次只看到一种语言——请同时填写英文和中文。
     </div>
     <div id="snippets-mount"></div>
     <div style="margin-top: var(--s5); display: flex; align-items: center; gap: var(--s4); position: sticky; bottom: 0; background: var(--bg-app); padding: var(--s3) 0;">
       <button class="btn btn-primary" onclick="saveSnippets()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        Save all copy
+        Save all copy · 保存全部文案
       </button>
       <button class="btn" onclick="loadSnippets()">Reset to saved · 重置为已保存</button>
       <span id="snip-status" style="font-size: 12px;"></span>
@@ -2624,14 +2625,14 @@
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
       <div>
-        <h2 style="margin: 0;">Pop-ups</h2>
+        <h2 style="margin: 0;">Pop-ups · 弹窗</h2>
         <div class="muted" style="font-size: 12px; line-height: 1.5; margin-top: 4px;">
-          Show a modal to customers on any page. Useful for announcements, coupon offers, restock alerts, holiday closures.
+          Show a modal to customers on any page. Useful for announcements, coupon offers, restock alerts, holiday closures. · 在任意页面向顾客弹出一个对话框。适合发布公告、优惠券、补货提醒、节假日歇业通知等。
         </div>
       </div>
       <button class="btn btn-primary" onclick="openPopupEditor()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        New pop-up
+        New pop-up · 新建弹窗
       </button>
     </div>
 
@@ -2643,7 +2644,7 @@
   <!-- Pop-up editor (slide-in side drawer with phone preview) -->
   <aside id="pu-editor-bg" class="side-drawer dw-wide" aria-hidden="true">
     <div class="drawer-head">
-      <div style="font-size: 14px; font-weight: 600;" id="pu-editor-title">Pop-up</div>
+      <div style="font-size: 14px; font-weight: 600;" id="pu-editor-title">Pop-up · 弹窗</div>
       <button class="btn btn-ghost btn-icon" onclick="closeDrawer('#pu-editor-bg')" title="Close · 关闭 (Esc)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -2660,10 +2661,10 @@
               <input type="text" id="pu-name" placeholder="e.g. 'Spring promo · home'" style="width: 100%;">
             </div>
             <label class="row" style="gap: 8px; padding: 6px 0; align-items: center; margin-top: 8px;">
-              <input type="checkbox" id="pu-enabled"> Enabled — show this pop-up to customers
+              <input type="checkbox" id="pu-enabled"> Enabled — show this pop-up to customers · 启用 — 向顾客显示此弹窗
             </label>
             <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="pu-dismissible" checked> Dismissible — show a close button
+              <input type="checkbox" id="pu-dismissible" checked> Dismissible — show a close button · 可关闭 — 显示关闭按钮
             </label>
           </div>
 
@@ -2749,7 +2750,7 @@
             </div>
             <div class="pu-form-row" style="margin-top: 8px;">
               <div class="field">
-                <label class="stacked">CTA label (EN, optional)</label>
+                <label class="stacked">CTA label (EN, optional) · 按钮文字(英文,可选)</label>
                 <input type="text" id="pu-cta_label_en" placeholder="Shop now" style="width: 100%;">
               </div>
               <div class="field">
@@ -2758,9 +2759,9 @@
               </div>
             </div>
             <div class="field" style="margin-top: 8px;">
-              <label class="stacked">CTA destination (optional)</label>
+              <label class="stacked">CTA destination (optional) · 按钮跳转(可选)</label>
               <select id="pu-cta_target_kind" style="width: 100%;">
-                <option value="">— Just dismiss (no destination)</option>
+                <option value="">— Just dismiss (no destination) · 仅关闭(无跳转)</option>
                 <option value="shop">Shop tab · 商城页</option>
                 <option value="cart">Cart tab · 购物车页</option>
                 <option value="home">Home tab · 首页</option>
@@ -2769,8 +2770,8 @@
                 <option value="promotions">CMS page · Promotions</option>
                 <option value="about">CMS page · About</option>
                 <option value="categories">CMS page · Categories</option>
-                <option value="product">A specific product…</option>
-                <option value="category">A specific category…</option>
+                <option value="product">A specific product… · 指定产品…</option>
+                <option value="category">A specific category… · 指定分类…</option>
               </select>
               <!-- Secondary picker: product -->
               <div id="pu-cta_product_wrap" style="margin-top: 8px; display: none;">
@@ -2805,7 +2806,7 @@
             </div>
           </div>
           <div class="muted" style="font-size: 11px; margin-top: 10px; text-align: center;">
-            Live preview · uses the EN copy
+            Live preview · 实时预览 · 使用英文文案
           </div>
         </div>
     </div>
@@ -2814,7 +2815,7 @@
       <button class="btn" onclick="closeDrawer('#pu-editor-bg')">Cancel · 取消</button>
       <button class="btn btn-primary" onclick="savePopup()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        Save
+        Save · 保存
       </button>
     </div>
   </aside>
@@ -2859,6 +2860,7 @@
       Send a notification to every active mini-app customer at once. Schedule it for later or send right away.
       Tapping the notification can deep-link to any internal mini-app page.
       Recall pulls the broadcast back out of every customer's inbox.
+      · 一次性向所有活跃的小程序顾客发送通知。可定时发送，也可立即发送。点击通知能深度跳转到小程序内的任意页面。撤回会把这条广播从每位顾客的收件箱中收回。
     </div>
 
     <!-- Automatic notifications — operator chooses which system-generated
@@ -2908,7 +2910,7 @@
         <h3 style="margin: 0 0 var(--s4); font-size: 15px;">New broadcast · 新广播</h3>
         <div class="bc-row">
           <div>
-            <label class="bc-label">Title (EN)</label>
+            <label class="bc-label">Title (EN) · 标题(英文)</label>
             <input id="bc-title-en" class="bc-input" type="text" maxlength="80" placeholder="e.g. New seasonal box">
           </div>
           <div>
@@ -2918,7 +2920,7 @@
         </div>
         <div class="bc-row">
           <div>
-            <label class="bc-label">Body (EN, optional)</label>
+            <label class="bc-label">Body (EN, optional) · 正文(英文,选填)</label>
             <textarea id="bc-body-en" class="bc-textarea" maxlength="400" placeholder="One short paragraph"></textarea>
           </div>
           <div>
@@ -2928,9 +2930,9 @@
         </div>
         <div class="bc-row">
           <div style="flex: 2;">
-            <label class="bc-label">Deep-link <span class="muted">(must start with <code>/pages/</code> — leave blank for none)</span></label>
+            <label class="bc-label">Deep-link <span class="muted">(must start with <code>/pages/</code> — leave blank for none)</span> · 深链接(须以 /pages/ 开头,留空则无)</label>
             <select id="bc-deeplink-preset" class="bc-select" onchange="bcDeeplinkPreset()">
-              <option value="">— No deep-link —</option>
+              <option value="">— No deep-link — · 无深链接</option>
               <option value="/pages/shop/shop">Shop tab · 商城</option>
               <option value="/pages/cart/cart">Cart · 购物车</option>
               <option value="/pages/orders/orders">My orders · 我的订单</option>
@@ -2939,7 +2941,7 @@
               <option value="/pages/affiliate/affiliate">Refer a friend · 推广</option>
               <option value="/pages/voting/voting">Your say · 投票</option>
               <option value="/pages/topup/topup">Top up · 充值</option>
-              <option value="__custom__">Custom path…</option>
+              <option value="__custom__">Custom path… · 自定义路径…</option>
             </select>
             <input id="bc-deeplink" class="bc-input" type="text" placeholder="/pages/product/product?id=123" style="margin-top: 6px; display: none;">
           </div>
@@ -2966,7 +2968,7 @@
         </div>
         <div class="bc-row">
           <div>
-            <label class="bc-label">Membership tier · 会员等级 <span class="muted">(blank = all)</span></label>
+            <label class="bc-label">Membership tier · 会员等级 <span class="muted">(blank = all)</span>(留空 = 全部)</label>
             <div class="bc-chips" id="bc-tiers">
               <label class="bc-chip"><input type="checkbox" class="bc-tier" value="seed" onchange="bcAudienceChanged()"> Seed · 种子</label>
               <label class="bc-chip"><input type="checkbox" class="bc-tier" value="sprout" onchange="bcAudienceChanged()"> Sprout · 萌芽</label>
@@ -2975,7 +2977,7 @@
             </div>
           </div>
           <div>
-            <label class="bc-label">Region · 地区 <span class="muted">(blank = all; by saved address)</span></label>
+            <label class="bc-label">Region · 地区 <span class="muted">(blank = all; by saved address)</span>(留空 = 全部;按已保存地址)</label>
             <div class="bc-chips bc-chips-scroll" id="bc-regions">
               <span class="muted" style="font-size:12px;">Loading…</span>
             </div>
@@ -2985,17 +2987,17 @@
           <div style="flex: 1;">
             <label class="bc-label">Audience · 接收人</label>
             <div class="bc-audience" id="bc-audience">
-              <span id="bc-aud-summary">All active customers</span> · <b id="bc-aud-count">—</b>
-              <div style="margin-top: 2px; opacity: 0.8;">Blocked customers are skipped.</div>
+              <span id="bc-aud-summary">All active customers · 所有活跃顾客</span> · <b id="bc-aud-count">—</b>
+              <div style="margin-top: 2px; opacity: 0.8;">Blocked customers are skipped. · 已封禁顾客将被跳过。</div>
             </div>
           </div>
         </div>
         <div class="bc-actions">
           <button class="btn btn-primary" onclick="sendBroadcast()" id="bc-send-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M3 11l15-7v16L3 13v-2z"/><path d="M11 19a2 2 0 0 1-4 0v-4"/></svg>
-            <span id="bc-send-label">Send broadcast</span>
+            <span id="bc-send-label">Send broadcast · 发送广播</span>
           </button>
-          <button class="btn" onclick="bcResetComposer()">Reset</button>
+          <button class="btn" onclick="bcResetComposer()">Reset · 重置</button>
           <span id="bc-send-status" style="font-size: 12px; color: var(--muted);"></span>
         </div>
       </div>
@@ -3103,9 +3105,9 @@
                   <span class="yen-input"><input type="number" id="cfg-fees-freeShippingThreshold"></span>
                 </div>
                 <div class="helper" style="margin-top: 10px;">
-                  Set high to push average-order-value up; set low (or 0) to be more generous. Set to <b>0</b> for "always free shipping" on standard delivery.<br>
-                  This is the <b>global default</b> — it applies to any address whose delivery zone leaves "Free-over" blank, and powers the Cart's "¥XX more for free shipping" bar. A zone with its own <b>Free-over</b> (edit a zone above) overrides this for that area.<br>
-                  Same-day delivery never qualifies for free shipping — it always charges its own fee.
+                  Set high to push average-order-value up; set low (or 0) to be more generous. Set to <b>0</b> for "always free shipping" on standard delivery. · 设得高可以拉高客单价,设得低（或为 0）则更慷慨。设为 <b>0</b> 表示标准配送"始终包邮"。<br>
+                  This is the <b>global default</b> — it applies to any address whose delivery zone leaves "Free-over" blank, and powers the Cart's "¥XX more for free shipping" bar. A zone with its own <b>Free-over</b> (edit a zone above) overrides this for that area. · 这是<b>全局默认值</b>——适用于配送区"满额免运"留空的任意地址,并驱动购物车里"再买 ¥XX 即可免运"的提示条。某个配送区若设有自己的<b>满额免运</b>（在上方编辑该区）则会覆盖此默认值。<br>
+                  Same-day delivery never qualifies for free shipping — it always charges its own fee. · 当日达永远不享受包邮,始终按自身费用收取。
                 </div>
               </div>
             </div>
@@ -3140,7 +3142,7 @@
                   <span class="yen-input"><input type="number" id="cfg-fees-standardShipping"></span>
                 </div>
                 <div class="helper" style="margin-top: 10px;">
-                  Charged on every standard-delivery order unless the subtotal hits the free-shipping threshold.
+                  Charged on every standard-delivery order unless the subtotal hits the free-shipping threshold. · 每笔标准配送订单都会收取,除非小计达到包邮门槛。
                 </div>
               </div>
             </div>
@@ -3175,7 +3177,7 @@
                   <span class="yen-input"><input type="number" id="cfg-fees-sameDayDelivery"></span>
                 </div>
                 <div class="helper" style="margin-top: 10px;">
-                  Charged on every same-day order regardless of cart size. Customers see this fee next to the radio at checkout.
+                  Charged on every same-day order regardless of cart size. Customers see this fee next to the radio at checkout. · 每笔当日达订单都会收取,与购物车大小无关。顾客会在结算页选项旁看到此费用。
                 </div>
               </div>
             </div>
@@ -3194,7 +3196,7 @@
                   <span class="yen-input"><input type="number" id="cfg-fees-pickupPackingFee"></span>
                 </div>
                 <div class="helper" style="margin-top: 10px;">
-                  Shows as a "Packing fee" line on the pickup checkout breakdown. Delivery orders keep their own per-zone packing fee (set under Delivery zones).
+                  Shows as a "Packing fee" line on the pickup checkout breakdown. Delivery orders keep their own per-zone packing fee (set under Delivery zones). · 在自提结算明细中显示为"包装费"一行。配送订单仍使用各自配送区的包装费(在"配送区"中设置)。
                 </div>
               </div>
             </div>
@@ -3219,7 +3221,7 @@
                   </div>
                 </div>
                 <div class="helper" style="margin-top: 10px;">
-                  One global window for all pickup-enabled stores. Leave the default (10:00–20:00) if unsure.
+                  One global window for all pickup-enabled stores. Leave the default (10:00–20:00) if unsure. · 所有开通自提的门店共用一个全局时间窗。不确定时保留默认值(10:00–20:00)即可。
                 </div>
               </div>
             </div>
@@ -3251,7 +3253,7 @@
                   <span class="yen-input"><input type="number" id="cfg-fees-minOrder"></span>
                 </div>
                 <div class="helper" style="margin-top: 10px;">
-                  Useful to avoid loss-making tiny orders, or leave at 0 if you want trial customers to buy one item.
+                  Useful to avoid loss-making tiny orders, or leave at 0 if you want trial customers to buy one item. · 有助于避免亏本的小额订单;若想让尝鲜顾客只买一件,可保持为 0。
                 </div>
               </div>
             </div>
@@ -3448,7 +3450,7 @@
     <div class="drawer-head">
       <div>
         <h3 style="margin: 0; font-size: 14px;" id="dz-edit-title">Add zone · 添加配送区</h3>
-        <div class="muted" id="dz-edit-sub" style="font-size: 11px; margin-top: 2px;">Pricing and scheduling for one delivery area.</div>
+        <div class="muted" id="dz-edit-sub" style="font-size: 11px; margin-top: 2px;">Pricing and scheduling for one delivery area. · 单个配送区的定价与时间设置。</div>
       </div>
       <button class="btn" onclick="closeDrawer('#dz-edit-bg')" title="Close · 关闭 (Esc)">Close · 关闭</button>
     </div>
@@ -3603,7 +3605,7 @@
       <div class="pu-editor-head">
         <div>
           <h3 style="margin: 0; font-size: 14px;">Copy settings to other zones · 复制设置到其他配送区</h3>
-          <div class="muted" id="dz-apply-sub" style="font-size: 11px; margin-top: 2px;">Pick which fields and which zones — applies the form values currently in the drawer.</div>
+          <div class="muted" id="dz-apply-sub" style="font-size: 11px; margin-top: 2px;">Pick which fields and which zones — applies the form values currently in the drawer. · 选择要复制的字段和目标配送区——将抽屉中当前的表单值应用过去。</div>
         </div>
         <button class="btn" onclick="closeApplyPanel()">Close · 关闭</button>
       </div>
@@ -3621,19 +3623,19 @@
           <label class="dz-apply-bundle"><input type="checkbox" class="dz-apply-bundle-cb" data-bundle="pricing" checked>
             <span>
               <span class="dz-bundle-title">Pricing · 定价</span>
-              <span class="dz-bundle-sub muted">Base fee · Free-over · MAX (GZ) · Packing fee & cap (city)</span>
+              <span class="dz-bundle-sub muted">Base fee · Free-over · MAX (GZ) · Packing fee & cap (city) · 基础运费 · 满额免运 · 封顶(广州) · 包装费与上限(外地)</span>
             </span>
           </label>
           <label class="dz-apply-bundle"><input type="checkbox" class="dz-apply-bundle-cb" data-bundle="scheduling" checked>
             <span>
               <span class="dz-bundle-title">Scheduling · 时间</span>
-              <span class="dz-bundle-sub muted">Hours · Slot length · Lead → Max · Same-day · Day-only mode</span>
+              <span class="dz-bundle-sub muted">Hours · Slot length · Lead → Max · Same-day · Day-only mode · 营业时段 · 时段长度 · 提前量 → 最长 · 当日达 · 仅按天模式</span>
             </span>
           </label>
           <label class="dz-apply-bundle"><input type="checkbox" class="dz-apply-bundle-cb" data-bundle="active">
             <span>
               <span class="dz-bundle-title">Active toggle · 启用状态</span>
-              <span class="dz-bundle-sub muted">Use sparingly — pushing this turns selected zones on/off.</span>
+              <span class="dz-bundle-sub muted">Use sparingly — pushing this turns selected zones on/off. · 谨慎使用 — 会切换所选配送区的启用状态。</span>
             </span>
           </label>
         </div>
@@ -3692,7 +3694,7 @@
         </div>
         <button class="btn btn-primary" onclick="addTopupPackage()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Add
+          Add · 添加
         </button>
       </div>
     </div>
@@ -3702,7 +3704,7 @@
       <table id="tp-table">
         <thead><tr>
           <th class="numeric">Amount ¥ · 金额</th><th class="numeric">Bonus pts · 赠送积分</th>
-          <th>EN title</th><th>中文 title</th><th>Active</th><th></th>
+          <th>标题(英文)</th><th>标题(中文)</th><th>Active · 启用</th><th></th>
         </tr></thead>
         <tbody><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
       </table>
@@ -3728,6 +3730,7 @@
       sides get rewarded — friend through the public coupon they applied at checkout, referrer through a
       wallet credit. <b>Edits live here only</b> — customers can view, share, and apply codes from the mini app
       but cannot change rewards or override statuses.
+      · 顾客可以分享自己的专属推荐码;当好友注册并完成首笔付费订单后,双方都会获得奖励——好友通过结算时使用的公开优惠券,推荐人则获得钱包返现。<b>奖励只能在此处修改</b>——顾客可在小程序查看、分享和使用推荐码,但不能更改奖励或覆盖状态。
     </div>
 
     <!-- Settings card -->
@@ -3805,6 +3808,7 @@
       Customer reviews collected from the mini app after a delivered order. Hidden reviews are dropped from
       the public product detail. Customers can't edit a review once submitted; if they ask for a change,
       hide the bad one and let them write another from the order page.
+      · 订单送达后从小程序收集的顾客评价。被隐藏的评价不会出现在对外的产品详情页。评价提交后顾客无法修改;若需更改,可隐藏原评价,让顾客从订单页重新撰写一条。
     </div>
 
     <div class="row" style="gap: 12px; margin-bottom: var(--s4); flex-wrap: wrap; align-items: center;">
@@ -3856,7 +3860,7 @@
         <div class="muted" style="font-size: 11px;">Customers tap these chips when leaving a review. Edit labels and colours — the new wording appears in the mini app within ~60s (config cache TTL). · 顾客提交评价时点击的标签;修改文案与颜色后,小程序约 60 秒内生效(配置缓存)。</div>
       </div>
       <div class="muted" style="font-size: 11px; margin-bottom: 12px;">
-        <b>id</b> is the slug stored in the database — change it only if no reviews have used the tag yet, otherwise older reviews lose their chip. Lowercase letters + hyphens only.
+        <b>id</b> is the slug stored in the database — change it only if no reviews have used the tag yet, otherwise older reviews lose their chip. Lowercase letters + hyphens only. · <b>id</b> 是存入数据库的标识符——仅在还没有评价使用过该标签时才可修改,否则旧评价会丢失对应的标签。只能使用小写字母和连字符。
       </div>
       <div class="table-wrap" style="margin-bottom: 12px;">
         <table id="rtags-table">
@@ -3871,7 +3875,7 @@
         </table>
       </div>
       <div class="row" style="gap: 12px;">
-        <button class="btn" onclick="addReviewTag()">+ Add tag</button>
+        <button class="btn" onclick="addReviewTag()">+ Add tag · 添加标签</button>
         <button class="btn btn-primary" onclick="saveReviewTags()">Save tags · 保存标签</button>
         <button class="btn" onclick="loadReviewTags()" style="margin-left: auto;">Reset (reload from server) · 重置(从服务端重新加载)</button>
       </div>
@@ -3987,9 +3991,9 @@
       .lb-reward .lb-r-tag { color: #CCD900; font-weight: 700; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
     </style>
 
-    <h2>Leaderboard <span id="lb-current-pill" class="lb-status-pill off" style="vertical-align: middle; font-size: 11px;">Off</span></h2>
+    <h2>Leaderboard · 排行榜 <span id="lb-current-pill" class="lb-status-pill off" style="vertical-align: middle; font-size: 11px;">Off</span></h2>
     <p class="muted" style="font-size: 12px; max-width: 720px; margin: 0 0 var(--s4);">
-      Configure the public Roots Club leaderboard shown in the mini app. Pick the metric, period, how many top members to show, and how their names appear. Enable the toggle to make it visible to customers.
+      Configure the public Roots Club leaderboard shown in the mini app. Pick the metric, period, how many top members to show, and how their names appear. Enable the toggle to make it visible to customers. · 配置小程序中展示的 Roots Club 公开排行榜。选择统计指标、周期、显示的上榜人数,以及成员名称的展示方式。打开开关即可向顾客显示。
     </p>
 
     <div class="lb-layout">
@@ -4153,7 +4157,7 @@
         <div class="lb-save-bar">
           <button class="btn btn-primary" onclick="saveLeaderboardConfig()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            Save leaderboard
+            Save leaderboard · 保存排行榜
           </button>
           <span id="lb-save-status" style="font-size: 12px; color: var(--text-3);"></span>
         </div>
@@ -4208,7 +4212,7 @@
         <div class="field" style="margin: 0;">
           <label class="stacked">Expire after (months) · 积分有效期(月)</label>
           <input type="number" id="pts-expiry-months" placeholder="12" min="0" style="width: 140px;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">0 = never expire. Applies to new earns only.</div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">0 = never expire. Applies to new earns only. · 0 = 永不过期;仅对新获取的积分生效。</div>
         </div>
         <div class="field" style="margin: 0;">
           <label class="stacked">Points cover shipping · 积分可抵运费</label>
@@ -4334,7 +4338,7 @@
 
     <h2>Voting · community polls · 投票 · 社区调查</h2>
     <p class="muted" style="font-size: 12px; max-width: 720px; margin: 0 0 var(--s4);">
-      Build polls the mini-app shows on Me → Your say. Customers vote one option per poll and earn the poll's reward points (default 5) once per poll. Drafts stay hidden; flip status to Open to publish. Close to lock in the result and surface it under "Past results" — pick the winner to highlight it.
+      Build polls the mini-app shows on Me → Your say. Customers vote one option per poll and earn the poll's reward points (default 5) once per poll. Drafts stay hidden; flip status to Open to publish. Close to lock in the result and surface it under "Past results" — pick the winner to highlight it. · 创建在小程序“我的 → 你说了算”页展示的投票。每位顾客每个投票只能选一个选项,并可获得该投票的奖励积分(默认 5 分,每个投票一次)。草稿保持隐藏;将状态切换为“开放”即可发布。“关闭”可锁定结果并展示在“往期结果”中 —— 选择获胜项即可高亮显示。
     </p>
 
     <!-- Editable intro tagline shown under the "Your say" headline. Reads live
@@ -4342,7 +4346,7 @@
     <div class="vot-form" style="max-width: 720px;">
       <h3>Intro tagline · 引导文字</h3>
       <div class="muted" style="font-size: 11px;">
-        The line under the "Your say" headline. Use <code>{pts}</code> where the points number should appear — it auto-fills from the featured poll's reward. Saves instantly; no app republish needed.
+        The line under the "Your say" headline. Use <code>{pts}</code> where the points number should appear — it auto-fills from the featured poll's reward. Saves instantly; no app republish needed. · 显示在“你说了算”标题下方的文字。在需要显示积分数字的位置使用 <code>{pts}</code> —— 它会自动填入精选投票的奖励分值。即时保存,无需重新发布小程序。
       </div>
       <div class="field">
         <label>English</label>
@@ -4356,7 +4360,7 @@
     </div>
 
     <div style="display: flex; gap: 10px; margin-bottom: var(--s4);">
-      <button class="btn btn-primary" onclick="newPoll()">+ New poll</button>
+      <button class="btn btn-primary" onclick="newPoll()">+ New poll · 新建投票</button>
       <button class="btn" onclick="loadPolls()">Refresh · 刷新</button>
     </div>
 
@@ -4370,7 +4374,7 @@
   <section id="tab-media">
     <h2>Media · 媒体库</h2>
     <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
-      All images uploaded for the mini app — banners, product photos, FAQ icons, anywhere in the CMS. Drag &amp; drop files onto the grid (or paste from clipboard) to upload. Drag a card onto a folder in the sidebar to move it. Click a card to edit alt text, tags, and folder. The <b>used-where</b> badge is a quick "safe to delete?" hint.
+      All images uploaded for the mini app — banners, product photos, FAQ icons, anywhere in the CMS. Drag &amp; drop files onto the grid (or paste from clipboard) to upload. Drag a card onto a folder in the sidebar to move it. Click a card to edit alt text, tags, and folder. The <b>used-where</b> badge is a quick "safe to delete?" hint. · 为小程序上传的全部图片 —— 横幅、产品图、常见问题图标,以及 CMS 中的任何位置。将文件拖放到网格上(或从剪贴板粘贴)即可上传。将卡片拖到侧栏的文件夹上即可移动。点击卡片可编辑替代文字、标签和所属文件夹。<b>引用位置</b>徽标可快速判断“是否可安全删除”。
     </div>
 
     <div class="ml-layout">
@@ -4450,7 +4454,7 @@
   <aside id="ml-edit-bg" class="side-drawer" aria-hidden="true">
     <div class="drawer-head">
       <div>
-        <h3 style="margin: 0; font-size: 14px;" id="ml-edit-title">Media</h3>
+        <h3 style="margin: 0; font-size: 14px;" id="ml-edit-title">Media · 媒体</h3>
         <div class="muted" id="ml-edit-sub" style="font-size: 11px; margin-top: 2px;"></div>
       </div>
       <button class="btn" onclick="closeDrawer('#ml-edit-bg')" title="Close · 关闭 (Esc)">Close · 关闭</button>
@@ -4464,7 +4468,7 @@
         </div>
 
         <div class="field">
-          <label class="stacked">Alt text · 替代文字 <span class="muted" style="font-weight: 400;">(for screen readers and SEO)</span></label>
+          <label class="stacked">Alt text · 替代文字 <span class="muted" style="font-weight: 400;">(for screen readers and SEO)(用于读屏与 SEO)</span></label>
           <input type="text" id="ml-edit-alt" placeholder="Coconut milk in a glass jar, top-down">
         </div>
 
@@ -4476,7 +4480,7 @@
         </div>
 
         <div class="field">
-          <label class="stacked">Tags · 标签 <span class="muted" style="font-weight: 400;">(comma or Enter to add)</span></label>
+          <label class="stacked">Tags · 标签 <span class="muted" style="font-weight: 400;">(comma or Enter to add)(逗号或回车添加)</span></label>
           <div class="ml-tag-input-row" id="ml-edit-tags-row">
             <input type="text" id="ml-edit-tag-input" placeholder="banner, hero, product…" onkeydown="onTagInputKey(event)">
           </div>
@@ -4487,7 +4491,7 @@
             <div class="muted" style="font-size: 11px; margin-bottom: 4px;">URL</div>
             <div class="row" style="gap: 6px;">
               <input type="text" id="ml-edit-url" readonly style="flex: 1; font-family: var(--f-mono); font-size: 11px;">
-              <button class="btn" onclick="copyMediaUrl()">Copy</button>
+              <button class="btn" onclick="copyMediaUrl()">Copy · 复制</button>
             </div>
           </div>
           <div style="min-width: 160px;">
@@ -4517,7 +4521,7 @@
       </div>
       <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display: block;">
         <div class="field" style="margin: 0;">
-          <label class="stacked">Add tags · 添加标签 <span class="muted" style="font-weight: 400;">(comma or Enter)</span></label>
+          <label class="stacked">Add tags · 添加标签 <span class="muted" style="font-weight: 400;">(comma or Enter)(逗号或回车)</span></label>
           <div class="ml-tag-input-row" id="ml-bulk-add-row">
             <input type="text" id="ml-bulk-add-input" placeholder="banner, hero…" onkeydown="onBulkTagInputKey(event, 'add')">
           </div>
@@ -4543,6 +4547,7 @@
     <p class="hint" style="margin-bottom: 16px;">
       Edit the content of the customer-facing About / Story page (Me → About Roots).
       Bilingual fields: fill both EN and CN — the customer sees their preferred language.
+      · 编辑面向顾客的“关于 / 故事”页内容(我的 → 关于 Roots)。双语字段:中英文都要填写 —— 顾客会看到自己偏好的语言。
     </p>
 
     <div class="about-editor">
@@ -4551,22 +4556,22 @@
         <summary>① Manifesto · 宣言</summary>
         <div class="about-block-body">
           <label class="ab-field">
-            <span class="ab-label">Kicker (EN)</span>
+            <span class="ab-label">Kicker (EN) · 引题(英文)</span>
             <input type="text" id="about-kicker-en" placeholder="WHO WE ARE">
           </label>
           <label class="ab-field">
-            <span class="ab-label">Kicker suffix (CN)</span>
+            <span class="ab-label">Kicker suffix (CN) · 引题后缀(中文)</span>
             <input type="text" id="about-kicker-cn" placeholder="我们是谁">
           </label>
           <label class="ab-field">
-            <span class="ab-label">Body — English</span>
+            <span class="ab-label">Body — English · 正文(英文)</span>
             <textarea id="about-manifesto-en" rows="5" placeholder="We exist to make…"></textarea>
-            <span class="ab-help">Wrap a word with **double asterisks** to make it bold (e.g. **plant-based food**).</span>
+            <span class="ab-help">Wrap a word with **double asterisks** to make it bold (e.g. **plant-based food**). · 用 **双星号** 包住词语即可加粗(例如 **plant-based food**)。</span>
           </label>
           <label class="ab-field">
             <span class="ab-label">Body — 中文</span>
             <textarea id="about-manifesto-cn" rows="5" placeholder="我们存在的意义…"></textarea>
-            <span class="ab-help">Leave blank to hide the Chinese paragraph.</span>
+            <span class="ab-help">Leave blank to hide the Chinese paragraph. · 留空则隐藏中文段落。</span>
           </label>
         </div>
       </details>
@@ -4595,45 +4600,45 @@
         <summary>③ Founder · 创始人</summary>
         <div class="about-block-body">
           <label class="ab-field">
-            <span class="ab-label">Section kicker (EN)</span>
+            <span class="ab-label">Section kicker (EN) · 栏目引题(英文)</span>
             <input type="text" id="about-founder-kicker-en" placeholder="MEET THE FOUNDER">
           </label>
           <label class="ab-field">
-            <span class="ab-label">Section kicker suffix (CN)</span>
+            <span class="ab-label">Section kicker suffix (CN) · 栏目引题后缀(中文)</span>
             <input type="text" id="about-founder-kicker-cn" placeholder="创始人">
           </label>
           <div class="ab-row">
             <label class="ab-field" style="flex:1">
-              <span class="ab-label">Name (EN)</span>
+              <span class="ab-label">Name (EN) · 姓名(英文)</span>
               <input type="text" id="about-founder-name-en" placeholder="Founder Name">
             </label>
             <label class="ab-field" style="flex:1">
-              <span class="ab-label">Name (CN)</span>
+              <span class="ab-label">Name (CN) · 姓名(中文)</span>
               <input type="text" id="about-founder-name-cn" placeholder="创始人姓名">
             </label>
           </div>
           <div class="ab-row">
             <label class="ab-field" style="flex:1">
-              <span class="ab-label">Title (EN)</span>
+              <span class="ab-label">Title (EN) · 头衔(英文)</span>
               <input type="text" id="about-founder-title-en" placeholder="FOUNDER & CEO">
             </label>
             <label class="ab-field" style="flex:1">
-              <span class="ab-label">Title (CN)</span>
+              <span class="ab-label">Title (CN) · 头衔(中文)</span>
               <input type="text" id="about-founder-title-cn" placeholder="创始人兼首席执行官">
             </label>
           </div>
           <label class="ab-field">
-            <span class="ab-label">Quote (EN)</span>
+            <span class="ab-label">Quote (EN) · 引言(英文)</span>
             <textarea id="about-founder-quote-en" rows="3" placeholder="Why you started…"></textarea>
           </label>
           <label class="ab-field">
-            <span class="ab-label">Quote (CN)</span>
+            <span class="ab-label">Quote (CN) · 引言(中文)</span>
             <textarea id="about-founder-quote-cn" rows="3" placeholder="为什么开始…"></textarea>
           </label>
           <label class="ab-field">
-            <span class="ab-label">Photo</span>
+            <span class="ab-label">Photo · 照片</span>
             <div id="about-founder-photo-preview" class="ab-photo-preview">
-              <div class="ab-photo-empty">No photo — placeholder tile will show.</div>
+              <div class="ab-photo-empty">No photo — placeholder tile will show. · 暂无照片 — 将显示占位图。</div>
             </div>
             <div class="ab-photo-actions">
               <input type="file" id="about-founder-photo-file" accept="image/*" style="display:none">
@@ -4650,11 +4655,11 @@
         <summary>④ What's IN / What's OUT · 是 / 否</summary>
         <div class="about-block-body">
           <label class="ab-field">
-            <span class="ab-label">Section kicker (EN)</span>
+            <span class="ab-label">Section kicker (EN) · 栏目引题(英文)</span>
             <input type="text" id="about-promise-kicker-en" placeholder="OUR PROMISE">
           </label>
           <label class="ab-field">
-            <span class="ab-label">Section kicker suffix (CN)</span>
+            <span class="ab-label">Section kicker suffix (CN) · 栏目引题后缀(中文)</span>
             <input type="text" id="about-promise-kicker-cn" placeholder="我们的承诺">
           </label>
           <div class="ab-two-col">
@@ -4664,7 +4669,7 @@
                 <thead><tr><th>#</th><th>EN</th><th>CN</th><th></th></tr></thead>
                 <tbody id="about-in-tbody"></tbody>
               </table>
-              <button type="button" class="btn btn-sm" onclick="aboutAddBullet('in')">+ Add IN item</button>
+              <button type="button" class="btn btn-sm" onclick="aboutAddBullet('in')">+ Add IN item · 添加「是」项</button>
             </div>
             <div>
               <h4 style="margin: 6px 0; font-size: 13px;">OUT · 否 — items</h4>
@@ -4672,7 +4677,7 @@
                 <thead><tr><th>#</th><th>EN</th><th>CN</th><th></th></tr></thead>
                 <tbody id="about-out-tbody"></tbody>
               </table>
-              <button type="button" class="btn btn-sm" onclick="aboutAddBullet('out')">+ Add OUT item</button>
+              <button type="button" class="btn btn-sm" onclick="aboutAddBullet('out')">+ Add OUT item · 添加「否」项</button>
             </div>
           </div>
         </div>
@@ -4684,21 +4689,21 @@
         <div class="about-block-body">
           <div class="ab-row">
             <label class="ab-field" style="flex:1">
-              <span class="ab-label">Headline (EN)</span>
+              <span class="ab-label">Headline (EN) · 标题(英文)</span>
               <input type="text" id="about-outro-en" placeholder="From soil to soul.">
             </label>
             <label class="ab-field" style="flex:1">
-              <span class="ab-label">Headline (CN)</span>
+              <span class="ab-label">Headline (CN) · 标题(中文)</span>
               <input type="text" id="about-outro-cn" placeholder="从土壤到灵魂">
             </label>
           </div>
           <div class="ab-row">
             <label class="ab-field" style="flex:1">
-              <span class="ab-label">Button label (EN)</span>
+              <span class="ab-label">Button label (EN) · 按钮文字(英文)</span>
               <input type="text" id="about-cta-en" placeholder="SHOP NOW">
             </label>
             <label class="ab-field" style="flex:1">
-              <span class="ab-label">Button label (CN)</span>
+              <span class="ab-label">Button label (CN) · 按钮文字(中文)</span>
               <input type="text" id="about-cta-cn" placeholder="立即购买">
             </label>
           </div>
@@ -4781,19 +4786,19 @@
       <aside class="settings-nav" id="settings-nav">
         <button data-sub="shop" class="active">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18l-2 13H5L3 7z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg>
-          Shop tab
+          Shop tab · 商城页
         </button>
         <button data-sub="push">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0v5l2 3H4l2-3V8z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
-          Push notifications
+          Push notifications · 推送通知
         </button>
         <button data-sub="cs">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-          Customer service
+          Customer service · 客户服务
         </button>
         <button data-sub="ops">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"/><path d="M12 2v3M12 19v3M22 12h-3M5 12H2M19.07 4.93l-2.12 2.12M7.05 16.95l-2.12 2.12M19.07 19.07l-2.12-2.12M7.05 7.05 4.93 4.93"/></svg>
-          Operations
+          Operations · 运营
         </button>
       </aside>
 
@@ -4940,7 +4945,8 @@
                 <div class="helper" style="margin-top: 8px;">
                   <b>Featured</b> uses the manual order on the Products page.<br>
                   <b>Newest</b> sorts by date added (descending).<br>
-                  <b>Popular</b> sorts by order count in the last 30 days.
+                  <b>Popular</b> sorts by order count in the last 30 days.<br>
+                  · <b>精选</b>采用产品页上的手动排序;<b>最新</b>按添加日期倒序排列;<b>最热销</b>按最近 30 天的下单次数排序。
                 </div>
               </div>
             </div>
@@ -4989,8 +4995,8 @@
               </div>
               <div class="ctrl">
                 <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
-                  <label class="ckbox"><input type="checkbox" id="cfg-shop-showSort"> <span>Show sort dropdown</span></label>
-                  <label class="ckbox"><input type="checkbox" id="cfg-shop-showDietary"> <span>Show dietary chips</span></label>
+                  <label class="ckbox"><input type="checkbox" id="cfg-shop-showSort"> <span>Show sort dropdown · 显示排序下拉</span></label>
+                  <label class="ckbox"><input type="checkbox" id="cfg-shop-showDietary"> <span>Show dietary chips · 显示饮食标签</span></label>
                   <div class="chip-strip" style="margin-left: 24px; margin-top: 0">
                     <span class="chip lit">Gluten-free</span>
                     <span class="chip lit">Nut-free</span>
@@ -4998,8 +5004,8 @@
                     <span class="chip lit">5-spice-free</span>
                   </div>
 
-                  <label class="ckbox"><input type="checkbox" id="cfg-shop-showStockFilter"> <span>Show "In stock" toggle</span></label>
-                  <label class="ckbox"><input type="checkbox" id="cfg-shop-showBadgeFilter"> <span>Show NEW / POP / SALE filter</span></label>
+                  <label class="ckbox"><input type="checkbox" id="cfg-shop-showStockFilter"> <span>Show "In stock" toggle · 显示「有货」开关</span></label>
+                  <label class="ckbox"><input type="checkbox" id="cfg-shop-showBadgeFilter"> <span>Show NEW / POP / SALE filter · 显示 NEW / POP / SALE 筛选</span></label>
                   <div class="chip-strip" style="margin-left: 24px; margin-top: 0">
                     <span class="chip lit">NEW</span>
                     <span class="chip lit">POP</span>
@@ -5007,12 +5013,12 @@
                     <span class="chip lit">HOT</span>
                   </div>
                   <div class="helper" style="margin-left: 24px; margin-top: -4px;">
-                    Set a product's badge with the <b>Badge</b> dropdown in its editor (Products page).
+                    Set a product's badge with the <b>Badge</b> dropdown in its editor (Products page). · 在产品编辑器(产品页)的<b>徽标</b>下拉中设置某个产品的徽标。
                   </div>
 
-                  <label class="ckbox"><input type="checkbox" id="cfg-shop-showPriceFilter"> <span>Show price ¥min – ¥max</span></label>
-                  <label class="ckbox"><input type="checkbox" id="cfg-shop-hideOutOfStock"> <span>Hide out-of-stock products entirely</span></label>
-                  <label class="ckbox"><input type="checkbox" id="cfg-shop-lockLayout"> <span>Lock layout (hide customer's view-switcher)</span></label>
+                  <label class="ckbox"><input type="checkbox" id="cfg-shop-showPriceFilter"> <span>Show price ¥min – ¥max · 显示价格 ¥min – ¥max 筛选</span></label>
+                  <label class="ckbox"><input type="checkbox" id="cfg-shop-hideOutOfStock"> <span>Hide out-of-stock products entirely · 完全隐藏缺货产品</span></label>
+                  <label class="ckbox"><input type="checkbox" id="cfg-shop-lockLayout"> <span>Lock layout (hide customer's view-switcher) · 锁定布局(隐藏顾客的视图切换)</span></label>
                 </div>
               </div>
             </div>
@@ -5032,7 +5038,7 @@
           <div class="group-card">
             <div class="group-card-head">
               <h3>Order-status subscribe-message template · 订单状态订阅消息模板</h3>
-              <div class="muted">WeChat doesn't allow free push — instead, each customer opts in to <em>one</em> notification per submission. We use that slot to send "Order paid", "Preparing", "Dispatched", and "Delivered" updates.</div>
+              <div class="muted">WeChat doesn't allow free push — instead, each customer opts in to <em>one</em> notification per submission. We use that slot to send "Order paid", "Preparing", "Dispatched", and "Delivered" updates. · 微信不允许免费推送 —— 顾客每次提交只能订阅<em>一条</em>通知。我们用这个名额发送“已付款”“备货中”“已发货”“已送达”等更新。</div>
             </div>
             <div class="illus-row">
               <div class="mini-phone">
@@ -5122,19 +5128,20 @@
           <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
             Shows a chat-bubble button on the Me tab, checkout, and order pages. Tapping opens a chat with your team.
             WeCom (企业微信) is the preferred mode — customers get a live conversation with a staff agent.
+            · 在"我的"页、结算页和订单页显示一个聊天气泡按钮,点击即可与你的团队对话。推荐使用企业微信(WeCom)模式 —— 顾客可与客服人员实时交流。
           </div>
 
           <!-- Mode -->
           <div class="group-card">
             <div class="group-card-head">
               <h3>How customers reach you · 顾客联系方式</h3>
-              <div class="muted">Three options. WeCom is best for ongoing conversations. WeChat 客服 is the lightweight built-in. QR code is the fallback when neither is set up yet.</div>
+              <div class="muted">Three options. WeCom is best for ongoing conversations. WeChat 客服 is the lightweight built-in. QR code is the fallback when neither is set up yet. · 三种方式可选。企业微信最适合持续对话;微信客服是轻量的内置方案;二维码则是两者都未配置时的备选。</div>
             </div>
             <select id="cfg-cs-mode" style="width:100%;max-width:460px;padding:10px 12px;border:1px solid #d8d2c4;border-radius:10px;background:#fff;font-size:14px;cursor:pointer;">
               <option value="off">Off — hide the button entirely · 关闭 — 完全隐藏按钮</option>
-              <option value="wecom">WeCom (企业微信) — recommended</option>
-              <option value="kf">WeChat 客服 — public-account customer service</option>
-              <option value="qr">QR code — show a scannable image</option>
+              <option value="wecom">WeCom (企业微信) — recommended · 推荐</option>
+              <option value="kf">WeChat 客服 — public-account customer service · 公众号客服</option>
+              <option value="qr">QR code — show a scannable image · 二维码 — 显示可扫描图片</option>
             </select>
             <div class="muted" style="margin-top: 8px; font-size: 12px; line-height: 1.5;">
               <b>WeCom:</b> Sign in at <a href="https://work.weixin.qq.com" target="_blank" rel="noopener">work.weixin.qq.com</a> →
@@ -5181,7 +5188,7 @@
             </div>
             <div class="row" style="gap: var(--s3);">
               <div class="field" style="flex: 1;">
-                <label class="stacked">EN label</label>
+                <label class="stacked">EN label · 英文标签</label>
                 <input type="text" id="cfg-cs-label_en" placeholder="Help" style="width: 100%;">
               </div>
               <div class="field" style="flex: 1;">
@@ -5191,7 +5198,7 @@
             </div>
             <div class="row" style="gap: var(--s3); margin-top: var(--s3);">
               <div class="field" style="flex: 1;">
-                <label class="stacked">EN hours line</label>
+                <label class="stacked">EN hours line · 英文营业时间</label>
                 <input type="text" id="cfg-cs-hours_en" placeholder="Mon–Sat · 9am–6pm" style="width: 100%;">
               </div>
               <div class="field" style="flex: 1;">
@@ -5202,7 +5209,7 @@
             <div class="field" style="margin-top: var(--s3); margin-bottom: 0;">
               <label class="stacked">Phone number (optional) · 电话(可选)</label>
               <input type="text" id="cfg-cs-phone" placeholder="+86 20 1234 5678" style="width: 100%; font-family: monospace;">
-              <div class="muted" style="font-size: 11px; margin-top: 6px;">Shown as the <b>Call</b> button on the FAQ help screen. Leave blank to hide.</div>
+              <div class="muted" style="font-size: 11px; margin-top: 6px;">Shown as the <b>Call</b> button on the FAQ help screen. Leave blank to hide. · 显示为常见问题帮助页上的<b>拨打</b>按钮;留空则隐藏。</div>
             </div>
           </div>
 
@@ -5213,19 +5220,19 @@
               <div class="muted">Pick which pages show the floating chat bubble. The look below applies to every page you tick. · 选择哪些页面显示悬浮客服按钮;下方样式将应用于所有勾选的页面。</div>
             </div>
             <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_me"> Me tab
+              <input type="checkbox" id="cfg-cs-show_me"> Me tab · 我的页
             </label>
             <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_home"> Home tab
+              <input type="checkbox" id="cfg-cs-show_home"> Home tab · 首页
             </label>
             <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_product"> Product detail
+              <input type="checkbox" id="cfg-cs-show_product"> Product detail · 商品详情
             </label>
             <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_checkout"> Checkout
+              <input type="checkbox" id="cfg-cs-show_checkout"> Checkout · 结算页
             </label>
             <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="cfg-cs-show_order"> Order detail
+              <input type="checkbox" id="cfg-cs-show_order"> Order detail · 订单详情
             </label>
           </div>
 
@@ -5338,8 +5345,8 @@
             </div>
             <div id="integrations-status" class="muted" style="font-size:13px;padding:14px 16px;background:var(--bg-elev-1);border-radius:8px;margin-bottom:14px">Loading status…</div>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
-              <button class="btn" onclick="loadIntegrationsStatus()">↻ Refresh status</button>
-              <button class="btn btn-primary" onclick="_geocodeBackfill()">🗺 Geocode all stores &amp; addresses now</button>
+              <button class="btn" onclick="loadIntegrationsStatus()">↻ Refresh status · 刷新状态</button>
+              <button class="btn btn-primary" onclick="_geocodeBackfill()">🗺 Geocode all stores &amp; addresses now · 立即定位所有门店与地址</button>
             </div>
             <div class="muted" style="font-size:11px;margin-top:10px"><strong>↻ Refresh status</strong> only re-counts — it does NOT geocode. Use <strong>🗺 Geocode all</strong> to actually fetch coordinates. New addresses + stores also geocode automatically on save. · ↻ 仅刷新计数,不定位;🗺 才会真正获取坐标。新地址保存时自动定位。</div>
           </div>
@@ -5371,17 +5378,17 @@
                 <div style="grid-column:1/-1">
                   <label class="field-label">Callback URL · 回调地址</label>
                   <input type="text" id="kd100-callback" style="font-family:monospace" value="https://rootskitchenchina.com/api/retail/tracking/kd100/callback">
-                  <div class="muted" style="font-size:11px;margin-top:4px">Whitelist this in your kd100 dashboard. Webhook fires on every event update.</div>
+                  <div class="muted" style="font-size:11px;margin-top:4px">Whitelist this in your kd100 dashboard. Webhook fires on every event update. · 在快递100后台将其加入白名单;每次轨迹更新都会触发回调。</div>
                 </div>
                 <div style="grid-column:1/-1">
                   <label class="field-label">Callback secret · 回调密钥</label>
                   <input type="password" id="kd100-secret" placeholder="random string — do not rotate">
-                  <div class="muted" style="font-size:11px;margin-top:4px">Verifies pushes came from a request we made. Set once and leave alone.</div>
+                  <div class="muted" style="font-size:11px;margin-top:4px">Verifies pushes came from a request we made. Set once and leave alone. · 用于验证回调确实来自我们发起的请求;设置一次后请勿改动。</div>
                 </div>
               </div>
               <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <button class="btn btn-primary" onclick="_saveIntegration('kd100')">💾 Save</button>
-                <button class="btn" onclick="_testKd100()">⚡ Save &amp; test</button>
+                <button class="btn btn-primary" onclick="_saveIntegration('kd100')">💾 Save · 保存</button>
+                <button class="btn" onclick="_testKd100()">⚡ Save &amp; test · 保存并测试</button>
               </div>
             </div>
 
@@ -5415,10 +5422,10 @@
                 </div>
               </div>
               <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <button class="btn btn-primary" onclick="_saveIntegration('jd')">💾 Save</button>
-                <button class="btn" onclick="_testJd()">⚡ Save &amp; ping JD</button>
+                <button class="btn btn-primary" onclick="_saveIntegration('jd')">💾 Save · 保存</button>
+                <button class="btn" onclick="_testJd()">⚡ Save &amp; ping JD · 保存并测试 JD</button>
               </div>
-              <div class="muted" style="font-size:11px;margin-top:10px">After saving, full waybill push needs a one-time field-set confirmation against your JD merchant config — tell your developer once credentials are saved.</div>
+              <div class="muted" style="font-size:11px;margin-top:10px">After saving, full waybill push needs a one-time field-set confirmation against your JD merchant config — tell your developer once credentials are saved. · 保存后,完整推单还需对照你的 JD 商家配置做一次性字段确认 —— 凭证保存后请告知你的开发人员。</div>
             </div>
           </div>
 
@@ -5428,15 +5435,15 @@
               <h3>Receipt printing — Feie cloud printer · 飞鹅云打印出单 <span id="feie-chip"></span></h3>
               <div class="muted">Auto-prints a ticket at the store the moment an order is paid — no PC needed, the printer also voice-announces it. Bind the printer in the Feie app, then get your <b>USERKEY</b> from a developer app at <a href="https://www.feieyun.com" target="_blank" style="color:var(--accent)">feieyun.com</a>. · 付款后自动在门店打印小票并语音播报。</div>
             </div>
-            <div class="muted" style="font-size:11px;margin-bottom:12px;background:var(--bg-elev-1);border-radius:6px;padding:8px 10px">⚠ The <b>USERKEY</b> is from your feieyun.com developer console — <em>not</em> the secret/KEY on the device label. One account holds all printers; each store's <b>SN</b> is set per-store below.</div>
+            <div class="muted" style="font-size:11px;margin-bottom:12px;background:var(--bg-elev-1);border-radius:6px;padding:8px 10px">⚠ The <b>USERKEY</b> is from your feieyun.com developer console — <em>not</em> the secret/KEY on the device label. One account holds all printers; each store's <b>SN</b> is set per-store below. · <b>USERKEY</b> 来自你的 feieyun.com 开发者后台 —— <em>不是</em>设备标签上的 secret/KEY。一个账号管理所有打印机;各门店的 <b>SN</b> 在下方逐店设置。</div>
             <div class="ops-grid">
               <div>
                 <label class="field-label">Account · 账号 (USER)</label>
-                <input type="text" id="feie-user" style="font-family:monospace" placeholder="feieyun login phone/email">
+                <input type="text" id="feie-user" style="font-family:monospace" data-ph-en="feieyun login phone/email" data-ph-cn="飞鹅登录手机号/邮箱" placeholder="feieyun login phone/email">
               </div>
               <div>
                 <label class="field-label">USERKEY · 用户密钥 (UKEY)</label>
-                <input type="password" id="feie-ukey" placeholder="paste USERKEY from dev console">
+                <input type="password" id="feie-ukey" data-ph-en="paste USERKEY from dev console" data-ph-cn="粘贴开发者后台的 USERKEY" placeholder="paste USERKEY from dev console">
               </div>
               <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px">
                 <input type="checkbox" id="feie-auto" style="width:18px;height:18px">
@@ -5444,7 +5451,7 @@
               </div>
               <div style="grid-column:1/-1">
                 <label class="field-label">Receipt header · 小票抬头</label>
-                <input type="text" id="feie-shop" maxlength="40" placeholder="shop name shown at top of receipt">
+                <input type="text" id="feie-shop" maxlength="40" data-ph-en="shop name shown at top of receipt" data-ph-cn="小票顶部显示的店名" placeholder="shop name shown at top of receipt">
               </div>
             </div>
             <div style="border-top:1px solid var(--line);margin:4px 0 14px"></div>
@@ -5460,7 +5467,7 @@
               <option value="">— Use each order's own store · 按订单所属门店 —</option>
             </select>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
-              <button class="btn btn-primary" onclick="_savePrinter()">💾 Save all</button>
+              <button class="btn btn-primary" onclick="_savePrinter()">💾 Save all · 全部保存</button>
             </div>
           </div>
         </div>
@@ -5469,7 +5476,7 @@
         <div class="save-bar">
           <button class="btn btn-primary" onclick="saveConfig()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            Save settings
+            Save settings · 保存设置
           </button>
           <span id="cfg-status" style="font-size: 12px;"></span>
         </div>
@@ -5488,7 +5495,7 @@
   <section id="tab-social" data-feat="socialProof">
           <h2>Social proof · 社交证明</h2>
           <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
-            Five live engagement widgets that surface real customer activity in the mini app. Toggle any of them off to hide the widget instantly across all customers (no WeChat republish needed). Tuning numbers control how aggressive each one is. · 五个实时社交证明组件,可即时开启/关闭和调整阈值。
+            Five live engagement widgets that surface real customer activity in the mini app. Toggle any of them off to hide the widget instantly across all customers (no WeChat republish needed). Tuning numbers control how aggressive each one is. · 五个实时互动组件,在小程序中呈现真实的顾客活动。关闭任意组件可立即对所有顾客隐藏(无需重新发布微信小程序)。调节数值用于控制每个组件触发的积极程度。
           </div>
 
           <!-- 1. Bought-count -->
@@ -5722,7 +5729,7 @@
     <div class="group-card">
       <div class="group-card-head">
         <h3>Privacy policy · 隐私政策</h3>
-        <div class="muted">Required by WeChat for any mini-program that collects user info (we do — phone, address, openid). Linked from the Me tab and shown on first-launch onboarding. The customer's WeChat language picks EN or 中.</div>
+        <div class="muted">Required by WeChat for any mini-program that collects user info (we do — phone, address, openid). Linked from the Me tab and shown on first-launch onboarding. The customer's WeChat language picks EN or 中. · 微信要求任何收集用户信息的小程序都必须提供(我们会收集手机号、地址、openid)。在"我的"页有入口,并在首次启动引导时展示。顾客的微信语言决定显示英文还是中文。</div>
       </div>
       <div class="illus-row">
         <div class="mini-phone">
@@ -5809,13 +5816,14 @@
     <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
       Powers the <b>Me → Help &amp; FAQ</b> screen in the mini app. Each question stores both EN and 中文 — the customer's language picks one. Changes appear in the mini app within ~60s (config cache TTL).
       The contact bar at the bottom of the FAQ screen reuses the WeChat customer-service settings (Settings → Customer service) and the optional phone number set there.
+      · 驱动小程序中的<b>"我的 → 帮助与常见问题"</b>页面。每个问题同时录入中英文,由顾客的语言决定显示哪一种;改动约 60 秒内(配置缓存 TTL)在小程序中生效。常见问题页底部的联系栏复用微信客服设置(设置 → 客户服务)及其中可选的电话号码。
     </div>
 
     <!-- Categories -->
     <div class="group-card">
       <div class="group-card-head">
         <h3>Categories · 分类</h3>
-        <div class="muted">The colour-coded chips at the top of the FAQ screen. Customers tap one to filter the question list. <b>id</b> is the slug stored in each question — change it only if no questions reference it yet.</div>
+        <div class="muted">The colour-coded chips at the top of the FAQ screen. Customers tap one to filter the question list. <b>id</b> is the slug stored in each question — change it only if no questions reference it yet. · 常见问题页顶部的彩色标签;顾客点击其一即可筛选问题列表。<b>id</b> 是存储在每个问题中的标识(slug),只有当还没有问题引用它时才可修改。</div>
       </div>
       <div class="table-wrap" style="margin-bottom: 12px;">
         <table id="faq-cats-table">
@@ -5830,7 +5838,7 @@
         </table>
       </div>
       <div class="row" style="gap: 12px;">
-        <button class="btn" onclick="addFaqCategory()">+ Add category</button>
+        <button class="btn" onclick="addFaqCategory()">+ Add category · 添加分类</button>
       </div>
     </div>
 
@@ -5844,7 +5852,7 @@
         <div class="muted" style="padding: 16px 0;">Loading… · 加载中…</div>
       </div>
       <div class="row" style="gap: 12px; margin-top: 12px;">
-        <button class="btn" onclick="addFaqQuestion()">+ Add question</button>
+        <button class="btn" onclick="addFaqQuestion()">+ Add question · 添加问题</button>
         <button class="btn" onclick="loadFaq()" style="margin-left: auto;">Reset (reload from server) · 重置(从服务端重新加载)</button>
       </div>
     </div>
@@ -5852,7 +5860,7 @@
     <div class="row" style="gap: 12px; margin-top: var(--s4);">
       <button class="btn btn-primary" onclick="saveFaq()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        Save FAQ
+        Save FAQ · 保存常见问题
       </button>
       <span id="faq-status" style="font-size: 12px; align-self: center;"></span>
     </div>
@@ -5937,7 +5945,7 @@
       </button>
       <button class="btn btn-sm" type="button" onclick="popOutLivePreview()" title="Open in new tab · 在新标签打开">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-        Pop out
+        Pop out · 弹出
       </button>
       <button class="btn btn-icon" type="button" onclick="closeDrawer('#live-preview-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -6476,14 +6484,14 @@
       var hint = fwd
         ? '<button type="button" class="rm-oc-hint" data-hintact data-id="' + o.id + '" data-to="' + fwd[0] + '">' + ICON_ADV + esc(en(fwd[1])) + '</button>'
         : (o.status === 'delivered'
-            ? '<div class="rm-oc-hint done">' + ICON_CHECK + 'Completed — no action needed</div>'
+            ? '<div class="rm-oc-hint done">' + ICON_CHECK + 'Completed — no action needed · 已完成 — 无需操作</div>'
             : '');
 
       var swipeable = !!(fwd || phone);
       var actions = swipeable
         ? '<div class="rm-ocard-actions">'
-          + (fwd ? '<button type="button" class="rm-act-advance" data-act="advance" data-id="' + o.id + '" data-to="' + fwd[0] + '">' + ICON_ADV + 'Advance</button>' : '')
-          + (phone ? '<button type="button" class="rm-act-call" data-act="call" data-phone="' + esc(phone) + '">' + ICON_CALL + 'Call</button>' : '')
+          + (fwd ? '<button type="button" class="rm-act-advance" data-act="advance" data-id="' + o.id + '" data-to="' + fwd[0] + '">' + ICON_ADV + 'Advance · 推进</button>' : '')
+          + (phone ? '<button type="button" class="rm-act-call" data-act="call" data-phone="' + esc(phone) + '">' + ICON_CALL + 'Call · 拨打</button>' : '')
           + '</div>'
         : '';
 
@@ -7298,8 +7306,8 @@
 
       var actions =
         '<div class="rm-cucard-actions">' +
-          '<button type="button" class="rm-cu-adjust" data-act="adjust" data-id="' + c.id + '">' + ICON_ADJ + 'Adjust</button>' +
-          '<button type="button" class="rm-cu-block' + (blocked ? ' is-unblock' : '') + '" data-act="block" data-id="' + c.id + '">' + ICON_BLOCK + (blocked ? 'Unblock' : 'Block') + '</button>' +
+          '<button type="button" class="rm-cu-adjust" data-act="adjust" data-id="' + c.id + '">' + ICON_ADJ + 'Adjust · 调整</button>' +
+          '<button type="button" class="rm-cu-block' + (blocked ? ' is-unblock' : '') + '" data-act="block" data-id="' + c.id + '">' + ICON_BLOCK + (blocked ? 'Unblock · 解封' : 'Block · 封禁') + '</button>' +
         '</div>';
 
       html +=
@@ -7310,7 +7318,7 @@
               '<div class="rm-cu-body">' +
                 '<div class="rm-cu-name' + (guest ? ' guest' : '') + '">' +
                   '<span class="nm">' + esc(name) + '</span>' +
-                  (blocked ? '<span class="cu-pill blocked">Blocked</span>' : '') +
+                  (blocked ? '<span class="cu-pill blocked">Blocked · 已封禁</span>' : '') +
                 '</div>' +
                 '<div class="rm-cu-meta">' + meta + '</div>' +
               '</div>' +

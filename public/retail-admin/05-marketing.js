@@ -25,38 +25,38 @@ async function loadVouchers() {
         ? labelBits.join(' · ')
         : '<span class="muted">—</span>';
       const publicBadge = v.is_public
-        ? '<span class="pill pub" style="font-size: 10px;">PUBLIC</span>'
+        ? '<span class="pill pub" style="font-size: 10px;">PUBLIC · 公开</span>'
         : '';
       const autoBadge = v.auto_grant_signup
-        ? '<span class="pill info" style="font-size: 10px;" title="Auto-granted to every new signup">AUTO</span>'
+        ? '<span class="pill info" style="font-size: 10px;" title="Auto-granted to every new signup · 每位新注册自动发放">AUTO · 自动</span>'
         : '';
       const autoApplyBadge = v.auto_apply
-        ? '<span class="pill pub" style="font-size: 10px;" title="Applied automatically at checkout (best one wins)">AUTO-APPLY</span>'
+        ? '<span class="pill pub" style="font-size: 10px;" title="Applied automatically at checkout (best one wins) · 结账时自动抵扣(取最优)">AUTO-APPLY · 自动抵扣</span>'
         : '';
       const grantBadge = v.grant_count
-        ? `<span class="pill info" style="font-size: 10px;">GRANTED ${v.grant_used_count || 0}/${v.grant_count}</span>`
+        ? `<span class="pill info" style="font-size: 10px;">GRANTED · 已发放 ${v.grant_used_count || 0}/${v.grant_count}</span>`
         : '';
       return `
       <tr data-id="${v.id}">
         <td><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;"><span style="font-family: var(--f-mono); font-weight: 700">${escapeHtml(v.code)}</span>${publicBadge}${autoBadge}${autoApplyBadge}${grantBadge}</div></td>
         <td style="font-size: 12px;">${label}</td>
-        <td class="muted">${v.type === 'fixed_amount' ? '¥ off' : v.type === 'percent' ? '% off' : 'Free ship'}</td>
+        <td class="muted">${v.type === 'fixed_amount' ? '¥ off · 立减' : v.type === 'percent' ? '% off · 折扣' : 'Free ship · 免运费'}</td>
         <td class="numeric">${v.type === 'percent' ? v.value + '%' : (v.type === 'free_shipping' ? '—' : '¥' + fmt(v.value))}</td>
         <td class="numeric muted">${v.min_subtotal ? '¥' + fmt(v.min_subtotal) : '—'}</td>
         <td class="numeric">${v.used_count}${v.max_uses != null ? ' / ' + v.max_uses : ''}</td>
         <td class="muted">${formatDateOnly(v.expires_at)}</td>
-        <td><span class="pill ${v.is_active ? 'pub' : 'draft'}"><span class="dot"></span>${v.is_active ? 'Active' : 'Inactive'}</span></td>
+        <td><span class="pill ${v.is_active ? 'pub' : 'draft'}"><span class="dot"></span>${v.is_active ? 'Active · 生效中' : 'Inactive · 已停用'}</span></td>
         <td style="white-space: nowrap;">
           <button class="btn btn-sm" onclick='openGrantModal(${v.id}, ${JSON.stringify(v.code)})'>Grant · 发放</button>
-          <button class="btn btn-sm" onclick="togglePublic(${v.id}, ${v.is_public ? 0 : 1})">${v.is_public ? 'Make private' : 'Make public'}</button>
-          <button class="btn btn-sm" onclick="toggleAutoGrant(${v.id}, ${v.auto_grant_signup ? 0 : 1})" title="Auto-grant to every new signup">${v.auto_grant_signup ? 'Stop auto-grant' : 'Auto-grant'}</button>
-          <button class="btn btn-sm" onclick="toggleAutoApply(${v.id}, ${v.auto_apply ? 0 : 1})" title="Apply automatically at checkout — best coupon wins, no code needed">${v.auto_apply ? 'Stop auto-apply' : 'Auto-apply'}</button>
-          <button class="btn btn-sm" onclick="toggleVoucher(${v.id}, ${v.is_active ? 0 : 1})">${v.is_active ? 'Disable' : 'Enable'}</button>
+          <button class="btn btn-sm" onclick="togglePublic(${v.id}, ${v.is_public ? 0 : 1})">${v.is_public ? 'Make private · 设为私有' : 'Make public · 设为公开'}</button>
+          <button class="btn btn-sm" onclick="toggleAutoGrant(${v.id}, ${v.auto_grant_signup ? 0 : 1})" title="Auto-grant to every new signup · 为每位新注册自动发放">${v.auto_grant_signup ? 'Stop auto-grant · 停止自动发放' : 'Auto-grant · 自动发放'}</button>
+          <button class="btn btn-sm" onclick="toggleAutoApply(${v.id}, ${v.auto_apply ? 0 : 1})" title="Apply automatically at checkout — best coupon wins, no code needed · 结账时自动抵扣 — 取最优券,无需编码">${v.auto_apply ? 'Stop auto-apply · 停止自动抵扣' : 'Auto-apply · 自动抵扣'}</button>
+          <button class="btn btn-sm" onclick="toggleVoucher(${v.id}, ${v.is_active ? 0 : 1})">${v.is_active ? 'Disable · 停用' : 'Enable · 启用'}</button>
         </td>
       </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="9" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="err">Failed · 失败: ${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -77,7 +77,7 @@ async function createVoucher() {
   };
   if (!body.code) { toast('Code required · 请填写编码', 'err'); return; }
   if (body.is_public && !body.title_en && !body.title_cn) {
-    toast('Public coupons need a label (EN or 中)', 'err'); return;
+    toast('Public coupons need a label (EN or 中) · 公开优惠券需要填写标签', 'err'); return;
   }
   try {
     // Reusing the code of an expired/disabled coupon revives that row
@@ -143,8 +143,8 @@ let _grantSearchTimer = null;
 
 function openGrantModal(voucherId, code) {
   _grantVoucherId = voucherId;
-  $('#grant-modal-title').textContent = 'Grant coupon · ' + code;
-  $('#grant-modal-sub').textContent = 'Recipients see this in their wallet & checkout, no code needed.';
+  $('#grant-modal-title').textContent = 'Grant coupon · 发放优惠券 ' + code;
+  $('#grant-modal-sub').textContent = 'Recipients see this in their wallet & checkout, no code needed. · 收件人会在钱包和结账时看到,无需编码。';
   $('#grant-search').value = '';
   $('#grant-note').value   = '';
   $('#grant-modal-bg').classList.add('show');
@@ -179,7 +179,7 @@ function searchGrantCustomers() {
           <button class="btn btn-sm btn-primary" onclick="grantToCustomer(${c.id})">Grant · 发放</button>
         </div>`).join('');
     } catch (e) {
-      mount.innerHTML = `<div class="err" style="padding: 12px; font-size: 12px;">Failed: ${escapeHtml(e.message)}</div>`;
+      mount.innerHTML = `<div class="err" style="padding: 12px; font-size: 12px;">Failed · 失败: ${escapeHtml(e.message)}</div>`;
     }
   }, 200);
 }
@@ -235,15 +235,15 @@ async function loadGrantedList() {
           <span style="font-weight: 600;">${escapeHtml(g.nickname || '(no name)')}</span>
           <span class="muted">#${g.customer_id} · ${escapeHtml(g.phone || '—')}</span>
           ${g.used_at
-            ? '<span class="pill pub" style="margin-left: 8px; font-size: 10px;">Used</span>'
-            : '<span class="pill draft" style="margin-left: 8px; font-size: 10px;">Unused</span>'}
+            ? '<span class="pill pub" style="margin-left: 8px; font-size: 10px;">Used · 已使用</span>'
+            : '<span class="pill draft" style="margin-left: 8px; font-size: 10px;">Unused · 未使用</span>'}
         </div>
         ${g.used_at
           ? ''
           : `<button class="btn btn-sm" onclick="revokeGrant(${g.id})">Revoke · 撤销</button>`}
       </div>`).join('');
   } catch (e) {
-    mount.innerHTML = `<div class="err" style="padding: 8px 0; font-size: 12px;">Failed: ${escapeHtml(e.message)}</div>`;
+    mount.innerHTML = `<div class="err" style="padding: 8px 0; font-size: 12px;">Failed · 失败: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -712,43 +712,43 @@ async function vwSave(activate) {
 const SNIPPETS = [
   {
     group: 'Cart · 购物车', items: [
-      { key: 'copy.cart.kicker',       label: 'Kicker', help: 'Small caps label above the cart title.', en: 'YOUR BASKET', cn: '购物车' },
-      { key: 'copy.cart.title',        label: 'Headline', help: 'Big serif title on the cart screen.', en: 'Almost yours.', cn: '即将拥有。' },
-      { key: 'copy.cart.empty',        label: 'Empty cart message', help: 'Shown when the customer has no items in their cart.', en: 'Your basket is empty — shop the garden →', cn: '购物车空空如也 — 去逛逛 →' },
-      { key: 'copy.cart.checkout_btn', label: 'Checkout button', help: 'Full-width button at the bottom of the cart.', en: 'CHECK OUT', cn: '结账' },
+      { key: 'copy.cart.kicker',       label: 'Kicker · 小标签', help: 'Small caps label above the cart title. · 购物车标题上方的小写标签。', en: 'YOUR BASKET', cn: '购物车' },
+      { key: 'copy.cart.title',        label: 'Headline · 大标题', help: 'Big serif title on the cart screen. · 购物车页面的大号衬线标题。', en: 'Almost yours.', cn: '即将拥有。' },
+      { key: 'copy.cart.empty',        label: 'Empty cart message · 空购物车提示', help: 'Shown when the customer has no items in their cart. · 当顾客购物车内没有商品时显示。', en: 'Your basket is empty — shop the garden →', cn: '购物车空空如也 — 去逛逛 →' },
+      { key: 'copy.cart.checkout_btn', label: 'Checkout button · 结账按钮', help: 'Full-width button at the bottom of the cart. · 购物车底部的通栏按钮。', en: 'CHECK OUT', cn: '结账' },
     ],
   },
   {
     group: 'Checkout · 结账', items: [
-      { key: 'copy.checkout.kicker',          label: 'Kicker', help: 'Small caps label above the checkout title.', en: 'CHECKOUT · 结账', cn: '结账' },
-      { key: 'copy.checkout.title',           label: 'Headline', help: 'Big serif title on the checkout screen.', en: 'Where & how.', cn: '送到何处？' },
-      { key: 'copy.checkout.place_order_btn', label: 'Place order button', help: 'Final order-placement button.', en: 'PLACE ORDER →', cn: '提交订单 →' },
+      { key: 'copy.checkout.kicker',          label: 'Kicker · 小标签', help: 'Small caps label above the checkout title. · 结账标题上方的小写标签。', en: 'CHECKOUT · 结账', cn: '结账' },
+      { key: 'copy.checkout.title',           label: 'Headline · 大标题', help: 'Big serif title on the checkout screen. · 结账页面的大号衬线标题。', en: 'Where & how.', cn: '送到何处？' },
+      { key: 'copy.checkout.place_order_btn', label: 'Place order button · 提交订单按钮', help: 'Final order-placement button. · 最终下单按钮。', en: 'PLACE ORDER →', cn: '提交订单 →' },
     ],
   },
   {
     group: 'Product detail · 产品详情', items: [
-      { key: 'copy.product.add_btn',  label: 'Add to basket button', help: 'Sticky bottom button on the product page.', en: 'ADD TO BASKET', cn: '加入购物车' },
-      { key: 'copy.product.sold_out', label: 'Sold-out badge', help: 'Shown over the photo when stock is exhausted.', en: 'SOLD OUT', cn: '已售罄' },
+      { key: 'copy.product.add_btn',  label: 'Add to basket button · 加入购物车按钮', help: 'Sticky bottom button on the product page. · 商品页面底部的吸附按钮。', en: 'ADD TO BASKET', cn: '加入购物车' },
+      { key: 'copy.product.sold_out', label: 'Sold-out badge · 售罄标签', help: 'Shown over the photo when stock is exhausted. · 库存售罄时显示在图片上方。', en: 'SOLD OUT', cn: '已售罄' },
     ],
   },
   {
     group: 'Profile · 我的', items: [
-      { key: 'copy.profile.greeting', label: 'Greeting template', help: 'Big serif greeting at top of profile. Use {name} for the customer\'s nickname.', en: 'Hey, {name}.', cn: '你好，{name}。' },
-      { key: 'copy.profile.kicker',   label: 'Kicker template', help: 'Small caps line above the greeting. Use {since} for join year, {level} for tier number.', en: 'MEMBER SINCE {since} · LVL {level}', cn: '加入年份 {since} · 等级 {level}' },
+      { key: 'copy.profile.greeting', label: 'Greeting template · 问候语模板', help: 'Big serif greeting at top of profile. Use {name} for the customer\'s nickname. · 个人页顶部的大号衬线问候语。用 {name} 代表顾客昵称。', en: 'Hey, {name}.', cn: '你好，{name}。' },
+      { key: 'copy.profile.kicker',   label: 'Kicker template · 小标签模板', help: 'Small caps line above the greeting. Use {since} for join year, {level} for tier number. · 问候语上方的小写行。用 {since} 代表加入年份,{level} 代表等级编号。', en: 'MEMBER SINCE {since} · LVL {level}', cn: '加入年份 {since} · 等级 {level}' },
     ],
   },
   {
     group: 'Order tracking · 订单跟踪', items: [
-      { key: 'copy.order.in_transit_title', label: 'In-transit headline', help: 'Big title when order is dispatched.', en: 'On its way.', cn: '配送中。' },
-      { key: 'copy.order.delivered_title',  label: 'Delivered headline', help: 'Big title when order is delivered.', en: 'Delivered.', cn: '已送达。' },
-      { key: 'copy.order.help_link',        label: 'Help link', help: 'Small "Need help" link in the tracking footer.', en: 'NEED HELP', cn: '需要帮助' },
+      { key: 'copy.order.in_transit_title', label: 'In-transit headline · 配送中标题', help: 'Big title when order is dispatched. · 订单已发货时的大标题。', en: 'On its way.', cn: '配送中。' },
+      { key: 'copy.order.delivered_title',  label: 'Delivered headline · 已送达标题', help: 'Big title when order is delivered. · 订单已送达时的大标题。', en: 'Delivered.', cn: '已送达。' },
+      { key: 'copy.order.help_link',        label: 'Help link · 帮助链接', help: 'Small "Need help" link in the tracking footer. · 物流跟踪页脚的小号「需要帮助」链接。', en: 'NEED HELP', cn: '需要帮助' },
     ],
   },
   {
     group: 'Onboarding · 欢迎', items: [
-      { key: 'copy.onboarding.skip_btn', label: 'Skip button', help: 'Onboarding skip button.', en: 'SKIP', cn: '跳过' },
-      { key: 'copy.onboarding.next_btn', label: 'Next button', help: 'Onboarding next/continue button.', en: 'NEXT →', cn: '下一步 →' },
-      { key: 'copy.onboarding.done_btn', label: 'Done button (last slide)', help: 'Final onboarding button to enter the app.', en: 'GET STARTED', cn: '开始使用' },
+      { key: 'copy.onboarding.skip_btn', label: 'Skip button · 跳过按钮', help: 'Onboarding skip button. · 引导页的跳过按钮。', en: 'SKIP', cn: '跳过' },
+      { key: 'copy.onboarding.next_btn', label: 'Next button · 下一步按钮', help: 'Onboarding next/continue button. · 引导页的下一步/继续按钮。', en: 'NEXT →', cn: '下一步 →' },
+      { key: 'copy.onboarding.done_btn', label: 'Done button (last slide) · 完成按钮(最后一页)', help: 'Final onboarding button to enter the app. · 进入应用的最后一个引导按钮。', en: 'GET STARTED', cn: '开始使用' },
     ],
   },
 ];
@@ -1239,17 +1239,17 @@ function renderManualBuyers() {
              style="flex: 1 1 110px; min-width: 90px; font-size: 12px;">
       <input type="text" data-mb-i="${i}" data-mb-f="product_en"
              value="${escapeAttr(m.product_en || '')}"
-             placeholder="Product EN"
+             placeholder="Product EN" data-ph-en="Product (English)" data-ph-cn="产品名(英文)"
              style="flex: 2 1 160px; min-width: 120px; font-size: 12px;">
       <input type="text" data-mb-i="${i}" data-mb-f="product_cn"
              value="${escapeAttr(m.product_cn || '')}"
-             placeholder="产品名(中文)"
+             placeholder="产品名(中文)" data-ph-en="Product (Chinese)" data-ph-cn="产品名(中文)"
              style="flex: 2 1 160px; min-width: 120px; font-size: 12px;">
       <div class="row" style="gap: 4px; align-items: center;">
         <input type="number" data-mb-i="${i}" data-mb-f="minutes_ago" min="0" max="86400"
                value="${Number(m.minutes_ago) || 0}"
                style="width: 80px; font-size: 12px;">
-        <span class="muted" style="font-size: 11px;">min ago</span>
+        <span class="muted" style="font-size: 11px;">min ago · 分钟前</span>
       </div>
       <button type="button" class="cat-del" title="Remove · 删除"
               onclick="removeManualBuyer(${i})">×</button>
@@ -1293,7 +1293,7 @@ async function loadCategories() {
     _cats = data || [];
     renderCategories();
   } catch (e) {
-    $('#cats-status').innerHTML = '<span class="err">Load failed: ' + escapeHtml(e.message) + '</span>';
+    $('#cats-status').innerHTML = '<span class="err">Load failed · 加载失败: ' + escapeHtml(e.message) + '</span>';
   }
 }
 
@@ -1307,10 +1307,10 @@ function renderCategories() {
     li.dataset.id = c.id;
     li.dataset.index = i;
     li.innerHTML = `
-      <span class="cat-handle" title="Drag to reorder">☰</span>
+      <span class="cat-handle" title="Drag to reorder · 拖动排序">☰</span>
       <input class="cat-name" type="text" value="${escapeAttr(c.name)}" data-original="${escapeAttr(c.name)}">
-      <span class="cat-usage">${c.usage_count} product${c.usage_count === 1 ? '' : 's'}</span>
-      <button class="cat-del" title="Delete (only allowed if no products use it)">×</button>
+      <span class="cat-usage">${c.usage_count} product${c.usage_count === 1 ? '' : 's'} · ${c.usage_count} 个商品</span>
+      <button class="cat-del" title="Delete (only allowed if no products use it) · 删除(仅当无商品使用时)">×</button>
     `;
     const nameInput = li.querySelector('.cat-name');
     nameInput.addEventListener('blur', () => renameCategory(c.id, nameInput));
@@ -1523,7 +1523,7 @@ async function loadBroadcastAudienceCount() {
   try {
     const q = '?aud=' + encodeURIComponent(JSON.stringify(aud));
     const { data } = await api('/api/retail-admin/broadcasts/audience-count' + q);
-    $('#bc-aud-count').textContent = (data && data.count != null ? data.count : '0') + ' customers';
+    $('#bc-aud-count').textContent = (data && data.count != null ? data.count : '0') + T(' customers', ' 位顾客');
   } catch (e) {
     $('#bc-aud-count').textContent = '?';
   }
@@ -1540,7 +1540,7 @@ async function loadBroadcastRegions() {
     const { data } = await api('/api/retail-admin/broadcasts/regions');
     _bcRegions = data || [];
     if (!_bcRegions.length) {
-      wrap.innerHTML = '<span class="muted" style="font-size:12px;">No saved addresses yet.</span>';
+      wrap.innerHTML = '<span class="muted" style="font-size:12px;">No saved addresses yet. · 暂无已保存地址。</span>';
       return;
     }
     wrap.innerHTML = _bcRegions.map(r => {
@@ -1552,7 +1552,7 @@ async function loadBroadcastRegions() {
       return `<label class="bc-chip"><input type="checkbox" class="bc-city" value="${escapeHtml(r.city)}" onchange="bcAudienceChanged()"> ${label} <span class="muted">${r.n}</span></label>`;
     }).join('');
   } catch (e) {
-    wrap.innerHTML = '<span class="err" style="font-size:12px;">Failed to load regions.</span>';
+    wrap.innerHTML = '<span class="err" style="font-size:12px;">Failed to load regions. · 加载地区失败。</span>';
   }
 }
 // Automatic-notification category switches. Read/write notifications.categories
@@ -1591,28 +1591,29 @@ async function loadBroadcasts() {
       const titleBits = [];
       if (b.title_en) titleBits.push(escapeHtml(b.title_en));
       if (b.title_cn) titleBits.push(escapeHtml(b.title_cn));
-      const title = titleBits.join(' · ') || '<span class="muted">(no title)</span>';
+      const title = titleBits.join(' · ') || '<span class="muted">(no title) · (无标题)</span>';
       const bodyBits = [];
       if (b.body_en) bodyBits.push(escapeHtml(b.body_en));
       if (b.body_cn) bodyBits.push(escapeHtml(b.body_cn));
       const body = bodyBits.join(' · ');
       const status = b.status || 'sent';
-      const pill = `<span class="bc-pill ${status}">${status.toUpperCase()}</span>`;
+      const BC_STATUS_LABEL = { sent: 'SENT · 已发送', scheduled: 'SCHEDULED · 已排期', draft: 'DRAFT · 草稿', recalled: 'RECALLED · 已撤回', cancelled: 'CANCELLED · 已取消' };
+      const pill = `<span class="bc-pill ${status}">${BC_STATUS_LABEL[status] || status.toUpperCase()}</span>`;
       const meta = [];
-      if (status === 'scheduled' && b.scheduled_for) meta.push('Scheduled for ' + escapeHtml(b.scheduled_for));
-      if (b.sent_at) meta.push('Sent ' + escapeHtml(b.sent_at));
-      if (b.recipient_count) meta.push(b.recipient_count + ' recipient' + (b.recipient_count === 1 ? '' : 's'));
+      if (status === 'scheduled' && b.scheduled_for) meta.push('Scheduled for · 排期于 ' + escapeHtml(b.scheduled_for));
+      if (b.sent_at) meta.push('Sent · 已发送 ' + escapeHtml(b.sent_at));
+      if (b.recipient_count) meta.push(b.recipient_count + ' recipient' + (b.recipient_count === 1 ? '' : 's') + ' · ' + b.recipient_count + ' 位收件人');
       if (b.audience && b.audience.charAt(0) === '{') {
         try {
           const aud = JSON.parse(b.audience);
           if (aud.activity !== 'all' || (aud.tiers && aud.tiers.length) || (aud.cities && aud.cities.length)) {
-            meta.push('To: ' + escapeHtml(bcAudienceLabel(aud)));
+            meta.push('To · 发送对象: ' + escapeHtml(bcAudienceLabel(aud)));
           }
         } catch (_) {}
       }
       if (b.deeplink) meta.push('→ <code>' + escapeHtml(b.deeplink) + '</code>');
       const canRecall = status === 'sent' || status === 'scheduled';
-      const recallLabel = status === 'scheduled' ? 'Cancel' : 'Recall';
+      const recallLabel = status === 'scheduled' ? 'Cancel · 取消' : 'Recall · 撤回';
       const recallBtn = canRecall
         ? `<button class="btn btn-sm" onclick="recallBroadcast(${b.id}, '${status}')">${recallLabel}</button>`
         : '';
@@ -1628,7 +1629,7 @@ async function loadBroadcasts() {
         </div>`;
     }).join('');
   } catch (e) {
-    wrap.innerHTML = `<div class="err" style="font-size: 12px;">Failed: ${escapeHtml(e.message)}</div>`;
+    wrap.innerHTML = `<div class="err" style="font-size: 12px;">Failed · 失败: ${escapeHtml(e.message)}</div>`;
   }
 }
 async function sendBroadcast() {
@@ -1641,11 +1642,11 @@ async function sendBroadcast() {
   const scheduledRaw = mode === 'later' ? $('#bc-schedule-at').value : '';
 
   if (!title_en && !title_cn) {
-    $('#bc-send-status').innerHTML = '<span class="err">Add at least one title.</span>';
+    $('#bc-send-status').innerHTML = '<span class="err">Add at least one title. · 请至少填写一个标题。</span>';
     return;
   }
   if (deeplink && !deeplink.startsWith('/pages/')) {
-    $('#bc-send-status').innerHTML = '<span class="err">Deep-link must start with /pages/</span>';
+    $('#bc-send-status').innerHTML = '<span class="err">Deep-link must start with /pages/ · 深链需以 /pages/ 开头</span>';
     return;
   }
   const audCount = ($('#bc-aud-count').textContent || '').replace(/[^0-9]/g, '');
@@ -1664,14 +1665,14 @@ async function sendBroadcast() {
   try {
     const { data } = await api('/api/retail-admin/broadcasts', { method: 'POST', body: payload });
     if (data.status === 'sent') {
-      status.innerHTML = `<span style="color: #2e7d32;">Sent to ${data.recipient_count} customer${data.recipient_count === 1 ? '' : 's'}.</span>`;
+      status.innerHTML = `<span style="color: #2e7d32;">Sent to ${data.recipient_count} customer${data.recipient_count === 1 ? '' : 's'}. · 已发送给 ${data.recipient_count} 位客户。</span>`;
     } else if (data.status === 'scheduled') {
-      status.innerHTML = '<span style="color: #1a56a8;">Scheduled.</span>';
+      status.innerHTML = '<span style="color: #1a56a8;">Scheduled. · 已排期。</span>';
     }
     bcResetComposer();
     loadBroadcasts();
   } catch (e) {
-    status.innerHTML = `<span class="err">Failed: ${escapeHtml(e.message)}</span>`;
+    status.innerHTML = `<span class="err">Failed · 失败: ${escapeHtml(e.message)}</span>`;
   } finally {
     btn.disabled = false;
   }
@@ -1708,17 +1709,17 @@ if (window.onLangChange) onLangChange(() => {
 // ════════════════════════════════════════════════════════════════
 let _popups = [];
 const PAGE_KEYS = [
-  ['all',          'All pages'],
-  ['home',         'Home'],
-  ['shop',         'Shop'],
-  ['cart',         'Cart'],
-  ['me',           'Me'],
-  ['product',      'Product detail'],
-  ['checkout',     'Checkout'],
-  ['order-success','Order success'],
-  ['orders',       'My orders'],
-  ['membership',   'Membership'],
-  ['addresses',    'Addresses'],
+  ['all',          'All pages · 全部页面'],
+  ['home',         'Home · 首页'],
+  ['shop',         'Shop · 商店'],
+  ['cart',         'Cart · 购物车'],
+  ['me',           'Me · 我的'],
+  ['product',      'Product detail · 商品详情'],
+  ['checkout',     'Checkout · 结账'],
+  ['order-success','Order success · 下单成功'],
+  ['orders',       'My orders · 我的订单'],
+  ['membership',   'Membership · 会员'],
+  ['addresses',    'Addresses · 地址'],
 ];
 
 function uid() {
@@ -1732,16 +1733,16 @@ async function loadPopups() {
     _popups = list;
     renderPopups();
   } catch (e) {
-    $('#popups-list').innerHTML = `<div class="err">Load failed: ${escapeHtml(e.message)}</div>`;
+    $('#popups-list').innerHTML = `<div class="err">Load failed · 加载失败: ${escapeHtml(e.message)}</div>`;
   }
 }
 
 function popupWindowStatus(p) {
   const today = new Date().toISOString().slice(0, 10);
-  if (p.start_at && today < p.start_at) return { kind: 'sched', label: 'Scheduled · starts ' + p.start_at };
-  if (p.end_at   && today > p.end_at)   return { kind: 'off',   label: 'Ended ' + p.end_at };
-  if (p.enabled) return { kind: 'on',  label: 'Live' };
-  return { kind: 'off', label: 'Disabled' };
+  if (p.start_at && today < p.start_at) return { kind: 'sched', label: 'Scheduled · 待开始 ' + p.start_at };
+  if (p.end_at   && today > p.end_at)   return { kind: 'off',   label: 'Ended · 已结束 ' + p.end_at };
+  if (p.enabled) return { kind: 'on',  label: 'Live · 进行中' };
+  return { kind: 'off', label: 'Disabled · 已停用' };
 }
 
 function renderPopups() {
@@ -1756,17 +1757,17 @@ function renderPopups() {
   }
   mount.innerHTML = _popups.map((p) => {
     const st = popupWindowStatus(p);
-    const pages = (p.pages && p.pages.length) ? p.pages.map(k => PAGE_KEYS.find(([kk]) => kk === k)?.[1] || k).join(' · ') : '(no pages selected)';
-    const freq = ({ once: 'Once ever', daily: 'Once/day', session: 'Once/session', every_visit: 'Every visit' })[p.frequency] || p.frequency || 'once';
-    const trig = p.trigger === 'after_seconds' ? `After ${p.delay_seconds || 3}s` : 'On open';
+    const pages = (p.pages && p.pages.length) ? p.pages.map(k => PAGE_KEYS.find(([kk]) => kk === k)?.[1] || k).join(' · ') : '(no pages selected) · (未选择页面)';
+    const freq = ({ once: 'Once ever · 仅一次', daily: 'Once/day · 每天一次', session: 'Once/session · 每次会话一次', every_visit: 'Every visit · 每次访问' })[p.frequency] || p.frequency || 'once';
+    const trig = p.trigger === 'after_seconds' ? `After ${p.delay_seconds || 3}s · ${p.delay_seconds || 3}秒后` : 'On open · 打开时';
     return `
       <div class="pu-card">
-        <label class="pu-toggle" title="Enable / disable">
+        <label class="pu-toggle" title="Enable / disable · 启用 / 停用">
           <input type="checkbox" ${p.enabled ? 'checked' : ''} onchange="togglePopup('${escapeAttr(p.id)}', this.checked)">
         </label>
         <div>
           <div style="display: flex; align-items: center; gap: 8px;">
-            <div class="pu-name">${escapeHtml(p.name || '(untitled)')}</div>
+            <div class="pu-name">${escapeHtml(p.name || '(untitled) · (未命名)')}</div>
             <span class="pu-status-pill ${st.kind}">${escapeHtml(st.label)}</span>
           </div>
           <div class="pu-meta">
@@ -1775,7 +1776,7 @@ function renderPopups() {
           </div>
         </div>
         <div class="pu-actions">
-          <button class="btn btn-sm" onclick="openPopupEditor('${escapeAttr(p.id)}')">${ICONS.open}Edit</button>
+          <button class="btn btn-sm" onclick="openPopupEditor('${escapeAttr(p.id)}')">${ICONS.open}Edit · 编辑</button>
         </div>
       </div>`;
   }).join('');
@@ -1811,7 +1812,7 @@ function blankPopup() {
 function openPopupEditor(id) {
   const p = id ? _popups.find(x => x.id === id) : blankPopup();
   if (!p) return;
-  $('#pu-editor-title').textContent = id ? 'Edit pop-up' : 'New pop-up';
+  $('#pu-editor-title').textContent = id ? 'Edit pop-up · 编辑弹窗' : 'New pop-up · 新建弹窗';
   $('#pu-delete-btn').style.display = id ? '' : 'none';
   $('#pu-id').value         = p.id;
   $('#pu-name').value       = p.name || '';
@@ -1845,23 +1846,24 @@ let _ctaProducts = null;  // cached list, loaded on demand
 
 function ctaTargetLabel(t) {
   if (!t) return '';
-  if (SIMPLE_TARGETS.has(t)) return t[0].toUpperCase() + t.slice(1);
+  const SIMPLE_TARGET_LABEL = { shop: 'Shop · 商店', cart: 'Cart · 购物车', home: 'Home · 首页', me: 'Me · 我的', membership: 'Membership · 会员', promotions: 'Promotions · 促销', about: 'About · 关于', categories: 'Categories · 分类' };
+  if (SIMPLE_TARGETS.has(t)) return SIMPLE_TARGET_LABEL[t] || (t[0].toUpperCase() + t.slice(1));
   if (t.startsWith('product:')) {
     const id = t.split(':')[1];
     const p = (_ctaProducts || []).find(x => String(x.id) === id);
-    return p ? `Product · ${p.name_en || p.name_cn || ('#' + id)}` : 'Product · #' + id;
+    return p ? `Product · 商品 ${p.name_en || p.name_cn || ('#' + id)}` : 'Product · 商品 #' + id;
   }
   if (t.startsWith('category:')) {
     const key = t.split(':')[1];
     const c = _cats.find(x => String(x.id) === key) || _cats.find(x => x.name === key);
-    return c ? `Category · ${c.name}` : 'Category · ' + key;
+    return c ? `Category · 分类 ${c.name}` : 'Category · 分类 ' + key;
   }
   return t;
 }
 
 function updateCtaTargetPreview() {
   const t = $('#pu-cta_target').value;
-  $('#pu-cta_target_preview').textContent = t ? `→ ${ctaTargetLabel(t)}` : 'No destination — pop-up just dismisses.';
+  $('#pu-cta_target_preview').textContent = t ? `→ ${ctaTargetLabel(t)}` : 'No destination — pop-up just dismisses. · 无跳转 — 弹窗仅关闭。';
 }
 
 async function ensureCtaProducts() {
@@ -1876,10 +1878,10 @@ async function ensureCtaProducts() {
 function renderCtaCategorySelect(selectedKey) {
   const sel = $('#pu-cta_target_category');
   if (!_cats.length) {
-    sel.innerHTML = '<option value="">(no categories yet)</option>';
+    sel.innerHTML = '<option value="">(no categories yet) · (暂无分类)</option>';
     return;
   }
-  sel.innerHTML = '<option value="">— pick a category —</option>' +
+  sel.innerHTML = '<option value="">— pick a category · 选择分类 —</option>' +
     _cats.map(c => `<option value="${escapeAttr(c.id)}" ${String(c.id) === String(selectedKey) ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
 }
 
@@ -1895,13 +1897,13 @@ async function renderCtaProductSelect(selectedId, query) {
   );
   list = list.slice(0, 200);
   if (!list.length) {
-    sel.innerHTML = '<option value="">(no matches)</option>';
+    sel.innerHTML = '<option value="">(no matches) · (无匹配)</option>';
     return;
   }
   sel.innerHTML = list.map(p => {
     const name = [p.name_en, p.name_cn].filter(Boolean).join(' · ') || ('#' + p.id);
     const sku = p.sku ? ` [${p.sku}]` : '';
-    const pub = p.is_published ? '' : ' (draft)';
+    const pub = p.is_published ? '' : ' (draft) · (草稿)';
     return `<option value="${p.id}" ${String(p.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(name + sku + pub)}</option>`;
   }).join('');
 }

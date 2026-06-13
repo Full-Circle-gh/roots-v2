@@ -1382,10 +1382,10 @@ function dashRenderKpis() {
     { lbl: 'Orders · 订单',         val: dashNum(k.orders),          num: k.orders,          fmt: 'num',    delta: d.orders,        sub: '' },
     { lbl: 'Avg order · 客单价',     val: dashMoney(k.aov, 2),        num: k.aov,             fmt: 'money2', delta: d.aov,           sub: '' },
     { lbl: 'New customers · 新客',   val: dashNum(k.new_customers),   num: k.new_customers,   fmt: 'num',    delta: d.new_customers, sub: '' },
-    { lbl: 'Visits · 访问',         val: dashNum(k.visits),          num: k.visits,          fmt: 'num',    delta: d.visits,        sub: k.visits === 0 ? 'No data yet · 暂无' : dashNum(k.sessions) + ' sessions' },
+    { lbl: 'Visits · 访问',         val: dashNum(k.visits),          num: k.visits,          fmt: 'num',    delta: d.visits,        sub: k.visits === 0 ? 'No data yet · 暂无' : dashNum(k.sessions) + ' ' + cuT('sessions', '会话') },
     { lbl: 'Unique visitors · 访客', val: dashNum(k.visitors),        num: k.visitors,        fmt: 'num',    delta: null,            sub: '' },
-    { lbl: 'Conversion · 转化率',    val: conv,                       num: k.conversion_rate, fmt: 'pct',    delta: null,            sub: 'orders ÷ sessions' },
-    { lbl: 'Refund rate · 退款率',   val: (k.refund_rate || 0).toFixed(1) + '%', num: k.refund_rate || 0, fmt: 'pct', delta: null, sub: dashNum(k.refunded_orders) + ' refunded' },
+    { lbl: 'Conversion · 转化率',    val: conv,                       num: k.conversion_rate, fmt: 'pct',    delta: null,            sub: 'orders ÷ sessions · 订单 ÷ 会话' },
+    { lbl: 'Refund rate · 退款率',   val: (k.refund_rate || 0).toFixed(1) + '%', num: k.refund_rate || 0, fmt: 'pct', delta: null, sub: dashNum(k.refunded_orders) + ' ' + cuT('refunded', '已退款') },
   ];
   // Snapshot the currently-shown headline values before we blow away the DOM,
   // so a range change can tween from old → new (a zen drift) instead of the
@@ -1650,7 +1650,7 @@ function dashRenderProducts() {
     <div class="db-row">
       <div class="rank">${i + 1}</div>
       ${r.image_url ? `<img class="thumb" src="${escapeAttr(r.image_url)}" loading="lazy" onerror="this.style.visibility='hidden'">` : '<div class="thumb"></div>'}
-      <div class="nm"><b title="${escapeAttr(nm(r.name_en, r.name_cn))}">${escapeHtml(nm(r.name_en, r.name_cn))}</b><span>${dashNum(r.units)} sold · ${dashNum(r.orders)} orders</span></div>
+      <div class="nm"><b title="${escapeAttr(nm(r.name_en, r.name_cn))}">${escapeHtml(nm(r.name_en, r.name_cn))}</b><span>${dashNum(r.units)} ${cuT('sold','已售')} · ${dashNum(r.orders)} ${cuT('orders','单')}</span></div>
       <div class="mny"><b>${dashMoney(r.revenue)}</b></div>
     </div>`).join('') + '</div>';
 }
@@ -1661,7 +1661,7 @@ function dashRenderCustomers() {
   $('#db-customers').innerHTML = '<div class="db-list">' + c.map((r, i) => `
     <div class="db-row">
       <div class="rank">${i + 1}</div>
-      <div class="nm"><b>${escapeHtml(r.nickname || ('Customer #' + r.customer_id))}</b><span>${escapeHtml(r.phone || '')} · ${dashNum(r.orders)} orders</span></div>
+      <div class="nm"><b>${escapeHtml(r.nickname || ('Customer #' + r.customer_id))}</b><span>${escapeHtml(r.phone || '')} · ${dashNum(r.orders)} ${cuT('orders','单')}</span></div>
       <div class="mny"><b>${dashMoney(r.revenue)}</b><span>${escapeHtml(r.tier_key || 'seed')}</span></div>
     </div>`).join('') + '</div>';
 }
@@ -1675,7 +1675,7 @@ function dashRenderTiers() {
     + `<div class="db-tile"><div class="t-val">${dashNum(nvr.new_buyers)}</div><div class="t-lbl">New · 新客</div></div>`
     + `<div class="db-tile"><div class="t-val">${dashNum(nvr.returning_buyers)}</div><div class="t-lbl">Returning · 回头</div></div>`
     + '</div>';
-  html += '<div style="font-family:var(--f-mono);font-size:10px;color:var(--brass);letter-spacing:.18em;text-transform:uppercase;margin:16px 0 8px;font-weight:500">TIER DISTRIBUTION · 等级分布 <span style="font-weight:400;color:var(--text-3);letter-spacing:.02em;text-transform:none">(all customers)</span></div>';
+  html += '<div style="font-family:var(--f-mono);font-size:10px;color:var(--brass);letter-spacing:.18em;text-transform:uppercase;margin:16px 0 8px;font-weight:500">TIER DISTRIBUTION · 等级分布 <span style="font-weight:400;color:var(--text-3);letter-spacing:.02em;text-transform:none">(all customers · 全部顾客)</span></div>';
   html += tiers.length ? dashBarList(tiers.map(t => ({ k: tierLabel(t.tier), value: dashNum(t.n), frac: t.n }))) : '<div class="db-muted">—</div>';
   $('#db-tiers').innerHTML = html;
 }
@@ -1684,8 +1684,8 @@ function dashRenderGeo() {
   const cities = DASH_DATA.geoCities || [];
   if (!cities.length) { $('#db-geo').innerHTML = '<div class="db-muted">No location data · 暂无地域数据</div>'; return; }
   $('#db-geo').innerHTML = dashBarList(cities.map(c => ({
-    k: c.city || '—', kSub: `${dashNum(c.customers)} cust.`,
-    value: dashMoney(c.revenue), valueSub: `${dashNum(c.orders)} ord.`, frac: c.revenue,
+    k: c.city || '—', kSub: `${dashNum(c.customers)} ${cuT('cust.','顾客')}`,
+    value: dashMoney(c.revenue), valueSub: `${dashNum(c.orders)} ${cuT('ord.','单')}`, frac: c.revenue,
   })));
 }
 
@@ -1698,20 +1698,20 @@ function dashRenderMarketing() {
     + `<div class="db-tile"><div class="t-val">${dashMoney(p.points_value)}</div><div class="t-lbl">Points value · 积分抵扣</div></div>`
     + '</div>';
   html += '<div style="font-family:var(--f-mono);font-size:10px;color:var(--brass);letter-spacing:.18em;text-transform:uppercase;margin:16px 0 8px;font-weight:500">VOUCHERS · 优惠券</div>';
-  html += v.length ? dashBarList(v.map(x => ({ k: x.code || '—', kSub: `${dashNum(x.uses)} uses`, value: '−' + dashMoney(x.discount), valueSub: dashMoney(x.revenue) + ' rev', frac: x.uses }))) : '<div class="db-muted">No vouchers redeemed · 无优惠券核销</div>';
+  html += v.length ? dashBarList(v.map(x => ({ k: x.code || '—', kSub: `${dashNum(x.uses)} ${cuT('uses','次')}`, value: '−' + dashMoney(x.discount), valueSub: `${dashMoney(x.revenue)} ${cuT('rev','营收')}`, frac: x.uses }))) : '<div class="db-muted">No vouchers redeemed · 无优惠券核销</div>';
   $('#db-marketing').innerHTML = html;
 }
 
 // WeChat launch-scene code → human label (common ones; fallback shows code).
 const DASH_SCENES = {
-  1001: 'Mini-program list · 小程序列表', 1005: 'Search · 搜索', 1006: 'Search result',
+  1001: 'Mini-program list · 小程序列表', 1005: 'Search · 搜索', 1006: 'Search result · 搜索结果',
   1007: 'Single chat card · 单聊', 1008: 'Group chat card · 群聊', 1011: 'Scan QR · 扫码',
   1012: 'Long-press QR · 长按识别', 1013: 'History · 历史', 1014: 'Template msg · 模板消息',
   1017: 'From mini-program · 小程序跳转', 1019: 'Wallet · 钱包', 1020: 'Card pkg · 卡包',
-  1023: 'Home screen · 桌面', 1035: 'Ad · 广告', 1036: 'App share',
-  1047: 'Scan QR (Discover)', 1048: 'History', 1058: 'Official article · 公众号文章',
-  1065: 'URL scheme', 1074: 'Nearby · 附近', 1089: 'Chat tools · 聊天工具',
-  1107: 'Subscription msg', 1131: 'Floating window · 浮窗',
+  1023: 'Home screen · 桌面', 1035: 'Ad · 广告', 1036: 'App share · 分享',
+  1047: 'Scan QR (Discover) · 扫码(发现)', 1048: 'History · 历史', 1058: 'Official article · 公众号文章',
+  1065: 'URL scheme · 链接跳转', 1074: 'Nearby · 附近', 1089: 'Chat tools · 聊天工具',
+  1107: 'Subscription msg · 订阅消息', 1131: 'Floating window · 浮窗',
 };
 function dashRenderTraffic() {
   const k = DASH_DATA.kpis, scenes = (DASH_DATA.traffic && DASH_DATA.traffic.scenes) || [];
@@ -1751,7 +1751,7 @@ function dashRenderHeatmap() {
       const bg = intensity === 0 ? 'var(--bg-elev-1)' : `rgba(107,142,111,${(0.16 + intensity * 0.84).toFixed(2)})`;
       const hh = String(h).padStart(2, '0');
       const tip = cell
-        ? `${DASH_DOW[d]} ${hh}:00 — ${dashNum(cell.orders)} orders · ${dashMoney(cell.revenue)}`
+        ? `${DASH_DOW[d]} ${hh}:00 — ${dashNum(cell.orders)} ${cuT('orders','单')} · ${dashMoney(cell.revenue)}`
         : `${DASH_DOW[d]} ${hh}:00 — 0`;
       cells += `<div class="db-heat-cell" style="background:${bg}" title="${escapeAttr(tip)}"></div>`;
     }
@@ -1880,7 +1880,7 @@ function dashRenderCohorts() {
       const p = size > 0 ? Math.round(active / size * 1000) / 10 : 0;
       const col = cellColor(p);
       cells += col
-        ? `<td style="background:${col};color:#E8E5DC" title="${escapeAttr(active + ' of ' + size + ' returned in ' + monthAdd(cm, i))}">${p.toFixed(0)}%</td>`
+        ? `<td style="background:${col};color:#E8E5DC" title="${escapeAttr(cuLang() === 'cn' ? `${monthAdd(cm, i)} 回购 ${active}/${size}` : `${active} of ${size} returned in ${monthAdd(cm, i)}`)}">${p.toFixed(0)}%</td>`
         : `<td class="empty">—</td>`;
     }
     body += `<tr>${cells}</tr>`;
