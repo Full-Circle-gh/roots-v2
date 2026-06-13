@@ -1189,8 +1189,19 @@ function itemSkuHtml(it) {
 // from options_json server-side into it.options = [{label, ...}]. Shown so the
 // operator/packer sees "which dressing" — two same-SKU salads differ only here.
 function itemOptionsHtml(it) {
+  const isCn = typeof window !== 'undefined' && window.cuLang && window.cuLang() === 'cn';
   const txt = (Array.isArray(it.options) ? it.options : [])
-    .map(o => escapeHtml((o && o.label) || '')).filter(Boolean).join(' · ');
+    .map(o => {
+      if (!o) return '';
+      // Choice value (operator language wins; fall back to whichever exists).
+      const val = (isCn && o.label_cn) ? o.label_cn : (o.label || o.label_cn || '');
+      if (!val) return '';
+      // Prefix the QUESTION so "Yes" reads as "Heat up?: Yes". Older orders or
+      // deleted options may lack it — then just show the bare value.
+      const q = (isCn && o.question_cn) ? o.question_cn : (o.question_en || '');
+      return q ? `${escapeHtml(q)}: ${escapeHtml(val)}` : escapeHtml(val);
+    })
+    .filter(Boolean).join(' · ');
   return txt ? `<div class="oi-opts">▸ ${txt}</div>` : '';
 }
 

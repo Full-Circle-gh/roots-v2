@@ -938,6 +938,46 @@ function loadProductOptions(productId) {
   return options.map(o => ({ ...o, choices: byOpt[o.id] || [] }));
 }
 
+// Order lines snapshot only the chosen choice label (e.g. "Yes"). Orders placed
+// before question-snapshotting carry no `question_en`, so the operator sees a
+// bare "Yes · Yes". Backfill the option's QUESTION ("Heat up?") and the 中文
+// label by re-looking-up the snapshotted option_id / choice_id. If the option
+// was since deleted the stored English label still shows. Mutates each item's
+// `.options` array in place; safe on items that have no options.
+function backfillOptionQuestions(items) {
+  if (!Array.isArray(items)) return items;
+  const optIds = new Set(), choiceIds = new Set();
+  for (const it of items)
+    for (const o of (Array.isArray(it.options) ? it.options : [])) {
+      if (o && o.option_id != null && o.question_en == null) optIds.add(o.option_id);
+      if (o && o.choice_id != null && o.label_cn == null) choiceIds.add(o.choice_id);
+    }
+  if (!optIds.size && !choiceIds.size) return items;
+  const qByOpt = {}, cnByChoice = {};
+  if (optIds.size) {
+    const ph = [...optIds].map(() => '?').join(',');
+    for (const r of tdb().prepare(
+      `SELECT id, question_en, question_cn FROM retail_product_options WHERE id IN (${ph})`
+    ).all(...optIds)) qByOpt[r.id] = r;
+  }
+  if (choiceIds.size) {
+    const ph = [...choiceIds].map(() => '?').join(',');
+    for (const r of tdb().prepare(
+      `SELECT id, label_cn FROM retail_product_option_choices WHERE id IN (${ph})`
+    ).all(...choiceIds)) cnByChoice[r.id] = r.label_cn;
+  }
+  for (const it of items)
+    for (const o of (Array.isArray(it.options) ? it.options : [])) {
+      if (!o) continue;
+      if (o.question_en == null && qByOpt[o.option_id]) {
+        o.question_en = qByOpt[o.option_id].question_en;
+        o.question_cn = qByOpt[o.option_id].question_cn;
+      }
+      if (o.label_cn == null && cnByChoice[o.choice_id] != null) o.label_cn = cnByChoice[o.choice_id];
+    }
+  return items;
+}
+
 // Replace ALL options for a product with the supplied set (delete-then-insert in
 // one transaction). Editor sends the full list every save, so this is the whole
 // truth — an empty/missing array clears them. Choice price_delta is the only way
@@ -4896,7 +4936,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
     if (Array.isArray(it.choices) && it.choices.length) {
       const placeholders = it.choices.map(() => '?').join(',');
       const choices = tdb().prepare(
-        `SELECT c.id, c.option_id, c.label_en, c.price_delta, c.stock_product_id, o.product_id, o.type
+        `SELECT c.id, c.option_id, c.label_en, c.label_cn, c.price_delta, c.stock_product_id,
+                o.product_id, o.type, o.question_en, o.question_cn
            FROM retail_product_option_choices c
            JOIN retail_product_options o ON o.id = c.option_id
           WHERE c.id IN (${placeholders})`
@@ -4908,7 +4949,15 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
         optionDelta += Number(c.price_delta) || 0;
         // stock_product_id carries through so expandStockLines can reserve a
         // stock-backed paid extra's inventory alongside the main product.
-        chosenLabels.push({ option_id: c.option_id, choice_id: c.id, label: c.label_en, delta: c.price_delta, stock_product_id: c.stock_product_id || null });
+        // question_en/cn + label_cn are snapshotted so the order line is
+        // self-describing ("Heat up?: Yes" not a bare "Yes") even if the
+        // option is later edited or deleted.
+        chosenLabels.push({
+          option_id: c.option_id, choice_id: c.id,
+          label: c.label_en, label_cn: c.label_cn || null,
+          question_en: c.question_en || null, question_cn: c.question_cn || null,
+          delta: c.price_delta, stock_product_id: c.stock_product_id || null,
+        });
       }
     }
 
@@ -5717,6 +5766,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
     }
     return it;
   });
+  backfillOptionQuestions(o.items);
   // Tell the customer which items ride in each parcel (split-package orders).
   if (o.shipments) {
     o.shipments.forEach(s => {
@@ -10719,6 +10769,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     delete it.bundle_items;
     return it;
   });
+  backfillOptionQuestions(o.items);
   o.payments = tdb().prepare(
     `SELECT id, method, amount, status, transaction_id, out_trade_no,
             qr_image_url, refunded_amount, created_at, completed_at
