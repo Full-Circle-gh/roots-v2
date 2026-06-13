@@ -1992,6 +1992,22 @@
         </div>
       </div>
     </div>
+
+    <!-- ─── Guided product wizard (additive; lives inside the Products tab so tab-switching never hides it) ─── -->
+    <div id="pw-bg" class="pu-editor-bg">
+      <div class="pu-editor vw" style="width: 760px; max-width: 94vw;">
+        <div class="pu-editor-head">
+          <div>
+            <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--brass,#b08d4a);font-weight:600;margin-bottom:3px;">NEW PRODUCT · 新增产品</div>
+            <h3 id="pw-title" style="margin: 0; font-size: 15px;">Add a product · 添加产品</h3>
+          </div>
+          <button class="btn" onclick="pwClose()">Close · 关闭</button>
+        </div>
+        <div id="pw-body" style="display: flex; flex-direction: column; gap: 14px; padding: 26px 24px 24px; max-height: 78vh; overflow: auto;"></div>
+        <div id="pw-foot" class="vw-foot"></div>
+        <input type="file" id="pw-photo-file" accept="image/*" style="display:none" onchange="pwPhotoPicked(event)">
+      </div>
+    </div>
   </section>
 
   <!-- ─── CATEGORIES (2-level tree editor) ─── -->
@@ -2338,22 +2354,6 @@
         </div>
         <div id="vw-body" style="display: flex; flex-direction: column; gap: 18px; padding: 28px 24px 24px; max-height: 78vh; overflow: auto;"></div>
         <div id="vw-foot" class="vw-foot"></div>
-      </div>
-    </div>
-
-    <!-- ─── Guided product wizard (additive; the manual editor below is untouched) ─── -->
-    <div id="pw-bg" class="pu-editor-bg">
-      <div class="pu-editor vw" style="width: 760px; max-width: 94vw;">
-        <div class="pu-editor-head">
-          <div>
-            <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--brass,#b08d4a);font-weight:600;margin-bottom:3px;">NEW PRODUCT · 新增产品</div>
-            <h3 id="pw-title" style="margin: 0; font-size: 15px;">Add a product · 添加产品</h3>
-          </div>
-          <button class="btn" onclick="pwClose()">Close · 关闭</button>
-        </div>
-        <div id="pw-body" style="display: flex; flex-direction: column; gap: 14px; padding: 26px 24px 24px; max-height: 78vh; overflow: auto;"></div>
-        <div id="pw-foot" class="vw-foot"></div>
-        <input type="file" id="pw-photo-file" accept="image/*" style="display:none" onchange="pwPhotoPicked(event)">
       </div>
     </div>
   </section>
