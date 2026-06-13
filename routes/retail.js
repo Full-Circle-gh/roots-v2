@@ -1213,7 +1213,12 @@ router.get('/api/retail/products', (req, res) => {
   // req.protocol respects X-Forwarded-Proto.
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   for (const r of rows) lazifyProductImage(r, baseUrl, thumbW);
-  for (const r of rows) decorateBundleRow(r);   // flag bundles + real (component-derived) stock
+  // bundle_components=1 (the home bundle block's by-id fetch): also attach each
+  // bundle's "what's inside" component cards so the block can show items + the
+  // true saving vs the bundle's fixed price. Off by default — the shop grid pulls
+  // hundreds of rows and doesn't need the extra per-bundle component query.
+  const withBundleComps = req.query.bundle_components === '1' || req.query.bundle_components === 'true';
+  for (const r of rows) decorateBundleRow(r, { withComponents: withBundleComps });   // flag bundles + real (component-derived) stock
   attachSoldCounts(rows);
   resolveAutoBadges(rows);
   const termClause = terms.map(() => 'AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)').join(' ');

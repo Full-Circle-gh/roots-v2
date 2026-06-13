@@ -1591,6 +1591,7 @@ Component({
             label_en: 'Bundle', label_cn: '组合',
             title_en: b.title_en, title_cn: b.title_cn,
             subtitle_en: b.subtitle_en, subtitle_cn: b.subtitle_cn,
+            bundle_product_id: b.bundle_product_id,
             product_ids: b.product_ids,
             bundle_price: b.bundle_price,
             auto_voucher_code: b.auto_voucher_code,
@@ -1599,25 +1600,51 @@ Component({
           }];
 
           const buildVariant = v => {
-            const ids = Array.isArray(v.product_ids) ? v.product_ids : [];
-            const items = ids
-              .map(id => this.findProductById(id))
-              .filter(Boolean)
-              .slice(0, 6);
+            // New model: the variant points at ONE real Bundle product. Its
+            // fixed price is the bundle price (charged for real at checkout),
+            // its components are the "what's inside" cards, and the saving is
+            // that price vs the sum of the components. Falls back to the legacy
+            // loose product_ids + bundle_price for blocks not yet repicked.
+            const bp = v.bundle_product_id ? this.findProductById(v.bundle_product_id) : null;
             let sum = 0;
-            const cards = items.map(p => {
-              const regular = Number(p.sell_price ?? p.price) || 0;
-              const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
-              sum += eff;
-              return {
-                id: p.id,
-                image: absUrl(p.image_url) || p.image_data || '',
-                name:  lang.pick(p.name_en, p.name_cn, L),
-                cn:    '',
-                price: eff > 0 ? '¥' + eff.toFixed(2) : '',
-              };
-            });
-            const bundlePrice = Number(v.bundle_price) || 0;
+            let cards, bundlePrice, titleFallback;
+            if (bp) {
+              const comps = Array.isArray(bp.bundle_components) ? bp.bundle_components.slice(0, 6) : [];
+              cards = comps.map(c => {
+                const qty  = Number(c.qty) || 1;
+                const line = (Number(c.price) || 0) * qty;
+                sum += line;
+                return {
+                  id: c.id,
+                  image: absUrl(c.image_data) || c.image_data || '',
+                  name:  (lang.pick(c.name_en, c.name_cn, L) || '') + (qty > 1 ? ` ×${qty}` : ''),
+                  cn:    '',
+                  price: line > 0 ? '¥' + line.toFixed(2) : '',
+                };
+              });
+              bundlePrice = Number(bp.effective_price) > 0 ? Number(bp.effective_price) : (Number(bp.sell_price) || 0);
+              titleFallback = lang.pick(bp.name_en, bp.name_cn, L);
+            } else {
+              const ids = Array.isArray(v.product_ids) ? v.product_ids : [];
+              const items = ids
+                .map(id => this.findProductById(id))
+                .filter(Boolean)
+                .slice(0, 6);
+              cards = items.map(p => {
+                const regular = Number(p.sell_price ?? p.price) || 0;
+                const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
+                sum += eff;
+                return {
+                  id: p.id,
+                  image: absUrl(p.image_url) || p.image_data || '',
+                  name:  lang.pick(p.name_en, p.name_cn, L),
+                  cn:    '',
+                  price: eff > 0 ? '¥' + eff.toFixed(2) : '',
+                };
+              });
+              bundlePrice = Number(v.bundle_price) || 0;
+              titleFallback = '';
+            }
             const showSavings = bundlePrice > 0 && bundlePrice < sum;
             const savAmt = sum - bundlePrice;
             // Receipt itemised rows — first row gets a solid rule, rest dashed.
@@ -1638,7 +1665,7 @@ Component({
               id: v.id || '',
               label: lang.pick(v.label_en, v.label_cn, L) || (L === 'cn' ? '组合' : 'Bundle'),
               recommended: !!v.recommended,
-              title:    lang.pick(v.title_en, v.title_cn, L),
+              title:    lang.pick(v.title_en, v.title_cn, L) || titleFallback,
               subtitle: lang.pick(v.subtitle_en, v.subtitle_cn, L),
               cards,
               cardCount: cards.length,
@@ -1652,10 +1679,17 @@ Component({
                 ? (L === 'cn' ? `省 ¥${savAmt.toFixed(2)}` : `SAVE ¥${savAmt.toFixed(2)}`)
                 : '',
               stampAmt: showSavings ? '¥' + Math.round(savAmt) : '',
-              voucherCode: (v.auto_voucher_code || '').toUpperCase(),
+              // New model adds the bundle PRODUCT to cart (real fixed price);
+              // legacy carries a voucher code + the loose component ids.
+              bundleProductId: bp ? bp.id : null,
+              voucherCode: bp ? '' : (v.auto_voucher_code || '').toUpperCase(),
               addLabel:  lang.pick(v.cta_label_en, v.cta_label_cn, L)
-                || (L === 'cn' ? `加入购物车 (${cards.length} 件)` : `ADD BUNDLE · ${cards.length} ITEMS`),
-              empty: cards.length === 0,
+                || (bp
+                  ? (L === 'cn' ? '加入购物车' : 'ADD BUNDLE')
+                  : (L === 'cn' ? `加入购物车 (${cards.length} 件)` : `ADD BUNDLE · ${cards.length} ITEMS`)),
+              // A real bundle is never "empty" (its price/CTA work even if the
+              // component cards didn't load); legacy needs ≥1 resolved item.
+              empty: bp ? false : cards.length === 0,
             };
           };
 
@@ -2135,9 +2169,12 @@ Component({
     onBundleAddTap() {
       const b = this.data.bundle;
       const v = b && b.active;
-      if (!v || !v.cards || !v.cards.length) return;
+      // New model: a real bundle product (its card list may be empty if the
+      // component preview didn't load). Legacy: needs ≥1 loose item.
+      if (!v || (!v.bundleProductId && (!v.cards || !v.cards.length))) return;
       // Emits up to home.js, which holds the product list and cart util.
       this.triggerEvent('bundle', {
+        bundleProductId: v.bundleProductId || null,
         productIds: v.cards.map(c => c.id),
         voucherCode: v.voucherCode || '',
         variantId:   v.id || '',

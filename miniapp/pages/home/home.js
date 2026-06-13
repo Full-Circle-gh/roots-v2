@@ -438,23 +438,36 @@ Page({
   // covered by that pull (the block-renderer falls back to it for those).
   async _fetchProductsByIdFor(layout) {
     const ids = new Set();
+    // Bundle products are tracked separately: they must come from the by-id call
+    // (with bundle_components=1) even when the main pull already has the row,
+    // because that pull omits the "what's inside" components. byId wins in
+    // findProductById, so the component-bearing copy always takes precedence.
+    const bundleIds = new Set();
     const addId  = v => { const n = Number(v); if (Number.isFinite(n) && n > 0) ids.add(n); };
     const addIds = a => { if (Array.isArray(a)) a.forEach(addId); };
+    const addBundleId = v => { const n = Number(v); if (Number.isFinite(n) && n > 0) { ids.add(n); bundleIds.add(n); } };
     (layout || []).forEach(b => {
       if (b.type === 'featured' || b.type === 'recipe_story') addId(b.product_id);
       else if (b.type === 'product_grid' && b.source_type === 'manual') addIds(b.product_ids);
       else if (b.type === 'bundle') {
+        addBundleId(b.bundle_product_id);
         addIds(b.product_ids);
-        if (Array.isArray(b.variants)) b.variants.forEach(v => addIds(v && v.product_ids));
+        if (Array.isArray(b.variants)) b.variants.forEach(v => {
+          if (v) { addBundleId(v.bundle_product_id); addIds(v.product_ids); }
+        });
       }
     });
     if (!ids.size) return;
     const have = new Set((this.data.products || []).map(p => p.id));
     const byId = { ...(this.data.productsById || {}) };
-    const missing = [...ids].filter(id => !have.has(id) && !byId[id]);
-    if (!missing.length) return;
+    // Fetch: ids not yet resolved anywhere, PLUS any bundle product still
+    // missing its components in byId (fall-through copy in `products` lacks them).
+    const fetchIds = [...ids].filter(id =>
+      (!have.has(id) && !byId[id]) ||
+      (bundleIds.has(id) && !(byId[id] && byId[id].bundle_components)));
+    if (!fetchIds.length) return;
     try {
-      const res = await api.get(`/api/retail/products?lean=1&ids=${missing.join(',')}`);
+      const res = await api.get(`/api/retail/products?lean=1&bundle_components=1&ids=${fetchIds.join(',')}`);
       const rows = Array.isArray(res) ? res : (res?.data || []);
       rows.forEach(p => { byId[p.id] = p; });
       this.setData({ productsById: byId });
@@ -550,18 +563,37 @@ Page({
     wx.navigateTo({ url: '/pages/product/product?id=' + id });
   },
 
-  // Bundle block → add every listed product to cart at its normal price,
-  // optionally stash an auto-apply voucher code that the checkout will pick
-  // up the next time the user opens it. Backend has no bundle concept, so
-  // we keep things truthful by adding items at their real prices.
+  // Bundle block → preferred path adds the ONE real Bundle product (its fixed
+  // price is charged at checkout and component stock is reserved server-side).
+  // Legacy path (old blocks not yet repicked): add each loose product at its
+  // normal price + stash an auto-apply voucher code for checkout to pick up.
   onBundle(e) {
-    const { productIds = [], voucherCode = '' } = e.detail || {};
+    const { bundleProductId = null, productIds = [], voucherCode = '' } = e.detail || {};
+    const findP = id => (this.data.productsById || {})[id] || (this.data.products || []).find(x => x.id === id);
+
+    // New model: a single bundle product.
+    if (bundleProductId) {
+      const bp = findP(bundleProductId);
+      if (bp) {
+        cart.add(bp, 1, []);
+        wx.showToast({
+          title: this.data.lang === 'cn' ? '套装已加入购物车' : 'Bundle added to cart',
+          icon: 'success', duration: 1400,
+        });
+      } else {
+        wx.showToast({
+          title: this.data.lang === 'cn' ? '套装已下架' : 'Bundle unavailable',
+          icon: 'none',
+        });
+      }
+      return;
+    }
+
+    // Legacy loose-list path.
     if (!productIds.length) return;
     let added = 0;
     productIds.forEach(id => {
-      // Prefer the by-id map (handpicked products fetched even when they sort
-      // past the first-100 pull); fall back to the main products array.
-      const p = (this.data.productsById || {})[id] || (this.data.products || []).find(x => x.id === id);
+      const p = findP(id);
       if (p) { cart.add(p, 1, []); added++; }
     });
     if (voucherCode) {

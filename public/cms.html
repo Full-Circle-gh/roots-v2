@@ -7844,14 +7844,20 @@ function makeBlock(type) {
       // swappable bundles; the recommended one loads first in the mini app.
       // Legacy flat fields (title_en, product_ids, bundle_price, …) mirror
       // the recommended variant so older mini-app builds still render.
-      const seed = state.products.slice(0, 3).map(p => p.id);
+      // Each variant points at a real Bundle product (one with a non-empty
+      // bundle_items recipe). Seed from whatever bundle products already exist;
+      // if there are none yet the picker shows empty and prompts to make one.
+      const bundleProds = state.products.filter(p => {
+        try { const a = JSON.parse(p.bundle_items || '[]'); return Array.isArray(a) && a.length > 0; }
+        catch { return false; }
+      });
       const v1 = {
         id: 'v1',
         label_en: 'Starter', label_cn: '入门款',
-        title_en: 'Stock-up bundle', title_cn: '囤货组合',
-        subtitle_en: 'Tap once — straight to cart',
-        subtitle_cn: '一键加入购物车',
-        product_ids: seed,
+        title_en: '', title_cn: '',
+        subtitle_en: '', subtitle_cn: '',
+        bundle_product_id: bundleProds[0] ? bundleProds[0].id : null,
+        product_ids: [],
         bundle_price: 0,
         auto_voucher_code: '',
         cta_label_en: '', cta_label_cn: '',
@@ -7860,22 +7866,25 @@ function makeBlock(type) {
       const v2 = {
         id: 'v2',
         label_en: 'Family', label_cn: '家庭装',
-        title_en: 'Family bundle', title_cn: '家庭组合',
-        subtitle_en: 'A week of meals for four',
-        subtitle_cn: '一家四口的一周',
-        product_ids: state.products.slice(3, 6).map(p => p.id),
+        title_en: '', title_cn: '',
+        subtitle_en: '', subtitle_cn: '',
+        bundle_product_id: bundleProds[1] ? bundleProds[1].id : null,
+        product_ids: [],
         bundle_price: 0,
         auto_voucher_code: '',
         cta_label_en: '', cta_label_cn: '',
         recommended: false,
       };
+      // Only seed the second variant when there's a second bundle to show.
+      const seedVariants = bundleProds[1] ? [v1, v2] : [v1];
       return {
         id, type,
         kicker_en: 'BUY TOGETHER', kicker_cn: '一起买',
-        variants: [v1, v2],
+        variants: seedVariants,
         // Mirror v1 into legacy flat fields for older mini-app builds.
         title_en: v1.title_en, title_cn: v1.title_cn,
         subtitle_en: v1.subtitle_en, subtitle_cn: v1.subtitle_cn,
+        bundle_product_id: v1.bundle_product_id,
         product_ids: v1.product_ids,
         bundle_price: 0,
         auto_voucher_code: '',
@@ -9983,25 +9992,54 @@ function renderBlockBody(b) {
         ? b._previewIdx : (recIdx >= 0 ? recIdx : 0);
       const v = variants[previewIdx] || variants[0];
 
-      const t = { en: v.title_en || '', cn: v.title_cn || '' };
-      const sub = pickLang(v.subtitle_en, v.subtitle_cn);
-      const ids = Array.isArray(v.product_ids) ? v.product_ids : [];
-      const items = ids.map(id => state.products.find(p => p.id === id)).filter(Boolean).slice(0, 6);
-      const itemData = items.map(p => ({
-        img: thumbUrl(p),
-        name: escapeHtml(pickLang(p.name_en, p.name_cn) || ''),
-        cn: escapeHtml(p.name_cn || ''),
-        price: Number(p.effective_price ?? p.sell_price ?? p.price ?? 0),
-      }));
-      const sum = itemData.reduce((s, it) => s + it.price, 0);
-      const bundlePrice = Number(v.bundle_price) || 0;
+      // Resolve this variant's display from EITHER its linked Bundle product
+      // (new model — real fixed price + the product's own components) or the
+      // legacy loose product list (back-compat for old blocks not yet repicked).
+      // The admin product list carries each product's raw bundle_items recipe,
+      // so we expand the components client-side from state.products.
+      let t, sub, itemData, sum, bundlePrice, addLbl;
+      const bp = v.bundle_product_id ? state.products.find(p => p.id === v.bundle_product_id) : null;
+      if (bp) {
+        let recipe = [];
+        try { recipe = JSON.parse(bp.bundle_items || '[]') || []; } catch {}
+        const comps = recipe.map(c => {
+          const cp = state.products.find(p => p.id === c.id);
+          return cp ? { p: cp, qty: Number(c.qty) || 1 } : null;
+        }).filter(Boolean).slice(0, 6);
+        itemData = comps.map(({ p, qty }) => ({
+          img: thumbUrl(p),
+          name: escapeHtml((pickLang(p.name_en, p.name_cn) || '') + (qty > 1 ? ` ×${qty}` : '')),
+          cn: escapeHtml(p.name_cn || ''),
+          price: Number(p.effective_price ?? p.sell_price ?? p.price ?? 0) * qty,
+        }));
+        sum = itemData.reduce((s, it) => s + it.price, 0);
+        bundlePrice = Number(bp.effective_price ?? bp.sell_price ?? 0);
+        // Title/subtitle fall back to the bundle product's own name.
+        t = { en: v.title_en || bp.name_en || '', cn: v.title_cn || bp.name_cn || '' };
+        sub = pickLang(v.subtitle_en, v.subtitle_cn);
+        addLbl = pickLang(v.cta_label_en, v.cta_label_cn)
+          || (state.lang === 'cn' ? '加入购物车' : 'ADD BUNDLE');
+      } else {
+        t = { en: v.title_en || '', cn: v.title_cn || '' };
+        sub = pickLang(v.subtitle_en, v.subtitle_cn);
+        const ids = Array.isArray(v.product_ids) ? v.product_ids : [];
+        const items = ids.map(id => state.products.find(p => p.id === id)).filter(Boolean).slice(0, 6);
+        itemData = items.map(p => ({
+          img: thumbUrl(p),
+          name: escapeHtml(pickLang(p.name_en, p.name_cn) || ''),
+          cn: escapeHtml(p.name_cn || ''),
+          price: Number(p.effective_price ?? p.sell_price ?? p.price ?? 0),
+        }));
+        sum = itemData.reduce((s, it) => s + it.price, 0);
+        bundlePrice = Number(v.bundle_price) || 0;
+        addLbl = pickLang(v.cta_label_en, v.cta_label_cn)
+          || (state.lang === 'cn' ? `加入购物车 (${itemData.length} 件)` : `ADD BUNDLE · ${itemData.length} ITEMS`);
+      }
       const showSav = bundlePrice > 0 && bundlePrice < sum;
       const priceLbl = bundlePrice > 0 ? '¥' + bundlePrice.toFixed(2) : (sum > 0 ? '¥' + sum.toFixed(2) : '');
       const sumLbl = sum > 0 ? '¥' + sum.toFixed(2) : '';
       const savAmt = sum - bundlePrice;
       const sav = showSav ? (state.lang === 'cn' ? `省 ¥${savAmt.toFixed(2)}` : `SAVE ¥${savAmt.toFixed(2)}`) : '';
-      const addLbl = pickLang(v.cta_label_en, v.cta_label_cn)
-        || (state.lang === 'cn' ? `加入购物车 (${itemData.length} 件)` : `ADD BUNDLE · ${itemData.length} ITEMS`);
 
       // Surface character for free-floating elements (tubs, stamp, sticker).
       const elBorder = BT.riso ? '1.5px solid #1a1a17' : '1.5px solid rgba(26,26,23,.10)';
@@ -10029,7 +10067,7 @@ function renderBlockBody(b) {
 
       let bodyHtml;
       if (itemData.length === 0) {
-        bodyHtml = `${kickerHtml}${pillsHtml}${titleHtml}<div class="bun-empty">Pick products on the right →</div>`;
+        bodyHtml = `${kickerHtml}${pillsHtml}${titleHtml}<div class="bun-empty">Pick a Bundle product on the right →</div>`;
       } else if (BT.style === 'receipt') {
         const rows = itemData.map((it, i) => `
           <div class="bun-rrow" style="border-top:${i === 0 ? '1.5px solid #1a1a17' : '1px dashed rgba(0,0,0,.22)'}">
@@ -12595,6 +12633,7 @@ function getBundleVariants(b) {
     title_cn:    b.title_cn    || '',
     subtitle_en: b.subtitle_en || '',
     subtitle_cn: b.subtitle_cn || '',
+    bundle_product_id: b.bundle_product_id || null,
     product_ids: Array.isArray(b.product_ids) ? b.product_ids : [],
     bundle_price:      Number(b.bundle_price) || 0,
     auto_voucher_code: b.auto_voucher_code || '',
@@ -12617,6 +12656,7 @@ function syncBundleFlatPatch(patch, currentVariants) {
     title_cn:          active.title_cn    || '',
     subtitle_en:       active.subtitle_en || '',
     subtitle_cn:       active.subtitle_cn || '',
+    bundle_product_id: active.bundle_product_id || null,
     product_ids:       Array.isArray(active.product_ids) ? active.product_ids : [],
     bundle_price:      Number(active.bundle_price) || 0,
     auto_voucher_code: active.auto_voucher_code || '',
@@ -12681,6 +12721,7 @@ function buildBundleForm(m, b) {
       label_cn: '组合 ' + (cur.length + 1),
       title_en: '', title_cn: '',
       subtitle_en: '', subtitle_cn: '',
+      bundle_product_id: null,
       product_ids: [],
       bundle_price: 0,
       auto_voucher_code: '',
@@ -12746,14 +12787,20 @@ function buildBundleForm(m, b) {
       txtPair(v.title_en, v.title_cn, ({ en, cn }) => updateVariant(idx, { title_en: en, title_cn: cn }))));
     card.appendChild(field(T('Subtitle', '副标题'), T('An optional extra line.', '可选的附加说明。'),
       txtPair(v.subtitle_en, v.subtitle_cn, ({ en, cn }) => updateVariant(idx, { subtitle_en: en, subtitle_cn: cn }))));
-    card.appendChild(field(T('Products in this variant', '此变体的商品'), T('Choose 2–5 products. The order you tap is kept.', '选择 2–5 件商品。会保留你点击的顺序。'),
-      productPicker({ multi: true, value: v.product_ids, onChange: val => updateVariant(idx, { product_ids: val }) })));
-    card.appendChild(field(T('Bundle price (¥)', '套装价格(¥)'),
-      T('Optional. If it is lower than the total, customers see the old price crossed out and a "SAVE ¥X" badge. The items still add at their normal prices — use the voucher box below to actually lower the price at checkout.', '可选。若低于合计,顾客会看到原价划线和「SAVE ¥X」角标。商品仍按原价加入 — 需配合下方的优惠券才能在结算时真正减价。'),
-      num(v.bundle_price, val => updateVariant(idx, { bundle_price: val }), { min: 0, step: 0.01 })));
-    card.appendChild(field(T('Auto-applied voucher code', '自动应用的优惠券码'),
-      T('Optional. Added at checkout when this bundle is chosen. Must be a real voucher code.', '可选。选择此套装时在结算页自动添加。必须是真实存在的优惠券码。'),
-      txt(v.auto_voucher_code, val => updateVariant(idx, { auto_voucher_code: (val || '').toUpperCase() }), 'BUNDLE10')));
+    // Each variant points at ONE real Bundle product (made on the Products page,
+    // with its components under "What's inside" and a fixed price). The block is
+    // pure display — the price charged + stock + "what's inside" all come from
+    // that product, so there's no fake price or voucher hack here anymore.
+    card.appendChild(field(T('Bundle', '套装'),
+      T('Pick a Bundle product (made on the Products page). Its fixed price is charged for real at checkout and its stock is tracked — no voucher needed.', '选择一个套装商品(在「商品」页创建)。结算时按其固定价格真实收费并跟踪库存 — 无需优惠券。'),
+      productPicker({ multi: false, bundlesOnly: true, value: v.bundle_product_id || null, onChange: val => updateVariant(idx, { bundle_product_id: val || null }) })));
+    if (!v.bundle_product_id && Array.isArray(v.product_ids) && v.product_ids.length) {
+      const warn = document.createElement('div');
+      warn.className = 'helper';
+      warn.style.cssText = 'margin-top:6px; color: var(--warn, #b8860b);';
+      warn.textContent = T('This variant still uses the old loose item list + voucher. Pick a Bundle product above to replace it with a real fixed-price bundle.', '此变体仍在使用旧的松散商品列表 + 优惠券。请在上方选择一个套装商品,替换为真正的固定价格套装。');
+      card.appendChild(warn);
+    }
     card.appendChild(field(T('Button text (optional)', '按钮文字(可选)'),
       T('Leave empty to use the automatic text "ADD BUNDLE · N ITEMS".', '留空则使用自动文字「ADD BUNDLE · N ITEMS」。'),
       txtPair(v.cta_label_en, v.cta_label_cn, ({ en, cn }) => updateVariant(idx, { cta_label_en: en, cta_label_cn: cn }))));
@@ -13383,12 +13430,23 @@ function buildCountdownForm(m, b) {
 // without rebuilding the whole inspector (which would lose the search
 // query and scroll position). Click handlers preventDefault on mousedown
 // to keep focus in the search input across selections.
-function productPicker({ multi, value, onChange }) {
+function productPicker({ multi, value, onChange, bundlesOnly }) {
   const wrap = document.createElement('div');
   wrap.className = 'product-picker';
 
-  if (!state.products.length) {
-    wrap.innerHTML = '<div class="empty-row">No products in the system.<br>Add some via the main admin first.</div>';
+  // bundlesOnly → restrict the list to real Bundle products (a store_products
+  // row whose bundle_items recipe is non-empty). The admin list ships the raw
+  // bundle_items JSON, so detect by parsing it.
+  const isBundleProduct = p => {
+    try { const a = JSON.parse(p.bundle_items || '[]'); return Array.isArray(a) && a.length > 0; }
+    catch { return false; }
+  };
+  const pool = bundlesOnly ? state.products.filter(isBundleProduct) : state.products;
+
+  if (!pool.length) {
+    wrap.innerHTML = bundlesOnly
+      ? '<div class="empty-row">No bundle products yet.<br>Create one on the Products page — add components under "What\'s inside".</div>'
+      : '<div class="empty-row">No products in the system.<br>Add some via the main admin first.</div>';
     return wrap;
   }
 
@@ -13402,7 +13460,7 @@ function productPicker({ multi, value, onChange }) {
   wrap.innerHTML = `
     <div class="search">
       ${searchIcon}
-      <input type="text" placeholder="Search ${state.products.length} products by name, 中文, or SKU…">
+      <input type="text" placeholder="Search ${pool.length} ${bundlesOnly ? 'bundles' : 'products'} by name, 中文, or SKU…">
     </div>
     <div class="list"></div>
     <div class="foot">
@@ -13416,13 +13474,13 @@ function productPicker({ multi, value, onChange }) {
   const clearEl  = wrap.querySelector('.foot .clear-link');
 
   function updateFoot() {
-    countEl.textContent = `${selCount()} of ${state.products.length} selected`;
+    countEl.textContent = `${selCount()} of ${pool.length} selected`;
     clearEl.style.display = selCount() ? '' : 'none';
   }
   updateFoot();
 
   // Build all items once; visibility toggled by search
-  state.products.forEach(p => {
+  pool.forEach(p => {
     const item = document.createElement('div');
     item.className = 'item' + (isSel(p.id) ? ' on' : '');
     item.dataset.id = p.id;
