@@ -1867,7 +1867,7 @@ function renderOpenOrder(o) {
         </div>
 
         ${(o.reservations && o.reservations.length) ? `
-        <div class="order-items">
+        <div class="order-items" style="margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft);">
           <div class="kicker" style="font-size: 10px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--brass); margin-bottom: var(--s2);">Stock reservations · 库存预留</div>
           <div class="table-wrap">
             <!-- nowrap on every header so the bilingual EN · 中文 labels
