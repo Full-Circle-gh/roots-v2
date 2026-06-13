@@ -5986,13 +5986,20 @@ function buildTrackingView(o) {
       }));
     } catch { events = []; }
   }
-  // Hydrate the classified scenario (parsed from the latest event's
-  // Chinese context) if we've stored one. This is what the customer
-  // banner reads — `scenario`, `pickup_code`, `signer`, `urgency`, etc.
-  let scenario = null;
-  if (o.tracking_scenario_data_json) {
-    try { scenario = JSON.parse(o.tracking_scenario_data_json); } catch { scenario = null; }
-  }
+  // Derive the customer banner from the CURRENT latest event so it can
+  // never contradict the timeline above it. We used to read the stored
+  // tracking_scenario_data_json, but that column is only rewritten by the
+  // live sync paths — a waybill change/clear (which NULLs the events) or an
+  // empty re-sync leaves it stale, so a prior "Delivered to you in person"
+  // banner could survive while fresh "Out for delivery" events stream in
+  // (banner ↔ timeline disagreement). Re-classifying events[0] — the same
+  // input the sync path classified, and the very event the timeline marks as
+  // "latest" — keeps the two in lockstep and self-heals already-stale rows.
+  // The stored column is retained purely for write-time push de-duplication
+  // (tracking_scenario_notified), not for display.
+  const scenario = events.length
+    ? tracking.classifyDeliveryEvent(events[0].description_cn)
+    : null;
   return {
     carrier_code:    o.tracking_carrier,
     carrier_name_en: carrier?.name_en || o.tracking_carrier,
@@ -11796,7 +11803,7 @@ router.get('/api/retail/orders/:orderNo/tracking/:trackingNumber', requireRetail
   const o = tdb().prepare(
     `SELECT order_no, status, tracking_carrier, tracking_number,
             tracking_status, tracking_events_json, tracking_synced_at,
-            tracking_scenario_data_json, customer_id
+            customer_id
        FROM retail_orders
       WHERE order_no = ? AND tracking_number = ?`
   ).get(orderNo, number);
@@ -11806,19 +11813,20 @@ router.get('/api/retail/orders/:orderNo/tracking/:trackingNumber', requireRetail
 
   const carrier   = tracking.carrierByCode(o.tracking_carrier);
   const statusDef = tracking.statusByCode(o.tracking_status || tracking.deriveStatusFromOrder(o.status));
-  const events = (() => {
-    try {
-      const raw = JSON.parse(o.tracking_events_json) || [];
-      return raw.map(ev => ({
-        time: (ev.time || '').slice(0, 16),
-        location: ev.location || '',
-        description: lang === 'cn'
-          ? (ev.description_cn || '')
-          : tracking.translateEventDescription(ev.description_cn),
-      }));
-    } catch { return []; }
-  })();
-  const sc = (() => { try { return JSON.parse(o.tracking_scenario_data_json) || null; } catch { return null; } })();
+  let rawEvents = [];
+  try { rawEvents = JSON.parse(o.tracking_events_json) || []; } catch { rawEvents = []; }
+  const events = rawEvents.map(ev => ({
+    time: (ev.time || '').slice(0, 16),
+    location: ev.location || '',
+    description: lang === 'cn'
+      ? (ev.description_cn || '')
+      : tracking.translateEventDescription(ev.description_cn),
+  }));
+  // Classify the banner from the CURRENT latest event rather than the stored
+  // tracking_scenario_data_json, which can go stale after a waybill change or
+  // an empty re-sync and contradict the events below it (mirrors
+  // buildTrackingView, which feeds the order-page banner from the same input).
+  const sc = rawEvents.length ? tracking.classifyDeliveryEvent(rawEvents[0].description_cn) : null;
 
   const cName  = lang === 'cn' ? (carrier?.name_cn || o.tracking_carrier) : (carrier?.name_en || o.tracking_carrier);
   const sLabel = lang === 'cn' ? (statusDef?.label_cn || '') : (statusDef?.label_en || '');
