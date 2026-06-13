@@ -38,13 +38,14 @@ const ALL_SKUS = [SOURCE_SKU, ...TARGET_SKUS];               // source included 
 const CHOICE_CN = {
   'brown rice': '糙米',
   'mix colored quinoa': '三色藜麦',
-  '3 slice of whole wheat': '全麦面包(3片)',
+  '3 slice of whole wheat bread': '全麦面包(3片)',
   'whole wheat pita bread': '全麦皮塔饼',
   'yes': '要',
   'no': '不要',
 };
 const QUESTION_CN = {
   'add extras?': '加点配料?',
+  'heat up?': '需要加热吗?',
 };
 
 const db = new Database(DB_PATH);
