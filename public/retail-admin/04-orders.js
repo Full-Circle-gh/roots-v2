@@ -1192,6 +1192,7 @@ function renderItemRow(it, opts = {}) {
           ${showPack ? `<span class="mf-packs">${renderPackBadges(it)}</span>` : ''}
         </div>
         ${itemOptionsHtml(it)}
+        ${renderBundleInside(it)}
       </div>
     </div>`;
 }
