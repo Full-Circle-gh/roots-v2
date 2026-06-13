@@ -2558,6 +2558,10 @@ addColumn('retail_orders', 'invoice_issued_at', 'DATETIME');
 // moment the one-and-only delivery reminder Web Push is fired for this order, so
 // it never re-fires. NULL = not yet reminded / not eligible.
 addColumn('retail_orders', 'reminder_ship_sent_at', 'DATETIME');
+// Staff "start preparing" reminder for PICKUP orders (see lib/delivery-reminders.js).
+// Stamped the moment the one-and-only pickup reminder Web Push is fired (20 min
+// before the chosen pickup time), so it never re-fires. NULL = not yet reminded.
+addColumn('retail_orders', 'reminder_pickup_sent_at', 'DATETIME');
 // Item-level: when this row is a substitute, point back to the original
 // product the customer was trying to buy. Lets us show "replaces X" on
 // receipts and analytics.
