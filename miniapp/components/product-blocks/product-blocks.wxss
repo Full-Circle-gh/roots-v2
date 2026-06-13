@@ -459,8 +459,12 @@
 }
 /* `.long` = the slot holds a phrase, not a hero numeral ("Cool & dry",
    "Refrigerate"). Drop to a readable display size that wraps inside the card
-   instead of overflowing at 96rpx. Set from product-blocks.js (numLong). */
+   instead of overflowing at 96rpx. Set from product-blocks.js (numLong).
+   Also swap off League Gothic (a condensed numeral/display face) to Bear
+   Serif — the brand body face — so a sentence reads as prose, not as a
+   stretched-out numeral. True numeral cards keep --f-gothic. */
 .pb-storage-num.long {
+  font-family: var(--f-bear);
   font-size: 46rpx;
   line-height: 1.1;
 }
