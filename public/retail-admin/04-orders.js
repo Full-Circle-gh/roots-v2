@@ -1184,7 +1184,7 @@ function renderItemRow(it, opts = {}) {
           ${nameCell}
           <span class="mf-total">¥${fmt(it.line_total)}</span>
         </div>
-        <div class="mf-meta">
+        <div class="mf-meta" data-no-i18n>
           ${zh}
           ${itemSkuHtml(it)}
           ${itemQtyHtml(it)}
