@@ -12715,8 +12715,9 @@ function buildBundleForm(m, b) {
     head.innerHTML = `<div style="font: 700 10px var(--bf-toni); letter-spacing: .12em; color: var(--text-2)">${B(`VARIANT ${idx + 1}${v.recommended ? ' · ★ RECOMMENDED' : ''}`, `变体 ${idx + 1}${v.recommended ? ' · ★ 推荐' : ''}`)}</div>`;
     if (variants.length > 1) {
       const rm = document.createElement('button');
-      rm.innerHTML = ICONS.x;
-      rm.style.cssText = 'background: none; border: 0; color: var(--text-2); cursor: pointer; padding: 2px; display: flex;';
+      rm.innerHTML = `<span style="display:inline-flex;width:13px;height:13px">${ICONS.x}</span>${B('Remove', '删除')}`;
+      rm.style.cssText = 'display:inline-flex; align-items:center; gap:4px; background: var(--bg-1); border: 1px solid var(--border-2); border-radius: 5px; color: var(--text-2); cursor: pointer; padding: 3px 8px; font: 600 11px var(--bf-toni); flex-shrink: 0;';
+      rm.querySelector('svg').setAttribute('style', 'width:13px;height:13px;display:block');
       rm.title = T('Remove this variant', '删除此变体');
       rm.addEventListener('click', () => removeVariant(idx));
       head.appendChild(rm);
