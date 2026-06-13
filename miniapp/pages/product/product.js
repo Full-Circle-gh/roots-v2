@@ -800,6 +800,7 @@ Page({
       image_url: p.image_url,
       image_data: p.image_data,
       price: this.data.priceN + delta,
+      bundle_worth: p.bundle_worth,   // a bundle product: its "separately" worth
     }, this.data.qty, chosen);
     return true;
   },

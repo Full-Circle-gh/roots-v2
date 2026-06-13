@@ -73,6 +73,9 @@ function add(product, qty = 1, options = []) {
       unit_price: eff,
       regular_price: isFlash ? regular : null,
       is_flash: isFlash,
+      // Bundle "if bought separately" worth (server-computed). Drives the
+      // checkout SAVE badge on a bundle line; null for normal products.
+      bundle_worth: Number(product.bundle_worth) > 0 ? Number(product.bundle_worth) : null,
       // Server-derived: this line is excluded from coupons while its flash is
       // live (product flagged no_coupon_on_flash). Refreshed by reprice().
       coupon_blocked: !!product.coupon_blocked,

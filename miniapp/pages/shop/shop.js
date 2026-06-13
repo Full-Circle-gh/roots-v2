@@ -958,6 +958,7 @@ Page({
       // active flash rate (was dropped here → checkout showed regular price).
       effective_price: raw.effective_price,
       is_on_flash: raw.is_on_flash,
+      bundle_worth: raw.bundle_worth,   // a bundle card: its "separately" worth
     }, 1, []);
 
     const imgUrl = absUrl(raw.image_url) || absUrl(raw.image_data) || '';

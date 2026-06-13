@@ -28,8 +28,8 @@
           </view>
         </view>
         <view class="line-total f-bear">
-          <view class="lt-now"><text wx:if="{{item.on_flash}}" class="line-was">{{item.was_total}}</text>{{item.line_total}}</view>
-          <text wx:if="{{item.on_flash}}" class="line-save">{{item.save_text}}</text>
+          <view class="lt-now"><text wx:if="{{item.show_save}}" class="line-was">{{item.was_total}}</text>{{item.line_total}}</view>
+          <text wx:if="{{item.show_save}}" class="line-save">{{item.save_text}}</text>
         </view>
       </view>
       <view wx:if="{{voucherCode}}" class="order-line voucher-line">

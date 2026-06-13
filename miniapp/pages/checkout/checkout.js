@@ -10,6 +10,29 @@ const lang   = require('../../utils/lang');
 const notify = require('../../utils/notifications');
 const zones  = require('../../utils/zones');
 
+// Per-line "was / save ¥X" badge for the order summary. A line earns the badge
+// when it's on flash OR it's a bundle priced below its components' combined
+// worth (bundle_worth, server-computed). Flash takes priority. `flash_save` is
+// broken out so only flash savings feed the order-wide "You saved" tally — a
+// bundle's notional saving isn't a discount off the listed price.
+function lineSaveFields(it, L) {
+  const qty  = Number(it.qty) || 0;
+  const unit = Number(it.unit_price) || 0;
+  const onFlash  = !!it.is_flash && it.regular_price != null && Number(it.regular_price) > unit;
+  const worth    = Number(it.bundle_worth) || 0;
+  const onBundle = !onFlash && worth > unit;
+  const wasN    = onFlash ? Number(it.regular_price) * qty : onBundle ? worth * qty : 0;
+  const saveAmt = onFlash ? (Number(it.regular_price) - unit) * qty : onBundle ? (worth - unit) * qty : 0;
+  const show = onFlash || onBundle;
+  return {
+    on_flash: onFlash,
+    show_save: show,
+    was_total: show ? '¥' + wasN.toFixed(2) : '',
+    save_text: show ? (L === 'cn' ? '省 ¥' : 'save ¥') + saveAmt.toFixed(2) : '',
+    flash_save: onFlash ? saveAmt : 0,
+  };
+}
+
 Page({
   data: {
     items: [],
@@ -969,17 +992,14 @@ Page({
     const L = this.data.lang;
     let flashSavings = 0;
     const items = state.items.map(it => {
-      const onFlash = !!it.is_flash && it.regular_price != null && Number(it.regular_price) > Number(it.unit_price);
-      const lineSave = onFlash ? (Number(it.regular_price) - Number(it.unit_price)) * it.qty : 0;
-      if (lineSave > 0) flashSavings += lineSave;
+      const sf = lineSaveFields(it, L);
+      flashSavings += sf.flash_save;
       return {
         ...it,
         display_name: lang.pick(it.name_en, it.name_cn, L),
         display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
         line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
-        on_flash: onFlash,
-        was_total: onFlash ? '¥' + (Number(it.regular_price) * it.qty).toFixed(2) : '',
-        save_text: onFlash ? (L === 'cn' ? '省 ¥' : 'save ¥') + lineSave.toFixed(2) : '',
+        ...sf,
       };
     });
     const itemCount = state.items.reduce((s, it) => s + (it.qty || 0), 0);
@@ -1120,6 +1140,7 @@ Page({
       display_name: lang.pick(it.name_en, it.name_cn, L),
       display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
       line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
+      ...lineSaveFields(it, L),
     }));
     const itemCount = state.items.reduce((s, it) => s + (it.qty || 0), 0);
     this.setData({ items, itemCount, subtotal: subtotal.toFixed(2) });
@@ -1193,17 +1214,14 @@ Page({
         // and tally the flash savings for the "You saved" line below.
         let flashSavings = 0;
         const itemRows = cart.get().items.map(it => {
-          const onFlash = !!it.is_flash && it.regular_price != null && Number(it.regular_price) > Number(it.unit_price);
-          const lineSave = onFlash ? (Number(it.regular_price) - Number(it.unit_price)) * it.qty : 0;
-          if (lineSave > 0) flashSavings += lineSave;
+          const sf = lineSaveFields(it, L);
+          flashSavings += sf.flash_save;
           return {
             ...it,
             display_name: lang.pick(it.name_en, it.name_cn, L),
             display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
             line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
-            on_flash: onFlash,
-            was_total: onFlash ? '¥' + (Number(it.regular_price) * it.qty).toFixed(2) : '',
-            save_text: onFlash ? (L === 'cn' ? '省 ¥' : 'save ¥') + lineSave.toFixed(2) : '',
+            ...sf,
           };
         });
         this.setData({ items: itemRows, subtotal: srvSubtotal.toFixed(2) });

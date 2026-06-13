@@ -1096,16 +1096,22 @@ function decorateBundleRow(r, { withComponents = false } = {}) {
   if (!recipe.length) { r.is_bundle = false; delete r.bundle_items; return r; }
   r.is_bundle = true;
   const comps = resolveBundleComponents(r.bundle_items);
-  let bstock = 0;
+  let bstock = 0, worth = 0;
   if (comps.length === recipe.length) {
     let min = Infinity;
     for (const c of comps) {
-      if (!c.available) { min = 0; break; }
+      worth += (Number(c.price) || 0) * c.qty;   // "if bought separately" total
+      if (!c.available) { min = 0; continue; }    // still tally worth for the SAVE badge
       min = Math.min(min, Math.floor((Number(c.stock) || 0) / c.qty));
     }
     bstock = Number.isFinite(min) ? min : 0;
   }
   r.stock = bstock;                       // shop card "sold out" honesty
+  // The components' combined regular price, surfaced only when it actually beats
+  // the bundle's own fixed price — lets the storefront + checkout show a "save ¥X"
+  // badge on the bundle line. Cheap: comps were already resolved for stock above.
+  const bundlePrice = Number(r.sell_price ?? r.price) || 0;
+  if (worth > bundlePrice) r.bundle_worth = Math.round(worth * 100) / 100;
   if (withComponents) r.bundle_components = comps;
   delete r.bundle_items;                  // never ship the raw recipe
   return r;
