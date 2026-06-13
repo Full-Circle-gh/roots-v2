@@ -1,0 +1,62 @@
+# Roots System v2 (Full Circle)
+
+Backend + storefront + operator tooling for **Roots**, built as the foundation of the
+**Full Circle** multi-tenant retail platform. One Node/Express service powers an online
+store, a WeChat Mini App, an operator "Mini App Backend," and a kitchen/ERP app, all on a
+single SQLite database.
+
+> **Private, commercial codebase.** Contains payment-integration and customer-data logic.
+> Do not make public.
+
+## Stack
+
+- **Runtime:** Node.js + [Express](https://expressjs.com/) (`server.js` entry, port 4000)
+- **Database:** [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) — `data/roots.db` (gitignored; live data lives on the server)
+- **Auth/security:** `express-session` (+ connect-sqlite3 store), `bcrypt`, `helmet`, `express-rate-limit`
+- **Media:** `sharp` for image processing, `multer` for uploads
+- **Push:** `web-push` (delivery/pickup reminders, order notifications)
+- **Client:** WeChat Mini App (`miniapp/`) + browser admin/storefront (`public/`)
+
+## Layout
+
+| Path | What's there |
+|------|--------------|
+| `server.js` | App entry — wires routes, sessions, integrations |
+| `database.js` | Schema + idempotent `addColumn` migrations (runs on boot) |
+| `routes/` | HTTP route modules (`retail.js` is the storefront/mini-app API) |
+| `lib/` | Domain logic (delivery reminders, secret-box, model gateway, …) |
+| `middleware/` | Express middleware |
+| `public/` | Browser apps — storefront, `retail-admin*` (Mini App Backend), `cms.html` |
+| `public/retail-admin/` | Split admin JS (`01…10-*.js`, one global scope, load order matters) |
+| `miniapp/` | WeChat Mini App (pages, components, utils) |
+| `scripts/` | One-off migrations, imports, and tooling (run on the server) |
+| `docs/`, `reference/`, `eval/` | Docs, design references, evaluation assets |
+
+## Getting started
+
+```bash
+npm install
+npm start          # node server.js → http://localhost:4000
+npm run lint       # eslint
+npm run lint:fix
+```
+
+Secrets are read from a local `.env` (gitignored — see `.gitignore` for the full
+no-commit list: `.env*`, `data/*.db`, PII migration files, `DEPLOY.md`). Ask a maintainer
+for the values; never commit them.
+
+## ⚠️ Commits deploy to production
+
+This repo has a **post-commit hook that lints and ships changed deployable files to the
+production server, then restarts the app.** A `git commit` here is effectively a live
+deploy. Non-deployable files (`.md`, `.csv`) are skipped. Be deliberate about what you
+commit, and never bypass the hook (`--no-verify`) to dodge a failing check.
+
+## Conventions
+
+- **Bilingual UI:** operator strings render **one** live language via `cuT('en', '中文')` —
+  never stack EN+CN both shown at once.
+- **Migrations:** add columns through `addColumn(...)` in `database.js` (idempotent); don't
+  hand-edit the live DB schema.
+- **Multi-tenant:** catalog/data writes are tenant-scoped — use the tenant-scoped DB handle,
+  not the shared one.
