@@ -2003,6 +2003,7 @@
   .bu-pick { padding: 8px 12px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--line-soft); }
   .bu-pick:last-child { border-bottom: none; }
   .bu-pick:hover { background: var(--bg-elev-1); color: var(--text-1); }
+  .bu-pick-tag { color: var(--text-3, #8a8f80); font-size: 11px; margin-left: 6px; }
   /* Bundle-product editor (#pd-bundle-product) — its own chip so the long
      product name truncates while the qty stepper + remove stay fixed-width and
      never get clipped (the bu-chip span ellipsis rule was squeezing the qty). */

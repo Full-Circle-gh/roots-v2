@@ -1805,6 +1805,13 @@ let VA_STORE_TOTALS = {};
 // re-open. Cleared when the editor opens a new product.
 let PD_STOCK_DATA = null;
 function _vaName(p) { return (p.name_en || '—') + (p.name_cn ? ' · ' + p.name_cn : ''); }
+// Picker row label (escaped HTML): the name plus a quiet disambiguator so two
+// products that share a name — e.g. the same butter in two sizes — can be told
+// apart. Prefer the variant/size, fall back to SKU.
+function _vaPickName(p) {
+  const tag = ((p.variant_label || '').trim() || (p.size || '').trim() || (p.sku || '').trim());
+  return escapeHtml(_vaName(p)) + (tag ? ` <span class="bu-pick-tag">${escapeHtml(tag)}</span>` : '');
+}
 async function vaLoad(id) {
   const box = document.getElementById('pd-variants'); if (!box) return;
   VA_ID = id; VA_MEMBERS = []; VA_HAD_GROUP = false; VA_STORE_TOTALS = {};
@@ -2171,7 +2178,7 @@ function buPickerList() {
     .filter(p => !q || (p.name_en || '').toLowerCase().includes(q) || (p.name_cn || '').includes(q) || (p.sku || '').toLowerCase().includes(q))
     .slice(0, 40);
   el.innerHTML = matches.length
-    ? matches.map(p => `<div class="bu-pick" onclick="buPick(${p.id})">${escapeHtml(_vaName(p))}</div>`).join('')
+    ? matches.map(p => `<div class="bu-pick" onclick="buPick(${p.id})">${_vaPickName(p)}</div>`).join('')
     : `<div class="bu-pick muted">${cuT('No matches', '无匹配')}</div>`;
 }
 function buPick(id) {
@@ -2258,7 +2265,7 @@ function bpPickerList() {
     .filter(p => !q || (p.name_en || '').toLowerCase().includes(q) || (p.name_cn || '').includes(q) || (p.sku || '').toLowerCase().includes(q))
     .slice(0, 40);
   el.innerHTML = matches.length
-    ? matches.map(p => `<div class="bu-pick" onclick="bpPick(${p.id})">${escapeHtml(_vaName(p))}</div>`).join('')
+    ? matches.map(p => `<div class="bu-pick" onclick="bpPick(${p.id})">${_vaPickName(p)}</div>`).join('')
     : `<div class="bu-pick muted">${cuT('No matches', '无匹配')}</div>`;
 }
 function bpPick(id) {
