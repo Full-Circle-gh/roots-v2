@@ -1,0 +1,1218 @@
+# Mini App Backend — language-toggle (EN/CN) leak audit
+
+Generated 2026-06-13 by multi-agent static sweep of retail-admin source.
+A label leaks when it is NOT written as `English · 中文`, not in EN_ONLY_MAP, and not a data-lang-block pair.
+
+**393 candidate leaks** (355 english-in-cn · 37 uncertain/intentional · 1 chinese-in-en).
+
+## public/retail-admin.html — 122
+
+- **L829** [english-in-cn] `placeholder="Search order #, name, phone…"`
+  - Orders search input placeholder is English-only with no Chinese half (other search boxes use data-ph-en/cn).
+  - → Add bilingual placeholder via data-ph-en/data-ph-cn (e.g. data-ph-cn="搜索订单号、姓名、电话…") like #pa-search does.
+- **L899** [english-in-cn] `Entries — <code>order#  waybill#</code> on each line (comma, tab, or space-separated)`
+  - Bulk-tracking field label is English-only.
+  - → Append " · 条目 — 每行一个 订单号  运单号(逗号、制表或空格分隔)".
+- **L905** [english-in-cn] `Per-line override: append a third value to set a different carrier (e.g. <code>R26… JD123 sf</code>).`
+  - Helper text is English-only.
+  - → Append a Chinese half, e.g. " · 单行覆盖:追加第三个值可指定不同快递。"
+- **L1379** [english-in-cn] `placeholder="Search name, phone, openid, or order #…"`
+  - Customers search placeholder English-only, no Chinese half.
+  - → Use data-ph-en/data-ph-cn pair (e.g. data-ph-cn="搜索姓名、电话、openid 或订单号…").
+- **L1572** [english-in-cn] `Set as default address`
+  - Checkbox label English-only.
+  - → Append " · 设为默认地址".
+- **L1925** [english-in-cn] `<option value="">+ Add section…</option>`
+  - Block-picker placeholder option English-only.
+  - → Append " · 添加板块…".
+- **L2133** [english-in-cn] `Coupons are either <b>code-redeemed</b> … or <b>public</b> … Three types: fixed ¥ off, percent off, or free shipping.`
+  - Coupons intro paragraph English-only, no Chinese half.
+  - → Add a Chinese translation half after the English (the page's other intros do).
+- **L2153** [english-in-cn] `<option value="fixed_amount">¥ off</option> … <option value="percent">% off</option>`
+  - Two coupon-type options are English-only while a sibling (free_shipping) is bilingual.
+  - → Append " · 减 ¥" and " · 百分比折扣" respectively.
+- **L2203** [english-in-cn] `<span class="muted">(shown to customers when Public)</span>`
+  - Label addendum English-only.
+  - → Append "(公开时顾客可见)".
+- **L2212** [english-in-cn] `Create`
+  - Create-coupon button is bare "Create", not in EN_ONLY_MAP.
+  - → Append " · 创建".
+- **L2256** [english-in-cn] `Grant to every customer`
+  - Heading English-only.
+  - → Append " · 发放给所有顾客".
+- **L2263** [english-in-cn] `placeholder="Search by name, phone, or openid…"`
+  - Grant-customer search placeholder English-only.
+  - → Use bilingual placeholder (e.g. "搜索姓名、电话或 openid…") via data-ph-en/cn.
+- **L2333** [english-in-cn] `<h3 id="vw-title" …>Make a coupon</h3>`
+  - Wizard title English-only.
+  - → Append " · 新建优惠券" (matches the vw-kick above which is bilingual).
+- **L2347** [english-in-cn] `Put a product on flash sale by setting a discounted price and an end time. …`
+  - Flash-sales intro paragraph English-only.
+  - → Add a Chinese translation half.
+- **L2363** [english-in-cn] `<div class="fs-picker-label empty" …>— pick a product —</div>`
+  - Product-picker placeholder English-only.
+  - → Append " · 选择产品".
+- **L2387** [english-in-cn] `Starts at <span class="muted">· optional, defaults to now</span>`
+  - The " · optional, defaults to now" suffix is English (right of the dot is not Chinese).
+  - → Make the suffix Chinese, e.g. "· 可选,默认即时".
+- **L2391** [english-in-cn] `<span class="fs-quick-chip" data-fs-quick="starts:now">Now</span> … >Tomorrow 09:00</span> … >Clear</span>`
+  - Quick-time chips "Now", "Tomorrow 09:00", "Clear" are English-only.
+  - → Append Chinese, e.g. "现在", "明天 09:00", "清除".
+- **L2399** [english-in-cn] `Ends at <span class="muted">· required</span>`
+  - " · required" suffix is English, not a translation pair.
+  - → Change to "· 必填".
+- **L2452** [english-in-cn] `Short text labels shown on fixed mini-app screens … fill in both EN and 中.`
+  - Copy/snippets intro English-only.
+  - → Add a Chinese translation half.
+- **L2460** [english-in-cn] `Save all copy`
+  - Button English-only, not in EN_ONLY_MAP.
+  - → Append " · 保存全部文案".
+- **L2627** [english-in-cn] `<h2 style="margin: 0;">Pop-ups</h2>`
+  - Pop-ups page heading English-only (the tab is bilingual but this h2 is not).
+  - → Append " · 弹窗".
+- **L2629** [english-in-cn] `Show a modal to customers on any page. Useful for announcements, coupon offers, restock alerts, holiday closures.`
+  - Pop-ups intro English-only.
+  - → Add a Chinese half.
+- **L2634** [english-in-cn] `New pop-up`
+  - Button English-only.
+  - → Append " · 新建弹窗".
+- **L2646** [english-in-cn] `<div … id="pu-editor-title">Pop-up</div>`
+  - Drawer title English-only.
+  - → Append " · 弹窗".
+- **L2663** [english-in-cn] `Enabled — show this pop-up to customers`
+  - Checkbox label English-only.
+  - → Append " · 启用 — 向顾客显示此弹窗".
+- **L2666** [english-in-cn] `Dismissible — show a close button`
+  - Checkbox label English-only.
+  - → Append " · 可关闭 — 显示关闭按钮".
+- **L2752** [english-in-cn] `<label class="stacked">CTA label (EN, optional)</label>`
+  - Field label English-only (its CN sibling labels a different field).
+  - → Append " · 按钮文字(英文,可选)".
+- **L2761** [english-in-cn] `<label class="stacked">CTA destination (optional)</label>`
+  - Field label English-only.
+  - → Append " · 按钮跳转(可选)".
+- **L2763** [english-in-cn] `<option value="">— Just dismiss (no destination)</option>`
+  - Select option English-only.
+  - → Append " · 仅关闭(无跳转)".
+- **L2772** [english-in-cn] `<option value="product">A specific product…</option> … >A specific category…</option>`
+  - Two select options English-only.
+  - → Append " · 指定产品…" and " · 指定分类…".
+- **L2808** [english-in-cn] `Live preview · uses the EN copy`
+  - The text right of " · " is English ("uses the EN copy"), so this is not a translation pair.
+  - → Make it bilingual, e.g. "实时预览 · 使用英文文案".
+- **L2817** [english-in-cn] `Save`
+  - Pop-up save button bare "Save" (not in EN_ONLY_MAP; "Saved/Saving…" are but not "Save").
+  - → Append " · 保存".
+- **L2859** [english-in-cn] `Send a notification to every active mini-app customer at once. …`
+  - Broadcasts intro English-only.
+  - → Add a Chinese half.
+- **L2911** [english-in-cn] `<label class="bc-label">Title (EN)</label>`
+  - Field label English-only (sibling is 标题(中文)).
+  - → Append " · 标题(英文)".
+- **L2921** [english-in-cn] `<label class="bc-label">Body (EN, optional)</label>`
+  - Field label English-only.
+  - → Append " · 正文(英文,选填)".
+- **L2931** [english-in-cn] `Deep-link <span class="muted">(must start with <code>/pages/</code> — leave blank for none)</span>`
+  - Label English-only.
+  - → Append " · 深链接(须以 /pages/ 开头,留空则无)".
+- **L2933** [english-in-cn] `<option value="">— No deep-link —</option>`
+  - Option English-only.
+  - → Append " · 无深链接".
+- **L2942** [english-in-cn] `<option value="__custom__">Custom path…</option>`
+  - Option English-only.
+  - → Append " · 自定义路径…".
+- **L2969** [english-in-cn] `Membership tier · 会员等级 <span class="muted">(blank = all)</span>`
+  - The muted "(blank = all)" addendum is English-only.
+  - → Append "(留空 = 全部)".
+- **L2978** [english-in-cn] `Region · 地区 <span class="muted">(blank = all; by saved address)</span>`
+  - Muted addendum English-only.
+  - → Append "(留空 = 全部;按已保存地址)".
+- **L2988** [english-in-cn] `<span id="bc-aud-summary">All active customers</span>`
+  - Default audience-summary text English-only.
+  - → Append/render " · 所有活跃顾客".
+- **L2989** [english-in-cn] `Blocked customers are skipped.`
+  - Note English-only.
+  - → Append " · 已封禁顾客将被跳过。"
+- **L2996** [english-in-cn] `<span id="bc-send-label">Send broadcast</span>`
+  - Button label English-only.
+  - → Append " · 发送广播".
+- **L2998** [english-in-cn] `<button class="btn" onclick="bcResetComposer()">Reset</button>`
+  - Button English-only.
+  - → Append " · 重置".
+- **L3106** [english-in-cn] `Set high to push average-order-value up; set low (or 0) to be more generous. …`
+  - Free-shipping helper paragraph English-only (most other delivery helpers are bilingual).
+  - → Add a Chinese half.
+- **L3143** [english-in-cn] `Charged on every standard-delivery order unless the subtotal hits the free-shipping threshold.`
+  - Helper English-only.
+  - → Add a Chinese half.
+- **L3178** [english-in-cn] `Charged on every same-day order regardless of cart size. Customers see this fee next to the radio at checkout.`
+  - Helper English-only.
+  - → Add a Chinese half.
+- **L3197** [english-in-cn] `Shows as a "Packing fee" line on the pickup checkout breakdown. …`
+  - Helper English-only.
+  - → Add a Chinese half.
+- **L3222** [english-in-cn] `One global window for all pickup-enabled stores. Leave the default (10:00–20:00) if unsure.`
+  - Helper English-only.
+  - → Add a Chinese half.
+- **L3254** [english-in-cn] `Useful to avoid loss-making tiny orders, or leave at 0 if you want trial customers to buy one item.`
+  - Helper English-only.
+  - → Add a Chinese half.
+- **L3451** [english-in-cn] `<div class="muted" id="dz-edit-sub" …>Pricing and scheduling for one delivery area.</div>`
+  - Zone-drawer subtitle English-only.
+  - → Append " · 单个配送区的定价与时间设置。"
+- **L3606** [english-in-cn] `<div class="muted" id="dz-apply-sub" …>Pick which fields and which zones — applies the form values currently in the draw`
+  - Subtitle English-only.
+  - → Add a Chinese half.
+- **L3624** [english-in-cn] `<span class="dz-bundle-sub muted">Base fee · Free-over · MAX (GZ) · Packing fee & cap (city)</span>`
+  - Bundle description is English field names (the dots separate English, not a translation).
+  - → Add a Chinese description, e.g. "基础运费 · 满额免运 · 封顶(广州) · 包装费与上限(外地)".
+- **L3630** [english-in-cn] `<span class="dz-bundle-sub muted">Hours · Slot length · Lead → Max · Same-day · Day-only mode</span>`
+  - Bundle description English-only.
+  - → Add a Chinese description.
+- **L3636** [english-in-cn] `<span class="dz-bundle-sub muted">Use sparingly — pushing this turns selected zones on/off.</span>`
+  - Bundle note English-only.
+  - → Append " · 谨慎使用 — 会切换所选配送区的启用状态。"
+- **L3695** [english-in-cn] `Add`
+  - Top-up add button bare "Add" (not in EN_ONLY_MAP).
+  - → Append " · 添加".
+- **L3705** [english-in-cn] `<th>EN title</th><th>中文 title</th><th>Active</th>`
+  - "EN title" and "Active" headers are English-only; "中文 title" mixes a CN word with English "title".
+  - → Use "标题(英文)"/"标题(中文)" and "Active · 启用".
+- **L3727** [english-in-cn] `Customers can share their personal code; when a friend signs up and places their first paid order, both sides get reward`
+  - Affiliate intro paragraph English-only.
+  - → Add a Chinese half.
+- **L3805** [english-in-cn] `Customer reviews collected from the mini app after a delivered order. …`
+  - Reviews intro paragraph English-only.
+  - → Add a Chinese half.
+- **L3859** [english-in-cn] `<b>id</b> is the slug stored in the database — change it only if no reviews have used the tag yet … Lowercase letters + `
+  - Helper paragraph English-only.
+  - → Add a Chinese half.
+- **L3874** [english-in-cn] `<button class="btn" onclick="addReviewTag()">+ Add tag</button>`
+  - Button English-only.
+  - → Append " · 添加标签".
+- **L3990** [english-in-cn] `<h2>Leaderboard <span … >Off</span></h2>`
+  - Leaderboard page heading English-only (the tab is bilingual; "Off" pill is in EN_ONLY_MAP).
+  - → Append " · 排行榜" to the heading text.
+- **L3992** [english-in-cn] `Configure the public Roots Club leaderboard shown in the mini app. …`
+  - Leaderboard intro English-only.
+  - → Add a Chinese half.
+- **L4156** [english-in-cn] `Save leaderboard`
+  - Button English-only.
+  - → Append " · 保存排行榜".
+- **L4211** [english-in-cn] `0 = never expire. Applies to new earns only.`
+  - Helper English-only (peers like line 4206 are bilingual).
+  - → Append " · 0 = 永不过期;仅对新获取的积分生效。"
+- **L4337** [english-in-cn] `Build polls the mini-app shows on Me → Your say. …`
+  - Voting intro paragraph English-only.
+  - → Add a Chinese half.
+- **L4345** [english-in-cn] `The line under the "Your say" headline. Use <code>{pts}</code> … no app republish needed.`
+  - Helper English-only.
+  - → Add a Chinese half.
+- **L4359** [english-in-cn] `<button class="btn btn-primary" onclick="newPoll()">+ New poll</button>`
+  - Button English-only.
+  - → Append " · 新建投票".
+- **L4373** [english-in-cn] `All images uploaded for the mini app — banners, product photos, FAQ icons … a quick "safe to delete?" hint.`
+  - Media intro paragraph English-only.
+  - → Add a Chinese half.
+- **L4453** [english-in-cn] `<h3 … id="ml-edit-title">Media</h3>`
+  - Media drawer default title English-only.
+  - → Append " · 媒体".
+- **L4467** [english-in-cn] `Alt text · 替代文字 <span class="muted" …>(for screen readers and SEO)</span>`
+  - Muted addendum English-only.
+  - → Append "(用于读屏与 SEO)".
+- **L4479** [english-in-cn] `Tags · 标签 <span class="muted" …>(comma or Enter to add)</span>`
+  - Muted addendum English-only.
+  - → Append "(逗号或回车添加)".
+- **L4490** [english-in-cn] `<button class="btn" onclick="copyMediaUrl()">Copy</button>`
+  - Button English-only.
+  - → Append " · 复制".
+- **L4520** [english-in-cn] `Add tags · 添加标签 <span class="muted" …>(comma or Enter)</span>`
+  - Muted addendum English-only.
+  - → Append "(逗号或回车)".
+- **L4543** [english-in-cn] `Edit the content of the customer-facing About / Story page (Me → About Roots). Bilingual fields: fill both EN and CN …`
+  - About-page intro English-only.
+  - → Add a Chinese half.
+- **L4554** [english-in-cn] `<span class="ab-label">Kicker (EN)</span>`
+  - About-editor field label English-only (the whole ab-label set in this section is English-only).
+  - → Append " · 引题(英文)"; apply the same EN·中文 treatment to the other ab-label fields (Body — English/中文, Section kicker, Name, Title, Quote, Headline, Button label, etc.).
+- **L4564** [english-in-cn] `Wrap a word with **double asterisks** to make it bold (e.g. **plant-based food**).`
+  - ab-help text English-only.
+  - → Add a Chinese half.
+- **L4569** [english-in-cn] `Leave blank to hide the Chinese paragraph.`
+  - ab-help text English-only.
+  - → Append " · 留空则隐藏中文段落。"
+- **L4636** [english-in-cn] `No photo — placeholder tile will show.`
+  - Empty-state text English-only.
+  - → Append " · 暂无照片 — 将显示占位图。"
+- **L4667** [english-in-cn] `<button … onclick="aboutAddBullet('in')">+ Add IN item</button> … >+ Add OUT item</button>`
+  - Buttons English-only.
+  - → Append " · 添加「是」项" / " · 添加「否」项".
+- **L4784** [english-in-cn] `Shop tab`
+  - Settings sidebar nav item English-only (its panel header is bilingual).
+  - → Append " · 商城页".
+- **L4788** [english-in-cn] `Push notifications`
+  - Settings nav item English-only.
+  - → Append " · 推送通知".
+- **L4792** [english-in-cn] `Customer service`
+  - Settings nav item English-only.
+  - → Append " · 客户服务".
+- **L4796** [english-in-cn] `Operations`
+  - Settings nav item English-only.
+  - → Append " · 运营".
+- **L4941** [english-in-cn] `<b>Featured</b> uses the manual order on the Products page. … <b>Popular</b> sorts by order count in the last 30 days.`
+  - Sort helper English-only.
+  - → Add a Chinese half.
+- **L4992** [english-in-cn] `<span>Show sort dropdown</span>`
+  - Filter-toggle checkbox label English-only.
+  - → Append " · 显示排序下拉".
+- **L4993** [english-in-cn] `<span>Show dietary chips</span>`
+  - Checkbox label English-only.
+  - → Append " · 显示饮食标签".
+- **L5001** [english-in-cn] `<span>Show "In stock" toggle</span>`
+  - Checkbox label English-only.
+  - → Append " · 显示「有货」开关".
+- **L5002** [english-in-cn] `<span>Show NEW / POP / SALE filter</span>`
+  - Checkbox label English-only.
+  - → Append " · 显示 NEW / POP / SALE 筛选".
+- **L5009** [english-in-cn] `Set a product's badge with the <b>Badge</b> dropdown in its editor (Products page).`
+  - Helper English-only.
+  - → Add a Chinese half.
+- **L5013** [english-in-cn] `<span>Show price ¥min – ¥max</span>`
+  - Checkbox label English-only.
+  - → Append " · 显示价格 ¥min – ¥max 筛选".
+- **L5014** [english-in-cn] `<span>Hide out-of-stock products entirely</span>`
+  - Checkbox label English-only.
+  - → Append " · 完全隐藏缺货产品".
+- **L5015** [english-in-cn] `<span>Lock layout (hide customer's view-switcher)</span>`
+  - Checkbox label English-only.
+  - → Append " · 锁定布局(隐藏顾客的视图切换)".
+- **L5035** [english-in-cn] `WeChat doesn't allow free push — instead, each customer opts in to <em>one</em> notification per submission. …`
+  - Push template helper English-only.
+  - → Add a Chinese half.
+- **L5122** [english-in-cn] `Shows a chat-bubble button on the Me tab, checkout, and order pages. … customers get a live conversation with a staff ag`
+  - Customer-service intro English-only.
+  - → Add a Chinese half.
+- **L5131** [english-in-cn] `Three options. WeCom is best for ongoing conversations. WeChat 客服 is the lightweight built-in. QR code is the fallback w`
+  - Helper paragraph English-only (the embedded 客服 is just a term, not a translation half).
+  - → Add a Chinese half.
+- **L5135** [english-in-cn] `<option value="wecom">WeCom (企业微信) — recommended</option> … <option value="qr">QR code — show a scannable image</option>`
+  - CS-mode options English-only (the 企业微信/客服 are inline terms, not translations of the English).
+  - → Append Chinese, e.g. " — 推荐" / " — 显示可扫描图片".
+- **L5184** [english-in-cn] `<label class="stacked">EN label</label>`
+  - Field label English-only.
+  - → Append " · 英文标签" (and similarly "EN hours line" at 5194).
+- **L5205** [english-in-cn] `Shown as the <b>Call</b> button on the FAQ help screen. Leave blank to hide.`
+  - Helper English-only.
+  - → Add a Chinese half.
+- **L5216** [english-in-cn] `Me tab / Home tab / Product detail / Checkout / Order detail (CS placement checkboxes)`
+  - Placement checkbox labels (lines 5216,5219,5222,5225,5228) are English-only.
+  - → Append Chinese to each, e.g. " · 我的页", " · 首页", " · 商品详情", " · 结算页", " · 订单详情".
+- **L5341** [english-in-cn] `<button class="btn" onclick="loadIntegrationsStatus()">↻ Refresh status</button>`
+  - Button English-only.
+  - → Append " · 刷新状态".
+- **L5342** [english-in-cn] `🗺 Geocode all stores &amp; addresses now`
+  - Button English-only.
+  - → Append " · 立即定位所有门店与地址".
+- **L5374** [english-in-cn] `Whitelist this in your kd100 dashboard. Webhook fires on every event update.`
+  - Helper English-only.
+  - → Add a Chinese half.
+- **L5379** [english-in-cn] `Verifies pushes came from a request we made. Set once and leave alone.`
+  - Helper English-only.
+  - → Add a Chinese half.
+- **L5383** [english-in-cn] `💾 Save / ⚡ Save & test / 💾 Save all (integration buttons)`
+  - Operations integration buttons (5383,5384,5418,5419,5463) are English-only.
+  - → Append Chinese, e.g. " · 保存", " · 保存并测试", " · 全部保存".
+- **L5421** [english-in-cn] `After saving, full waybill push needs a one-time field-set confirmation … tell your developer once credentials are saved`
+  - Helper English-only.
+  - → Add a Chinese half.
+- **L5443** [uncertain] `Auto-print every paid order at its store · 付款后在对应门店自动打印`
+  - This one IS bilingual; flagged only to note the surrounding Feie helper/labels (e.g. 5447 placeholder, 5431 ⚠ note) are English-only.
+  - → Verify the Feie ⚠ note (5431) and field placeholders carry a Chinese half; add where missing.
+- **L5447** [english-in-cn] `placeholder="shop name shown at top of receipt"`
+  - Receipt-header placeholder English-only.
+  - → Use a bilingual placeholder, e.g. "小票顶部显示的店名".
+- **L5472** [english-in-cn] `Save settings`
+  - Settings save-bar button English-only.
+  - → Append " · 保存设置".
+- **L5491** [english-in-cn] `Five live engagement widgets that surface real customer activity in the mini app. … Tuning numbers control how aggressiv`
+  - Social-proof intro: only the trailing 'X' sentence is Chinese; the long English lead has no Chinese counterpart.
+  - → Translate the full English lead, not just the short tail.
+- **L5725** [english-in-cn] `Required by WeChat for any mini-program that collects user info … The customer's WeChat language picks EN or 中.`
+  - Privacy-policy helper English-only.
+  - → Add a Chinese half.
+- **L5810** [english-in-cn] `Powers the <b>Me → Help &amp; FAQ</b> screen in the mini app. … reuses the WeChat customer-service settings …`
+  - FAQ intro paragraph English-only.
+  - → Add a Chinese half.
+- **L5818** [english-in-cn] `The colour-coded chips at the top of the FAQ screen. … change it only if no questions reference it yet.`
+  - FAQ categories helper English-only.
+  - → Add a Chinese half.
+- **L5833** [english-in-cn] `<button class="btn" onclick="addFaqCategory()">+ Add category</button>`
+  - Button English-only.
+  - → Append " · 添加分类".
+- **L5847** [english-in-cn] `<button class="btn" onclick="addFaqQuestion()">+ Add question</button>`
+  - Button English-only.
+  - → Append " · 添加问题".
+- **L5855** [english-in-cn] `Save FAQ`
+  - Button English-only.
+  - → Append " · 保存常见问题".
+- **L5940** [english-in-cn] `Pop out`
+  - Live-preview drawer button English-only (peers Reload/Close use titles but visible label is English-only).
+  - → Append " · 弹出".
+- **L6479 (inline JS, ~line 343 of post-6137 block)** [english-in-cn] `'<div class="rm-oc-hint done">' + ICON_CHECK + 'Completed — no action needed</div>'`
+  - Mobile order-card hint string is English-only.
+  - → Append " · 已完成 — 无需操作".
+- **Linline JS rmRenderOrderCards (Advance/Call)** [english-in-cn] `…>Advance</button> … >Call</button>`
+  - Mobile order-card action buttons "Advance"/"Call" are English-only.
+  - → Append " · 推进" / " · 拨打" (or render via the bilingual en() helper).
+- **Linline JS rmRenderCustomerCards (Adjust/Block/Unblock/Blocked)** [english-in-cn] `…>Adjust</button> … (blocked ? 'Unblock' : 'Block') … <span class="cu-pill blocked">Blocked</span>`
+  - Mobile customer-card buttons "Adjust"/"Block"/"Unblock" and "Blocked" pill are English-only.
+  - → Append Chinese, e.g. "调整", "封禁"/"解封", "已封禁".
+- **Linline JS customer peek actions** [uncertain] `…>Full profile · 资料</button> … >Adjust points · 调整</button>`
+  - These ARE bilingual; flagged only to note nearby generated buttons (Adjust/Block) in the same render path are not — verify all generated labels.
+  - → Confirm every dynamically-built mobile button carries a Chinese half like these two do.
+- **Linline JS settings sheet header** [uncertain] `hh.innerHTML = '…<div class="eyebrow">Mini App Backend</div><h2>Settings · 设置</h2>'`
+  - "Settings · 设置" is bilingual and "Mini App Backend" is a product/brand name (per app naming convention), so likely intentional; not a clear leak.
+  - → Leave as-is unless the brand eyebrow should localise.
+
+## public/retail-admin/01-core.js — 5
+
+- **L353** [english-in-cn] `<button class="btn-icon cat-del" type="button" title="Remove subcategory" onclick="catRemoveSub(${ti},${si})">✕</button>`
+  - The hover title is English-only with no Chinese half; sibling titles on this row (line 348/364) are bilingual, so this one stays English in CN mode.
+  - → Change to title="Remove subcategory · 删除子分类" to match the bilingual title convention used on the surrounding rows.
+- **L350** [uncertain] `placeholder="Subcategory (EN)"`
+  - Mono-lingual placeholder, not in the data-ph-en/data-ph-cn paired form; but it is the deliberate EN-field label (the CN field sits beside it), so the '(EN)' suffix makes it intentional rather than a confusing leak.
+  - → Optional: convert the EN/CN field pair to paired data-ph-en/data-ph-cn placeholders, or leave as-is since the (EN)/(中文) labelling is intentional and self-documenting.
+- **L351** [uncertain] `placeholder="子分类 (中文)"`
+  - Chinese-only placeholder on the CN field beside an EN field; intentional mono-lingual pair, but not in a defined safe form so it stays Chinese in EN mode.
+  - → Optional: switch to paired data-ph-en/data-ph-cn placeholders; otherwise acceptable as the deliberate CN-field label.
+- **L362** [uncertain] `placeholder="Top category (EN)"`
+  - Mono-lingual EN placeholder, not in paired data-ph form; deliberate EN-field label sitting beside the CN field.
+  - → Optional: convert to paired data-ph-en/data-ph-cn placeholders, or leave as the intentional (EN) field label.
+- **L363** [uncertain] `placeholder="主分类 (中文)"`
+  - Chinese-only placeholder on the CN field; intentional mono-lingual pair but not a defined safe form, so it remains Chinese in EN mode.
+  - → Optional: switch to paired data-ph-en/data-ph-cn placeholders; otherwise acceptable as the deliberate CN-field label.
+
+## public/retail-admin/02-settings-ops.js — 30
+
+- **L144, 366, 419, 466** [english-in-cn] `toast('Failed: ' + e.message, 'error')`
+  - "Failed:" prefix is English UI text with no Chinese half; stays English in CN mode (not an EN_ONLY_MAP term).
+  - → toast('Failed · 操作失败: ' + e.message, 'error')
+- **L495** [english-in-cn] `toast('Failed to load: ' + e.message, 'error')`
+  - "Failed to load:" is English-only toast text, no CN half.
+  - → toast('Failed to load · 加载失败: ' + e.message, 'error')
+- **L377** [english-in-cn] `toast('Print failed: ' + (j.error || 'unknown'), 'error')`
+  - "Print failed:" English-only, no CN half.
+  - → toast('Print failed · 打印失败: ' + (j.error || 'unknown'), 'error')
+- **L378, 429, 441** [english-in-cn] `toast('Test failed: ' + e.message, 'error')`
+  - "Test failed:" English-only toast, no CN half.
+  - → toast('Test failed · 测试失败: ' + e.message, 'error')
+- **L427** [english-in-cn] `toast('✅ 快递100 reachable · auth OK', 'success')`
+  - The ' · ' separates two English phrases (reachable · auth OK); the visible message words are English with no CN half (快递100 is just the brand name).
+  - → toast('✅ 快递100 reachable · auth OK · 连接正常', 'success')
+- **L428** [english-in-cn] `toast('快递100 test failed: ' + (j.error || 'unknown'), 'error')`
+  - "test failed" is English UI text (only the brand 快递100 is Chinese); no real CN half.
+  - → toast('快递100 测试失败: ' + (j.error || 'unknown'), 'error')
+- **L438** [english-in-cn] `toast('✅ JD reachable · auth OK', 'success')`
+  - All-English message; ' · ' divides two English phrases, not an EN·CN pair.
+  - → toast('✅ JD reachable · auth OK · 连接正常', 'success')
+- **L440** [english-in-cn] `toast('JD ping failed: ' + (j.error || 'unknown'), 'error')`
+  - "JD ping failed:" English-only, no CN half.
+  - → toast('JD ping failed · 连接失败: ' + (j.error || 'unknown'), 'error')
+- **L447** [english-in-cn] `toast('Geocoding…', 'info')`
+  - English-only progress toast; not an EN_ONLY_MAP term ("Loading…" is, this is not).
+  - → toast('Geocoding… · 定位中…', 'info')
+- **L461** [english-in-cn] `toast('⚠ Could not geocode addresses: ' + (d.last_error.message || d.last_error.code), 'error')`
+  - English-only error toast, no CN half.
+  - → toast('⚠ Could not geocode addresses · 地址定位失败: ' + (d.last_error.message || d.last_error.code), 'error')
+- **L463** [english-in-cn] `toast(`✅ Geocoded ${d.stores_geocoded}/${d.stores_total} stores · ${d.addresses_geocoded}/${d.addresses_total} addresses`
+  - Whole message is English ("Geocoded", "stores", "addresses"); the ' · ' joins two data counts, not a translation pair.
+  - → Append a CN half, e.g. `✅ Geocoded ${a}/${b} stores · ${c}/${d} addresses · 已定位 门店与地址`
+- **L330** [english-in-cn] `box.innerHTML = '<div ...>No preview available</div>'`
+  - English-only message rendered into the print-preview box; stays English in CN mode.
+  - → ...>No preview available · 暂无预览</div>
+- **L335** [english-in-cn] `box.innerHTML = '<div ...>Preview failed</div>'`
+  - English-only preview-error text in the visible preview box.
+  - → ...>Preview failed · 预览失败</div>
+- **L279** [english-in-cn] `<button ... onclick="_testPrinter(${s.id})">🖨 Save &amp; test this store</button>`
+  - English-only button label; no CN half.
+  - → 🖨 Save &amp; test this store · 保存并测试本店
+- **L160** [english-in-cn] ``${k.key_masked} · leave blank to keep` : 'paste 授权 key'`
+  - Placeholder text: "leave blank to keep" and "paste … key" are English UI words with no CN half (should use data-ph-en/data-ph-cn).
+  - → Use bilingual placeholder, e.g. '…· leave blank to keep · 留空则保持不变' and 'paste 授权 key · 粘贴授权 key'
+- **L162** [english-in-cn] `'random string — do not rotate'`
+  - English-only input placeholder.
+  - → 'random string — do not rotate · 随机字符串,请勿更换'
+- **L176** [english-in-cn] ``${d.app_secret_masked} · leave blank to keep` : 'paste app_secret'`
+  - "leave blank to keep" / "paste app_secret" English-only placeholder, no CN half.
+  - → Append CN: '… · leave blank to keep · 留空保持不变' and 'paste app_secret · 粘贴 app_secret'
+- **L177** [english-in-cn] ``${d.access_token_masked} · leave blank to keep` : 'paste access_token'`
+  - English-only placeholder, no CN half.
+  - → Append CN halves as above for access_token
+- **L191** [english-in-cn] ``${f.ukey_masked} · leave blank to keep` : 'paste USERKEY from dev console'`
+  - "leave blank to keep" / "paste USERKEY from dev console" English-only placeholder.
+  - → 'paste USERKEY from dev console · 从开发者后台粘贴 USERKEY'
+- **L165, 182, 194** [english-in-cn] `<span ...>✓ LIVE</span>`
+  - Status chip reads "LIVE" (uppercase) — not the EN_ONLY_MAP term "Live" (exact match only) and rendered via innerHTML the toggle never reaches; stays English in CN mode.
+  - → ✓ LIVE · 已启用
+- **L166, 195** [english-in-cn] `<span ...>✗ NOT CONFIGURED</span>`
+  - English-only status chip, no CN half.
+  - → ✗ NOT CONFIGURED · 未配置
+- **L183** [english-in-cn] `<span ...>⏳ PENDING JD ACCOUNT</span>`
+  - English-only status chip.
+  - → ⏳ PENDING JD ACCOUNT · 待开通京东账号
+- **L554** [english-in-cn] `<span ...>✓ KEY CONFIGURED</span>`
+  - English-only maps-key status chip.
+  - → ✓ KEY CONFIGURED · 已配置密钥
+- **L555** [english-in-cn] `<span ...>✗ KEY MISSING</span>`
+  - English-only status chip.
+  - → ✗ KEY MISSING · 缺少密钥
+- **L571** [english-in-cn] `<span style="color:var(--text-3)">Stores geocoded</span>`
+  - English-only stat label in the routing-status panel.
+  - → Stores geocoded · 门店已定位
+- **L573** [english-in-cn] `<span style="color:var(--text-3)">Addresses geocoded</span>`
+  - English-only stat label.
+  - → Addresses geocoded · 地址已定位
+- **L572, 574** [english-in-cn] `` · <span style="color:#b85c00">${s.missing} missing GPS</span>``
+  - "missing GPS" is English UI text appended after a count; no CN half (the ' · ' joins the count to the English label).
+  - → ${s.missing} 个未定位 (missing GPS)
+- **L563** [english-in-cn] ``<div ...>⚠ Last geocode error (${provLabel}): ${le.code} ${le.message}</div>``
+  - English-only error line, no CN half (unlike the quota branch on line 561 which has one).
+  - → ⚠ Last geocode error · 最近定位错误 (${provLabel}): …
+- **L576** [english-in-cn] `'<div ...>⚠ Add <code>AMAP_MAPS_KEY=...</code> ... and restart pm2 to enable geocoding.</div>'`
+  - English-only multi-sentence help note, no CN half.
+  - → Append a CN half, e.g. '… restart pm2 to enable geocoding. · 在 .env 中添加密钥并重启 pm2 以启用定位。'
+- **L1035-1042** [uncertain] `const labels = { '':'Featured ↓','newest':'Newest','price_asc':'Price ↑',... }; el.textContent = labels[...] || 'Feature`
+  - These sort labels paint into the in-admin mini-phone preview (pv-sort-label). They mirror customer-facing storefront copy rather than admin chrome, so may be intentionally fixed to the storefront's language; but as rendered they stay English when the operator switches to CN.
+  - → If treated as admin UI, make bilingual or wrap in cuT(); if intentionally mirroring the storefront preview, leave as-is.
+
+## public/retail-admin/03-dashboard.js — 15
+
+- **L1385** [english-in-cn] `sub: k.visits === 0 ? 'No data yet · 暂无' : dashNum(k.sessions) + ' sessions'`
+  - The non-zero KPI sub-line renders "N sessions" with no Chinese half; stays English in CN mode.
+  - → dashNum(k.sessions) + cuT(' sessions', ' 会话') — or build it as `${dashNum(k.sessions)} sessions · ${dashNum(k.sessions)} 会话`.
+- **L1387** [english-in-cn] `{ lbl: 'Conversion · 转化率', val: conv, ..., sub: 'orders ÷ sessions' }`
+  - KPI card sub-line 'orders ÷ sessions' is English-only and not an EN_ONLY_MAP term.
+  - → sub: 'orders ÷ sessions · 订单 ÷ 会话'
+- **L1388** [english-in-cn] `sub: dashNum(k.refunded_orders) + ' refunded'`
+  - KPI sub-line renders "N refunded" with no Chinese half.
+  - → dashNum(k.refunded_orders) + cuT(' refunded', ' 已退款') (or append ` · N 已退款`).
+- **L1653** [english-in-cn] `<span>${dashNum(r.units)} sold · ${dashNum(r.orders)} orders</span>`
+  - Top-products row sub-line: 'sold' and 'orders' are English UI words with no Chinese; the ' · ' separates two English data phrases, not an EN|CN pair.
+  - → Use cuT: `${dashNum(r.units)} ${cuT('sold','已售')} · ${dashNum(r.orders)} ${cuT('orders','单')}`.
+- **L1664** [english-in-cn] `<span>${escapeHtml(r.phone || '')} · ${dashNum(r.orders)} orders</span>`
+  - Top-customers row sub: trailing 'orders' is English-only (the ' · ' here just separates phone from the count).
+  - → ${dashNum(r.orders)} ${cuT('orders','单')}
+- **L1678** [english-in-cn] `<span ...>(all customers)</span>`
+  - Tier-distribution heading qualifier '(all customers)' is English-only user-visible text.
+  - → '(all customers · 全部顾客)' or wrap with cuT('all customers','全部顾客').
+- **L1687-1688** [english-in-cn] `kSub: `${dashNum(c.customers)} cust.`, ... valueSub: `${dashNum(c.orders)} ord.``
+  - Geo bar rows show 'N cust.' and 'N ord.' English-only sub-labels.
+  - → Use cuT: `${dashNum(c.customers)} ${cuT('cust.','顾客')}` and `${dashNum(c.orders)} ${cuT('ord.','单')}`.
+- **L1701** [english-in-cn] `kSub: `${dashNum(x.uses)} uses`, value: '−' + dashMoney(x.discount), valueSub: dashMoney(x.revenue) + ' rev'`
+  - Voucher bar rows show 'N uses' and '¥X rev' English-only sub-labels.
+  - → cuT the suffixes: `${dashNum(x.uses)} ${cuT('uses','次')}` and `${dashMoney(x.revenue)} ${cuT('rev','营收')}`.
+- **L1706** [english-in-cn] `1006: 'Search result',`
+  - WeChat entry-scene label (rendered as a traffic bar label at line 1730) has no Chinese half.
+  - → 1006: 'Search result · 搜索结果'
+- **L1711** [english-in-cn] `1036: 'App share',`
+  - Entry-scene label rendered in traffic bars is English-only.
+  - → 1036: 'App share · 分享'
+- **L1712** [english-in-cn] `1047: 'Scan QR (Discover)', 1048: 'History',`
+  - Two scene labels ('Scan QR (Discover)', 'History') are English-only (note 1013 'History' already has a CN half, this duplicate at 1048 does not).
+  - → 1047: 'Scan QR (Discover) · 扫码(发现)', 1048: 'History · 历史'
+- **L1713** [english-in-cn] `1065: 'URL scheme',`
+  - Entry-scene label rendered in traffic bars is English-only.
+  - → 1065: 'URL scheme · 链接跳转' (or keep technical term with a CN gloss).
+- **L1714** [english-in-cn] `1107: 'Subscription msg',`
+  - Entry-scene label rendered in traffic bars is English-only.
+  - → 1107: 'Subscription msg · 订阅消息'
+- **L1754** [english-in-cn] ``${DASH_DOW[d]} ${hh}:00 — ${dashNum(cell.orders)} orders · ${dashMoney(cell.revenue)}``
+  - Heatmap cell title tooltip word 'orders' is English-only; the ' · ' separates two data values, not an EN|CN pair.
+  - → Use cuT('orders','单') for the word: `... — ${dashNum(cell.orders)} ${cuT('orders','单')} · ${dashMoney(cell.revenue)}`.
+- **L1883** [english-in-cn] `title="${escapeAttr(active + ' of ' + size + ' returned in ' + monthAdd(cm, i))}"`
+  - Cohort-matrix cell tooltip 'N of M returned in YYYY-MM' is fully English and stays English in CN mode.
+  - → Build it via cuT, e.g. cuLang()==='cn' ? `${monthAdd(cm,i)} 回购 ${active}/${size}` : `${active} of ${size} returned in ${monthAdd(cm,i)}`.
+
+## public/retail-admin/04-orders.js — 45
+
+- **L79** [english-in-cn] `<span class="pill refund-pending" title="Refund paid · 已退款">↩ refunded</span>`
+  - Pill BODY text '↩ refunded' is English-only; only the title attribute is bilingual, so the visible chip stays English in CN mode.
+  - → Make the visible label bilingual, e.g. `↩ refunded · 已退款` (or wrap in cuT('refunded','已退款')).
+- **L82-87** [english-in-cn] `pending:'refund req', reviewing:'reviewing', approved:'approved' … `↩ ${label}``
+  - Visible refund-badge labels (refund req / reviewing / approved) are English-only; the bilingual text lives only in the title attribute.
+  - → Give each label a Chinese half, e.g. 'refund req · 申请退款', 'reviewing · 处理中', 'approved · 已批准'.
+- **L105-107,113** [english-in-cn] ``¥${fmt(o.refund_amount_requested)} of ¥${fmt(o.total)}` / `full ¥${fmt(o.total)}` / ` · requested ${formatDate(...)}``
+  - The drawer refund-banner sub-line ('… of ¥…', 'full ¥…', 'requested DATE') renders English words to the operator with no Chinese half.
+  - → Localise via cuT, e.g. cuT(`¥${a} of ¥${b}`,`¥${a} / 共 ¥${b}`), cuT('full','全额'), cuT('requested','申请于').
+- **L830** [english-in-cn] `<div class="muted" style="font-size: 10px; margin-top: 2px;">no slot picked</div>`
+  - List ship-by cell shows 'no slot picked' English-only.
+  - → Use a bilingual pair: 'no slot picked · 未选时段' (or cuT).
+- **L841-844** [english-in-cn] `badge = ' · <b>OVERDUE</b>' / ' · today' / ' · tomorrow'`
+  - Urgency badges in the ship-by list cell (OVERDUE / today / tomorrow) are English-only and stay English in CN mode.
+  - → Localise via cuT, e.g. cuT('OVERDUE','已逾期'), cuT('today','今天'), cuT('tomorrow','明天').
+- **L853** [english-in-cn] ``+¥${fmt(o.same_day_surcharge_fee)} same-day``
+  - 'same-day' is an English UI word shown next to the surcharge amount.
+  - → cuT('same-day','当日'): `+¥${fee} ${cuT('same-day','当日')}`.
+- **L902-903** [english-in-cn] `if (r==='fallback_no_stock') return 'rerouted · out of stock'; if (r==='manual') return 'manually routed';`
+  - routingNote() (rendered in the list store cell and the drawer Fulfilled-by sub) returns English-only text; the ' · ' on line 902 separates two English phrases, not a translation pair.
+  - → Return bilingual strings: 'rerouted · 改派(缺货)' and 'manually routed · 手动改派'.
+- **L922** [english-in-cn] ``🥗 Make fresh on ${escapeHtml(o.promised_ship_date)} → arrives ~${escapeHtml(o.promised_delivery_date||'')}``
+  - Batch ship-by sub-line is English-only.
+  - → Localise: cuT(`🥗 Make fresh on ${d} → arrives ~${a}`,`🥗 ${d} 当天现做 → 约 ${a} 送达`).
+- **L928** [english-in-cn] `|| (o.scheduled_for ? humanizeSlotLabel(o.scheduled_for) : 'During pickup hours');`
+  - Pickup-time fallback label 'During pickup hours' is English-only.
+  - → cuT('During pickup hours','营业时间内自取').
+- **L940-941** [english-in-cn] `ASAP / Right away …  <div class="sub">No slot picked${mode?...}</div>`
+  - Ship-by tile shows 'ASAP / Right away' and 'No slot picked' English-only.
+  - → cuT('ASAP / Right away','尽快 / 立即') and cuT('No slot picked','未选时段').
+- **L951-957** [english-in-cn] `urgencyLabel = '⚠ OVERDUE' / `⚠ in ${n}h` / `today (${n}h)` / 'tomorrow' / `in ${n}d` / 'past' / 'within 24h'`
+  - Ship-by-tile urgency labels are all English-only and stay English when CN is active.
+  - → Localise each via cuT, e.g. cuT('⚠ OVERDUE','⚠ 已逾期'), cuT('tomorrow','明天'), cuT('within 24h','24小时内'), cuT('past','已过期').
+- **L964** [english-in-cn] `` · <span style="color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} same-day surcharge</span>``
+  - 'same-day surcharge' is English-only UI text in the ship-by tile.
+  - → cuT('same-day surcharge','当日加收').
+- **L975** [english-in-cn] `return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} pickup</span>`;`
+  - Tracking-cell pickup label 'pickup' is English-only (lowercase; not the EN_ONLY_MAP 'Pickup').
+  - → 'pickup · 自提' or cuT('pickup','自提').
+- **L979** [english-in-cn] `if (o.status === 'dispatched') return '<span class="err" style="font-size:11px;">⚠ missing</span>';`
+  - Tracking-cell '⚠ missing' (waybill not yet entered) is English-only.
+  - → cuT('⚠ missing','⚠ 缺运单号').
+- **L984-985** [english-in-cn] `'<span style="color:#5a8c2a; font-size:10px;">● live</span>' : '<span class="muted" style="font-size:10px;">manual</span`
+  - Tracking-cell sync labels '● live' and 'manual' are English-only; 'live' is lowercase so it is not the EN_ONLY_MAP term 'Live'.
+  - → cuT('live','实时') and cuT('manual','手动').
+- **L1013-1014** [english-in-cn] `if (s === 'dispatched') return 'Ready'; if (s === 'delivered') return 'Picked up';`
+  - Pickup-relabelled status pill text 'Ready' / 'Picked up' is English-only and NOT in EN_ONLY_MAP (unlike Dispatched/Delivered), so it stays English in CN mode.
+  - → Return bilingual, e.g. 'Ready · 可取货' and 'Picked up · 已取货'.
+- **L1154** [english-in-cn] `return `<span class="item-sku">${it.sku ? escapeHtml(it.sku) : 'no SKU'}</span>`;`
+  - SKU-chip fallback 'no SKU' is English-only visible text.
+  - → cuT('no SKU','无货号').
+- **L1173** [english-in-cn] `<a … class="prod-link" title="Open product in new tab">${name}</a>`
+  - Product-link title attribute is English-only (rule 4 requires title="EN · 中文"). Same string repeats at 1323, 1346, 1833.
+  - → title="Open product in new tab · 在新标签页打开商品" (apply to all four occurrences).
+- **L1233** [english-in-cn] `<span class="count">${loose.length} item${loose.length === 1 ? '' : 's'}</span>`
+  - Loose-items count 'N item(s)' in the not-yet-in-a-parcel card is English-only (unlike the shipment-card counts which use data-lang-block pairs).
+  - → Use the same data-lang-block pattern as line 1410, or cuT(`${n} item${s}`,`${n} 件商品`).
+- **L1487** [english-in-cn] `mount.innerHTML = '<div class="order-card muted">Loading order…</div>';`
+  - Drawer loading text 'Loading order…' is English-only; EN_ONLY_MAP only auto-translates the bare term 'Loading…', not 'Loading order…'.
+  - → Use the exact EN_ONLY_MAP term 'Loading…' or make it bilingual 'Loading order… · 正在加载订单…'.
+- **L1518** [english-in-cn] `mount.innerHTML = `<div class="order-card err">Failed: ${escapeHtml(e.message)}</div>`;`
+  - Drawer error label 'Failed:' is English-only; the file elsewhere uses 'Failed · 失败'. Not in EN_ONLY_MAP.
+  - → `Failed · 失败: ${escapeHtml(e.message)}`.
+- **L1767** [english-in-cn] `<div class="sub">Collects at <b>${...||'store'}</b>${...}</div>`
+  - Pickup info sub-line prefix 'Collects at' (and the 'store' fallback) is English-only in the order drawer.
+  - → cuT('Collects at','自提门店') and cuT('store','门店') for the fallback.
+- **L1701** [english-in-cn] `subtotal ¥${fmt(o.subtotal)} · shipping ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · voucher −¥'+fmt(...) : ''}`
+  - Order-total banner/inline/footer sub-line labels 'subtotal' / 'shipping' / 'voucher' are English-only UI words (not pure data). Same string at lines 1711 and 1719.
+  - → Localise the labels, e.g. cuT('subtotal','小计'), cuT('shipping','运费'), cuT('voucher','优惠券') (apply to 1701/1711/1719).
+- **L1802** [english-in-cn] `⚠ Destination outside Guangzhou<span data-lang-block="cn"> (...)</span> — order split into ${o.shipments.length} shipmen`
+  - Only the city parenthetical is in a data-lang-block; the surrounding sentence '⚠ Destination outside Guangzhou — order split into N shipments' is plain English with no CN sibling, so it stays English in CN mode.
+  - → Wrap the full sentence in paired data-lang-block en/cn spans, e.g. cn: '⚠ 目的地在广州以外 (城市) — 订单已拆分为 N 个包裹'.
+- **L1806** [english-in-cn] `<span data-lang-block="en">Outside Guangzhou — </span>...</span>single ${shipGlyph(...)} ${mode==='air'?'air':'land'} sh`
+  - Only the 'Outside Guangzhou —' prefix is wrapped in lang-blocks; the trailing 'single … air/land shipment' is plain English with no CN half.
+  - → Also wrap the suffix in data-lang-block en/cn (cn e.g. '单个空运/陆运包裹'), or localise via cuT.
+- **L2170** [english-in-cn] `const synced = t?.synced_at ? `last updated ${formatDate(t.synced_at)}` : 'no live sync yet';`
+  - Tracking-card sync line ('last updated DATE' / 'no live sync yet') is English-only; rendered at line 2247.
+  - → cuT(`last updated ${d}`,`最后更新 ${d}`) and cuT('no live sync yet','尚未实时同步').
+- **L2172** [english-in-cn] `<a … class="muted" …>View on carrier site →</a>`
+  - Tracking-card link text 'View on carrier site →' is English-only.
+  - → 'View on carrier site → · 在承运商官网查看 →' (or cuT).
+- **L2185** [english-in-cn] `kdBadge = `<span class="muted" style="font-size:11px; color: #5a8c2a;">● JD live sync on</span>`;`
+  - '● JD live sync on' badge is English-only.
+  - → '● JD live sync on · 京东实时同步中' (or cuT).
+- **L2187** [english-in-cn] `kdBadge = `<span class="muted" style="font-size:11px; color: #5a8c2a;">● kd100 live sync on</span>`;`
+  - '● kd100 live sync on' badge is English-only.
+  - → '● kd100 live sync on · 快递100实时同步中' (or cuT).
+- **L2192** [english-in-cn] `kdBadge = `<span class="muted" style="font-size:11px;">manual entry only</span>`;`
+  - 'manual entry only' badge is English-only.
+  - → 'manual entry only · 仅手动录入' (or cuT).
+- **L2261** [english-in-cn] `<input … id="trk-number-${sid}" … placeholder="Tracking / waybill number" …>`
+  - Tracking input placeholder is English-only with no data-ph-en/data-ph-cn pair (rule 4).
+  - → Add data-ph-en="Tracking / waybill number" data-ph-cn="快递单号 / 运单号" so the i18n engine swaps it.
+- **L2262** [english-in-cn] `<button … onclick="saveTracking(...)">${has ? 'Update' : 'Save tracking'}</button>`
+  - Tracking save button labels 'Update' / 'Save tracking' are English-only (not in EN_ONLY_MAP).
+  - → 'Update · 更新' and 'Save tracking · 保存运单号'.
+- **L2266** [english-in-cn] `“Cancel JD pickup” calls off the courier with JD. “Clear” only removes the number locally (courier still comes).`
+  - JD help text in the tracking card is English-only.
+  - → Append a Chinese half, e.g. '… · “取消揽收”会向京东取消上门;“清除”仅在本地移除运单号(快递仍会上门)。'
+- **L2267** [english-in-cn] `A manually-entered number tracks via 快递100 (paid) — incl. a personal JD JDV0… number. For free JD tracking, use “Create `
+  - Manual-waybill help text is predominantly English UI prose (the only Chinese is the brand name 快递100); it stays English in CN mode.
+  - → Provide a CN sibling/half, e.g. '… · 手动录入的运单号通过快递100(付费)追踪;如需免费京东追踪,请使用上方“生成京东运单”。'
+- **L2280,2290** [english-in-cn] `counter.textContent = '0 entries'  …  lines.length + (lines.length === 1 ? ' entry' : ' entries')`
+  - Bulk-tracking entry counter ('N entries' / 'N entry') is English-only visible text.
+  - → cuT(`${n} entries`,`${n} 条`) / cuT('0 entries','0 条').
+- **L2639** [english-in-cn] `<div class="muted" …>Customer-selected lines</div>`
+  - Refund-panel label 'Customer-selected lines' is English-only.
+  - → 'Customer-selected lines · 顾客选择的商品' (or cuT).
+- **L2650-2654** [english-in-cn] `…>Order total</div> … >Requested</div> … >Approved</div> … >Paid back</div> … >Method</div>`
+  - Refund-panel amount-summary mini-labels (Order total / Requested / Approved / Paid back / Method) are all English-only.
+  - → Localise each: 'Order total · 订单总额', 'Requested · 申请金额', 'Approved · 已批准', 'Paid back · 已退款', 'Method · 方式'.
+- **L2656** [english-in-cn] ``<div … >Customer asked for <b>¥${fmt(reqAmt)}</b> of <b>¥${fmt(total)}</b></div>``
+  - Refund-panel sentence 'Customer asked for ¥X of ¥Y' is English-only.
+  - → Localise via cuT, e.g. cuT(`Customer asked for ¥${a} of ¥${b}`,`顾客申请退 ¥${a} / 共 ¥${b}`).
+- **L2664** [english-in-cn] `${o.refund_requested_at ? 'requested ' + formatDate(o.refund_requested_at) : ''}`
+  - Refund-panel 'requested DATE' prefix is English-only.
+  - → cuT('requested','申请于') + formatDate(...).
+- **L2666** [english-in-cn] `<button … onclick="openRefundEvents(${o.id})" title="Audit log">📜 History</button>`
+  - Refund-history button text '📜 History' and its title 'Audit log' are both English-only.
+  - → Button: '📜 History · 历史'; title: 'Audit log · 审计记录'.
+- **L2671** [english-in-cn] `<div class="muted" …>Staff note: ${escapeHtml(o.refund_review_note)}</div>`
+  - Refund-panel 'Staff note:' label is English-only.
+  - → cuT('Staff note','客服备注') + ': ' + note.
+- **L2757** [english-in-cn] `Order total ¥${fmt(total)}${o.refund_amount_requested != null ? ' · customer asked for ¥' + fmt(...) : ''}`
+  - Approve-refund dialog hint 'Order total ¥X · customer asked for ¥Y' is English-only (the ' · ' joins two English phrases, not a translation pair).
+  - → Localise via cuT, e.g. cuT('Order total','订单总额') and cuT('customer asked for','顾客申请').
+- **L2770** [english-in-cn] `... : '<div class="muted" style="padding: 8px;">No items</div>'`
+  - Approve-refund lines empty-state 'No items' is English-only.
+  - → cuT('No items','无商品') / 'No items · 无商品'.
+- **L2772** [english-in-cn] `<div … >Lines total: <b id="rf-lines-total">¥0.00</b></div>`
+  - Approve-refund 'Lines total:' label is English-only.
+  - → cuT('Lines total','商品合计') + ': '.
+- **L2975** [uncertain] `by ${escapeHtml(ev.user_username || ev.customer_nickname || (ev.user_id ? 'staff#' + ev.user_id : 'customer'))}`
+  - Refund-history attribution prefix 'by' and the fallbacks 'customer' / 'staff#N' are English-only, but they are largely a data attribution line; unclear if treated as translatable UI.
+  - → If localising, use cuT('by','操作人') and cuT('customer','顾客') for the fallback.
+
+## public/retail-admin/05-marketing.js — 63
+
+- **L28** [english-in-cn] `'<span class="pill pub" style="font-size: 10px;">PUBLIC</span>'`
+  - Voucher-table badge text 'PUBLIC' is English-only with no Chinese half and not an EN_ONLY_MAP term; stays English in CN mode.
+  - → Use 'PUBLIC · 公开' (or keep PUBLIC and add a Chinese half).
+- **L31** [english-in-cn] `title="Auto-granted to every new signup" ...>AUTO</span>`
+  - Badge 'AUTO' and its title tooltip are English-only with no Chinese half.
+  - → Badge: 'AUTO · 自动'; title: "Auto-granted to every new signup · 每位新注册自动发放".
+- **L34** [english-in-cn] `title="Applied automatically at checkout (best one wins)" ...>AUTO-APPLY</span>`
+  - Badge 'AUTO-APPLY' and its title tooltip are English-only.
+  - → Badge: 'AUTO-APPLY · 自动抵扣'; title: append ' · 结账时自动抵扣(取最优)'.
+- **L37** [english-in-cn] ``<span class="pill info" ...>GRANTED ${v.grant_used_count||0}/${v.grant_count}</span>``
+  - Badge label 'GRANTED' is English-only (the n/m is data, but the word stays English in CN mode).
+  - → Use 'GRANTED · 已发放 ' + n + '/' + m, or label it bilingually.
+- **L43** [english-in-cn] `v.type==='fixed_amount' ? '¥ off' : v.type==='percent' ? '% off' : 'Free ship'`
+  - Voucher type column labels 'off' / 'Free ship' are English-only UI text with no Chinese half.
+  - → e.g. '¥ off · 立减' / '% off · 折扣' / 'Free ship · 免运费'.
+- **L48** [english-in-cn] `${v.is_active ? 'Active' : 'Inactive'}`
+  - Status pill 'Active'/'Inactive' is English-only; not in EN_ONLY_MAP (which has ACTIVE caps for flash sales, not this).
+  - → 'Active · 生效中' / 'Inactive · 已停用'.
+- **L51** [english-in-cn] `${v.is_public ? 'Make private' : 'Make public'}`
+  - Action button label English-only, no Chinese half.
+  - → 'Make public · 设为公开' / 'Make private · 设为私有'.
+- **L52** [english-in-cn] `title="Auto-grant to every new signup">${v.auto_grant_signup ? 'Stop auto-grant' : 'Auto-grant'}`
+  - Button label and title attribute are English-only.
+  - → 'Auto-grant · 自动发放' / 'Stop auto-grant · 停止自动发放'; add Chinese to the title.
+- **L53** [english-in-cn] `title="Apply automatically at checkout — best coupon wins, no code needed">${v.auto_apply ? 'Stop auto-apply' : 'Auto-ap`
+  - Button label and title attribute are English-only.
+  - → 'Auto-apply · 自动抵扣' / 'Stop auto-apply · 停止自动抵扣'; add Chinese to the title.
+- **L54** [english-in-cn] `${v.is_active ? 'Disable' : 'Enable'}`
+  - Toggle button label English-only, no Chinese half.
+  - → 'Enable · 启用' / 'Disable · 停用'.
+- **L59** [english-in-cn] ``<tr><td colspan="9" class="err">Failed: ${escapeHtml(e.message)}</td></tr>``
+  - Error row prefix 'Failed:' is English-only (other places use 'Failed · 失败:').
+  - → Use 'Failed · 失败: ' + message, matching the file's convention.
+- **L80** [english-in-cn] `toast('Public coupons need a label (EN or 中)', 'err');`
+  - Toast is English-only with no Chinese half; line 670 has the equivalent WITH a Chinese half, so this is inconsistent and leaks.
+  - → 'Public coupons need a label (EN or 中) · 公开优惠券需要填写标签'.
+- **L146** [english-in-cn] `$('#grant-modal-title').textContent = 'Grant coupon · ' + code;`
+  - 'Grant coupon' is a label before a data value (code); the English label stays English in CN mode (the ' · ' here joins a label to data, not EN to 中文).
+  - → 'Grant coupon · 发放优惠券 ' + code (put the bilingual label before the code).
+- **L147** [english-in-cn] `$('#grant-modal-sub').textContent = 'Recipients see this in their wallet & checkout, no code needed.';`
+  - Modal subtitle is English-only with no Chinese half.
+  - → Append ' · 收件人会在钱包和结账时看到,无需编码。'.
+- **L182** [english-in-cn] ``<div class="err" ...>Failed: ${escapeHtml(e.message)}</div>``
+  - Search-results error prefix 'Failed:' is English-only.
+  - → Use 'Failed · 失败: ' + message.
+- **L238** [english-in-cn] `'<span class="pill pub" ...>Used</span>'`
+  - Grant-list status pill 'Used' is English-only with no Chinese half.
+  - → 'Used · 已使用'.
+- **L239** [english-in-cn] `'<span class="pill draft" ...>Unused</span>'`
+  - Grant-list status pill 'Unused' is English-only with no Chinese half.
+  - → 'Unused · 未使用'.
+- **L246** [english-in-cn] ``<div class="err" ...>Failed: ${escapeHtml(e.message)}</div>``
+  - Grant-list error prefix 'Failed:' is English-only.
+  - → Use 'Failed · 失败: ' + message.
+- **L715-718, 723-725, 730-731, 736-737, 742-744, 749-751** [english-in-cn] `label: 'Kicker', help: 'Small caps label above the cart title.' ... label: 'Headline', label: 'Empty cart message', labe`
+  - SNIPPETS item .label and .help are rendered to the admin UI (snippetsRender lines 763-764: <div class="label">${s.label}</div> / <div class="help">${s.help}</div>) and are English-only with no Chinese half. (The en/cn fields are editable mini-app data, not chrome — those are fine.)
+  - → Add Chinese halves to every label/help, e.g. label: 'Kicker · 小标签', help: 'Small caps label above the cart title. · 购物车标题上方的小写标签。'.
+- **L1242** [english-in-cn] `placeholder="Product EN"`
+  - Static placeholder is English-only and not a data-ph-en/data-ph-cn pair (the row's name field on line 1238 IS paired correctly, but these product fields are not).
+  - → Use data-ph-en="Product (English)" data-ph-cn="产品名(英文)" like the name field above.
+- **L1246** [chinese-in-en] `placeholder="产品名(中文)"`
+  - Static placeholder is Chinese-only with no English half/pair; stays Chinese in EN mode.
+  - → Use data-ph-en="Product (Chinese)" data-ph-cn="产品名(中文)".
+- **L1252** [english-in-cn] `<span class="muted" style="font-size: 11px;">min ago</span>`
+  - Static unit label 'min ago' is English-only with no Chinese half.
+  - → 'min ago · 分钟前'.
+- **L1296** [english-in-cn] `$('#cats-status').innerHTML = '<span class="err">Load failed: ' + escapeHtml(e.message) + '</span>';`
+  - Category load error 'Load failed:' is English-only.
+  - → Use 'Load failed · 加载失败: ' + message.
+- **L1310** [english-in-cn] `<span class="cat-handle" title="Drag to reorder">☰</span>`
+  - title attribute is English-only, not in EN · 中文 form.
+  - → title="Drag to reorder · 拖动排序".
+- **L1312** [english-in-cn] `<span class="cat-usage">${c.usage_count} product${c.usage_count===1?'':'s'}</span>`
+  - 'product/products' suffix is English-only UI text (the count is data, the noun is not).
+  - → Append a Chinese form, e.g. ` 个商品` (`${n} product${s} · ${n} 个商品`).
+- **L1313** [english-in-cn] `<button class="cat-del" title="Delete (only allowed if no products use it)">×</button>`
+  - title attribute is English-only.
+  - → title="Delete (only allowed if no products use it) · 删除(仅当无商品使用时)".
+- **L1510, 1526** [english-in-cn] `T(aud.cities.length + ' regions', ...) ... $('#bc-aud-count').textContent = (...count) + ' customers';`
+  - Line 1526 audience count suffix ' customers' is English-only (line 1510 'regions' is fine — it uses cuT() with a CN half). The bc-aud-count text node leaks.
+  - → Use cuT/T for the suffix: count + cuT(' customers',' 位顾客').
+- **L1543** [english-in-cn] `wrap.innerHTML = '<span class="muted" ...>No saved addresses yet.</span>';`
+  - Empty-state text is English-only with no Chinese half.
+  - → 'No saved addresses yet. · 暂无已保存地址。'.
+- **L1555** [english-in-cn] `wrap.innerHTML = '<span class="err" ...>Failed to load regions.</span>';`
+  - Error text is English-only.
+  - → 'Failed to load regions. · 加载地区失败。'.
+- **L1594** [english-in-cn] `const title = titleBits.join(' · ') || '<span class="muted">(no title)</span>';`
+  - Broadcast-list fallback '(no title)' is English-only UI text.
+  - → '(no title) · (无标题)'.
+- **L1600** [uncertain] `const pill = `<span class="bc-pill ${status}">${status.toUpperCase()}</span>`;`
+  - Status pill renders SENT/SCHEDULED/etc uppercased from a server status code; status codes are normally DO-NOT-FLAG, but these are user-visible English words with no CN form.
+  - → Map to bilingual labels (e.g. SENT→'SENT · 已发送', SCHEDULED→'SCHEDULED · 已排期') if these should localise.
+- **L1602** [english-in-cn] `meta.push('Scheduled for ' + escapeHtml(b.scheduled_for));`
+  - Meta text 'Scheduled for <date>' has an English-only label before the date.
+  - → 'Scheduled for · 排期于 ' + date.
+- **L1603** [english-in-cn] `if (b.sent_at) meta.push('Sent ' + escapeHtml(b.sent_at));`
+  - Meta label 'Sent' before the date is English-only.
+  - → 'Sent · 已发送 ' + date.
+- **L1604** [english-in-cn] `meta.push(b.recipient_count + ' recipient' + (b.recipient_count===1?'':'s'));`
+  - 'recipient/recipients' suffix is English-only UI text.
+  - → Append a Chinese form, e.g. ` 位收件人`.
+- **L1609** [english-in-cn] `meta.push('To: ' + escapeHtml(bcAudienceLabel(aud)));`
+  - Meta prefix 'To:' is English-only (the label itself is bilingual via bcAudienceLabel).
+  - → '发送对象 · To: ' + label (or 'To · 发送对象: ').
+- **L1615** [english-in-cn] `const recallLabel = status === 'scheduled' ? 'Cancel' : 'Recall';`
+  - Button label 'Cancel'/'Recall' (rendered line 1617) is English-only with no Chinese half.
+  - → 'Cancel · 取消' / 'Recall · 撤回'.
+- **L1631** [english-in-cn] `wrap.innerHTML = `<div class="err" ...>Failed: ${escapeHtml(e.message)}</div>`;`
+  - Broadcast-list error prefix 'Failed:' is English-only.
+  - → Use 'Failed · 失败: ' + message.
+- **L1644** [english-in-cn] `$('#bc-send-status').innerHTML = '<span class="err">Add at least one title.</span>';`
+  - Validation message is English-only with no Chinese half.
+  - → 'Add at least one title. · 请至少填写一个标题。'.
+- **L1648** [english-in-cn] `$('#bc-send-status').innerHTML = '<span class="err">Deep-link must start with /pages/</span>';`
+  - Validation message is English-only.
+  - → 'Deep-link must start with /pages/ · 深链需以 /pages/ 开头'.
+- **L1667** [english-in-cn] `status.innerHTML = `<span ...>Sent to ${data.recipient_count} customer${...}.</span>`;`
+  - Success message is English-only UI text (only count is data).
+  - → Add a Chinese half, e.g. 'Sent to N customers. · 已发送给 N 位客户。'.
+- **L1669** [english-in-cn] `status.innerHTML = '<span ...>Scheduled.</span>';`
+  - Success message 'Scheduled.' is English-only.
+  - → 'Scheduled. · 已排期。'.
+- **L1674** [english-in-cn] `status.innerHTML = `<span class="err">Failed: ${escapeHtml(e.message)}</span>`;`
+  - Send error prefix 'Failed:' is English-only.
+  - → Use 'Failed · 失败: ' + message.
+- **L1711-1721** [english-in-cn] `['all','All pages'],['home','Home'],['shop','Shop'],['cart','Cart'],['me','Me'],['product','Product detail'],['checkout'`
+  - PAGE_KEYS labels are rendered to UI (pop-up meta line 1759 and page chips line 1978) and are English-only with no Chinese half.
+  - → Give each label a bilingual form, e.g. 'All pages · 全部页面','Home · 首页','Shop · 商店','Cart · 购物车', etc.
+- **L1735** [english-in-cn] `$('#popups-list').innerHTML = `<div class="err">Load failed: ${escapeHtml(e.message)}</div>`;`
+  - Pop-up load error 'Load failed:' is English-only.
+  - → Use 'Load failed · 加载失败: ' + message.
+- **L1741** [english-in-cn] `return { kind: 'sched', label: 'Scheduled · starts ' + p.start_at };`
+  - Label is English-only; the ' · ' here separates two English words ('Scheduled' / 'starts <date>'), it is NOT an EN·中文 pair, so it stays English in CN mode.
+  - → 'Scheduled · 待开始 ' + date (make the pieces bilingual).
+- **L1742** [english-in-cn] `if (p.end_at && today > p.end_at) return { kind: 'off', label: 'Ended ' + p.end_at };`
+  - Status label 'Ended' before the date is English-only.
+  - → 'Ended · 已结束 ' + date.
+- **L1744** [english-in-cn] `return { kind: 'off', label: 'Disabled' };`
+  - Status pill label 'Disabled' is English-only ('Off' is in EN_ONLY_MAP but 'Disabled' is not).
+  - → 'Disabled · 已停用'.
+- **L1759** [english-in-cn] `... : '(no pages selected)';`
+  - Pop-up meta fallback '(no pages selected)' is English-only.
+  - → '(no pages selected) · (未选择页面)'.
+- **L1760** [english-in-cn] `({ once: 'Once ever', daily: 'Once/day', session: 'Once/session', every_visit: 'Every visit' })[p.frequency]`
+  - Frequency labels rendered into pop-up meta (line 1773) are English-only with no Chinese half.
+  - → Give bilingual labels, e.g. 'Once ever · 仅一次','Once/day · 每天一次','Once/session · 每次会话一次','Every visit · 每次访问'.
+- **L1761** [english-in-cn] `const trig = p.trigger==='after_seconds' ? `After ${p.delay_seconds||3}s` : 'On open';`
+  - Trigger labels 'After Ns' / 'On open' rendered into pop-up meta are English-only.
+  - → e.g. `After ${n}s · ${n}秒后` and 'On open · 打开时'.
+- **L1764** [english-in-cn] `<label class="pu-toggle" title="Enable / disable">`
+  - title attribute is English-only.
+  - → title="Enable / disable · 启用 / 停用".
+- **L1769** [english-in-cn] `<div class="pu-name">${escapeHtml(p.name || '(untitled)')}</div>`
+  - Name fallback '(untitled)' is English-only UI text shown when a pop-up has no name.
+  - → '(untitled) · (未命名)'.
+- **L1778** [english-in-cn] `<button class="btn btn-sm" onclick="openPopupEditor(...)">${ICONS.open}Edit</button>`
+  - Button label 'Edit' is English-only with no Chinese half.
+  - → 'Edit · 编辑'.
+- **L1814** [english-in-cn] `$('#pu-editor-title').textContent = id ? 'Edit pop-up' : 'New pop-up';`
+  - Editor drawer title is English-only.
+  - → 'Edit pop-up · 编辑弹窗' / 'New pop-up · 新建弹窗'.
+- **L1848** [english-in-cn] `if (SIMPLE_TARGETS.has(t)) return t[0].toUpperCase() + t.slice(1);`
+  - CTA destination labels (Shop/Cart/Home/Me/Membership/Promotions/About/Categories) shown in the CTA preview (line 1864) are English-only with no Chinese half.
+  - → Map each target key to a bilingual label instead of capitalising the raw key.
+- **L1852** [uncertain] `return p ? `Product · ${p.name_en || p.name_cn || ('#'+id)}` : 'Product · #' + id;`
+  - The leading word 'Product' before the ' · ' and product-name data is an English-only label that stays English in CN mode (the right side is a name, not 中文 words).
+  - → Use a bilingual label: 'Product · 商品 ' + name.
+- **L1857** [uncertain] `return c ? `Category · ${c.name}` : 'Category · ' + key;`
+  - Leading 'Category' label before ' · ' and category-name data is English-only.
+  - → Use 'Category · 分类 ' + name.
+- **L1864** [english-in-cn] `... : 'No destination — pop-up just dismisses.';`
+  - CTA preview fallback text is English-only.
+  - → 'No destination — pop-up just dismisses. · 无跳转 — 弹窗仅关闭。'.
+- **L1879** [english-in-cn] `sel.innerHTML = '<option value="">(no categories yet)</option>';`
+  - Select option text is English-only.
+  - → '(no categories yet) · (暂无分类)'.
+- **L1882** [english-in-cn] `sel.innerHTML = '<option value="">— pick a category —</option>' + ...`
+  - Placeholder option text is English-only.
+  - → '— pick a category · 选择分类 —'.
+- **L1898** [english-in-cn] `sel.innerHTML = '<option value="">(no matches)</option>';`
+  - Select option text is English-only.
+  - → '(no matches) · (无匹配)'.
+- **L1904** [english-in-cn] `const pub = p.is_published ? '' : ' (draft)';`
+  - Product-option suffix ' (draft)' is English-only UI text.
+  - → ' (draft) · (草稿)'.
+- **L2023** [uncertain] `const title = ... || 'Pop-up title';`
+  - Fallback rendered into the live pop-up preview (#pu-preview-title). This previews customer-facing content rather than admin chrome, so it may be intentional preview filler; flag if it should localise with the operator's language.
+  - → If treated as admin chrome, use 'Pop-up title · 弹窗标题'; otherwise leave as preview placeholder.
+
+## public/retail-admin/06-delivery.js — 5
+
+- **L51** [english-in-cn] `if (!_regions.gz.length) { wrap.innerHTML = '<div class="muted" style="font-size: 11px;">Loading districts…</div>'; retu`
+  - User-visible loading placeholder shown in the GZ-district chip area; English-only and not the EN_ONLY_MAP term 'Loading…', so it stays English in CN mode.
+  - → Change to 'Loading districts… · 加载区/县…'
+- **L409** [english-in-cn] `body.innerHTML = `<tr><td colspan="6" class="muted">${q ? 'No matches.' : 'No zones yet — click + Add zone above.'}</td>`
+  - Empty-state / no-results cell text in the pricing zone table; English-only with no Chinese half.
+  - → Use 'No matches. · 无匹配结果' and 'No zones yet — click + Add zone above. · 暂无配送区,请点上方「+ 添加配送区」'
+- **L416** [english-in-cn] `<td class="numeric">${z.free_threshold == null ? '<span class="muted">default</span>' : '¥'+z.free_threshold}</td>`
+  - The 'default' cell label (meaning the zone uses the global free-over default) is user-visible UI text with no Chinese half.
+  - → Use a bilingual span, e.g. dzLangSpan('default','默认') or '<span class="muted">default · 默认</span>'
+- **L439** [english-in-cn] `body.innerHTML = `<tr><td colspan="7" class="muted">${q ? 'No matches.' : 'No zones yet.'}</td></tr>`;`
+  - Empty-state / no-results cell text in the scheduling zone table; English-only with no Chinese half.
+  - → Use 'No matches. · 无匹配结果' and 'No zones yet. · 暂无配送区'
+- **L788** [english-in-cn] `: 'Pushing the drawer\'s current form values.';`
+  - Fallback subtitle in the apply-to-others panel (when no source zone); English-only with no Chinese half, unlike the bilingual branch on the line above.
+  - → Append a Chinese half, e.g. 'Pushing the drawer\'s current form values. · 以当前抽屉表单内的值为准。'
+
+## public/retail-admin/07-content-billing.js — 49
+
+- **L116** [english-in-cn] `.catch(e => toast('Create failed: '+e.message, 'err'));`
+  - Folder-create error toast is English-only with no Chinese half (the success toast on line 115 is bilingual).
+  - → toast('Create failed · 创建失败: '+e.message, 'err')
+- **L129** [english-in-cn] `catch (e) { toast('Rename failed: '+e.message, 'err'); }`
+  - Rename-folder error toast English-only (success on line 128 is bilingual).
+  - → toast('Rename failed · 重命名失败: '+e.message, 'err')
+- **L143** [english-in-cn] `catch (e) { toast('Delete failed: '+e.message, 'err'); }`
+  - Delete-folder error toast English-only (success on line 142 is bilingual).
+  - → toast('Delete failed · 删除失败: '+e.message, 'err')
+- **L169** [english-in-cn] `catch (e) { toast('Move failed: '+e.message, 'err'); }`
+  - Move-media error toast English-only (success on line 168 is bilingual).
+  - → toast('Move failed · 移动失败: '+e.message, 'err')
+- **L214** [english-in-cn] `title="${used ? `Used in ${used} place${used===1?'':'s'}` : 'Not used anywhere yet'}"`
+  - Media-card usage tooltip (title attr) is English-only, no EN·CN form.
+  - → title="${used ? `Used in ${used} place${used===1?'':'s'} · 被引用 ${used} 处` : '未被引用 · Not used anywhere yet'}"
+- **L333** [english-in-cn] ``<span ...>× ${used}</span> reference${used===1?'':'s'}``
+  - Drawer usage line renders the word 'reference(s)' in English only.
+  - → append ' · 处引用' or rephrase to `× ${used} · 被引用 ${used} 处`
+- **L334** [english-in-cn] `'<span class="muted">Not used yet</span>'`
+  - Drawer 'Not used yet' label is English-only.
+  - → '<span class="muted">Not used yet · 未使用</span>'
+- **L335** [english-in-cn] ``<span class="muted">Uploaded</span> ${new Date(...).toLocaleString()}``
+  - Drawer 'Uploaded' label before the date is English-only.
+  - → `<span class="muted">Uploaded · 上传于</span> ${...}`
+- **L352** [english-in-cn] `<button type="button" class="x" title="Remove">×</button>`
+  - Tag-chip remove button title attr is English-only (visible on hover).
+  - → title="Remove · 移除"
+- **L673** [english-in-cn] ``Delete ${ids.length} item${...} — ${usedCount} reference${...} will be broken. Continue?``
+  - Bulk-delete confirm dialog (used branch) is English-only, unlike the per-item delete confirms which are bilingual.
+  - → append a ' · 删除 N 项，将破坏 M 处引用，是否继续？' Chinese half
+- **L674** [english-in-cn] ``Delete ${ids.length} item${ids.length===1?'':'s'}?``
+  - Bulk-delete confirm dialog (unused branch) is English-only.
+  - → append ' · 删除 N 项？' Chinese half
+- **L724** [english-in-cn] `chip.innerHTML = `${escapeHtml(t)} <button type="button" class="x" title="Remove">×</button>`;`
+  - Bulk-tag chip remove button title attr English-only (visible on hover).
+  - → title="Remove · 移除"
+- **L998** [english-in-cn] `${escapeHtml(t.nickname || '(no name)')}`
+  - Top-up transactions table fallback '(no name)' is English-only UI placeholder.
+  - → '(no name) · 无名'
+- **L1035** [uncertain] `tbody.innerHTML = '<tr><td colspan="5" class="muted">Loading…</td></tr>';`
+  - 'Loading…' is in EN_ONLY_MAP so it auto-translates, but it is hard-set as raw innerHTML and won't re-run the classifier on toggle while shown; transient so likely fine.
+  - → If concerned, use 'Loading… · 加载中…' to match the rest of the file's pattern.
+- **L1048** [english-in-cn] `<tr><td colspan="5" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`
+  - Review-tags load error row 'Failed:' is English-only.
+  - → 'Failed · 失败: '+...
+- **L1107** [english-in-cn] `if (ids.has(t.id)) { toast(`Duplicate id "${t.id}"`, 'err'); return; }`
+  - Review-tag duplicate-id validation toast is English-only.
+  - → toast(`Duplicate id · 重复 id "${t.id}"`, 'err')
+- **L1108** [english-in-cn] `if (!t.en && !t.cn) { toast(`Tag "${t.id}" needs at least one label`, 'err'); return; }`
+  - Review-tag 'needs at least one label' validation toast is English-only.
+  - → toast(`Tag "${t.id}" needs a label · 标签需至少一个名称`, 'err')
+- **L1150** [uncertain] `if (catBody) catBody.innerHTML = '<tr><td colspan="5" class="muted">Loading…</td></tr>';`
+  - 'Loading…' is an EN_ONLY_MAP term (auto-translates); transient. The sibling list on 1151 uses bilingual 'Loading… · 加载中…'.
+  - → For consistency use 'Loading… · 加载中…'.
+- **L1173** [english-in-cn] `catBody.innerHTML = `<tr><td colspan="5" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;`
+  - FAQ categories load-error row 'Failed:' is English-only.
+  - → 'Failed · 失败: '+...
+- **L1174** [english-in-cn] `qsList.innerHTML = `<div class="err">Failed: ${escapeHtml(e.message)}</div>`;`
+  - FAQ questions load-error 'Failed:' is English-only.
+  - → 'Failed · 失败: '+...
+- **L1233** [english-in-cn] `const catOpts = ['<option value="">— pick category —</option>']`
+  - FAQ-question category <option> placeholder is English-only.
+  - → '— pick category · 选择分类 —'
+- **L1247** [english-in-cn] `<label class="stacked">id (optional)</label>`
+  - FAQ-question id field label is English-only.
+  - → 'id (optional) · 选填'
+- **L1258** [uncertain] `<label class="stacked">EN question</label>`
+  - Field label 'EN question' marks the English-input field; arguably a language tag rather than translatable UI, but it stays English in CN mode. Its sibling on 1262 is '中文问题'.
+  - → If treated as a leak, 'EN question · 英文问题'.
+- **L1268** [uncertain] `<label class="stacked">EN answer</label>`
+  - Field label 'EN answer' for the English-input field; sibling on 1272 is '中文回答'. Stays English in CN mode.
+  - → If treated as a leak, 'EN answer · 英文回答'.
+- **L1335** [english-in-cn] `status.textContent = 'Saving…';`
+  - FAQ save status 'Saving…' set English-only (the legal saver on 1313 uses bilingual 'Saving… · 保存中…').
+  - → status.textContent = 'Saving… · 保存中…'
+- **L1340** [english-in-cn] `status.innerHTML = '<span class="err">Every category needs an id</span>';`
+  - FAQ validation message English-only and user-visible in the status line.
+  - → append ' · 每个分类都需要 id'
+- **L1341** [english-in-cn] `status.innerHTML = `<span class="err">Duplicate category id "${escapeHtml(c.id)}"</span>`;`
+  - FAQ duplicate-category validation message English-only.
+  - → add '· 分类 id 重复'
+- **L1342** [english-in-cn] `status.innerHTML = `<span class="err">Category "${escapeHtml(c.id)}" needs a label</span>`;`
+  - FAQ category-needs-label validation message English-only.
+  - → add '· 分类需要名称'
+- **L1363** [english-in-cn] `status.innerHTML = `<span class="err">Question "..." needs a category</span>`;`
+  - FAQ question-needs-category validation message English-only.
+  - → add '· 该问题需要选择分类'
+- **L1364** [english-in-cn] `status.innerHTML = `<span class="err">Question "${...}" needs a Q in at least one language</span>`;`
+  - FAQ question validation message English-only.
+  - → add '· 问题至少需一种语言'
+- **L1365** [english-in-cn] `status.innerHTML = `<span class="err">Question "${...}" needs an A in at least one language</span>`;`
+  - FAQ answer validation message English-only.
+  - → add '· 回答至少需一种语言'
+- **L1378** [uncertain] `status.innerHTML = '<span class="ok">Saved ✓</span>';`
+  - 'Saved ✓' is in EN_ONLY_MAP so it auto-translates; the parallel legal saver on 1325 uses bilingual 'Saved ✓ · 已保存'. Likely safe.
+  - → For consistency: '<span class="ok">Saved ✓ · 已保存</span>'.
+- **L1389** [uncertain] `tbody.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';`
+  - 'Loading…' is an EN_ONLY_MAP term; transient. Listed for completeness.
+  - → Optionally 'Loading… · 加载中…' to match file convention.
+- **L1402** [english-in-cn] ``${s.total} total · ${s.visible || 0} visible · ${s.hidden || 0} hidden``
+  - Reviews summary words 'total / visible / hidden' are English-only; the ' · ' here separates data values, not a translation, so the words leak in CN mode.
+  - → Use cuT, e.g. cuT(`${s.total} total · ${s.visible} visible · ${s.hidden} hidden`, `共 ${s.total} · 显示 ${s.visible} · 隐藏 ${s.hidden}`)
+- **L1410** [english-in-cn] `<tr><td colspan="7" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`
+  - Reviews load-error row 'Failed:' English-only.
+  - → 'Failed · 失败: '+...
+- **L1432** [english-in-cn] `'<div class="muted" style="font-size: 11px;">(no comment)</div>'`
+  - Review row '(no comment)' placeholder English-only.
+  - → '(no comment) · 无评论'
+- **L1452** [english-in-cn] `<span class="pill ..."><span class="dot"></span>${r.is_visible ? 'Visible' : 'Hidden'}</span>`
+  - Review visibility status pill 'Visible'/'Hidden' English-only.
+  - → r.is_visible ? 'Visible · 显示' : 'Hidden · 隐藏'
+- **L1455** [english-in-cn] `${r.is_visible ? 'Hide' : 'Restore'}`
+  - Review action button 'Hide'/'Restore' English-only.
+  - → r.is_visible ? 'Hide · 隐藏' : 'Restore · 恢复'
+- **L1467** [english-in-cn] `toast(visible ? 'Restored' : 'Hidden');`
+  - Review toggle result toast 'Restored'/'Hidden' English-only.
+  - → toast(visible ? 'Restored · 已恢复' : 'Hidden · 已隐藏')
+- **L1509** [english-in-cn] `<tr><td colspan="4" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`
+  - Feedback load-error row 'Failed:' English-only.
+  - → 'Failed · 失败: '+...
+- **L1616** [english-in-cn] `label.textContent = '— pick a product —';`
+  - Flash-sale product picker empty trigger label English-only.
+  - → '— pick a product · 选择产品 —'
+- **L1629** [english-in-cn] ``<div class="fs-picker-empty">${q ? 'No products match — try a different search.' : 'No products in the system yet.'}</d`
+  - Flash-sale picker empty-state messages English-only.
+  - → q ? 'No products match · 无匹配产品 — try a different search.' : 'No products in the system yet · 系统中暂无产品。'
+- **L1714** [english-in-cn] `hint.textContent = `${...name_en} has no regular price set — set one in the kitchen admin first.`;`
+  - Flash-sale price hint (no regular price) English-only.
+  - → append ' · 该产品未设置原价，请先在后厨后台设置。'
+- **L1716** [english-in-cn] `hint.innerHTML = `Regular price: <b>¥...</b>. Enter a lower price above to activate the discount.`;`
+  - Flash-sale price hint (enter lower) English-only.
+  - → add a Chinese half '原价 … 在上方输入更低的价格以启用折扣。'
+- **L1720** [english-in-cn] ``<span class="err">Flash price (¥${fmt(flash)}) must be lower than regular ¥${fmt(regular)} or the discount won't apply.`
+  - Flash-sale price-too-high warning English-only.
+  - → add Chinese half '秒杀价必须低于原价，否则折扣不生效。'
+- **L1725** [english-in-cn] `hint.innerHTML = `Saves <b>¥${fmt(off)}</b> (${pct}% off) vs regular ¥${fmt(regular)}.`;`
+  - Flash-sale savings hint English-only.
+  - → add Chinese half '比原价省 ¥X（X% off）。'
+- **L1825** [english-in-cn] `flash_price_invalid: 'Flash price must be greater than 0', ...`
+  - fsSave error-map (lines 1825-1830) messages shown in the toast are English-only; the toast prefix 'Failed · 失败:' is bilingual but the mapped text is not.
+  - → Append ' · 中文' to each map value (e.g. 'Flash price must be greater than 0 · 秒杀价必须大于 0').
+- **L1883** [uncertain] `<h3>No flash sales yet</h3>`
+  - 'No flash sales yet' is listed in EN_ONLY_MAP so it auto-translates; the following <p> is bilingual. Likely safe.
+  - → No change needed; could mirror the <p> with '· 暂无秒杀' if desired.
+- **L1890** [english-in-cn] `const draft = !p.is_published ? ' <span class="pill draft" style="font-size:9px;">DRAFT</span>' : '';`
+  - Flash-sale list DRAFT badge is English-only and not in EN_ONLY_MAP.
+  - → 'DRAFT · 草稿'
+
+## public/retail-admin/08-customers.js — 14
+
+- **L91** [english-in-cn] `tbody.innerHTML = '<tr><td colspan="8" class="muted">Network error.</td></tr>';`
+  - Table empty-state error text is English-only with no Chinese half and is not an EN_ONLY_MAP term; stays English in CN mode.
+  - → Use 'Network error. · 网络错误。' (mirrors line 175's drawer copy).
+- **L92** [english-in-cn] `if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Network error');`
+  - This string is rendered on phone cards as 'Couldn't load customers · <errMsg>' (retail-admin.html:7279); the English errMsg shows in CN mode.
+  - → Pass 'Network error · 网络错误'.
+- **L96** [english-in-cn] `tbody.innerHTML = '<tr><td colspan="8" class="muted">Failed to load.</td></tr>';`
+  - Table empty-state error text is English-only with no Chinese half; stays English in CN mode.
+  - → Use 'Failed to load. · 加载失败。'
+- **L97** [english-in-cn] `if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Failed to load');`
+  - Rendered on phone cards as 'Couldn't load customers · <errMsg>'; the English errMsg shows in CN mode.
+  - → Pass 'Failed to load · 加载失败'.
+- **L114** [english-in-cn] `${r.is_blocked ? ' <span class="cu-pill blocked">Blocked</span>' : ''}`
+  - List-row 'Blocked' pill is English-only; the detail drawer (line 437) correctly uses 'Blocked · 已封禁', so this row pill leaks in CN mode.
+  - → Use 'Blocked · 已封禁' (or rely on data-no-i18n only if pure data — here it is a UI status label).
+- **L124** [english-in-cn] `$('#cu-total').textContent = CU_TOTAL ? `${CU_TOTAL} total · page ${CU_PAGE} of ${pages}` : '';`
+  - 'total', 'page X of Y' are English UI words; the ' · ' here separates a number from English text, not an EN·CN translation, so it stays English in CN mode.
+  - → Build bilingually, e.g. `共 ${CU_TOTAL} 位 · 第 ${CU_PAGE}/${pages} 页` paired with an English half, or use cuT() like the KPI strip does.
+- **L405** [english-in-cn] `${a.is_default ? '<span class="cu-addr-default">Default</span>' : ''}`
+  - Address 'Default' badge is a UI label with no Chinese half; stays English in CN mode.
+  - → Use 'Default · 默认'.
+- **L566** [english-in-cn] `: '<span class="muted">(none yet)</span>';`
+  - Affiliate 'no referral code' placeholder is English-only user-visible text.
+  - → Use '(none yet) · 暂无' (or '(尚未生成 · none yet)').
+- **L570** [english-in-cn] `: '<span class="muted">— none —</span>';`
+  - Affiliate 'referred by — none —' placeholder is English-only user-visible text.
+  - → Use '— none — · 无'.
+- **L582** [english-in-cn] `: '<tr><td colspan="5" class="muted">No invites yet.</td></tr>';`
+  - Affiliate invites empty-state is English-only; other empty states in this file use EN·CN form.
+  - → Use 'No invites yet. · 暂无邀请记录。'
+- **L585** [english-in-cn] `<h3>Affiliate <span class="muted" ...>· edit in the Affiliate tab</span></h3>`
+  - 'Affiliate' heading plus '· edit in the Affiliate tab' is English on both sides of the dot (no Chinese), so it stays English in CN mode.
+  - → Use 'Affiliate · 推广' and a bilingual hint, e.g. '· edit in the Affiliate tab · 在推广标签页编辑'.
+- **L599** [english-in-cn] `<span class="muted">· ¥${fmt(sum.earned || 0)} earned</span>`
+  - Trailing word 'earned' is an English UI word (the ' · ' precedes a ¥ value then an English word); stays English in CN mode.
+  - → Use '· 已赚 ¥${fmt(sum.earned || 0)}' or append ' earned · 已赚'.
+- **L604** [english-in-cn] `<th>First order</th>`
+  - Table header is English-only while its sibling headers use EN·CN ('Invitee · 受邀人', 'Status · 状态', etc.); leaks in CN mode.
+  - → Use 'First order · 首单'.
+- **L391** [uncertain] `<td class="numeric">+${t.bonus_points || 0} pts</td>`
+  - 'pts' is a unit suffix in a top-up ledger value cell; may be acceptable as a data unit, but it renders as English in CN mode unlike surrounding bilingual headers.
+  - → If treated as UI, render '+${t.bonus_points||0} 分' in CN; otherwise leave as a unit (low priority).
+
+## public/retail-admin/09-products.js — 20
+
+- **L851** [english-in-cn] `toast((e && e.message) ? ('Reorder failed: ' + e.message) : 'Reorder failed · 排序未保存', 'err');`
+  - The toast message 'Reorder failed: ' + e.message (the branch when e.message exists) is English-only with no Chinese half; the operator sees it in CN mode.
+  - → Use cuT for the prefix, e.g. cuT('Reorder failed: ', '排序失败:') + e.message, matching the fallback's bilingual style.
+- **L1280** [uncertain] `<button class="pa-dup-row" type="button" title="Duplicate · 复制" ... >⧉</button>`
+  - title attribute is correctly EN·CN; only flagging to note the glyph ⧉ is decorative. No actual leak — title is bilingual.
+  - → No change needed (already 'Duplicate · 复制').
+- **L2147** [uncertain] `<input type="text" value="..." placeholder="Buy together" oninput="buField('title_en', this.value)">`
+  - placeholder 'Buy together' is an English example value for the EN title field (paired with a CN field whose placeholder is '一起买'). As a per-language field placeholder it is arguably intentional, not a toggle leak.
+  - → Acceptable as-is (EN field shows EN example, CN field shows CN example). No fix required.
+- **L1584** [uncertain] `if (!changed.length) { if (msg) msg.textContent = 'No changes · 无改动'; return; }`
+  - Bilingual EN·CN form; not a leak. Listed only to confirm reviewed.
+  - → No change needed.
+- **L1604** [uncertain] `if (fail) { toast('Some stock updates failed · 部分库存更新失败', 'err'); ... }`
+  - Bilingual EN·CN; not a leak.
+  - → No change needed.
+- **L2527** [uncertain] `toast(`Image too huge (max ${hardCapMB}MB) · 图片过大,上限 ${hardCapMB}MB`, 'err');`
+  - Bilingual EN·CN; not a leak.
+  - → No change needed.
+- **L2532** [english-in-cn] `if (r.resized) toast(`📐 Optimized ${pdFmtBytes(r.originalBytes)} → ${pdFmtBytes(r.finalBytes)} · 已优化`, 'ok');`
+  - The visible words 'Optimized' is English-only; the ' · 已优化' half follows the byte figures, not the word 'Optimized', so in CN mode the operator reads 'Optimized 2MB → 400KB · 已优化' with the leading English word un-translated.
+  - → Make the word bilingual: `📐 ${cuT('Optimized','已优化')} ${pdFmtBytes(...)} → ${pdFmtBytes(...)}` (drop the trailing · 已优化), or restructure so the English label has its CN twin.
+- **L3206** [uncertain] `: j.error === 'sku_required'   ? 'A SKU is required · 需要填写货号'`
+  - Bilingual EN·CN error message thrown then toasted; not a leak.
+  - → No change needed.
+- **L3207** [uncertain] `: j.error === 'catalog_locked' ? 'This catalog is managed by the upstream system · 该商品目录由上游系统管理'`
+  - Bilingual EN·CN; not a leak.
+  - → No change needed.
+- **L3745** [uncertain] `<div class="helper" ...>Meta facts shown as a quiet strip under the product header. Labels are caps; values are serif. .`
+  - This is the spec_strip block-editor helper inside the products design modal. It IS bilingual (English … · 中文…), so technically safe. Listed only because the EN half is long; no fix needed.
+  - → No change needed (EN · CN present).
+- **L3750** [uncertain] `<button type="button" class="btn danger" ... onclick="paArrRemove('${b.id}','cells',${i})" ...>Remove · 删除</button>`
+  - spec_strip Remove button is bilingual ('Remove · 删除'); noting it because the why/ingredients/how_to_use/storage Remove buttons below are NOT (see those findings).
+  - → No change needed here.
+- **L3798** [english-in-cn] `<button type="button" class="btn danger" ... onclick="paArrRemove('${b.id}','rows',${i})" ...>Remove</button>`
+  - The 'why' block-editor row Remove button is English-only with no Chinese half (unlike the spec_strip one which uses 'Remove · 删除'). It stays English in CN mode.
+  - → Change to 'Remove · 删除' to match the spec_strip button.
+- **L3822** [english-in-cn] `<button type="button" class="btn danger" ... onclick="paArrRemove('${b.id}','items',${i})" ...>Remove</button>`
+  - The ingredients_chips/ingredients_line row Remove button is English-only with no Chinese half; stays English in CN mode.
+  - → Change to 'Remove · 删除'.
+- **L3869** [english-in-cn] `<button type="button" class="btn danger" ... onclick="paArrRemove('${b.id}','tiles',${i})" ...>Remove</button>`
+  - The how_to_use tile Remove button is English-only with no Chinese half; stays English in CN mode.
+  - → Change to 'Remove · 删除'.
+- **L3939** [english-in-cn] `<div class="helper">e.g. <code>81%</code>, <code>500g</code>, <code>0g</code></div>`
+  - big_stat 'Stat' field helper 'e.g.' is English-only prose with no Chinese half. Visible under the field in the design modal; stays English in CN mode.
+  - → Append a CN half, e.g. `e.g. <code>81%</code>, <code>500g</code>, <code>0g</code> · 例如`.
+- **L3957** [uncertain] `${bgOpts.map(c => `<option value="${c}" ...>${c}</option>`).join('')}`
+  - Slab-colour <option> labels render the raw English colour keys (lime/carrot/pink…). They are visible select options with no Chinese, but they are colour-name data tokens rather than translated UI labels.
+  - → Optional: map each key to a bilingual label, e.g. cuT('Lime','青柠') etc.; low priority as they read as design swatch names.
+- **L3685** [uncertain] `list.innerHTML = '<div class="helper" ...>No sections yet.<br>Use the dropdown above<br>to add your first. · 暂无板块。</div>`
+  - Block-list empty state. The English ('No sections yet. Use the dropdown above to add your first.') has only a short '· 暂无板块。' twin — the CN half doesn't carry the 'use the dropdown' instruction, but a CN half IS present so the auto-splitter keeps it bilingual. Borderline.
+  - → Optionally flesh out the CN half to match the EN instruction; not a hard leak since '· 暂无板块。' is present.
+- **L3990** [uncertain] `mount.innerHTML = '<div class="pa-blocks-empty">No sections yet. Use the <strong>+ Add section</strong> dropdown on the `
+  - Block-editor empty state. EN sentence then a <br> then a CN sentence (no ' · ' divider). It is effectively bilingual but uses a <br> rather than ' · '; the i18n auto-splitter may not pair them, risking BOTH showing. Mirrors line 3685's pattern.
+  - → If the auto-splitter only recognises ' · ', wrap each language in data-lang-block spans (en/cn) as done for the pager, so only the active language shows.
+- **L4126** [uncertain] `<span class="pa-prev-why-l">Why people choose it</span>`
+  - Inside the phone-frame live PREVIEW (_paPreviewBlockHtml). Per the comment at line 4086 the preview deliberately renders the EN side only (mirrors the customer phone screen, not admin chrome). So English-only here is by-design mockup content, not an admin toggle leak.
+  - → No fix (preview mirrors customer-facing phone; out of scope for the admin EN/CN toggle).
+- **L4145-4241** [uncertain] `pa-prev-section-h3: 'Ingredients' / 'How to use' / 'Storage'; tags '12 items · chips', 'editorial run', 'keep it right',`
+  - All inside the customer phone-frame preview, which by design shows the EN rendering only (see line 4086 comment). Not admin chrome, so not a toggle leak.
+  - → No fix (customer-facing preview content).
+
+## public/retail-admin/10-extras.js — 25
+
+- **L71** [english-in-cn] `<td colspan="9" class="muted" style="text-align: center; padding: 24px;">No referrals match.</td>`
+  - Affiliate table empty-state text is English-only with no Chinese half and is not an EN_ONLY_MAP term — stays English in CN mode.
+  - → No referrals match. · 暂无匹配的推荐记录
+- **L84** [english-in-cn] `<span class="muted" style="font-size: 11px;">paid · adjust via wallet</span>`
+  - The ' · ' here separates two English phrases (not a translation divider), so the whole label is English-only and never switches to Chinese.
+  - → Rewrite without an internal ' · ' and add a Chinese half, e.g. 'paid — adjust via wallet · 已发放 — 请在钱包调整'
+- **L98** [english-in-cn] `<td colspan="9" class="muted">Failed: ${escapeHtml(e.message)}</td>`
+  - Referrals load-failure cell label 'Failed:' is English-only with no Chinese half.
+  - → Failed · 加载失败: ${escapeHtml(e.message)}
+- **L104-106** [english-in-cn] `joined: { label: 'JOINED' }, ordered: { label: 'ORDERED' }, void: { label: 'VOIDED' }`
+  - Affiliate status pills render JOINED/ORDERED/VOIDED, which are NOT in EN_ONLY_MAP (only ACTIVE/UPCOMING/ENDED are) — they stay English in CN mode.
+  - → Append a Chinese half to each pill label (e.g. 'JOINED · 已加入', 'ORDERED · 已下单', 'VOIDED · 已作废') or add these three terms to EN_ONLY_MAP.
+- **L684** [english-in-cn] `toast('Failed to load leaderboard config: ' + e.message);`
+  - Leaderboard config load-failure toast is English-only with no Chinese half.
+  - → toast('Failed to load leaderboard config · 加载排行榜配置失败: ' + e.message);
+- **L795** [english-in-cn] `'Note: points-balance metric is point-in-time. Period selector is ignored for this metric.'`
+  - Admin guidance note set on #lb-period-note is English-only with no Chinese half.
+  - → Provide both halves via cuT(), e.g. cuT('Note: points-balance metric is point-in-time. Period selector is ignored for this metric.', '说明:积分余额为实时快照指标,该指标会忽略周期选择。')
+- **L863** [english-in-cn] `toast('Leaderboard saved');`
+  - Leaderboard save-success toast is English-only with no Chinese half (unlike the sibling 'Save failed · 保存失败' on line 869).
+  - → toast('Leaderboard saved · 排行榜已保存');
+- **L862** [english-in-cn] `if (status) status.textContent = 'Saved ' + new Date().toLocaleTimeString();`
+  - Save-status reads 'Saved <time>'; the trailing time means it never exactly matches the EN_ONLY_MAP 'Saved' key, so the word 'Saved' stays English in CN mode.
+  - → Use the bilingual-prefix form like the About page (line 1462): status.textContent = cuT('Saved', '已保存') + ' · ' + new Date().toLocaleTimeString();
+- **L947** [english-in-cn] `${p.is_featured ? '<span class="vot-featured">Featured</span>' : ''}`
+  - Poll-list 'Featured' badge is English-only and not in EN_ONLY_MAP.
+  - → <span class="vot-featured">Featured · 精选</span>
+- **L1015** [english-in-cn] `<h3>${isEdit ? 'Edit poll #' + d.id : 'New poll'}</h3>`
+  - Poll form heading 'Edit poll #N' / 'New poll' is English-only with no Chinese half.
+  - → Use bilingual labels, e.g. cuT('Edit poll', '编辑投票') + ' #' + d.id and cuT('New poll', '新建投票').
+- **L1016** [english-in-cn] `Question + options are required (min 2 options). Customers see polls with status <code>open</code> or <code>closed</code`
+  - Poll form intro help text is English-only with no Chinese half.
+  - → Append a ' · 中文' translation of the sentence (keeping the <code> status tokens), or split into stacked data-lang-block en/cn prose blocks.
+- **L1042** [english-in-cn] `<label>Explainer · EN <span ...>(italic line under the question)</span></label>`
+  - The parenthetical hint '(italic line under the question)' is English-only; the leading 'Explainer · EN' is a field name not a translation pair.
+  - → Translate the hint, e.g. '(italic line under the question) · (问题下方的斜体说明行)'
+- **L1052** [english-in-cn] `<label>Options <span ...>(drag is server-side via sort_order; reorder by editing — first row becomes A)</span></label>`
+  - The 'Options' field hint is English-only with no Chinese half.
+  - → Append a ' · 中文' translation of the parenthetical hint.
+- **L1055** [english-in-cn] `<button class="btn" onclick="pollOptAdd()" ...>+ Add option</button>`
+  - '+ Add option' button is English-only and not in EN_ONLY_MAP.
+  - → + Add option · 添加选项
+- **L1057** [english-in-cn] `· options with votes can't be removed individually — use the "Hard reset" toggle below to wipe all votes`
+  - Conditional helper hint is English-only (leading ' · ' is a bullet separator, not a translation divider).
+  - → Append a Chinese translation of the hint, e.g. '… wipe all votes · 含有投票的选项不能单独删除——请用下方“硬重置”开关清空所有投票'
+- **L1082** [english-in-cn] `<label>Featured? <span ...>(promotes this poll to the big top card)</span></label>`
+  - 'Featured?' label plus its English-only parenthetical hint have no Chinese half.
+  - → Featured? · 精选? and translate the hint '(promotes this poll to the big top card) · (将此投票提升为顶部大卡片)'
+- **L1093** [english-in-cn] `<label>Winner option <span ...>(only used when Closed)</span></label>`
+  - 'Winner option' label and its English-only hint have no Chinese half.
+  - → Winner option · 获胜选项 and translate '(only used when Closed) · (仅在已结束时生效)'
+- **L1095** [english-in-cn] `<option value="">— (auto: highest vote count)</option>`
+  - Winner select default option text is English-only.
+  - → — (auto: highest vote count) · —(自动:票数最高)
+- **L1100** [english-in-cn] `<label>Sort order <span ...>(lower appears first within status)</span></label>`
+  - 'Sort order' label with English-only hint; note line 1115 has the bilingual 'Sort order · 排序' for the non-edit branch, so this edit-branch variant is inconsistent and leaks.
+  - → Sort order · 排序 and translate '(lower appears first within status) · (数值越小在同状态内越靠前)'
+- **L1108** [english-in-cn] `<input type="checkbox" id="vot-replace-opts"/> Hard reset options (clears all ${d.total_votes || 0} votes)`
+  - 'Hard reset options (clears all N votes)' checkbox label is English-only.
+  - → Hard reset options · 硬重置选项 (clears all ${d.total_votes||0} votes · 将清空全部 ${d.total_votes||0} 票)
+- **L1121** [english-in-cn] `<button class="btn btn-primary" onclick="savePoll()">${isEdit ? 'Save changes' : 'Create poll'}</button>`
+  - Poll form primary button 'Save changes' / 'Create poll' is English-only with no Chinese half.
+  - → cuT('Save changes', '保存更改') and cuT('Create poll', '创建投票')
+- **L1380** [english-in-cn] `wrap.innerHTML = '<div class="ab-photo-empty">No photo — placeholder tile will show.</div>';`
+  - About-page founder-photo empty state is English-only with no Chinese half.
+  - → No photo — placeholder tile will show. · 暂无照片 — 将显示占位图块。
+- **L934-940** [english-in-cn] `[ `${len} opts`, `${total} votes`, `+${pts} pts`, `closes ...`, `top: ${label}` ].join(' · ')`
+  - Poll-list meta line renders English units/labels ('opts', 'votes', 'pts', 'closes', 'top:') joined by ' · '; these are visible admin chrome that stay English in CN mode.
+  - → Wrap the unit/label words in cuT(), e.g. cuT('opts','选项'), cuT('votes','票'), cuT('closes','截止'), cuT('top:','领先:') (keep the numeric data as-is).
+- **L761-769** [uncertain] `return 'By points balance' / 'By paid orders' / 'By lifetime spend' / 'Last 12 months' / 'Last 30 days' / 'Last 7 days' `
+  - These feed #lb-pv-meta (line 792) which is a phone-shaped preview of the customer leaderboard, so they may be intentional English preview content rather than admin chrome; flag for review.
+  - → If this meta line is admin-facing, return cuT() pairs (e.g. cuT('By points balance','按积分余额')); if it is a faithful storefront preview, leave as-is.
+- **L816** [uncertain] `<div class="lb-pv-empty">No qualifying members yet. Save the config and customers with activity will appear here.</div>`
+  - Rendered into #lb-pv-list inside the leaderboard phone preview; could be intentional storefront-preview copy rather than admin chrome.
+  - → If admin-facing guidance, use cuT('No qualifying members yet. Save the config and customers with activity will appear here.', '暂无符合条件的会员。保存配置后,有消费记录的顾客将显示在这里。').
