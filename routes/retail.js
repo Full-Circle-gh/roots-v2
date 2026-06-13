@@ -9881,6 +9881,22 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   const cat2 = normalizeCategoryPair(b.top_category, b.subcategory, tdb());
   const ST = ['Active', 'Inactive', 'Seasonal', 'Coming Soon'];
   const status = ST.includes(b.status) ? b.status : 'Active';
+  // product_facts: same shape-guard as the PATCH handler — an object of short
+  // string fields, stored as JSON (or null). MUST be bound below: it's column 22
+  // of the INSERT, so omitting it shifts every later value and the column/value
+  // counts diverge → SQLite throws and the create 500s (this is exactly the bug
+  // that blocked the first product ever created from this backend).
+  const factsJson = (() => {
+    const v = b.product_facts;
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    const out = {};
+    for (const k of Object.keys(v).slice(0, 60)) {
+      if (!/^[a-z0-9_]{1,40}$/i.test(k)) continue;
+      const val = (v[k] == null ? '' : String(v[k])).trim().slice(0, 4000);
+      if (val) out[k] = val;
+    }
+    return Object.keys(out).length ? JSON.stringify(out) : null;
+  })();
   // Reclaim the SKU from any hidden/deleted holder before the INSERT so a brand
   // new product can take a code that's only wedged on an unreachable row.
   const freedOnCreate = releaseSkuFromHiddenHolders(sku, null);
@@ -9892,7 +9908,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
           description_en, description_cn, description_format, image_data, images, tags,
           status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
           is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       name_en || name_cn, name_cn || null,
       sku, cat2.top,
@@ -9904,6 +9920,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
       descEn, descCn, descFormat,
       primaryImg, gallery.length ? JSON.stringify(gallery) : null, sanitizeProductBadge(b.tags),
       status, (b.barcode || '').trim() || null, (b.free_of || '').trim() || null, (b.notes || '').trim() || null,
+      factsJson,
       b.is_market ? 1 : 0, b.is_restock_only ? 1 : 0,
       b.is_published ? 1 : 0
     );
