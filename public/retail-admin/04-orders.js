@@ -2260,18 +2260,19 @@ function renderShipmentTrackingCard(o, s) {
   let reuseBanner = '';
   if (has && t.reuse_warning) {
     const w = t.reuse_warning;
-    const en = w.delivered
-      ? `This waybill is already on a delivered order (${escapeHtml(w.order_no)}). A reused number won't sync live — double-check it's correct.`
-      : `This waybill is also attached to order ${escapeHtml(w.order_no)} (${escapeHtml(w.status)}). Reused numbers may not sync live.`;
-    const cn = w.delivered
-      ? `此运单号已用于一笔已签收订单(${escapeHtml(w.order_no)})。重复运单号不会实时同步,请核对。`
-      : `此运单号也绑定在订单 ${escapeHtml(w.order_no)}(${escapeHtml(w.status)})上。重复运单号可能无法实时同步。`;
+    const msg = w.delivered
+      ? cuT(
+          `This waybill is already on a delivered order (${escapeHtml(w.order_no)}). A reused number won't sync live — double-check it's correct.`,
+          `此运单号已用于一笔已签收订单(${escapeHtml(w.order_no)})。重复运单号不会实时同步,请核对。`)
+      : cuT(
+          `This waybill is also attached to order ${escapeHtml(w.order_no)} (${escapeHtml(w.status)}). Reused numbers may not sync live.`,
+          `此运单号也绑定在订单 ${escapeHtml(w.order_no)}(${escapeHtml(w.status)})上。重复运单号可能无法实时同步。`);
     reuseBanner = `
       <div style="display:flex; gap:8px; align-items:flex-start; padding:8px 10px; margin-bottom:10px;
                   background: var(--danger-bg, #fbeaea); border:1px solid var(--danger, #c0392b);
                   border-radius:6px; font-size:12px; line-height:1.4; color: var(--danger, #c0392b);">
         <span>⚠️</span>
-        <div><div>${en}</div><div style="margin-top:2px;">${cn}</div></div>
+        <div>${msg}</div>
       </div>`;
   }
 
