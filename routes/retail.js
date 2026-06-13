@@ -21,6 +21,7 @@ const geocode = require('../lib/geocode');
 const regionI18n = require('../lib/region-i18n');
 const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
+const { imageAspect } = require('../lib/image-dims');
 const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib/category-tree');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
 const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
@@ -691,6 +692,7 @@ const RETAIL_PRODUCT_COLS = `
   p.sort_order AS display_order,
   p.description_en, p.description_cn, p.description_format,
   p.free_of, p.tags, p.ship_modes, p.image_data, p.image_url,
+  p.image_aspect,
   p.nutrition,
   p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,
   p.description_blocks, p.use_block_design, p.page_template,
@@ -9668,6 +9670,11 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     const arr = (Array.isArray(body.images) ? body.images : []).filter(s => typeof s === 'string' && s).slice(0, 8);
     sets.push('images = ?');     params.push(arr.length ? JSON.stringify(arr) : null);
     sets.push('image_data = ?'); params.push(arr.length ? arr[0] : null);
+    // Keep the PDP hero aspect ratio in lockstep with the primary photo. Read
+    // the new image's true shape from its header bytes so the mini-app sizes the
+    // hero box to fit (no crop) on first paint. null when unmeasurable (external
+    // URL, or cleared) — the mini-app then self-corrects from the bindload event.
+    sets.push('image_aspect = ?'); params.push(arr.length ? imageAspect(arr[0]) : null);
   }
   if ('bundle' in body) { sets.push('bundle = ?'); params.push(sanitizeBundle(body.bundle)); }
   // Bundle PRODUCT recipe — [{id, qty}] of component products. A product can't
@@ -9841,10 +9848,10 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
     info = tdb().prepare(
       `INSERT INTO store_products
          (name_en, name_cn, sku, category, top_category, subcategory, weight, sell_price, compare_at_price, stock_qty, ship_modes,
-          description_en, description_cn, description_format, image_data, images, tags,
+          description_en, description_cn, description_format, image_data, images, image_aspect, tags,
           status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
           is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       name_en || name_cn, name_cn || null,
       sku, cat2.top,
@@ -9854,8 +9861,9 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
       Math.max(0, parseInt(b.stock_qty, 10) || 0),
       ship,
       descEn, descCn, descFormat,
-      primaryImg, gallery.length ? JSON.stringify(gallery) : null, sanitizeProductBadge(b.tags),
+      primaryImg, gallery.length ? JSON.stringify(gallery) : null, imageAspect(primaryImg), sanitizeProductBadge(b.tags),
       status, (b.barcode || '').trim() || null, (b.free_of || '').trim() || null, (b.notes || '').trim() || null,
+      null, // product_facts — authored later via PATCH; column was unbound before (off-by-one INSERT bug from 673ddf3)
       b.is_market ? 1 : 0, b.is_restock_only ? 1 : 0,
       b.is_published ? 1 : 0
     );
@@ -9999,14 +10007,14 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
     const info = tdb().prepare(
       `INSERT INTO store_products
          (name_en, name_cn, sku, category, weight, sell_price, compare_at_price, stock_qty, ship_modes,
-          description_en, description_cn, description_format, image_data, images,
+          description_en, description_cn, description_format, image_data, images, image_aspect,
           keywords_en, keywords_cn, tagline_en, tagline_cn, free_of, tags, nutrition,
           description_blocks, colophon_character, colophon_tagline_en, colophon_tagline_cn,
           variant_group_id, variant_label, sort_order, is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       src.name_en, src.name_cn, null, src.category, src.weight, src.sell_price, src.compare_at_price, 0, src.ship_modes,
-      src.description_en, src.description_cn, src.description_format, src.image_data, src.images,
+      src.description_en, src.description_cn, src.description_format, src.image_data, src.images, imageAspect(src.image_data),
       src.keywords_en, src.keywords_cn, src.tagline_en, src.tagline_cn, src.free_of, src.tags, src.nutrition,
       src.description_blocks, src.colophon_character, src.colophon_tagline_en, src.colophon_tagline_cn,
       asVariant ? groupId : null, asVariant ? label : null, src.sort_order
