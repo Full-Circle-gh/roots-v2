@@ -820,13 +820,13 @@ function pickupIcon(size = 12) {
 function renderShipByCell(o) {
   const actionable = (o.status === 'paid' || o.status === 'preparing');
   if (o.fulfillment_type === 'pickup') {
-    const label = humanizeSlotLabel(o.delivery_slot_label) || 'ASAP';
+    const label = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label)) || cuT('ASAP', '尽快');
     return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-1)'}; line-height: 1.3;">${pickupIcon(12)} ${escapeHtml(label)}</div>
             <div class="muted" style="font-size: 10px; margin-top: 2px;">pickup · 自提</div>`;
   }
   const isAsap     = !o.scheduled_for;
   if (isAsap) {
-    return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-3)'};">ASAP</div>
+    return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-3)'};">${cuT('ASAP', '尽快')}</div>
             <div class="muted" style="font-size: 10px; margin-top: 2px;">no slot picked · 未选时段</div>`;
   }
   // Parse "YYYY-MM-DD HH:MM:SS" (UTC from SQLite) → local time
@@ -846,7 +846,7 @@ function renderShipByCell(o) {
   // Some orders saved an ISO timestamp into delivery_slot_label (rather
   // than a human "May 25 11am"). humanizeSlotLabel rewrites those before
   // they hit the cell so we never show raw ISO to the operator.
-  const rawLabel = humanizeSlotLabel(o.delivery_slot_label)
+  const rawLabel = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label))
     || (valid ? fmtSlotShort(dt) : escapeHtml(String(o.scheduled_for)));
   const dateLine = valid ? fmtSlotShort(dt) : '';
   const surcharge = (Number(o.same_day_surcharge_fee) || 0) > 0
@@ -857,8 +857,39 @@ function renderShipByCell(o) {
 }
 function fmtSlotShort(dt) {
   const pad = n => String(n).padStart(2, '0');
+  // In Chinese mode show "6月25日 · 14:30" instead of "Jun 25 · 14:30".
+  if (typeof window !== 'undefined' && window.cuLang && window.cuLang() === 'cn') {
+    return `${dt.getMonth() + 1}月${dt.getDate()}日 · ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  }
   const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
   return `${M} ${pad(dt.getDate())} · ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+}
+// The customer's delivery_slot_label is stored as free text in WHATEVER language
+// they checked out in (e.g. "Today 10AM–12PM", "Thu Jun 25 2026", "ASAP") — the
+// server keeps only that one string, so the operator's EN/CN toggle can't swap
+// it. Translate the known formats at render time when the admin is in Chinese.
+// Leaves already-Chinese labels (and anything unrecognised) untouched.
+function localizeSlotLabel(label) {
+  if (label == null || label === '') return label;
+  if (!(typeof window !== 'undefined' && window.cuLang && window.cuLang() === 'cn')) return label;
+  let s = String(label).trim();
+  const WK  = { Sun: '周日', Mon: '周一', Tue: '周二', Wed: '周三', Thu: '周四', Fri: '周五', Sat: '周六' };
+  const MON = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
+  // Full toDateString shape "Thu Jun 25 2026" → "2026年6月25日 周四".
+  let m = /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat),?\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})\s+(\d{4})$/.exec(s);
+  if (m) return `${m[4]}年${MON[m[2]]}月${Number(m[3])}日 ${WK[m[1]]}`;
+  // "Mmm DD YYYY" / "Mmm DD" (with optional "· HH:MM" time tail) → "M月D日 …".
+  s = s.replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})(?:\s+(\d{4}))?\b/g,
+    (_, mo, d, y) => (y ? y + '年' : '') + MON[mo] + '月' + Number(d) + '日');
+  // Standalone weekday names (drop any trailing comma).
+  s = s.replace(/\b(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\b,?/g, (_, w) => WK[w]);
+  // Relative day words.
+  s = s.replace(/\bToday\b/g, '今天').replace(/\bTomorrow\b/g, '明天')
+       .replace(/\bYesterday\b/g, '昨天').replace(/\bASAP\b/g, '尽快');
+  // Time markers "10AM"/"12:30PM" → "上午10点"/"下午12:30".
+  s = s.replace(/(\d{1,2})(:\d{2})?\s*(AM|PM)/gi,
+    (_, h, mm, ap) => (/p/i.test(ap) ? '下午' : '上午') + h + (mm ? mm : '点'));
+  return s;
 }
 // Some orders have `delivery_slot_label` stored as a raw ISO timestamp
 // (e.g. `2026-05-20T08:00:00.000Z`) instead of a human label like
@@ -924,8 +955,8 @@ function renderShipByTile(o) {
   // Pickup orders have no "ship by" deadline — show the customer-chosen pickup
   // window instead so staff know when to have it ready at the counter.
   if (o.fulfillment_type === 'pickup') {
-    const label = humanizeSlotLabel(o.delivery_slot_label)
-      || (o.scheduled_for ? humanizeSlotLabel(o.scheduled_for) : cuT('During pickup hours', '营业时间内自取'));
+    const label = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label))
+      || (o.scheduled_for ? localizeSlotLabel(humanizeSlotLabel(o.scheduled_for)) : cuT('During pickup hours', '营业时间内自取'));
     return `<div>
       <div class="kicker">Pickup time · 取货时间</div>
       <div class="val"><b style="color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">${escapeHtml(label)}</b></div>
@@ -959,7 +990,7 @@ function renderShipByTile(o) {
   const fullIso = valid ? fmtSlotShort(dt) : escapeHtml(String(o.scheduled_for));
   // Humanize any ISO-shaped label so the tile never reads as
   // "2026-05-20T08:00:00.000Z · mode: standard".
-  const label = humanizeSlotLabel(o.delivery_slot_label) || fullIso;
+  const label = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label)) || fullIso;
   const surcharge = (Number(o.same_day_surcharge_fee) || 0) > 0
     ? ` · <span style="color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day surcharge','当日加收')}</span>` : '';
   return `<div>
