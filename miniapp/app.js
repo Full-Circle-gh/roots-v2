@@ -38,8 +38,18 @@ App({
     // Capture the WeChat launch-scene code for traffic attribution.
     track.setScene(options.scene);
 
-    // 1. Fonts — fire-and-forget, swap when ready
-    fonts.loadAll();
+    // 1. Fonts — fire-and-forget, swap when ready. `fontsReady` (a promise)
+    //    resolves once the primary brand fonts have loaded, so pages can fade
+    //    brand text in instead of flashing system fonts on the very first
+    //    launch (before utils/fonts.js has cached the files on-device). On
+    //    every later launch the cache makes this resolve almost immediately.
+    this.globalData.fontsReady = false;
+    this.fontsReady = new Promise((resolve) => {
+      fonts.loadAll(() => {
+        this.globalData.fontsReady = true;
+        resolve();
+      });
+    });
 
     // 2. Restore auth from storage
     try {
