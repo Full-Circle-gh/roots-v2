@@ -12,9 +12,8 @@ const zones  = require('../../utils/zones');
 
 // Per-line "was / save ¥X" badge for the order summary. A line earns the badge
 // when it's on flash OR it's a bundle priced below its components' combined
-// worth (bundle_worth, server-computed). Flash takes priority. `flash_save` is
-// broken out so only flash savings feed the order-wide "You saved" tally — a
-// bundle's notional saving isn't a discount off the listed price.
+// worth (bundle_worth, server-computed). Flash takes priority. `flash_save` and
+// `bundle_save` are broken out so both feed the order-wide "You saved" tally.
 function lineSaveFields(it, L) {
   const qty  = Number(it.qty) || 0;
   const unit = Number(it.unit_price) || 0;
@@ -30,6 +29,7 @@ function lineSaveFields(it, L) {
     was_total: show ? '¥' + wasN.toFixed(2) : '',
     save_text: show ? (L === 'cn' ? '省 ¥' : 'save ¥') + saveAmt.toFixed(2) : '',
     flash_save: onFlash ? saveAmt : 0,
+    bundle_save: onBundle ? saveAmt : 0,
   };
 }
 
@@ -990,10 +990,11 @@ Page({
     const state = cart.get();
     const subtotal = cart.subtotal();
     const L = this.data.lang;
-    let flashSavings = 0;
+    let flashSavings = 0, bundleSavings = 0;
     const items = state.items.map(it => {
       const sf = lineSaveFields(it, L);
       flashSavings += sf.flash_save;
+      bundleSavings += sf.bundle_save;
       return {
         ...it,
         display_name: lang.pick(it.name_en, it.name_cn, L),
@@ -1015,7 +1016,7 @@ Page({
     }
     const pointsAffordable = grossTotal > 0 && pointsDiscount >= grossTotal;
     const total = Math.max(0, grossTotal - pointsDiscount);
-    const savedTotal = flashSavings + voucherDiscount + pointsDiscount;
+    const savedTotal = flashSavings + bundleSavings + voucherDiscount + pointsDiscount;
     this.setData({
       items, itemCount,
       subtotal: subtotal.toFixed(2),
@@ -1212,10 +1213,11 @@ Page({
         const srvSubtotal = Number(data.subtotal != null ? data.subtotal : cart.subtotal());
         // Per-line flash treatment (strikethrough original + "save ¥X" tag)
         // and tally the flash savings for the "You saved" line below.
-        let flashSavings = 0;
+        let flashSavings = 0, bundleSavings = 0;
         const itemRows = cart.get().items.map(it => {
           const sf = lineSaveFields(it, L);
           flashSavings += sf.flash_save;
+          bundleSavings += sf.bundle_save;
           return {
             ...it,
             display_name: lang.pick(it.name_en, it.name_cn, L),
@@ -1290,9 +1292,9 @@ Page({
         const fallbackExtraKm  = routing?.fallback?.extra_km ?? null;
         const fallbackExtraMin = routing?.fallback?.extra_min_estimate ?? null;
         const missingItems     = Array.isArray(routing?.missing_items) ? routing.missing_items : [];
-        // "You saved" total — flash savings + voucher + points + waived
+        // "You saved" total — flash + bundle savings + voucher + points + waived
         // delivery (free-ship voucher). Empty string hides the summary row.
-        const savedTotal = flashSavings + voucherDiscount + pointsDiscount
+        const savedTotal = flashSavings + bundleSavings + voucherDiscount + pointsDiscount
           + (ev.freeShip ? deliveryFee : 0);
         this.setData({
           zone: data.zone || null,
