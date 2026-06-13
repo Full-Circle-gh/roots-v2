@@ -17,6 +17,7 @@
     <view class="empty-sub">{{lang === 'cn' ? '请在 Roots 后台发布首页布局后开始使用。' : 'Publish a home layout from the Roots admin to get started.'}}</view>
   </view>
 
+  <view wx:else class="font-gate {{fontsReady ? '' : 'fonts-pending'}}">
   <block-renderer
     wx:for="{{layout}}"
     wx:key="id"
@@ -53,6 +54,7 @@
     bind:vote="onVote"
     bind:bundle="onBundle"
     bind:order="onOrder"/>
+  </view>
 
   <cs-button variant="fab" placement="home"></cs-button>
   <popup-manager page="home"></popup-manager>

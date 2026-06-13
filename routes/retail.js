@@ -21,6 +21,7 @@ const geocode = require('../lib/geocode');
 const regionI18n = require('../lib/region-i18n');
 const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
+const { imageAspect } = require('../lib/image-dims');
 const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib/category-tree');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
 const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
@@ -691,6 +692,7 @@ const RETAIL_PRODUCT_COLS = `
   p.sort_order AS display_order,
   p.description_en, p.description_cn, p.description_format,
   p.free_of, p.tags, p.ship_modes, p.image_data, p.image_url,
+  p.image_aspect,
   p.nutrition,
   p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,
   p.description_blocks, p.use_block_design, p.page_template,
@@ -6047,13 +6049,20 @@ function buildTrackingView(o) {
       }));
     } catch { events = []; }
   }
-  // Hydrate the classified scenario (parsed from the latest event's
-  // Chinese context) if we've stored one. This is what the customer
-  // banner reads — `scenario`, `pickup_code`, `signer`, `urgency`, etc.
-  let scenario = null;
-  if (o.tracking_scenario_data_json) {
-    try { scenario = JSON.parse(o.tracking_scenario_data_json); } catch { scenario = null; }
-  }
+  // Derive the customer banner from the CURRENT latest event so it can
+  // never contradict the timeline above it. We used to read the stored
+  // tracking_scenario_data_json, but that column is only rewritten by the
+  // live sync paths — a waybill change/clear (which NULLs the events) or an
+  // empty re-sync leaves it stale, so a prior "Delivered to you in person"
+  // banner could survive while fresh "Out for delivery" events stream in
+  // (banner ↔ timeline disagreement). Re-classifying events[0] — the same
+  // input the sync path classified, and the very event the timeline marks as
+  // "latest" — keeps the two in lockstep and self-heals already-stale rows.
+  // The stored column is retained purely for write-time push de-duplication
+  // (tracking_scenario_notified), not for display.
+  const scenario = events.length
+    ? tracking.classifyDeliveryEvent(events[0].description_cn)
+    : null;
   return {
     carrier_code:    o.tracking_carrier,
     carrier_name_en: carrier?.name_en || o.tracking_carrier,
@@ -9722,6 +9731,11 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     const arr = (Array.isArray(body.images) ? body.images : []).filter(s => typeof s === 'string' && s).slice(0, 8);
     sets.push('images = ?');     params.push(arr.length ? JSON.stringify(arr) : null);
     sets.push('image_data = ?'); params.push(arr.length ? arr[0] : null);
+    // Keep the PDP hero aspect ratio in lockstep with the primary photo. Read
+    // the new image's true shape from its header bytes so the mini-app sizes the
+    // hero box to fit (no crop) on first paint. null when unmeasurable (external
+    // URL, or cleared) — the mini-app then self-corrects from the bindload event.
+    sets.push('image_aspect = ?'); params.push(arr.length ? imageAspect(arr[0]) : null);
   }
   if ('bundle' in body) { sets.push('bundle = ?'); params.push(sanitizeBundle(body.bundle)); }
   // Bundle PRODUCT recipe — [{id, qty}] of component products. A product can't
@@ -9911,10 +9925,10 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
     info = tdb().prepare(
       `INSERT INTO store_products
          (name_en, name_cn, sku, category, top_category, subcategory, weight, sell_price, compare_at_price, stock_qty, ship_modes,
-          description_en, description_cn, description_format, image_data, images, tags,
+          description_en, description_cn, description_format, image_data, images, image_aspect, tags,
           status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
           is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       name_en || name_cn, name_cn || null,
       sku, cat2.top,
@@ -9924,9 +9938,9 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
       Math.max(0, parseInt(b.stock_qty, 10) || 0),
       ship,
       descEn, descCn, descFormat,
-      primaryImg, gallery.length ? JSON.stringify(gallery) : null, sanitizeProductBadge(b.tags),
+      primaryImg, gallery.length ? JSON.stringify(gallery) : null, imageAspect(primaryImg), sanitizeProductBadge(b.tags),
       status, (b.barcode || '').trim() || null, (b.free_of || '').trim() || null, (b.notes || '').trim() || null,
-      factsJson,
+      factsJson, // product_facts — bind the real value on create (needs the 26th placeholder above)
       b.is_market ? 1 : 0, b.is_restock_only ? 1 : 0,
       b.is_published ? 1 : 0
     );
@@ -10070,14 +10084,14 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
     const info = tdb().prepare(
       `INSERT INTO store_products
          (name_en, name_cn, sku, category, weight, sell_price, compare_at_price, stock_qty, ship_modes,
-          description_en, description_cn, description_format, image_data, images,
+          description_en, description_cn, description_format, image_data, images, image_aspect,
           keywords_en, keywords_cn, tagline_en, tagline_cn, free_of, tags, nutrition,
           description_blocks, colophon_character, colophon_tagline_en, colophon_tagline_cn,
           variant_group_id, variant_label, sort_order, is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       src.name_en, src.name_cn, null, src.category, src.weight, src.sell_price, src.compare_at_price, 0, src.ship_modes,
-      src.description_en, src.description_cn, src.description_format, src.image_data, src.images,
+      src.description_en, src.description_cn, src.description_format, src.image_data, src.images, imageAspect(src.image_data),
       src.keywords_en, src.keywords_cn, src.tagline_en, src.tagline_cn, src.free_of, src.tags, src.nutrition,
       src.description_blocks, src.colophon_character, src.colophon_tagline_en, src.colophon_tagline_cn,
       asVariant ? groupId : null, asVariant ? label : null, src.sort_order
@@ -11875,7 +11889,7 @@ router.get('/api/retail/orders/:orderNo/tracking/:trackingNumber', requireRetail
   const o = tdb().prepare(
     `SELECT order_no, status, tracking_carrier, tracking_number,
             tracking_status, tracking_events_json, tracking_synced_at,
-            tracking_scenario_data_json, customer_id
+            customer_id
        FROM retail_orders
       WHERE order_no = ? AND tracking_number = ?`
   ).get(orderNo, number);
@@ -11885,19 +11899,20 @@ router.get('/api/retail/orders/:orderNo/tracking/:trackingNumber', requireRetail
 
   const carrier   = tracking.carrierByCode(o.tracking_carrier);
   const statusDef = tracking.statusByCode(o.tracking_status || tracking.deriveStatusFromOrder(o.status));
-  const events = (() => {
-    try {
-      const raw = JSON.parse(o.tracking_events_json) || [];
-      return raw.map(ev => ({
-        time: (ev.time || '').slice(0, 16),
-        location: ev.location || '',
-        description: lang === 'cn'
-          ? (ev.description_cn || '')
-          : tracking.translateEventDescription(ev.description_cn),
-      }));
-    } catch { return []; }
-  })();
-  const sc = (() => { try { return JSON.parse(o.tracking_scenario_data_json) || null; } catch { return null; } })();
+  let rawEvents = [];
+  try { rawEvents = JSON.parse(o.tracking_events_json) || []; } catch { rawEvents = []; }
+  const events = rawEvents.map(ev => ({
+    time: (ev.time || '').slice(0, 16),
+    location: ev.location || '',
+    description: lang === 'cn'
+      ? (ev.description_cn || '')
+      : tracking.translateEventDescription(ev.description_cn),
+  }));
+  // Classify the banner from the CURRENT latest event rather than the stored
+  // tracking_scenario_data_json, which can go stale after a waybill change or
+  // an empty re-sync and contradict the events below it (mirrors
+  // buildTrackingView, which feeds the order-page banner from the same input).
+  const sc = rawEvents.length ? tracking.classifyDeliveryEvent(rawEvents[0].description_cn) : null;
 
   const cName  = lang === 'cn' ? (carrier?.name_cn || o.tracking_carrier) : (carrier?.name_en || o.tracking_carrier);
   const sLabel = lang === 'cn' ? (statusDef?.label_cn || '') : (statusDef?.label_en || '');

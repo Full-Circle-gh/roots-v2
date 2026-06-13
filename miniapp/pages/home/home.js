@@ -9,6 +9,7 @@ const config = require('../../utils/config');
 const lang   = require('../../utils/lang');
 const theme  = require('../../utils/theme');
 const { createPoller } = require('../../utils/livepoll');
+const fontgate = require('../../utils/fontgate');
 
 Page({
   data: {
@@ -68,6 +69,10 @@ Page({
     // Brand-theme CSS-variable overrides (palette + fonts), injected at the
     // page root so app.wxss tokens adopt the tenant brand. '' = un-themed.
     themeVars: '',
+    // False only on the first launch while brand fonts download — gates the
+    // hero/content fade-in (utils/fontgate.js) so the wordmark doesn't flash a
+    // system font then snap to Bear Serif. True (instant) on cached launches.
+    fontsReady: true,
   },
 
   switchLang(e) {
@@ -82,6 +87,8 @@ Page({
     // (cfg.onboarding.show_to / cfg.onboarding.version, edited in /cms).
     // Storage flag `onboarded` holds the version string the user last
     // finished; mismatch = re-show, missing = brand-new user.
+    // Fade brand text in once the brand fonts are ready (first launch only).
+    fontgate.gate(this);
     this._gateOnboarding().then(redirected => {
       if (redirected) return;
       const app = getApp();

@@ -715,6 +715,20 @@ Page({
     if (Number.isFinite(i) && i !== this.data.heroIndex) this.setData({ heroIndex: i });
   },
 
+  // Self-correct a cropped hero: when the product carries no stored
+  // `image_aspect`, the hero box falls back to a fixed 880rpx height and
+  // `aspectFill` crops the photo (clipping baked-in title text, etc.). Here we
+  // read the image's natural width/height from the load event and adopt its
+  // real aspect ratio, so the box fits the whole image instead of cropping.
+  // Only fires when aspectRatio is still empty, so a server-provided value
+  // always wins and this never thrashes across multi-photo galleries.
+  onHeroLoad(e) {
+    if (this.data.aspectRatio) return;
+    const { width, height } = e.detail || {};
+    if (!width || !height) return;
+    this.setData({ aspectRatio: (width / height).toFixed(4) });
+  },
+
   back() { wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/home' }) }); },
 
   previewReviewPhoto(e) {

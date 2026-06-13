@@ -20,10 +20,10 @@
     <view class="hero" style="{{aspectRatio ? 'aspect-ratio:' + aspectRatio + ';height:auto' : 'height: 880rpx'}}">
       <swiper wx:if="{{images.length > 1}}" class="hero-swiper" current="{{heroIndex}}" bindchange="onHeroSwiperChange" indicator-dots indicator-color="rgba(255,255,255,0.45)" indicator-active-color="#ffffff">
         <swiper-item wx:for="{{images}}" wx:key="*this">
-          <image src="{{item}}" mode="aspectFill" class="hero-img"/>
+          <image src="{{item}}" mode="aspectFill" class="hero-img" bindload="onHeroLoad"/>
         </swiper-item>
       </swiper>
-      <image wx:elif="{{image}}" src="{{image}}" mode="aspectFill" class="hero-img"/>
+      <image wx:elif="{{image}}" src="{{image}}" mode="aspectFill" class="hero-img" bindload="onHeroLoad"/>
       <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="hero-placeholder-img"/>
       <view wx:if="{{stockTag}}" class="stock-badge stock-{{stockTagKind}} f-toni">{{stockTag}}</view>
 

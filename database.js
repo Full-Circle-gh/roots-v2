@@ -3038,6 +3038,12 @@ try {
   // won't pile on top of the deep flash price). Dormant when the product isn't on
   // flash — the checkout only honours it for items whose flash window is live.
   addColumn('store_products', 'no_coupon_on_flash', 'INTEGER');
+  // Mini-app PDP hero aspect ratio (width/height as a REAL). When present, the
+  // product page sizes the hero box to the photo's true shape so nothing crops;
+  // when NULL the mini-app self-corrects from the image's bindload event, then
+  // the hero box falls back to a fixed height + aspectFill (which crops). Backfilled
+  // by scripts/backfill_image_aspect.js; recomputed on image save in retail.js.
+  addColumn('store_products', 'image_aspect', 'REAL');
   // Own indexes — store_products has its OWN sku namespace (independent of the
   // kitchen's), mirroring the products indexes the storefront relies on.
   db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_store_products_sku ON store_products(sku)').run();
