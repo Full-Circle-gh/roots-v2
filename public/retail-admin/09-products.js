@@ -2359,14 +2359,17 @@ function _optChoiceRow(o, oi, c, ci) {
   const def = o.type === 'single'
     ? `<input type="radio" name="opt-def-${oi}" title="${cuT('Default pick', '默认选项')}"${c.is_default ? ' checked' : ''} onchange="optDefault(${oi}, ${ci})">`
     : `<input type="checkbox" title="${cuT('Pre-selected', '默认勾选')}"${c.is_default ? ' checked' : ''} onchange="optDefaultMulti(${oi}, ${ci}, this.checked)">`;
+  // A "Pick one" is a free pick (dressings/spice) — no charge, no stock draw — so
+  // the money/stock section is hidden. Paid extras live on "Pick any" (multi).
+  const paid = o.type !== 'single';
   // Link control: a chip when linked (name + live stock), else a "+ Stock" button.
-  let link;
-  if (c.stock_product_id) {
+  let link = '';
+  if (paid && c.stock_product_id) {
     const nm = escapeHtml(c.addon_name_en || c.addon_name_cn || ('#' + c.stock_product_id));
     const stk = c.addon_stock != null ? ` · ${c.addon_stock} ${cuT('in stock', '库存')}` : '';
     link = `<span class="opt-link on" title="${cuT('Draws from this product’s stock', '占用该商品库存')}">🔗 ${nm}${stk}` +
       `<button type="button" class="opt-unlink" title="${cuT('Unlink', '取消关联')}" onclick="optUnlink(${oi}, ${ci})">✕</button></span>`;
-  } else {
+  } else if (paid) {
     link = `<button type="button" class="btn btn-sm opt-link-btn" title="${cuT('Link a product so this extra uses its stock', '关联商品,使此加项占用其库存')}" onclick="optLinkPick(${oi}, ${ci})">${cuT('+ Stock product', '+ 关联库存商品')}</button>`;
   }
   const picking = OPT_PICK && OPT_PICK.oi === oi && OPT_PICK.ci === ci;
@@ -2376,7 +2379,7 @@ function _optChoiceRow(o, oi, c, ci) {
   return `<div class="opt-choice">` + def +
     `<input type="text" class="opt-clab" value="${escapeAttr(c.label_en)}" placeholder="${cuT('Choice EN', '选项(英文)')}" oninput="optC(${oi}, ${ci}, 'label_en', this.value)">` +
     `<input type="text" class="opt-clab" value="${escapeAttr(c.label_cn)}" placeholder="${cuT('Choice 中文', '选项(中文)')}" oninput="optC(${oi}, ${ci}, 'label_cn', this.value)">` +
-    `<span class="opt-cdelta" title="${cuT('Extra charge for this choice (0 = free)', '此选项加价(0 = 免费)')}">+¥<input type="number" step="0.01" value="${c.price_delta || 0}" oninput="optC(${oi}, ${ci}, 'price_delta', this.value)"></span>` +
+    (paid ? `<span class="opt-cdelta" title="${cuT('Extra charge for this choice (0 = free)', '此选项加价(0 = 免费)')}">+¥<input type="number" step="0.01" value="${c.price_delta || 0}" oninput="optC(${oi}, ${ci}, 'price_delta', this.value)"></span>` : '') +
     link +
     `<button type="button" class="bp-chip-x" title="${cuT('Remove', '移除')}" onclick="optRemoveChoice(${oi}, ${ci})">✕</button>` +
   `</div>` + picker;
@@ -2388,7 +2391,19 @@ function optC(oi, ci, key, val) {
   const c = OPT[oi] && OPT[oi].choices[ci]; if (!c) return;
   c[key] = key === 'price_delta' ? (parseFloat(val) || 0) : val;
 }
-function optType(oi, val) { if (OPT[oi]) { OPT[oi].type = val; optRender(); } }
+function optType(oi, val) {
+  const o = OPT[oi]; if (!o) return;
+  o.type = val;
+  // Switching to a free pick ("Pick one") drops any charge/stock link the choices
+  // carried as paid extras — the money/stock section no longer applies.
+  if (val === 'single') {
+    o.choices.forEach(c => {
+      c.price_delta = 0; c.stock_product_id = null;
+      c.addon_name_en = ''; c.addon_name_cn = ''; c.addon_stock = null;
+    });
+  }
+  optRender();
+}
 function optReq(oi, on) { if (OPT[oi]) OPT[oi].is_required = on ? 1 : 0; }
 function optDefault(oi, ci) {   // single-select: exactly one default
   const o = OPT[oi]; if (!o) return;
