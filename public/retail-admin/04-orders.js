@@ -1194,17 +1194,30 @@ function itemOptionsHtml(it) {
   return txt ? `<div class="oi-opts">▸ ${txt}</div>` : '';
 }
 
+// Which name is the bold headline vs. the muted second line. The operator's
+// language wins: in Chinese mode the 中文 name leads and English drops below;
+// in English mode it's the reverse (the long-standing default). Falls back to
+// whichever name exists when one is missing. Accepts {name_en, name_cn}.
+function orderItemNames(it) {
+  const en = it.name_en || '';
+  const cn = it.name_cn || '';
+  const isCn = typeof window !== 'undefined' && window.cuLang && window.cuLang() === 'cn';
+  if (isCn && cn) return { primary: cn, secondary: en };
+  return { primary: en || cn, secondary: (en && cn) ? cn : '' };
+}
+
 // One line of the packing manifest. `opts.index` (1-based) renders the
 // 01 / 02 … brass line number; `opts.showPack` toggles the pack badges.
 function renderItemRow(it, opts = {}) {
   const showPack = opts.showPack !== false;
   const num = opts.index != null ? String(opts.index).padStart(2, '0') : '';
-  const name = `<span class="mf-name">${escapeHtml(it.name_en || '')}</span>`;
+  const nm = orderItemNames(it);
+  const name = `<span class="mf-name">${escapeHtml(nm.primary)}</span>`;
   const nameCell = it.product_id
     ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${name}</a>`
     : name;
-  const zh = (it.name_cn || it.size)
-    ? `<span class="mf-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</span>`
+  const zh = (nm.secondary || it.size)
+    ? `<span class="mf-zh">${escapeHtml(nm.secondary)}${it.size ? (nm.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</span>`
     : '';
   return `
     <div class="mf-row" data-fk="${it.id}">
@@ -1333,8 +1346,9 @@ function renderItemsTable(items, showPack = true) {
 function renderBundleInside(it) {
   if (!it || !it.is_bundle || !Array.isArray(it.bundle_components) || !it.bundle_components.length) return '';
   const rows = it.bundle_components.map(c => {
-    const nm = escapeHtml(c.name_en || c.name_cn || ('#' + c.id));
-    const cn = (c.name_cn && c.name_en) ? ` <span class="oi-bndl-zh">${escapeHtml(c.name_cn)}</span>` : '';
+    const bn = orderItemNames(c);
+    const nm = escapeHtml(bn.primary || ('#' + c.id));
+    const cn = bn.secondary ? ` <span class="oi-bndl-zh">${escapeHtml(bn.secondary)}</span>` : '';
     return `<div class="oi-bndl-row"><span class="oi-bndl-qty">${c.pack_qty}×</span><span>${nm}${cn}</span></div>`;
   }).join('');
   return `<div class="oi-bndl"><div class="oi-bndl-h">${cuT('Inside this bundle', '套装内含')}</div>${rows}</div>`;
@@ -1349,12 +1363,13 @@ function renderItemsAsGrid(items, showPack = true) {
     <span style="text-align:right">Pack · 包装</span>
   </div>`;
   const rows = items.map(it => {
-    const nm = `<span class="oi-name">${escapeHtml(it.name_en || '')}</span>`;
+    const nn = orderItemNames(it);
+    const nm = `<span class="oi-name">${escapeHtml(nn.primary)}</span>`;
     const nameCell = it.product_id
       ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
       : nm;
-    const zh = (it.name_cn || it.size)
-      ? `<div class="oi-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
+    const zh = (nn.secondary || it.size)
+      ? `<div class="oi-zh">${escapeHtml(nn.secondary)}${it.size ? (nn.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
     return `<div class="oi-row" data-fk="${it.id}">
       <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
         ${itemThumb(it)}
@@ -1372,12 +1387,13 @@ function renderItemsAsGrid(items, showPack = true) {
 // Items layout · CARDS — each line a bordered card, total emphasised.
 function renderItemsAsCards(items, showPack = true) {
   const cards = items.map(it => {
-    const nm = `<span class="oic-name">${escapeHtml(it.name_en || '')}</span>`;
+    const nn = orderItemNames(it);
+    const nm = `<span class="oic-name">${escapeHtml(nn.primary)}</span>`;
     const nameCell = it.product_id
       ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
       : nm;
-    const zh = (it.name_cn || it.size)
-      ? `<div class="oic-zh">${escapeHtml(it.name_cn || '')}${it.size ? (it.name_cn ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
+    const zh = (nn.secondary || it.size)
+      ? `<div class="oic-zh">${escapeHtml(nn.secondary)}${it.size ? (nn.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
     return `<div class="oic" data-fk="${it.id}">
       <div class="oic-top">
         <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
@@ -1857,8 +1873,9 @@ function renderOpenOrder(o) {
                 <th style="white-space:nowrap;">Released · 释放</th>
               </tr></thead>
               <tbody>${o.reservations.map(r => {
-                const label = (r.product_name_en || r.product_name_cn)
-                  ? `<div>${escapeHtml(r.product_name_en || '')}</div>${r.product_name_cn ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(r.product_name_cn)}</div>` : ''}`
+                const rn = orderItemNames({ name_en: r.product_name_en, name_cn: r.product_name_cn });
+                const label = rn.primary
+                  ? `<div>${escapeHtml(rn.primary)}</div>${rn.secondary ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(rn.secondary)}</div>` : ''}`
                   : `<span class="muted" style="font-family: var(--f-mono); font-size: 11px;">product_id ${r.product_id}</span>`;
                 const cell = r.product_id
                   ? `<a href="/?openProduct=${r.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${label}</a>`
