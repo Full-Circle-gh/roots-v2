@@ -1848,7 +1848,7 @@ function vaRender() {
     `<span class="pd-var-summary">${summary}</span></button>`;
   if (!VA_OPEN) { box.innerHTML = toggle; return; }
   const head = `<div class="va-row va-row-head"><span></span><span>${cuT('Photo', '图片')}</span><span>${cuT('Name', '名称')}</span>` +
-    `<span>${cuT('SKU', '货号')}</span>` +
+    `<span>${cuT('SKU', '货号')}</span><span>${cuT('Weight', '规格')}</span>` +
     `<span class="va-num">¥</span><span class="va-num">${cuT('Was', '划线价')}</span><span class="va-num">${cuT('Stock', '库存')}</span>` +
     `<span style="text-align:center">${cuT('Show', '上架')}</span><span></span></div>`;
   const rows = VA_MEMBERS.map((v, i) => {
@@ -1890,6 +1890,7 @@ function vaRender() {
       // vaSelfField).
       return rowOpen + grip + photo + label +
         `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaSelfField('sku', this.value)">` +
+        `<input class="va-label va-wt" type="text" value="${escapeAttr(v.size || '')}" placeholder="${cuT('e.g. 200 g', '如 200克')}" title="${cuT('Size / weight shown on the size picker', '规格选择器上显示的规格 / 净重')}" oninput="vaSelfField('weight', this.value)">` +
         `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaSelfField('price', this.value)">` +
         `<input class="va-num va-was" type="number" min="0" step="0.01" value="${cmp === '' ? '' : cmp}" placeholder="—" title="${cuT('Was price — shown struck-through to shoppers when higher than the price. Leave blank for no discount.', '划线价 — 高于售价时在顾客端显示删除线。留空则不打折。')}" oninput="vaSelfField('compare', this.value)">` +
         stkCell +
@@ -1898,6 +1899,7 @@ function vaRender() {
     }
     return rowOpen + grip + photo + label +
       `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaField(${v.id}, 'sku', this.value)">` +
+      `<input class="va-label va-wt" type="text" value="${escapeAttr(v.size || '')}" placeholder="${cuT('e.g. 200 g', '如 200克')}" title="${cuT('Size / weight shown on the size picker', '规格选择器上显示的规格 / 净重')}" oninput="vaField(${v.id}, 'weight', this.value)">` +
       `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaField(${v.id}, 'price', this.value)">` +
       `<input class="va-num va-was" type="number" min="0" step="0.01" value="${cmp === '' ? '' : cmp}" placeholder="—" title="${cuT('Was price — shown struck-through to shoppers when higher than the price. Leave blank for no discount.', '划线价 — 高于售价时在顾客端显示删除线。留空则不打折。')}" oninput="vaField(${v.id}, 'compare', this.value)">` +
       stkCell +
@@ -1931,6 +1933,9 @@ function vaSelfField(key, val) {
   } else if (key === 'compare') {
     v.compare = (val === '' ? '' : Math.max(0, parseFloat(val) || 0));
     const f = document.getElementById('pd-compare'); if (f) f.value = val;
+  } else if (key === 'weight') {
+    v.size = val;
+    const f = document.getElementById('pd-weight'); if (f) f.value = val;
   }
 }
 // Inline edit of a sibling size's commercial fields. Mutates the model only
@@ -1940,6 +1945,7 @@ function vaField(id, key, val) {
   if (key === 'price')      v.price = (val === '' ? '' : Math.max(0, parseFloat(val) || 0));
   else if (key === 'stock') v.stock = (val === '' ? '' : Math.max(0, parseInt(val, 10) || 0));
   else if (key === 'sku')   v.sku = val;
+  else if (key === 'weight') v.size = val;
   else if (key === 'published') v.published = val ? 1 : 0;
   else if (key === 'compare') v.compare = (val === '' ? '' : Math.max(0, parseFloat(val) || 0));
   v._dirty = true;
@@ -2070,6 +2076,7 @@ async function vaPersistSiblings() {
     const body = {};
     if (v.price !== '' && v.price != null) body.sell_price = v.price;
     if (v.sku != null) body.sku = v.sku;
+    if (v.size != null) body.weight = v.size;
     if (v.published === 0 || v.published === 1) body.is_published = v.published;
     // Was-price (compare-at): always sent so clearing it sticks. 0/blank → server
     // stores NULL (no strike-through). v.compare is loaded from the row, so a

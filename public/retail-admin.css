@@ -1875,7 +1875,9 @@
   .va-table { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
   /* grip · photo · name · sku · ¥ · stock · show · ✕ · slack — name is capped so
      it doesn't sprawl; the trailing slack track absorbs leftover width. */
-  .va-row { display: grid; grid-template-columns: 20px 44px minmax(96px,190px) 92px 64px 64px 56px 38px 22px minmax(0,1fr); gap: 8px; align-items: center; }
+  .va-row { display: grid; grid-template-columns: 20px 44px minmax(96px,190px) 92px 72px 64px 64px 56px 38px 22px minmax(0,1fr); gap: 8px; align-items: center; }
+  /* Size/weight column input — narrower text field; feeds the size picker's grey subline. */
+  .va-wt { font-size: 13px; }
   /* Was-price (compare-at) column input: dimmed so it reads as the secondary,
      optional "original price" next to the live ¥ price. */
   .va-num.va-was { color: var(--text-3); }
