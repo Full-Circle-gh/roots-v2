@@ -4815,7 +4815,16 @@ function pwOptionsBody() {
     const type = o.type === 'multi' ? 'multi' : 'single';
     const choices = o.choices.map(c => ({ label_en: (c.label_en || '').trim(), label_cn: (c.label_cn || '').trim(), price_delta: Number(c.price_delta) || 0, is_default: c.is_default ? 1 : 0, stock_product_id: c.stock_product_id || null }))
       .filter(c => c.label_en || c.label_cn);
-    return { question_en: (o.question_en || '').trim(), question_cn: (o.question_cn || '').trim(), type, is_required: o.is_required ? 1 : 0, choices };
+    // People fill the choice rows but often leave the question header blank —
+    // especially on paid extras. Don't drop a real pick over a missing title;
+    // give it a sensible default so it actually saves.
+    let qEn = (o.question_en || '').trim();
+    let qCn = (o.question_cn || '').trim();
+    if (choices.length && !qEn && !qCn) {
+      qEn = type === 'multi' ? 'Add extras' : 'Choose one';
+      qCn = type === 'multi' ? '添加加项' : '请选择';
+    }
+    return { question_en: qEn, question_cn: qCn, type, is_required: o.is_required ? 1 : 0, choices };
   }).filter(o => (o.question_en || o.question_cn) && o.choices.length);
 }
 async function pwPrimaryStore(id) {
@@ -4878,7 +4887,10 @@ async function pwFinish(publish) {
           const dup = await api('/api/retail-admin/products/' + newId + '/duplicate', { method: 'POST', body: { as_variant: true, label: sz.label || '' } });
           const vid = dup.data && dup.data.id; if (!vid) continue;
           if (Array.isArray(PA_PRODUCTS)) PA_PRODUCTS.unshift(dup.data);
-          const vbody = { weight: sz.label || '', compare_at_price: 0 };
+          // duplicate always lands as a draft (is_published=0) — match the
+          // parent so a published product's other sizes go live too, not just
+          // the first one. Otherwise the extra sizes stay hidden/"unchecked".
+          const vbody = { weight: sz.label || '', compare_at_price: 0, is_published: publish ? 1 : 0 };
           if (String(sz.price).trim() !== '') vbody.sell_price = parseFloat(sz.price) || 0;
           await api('/api/retail-admin/products/' + vid, { method: 'PATCH', body: vbody });
           members.push({ id: vid, label: sz.label || '', label_cn: '' });
