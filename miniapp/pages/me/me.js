@@ -68,6 +68,16 @@ const COPY_EN = {
   menuTourCn: '查看教程',
   tourMeta: 'See the welcome screen again',
   noAddressMeta: 'Tap to add an address',
+  restoreTitle: 'Shopped with us before?',
+  restoreDesc: 'Restore your balance & points from your previous account.',
+  restoreBtn: 'Restore my wallet',
+  restoreDone: 'All set!',
+  restoreFailed: "Couldn't restore — please try again",
+  restoreDenied: 'Cancelled',
+  restoreWelcome: 'Welcome back!',
+  restoreGotIt: 'Great',
+  restoredLead: "We've restored ",
+  restoredTail: ' to your wallet.',
 };
 
 const COPY_CN = {
@@ -128,6 +138,16 @@ const COPY_CN = {
   menuTourCn: 'TAKE THE TOUR',
   tourMeta: '重新观看欢迎引导',
   noAddressMeta: '点击添加地址',
+  restoreTitle: '以前在我们这买过?',
+  restoreDesc: '一键找回您之前账户的余额和积分。',
+  restoreBtn: '找回我的钱包',
+  restoreDone: '已完成!',
+  restoreFailed: '找回失败,请重试',
+  restoreDenied: '已取消',
+  restoreWelcome: '欢迎回来!',
+  restoreGotIt: '好的',
+  restoredLead: '已为您找回 ',
+  restoredTail: '。',
 };
 
 // Canonical menu-row catalogue. Order here is the default; the operator can
@@ -166,6 +186,12 @@ Page({
     lang: 'en',
     loading: false,
     copy: COPY_EN,
+    // Returning-customer restore prompt. Shown when the account has no phone on
+    // file (new + returning alike); the copy self-targets returning OUT1N
+    // customers. Binding a phone applies any pending migration credit, then the
+    // card disappears on refresh. Mirrors the wallet page's bind flow.
+    needPhone: false,
+    binding: false,
     // "Take the tour" row visibility. Hidden when the operator sets
     // onboarding show_to='off' in /cms — "disabled" means the welcome
     // screen is gone for good, both the auto-gate (home.js) and this
@@ -369,6 +395,7 @@ Page({
       next.notifUnread = (notif && notif.count) || 0;
       if (cust) {
         next.customer = cust;
+        next.needPhone = !cust.phone;   // returning-customer restore prompt
         next.balanceDisplay = Number(cust.balance || 0).toFixed(2);
         next.avatarPreview = cust.avatar_url
           ? (/^https?:\/\//.test(cust.avatar_url) ? cust.avatar_url : api.BASE + cust.avatar_url)
@@ -403,6 +430,50 @@ Page({
     } catch (e) {
       console.warn('[me] refresh failed:', e.message);
       this.setData({ loading: false });
+    }
+  },
+
+  // Returning-customer restore. The <button open-type="getPhoneNumber"> hands
+  // us a one-time code; the backend exchanges it, stores the phone, and applies
+  // any pending OUT1N migration credit. We compare balance/points before/after
+  // so we can celebrate a real restore; a no-credit bind just confirms quietly.
+  async onGetPhone(e) {
+    const d = e && e.detail;
+    const code = d && d.code;
+    if (!code) {
+      wx.showToast({ title: this.data.copy.restoreDenied, icon: 'none' });
+      return;
+    }
+    if (this.data.binding) return;
+    this.setData({ binding: true });
+    const before = this.data.customer || {};
+    const beforeBal = Number(before.balance || 0);
+    const beforePts = Number(before.points_balance || 0);
+    try {
+      const after = (await api.post('/api/retail/phone', { code })) || {};
+      const gainBal = Number(after.balance || 0) - beforeBal;
+      const gainPts = Number(after.points_balance || 0) - beforePts;
+      const c = this.data.copy;
+      if (gainBal > 0.001 || gainPts > 0) {
+        const cn = this.data.lang === 'cn';
+        const parts = [];
+        if (gainBal > 0.001) parts.push('¥' + gainBal.toFixed(2));
+        if (gainPts > 0) parts.push(gainPts + (cn ? ' 积分' : ' points'));
+        wx.showModal({
+          title: c.restoreWelcome,
+          content: c.restoredLead + parts.join(cn ? ' 和 ' : ' and ') + c.restoredTail,
+          showCancel: false,
+          confirmText: c.restoreGotIt,
+        });
+      } else {
+        wx.showToast({ title: c.restoreDone, icon: 'success' });
+      }
+      await this.refresh();
+    } catch (err) {
+      console.warn('[me] phone bind failed:', err.message);
+      wx.showToast({ title: this.data.copy.restoreFailed, icon: 'none' });
+    } finally {
+      this.setData({ binding: false });
     }
   },
 

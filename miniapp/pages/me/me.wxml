@@ -35,6 +35,19 @@
     </view>
   </view>
 
+  <!-- Returning-customer restore prompt. Shown only when the account has no
+       phone on file; wording self-targets returning OUT1N customers. Binding a
+       phone applies any migrated balance/points, then the card disappears. -->
+  <view wx:if="{{needPhone}}" class="restore-card">
+    <view class="restore-title f-bear">{{copy.restoreTitle}}</view>
+    <view class="restore-desc f-toni">{{copy.restoreDesc}}</view>
+    <button class="restore-btn f-gothic"
+            open-type="getPhoneNumber"
+            bindgetphonenumber="onGetPhone"
+            loading="{{binding}}"
+            disabled="{{binding}}">{{copy.restoreBtn}}</button>
+  </view>
+
   <!-- My orders — status bucket icons -->
   <view class="section">
     <view class="section-head">
