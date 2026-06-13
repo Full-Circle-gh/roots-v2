@@ -1639,7 +1639,8 @@
         <option value="all">All subcategories · 全部子分类</option>
       </select>
       <div id="pa-count" class="pa-count"></div>
-      <button class="btn btn-primary" id="pa-add-btn" type="button" onclick="pdOpen(null)" style="white-space:nowrap;">＋ Add product · 新增产品</button>
+      <button class="btn btn-primary" id="pa-wizard-btn" type="button" onclick="pwOpen()" style="white-space:nowrap;"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 2.5l1.2 2.8L12 6.5 9.2 7.7 8 10.5 6.8 7.7 4 6.5l2.8-1.2z"/><path d="M12.5 10.5l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z"/></svg>Guided add · 向导添加</button>
+      <button class="btn" id="pa-add-btn" type="button" onclick="pdOpen(null)" style="white-space:nowrap;">＋ Add manually · 手动新增</button>
       <div id="pa-view-seg" class="pa-view-seg" role="group" aria-label="Product layout · 产品布局">
         <button type="button" class="pa-view-btn" data-view="grid" title="Grid view · 网格视图" aria-label="Grid view"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></button>
         <button type="button" class="pa-view-btn" data-view="compact" title="Compact view · 紧凑视图" aria-label="Compact view"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9.5" y="2" width="5" height="5" rx="1"/><rect x="17" y="2" width="5" height="5" rx="1"/><rect x="2" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><rect x="17" y="9.5" width="5" height="5" rx="1"/><rect x="2" y="17" width="5" height="5" rx="1"/><rect x="9.5" y="17" width="5" height="5" rx="1"/><rect x="17" y="17" width="5" height="5" rx="1"/></svg></button>
@@ -2337,6 +2338,22 @@
         </div>
         <div id="vw-body" style="display: flex; flex-direction: column; gap: 18px; padding: 28px 24px 24px; max-height: 78vh; overflow: auto;"></div>
         <div id="vw-foot" class="vw-foot"></div>
+      </div>
+    </div>
+
+    <!-- ─── Guided product wizard (additive; the manual editor below is untouched) ─── -->
+    <div id="pw-bg" class="pu-editor-bg">
+      <div class="pu-editor vw" style="width: 760px; max-width: 94vw;">
+        <div class="pu-editor-head">
+          <div>
+            <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--brass,#b08d4a);font-weight:600;margin-bottom:3px;">NEW PRODUCT · 新增产品</div>
+            <h3 id="pw-title" style="margin: 0; font-size: 15px;">Add a product · 添加产品</h3>
+          </div>
+          <button class="btn" onclick="pwClose()">Close · 关闭</button>
+        </div>
+        <div id="pw-body" style="display: flex; flex-direction: column; gap: 14px; padding: 26px 24px 24px; max-height: 78vh; overflow: auto;"></div>
+        <div id="pw-foot" class="vw-foot"></div>
+        <input type="file" id="pw-photo-file" accept="image/*" style="display:none" onchange="pwPhotoPicked(event)">
       </div>
     </div>
   </section>

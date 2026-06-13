@@ -4391,3 +4391,523 @@ function paRenderPreview() {
   if (el) el.addEventListener('input', paRenderPreview);
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// GUIDED PRODUCT WIZARD (PC) — "Add a product" made simple for non-tech sellers.
+// Additive: sits beside the full editor (pdOpen). Collects a few plain-language
+// answers across small steps, then CREATES a real product through the same
+// endpoints the editor uses, and opens it for any fine-tuning. Mirrors the
+// coupon wizard's shell/motion (vw-*). Full spec + copy: Product-Wizard-v1-Spec.md.
+// Copy follows the plain-words rule (one idea per line, concrete examples).
+// ════════════════════════════════════════════════════════════════════════════
+let _pw = null;
+const PW_STEPS = ['what', 'price', 'details', 'extras', 'review'];
+const PW_FREE_OF = [['nuts', 'Nuts', '无坚果'], ['soy', 'Soy', '无大豆'], ['gluten', 'Gluten', '无麸质'], ['5 spice', '5 Spice', '无五香']];
+const PW_FACTS = [['origin', 'Where it’s from', '产地', 'e.g. Peru'],
+                  ['ingredients', 'What’s in it', '配料', 'e.g. 100% cacao'],
+                  ['storage', 'How to store it', '储存方式', 'e.g. Cool, dry place'],
+                  ['shelf_life', 'Keeps for', '保质期', 'e.g. 12 months'],
+                  ['serving', 'How to enjoy it', '食用建议', 'e.g. Add to smoothies, oats or baking']];
+const PW_ICONS = {
+  pencil: '<path d="M4 20h4L18 10l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>',
+  paste: '<rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+};
+function pwIcon(name, size) {
+  size = size || 24;
+  return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + (PW_ICONS[name] || '') + '</svg>';
+}
+function pwPrimaryLang() { try { if (typeof cuLang === 'function') return cuLang() === 'cn' ? 'cn' : 'en'; } catch (e) {} return 'en'; }
+
+function pwOpen() {
+  _pw = {
+    step: 'front', source: null,
+    name_en: '', name_cn: '', sku: '', top: '', sub: '', photo: '',
+    price: '', compare: '', stock: '', weight: '',
+    hasSizes: false, sizes: [{ label: '', price: '', stock: '' }], localOnly: false,
+    facts: {}, freeOf: {}, descEn: '', descCn: '',
+    options: [], pick: null,
+    designed: true, busy: false,
+  };
+  const bg = document.getElementById('pw-bg'); if (bg) bg.classList.add('show');
+  pwRender();
+  // Categories drive the picker on Step 1 — warm the cache, re-render if we're there.
+  pdLoadCatTree().then(() => { if (_pw && _pw.step === 'what') pwRender(); });
+}
+function pwClose() {
+  const body = document.getElementById('pw-body');
+  if (body) body.classList.remove('vw-leaving', 'vw-entering');
+  const bg = document.getElementById('pw-bg'); if (bg) bg.classList.remove('show');
+  _pw = null;
+}
+// Esc closes (parity with the coupon wizard); backdrop click does NOT, so an
+// in-progress product is never discarded by a stray click.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !_pw) return;
+  const bg = document.getElementById('pw-bg');
+  if (bg && bg.classList.contains('show')) pwClose();
+});
+function pwGoto(step) {
+  if (!_pw) return;
+  const body = document.getElementById('pw-body');
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!body || reduce) { _pw.step = step; pwRender(); if (body) body.scrollTop = 0; return; }
+  body.classList.remove('vw-entering');
+  body.classList.add('vw-leaving');
+  setTimeout(() => {
+    if (!_pw) return;
+    _pw.step = step; pwRender(); body.scrollTop = 0;
+    body.classList.remove('vw-leaving'); void body.offsetWidth; body.classList.add('vw-entering');
+  }, 240);
+}
+function pwDots(active) {
+  return '<div class="vw-dots">' + PW_STEPS.map(s => '<span class="vw-dot' + (s === active ? ' on' : '') + '"></span>').join('') + '</div>';
+}
+function pwFoot(backStep, nextFn, active, nextLabel) {
+  return '<button class="btn" onclick="pwGoto(\'' + backStep + '\')">' + cuT('Back', '返回') + '</button>'
+    + pwDots(active)
+    + '<button class="btn btn-primary" onclick="' + nextFn + '">' + (nextLabel || cuT('Next', '下一步')) + '</button>';
+}
+function pwRender() {
+  if (!_pw) return;
+  const title = document.getElementById('pw-title'), body = document.getElementById('pw-body'), foot = document.getElementById('pw-foot');
+  if (!title || !body || !foot) return;
+  const s = _pw.step;
+  foot.style.display = (s === 'front' || s === 'front-paste' || s === 'front-copy') ? 'none' : 'flex';
+  if (s === 'front')            { title.textContent = cuT('Add a product', '添加产品');     body.innerHTML = pwFrontHtml(); }
+  else if (s === 'front-paste') { title.textContent = cuT('Paste your text', '粘贴文字');     body.innerHTML = pwPasteHtml(); }
+  else if (s === 'front-copy')  { title.textContent = cuT('Copy one you sell', '复制已有产品'); body.innerHTML = pwCopyHtml(); pwCopyList(); }
+  else if (s === 'what')        { title.textContent = cuT('What is it?', '这是什么?');       body.innerHTML = pwWhatHtml();   foot.innerHTML = pwFoot('front', 'pwNextWhat()', 'what'); }
+  else if (s === 'price')       { title.textContent = cuT('Sizes & price', '规格与价格');     body.innerHTML = pwPriceHtml();  foot.innerHTML = pwFoot('what', "pwGoto('details')", 'price'); }
+  else if (s === 'details')     { title.textContent = cuT('The details', '详细信息');        body.innerHTML = pwDetailsHtml(); foot.innerHTML = pwFoot('price', "pwGoto('extras')", 'details'); }
+  else if (s === 'extras')      { title.textContent = cuT('Customize?', '可定制?');          body.innerHTML = pwExtrasHtml();  foot.innerHTML = pwFoot('details', "pwGoto('review')", 'extras'); }
+  else if (s === 'review')      {
+    title.textContent = cuT('Take a look', '看看效果'); body.innerHTML = pwReviewHtml();
+    foot.innerHTML = '<button class="btn" onclick="pwGoto(\'extras\')">' + cuT('Back', '返回') + '</button>' + pwDots('review')
+      + '<span style="display:flex;gap:8px;">'
+      + '<button class="btn" onclick="pwFinish(false)">' + cuT('Save as draft', '存为草稿') + '</button>'
+      + '<button class="btn btn-primary" onclick="pwFinish(true)">' + cuT('Publish it', '发布') + '</button></span>';
+  }
+}
+
+// ── Front door ───────────────────────────────────────────────────────────────
+function pwFrontHtml() {
+  const cards = [
+    ['scratch', 'pencil', cuT('Start from scratch', '从头开始'), cuT('A blank product. You fill it in.', '空白产品,自行填写。')],
+    ['paste', 'paste', cuT('Paste what you’ve written', '粘贴已有文字'), cuT('Drop in a description — we’ll sort it into the right boxes.', '粘贴描述 — 我们帮你归类到各栏。')],
+    ['copy', 'copy', cuT('Copy one you already sell', '复制已有产品'), cuT('Start from a similar product and change what’s different.', '从相似产品开始,只改不同处。')],
+  ];
+  return '<div class="vw-lab" style="margin-bottom:2px;">' + cuT('How do you want to add it?', '你想怎样添加?') + '</div>'
+    + '<div class="vw-help" style="margin:-2px 0 6px;">' + cuT('Pick whatever’s easiest. You can change anything later.', '选最方便的方式,之后都能修改。') + '</div>'
+    + '<div class="vw-goals">'
+    + cards.map(c => '<button class="vw-goal" onclick="pwFront(\'' + c[0] + '\')"><span class="vico">' + pwIcon(c[1], 26) + '</span>'
+        + '<span><span class="gt">' + c[2] + '</span><br><span class="gs">' + c[3] + '</span></span></button>').join('')
+    + '</div>';
+}
+function pwFront(source) {
+  _pw.source = source;
+  if (source === 'scratch') return pwGoto('what');
+  if (source === 'paste') return pwGoto('front-paste');
+  if (source === 'copy') return pwGoto('front-copy');
+}
+function pwPasteHtml() {
+  return '<div class="vw-lab">' + cuT('Paste anything you have', '粘贴你已有的文字') + '</div>'
+    + '<div class="vw-help" style="margin:-2px 0 8px;">' + cuT('A description, the back of the package, a spec sheet — we’ll pull the details out next.', '描述、包装背面、规格表都行 — 下一步我们帮你提取详情。') + '</div>'
+    + '<textarea id="pw-paste" rows="7" style="width:100%;box-sizing:border-box;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:9px;resize:vertical;"></textarea>'
+    + '<div class="pw-row-end" style="margin-top:14px;">'
+    + '<button class="btn" onclick="pwGoto(\'front\')">' + cuT('Back', '返回') + '</button>'
+    + '<button class="btn btn-primary" onclick="pwPasteContinue()">' + cuT('Continue', '继续') + '</button></div>';
+}
+function pwPasteContinue() {
+  const t = (document.getElementById('pw-paste') || {}).value || '';
+  if (pwPrimaryLang() === 'cn') _pw.descCn = t.trim(); else _pw.descEn = t.trim();
+  pwGoto('what');
+}
+function pwCopyHtml() {
+  return '<div class="vw-lab">' + cuT('Which product is it like?', '与哪个产品相似?') + '</div>'
+    + '<input id="pw-copy-q" type="text" autocomplete="off" placeholder="' + cuT('Search by name or SKU…', '按名称或货号搜索…') + '" oninput="pwCopyList()" style="width:100%;box-sizing:border-box;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:9px;margin:6px 0 10px;">'
+    + '<div id="pw-copy-list" class="pw-pick-list"></div>'
+    + '<div class="pw-row-end" style="margin-top:12px;"><button class="btn" onclick="pwGoto(\'front\')">' + cuT('Back', '返回') + '</button></div>';
+}
+function pwCopyList() {
+  const el = document.getElementById('pw-copy-list'); if (!el) return;
+  const q = ((document.getElementById('pw-copy-q') || {}).value || '').toLowerCase().trim();
+  const rows = (PA_PRODUCTS || [])
+    .filter(p => !q || (p.name_en || '').toLowerCase().includes(q) || (p.name_cn || '').includes(q) || (p.sku || '').toLowerCase().includes(q))
+    .slice(0, 30);
+  el.innerHTML = rows.length
+    ? rows.map(p => '<div class="pw-pick" onclick="pwCopyPick(' + p.id + ')">' + escapeHtml(cuT(p.name_en || p.name_cn || ('#' + p.id), p.name_cn || p.name_en || ('#' + p.id))) + (p.sku ? ' <span class="muted">· ' + escapeHtml(p.sku) + '</span>' : '') + '</div>').join('')
+    : '<div class="pw-pick muted">' + cuT('No matches', '无匹配') + '</div>';
+}
+function pwCopyPick(id) {
+  const p = (PA_PRODUCTS || []).find(x => x.id === id); if (!p) return;
+  _pw.name_en = p.name_en || ''; _pw.name_cn = p.name_cn || '';
+  _pw.top = p.top_category || p.category || ''; _pw.sub = p.subcategory || '';
+  _pw.price = (p.sell_price != null ? p.sell_price : '');
+  pwGoto('what');
+}
+
+// ── Step 1 · What it is ────────────────────────────────────────────────────────
+function pwCatOptionsHtml() {
+  const tree = PA_CAT_TREE || [];
+  if (!tree.length) return '<option value="">' + cuT('— loading… —', '— 加载中… —') + '</option>';
+  let html = '<option value="">' + cuT('— pick a category —', '— 选择分类 —') + '</option>';
+  tree.forEach(t => {
+    const subs = t.subs || [];
+    const topVal = t.name + '|||';
+    if (!subs.length) { html += '<option value="' + escapeAttr(topVal) + '"' + (_pw.top === t.name && !_pw.sub ? ' selected' : '') + '>' + escapeHtml(cuT(t.name, t.name_cn || t.name)) + '</option>'; return; }
+    html += '<optgroup label="' + escapeAttr(cuT(t.name, t.name_cn || t.name)) + '">';
+    html += '<option value="' + escapeAttr(topVal) + '"' + (_pw.top === t.name && !_pw.sub ? ' selected' : '') + '>' + escapeHtml(cuT('(whole category)', '(整个分类)')) + '</option>';
+    subs.forEach(s => {
+      const v = t.name + '|||' + s.name;
+      html += '<option value="' + escapeAttr(v) + '"' + (_pw.top === t.name && _pw.sub === s.name ? ' selected' : '') + '>' + escapeHtml(cuT(s.name, s.name_cn || s.name)) + '</option>';
+    });
+    html += '</optgroup>';
+  });
+  return html;
+}
+function pwWhatHtml() {
+  const primary = pwPrimaryLang();
+  const nameMain = primary === 'cn'
+    ? { lab: cuT('Name', '名称'), val: _pw.name_cn, fn: 'pwSet(\'name_cn\', this.value)', ph: '可可碎' }
+    : { lab: cuT('Name', '名称'), val: _pw.name_en, fn: 'pwSet(\'name_en\', this.value)', ph: 'Cacao Nibs' };
+  const nameAlt = primary === 'cn'
+    ? { lab: cuT('English name (optional)', '英文名(可选)'), val: _pw.name_en, fn: 'pwSet(\'name_en\', this.value)', ph: 'Cacao Nibs' }
+    : { lab: cuT('中文名 (optional)', '中文名(可选)'), val: _pw.name_cn, fn: 'pwSet(\'name_cn\', this.value)', ph: '可可碎' };
+  const prefilled = (_pw.source === 'paste' || _pw.source === 'copy');
+  return (prefilled ? '<div class="vw-help" style="margin:-2px 0 4px;">' + cuT('We’ve filled in what we could — just check it’s right.', '已尽量帮你填好 — 核对一下即可。') + '</div>' : '')
+    + '<div class="field"><label class="vw-lab">' + nameMain.lab + '</label>'
+    + '<input type="text" value="' + escapeAttr(nameMain.val) + '" placeholder="' + nameMain.ph + '" oninput="' + nameMain.fn + '" onblur="pwSuggestSku()" style="width:100%;box-sizing:border-box;"></div>'
+    + '<div class="vw-help" style="margin:-6px 0 4px;">' + cuT('Type one language — you can add the other below.', '填一种语言即可 — 另一种可在下方补充。') + '</div>'
+    + '<div class="field"><label class="vw-lab">' + nameAlt.lab + '</label>'
+    + '<input type="text" value="' + escapeAttr(nameAlt.val) + '" placeholder="' + nameAlt.ph + '" oninput="' + nameAlt.fn + '" style="width:100%;box-sizing:border-box;"></div>'
+    + '<div class="pw-row2">'
+    + '<div class="field"><label class="vw-lab">' + cuT('Photo', '图片') + '</label>'
+    + '<div style="display:flex;align-items:center;gap:12px;">'
+    + '<div class="pw-photo" onclick="pwPhotoPick()" title="' + cuT('Add a photo', '添加图片') + '"' + (_pw.photo ? ' style="background-image:url(' + escapeAttr(_pw.photo) + ');background-size:cover;background-position:center;"' : '') + '>' + (_pw.photo ? '' : '＋') + '</div>'
+    + '<span class="vw-help">' + cuT('A clear shot on a plain background looks best.', '干净背景的清晰照片最好。') + '</span></div></div>'
+    + '<div class="field"><label class="vw-lab">' + cuT('What kind of product is it?', '属于哪类产品?') + '</label>'
+    + '<select onchange="pwSetCat(this.value)" style="width:100%;box-sizing:border-box;">' + pwCatOptionsHtml() + '</select></div>'
+    + '</div>'
+    + '<div class="field"><label class="vw-lab">' + cuT('Product code', '产品编号') + '</label>'
+    + '<input id="pw-sku-input" type="text" value="' + escapeAttr(_pw.sku) + '" placeholder="' + cuT('we’ll make one for you', '系统会自动生成') + '" oninput="pwSet(\'sku\', this.value)" style="width:100%;box-sizing:border-box;"></div>'
+    + '<div class="vw-help" style="margin-top:-6px;">' + cuT('We made this for you — type over it if you already have your own.', '已为你生成 — 若有自己的编号可直接覆盖。') + '</div>';
+}
+function pwSet(key, val) { if (_pw) _pw[key] = val; }
+function pwSetCat(v) {
+  const parts = String(v || '').split('|||');
+  _pw.top = parts[0] || ''; _pw.sub = parts[1] || '';
+}
+function pwSuggestSku() {
+  if (!_pw || (_pw.sku && _pw.sku.trim())) return;
+  const base = (_pw.name_en || _pw.name_cn || '').trim();
+  if (!base) return;
+  const slug = base.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24);
+  if (slug) { _pw.sku = slug; const f = document.getElementById('pw-sku-input'); if (f) f.value = slug; }
+}
+function pwNextWhat() {
+  if (!_pw.name_en.trim() && !_pw.name_cn.trim()) { toast(cuT('Add a name first', '请先填写名称'), 'err'); return; }
+  pwGoto('price');
+}
+function pwPhotoPick() { const f = document.getElementById('pw-photo-file'); if (f) { f.value = ''; f.click(); } }
+async function pwPhotoPicked(e) {
+  const file = e.target.files && e.target.files[0]; if (!file || !_pw) return;
+  try {
+    const out = await pdResizeImage(file, { maxLong: 1440, quality: 0.88, format: 'jpeg' });
+    _pw.photo = out.dataURL; pwRender();
+  } catch (err) { toast(cuT('Couldn’t read that image', '无法读取图片'), 'err'); }
+}
+
+// ── Step 2 · Sizes & price ─────────────────────────────────────────────────────
+function pwPriceHtml() {
+  const fork = '<div class="vw-lab">' + cuT('Does it come in different sizes?', '有不同规格吗?') + '</div>'
+    + '<div class="vw-help" style="margin:-2px 0 8px;">' + cuT('Like 250g and 500g, or Small and Large.', '比如 250 克和 500 克,或大杯和小杯。') + '</div>'
+    + '<div class="pw-seg">'
+    + '<button class="pw-seg-btn' + (!_pw.hasSizes ? ' on' : '') + '" onclick="pwSetSizes(false)">' + cuT('No, just one', '不,只有一种') + '</button>'
+    + '<button class="pw-seg-btn' + (_pw.hasSizes ? ' on' : '') + '" onclick="pwSetSizes(true)">' + cuT('Yes, it has sizes', '有多种规格') + '</button></div>';
+  let core;
+  if (!_pw.hasSizes) {
+    core = '<div class="pw-row2">'
+      + '<div class="field"><label class="vw-lab">' + cuT('Price', '价格') + ' ¥</label><input type="number" min="0" step="0.01" value="' + (_pw.price === '' ? '' : _pw.price) + '" oninput="pwSet(\'price\', this.value)" style="width:100%;box-sizing:border-box;"></div>'
+      + '<div class="field"><label class="vw-lab">' + cuT('In stock', '库存') + '</label><input type="number" min="0" step="1" value="' + (_pw.stock === '' ? '' : _pw.stock) + '" oninput="pwSet(\'stock\', this.value)" style="width:100%;box-sizing:border-box;"></div></div>'
+      + '<label class="pw-check"><input type="checkbox"' + (_pw.compare !== '' ? ' checked' : '') + ' onchange="pwToggleSale(this.checked)"> ' + cuT('It’s on sale', '正在促销') + '</label>'
+      + (_pw.compare !== '' ? '<div class="field" style="max-width:240px;"><label class="vw-lab">' + cuT('Was price', '原价') + ' ¥</label><input type="number" min="0" step="0.01" value="' + _pw.compare + '" oninput="pwSet(\'compare\', this.value)" style="width:100%;box-sizing:border-box;"><div class="vw-help">' + cuT('Shoppers see the old price crossed out.', '顾客会看到原价划线。') + '</div></div>' : '');
+  } else {
+    core = '<div class="vw-help" style="margin-bottom:6px;">' + cuT('Add each size with its own price and stock.', '为每种规格设置价格与库存。') + '</div>'
+      + '<div class="pw-sizes">'
+      + _pw.sizes.map((s, i) => '<div class="pw-size-row">'
+        + '<input type="text" placeholder="' + cuT('e.g. 250g', '如 250克') + '" value="' + escapeAttr(s.label) + '" oninput="pwSizeField(' + i + ', \'label\', this.value)">'
+        + '<span class="pw-size-cur">¥<input type="number" min="0" step="0.01" placeholder="' + cuT('price', '价格') + '" value="' + (s.price === '' ? '' : s.price) + '" oninput="pwSizeField(' + i + ', \'price\', this.value)"></span>'
+        + '<input type="number" min="0" step="1" placeholder="' + cuT('stock', '库存') + '" value="' + (s.stock === '' ? '' : s.stock) + '" oninput="pwSizeField(' + i + ', \'stock\', this.value)">'
+        + (_pw.sizes.length > 1 ? '<button type="button" class="pw-x" onclick="pwSizeRemove(' + i + ')" title="' + cuT('Remove', '移除') + '">✕</button>' : '<span class="pw-x-spacer"></span>')
+        + '</div>').join('')
+      + '</div>'
+      + '<button type="button" class="btn btn-sm" onclick="pwSizeAdd()">' + cuT('+ Add a size', '+ 添加规格') + '</button>';
+  }
+  const ship = '<div class="field" style="margin-top:14px;"><label class="vw-lab">' + cuT('Where can people get it?', '哪里可以买到?') + '</label>'
+    + '<label class="pw-check"><input type="checkbox"' + (_pw.localOnly ? ' checked' : '') + ' onchange="pwSet(\'localOnly\', this.checked)"> ' + cuT('Guangzhou delivery only', '仅限广州配送') + '</label>'
+    + '<div class="vw-help">' + cuT('Leave unticked to ship anywhere.', '不勾选则可寄往各地。') + '</div></div>';
+  return fork + '<div style="margin-top:14px;">' + core + '</div>' + ship;
+}
+function pwSetSizes(on) { _pw.hasSizes = !!on; pwRender(); }
+function pwToggleSale(on) { _pw.compare = on ? (_pw.compare || '0') : ''; pwRender(); }
+function pwSizeField(i, key, val) { if (_pw.sizes[i]) _pw.sizes[i][key] = val; }
+function pwSizeAdd() { _pw.sizes.push({ label: '', price: '', stock: '' }); pwRender(); }
+function pwSizeRemove(i) { _pw.sizes.splice(i, 1); if (!_pw.sizes.length) _pw.sizes.push({ label: '', price: '', stock: '' }); pwRender(); }
+
+// ── Step 3 · Details ───────────────────────────────────────────────────────────
+function pwDetailsHtml() {
+  const primary = pwPrimaryLang();
+  const desc = primary === 'cn' ? _pw.descCn : _pw.descEn;
+  let html = '<div class="vw-lab">' + cuT('Describe it (or paste anything)', '描述一下(或粘贴任意文字)') + '</div>'
+    + '<div class="vw-help" style="margin:-2px 0 6px;">' + cuT('A sentence is fine. Paste a label or spec sheet and we’ll pull the details below.', '一句话也行。粘贴标签或规格表,我们帮你提取下方详情。') + '</div>'
+    + '<textarea id="pw-desc" rows="3" oninput="pwSetDesc(this.value)" style="width:100%;box-sizing:border-box;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:9px;resize:vertical;">' + escapeHtml(desc) + '</textarea>'
+    + '<div style="margin:8px 0 14px;"><button type="button" class="btn btn-sm" onclick="pwPullFacts()">' + cuT('Pull the details from this', '从中提取详情') + '</button></div>';
+  if (!_pw.hasSizes) {
+    html += '<div class="field" style="max-width:240px;"><label class="vw-lab">' + cuT('Net weight', '净含量') + '</label><input type="text" placeholder="e.g. 200g" value="' + escapeAttr(_pw.weight) + '" oninput="pwSet(\'weight\', this.value)" style="width:100%;box-sizing:border-box;"></div>';
+  }
+  html += PW_FACTS.map(([col, en, cn, ph]) => {
+    const k = col + '_' + primary;
+    return '<div class="field"><label class="vw-lab">' + cuT(en, cn) + '</label><input type="text" placeholder="' + ph + '" value="' + escapeAttr(_pw.facts[k] || '') + '" oninput="pwSetFact(\'' + k + '\', this.value)" style="width:100%;box-sizing:border-box;"></div>';
+  }).join('');
+  html += '<div class="field"><label class="vw-lab">' + cuT('Free from anything? (optional)', '不含什么?(可选)') + '</label>'
+    + '<div class="pw-chips">' + PW_FREE_OF.map(([id, en, cn]) => '<label class="pw-chip"><input type="checkbox"' + (_pw.freeOf[id] ? ' checked' : '') + ' onchange="pwToggleFreeOf(\'' + id + '\', this.checked)"> ' + cuT(en, cn) + '</label>').join('') + '</div>'
+    + '<div class="vw-help">' + cuT('This is your promise to shoppers, so make sure it’s true.', '这是对顾客的承诺,请确保属实。') + '</div></div>';
+  return html;
+}
+function pwSetDesc(v) { if (pwPrimaryLang() === 'cn') _pw.descCn = v; else _pw.descEn = v; }
+function pwSetFact(k, v) { _pw.facts[k] = v; }
+function pwToggleFreeOf(id, on) { _pw.freeOf[id] = !!on; }
+async function pwPullFacts() {
+  const primary = pwPrimaryLang();
+  const text = (primary === 'cn' ? _pw.descCn : _pw.descEn) || '';
+  if (!text.trim()) { toast(cuT('Write or paste some text first', '请先填写或粘贴文字'), 'err'); return; }
+  toast(cuT('Reading your text…', '正在识别…'));
+  try {
+    const r = await fetch('/api/retail-admin/ai/extract-facts', {
+      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(primary === 'cn' ? { text_cn: text } : { text_en: text }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 503) { toast(cuT('AI is not set up yet — fill the boxes by hand', 'AI 尚未配置,请手动填写'), 'err'); return; }
+    if (!r.ok || !j.success) { toast(cuT('Couldn’t read the details — fill by hand', '识别失败,请手动填写'), 'err'); return; }
+    const facts = (j.data && j.data.facts) || {};
+    if (!Object.keys(facts).length) { toast(cuT('No details found in the text', '未找到详情'), 'err'); return; }
+    Object.assign(_pw.facts, facts);
+    pwRender();
+    toast(cuT('Filled in the details — review & tweak', '已填充详情,请核对'), 'ok');
+  } catch (e) { toast(cuT('Couldn’t read the details', '识别失败'), 'err'); }
+}
+
+// ── Customize? · options + paid extras ─────────────────────────────────────────
+function pwExtrasHtml() {
+  let html = '<div class="vw-lab">' + cuT('Do customers get to pick anything?', '顾客可以自由选择吗?') + '</div>'
+    + '<div class="vw-help" style="margin:-2px 0 8px;">' + cuT('For example: choosing a dressing, or paying a bit more for extra toppings.', '例如:选择酱料,或加点钱添加配料。') + '</div>';
+  html += '<div class="pw-opts">' + _pw.options.map((o, oi) => pwOptBlock(o, oi)).join('') + '</div>';
+  html += '<div class="pw-row" style="margin-top:10px;gap:8px;">'
+    + '<button type="button" class="btn btn-sm" onclick="pwAddFree()">' + cuT('+ A free pick', '+ 免费选择') + '</button>'
+    + '<button type="button" class="btn btn-sm" onclick="pwAddPaid()">' + cuT('+ A paid extra', '+ 付费加项') + '</button></div>';
+  if (!_pw.options.length) html += '<div class="vw-help" style="margin-top:6px;">' + cuT('Nothing to pick? Just tap Next.', '无需选择?直接点下一步。') + '</div>';
+  return html;
+}
+function pwOptBlock(o, oi) {
+  const paid = o.type === 'multi';
+  const head = '<div class="pw-opt-head"><span class="pw-opt-tag">' + (paid ? cuT('Paid extra', '付费加项') : cuT('Free pick', '免费选择')) + '</span>'
+    + '<button type="button" class="pw-x" onclick="pwOptRemove(' + oi + ')" title="' + cuT('Remove', '移除') + '">✕</button></div>';
+  const primary = pwPrimaryLang();
+  const qKey = primary === 'cn' ? 'question_cn' : 'question_en';
+  const q = '<input type="text" class="pw-opt-q" placeholder="' + (paid ? cuT('What can they add? e.g. Add extras', '可添加什么?如:添加加项') : cuT('What are they picking? e.g. Choose your dressing', '让顾客选什么?如:选择酱料')) + '" value="' + escapeAttr(o[qKey] || '') + '" oninput="pwOptQ(' + oi + ', \'' + qKey + '\', this.value)">';
+  const choices = o.choices.map((c, ci) => pwChoiceRow(o, oi, c, ci)).join('');
+  const addLbl = paid ? cuT('+ Add an extra', '+ 添加加项') : cuT('+ Add another', '+ 添加选项');
+  const req = paid ? '' : '<label class="pw-check"><input type="checkbox"' + (o.is_required ? ' checked' : '') + ' onchange="pwOptReq(' + oi + ', this.checked)"> ' + cuT('They have to pick one before they can buy', '购买前必须选择') + '</label>';
+  return '<div class="pw-opt">' + head + q + '<div class="pw-choices">' + choices + '</div><button type="button" class="btn btn-sm pw-addc" onclick="pwAddChoice(' + oi + ')">' + addLbl + '</button>' + req + '</div>';
+}
+function pwChoiceRow(o, oi, c, ci) {
+  const paid = o.type === 'multi';
+  const primary = pwPrimaryLang();
+  const labKey = primary === 'cn' ? 'label_cn' : 'label_en';
+  const def = !paid
+    ? '<input type="radio" name="pw-def-' + oi + '" title="' + cuT('Show one as the usual pick', '设为默认选项') + '"' + (c.is_default ? ' checked' : '') + ' onchange="pwOptDefault(' + oi + ', ' + ci + ')">'
+    : '<span class="pw-radio-spacer"></span>';
+  const lab = '<input type="text" class="pw-clab" placeholder="' + (paid ? cuT('e.g. Extra pickles', '如 加酸黄瓜') : cuT('e.g. Ranch', '如 牧场酱')) + '" value="' + escapeAttr(c[labKey] || '') + '" oninput="pwOptC(' + oi + ', ' + ci + ', \'' + labKey + '\', this.value)">';
+  const price = paid ? '<span class="pw-cur">+¥<input type="number" min="0" step="0.01" value="' + (c.price_delta || 0) + '" oninput="pwOptC(' + oi + ', ' + ci + ', \'price_delta\', this.value)"></span>' : '';
+  let link = '';
+  if (paid) {
+    if (c.stock_product_id) {
+      link = '<span class="pw-link on">🔗 ' + escapeHtml(c.addon_name || ('#' + c.stock_product_id)) + '<button type="button" class="pw-x" onclick="pwUnlink(' + oi + ', ' + ci + ')" title="' + cuT('Unlink', '取消关联') + '">✕</button></span>';
+    } else {
+      link = '<button type="button" class="btn btn-sm pw-link-btn" onclick="pwLinkPick(' + oi + ', ' + ci + ')" title="' + cuT('Use a product’s stock', '使用某商品库存') + '">' + cuT('+ Stock', '+ 库存') + '</button>';
+    }
+  }
+  const picking = _pw.pick && _pw.pick.oi === oi && _pw.pick.ci === ci;
+  const picker = picking ? '<div class="pw-linkpick"><input id="pw-link-q" type="text" placeholder="' + cuT('Search a product for stock…', '搜索作为库存的商品…') + '" oninput="pwLinkList()"><div id="pw-link-list" class="pw-pick-list"></div></div>' : '';
+  return '<div class="pw-choice">' + def + lab + price + link + '<button type="button" class="pw-x" onclick="pwChoiceRemove(' + oi + ', ' + ci + ')" title="' + cuT('Remove', '移除') + '">✕</button></div>' + picker;
+}
+function pwAddFree() { _pw.options.push({ type: 'single', question_en: '', question_cn: '', is_required: 0, choices: [{ label_en: '', label_cn: '', price_delta: 0, is_default: 0, stock_product_id: null, addon_name: '' }] }); pwRender(); }
+function pwAddPaid() { _pw.options.push({ type: 'multi', question_en: '', question_cn: '', is_required: 0, choices: [{ label_en: '', label_cn: '', price_delta: 0, is_default: 0, stock_product_id: null, addon_name: '' }] }); pwRender(); }
+function pwOptRemove(oi) { _pw.options.splice(oi, 1); if (_pw.pick && _pw.pick.oi === oi) _pw.pick = null; pwRender(); }
+function pwOptQ(oi, key, val) { if (_pw.options[oi]) _pw.options[oi][key] = val; }
+function pwOptReq(oi, on) { if (_pw.options[oi]) _pw.options[oi].is_required = on ? 1 : 0; }
+function pwOptC(oi, ci, key, val) { const c = _pw.options[oi] && _pw.options[oi].choices[ci]; if (!c) return; c[key] = key === 'price_delta' ? (parseFloat(val) || 0) : val; }
+function pwOptDefault(oi, ci) { const o = _pw.options[oi]; if (!o) return; o.choices.forEach((c, i) => { c.is_default = i === ci ? 1 : 0; }); }
+function pwAddChoice(oi) { const o = _pw.options[oi]; if (!o) return; o.choices.push({ label_en: '', label_cn: '', price_delta: 0, is_default: 0, stock_product_id: null, addon_name: '' }); pwRender(); }
+function pwChoiceRemove(oi, ci) { const o = _pw.options[oi]; if (!o) return; o.choices.splice(ci, 1); if (!o.choices.length) o.choices.push({ label_en: '', label_cn: '', price_delta: 0, is_default: 0, stock_product_id: null, addon_name: '' }); pwRender(); }
+function pwLinkPick(oi, ci) { _pw.pick = { oi, ci }; pwRender(); }
+function pwUnlink(oi, ci) { const c = _pw.options[oi] && _pw.options[oi].choices[ci]; if (c) { c.stock_product_id = null; c.addon_name = ''; } pwRender(); }
+function pwLinkList() {
+  const el = document.getElementById('pw-link-list'); if (!el) return;
+  const q = ((document.getElementById('pw-link-q') || {}).value || '').toLowerCase().trim();
+  const rows = (PA_PRODUCTS || []).filter(p => !p.is_bundle)
+    .filter(p => !q || (p.name_en || '').toLowerCase().includes(q) || (p.name_cn || '').includes(q) || (p.sku || '').toLowerCase().includes(q))
+    .slice(0, 24);
+  el.innerHTML = rows.length
+    ? rows.map(p => '<div class="pw-pick" onclick="pwLinkChoose(' + p.id + ')">' + escapeHtml(cuT(p.name_en || p.name_cn || ('#' + p.id), p.name_cn || p.name_en || ('#' + p.id))) + '</div>').join('')
+    : '<div class="pw-pick muted">' + cuT('No matches', '无匹配') + '</div>';
+}
+function pwLinkChoose(id) {
+  if (!_pw.pick) return;
+  const p = (PA_PRODUCTS || []).find(x => x.id === id);
+  const c = _pw.options[_pw.pick.oi] && _pw.options[_pw.pick.oi].choices[_pw.pick.ci];
+  if (c) { c.stock_product_id = id; c.addon_name = p ? (cuT(p.name_en || p.name_cn, p.name_cn || p.name_en) || ('#' + id)) : ('#' + id); }
+  _pw.pick = null; pwRender();
+}
+
+// ── Step 4 · Review ────────────────────────────────────────────────────────────
+function pwReviewHtml() {
+  const name = cuT(_pw.name_en || _pw.name_cn || '—', _pw.name_cn || _pw.name_en || '—');
+  const priceTxt = _pw.hasSizes
+    ? _pw.sizes.filter(s => s.label || s.price !== '').map(s => escapeHtml(s.label || '—') + ' ¥' + (s.price || '?')).join(' · ')
+    : ('¥' + (_pw.price || '?') + (_pw.compare !== '' ? ' <span class="muted" style="text-decoration:line-through;">¥' + _pw.compare + '</span>' : ''));
+  const cat = _pw.sub ? (_pw.top + ' › ' + _pw.sub) : (_pw.top || cuT('No category yet', '尚未分类'));
+  const factCount = Object.values(_pw.facts).filter(v => (v || '').trim()).length;
+  const freeOf = PW_FREE_OF.filter(([id]) => _pw.freeOf[id]).map(([, en, cn]) => cuT(en, cn));
+  const lines = [];
+  lines.push(['Name', '名称', escapeHtml(name)]);
+  lines.push(['Category', '分类', escapeHtml(cat)]);
+  lines.push(['Price', '价格', priceTxt]);
+  if (factCount) lines.push(['Details', '详情', factCount + ' ' + cuT('filled in', '项已填')]);
+  if (freeOf.length) lines.push(['Free of', '不含', freeOf.join(', ')]);
+  _pw.options.forEach(o => {
+    const paid = o.type === 'multi';
+    const q = (pwPrimaryLang() === 'cn' ? o.question_cn : o.question_en) || (paid ? cuT('Extras', '加项') : cuT('Pick', '选择'));
+    const items = o.choices.filter(c => c.label_en || c.label_cn).map(c => (pwPrimaryLang() === 'cn' ? c.label_cn : c.label_en) + (paid && c.price_delta ? ' +¥' + c.price_delta : '')).join(', ');
+    lines.push([paid ? 'They can add' : 'They can pick', paid ? '可添加' : '可选择', escapeHtml(q + (items ? ' — ' + items : ''))]);
+  });
+  const photo = _pw.photo ? '<div class="pw-rev-photo" style="background-image:url(' + escapeAttr(_pw.photo) + ')"></div>' : '<div class="pw-rev-photo pw-rev-photo-empty">🛍</div>';
+  const warn = [];
+  if (!_pw.photo) warn.push(cuT('No photo yet', '尚无图片'));
+  if (!_pw.top) warn.push(cuT('No category yet', '尚未分类'));
+  if (!_pw.hasSizes && (_pw.price === '' || _pw.price == null)) warn.push(cuT('No price yet', '尚无价格'));
+  return '<div class="pw-review">'
+    + photo
+    + '<div class="pw-rev-rows">' + lines.map(l => '<div class="pw-rev-row"><span class="pw-rev-k">' + cuT(l[0], l[1]) + '</span><span class="pw-rev-v">' + l[2] + '</span></div>').join('') + '</div>'
+    + '</div>'
+    + (warn.length ? '<div class="pw-warn">⚠ ' + warn.join(' · ') + '<div class="vw-help" style="margin-top:2px;">' + cuT('No rush — you can finish these later.', '不急 — 之后可补充。') + '</div></div>' : '')
+    + '<label class="pw-check" style="margin-top:12px;"><input type="checkbox"' + (_pw.designed ? ' checked' : '') + ' onchange="pwSet(\'designed\', this.checked)"> ' + cuT('Build the nice designed page from my description', '根据描述生成精美页面') + '</label>'
+    + '<div class="vw-help" style="margin-top:2px;">' + cuT('Needs a description on the last step. You can always design it later in the editor.', '需要上一步的描述。也可稍后在编辑器中设计。') + '</div>'
+    + '<div class="vw-help" style="margin-top:10px;">' + cuT('Nothing goes live until you tap Publish.', '点「发布」前不会上架。') + '</div>';
+}
+
+// ── Create ─────────────────────────────────────────────────────────────────────
+function pwFreeOfStr() { return PW_FREE_OF.filter(([id]) => _pw.freeOf[id]).map(([id]) => id).join(', '); }
+function pwFactsObj() { const o = {}; Object.keys(_pw.facts).forEach(k => { const v = (_pw.facts[k] || '').trim(); if (v) o[k] = v; }); return o; }
+function pwOptionsBody() {
+  return _pw.options.map(o => {
+    const type = o.type === 'multi' ? 'multi' : 'single';
+    const choices = o.choices.map(c => ({ label_en: (c.label_en || '').trim(), label_cn: (c.label_cn || '').trim(), price_delta: Number(c.price_delta) || 0, is_default: c.is_default ? 1 : 0, stock_product_id: c.stock_product_id || null }))
+      .filter(c => c.label_en || c.label_cn);
+    return { question_en: (o.question_en || '').trim(), question_cn: (o.question_cn || '').trim(), type, is_required: o.is_required ? 1 : 0, choices };
+  }).filter(o => (o.question_en || o.question_cn) && o.choices.length);
+}
+async function pwPrimaryStore(id) {
+  try {
+    const r = await fetch('/api/retail-admin/products/' + id + '/variant-store-stocks', { credentials: 'same-origin' });
+    const j = await r.json(); const d = j && j.success && j.data;
+    if (d && Array.isArray(d.stores) && d.stores.length) return d.stores[0].store_id;
+  } catch (e) {}
+  return null;
+}
+async function pwWriteStock(storeId, productId, qty) {
+  const q = Math.max(0, parseInt(qty, 10) || 0);
+  try {
+    await fetch('/api/retail-admin/stores/' + storeId + '/stock/' + productId, {
+      method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ physical_qty: q }),
+    });
+  } catch (e) {}
+}
+async function pwFinish(publish) {
+  if (!_pw || _pw.busy) return;
+  if (!_pw.name_en.trim() && !_pw.name_cn.trim()) { toast(cuT('Add a name first', '请先填写名称'), 'err'); pwGoto('what'); return; }
+  _pw.busy = true;
+  const foot = document.getElementById('pw-foot'); if (foot) foot.querySelectorAll('button').forEach(b => { b.disabled = true; });
+  toast(cuT('Creating your product…', '正在创建产品…'));
+  // Capture what we need before pwClose() nulls _pw.
+  const firstSize = _pw.hasSizes ? _pw.sizes[0] : null;
+  const wantDesign = _pw.designed && !!(_pw.descEn.trim() || _pw.descCn.trim());
+  const dEn = _pw.descEn, dCn = _pw.descCn;
+  const extraSizes = _pw.hasSizes ? _pw.sizes.slice(1).filter(s => s.label || s.price !== '') : [];
+  const baseStock = _pw.hasSizes ? (firstSize ? firstSize.stock : '') : _pw.stock;
+  try {
+    const price = _pw.hasSizes ? (firstSize ? firstSize.price : '') : _pw.price;
+    const body = {
+      name_en: _pw.name_en.trim(), name_cn: _pw.name_cn.trim(),
+      top_category: _pw.top, subcategory: _pw.sub,
+      weight: _pw.hasSizes ? (firstSize ? (firstSize.label || '') : '') : (_pw.weight || ''),
+      ...(String(price).trim() !== '' ? { sell_price: parseFloat(price) || 0 } : {}),
+      compare_at_price: _pw.hasSizes ? 0 : (parseFloat(_pw.compare) || 0),
+      free_of: pwFreeOfStr(), product_facts: pwFactsObj(), options: pwOptionsBody(),
+      ship_modes: _pw.localOnly ? 'local' : 'air,land',
+      description_en: dEn || '', description_cn: dCn || '', description_format: 'rich',
+      is_published: publish ? 1 : 0,
+    };
+    if (_pw.sku && _pw.sku.trim()) body.sku = _pw.sku.trim();
+    if (_pw.photo) body.images = [_pw.photo];
+    const j = await api('/api/retail-admin/products', { method: 'POST', body });
+    const created = j.data; const newId = created && created.id;
+    if (!newId) throw new Error('create_failed');
+    if (Array.isArray(PA_PRODUCTS)) PA_PRODUCTS.unshift(created);
+
+    // Opening stock → the first store (best-effort; brand-new product starts at 0).
+    const storeId = await pwPrimaryStore(newId);
+    if (storeId != null && String(baseStock).trim() !== '') await pwWriteStock(storeId, newId, baseStock);
+
+    // Extra sizes → clone as variants, set price/label, group them (best-effort).
+    if (extraSizes.length) {
+      try {
+        const members = [{ id: newId, label: (firstSize && firstSize.label) || '', label_cn: '' }];
+        for (const sz of extraSizes) {
+          const dup = await api('/api/retail-admin/products/' + newId + '/duplicate', { method: 'POST', body: { as_variant: true, label: sz.label || '' } });
+          const vid = dup.data && dup.data.id; if (!vid) continue;
+          if (Array.isArray(PA_PRODUCTS)) PA_PRODUCTS.unshift(dup.data);
+          const vbody = { weight: sz.label || '', compare_at_price: 0 };
+          if (String(sz.price).trim() !== '') vbody.sell_price = parseFloat(sz.price) || 0;
+          await api('/api/retail-admin/products/' + vid, { method: 'PATCH', body: vbody });
+          members.push({ id: vid, label: sz.label || '', label_cn: '' });
+          if (storeId != null && String(sz.stock).trim() !== '') await pwWriteStock(storeId, vid, sz.stock);
+        }
+        await api('/api/retail-admin/products/' + newId + '/variants', { method: 'PUT', body: { members } });
+      } catch (e) { toast(cuT('Product made — check its sizes in the editor', '产品已创建 — 请在编辑器中检查规格'), 'err'); }
+    }
+
+    try { await paLoad(); } catch (e) { try { paRender(); } catch (_) {} }
+    toast(publish ? cuT('Published! Opening it for any tweaks…', '已发布!正在打开以便微调…') : cuT('Saved as draft! Opening it…', '已存为草稿!正在打开…'), 'ok');
+    pwClose();
+    try { pdOpen(newId); } catch (e) {}
+
+    // Designed page — compose once the editor DOM holds the description (best-effort).
+    if (wantDesign) {
+      setTimeout(async () => {
+        try {
+          const en = document.getElementById('pd-rte-en'), cn = document.getElementById('pd-rte-cn');
+          if (en && dEn && !pdRteClean(en.innerHTML)) en.innerHTML = dEn;
+          if (cn && dCn && !pdRteClean(cn.innerHTML)) cn.innerHTML = dCn;
+          await pdAutoComposeBlocks(newId, null, true);
+        } catch (e) {}
+      }, 500);
+    }
+  } catch (e) {
+    toast(cuT('Could not create the product: ', '创建失败:') + (e && e.message || e), 'err');
+    if (foot) foot.querySelectorAll('button').forEach(b => { b.disabled = false; });
+    if (_pw) _pw.busy = false;
+  }
+}
+
