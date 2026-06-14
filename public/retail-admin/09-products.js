@@ -2606,6 +2606,152 @@ async function pdAddPhotos(e) {
   }
   if (added) { pdRenderGallery(); pdScheduleAutosave(); }
 }
+
+// ── "From library" picker ────────────────────────────────────────────────────
+// Reuse a photo already in the Media library (Content → Media) instead of
+// re-uploading from the computer. Picked images are fetched and run through the
+// SAME resize path as a local upload, so they land in image_data identically
+// (base64, self-contained) — no fragile relative URLs that break in the mini-app.
+let _pdLib = { sel: new Set(), rows: [], total: 0, offset: 0, q: '', loading: false };
+const PD_LIB_PAGE = 60;
+async function pdOpenLibraryPicker() {
+  if (PD_MAX_PHOTOS - _pdGallery.length <= 0) {
+    toast(cuT('Up to 8 photos', '最多 8 张图片'), 'err'); return;
+  }
+  _pdLib = { sel: new Set(), rows: [], total: 0, offset: 0, q: '', loading: false };
+  let box = document.getElementById('pd-lib-bg');
+  if (box) box.remove();
+  box = document.createElement('div');
+  box.id = 'pd-lib-bg';
+  box.className = 'pu-editor-bg';
+  box.style.cssText = 'display:flex;align-items:center;justify-content:center;z-index:9000;';
+  box.innerHTML = `
+    <div class="pu-editor" style="width:760px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;">
+      <div class="pu-editor-head" style="display:flex;align-items:center;gap:10px;">
+        <div style="font-weight:600;">${cuT('Choose from library', '从图库选择')}</div>
+        <input id="pd-lib-q" type="search" placeholder="${cuT('Search photos…', '搜索图片…')}"
+               style="margin-left:8px;flex:1;max-width:260px;font-size:13px;padding:5px 8px;border:1.5px solid var(--border);border-radius:8px;">
+        <button type="button" class="btn btn-sm" id="pd-lib-x" style="margin-left:auto;">${cuT('Close', '关闭')} ×</button>
+      </div>
+      <div class="pu-editor-body" style="display:block;padding:14px;overflow:auto;flex:1;">
+        <div id="pd-lib-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px;"></div>
+        <div id="pd-lib-empty" class="muted" style="display:none;text-align:center;padding:30px 0;font-size:13px;"></div>
+        <div style="text-align:center;margin-top:14px;">
+          <button type="button" class="btn btn-sm" id="pd-lib-more" style="display:none;">${cuT('Load more', '加载更多')}</button>
+        </div>
+      </div>
+      <div class="pu-editor-foot" style="display:flex;align-items:center;gap:10px;padding:12px 14px;">
+        <span class="muted" id="pd-lib-count" style="font-size:12px;"></span>
+        <button type="button" class="btn btn-primary btn-sm" id="pd-lib-add" style="margin-left:auto;" disabled>${cuT('Add selected', '添加所选')}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(box);
+
+  const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  box.addEventListener('click', e => { if (e.target === box) close(); });
+  box.querySelector('#pd-lib-x').onclick = close;
+  box.querySelector('#pd-lib-add').onclick = () => pdLibAddSelected(close);
+
+  const qEl = box.querySelector('#pd-lib-q');
+  let qTimer = null;
+  qEl.addEventListener('input', () => {
+    clearTimeout(qTimer);
+    qTimer = setTimeout(() => { _pdLib.q = qEl.value.trim(); _pdLib.offset = 0; _pdLib.rows = []; pdLibFetch(true); }, 220);
+  });
+  box.querySelector('#pd-lib-more').onclick = () => { _pdLib.offset += PD_LIB_PAGE; pdLibFetch(false); };
+
+  await pdLibFetch(true);
+}
+async function pdLibFetch(reset) {
+  if (_pdLib.loading) return;
+  _pdLib.loading = true;
+  try {
+    const params = new URLSearchParams({ mime: 'image', limit: String(PD_LIB_PAGE), offset: String(_pdLib.offset) });
+    if (_pdLib.q) params.set('q', _pdLib.q);
+    const r = await api('/api/retail-admin/media/list?' + params.toString());
+    const { rows, total } = (r && r.data) || {};
+    _pdLib.rows = reset ? (rows || []) : _pdLib.rows.concat(rows || []);
+    _pdLib.total = total || 0;
+  } catch (e) {
+    toast(cuT('Load failed', '加载失败') + ' · ' + (e.message || e), 'err');
+  } finally {
+    _pdLib.loading = false;
+    pdLibRenderGrid();
+  }
+}
+function pdLibRenderGrid() {
+  const grid = document.getElementById('pd-lib-grid');
+  const empty = document.getElementById('pd-lib-empty');
+  if (!grid) return;
+  if (!_pdLib.rows.length) {
+    grid.innerHTML = '';
+    empty.style.display = '';
+    empty.textContent = _pdLib.q
+      ? cuT('No photos match your search', '没有匹配的图片')
+      : cuT('Your media library is empty — upload photos in Content → Media', '图库为空 — 请在「内容 → 媒体」中上传图片');
+  } else {
+    empty.style.display = 'none';
+    grid.innerHTML = _pdLib.rows.map(m => {
+      const on = _pdLib.sel.has(m.id);
+      return `<div class="pd-lib-card" data-id="${m.id}" title="${escapeAttr(m.filename || '')}"
+        style="position:relative;cursor:pointer;border:2px solid ${on ? 'var(--accent,#9a7b3f)' : 'transparent'};border-radius:10px;overflow:hidden;aspect-ratio:1;background:var(--panel-2,#f3efe6);">
+        <img loading="lazy" src="/api/retail/media/${m.id}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">
+        <span style="position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:50%;display:${on ? 'flex' : 'none'};align-items:center;justify-content:center;background:var(--accent,#9a7b3f);color:#fff;font-size:12px;">✓</span>
+      </div>`;
+    }).join('');
+    grid.querySelectorAll('.pd-lib-card').forEach(card => {
+      card.onclick = () => pdLibToggle(parseInt(card.dataset.id, 10));
+    });
+  }
+  const more = document.getElementById('pd-lib-more');
+  if (more) more.style.display = (_pdLib.rows.length < _pdLib.total) ? '' : 'none';
+  pdLibUpdateFoot();
+}
+function pdLibToggle(id) {
+  if (_pdLib.sel.has(id)) { _pdLib.sel.delete(id); }
+  else {
+    // Don't let the operator pick more than the gallery has room for.
+    const room = PD_MAX_PHOTOS - _pdGallery.length;
+    if (_pdLib.sel.size >= room) { toast(cuT('Up to 8 photos', '最多 8 张图片'), 'err'); return; }
+    _pdLib.sel.add(id);
+  }
+  pdLibRenderGrid();
+}
+function pdLibUpdateFoot() {
+  const n = _pdLib.sel.size;
+  const countEl = document.getElementById('pd-lib-count');
+  const addBtn = document.getElementById('pd-lib-add');
+  if (countEl) countEl.textContent = n ? cuT(`${n} selected`, `已选 ${n} 张`) : '';
+  if (addBtn) addBtn.disabled = !n;
+}
+async function pdLibAddSelected(close) {
+  const ids = Array.from(_pdLib.sel);
+  if (!ids.length) return;
+  const addBtn = document.getElementById('pd-lib-add');
+  if (addBtn) { addBtn.disabled = true; addBtn.textContent = cuT('Adding…', '添加中…'); }
+  let added = 0;
+  for (const id of ids) {
+    if (PD_MAX_PHOTOS - _pdGallery.length <= 0) break;
+    try {
+      const resp = await fetch('/api/retail/media/' + id, { credentials: 'same-origin' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const blob = await resp.blob();
+      const file = new File([blob], 'library-' + id + '.jpg', { type: blob.type || 'image/jpeg' });
+      // Same resize preset as a local upload → consistent, self-contained base64.
+      const r = await pdResizeImage(file, PD_IMG_OPTS);
+      if (r && r.dataURL) {
+        _pdGallery.push(r.dataURL); _pdGalleryDirty = true; _pdGalleryInherited = false; added++;
+      }
+    } catch (e) {
+      console.warn('[pd library pick] failed for', id, e);
+    }
+  }
+  if (added) { pdRenderGallery(); pdScheduleAutosave(); toast(cuT(`Added ${added}`, `已添加 ${added} 张`), 'ok'); }
+  if (typeof close === 'function') close();
+}
+
 function pdRemovePhoto(i) {
   if (i < 0 || i >= _pdGallery.length) return;
   _pdGallery.splice(i, 1); _pdGalleryDirty = true; _pdGalleryInherited = false; pdRenderGallery(); pdScheduleAutosave();

@@ -1721,8 +1721,9 @@
             <section class="pd-sec">
               <div class="pd-sec-h" style="margin-bottom:8px;">Photos · 图片</div>
               <div id="pd-gallery" class="pd-gallery"></div>
-              <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+              <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                 <input type="file" id="pd-img-file" accept="image/*" multiple onchange="pdAddPhotos(event)" style="font-size:12px;">
+                <button type="button" class="btn btn-sm" onclick="pdOpenLibraryPicker()" style="font-size:12px;">🖼️ From library · 从图库选择</button>
                 <span class="muted" style="font-size:11px;">Up to 8 · 最多 8 张</span>
               </div>
             </section>
