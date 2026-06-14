@@ -32,6 +32,16 @@
       </view>
     </view>
 
+    <!-- Local (same-city) delivery ETA — Guangzhou orders have no waybill, so
+         the store sets an estimated arrival time the customer can see here. -->
+    <view wx:if="{{etaLabel}}" class="eta-banner">
+      <view class="eta-icon">🛵</view>
+      <view class="eta-body">
+        <view class="eta-label">{{copy.etaLabel}}</view>
+        <view class="eta-time f-bear">{{etaLabel}}</view>
+      </view>
+    </view>
+
     <!-- Partial shipment — some parcels are out, the rest still to follow.
          Shows regardless of whether the shipped parcel carries a waybill. -->
     <view wx:if="{{partialShip}}" class="partial-banner">

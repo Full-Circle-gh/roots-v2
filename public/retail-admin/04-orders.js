@@ -1492,8 +1492,50 @@ function renderShipmentCard(o, s) {
       </div>
       ${renderItemsTable(s.items, true)}
       ${actions}
-      ${['dispatched', 'delivered'].includes(state) ? renderShipmentTrackingCard(o, s) : ''}
+      ${mode === 'local'
+        ? (['paid', 'preparing', 'dispatched', 'delivered'].includes(o.status) ? renderLocalEtaCard(o, s) : '')
+        : (['dispatched', 'delivered'].includes(state) ? renderShipmentTrackingCard(o, s) : '')}
     </div>`;
+}
+
+// Local (Guangzhou same-city) delivery has no waybill, so it gets an ETA card
+// instead of the carrier tracking card: the operator picks a same-day arrival
+// time the customer sees on their order page. Stored on the shipment row as a
+// 24h "HH:MM" string. Editable from 'paid' onward (the rider's arrival window
+// is usually known before the parcel is marked out for delivery).
+function renderLocalEtaCard(o, s) {
+  const sid = s.id;
+  const eta = s.local_eta || '';            // 'HH:MM' 24h, or '' when unset
+  const pretty = eta ? formatEtaPretty(eta) : '';
+  return `
+    <div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);" id="eta-card-${sid}">
+      <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Delivery time · 送达时间</div>
+      ${eta ? `
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:10px;">
+          <div>
+            <div style="font-size:12px; color:var(--text-3);">Estimated arrival · 预计送达</div>
+            <div style="font-family: var(--f-mono); font-weight:600; font-size:15px;">${escapeHtml(pretty)}</div>
+          </div>
+          <div style="flex:1; min-width:120px; text-align:right;">
+            <span class="muted" style="font-size:11px;">Shown to the customer · 已展示给顾客</span>
+          </div>
+        </div>` : ''}
+      <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+        <input type="time" id="eta-time-${sid}" value="${escapeHtml(eta)}" style="min-width:140px; font-family: var(--f-mono);">
+        <button class="btn ${eta ? 'btn-primary' : ''} btn-sm" onclick="saveLocalEta(${o.id}, ${sid}, event)">${eta ? 'Update time · 更新时间' : 'Set arrival time · 设置送达时间'}</button>
+        ${eta ? `<button class="btn btn-sm" onclick="clearLocalEta(${o.id}, ${sid}, event)">Clear · 清除</button>` : ''}
+      </div>
+      <div class="muted" style="font-size:11px; margin-top:6px;">Same-city delivery — set when the rider should arrive; the customer sees this on their order. · 同城配送 — 设置骑手预计送达时间,顾客可在订单中查看。</div>
+    </div>`;
+}
+
+// Stored ETA is a 24h "HH:MM"; render it on a 12h clock for the office card.
+function formatEtaPretty(hhmm) {
+  const m = /^(\d{2}):(\d{2})$/.exec(hhmm || '');
+  if (!m) return hhmm || '';
+  const h = parseInt(m[1], 10);
+  const h12 = (h % 12) || 12;
+  return `${h12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
 }
 
 // Inline "ship part later" panel — checkbox list of this parcel's items.
@@ -2561,6 +2603,41 @@ async function clearTracking(orderId, shipmentId, ev) {
       method: 'DELETE', errLabelEn: 'Clear failed', errLabelCn: '清除失败',
     });
     toast('Tracking cleared · 运单号已清除');
+    const _mount = document.getElementById('order-detail-mount');
+    const _scrollTop = _mount ? _mount.scrollTop : 0;
+    await openOrder(orderId);
+    if (_mount) _mount.scrollTop = _scrollTop;
+  } catch {}
+}
+
+// Local-delivery ETA (Guangzhou same-city). Saves the picked same-day arrival
+// time onto the 'local' shipment; the customer's order page shows it as
+// "Estimated arrival". Mirrors saveTracking's scroll-preserving re-render.
+async function saveLocalEta(orderId, shipmentId, ev) {
+  const eta = document.getElementById('eta-time-' + shipmentId)?.value;
+  if (!eta) { toast('Pick an arrival time first · 请先选择送达时间', 'err'); return; }
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget, url: `/api/retail-admin/orders/${orderId}/eta`,
+      method: 'PUT', body: { shipment_id: shipmentId, eta },
+      errLabelEn: 'Save failed', errLabelCn: '保存失败',
+    });
+    toast('Arrival time saved · 送达时间已保存');
+    const _mount = document.getElementById('order-detail-mount');
+    const _scrollTop = _mount ? _mount.scrollTop : 0;
+    await openOrder(orderId);
+    if (_mount) _mount.scrollTop = _scrollTop;
+  } catch {}
+}
+
+async function clearLocalEta(orderId, shipmentId, ev) {
+  if (!confirm('Remove the arrival time? · 移除送达时间?')) return;
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget, url: `/api/retail-admin/orders/${orderId}/eta?shipment_id=${shipmentId}`,
+      method: 'DELETE', errLabelEn: 'Clear failed', errLabelCn: '清除失败',
+    });
+    toast('Arrival time cleared · 送达时间已清除');
     const _mount = document.getElementById('order-detail-mount');
     const _scrollTop = _mount ? _mount.scrollTop : 0;
     await openOrder(orderId);

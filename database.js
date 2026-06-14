@@ -2452,6 +2452,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_shipments_tracking ON retail_shipments(tracking_number);
 `);
 
+// Local (same-city / Guangzhou) delivery has no waybill — there's nothing to
+// track via a carrier. Instead the operator sets a same-day estimated arrival
+// time the customer sees on their order page. Stored as a 24h "HH:MM" string on
+// the 'local' shipment row (NULL = no ETA set yet). Only ever set on local
+// shipments; air/land parcels use tracking_number instead.
+addColumn('retail_shipments', 'local_eta', 'TEXT');
+
 // Per-store restock *target* — the level this store wants to keep on
 // hand. When physical_qty < restock_target the cross-store grid flags
 // it. Optional (NULL = no target set yet).

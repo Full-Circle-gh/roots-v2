@@ -42,6 +42,7 @@ Page({
     timeline: [],
     tracking: null,
     shipments: [],
+    etaLabel: '',                // local (same-city) delivery arrival time, e.g. "2:50 PM"
     partialShip: null,           // {line, sub} when some-but-not-all parcels shipped
     trackingEvents: [],
     trackingEventsVisible: [],   // computed: 1 latest by default, all when expanded
@@ -69,6 +70,7 @@ Page({
       payLabel: 'PAYMENT',
       itemsLabel: 'ITEMS',
       timelineLabel: 'TIMELINE',
+      etaLabel: 'Estimated arrival',
       trackingLabel: 'SHIPMENT TRACKING',
       trackingNoEvents: 'Waiting for the first update from the carrier.',
       trackingPending: 'Tracking will appear here shortly.',
@@ -188,6 +190,7 @@ Page({
         payLabel: '支付',
         itemsLabel: '商品',
         timelineLabel: '订单进度',
+        etaLabel: '预计送达',
         trackingLabel: '物流跟踪',
         trackingNoEvents: '等待承运商首次更新…',
         trackingPending: '物流信息即将更新。',
@@ -387,6 +390,12 @@ Page({
               sub:  `${left} ${left === 1 ? 'item is' : 'items are'} still to follow` };
       }
 
+      // Local (same-city / Guangzhou) delivery has no waybill — the store sets a
+      // same-day arrival time instead. Surface it as a single label the page
+      // shows above the items ("Estimated arrival · 2:50 PM").
+      const etaObj = data.delivery_eta || null;
+      const etaLabel = etaObj ? (L === 'cn' ? etaObj.label_cn : etaObj.label_en) : '';
+
       // Pickup orders collect at a store instead of shipping to an address.
       // Build a "Collect at <store>" location string from the store fields
       // carried in address_json (parsed server-side into data.address), and
@@ -409,6 +418,7 @@ Page({
         timeline,
         tracking,
         shipments,
+        etaLabel,
         partialShip,
         trackingEvents,
         trackingEventsVisible,

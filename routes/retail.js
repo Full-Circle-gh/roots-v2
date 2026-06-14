@@ -5928,6 +5928,24 @@ function localizeOrderTimes(row) {
   return localizeTimes(row, GZ_LOCAL_TS_FIELDS);
 }
 
+// Format a stored local-delivery ETA ("HH:MM", 24h) into display labels for the
+// customer order page. Returns { time, label_en, label_cn } or null. EN uses a
+// 12h clock ("2:50 PM"); CN uses 上午/下午 + 12h ("下午2:50") to read naturally.
+function formatLocalEta(hhmm) {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(hhmm || '').trim());
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const mm = m[2];
+  const h12 = (h % 12) || 12;
+  const enPeriod = h < 12 ? 'AM' : 'PM';
+  const cnPeriod = h < 12 ? '上午' : '下午';
+  return {
+    time:     `${m[1]}:${mm}`,
+    label_en: `${h12}:${mm} ${enPeriod}`,
+    label_cn: `${cnPeriod}${h12}:${mm}`,
+  };
+}
+
 function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
   const o = tdb().prepare(
     `SELECT id, order_no, status, payment_method,
@@ -5991,10 +6009,26 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
           status_label_cn: trk?.status_label_cn || null,
           synced_at:       trk?.synced_at || null,
           events:          trk?.events || [],
+          eta:             s.mode === 'local' ? formatLocalEta(s.local_eta) : null,
         };
       });
     }
   } catch (e) { /* shipments table is optional — fall back to single tracking */ }
+
+  // Local (same-city) delivery has no waybill — the operator instead sets a
+  // same-day arrival time. A single-parcel local order never populates
+  // o.shipments (only split 2+ orders do), so read the ETA straight off the
+  // 'local' shipment row and surface it as a top-level field the order page
+  // can show as "Estimated arrival" without any tracking number.
+  try {
+    const etaRow = tdb().prepare(
+      `SELECT local_eta FROM retail_shipments
+        WHERE order_id = ? AND mode = 'local'
+          AND local_eta IS NOT NULL AND local_eta != ''
+        ORDER BY id ASC LIMIT 1`
+    ).get(orderId);
+    if (etaRow) o.delivery_eta = formatLocalEta(etaRow.local_eta);
+  } catch (e) { /* column is optional on older DBs */ }
   // Items snapshot historical name + price at order time, but image_url
   // was never captured (always null on insert). Fall through to the live
   // product image so order/review thumbnails actually render. The tradeoff
@@ -11104,6 +11138,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     tracking_synced_at:  s.tracking_synced_at,
     dispatched_at: s.dispatched_at,
     delivered_at:  s.delivered_at,
+    local_eta:     s.local_eta || null,   // 'HH:MM' arrival time for local delivery (no waybill)
     state: shipmentState(s),
     items: o.items.filter(it => it.shipment_id === s.id),
     tracking: buildShipmentTrackingView(s),
@@ -12546,6 +12581,54 @@ router.delete('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, (req,
     ).run(id);
   }
   logActivity(req.user.id, req.user.username, 'tracking_clear', 'retail_order', id, { shipment_id: s.id }, req.ip);
+  res.json({ success: true });
+});
+
+// Set the local-delivery ETA (Guangzhou same-city). Local parcels never get a
+// waybill, so instead of tracking the operator picks a same-day arrival time
+// (24h "HH:MM"). Stored on the 'local' shipment row; the customer's order page
+// shows it as "Estimated arrival". Rejected on non-local parcels — those use a
+// real waybill via PUT .../tracking.
+router.put('/api/retail-admin/orders/:id/eta', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const eta = String(req.body?.eta || '').trim();
+  const shipmentIdReq = req.body?.shipment_id != null ? parseInt(req.body.shipment_id, 10) : null;
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(eta)) {
+    return res.status(400).json({ success: false, error: 'invalid_eta' });
+  }
+  const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const shipments = ensureShipments(id);
+  if (!shipments.length) return res.status(500).json({ success: false, error: 'no_shipments' });
+  const shipment = shipmentIdReq
+    ? shipments.find(s => s.id === shipmentIdReq)
+    : shipments.find(s => s.mode === 'local') || shipments[0];
+  if (!shipment) return res.status(400).json({ success: false, error: 'invalid_shipment_id' });
+  if (shipment.mode !== 'local') return res.status(409).json({ success: false, error: 'not_local' });
+
+  tdb().prepare(
+    `UPDATE retail_shipments SET local_eta = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+  ).run(eta, shipment.id);
+  logActivity(req.user.id, req.user.username, 'eta_set', 'retail_order', id,
+    { eta, shipment_id: shipment.id }, req.ip);
+  res.json({ success: true, data: { eta: formatLocalEta(eta), shipment_id: shipment.id } });
+});
+
+// Clear the local-delivery ETA off a parcel.
+router.delete('/api/retail-admin/orders/:id/eta', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const shipmentIdReq = req.query.shipment_id ? parseInt(req.query.shipment_id, 10) : null;
+  const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const shipments = ensureShipments(id);
+  const s = shipmentIdReq
+    ? shipments.find(x => x.id === shipmentIdReq)
+    : shipments.find(x => x.mode === 'local') || shipments[0];
+  if (!s) return res.status(400).json({ success: false, error: 'invalid_shipment_id' });
+  tdb().prepare(
+    `UPDATE retail_shipments SET local_eta = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+  ).run(s.id);
+  logActivity(req.user.id, req.user.username, 'eta_clear', 'retail_order', id, { shipment_id: s.id }, req.ip);
   res.json({ success: true });
 });
 

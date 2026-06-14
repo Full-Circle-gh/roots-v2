@@ -260,6 +260,35 @@
   line-height: 1.4;
 }
 
+/* Local (same-city) delivery arrival time. Green accent = "on its way",
+   distinct from the amber partial-shipment banner above. */
+.eta-banner {
+  margin: 32rpx 44rpx 0;
+  padding: 22rpx 26rpx;
+  border-radius: 4rpx;
+  border-left: 8rpx solid var(--forest);
+  background: rgba(54, 83, 41, 0.10);
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+}
+.eta-banner .eta-icon {
+  font-size: calc(40rpx * var(--font-scale));
+  line-height: 1.2;
+}
+.eta-banner .eta-body { flex: 1; min-width: 0; }
+.eta-banner .eta-label {
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--olive);
+}
+.eta-banner .eta-time {
+  font-size: calc(36rpx * var(--font-scale));
+  color: var(--forest);
+  margin-top: 2rpx;
+}
+
 .refund-banner {
   margin: 32rpx 44rpx 0;
   padding: 24rpx 28rpx;
