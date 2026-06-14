@@ -560,7 +560,15 @@
       <text class="cp-code-copy">{{coupon.codeLabel}}</text>
     </view>
   </view>
-  <view wx:if="{{coupon.ctaLabel}}" class="cp-cta" style="background:{{coupon.btnBg}};color:{{coupon.btnFg}}" bindtap="onCouponCtaTap">{{coupon.ctaLabel}}</view>
+  <!-- New-customers-only coupon + no phone on file → the CTA is a real
+       getPhoneNumber button (WeChat only fires the auth sheet from a button
+       tap). Binding auto-grants the voucher server-side; we then claim to
+       reflect the outcome. Everyone else gets the normal tap-to-claim CTA. -->
+  <button wx:if="{{coupon.ctaLabel && coupon.needPhone}}"
+          class="cp-cta" style="background:{{coupon.btnBg}};color:{{coupon.btnFg}}"
+          open-type="getPhoneNumber" bindgetphonenumber="onCouponBindPhone"
+          loading="{{couponBinding}}" disabled="{{couponBinding}}">{{coupon.bindLabel || coupon.ctaLabel}}</button>
+  <view wx:elif="{{coupon.ctaLabel}}" class="cp-cta" style="background:{{coupon.btnBg}};color:{{coupon.btnFg}}" bindtap="onCouponCtaTap">{{coupon.ctaLabel}}</view>
 </view>
 
 <view wx:elif="{{type === 'points_widget' && points}}" class="points-blk" style="background:{{bg}};color:{{fg}}">

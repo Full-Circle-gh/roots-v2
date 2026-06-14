@@ -27,6 +27,7 @@
     topup-packages="{{topupPackages}}"
     customer="{{customer}}"
     bind:cta="onCta"
+    bind:customerchanged="onCustomerChanged"
     bind:category="onCategory"
     bind:product="onProduct"
     bind:vote="onVote"

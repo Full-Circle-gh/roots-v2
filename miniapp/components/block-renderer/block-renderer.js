@@ -979,6 +979,19 @@ Component({
             // coupon picker). When present, CLAIM grants it straight into the
             // wallet; when absent (legacy free-typed block) CLAIM just navigates.
             voucherId: b.voucher_id || null,
+            // signupOnly: this coupon is new-customers-only (auto_grant_signup).
+            // It can't be self-claimed — it's auto-granted once a phone is on
+            // file. needPhone flips the CLAIM CTA into a getPhoneNumber button
+            // when the signed-in customer hasn't bound a phone yet, so the
+            // dead-end "New customers only" toast becomes a one-tap bind+grant.
+            signupOnly: !!b.signup_only,
+            // Only offer the phone-bind CTA to a signed-in customer who simply
+            // has no phone yet — /api/retail/phone needs an authed account to
+            // attach the number to. A truly anonymous visitor (null customer)
+            // falls through to the normal CTA, which prompts sign-in.
+            needPhone: !!b.signup_only
+              && !!this.properties.customer
+              && !this.properties.customer.phone,
             // Visual style: ticket (perforated row) · stamp (centred card) · strip (slim banner)
             style: ['ticket', 'stamp', 'strip'].includes(b.coupon_style) ? b.coupon_style : 'ticket',
             kicker:   lang.pick(b.kicker_en,   b.kicker_cn,   L),
@@ -988,6 +1001,10 @@ Component({
             code:     b.code || '',
             codeLabel: L === 'cn' ? '复制' : 'COPY',
             ctaLabel: lang.pick(b.cta_label_en, b.cta_label_cn, L),
+            // Label for the phone-bind variant of the CTA (needPhone). Kept
+            // separate from ctaLabel so the action reads honestly: binding a
+            // phone is what unlocks a new-customers-only coupon.
+            bindLabel: L === 'cn' ? '绑定手机领取' : 'Add phone to unlock',
             ctaTarget: b.cta_target || 'coupons',
             btnBg: color(b.btn_color || ''),
             btnFg: b.btn_color ? btnText(b.btn_color) : '',
@@ -2024,9 +2041,17 @@ Component({
       if (!c.voucherId && !c.code) { this.triggerEvent('cta', { target }); return; }
       if (this._claiming) return;
       this._claiming = true;
+      this._claimCoupon(c).then(() => { this._claiming = false; });
+    },
+
+    // Shared claim → toast → hand-off, used by the normal CTA and by the
+    // phone-bind variant below. Always resolves (errors are surfaced as a
+    // toast, never rejected) so callers can chain without a catch.
+    _claimCoupon(c) {
       const cn = this.properties.lang === 'cn';
+      const target = c.ctaTarget || 'coupons';
       const payload = c.voucherId ? { voucher_id: c.voucherId } : { code: c.code };
-      api.post('/api/retail/vouchers/claim', payload)
+      return api.post('/api/retail/vouchers/claim', payload)
         .then((data) => {
           const already = data && data.already;
           wx.showToast({
@@ -2045,8 +2070,41 @@ Component({
           else if (code === 'unavailable' || code === 'not_found') msg = cn ? '优惠券已失效' : 'Coupon unavailable';
           else if (err && /unauth/.test(err.message || ''))   msg = cn ? '请重新登录' : 'Please sign in';
           wx.showToast({ title: msg, icon: 'none' });
+        });
+    },
+
+    // New-customers-only coupon + phone-less customer: the CTA is a real
+    // getPhoneNumber button. Bind the phone — which auto-grants the signup
+    // voucher for a genuine new customer, or correctly withholds it for a
+    // returning OUT1N customer (reconcileSignupVouchers, server-side) — tell
+    // the host to refresh the customer (so the observer reverts this button to
+    // the normal CTA), then run the normal claim so the toast tells the truth:
+    // "In your wallet" for a new customer, "New customers only" for a returner.
+    onCouponBindPhone(e) {
+      const cn = this.properties.lang === 'cn';
+      const code = e && e.detail && e.detail.code;
+      if (!code) {
+        // User dismissed the WeChat phone-authorization sheet.
+        wx.showToast({ title: cn ? '需要手机号' : 'Phone needed', icon: 'none' });
+        return;
+      }
+      if (this._claiming) return;
+      this._claiming = true;
+      this.setData({ couponBinding: true });
+      const c = this.data.coupon || {};
+      api.post('/api/retail/phone', { code })
+        .then((customer) => {
+          this.triggerEvent('customerchanged', { customer });
+          return this._claimCoupon(c);
         })
-        .finally(() => { this._claiming = false; });
+        .catch((err) => {
+          console.warn('[coupon] phone bind failed:', err && err.message);
+          wx.showToast({ title: cn ? '绑定失败' : 'Could not bind phone', icon: 'none' });
+        })
+        .finally(() => {
+          this._claiming = false;
+          this.setData({ couponBinding: false });
+        });
     },
     onCouponCodeTap() {
       const code = this.data.coupon?.code;

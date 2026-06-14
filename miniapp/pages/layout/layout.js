@@ -231,6 +231,15 @@ Page({
     }
   },
 
+  // A coupon block bound a phone (new-customers-only CTA) and returned the
+  // refreshed customer — sync it so the coupon CTA recomputes (needPhone).
+  onCustomerChanged(e) {
+    const customer = e.detail && e.detail.customer;
+    if (!customer) return;
+    getApp().globalData.customer = customer;
+    try { wx.setStorageSync('customer', customer); } catch {}
+    this.setData({ customer });
+  },
   onCta(e) {
     const t = e.detail.target || '';
     if (!t) return;

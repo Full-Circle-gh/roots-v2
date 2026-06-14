@@ -485,7 +485,7 @@ function refreshCouponBlocks(cfg) {
     if (vById) return;
     vById = new Map(); vByCode = new Map();
     const rows = tdb().prepare(
-      `SELECT id, code, type, value, min_subtotal, expires_at, title_en, title_cn, description, is_active
+      `SELECT id, code, type, value, min_subtotal, expires_at, title_en, title_cn, description, is_active, auto_grant_signup
          FROM retail_vouchers`
     ).all();
     for (const v of rows) {
@@ -507,6 +507,12 @@ function refreshCouponBlocks(cfg) {
       if (!v || !v.is_active) continue;   // gone/disabled → leave the snapshot as-is
       Object.assign(b, couponFieldsFromVoucher(v));
       b.voucher_id = v.id;                // keep CLAIM pointed at the live coupon
+      // Surface new-customers-only status so the mini app can turn the CLAIM
+      // CTA into a phone-bind button: a signup voucher is grant-gated on a phone
+      // (reconcileSignupVouchers), so a phone-less customer can never "claim" it
+      // — they need to bind first, after which it's auto-granted (or correctly
+      // withheld if they're a returning OUT1N customer).
+      b.signup_only = v.auto_grant_signup ? 1 : 0;
     }
   }
 }

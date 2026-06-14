@@ -553,6 +553,15 @@ Page({
     const target = e.detail.target || '';
     this.routeTarget(target);
   },
+  // A coupon block bound a phone (new-customers-only CTA) and handed back the
+  // refreshed customer. Push it into globalData + data so the greeting block
+  // and the coupon CTA (needPhone) recompute with the phone now on file.
+  onCustomerChanged(e) {
+    const customer = e.detail && e.detail.customer;
+    if (!customer) return;
+    getApp().globalData.customer = customer;
+    this.setData({ customer });
+  },
   onCategory(e) {
     this._gotoCategory(e.detail && e.detail.id);
   },
