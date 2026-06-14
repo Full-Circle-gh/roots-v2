@@ -24,6 +24,20 @@ function absUrl(u) {
   return u;
 }
 
+// Rich descriptions are TinyMCE HTML (e.g. "<!-- x-tinymce/html --><p><strong>…").
+// When we fall back to one as a short tagline, flatten it to readable plain text
+// first so raw tags/comments never leak into the card snippet.
+function stripRichText(s) {
+  return String(s == null ? '' : s)
+    .replace(/<!--[\s\S]*?-->/g, ' ')   // drop HTML comments incl. x-tinymce marker
+    .replace(/<[^>]+>/g, ' ')           // drop tags
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"').replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Zigzag (perforated) clip-path for the compact "Stay in the loop" ticket —
 // teeth cut into the top + bottom edges so the page colour shows through.
 // Same shape the Mini App Editor (cms.html loopZigzag) computes.
@@ -588,7 +602,7 @@ Component({
             const regular = Number(p.sell_price ?? p.price) || 0;
             const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
             const isFlash = !!p.is_on_flash && eff < regular;
-            const tagline = lang.pick(p.tagline_en, p.tagline_cn, L) || lang.pick(p.description_en, p.description_cn, L) || '';
+            const tagline = lang.pick(p.tagline_en, p.tagline_cn, L) || stripRichText(lang.pick(p.description_en, p.description_cn, L)) || '';
             // Rank position (1..N). The renderer downstream decides whether
             // to show it based on rankMode + idx.
             let rank = isTopSelling ? (idx + 1) : 0;
