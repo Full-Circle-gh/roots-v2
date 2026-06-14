@@ -786,6 +786,9 @@ async function loadPointsSettings() {
     const earnSpend  = pts.earnSpend  ?? pts.earnRate ?? 100;
     if ($('#pts-earn-points'))    $('#pts-earn-points').value   = earnPoints;
     if ($('#pts-earn-spend'))     $('#pts-earn-spend').value    = earnSpend;
+    // Earn base: 'paid' (net total after discounts) or 'subtotal' (pre-discount
+    // goods value). Default 'paid' so points track what the customer paid.
+    if ($('#pts-earn-base'))      $('#pts-earn-base').value     = (pts.earnBase === 'subtotal') ? 'subtotal' : 'paid';
     // Point value is the inverse of redeem rate: storage is "points per ¥1",
     // UI shows "¥ per point" (the way humans think about it). 1/N rounded to
     // 2 decimals — clean for typical values (1 → 1.00, 10 → 0.10, 100 → 0.01).
@@ -863,6 +866,7 @@ async function savePointsSettings() {
     // earnRate = "¥ per point" = earnSpend / earnPoints (rounded up so we
     // never under-charge ourselves on legacy fallback paths).
     'points.earnRate':      Math.max(1, Math.ceil(earnSpend / earnPoints)),
+    'points.earnBase':      ($('#pts-earn-base')?.value === 'subtotal') ? 'subtotal' : 'paid',
     'points.redeemRate':    redeemRate,
     'points.expiryMonths':  Math.max(0, parseInt($('#pts-expiry-months').value, 10) || 0),
     'points.coverShipping': !!$('#pts-cover-shipping')?.checked,

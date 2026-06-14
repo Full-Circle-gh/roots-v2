@@ -4238,6 +4238,14 @@
           <div class="muted" style="font-size: 11px; margin-top: 4px;">Base rate, before tier multiplier. e.g. 1 point per ¥100 = 1% at a 1.0× tier. · 基础速率(未含等级倍率)。例:每消费 ¥100 在 1.0 倍等级得 1 积分。</div>
         </div>
         <div class="field" style="margin: 0;">
+          <label class="stacked">Earn points on · 积分计算基准</label>
+          <select id="pts-earn-base" style="width: 240px; padding: 6px;">
+            <option value="paid">What the customer pays · 实付金额(折后)</option>
+            <option value="subtotal">Order value before discounts · 折前订单金额</option>
+          </select>
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">"What the customer pays" counts the amount left after coupons and points. "Before discounts" counts the full goods value. · "实付金额"按优惠券和积分抵扣后的金额计;"折前订单金额"按商品原价计。</div>
+        </div>
+        <div class="field" style="margin: 0;">
           <label class="stacked">Point value · 积分价值</label>
           <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding-top: 2px;">
             <span>1 point = ¥</span>
@@ -5106,6 +5114,43 @@
                   <b>3.</b> Paste the template ID here.<br>
                   <b>4.</b> Save — the checkout prompt activates automatically.<br>
                   Leave blank to disable until AppID is registered. In DEV mode (no AppID) pushes are logged, not sent.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>New-order alert to your phone · 新订单手机提醒</h3>
+              <div class="muted">Get a card in a WeChat Work (企业微信) group the moment a new order is paid — order number, amount, recipient and address. Works even when this backend is closed. · 每当有新订单付款,立即在企业微信群里收到一张卡片(订单号、金额、收货人、地址)。即使后台没开也能收到。</div>
+            </div>
+            <div class="illus-row">
+              <div class="mini-phone">
+                <div class="mp-notch"></div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 10px; bottom: 4px; background: #f0f0ec; border-radius: 4px; padding: 4px;">
+                  <div style="background: #fff; border-radius: 3px; padding: 4px;">
+                    <div style="font-size: 6px; font-weight: 700; color: #2a2a30; margin-bottom: 3px">🌿 新订单 · New order</div>
+                    <div style="font-size: 5px; color: #2a2a30; line-height: 1.5">订单号 Order: 10257097<br>金额 Amount: <span style="color:#e6a23c">¥57.00</span><br>收货人 To: asher<br>地址 Address: 广东省广州市番禺区…</div>
+                  </div>
+                </div>
+              </div>
+              <div class="ctrl">
+                <div class="field" style="margin: 0;">
+                  <label class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
+                  <input type="text" id="cfg-notifications-wecom_order_webhook"
+                         placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
+                         style="width: 100%; font-family: monospace;">
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="testWecomWebhook()">Send a test · 发送测试</button>
+                  <span id="wecom-test-status" class="muted" style="font-size: 11px;"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
+                  <b>1.</b> Open WeChat Work (企业微信) → a group chat for your team.<br>
+                  <b>2.</b> Group settings → 群机器人 (Group robots) → 添加 (Add).<br>
+                  <b>3.</b> Copy the bot's Webhook 地址 and paste it here.<br>
+                  <b>4.</b> Save, then "Send a test" to confirm it arrives.<br>
+                  Leave blank to turn off. Only qyapi.weixin.qq.com URLs are accepted. · 留空即关闭。仅接受 qyapi.weixin.qq.com 地址。
                 </div>
               </div>
             </div>

@@ -15036,6 +15036,19 @@ function pointsEarnedFor(subtotal, tierMult = 1) {
   return Math.floor((Number(subtotal || 0) * pts * m) / denom);
 }
 
+// Which monetary amount earns points, set by `points.earnBase`:
+//   'paid'     → the net total the customer actually paid, after voucher AND
+//                points discounts (the default — points track real spend).
+//   'subtotal' → the goods value BEFORE any discount (the legacy behaviour;
+//                more generous, rewards order size rather than net spend).
+// Absent key defaults to 'paid'. Callers pass the order's stored subtotal and
+// total; the result feeds pointsEarnedFor() as the earn base.
+function pointsEarnBaseAmount(subtotal, total) {
+  const mode = String(cfgValue('points.earnBase', 'paid'));
+  const base = mode === 'subtotal' ? subtotal : total;
+  return Math.max(0, Number(base) || 0);
+}
+
 // SQLite ISO datetime N months from now, or NULL if expiry disabled. Used
 // to stamp expires_at on new earn rows at insert time so each batch knows
 // its own TTL (admin can change the global later without affecting old rows).
@@ -15188,7 +15201,7 @@ function reverseOrderVoucher(orderId) {
 // for an existing order_earn row for this order before inserting.
 function awardOrderPoints(orderId) {
   const o = tdb().prepare(
-    'SELECT id, customer_id, subtotal, points_earned FROM retail_orders WHERE id = ?'
+    'SELECT id, customer_id, subtotal, total, points_earned FROM retail_orders WHERE id = ?'
   ).get(orderId);
   if (!o) return 0;
   // Sweep first so the awarded balance is based on a clean (post-expiry) state.
@@ -15203,7 +15216,11 @@ function awardOrderPoints(orderId) {
   // in the same transaction below.
   const c = tdb().prepare('SELECT tier_key FROM retail_customers WHERE id = ?').get(o.customer_id);
   const tierMult = tierMultiplierFor(c?.tier_key);
-  const pts   = pointsEarnedFor(o.subtotal, tierMult);
+  // Earn on the configured base (net paid by default; pre-discount subtotal if
+  // the operator picked 'subtotal'). lifetime_spend still tracks the goods
+  // subtotal so tier progression is unaffected by the earn-base choice.
+  const base  = pointsEarnBaseAmount(o.subtotal, o.total);
+  const pts   = pointsEarnedFor(base, tierMult);
   const spend = Math.max(0, Number(o.subtotal) || 0);
   const expiresAt = pts > 0 ? nextEarnExpiry() : null;
   // We always insert the order_earn row (even at delta=0) so the row is the
@@ -15222,7 +15239,7 @@ function awardOrderPoints(orderId) {
     const after = fresh.points_balance;
     const note  = pts > 0
       ? `Order ${orderId} earned ${pts} pts`
-      : `Order ${orderId} (subtotal ¥${spend.toFixed(2)}, below earn threshold)`;
+      : `Order ${orderId} (earn base ¥${base.toFixed(2)}, below earn threshold)`;
     tdb().prepare(
       `INSERT INTO retail_points_transactions
          (customer_id, delta, balance_after, source, order_id, note, expires_at)
@@ -15500,7 +15517,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
       points_to_use_applied: pointsToUseApplied,
       points_discount: pointsDiscount,
       points_cover_shipping: pointsCoverShipping(),
-      points_earned_preview: pointsEarnedFor(priced.subtotal, tierMultiplierFor(req.customer?.tier_key)),
+      points_earned_preview: pointsEarnedFor(pointsEarnBaseAmount(priced.subtotal, total), tierMultiplierFor(req.customer?.tier_key)),
       delivery_mode: deliveryMode,
       zone: {
         id: zone.id,

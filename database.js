@@ -2191,6 +2191,9 @@ try {
     ins.run('points.earnPoints',              JSON.stringify(1));
     ins.run('points.earnSpend',               JSON.stringify(100));
     ins.run('points.earnRate',                JSON.stringify(100));
+    // Which amount earns points: 'paid' = net total after discounts (default,
+    // points track real spend), 'subtotal' = goods value before discounts.
+    ins.run('points.earnBase',                JSON.stringify('paid'));
     // 1 point = ¥1 when redeeming. redeemRate is "points per ¥1".
     ins.run('points.redeemRate',              JSON.stringify(1));
     // Points expire N months after earn. 0 = never expire. Admin can change
@@ -2236,6 +2239,20 @@ try {
     console.log(`[migration] seed_points_earn_pair_v1: backfilled earnPoints=1 earnSpend=${legacy}`);
   }
 } catch (e) { console.error('[migration seed_points_earn_pair_v1]', e); }
+
+// Backfill points.earnBase on databases seeded before it existed. 'paid' makes
+// points earn on the net total the customer actually paid (after voucher +
+// points discounts) rather than the pre-discount goods subtotal. INSERT OR
+// IGNORE so an operator who already set 'subtotal' is never overwritten.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_points_earn_base_v1');
+  if (!ran) {
+    db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES (?, ?)")
+      .run('points.earnBase', JSON.stringify('paid'));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_points_earn_base_v1');
+    console.log('[migration] seed_points_earn_base_v1: backfilled points.earnBase=paid');
+  }
+} catch (e) { console.error('[migration seed_points_earn_base_v1]', e); }
 
 // ─────────────────────────────────────────────────────────────────────────
 // DUAL-LOCATION RETAIL INVENTORY (Phase 1)
