@@ -464,7 +464,7 @@ function copyChip(payload, label) {
 }
 
 // ── Fapiao (发票) — order-drawer block + one-click accounting export ──
-// Builds a plain-text bundle (invoice header + total + line items) for the
+// Builds a plain-text bundle (invoice header + products-only total) for the
 // "Copy for accounting" button. Stored verbatim on the button's data-copy and
 // pushed to the clipboard by copyKicker — newlines survive the attribute.
 // Type may be unset on legacy orders (column added later) — infer company from
@@ -481,12 +481,15 @@ function invoiceAccountingText(o) {
   if (company) L.push('税号 Tax ID: ' + (o.invoice_tax_id || ''));
   if (o.invoice_email) L.push('邮箱 Email: ' + o.invoice_email);
   L.push('————————————');
-  L.push('订单总额 Total: ' + money(o.total));
-  L.push('明细 Items:');
-  (o.items || []).forEach(it => {
-    L.push('  ' + (it.name_cn || it.name_en || ('#' + it.product_id)) + ' ×' + it.qty + '  ' + money(it.line_total));
-  });
-  if (o.shipping_fee) L.push('  配送费 Delivery  ' + money(o.shipping_fee));
+  // Accounting wants the goods amount only — no per-item detail, no delivery fee.
+  // Prefer the stored products subtotal; fall back to summing line totals, then to
+  // total minus shipping for legacy orders missing a subtotal column.
+  const goods = (o.subtotal != null)
+    ? Number(o.subtotal)
+    : (Array.isArray(o.items) && o.items.length
+        ? o.items.reduce((s, it) => s + Number(it.line_total || 0), 0)
+        : Number(o.total || 0) - Number(o.shipping_fee || 0));
+  L.push('商品总额 Products total: ' + money(goods));
   return L.join('\n');
 }
 
