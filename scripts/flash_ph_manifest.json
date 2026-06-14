@@ -1,0 +1,34 @@
+[
+  {
+    "slug": "01_front",
+    "caption": "Front door"
+  },
+  {
+    "slug": "02_ideas",
+    "caption": "Ideas from sales"
+  },
+  {
+    "slug": "03_pick",
+    "caption": "What's on sale"
+  },
+  {
+    "slug": "04_discount",
+    "caption": "The discount"
+  },
+  {
+    "slug": "05_when",
+    "caption": "When & how many"
+  },
+  {
+    "slug": "06_review",
+    "caption": "Review"
+  },
+  {
+    "slug": "07_headsup",
+    "caption": "Heads up"
+  },
+  {
+    "slug": "08_customer",
+    "caption": "What the shopper sees"
+  }
+]
