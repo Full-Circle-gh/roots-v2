@@ -241,6 +241,7 @@ Component({
     flashStrip: null,
     flashDesign: null,
     flashHidden: false,
+    flashGrid: false,
     // coupon / points / review / store
     coupon: null,
     points: null,
@@ -831,6 +832,10 @@ Component({
           out.flashAccent = b.accent_color ? color(b.accent_color) : '';
           const view = b.view || 'strip';
           out.flashView = view;
+          // Card layout: 'grid' wraps the product cards two-per-row so a few
+          // show at once without swiping; default 'carousel' keeps the
+          // sideways-scrolling row. Banner has no cards, so never grid.
+          out.flashGrid = b.card_layout === 'grid' && view !== 'banner';
           out.flashDesign = null;
           const all = this.properties.flashSales || [];
           const active = all.filter(p => p.flash && p.flash.state === 'active');
@@ -1004,7 +1009,7 @@ Component({
             // Label for the phone-bind variant of the CTA (needPhone). Kept
             // separate from ctaLabel so the action reads honestly: binding a
             // phone is what unlocks a new-customers-only coupon.
-            bindLabel: L === 'cn' ? '绑定手机领取' : 'Add phone to unlock',
+            bindLabel: L === 'cn' ? '绑定领取' : 'Unlock →',
             ctaTarget: b.cta_target || 'coupons',
             btnBg: color(b.btn_color || ''),
             btnFg: b.btn_color ? btnText(b.btn_color) : '',

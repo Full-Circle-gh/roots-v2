@@ -539,6 +539,8 @@
     scrollbar-width: none;
   }
   .b-flash .fs-cards::-webkit-scrollbar { display: none; }
+  .b-flash .fs-cards.is-grid { flex-wrap: wrap; overflow-x: visible; }
+  .b-flash .fs-cards.is-grid .fs-card { flex: 0 0 calc((100% - 10px) / 2); }
   .b-flash .fs-card {
     flex: 0 0 130px;
     background: rgba(255, 255, 255, .92);
@@ -661,6 +663,8 @@
 
   .fsd-cards { display: flex; gap: 12px; overflow-x: auto; padding: 0 16px 4px; scrollbar-width: none; }
   .fsd-cards::-webkit-scrollbar { display: none; }
+  .fsd-cards.is-grid { flex-wrap: wrap; overflow-x: visible; }
+  .fsd-cards.is-grid .fsd-card { flex: 0 0 calc((100% - 12px) / 2); }
   .fsd-card { flex: 0 0 150px; background: #FFFCF7; color: var(--ink); border-radius: var(--fs-radius); overflow: hidden; box-sizing: border-box; }
   .fsd-card .fsd-img { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: #eee; }
   .fsd-card .fsd-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -1657,6 +1661,8 @@ function renderBlock(b) {
       const active = (state.flashSales || []).filter(p => p.flash?.state === 'active');
       const limit = view === 'banner' ? 0 : Math.max(1, Math.min(8, b.product_limit || 3));
       const products = limit > 0 ? active.slice(0, limit) : [];
+      // Card layout: 'grid' wraps cards two-per-row (no sideways swipe).
+      const fsGridCls = (b.card_layout === 'grid' && view !== 'banner') ? ' is-grid' : '';
       const k = getBi(b, 'kicker');
       const t = getBi(b, 'title');
       const haveSomething = products.length > 0 || (view === 'banner' && active.length > 0);
@@ -1797,7 +1803,7 @@ function renderBlock(b) {
                 <div class="fsd-clock${pulse}"${endsAttr}>${tiles}</div>
               </div>
               ${shop ? `<div class="fsd-cta-wrap"><div class="fsd-cta"${ctaAttr}>${shop}</div></div>` : ''}
-              <div class="fsd-cards">${designCards('corner')}</div>
+              <div class="fsd-cards${fsGridCls}">${designCards('corner')}</div>
             </div>
           </div>`;
         }
@@ -1823,7 +1829,7 @@ function renderBlock(b) {
                   <div class="fsd-off">${offLine}</div>
                 </div>
               </div>
-              <div class="fsd-cards">${designCards('ribbon')}</div>
+              <div class="fsd-cards${fsGridCls}">${designCards('ribbon')}</div>
             </div>
           </div>`;
         }
@@ -1842,7 +1848,7 @@ function renderBlock(b) {
             </div>
             <div class="fsd-clock${pulse}"${endsAttr}>${tiles}</div>
             ${shop ? `<div class="fsd-cta-wrap"><div class="fsd-cta"${ctaAttr}>${shop}</div></div>` : ''}
-            <div class="fsd-cards">${designCards('stamp')}</div>
+            <div class="fsd-cards${fsGridCls}">${designCards('stamp')}</div>
           </div>
         </div>`;
       }
@@ -1854,7 +1860,7 @@ function renderBlock(b) {
           <div class="hero-ends">${endsLbl}</div>
           <div class="hero-clock" data-ends-at="${escapeAttr(new Date(soonestEnd).toISOString())}">${heroCells}</div>
           ${ctaLabel ? `<div class="hero-cta"${b.cta_target ? ` data-cta-target="${escapeAttr(b.cta_target)}"` : ''}>${escapeHtml(ctaLabel)}</div>` : ''}
-          ${view === 'hero' && cards ? `<div class="fs-cards hero-cards">${cards}</div>` : ''}
+          ${view === 'hero' && cards ? `<div class="fs-cards hero-cards${fsGridCls}">${cards}</div>` : ''}
         </div>`;
       }
       // strip view (default)
@@ -1869,7 +1875,7 @@ function renderBlock(b) {
             <div class="ct-cells">${stripCells}</div>
           </div>
         </div>
-        <div class="fs-cards">${cards}</div>
+        <div class="fs-cards${fsGridCls}">${cards}</div>
       </div>`;
     }
     case 'coupon_block': {

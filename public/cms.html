@@ -3453,6 +3453,8 @@
     scrollbar-width: none;
   }
   .b-flash .fs-cards::-webkit-scrollbar { display: none; }
+  .b-flash .fs-cards.is-grid { flex-wrap: wrap; overflow-x: visible; }
+  .b-flash .fs-cards.is-grid .fs-card { flex: 0 0 calc((100% - 10px) / 2); }
   .b-flash .fs-card {
     flex: 0 0 130px;
     background: rgba(255, 255, 255, .92);
@@ -3594,6 +3596,8 @@
   /* shared product card (design) — badge variants: corner / stamp / ribbon */
   .fsd-cards { display: flex; gap: 12px; overflow-x: auto; padding: 0 16px 4px; scrollbar-width: none; }
   .fsd-cards::-webkit-scrollbar { display: none; }
+  .fsd-cards.is-grid { flex-wrap: wrap; overflow-x: visible; }
+  .fsd-cards.is-grid .fsd-card { flex: 0 0 calc((100% - 12px) / 2); }
   .fsd-card { flex: 0 0 150px; background: #FFFCF7; color: var(--b-ink); border-radius: var(--fs-radius); overflow: hidden; box-sizing: border-box; }
   .fsd-card .fsd-img { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: #eee; }
   .fsd-card .fsd-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -8835,6 +8839,8 @@ function renderBlockBody(b) {
     case 'flash_sale_strip': {
       const view = b.view || 'strip';
       const isFsDesign = view === 'classic' || view === 'editorial' || view === 'urgency';
+      // Card layout: 'grid' wraps cards two-per-row (no sideways swipe).
+      const fsGridCls = (b.card_layout === 'grid' && view !== 'banner') ? ' is-grid' : '';
       d.className = 'b-flash b-flash-' + view
         + (isFsDesign ? cornerRadiusClass(b) + entranceAnimClass(b) : '');
       d.style.background = brandColorVar(b.bg_color) || 'var(--b-berry)';
@@ -9000,7 +9006,7 @@ function renderBlockBody(b) {
                 <div class="fsd-clock${pulse}"${endsAttr}>${tiles}</div>
               </div>
               ${shop ? `<div class="fsd-cta-wrap"><div class="fsd-cta tap">${shop}</div></div>` : ''}
-              <div class="fsd-cards">${designCards('corner')}</div>
+              <div class="fsd-cards${fsGridCls}">${designCards('corner')}</div>
             </div>`;
           return d;
         }
@@ -9026,7 +9032,7 @@ function renderBlockBody(b) {
                   <div class="fsd-off">${offLine}</div>
                 </div>
               </div>
-              <div class="fsd-cards">${designCards('ribbon')}</div>
+              <div class="fsd-cards${fsGridCls}">${designCards('ribbon')}</div>
             </div>`;
           return d;
         }
@@ -9047,7 +9053,7 @@ function renderBlockBody(b) {
             </div>
             <div class="fsd-clock${pulse}"${endsAttr}>${tiles}</div>
             ${shop ? `<div class="fsd-cta-wrap"><div class="fsd-cta tap">${shop}</div></div>` : ''}
-            <div class="fsd-cards">${designCards('stamp')}</div>
+            <div class="fsd-cards${fsGridCls}">${designCards('stamp')}</div>
           </div>`;
         return d;
       }
@@ -9059,7 +9065,7 @@ function renderBlockBody(b) {
           <div class="hero-ends">${endsLbl}</div>
           <div class="hero-clock" data-ends-at="${escapeAttr(new Date(soonestEnd).toISOString())}">${heroCells}</div>
           ${ctaLabel ? `<div class="hero-cta">${escapeHtml(ctaLabel)}</div>` : ''}
-          ${view === 'hero' && productCards ? `<div class="fs-cards hero-cards">${productCards}</div>` : ''}`;
+          ${view === 'hero' && productCards ? `<div class="fs-cards hero-cards${fsGridCls}">${productCards}</div>` : ''}`;
         d.innerHTML = inner;
         return d;
       }
@@ -9076,7 +9082,7 @@ function renderBlockBody(b) {
             <div class="ct-cells">${stripCells}</div>
           </div>
         </div>
-        <div class="fs-cards">${productCards}</div>`;
+        <div class="fs-cards${fsGridCls}">${productCards}</div>`;
       return d;
     }
     case 'coupon_block': {
@@ -11853,6 +11859,11 @@ function buildFlashStripForm(m, b) {
         ? T('Hero view focuses on the countdown — keep this small (1–3) so it stays bold.', '主视觉模式聚焦倒计时 — 数量保持较小(1–3),让视觉更醒目。')
         : T('How many flash-sale items to show. Extra ones scroll sideways.', '显示多少件秒杀商品。多出的可左右滑动。'),
       num(b.product_limit, v => updateBlock(b.id, { product_limit: Math.max(1, Math.min(8, v)) }), { min: 1, max: 8 })));
+    secLayout.appendChild(field(T('Card layout', '卡片排列'), T('Carousel = one row you swipe sideways. Grid = cards wrap two per row, so a few show at once without swiping.', '轮播 = 单行,左右滑动查看。网格 = 每行两个自动换行,无需滑动即可同时看到多件。'),
+      sel(b.card_layout || 'carousel', [
+        { value: 'carousel', label: T('Carousel — swipe sideways', '轮播 — 左右滑动') },
+        { value: 'grid',     label: T('Grid — 2 per row, no swiping', '网格 — 每行 2 个,无需滑动') },
+      ], v => updateBlock(b.id, { card_layout: v }))));
   }
 
   if (isDesign) {

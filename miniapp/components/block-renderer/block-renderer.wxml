@@ -415,7 +415,7 @@
       </view>
     </view>
   </view>
-  <scroll-view wx:if="{{flashStrip.cards.length}}" class="fs-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+  <scroll-view wx:if="{{flashStrip.cards.length}}" class="fs-cards {{flashGrid ? 'is-grid' : ''}}" scroll-x="{{!flashGrid}}" enhanced="{{true}}" show-scrollbar="{{false}}">
     <view wx:for="{{flashStrip.cards}}" wx:key="id" class="fs-card"
           data-id="{{item.id}}" bindtap="onFlashCardTap">
       <view class="fs-card-img">
@@ -454,7 +454,7 @@
     </block>
   </view>
   <view wx:if="{{!flashStrip.isEmpty && flashStrip.ctaLabel}}" class="fh-cta" bindtap="onFlashCtaTap">{{flashStrip.ctaLabel}}</view>
-  <scroll-view wx:if="{{flashView === 'hero' && flashStrip.cards.length}}" class="fs-cards fh-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+  <scroll-view wx:if="{{flashView === 'hero' && flashStrip.cards.length}}" class="fs-cards fh-cards {{flashGrid ? 'is-grid' : ''}}" scroll-x="{{!flashGrid}}" enhanced="{{true}}" show-scrollbar="{{false}}">
     <view wx:for="{{flashStrip.cards}}" wx:key="id" class="fs-card"
           data-id="{{item.id}}" bindtap="onFlashCardTap">
       <view class="fs-card-img">
@@ -501,7 +501,7 @@
         </view>
       </view>
       <view wx:if="{{flashDesign.shop}}" class="fsd-cta-wrap"><view class="fsd-cta" bindtap="onFlashCtaTap">{{flashDesign.shop}} →</view></view>
-      <scroll-view class="fsd-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+      <scroll-view class="fsd-cards {{flashGrid ? 'is-grid' : ''}}" scroll-x="{{!flashGrid}}" enhanced="{{true}}" show-scrollbar="{{false}}">
         <template is="fsdCard" wx:for="{{flashDesign.cards}}" wx:key="id" data="{{c: item, badge: 'corner'}}"/>
       </scroll-view>
     </block>
@@ -522,7 +522,7 @@
           <view class="fsd-off">{{flashDesign.offMain}}<text class="cn">{{flashDesign.offSub}}</text></view>
         </view>
       </view>
-      <scroll-view class="fsd-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+      <scroll-view class="fsd-cards {{flashGrid ? 'is-grid' : ''}}" scroll-x="{{!flashGrid}}" enhanced="{{true}}" show-scrollbar="{{false}}">
         <template is="fsdCard" wx:for="{{flashDesign.cards}}" wx:key="id" data="{{c: item, badge: 'ribbon'}}"/>
       </scroll-view>
     </block>
@@ -538,7 +538,7 @@
         <view wx:for="{{flashDesign.tiles}}" wx:key="lbl" class="fsd-tile"><view class="fsd-tile-num">{{item.num}}</view><view class="fsd-tile-lbl">{{item.lbl}}</view></view>
       </view>
       <view wx:if="{{flashDesign.shop}}" class="fsd-cta-wrap"><view class="fsd-cta" bindtap="onFlashCtaTap">{{flashDesign.shop}} →</view></view>
-      <scroll-view class="fsd-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+      <scroll-view class="fsd-cards {{flashGrid ? 'is-grid' : ''}}" scroll-x="{{!flashGrid}}" enhanced="{{true}}" show-scrollbar="{{false}}">
         <template is="fsdCard" wx:for="{{flashDesign.cards}}" wx:key="id" data="{{c: item, badge: 'stamp'}}"/>
       </scroll-view>
     </block>

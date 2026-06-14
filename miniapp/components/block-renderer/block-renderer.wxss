@@ -1208,6 +1208,9 @@
   white-space: nowrap;
   width: 100%;
 }
+/* Grid layout — wrap cards two-per-row (no sideways swipe). */
+.fs-cards.is-grid { white-space: normal; display: flex; flex-wrap: wrap; gap: 20rpx; }
+.fs-cards.is-grid .fs-card { width: calc((100% - 20rpx) / 2); margin-right: 0; }
 .fs-card {
   display: inline-block;
   vertical-align: top;
@@ -1433,6 +1436,11 @@
 .fsd-meter .fsd-meter-bar { position: absolute; top: 0; bottom: 0; left: 0; background: var(--fs-fill); border-radius: 18rpx; }
 .fsd-sold { font-family: var(--f-toni); font-size: calc(18rpx * var(--font-scale)); letter-spacing: .12em; color: #6A6E2D; margin-top: 10rpx; }
 
+/* Grid layout — cards wrap two-per-row instead of a swipe carousel, so a few
+   show at once without scrolling sideways (set via "Card layout" in the editor). */
+.fsd-cards.is-grid { white-space: normal; display: flex; flex-wrap: wrap; gap: 24rpx; }
+.fsd-cards.is-grid .fsd-card { width: calc((100% - 24rpx) / 2); margin-right: 0; display: block; }
+
 /* A · Classic — centred, cream tiles with ":" separators, cream CTA pill */
 .fsd-classic .fsd-head { text-align: center; padding: 0 48rpx; }
 .fsd-classic .fsd-kicker { font-family: var(--f-toni); font-size: calc(24rpx * var(--font-scale)); letter-spacing: .34em; }
@@ -1578,11 +1586,17 @@
   border-radius: 8rpx;
 }
 /* When the CTA is a real <button> (getPhoneNumber phone-bind variant) strip
-   WeChat's default button chrome so it renders identically to the view CTA. */
+   WeChat's default button chrome so it renders identically to the view CTA.
+   The native <button> defaults to full-width with a ~96rpx min-height, which
+   blew the ticket up — force it back to hug its label like the <view> did. */
 button.cp-cta {
   margin: 0;
+  width: auto;
+  min-height: 0;
   line-height: 1.2;
+  padding: 18rpx 24rpx;
   border: none;
+  background: transparent;
 }
 button.cp-cta::after { border: none; }
 
