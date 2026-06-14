@@ -6090,19 +6090,25 @@ function localizeOrderTimes(row) {
   return localizeTimes(row, GZ_LOCAL_TS_FIELDS);
 }
 
-// Out-of-Guangzhou ("city" zone) orders where the customer asked for "as soon
-// as possible" (Express — the day-only default — or right-away/restock) never
-// carried a real chosen date; the stored scheduled_for is just the system's
-// earliest fulfillable day at 00:00, which reads misleadingly in the Orders
-// list as if the customer booked it. For those, surface a real SEND-BY deadline
-// = paid_at + delivery.expressDispatchHours (default 48h) instead, and tag the
-// row so the backend renders "ASAP · send by <deadline>". Orders with a genuine
-// scheduled date, GZ same-day orders, and pickups are left untouched.
+// Shipped-out orders (anything that leaves on a courier — out-of-GZ "city"
+// zones AND orders whose destination matched no zone row, which are still
+// land/air parcels) where the customer asked for "as soon as possible"
+// (Express — the day-only default — or right-away/restock) never carried a real
+// chosen date; the stored scheduled_for is just the system's earliest
+// fulfillable day at 00:00, which reads misleadingly in the Orders list as if
+// the customer booked it. For those, surface a real SEND-BY deadline = paid_at +
+// delivery.expressDispatchHours (default 48h) instead, and tag the row so the
+// backend renders "ASAP · send by <deadline>". GZ same-city orders (gz_district
+// — same-day / local delivery), orders with a genuine scheduled date, and
+// pickups are left untouched.
 // Mutates and returns the row; expects raw (un-localized) paid_at + zone_type.
 function annotateShipBy(r) {
   if (!r) return r;
   if (r.fulfillment_type === 'pickup') return r;          // pickup window owns the cell
-  if (r.zone_type !== 'city') return r;                   // GZ local / unknown: leave as-is
+  // GZ same-city (gz_district) delivers same-day/local — never a 48h ship
+  // deadline. Everything else non-pickup is a shipped parcel: out-of-GZ 'city'
+  // zones AND unmatched (NULL) zones, which still go out by courier.
+  if (r.zone_type === 'gz_district') return r;
   const kind = r.delivery_slot_kind;
   // A deliberate future date keeps showing that date.
   if (kind === 'schedule' || kind === 'today') return r;
