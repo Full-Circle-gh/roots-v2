@@ -681,7 +681,9 @@ Page({
           ? `Get ¥${reward} off your first Roots order — code ${af.code}`
           : `Roots 邀请码 ${af.code} · 首单立减 ¥${reward}`,
         path: '/pages/affiliate/affiliate?ref=' + encodeURIComponent(af.code),
-        imageUrl: '/assets/brand/share-affiliate.png',
+        // Custom share picture set by the office (admin → Affiliate), else the
+        // bundled default. af.share_image is already an absolute URL.
+        imageUrl: af.share_image || '/assets/brand/share-affiliate.png',
       };
     }
     return {

@@ -3771,6 +3771,24 @@
           <input type="text" id="af-prefix" placeholder="ROOTS-" maxlength="12" style="width: 160px; text-transform: uppercase;">
           <div class="muted" style="font-size: 11px; margin-top: 4px;">Prepended to new codes only — existing codes don't change. · 仅作用于新邀请码;已有邀请码不会改变。</div>
         </div>
+      </div>
+
+      <!-- Share-card picture: the thumbnail a customer sees when they forward
+           their invite into a WeChat chat. Empty = the built-in default. -->
+      <div class="field" style="margin: 16px 0 0;">
+        <label class="stacked">Share-card picture · 分享卡片图片</label>
+        <div class="muted" style="font-size: 11px; margin: 2px 0 8px; line-height: 1.5;">
+          The picture shown when a customer forwards their invite into a WeChat chat. Best shape is wide (5:4 — about 500×400). Leave empty to use the built-in Roots picture. The ¥-amount and code are added automatically as text — don't put them in the picture. · 顾客把邀请转发到微信聊天时显示的图片。建议比例 5:4(约 500×400)。留空则使用内置 Roots 图片。优惠金额与邀请码会自动作为文字显示,无需放进图片。
+        </div>
+        <input type="hidden" id="af-share-image">
+        <div id="af-share-preview"></div>
+        <div class="row" style="gap: 8px; margin-top: 8px;">
+          <button class="btn btn-sm" onclick="document.getElementById('af-share-file').click()">Upload picture · 上传图片</button>
+          <input type="file" id="af-share-file" accept="image/png,image/jpeg" style="display: none;">
+        </div>
+      </div>
+
+      <div style="margin-top: 16px;">
         <button class="btn btn-primary" onclick="afSaveSettings()">Save settings · 保存设置</button>
       </div>
     </div>

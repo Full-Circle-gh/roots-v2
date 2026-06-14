@@ -124,6 +124,7 @@ Page({
     code: '',
     rewardPerOrder: 30,   // referrer reward ("for you")
     rewardReferee: 0,      // friend reward ("for them"); 0 = friend gets nothing
+    shareImage: '',        // office-set share-card picture (absolute URL); '' = bundled default
     referredBy: null,
     canApply: false,
     applyInput: '',
@@ -197,6 +198,7 @@ Page({
         code: data.code || '',
         rewardPerOrder: reward,
         rewardReferee: refereeReward,
+        shareImage: data.share_image || '',
         referredBy: data.referred_by || null,
         canApply: !data.referred_by && data.enabled !== false,
         stats: {
@@ -294,7 +296,8 @@ Page({
     return {
       title,
       path: `/pages/affiliate/affiliate?ref=${encodeURIComponent(code)}`,
-      imageUrl: '/assets/brand/share-affiliate.png',
+      // Office-set picture (admin → Affiliate) else the bundled default.
+      imageUrl: this.data.shareImage || '/assets/brand/share-affiliate.png',
     };
   },
 

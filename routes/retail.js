@@ -8353,6 +8353,12 @@ function affiliateSettings() {
     // the split is an explicit, opt-in spend decision by the operator.
     rewardReferee:  Number(cfgValue('affiliate.rewardReferee', 0)) || 0,
     codePrefix:     String(cfgValue('affiliate.codePrefix', REFERRAL_CODE_PREFIX)),
+    // Optional custom picture for the WeChat share card (the 5:4 thumbnail a
+    // customer sees when they forward their invite into a chat). Empty string
+    // ⇒ the mini-app falls back to the bundled default share-affiliate.png.
+    // Stored as a relative media path (e.g. /api/retail/media/55); the
+    // customer endpoint absolutizes it so the mini-app can hand WeChat a URL.
+    shareImage:     String(cfgValue('affiliate.shareImage', '') || ''),
   };
 }
 
@@ -8426,6 +8432,13 @@ router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
       enabled:          s.enabled,
       reward_per_order: s.rewardPerOrder,
       reward_referee:   s.rewardReferee,
+      // Absolutize the share picture so the mini-app can pass WeChat a real
+      // URL; already-absolute (http/data:) values pass through untouched.
+      share_image:      s.shareImage
+                          ? (/^(https?:|data:)/i.test(s.shareImage)
+                              ? s.shareImage
+                              : `${req.protocol}://${req.get('host')}${s.shareImage}`)
+                          : '',
       code,
       referred_by:      referredBy?.id ? { id: referredBy.id, nickname: referredBy.nickname, code: referredBy.referral_code } : null,
       stats:            affiliateStatsFor(req.customer.id),
@@ -8645,6 +8658,15 @@ router.patch('/api/retail-admin/affiliate/settings', requireRetailAdmin, express
     const p = b.codePrefix.trim().toUpperCase().slice(0, 12);
     if (!/^[A-Z0-9-]*$/.test(p)) return res.status(400).json({ success: false, error: 'bad_prefix' });
     writes.push(['affiliate.codePrefix', p || REFERRAL_CODE_PREFIX]);
+  }
+  if (typeof b.shareImage === 'string') {
+    // Empty clears it (back to the bundled default). Otherwise only accept a
+    // same-origin media path or a full URL — never arbitrary text.
+    const v = b.shareImage.trim();
+    if (v && !/^(\/api\/retail\/media\/\d+|https?:\/\/|data:image\/)/i.test(v)) {
+      return res.status(400).json({ success: false, error: 'bad_share_image' });
+    }
+    writes.push(['affiliate.shareImage', v.slice(0, 2000)]);
   }
   if (!writes.length) return res.status(400).json({ success: false, error: 'no_fields' });
   const up = tdb().prepare(

@@ -28,6 +28,8 @@ async function afLoadSettings() {
     $('#af-reward').value         = (Number(d.rewardPerOrder) || 0).toString();
     $('#af-reward-referee').value = (Number(d.rewardReferee) || 0).toString();
     $('#af-prefix').value         = String(d.codePrefix || 'ROOTS-').toUpperCase();
+    $('#af-share-image').value    = String(d.shareImage || '');
+    afRenderSharePreview();
   } catch (e) {
     toast('Settings load failed · 加载设置失败: ' + e.message, 'err');
   }
@@ -38,6 +40,7 @@ async function afSaveSettings() {
     rewardPerOrder: Number($('#af-reward').value) || 0,
     rewardReferee:  Number($('#af-reward-referee').value) || 0,
     codePrefix:     String($('#af-prefix').value || '').trim().toUpperCase(),
+    shareImage:     String($('#af-share-image').value || '').trim(),
   };
   try {
     await api('/api/retail-admin/affiliate/settings', { method: 'PATCH', body });
@@ -45,6 +48,48 @@ async function afSaveSettings() {
     afLoadSettings();
   } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'err'); }
 }
+
+// ── Share-card picture: upload / preview / clear ──
+// Reuses the Media-library upload endpoint (stores the raster, returns a
+// /api/retail/media/:id URL). We keep just that URL in the hidden field; the
+// customer endpoint absolutizes it for WeChat. Empty ⇒ bundled default.
+function afRenderSharePreview() {
+  const url = $('#af-share-image').value;
+  const box = $('#af-share-preview');
+  if (!box) return;
+  if (!url) {
+    box.innerHTML = '<div class="muted" style="font-size: 11px;">No custom picture — using the built-in Roots share card. · 暂无自定义图片 — 使用内置 Roots 分享卡片。</div>';
+    return;
+  }
+  box.innerHTML = `<img src="${escapeAttr(url)}" alt="" style="width: 250px; aspect-ratio: 5 / 4; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--bg2);">
+    <div style="margin-top: 6px;"><button class="btn btn-sm" onclick="afClearShareImage()">Remove picture · 移除图片</button></div>`;
+}
+
+function afClearShareImage() {
+  $('#af-share-image').value = '';
+  afRenderSharePreview();
+}
+
+async function afUploadShareImage(file) {
+  if (!file) return;
+  const fd = new FormData(); fd.append('file', file);
+  toast('Uploading… · 上传中…');
+  try {
+    const r = await fetch('/api/retail-admin/media/upload', { method: 'POST', credentials: 'same-origin', body: fd });
+    const j = await r.json();
+    if (!j.success) { toast('Upload failed · 上传失败: ' + (j.error || ''), 'err'); return; }
+    $('#af-share-image').value = j.data.url;
+    afRenderSharePreview();
+    toast('Uploaded — remember to Save · 已上传 — 请记得保存');
+  } catch (e) { toast('Upload failed · 上传失败: ' + e.message, 'err'); }
+}
+
+document.addEventListener('change', e => {
+  if (e.target.id === 'af-share-file' && e.target.files?.[0]) {
+    afUploadShareImage(e.target.files[0]);
+    e.target.value = '';
+  }
+});
 
 async function afLoadReferrals() {
   const status = $('#af-status').value;
