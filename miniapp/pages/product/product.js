@@ -565,7 +565,7 @@ Page({
         return {
           id: it.id,
           name: lang.pick(it.name_en, it.name_cn, L) || ('#' + it.id),
-          img: it.image_data || it.image_url || '',
+          img: absUrl(it.image_data || it.image_url),
           price: Number(it.price) > 0 ? money(Number(it.price)) : '',
           soldOut: st != null && st <= 0,
         };
@@ -590,12 +590,19 @@ Page({
     // normal Add-to-cart (one price, one line). Distinct from "buy together".
     const whatsInside = (p.is_bundle && Array.isArray(p.bundle_components) && p.bundle_components.length)
       ? {
-          title: L === 'cn' ? '套装内含' : "What's inside",
+          title: L === 'cn' ? '这款套装包含' : 'This bundle includes',
           items: p.bundle_components.map(c => ({
             id: c.id,
             name: lang.pick(c.name_en, c.name_cn, L) || ('#' + c.id),
-            img: c.image_data || c.image_url || '',
+            // Server ships component photos as a relative /api/... URL (same as
+            // the hero); run it through absUrl so the mini-app <image> resolves
+            // it against api.BASE — otherwise the thumbnails render empty.
+            img: absUrl(c.image_data || c.image_url),
             qty: Number(c.qty) > 1 ? ('×' + c.qty) : '',
+            // Only components that are sold on their own (published + active)
+            // get their own PDP — make just those tappable so nobody lands on
+            // an empty page for a bundle-only item.
+            tappable: c.available !== false,
           })),
         }
       : null;
@@ -895,6 +902,15 @@ Page({
       icon: added ? 'success' : 'none',
       duration: 1400,
     });
+  },
+
+  // Tap a "what's inside" component → open its own product page. Only fires
+  // for components flagged tappable (sold on their own); bundle-only items
+  // carry no id-tap binding so this is a no-op for them.
+  onInsideTap(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    wx.navigateTo({ url: '/pages/product/product?id=' + id });
   },
 
   // ── Variant size picker ───────────────────────────────────────────
