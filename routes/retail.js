@@ -564,6 +564,20 @@ router.get('/api/retail/config', (req, res) => {
     if (!Number.isFinite(cfg.onboarding.version) || cfg.onboarding.version < 1) {
       cfg.onboarding.version = 1;
     }
+    // Per-page WeChat share-card pictures (Home / Product / Voting). Stored as
+    // relative media paths (e.g. /api/retail/media/55); WeChat's share imageUrl
+    // needs a real URL, so absolutize them here the same way the affiliate card
+    // is absolutized in /api/retail/affiliate. Already-absolute (http/data:)
+    // values pass through untouched; empty/missing keys stay empty.
+    if (cfg.sharing && typeof cfg.sharing === 'object') {
+      const origin = `${req.protocol}://${req.get('host')}`;
+      for (const k of ['home', 'product', 'voting']) {
+        const v = cfg.sharing[k];
+        if (typeof v === 'string' && v && !/^(https?:|data:)/i.test(v)) {
+          cfg.sharing[k] = origin + v;
+        }
+      }
+    }
     // Mirror live vouchers into coupon_blocks so a renamed/repriced coupon (or
     // one reusing the same code) updates the home page without re-picking it.
     try { refreshCouponBlocks(cfg); } catch (e) { console.error('[retail/config refreshCouponBlocks]', e); }

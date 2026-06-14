@@ -261,9 +261,12 @@ Page({
 
   onShareAppMessage() {
     const p = this.data.featured;
+    // Office-set Voting share picture (admin → Share cards). Already absolute.
+    const img = getApp().globalData.config?.sharing?.voting;
     return {
       title: p ? (this.data.lang === 'cn' && p.question_cn ? p.question_cn : p.question_en) : 'Vote with Roots',
       path: '/pages/voting/voting',
+      ...(img ? { imageUrl: img } : {}),
     };
   },
 });

@@ -252,6 +252,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-3 3-3-3"/><path d="M19 14V4"/></svg>
         Affiliate · 分销
       </button>
+      <button data-tab="sharing">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
+        Share cards · 分享卡片
+      </button>
       <button data-tab="broadcasts">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l15-7v16L3 13v-2z"/><path d="M11 19a2 2 0 0 1-4 0v-4"/><path d="M18 8a4 4 0 0 1 0 8"/></svg>
         Broadcasts · 广播
@@ -3737,6 +3741,60 @@
         </tr></thead>
         <tbody><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
       </table>
+    </div>
+  </section>
+
+  <!-- ─── SHARE CARDS — per-page WeChat forward thumbnails ─── -->
+  <section id="tab-sharing">
+    <h2>Share cards · 分享卡片</h2>
+    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
+      When a customer forwards a page into a WeChat chat, this is the picture on the card. Set one per page. Best shape is wide (5:4 — about 500×400). Leave a page empty to use the page's own look. · 顾客把页面转发到微信聊天时,卡片上显示的图片。每个页面单独设置。建议比例 5:4(约 500×400)。留空则使用该页面自带的样式。
+    </div>
+
+    <div class="card" style="margin-bottom: var(--s4);">
+      <!-- Home / store -->
+      <div class="field" style="margin: 0 0 20px;">
+        <label class="stacked">Home page · 首页</label>
+        <div class="muted" style="font-size: 11px; margin: 2px 0 8px;">Shown when someone forwards the store's home page (without a referral code). · 转发店铺首页(不含推荐码)时显示。</div>
+        <input type="hidden" id="sh-home">
+        <div id="sh-home-preview"></div>
+        <div class="row" style="gap: 8px; margin-top: 8px;">
+          <button class="btn btn-sm" onclick="document.getElementById('sh-home-file').click()">Upload picture · 上传图片</button>
+          <input type="file" id="sh-home-file" accept="image/png,image/jpeg" style="display: none;">
+        </div>
+      </div>
+
+      <!-- Product -->
+      <div class="field" style="margin: 0 0 20px;">
+        <label class="stacked">Product page · 商品页</label>
+        <div class="muted" style="font-size: 11px; margin: 2px 0 8px;">Fallback for product shares. Each product still prefers its own photo when it has one — this fills in when it doesn't. · 商品分享的备用图。商品有自己的图片时优先用商品图,没有时才用这张。</div>
+        <input type="hidden" id="sh-product">
+        <div id="sh-product-preview"></div>
+        <div class="row" style="gap: 8px; margin-top: 8px;">
+          <button class="btn btn-sm" onclick="document.getElementById('sh-product-file').click()">Upload picture · 上传图片</button>
+          <input type="file" id="sh-product-file" accept="image/png,image/jpeg" style="display: none;">
+        </div>
+      </div>
+
+      <!-- Voting -->
+      <div class="field" style="margin: 0;">
+        <label class="stacked">Voting page · 投票页</label>
+        <div class="muted" style="font-size: 11px; margin: 2px 0 8px;">Shown when someone forwards the community polls page. · 转发社区投票页时显示。</div>
+        <input type="hidden" id="sh-voting">
+        <div id="sh-voting-preview"></div>
+        <div class="row" style="gap: 8px; margin-top: 8px;">
+          <button class="btn btn-sm" onclick="document.getElementById('sh-voting-file').click()">Upload picture · 上传图片</button>
+          <input type="file" id="sh-voting-file" accept="image/png,image/jpeg" style="display: none;">
+        </div>
+      </div>
+
+      <div style="margin-top: 16px;">
+        <button class="btn btn-primary" onclick="shSave()">Save share cards · 保存分享卡片</button>
+      </div>
+    </div>
+
+    <div class="muted" style="font-size: 11px; line-height: 1.5;">
+      The <b>invite / referral</b> card has its own picture in <b>Marketing → Affiliate</b>. · <b>邀请 / 推荐</b>卡片的图片在<b>“营销 → 分销”</b>单独设置。
     </div>
   </section>
 

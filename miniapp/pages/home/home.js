@@ -82,7 +82,12 @@ Page({
     this.setData({ lang: next });
   },
 
-  onLoad() {
+  onLoad(query) {
+    // A shared affiliate card now lands here (not the affiliate page). Stash
+    // the ref code so the affiliate apply box can pre-fill it later.
+    if (query && query.ref) {
+      try { wx.setStorageSync('pending_ref', String(query.ref).toUpperCase().slice(0, 32)); } catch (e) {}
+    }
     // Onboarding gating — mode + version come from /api/retail/config
     // (cfg.onboarding.show_to / cfg.onboarding.version, edited in /cms).
     // Storage flag `onboarded` holds the version string the user last
@@ -680,15 +685,20 @@ Page({
         title: en
           ? `Get ¥${reward} off your first Roots order — code ${af.code}`
           : `Roots 邀请码 ${af.code} · 首单立减 ¥${reward}`,
-        path: '/pages/affiliate/affiliate?ref=' + encodeURIComponent(af.code),
+        // Land the friend on the storefront Home; onLoad stashes the ref so
+        // the affiliate apply box still pre-fills it later.
+        path: '/pages/home/home?ref=' + encodeURIComponent(af.code),
         // Custom share picture set by the office (admin → Affiliate), else the
         // bundled default. af.share_image is already an absolute URL.
         imageUrl: af.share_image || '/assets/brand/share-affiliate.png',
       };
     }
+    // Office-set Home share picture (admin → Share cards). Already absolute.
+    const img = getApp().globalData.config?.sharing?.home;
     return {
       title: this.data.lang === 'cn' ? 'Roots · 植物食物' : 'Roots · plant-forward food',
       path: '/pages/home/home',
+      ...(img ? { imageUrl: img } : {}),
     };
   },
 
@@ -704,6 +714,10 @@ Page({
         query: 'ref=' + encodeURIComponent(af.code),
       };
     }
-    return { title: this.data.lang === 'cn' ? 'Roots · 植物食物' : 'Roots' };
+    const img = getApp().globalData.config?.sharing?.home;
+    return {
+      title: this.data.lang === 'cn' ? 'Roots · 植物食物' : 'Roots',
+      ...(img ? { imageUrl: img } : {}),
+    };
   },
 });

@@ -295,7 +295,10 @@ Page({
             : `Roots 邀请码 ${code} · 一起来逛`);
     return {
       title,
-      path: `/pages/affiliate/affiliate?ref=${encodeURIComponent(code)}`,
+      // Land the friend on the storefront Home (not the affiliate page). The
+      // ref code rides along so home.js can stash it; the affiliate apply box
+      // falls back to that stashed code the next time the friend opens it.
+      path: `/pages/home/home?ref=${encodeURIComponent(code)}`,
       // Office-set picture (admin → Affiliate) else the bundled default.
       imageUrl: this.data.shareImage || '/assets/brand/share-affiliate.png',
     };
@@ -324,9 +327,14 @@ Page({
     if (typeof this.enableShareTimeline === 'function') {
       this.enableShareTimeline();
     }
-    // If the page was opened from a shared link, pre-fill the apply box.
-    if (query && query.ref) {
-      this.setData({ applyInput: String(query.ref).toUpperCase().slice(0, 32) });
+    // Pre-fill the apply box from a shared link's ref, or from the ref a
+    // shared card stashed when it landed the friend on Home instead.
+    let ref = query && query.ref ? String(query.ref) : '';
+    if (!ref) {
+      try { ref = wx.getStorageSync('pending_ref') || ''; } catch (e) {}
+    }
+    if (ref) {
+      this.setData({ applyInput: ref.toUpperCase().slice(0, 32) });
     }
   },
 });

@@ -188,6 +188,82 @@ document.querySelector('[data-tab="affiliate"]').addEventListener('click', () =>
   if (!AFFILIATE_LOADED) { AFFILIATE_LOADED = true; afLoadAll(); }
 });
 
+// ════════════════════════════════════════════════════════════════
+// SHARE CARDS — per-page WeChat forward thumbnails (Home / Product /
+// Voting). Stored as config keys sharing.<key> (relative media paths);
+// the customer /api/retail/config endpoint absolutizes them for WeChat.
+// The affiliate invite card keeps its own picture (affiliate.shareImage).
+// Reuses the same media-upload endpoint as the affiliate share image.
+// ════════════════════════════════════════════════════════════════
+const SH_KEYS = ['home', 'product', 'voting'];
+let SHARING_LOADED = false;
+
+function shRenderPreview(key) {
+  const url = $('#sh-' + key).value;
+  const box = $('#sh-' + key + '-preview');
+  if (!box) return;
+  if (!url) {
+    box.innerHTML = '<div class="muted" style="font-size: 11px;">No custom picture — using the page\'s own look. · 暂无自定义图片 — 使用该页面自带样式。</div>';
+    return;
+  }
+  box.innerHTML = `<img src="${escapeAttr(url)}" alt="" style="width: 250px; aspect-ratio: 5 / 4; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--bg2);">
+    <div style="margin-top: 6px;"><button class="btn btn-sm" onclick="shClear('${key}')">Remove picture · 移除图片</button></div>`;
+}
+
+function shClear(key) {
+  $('#sh-' + key).value = '';
+  shRenderPreview(key);
+}
+
+async function shUpload(key, file) {
+  if (!file) return;
+  const fd = new FormData(); fd.append('file', file);
+  toast('Uploading… · 上传中…');
+  try {
+    const r = await fetch('/api/retail-admin/media/upload', { method: 'POST', credentials: 'same-origin', body: fd });
+    const j = await r.json();
+    if (!j.success) { toast('Upload failed · 上传失败: ' + (j.error || ''), 'err'); return; }
+    $('#sh-' + key).value = j.data.url;
+    shRenderPreview(key);
+    toast('Uploaded — remember to Save · 已上传 — 请记得保存');
+  } catch (e) { toast('Upload failed · 上传失败: ' + e.message, 'err'); }
+}
+
+async function shLoad() {
+  try {
+    const r = await api('/api/retail-admin/config');
+    const sharing = (r.data && r.data.sharing) || {};
+    for (const key of SH_KEYS) {
+      $('#sh-' + key).value = String(sharing[key] || '');
+      shRenderPreview(key);
+    }
+  } catch (e) {
+    toast('Settings load failed · 加载设置失败: ' + e.message, 'err');
+  }
+}
+
+async function shSave() {
+  const body = {};
+  for (const key of SH_KEYS) body['sharing.' + key] = String($('#sh-' + key).value || '').trim();
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body });
+    toast('Share cards saved · 分享卡片已保存');
+  } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'err'); }
+}
+
+document.addEventListener('change', e => {
+  for (const key of SH_KEYS) {
+    if (e.target.id === 'sh-' + key + '-file' && e.target.files?.[0]) {
+      shUpload(key, e.target.files[0]);
+      e.target.value = '';
+    }
+  }
+});
+
+document.querySelector('[data-tab="sharing"]').addEventListener('click', () => {
+  if (!SHARING_LOADED) { SHARING_LOADED = true; shLoad(); }
+});
+
 // ── Theme toggle (light / dark) ──
 // The pre-render script in <head> already set data-theme so paint is
 // correct. This handler just paints the icon to match and lets the user

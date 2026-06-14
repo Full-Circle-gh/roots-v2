@@ -750,20 +750,24 @@ Page({
     const p = this.data.product;
     if (!p) return { title: 'Roots', path: '/pages/home/home' };
     const title = (this.data.lang === 'cn' ? p.name_cn : p.name_en) || p.name_en || 'Roots';
+    // Prefer the product's own photo; fall back to the office-set Product
+    // share card (admin → Share cards) when it has none.
+    const fallback = getApp().globalData.config?.sharing?.product;
     return {
       title,
       path: '/pages/product/product?id=' + p.id,
-      imageUrl: this.data.image || undefined,
+      imageUrl: this.data.image || fallback || undefined,
     };
   },
   // Share to "Moments" (timeline) — same target, slightly different prompt.
   onShareTimeline() {
     const p = this.data.product;
     if (!p) return {};
+    const fallback = getApp().globalData.config?.sharing?.product;
     return {
       title: (this.data.lang === 'cn' ? p.name_cn : p.name_en) || p.name_en || 'Roots',
       query: 'id=' + p.id,
-      imageUrl: this.data.image || undefined,
+      imageUrl: this.data.image || fallback || undefined,
     };
   },
 
