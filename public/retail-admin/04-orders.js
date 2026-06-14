@@ -186,6 +186,146 @@ async function applySplitSuggestion(orderId) {
   }
 }
 
+// ── Combine / split parcels ────────────────────────────────────────────
+// The system splits out-of-Guangzhou orders into Air + Land parcels, but the
+// operator sometimes packs everything in one box. These let them collapse the
+// split to ONE parcel (so the customer tracks a single shipment) and undo it.
+// Both are offered ONLY while no parcel has a waybill yet — afterwards the
+// server refuses (combining would strand a created label). A combined parcel
+// carries the '合并发货' label, which is how we detect it to offer "split again".
+function shipmentMergeControls(o) {
+  const ships = o.shipments || [];
+  const hasTracking = ships.some(s => s.tracking_number || s.tracking_carrier);
+  const combined = ships.length === 1 && (ships[0].label || '').includes('合并');
+  if (hasTracking) {
+    // Waybill attached → locked. A short hint only where a split still shows.
+    return ships.length > 1
+      ? `<div style="margin-top:6px; font-size:11px; color:var(--text-3);">${cuT('Clear the waybills to combine into one parcel', '清除运单后才能合并为一个包裹')}</div>`
+      : '';
+  }
+  if (ships.length > 1) {
+    return `<div style="margin-top:8px;"><button class="btn btn-sm" onclick="combineParcels(${o.id})">${cuT('Combine into one parcel', '合并为一个包裹')}</button></div>`;
+  }
+  if (combined) {
+    return `<div style="margin-top:8px;"><button class="btn btn-sm" onclick="splitParcels(${o.id})">${cuT('Split into separate parcels', '拆分为多个包裹')}</button></div>`;
+  }
+  return '';
+}
+async function combineParcels(orderId) {
+  if (!confirm(cuT('Combine all parcels into one shipment? The customer will track a single parcel.', '将所有包裹合并为一个发货?顾客将只追踪一个包裹。'))) return;
+  try {
+    await adminWrite({ url: `/api/retail-admin/orders/${orderId}/shipments/combine`, method: 'POST', errLabelEn: 'Combine failed', errLabelCn: '合并失败' });
+    toast(cuT('Combined into one parcel', '已合并为一个包裹'));
+    openOrder(orderId); loadOrders();
+  } catch {}
+}
+async function splitParcels(orderId) {
+  if (!confirm(cuT('Split back into separate Air / Land parcels?', '拆分回独立的空运 / 陆运包裹?'))) return;
+  try {
+    await adminWrite({ url: `/api/retail-admin/orders/${orderId}/shipments/split`, method: 'POST', errLabelEn: 'Split failed', errLabelCn: '拆分失败' });
+    toast(cuT('Split into separate parcels', '已拆分为多个包裹'));
+    openOrder(orderId); loadOrders();
+  } catch {}
+}
+
+// ── Address → Chinese ──────────────────────────────────────────────────
+// Turn an English / mixed shipping address into a clean Chinese one for the
+// waybill. Fetches an AI-translated + geocode-verified proposal, shows it in an
+// editable confirm dialog, then writes it back to the order (and, optionally,
+// the customer's saved address for future orders).
+async function openAddressToChinese(orderId) {
+  toast(cuT('Translating address…', '正在翻译地址…'));
+  let data;
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/address/to-chinese`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) {
+      const err = j.error || 'failed';
+      toast(err === 'ai_not_configured' ? cuT('Translation service is off', '翻译服务未启用')
+          : err === 'pickup_order' ? cuT('Pickup order — no shipping address', '自提订单 — 无收货地址')
+          : cuT('Couldn’t translate the address', '地址翻译失败'), 'error');
+      return;
+    }
+    data = j.data;
+  } catch (e) { toast(cuT('Network error', '网络错误'), 'error'); return; }
+
+  const c = data.chinese || {};
+  const geoBadge = !data.geocode_configured ? ''
+    : data.geocode_ok
+      ? `<span style="margin-left:8px; font-size:11px; font-weight:600; color:#5fc28e;">✓ ${cuT('resolves on map', '地图可定位')}</span>`
+      : `<span style="margin-left:8px; font-size:11px; font-weight:600; color:var(--warn);">⚠ ${cuT('couldn’t verify on map', '无法在地图核验')}</span>`;
+  const field = (id, labelEn, labelCn, val) => `
+    <div class="field" style="margin-bottom:10px;">
+      <label class="stacked">${labelEn} · ${labelCn}</label>
+      <input id="${id}" type="text" style="width:100%;" value="${escapeHtml(val || '')}">
+    </div>`;
+
+  const bg = document.createElement('div');
+  bg.className = 'pu-editor-bg';
+  bg.style.display = 'flex';
+  bg.innerHTML = `
+    <div class="pu-editor" style="width: 520px; max-width: 94vw;">
+      <div class="pu-editor-head">
+        <div>
+          <h3 style="margin:0; font-size:14px;">${cuT('Make address Chinese', '转为中文地址')}</h3>
+          <div class="muted" style="font-size:11px; margin-top:2px;">${cuT('Check the Chinese address, edit if needed, then save.', '请核对中文地址,如需可修改,然后保存。')}</div>
+        </div>
+        <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Close', '关闭')}</button>
+      </div>
+      <div class="pu-editor-body" style="grid-template-columns: 1fr; padding:18px; display:block;">
+        <div style="background:var(--bg-elev-1); border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:14px;">
+          <div class="muted" style="font-size:10px; letter-spacing:.08em; text-transform:uppercase;">${cuT('As entered', '原始地址')}</div>
+          <div style="font-size:12px; color:var(--text-2); line-height:1.5; margin-top:2px;" data-no-i18n>${escapeHtml(data.original_full || '')}</div>
+        </div>
+        <div style="font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--brass); margin-bottom:10px;">${cuT('Chinese address', '中文地址')}${geoBadge}</div>
+        ${field('gz-prov', 'Province', '省 / 市', c.province)}
+        ${field('gz-city', 'City', '市', c.city)}
+        ${field('gz-dist', 'District', '区 / 县', c.district)}
+        ${field('gz-addr', 'Street / building', '街道 / 楼栋', c.address)}
+        ${field('gz-detail', 'Unit / floor (optional)', '单元 / 楼层(可选)', c.detail)}
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; margin:6px 0; cursor:pointer;"><input type="checkbox" id="gz-save-order" checked> ${cuT('Update this order (prints on the waybill)', '更新此订单(用于运单打印)')}</label>
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; margin:6px 0; cursor:pointer;"><input type="checkbox" id="gz-save-cust" checked> ${cuT('Also fix the customer’s saved address', '同时更新顾客保存的地址')}</label>
+        <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+          <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Cancel', '取消')}</button>
+          <button class="btn btn-primary" id="gz-apply">${cuT('Save', '保存')}</button>
+        </div>
+      </div>
+    </div>`;
+  mountFloatingPuModal(bg);
+  bg.querySelector('#gz-apply').addEventListener('click', async (ev) => {
+    const body = {
+      province: bg.querySelector('#gz-prov').value,
+      city:     bg.querySelector('#gz-city').value,
+      district: bg.querySelector('#gz-dist').value,
+      address:  bg.querySelector('#gz-addr').value,
+      detail:   bg.querySelector('#gz-detail').value,
+      save_order:    bg.querySelector('#gz-save-order').checked,
+      save_customer: bg.querySelector('#gz-save-cust').checked,
+    };
+    if (!body.save_order && !body.save_customer) { toast(cuT('Pick at least one place to save', '请至少选择一处保存'), 'error'); return; }
+    if (!body.address.trim()) { toast(cuT('Street / building is required', '街道 / 楼栋不能为空'), 'error'); return; }
+    try {
+      const j = await adminWrite({
+        btn: ev.currentTarget, url: `/api/retail-admin/orders/${orderId}/address/apply-chinese`,
+        method: 'POST', body, errLabelEn: 'Save failed', errLabelCn: '保存失败',
+      });
+      const d = (j && j.data) || {};
+      let msg = cuT('Address updated', '地址已更新');
+      if (body.save_customer && !d.saved_customer) {
+        const why = d.customer_reason === 'no_match' ? cuT('couldn’t match the saved address', '未找到对应的保存地址')
+                  : d.customer_reason === 'no_customer' ? cuT('no customer on file', '无顾客记录')
+                  : cuT('saved address not updated', '保存地址未更新');
+        msg = cuT('Order updated · ', '订单已更新 · ') + why;
+      }
+      toast(msg);
+      bg.remove();
+      openOrder(orderId); loadOrders();
+    } catch {}
+  });
+}
+
 // `silent` = called by the poller. Skip the "Loading…" placeholder, skip
 // the rebuild when the fingerprint matches, flash new rows on arrival.
 // ── Orders view options (tweaks) ──────────────────────────────────────
@@ -1113,20 +1253,27 @@ function renderTrackingCell(o) {
 
 // "Ship to" — the parcel's destination city (+ district below) so operators can
 // triage where orders are headed without opening each one. Server fills
-// ship_city / ship_district (or ship_pickup) on the list row. Pickup orders
-// have no destination; everything else shows at least a city.
+// ship_city/ship_district (canonical Chinese) + *_en companions, or ship_pickup.
+// Addresses are stored Chinese-only, so the English side is resolved server-side
+// (lib/region-i18n) and falls back to the Chinese name when the place is unknown.
+// We emit explicit data-lang-block="en"/"cn" spans rather than relying on the
+// auto-classifier (which would mis-pair the city/district divs) — the global CSS
+// then toggles them instantly when the operator flips the EN/中文 switch.
+function shipToLangBlock(en, cn) {
+  // Fall back to the Chinese name in English view when no romanization exists,
+  // so the column never blanks. (cn always present here.)
+  return `<span data-lang-block="en">${escapeHtml(en || cn)}</span>`
+       + `<span data-lang-block="cn">${escapeHtml(cn)}</span>`;
+}
 function renderShipToCell(o) {
   if (o.ship_pickup || o.fulfillment_type === 'pickup') {
-    return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${cuT('Pickup','自提')}</span>`;
+    return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${shipToLangBlock('Pickup','自提')}</span>`;
   }
   if (!o.ship_city) return '<span class="muted">—</span>';
-  // City + district are raw address data (both Chinese) — wrap in data-no-i18n
-  // so the EN/CN block classifier doesn't mis-pair the two divs and hide the
-  // district in one language. See the parseSchedFor note above for the trap.
-  const district = o.ship_district && o.ship_district !== o.ship_city
-    ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(o.ship_district)}</div>`
+  const district = (o.ship_district && o.ship_district !== o.ship_city)
+    ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${shipToLangBlock(o.ship_district_en, o.ship_district)}</div>`
     : '';
-  return `<div data-no-i18n><div>${escapeHtml(o.ship_city)}</div>${district}</div>`;
+  return `<div><div>${shipToLangBlock(o.ship_city_en, o.ship_city)}</div>${district}</div>`;
 }
 
 let ORDERS_STORE_FILTER_LOADED = false;
@@ -1988,6 +2135,7 @@ function renderOpenOrder(o) {
             <div class="kicker">Ship to · 收货人 ${copyChip([o.recipient_name, o.recipient_phone, o.address_full].filter(Boolean).join('\n'), 'Ship-to')}</div>
             <div class="val" data-no-i18n><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
             <div class="sub" data-no-i18n>${escapeHtml(o.address_full || '')}</div>
+            ${/[A-Za-z]/.test(o.address_full || '') ? `<button class="btn btn-sm" style="margin-top:8px;" onclick="openAddressToChinese(${o.id})">${cuT('📍 Make address Chinese', '📍 转为中文地址')}</button>` : ''}
           </div>`}
           <div${o.customer_id ? ` onclick="orderGotoCustomer(${o.customer_id})" style="cursor: pointer;" title="View customer · 查看顾客"` : ''}>
             <div class="kicker">Customer · 顾客</div>
@@ -2018,10 +2166,12 @@ function renderOpenOrder(o) {
           ${o.outside_guangzhou && (o.shipments?.length > 1) ? `
             <div class="outside-gz-note">
               <span data-lang-block="en">⚠ Destination outside Guangzhou (${escapeHtml(o.shipping_city || 'unknown city')}) — order split into ${o.shipments.length} shipments</span><span data-lang-block="cn">⚠ 目的地在广州以外 (${escapeHtml(o.shipping_city || '未知城市')}) — 订单已拆分为 ${o.shipments.length} 个包裹</span>
+              ${shipmentMergeControls(o)}
             </div>` : ''}
           ${o.outside_guangzhou && (o.shipments?.length === 1) ? `
             <div class="outside-gz-note">
-              <span data-lang-block="en">Outside Guangzhou — single ${shipGlyph(o.shipments[0].mode)} ${o.shipments[0].mode === 'air' ? 'air' : 'land'} shipment</span><span data-lang-block="cn">${escapeHtml(o.shipping_city || '广州以外')} — 单个 ${shipGlyph(o.shipments[0].mode)} ${o.shipments[0].mode === 'air' ? '空运' : '陆运'}包裹</span>
+              <span data-lang-block="en">${(o.shipments[0].label || '').includes('合并') ? 'Combined into one parcel — customer tracks a single shipment' : `Outside Guangzhou — single ${shipGlyph(o.shipments[0].mode)} ${o.shipments[0].mode === 'air' ? 'air' : 'land'} shipment`}</span><span data-lang-block="cn">${(o.shipments[0].label || '').includes('合并') ? '已合并为一个包裹 — 顾客只追踪一个包裹' : `${escapeHtml(o.shipping_city || '广州以外')} — 单个 ${shipGlyph(o.shipments[0].mode)} ${o.shipments[0].mode === 'air' ? '空运' : '陆运'}包裹`}</span>
+              ${shipmentMergeControls(o)}
             </div>` : ''}
           <div id="odv-items-sortable">${renderSortableItems(o)}</div>
         </div>

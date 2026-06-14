@@ -6138,12 +6138,13 @@ function annotateShipBy(r) {
 function annotateShipTo(r) {
   if (!r) return r;
   if (r.fulfillment_type === 'pickup') { r.ship_pickup = true; return r; }
-  let city = '', district = '';
+  let province = '', city = '', district = '';
   if (r.address_json) {
     try {
       const a = JSON.parse(r.address_json);
       if (a && !a.pickup) {
-        city = (a.city || a.province || '').toString().trim();
+        province = (a.province || '').toString().trim();
+        city = (a.city || '').toString().trim();
         district = (a.district || '').toString().trim();
       }
     } catch (_) { /* malformed JSON — fall through to address_full */ }
@@ -6151,11 +6152,21 @@ function annotateShipTo(r) {
   if (!city && r.address_full) {
     // address_full = "province city district address detail" joined by spaces.
     const parts = String(r.address_full).trim().split(/\s+/);
+    province = parts[0] || '';
     city = parts[1] || parts[0] || '';
     district = parts[2] || '';
   }
-  if (city) r.ship_city = city;
-  if (district) r.ship_district = district;
+  if (!city && !province) return r;
+  // Resolve to canonical Chinese + English so the list can render in whichever
+  // language the backend toggle is set to. Addresses are stored Chinese-only;
+  // resolveRegion fills the *_en companions for any place it recognises and
+  // leaves them null for foreign/freeform entries (which then pass through).
+  const reg = regionI18n.resolveRegion({ province, city, district });
+  const cityCn = reg.city || city || reg.province || province;
+  const cityEn = reg.city_en || reg.province_en || '';
+  if (cityCn) { r.ship_city = cityCn; r.ship_city_en = cityEn || ''; }
+  const distCn = reg.district || district;
+  if (distCn) { r.ship_district = distCn; r.ship_district_en = reg.district_en || ''; }
   return r;
 }
 // True when an ISO/SQLite timestamp lands on 00:00 Guangzhou (UTC+8) wall-clock.
