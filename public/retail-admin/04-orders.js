@@ -1078,8 +1078,8 @@ function formatDateOnly(v) {
 // column AND inside the open-order drawer's footer transition buttons.
 const NEXT_STATUS = {
   pending_payment: [['paid', 'Mark paid · 标记已付款'], ['cancelled', 'Cancel · 取消']],
-  paid:            [['preparing', 'Start preparing · 开始备货'], ['cancelled', 'Cancel · 取消']],
-  preparing:       [['dispatched', 'Mark dispatched · 标记已发货'], ['cancelled', 'Cancel · 取消']],
+  paid:            [['preparing', 'Start preparing · 开始备货'], ['refunded', 'Refund · 退款'], ['cancelled', 'Cancel + refund · 取消并退款']],
+  preparing:       [['dispatched', 'Mark dispatched · 标记已发货'], ['refunded', 'Refund · 退款'], ['cancelled', 'Cancel + refund · 取消并退款']],
   dispatched:      [['delivered', 'Mark delivered · 标记已送达'], ['refunded', 'Refund · 退款']],
   delivered:       [['refunded', 'Refund · 退款']],
   cancelled:       [],
