@@ -2592,19 +2592,26 @@ function renderShipmentTrackingCard(o, s) {
       </div>`;
   }
 
+  // data-no-i18n: each event is a single free-text scan (Chinese from the
+  // carrier, with an English translation we precompute). The backend's EN/CN
+  // auto-classifier would otherwise treat the raw Chinese as a stray half of a
+  // translation pair and blank it in the other language — so we opt the whole
+  // block out and pick the live language ourselves via cuT().
   const eventsBlock = (has && t.events && t.events.length) ? `
-    <div style="margin-top:14px; border-top: 1px dashed var(--line-soft); padding-top:10px;">
-      <div class="muted" style="font-size:10px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:6px;">Recent events · 最近事件</div>
+    <div data-no-i18n style="margin-top:14px; border-top: 1px dashed var(--line-soft); padding-top:10px;">
+      <div class="muted" style="font-size:10px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:6px;">${cuT('Recent events', '最近事件')}</div>
       <div style="display:flex; flex-direction:column; gap:6px; max-height: 220px; overflow-y: auto;">
-        ${t.events.slice(0, 8).map(ev => `
+        ${t.events.slice(0, 8).map(ev => {
+          const desc = cuT(ev.description_en || ev.description_cn || '', ev.description_cn || ev.description_en || '');
+          return `
           <div style="display:flex; gap:10px; font-size:12px; line-height:1.4;">
             <div class="muted" style="font-family: var(--f-mono); white-space:nowrap; min-width: 130px;">${escapeHtml(ev.time || '')}</div>
             <div style="flex:1;">
-              <div>${escapeHtml(ev.description_cn || '')}</div>
+              <div>${escapeHtml(desc)}</div>
               ${ev.location ? `<div class="muted" style="font-size:11px;">${escapeHtml(ev.location)}</div>` : ''}
             </div>
-          </div>
-        `).join('')}
+          </div>`;
+        }).join('')}
       </div>
     </div>` : '';
 

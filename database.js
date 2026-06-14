@@ -2587,6 +2587,13 @@ addColumn('retail_orders', 'invoice_status',    'TEXT');      // null/'requested
 addColumn('retail_orders', 'invoice_file_url',  'TEXT');      // pasted link OR /api/retail/media/<id> (uploaded PDF)
 addColumn('retail_orders', 'invoice_number',    'TEXT');      // 发票号码
 addColumn('retail_orders', 'invoice_issued_at', 'DATETIME');
+// Nuonuo auto-issue (lib/nuonuo.js). invoice_serial = the 流水号 returned by the
+// async issue call (used to poll for the PDF + number, and as the idempotency
+// marker so we never double-issue). invoice_auto_error = last auto-issue failure
+// reason; non-null means it fell back to the manual office flow. Both NULL for
+// orders issued manually or before auto-issue was enabled.
+addColumn('retail_orders', 'invoice_serial',     'TEXT');
+addColumn('retail_orders', 'invoice_auto_error', 'TEXT');
 // Staff "ship it on time" reminder (see lib/delivery-reminders.js). Stamped the
 // moment the one-and-only delivery reminder Web Push is fired for this order, so
 // it never re-fires. NULL = not yet reminded / not eligible.

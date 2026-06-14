@@ -30,6 +30,7 @@ const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/te
 let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
 const _feie = require('../lib/feie');   // Feie cloud-printer client (order auto-print)
+const _nuonuo = require('../lib/nuonuo'); // 诺诺发票 e-fapiao auto-issue (dormant until creds)
 const qrpng = require('../lib/qrpng');  // zero-dep QR→PNG (renders the Alipay qr_code)
 // Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
 // that hasn't `npm install`ed sharp yet still serves full-size originals rather
@@ -2962,6 +2963,133 @@ function sendWecomOrderAlert(orderId, { awaitingRestock = false } = {}) {
   } catch (e) { console.warn('[wecom alert setup]', e.message); }
 }
 
+// ── Nuonuo auto-issue (dormant until creds + fapiao.autoIssue) ──────────────
+// Seller (销方) details for the fapiao come from config; the tax NUMBER comes
+// from the saved Nuonuo credential (saler_tax). taxRate/taxCode default here but
+// are configurable per tenant. invoiceLine 'pc' = 增值税普通发票(电子).
+function fapiaoSettings() {
+  const saler = cfgValue('fapiao.saler', {}) || {};
+  return {
+    autoIssue:   !!cfgValue('fapiao.autoIssue', false),
+    invoiceLine: cfgValue('fapiao.invoiceLine', 'pc'),
+    taxRate:     String(cfgValue('fapiao.taxRate', '0.06')),
+    taxCode:     cfgValue('fapiao.taxCode', '') || '',
+    clerk:       cfgValue('fapiao.clerk', '') || '',
+    saler:       { name: saler.name || '', tel: saler.tel || '', address: saler.address || '', account: saler.account || '' },
+  };
+}
+
+// Build the normalized Nuonuo order from a paid retail order + its items.
+// Unit price is derived tax-inclusive (our prices include tax) as line_total/qty.
+function buildNuonuoOrder(order, items, settings, salerTaxNum) {
+  return {
+    orderNo:     order.order_no,
+    senid:       'inv' + order.id,                       // idempotency: one per order
+    buyerName:   order.invoice_title || '',
+    buyerTaxNum: order.invoice_type === 'company' ? (order.invoice_tax_id || '') : '',
+    buyerEmail:  order.invoice_email || '',
+    buyerPhone:  '',
+    invoiceLine: settings.invoiceLine,
+    clerk:       settings.clerk,
+    saler:       { taxNum: salerTaxNum, ...settings.saler },
+    items: (items || []).map((it) => {
+      const qty = Number(it.qty) || 1;
+      const unit = qty ? (Number(it.line_total) || 0) / qty : Number(it.line_total) || 0;
+      return {
+        name:    it.name_cn || it.name_en || 'Goods',
+        price:   unit,
+        num:     qty,
+        taxRate: settings.taxRate,
+        taxCode: settings.taxCode,
+      };
+    }),
+  };
+}
+
+// Query Nuonuo for an already-submitted serial and, once issued, store the
+// number + PDF url, flip the order to 'issued', and fire the existing
+// "invoice issued" notification. Idempotent: a no-op if already issued or no
+// serial. Returns { done } so the caller / poller knows whether to retry.
+async function finalizeInvoiceResult(orderId) {
+  const o = tdb().prepare(
+    'SELECT id, order_no, invoice_status, invoice_serial FROM retail_orders WHERE id = ?'
+  ).get(orderId);
+  if (!o || !o.invoice_serial || o.invoice_status === 'issued') return { done: true };
+  const creds = integ().nuonuo;
+  if (!_nuonuo.nuonuoEnabled(creds)) return { done: false };
+  const r = await _nuonuo.queryResult(o.invoice_serial, creds);
+  if (!r.ok) {
+    tdb().prepare('UPDATE retail_orders SET invoice_auto_error = ? WHERE id = ?').run(String(r.error || 'query_failed'), orderId);
+    return { done: false };
+  }
+  if (!r.done) return { done: false };   // still 开具中 — poll again later
+  tdb().prepare(
+    `UPDATE retail_orders
+        SET invoice_status = 'issued', invoice_file_url = ?, invoice_number = ?,
+            invoice_issued_at = CURRENT_TIMESTAMP, invoice_auto_error = NULL
+      WHERE id = ?`
+  ).run(r.pdfUrl || null, r.number || null, orderId);
+  notifyForOrder(orderId, (ord) => ({
+    category: 'invoice', type: 'invoice_issued', ref_type: 'invoice',
+    title_en: 'Invoice issued', title_cn: '发票已开具',
+    body_en: `The invoice for order ${ord.order_no} is ready`,
+    body_cn: `订单 ${ord.order_no} 的发票已开具`,
+  }));
+  return { done: true };
+}
+
+// Fire-and-forget auto-issue for a paid order that wants a fapiao. Guarded so
+// it stays DORMANT until both the Nuonuo creds are saved AND fapiao.autoIssue is
+// on; on ANY failure it records the reason and leaves the order in the manual
+// office queue (current behaviour) — nothing is ever lost. Issuance is async at
+// the tax bureau, so we store the serial then poll a few times for the result;
+// Nuonuo itself emails the PDF to the buyer when it completes.
+async function maybeAutoIssueInvoice(orderId) {
+  try {
+    const settings = fapiaoSettings();
+    const creds = integ().nuonuo;
+    if (!settings.autoIssue || !_nuonuo.nuonuoEnabled(creds)) return;   // dormant
+    const o = tdb().prepare(
+      `SELECT id, order_no, status, needs_invoice, invoice_type, invoice_title,
+              invoice_tax_id, invoice_email, invoice_status, invoice_serial
+         FROM retail_orders WHERE id = ?`
+    ).get(orderId);
+    if (!o || !o.needs_invoice) return;
+    if (o.status === 'pending_payment' || o.status === 'cancelled') return;   // must be paid
+    if (o.invoice_status === 'issued' || o.invoice_serial) return;            // already done / submitted
+    if (!o.invoice_email) {                                                   // can't push without an email
+      tdb().prepare('UPDATE retail_orders SET invoice_auto_error = ? WHERE id = ?').run('no_email', orderId);
+      return;
+    }
+    const items = tdb().prepare(
+      'SELECT name_en, name_cn, qty, line_total FROM retail_order_items WHERE order_id = ? ORDER BY id ASC'
+    ).all(orderId);
+    const payload = buildNuonuoOrder(o, items, settings, creds.salerTaxNum);
+    const r = await _nuonuo.issueInvoice(payload, creds);
+    if (!r.ok) {
+      tdb().prepare('UPDATE retail_orders SET invoice_auto_error = ? WHERE id = ?').run(String(r.error || 'issue_failed'), orderId);
+      return;
+    }
+    // Persist the serial FIRST — it's the idempotency marker that stops a retry
+    // (or the next markOrderPaid) from issuing a second fapiao.
+    tdb().prepare('UPDATE retail_orders SET invoice_serial = ?, invoice_auto_error = NULL WHERE id = ?').run(r.serialNo, orderId);
+    // Poll for the result a few times (issuance is usually done within ~1 min).
+    // The serial is persisted, so a server restart mid-poll loses nothing — the
+    // admin "Check result" endpoint (or a later finalize) completes it. The
+    // timers fire OUTSIDE the request's ALS scope, so re-enter the tenant's data
+    // context (getTenantDb(tid)) before finalize so tdb()/integ() hit the right tenant.
+    const tid = currentTenantId();
+    for (const delay of [5000, 20000, 60000]) {
+      setTimeout(() => {
+        tenantAls.run(getTenantDb(tid), () => finalizeInvoiceResult(orderId).catch(() => {}));
+      }, delay);
+    }
+  } catch (e) {
+    console.error('[maybeAutoIssueInvoice]', orderId, e.message);
+    try { tdb().prepare('UPDATE retail_orders SET invoice_auto_error = ? WHERE id = ?').run('exception: ' + e.message, orderId); } catch {}
+  }
+}
+
 function markOrderPaid(orderId) {
   // "wait_for_restock" orders transition to 'awaiting_restock' on payment,
   // not 'paid'. The kitchen waits, and checkAwaitingRestockForRestock()
@@ -3046,6 +3174,11 @@ function markOrderPaid(orderId) {
     // Auto-print to the store's Feie cloud printer. Best-effort + fire-and-
     // forget (records the outcome on the order); see autoPrintOrder.
     autoPrintOrder(orderId);
+
+    // Auto-issue the fapiao if the buyer asked for one at checkout. Dormant
+    // unless Nuonuo creds are saved AND fapiao.autoIssue is on; on failure it
+    // silently falls back to the manual office queue. Fire-and-forget.
+    maybeAutoIssueInvoice(orderId).catch((e) => console.warn('[markOrderPaid fapiao]', e.message));
   }
 }
 
@@ -6816,6 +6949,10 @@ router.post('/api/retail/orders/:id/invoice-request', requireRetailAuth, express
   tdb().prepare(
     'UPDATE retail_orders SET needs_invoice = 1, invoice_type = ?, invoice_title = ?, invoice_tax_id = ?, invoice_email = ? WHERE id = ?'
   ).run(type, title, taxId, email, id);
+  // The order is already PAID here (guarded above), so attempt auto-issue now.
+  // Dormant unless Nuonuo + fapiao.autoIssue are configured; falls back to the
+  // manual office queue otherwise. Fire-and-forget so the request returns fast.
+  maybeAutoIssueInvoice(id).catch((e) => console.warn('[invoice-request fapiao]', e.message));
   res.json({ success: true });
 });
 
@@ -11494,6 +11631,53 @@ router.put('/api/retail-admin/orders/:id/invoice', requireRetailAdmin, express.j
   res.json({ success: true });
 });
 
+// ── Automatic fapiao (Nuonuo) settings ─────────────────────────────────────
+// The on/off toggle + seller (销方) details + tax defaults that drive
+// maybeAutoIssueInvoice. The Nuonuo API credentials live in the Integrations
+// panel (integrations.nuonuo.*); this is just the issuing config. `enabled`
+// reflects whether the creds are actually present, so the UI can warn that the
+// toggle does nothing until they're saved.
+router.get('/api/retail-admin/fapiao-settings', requireRetailAdmin, (req, res) => {
+  const s = fapiaoSettings();
+  res.json({ success: true, data: { ...s, credsReady: _nuonuo.nuonuoEnabled(integ().nuonuo) } });
+});
+
+router.put('/api/retail-admin/fapiao-settings', requireRetailAdmin, express.json(), (req, res) => {
+  const b = req.body || {};
+  const upsert = tdb().prepare(
+    `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+       VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
+  );
+  const set = (key, val) => upsert.run(key, JSON.stringify(val), req.user.id);
+  const tx = tdb().transaction(() => {
+    if ('autoIssue'   in b) set('fapiao.autoIssue', !!b.autoIssue);
+    if ('invoiceLine' in b) set('fapiao.invoiceLine', String(b.invoiceLine || 'pc'));
+    if ('taxRate'     in b) set('fapiao.taxRate', String(b.taxRate || '0.06'));
+    if ('taxCode'     in b) set('fapiao.taxCode', String(b.taxCode || ''));
+    if ('clerk'       in b) set('fapiao.clerk', String(b.clerk || ''));
+    if ('saler'       in b && b.saler && typeof b.saler === 'object') {
+      set('fapiao.saler', {
+        name:    String(b.saler.name || ''),
+        tel:     String(b.saler.tel || ''),
+        address: String(b.saler.address || ''),
+        account: String(b.saler.account || ''),
+      });
+    }
+  });
+  tx();
+  res.json({ success: true });
+});
+
+// Manually re-check an issued-but-async fapiao (the poller may have missed it,
+// e.g. a server restart between submit and completion). Reads the stored serial,
+// queries Nuonuo, and finalizes if ready. Safe to call repeatedly.
+router.post('/api/retail-admin/orders/:id/invoice/finalize', requireRetailAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const r = await finalizeInvoiceResult(id);
+  res.json({ success: true, done: r.done });
+});
+
 // Store an uploaded fapiao PDF (base64 data URI) in retail_media; returns a
 // servable URL (GET /api/retail/media/:id streams it with the stored mime).
 router.post('/api/retail-admin/invoice-file', requireRetailAdmin, express.json({ limit: '12mb' }), (req, res) => {
@@ -12039,6 +12223,15 @@ const INTEGRATION_KEYS = {
     agent_id: { env: 'WECOM_AGENT_ID', secret: false, cred: CRED_KEYS.WECOM_AGENT_ID, bkey: 'agentId' },
     secret:   { env: 'WECOM_SECRET',   secret: true,  cred: CRED_KEYS.WECOM_SECRET,   bkey: 'secret'  },
   },
+  // 诺诺发票 (Nuonuo) — auto-issues the e-fapiao AND emails the PDF to the buyer
+  // itself (pushMode). app_key/app_secret from the Nuonuo Open Platform; the
+  // saler_tax is the issuing company's 销方税号; env flips sandbox→production.
+  nuonuo: {
+    app_key:    { env: 'NUONUO_APP_KEY',    secret: false, cred: CRED_KEYS.NUONUO_APP_KEY,    bkey: 'appKey'      },
+    app_secret: { env: 'NUONUO_APP_SECRET', secret: true,  cred: CRED_KEYS.NUONUO_APP_SECRET, bkey: 'appSecret'   },
+    saler_tax:  { env: 'NUONUO_SALER_TAX',  secret: false, cred: CRED_KEYS.NUONUO_SALER_TAX,  bkey: 'salerTaxNum' },
+    env:        { env: 'NUONUO_ENV',        secret: false, cred: CRED_KEYS.NUONUO_ENV,        bkey: 'env'         },
+  },
 };
 
 function maskSecret(s) {
@@ -12071,6 +12264,7 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
   out.jd.enabled    = jd.jdEnabled(ci.jd);
   out.feie.enabled  = _feie.feieEnabled(ci.feie);
   out.wecom_app.enabled = !!(ci.wecom_app && ci.wecom_app.corpId && ci.wecom_app.agentId && ci.wecom_app.secret);
+  out.nuonuo.enabled = _nuonuo.nuonuoEnabled(ci.nuonuo);
   res.json({ success: true, data: out });
 });
 
@@ -12174,6 +12368,16 @@ router.post('/api/retail-admin/integrations/jd/test', requireRetailAdmin, async 
   const r = await jd.pingJd(jc);
   if (r.ok) return res.json({ ok: true, note: r.note || null });
   return res.json({ ok: false, error: r.error });
+});
+
+// Sanity-check Nuonuo (诺诺发票) connectivity — mints an access_token from the
+// saved appKey/appSecret. Success proves the credentials clear Nuonuo's auth
+// gateway before any real fapiao is ever issued.
+router.post('/api/retail-admin/integrations/nuonuo/test', requireRetailAdmin, async (req, res) => {
+  const nc = integ().nuonuo;
+  if (!_nuonuo.nuonuoEnabled(nc)) return res.json({ ok: false, error: 'not_configured' });
+  const r = await _nuonuo.pingNuonuo(nc);
+  return res.json({ ok: r.ok, error: r.ok ? undefined : r.error });
 });
 
 // ─── Feie cloud printer (per-store routing) ──────────────────────────────
