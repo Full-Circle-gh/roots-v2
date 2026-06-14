@@ -835,6 +835,19 @@ async function _pollUnseenInbox() {
 function pickupIcon(size = 12) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px;margin-right:1px"><path d="M4 10.5V20h16v-9.5"/><path d="M3.5 6.5 5 3.5h14l1.5 3a3 3 0 0 1-5.7 1.3A3 3 0 0 1 12 7.5a3 3 0 0 1-2.8.3A3 3 0 0 1 3.5 6.5z"/><path d="M9.5 20v-5h5v5"/></svg>`;
 }
+// `scheduled_for` reaches the client in two shapes: a bare SQLite UTC stamp
+// ("YYYY-MM-DD HH:MM:SS", which needs a 'Z' to parse as UTC) or a full ISO
+// string that already carries 'T'+'Z' (slot resolution stores
+// dt.toISOString(), and localizeOrderTimes deliberately leaves it untouched).
+// Appending 'Z' unconditionally turned the ISO form into "…ZZ" → Invalid Date,
+// which silently blanked the ship-by value: with no valid date the cell/tile
+// drops the urgency badge and collapses to the pure-Chinese slot label, which
+// the EN/CN block classifier then mis-pairs with the English sub-line and hides
+// in English view. Only append 'Z' when the string isn't already ISO/tz-aware.
+function parseSchedFor(s) {
+  const v = String(s == null ? '' : s);
+  return new Date(/[TZ]/.test(v) ? v : v.replace(' ', 'T') + 'Z');
+}
 function renderShipByCell(o) {
   const actionable = (o.status === 'paid' || o.status === 'preparing');
   if (o.fulfillment_type === 'pickup') {
@@ -847,8 +860,8 @@ function renderShipByCell(o) {
     return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-3)'};">${cuT('ASAP', '尽快')}</div>
             <div class="muted" style="font-size: 10px; margin-top: 2px;">${cuT('no slot picked', '未选时段')}</div>`;
   }
-  // Parse "YYYY-MM-DD HH:MM:SS" (UTC from SQLite) → local time
-  const dt = new Date(String(o.scheduled_for).replace(' ', 'T') + 'Z');
+  // Parse "YYYY-MM-DD HH:MM:SS" (UTC from SQLite) or a full ISO string → local
+  const dt = parseSchedFor(o.scheduled_for);
   const valid = !isNaN(dt.getTime());
   const now = Date.now();
   const hrsUntil = valid ? (dt.getTime() - now) / 3600000 : null;
@@ -981,7 +994,7 @@ function renderShipByTile(o) {
       || (o.scheduled_for ? localizeSlotLabel(humanizeSlotLabel(o.scheduled_for)) : cuT('During pickup hours', '营业时间内自取'));
     return `<div>
       <div class="kicker">Pickup time · 取货时间</div>
-      <div class="val"><b style="color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">${escapeHtml(label)}</b></div>
+      <div class="val" data-no-i18n><b style="color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">${escapeHtml(label)}</b></div>
       <div class="sub">Have ready at counter · 备好待取</div>
     </div>`;
   }
@@ -995,7 +1008,7 @@ function renderShipByTile(o) {
       ${batchSub}
     </div>`;
   }
-  const dt = new Date(String(o.scheduled_for).replace(' ', 'T') + 'Z');
+  const dt = parseSchedFor(o.scheduled_for);
   const valid = !isNaN(dt.getTime());
   const hrsUntil = valid ? (dt.getTime() - Date.now()) / 3600000 : null;
   let color = 'var(--text-1)';
@@ -1017,7 +1030,7 @@ function renderShipByTile(o) {
     ? ` · <span style="color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day surcharge','当日加收')}</span>` : '';
   return `<div>
     <div class="kicker">${shipByKicker(o)}</div>
-    <div class="val"><b style="color: ${color};">${escapeHtml(label)}</b>${urgencyLabel ? ` <span style="font-size: 11px; color: ${color}; font-weight: 600;">· ${urgencyLabel}</span>` : ''}</div>
+    <div class="val" data-no-i18n><b style="color: ${color};">${escapeHtml(label)}</b>${urgencyLabel ? ` <span style="font-size: 11px; color: ${color}; font-weight: 600;">· ${urgencyLabel}</span>` : ''}</div>
     <div class="sub">${mode}${surcharge}</div>
     ${batchSub}
   </div>`;
@@ -1395,7 +1408,10 @@ function renderBundleInside(it) {
     const bn = orderItemNames(c);
     const nm = escapeHtml(bn.primary || ('#' + c.id));
     const cn = bn.secondary ? ` <span class="oi-bndl-zh">${escapeHtml(bn.secondary)}</span>` : '';
-    return `<div class="oi-bndl-row"><span class="oi-bndl-qty">${c.pack_qty}×</span><span>${nm}${cn}</span></div>`;
+    // Each component's OWN sku — this is what gets packed/printed; the bundle's
+    // own sku is irrelevant to fulfilment.
+    const sku = `<span class="item-sku oi-bndl-sku">${c.sku ? escapeHtml(c.sku) : cuT('no SKU','无货号')}</span>`;
+    return `<div class="oi-bndl-row"><span class="oi-bndl-qty">${c.pack_qty}×</span>${sku}<span>${nm}${cn}</span></div>`;
   }).join('');
   return `<div class="oi-bndl"><div class="oi-bndl-h">${cuT('Inside this bundle', '套装内含')}</div>${rows}</div>`;
 }
@@ -1948,8 +1964,12 @@ function renderOpenOrder(o) {
         </div>
 
         ${(o.reservations && o.reservations.length) ? `
-        <div class="order-items" style="margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft);">
-          <div class="kicker" style="font-size: 10px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--brass); margin-bottom: var(--s2);">Stock reservations · 库存预留</div>
+        <details class="order-items resv-details" style="margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft);">
+          <summary class="kicker resv-summary" style="font-size: 10px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--brass);">
+            <span class="resv-caret" aria-hidden="true">▸</span>
+            <span>Stock reservations · 库存预留</span>
+            <span class="resv-count">${o.reservations.length}</span>
+          </summary>
           <div class="table-wrap">
             <!-- nowrap on every header so the bilingual EN · 中文 labels
                  don't wrap mid-word ("STATUS · 状 / 态", "EXPIRES · / 到期")
@@ -1984,7 +2004,7 @@ function renderOpenOrder(o) {
                 </tr>`; }).join('')}</tbody>
             </table>
           </div>
-        </div>` : ''}
+        </details>` : ''}
 
         ${ODV.totalPlacement === 'footer' ? renderOrderTotalFooter(o) : ''}
       </div>`;

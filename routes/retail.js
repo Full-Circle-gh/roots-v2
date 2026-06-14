@@ -11871,7 +11871,23 @@ function printOrderById(orderId, prefs, pcfg) {
   const p = prefs || loadPrinterPrefs();
   const printer = pcfg || printerForOrder(order, p);
   if (!printer || !printer.sn) return Promise.resolve({ ok: false, msg: 'no_printer_for_store' });
-  const items = tdb().prepare('SELECT * FROM retail_order_items WHERE order_id = ? ORDER BY id').all(orderId);
+  const items = tdb().prepare(
+    `SELECT oi.*, p.bundle_items
+       FROM retail_order_items oi
+  LEFT JOIN store_products p ON p.id = oi.product_id
+      WHERE oi.order_id = ? ORDER BY oi.id`
+  ).all(orderId);
+  // Bundle line → attach the component pack list so the slip prints what's
+  // actually inside (each component's OWN sku); the bundle's own sku is
+  // irrelevant for fulfilment. pack_qty = component qty × this line's qty.
+  for (const it of items) {
+    const comps = resolveBundleComponents(it.bundle_items);
+    if (comps.length) {
+      it.is_bundle = true;
+      it.bundle_components = comps.map(c => ({ ...c, pack_qty: c.qty * (Number(it.qty) || 1) }));
+    }
+    delete it.bundle_items;
+  }
   const shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(orderId);
   const tpl = _feie.TEMPLATE_IDS.includes(printer.template) ? printer.template : 'receipt';
   const content = _feie.renderOrder(tpl, order, items, p.shop_name, shipments);
@@ -12030,7 +12046,20 @@ router.get('/api/retail-admin/printer/preview', requireRetailAdmin, (req, res) =
     : null;
   if (last) {
     order = last;
-    items = tdb().prepare('SELECT * FROM retail_order_items WHERE order_id = ? ORDER BY id').all(last.id);
+    items = tdb().prepare(
+      `SELECT oi.*, p.bundle_items
+         FROM retail_order_items oi
+    LEFT JOIN store_products p ON p.id = oi.product_id
+        WHERE oi.order_id = ? ORDER BY oi.id`
+    ).all(last.id);
+    for (const it of items) {
+      const comps = resolveBundleComponents(it.bundle_items);
+      if (comps.length) {
+        it.is_bundle = true;
+        it.bundle_components = comps.map(c => ({ ...c, pack_qty: c.qty * (Number(it.qty) || 1) }));
+      }
+      delete it.bundle_items;
+    }
     shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(last.id);
   } else {
     ({ order, items, shipments } = _sampleOrderForPreview());
@@ -14751,7 +14780,10 @@ function computeDeliverySlots(zone, now) {
 
   // Helper: emit the time-slot chips for a given day, given the absolute
   // start-of-day timestamp + a label prefix. `filterElapsed=true` skips
-  // slots that have already ended (only meaningful when day === today).
+  // slots whose start time has already passed (only meaningful when
+  // day === today) — a window must not have started yet to remain bookable,
+  // so the customer can never pick an essentially-over slot (e.g. choosing
+  // 16:00–18:00 at 17:45 and leaving the kitchen 15 min to deliver).
   function emitTimeSlots(startOfTargetDay, isoDate, prefixEn, prefixCn, filterElapsed) {
     const out = [];
     let hourCursor = startHour * 60;
@@ -14763,8 +14795,8 @@ function computeDeliverySlots(zone, now) {
       const slotEndH = Math.floor(slotEndCursor / 60);
       const slotEndM = slotEndCursor % 60;
       if (filterElapsed) {
-        const slotEndsAt = new Date(startOfTargetDay.getTime() + slotEndCursor * 60000);
-        if (slotEndsAt.getTime() <= tzNow.getTime()) { hourCursor += slotMins; continue; }
+        const slotStartsAt = new Date(startOfTargetDay.getTime() + hourCursor * 60000);
+        if (slotStartsAt.getTime() <= tzNow.getTime()) { hourCursor += slotMins; continue; }
       }
       const requiresSurcharge = (isoDate === todayIso) && cfg.same_day_surcharge > 0;
       out.push({
