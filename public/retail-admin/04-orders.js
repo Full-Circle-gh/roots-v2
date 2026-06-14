@@ -855,6 +855,27 @@ function renderShipByCell(o) {
     return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-1)'}; line-height: 1.3;">${pickupIcon(12)} ${escapeHtml(label)}</div>
             <div class="muted" style="font-size: 10px; margin-top: 2px;">${cuT('pickup', '自提')}</div>`;
   }
+  // Out-of-GZ "as soon as possible" order (Express / no specific date chosen):
+  // the server stripped the misleading earliest-day date and gave us a real
+  // send-by deadline (paid + 48h). Show "ASAP · send by <deadline>" instead.
+  if (o.ship_by_mode === 'asap') {
+    const dl    = o.dispatch_deadline ? parseSchedFor(o.dispatch_deadline) : null;
+    const valid = dl && !isNaN(dl.getTime());
+    const hrs   = valid ? (dl.getTime() - Date.now()) / 3600000 : null;
+    let c = actionable ? 'var(--warn)' : 'var(--text-3)';
+    let tail = '';
+    if (actionable && hrs !== null) {
+      if (hrs < 0)        { c = 'var(--danger)'; tail = ` · <b>${cuT('OVERDUE', '已逾期')}</b>`; }
+      else if (hrs < 12)  { c = 'var(--danger)'; }
+      else if (hrs < 24)  { c = 'var(--warn)'; }
+      else                { c = 'var(--text-1)'; }
+    }
+    const sub = valid
+      ? `${cuT('send by', '须发出')} ${fmtSlotShort(dl)}${tail}`
+      : cuT('as soon as possible', '尽快发出');
+    return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">${cuT('ASAP', '尽快')}</div>
+            <div style="font-size: 10px; margin-top: 2px; color: ${valid ? c : 'var(--text-3)'};">${sub}</div>`;
+  }
   const isAsap     = !o.scheduled_for;
   if (isAsap) {
     return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-3)'};">${cuT('ASAP', '尽快')}</div>
@@ -996,6 +1017,29 @@ function renderShipByTile(o) {
       <div class="kicker">Pickup time · 取货时间</div>
       <div class="val" data-no-i18n><b style="color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">${escapeHtml(label)}</b></div>
       <div class="sub">Have ready at counter · 备好待取</div>
+    </div>`;
+  }
+  // Out-of-GZ "as soon as possible" order — show the send-by deadline tile
+  // (paid + 48h) rather than the misleading system earliest-day date.
+  if (o.ship_by_mode === 'asap') {
+    const dl    = o.dispatch_deadline ? parseSchedFor(o.dispatch_deadline) : null;
+    const valid = dl && !isNaN(dl.getTime());
+    const hrs   = valid ? (dl.getTime() - Date.now()) / 3600000 : null;
+    let color = actionable ? 'var(--warn)' : 'var(--text-1)';
+    let urg = '';
+    if (actionable && hrs !== null) {
+      if (hrs < 0)        { color = 'var(--danger)'; urg = cuT('⚠ OVERDUE', '⚠ 已逾期'); }
+      else if (hrs < 12)  { color = 'var(--danger)'; urg = cuT(`⚠ in ${Math.round(hrs)}h`, `⚠ ${Math.round(hrs)}小时内`); }
+      else if (hrs < 24)  { color = 'var(--warn)';   urg = cuT(`${Math.round(hrs)}h left`, `剩 ${Math.round(hrs)}小时`); }
+    }
+    const deadlineLine = valid
+      ? `<div class="sub" style="color: ${color}; font-weight: 600;">${cuT('Send by', '须发出')} ${fmtSlotShort(dl)}${urg ? ' · ' + urg : ''}</div>`
+      : `<div class="sub">${cuT('No fixed date — ship as soon as possible', '无固定日期 — 尽快发货')}</div>`;
+    return `<div>
+      <div class="kicker">${shipByKicker(o)}</div>
+      <div class="val"><b style="color: ${color};">${cuT('ASAP / As soon as possible', '尽快 / 越快越好')}</b></div>
+      ${deadlineLine}
+      ${batchSub}
     </div>`;
   }
   const isAsap = !o.scheduled_for;

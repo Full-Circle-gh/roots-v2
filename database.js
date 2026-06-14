@@ -2421,6 +2421,15 @@ addColumn('products', 'is_batch_made', 'INTEGER DEFAULT 0');
 addColumn('retail_orders', 'promised_ship_date',     'TEXT');
 addColumn('retail_orders', 'promised_delivery_date', 'TEXT');
 
+// How the customer picked their delivery timing, captured at checkout:
+// 'express' (out-of-GZ "as soon as possible", the day-only default),
+// 'today' / 'right_away' (GZ same-day), 'schedule' (a deliberate future date),
+// 'restock' (ships when restocked), or 'pickup'. NULL on legacy orders placed
+// before this column existed. Lets the Mini App Backend tell an Express order
+// (no specific date wanted → show a send-by deadline) apart from a customer
+// who actually booked a calendar day (→ show that date).
+addColumn('retail_orders', 'delivery_slot_kind', 'TEXT');
+
 // Cloud-printer (Feie) auto-print outcome, so the backend can show whether a
 // slip actually printed and offer a one-click reprint instead of the operator
 // guessing. null = never attempted; 'printed' = Feieyun accepted the job;

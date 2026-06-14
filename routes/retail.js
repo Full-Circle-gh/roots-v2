@@ -5692,6 +5692,14 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       slotLabel         = 'Ships when restocked';
     }
   }
+  // Persisted so the Mini App Backend can tell an Express "as soon as possible"
+  // order (out-of-GZ default, no specific date wanted) apart from a deliberate
+  // scheduled calendar date. Trust the mini-app's explicit kind; leave NULL for
+  // older clients that don't send one (the backend infers those at render time).
+  const slotKind = isPickup ? 'pickup'
+    : isWaitFlow ? 'restock'
+    : (body.delivery_slot_kind || (deliverySlotId === 'right_away' ? 'right_away' : null));
+
   // Same-day surcharge is added to the shipping line so totals reconcile
   // without a new fee column on retail_orders.
   shippingFee += sameDaySurcharge;
@@ -5827,7 +5835,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
          order_no, customer_id, status, payment_method,
          recipient_name, recipient_phone, address_full, address_json,
          subtotal, shipping_fee, packing_fee, delivery_mode, delivery_zone_id,
-         scheduled_for, delivery_slot_label, same_day_surcharge_fee,
+         scheduled_for, delivery_slot_label, delivery_slot_kind, same_day_surcharge_fee,
          voucher_code, voucher_amount,
          points_used, points_amount, total,
          customer_note, needs_cutlery, needs_invoice, invoice_title, invoice_tax_id,
@@ -5835,7 +5843,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
          store_id, routing_reason, channel,
          fallback_choice, awaiting_restock_pids, idempotency_key,
          fulfillment_type
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       orderNo, req.customer.id, 'pending_payment', paymentMethod,
       address.recipient_name, address.phone,
@@ -5853,7 +5861,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
             address: address.address, detail: address.detail, postal_code: address.postal_code,
           }),
       subtotal, shippingFee, packingFee, resolvedMode, deliveryZoneId,
-      scheduledFor, slotLabel, sameDaySurcharge,
+      scheduledFor, slotLabel, slotKind, sameDaySurcharge,
       voucher ? voucher.code : null, voucherDiscount,
       pointsUsed, pointsAmount, total,
       customerNote, needsCutlery, needsInvoice, invoiceTitle, invoiceTaxId,
@@ -6080,6 +6088,50 @@ function localizeTimes(row, fields) {
 }
 function localizeOrderTimes(row) {
   return localizeTimes(row, GZ_LOCAL_TS_FIELDS);
+}
+
+// Out-of-Guangzhou ("city" zone) orders where the customer asked for "as soon
+// as possible" (Express — the day-only default — or right-away/restock) never
+// carried a real chosen date; the stored scheduled_for is just the system's
+// earliest fulfillable day at 00:00, which reads misleadingly in the Orders
+// list as if the customer booked it. For those, surface a real SEND-BY deadline
+// = paid_at + delivery.expressDispatchHours (default 48h) instead, and tag the
+// row so the backend renders "ASAP · send by <deadline>". Orders with a genuine
+// scheduled date, GZ same-day orders, and pickups are left untouched.
+// Mutates and returns the row; expects raw (un-localized) paid_at + zone_type.
+function annotateShipBy(r) {
+  if (!r) return r;
+  if (r.fulfillment_type === 'pickup') return r;          // pickup window owns the cell
+  if (r.zone_type !== 'city') return r;                   // GZ local / unknown: leave as-is
+  const kind = r.delivery_slot_kind;
+  // A deliberate future date keeps showing that date.
+  if (kind === 'schedule' || kind === 'today') return r;
+  // Express / right-away / restock / no-date — or a legacy row (no kind captured)
+  // whose slot sits at local midnight, the signature of a day-only Express pick
+  // (a real time-slot pick carries a non-midnight time).
+  const isAsap = kind === 'express' || kind === 'right_away' || kind === 'restock'
+    || !r.scheduled_for
+    || (kind == null && _gzIsMidnight(r.scheduled_for));
+  if (!isAsap) return r;
+  r.ship_by_mode = 'asap';
+  if (r.paid_at) {
+    const base = /[TZ]/.test(r.paid_at) ? r.paid_at : String(r.paid_at).replace(' ', 'T') + 'Z';
+    const d = new Date(base);
+    if (!isNaN(d.getTime())) {
+      const hours = Number(cfgValue('delivery.expressDispatchHours', 48)) || 48;
+      r.dispatch_deadline = new Date(d.getTime() + hours * 3600000).toISOString();
+    }
+  }
+  return r;
+}
+// True when an ISO/SQLite timestamp lands on 00:00 Guangzhou (UTC+8) wall-clock.
+function _gzIsMidnight(ts) {
+  if (!ts) return false;
+  const s = String(ts);
+  const d = new Date(/[TZ]/.test(s) ? s : s.replace(' ', 'T') + 'Z');
+  if (isNaN(d.getTime())) return false;
+  const gz = new Date(d.getTime() + 8 * 3600 * 1000);
+  return gz.getUTCHours() === 0 && gz.getUTCMinutes() === 0;
 }
 
 // Format a stored local-delivery ETA ("HH:MM", 24h) into display labels for the
@@ -11102,7 +11154,8 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.refund_requested_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.channel, o.fulfillment_type,
-                    o.scheduled_for, o.delivery_slot_label,
+                    o.scheduled_for, o.delivery_slot_label, o.delivery_slot_kind,
+                    z.zone_type AS zone_type,
                     o.promised_ship_date, o.promised_delivery_date,
                     o.tracking_carrier, o.tracking_number, o.tracking_status,
                     o.tracking_kd100_subscribed,
@@ -11116,6 +11169,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                FROM retail_orders o
           LEFT JOIN retail_customers c ON c.id = o.customer_id
           LEFT JOIN retail_stores    s ON s.id = o.store_id
+          LEFT JOIN retail_delivery_zones z ON z.id = o.delivery_zone_id
               WHERE 1=1`;
   const params = [];
   // `refunds_open` is a pseudo-status that pulls every order currently in
@@ -11147,6 +11201,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
     // own API — let the kd100 badge own it (the list cell still reads "live"
     // off tracking_kd100_subscribed).
     r.jd_live = r.tracking_carrier === 'jd' && !!r.tracking_number && jdLiveOn && !r.tracking_kd100_subscribed;
+    annotateShipBy(r);   // adds ship_by_mode + dispatch_deadline for out-of-GZ ASAP orders
   }
   res.json({ success: true, data: rows, meta: { limit, offset } });
 });
@@ -11183,13 +11238,16 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare(
     `SELECT o.*, c.nickname, c.avatar_url, c.phone AS customer_phone,
-            s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
+            s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn,
+            z.zone_type AS zone_type
        FROM retail_orders o
        LEFT JOIN retail_customers c ON c.id = o.customer_id
        LEFT JOIN retail_stores    s ON s.id = o.store_id
+       LEFT JOIN retail_delivery_zones z ON z.id = o.delivery_zone_id
       WHERE o.id = ?`
   ).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  annotateShipBy(o);   // adds ship_by_mode + dispatch_deadline (uses raw paid_at)
   // Mark the order seen by staff the first time anyone opens it (shared across
   // operators) — clears the "unread" (bold + dot) treatment in the Orders list.
   // Idempotent: only the first open stamps seen_at.
