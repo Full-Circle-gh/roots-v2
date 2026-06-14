@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Roots storefront favicon: a sprout in the brand palette -->
+  <rect width="64" height="64" rx="14" fill="#365329"/>
+  <!-- soil mound -->
+  <path d="M14 48 C14 43 22 41 32 41 C42 41 50 43 50 48 L50 50 L14 50 Z" fill="#CCD900" opacity="0.18"/>
+  <!-- stem -->
+  <path d="M32 47 L32 26" stroke="#CCD900" stroke-width="4" stroke-linecap="round"/>
+  <!-- left leaf -->
+  <path d="M32 32 C24 32 18 28 16 20 C25 19 32 23 32 32 Z" fill="#CCD900"/>
+  <!-- right leaf -->
+  <path d="M32 28 C40 28 46 23 48 15 C39 14 32 19 32 28 Z" fill="#7BBD3B"/>
+</svg>
