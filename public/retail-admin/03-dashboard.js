@@ -662,7 +662,9 @@ function dashFeedToggleExpand() {
 
 async function dashHeroLoadActivity() {
   try {
-    const j = await api('/api/retail-admin/dashboard/activity?limit=30');
+    // Pull the whole day (server window = since GZ-midnight today), capped
+    // high so a busy day's events aren't truncated to the last few minutes.
+    const j = await api('/api/retail-admin/dashboard/activity?limit=500');
     const events = (j.data && j.data.events) || [];
     dashFeedRender(events);
   } catch (e) {
