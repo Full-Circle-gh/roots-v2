@@ -12878,6 +12878,26 @@ function handleKd100Callback(req, res, tid) {
                 updated_at                 = CURRENT_TIMESTAMP
           WHERE id = ?`
       ).run(parsed.state_code, JSON.stringify(parsed.events), scenarioCode, scenarioJson, order.id);
+
+      // Mirror onto the matching shipment row(s). The admin order drawer and the
+      // customer split-parcel view both read tracking off retail_shipments
+      // (buildShipmentTrackingView), NOT the order row — so without this, kd100's
+      // pushed events land only on retail_orders and never surface on the
+      // per-parcel cards, leaving every kd100-tracked order stuck on the
+      // save-time "In transit" placeholder with an empty event list. Match by
+      // waybill within this order so split parcels each get their own events.
+      try {
+        tdb().prepare(
+          `UPDATE retail_shipments
+              SET tracking_status             = ?,
+                  tracking_events_json        = ?,
+                  tracking_scenario           = ?,
+                  tracking_scenario_data_json = ?,
+                  tracking_synced_at          = CURRENT_TIMESTAMP,
+                  updated_at                  = CURRENT_TIMESTAMP
+            WHERE order_id = ? AND tracking_number = ?`
+        ).run(parsed.state_code, JSON.stringify(parsed.events), scenarioCode, scenarioJson, order.id, parsed.number);
+      } catch (e) { console.error('[kd100.callback] shipment mirror failed:', e); }
       console.log(`[kd100.callback] tenant=${tid} order=${order.id} number=${parsed.number} state=${parsed.state_code} scenario=${scenarioCode || '-'} events=${parsed.events.length}`);
 
       // Fire a push notification when the scenario changes to one the
