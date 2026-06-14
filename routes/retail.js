@@ -4537,6 +4537,25 @@ function isGuangzhou(city) {
   return s === '广州' || s === 'guangzhou' || s === 'gz';
 }
 
+// "Inside Guangdong province" detection (Guangzhou included). Guangdong always
+// ships by LAND — never air — so this zone overrides each product's air flag for
+// any Guangdong destination: an "Air only" product still goes by land within the
+// province; air is reserved for OUT-of-Guangdong destinations. Resolves the
+// province from an explicit province string OR by looking the city up in the
+// served-cities catalogue (provinceForCity, hoisted), so it works even when the
+// address carries only a city.
+function isGuangdong(province, city) {
+  const norm = s => String(s || '').trim().toLowerCase().replace(/省$|市$|自治区$/g, '');
+  const p = norm(province);
+  if (p === '广东' || p === 'guangdong') return true;
+  if (city) {
+    if (isGuangzhou(city)) return true; // GZ districts may arrive without a province
+    const prov = provinceForCity(city);
+    if (prov && /广东/.test(prov)) return true;
+  }
+  return false;
+}
+
 // Decide which modes a single item is allowed to ship by. csv -> array.
 // 'local' is exclusive: a "Local only" product delivers ONLY within Guangzhou
 // (same-city), never air/land — so it stands alone, ignoring any stray air/land.
@@ -4678,10 +4697,16 @@ function bucketCost(grams, mode, rates, city) {
 //
 // `items` shape: [{ id, ship_modes, needs_ice_pack }, ...]
 // Returns: [{ mode, label, item_ids: [...] }, ...]
-function planShipments(items, destCity) {
+function planShipments(items, destCity, destProvince) {
   if (!items.length) return [];
   if (isGuangzhou(destCity)) {
     return [{ mode: 'local', label: 'Local delivery · 同城配送', item_ids: items.map(i => i.id) }];
+  }
+  // Anywhere else in Guangdong → land only. The province ships by ground
+  // regardless of any item's air flag, so a single land shipment carries
+  // everything (an "Air only" product still goes by land within Guangdong).
+  if (isGuangdong(destProvince, destCity)) {
+    return [{ mode: 'land', label: 'Land shipment · 陆运', item_ids: items.map(i => i.id) }];
   }
   const air  = [];
   const land = [];
@@ -4718,8 +4743,8 @@ function ensureShipments(orderId) {
        FROM retail_orders WHERE id = ?`
   ).get(orderId);
   if (!o) return [];
-  let destCity = '';
-  try { destCity = JSON.parse(o.address_json || '{}').city || ''; } catch {}
+  let destCity = '', destProvince = '';
+  try { const a = JSON.parse(o.address_json || '{}'); destCity = a.city || ''; destProvince = a.province || ''; } catch {}
 
   const items = tdb().prepare(
     `SELECT id,
@@ -4727,7 +4752,7 @@ function ensureShipments(orderId) {
             COALESCE(needs_ice_pack, 0)      AS needs_ice_pack
        FROM retail_order_items WHERE order_id = ?`
   ).all(orderId);
-  const plan = planShipments(items, destCity);
+  const plan = planShipments(items, destCity, destProvince);
 
   const ins = tdb().prepare(
     `INSERT INTO retail_shipments (order_id, mode, label, created_at, updated_at)
@@ -4808,10 +4833,10 @@ function buildOrderFulfillment(orderId) {
 //
 // Returns { eligible, reason, current: {plan, cost}, suggested: {plan, cost},
 //           savings, threshold, currency }.
-// `reason` codes: 'ok' | 'in_guangzhou' | 'asap_paid' | 'holiday_mode_off'
-//                 | 'only_one_bucket' | 'savings_below_threshold'
-//                 | 'land_bucket_too_small' | 'no_parseable_weight'
-//                 | 'already_optimal' | 'no_items'
+// `reason` codes: 'ok' | 'in_guangzhou' | 'in_guangdong' | 'asap_paid'
+//                 | 'holiday_mode_off' | 'only_one_bucket'
+//                 | 'savings_below_threshold' | 'land_bucket_too_small'
+//                 | 'no_parseable_weight' | 'already_optimal' | 'no_items'
 const SAVINGS_THRESHOLD = 10;       // ¥10 — see project_roots_v2_split_package
 const LAND_FLOOR_VALUE  = 50;       // ¥50 — land bucket below this folds back
 const LAND_FLOOR_GRAMS  = 2000;     // 2 kg
@@ -4822,10 +4847,14 @@ function buildShipmentSuggestion(orderId) {
   ).get(orderId);
   if (!order) return null;
 
-  let destCity = '';
-  try { destCity = JSON.parse(order.address_json || '{}').city || ''; } catch {}
+  let destCity = '', destProvince = '';
+  try { const a = JSON.parse(order.address_json || '{}'); destCity = a.city || ''; destProvince = a.province || ''; } catch {}
   if (isGuangzhou(destCity)) {
     return { eligible: false, reason: 'in_guangzhou' };
+  }
+  // Guangdong ships land-only — no air/land split to optimize.
+  if (isGuangdong(destProvince, destCity)) {
+    return { eligible: false, reason: 'in_guangdong' };
   }
 
   // ASAP paid → never suggest splitting; the customer paid for speed.
@@ -7568,27 +7597,14 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       },
     });
 
-    // Low stock — items currently low + recently touched. We don't track a
-    // true "crossing" event (no stock history), so we proxy with updated_at:
-    // shows items that became (or stayed) low in the window. "Low" = stock >0
-    // and at/under the product's own low_stock_threshold, falling back to the
-    // tenant global default (storefront_config 'inventory.lowStockThreshold').
-    const lowDefault = lowStockDefault();
-    const low = tdb().prepare(`
-      SELECT id, name_en, name_cn, sku, stock_qty, updated_at
-        FROM store_products
-       WHERE COALESCE(stock_qty,0) > 0
-         AND COALESCE(stock_qty,0) <= COALESCE(low_stock_threshold, ?)
-         AND status = 'Active' AND COALESCE(is_active,1) = 1
-         AND updated_at >= ?
-       ORDER BY updated_at DESC LIMIT ?
-    `).all(lowDefault, sinceIso, limit);
-    for (const r of low) events.push({
-      type: 'low_stock',
-      ts: parseTs(r.updated_at),
-      ref_type: 'product', ref_id: r.id,
-      payload: { name_en: r.name_en, name_cn: r.name_cn, sku: r.sku, stock: r.stock_qty },
-    });
+    // NOTE: stock is a STATE, not an event, so it is deliberately NOT pushed
+    // into this feed (no low_stock / out_of_stock rows). With no stock-history
+    // table the only timestamp available is the product's updated_at = "when
+    // the row was last edited", not when it actually crossed the threshold. A
+    // single bulk edit/import/re-seed therefore floods the feed with dozens of
+    // identical-timestamp rows, and a long-out item resurfaces the moment
+    // anyone touches it. Current low/out stock is surfaced correctly, as live
+    // state, by the "Low stock" bento tile (/dashboard/ops) and the alerts page.
 
     // New customers — first WeChat sign-in writes the retail_customers row.
     const newCust = tdb().prepare(`
@@ -7669,22 +7685,8 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       payload: { amount: r.amount, buyer: r.buyer },
     });
 
-    // Out of stock — distinct from low_stock (1..5); qty hit zero on an
-    // Active product. More urgent: the item is now unbuyable.
-    const oos = tdb().prepare(`
-      SELECT id, name_en, name_cn, sku, updated_at
-        FROM store_products
-       WHERE COALESCE(stock_qty,0) = 0
-         AND status = 'Active' AND COALESCE(is_active,1) = 1
-         AND updated_at >= ?
-       ORDER BY updated_at DESC LIMIT ?
-    `).all(sinceIso, limit);
-    for (const r of oos) events.push({
-      type: 'out_of_stock',
-      ts: parseTs(r.updated_at),
-      ref_type: 'product', ref_id: r.id,
-      payload: { name_en: r.name_en, name_cn: r.name_cn, sku: r.sku },
-    });
+    // (Out-of-stock is intentionally omitted here too — see the stock NOTE
+    // above. It lives as live state in the "Low stock" tile + alerts page.)
   } catch (e) {
     console.error('[dashboard/activity]', e.message);
   }
