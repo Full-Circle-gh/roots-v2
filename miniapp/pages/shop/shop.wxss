@@ -513,6 +513,12 @@
 }
 /* Sit FLASH + POP side by side with a clear gap instead of touching. */
 .row-flash + .row-badge { margin-left: 10rpx; }
+/* In list rows the "N sizes" pill + POP tag share a line right under the
+   (often-wrapping) name — give the cluster breathing room above and keep a
+   clear gap between the two pills so they don't read as one cramped blob. */
+.row-body .vhint { margin-top: 18rpx; }
+.row-body .vhint + .row-badge { margin-top: 18rpx; margin-left: 10rpx; }
+.row-body .vhint + .row-flash { margin-left: 10rpx; }
 .row-oos {
   display: inline-block; margin-top: 10rpx; margin-left: 8rpx;
   background: rgba(0,0,0,.1); color: var(--olive);

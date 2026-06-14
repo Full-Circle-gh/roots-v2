@@ -185,9 +185,12 @@ Page({
     this._applyPendingCategory();
   },
 
-  // Pre-select + scroll to the category the customer tapped on Home. The
-  // target name is stashed in globalData because switchTab carries no params.
-  // No-op when nothing is pending or the section hasn't loaded yet.
+  // Drill straight into the category the customer tapped on Home — the tile
+  // lands them in that category's subcategory menu (the drilled rail), not
+  // just scrolled to its section. The target name is stashed in globalData
+  // because switchTab carries no params. No-op when nothing is pending or the
+  // section hasn't loaded yet (refresh() retries once it builds them). A rare
+  // single-group category isn't drillable, so it just scrolls to itself.
   _applyPendingCategory() {
     const app = getApp();
     const name = app.globalData && app.globalData.pendingCategory;
@@ -195,7 +198,8 @@ Page({
     const section = (this.data.sections || []).find(s => s.name === name);
     if (!section) return;            // sections not built yet — refresh() retries
     app.globalData.pendingCategory = '';
-    this.setCategory({ currentTarget: { dataset: { name } } });
+    if (section.drillable) this.drillInto(name);
+    else this.setCategory({ currentTarget: { dataset: { name } } });
   },
 
   // Page-level scroll: only used when the layout is grid/gallery (the
