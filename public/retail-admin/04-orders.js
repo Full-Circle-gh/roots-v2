@@ -1584,7 +1584,7 @@ function renderShipmentCard(o, s) {
         <span class="count">${countLabel}</span>
         ${shipmentStatePill(s)}
       </div>
-      ${renderItemsTable(s.items, true)}
+      ${renderItemsTable(s.items, false)}
       ${actions}
       ${mode === 'local'
         ? (['paid', 'preparing', 'dispatched', 'delivered'].includes(o.status) ? renderLocalEtaCard(o, s) : '')
