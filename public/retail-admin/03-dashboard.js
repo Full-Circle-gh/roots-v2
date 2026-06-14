@@ -945,7 +945,7 @@ const BENTO_CATALOGUE = {
       const d = (DASH_OPS && DASH_OPS.low_stock) || { count: 0, items: [] };
       if (!d.count) return body.innerHTML = `<div class="db-tile-num good">0</div><div class="db-tile-sub">All stocked · 库存充足</div>`;
       if (tile) tile.classList.add('alert');
-      const rows = d.items.slice(0, 6).map(it => `<div class="db-tile-list-row">
+      const rows = d.items.slice(0, 6).map(it => `<div class="db-tile-list-row${it.id ? ' is-link' : ''}"${it.id ? ` role="button" tabindex="0" onclick="dashOpenProductFromFeed(${Number(it.id)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();dashOpenProductFromFeed(${Number(it.id)})}"` : ''}>
         <span class="name">${escapeHtml(dbProdName(it))}</span>
         <span class="val">${it.stock_qty}</span>
       </div>`).join('');

@@ -1102,6 +1102,10 @@
   .db-tile-list-row:last-child { border-bottom: 0; }
   .db-tile-list-row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .db-tile-list-row .val  { color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; font-weight: 500; }
+  /* Clickable rows (e.g. Low stock → open that product's editor). */
+  .db-tile-list-row.is-link { cursor: pointer; margin: 0 -6px; padding: 4px 6px; border-radius: 6px; transition: background .15s ease; }
+  .db-tile-list-row.is-link:hover, .db-tile-list-row.is-link:focus-visible { background: var(--line-soft); outline: none; }
+  .db-tile-list-row.is-link:hover .name { color: var(--accent); }
   .db-tile-empty { font-size: 12px; color: var(--text-3); padding: 8px 0; text-align: center; }
   /* Mini heatmap for the bento variant — squished cells, no labels. */
   /* Mini heatmap — day-of-week rows (labelled) × 24 hour cells, with an hour
