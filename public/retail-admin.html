@@ -4458,7 +4458,16 @@
         <label>中文</label>
         <input type="text" id="vot-intro-cn" maxlength="240" placeholder="每周日截止,投票得 {pts} 积分。"/>
       </div>
-      <button class="btn btn-primary" onclick="saveVotingConfig(this)" style="margin-top: 14px;">Save tagline · 保存</button>
+      <div class="field" style="margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px;">
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+          <input type="checkbox" id="vot-show-counts" checked style="width: auto;"/>
+          <span>Show vote counts · 显示票数</span>
+        </label>
+        <div class="muted" style="font-size: 11px; margin-top: 6px;">
+          When off, the poll still highlights which option is winning, but hides all numbers (vote tallies and percentages). · 关闭后,投票仍会标出领先/获胜的选项,但隐藏所有数字(票数和百分比)。
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="saveVotingConfig(this)" style="margin-top: 14px;">Save · 保存</button>
     </div>
 
     <div style="display: flex; gap: 10px; margin-bottom: var(--s4);">

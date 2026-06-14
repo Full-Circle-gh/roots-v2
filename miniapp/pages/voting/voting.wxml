@@ -36,10 +36,10 @@
     <!-- Options -->
     <view class="opts">
       <view wx:for="{{featured.options}}" wx:key="id" wx:for-item="opt"
-            class="opt {{opt.isChosen ? 'opt-chosen' : ''}} {{featured.showResults ? 'opt-results' : ''}} {{featured.isClosed && opt.isMax ? 'opt-winner' : ''}}"
+            class="opt {{opt.isChosen ? 'opt-chosen' : ''}} {{featured.showResults ? 'opt-results' : ''}} {{(featured.isClosed || !showCounts) && opt.isMax ? 'opt-winner' : ''}}"
             data-poll-id="{{featured.id}}" data-option-id="{{opt.id}}" bindtap="pickOption">
-        <!-- Result fill bar (only after voting or closed) -->
-        <view wx:if="{{featured.showResults}}" class="opt-fill {{opt.isMine ? 'opt-fill-mine' : ''}} {{opt.isMax ? 'opt-fill-max' : ''}}" style="width: {{opt.pctWidth}};"></view>
+        <!-- Result fill bar (only after voting or closed, and only when counts are shown) -->
+        <view wx:if="{{featured.showResults && showCounts}}" class="opt-fill {{opt.isMine ? 'opt-fill-mine' : ''}} {{opt.isMax ? 'opt-fill-max' : ''}}" style="width: {{opt.pctWidth}};"></view>
 
         <view class="opt-row">
           <view class="opt-letter f-gothic {{opt.isChosen ? 'on' : ''}}">{{opt.letter}}</view>
@@ -47,11 +47,14 @@
             <view wx:if="{{lang === 'cn'}}" class="opt-label opt-cn f-yuan">{{opt.label_cn || opt.label_en}}</view>
             <view wx:else class="opt-label f-bear">{{opt.label_en}}</view>
           </view>
-          <view wx:if="{{featured.showResults}}" class="opt-pct">
+          <view wx:if="{{featured.showResults && showCounts}}" class="opt-pct">
             <view class="opt-pct-num f-gothic">{{opt.pctStr}}%</view>
             <view class="opt-pct-lbl f-toni">{{opt.votesLbl}} {{lang === 'cn' ? '票' : 'VOTES'}}</view>
           </view>
-          <view wx:else class="opt-tick {{opt.isChosen ? 'on' : ''}}">
+          <view wx:elif="{{featured.showResults && !showCounts && opt.isMax}}" class="opt-lead f-gothic">
+            {{featured.isClosed ? copy.winnerTag : copy.leadingTag}}
+          </view>
+          <view wx:elif="{{!featured.showResults}}" class="opt-tick {{opt.isChosen ? 'on' : ''}}">
             <text wx:if="{{opt.isChosen}}" class="opt-check">✓</text>
           </view>
         </view>
@@ -74,7 +77,8 @@
     </view>
 
     <view class="card-foot f-toni">
-      <text>{{featured.totalVotes}} {{lang === 'cn' ? '票' : 'VOTES'}}</text>
+      <text wx:if="{{showCounts}}">{{featured.totalVotes}} {{lang === 'cn' ? '票' : 'VOTES'}}</text>
+      <text wx:else></text>
       <text class="share-lnk" bindtap="share">{{copy.share}}</text>
     </view>
   </view>

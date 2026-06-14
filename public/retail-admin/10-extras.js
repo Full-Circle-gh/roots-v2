@@ -1368,9 +1368,10 @@ async function loadVotingConfig() {
   try {
     const r = await api('/api/retail-admin/voting/config');
     const c = r.data || {};
-    const en = $('#vot-intro-en'), cn = $('#vot-intro-cn');
+    const en = $('#vot-intro-en'), cn = $('#vot-intro-cn'), sc = $('#vot-show-counts');
     if (en) en.value = c.intro_en || '';
     if (cn) cn.value = c.intro_cn || '';
+    if (sc) sc.checked = c.show_counts !== false;
   } catch (e) { /* leave placeholders if the load fails */ }
 }
 
@@ -1382,9 +1383,10 @@ async function saveVotingConfig(btn) {
       body: {
         intro_en: $('#vot-intro-en').value.trim(),
         intro_cn: $('#vot-intro-cn').value.trim(),
+        show_counts: !!($('#vot-show-counts') && $('#vot-show-counts').checked),
       },
     });
-    toast('Tagline saved · 已保存');
+    toast('Saved · 已保存');
   } catch (e) {
     toast('Save failed · 保存失败: ' + e.message, 'err');
   } finally {

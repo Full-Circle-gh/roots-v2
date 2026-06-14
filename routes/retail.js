@@ -16514,6 +16514,9 @@ router.get('/api/retail/storefront/leaderboard', (req, res) => {
 const VOTING_DEFAULTS = {
   intro_en: 'Every poll closes Sundays. Voting earns {pts} pts.',
   intro_cn: '每周日截止,投票得 {pts} 积分。',
+  // When false, the mini app hides vote tallies and percentages — it still
+  // marks the leading/winning option, just without any numbers.
+  show_counts: true,
 };
 
 function loadVotingConfig() {
@@ -16522,7 +16525,9 @@ function loadVotingConfig() {
   let parsed;
   try { parsed = JSON.parse(row.value_json); }
   catch { parsed = {}; }
-  return { ...VOTING_DEFAULTS, ...(parsed || {}) };
+  const merged = { ...VOTING_DEFAULTS, ...(parsed || {}) };
+  merged.show_counts = merged.show_counts !== false; // default on; only an explicit false hides counts
+  return merged;
 }
 
 function loadPollOptions(pollId) {
@@ -16716,6 +16721,7 @@ router.put('/api/retail-admin/voting/config', requireRetailAdmin, express.json()
   const next = {
     intro_en: String(body.intro_en || '').slice(0, 240) || VOTING_DEFAULTS.intro_en,
     intro_cn: String(body.intro_cn || '').slice(0, 240) || VOTING_DEFAULTS.intro_cn,
+    show_counts: body.show_counts !== false,
   };
   tdb().prepare(
     `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)

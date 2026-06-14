@@ -202,6 +202,17 @@
   color: var(--olive);
   margin-top: 4rpx;
 }
+/* "WINNING / LEADING" pill shown in place of numbers when vote counts are hidden */
+.opt-lead {
+  flex-shrink: 0;
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  background: var(--lime);
+  border-radius: 999rpx;
+  padding: 6rpx 16rpx;
+  line-height: 1;
+}
 .opt-tick {
   width: 40rpx;
   height: 40rpx;

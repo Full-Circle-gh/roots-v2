@@ -26,6 +26,8 @@ const COPY = {
     otherPolls: 'OTHER OPEN POLLS',
     pastResults:'PAST RESULTS',
     winnerLbl:  'Winner: ',
+    winnerTag:  'WINNING',
+    leadingTag: 'LEADING',
     quote:      '"Your voice shapes the menu."',
     noOpen:     'No open polls right now. Check back soon.',
     pollDays:   '{n}d',
@@ -52,6 +54,8 @@ const COPY = {
     otherPolls: '其他投票',
     pastResults:'已结束',
     winnerLbl:  '获胜者:',
+    winnerTag:  '领先',
+    leadingTag: '领先',
     quote:      '"你的选择,塑造菜单。"',
     noOpen:     '暂无进行中的投票,请稍后再来。',
     pollDays:   '{n}天',
@@ -121,6 +125,7 @@ Page({
     chosenByPoll: {},  // pollId -> optionId (pre-vote local pick)
     introLine: '',
     titleLines: {},
+    showCounts: true,  // office toggle — hide vote tallies/percentages when off
   },
 
   onShow() {
@@ -168,6 +173,7 @@ Page({
       // otherwise the bundled default. `{pts}` fills from the featured poll.
       const introTpl = (cfg && (lang === 'cn' ? cfg.intro_cn : cfg.intro_en)) || this.data.copy.intro;
       const introLine = format(introTpl, { pts: featured?.rewardPoints || 5 });
+      const showCounts = !(cfg && cfg.show_counts === false);
 
       this.setData({
         loading: false,
@@ -176,6 +182,7 @@ Page({
         otherOpen,
         closed,
         introLine,
+        showCounts,
       });
     } catch (e) {
       console.warn('[voting] refresh failed:', e.message);
