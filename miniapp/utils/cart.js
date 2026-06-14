@@ -119,22 +119,25 @@ function reprice(lines) {
   const byKey = {};
   for (const ln of lines) byKey[keyOf(ln.product_id, ln.choice_ids)] = ln;
   let changed = false;
+  const numOrNull = v => (v != null && Number.isFinite(Number(v))) ? Number(v) : null;
   for (const it of state.items) {
     const ln = byKey[keyOf(it.product_id, (it.options || []).map(o => o.choice_id))];
     if (!ln) continue;
-    // Keep the coupon-exclusion flag fresh even when the price is unchanged —
-    // a flash window can start/end while items sit in the cart, flipping whether
-    // the line is ring-fenced from coupons.
-    if (ln.coupon_blocked != null && !!it.coupon_blocked !== !!ln.coupon_blocked) {
-      it.coupon_blocked = !!ln.coupon_blocked;
-      changed = true;
-    }
-    if (ln.unit_price != null && Number(it.unit_price) !== Number(ln.unit_price)) {
-      it.unit_price    = Number(ln.unit_price);
-      it.is_flash      = !!ln.is_flash;
-      it.regular_price = ln.regular_price != null ? Number(ln.regular_price) : null;
-      changed = true;
-    }
+    // Refresh every server-authoritative discount field, unconditionally — NOT
+    // gated on a unit-price change. A flash window or a manual "was" markdown
+    // can start, end, or change while items sit in the cart, and a markdown's
+    // was-price can move even when the price the customer actually pays is the
+    // same. Doing this only on a unit-price change (the old behaviour) left the
+    // flash/markdown badge stale in those cases.
+    const apply = (field, val) => {
+      const cur = it[field] == null ? null : it[field];
+      if (cur !== val) { it[field] = val; changed = true; }
+    };
+    if (ln.coupon_blocked != null) apply('coupon_blocked', !!ln.coupon_blocked);
+    if (ln.unit_price != null)     apply('unit_price', Number(ln.unit_price));
+    apply('is_flash', !!ln.is_flash);
+    apply('regular_price', numOrNull(ln.regular_price));
+    if ('compare_at_price' in ln) apply('compare_at_price', numOrNull(ln.compare_at_price));
   }
   if (changed) save();
   return changed;

@@ -20,9 +20,12 @@ function lineSaveFields(it, L) {
   const onFlash  = !!it.is_flash && it.regular_price != null && Number(it.regular_price) > unit;
   const worth    = Number(it.bundle_worth) || 0;
   const onBundle = !onFlash && worth > unit;
-  const wasN    = onFlash ? Number(it.regular_price) * qty : onBundle ? worth * qty : 0;
-  const saveAmt = onFlash ? (Number(it.regular_price) - unit) * qty : onBundle ? (worth - unit) * qty : 0;
-  const show = onFlash || onBundle;
+  // Everyday "was" markdown (compare_at_price). Flash + bundle take priority.
+  const cmp        = Number(it.compare_at_price) || 0;
+  const onMarkdown = !onFlash && !onBundle && cmp > unit;
+  const wasN    = onFlash ? Number(it.regular_price) * qty : onBundle ? worth * qty : onMarkdown ? cmp * qty : 0;
+  const saveAmt = onFlash ? (Number(it.regular_price) - unit) * qty : onBundle ? (worth - unit) * qty : onMarkdown ? (cmp - unit) * qty : 0;
+  const show = onFlash || onBundle || onMarkdown;
   return {
     on_flash: onFlash,
     show_save: show,
@@ -30,6 +33,7 @@ function lineSaveFields(it, L) {
     save_text: show ? (L === 'cn' ? '省 ¥' : 'save ¥') + saveAmt.toFixed(2) : '',
     flash_save: onFlash ? saveAmt : 0,
     bundle_save: onBundle ? saveAmt : 0,
+    markdown_save: onMarkdown ? saveAmt : 0,
   };
 }
 
@@ -990,11 +994,12 @@ Page({
     const state = cart.get();
     const subtotal = cart.subtotal();
     const L = this.data.lang;
-    let flashSavings = 0, bundleSavings = 0;
+    let flashSavings = 0, bundleSavings = 0, markdownSavings = 0;
     const items = state.items.map(it => {
       const sf = lineSaveFields(it, L);
       flashSavings += sf.flash_save;
       bundleSavings += sf.bundle_save;
+      markdownSavings += sf.markdown_save;
       return {
         ...it,
         display_name: lang.pick(it.name_en, it.name_cn, L),
@@ -1016,7 +1021,7 @@ Page({
     }
     const pointsAffordable = grossTotal > 0 && pointsDiscount >= grossTotal;
     const total = Math.max(0, grossTotal - pointsDiscount);
-    const savedTotal = flashSavings + bundleSavings + voucherDiscount + pointsDiscount;
+    const savedTotal = flashSavings + bundleSavings + markdownSavings + voucherDiscount + pointsDiscount;
     this.setData({
       items, itemCount,
       subtotal: subtotal.toFixed(2),
@@ -1213,11 +1218,12 @@ Page({
         const srvSubtotal = Number(data.subtotal != null ? data.subtotal : cart.subtotal());
         // Per-line flash treatment (strikethrough original + "save ¥X" tag)
         // and tally the flash savings for the "You saved" line below.
-        let flashSavings = 0, bundleSavings = 0;
+        let flashSavings = 0, bundleSavings = 0, markdownSavings = 0;
         const itemRows = cart.get().items.map(it => {
           const sf = lineSaveFields(it, L);
           flashSavings += sf.flash_save;
           bundleSavings += sf.bundle_save;
+          markdownSavings += sf.markdown_save;
           return {
             ...it,
             display_name: lang.pick(it.name_en, it.name_cn, L),
@@ -1294,7 +1300,7 @@ Page({
         const missingItems     = Array.isArray(routing?.missing_items) ? routing.missing_items : [];
         // "You saved" total — flash + bundle savings + voucher + points + waived
         // delivery (free-ship voucher). Empty string hides the summary row.
-        const savedTotal = flashSavings + bundleSavings + voucherDiscount + pointsDiscount
+        const savedTotal = flashSavings + bundleSavings + markdownSavings + voucherDiscount + pointsDiscount
           + (ev.freeShip ? deliveryFee : 0);
         this.setData({
           zone: data.zone || null,

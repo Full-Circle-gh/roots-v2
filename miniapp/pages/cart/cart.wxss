@@ -94,6 +94,11 @@
   color: rgba(0, 0, 0, 0.4);
   text-decoration: line-through;
 }
+.line-save {
+  color: #5a8a2f;
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.04em;
+}
 .line-flash {
   background: #E96174;
   color: #fff;
@@ -136,6 +141,65 @@
   letter-spacing: 0.1em;
   width: 100%;
 }
+
+/* ──── "Complete your profile" checkout gate ───────────────────────────
+   Branded replacement for wx.showModal. Hard square ink border + oat card
+   + lime CTA so it reads as part of the cart, not a system alert. */
+.bind-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(26, 35, 20, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 56rpx;
+}
+.bind-card {
+  width: 100%;
+  max-width: 600rpx;
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  box-shadow: 12rpx 12rpx 0 var(--ink);
+  padding: 48rpx 44rpx 40rpx;
+  animation: bindPop 200ms cubic-bezier(.2,.9,.3,1.1);
+}
+@keyframes bindPop {
+  from { opacity: 0; transform: translateY(16rpx) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.bind-icon { font-size: 72rpx; line-height: 1; margin-bottom: 16rpx; }
+.bind-kicker {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.18em;
+  color: var(--olive);
+  margin-bottom: 12rpx;
+}
+.bind-title {
+  font-size: calc(56rpx * var(--font-scale));
+  line-height: 1.05;
+  color: var(--ink);
+  margin-bottom: 18rpx;
+}
+.bind-body {
+  font-size: calc(28rpx * var(--font-scale));
+  line-height: 1.5;
+  color: rgba(26, 35, 20, 0.82);
+  margin-bottom: 40rpx;
+}
+.bind-actions { display: flex; gap: 16rpx; }
+.bind-btn {
+  flex: 1;
+  text-align: center;
+  padding: 26rpx 0;
+  font-size: calc(28rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  border: 3rpx solid var(--ink);
+}
+.bind-btn--secondary { background: transparent; color: var(--ink); }
+.bind-btn--secondary:active { background: rgba(26, 35, 20, 0.06); }
+.bind-btn--primary { background: var(--ink); color: var(--lime); }
+.bind-btn--primary:active { background: #2a3a22; }
 
 .empty { padding: 200rpx 44rpx 0; text-align: center; }
 .empty-title { font-size: calc(44rpx * var(--font-scale)); font-weight: 500; margin-bottom: 32rpx; line-height: 1.3; }

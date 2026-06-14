@@ -37,6 +37,7 @@
           <view wx:if="{{item.is_flash}}" class="line-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
           <view wx:if="{{item.regular_total}}" class="line-was f-aleo">¥{{item.regular_total}}</view>
           <view class="line-total f-bear {{item.is_flash ? 'is-flash' : ''}}">¥{{item.line_total}}</view>
+          <view wx:if="{{item.save_text}}" class="line-save f-toni">{{item.save_text}}</view>
         </view>
       </view>
     </view>
@@ -58,5 +59,22 @@
     <view class="empty-title f-bear">{{copy.empty}}</view>
     <button class="empty-btn f-toni" bindtap="goShop">{{lang === 'cn' ? '去逛逛 →' : 'Browse the shop →'}}</button>
   </view>
+  <!-- Branded "complete your profile" modal — replaces wx.showModal so the
+       checkout-gate matches the cart's Bear/Toni type + oat/ink/lime palette. -->
+  <view wx:if="{{showBindModal}}" class="bind-backdrop" bindtap="bindModalCancel">
+    <view class="bind-card" catchtap="noop">
+      <view class="bind-icon">🪪</view>
+      <view class="bind-kicker f-toni">{{ lang === 'cn' ? '差一步' : 'ONE LAST STEP' }}</view>
+      <view class="bind-title f-bear">{{ lang === 'cn' ? '先完善资料' : 'Complete your profile' }}</view>
+      <view class="bind-body f-aleo">{{ lang === 'cn'
+        ? '结账前请先绑定您的微信昵称与头像。'
+        : 'Bind your WeChat nickname and avatar before checking out.' }}</view>
+      <view class="bind-actions">
+        <view class="bind-btn bind-btn--secondary f-toni" bindtap="bindModalCancel">{{ lang === 'cn' ? '取消' : 'Cancel' }}</view>
+        <view class="bind-btn bind-btn--primary f-toni" bindtap="bindModalConfirm">{{ lang === 'cn' ? '去绑定 →' : 'Bind now →' }}</view>
+      </view>
+    </view>
+  </view>
+
   <popup-manager page="cart"></popup-manager>
 </view>
