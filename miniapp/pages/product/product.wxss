@@ -923,3 +923,14 @@
   flex-shrink: 0; font-size: calc(24rpx * var(--font-scale)); color: var(--olive);
   background: rgba(0,0,0,.06); padding: 4rpx 14rpx; border-radius: 999rpx;
 }
+/* Tappable component → opens its own product page. Gentle inset so the
+   tap-down highlight has room to read, plus a chevron affordance. */
+.pd-inside-item.is-link {
+  padding: 8rpx 6rpx 8rpx 8rpx; margin: -8rpx -6rpx -8rpx -8rpx;
+  border-radius: 14rpx; transition: background-color .18s var(--ease-out, ease-out);
+}
+.pd-inside-item--tap { background: rgba(0,0,0,.06); }
+.pd-inside-arrow {
+  flex-shrink: 0; font-size: calc(40rpx * var(--font-scale)); color: var(--olive);
+  line-height: 1; padding-left: 4rpx; opacity: .7;
+}

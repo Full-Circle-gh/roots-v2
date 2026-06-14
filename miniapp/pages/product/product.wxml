@@ -163,10 +163,16 @@
       <view wx:if="{{whatsInside}}" class="pd-inside">
         <text class="pd-inside-title f-bear">{{whatsInside.title}}</text>
         <view class="pd-inside-list">
-          <view wx:for="{{whatsInside.items}}" wx:key="id" class="pd-inside-item">
+          <view wx:for="{{whatsInside.items}}" wx:key="id"
+                class="pd-inside-item {{item.tappable ? 'is-link' : ''}}"
+                hover-class="{{item.tappable ? 'pd-inside-item--tap' : 'none'}}"
+                hover-stay-time="80"
+                data-id="{{item.tappable ? item.id : ''}}"
+                bindtap="onInsideTap">
             <image class="pd-inside-img" src="{{item.img}}" mode="aspectFill"/>
             <text class="pd-inside-name f-aleo">{{item.name}}</text>
             <text wx:if="{{item.qty}}" class="pd-inside-qty f-toni">{{item.qty}}</text>
+            <text wx:if="{{item.tappable}}" class="pd-inside-arrow f-bear">›</text>
           </view>
         </view>
       </view>
