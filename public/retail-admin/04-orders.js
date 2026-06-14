@@ -54,6 +54,7 @@ function _ordersFp(rows) {
     s += r.id + ':' + (r.status||'') + ':'
        + (r.refund_status||'') + ':'
        + (r.tracking_number||'') + ':'
+       + (r.local_eta||'') + ':'
        + (r.updated_at || r.placed_at || '') + ',';
   }
   return s;
@@ -1005,6 +1006,19 @@ function renderShipByTile(o) {
 function renderTrackingCell(o) {
   if (o.fulfillment_type === 'pickup') {
     return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${cuT('pickup','自提')}</span>`;
+  }
+  // Local (same-city) delivery has no waybill — it carries an operator-set ETA
+  // instead. Show that here, and never the red "missing waybill" warning, which
+  // doesn't apply to local delivery.
+  if (o.is_local) {
+    if (o.local_eta) {
+      return `<div style="font-size:11px; font-weight:600; color:#5a8c2a;">🛵 ${escapeHtml(formatEtaPretty(o.local_eta))}</div>
+              <div class="muted" style="font-size:10px; margin-top:2px;">${cuT('arrival','预计送达')}</div>`;
+    }
+    if (o.status === 'dispatched') {
+      return `<span class="muted" style="font-size:11px;">${cuT('no ETA set','未设送达时间')}</span>`;
+    }
+    return '<span class="muted">—</span>';
   }
   if (!o.tracking_number) {
     // Shipped without tracking = office still needs to enter the waybill.
@@ -2627,6 +2641,7 @@ async function saveLocalEta(orderId, shipmentId, ev) {
     const _scrollTop = _mount ? _mount.scrollTop : 0;
     await openOrder(orderId);
     if (_mount) _mount.scrollTop = _scrollTop;
+    loadOrders();   // refresh the list so the tracking cell shows the new ETA
   } catch {}
 }
 
@@ -2642,6 +2657,7 @@ async function clearLocalEta(orderId, shipmentId, ev) {
     const _scrollTop = _mount ? _mount.scrollTop : 0;
     await openOrder(orderId);
     if (_mount) _mount.scrollTop = _scrollTop;
+    loadOrders();   // refresh the list so the tracking cell drops the ETA
   } catch {}
 }
 

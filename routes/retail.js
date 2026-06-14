@@ -7558,8 +7558,15 @@ router.get('/api/retail-admin/dashboard/presence', requireRetailAdmin, (req, res
 // window: last 24h; ?since=<ms> + ?limit=N tune it. Polled every ~20s by the
 // dashboard; no cache (cheap query, freshness matters).
 router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res) => {
-  const limit   = Math.min(Math.max(parseInt(req.query.limit || '50', 10) || 50, 1), 200);
-  const sinceMs = parseInt(req.query.since || '0', 10) || (Date.now() - 24 * 3600 * 1000);
+  const limit   = Math.min(Math.max(parseInt(req.query.limit || '50', 10) || 50, 1), 500);
+  // Default window = since the start of TODAY in Guangzhou (UTC+8), not a
+  // rolling 24h — so the feed shows the whole day's activity, not just the
+  // last N events (which a burst of sign-ups can otherwise fill in minutes).
+  const gzMidnightMs = () => {
+    const gzDate = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    return Date.parse(gzDate + 'T00:00:00Z') - 8 * 3600 * 1000;
+  };
+  const sinceMs = parseInt(req.query.since || '0', 10) || gzMidnightMs();
   // SQLite stores DEFAULT CURRENT_TIMESTAMP as "YYYY-MM-DD HH:MM:SS" UTC.
   const sinceIso = new Date(sinceMs).toISOString().slice(0, 19).replace('T', ' ');
   const parseTs  = s => Date.parse(String(s || '').replace(' ', 'T') + 'Z') || null;
@@ -10945,6 +10952,12 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.promised_ship_date, o.promised_delivery_date,
                     o.tracking_carrier, o.tracking_number, o.tracking_status,
                     o.tracking_kd100_subscribed,
+                    (SELECT sh.local_eta FROM retail_shipments sh
+                       WHERE sh.order_id = o.id AND sh.mode = 'local'
+                         AND sh.local_eta IS NOT NULL AND sh.local_eta != ''
+                       ORDER BY sh.id ASC LIMIT 1) AS local_eta,
+                    (SELECT 1 FROM retail_shipments sh2
+                       WHERE sh2.order_id = o.id AND sh2.mode = 'local' LIMIT 1) AS is_local,
                     s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
                FROM retail_orders o
           LEFT JOIN retail_customers c ON c.id = o.customer_id
