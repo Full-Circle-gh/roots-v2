@@ -1178,7 +1178,7 @@ function renderShipByTile(o) {
       : `<div class="sub">${cuT('No fixed date — ship as soon as possible', '无固定日期 — 尽快发货')}</div>`;
     return `<div>
       <div class="kicker">${shipByKicker(o)}</div>
-      <div class="val"><b style="color: ${color};">${cuT('ASAP / As soon as possible', '尽快 / 越快越好')}</b></div>
+      <div class="val"><b style="color: ${color};">${cuT('As soon as possible', '越快越好')}</b></div>
       ${deadlineLine}
       ${batchSub}
     </div>`;
