@@ -45,6 +45,27 @@
     </view>
   </view>
 </template>
+<!-- Flash-sale strip/hero product card. `item` = card data, `flashAccent` =
+     optional sale-price/meter tint. Shared by the carousel + grid layouts. -->
+<template name="fsCard">
+  <view class="fs-card" data-id="{{item.id}}" bindtap="onFlashCardTap">
+    <view class="fs-card-img">
+      <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
+      <view wx:if="{{item.badge}}" class="fs-badge">{{item.badge}}</view>
+    </view>
+    <view class="fs-card-meta">
+      <view class="fs-card-name">{{item.name}}</view>
+      <view class="fs-card-prices">
+        <text class="fs-price-now" style="{{flashAccent ? 'color:' + flashAccent : ''}}">{{item.priceNow}}</text>
+        <text wx:if="{{item.priceWas}}" class="fs-price-was">{{item.priceWas}}</text>
+      </view>
+      <view wx:if="{{item.meterPct !== null}}" class="fs-meter">
+        <view class="fs-meter-bar" style="width:{{item.meterPct}}%;{{flashAccent ? 'background:' + flashAccent : ''}}"></view>
+      </view>
+      <view class="fs-meter-lbl">{{item.meterLabel}}</view>
+    </view>
+  </view>
+</template>
 
 <view wx:if="{{type === 'announcement_bar'}}" class="announce anim-{{anim}} speed-{{speed}} {{announceLink ? 'announce-linked' : ''}}" style="background:{{bg}};color:{{fg}}" bindtap="onAnnounceTap">
   <!-- Marquee: clipped wrapper around a duplicated track for seamless loop -->
@@ -415,26 +436,16 @@
       </view>
     </view>
   </view>
-  <scroll-view wx:if="{{flashStrip.cards.length}}" class="fs-cards {{flashGrid ? 'is-grid' : ''}}" scroll-x="{{!flashGrid}}" enhanced="{{true}}" show-scrollbar="{{false}}">
-    <view wx:for="{{flashStrip.cards}}" wx:key="id" class="fs-card"
-          data-id="{{item.id}}" bindtap="onFlashCardTap">
-      <view class="fs-card-img">
-        <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
-        <view wx:if="{{item.badge}}" class="fs-badge">{{item.badge}}</view>
-      </view>
-      <view class="fs-card-meta">
-        <view class="fs-card-name">{{item.name}}</view>
-        <view class="fs-card-prices">
-          <text class="fs-price-now" style="{{flashAccent ? 'color:' + flashAccent : ''}}">{{item.priceNow}}</text>
-          <text wx:if="{{item.priceWas}}" class="fs-price-was">{{item.priceWas}}</text>
-        </view>
-        <view wx:if="{{item.meterPct !== null}}" class="fs-meter">
-          <view class="fs-meter-bar" style="width:{{item.meterPct}}%;{{flashAccent ? 'background:' + flashAccent : ''}}"></view>
-        </view>
-        <view class="fs-meter-lbl">{{item.meterLabel}}</view>
-      </view>
+  <block wx:if="{{flashStrip.cards.length}}">
+    <!-- Grid = plain view so flex-wrap reaches the cards (a scroll-view wraps
+         its children in an internal node, defeating display:flex). -->
+    <view wx:if="{{flashGrid}}" class="fs-cards is-grid">
+      <template is="fsCard" wx:for="{{flashStrip.cards}}" wx:key="id" data="{{item, flashAccent}}"/>
     </view>
-  </scroll-view>
+    <scroll-view wx:else class="fs-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+      <template is="fsCard" wx:for="{{flashStrip.cards}}" wx:key="id" data="{{item, flashAccent}}"/>
+    </scroll-view>
+  </block>
   <view wx:elif="{{flashStrip.isEmpty}}" class="fs-empty">{{flashStrip.emptyText}}</view>
 </view>
 
@@ -454,26 +465,14 @@
     </block>
   </view>
   <view wx:if="{{!flashStrip.isEmpty && flashStrip.ctaLabel}}" class="fh-cta" bindtap="onFlashCtaTap">{{flashStrip.ctaLabel}}</view>
-  <scroll-view wx:if="{{flashView === 'hero' && flashStrip.cards.length}}" class="fs-cards fh-cards {{flashGrid ? 'is-grid' : ''}}" scroll-x="{{!flashGrid}}" enhanced="{{true}}" show-scrollbar="{{false}}">
-    <view wx:for="{{flashStrip.cards}}" wx:key="id" class="fs-card"
-          data-id="{{item.id}}" bindtap="onFlashCardTap">
-      <view class="fs-card-img">
-        <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full"/>
-        <view wx:if="{{item.badge}}" class="fs-badge">{{item.badge}}</view>
-      </view>
-      <view class="fs-card-meta">
-        <view class="fs-card-name">{{item.name}}</view>
-        <view class="fs-card-prices">
-          <text class="fs-price-now" style="{{flashAccent ? 'color:' + flashAccent : ''}}">{{item.priceNow}}</text>
-          <text wx:if="{{item.priceWas}}" class="fs-price-was">{{item.priceWas}}</text>
-        </view>
-        <view wx:if="{{item.meterPct !== null}}" class="fs-meter">
-          <view class="fs-meter-bar" style="width:{{item.meterPct}}%;{{flashAccent ? 'background:' + flashAccent : ''}}"></view>
-        </view>
-        <view class="fs-meter-lbl">{{item.meterLabel}}</view>
-      </view>
+  <block wx:if="{{flashView === 'hero' && flashStrip.cards.length}}">
+    <view wx:if="{{flashGrid}}" class="fs-cards fh-cards is-grid">
+      <template is="fsCard" wx:for="{{flashStrip.cards}}" wx:key="id" data="{{item, flashAccent}}"/>
     </view>
-  </scroll-view>
+    <scroll-view wx:else class="fs-cards fh-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+      <template is="fsCard" wx:for="{{flashStrip.cards}}" wx:key="id" data="{{item, flashAccent}}"/>
+    </scroll-view>
+  </block>
   <view wx:if="{{flashStrip.isEmpty}}" class="fs-empty">{{flashStrip.emptyText}}</view>
 </view>
 
@@ -501,7 +500,10 @@
         </view>
       </view>
       <view wx:if="{{flashDesign.shop}}" class="fsd-cta-wrap"><view class="fsd-cta" bindtap="onFlashCtaTap">{{flashDesign.shop}} →</view></view>
-      <scroll-view class="fsd-cards {{flashGrid ? 'is-grid' : ''}}" scroll-x="{{!flashGrid}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+      <view wx:if="{{flashGrid}}" class="fsd-cards is-grid">
+        <template is="fsdCard" wx:for="{{flashDesign.cards}}" wx:key="id" data="{{c: item, badge: 'corner'}}"/>
+      </view>
+      <scroll-view wx:else class="fsd-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
         <template is="fsdCard" wx:for="{{flashDesign.cards}}" wx:key="id" data="{{c: item, badge: 'corner'}}"/>
       </scroll-view>
     </block>
@@ -522,7 +524,10 @@
           <view class="fsd-off">{{flashDesign.offMain}}<text class="cn">{{flashDesign.offSub}}</text></view>
         </view>
       </view>
-      <scroll-view class="fsd-cards {{flashGrid ? 'is-grid' : ''}}" scroll-x="{{!flashGrid}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+      <view wx:if="{{flashGrid}}" class="fsd-cards is-grid">
+        <template is="fsdCard" wx:for="{{flashDesign.cards}}" wx:key="id" data="{{c: item, badge: 'ribbon'}}"/>
+      </view>
+      <scroll-view wx:else class="fsd-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
         <template is="fsdCard" wx:for="{{flashDesign.cards}}" wx:key="id" data="{{c: item, badge: 'ribbon'}}"/>
       </scroll-view>
     </block>
@@ -538,7 +543,10 @@
         <view wx:for="{{flashDesign.tiles}}" wx:key="lbl" class="fsd-tile"><view class="fsd-tile-num">{{item.num}}</view><view class="fsd-tile-lbl">{{item.lbl}}</view></view>
       </view>
       <view wx:if="{{flashDesign.shop}}" class="fsd-cta-wrap"><view class="fsd-cta" bindtap="onFlashCtaTap">{{flashDesign.shop}} →</view></view>
-      <scroll-view class="fsd-cards {{flashGrid ? 'is-grid' : ''}}" scroll-x="{{!flashGrid}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+      <view wx:if="{{flashGrid}}" class="fsd-cards is-grid">
+        <template is="fsdCard" wx:for="{{flashDesign.cards}}" wx:key="id" data="{{c: item, badge: 'stamp'}}"/>
+      </view>
+      <scroll-view wx:else class="fsd-cards" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
         <template is="fsdCard" wx:for="{{flashDesign.cards}}" wx:key="id" data="{{c: item, badge: 'stamp'}}"/>
       </scroll-view>
     </block>
