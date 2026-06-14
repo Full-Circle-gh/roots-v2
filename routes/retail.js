@@ -7704,27 +7704,41 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
 // ── Dashboard: operational snapshot (low stock + refunds queue) ────────────
 // Feeds the bento "Low stock" and "Refunds queue" tiles. Counts + small
 // preview lists in one round-trip. Cheap; polled every ~60s alongside today's
-// KPIs. Low-stock definition matches alerts.js (stock_qty 1..5, Active).
+// KPIs. "Low stock" = real stock 1..threshold on an Active product, where
+// real stock is the SAME source the storefront/shop sell against: the SUM of
+// per-store physical_qty across ACTIVE stores, falling back to the legacy
+// store_products.stock_qty column only when no per-store rows exist. Reading
+// the legacy column directly (as this used to) reported products as low/out
+// even when they were fully stocked per-store — see the stock NOTE in the
+// activity endpoint above.
 router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => {
   const previewLimit = Math.min(Math.max(parseInt(req.query.preview || '8', 10) || 8, 1), 50);
   let low = { count: 0, items: [] };
   let refunds = { count: 0, items: [] };
 
+  // Real, sellable stock per product (matches the storefront's `stock` column).
+  const REAL_STOCK = `COALESCE(
+      (SELECT SUM(rss.physical_qty)
+         FROM retail_store_stock rss
+         JOIN retail_stores      rs ON rs.id = rss.store_id
+        WHERE rss.product_id = p.id AND rs.is_active = 1),
+      p.stock_qty, 0)`;
+
   try {
     const lowDefault = lowStockDefault();
     const lowCount = tdb().prepare(`
-      SELECT COUNT(*) AS n FROM store_products
-       WHERE COALESCE(stock_qty,0) > 0
-         AND COALESCE(stock_qty,0) <= COALESCE(low_stock_threshold, ?)
-         AND status = 'Active' AND COALESCE(is_active,1) = 1
+      SELECT COUNT(*) AS n FROM store_products p
+       WHERE ${REAL_STOCK} > 0
+         AND ${REAL_STOCK} <= COALESCE(p.low_stock_threshold, ?)
+         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1
     `).get(lowDefault).n;
     const lowItems = tdb().prepare(`
-      SELECT id, name_en, name_cn, sku, stock_qty
-        FROM store_products
-       WHERE COALESCE(stock_qty,0) > 0
-         AND COALESCE(stock_qty,0) <= COALESCE(low_stock_threshold, ?)
-         AND status = 'Active' AND COALESCE(is_active,1) = 1
-       ORDER BY stock_qty ASC, name_en LIMIT ?
+      SELECT p.id, p.name_en, p.name_cn, p.sku, ${REAL_STOCK} AS stock_qty
+        FROM store_products p
+       WHERE ${REAL_STOCK} > 0
+         AND ${REAL_STOCK} <= COALESCE(p.low_stock_threshold, ?)
+         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1
+       ORDER BY stock_qty ASC, p.name_en LIMIT ?
     `).all(lowDefault, previewLimit);
     low = { count: lowCount, items: lowItems };
 
