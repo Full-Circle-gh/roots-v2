@@ -5190,6 +5190,41 @@ function buildShipmentTrackingView(s) {
   };
 }
 
+// Backfill kd100 tracking from the order-row mirror onto its shipment row(s).
+// kd100 pushes historically wrote ONLY retail_orders, but the order drawer and
+// the customer split-parcel view read off retail_shipments — so orders that
+// already received events before the shipment-mirror fix show an empty timeline.
+// Copy the order row's events onto any shipment carrying the SAME waybill that
+// has none yet. Idempotent + cheap; only fills event-less rows. Returns #rows.
+// (Single-shipment + the primary leg of split orders only — a secondary leg's
+// events were never stored on the order row, so there's nothing local to copy;
+// those fill on the next live kd100 push, which now lands via shipment lookup.)
+function backfillShipmentTrackingFromOrder(orderId) {
+  const o = tdb().prepare(
+    `SELECT tracking_number, tracking_status, tracking_events_json,
+            tracking_scenario, tracking_scenario_data_json, tracking_synced_at
+       FROM retail_orders WHERE id = ?`
+  ).get(orderId);
+  if (!o || !o.tracking_number || !o.tracking_events_json
+      || o.tracking_events_json === '[]') return 0;
+  try {
+    const r = tdb().prepare(
+      `UPDATE retail_shipments
+          SET tracking_status             = ?,
+              tracking_events_json        = ?,
+              tracking_scenario           = ?,
+              tracking_scenario_data_json = ?,
+              tracking_synced_at          = ?,
+              updated_at                  = CURRENT_TIMESTAMP
+        WHERE order_id = ? AND tracking_number = ?
+          AND (tracking_events_json IS NULL OR tracking_events_json = ''
+               OR tracking_events_json = '[]')`
+    ).run(o.tracking_status, o.tracking_events_json, o.tracking_scenario,
+          o.tracking_scenario_data_json, o.tracking_synced_at, orderId, o.tracking_number);
+    return r.changes || 0;
+  } catch (e) { console.error('[tracking.backfill] failed for order=' + orderId, e); return 0; }
+}
+
 function nextOrderNo() {
   // R{YYMMDD}{6-digit-daily-seq}. Compute next seq by counting today's rows.
   const now = new Date();
@@ -11313,6 +11348,9 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     try { await syncJdTrackingForCustomer(id, o.customer_id); }
     catch (e) { console.error('[jd.trace] backend sync failed', e); }
   }
+  // Self-heal pre-fix kd100 orders: copy any events the kd100 push wrote only
+  // to the order row onto the shipment row(s) the drawer actually reads.
+  try { backfillShipmentTrackingFromOrder(id); } catch {}
 
   // Lazy-fill shipments for orders predating the split-shipment feature.
   // This is idempotent — if rows already exist, nothing changes. Pickup
@@ -12839,14 +12877,34 @@ function handleKd100Callback(req, res, tid) {
       if (!parsed || !parsed.number) {
         return res.json({ result: false, returnCode: '400', message: 'invalid payload' });
       }
-      const order = tdb().prepare(
+      let order = tdb().prepare(
         'SELECT id, status, tracking_number, tracking_status, tracking_scenario_notified FROM retail_orders WHERE tracking_number = ? ORDER BY id DESC LIMIT 1'
       ).get(parsed.number);
+      // Split-parcel SECONDARY leg: retail_orders mirrors only the PRIMARY
+      // waybill, so a non-primary parcel's number won't match the order row.
+      // Resolve the owning order through its shipment row instead — otherwise
+      // the push no-op'd here and that leg's events were dropped with no local
+      // copy to recover from.
+      if (!order) {
+        const ship = tdb().prepare(
+          'SELECT order_id FROM retail_shipments WHERE tracking_number = ? ORDER BY id DESC LIMIT 1'
+        ).get(parsed.number);
+        if (ship) {
+          order = tdb().prepare(
+            'SELECT id, status, tracking_number, tracking_status, tracking_scenario_notified FROM retail_orders WHERE id = ?'
+          ).get(ship.order_id);
+        }
+      }
       if (!order) {
         // kd100 expects 200 on receipt — otherwise they retry. Log and ack.
-        console.warn('[kd100.callback] no order matches tracking_number=', parsed.number);
+        console.warn('[kd100.callback] no order/shipment matches tracking_number=', parsed.number);
         return res.json({ result: true, returnCode: '200', message: 'no-op (no matching order)' });
       }
+      // Is this push for the order's PRIMARY (mirrored) waybill, or a secondary
+      // split-parcel leg? Only the primary owns the retail_orders mirror and the
+      // order-level scenario notification / auto-deliver; a secondary leg updates
+      // only its own shipment row.
+      const isPrimary = order.tracking_number === parsed.number;
       // Verify salt — kd100 echoes the salt we set on subscribe, derived from
       // THIS tenant's secret (Roots → env secret, identical to before).
       const creds = getTenantCreds(tid).integrations.kd100;
@@ -12868,16 +12926,21 @@ function handleKd100Callback(req, res, tid) {
       const scenarioCode = scenario?.scenario || null;
       const scenarioJson = scenario ? JSON.stringify(scenario) : null;
 
-      tdb().prepare(
-        `UPDATE retail_orders
-            SET tracking_status            = ?,
-                tracking_events_json       = ?,
-                tracking_scenario          = ?,
-                tracking_scenario_data_json = ?,
-                tracking_synced_at         = CURRENT_TIMESTAMP,
-                updated_at                 = CURRENT_TIMESTAMP
-          WHERE id = ?`
-      ).run(parsed.state_code, JSON.stringify(parsed.events), scenarioCode, scenarioJson, order.id);
+      // Order-row mirror belongs to the PRIMARY waybill only — writing a
+      // secondary leg's events here would overwrite the primary parcel's
+      // timeline that the legacy single-card customer view reads.
+      if (isPrimary) {
+        tdb().prepare(
+          `UPDATE retail_orders
+              SET tracking_status            = ?,
+                  tracking_events_json       = ?,
+                  tracking_scenario          = ?,
+                  tracking_scenario_data_json = ?,
+                  tracking_synced_at         = CURRENT_TIMESTAMP,
+                  updated_at                 = CURRENT_TIMESTAMP
+            WHERE id = ?`
+        ).run(parsed.state_code, JSON.stringify(parsed.events), scenarioCode, scenarioJson, order.id);
+      }
 
       // Mirror onto the matching shipment row(s). The admin order drawer and the
       // customer split-parcel view both read tracking off retail_shipments
@@ -12902,16 +12965,19 @@ function handleKd100Callback(req, res, tid) {
 
       // Fire a push notification when the scenario changes to one the
       // customer should know about. Suppresses repeats so a duplicate
-      // kd100 push (same scenario) doesn't double-notify.
-      if (scenario && scenarioCode !== order.tracking_scenario_notified) {
+      // kd100 push (same scenario) doesn't double-notify. Order-level, so
+      // primary leg only — a secondary parcel's scenario shares the order's
+      // single notified-state and would race the primary's.
+      if (isPrimary && scenario && scenarioCode !== order.tracking_scenario_notified) {
         notifyTrackingScenario(order.id, scenario);
         tdb().prepare("UPDATE retail_orders SET tracking_scenario_notified = ? WHERE id = ?").run(scenarioCode, order.id);
       }
 
       // If delivered and the order is still 'dispatched', auto-flip to
       // 'delivered'. This mirrors what staff would do manually and
-      // unlocks the review prompt for the customer.
-      if (parsed.delivered && order.status === 'dispatched') {
+      // unlocks the review prompt for the customer. Primary leg only — one
+      // delivered parcel of a split order doesn't mean the whole order arrived.
+      if (isPrimary && parsed.delivered && order.status === 'dispatched') {
         try {
           tdb().prepare(
             "UPDATE retail_orders SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'dispatched'"
