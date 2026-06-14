@@ -2813,6 +2813,79 @@ function alipayVerifyNotify(params) {
   }
 }
 
+// ── WeCom (企业微信) group-bot order alert ──────────────────────────────────
+// Option A merchant notification: on every new paid order, POST a card to a
+// WeCom group via its incoming-webhook bot. No WeChat approval, no per-message
+// consent, no openid mapping — the operator just pastes the bot's webhook URL
+// (Settings → Push). Mirrors the OUT1N "新订单通知" the merchant used to get,
+// but lands in a WeCom group instead of personal WeChat.
+//
+// Webhook URL looks like:
+//   https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxxxxxx
+// We only accept that host so a misconfigured field can't POST order data
+// (recipient name + address = PII) to an arbitrary URL.
+function wecomWebhookUrl() {
+  try {
+    const u = String(loadConfig().notifications?.wecom_order_webhook || '').trim();
+    if (!u) return null;
+    const parsed = new URL(u);
+    if (parsed.hostname !== 'qyapi.weixin.qq.com') return null;
+    return u;
+  } catch { return null; }
+}
+
+// POST a markdown message to a WeCom webhook. Best-effort; resolves to a
+// {ok,msg} result and never throws so callers can fire-and-forget.
+async function postWecomMarkdown(url, content) {
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ msgtype: 'markdown', markdown: { content } }),
+    });
+    const j = await resp.json().catch(() => ({}));
+    // WeCom returns { errcode: 0, errmsg: 'ok' } on success.
+    if (j.errcode === 0) return { ok: true };
+    return { ok: false, msg: j.errmsg || ('errcode ' + j.errcode) };
+  } catch (e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+// Build the new-order card. Mirrors the fields OUT1N pushed: order no, amount,
+// time, recipient, address. Pickup orders show the pickup label instead of an
+// address. Fire-and-forget from markOrderPaid.
+function sendWecomOrderAlert(orderId, { awaitingRestock = false } = {}) {
+  const url = wecomWebhookUrl();
+  if (!url) return;
+  try {
+    const o = tdb().prepare(
+      `SELECT order_no, total, paid_at, fulfillment_type, recipient_name,
+              address_full, delivery_slot_label
+         FROM retail_orders WHERE id = ?`
+    ).get(orderId);
+    if (!o) return;
+    const time = String(o.paid_at || '').replace('T', ' ').slice(0, 16);
+    const amount = '¥' + Number(o.total || 0).toFixed(2);
+    const lines = [
+      `**🌿 新订单 · New order**${awaitingRestock ? ' (待补货 · awaiting restock)' : ''}`,
+      `> 订单号 Order: \`${o.order_no}\``,
+      `> 金额 Amount: <font color="warning">${amount}</font>`,
+      time ? `> 时间 Time: ${time}` : null,
+    ];
+    if (o.fulfillment_type === 'pickup') {
+      lines.push(`> 方式 Method: 自提 Pickup`);
+      if (o.delivery_slot_label) lines.push(`> 时间 Slot: ${o.delivery_slot_label}`);
+    } else {
+      if (o.recipient_name) lines.push(`> 收货人 To: ${o.recipient_name}`);
+      if (o.address_full)   lines.push(`> 地址 Address: ${o.address_full}`);
+    }
+    postWecomMarkdown(url, lines.filter(Boolean).join('\n'))
+      .then(r => { if (!r.ok) console.warn('[wecom alert]', orderId, r.msg); })
+      .catch(e => console.warn('[wecom alert]', orderId, e.message));
+  } catch (e) { console.warn('[wecom alert setup]', e.message); }
+}
+
 function markOrderPaid(orderId) {
   // "wait_for_restock" orders transition to 'awaiting_restock' on payment,
   // not 'paid'. The kitchen waits, and checkAwaitingRestockForRestock()
@@ -2888,6 +2961,11 @@ function markOrderPaid(orderId) {
         }
       }
     } catch (e) { console.warn('[markOrderPaid push]', e.message); }
+
+    // Mirror the push to a WeCom group bot, if configured (Settings → Push).
+    // Best-effort; reaches the owner's phone even with the backend closed.
+    try { sendWecomOrderAlert(orderId, { awaitingRestock: isWait }); }
+    catch (e) { console.warn('[markOrderPaid wecom]', e.message); }
 
     // Auto-print to the store's Feie cloud printer. Best-effort + fire-and-
     // forget (records the outcome on the order); see autoPrintOrder.
@@ -11511,6 +11589,29 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
   out.jd.enabled    = jd.jdEnabled(ci.jd);
   out.feie.enabled  = _feie.feieEnabled(ci.feie);
   res.json({ success: true, data: out });
+});
+
+// Send a test card to the configured WeCom new-order bot so the operator can
+// confirm the webhook works without waiting for a real order. Uses the URL in
+// the request body if present (lets them test BEFORE saving), else the saved
+// one. Same host-allowlist as the live path.
+router.post('/api/retail-admin/wecom/test', requireRetailAdmin, express.json(), async (req, res) => {
+  let url = String(req.body?.webhook || '').trim();
+  if (url) {
+    try { if (new URL(url).hostname !== 'qyapi.weixin.qq.com') url = ''; }
+    catch { url = ''; }
+  }
+  if (!url) url = wecomWebhookUrl();
+  if (!url) return res.json({ success: false, error: 'no_valid_webhook' });
+  const content = [
+    '**🌿 测试 · Test message**',
+    '> 这是来自 Mini App Backend 的测试提醒。',
+    '> A test alert from your Mini App Backend.',
+    '> 收到本条说明新订单提醒已接通 ✅',
+    '> Receiving this means new-order alerts are connected ✅',
+  ].join('\n');
+  const r = await postWecomMarkdown(url, content);
+  res.json({ success: r.ok, error: r.ok ? undefined : r.msg });
 });
 
 router.put('/api/retail-admin/integrations', requireRetailAdmin, express.json(), (req, res) => {
