@@ -14,13 +14,19 @@
     <view class="avatar-disc">
       <button
         class="avatar-btn"
-        open-type="chooseAvatar"
-        bindchooseavatar="onChooseAvatar">
+        bindtap="pickAvatar">
         <image wx:if="{{avatarPreview}}" class="avatar-img" src="{{avatarPreview}}" mode="aspectFill"></image>
         <view wx:else class="avatar-placeholder f-toni">{{copy.pickAvatar}}</view>
       </button>
     </view>
     <view class="avatar-hint f-toni">{{copy.avatarHint}}</view>
+    <!-- WeChat-avatar shortcut. This is the ONLY way to pull the user's real
+         WeChat avatar; it opens WeChat's own native sheet (its language follows
+         the user's WeChat setting, not ours — unavoidable). -->
+    <button
+      class="avatar-wx-btn f-toni"
+      open-type="chooseAvatar"
+      bindchooseavatar="onChooseAvatar">{{copy.useWxAvatar}}</button>
   </view>
 
   <view class="form">

@@ -90,6 +90,22 @@
   text-align: center;
 }
 
+/* Small text-link WeChat-avatar shortcut — strip the default button chrome. */
+.avatar-wx-btn {
+  display: inline-block;
+  margin: 12rpx auto 0;
+  padding: 0;
+  background: transparent;
+  line-height: 1.4;
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  color: var(--olive);
+  text-decoration: underline;
+}
+.avatar-wx-btn::after {
+  border: none;
+}
+
 /* ── Form ── */
 .form { margin-top: 48rpx; }
 .field-block { padding: 0 44rpx 28rpx; }

@@ -1,5 +1,7 @@
 // Bind-WeChat-profile page. The only sanctioned 2023+ flow:
-//   • <button open-type="chooseAvatar"> → user picks their real WeChat avatar
+//   • avatar: custom picker (wx.showActionSheet → wx.chooseMedia) so the sheet
+//     copy stays in our app language. (We dropped open-type="chooseAvatar"
+//     because its native sheet follows the user's WeChat language, not ours.)
 //   • <input type="nickname">           → auto-fills real WeChat nickname
 //   • <button open-type="getPhoneNumber"> → real bound phone (needs real AppID)
 // All three require explicit user action — WeChat no longer hands them out
@@ -25,6 +27,7 @@ Page({
       sub: 'WeChat keeps your nickname, avatar and address private. Tap to pull them in.',
       pickAvatar: 'Pick avatar',
       avatarHint: 'Tap to pick your WeChat avatar or upload one.',
+      useWxAvatar: 'Use my WeChat avatar',
       nicknameLabel: 'NICKNAME',
       nicknamePh: 'Tap, then choose from WeChat',
       addrLabel: 'ADDRESS · NAME · PHONE',
@@ -71,6 +74,7 @@ Page({
         sub: '微信不会自动告诉我们您的昵称、头像和地址，请点击下方手动绑定。',
         pickAvatar: '选择头像',
         avatarHint: '点击选择微信头像或上传图片。',
+        useWxAvatar: '使用微信头像',
         nicknameLabel: '昵称',
         nicknamePh: '点击输入框，从微信选择',
         addrLabel: '地址 · 姓名 · 电话',
@@ -91,6 +95,42 @@ Page({
     });
   },
 
+  // Custom avatar picker. We draw our OWN action sheet (English/CN copy we
+  // control) instead of WeChat's native chooseAvatar sheet, whose language
+  // follows the user's WeChat app setting and can't be overridden.
+  // Trade-off vs chooseAvatar: no one-tap "use my real WeChat avatar" option.
+  pickAvatar() {
+    const cn = this.data.lang === 'cn';
+    wx.showActionSheet({
+      itemList: cn ? ['从相册选择', '拍照'] : ['Choose from album', 'Take photo'],
+      success: (r) => {
+        const sourceType = r.tapIndex === 1 ? ['camera'] : ['album'];
+        wx.chooseMedia({
+          count: 1,
+          mediaType: ['image'],
+          sourceType,
+          sizeType: ['compressed'],
+          camera: 'front',
+          success: (res) => {
+            const f = res.tempFiles && res.tempFiles[0];
+            if (!f || !f.tempFilePath) return;
+            this.setData({
+              avatarPreview: f.tempFilePath,
+              avatarTempPath: f.tempFilePath,   // save() uploads this local path
+            });
+          },
+          fail: (e) => {
+            if (/cancel/i.test(e?.errMsg || '')) return;
+            wx.showToast({ title: cn ? '选择失败' : 'Pick failed', icon: 'none' });
+          },
+        });
+      },
+      // showActionSheet "fail" fires on dismiss/cancel — ignore.
+    });
+  },
+
+  // Native WeChat-avatar shortcut. Opens WeChat's own sheet (Chinese if the
+  // user's WeChat is Chinese); the only path to the real WeChat avatar.
   onChooseAvatar(e) {
     const avatarUrl = e.detail.avatarUrl;
     if (!avatarUrl) return;
