@@ -244,6 +244,18 @@ function ordTweakOutside(e) {
 let _ORD_KPI_AT = 0;
 let _ORD_KPI_DATA = null;
 let _ORD_KPI_LANG_HOOKED = false;
+let _ORD_TABLE_LANG_HOOKED = false;
+// The row cells bake their language at render time (cuT() returns one string,
+// localizeSlotLabel() reads the current lang once). Toggling EN/CN afterwards
+// only swaps DOM-classifier "en · cn" text nodes, leaving cuT()/localized cells
+// frozen in the old language. Re-render the rows on a toggle so the whole table
+// follows. Cheap: a silent refetch (same call the poller makes) with the
+// fingerprint cleared to force the rebuild.
+function _ordRepaintOnLang() {
+  if (!document.getElementById('orders-table')) return;
+  _ORDERS_LAST_FP = null;
+  loadOrders({ silent: true });
+}
 async function ordLoadKpis(force) {
   if (!document.getElementById('ord-kpis')) return;
   if (!force && Date.now() - _ORD_KPI_AT < 45000) return;
@@ -286,6 +298,11 @@ function ordRepaintKpiLabels() {
 
 async function loadOrders(opts = {}) {
   const silent = !!opts.silent;
+
+  // Repaint the rows on a language toggle (cuT()/localizeSlotLabel cells freeze
+  // their language at render time). Registered lazily — onLangChange lives in
+  // the i18n module loaded later.
+  if (!_ORD_TABLE_LANG_HOOKED && window.onLangChange) { _ORD_TABLE_LANG_HOOKED = true; onLangChange(_ordRepaintOnLang); }
 
   // Bail mid-tick if a manual reload is already in flight — prevents the
   // poller from clobbering the user's freshly-clicked Refresh.
@@ -823,12 +840,12 @@ function renderShipByCell(o) {
   if (o.fulfillment_type === 'pickup') {
     const label = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label)) || cuT('ASAP', '尽快');
     return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-1)'}; line-height: 1.3;">${pickupIcon(12)} ${escapeHtml(label)}</div>
-            <div class="muted" style="font-size: 10px; margin-top: 2px;">pickup · 自提</div>`;
+            <div class="muted" style="font-size: 10px; margin-top: 2px;">${cuT('pickup', '自提')}</div>`;
   }
   const isAsap     = !o.scheduled_for;
   if (isAsap) {
     return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-3)'};">${cuT('ASAP', '尽快')}</div>
-            <div class="muted" style="font-size: 10px; margin-top: 2px;">no slot picked · 未选时段</div>`;
+            <div class="muted" style="font-size: 10px; margin-top: 2px;">${cuT('no slot picked', '未选时段')}</div>`;
   }
   // Parse "YYYY-MM-DD HH:MM:SS" (UTC from SQLite) → local time
   const dt = new Date(String(o.scheduled_for).replace(' ', 'T') + 'Z');
@@ -887,6 +904,9 @@ function localizeSlotLabel(label) {
   // Relative day words.
   s = s.replace(/\bToday\b/g, '今天').replace(/\bTomorrow\b/g, '明天')
        .replace(/\bYesterday\b/g, '昨天').replace(/\bASAP\b/g, '尽快');
+  // Pickup labels carry the English verb in the customer's free-text slot
+  // ("Pickup Today …"). Translate it so the Chinese view stays all-Chinese.
+  s = s.replace(/\bPick ?up\b/gi, '自提').replace(/\bCollect(?:ion)?\b/gi, '自提');
   // Time markers "10AM"/"12:30PM" → "上午10点"/"下午12:30".
   s = s.replace(/(\d{1,2})(:\d{2})?\s*(AM|PM)/gi,
     (_, h, mm, ap) => (/p/i.test(ap) ? '下午' : '上午') + h + (mm ? mm : '点'));
