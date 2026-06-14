@@ -2168,9 +2168,9 @@ function renderOpenOrder(o) {
               <span data-lang-block="en">⚠ Destination outside Guangzhou (${escapeHtml(o.shipping_city || 'unknown city')}) — order split into ${o.shipments.length} shipments</span><span data-lang-block="cn">⚠ 目的地在广州以外 (${escapeHtml(o.shipping_city || '未知城市')}) — 订单已拆分为 ${o.shipments.length} 个包裹</span>
               ${shipmentMergeControls(o)}
             </div>` : ''}
-          ${o.outside_guangzhou && (o.shipments?.length === 1) ? `
+          ${o.outside_guangzhou && (o.shipments?.length === 1) && (o.shipments[0].label || '').includes('合并') ? `
             <div class="outside-gz-note">
-              <span data-lang-block="en">${(o.shipments[0].label || '').includes('合并') ? 'Combined into one parcel — customer tracks a single shipment' : `Outside Guangzhou — single ${shipGlyph(o.shipments[0].mode)} ${o.shipments[0].mode === 'air' ? 'air' : 'land'} shipment`}</span><span data-lang-block="cn">${(o.shipments[0].label || '').includes('合并') ? '已合并为一个包裹 — 顾客只追踪一个包裹' : `${escapeHtml(o.shipping_city || '广州以外')} — 单个 ${shipGlyph(o.shipments[0].mode)} ${o.shipments[0].mode === 'air' ? '空运' : '陆运'}包裹`}</span>
+              <span data-lang-block="en">Combined into one parcel — customer tracks a single shipment</span><span data-lang-block="cn">已合并为一个包裹 — 顾客只追踪一个包裹</span>
               ${shipmentMergeControls(o)}
             </div>` : ''}
           <div id="odv-items-sortable">${renderSortableItems(o)}</div>
