@@ -13562,6 +13562,151 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
   res.json({ success: true, amount, method, reference });
 });
 
+// Operator-initiated refund — one shot, no customer request required. Backs the
+// order drawer's top "Refund" button when staff pick a PARTIAL amount or specific
+// lines. (A FULL refund still flows through PATCH /status → 'refunded'.) Mirrors
+// approve+payout collapsed together: issues the real WeChat refund for the chosen
+// amount, records the bookkeeping (approved + paid in one go), reverses committed
+// stock for the refunded lines, and — only when the refund equals the whole order
+// — reverses points/referral and flips the order to 'refunded'. A partial refund
+// leaves the order's fulfilment status untouched.
+// body: { amount? , lines?: [{item_id, qty}], note? }
+router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, express.json(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare(
+    'SELECT id, status, total, refund_status FROM retail_orders WHERE id = ?'
+  ).get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  // Only paid/fulfilment states can be refunded (mirror STATUS_TRANSITIONS.refunded.prev).
+  if (!['paid', 'preparing', 'dispatched', 'delivered'].includes(o.status)) {
+    return res.status(409).json({ success: false, error: 'invalid_status', status: o.status });
+  }
+  // Don't collide with the customer-request workflow or an already-settled refund.
+  if (['pending', 'reviewing', 'approved', 'paying', 'paid'].includes(o.refund_status)) {
+    return res.status(409).json({
+      success: false, error: 'refund_in_progress', refund_status: o.refund_status,
+      message: 'This order already has a refund in progress — use the refund panel.',
+    });
+  }
+  const note = (req.body?.note || '').slice(0, 500);
+
+  // Resolve amount + lines. Staff lines win, else an explicit amount, else full total.
+  let lines = null;
+  let amount = null;
+  const norm = normalizeRefundLines(id, req.body?.lines);
+  if (norm.lines) {
+    lines = norm.lines;
+    amount = norm.amount;
+  } else if (req.body?.amount != null) {
+    const a = Math.max(0, Math.min(Number(req.body.amount) || 0, Number(o.total) || 0));
+    amount = a > 0 ? +a.toFixed(2) : null;
+  } else {
+    amount = +Number(o.total).toFixed(2);
+  }
+  // Cap at the order total (= net cash charged) so a per-line sum that includes
+  // redeemed-points value can never pay back more than was actually taken.
+  if (amount != null) amount = +Math.min(Number(amount) || 0, Number(o.total) || 0).toFixed(2);
+  if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount' });
+  const isFull = amount + 0.005 >= Number(o.total); // ¥0.01 rounding tolerance
+
+  // Real WeChat refund — same eligibility rules as the status shortcut. Off-app
+  // payments hold no money at WeChat, so we just record the bookkeeping and the
+  // operator returns the money themselves.
+  let payoutMethod = 'manual';
+  let payoutRef = null;
+  const pay = tdb().prepare(
+    "SELECT out_trade_no, amount, method FROM retail_payments WHERE order_id = ? AND status IN ('success','refunded') ORDER BY id DESC LIMIT 1"
+  ).get(id);
+  const isOnlineWechatPay =
+    pay?.out_trade_no &&
+    !OFFLINE_PAY_METHODS.has(pay.method) &&
+    !String(pay.out_trade_no).startsWith('MANUAL');
+  if (isOnlineWechatPay && !payContext().devMode) {
+    // Atomically claim (→ 'paying') so a double-click can't fire two real refunds.
+    const claim = tdb().prepare(
+      "UPDATE retail_orders SET refund_status = 'paying', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(refund_status,'') NOT IN ('pending','reviewing','approved','paying','paid')"
+    ).run(id);
+    if (claim.changes !== 1) return res.status(409).json({ success: false, error: 'refund_already_processing' });
+    const totalCents  = Math.round(Number(pay.amount != null ? pay.amount : o.total) * 100);
+    const refundCents = Math.round(amount * 100);
+    const outRefundNo = ('RF' + pay.out_trade_no + Date.now().toString().slice(-6)).slice(0, 63);
+    try {
+      const r = await wechatPayRefund({ outTradeNo: pay.out_trade_no, outRefundNo, refundCents, totalCents, reason: note || ('Refund order ' + id) });
+      if (r.status === 'ABNORMAL') {
+        tdb().prepare("UPDATE retail_orders SET refund_status = NULL WHERE id = ? AND refund_status = 'paying'").run(id);
+        return res.status(502).json({ success: false, error: 'wechat_refund_abnormal', message: 'WeChat returned ABNORMAL (often insufficient merchant balance) — check the merchant platform.' });
+      }
+      payoutMethod = 'wechat';
+      payoutRef = r.refund_id + (r.status ? ' (' + r.status + ')' : '');
+    } catch (e) {
+      console.error('[wechat-refund direct]', e);
+      tdb().prepare("UPDATE retail_orders SET refund_status = NULL WHERE id = ? AND refund_status = 'paying'").run(id);
+      return res.status(502).json({ success: false, error: e.code || 'wechat_refund_failed', message: e.message });
+    }
+  }
+
+  // Record the settled refund (approved + paid in one shot).
+  tdb().prepare(
+    `UPDATE retail_orders
+        SET refund_status = 'paid',
+            refund_amount_requested = COALESCE(refund_amount_requested, ?),
+            refund_amount_approved = ?,
+            refund_amount_paid = ?,
+            refund_lines_json = ?,
+            refund_payout_method = ?,
+            refund_payout_ref = ?,
+            refund_reason = COALESCE(NULLIF(?, ''), refund_reason),
+            refund_requested_at = COALESCE(refund_requested_at, CURRENT_TIMESTAMP),
+            refund_approved_at = CURRENT_TIMESTAMP,
+            refund_paid_at = CURRENT_TIMESTAMP,
+            refund_reviewer_id = COALESCE(refund_reviewer_id, ?),
+            refund_payer_id = COALESCE(refund_payer_id, ?),
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`
+  ).run(amount, amount, amount, lines ? JSON.stringify(lines) : null, payoutMethod, payoutRef, note, req.user.id, req.user.id, id);
+
+  // Mirror onto retail_payments so reconciliation reports see it.
+  try {
+    tdb().prepare(
+      `UPDATE retail_payments
+          SET refunded_amount = MIN(amount, COALESCE(refunded_amount, 0) + ?),
+              status = CASE WHEN amount <= COALESCE(refunded_amount, 0) + ? THEN 'refunded' ELSE status END
+        WHERE order_id = ? AND status IN ('success', 'refunded')`
+    ).run(amount, amount, id);
+  } catch (e) { console.error('[retail_payments refund-mirror direct]', e); }
+
+  // Stock + points side-effects. Points/referral reverse ALL-OR-NOTHING, so only
+  // on a full refund (matches /refund/approve).
+  try {
+    const _actorLabel = req.user.display_name || req.user.username || null;
+    if (isFull) {
+      inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct full)' });
+    } else if (lines) {
+      inventory.reverseCommittedLines(id, lines, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct partial lines)' });
+    }
+  } catch (e) { console.error('[inventory.reverse (direct)]', e); }
+  if (isFull) {
+    try { reverseOrderPoints(id); }   catch (e) { console.error('[reverseOrderPoints direct]', e); }
+    try { reverseOrderRedeem(id); }   catch (e) { console.error('[reverseOrderRedeem direct]', e); }
+    try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral direct]', e); }
+    if (o.status !== 'refunded' && o.status !== 'cancelled') {
+      tdb().prepare("UPDATE retail_orders SET status = 'refunded' WHERE id = ?").run(id);
+    }
+  }
+
+  logRefundEvent({ orderId: id, event: 'approved', amount, note: note || null, userId: req.user.id, meta: { is_full: isFull, lines, direct: true } });
+  logRefundEvent({ orderId: id, event: 'paid',     amount, note: note || null, userId: req.user.id, meta: { method: payoutMethod, reference: payoutRef, direct: true } });
+  logActivity(req.user.id, req.user.username, 'refund_direct', 'retail_order', id, { amount, is_full: isFull, lines, method: payoutMethod }, req.ip);
+  notifyOrderStatusChange(id, isFull ? 'refunded' : null);
+  notifyForOrder(id, (o) => ({
+    category: 'refund', type: 'refund_paid',
+    title_en: 'Refund paid', title_cn: '退款已到账',
+    body_en: `¥${Number(amount).toFixed(2)} has been refunded for order ${o.order_no}`,
+    body_cn: `订单 ${o.order_no} 的 ¥${Number(amount).toFixed(2)} 退款已退回`,
+  }));
+  res.json({ success: true, is_full: isFull, amount, method: payoutMethod });
+});
+
 // REJECT — terminal. Customer sees the note. Works at requested OR reviewing.
 function rejectRefundHandler(req, res) {
   const id = parseInt(req.params.id, 10);

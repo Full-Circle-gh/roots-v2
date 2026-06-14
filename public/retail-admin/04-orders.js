@@ -2321,17 +2321,21 @@ async function transition(id, status) {
       if (!ok) return;
     }
   }
-  if (status === 'cancelled' || status === 'refunded') {
-    const isCancel = status === 'cancelled';
+  // The plain "Refund" button now opens a full/partial chooser instead of a
+  // bare reason prompt. The dialog drives its own submission (full → this same
+  // /status path; partial → /refund/direct), so we hand off and stop here.
+  if (status === 'refunded') {
+    openDirectRefundDialog(id);
+    return;
+  }
+  if (status === 'cancelled') {
     reason = await askReason({
-      titleEn: isCancel ? 'Cancel order' : 'Refund order',
-      titleCn: isCancel ? '取消订单' : '退款订单',
+      titleEn: 'Cancel order', titleCn: '取消订单',
       subEn: 'Recorded on the order for your records.',
       subCn: '将记录在订单中以备查询。',
-      labelEn: isCancel ? 'Reason for cancellation (optional)' : 'Reason for refund (optional)',
-      labelCn: isCancel ? '取消原因(可选)' : '退款原因(可选)',
+      labelEn: 'Reason for cancellation (optional)', labelCn: '取消原因(可选)',
       phEn: 'Optional', phCn: '可选',
-      submitEn: isCancel ? 'Cancel order' : 'Refund', submitCn: isCancel ? '确认取消' : '确认退款',
+      submitEn: 'Cancel order', submitCn: '确认取消',
     });
     if (reason === null) return;  // dismissed → abort
   }
@@ -2953,6 +2957,149 @@ function mountFloatingPuModal(bg) {
   const inner = bg.querySelector('.pu-editor');
   if (inner) inner.addEventListener('click', (e) => e.stopPropagation());
   document.body.appendChild(bg);
+}
+
+// Direct refund dialog — backs the order drawer's top "Refund" button. Lets staff
+// refund the WHOLE order or a PARTIAL amount / specific lines in one step, without
+// waiting for a customer to file a request. Full refunds go through the existing
+// PATCH /status → 'refunded' path (unchanged, real WeChat full refund + points
+// reversal). Partial refunds POST to /refund/direct (real partial WeChat refund,
+// no status flip, no points reversal). Modeled on openRefundApproveDialog.
+function openDirectRefundDialog(orderId) {
+  const o = _OPEN_ORDER;
+  if (!o || o.id !== orderId) { toast('Reopen the order and try again · 请重新打开订单', 'err'); return; }
+  const items = (o.items || []).map(it => ({
+    id: it.id, name: it.name_en || it.name_cn || ('item #' + it.id),
+    qty: Number(it.qty) || 0, unit: it.qty > 0 ? (Number(it.line_total) / Number(it.qty)) : Number(it.unit_price || 0),
+  }));
+  const total = Number(o.total) || 0;
+
+  const bg = document.createElement('div');
+  bg.className = 'pu-editor-bg';
+  bg.style.display = 'flex';
+  bg.innerHTML = `
+    <div class="pu-editor" style="width: 640px; max-width: 92vw;">
+      <div class="pu-editor-head">
+        <div>
+          <h3 style="margin: 0; font-size: 14px;">${cuT('Refund order', '退款订单')}</h3>
+          <div class="muted" style="font-size: 11px; margin-top: 2px;">${cuT(
+            'Money goes back the way it was paid. Full also reverses points + flips the order to Refunded; partial does not.',
+            '原路退回。全额退款会同时退还积分并将订单标记为已退款;部分退款不会。')}</div>
+        </div>
+        <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Close', '关闭')}</button>
+      </div>
+      <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display: block;">
+        <div class="field" style="margin-bottom: 14px;">
+          <label class="stacked">${cuT('How much', '退款方式')}</label>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="drf-mode" value="full" checked> ${cuT('Full', '全额')} ¥${fmt(total)}</label>
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="drf-mode" value="amount"> ${cuT('Part — by amount', '部分 — 按金额')}</label>
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="drf-mode" value="lines"> ${cuT('Part — by items', '部分 — 按商品')}</label>
+          </div>
+        </div>
+        <div class="field" id="drf-amt-wrap" style="margin-bottom: 14px; display: none;">
+          <label class="stacked">${cuT('Amount', '金额')} (¥)</label>
+          <input type="number" id="drf-amt" step="0.01" min="0" max="${total}" value="${total.toFixed(2)}" style="width: 100%;">
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">${cuT('Order total', '订单总额')} ¥${fmt(total)}</div>
+        </div>
+        <div class="field" id="drf-lines-wrap" style="margin-bottom: 14px; display: none;">
+          <label class="stacked">${cuT('Items to refund', '退款商品')}</label>
+          <div style="border: 1px solid var(--line-soft); border-radius: 6px; padding: 6px;">
+            ${items.length ? items.map(it => `
+              <div style="display: flex; align-items: center; gap: 10px; padding: 6px; border-bottom: 1px solid var(--line-soft);">
+                <label style="flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="checkbox" class="drf-line-chk" data-item="${it.id}" data-unit="${it.unit}" data-maxqty="${it.qty}">
+                  <span>${escapeHtml(it.name)}</span>
+                </label>
+                <input type="number" class="drf-line-qty" data-item="${it.id}" step="0.001" min="0" max="${it.qty}" value="${it.qty}" style="width: 80px;">
+                <span class="muted" style="font-size: 11px;">× ¥${fmt(it.unit)} = <b id="drf-line-amt-${it.id}">¥${fmt(it.unit * it.qty)}</b></span>
+              </div>`).join('') : `<div class="muted" style="padding: 8px;">${cuT('No items', '无商品')}</div>`}
+          </div>
+          <div style="margin-top: 6px; text-align: right; font-size: 13px;">${cuT('Items total', '商品合计')}: <b id="drf-lines-total">¥0.00</b></div>
+        </div>
+        <div class="field" style="margin-bottom: 14px;">
+          <label class="stacked">${cuT('Reason / note', '原因 / 备注')}</label>
+          <textarea id="drf-note" rows="2" style="width: 100%;" data-ph-en="Optional" data-ph-cn="可选" placeholder="${cuT('Optional', '可选')}"></textarea>
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+          <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Cancel', '取消')}</button>
+          <button class="btn btn-primary" id="drf-submit">${cuT('Refund', '退款')}</button>
+        </div>
+      </div>
+    </div>`;
+  mountFloatingPuModal(bg);
+
+  const recalcLineAmt = () => {
+    let sum = 0;
+    bg.querySelectorAll('.drf-line-chk').forEach(chk => {
+      const it = chk.dataset.item;
+      const unit = Number(chk.dataset.unit) || 0;
+      const qty = Number(bg.querySelector(`.drf-line-qty[data-item="${it}"]`).value) || 0;
+      const amt = chk.checked ? +(unit * qty).toFixed(2) : 0;
+      bg.querySelector(`#drf-line-amt-${it}`).textContent = '¥' + fmt(amt);
+      sum += amt;
+    });
+    bg.querySelector('#drf-lines-total').textContent = '¥' + fmt(sum);
+  };
+  bg.querySelectorAll('.drf-line-chk, .drf-line-qty').forEach(el => el.addEventListener('input', recalcLineAmt));
+  recalcLineAmt();
+
+  bg.querySelectorAll('input[name="drf-mode"]').forEach(r => r.addEventListener('change', () => {
+    const mode = bg.querySelector('input[name="drf-mode"]:checked').value;
+    bg.querySelector('#drf-amt-wrap').style.display   = (mode === 'amount') ? '' : 'none';
+    bg.querySelector('#drf-lines-wrap').style.display = (mode === 'lines') ? '' : 'none';
+  }));
+
+  bg.querySelector('#drf-submit').addEventListener('click', async (ev) => {
+    const mode = bg.querySelector('input[name="drf-mode"]:checked').value;
+    const note = bg.querySelector('#drf-note').value || '';
+    const btn = ev.currentTarget;
+
+    // FULL → keep the battle-tested status shortcut (real WeChat full refund,
+    // points reversal, status → refunded).
+    if (mode === 'full') {
+      btn.disabled = true;
+      try {
+        await api(`/api/retail-admin/orders/${orderId}/status`, { method: 'PATCH', body: { status: 'refunded', reason: note } });
+        toast(cuT('Refunded in full', '已全额退款'));
+        bg.remove();
+        openOrder(orderId, { instant: true });
+        loadOrders();
+      } catch (e) {
+        btn.disabled = false;
+        toast(cuT('Refund failed', '退款失败') + ': ' + e.message, 'err');
+      }
+      return;
+    }
+
+    // PARTIAL → /refund/direct.
+    const body = { note };
+    if (mode === 'lines') {
+      const sel = [];
+      bg.querySelectorAll('.drf-line-chk:checked').forEach(chk => {
+        const it = chk.dataset.item;
+        const qty = Number(bg.querySelector(`.drf-line-qty[data-item="${it}"]`).value) || 0;
+        if (qty > 0) sel.push({ item_id: Number(it), qty });
+      });
+      if (!sel.length) { toast(cuT('Select at least one item', '至少选一项'), 'err'); return; }
+      body.lines = sel;
+    } else {
+      const amt = Number(bg.querySelector('#drf-amt').value);
+      if (!(amt > 0)) { toast(cuT('Enter an amount above 0', '请输入大于 0 的金额'), 'err'); return; }
+      if (amt > total + 0.005) { toast(cuT('Amount is more than the order total', '金额超过订单总额'), 'err'); return; }
+      body.amount = amt;
+    }
+    try {
+      const j = await adminWrite({
+        btn, url: `/api/retail-admin/orders/${orderId}/refund/direct`,
+        method: 'POST', body, errLabelEn: 'Refund failed', errLabelCn: '退款失败',
+      });
+      toast(cuT('Refunded', '已退款') + ` ¥${fmt(j.amount || 0)}`);
+      bg.remove();
+      openOrder(orderId, { instant: true });
+      loadOrders();
+    } catch {}
+  });
 }
 
 // Approve dialog — staff picks amount + (optional) line items, leaves a note.
