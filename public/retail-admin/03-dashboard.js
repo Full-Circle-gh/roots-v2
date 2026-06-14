@@ -1363,6 +1363,7 @@ function dashRenderAll() {
   dashRenderKpis();
   dashRenderTrend();
   dashRenderHeatmap();
+  dashRenderAcqFunnel();
   dashRenderFunnel();
   dashRenderSplits();
   dashRenderProducts();
@@ -1616,6 +1617,50 @@ const DASH_STATUS_LABELS = {
   awaiting_restock: 'Awaiting stock · 待补货', cancelled: 'Cancelled · 已取消', refunded: 'Refunded · 已退款',
 };
 const DASH_STATUS_ORDER = ['pending_payment', 'paid', 'awaiting_restock', 'preparing', 'dispatched', 'delivered', 'cancelled', 'refunded'];
+
+// Acquisition funnel — the visitor→buyer drop-off, built from numbers the
+// dashboard already loads (no extra fetch): kpis.visitors / new_customers /
+// orders + checkout.started. Each bar is a share of visitors; the kSub shows
+// the step conversion vs the stage above so the cliff is obvious. The final
+// "paid" step uses the server's checkout completion rate (converted ÷ started)
+// rather than orders ÷ started, which can exceed 100% when a buyer paid
+// without leaving a tracked checkout quote.
+function dashRenderAcqFunnel() {
+  const host = document.getElementById('db-acqfunnel');
+  if (!host) return;
+  const k = DASH_DATA.kpis || {};
+  const c = DASH_DATA.checkout || {};
+  const opened  = Number(k.visitors || 0);
+  const signed  = Number(k.new_customers || 0);
+  const reached = Number(c.started || 0);
+  const paid    = Number(k.orders || 0);
+  if (!opened) { host.innerHTML = '<div class="db-muted">No visitors in range · 区间内无访客</div>'; return; }
+  const pctOf  = (n, d) => (d > 0 ? (n / d) * 100 : null);
+  const fmtPct = (p) => (p == null ? '—' : (p >= 10 ? p.toFixed(0) : p.toFixed(1)) + '%');
+  // checkout→paid completion: prefer the server's rate; fall back to a guarded ratio.
+  const paidStep = c.conversion_rate != null ? c.conversion_rate : pctOf(paid, reached);
+  const stages = [
+    { k: 'Opened · 打开',   n: opened,  step: null },
+    { k: 'Signed up · 注册', n: signed,  step: pctOf(signed, opened) },
+    { k: 'Checkout · 结算',  n: reached, step: pctOf(reached, signed) },
+    { k: 'Paid · 下单',     n: paid,    step: paidStep },
+  ];
+  // Bar width = share of visitors (visual); the right-side sub = step retention
+  // vs the stage above — the drop between rows is where the funnel leaks.
+  const rows = stages.map((s, i) => ({
+    k: s.k,
+    value: dashNum(s.n),
+    valueSub: i === 0 ? fmtPct(100) : (s.step != null ? '↓ ' + fmtPct(s.step) : ''),
+    frac: s.n,
+    barColor: i === stages.length - 1 ? 'var(--tea)' : undefined,
+  }));
+  const conv = fmtPct(pctOf(paid, opened));
+  host.innerHTML = dashBarList(rows)
+    + `<div class="db-muted" style="margin-top:10px;font-size:12px">`
+    + `${cuT('Visitor → order', '访客 → 下单')}: <b style="color:var(--tea)">${conv}</b>`
+    + (reached ? ` · ${cuT('checkout → paid', '结算 → 下单')}: <b>${fmtPct(paidStep)}</b>` : '')
+    + `</div>`;
+}
 
 function dashRenderFunnel() {
   const f = DASH_DATA.funnel || {};

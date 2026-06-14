@@ -634,6 +634,14 @@
       <div id="db-heatmap"></div>
     </div>
 
+    <!-- Acquisition funnel — opened → signed up → checkout → paid (the drop-off story) -->
+    <div class="card">
+      <div class="db-card-head">
+        <h3>Acquisition funnel · 转化漏斗 <span style="color:var(--text-3);font-weight:400">Opened → signed up → checkout → paid · 从访问到下单</span></h3>
+      </div>
+      <div id="db-acqfunnel"></div>
+    </div>
+
     <div class="db-grid-2">
       <div class="card">
         <div class="db-card-head"><h3>Order status · 订单状态</h3></div>
@@ -6705,7 +6713,11 @@
               '<span class="rm-oc-meta">' +
                 '<span>' + items + (items === 1 ? ' item' : ' items') + '</span>' +
                 (o.store_code ? '<span class="sep">·</span><span>' + esc(o.store_name_en || o.store_code) + '</span>' : '') +
-                (o.ship_pickup ? '<span class="sep">·</span><span>自提 Pickup</span>' : (o.ship_city ? '<span class="sep">·</span><span>→ ' + esc(o.ship_city) + '</span>' : '')) +
+                (o.ship_pickup
+                  ? '<span class="sep">·</span><span data-lang-block="en">Pickup</span><span data-lang-block="cn">自提</span>'
+                  : (o.ship_city
+                      ? '<span class="sep">·</span><span>→ </span><span data-lang-block="en">' + esc(o.ship_city_en || o.ship_city) + '</span><span data-lang-block="cn">' + esc(o.ship_city) + '</span>'
+                      : '')) +
               '</span>' +
               '<span class="rm-oc-go">' +
                 (sb.text && o.status !== 'cancelled' && o.status !== 'refunded' ? '<span class="shipby' + (sb.late ? ' late' : (fwd ? ' act' : '')) + '">' + esc(sb.text) + '</span>' : '') +
@@ -7308,6 +7320,7 @@
     traffic: { title: 'Conversion · 转化', body: function () {
       var k = DASH_DATA.kpis || {}, c = (k.conversion_rate == null) ? '—' : (k.conversion_rate.toFixed(1) + '%');
       return kpis([['Visits · 访问', num(k.visits), ''], ['Sessions · 会话', num(k.sessions), ''], ['Conversion · 转化', c, 'brass'], ['Refund rate · 退款率', (k.refund_rate || 0).toFixed(1) + '%', '']]) +
+        block('Acquisition funnel · 转化漏斗', clone('db-acqfunnel')) +
         block('Traffic &amp; entry scenes · 流量与场景', clone('db-traffic'));
     } },
     ops: { title: 'Operations · 运营', body: function () {

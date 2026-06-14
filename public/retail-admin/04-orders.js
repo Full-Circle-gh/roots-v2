@@ -1012,7 +1012,7 @@ function renderShipByCell(o) {
       else                { c = 'var(--text-1)'; }
     }
     const sub = valid
-      ? `${cuT('send by', '须发出')} ${fmtSlotShort(dl)}${tail}`
+      ? `${cuT('latest', '最迟')} ${fmtSlotShort(dl)}${tail}`
       : cuT('as soon as possible', '尽快发出');
     return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">${cuT('ASAP', '尽快')}</div>
             <div style="font-size: 10px; margin-top: 2px; color: ${valid ? c : 'var(--text-3)'};">${sub}</div>`;
@@ -1174,7 +1174,7 @@ function renderShipByTile(o) {
       else if (hrs < 24)  { color = 'var(--warn)';   urg = cuT(`${Math.round(hrs)}h left`, `剩 ${Math.round(hrs)}小时`); }
     }
     const deadlineLine = valid
-      ? `<div class="sub" style="color: ${color}; font-weight: 600;">${cuT('Send by', '须发出')} ${fmtSlotShort(dl)}${urg ? ' · ' + urg : ''}</div>`
+      ? `<div class="sub" style="color: ${color}; font-weight: 600;">${cuT('Latest', '最迟')} ${fmtSlotShort(dl)}${urg ? ' · ' + urg : ''}</div>`
       : `<div class="sub">${cuT('No fixed date — ship as soon as possible', '无固定日期 — 尽快发货')}</div>`;
     return `<div>
       <div class="kicker">${shipByKicker(o)}</div>
